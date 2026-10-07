@@ -121,30 +121,23 @@ private:
 
 namespace detail {
 
-// Whether t's edge e must flip: interior, unconstrained, and the quad's
-// incircle determinant positive in the frame -- the apex across e inside t's
-// circle, or t's apex inside the neighbour's circle.
+// Whether the edge (av, bv) of the triangle (av, bv, cv), counter-clockwise on
+// (col, -row), must flip against the apex dv across it: the quad's incircle
+// determinant positive in the frame -- dv inside the triangle's circle, or cv
+// inside the neighbour's. must_flip asks it, and so does quality.hpp's
+// read-only cavity (20c R7), so the two cannot disagree. Forced inline:
+// must_flip is on the split phase's path, and before 20c-2 made no call here.
 template <pred::GeometryKernel K>
-[[nodiscard]] bool must_flip(const LatticeMesh& m, std::uint32_t t, unsigned e,
-                             const LatticeFrame& f) {
-    const auto u = m.neighbours(t)[e];
-    if (u == kNoNeighbour || m.is_constrained(t, e))
-        return false;
-    const auto& tri = m.triangles()[t];
-    unsigned j = 0;
-    while (m.triangles()[u][j] != tri[(e + 1) % 3])
-        ++j;
-    const auto v = m.vertices();
-    const MeshVertex d_vertex = v[m.triangles()[u][(j + 2) % 3]];
-    // The integer path first; the mesh triangle is counter-clockwise on
-    // (col, -row), and it answers only where the kernel would give the same sign.
-    // Answering without consulting K assumes K's incircle sign is exact, as
-    // DefaultKernel's (FilteredKernel<DetriaExact>) is: for an inexact K the
-    // integer sign could differ from K's, and the flip sequence with it.
-    if (const auto s = lattice_incircle(v[tri[e]], v[tri[(e + 1) % 3]], v[tri[(e + 2) % 3]], d_vertex, f))
+[[nodiscard, gnu::always_inline]] inline bool quad_flips(MeshVertex av, MeshVertex bv, MeshVertex cv,
+                                                         MeshVertex dv, const LatticeFrame& f) {
+    // The integer path first; it answers only where the kernel would give the
+    // same sign. Answering without consulting K assumes K's incircle sign is
+    // exact, as DefaultKernel's (FilteredKernel<DetriaExact>) is: for an
+    // inexact K the integer sign could differ from K's, and the flip sequence
+    // with it.
+    if (const auto s = lattice_incircle(av, bv, cv, dv, f))
         return *s == pred::Incircle::Inside;
-    const Point2 a = f.at(v[tri[e]]), b = f.at(v[tri[(e + 1) % 3]]), c = f.at(v[tri[(e + 2) % 3]]),
-                 d = f.at(d_vertex);
+    const Point2 a = f.at(av), b = f.at(bv), c = f.at(cv), d = f.at(dv);
     // Orientation is exact on (col, -row), but the frame rounds col * dx and
     // row * dy, so a triangle counter-clockwise in the mesh can be collinear
     // or clockwise here. The kernel answers Cocircular for a collinear triple
@@ -157,6 +150,21 @@ template <pred::GeometryKernel K>
         return K::incircle(a, b, c, d) == pred::Incircle::Inside;
     return K::orient2d(b, a, d) == pred::Orientation::CounterClockwise
         && K::incircle(b, a, d, c) == pred::Incircle::Inside;
+}
+
+// Whether t's edge e must flip: interior, unconstrained, and quad_flips.
+template <pred::GeometryKernel K>
+[[nodiscard]] bool must_flip(const LatticeMesh& m, std::uint32_t t, unsigned e,
+                             const LatticeFrame& f) {
+    const auto u = m.neighbours(t)[e];
+    if (u == kNoNeighbour || m.is_constrained(t, e))
+        return false;
+    const auto& tri = m.triangles()[t];
+    unsigned j = 0;
+    while (m.triangles()[u][j] != tri[(e + 1) % 3])
+        ++j;
+    const auto v = m.vertices();
+    return quad_flips<K>(v[tri[e]], v[tri[(e + 1) % 3]], v[tri[(e + 2) % 3]], v[m.triangles()[u][(j + 2) % 3]], f);
 }
 
 }  // namespace detail

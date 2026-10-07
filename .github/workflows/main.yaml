@@ -157,7 +157,7 @@ jobs:
           test_refinement_chunks_dynamic test_refinement_active
           test_refinement_refine_points prop_refinement_refine_points
           prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam
-          test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final
+          test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final test_quality_gain_refine
 
       # One suite per CPU (h17 §4c). Each suite's output goes to its own log,
       # printed whole once all have ended; a suite that fails is named in
@@ -172,7 +172,7 @@ jobs:
                          test_refinement_chunks_dynamic test_refinement_active \
                          test_refinement_refine_points prop_refinement_refine_points \
                          prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam \
-                         test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final |
+                         test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final test_quality_gain_refine |
             xargs -P "$(getconf _NPROCESSORS_ONLN)" -I {} sh -c \
               'build-tsan/tests/cpp/"$1" > tsan-logs/"$1".log 2>&1 || echo "$1" >> tsan-logs/failed' sh {}
           for log in tsan-logs/*.log; do

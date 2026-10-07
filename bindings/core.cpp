@@ -949,13 +949,17 @@ unless ok().
         .def_readonly("feet_refused", &RefineOutcome::feet_refused,
                       "Feet refused, their node inserted instead.")
         .def_readonly("quality_feet", &RefineOutcome::quality_feet,
-                      "Feet the start-quality pass inserted, in neither quality_inserted nor inserted.");
+                      "Feet the start-quality pass inserted, in neither quality_inserted nor inserted.")
+        .def_readonly("quality_no_gain", &RefineOutcome::quality_no_gain,
+                      "Start-quality points refused for lowering the worst angle, in quality_skipped.")
+        .def_readonly("quality_line_splits", &RefineOutcome::quality_line_splits,
+                      "Constraint lines the start-quality pass split, in no other count.");
 
     m.def(
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
-           bool constraint_feet, std::uint32_t frozen_mask) {
+           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -967,7 +971,7 @@ unless ok().
                 reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), n};
             const std::span<const std::uint32_t> bits{k.data(), n};
             const terrain::refinement::RefineOptions options{tolerance, threads, min_angle_deg,
-                                                             constraint_feet, frozen_mask};
+                                                             constraint_feet, frozen_mask, min_gain_deg};
             // Every buffer read below is held by a local or by `raster`, and
             // the outcome is converted after the lock returns.
             const py::gil_scoped_release unlocked;
@@ -979,7 +983,8 @@ unless ok().
         },
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
         py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
-        py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, R"doc(
+        py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, py::arg("min_gain_deg") = -1.0,
+        R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -992,6 +997,9 @@ meet that minimum angle or a stated reason prevents it; 0 is off.
 constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
 frozen_mask: no vertex goes on an edge whose mask meets it (a seam); 0 is off.
+min_gain_deg >= 0: the start-quality pass adds a point only if the smallest
+angle around it rises by at least this many degrees, and, with
+constraint_feet, splits a line a point lies beyond; negative is off.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");

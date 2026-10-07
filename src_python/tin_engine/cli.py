@@ -213,6 +213,9 @@ DEFAULT_LABEL_LIMIT = 500
 DEFAULT_SNAP_SPACING = 1e-3
 # Increment 20, C2 (a): the start mesh's minimum angle, degrees.
 DEFAULT_START_MIN_ANGLE = 25.0
+# Increment 20c, R7 (Ola's ruling, question 2): the gain a start-quality point
+# must bring, degrees; negative is increment 20's hard rule.
+DEFAULT_START_QUALITY_GAIN = 0.0
 
 
 @app.callback()
@@ -688,6 +691,16 @@ def mesh(
             "0 is off, at most 35. Default: 25.",
         ),
     ] = None,
+    start_quality_gain: Annotated[
+        float | None,
+        typer.Option(
+            "--start-quality-gain",
+            help="With --tolerance, add such a node only if it raises the smallest angle "
+            "around it by at least this many degrees and, unless --no-constraint-feet, "
+            "split a line it lies beyond; negative adds every node, as before. "
+            "At most 10. Default: 0.",
+        ),
+    ] = None,
     no_constraint_feet: Annotated[
         bool,
         typer.Option(
@@ -864,6 +877,17 @@ def mesh(
             raise typer.BadParameter(
                 "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
             )
+        if start_quality_gain is not None and not (
+            math.isfinite(start_quality_gain) and start_quality_gain <= 10
+        ):
+            raise typer.BadParameter(
+                f"must be finite and <= 10, got {start_quality_gain}",
+                param_hint="--start-quality-gain",
+            )
+        if start_quality_gain is not None and tolerance is None:
+            raise typer.BadParameter(
+                "--start-quality-gain needs --tolerance", param_hint="--start-quality-gain"
+            )
         if no_constraint_feet and tolerance is None:
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
@@ -912,6 +936,7 @@ def mesh(
             found,
             grid,
             checks,
+            DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
         )
         surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
@@ -982,6 +1007,8 @@ def mesh(
             raise typer.BadParameter("applies only with --dem", param_hint="--tolerance")
         if start_min_angle is not None:
             raise typer.BadParameter("applies only with --dem", param_hint="--start-min-angle")
+        if start_quality_gain is not None:
+            raise typer.BadParameter("applies only with --dem", param_hint="--start-quality-gain")
         if no_constraint_feet:
             raise typer.BadParameter("applies only with --dem", param_hint="--no-constraint-feet")
         if not flat:
@@ -1526,6 +1553,7 @@ def _dem_mesh(
     features: FeatureSet | None = None,
     grid: TargetGrid | None = None,
     checks: Iterator[Block] | None = None,
+    gain: float = -1.0,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -1534,7 +1562,8 @@ def _dem_mesh(
     mesh, refined against the DEM's nodes; with ``domain`` (already in the
     DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
     polygon's rings are, and ``features``' lines (16b). ``min_angle`` > 0
-    improves the start's angles first (increment 20); ``feet`` inserts
+    improves the start's angles first (increment 20), ``gain`` >= 0 with
+    20c's soft criterion; ``feet`` inserts
     constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
     the refined mesh is checked against the source's nodes (D5), after the
     tile is dropped (15e, fix 3).
@@ -1603,6 +1632,7 @@ def _dem_mesh(
             tolerance=tolerance,
             min_angle_deg=min_angle,
             constraint_feet=feet,
+            min_gain_deg=gain,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
@@ -1648,6 +1678,7 @@ def _dem_mesh(
             )
         values |= {
             "start_min_angle_deg": min_angle,
+            "start_quality_gain_deg": gain,
             "snap_to_lines": "on" if feet else "off",
             "tolerance_m": tolerance,
             "max_error_m": max_error,
@@ -1658,7 +1689,9 @@ def _dem_mesh(
             "edge_flips": out.flips,
             "start_quality_points_inserted": out.quality_inserted,
             "start_quality_points_skipped": out.quality_skipped,
+            "start_quality_points_without_gain": out.quality_no_gain,
             "start_quality_points_snapped_to_lines": out.quality_feet,
+            "start_quality_lines_split": out.quality_line_splits,
             "points_snapped_to_lines": out.feet,
             "snaps_refused": out.feet_refused,
             "final_check_points_snapped_to_lines": final.feet,

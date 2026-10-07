@@ -52,19 +52,23 @@ namespace detail {
     return orient_sign(b, f, d) > 0 && orient_sign(f, a, d) > 0;
 }
 
-// The verdict of edge e of triangle o, or nothing when it is not a candidate.
+// The verdict of edge e of triangle o, or nothing when it is not a candidate:
+// p closer than `reach` to it, and NearEnd when the foot is within `end` of
+// an end. constraint_foot passes delta for both; the quality start's line
+// split (20c R8) any reach and half a cell.
 [[nodiscard]] inline std::optional<FootSearch> foot_on(const LatticeMesh& m, std::uint32_t o, unsigned e,
-                                                       MeshVertex p, double delta, const LatticeFrame& f) {
+                                                       MeshVertex p, double reach, double end,
+                                                       const LatticeFrame& f) {
     const MeshVertex a = m.corner(o, e), b = m.corner(o, (e + 1) % 3);
     if (!m.is_constrained(o, e) || m.is_frozen(o, e) || orient_sign(a, b, p) == 0)
         return std::nullopt;
     const double ux = (b.col - a.col) * f.dx, uy = (b.row - a.row) * f.dy;
     const double px = (p.col - a.col) * f.dx, py = (p.row - a.row) * f.dy;
     const double s = std::clamp((px * ux + py * uy) / (ux * ux + uy * uy), 0.0, 1.0);
-    if (std::hypot(px - s * ux, py - s * uy) >= delta)
+    if (std::hypot(px - s * ux, py - s * uy) >= reach)
         return std::nullopt;
     const double len = std::hypot(ux, uy);
-    if (s * len < delta || (1.0 - s) * len < delta)
+    if (s * len < end || (1.0 - s) * len < end)
         return FootSearch{FootStatus::NearEnd, o, e, {}};
     const MeshVertex at{a.col + s * (b.col - a.col), a.row + s * (b.row - a.row)};
     return FootSearch{foot_fits(m, o, e, at) ? FootStatus::Hit : FootStatus::NotCounterClockwise, o, e, at};
@@ -91,7 +95,7 @@ namespace detail {
 [[nodiscard]] inline FootSearch constraint_foot(const LatticeMesh& m, std::uint32_t t, MeshVertex p, double delta,
                                                 const LatticeFrame& f) {
     for (unsigned e = 0; e < 3; ++e)
-        if (const auto r = detail::foot_on(m, t, e, p, delta, f))
+        if (const auto r = detail::foot_on(m, t, e, p, delta, delta, f))
             return *r;
     for (unsigned e = 0; e < 3; ++e) {
         const std::uint32_t u = m.neighbours(t)[e];
@@ -101,7 +105,7 @@ namespace detail {
         while (m.neighbours(u)[k] != t)
             ++k;
         for (const unsigned j : {(k + 1) % 3, (k + 2) % 3})
-            if (const auto r = detail::foot_on(m, u, j, p, delta, f))
+            if (const auto r = detail::foot_on(m, u, j, p, delta, delta, f))
                 return *r;
     }
     return {};

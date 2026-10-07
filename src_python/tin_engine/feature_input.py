@@ -156,9 +156,10 @@ class FeatureSet(BaseModel):
 
 
 def source_region(domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | CRS) -> Polygon:
-    """R5: the domain, in the DEM's CRS, buffered by 100 m, densified to 1 km,
+    """R5: the domain's convex hull, in the DEM's CRS, buffered by 100 m (the
+    hull of the domain buffered, to the arc's chord; 30d), densified to 1 km,
     moved into ``source_crs``; the convex hull of those points."""
-    ring = shapely.segmentize(domain.polygon.buffer(MARGIN).exterior, DENSIFY)
+    ring = shapely.segmentize(shapely.convex_hull(domain.polygon).buffer(MARGIN).exterior, DENSIFY)
     xy = shapely.get_coordinates(ring)
     if not same_crs(source_crs, dem_crs):
         xy = reprojector(dem_crs, source_crs)(xy)

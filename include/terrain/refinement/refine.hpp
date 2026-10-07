@@ -84,6 +84,7 @@ struct RefineOptions {
     double min_angle_deg = 0.0;  // the start-quality pass; 0 (or NaN) is off
     bool constraint_feet = false;  // 20b R9: feet on constraint segments
     std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
+    double min_gain_deg = -1.0;     // 20c R7 and R8 in the quality start; negative is off
 };
 
 struct RefineOutcome {
@@ -106,6 +107,8 @@ struct RefineOutcome {
     std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
     std::size_t quality_skipped = 0;   // start-quality skips, every reason summed
     std::size_t quality_feet = 0;      // start-quality feet (20c R2), in neither count above
+    std::size_t quality_no_gain = 0;   // 20c R7's refusals, in quality_skipped
+    std::size_t quality_line_splits = 0;  // 20c R8's splits, in no count above
     std::size_t feet = 0;              // feet inserted, a subset of `inserted`
     std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
 
@@ -283,13 +286,16 @@ template <raster::RasterSource R>
         // The pass never inserts a NoData node or a foot without a z: trim would remove it.
         const auto q = mesh::improve<pred::DefaultKernel>(
             m, frame,
-            mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols(), options.constraint_feet},
+            mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols(), options.constraint_feet,
+                                 options.min_gain_deg},
             [&](const mesh::MeshVertex& v) { return vertex_z(dem, v).has_value(); });
         out.quality_inserted = q.inserted;
         out.quality_feet = q.feet;
+        out.quality_no_gain = q.skipped_no_gain;
+        out.quality_line_splits = q.line_splits;
         out.quality_skipped = q.skipped_floor + q.skipped_outside + q.skipped_vertex
                             + q.skipped_blocked + q.walk_bound_hits + q.skipped_frozen
-                            + q.skipped_void + q.skipped_near_line;
+                            + q.skipped_void + q.skipped_near_line + q.skipped_no_gain;
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;

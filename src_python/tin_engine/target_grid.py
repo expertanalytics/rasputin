@@ -25,6 +25,7 @@ from shapely.prepared import prep
 
 from tin_engine.crs import parse_crs, reprojector
 from tin_engine.domain import DomainPolygon
+from tin_engine.grow import grow_mitred
 from tin_engine.io.models import Bounds, DemTile, RasterMeta, valid_mask
 
 #: Source nodes per check-point block side (D4).
@@ -100,17 +101,20 @@ def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> int:
     return max(1, round(float(metres)))
 
 
-def target_grid_for(domain: DomainPolygon, target: str, spacing: int) -> TargetGrid:
+def target_grid_for(
+    domain: DomainPolygon, target: str, spacing: int
+) -> tuple[TargetGrid, shapely.Polygon]:
     """The domain (in `target`) grown by the cell diagonal with mitred
-    corners, its bounds snapped outward to the lattice (D2)."""
+    corners, its bounds snapped outward to the lattice (D2); and that grown
+    domain, so the caller does not grow it again (30d)."""
     h = spacing
-    grown = domain.polygon.buffer(math.sqrt(2) * h, join_style="mitre")
+    grown = grow_mitred(domain.polygon, math.sqrt(2) * h)
     x0, y0, x1, y1 = grown.bounds
     col0, col1 = math.floor(x0 / h), math.ceil(x1 / h)
     row0, row1 = math.floor(-y1 / h), math.ceil(-y0 / h)
     return TargetGrid(
         crs=target, spacing=h, row0=row0, col0=col0, rows=row1 - row0 + 1, cols=col1 - col0 + 1
-    )
+    ), grown
 
 
 def source_region(grid: TargetGrid, meta: RasterMeta, grown: Any) -> tuple[Bounds, Any]:

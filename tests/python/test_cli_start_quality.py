@@ -46,6 +46,10 @@ from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
 QUALITY = re.compile(r"(\d+) start quality nodes inserted, (\d+) start quality skips")  # pre-25
 COUNTS = ("start_quality_points_inserted", "start_quality_points_skipped")
+#: Increment 20's hard rule, which 20c-2's soft criterion replaces by default
+#: (docs/increments/20c-soft-quality.md, R7: ``-1`` restores it); for the
+#: tests below that need the pass to insert on the box.
+HARD = ("--start-quality-gain", "-1")
 
 
 bumpy = rough_dem(20)
@@ -199,8 +203,13 @@ class TestReport:
     timing row; stderr carries neither (D7)."""
 
     def test_stats_counts_the_pass(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
+        # 20c-2 (docs/increments/20c-soft-quality.md, R7): the hard rule, as
+        # this test was written for. At the CLI's default gain 0 the soft
+        # criterion refuses both of the box's candidates (each would lower its
+        # cavity's worst angle, 20.87° to 20.66°, by a prototype of R7), so
+        # nothing is inserted; test_cli_start_quality_gain.py covers that.
         _, report, stderr = run(
-            tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1"
+            tmp_path, *("--dem", str(bumpy), "--domain", str(box), "--tolerance", "1"), *HARD
         )
         inserted = int(stats_row(report, "start_quality_points_inserted"))
         assert inserted > 0  # the box's 20.7° start triangles are bad at 25°
@@ -260,7 +269,9 @@ class TestNoData:
         array = np.random.default_rng(10).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
         array[5:12, 7:14] = float(SENTINEL)  # under the box's centre, where the pass looks first
         tif = write_tiff(tmp_path / "nodata.tif", micro_tiff(array, nodata=SENTINEL))
-        vtk, report, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        vtk, report, _ = run(
+            tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1", *HARD
+        )
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
         assert np.isfinite(vtk.points[:, 2]).all()
         assert stats_row(report, "nodata_vertices_removed") == "0"
@@ -275,7 +286,8 @@ class TestTheVoidIsSkipped:
     node, so it makes no vertex for the trim to remove and no hole.
 
     The scene is the box over ``bumpy``. Its two start triangles are bad at
-    25°, and the pass adds one node; ``pass_node`` finds it from two runs
+    25°, and the pass under increment 20's hard rule (``HARD``; 20c-2's soft
+    criterion refuses it) adds one node; ``pass_node`` finds it from two runs
     without the void, with the pass on and off, at a tolerance refine
     meets without inserting anything. That node is then NoData, as the
     sentinel or as NaN.
@@ -292,7 +304,7 @@ class TestTheVoidIsSkipped:
 
     @pytest.fixture
     def pass_node(self, tmp_path: Path, bumpy: Path, box: Path) -> tuple[int, int]:
-        common = ("--dem", str(bumpy), "--domain", str(box), "--tolerance", "1000")
+        common = ("--dem", str(bumpy), "--domain", str(box), "--tolerance", "1000", *HARD)
         on, _, _ = run(tmp_path, *common, name="on.vtk")
         off, _, _ = run(tmp_path, *common, "--start-min-angle", "0", name="off.vtk")
         added = _nodes_of(on, bumpy) - _nodes_of(off, bumpy)
@@ -318,7 +330,9 @@ class TestTheVoidIsSkipped:
         self, tmp_path: Path, box: Path, voided: tuple[Path, np.ndarray]
     ) -> None:
         tif, _ = voided
-        vtk, report, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        vtk, report, _ = run(
+            tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1", *HARD
+        )
         assert stats_row(report, "nodata_vertices_removed") == "0"
         assert "nodata_vertices_removed" not in vtk.field_data  # D3 rule 3: a zero is not written
         assert stats_row(report, "points_inserted_on_nodata") == "0"  # no void triangle to carve
@@ -329,7 +343,9 @@ class TestTheVoidIsSkipped:
         self, tmp_path: Path, box: Path, voided: tuple[Path, np.ndarray], pass_node: tuple[int, int]
     ) -> None:
         tif, array = voided
-        vtk, _, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        vtk, _, _ = run(
+            tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1", *HARD
+        )
         assert pass_node not in _nodes_of(vtk, tif)
         assert np.isfinite(vtk.points[:, 2]).all()
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
@@ -340,7 +356,9 @@ class TestTheVoidIsSkipped:
     ) -> None:
         """The hole check and section 3D's tolerance oracle, from the file."""
         tif, array = voided
-        vtk, _, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        vtk, _, _ = run(
+            tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1", *HARD
+        )
         xy, z = _valid_nodes_inside(tif, array, Polygon(SQUARE).buffer(-SNAP))
         assert len(z) > 100
         error = located_errors(vtk, xy, z)
@@ -354,7 +372,9 @@ class TestTheVoidIsSkipped:
     ) -> None:
         """Section 3D's other oracle, exact, in the file's frame."""
         tif, _ = voided
-        vtk, _, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        vtk, _, _ = run(
+            tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1", *HARD
+        )
         constrained = {tuple(sorted(map(int, e))) for e in lines_as_array(vtk)}
         assert _delaunay_violations(vtk.points[:, :2], polygons_as_array(vtk), constrained) == []
 

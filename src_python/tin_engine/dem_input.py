@@ -39,6 +39,7 @@ from tin_engine.crs import (
     suggest_crs,
 )
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
+from tin_engine.grow import grow_mitred
 from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
 from tin_engine.io.repository import CacheRepository, DemRepository, TiffDemRepository
 from tin_engine.mosaic import MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
@@ -209,8 +210,7 @@ def _open_reprojected(
     meta = footprints[0].meta
     c = domain.polygon.centroid
     ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
-    grid = target_grid_for(domain, target, default_spacing(meta, (ax, ay)))
-    grown = domain.polygon.buffer(math.sqrt(2) * grid.spacing, join_style="mitre")
+    grid, grown = target_grid_for(domain, target, default_spacing(meta, (ax, ay)))
     box, needed = source_region(grid, meta, grown)
     plan = plan_mosaic(footprints, box, needed)
     repository.check(plan)
@@ -247,7 +247,7 @@ def _domain_plan(
         # chosen lattice's own cell.
         plan, reach, grown = plan_mosaic(footprints, box, domain.polygon), 0.0, domain.polygon
         while (diagonal := math.hypot(plan.meta.delta_x, plan.meta.delta_y)) > reach:
-            reach, grown = diagonal, domain.polygon.buffer(diagonal, join_style="mitre")
+            reach, grown = diagonal, grow_mitred(domain.polygon, diagonal)
             plan = plan_mosaic(footprints, box, grown)
         if past := _past(box, plan.meta):  # a vertex within 1e-6 cell past a node line
             plan = plan_mosaic(footprints, past, grown)

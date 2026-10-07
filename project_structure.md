@@ -128,6 +128,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   resample (bilinear, threads), check_point_blocks;
                            #   NoData by valid_mask (+-inf is data); never
                            #   imports _core or mosaic (15c-2)
+  grow.py                  # uses_pieces (the gate), grow_mitred: a polygon
+                           #   grown with mitred corners, a long staircase
+                           #   outline in pieces (30d); shapely and NumPy
+                           #   only, never imports _core
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
                            #   mesh (15c-2); takes the edge strip, checked in
