@@ -57,6 +57,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+import typer
 
 import tin_engine.cli as cli
 from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
@@ -225,6 +226,22 @@ class TestTheFlag:
         code, output = invoke("mesh", "--help")
         assert code == 0, output
         assert "--start-quality-gain" in output
+
+    def test_the_help_ties_the_line_split_to_the_constraint_feet(self) -> None:
+        """Pin 4: the line split (R8) runs only with the gain test and the
+        constraint feet both on, so the clause of the help that names the split
+        names the feet too. The meaning is pinned, not the wording: the clause
+        is the ``;``- or ``.``-delimited piece that says "split". Read from the
+        option itself, so terminal width cannot wrap the words apart."""
+        (option,) = [
+            p
+            for p in typer.main.get_command(cli.app).commands["mesh"].params
+            if "--start-quality-gain" in p.opts
+        ]
+        clauses = [c for c in re.split(r"[;.]\s", option.help or "") if "split" in c]
+        assert clauses, option.help
+        for clause in clauses:
+            assert re.search(r"constraint[- ]feet", clause), clause
 
 
 class TestRefusals:
