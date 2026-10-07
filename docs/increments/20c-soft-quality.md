@@ -25,8 +25,8 @@ only), so all 16 planted faults are killed; ctest 886 of 886, pytest
 **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1
 (branch `worktree-soft-quality-2` off master `41bda81a`; Ola: "build
-20c-2 and 20c-3"): **built**, 157 net production lines (`python3
-tools/count_loc.py 41bda81a 65ae0792`; "LOC" says why above the ~110
+20c-2 and 20c-3"): **built**, 158 net production lines (`python3
+tools/count_loc.py 41bda81a 50544838`; "LOC" says why above the ~110
 estimate). Red tests `100f5a09` (`@tester`), their pins ruled (below,
 "Pins ruled for 20c-2's red step"; R7 gains a slack and R8 needs the feet
 on) and amended `5b65941a`; green `d3c939d9` and `96119508`
@@ -37,8 +37,13 @@ passes, the time limit not met; `@developer`'s speed fix `65ae0792`
 the 1 m benchmark met, the split phase over 2 % in seconds but not per
 split, which Ola ruled is how 20c-2 is judged (ruling 8; "The split-phase
 limit for 20c-2, judged per split"); the green step and the fix ruled
-("Rulings on 20c-2's green step and speed fix"). **Next: `@reviewer`'s
-code review**;
+("Rulings on 20c-2's green step and speed fix"). Code review round 1
+(`@reviewer`, on `8ea0f32d`): changes requested, the `--start-quality-gain`
+help promised a line split that `--no-constraint-feet` turns off; fix
+round: red `9f54bc95` (`@tester`, the help-text test), green `50544838`
+(`@developer`, the help reworded, the atan2-skip comment corrected); the
+kill table copied in ("Mutation round for 20c-2"). **Next: `@reviewer`'s
+code review round 2**;
 **20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
 default at 5 m (question 6, ruling 6), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
@@ -2067,8 +2072,10 @@ all kept.
 3. **`GainJudge::capped` skips atan2 when every corner clears θ by
    1e-9 of |cross| + |dot|.** A relative margin, with no length scale: it
    is at most about 8 × 10⁻⁸° of angle, far above the rounding of the test, atan2
-   and the degree conversion (about 10⁻¹⁴ relative), and θ is at most 35°
-   (the CLI). A corner within the margin falls back to the exact call, so
+   and the degree conversion (about 10⁻¹⁴ relative). The argument holds
+   for any θ up to 180°; nothing in the C++ or the binding bounds θ, and
+   above 180° (already meaningless as an angle cap) the skip would wrongly
+   return θ; the comment says so (`50544838`). A corner within the margin falls back to the exact call, so
    the capped value is unchanged; checked as byte-identical meshes at gain
    0 and −1 on Lagan, Numedalslagen, the tile and the quarter
    (`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:139-163`).
@@ -2093,6 +2100,82 @@ all kept.
    passed, `@architect`, on this worktree's installed extension), so no
    test needed `--start-quality-gain -1`; `@tester` checks it again on
    the code under review.
+
+#### Mutation round for 20c-2 (`@tester`, 2026-10-07, test commit `600b2acb`, on code `96119508`)
+
+Copied from `@tester`'s hand-back for the round (code review round 1's
+S1). The suite is `test_quality_gain`, run on the green code (`d3c939d9`
+plus `96119508`) in a scratch copy from `tools/scratch_copy.py 96119508`,
+macOS arm64 Release. Before each build the target's object files and
+binary were deleted; each log shows the compile line of each test file and
+the diff of the planted fault; each binary ran under a timeout; after each
+restore the headers were compared byte for byte. Every fault this file
+lists was killed except D5b, which the design expected to survive. Three
+faults outside the list (QF3, QF4, I1) were not killed by
+`test_quality_gain`; `600b2acb` (tests only, +136 lines) kills each with a
+new case that fails on its fault and passes on the code (21 cases, 7313
+assertions; `test_quality_gain_refine` still passes, 6 cases). Line
+numbers in the two tables are in
+`tests/cpp/unit/test_quality_gain.cpp@96119508` (T) and
+`tests/cpp/property/prop_quality_gain_refine.cpp@96119508` (R); new-case
+lines are at `600b2acb`.
+
+**The round ran before the speed fix** (code review round 1's S2).
+`65ae0792` rewrote `pays` after the round: the acceptance test
+`new_w >= old + gain - s` is now made in two places, inside the loop over
+the removed triangles (the early stop, ruling 4 above) and once after it,
+so D4 and D5 now sit on two comparisons, not one; and `GainJudge::capped`
+(the atan2 skip, ruling 3) did not exist when the round ran, so no fault
+was planted in it. Two things carry the round over: the meshes are byte
+identical before and after the fix at gain 0 and −1 on Lagan,
+Numedalslagen, the tile and the quarter
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:139-163`),
+and `@reviewer`'s round 1 check of the early stop and the atan2 skip by
+argument (the bar only falls, so a yes at any point is final; a corner
+inside the margin falls back to the exact call).
+
+**Kill table: the increment file's list**
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| D1 | cavity crosses a constrained edge (`quality_cavity`: `is_constrained` test dropped) | killed | T:439, cavity `{0,1}` where `{0}` is expected; T:515, 3 new triangles, not 2 |
+| D2 | inexact incircle in the cavity (`quad_flips<pred::FastKernel>` in `quality_cavity` only) | killed | T:478, cavity `{1,0}` where `{1}` is expected (near-cocircular fixture) |
+| D3 | foot's second seed missing (the push of `neighbours(t)[on]` removed) | killed | T:499, cavity of 1 slot, not 2; T:177/178, prediction differs from what Lawson wrote (3 slots removed, 5 made), in the line fixture |
+| D4 | acceptance reversed (`new_w < old + gain - s`) | killed | T:187, worst angle falls 21.80° to 17.40°; T:590, 642, 680; R:129, R:191 |
+| D5 | slack dropped and test made strict (`new_w > old + gain`) | killed | T:641 (the equality fixture gets no insertion); T:680 (`feet` is 0, not ≥ 1) |
+| D5b | slack dropped, `>=` kept | **survived**, as the design expected | Only rounding decides it, and only where it puts `new` below `old` on CF2's own edge. Per the increment file, recorded and not chased. |
+| D6 | R8 splits at the midpoint, not the foot | killed | T:716/717, 0.861 cells off the foot in col, 0.0154 in row |
+| D7 | R8's end check removed (end = 0 in R8's `foot_on` call) | killed | T:768, `line_splits` is 2, not 0 |
+| D8 | R8 left on at gain −1 (`split_lines = constraint_feet`) | killed | T:732, 4 splits, not 0; R:110, T-P3 digest differs. 20c-1's foot suites (CF1, CF2, CF3, CF4 and 20b's suite) pass |
+| D9 | R8 left on with the feet off (`split_lines = judged`) | killed | T:563 and T:745, 4 splits, not 0 |
+
+**Kill table: further faults, including the new shared pieces**
+
+| # | fault planted | result | killed by |
+|---|---|---|---|
+| D10 | R8's outline guard dropped (an outline edge with nothing beyond gets split) | killed | T:779, 7 splits, not 0; T:791; R:81, R:129 |
+| D11 | the validity callable not asked about R8's foot | killed | T:802, 4 splits, not 0 |
+| QF2 | `quad_flips` (shared) uses FastKernel throughout | killed, both sides | Cavity suite: T:476, Lawson's own replay removes 2 slots, not 1; R:110. Lawson side: `test_mesh_lattice_incircle.cpp:894` and `:971`. Line 894 counts `must_flip` decisions (270) that differ from that suite's exact reference copy, so it is a sign disagreement, not a rounding-sized distance. `test_mesh_lawson` survives it. |
+| QF3 | `quad_flips`: the branch for a side that is not counter-clockwise in the frame dropped | Lawson side killed; cavity suite **survived**, now killed by 600b2acb | Lawson side: `test_mesh_lawson.cpp:466`. New case "a side collinear in the frame is decided from the triangle across…": fails at 600b2acb line 622, 1 slot removed, not 2 |
+| QF4 | `quad_flips`' integer path flips on Cocircular | Lawson side killed; cavity suite **survived** (only R:110 caught it), now killed by 600b2acb | Lawson side: `test_mesh_lattice_incircle.cpp:894`, with 890 failures, then the binary hung past the timeout. I count the hang as no part of the kill; line 894 is the kill. `test_mesh_lawson` survives it. New case "on the integer frame a candidate on the circle of the triangle across does not grow the cavity": fails at line 595, 2 slots removed, not 1 |
+| F1 | R8 passes delta (half a cell) for both reach and end | killed | T:561 and T:712 (no splits); R:129–131, R:205 |
+| F2 | `constraint_foot` passes infinity for both reach and end | killed | T:547, T:680; R:110, 123, 129; CF1 lines 119 (×9), 170, 310, 316, 348, 402; CF2 272, 328, 407; CF3 174; CF4 230, 252, 272, 416, 480, 513, 567, 599 |
+| F3 | inside `foot_on`, the end check reads `reach` (and its mirror, the distance check reading `end`) | killed by the compiler gate | `-Werror=unused-parameter` refuses the build (`end`, or `reach`, unused) |
+| I1 | insert routine: the slot across a split edge not seeded or offered | `test_quality_gain` **survived**, now killed by 600b2acb | Already killed elsewhere by `test_mesh_quality.cpp:446/524` and R:129. New case "a line split flips beyond the triangle across the line, as predicted": fails at line 650, the flip of D-E2 is missing from the split |
+| I2 | insert routine: written slots never offered to the queue | `test_quality_gain` survived; killed by `test_mesh_quality.cpp:381` (and 438, 441, 478, 527, 546, 599, 705, 720) and R:110/129 | Not added: "every written slot is offered" is increment 20's invariant, which its suite holds; it is not T-P1, T-P2 or LS1 |
+| I3 | insert routine: a node on an edge inserted as if strictly inside (`edge = 3`) | `test_quality_gain` survived; killed by `test_mesh_quality.cpp:255` (×4), 473, 720, 727 | Not added, for the same reason as I2: it is the node path's on-edge handling, which increment 20's suite covers |
+
+("I" in the QF4 row is `@tester`.) `edge = on` (without the zero-count
+test) is an equivalent mutant: with no zero side, `on` is already 3, so it
+was not run. Every kill above is an exact count, a cavity or slot set, a
+digest, or a distance far above rounding; none rests on a rounding-sized
+oracle violation. "Both suites" for a `quad_flips` fault was read as
+Lawson's side (`test_mesh_lawson` with `test_mesh_lattice_incircle`, the
+integer path's suite) and the cavity's side (`test_quality_gain`); all
+three `quad_flips` faults are caught on both. The QF3 and QF4 cases state
+the expected cavity outright, since a fault in the shared `quad_flips`
+moves the prediction and `legalise_around` together, and T-P1's
+comparison cannot see it.
 
 ### 20c-3
 
@@ -2175,6 +2258,7 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-1 built | `python3 tools/count_loc.py c074f900 69f37d1c`: `constraint_foot.hpp` 77, `quality.hpp` 20, `refine.hpp` −21, `refine_points.hpp` 53, `strip_scan.hpp` 0, `bindings/core.cpp` 8, `_core.pyi` 6, `cli.py` 3, `edge_strip.py` 3, `final_check.py` 7, `run_record.py` 7 | **163** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
 | 20c-2 built | `python3 tools/count_loc.py 41bda81a 65ae0792`: `quality.hpp` 102, `lawson.hpp` 3, `constraint_foot.hpp` 1, `refine.hpp` 6, `bindings/core.cpp` 5, `_core.pyi` 5, `cli.py` 29, `run_record.py` 6. Over the estimate by 47: the plumbing is 51 against ~30, mostly `cli.py`'s option declaration (the help text alone is five lines), its refusals (non-finite, above 10, without `--tolerance`, without `--dem`: pin 8, three checks the estimate did not see) and the wiring into the run and its rows; the speed fix `65ae0792` adds 27 to `quality.hpp` (the atan2 skip, the early stop, the reused buffer), which no estimate had; the green step's `quality.hpp` was 75 against ~80 | **157** (green 130, `count_loc.py 41bda81a 600b2acb`) |
+| 20c-2 review fix | `python3 tools/count_loc.py 41bda81a 50544838`: `cli.py` 30 (+1, the reworded help string); the rest as above | **158** |
 | 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
 
 On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
