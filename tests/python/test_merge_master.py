@@ -344,9 +344,16 @@ def test_the_first_form_without_persona_or_trailer_is_refused_up_front(
     given = {"--persona": "developer", "--trailer": TRAILER}
     del given[missing]
     outcome = setup.run([str(setup.wt), *[w for kv in given.items() for w in kv]])
-    line = refusal(outcome)
-    assert line.startswith("merge_master: ") and missing in line
+    assert refusal(outcome) == missing_option_message(missing)
     assert_no_merge_started(setup, outcome)
+
+
+def missing_option_message(missing: str) -> str:
+    """§4.6's row for a first form or `--continue` without `--persona` or `--trailer`."""
+    return (
+        f"merge_master: {missing} is missing;"
+        " starting or continuing a merge needs --persona and --trailer"
+    )
 
 
 def test_a_failed_fetch_is_refused_as_blocked_on_network(setup: Setup) -> None:
@@ -381,6 +388,22 @@ def test_continue_without_a_merge_this_tool_started_is_refused(setup: Setup) -> 
     assert line.endswith("; start one with: python3 tools/merge_master.py " + line.split()[-1])
     assert same(line.split()[-1], setup.wt)
     assert head(setup.wt) == setup.old_head
+
+
+@pytest.mark.parametrize("missing", ["--persona", "--trailer"])
+def test_continue_without_persona_or_trailer_is_refused_and_leaves_the_merge(
+    setup: Setup, missing: str
+) -> None:
+    conflict_on_a_py_and_claude_md(setup)
+    assert setup.start().code == 3
+    resolve_conflicts(setup)
+    given = {"--persona": "developer", "--trailer": TRAILER}
+    del given[missing]
+    outcome = setup.run([str(setup.wt), "--continue", *[w for kv in given.items() for w in kv]])
+    assert refusal(outcome) == missing_option_message(missing)
+    assert_left_in_progress(setup)
+    assert gates_called(outcome) == []
+    assert "commit" not in outcome.recorder.git_subs()
 
 
 def test_continue_with_unmerged_paths_is_refused_naming_them(setup: Setup) -> None:
@@ -485,7 +508,7 @@ def test_the_merge_list_is_git_log_first_parent_merges_since_the_base(setup: Set
         assert line in outcome.out, f"{line!r} was not printed"
     assert not any(line.startswith("#") for line in setup.body()[1:])
     assert "Conflicts: none" in body
-    assert any(line.endswith("_core rebuilt: no, no C++ came in.") for line in body), body
+    assert "_core rebuilt: no, no C++ came in." in body, body
     assert not any(line.startswith("Changed by hand beyond git's merge:") for line in body)
 
 
@@ -653,7 +676,8 @@ def test_cpp_from_master_rebuilds_core_between_the_fast_gates_and_pytest(setup: 
     copied = site_package(setup) / f"_core{SUFFIX}"
     assert copied.read_bytes() == CORE_BYTES
     assert copied.stat().st_mtime > 1e9 + 1, "the copy's time stamp is touched"
-    assert any("_core rebuilt: yes" in line for line in setup.body()), setup.body()
+    body = [line.strip() for line in setup.body()]
+    assert "_core rebuilt: yes." in body, body
 
 
 def test_no_build_on_continue_refuses_cpp_and_leaves_the_merge(setup: Setup) -> None:
@@ -702,16 +726,70 @@ def test_build_pyext_must_hold_one_core_with_the_venv_suffix(
     assert_left_in_progress(setup)
 
 
+def assert_no_build_pyext_refusal(setup: Setup, line: str, ending: str) -> None:
+    """§4.6's row "C++ came in and no `build-pyext`", the worktree named twice."""
+    prefix = "merge_master: origin/master changed C++ (include/core.h) and "
+    middle = (
+        " has no build-pyext to rebuild _core in; run: python3 tools/new_worktree.py --existing "
+    )
+    assert line.startswith(prefix) and middle in line, line
+    assert line.endswith(f". {ending}"), line
+    named, again = line.removeprefix(prefix).removesuffix(f". {ending}").split(middle)
+    assert same(named, setup.wt) and same(again, setup.wt), line
+
+
 def test_cpp_from_master_without_build_pyext_is_refused_naming_new_worktree(
     setup: Setup,
 ) -> None:
     (setup.wt / "build-pyext").rmdir()
     bring_in(setup, (12, {"include/core.h": "#pragma once\nint f();\n"}))
     outcome = setup.start()
-    line = refusal(outcome)
-    assert line.startswith("merge_master: ") and "new_worktree.py --existing" in line
-    assert "pytest" not in gates_called(outcome)
-    assert head(setup.wt) == setup.old_head
+    assert_no_build_pyext_refusal(setup, refusal(outcome), "No merge was started")
+    assert_no_merge_started(setup, outcome)
+    assert builds(outcome) == []
+    assert gates_called(outcome) == []
+
+
+def test_continue_without_build_pyext_refuses_cpp_and_leaves_the_merge(setup: Setup) -> None:
+    conflict_on_a_py_and_claude_md(setup)
+    bring_in(setup, (13, {"include/core.h": "#pragma once\nint f();\n"}))
+    assert setup.start().code == 3
+    resolve_conflicts(setup)
+    (setup.wt / "build-pyext").rmdir()
+    outcome = setup.resume()
+    assert_no_build_pyext_refusal(setup, refusal(outcome), "The merge is left in progress")
+    assert builds(outcome) == []
+    assert gates_called(outcome) == []
+    assert_left_in_progress(setup)
+
+
+def test_no_build_and_no_build_pyext_on_continue_is_the_no_build_refusal(setup: Setup) -> None:
+    conflict_on_a_py_and_claude_md(setup)
+    bring_in(setup, (13, {"include/core.h": "#pragma once\nint f();\n"}))
+    assert setup.start().code == 3
+    resolve_conflicts(setup)
+    (setup.wt / "build-pyext").rmdir()
+    outcome = setup.resume("--no-build")
+    assert refusal(outcome) == (
+        "merge_master: origin/master changed C++ (include/core.h); the suite needs a rebuilt"
+        " _core and this run may not build C++. The merge is left in progress; hand back"
+    )
+    assert builds(outcome) == []
+    assert_left_in_progress(setup)
+
+
+def test_no_build_and_no_build_pyext_on_the_first_form_is_the_no_build_refusal(
+    setup: Setup,
+) -> None:
+    (setup.wt / "build-pyext").rmdir()
+    bring_in(setup, (12, {"include/core.h": "#pragma once\nint f();\n"}))
+    outcome = setup.start("--no-build")
+    assert refusal(outcome) == (
+        "merge_master: origin/master changed C++ (include/core.h); the suite needs a rebuilt"
+        " _core and this run may not build C++. No merge was started; hand back"
+    )
+    assert_no_merge_started(setup, outcome)
+    assert builds(outcome) == []
 
 
 # --- 8. MERGE_HEAD gone ------------------------------------------------------------------------
@@ -782,8 +860,11 @@ def test_abort_returns_the_tree_to_the_old_head_and_removes_the_state(setup: Set
 def test_abort_with_no_merge_in_progress_is_refused(setup: Setup) -> None:
     outcome = setup.run([str(setup.wt), "--abort"])
     line = refusal(outcome)
-    assert line.startswith("merge_master: ")
+    prefix, suffix = "merge_master: no merge in progress in ", "; nothing to abort"
+    assert line.startswith(prefix) and line.endswith(suffix), line
+    assert same(line.removeprefix(prefix).removesuffix(suffix), setup.wt), line
     assert head(setup.wt) == setup.old_head
+    assert "merge" not in outcome.recorder.git_subs()
 
 
 def test_the_default_run_answers_a_missing_program_with_127(setup: Setup, tmp_path: Path) -> None:
