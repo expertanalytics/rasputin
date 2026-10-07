@@ -130,8 +130,16 @@ def start(t: Tree, args: argparse.Namespace) -> int:
         t.drop_state()
         raise Refusal(f"git merge failed (exit {merge.returncode}); its output is above")
     t.state.write_text(json.dumps(state, indent=1))
+    same_master(t, master)  # a fetch elsewhere moved origin/master: refuse before the stop
     stop(t, state["conflicts"])
     return 3
+
+
+def same_master(t: Tree, merged: str) -> None:
+    found = t.merge_head.read_text().strip()
+    if found != merged:
+        a, b = t.out("rev-parse", "--short", found), t.out("rev-parse", "--short", merged)
+        raise Refusal(f"MERGE_HEAD is {a}, but this tool merged {b}; stop and hand back")
 
 
 def stop(t: Tree, conflicts: list[str]) -> None:
@@ -161,10 +169,7 @@ def finish(t: Tree, args: argparse.Namespace) -> int:
                       "commit during it). Nothing was committed by this tool; stop and "
                       "hand back")  # fmt: skip
     state = json.loads(t.state.read_text())
-    found, merged = t.merge_head.read_text().strip(), state["master"]
-    if found != merged:
-        a, b = t.out("rev-parse", "--short", found), t.out("rev-parse", "--short", merged)
-        raise Refusal(f"MERGE_HEAD is {a}, but this tool merged {b}; stop and hand back")
+    same_master(t, state["master"])
     unresolved = t.lines("diff", "--name-only", "--diff-filter=U")
     if unresolved:
         raise Refusal(f"still unresolved: {', '.join(unresolved)}; resolve with Edit, then git add")

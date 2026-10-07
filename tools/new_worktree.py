@@ -101,11 +101,11 @@ def set_up(run: Run, wt: Path, version: str) -> None:
     py = str(wt / ".venv" / "bin" / "python")
     if not (wt / ".venv").exists():
         step(run, "uv venv", ["uv", "venv", "--python", version, str(wt / ".venv")], wt)
-    found = check(run, wt, py)
-    if isinstance(found, str):
+    found, configured = check(run, wt, py), (wt / "build-pyext" / "CMakeCache.txt").exists()
+    if isinstance(found, str) or not configured:  # the configure needs pybind11 in this venv
         step(run, "uv pip install", ["uv", "pip", "install", "--python", py, "-e",
                                      ".[dev,codecs]", "pybind11"], wt, wt)  # fmt: skip
-    if not (wt / "build-pyext" / "CMakeCache.txt").exists():
+    if not configured:
         cmakedir = step(run, "pybind11 --cmakedir", [py, "-m", "pybind11", "--cmakedir"], wt, wt)
         step(run, "cmake configure", ["cmake", "-S", str(wt), "-B", str(wt / "build-pyext"),
              "-DCMAKE_BUILD_TYPE=Release", "-DRASPUTIN_BUILD_PYTHON=ON",
