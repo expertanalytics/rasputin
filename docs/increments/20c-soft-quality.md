@@ -18,7 +18,7 @@ remaining time (question 7, ruling 7). Code review round 1 (`@reviewer`,
 on `0346ac63`): changes requested, no mutation record; `@tester`'s
 mutation round then ran ("Mutation round for 20c-1": 4 survivors of 16
 faults, one killed by the new test `4a64c1ef`), and each survivor is ruled
-there. **Next: `@tester`'s kills as ruled there (three test additions and
+there. **Next: `@tester`'s kills as ruled there (four test additions and
 one header fix, no production change), then code review round 2
 (`@reviewer`)**;
 **20c-2** the soft criterion and a split of the
