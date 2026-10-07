@@ -4,8 +4,10 @@ Status: **designed** (`@architect`, 2026-10-06, branch
 `worktree-soft-quality` off master `ed12512`), design review rounds 1 to
 5 answered and round 6 approved; in three PRs: **20c-1** the foot rule on
 every insertion path: red tests written (`a982d531`, `@tester`), their pins
-ruled (below, "Pins ruled for 20c-1's red step"), next `@tester`'s
-amendment of 20b's helper tests and then `@developer`; **20c-2** the soft criterion and a split of the
+ruled (below, "Pins ruled for 20c-1's red step"), green step `8f275220`
+(`@developer`) with four items left failing, ruled below ("Rulings on
+20c-1's green step"); next `@tester`'s re-pins, oracle margin and test
+amendments, then `@developer`'s `MeshVertex` callable; **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
 **20c-3** input clean-up and coarsening, and Ola's outline rule (built
 either way; question 6 sets only whether it is on by default), after
@@ -784,7 +786,9 @@ and quality during refinement, not only at the start (C3). Measured:
 ### R1. One geometric helper, three policies
 
 - **New header `include/terrain/mesh/constraint_foot.hpp`**, depending on
-  `core`, `predicates` and `lattice_mesh.hpp` only; no raster, no height.
+  `core`, `predicates`, `lattice_mesh.hpp` and `lawson.hpp` (for
+  `LatticeFrame`, which itself depends on those three only); no raster, no
+  height.
 
   ```cpp
   enum class FootStatus : std::uint8_t { None, Hit, NearEnd, NotCounterClockwise };
@@ -1293,6 +1297,120 @@ covers the quality start, since `refine`'s switch is the pass's (R2.6).
   `.github/workflows/main.yaml`'s `tsan` job (the build targets and the run
   list, which must match). `test_constraint_foot` does not; it starts no
   threads. Confirmed.
+
+#### Rulings on 20c-1's green step (`@architect`, 2026-10-07, on `8f275220`)
+
+`@developer`'s green commit (147 net LOC) left four things failing and made
+five choices the design did not. Each was checked against the code first.
+
+1. **F2's `feet_refused == 1` becomes 2: correct under R3, `@tester`
+   re-pins.** Checked with a scratch build of F2's fixture: the two refused
+   nodes are the needle (row 16, col 8) and its neighbour above, (row 15,
+   col 8), 0.0158 cells right of the side. That node's foot, (col 7.984,
+   row 15.0008), lies in a cell whose column-7 corners are the fixture's
+   NaN nodes, so `vertex_z` refuses it, and R3 and R5 say a refused foot is
+   counted and the node inserted. 20b never asked: the node's own triangle
+   has no constrained edge, only its neighbour does, which is exactly what
+   R3 adds. Without the NoData column the same run foots that node (4 feet,
+   0 refused). The pin becomes `== 2`, with that reason in the comment, and
+   the case also asserts that both nodes are vertices.
+2. **CF4's 2 Delaunay violations on macOS: an oracle defect, `@tester`
+   fixes the oracle; nothing in production.** Checked: the case fails in a
+   default Release build and passes with `-ffp-contract=off`; the library
+   (`libterrain_predicates.a`, which holds the exact predicate) built either
+   way makes no difference, only the contraction in the test's own
+   translation unit, which compiles the header-only producer and its
+   `x_min + col * dx` output. The violating quad is vertices 256 (a foot),
+   339 (a strip point), 290 and 389 (nodes): two points on the same tilted
+   side beside two nodes, cocircular to within rounding (exact incircle +1.77e-8 on terms around
+   60). The oracle
+   rebuilds (col, row) from world points at y_max = 7e6 m, which carries
+   about 1e-9 m of rounding, and asks the exact incircle of that rounded
+   copy: the exact predicate on rounded data, not the producer's relation.
+   **A small-origin fixture does not fix it**: with y_max = 160 m, where the
+   rebuild is good to about 1e-14 m, the same case still fails, with 2
+   violations under contraction and 4 without (determinants around 1e-13),
+   because the producer routinely makes such near-cocircular quads along a
+   footed line. The fix, in `tests/cpp/support/constraint_foot_oracles.hpp`'s
+   `delaunay_violations`:
+   - an edge is a violation when the exact incircle says Inside **and** the
+     apex lies inside the circumcircle by more than
+     η = 1e-7 · min(dx, dy) in the producer frame (R − |apex − centre|,
+     centre and radius in double). Scale: 5e-7 m on the 10 m × 5 m fixtures,
+     about 500 times the rebuild's rounding at y_max = 7e6 m; checked there;
+     it holds while half an ulp of the largest world coordinate stays under
+     η / 100 (world coordinates below about 4e7 m at 5 m cells). A real
+     missed flip is off by a fraction of a cell, not by 5e-7 m.
+   - the case reports the depth of every quad it excuses, and `@tester`
+     shows the oracle can still fail: with `legalise_around` skipped after a
+     final-check foot split (a planted mutant in `refine_points.hpp`,
+     restored and `touch`ed afterwards), CF4 must go red with depths far
+     above η. That is the evidence the margin does not hide a defect.
+   **CI**: `macos-latest` is Apple clang on arm64, which contracts by
+   default, so this case would fail there as it does locally. The Linux
+   jobs use GCC on x86-64; GCC's default for C++ is to contract, but the
+   build passes no `-march`, so the baseline instruction set has no fused
+   multiply-add to contract into and the Linux build behaves as
+   `-ffp-contract=off` does. That pass is luck, not evidence (the small-origin
+   run fails without contraction too). 20b's `delaunay_oracle` in
+   `tests/cpp/property/prop_refinement_constraint_feet.cpp` rebuilds the
+   same way and is green on both today; it is not changed in 20c-1, and gets
+   the same margin if it ever goes red on a platform.
+3. **The two stub tests: `@tester` amends them.** Pin 10 puts
+   `constraint_feet` on `_core.refine_points` and `_core.refine_strip`, and
+   both bindings (`bindings/core.cpp`) and `_core.pyi` take it last, after
+   `frozen_mask` (23b's "goes last" rule).
+   `tests/python/test_core_edge_strip.py::TestStubs::test_refine_strips_parameters`
+   expects `["tolerance", "threads", "frozen_mask", "constraint_feet"]`, and
+   `tests/python/test_core_refine_points.py::TestStubs::test_refine_points_takes_tolerance_threads_strip_and_frozen_mask_by_keyword`
+   expects `["tolerance", "threads", "strip", "frozen_mask",
+   "constraint_feet"]`; each comment says 20c-1 (pin 10) added it.
+4. **Stale citations: fixed in this commit.** `refine.hpp` went from 436 to
+   405 lines. The six broken citations (`25-plain-output.md` lines 115 and
+   120, `27-node-sampling.md` lines 124, 150, 171 and 263) and the at-risk
+   ones whose line now says something else (`27-node-sampling.md` 115,
+   `15f-edge-strip.md` 64, 1554 and 1904, `23-basin-scale.md` 3267 to 3271)
+   are pinned to `ed125121`, where each line was read and says what the text
+   claims; `15f-edge-strip.md` 1904 to `17c2d14`, the commit its review
+   names, since at `ed125121` line 101 is another field.
+   `python3 tools/check_citations.py` exits 0.
+5. **The five choices beyond the design:**
+   - **The validity callable: changed, to the design.** The green commit
+     keeps `improve`'s constraint `std::predicate<const LatticeVertex&>`
+     and judges a foot only if the callable also takes a `MeshVertex`; a
+     `LatticeVertex`-only callable silently refuses every foot, so feet on
+     would quietly do nothing for such a caller. R2.3 says the callable
+     takes a `MeshVertex`. First `@tester`, in its own commit: the seven
+     callables in `tests/cpp/unit/test_mesh_quality_void.cpp` take
+     `const MeshVertex&` (the `asked` vector too; `MeshVertex ==
+     LatticeVertex` exists), which compiles and passes against the green
+     code as it is. Then `@developer`: the constraint becomes
+     `std::predicate<const MeshVertex&>`, the `if constexpr` goes, the foot
+     is judged by `valid(s.at)`, and the header comment's sentence about a
+     `LatticeVertex`-only callable goes.
+   - **`constraint_foot.hpp` includes `lawson.hpp` for `LatticeFrame`:
+     kept.** `lawson.hpp` depends on core, `lattice_mesh.hpp` and the
+     predicates only, the set R1 allows; R1 now names it.
+   - **A footed DEM node's foot is not in `nodes_inserted`; its fallback
+     insertion is: kept.** A foot is not a DEM node (pin 5's reason), and
+     the field stays a subset of `inserted`.
+   - **`feet_fallback` counts any later insertion of a footed position:
+     kept.** That is R4.5's definition; a footed point goes in as itself at
+     most once (it is then a vertex), so `feet_fallback <= feet` holds.
+   - **`foot_epsilon` for every split with feet on: kept for now, measured
+     by `@perf`.** 20b computed it only when the triangle had a constrained
+     edge; it now reads up to 16 DEM values per split in the serial phase.
+     `@perf`'s acceptance reports the split phase's seconds, feet on against
+     `--no-constraint-feet`, on both catchments; if the feet-on figure is
+     more than 2 % higher, `@developer` computes ε only when the triangle or
+     a neighbour across an unconstrained edge has a constrained, non-frozen
+     edge (no change to the output).
+
+**Next, in order.** `@tester`, one commit each: F2's re-pin (1); the CF4
+oracle margin with its mutant demonstration (2); the two stub tests (3);
+`test_mesh_quality_void.cpp`'s callables (5). Then `@developer`: the
+`MeshVertex` constraint on `improve` (5). Then the full C++ and Python runs,
+`@reviewer`, and `@perf`.
 
 ### 20c-2
 
