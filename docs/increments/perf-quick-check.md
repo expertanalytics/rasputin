@@ -42,6 +42,15 @@ returned one line, `legacy-archive:legacy/rasputin/avalanche.py:26`, a
 
 `python tools/bench_quick.py run [--tree DIR] [--budget 900] [--save-baseline]`.
 
+**When it runs** (Ola's ruling on question 3, section 10). There is no blanket
+trigger. Each increment's design says in one line whether the change could
+change speed, and why. It could when it changes what work `rasputin mesh` does:
+a step turned on by default, how files are read or written, refine, decode or
+feature reading. A new flag off by default, a reworded error or help text is
+"no effect on speed". On yes, the main session runs the quick check before the
+push; on no, nothing runs. The monthly extensive run (section 4) catches what
+that judgment misses.
+
 **Cases**, fixed, in `docs/benchmarks/quick/cases.toml`, run in this order:
 
 | case | inputs | threads | runs | est. per run |
@@ -184,14 +193,18 @@ network.
 
 ## 9. Rule text this needs (proposed, not applied)
 
-**`docs/increments/README.md`, *Acceptance*, a new first paragraph (+77 words):**
-"**The quick check comes first.** An increment whose diff touches code that
-`rasputin mesh` runs gets `python tools/bench_quick.py run` before the push: a
-fixed set of cases against the stored master baseline, stopped at 15 minutes
-(`docs/increments/perf-quick-check.md`). It answers "is it slower"; the run
-below never does. The run below also runs on master on the first unattended
-night of each month, and on Ola's ask. A `HOTSPOT` line goes to Ola as an
-`ASK OLA:` line."
+**`docs/increments/README.md`, *Acceptance*, a new first paragraph (+137 words):**
+"**The quick check, when speed could change.** Each design says in one line
+whether the change could change speed, and why. It could when it changes what
+work `rasputin mesh` does: a step on by default, how files are read or written,
+refine, decode or feature reading. A new flag off by default, a reworded error
+or help text has no effect. On yes, the main session runs
+`python tools/bench_quick.py run` before the push: fixed cases against the
+stored master baseline, stopped at 15 minutes
+(`docs/increments/perf-quick-check.md`). On no, nothing runs. It answers "is it
+slower"; the run below never does. The run below also runs on master on the
+first unattended night of each month, which catches what the one-line judgment
+misses, and on Ola's ask. A `HOTSPOT` line goes to Ola as an `ASK OLA:` line."
 
 **`.claude/agents/perf.md`, §1, two bullets (+44 words):**
 "* **The quick check** (`tools/bench_quick.py`): 15 minutes at most; its cases,
@@ -210,5 +223,24 @@ write-up runs beside others."
 verdict other than `NO CHANGE`, on a `HOTSPOT`, for the extensive run, or for a
 diagnosis."
 
-Net: +194 words across three files; none removed. The `description:` line
+Net: +254 words across three files; none removed. The `description:` line
 of `perf.md`'s front matter stays as it is.
+
+## 10. Questions for Ola (question 3 ruled 2026-10-07; 1, 2 and 4 open)
+
+Asked in the design's handback at `a7a15f1b`; recorded here as asked.
+
+1. Should the main session run the quick check itself, and spawn `@perf` only
+   when something is found? Default: yes.
+2. Are 40 % of a run (for a phase) and 25 % (for a single call in a profile)
+   the right hotspot thresholds? Default: yes.
+3. Should every increment whose change touches code that `rasputin mesh` runs
+   get the quick check before its push, not only refine and mesh changes?
+   Default: yes.
+   **Ola, 2026-10-07: "I'm not sure I support q3." "It's very dogmatic."
+   "Aay you change the CLI - why would we want this?"** The main session then
+   proposed the one-line judgment now in section 3 (*When it runs*), and
+   **Ola: "Ok, this is good".** *Ruled: no blanket trigger; each design's
+   one-line speed judgment decides.*
+4. Should the full extensive run happen on master on the first unattended
+   night of each month? Default: yes.
