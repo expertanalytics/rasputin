@@ -282,3 +282,7 @@ keeps it on GEOS. No sweep, no profile unless the check misses.
 ## 10. ROADMAP
 
 Row 30d in `ROADMAP.md`.
+
+## Review
+
+30d code review round 1, 2026-10-07, @reviewer: range f81b20b7..2817f6c1 (perf baseline d9f9c025, design f300248e, red b414193c, green 4f13ee90, speed check 2817f6c1). Verdict: CHANGES REQUESTED. LOC: 36 added, 7 removed, 29 net (grow.py +26, target_grid.py +3, dem_input.py 0, feature_input.py 0) against "about +25", no split needed. B1: /Users/skavhaug/projects/rasputin/.claude/worktrees/buffer-speed-2/tests/python/test_target_grid.py@2817f6c1:39-40, "Red until 30d: target_grid_for returns the grid alone" is a red-step leftover and now false; drop that sentence. B2: /Users/skavhaug/projects/rasputin/.claude/worktrees/buffer-speed-2/project_structure.md@2817f6c1:99-160 lists every module in src_python/tin_engine except the new grow.py; add its row (uses_pieces, grow_mitred, shapely and NumPy only, no _core). CI not run (branch never pushed). Touched suites 401 passed locally against the branch code.
