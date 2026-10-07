@@ -5,8 +5,10 @@
 
 - `TargetGrid(crs, spacing, row0, col0, rows, cols)`, frozen; node `(R, K)`
   at `(K h, -R h)` in the target CRS (J6); `spacing` whole metres, 1 to 1000.
-- `target_grid_for(domain, target, spacing) -> TargetGrid`: the domain grown
-  by the cell diagonal with mitred corners, snapped outward to the lattice.
+- `target_grid_for(domain, target, spacing) -> tuple[TargetGrid, Polygon]`:
+  the domain grown by the cell diagonal with mitred corners, snapped outward
+  to the lattice, and that grown domain (increment 30d, section 3.1: the
+  caller no longer grows it a second time).
 - `TileWindows(tile)`, a `SourceWindows`: `.meta` and `.window(r0, r1, c0, c1)`.
 - `resample(grid, source, threads) -> DemTile`: bilinear in the source's
   index space; a node whose stencil touches NoData or leaves the source is
@@ -32,6 +34,10 @@ HOW THIS FILE GOES RED: `tin_engine.target_grid` does not exist; it is
 imported in a fixture, so each test fails on its own. The `to_core` gate
 fails on its assertion (no refusal), because `RasterMeta` ignores
 `geographic` before 15c-2.
+
+AMENDED for 30d (`docs/increments/30d-outline-buffer-speed.md`, section 3.1):
+the two G3 tests unpack `(grid, grown)`. Red until 30d: `target_grid_for`
+returns the grid alone.
 """
 
 from __future__ import annotations
@@ -145,7 +151,7 @@ class TestTheTargetGrid:
     def test_nodes_are_multiples_of_h_bit_for_bit(
         self, tg: ModuleType, domain: DomainPolygon
     ) -> None:
-        grid = tg.target_grid_for(domain, TARGET, H)
+        grid, _ = tg.target_grid_for(domain, TARGET, H)
         assert (grid.crs, grid.spacing) == (TARGET, H)
         source = tg.TileWindows(geographic_tile(rough(80, 80)))
         tile = tg.resample(grid, source, threads=2)
@@ -157,8 +163,13 @@ class TestTheTargetGrid:
     def test_the_extent_covers_the_grown_domain_and_no_more(
         self, tg: ModuleType, domain: DomainPolygon
     ) -> None:
-        grid = tg.target_grid_for(domain, TARGET, H)
-        grown = domain.polygon.buffer(math.sqrt(2) * H, join_style="mitre")
+        result = tg.target_grid_for(domain, TARGET, H)
+        assert isinstance(result, tuple) and len(result) == 2, type(result)
+        grid, grown = result
+        # 30d, section 3.1: the grown domain it returns is GEOS's mitred buffer
+        # (a 4-vertex domain is off the gate of section 3.3), bit for bit.
+        expected = domain.polygon.buffer(math.sqrt(2) * H, join_style="mitre")
+        assert shapely.to_wkb(grown) == shapely.to_wkb(expected)
         x0, y1 = grid.col0 * H, -grid.row0 * H
         x1, y0 = x0 + (grid.cols - 1) * H, y1 - (grid.rows - 1) * H
         gx0, gy0, gx1, gy1 = grown.bounds
