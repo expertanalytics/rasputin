@@ -63,6 +63,7 @@
 
 using terrain::TriangleIndices;
 using terrain::mesh::constraint_foot;
+using terrain::mesh::foot_reachable;
 using terrain::mesh::FootSearch;
 using terrain::mesh::FootStatus;
 using terrain::mesh::LatticeFrame;
@@ -290,6 +291,45 @@ TEST_CASE("CF1: a frozen edge is never a foot, on t or on a neighbour", "[mesh][
         LatticeMesh m = build(fx.v, fx.tris, {{{0u, 3u}, 4u}});
         m.set_frozen_mask(4u);
         REQUIRE(constraint_foot(m, 0, V(5, 0.1), kDelta, kUnit).status == FootStatus::None);
+    }
+}
+
+// ------------------------------------------------------------------ foot_reachable
+
+// foot_reachable(m, t) is the contract the speed fix 69f37d1c rests on: where
+// it is false, constraint_foot finds nothing at t. Kills "ignores the
+// triangle's own edges", "ignores the neighbours" and "always true".
+TEST_CASE("CF1: foot_reachable is true where t's own edge or a neighbour's is constrained and live, and false "
+          "where constraint_foot can find nothing",
+          "[mesh][constraint_foot][CF1][reachable]") {
+    const FixtureA fx;
+    const MeshVertex p = V(5, 0.1);  // 0.1 from a-b, 0.105 from a-d
+    SECTION("only t's own a-b: true") {
+        const LatticeMesh m = build(fx.v, fx.tris, {{{0u, 1u}, 1u}});
+        REQUIRE(foot_reachable(m, 0));
+        REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::Hit);
+    }
+    SECTION("only the neighbour's a-d, across t's free a-b: true") {
+        const LatticeMesh m = build(fx.v, fx.tris, {{{0u, 3u}, 2u}});
+        for (unsigned k = 0; k < 3; ++k) REQUIRE_FALSE(m.is_constrained(0, k));
+        REQUIRE(foot_reachable(m, 0));
+        REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::Hit);
+    }
+    SECTION("the only live edge, a-d, lies beyond t's constrained (frozen) a-b: false") {
+        LatticeMesh m = build(fx.v, fx.tris, {{{0u, 1u}, 4u}, {{0u, 3u}, 2u}});
+        m.set_frozen_mask(4u);
+        REQUIRE_FALSE(m.is_frozen(1, 1));  // a-d is live
+        REQUIRE_FALSE(foot_reachable(m, 0));
+        REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::None);
+    }
+    SECTION("the only constrained edge is frozen: false, on t and on the neighbour") {
+        for (const Pair e : {Pair{0u, 1u}, Pair{0u, 3u}}) {
+            CAPTURE(e.first, e.second);
+            LatticeMesh m = build(fx.v, fx.tris, {{e, 4u}});
+            m.set_frozen_mask(4u);
+            REQUIRE_FALSE(foot_reachable(m, 0));
+            REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::None);
+        }
     }
 }
 
