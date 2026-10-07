@@ -1,7 +1,7 @@
 # Harness h19: the after-commit gate checks the tree that was committed
 
-Status: design review round 1 answered on `worktree-commit-gate` off
-`5c41238`; next, design review round 2. Not yet red. One PR, about 45 net
+Status: red `3907dcce`, pins ruled (§8); next `@developer` (green). On
+`worktree-commit-gate` off `5c41238`. One PR, about 45 net
 production lines (§6), in one governed file,
 `.claude/hooks/gates_after_commit.py`, plus one new test file. Ola's ruling
 in §7.
@@ -342,8 +342,59 @@ open for you: h19's question, telling the agent "not checked" when the hook
 can't tell the folder: yes." So §3.2 and §3.4 stand as written: NOT
 CHECKED, exit 2, no gate run in another tree in its place.
 
+## 8. Pins for the red step
+
+`@tester`'s red step `3907dcce` (`tests/python/test_gates_after_commit.py`)
+made nine assumptions beyond §3-§5. Ruled, each checked against the test file
+and, for the word forms, against `shell_scan.parse` at `3907dcce`:
+
+1. **Unknown word, as `shell_scan` gives it.** Taken. "The word as written"
+   (§3.2) means the word after quote removal: `cd -` gives `"-"`, `cd "$WT"`
+   gives `"$WT"` (`parse` yields `['cd', '$WT']`).
+2. **`--git-dir` and `--work-tree`.** Taken. The glued form gives the one
+   word, `"--work-tree=/a"`. The two-word form gives the option and its
+   argument joined by one space (`"--work-tree /a"`); the test asserts only
+   a `str` starting with the option name, which is enough.
+3. **First unknown word kept.** Taken, as §3.2's third row says: `cd - &&
+   cd b` and `cd - && git -C b` both give `"-"`; an absolute `cd` after it
+   gives a directory again.
+4. **The tree is named in the hook's own words.** Required, not an example:
+   every failure block is headed by the tree it ran in, on every exit 2,
+   also when only one tree was gated. The words `Gates in <tree>:` are the
+   example; the path, as `committed_trees` returns it, is the requirement.
+   So the test's "path appears at least twice in stderr" (once in the stub's
+   `RED IN`, once in the heading) is right.
+5. **Main checkout, green.** Taken: all five gates run there, each `ruff`
+   call counted, exit 0 and silent (§3.3, unchanged).
+6. **A missing directory.** Taken. `committed_trees` returns it as `str` of
+   the directory §3.2 resolved, the same type as an unknown word; its NOT
+   CHECKED line contains that path. One wording may cover both kinds of
+   `str` (for example "which this hook cannot resolve to a work tree").
+7. **`shell_scan` not importable.** Taken: the same route as an unreadable
+   line (§3.2): text test, gates in `cwd`'s tree, a NOT CHECKED line, exit 2
+   even when the gates pass. The line must say the true cause: "could not be
+   read" for an unreadable line, that `shell_scan` could not be imported when
+   that is the cause. The module-level name `shell_scan` is `None` after a
+   failed import (`except ImportError`, as `guard_push.py` on PR B).
+8. **Tops as `git rev-parse` gives them.** Taken: `Path(<its output>)`, no
+   further `resolve()`; a `Path`, never a `str`, for a resolved tree. The
+   test's fixture paths are resolved, and `git rev-parse --show-toplevel`
+   gives the real path, so they compare equal.
+9. **`git_dirs` is pure.** Taken: with `cwd` `/c`, a plain committing git
+   gives `Path("/c")` and `cd b` gives `Path("/c") / "b"`. `git_dirs` joins
+   paths and expands `~` only: no `resolve()`, no existence check, no `..`
+   folding; existence and the top are `committed_trees`'s.
+
+One more pin, from item 7: the opening sentence of the exit-2 message
+("these gates are red") must stay true when nothing is red and only NOT
+CHECKED lines are printed.
+
 ## Review
 
 h19 design review round 1 (@reviewer, 5c412383..abeff234 on worktree-commit-gate, docs only, 0 counted lines): CHANGES REQUESTED, with two blocking items. B1: the design says to import `shell_scan` "the way guard_push.py imports it" (/Users/skavhaug/projects/rasputin/.claude/worktrees/commit-gate/docs/increments/h19-commit-gate-tree.md@abeff234:73-76). At the design's own base that way is `sys.path.insert(0, ...)`. PR B's fix G4 removes exactly that form as a live hole (/Users/skavhaug/projects/rasputin/.claude/worktrees/h16b/.claude/hooks/guard_push.py@c83dfe0e:32-35). The design must say `sys.path.append`. B2: the quote "1-3 default" (docs/increments/h19-commit-gate-tree.md@abeff234:10) is recorded in the tree only as Ola's answer on 20c questions 7 and 6 (/Users/skavhaug/projects/rasputin/docs/increments/20c-soft-quality.md@5c412383:1912-1913). Either check it against the transcript as an answer on the retrospective's questions, or drop it and keep the verbatim "T1 and guard PR B now". Everything else I checked holds. 6 suggestions: S1 Ola's "no" answer to question 1 spelled out, S2 unknown directory stays unknown, S3 `=` forms, S4 nested `cd` leaks, S5 `git_dirs` without shell_scan, S6 two wording fixes.
 
 `@architect` answer to round 1: B1 taken, §3 names `sys.path.append` and why not `insert(0, ...)`, with test 9; B2 checked against the session transcript (the 05:36 UTC list's item 3 was the retrospective with T1-T6, R1, R2, S1), both quotes now in the opening; S1 moot, Ola ruled yes at 09:38 UTC (§7); S2 taken (§3.2 row, test 4 cases); S3 taken (§3.1, §3.2); S4 taken as a limit, checked with `shell_scan.parse` at `5c41238`; S5 taken (docstring, test 9's second half; the `APPENDERS` idea done as test 9 so neither PR edits the other's file); S6 taken (`agent_type` under `--agent`, PR B past round 9). The round 1 line above is word for word but one change: its short citation of this file gains the `docs/increments/` prefix, so that `check_citations.py` resolves it.
+
+h19 design review round 2 (@reviewer, abeff234..80d1627b on worktree-commit-gate, docs only, 0 counted lines): APPROVED. Both blocking items from round 1 are fixed. B1: the design now names `sys.path.append` and says why `insert(0, ...)` is not used (docs/increments/h19-commit-gate-tree.md@80d1627b:84-93). B2: both of Ola's approvals are quoted with their context (docs/increments/h19-commit-gate-tree.md@80d1627b:12-21). Ola's ruling on question 1 is recorded in §7. S1-S6 are taken. 2 suggestions: S1 round 1's guard_push line numbers, S2 test 9's missing module must fail in a fresh process.
+
+`@architect` answer to round 2: nothing blocking. S1 noted: round 1's `guard_push.py` citation should read `.claude/hooks/guard_push.py@c83dfe0e:42-44` (the `sys.path.append` lines), not `:32-35`; the round 1 line stays word for word. S2 done in the red step `3907dcce`: test 9's missing-module half runs in a fresh, isolated interpreter (`python -I`). The red step's nine assumptions are ruled in §8.
