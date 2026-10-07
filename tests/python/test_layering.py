@@ -37,11 +37,12 @@ LAYERS: tuple[dict[str, str], ...] = (
     {  # L1: pure algorithms
         "crs": "run_record",
         "mosaic": "io.models",
-        "target_grid": "crs domain io.models",
+        "target_grid": "crs domain grow io.models",
         "grid_domain": "io.models",
         "domain": "crs io.models",
         "chains": "domain features",
         "elevation": "", "outline": "", "sensitivity": "", "landcover": "", "decompose": "",
+        "grow": "",  # 30d: the outline grown, shapely and NumPy only
         "burn": "gauge io.models",
         "gauge": "hydrography",
         "reference": "io.models",
@@ -73,7 +74,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "_core": "",
     },
     {  # L4: pipelines
-        "dem_input": "crs domain io.models io.repository mosaic target_grid",
+        "dem_input": "crs domain grow io.models io.repository mosaic target_grid",
         "feature_input": "crs domain features io.geojson io.geopackage io.gml io.repository",
         "catchment": "burn catchment_core crs gauge io.models io.repository mosaic outline"
                      " sensitivity",

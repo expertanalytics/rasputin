@@ -1,0 +1,19 @@
+{"tin_engine": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-30d2/pkg/tin_engine/__init__.py", "shapely": "2.1.2", "geos": "3.13.1"}
+{"catchment": "lagan", "step": "footprints (tile headers)", "runs": [0.03867229097522795, 1.0209041647613049e-05, 9.00006853044033e-06], "median": 1.0209041647613049e-05}
+{"catchment": "lagan", "step": "domain.to_crs(target)", "runs": [0.0024753750767558813, 0.000367708969861269, 0.0003184169763699174], "median": 0.000367708969861269}
+{"catchment": "lagan", "step": "target_grid_for (target_grid.py:107's buffer inside)", "runs": [17.489374416996725, 17.34058916696813, 16.889420541003346], "median": 17.34058916696813}
+{"catchment": "lagan", "step": "buffer target_grid.py:107 = dem_input.py:213 (the same call)", "runs": [16.860027667018585, 16.961117333965376, 16.85829687502701], "median": 16.860027667018585, "distance": 43.84062043356595, "vertices": 56261}
+{"catchment": "lagan", "step": "target_grid.source_region (target_grid.py:145's buffer inside)", "runs": [0.2116704999934882, 0.21104704204481095, 0.21046066691633314], "median": 0.21104704204481095}
+{"catchment": "lagan", "step": "buffer target_grid.py:145", "runs": [0.20123274996876717, 0.20070074999239296, 0.20094545790925622], "median": 0.20094545790925622, "distance": 0.0005007710104811096, "vertices": 40176}
+{"catchment": "lagan", "step": "plan_mosaic", "runs": [0.0027236249297857285, 0.0021799589740112424, 0.002147749997675419], "median": 0.0021799589740112424}
+{"catchment": "lagan", "step": "repository.check", "runs": [0.0005790829891338944, 0.0003768749302253127, 0.00037050002720206976], "median": 0.0003768749302253127}
+{"catchment": "lagan", "step": "assemble (decode + seams)", "runs": [0.15180895803496242, 0.13618862500879914, 0.13519558391999453], "median": 0.13618862500879914}
+{"catchment": "lagan", "step": "resample", "runs": [0.5103214590344578, 0.49374333396553993, 0.4984885420417413], "median": 0.4984885420417413}
+{"catchment": "lagan", "step": "buffer feature_input.py:161", "runs": [28.195720207993872, 28.151531083974987, 28.09728233399801], "median": 28.151531083974987, "distance": 100.0, "vertices": 56261}
+{"catchment": "lagan", "step": "feature_input.source_region(domain, dem, dem)", "runs": [28.131020165979862, 28.007383667048998, 28.186585834017023], "median": 28.131020165979862}
+{"catchment": "lagan", "step": "read_json (GeoJSON window)", "runs": [0.6929499580292031, 0.7413209580117837, 0.7422429999569431], "median": 0.7413209580117837, "mb": 62.312082}
+{"catchment": "lagan", "step": "read_source (GeoJSON window: read_json + shape)", "runs": [1.654055583057925, 1.5685324999503791, 1.5569916249951348], "median": 1.5685324999503791}
+{"catchment": "lagan", "source": "geojson", "rows": 7319, "vertices": 1744538}
+{"catchment": "lagan", "step": "feature_input.source_region(domain, dem, EPSG:3035) [gpkg box]", "runs": [28.051145124947652, 27.936612457968295, 27.997097874991596], "median": 27.997097874991596}
+{"catchment": "lagan", "step": "query_features (gpkg, 8.86 GB)", "runs": [1.082488749991171, 1.0242485420312732, 0.9919025839772075], "median": 1.0242485420312732}
+{"catchment": "lagan", "source": "gpkg", "rows": 7866, "vertices": 15888613}
