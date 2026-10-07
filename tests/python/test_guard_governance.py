@@ -413,6 +413,8 @@ def test_the_legacy_remote_files_are_governed(path: str, expected: bool) -> None
 G8_ASKED: dict[str, str] = {
     "dash -c 'cp x CLAUDE.md'": "CLAUDE.md",
     "ksh -c 'echo x > CLAUDE.md'": "CLAUDE.md",
+    # §2 G7, PR #210 addendum: PowerShell's command text is a nested line too.
+    "pwsh -c 'cp x CLAUDE.md'": "CLAUDE.md",
     "cp json.py tools": "tools/json.py",
     "mv ast.py tools": "tools/ast.py",
     "cp a.py b/json.py tools": "tools/json.py",

@@ -926,6 +926,82 @@ def test_pwsh_is_in_the_shell_set() -> None:
     assert "pwsh" in shell_scan.SHELLS
 
 
+# ------------------------------------------------- h16 G7, PR #210 addendum
+#
+# §2 G7, amended for PR #210's CI failure: PowerShell reads its own flags. A
+# flag starts with `-`, `--` or `/`, in any case, and any non-empty prefix of
+# `command` takes the command text; a prefix of `encodedcommand` (`-e`, `-en`;
+# not `-ex`, which is `-ExecutionPolicy`), `-ec`, `-cwa` or `-CommandWithArgs`
+# and `-Command -` (stdin) hide it, and ask as unknown. `powershell` and
+# `pwsh-preview` are read as `pwsh`; `nu` takes `-c` and `--commands`.
+
+#: {command: the reason it asks with}.
+PWSH_ADDENDUM_ASKED: dict[str, str] = {
+    "pwsh -co 'git push'": PUSH,
+    "pwsh -com 'git push'": PUSH,
+    "pwsh --command 'git push'": PUSH,
+    "pwsh /c 'git push'": PUSH,
+    "pwsh -ex Bypass -c 'git push'": PUSH,
+    "powershell -Command 'git push'": PUSH,
+    "pwsh-preview -c 'git push'": PUSH,
+    "nu -c 'git push'": PUSH,
+    "nu --commands 'git push'": PUSH,
+    f"pwsh -en {encoded('git push')}": UNKNOWN,
+    f"powershell -EncodedCommand {encoded('git push')}": UNKNOWN,
+    "pwsh -cwa 'git status'": UNKNOWN,
+    "pwsh -CommandWithArgs 'git status'": UNKNOWN,
+    "pwsh -Command -": UNKNOWN,
+    "pwsh -c -": UNKNOWN,
+    # Pinned false positive: the script's own argument is read as a flag, since
+    # the scan does not stop at the script.
+    "pwsh x.ps1 -c 'git push'": PUSH,
+}
+
+#: Ruled to pass. A script file, as `bash x.sh` passes (a named gap, §6), and
+#: `nu -e` (`--execute`, likewise); `-config` is a prefix of
+#: `configurationname`, not of `command`, so its value is not a command; and
+#: words that only name PowerShell or nu.
+PWSH_ADDENDUM_PASSED = (
+    "pwsh -File x.ps1",
+    "pwsh x.ps1",
+    "nu -e 'git push'",
+    "pwsh -config x -c 'git status'",
+    "pwsh -config 'git push'",
+    "pwsh -c 'git status; ls'",
+    "pwsh -NoLogo -NoProfile",
+    "echo powershell",
+    "grep -n nu file",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", PWSH_ADDENDUM_ASKED)
+def test_a_command_powershell_or_nu_runs_asks_by_their_own_flags(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PWSH_ADDENDUM_ASKED[command] in reason, reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", PWSH_ADDENDUM_PASSED)
+def test_a_script_a_non_command_flag_or_a_name_under_powershell_or_nu_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
 def test_guard_push_holds_no_shell_list_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "path", [*sys.path])  # the hook appends tools/ on import
     hook = load_guard_push()
