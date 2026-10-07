@@ -3,11 +3,13 @@
 **Status:** designed by `@architect` on `85a3e6dd`, 2026-10-07; read by
 `@perf` the same night and corrected (section 8); Ola's rulings in section 10.
 Red step `fa3e03ef` (`@tester`), green step `b3439629` (`@developer`), the two
-data files and this as-built update in the commit after it (`@architect`):
-241 net production lines (`python3 tools/count_loc.py 85a3e6dd b3439629`)
-against the estimate of about 220. Section 11 rules on the green step's
-assumptions; one change (the file fingerprint) goes back to `@tester`. Next,
-`@reviewer`'s code review.
+data files and the as-built update in `807130ec` (`@architect`). Section 11
+rules on the green step's assumptions; its one change, the file fingerprint,
+is done: red `166f2528`, green `db1ce78e`. Code review round 1 asked for
+changes (the Review section); master merged in as `8c05d65e`. 242 net
+production lines (`python3 tools/count_loc.py 483221d2 8c05d65e`) against the
+estimate of about 220. Next, `@reviewer`'s code review round 2; then the push
+waits on Ola's yes.
 Tooling only: `tools/bench.py` and a new `tools/bench_quick.py`. One PR. No
 refine or mesh code, so no acceptance run of its own. Its first baseline is
 taken on master after this PR merges (30d, the outline-buffer fix, merged as
@@ -97,7 +99,10 @@ a directory, such as DTM10's 762 files or the GLO-30 cache: the
 SHA-256 of its sorted relative file names, sizes and mtimes, recursive, no
 content read),
 and per case and measure the median, min and max. A machine, power state or
-input mismatch is `NO BASELINE: <field>`, never a cross comparison. It is
+input mismatch is `NO BASELINE: <field>`, never a cross comparison. The
+baselines, `cases.toml` and `hotspots.toml` are read from, and
+`--save-baseline` writes to, the `docs/benchmarks/quick` of the checkout the
+tool runs from, even with `--tree` naming another. It is
 refreshed with `--save-baseline` (a) in the PR whose check showed a change that
 was accepted (`FASTER`, or a `SLOWER` Ola accepted), measured at that branch's
 head, (b) after a `NO BASELINE`, on a master checkout, and (c) by the monthly
@@ -132,8 +137,8 @@ Evidence goes to the scratchpad; it is committed under `docs/benchmarks/<date>/`
 only with a finding or a baseline refresh.
 
 **The 15 minutes is enforced in the tool.** The deadline is the command's start
-plus `--budget` (default and maximum 900 s; more is refused). Every subprocess
-(CMake and each child) gets `timeout = deadline − now − 10 s`, through a new
+plus `--budget` (default and maximum 900 s; more is refused). CMake and each
+child get `timeout = deadline − now − 10 s`, through a new
 `timeout` argument of bench.py's `Runner.run`; on expiry the child is killed.
 Before each case, if the baseline's median times its runs exceeds what is left,
 the case is skipped rather than started. Either way the verdict is
@@ -199,8 +204,8 @@ a new ask. A later PR may add `bench_quick.py profile <case>` (about 25 lines).
 Counted as CLAUDE.md §2 counts: `bench.py` +20 (the `timeout` argument and
 `Completed.timed_out` 10, phases in the child 10); `bench_quick.py` about 200
 (models 30, cases, baseline and fingerprint I/O 35, the loop with the deadline
-45, verdict 45, hotspots 20, Typer 25). About 220 in all; as built, 241
-(`bench.py` +25, `bench_quick.py` +216).
+45, verdict 45, hotspots 20, Typer 25). About 220 in all; as built, 242
+(`bench.py` +25, `bench_quick.py` +217).
 `tools/bench_quick.py` joins mypy's `files`.
 
 Seams for `tests/python/test_bench_quick.py`: `verdict(new, base)` and
@@ -314,7 +319,13 @@ name is the `--stats` row `mesh` writes (`src_python/tin_engine/cli.py@b3439629:
    GEOS does `features clip`'s work.
 4. **The verdict:** BROKEN over SLOWER over FASTER over NO CHANGE; `OUT OF
    TIME` replaces any of them, with exit 4, and the lines of what was measured
-   are still printed. *Kept*, as section 3 says.
+   are still printed. *Kept*, as section 3 says. A known gap, from code review
+   round 1: `NO BASELINE` is returned before `max_error` is checked
+   (`tools/bench_quick.py@db1ce78e:121-123`), so a run with no matching
+   baseline, such as the first `--save-baseline`, cannot report `BROKEN`. Left
+   as is, because the fix is code and this round is prose; a later PR moves
+   the check ahead. `bench.py`'s acceptance still judges its own cases'
+   tolerance (`tools/bench.py@db1ce78e:352`).
 5. **Two extra lines,** `MESH CHANGED` (the mesh hash moved, reported, not
    judged) and `NOT JUDGED` (a case missing from the baseline). *Kept.*
 6. **`--save-baseline` judges first, then writes**; it writes nothing after
