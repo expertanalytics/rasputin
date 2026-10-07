@@ -2,8 +2,10 @@
 
 Status: **designed** (`@architect`, 2026-10-06, branch
 `worktree-soft-quality` off master `ed12512`), design review rounds 1 to
-5 answered; in three PRs: **20c-1** the foot rule on every insertion path,
-ready for `@tester`; **20c-2** the soft criterion and a split of the
+5 answered and round 6 approved; in three PRs: **20c-1** the foot rule on
+every insertion path: red tests written (`a982d531`, `@tester`), their pins
+ruled (below, "Pins ruled for 20c-1's red step"), next `@tester`'s
+amendment of 20b's helper tests and then `@developer`; **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
 **20c-3** input clean-up and coarsening, and Ola's outline rule (built
 either way; question 6 sets only whether it is on by default), after
@@ -1180,6 +1182,118 @@ Property and integration:
   constraints): each listed with the reason and amended in its own commit,
   as the NoData fix did (20, Q-V3).
 
+#### Pins ruled for 20c-1's red step (`@architect`, 2026-10-07, on `a982d531`)
+
+`@tester`'s red commit fixed some details the design left open. Each is
+ruled here; "kept" means `@developer` builds to it as written.
+
+1. `constraint_foot`, `FootStatus` and `FootSearch` live in namespace
+   `terrain::mesh`. Kept.
+2. "Closer than δ" is strict, and the distance is to the closed segment in
+   the world frame (col · dx, row · dy). Kept: it is 20b's `foot_of`
+   (`>= eps` is "not near"; the projection clamped to the segment), and
+   `LatticeFrame` is that frame.
+3. `at` is the orthogonal projection in the world frame; owner, edge and
+   `at` are asserted only for `Hit`. Kept; for the other statuses they stay
+   unspecified.
+4. The `NotCounterClockwise` fixture folds a child for every double within
+   64 ulps of the projection in each coordinate. Kept: it makes the case
+   independent of how `@developer` rounds the projection.
+5. `QualityOutcome::inserted` counts DEM nodes only and quality-start feet
+   are in `feet` alone; through `refine`, vertices = start + `quality_inserted`
+   + `quality_feet` + `inserted`, and refinement's own feet stay inside
+   `inserted` as in 20b. Kept: a foot is not a DEM node, which is what
+   `inserted`'s comment promises.
+6. CF2's exact counts (`feet == 1`, `inserted == 0`) on its two fixtures,
+   taken from running today's `improve` on the mesh the foot leaves. Kept.
+7. The final check's feet are counted in `inserted` (so vertices = start +
+   `inserted` on every final-check path), and `feet_fallback <= feet`. Kept,
+   as refinement counts its feet.
+8. R4.3's foot z asserted to 1e-9 m. Kept; scale: z under 100 m on these
+   fixtures, so 1e-9 m is about 7e4 ulps of headroom.
+9. CF4's `ExactStore` through `refine_points`' `Store` template. Kept:
+   `refine_points.hpp` names "a test double with geometry(), frozen() and
+   for_each_in" as a Store.
+10. Python names: `RefineOutcome.quality_feet`, `PointRefineOutcome.feet_fallback`,
+    keyword `constraint_feet=False` on `_core.refine_points` and
+    `_core.refine_strip`; the CLI passes the switch to the final check on
+    both paths (from `edge_strip.py` and `final_check.py`, which the tests
+    spy on by those modules' names). Kept.
+11. The three row names `start_quality_points_snapped_to_lines`,
+    `final_check_points_snapped_to_lines` and
+    `final_check_snapped_points_added_anyway`. Kept: snake_case keys in the
+    pattern of `start_quality_points_inserted`. Ola's plain-output rule binds
+    the wording `--stats` prints beside each key (`run_record.WORDING`),
+    which the tests do not pin, so it is set here:
+    - `start_quality_points_snapped_to_lines`: "Points moved onto lines while
+      improving the starting mesh", right after `start_quality_points_skipped`;
+    - `final_check_points_snapped_to_lines`: "Points the final check against
+      the DEM moved onto lines", after `snaps_refused`;
+    - `final_check_snapped_points_added_anyway`: "Of them, also added where
+      they were", right after it;
+    - with three such rows, the existing two are reworded (keys unchanged):
+      `points_snapped_to_lines` "Points refinement moved onto lines", and
+      `snap_to_lines` "Points very close to a line were moved onto it"
+      (it is no longer DEM nodes only).
+12. Four C++ targets instead of one. Kept: CF1 starts no threads and stays
+    out of the TSan job; the other three do. The design's suite name
+    `test_constraint_foot` names all four for mutation testing.
+13. R3's "the node waits a round" is not visible in the output; the
+    deferral fixture is checked by tolerance, Delaunay and determinism only.
+    Kept: the wait is a scheduling rule, not an output property, and
+    removing it is not a correctness mutant.
+
+Off-switch digests recorded from `c074f900` (master's production code):
+features start, quality on, feet off `0x1253792f2761a97d`; `refine_points`
+with a strip, feet off `0xa460db59ad797984`; `refine_strip`, feet off
+`0x93e787a9ab2b77fd`. Never re-recorded. The design's "T12 fixtures and a
+domain start" half of the off switch is 20b's F5
+(`tests/cpp/property/prop_refinement_constraint_feet.cpp`), which now also
+covers the quality start, since `refine`'s switch is the pass's (R2.6).
+
+**Open items.**
+
+- (a) **`prop_refinement_constraint_feet.cpp`, before green, by `@tester`,
+  its own commit.** No shims: R1 says 20b's helpers "become" the new header.
+  - `detail::foot_fits` moves, same signature, to
+    `terrain::mesh::detail::foot_fits` in `constraint_foot.hpp` (the helper
+    calls it for `NotCounterClockwise`). The "R2 step 4" case changes only
+    its qualifier, and keeps its direct kills of the two one-sided mutants,
+    which CF1's both-sides fixture cannot tell apart.
+  - `detail::foot_of` is removed. Its "R2 step 2" case is rewritten against
+    `constraint_foot(m, 0, MeshVertex{col, row}, δ, LatticeFrame{10, 5})`, with
+    δ = `foot_epsilon(dem, node, 1.0)` (the cap, 2.5 m, on the flat DEM): the
+    far node is a `Hit` on edge 0 at (4, 0.8), the two near-end nodes are
+    `NearEnd`, and the control at col 3 is a `Hit`.
+  - `foot_epsilon` stays in `refine.hpp`; its cases are unchanged.
+  - `classify`: the vertex identity becomes start + `quality_inserted` +
+    `quality_feet` + `inserted`, and the feet it finds must number `feet +
+    quality_feet`. A quality-start foot passes its other checks as it
+    stands: it lies on an input segment, it is the projection of a valid DEM
+    node within the cap (δ_q is the cap), and its z is bilinear. The "no two
+    feet share a source node" check stays over all feet; if a fixture breaks
+    it, `@tester` brings the case to `@architect` and does not weaken it.
+  These edits leave the file red by compile until green, like the rest of
+  the red step.
+- (b) **`test_cli_constraint_feet.py::test_the_default_leaves_the_10m_quarter_circle_alone`,
+  after green, by `@tester`, its own commit, only if it fails.** Its claim
+  is 20b's: refinement's own rule never fires at 10 m. If the quality start
+  or the final check now foots there, the amendment keeps `out.feet == 0`,
+  adds `out.feet_refused == 0`, moves the recorded `("quarter_circle", "10")`
+  digest into `test_no_constraint_feet_matches_increment_20`'s cases (where
+  `--no-constraint-feet` must still match it), and renames the test to say
+  what it now checks (refinement puts no feet on the 10 m quarter circle).
+  The recorded digest is not re-recorded. Any other existing pin that green
+  breaks is handled the same way: listed with its reason, amended by
+  `@tester` in its own commit, and a pin that claims "equal to master" is
+  moved behind `--no-constraint-feet`, never re-recorded.
+- (c) **The TSan job, by `@developer`, in the green commit.**
+  `test_constraint_foot_quality`, `test_constraint_foot_refine` and
+  `test_constraint_foot_final` join both lists in
+  `.github/workflows/main.yaml`'s `tsan` job (the build targets and the run
+  list, which must match). `test_constraint_foot` does not; it starts no
+  threads. Confirmed.
+
 ### 20c-2
 
 **Invariant-critical (mutation testing required): `test_quality_gain`**
@@ -1348,3 +1462,4 @@ with the default no: "defaults on all four". So:
 20c design review round 3 (@reviewer, 3d1df11f..a3a2b7ec, 0 counted LOC, docs only): CHANGES REQUESTED; round 2's B1-B3 answered (B2's 1 cm gap confirmed in the CORINE source, M5's 20c-3 Lagan row reproduced exactly). (B1) M6 measures Ola's outline rule on 20c-2's mesh, but the rule was proposed for 20c-3: on 20c-3's mesh 34 of 151 slivers (22.5 %) lie within 5 m of the outline with a CORINE line nearby, and the thin-piece rule reaches 6 and 11 of them (4 % and 7 %), against M6's 8 % and "at most 2.5 %"; (B2) the file says "Questions for Ola: None open" while M6 sets aside Ola's own proposal; (B3) M1's "None is forced by an input angle" contradicts the new finding that the 1 cm gap's thin triangle is in every mesh of that input.
 20c design review round 4 (@reviewer, a3a2b7ec..6ac8ab2d, 0 counted LOC, docs only): CHANGES REQUESTED; round 3's B1-B3, S1 and S2 answered (S1's 0.86 × bound recomputed; both catchments' CORINE pass `coverage_is_valid` in the computation CRS, as 20c-3 step 2 says); 20c-1's part unchanged since round 2 and independent of question 6: ready to build. (B1) 20c-3's Lagan worst triangle (0.006697°) is made by the 2 m simplification, not the input: it stands on the slit's own 1 cm closing edge (EPSG:3006 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244), its apex 413 527.395 6 331 662.317 78.9 m away, because `coverage_simplify` drops the source vertex 413 596.806 6 331 640.083 that stands 5.98 m from that edge (0.088° in the source); so docs/increments/20c-soft-quality.md@6ac8ab2d:164-166, :448, :452-453, :455-456, :480-484, :597 and :643-648 and ROADMAP.md@6ac8ab2d:61 ("stays set by the input", "150 m from the slit") are false, and :474-475's "needs no guard" needs re-judging for it; (B2) question 6's other choice (the rule as a flag, off by default) still builds the rule, but the Status, gate, tests and LOC build and gate it only "if Ola says yes" (docs/increments/20c-soft-quality.md@6ac8ab2d:8-9, :611-613, :1028-1030, :1038, :1173, :1225); say question 6 sets only the default, or add a plain no and what it drops.
 20c design review round 5 (@reviewer, 6ac8ab2d..51b4434a, 0 counted LOC, docs only): CHANGES REQUESTED; round 4's B1, B2, S1 and S2 answered (rerun on the source: in the designed order (moved to EPSG:3006 first) `coverage_simplify` at 2 m drops 413 596.806 6 331 640.083, which is 4.47 mm off the border and 5.98 m from the 1 cm edge; angles 0.0882° before and 0.006697° after; the gap's corners 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244 now match the source; 27 % and 33 % correct); 20c-1's part unchanged since round 2: ready to build. (B1) docs/increments/20c-soft-quality.md@51b4434a:739-740 still says the outline rule's ~70 lines come "if he says yes (question 6, M6)": round 4's B2, missed in section (b); (B2) docs/increments/20c-soft-quality.md@51b4434a:502-503 "Lagan has 616 such edges and puts back 78 vertices" counts each shared edge and vertex once per polygon: the source has 417 distinct edges under 10 cm, and the guard puts back 39 distinct points (Numedalslagen's 1 779 and 142 not rerun; restate both in one unit).
+20c design review round 6 (@reviewer, 51b4434a..c074f900, 0 counted LOC, docs only): APPROVED; round 5's B1, B2, S1 and S2 answered. (B1) /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@c074f900:741-742 now says the outline rule is "built either way (question 6 sets only its default)", and a grep for "says yes|if Ola|if he|question 6" finds no conditional build left outside round 4's quoted record. (B2) :502-505 counts each shared edge and point once: rerun on Numedalslagen's box read (8 017 polygons) gives 1 362 distinct short edges / 71 points put back (1 779 / 142 per polygon), matching the doc. (S1) :1045-1048 rerun: 3 polygons fail `coverage_invalid_edges`, none of them reach the domain, and the 1 611 that do reach it pass `coverage_is_valid`. (S2) :691 "about 6 % (0.006697° to 0.007080°)" checks out: 0.007080 / 0.006697 = 1.057. ROADMAP.md@c074f900:61 matches. 20c-1's part has not changed since round 2.
