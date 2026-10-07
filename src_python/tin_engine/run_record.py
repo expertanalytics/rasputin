@@ -35,6 +35,10 @@ WORDING = {
     "features_transform": "Conversion from each features file's coordinate system",
     "start_mesh": "What refinement started from",
     "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",
+    "start_quality_gain_deg": (
+        "Starting mesh: a point is added only if it raises the smallest angle around it "
+        "by at least this many degrees (negative = always added)"
+    ),
     "snap_to_lines": "Points very close to a line were moved onto it",
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
@@ -68,9 +72,11 @@ WORDING = {
     "edge_flips": "Edge swaps",
     "start_quality_points_inserted": "Points added to improve the starting mesh",
     "start_quality_points_skipped": "Tries skipped while improving it",
+    "start_quality_points_without_gain": "Tries that would not have improved the angles",
     "start_quality_points_snapped_to_lines": (
         "Points moved onto lines while improving the starting mesh"
     ),
+    "start_quality_lines_split": "Land-cover and outline lines split to improve angles",
     "points_snapped_to_lines": "Points refinement moved onto lines",
     "snaps_refused": "Moves onto lines refused",
     "final_check_points_snapped_to_lines": (

@@ -27,6 +27,17 @@
 // callable accepts, and is skipped (skipped_near_line) for any other answer
 // but None. The callable is asked about the foot as a MeshVertex.
 //
+// The soft criterion (20c R7). With min_gain_deg >= 0, a candidate (node or
+// foot) goes in only if the worst angle of the triangles it would make, capped
+// at theta, is at least the worst of those it would replace plus the gain,
+// less kGainSlackDeg; otherwise skipped_no_gain. The triangles come from
+// quality_cavity, read-only, with Lawson's own flip test, so they are what
+// legalise_around then writes. The line split (20c R8). With the criterion
+// and constraint_feet on, a walk blocked by a constrained, non-frozen edge
+// with a triangle beyond splits that edge at the node's foot, if the foot is
+// at least min(dx, dy) / 2 from both ends, fits, and is valid; not judged by
+// R7; otherwise skipped_blocked.
+//
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
 // stale and dropped. It ends because every insertion is a new node of a finite
@@ -48,19 +59,28 @@
 #include <cstddef>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <numbers>
+#include <optional>
 #include <queue>
 #include <span>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace terrain::mesh {
+
+// R7's slack s, degrees: a candidate is accepted when new >= old + gain - s,
+// so a foot that keeps its edge's end angle exactly is not decided by its
+// last bit (20c R7, "Why the slack").
+inline constexpr double kGainSlackDeg = 1e-6;
 
 struct QualityOptions {
     double min_angle_deg = 0.0;  // <= 0 (or NaN): the pass does nothing
     std::size_t rows = 0;        // the node rectangle, [0, cols-1] x [0, rows-1]
     std::size_t cols = 0;
     bool constraint_feet = false;  // R2.6: a node near a constraint goes in as its foot
+    double min_gain_deg = -1.0;    // 20c R7's gain P; negative (or NaN): off, and R8 with it
 };
 
 struct QualityOutcome {
@@ -74,6 +94,8 @@ struct QualityOutcome {
     std::size_t skipped_void = 0;     // the snapped node is not valid (NoData)
     std::size_t feet = 0;               // feet inserted instead of the node, not in `inserted`
     std::size_t skipped_near_line = 0;  // near a constraint with no usable foot
+    std::size_t skipped_no_gain = 0;    // R7: the candidate would lower the worst angle
+    std::size_t line_splits = 0;        // R8: lines split at a node's foot, in no count above
 };
 
 // The default validity callable: every node holds data.
@@ -112,6 +134,66 @@ struct QualityEntry {
     }
 };
 
+// R7's prediction: the slots inserting p would replace and the triangles it
+// would make, p joined to each boundary edge, counter-clockwise. `on` 0..2:
+// p goes in on t's edge `on` and the triangle across seeds too; 3: inside t.
+// Grown across unconstrained edges by quad_flips, Lawson's own test.
+struct QualityCavity {
+    std::vector<std::uint32_t> removed;
+    std::vector<std::array<MeshVertex, 3>> created;
+};
+
+template <pred::GeometryKernel K>
+[[nodiscard]] QualityCavity quality_cavity(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p,
+                                           const LatticeFrame& f) {
+    QualityCavity c{{t}, {}};
+    if (on < 3 && m.neighbours(t)[on] != kNoNeighbour)
+        c.removed.push_back(m.neighbours(t)[on]);
+    const auto in = [&](std::uint32_t u) { return std::find(c.removed.begin(), c.removed.end(), u) != c.removed.end(); };
+    for (std::size_t i = 0; i < c.removed.size(); ++i)
+        for (unsigned k = 0; k < 3; ++k) {
+            const std::uint32_t r = c.removed[i], u = m.neighbours(r)[k];
+            if (u == kNoNeighbour || in(u) || m.is_constrained(r, k))
+                continue;
+            unsigned j = 0;
+            while (m.triangles()[u][j] != m.triangles()[r][(k + 1) % 3])
+                ++j;
+            if (quad_flips<K>(m.corner(r, k), m.corner(r, (k + 1) % 3), p, m.corner(u, (j + 2) % 3), f))
+                c.removed.push_back(u);
+        }
+    for (const auto r : c.removed)
+        for (unsigned k = 0; k < 3; ++k)
+            if (const auto u = m.neighbours(r)[k]; u == kNoNeighbour ? !(r == t && k == on) : !in(u))
+                c.created.push_back({m.corner(r, k), m.corner(r, (k + 1) % 3), p});
+    return c;
+}
+
+// The smallest angle of (a, b, c), degrees.
+[[nodiscard]] inline double smallest_angle_deg(Point2 a, Point2 b, Point2 c) {
+    const std::array<Point2, 3> v{a, b, c};
+    double best = std::numbers::pi;
+    for (std::size_t k = 0; k < 3; ++k) {
+        const double ux = v[(k + 1) % 3].x - v[k].x, uy = v[(k + 1) % 3].y - v[k].y;
+        const double wx = v[(k + 2) % 3].x - v[k].x, wy = v[(k + 2) % 3].y - v[k].y;
+        best = std::min(best, std::atan2(std::abs(ux * wy - uy * wx), ux * wx + uy * wy));
+    }
+    return best * 180.0 / std::numbers::pi;
+}
+
+// R7: inserting p at (t, on) leaves the worst angle, capped at theta, no lower
+// than before plus gain, less the slack.
+template <pred::GeometryKernel K>
+[[nodiscard]] bool pays(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p, const LatticeFrame& f,
+                        double theta, double gain) {
+    const auto c = quality_cavity<K>(m, t, on, p, f);
+    double old_w = theta, new_w = theta;
+    for (const auto r : c.removed)
+        old_w = std::min(old_w, smallest_angle_deg(f.at(m.corner(r, 0)), f.at(m.corner(r, 1)), f.at(m.corner(r, 2))));
+    for (const auto& x : c.created)
+        new_w = std::min(new_w, smallest_angle_deg(f.at(x[0]), f.at(x[1]), f.at(x[2])));
+    return new_w >= old_w + gain - kGainSlackDeg;
+}
+
 }  // namespace detail
 
 template <pred::GeometryKernel K, std::predicate<const MeshVertex&> Valid = AllNodesValid>
@@ -131,7 +213,32 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
     for (std::uint32_t t = 0; t < m.triangle_count(); ++t)
         offer(t);
 
+    const bool judged = o.min_gain_deg >= 0.0, split_lines = judged && o.constraint_feet;
+    const double half_cell = std::min(f.dx, f.dy) / 2.0;  // delta_q, R2.2
     std::vector<std::uint32_t> written;
+    // p into t (`on` 3) or onto t's edge `on`, legalised; written slots offered.
+    const auto insert = [&](std::uint32_t t, unsigned on, MeshVertex p) {
+        const auto before = static_cast<std::uint32_t>(m.triangle_count());
+        written.assign({t, before, before + 1});
+        std::uint32_t q = 0;
+        if (on == 3) {
+            q = m.split_inside(t, p);
+        } else {
+            const auto u = m.neighbours(t)[on];
+            q = m.split_edge(t, on, p);
+            if (u == kNoNeighbour)
+                written.pop_back();
+            else
+                written.push_back(u);
+        }
+        const std::vector<std::uint32_t> seeds = written;
+        legalise_around<K>(m, q, std::span<const std::uint32_t>{seeds}, f,
+                           [&](std::uint32_t w) { written.push_back(w); });
+        std::sort(written.begin(), written.end());
+        written.erase(std::unique(written.begin(), written.end()), written.end());
+        for (const auto w : written)
+            offer(w);
+    };
     while (!queue.empty()) {
         const detail::QualityEntry e = queue.top();
         queue.pop();
@@ -159,6 +266,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
         // Visibility walk: cross the first edge with p strictly beyond it.
         std::uint32_t t = e.slot;
         std::size_t steps = 0;
+        unsigned hit = 0;  // the edge a blocked walk stopped at
         bool blocked = false, located = false;
         while (!blocked && !located) {
             if (++steps > m.triangle_count()) {
@@ -171,12 +279,21 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
                     located = false;
                     const auto u = m.neighbours(t)[k];
                     blocked = u == kNoNeighbour || m.is_constrained(t, k);
-                    t = blocked ? t : u;
+                    std::tie(t, hit) = std::pair{blocked ? t : u, k};
                     break;
                 }
         }
-        if (blocked)
-            ++out.skipped_blocked;
+        if (blocked) {  // R8: split the line at the node's foot, or skip
+            std::optional<FootSearch> s;
+            if (split_lines && m.neighbours(t)[hit] != kNoNeighbour)
+                s = detail::foot_on(m, t, hit, p, std::numeric_limits<double>::infinity(), half_cell, f);
+            if (s && s->status == FootStatus::Hit && valid(s->at)) {
+                insert(t, hit, s->at);
+                ++out.line_splits;
+            } else {
+                ++out.skipped_blocked;
+            }
+        }
         if (!located)
             continue;
 
@@ -194,11 +311,11 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
             continue;
         }
         std::uint32_t owner = t;
-        unsigned edge = on;
+        unsigned edge = zeros == 0 ? 3 : on;
         MeshVertex at = p;
         bool foot = false;
         if (o.constraint_feet) {
-            const auto s = constraint_foot(m, t, p, std::min(f.dx, f.dy) / 2.0, f);
+            const auto s = constraint_foot(m, t, p, half_cell, f);
             if (s.status != FootStatus::None) {
                 if (s.status != FootStatus::Hit || !valid(s.at)) {
                     ++out.skipped_near_line;
@@ -208,27 +325,12 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
                 std::tie(owner, edge, at) = std::tuple{s.owner, s.edge, s.at};
             }
         }
-        const auto before = static_cast<std::uint32_t>(m.triangle_count());
-        written.assign({owner, before, before + 1});
-        std::uint32_t q = 0;
-        if (zeros == 0 && !foot) {
-            q = m.split_inside(t, node);
-        } else {
-            const auto u = m.neighbours(owner)[edge];
-            q = m.split_edge(owner, edge, at);
-            if (u == kNoNeighbour)
-                written.pop_back();
-            else
-                written.push_back(u);
+        if (judged && !detail::pays<K>(m, owner, edge, at, f, o.min_angle_deg, o.min_gain_deg)) {
+            ++out.skipped_no_gain;
+            continue;
         }
+        insert(owner, edge, at);
         ++(foot ? out.feet : out.inserted);
-        const std::vector<std::uint32_t> seeds = written;
-        legalise_around<K>(m, q, std::span<const std::uint32_t>{seeds}, f,
-                           [&](std::uint32_t w) { written.push_back(w); });
-        std::sort(written.begin(), written.end());
-        written.erase(std::unique(written.begin(), written.end()), written.end());
-        for (const auto w : written)
-            offer(w);
     }
     return out;
 }
