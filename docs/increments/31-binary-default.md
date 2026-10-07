@@ -1,10 +1,11 @@
 # Increment 31: binary output by default
 
-**Status:** implemented, as built in section 9; next: code review.
-Designed by `@architect` on `2764ef71`, design approved in review round 2.
-Red `e3fe391a` and `9008811c` (`@tester`, tests only; its four pins ruled
-in Rulings, P1-P4), green `29bc5ad3` (`@developer`). Question 1 is still
-open with Ola; what was built is its default, both formats binary. The
+**Status:** implemented and approved in code review round 1 (section 9;
+Review). Designed by `@architect` on `2764ef71`, design approved in review
+round 2. Red `e3fe391a` and `9008811c` (`@tester`, tests only; its four pins
+ruled in Rulings, P1-P4), green `29bc5ad3` (`@developer`). Ola answered
+question 1: both formats binary, as built. Next: the push, on Ola's yes
+(`gh pr list --head worktree-binary-default` shows whether it happened). The
 worktree's `.venv` holds a plain copy of `tin_engine` and a copied `_core`
 (no editable install), so each changed `src_python/tin_engine` file is copied
 into `.venv/lib/python3.*/site-packages/tin_engine/` before running `pytest`.
@@ -209,7 +210,8 @@ only the option's help and the README; Typer prints the docstring in
    text), and `tests/python/test_cli_mesh_vtk.py@e3fe391a:140-154`
    (`test_the_help_shows_binary_as_the_default` matches the two-default
    sentence instead of one `[default: ...]` marker).
-   *Still open with Ola after the green step.* What was built is the
+   **Ruled by Ola, 2026-10-07: "Both binary by default."** What was built
+   stands. *(Before the ruling:)* What was built is the
    default, one flag with both formats binary (section 9); a "no" now also
    reopens the green code, `src_python/tin_engine/cli.py@29bc5ad3:632-638`
    and the `mesh` description at `:759-760`.
@@ -269,3 +271,7 @@ Pins of the red step `e3fe391a` (`@tester`), ruled by `@architect`,
 Design review round 1 (@reviewer, 2026-10-07): CHANGES REQUESTED on 2764ef71..ad91b5dd (docs only, 0 net production lines by tools/count_loc.py): two byte-for-byte golden tests hash the default text output, contrary to section 5 (/Users/skavhaug/projects/rasputin/tests/python/test_refine_golden.py@2764ef71:185, /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_refine.py@2764ef71:134), and the ascii case of /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_landcover.py@2764ef71:293 would quietly become a second binary case.
 
 Design review round 2 (@reviewer, 2026-10-07): APPROVED on ad91b5dd..09cbee96 (docs only, 0 net production lines by tools/count_loc.py): round 1's two findings and four suggestions are answered in sections 5, 6 and 8; round 1's first two citations were wrong and are corrected here: the golden tests are at /Users/skavhaug/projects/rasputin/tests/python/test_refine_golden.py@2764ef71:202-206 and /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_refine.py@2764ef71:212-219, and the land-cover citation /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_landcover.py@2764ef71:293 stands.
+
+Code review round 1 (@reviewer, 2026-10-07): APPROVED on 2764ef71..b7bc1210 (4 net production lines by tools/count_loc.py, 6 added and 2 removed, all in /Users/skavhaug/projects/rasputin/.claude/worktrees/binary-default/src_python/tin_engine/cli.py; estimate about 1). The overrun is ruff wrapping the option. The flipped default is at /Users/skavhaug/projects/rasputin/.claude/worktrees/binary-default/src_python/tin_engine/cli.py@29bc5ad3:632-638 and the mesh description at /Users/skavhaug/projects/rasputin/.claude/worktrees/binary-default/src_python/tin_engine/cli.py@29bc5ad3:759-760. The writers changed only in their docstrings, at /Users/skavhaug/projects/rasputin/.claude/worktrees/binary-default/src_python/tin_engine/io/vtk_legacy.py@29bc5ad3:14-15 and /Users/skavhaug/projects/rasputin/.claude/worktrees/binary-default/src_python/tin_engine/io/ply.py@29bc5ad3:14-15. 2 suggestions: S1 ROADMAP row 13, S2 double backticks in --help.
+
+Recorded by the main session (Ola, 2026-10-07: the main session records review verdicts). S1 taken: ROADMAP row 13 notes the default changed in 31. S2 (double backticks in `--help`) left: the same paragraph already uses them, and this change adds one more.
