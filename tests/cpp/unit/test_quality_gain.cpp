@@ -67,6 +67,13 @@
 //         the end check removed                          "within half a cell of an end"
 //         R8 left on at gain -1                          "gain -1 turns the split off"
 //         R8 left on with the feet off                   "with the feet off, no split"
+// Added by the mutation round, for faults the list above did not reach:
+//   T-P1  quad_flips' integer path flipping on           "on the integer frame a candidate
+//         Cocircular (shared with Lawson)                on the circle ..."
+//         quad_flips' frame-collinear branch dropped     "a side collinear in the frame ..."
+//         (shared with Lawson)
+//         the slot across a split edge not seeded        "a line split flips beyond ..."
+//         by improve's insert routine
 // Each case's comment names the fault it is for.
 
 #include <catch2/catch_test_macros.hpp>
@@ -108,6 +115,7 @@ using terrain::mesh::QualityOutcome;
 using terrain::pred::DefaultKernel;
 using terrain::pred::FastKernel;
 using terrain::pred::Incircle;
+using terrain::pred::Orientation;
 
 namespace qg = quality_gain;
 namespace cfo = constraint_foot_oracles;
@@ -394,6 +402,50 @@ qg::Fixture line_near_end() {
     return f;
 }
 
+// A candidate on the circle of the triangle across, every vertex a node, for
+// quad_flips' integer path. In (x, y) on the circle x^2 + y^2 = 25: U = (5, 0)
+// (3, 4) (-5, 0) has the circle; t = (3, 4) (5, 0) (8, 6) holds p = (4, 3)
+// strictly, and E = (8, 6) is outside U's circle (distance 10). Mapped to
+// (col, row) = (x + 5, 10 - y), which keeps the orientation.
+qg::Fixture cocircular_nodes() {
+    qg::Fixture f;
+    f.vertices = {{10, 10}, {8, 6}, {0, 10}, {13, 4}};  // P1 P2 P3 E
+    f.triangles = {{0, 1, 2}, {1, 0, 3}};                // U, t
+    f.rows = 11;
+    f.cols = 14;
+    return f;
+}
+const MeshVertex kOnUsCircle{9, 7};
+
+// tests/cpp/unit/test_mesh_lawson.cpp's L4b quad, as a candidate's cavity: A (0, 0),
+// B (1, 1), D (0, 1), E (1, 0) in (col, row), t = (A, B, E) and u = (B, A, D).
+// C = (0.34, the double below 0.34) lies inside t, one ulp of row off A-B, so
+// (A, B, C) is counter-clockwise in the mesh but collinear in the frame
+// (3, 1.5); seen from u, C is strictly inside (B, A, D)'s circle.
+qg::Fixture frame_collinear() {
+    qg::Fixture f;
+    f.vertices = {{0, 0}, {1, 1}, {0, 1}, {1, 0}};  // A B D E
+    f.triangles = {{0, 1, 3}, {1, 0, 2}};           // t, u
+    f.rows = f.cols = 2;
+    return f;
+}
+const MeshVertex kFrameCollinearC{0.34, std::nextafter(0.34, 0.0)};
+
+// LS1's line with a triangle (D, G, E2) beyond the far side's edge D-E2 (now
+// interior and free), G = (25, 19). Its circle holds the foot of the node
+// (15, 18) on e, about 4.9 cells from the centre (17.25, 9.25) against a
+// radius of about 12.8, and not E1: so the split of e must flip D-E2 in the
+// slot across e, which only the far side's seed reaches.
+qg::Fixture line_beyond_far_flip() {
+    qg::Fixture f = line_beyond();
+    f.vertices.push_back({25, 19});  // G, index 7
+    f.triangles.push_back({3, 7, 1});  // (D, G, E2)
+    f.constraints.erase({1u, 3u});
+    f.constraints.emplace(std::pair{1u, 7u}, 1u);
+    f.constraints.emplace(std::pair{3u, 7u}, 1u);
+    return f;
+}
+
 // 20's Q7 ring: a 23-gon fanned from one vertex on a 33 x 33 grid, every
 // side an outline with mask 1, so R8 can never fire (nothing lies beyond).
 qg::Fixture q7_ring() {
@@ -514,6 +566,90 @@ TEST_CASE("T-P1: a point on an outline edge makes two triangles, not a flat thir
     const auto c = terrain::mesh::detail::quality_cavity<DefaultKernel>(m, 0, 0, p, f);
     REQUIRE(c.created.size() == 2);
     check_prediction(qg::Step{m, after, p, {0, 0}}, f);
+}
+
+// The next two cases name the cavity they expect, because the cavity and
+// legalise_around share detail::quad_flips: a fault there moves both, and
+// check_prediction alone cannot see it.
+
+TEST_CASE("T-P1: on the integer frame a candidate on the circle of the triangle across does not grow the cavity",
+          "[mesh][quality][gain][T-P1]") {
+    // Planted fault: quad_flips' integer path flipping on Cocircular.
+    const auto fx = cocircular_nodes();
+    const LatticeFrame f = terrain::mesh::lattice_frame(1.0, 1.0, fx.rows, fx.cols);
+    REQUIRE(f.integer());
+    const LatticeMesh m = built(fx, f);
+    const MeshVertex p = kOnUsCircle;
+    {  // the premise: p strictly inside t, on U's circle, and the integer path answers it
+        const auto at = qg::locate(m, p);
+        REQUIRE(at.has_value());
+        REQUIRE(at->t == 1);
+        REQUIRE(at->on == 3);
+        REQUIRE(DefaultKernel::incircle(f.at(m.corner(0, 0)), f.at(m.corner(0, 1)), f.at(m.corner(0, 2)), f.at(p))
+                == Incircle::Cocircular);
+        REQUIRE(terrain::mesh::lattice_incircle(m.corner(0, 0), m.corner(0, 1), m.corner(0, 2), p, f)
+                == std::optional<Incircle>{Incircle::Cocircular});
+    }
+    LatticeMesh after = m;
+    qg::replay<DefaultKernel>(after, {1, 3}, p, f);
+    REQUIRE(qg::diff(m, after).removed.size() == 1);  // Lawson leaves U alone
+    const auto c = terrain::mesh::detail::quality_cavity<DefaultKernel>(m, 1, 3, p, f);
+    REQUIRE(c.removed == std::vector<std::uint32_t>{1});
+    REQUIRE(c.created.size() == 3);
+    check_prediction(qg::Step{m, after, p, {1, 3}}, f);
+}
+
+TEST_CASE("T-P1: a side collinear in the frame is decided from the triangle across, and the cavity grows there",
+          "[mesh][quality][gain][T-P1]") {
+    // Planted fault: quad_flips' second branch (the side that is not
+    // counter-clockwise in the frame) dropped.
+    const LatticeFrame f{3.0, 1.5};
+    const auto fx = frame_collinear();
+    const LatticeMesh m = built(fx, f);
+    const MeshVertex a = fx.vertices[0], b = fx.vertices[1], d = fx.vertices[2], c = kFrameCollinearC;
+    {  // the premise, as L4b has it
+        const auto at = qg::locate(m, c);
+        REQUIRE(at.has_value());
+        REQUIRE(at->t == 0);
+        REQUIRE(at->on == 3);
+        REQUIRE(orient_sign(a, b, c) > 0);
+        REQUIRE(DefaultKernel::orient2d(f.at(a), f.at(b), f.at(c)) == Orientation::Collinear);
+        REQUIRE(DefaultKernel::orient2d(f.at(b), f.at(a), f.at(d)) == Orientation::CounterClockwise);
+        REQUIRE(DefaultKernel::incircle(f.at(b), f.at(a), f.at(d), f.at(c)) == Incircle::Inside);
+    }
+    LatticeMesh after = m;
+    qg::replay<DefaultKernel>(after, {0, 3}, c, f);
+    REQUIRE(qg::diff(m, after).removed.size() == 2);  // Lawson flips A-B
+    const auto cav = terrain::mesh::detail::quality_cavity<DefaultKernel>(m, 0, 3, c, f);
+    REQUIRE(cav.removed.size() == 2);
+    REQUIRE(cav.created.size() == 4);
+    check_prediction(qg::Step{m, after, c, {0, 3}}, f);
+    REQUIRE(delaunay_violations(after, f) == 0);
+}
+
+TEST_CASE("T-P1: a line split flips beyond the triangle across the line, as predicted",
+          "[mesh][quality][gain][T-P1][LS1]") {
+    // Planted fault: improve's insert routine leaving the slot across a split
+    // edge out of legalise_around's seeds.
+    const LatticeFrame f{1.0, 1.0};
+    const auto fx = line_beyond_far_flip();
+    const MeshVertex foot = foot_on_e(fx, kBeyondNode);
+    const MeshVertex d = fx.vertices[3], e2 = fx.vertices[1], g = fx.vertices[7];
+    {  // the premise: the foot inside (D, G, E2)'s circle, E1 outside it
+        REQUIRE(DefaultKernel::incircle(f.at(d), f.at(g), f.at(e2), f.at(foot)) == Incircle::Inside);
+        REQUIRE(DefaultKernel::incircle(f.at(d), f.at(g), f.at(e2), f.at(fx.vertices[0])) == Incircle::Outside);
+    }
+    LatticeMesh m = built(fx, f);
+    const auto r = recorded(m, f, options(fx, 0.0, true));
+    REQUIRE(r.out.line_splits >= 1);
+    REQUIRE_FALSE(r.steps.empty());
+    const auto& first = r.steps.front();  // P Q R's foot on e, as in "splits the line at the node's foot"
+    CAPTURE(first.p.col, first.p.row, foot.col, foot.row);
+    REQUIRE(std::abs(first.p.col - foot.col) <= 1e-12);  // cells
+    REQUIRE(std::abs(first.p.row - foot.row) <= 1e-12);
+    REQUIRE(qg::diff(first.before, first.after).removed.count(qg::tri(d, g, e2)) == 1);  // D-E2 flipped
+    for (const auto& s : r.steps) check_prediction(s, f);
+    check_mesh(m, fx, f);
 }
 
 // ================================================================== T-P1 and T-P2 over whole runs
