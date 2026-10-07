@@ -96,13 +96,13 @@ def git_dirs(command: str, cwd: Path) -> list[Path | str] | None:
             words = [w for w in rest if w == "-" or not w.startswith("-")]
             here = step(here, words[0], name != "popd") if words else step(here, name, False)
         elif name == "git":
-            where = here
+            where, pinned = here, False  # pinned: --git-dir or --work-tree seen, -C cannot undo it
             while rest and rest[0].startswith("-"):
                 option, takes = rest[0], rest[0] in GIT_TAKES_ARG and len(rest) > 1
-                if option == "-C" and takes:
+                if option == "-C" and takes and not pinned:
                     where = step(where, rest[1])
                 elif option.split("=")[0] in ("--git-dir", "--work-tree"):
-                    where = f"{option} {rest[1]}" if takes else option
+                    where, pinned = (f"{option} {rest[1]}" if takes else option), True
                 rest = rest[2:] if takes else rest[1:]
             if rest and rest[0] in COMMITTING:
                 found.append(where)
@@ -131,7 +131,8 @@ def committed_trees(event: dict) -> list[Path | str]:
         entry = Path(top) if top else str(where)
         if entry not in trees:
             trees.append(entry)
-    return trees + notes
+    # The note says gates ran in cwd; true only when cwd resolved to a work tree.
+    return trees + notes if all(isinstance(t, Path) for t in trees) else trees
 
 
 def find_ruff(root: Path) -> str:
