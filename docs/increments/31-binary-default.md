@@ -1,6 +1,8 @@
 # Increment 31: binary output by default
 
-**Status:** designed (`@architect`, 2026-10-07, on `2764ef71`). One small PR,
+**Status:** designed (`@architect`, 2026-10-07, on `2764ef71`); design review
+round 1 answered (section 5's byte-identity claim corrected, three tests added
+to the red commit). One small PR,
 Python only. Not refine or mesh code, so no `@perf` acceptance run (section 7).
 
 ## 1. What Ola asked
@@ -62,7 +64,7 @@ same per-number cost. (Question 1 below.)
 
 **D3. Help text in plain words** (Ola's plain-output rule). Proposed:
 
-    help="Binary files (the default: small and fast), or --ascii for text you can read."
+    help="Binary files, small and fast; --ascii writes text you can read."
 
 Typer prints the default itself: today's `rasputin mesh --help` ends the
 line with `[default: ascii]`, and after the flip it reads `[default: binary]`.
@@ -94,25 +96,31 @@ explicitly.
 | `tests/python/test_io_vtk_readback.py` (CI's viewer step, real `vtk`) | passes `--binary` or `--ascii` explicitly | none |
 | `tools/bench.py` | timing runs pass `--binary`, the quality run passes `--ascii` and reads it with `read_vtk_ascii` (`tools/bench.py@2764ef71:342`, `:607`, `:616`) | none; stored baselines unchanged |
 | Golden digests (`test_refine_golden.digest`, used by `test_cli_constraint_feet.py`) | hash the in-memory refine arrays, not file bytes | none |
+| Two byte-for-byte golden tests: `tests/python/test_refine_golden.py` `test_the_kartverket_stride_vtk_is_unchanged_by_node_sampling` (`@2764ef71:202-206`, SHA-256 of the whole file against `GOLDEN_STRIDE_VTK`) and `tests/python/test_cli_mesh_refine.py` `TestWithoutTolerance.test_the_uniform_mesh_is_unchanged` (`@2764ef71:212-219`, SHA-256 from `POINTS` on against `INCREMENT_12_LARGER_STRIDE_2`) | **text, by leaving the flag out** | fail after the flip; the red commit passes `--ascii` in both runs and keeps both hashes (section 6) |
+| `tests/python/test_cli_mesh_landcover.py` `test_every_cell_carries_a_code_in_both_encodings` (`@2764ef71:289-303`) | **text, by leaving the flag out** (`["--binary"] if binary else []`) | does not fail, but its `ascii` case would quietly write binary; the red commit passes `--ascii` there (section 6) |
+| The one-off probes under `docs/increments/26-probes/` (`docs/increments/26-probes/fractions_probe.py@2764ef71:52-61` `read_mesh`, which `water_probe.py` imports) | both: VTK's own `vtkPolyDataReader` | none |
 | `@perf`'s byte-identity probes of increments 30a-30c and the Python audit (`docs/increments/30*-probes/*_bytes.py`, `python-audit-probes/encoder_bytes.py`) and the stats scripts of `docs/benchmarks/2026-10-06/` | pass `--binary` (and the audit also `--ascii`) explicitly | none |
 | Ola's converter `../rasputin_data/lands/scripts/vtk_to_gpkg.py` (outside the repository) | both: reads line 3 for `BINARY` | none |
 | ParaView, QGIS | both | none |
 | The run record and `--stats` | record the command line as typed and no encoding field (`git grep -n -i -e binary -e encoding -- src_python/tin_engine` finds only `cli.py`) | no wording change |
 
-No stored digest or byte-identity gate depends on the text default. A future
-comparison across this increment's merge (an old commit against a new one)
-must pass `--binary` or `--ascii` explicitly, as every script above already
-does.
+Two stored byte-for-byte hashes depend on the text default, and one test
+picks text by leaving the flag out; all three get `--ascii` in the red commit.
+The hashes themselves stay: `GOLDEN_STRIDE_VTK` "must not change"
+(`tests/python/test_refine_golden.py@2764ef71:170-190`), and a hash of the text
+file still pins the same mesh. A future comparison across this increment's
+merge (an old commit against a new one) must pass `--binary` or `--ascii`
+explicitly, as every script above already does.
 
 **Tests that assert the old default** (to be inverted, section 6):
 `tests/python/test_cli_mesh_vtk.py` `TestEncoding.test_vtk_is_ascii_by_default`
 and `test_ply_is_ascii_by_default`; `tests/python/test_cli_mesh.py`
 `test_both_files_are_ascii_by_default`. Tests that name `--ascii` explicitly
 (`TestTheAsciiFlag`, `test_ascii_is_the_explicit_spelling`, `test_cli_fetch.py`)
-stay as they are.
-
-Not checked: the one-off probes under `docs/increments/26-probes/` take a mesh
-path as an argument; they are not gates and were not read for this.
+stay as they are. Their stale wording changes with them: `TestEncoding`'s
+docstring (`tests/python/test_cli_mesh_vtk.py@2764ef71:103`, "text by default
+(U2 (a))") and the module docstring of `tests/python/test_cli_mesh.py`
+(`@2764ef71:3-4`), which describe the old default.
 
 ## 6. Tests `@tester` writes red first
 
@@ -126,12 +134,28 @@ path as an argument; they are not gates and were not read for this.
    and the behaviour cannot drift apart. Strip ANSI and line-wrap before
    matching, as `test_cli_mesh_geographic.py` does.
 
+4. Amendments in the same red commit, since `@developer` may not touch tests
+   (section 5's table):
+   - `test_the_kartverket_stride_vtk_is_unchanged_by_node_sampling` and
+     `TestWithoutTolerance.test_the_uniform_mesh_is_unchanged` pass `--ascii`;
+     their hashes stay as recorded.
+   - `test_every_cell_carries_a_code_in_both_encodings` builds its flag as
+     `["--binary"] if binary else ["--ascii"]`.
+   - The `TestEncoding` docstring and `test_cli_mesh.py`'s module docstring
+     say binary by default (increment 31).
+
 Before committing red, `@tester` runs the whole Python suite once against a
-local, uncommitted flip of the default in its own worktree (then reverts it):
-any other test that silently relied on text output fails there and is
-amended in the red commit, since `@developer` may not touch tests. None is
-expected (section 5). No mutation round: a one-line default is not an
-invariant-critical suite.
+local, uncommitted flip of the default in its own worktree (then reverts it).
+Expected there: 5 failures, the three default tests of item 1 and the two
+golden hashes of item 4; any other failure is a test that silently relied on
+text output and is amended in the red commit. A flip run finds only tests
+that fail, so `@tester` also greps for tests that choose an encoding by
+leaving the flag out and makes each one name its flag:
+
+    git grep -n -e '\["--binary"\] if' -e 'if binary else \[\]' -- tests
+
+On `2764ef71` this finds only `test_cli_mesh_landcover.py:293`. No mutation
+round: a one-line default is not an invariant-critical suite.
 
 ## 7. Cost, `@perf`, LOC
 
@@ -150,8 +174,17 @@ invariant-critical suite.
 
 1. **Should `.ply` become binary by default too, or only `.vtk`?** One flag
    covers both today. *Default: both, so the command keeps one default
-   (increment 13's principle).*
+   (increment 13's principle).* A "no" reopens D1, D3 and red test 3: the
+   flag would become three-state (`bool | None`, unset meaning "by suffix":
+   binary for `.vtk`, text for `.ply`), Typer could no longer print a single
+   `[default: ...]` marker, so the help states the two defaults in words and
+   test 3 matches that sentence. A few more production lines, still far under
+   the limit.
 
 ## Rulings
 
 (none yet)
+
+## Review
+
+Design review round 1 (@reviewer, 2026-10-07): CHANGES REQUESTED on 2764ef71..ad91b5dd (docs only, 0 net production lines by tools/count_loc.py): two byte-for-byte golden tests hash the default text output, contrary to section 5 (/Users/skavhaug/projects/rasputin/tests/python/test_refine_golden.py@2764ef71:185, /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_refine.py@2764ef71:134), and the ascii case of /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_landcover.py@2764ef71:293 would quietly become a second binary case.
