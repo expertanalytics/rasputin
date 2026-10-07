@@ -150,8 +150,7 @@ forge `curl` with a writing method or a body, glued options included
 it does not know, such as an alias. It judges the rest of these (not an
 unknown command) also when another program runs them (`caffeinate git push`, `find … -exec git push`,
 `watch 'git push'`, a shell's `-c '…'`: `sh`, `dash`, `tcsh` and every shell
-`/etc/shells` lists on the Mac, `nu`, and `pwsh` with its own flags, a
-PowerShell command it cannot read, such as `-EncodedCommand`, asking);
+`/etc/shells` lists on the Mac);
 a git or gh word under `parallel`, which builds its commands from its
 inputs, asks as an unknown command, and a runner in front of `parallel`,
 `watch` or `flock` (`caffeinate parallel …`) does not hide it. `guard_governance.py` asks before any write

@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route, and then, on §7 question 4, the command-runner route past the push guard (last section). §2 G1 and G6 are amended and G7 is added for them, with §4, §6, §7 and R1 following; design `28b8292` and `1a1e5d3`, red `8c309a8`, green `fa9f3e1` (97 net production lines by `tools/count_loc.py origin/master fa9f3e1`). Code review round 3 of PR B (round 8 below) asked for changes; Ola ruled that PR B also closes the three routes it found (last section): §2 G7 is amended (every shell; a git or gh word under `parallel`) and G8 is added (a copy or move into a directory named without a trailing `/`), with §4, §6 and R1 following; `origin/master` merged in as `f86d3953`, red `2d44b462`, green `a0001d00` (109 net production lines by `tools/count_loc.py origin/master a0001d00`). Code review round 4 of PR B (round 9 below) asked for changes; Ola chose option A (last section): §2 G7 is amended (a runner in front of `parallel`, `watch` or `flock`, and the slow line of §7 question 5, which waits on Ola with default yes) and G4 is amended (a path judged also normalised), with §4, §6 and R1 following; writes to a whole governed directory go to §6. Ola answered §7 question 5 with its default on 2026-10-06 (fix the slow line); round 9's red step is `c83dfe0e` and its green step `80800a14`. Code review round 5 of PR B (round 10 below) asked for wording changes only: §2 G7's claim of linear time is corrected, and Ola ruled its suggested cap on runner and shell words goes to §6; the matching docstring fix is `85d39f5c`. Code review round 6 of PR B (round 11 below) approved it; `origin/master` was merged in as `3891ff11` and PR B pushed as #210. CI's Linux harness job failed there twice (a push run by `pwsh`, which the runner's `/etc/shells` lists, and a test fixture with no git identity); Ola said yes to fixing both and pushing the fix (2026-10-07). Red `1184f610`; §2 G7 is amended for PowerShell and `nu`, with §4, §6 and R1 following. Next, in order: the red addendum (§2 G7, *Red test, PR #210 addendum*), green, review, then the push. `git log --oneline origin/master..HEAD` shows which of these have landed.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route, and then, on §7 question 4, the command-runner route past the push guard (last section). §2 G1 and G6 are amended and G7 is added for them, with §4, §6, §7 and R1 following; design `28b8292` and `1a1e5d3`, red `8c309a8`, green `fa9f3e1` (97 net production lines by `tools/count_loc.py origin/master fa9f3e1`). Code review round 3 of PR B (round 8 below) asked for changes; Ola ruled that PR B also closes the three routes it found (last section): §2 G7 is amended (every shell; a git or gh word under `parallel`) and G8 is added (a copy or move into a directory named without a trailing `/`), with §4, §6 and R1 following; `origin/master` merged in as `f86d3953`, red `2d44b462`, green `a0001d00` (109 net production lines by `tools/count_loc.py origin/master a0001d00`). Code review round 4 of PR B (round 9 below) asked for changes; Ola chose option A (last section): §2 G7 is amended (a runner in front of `parallel`, `watch` or `flock`, and the slow line of §7 question 5, which waits on Ola with default yes) and G4 is amended (a path judged also normalised), with §4, §6 and R1 following; writes to a whole governed directory go to §6. Ola answered §7 question 5 with its default on 2026-10-06 (fix the slow line); round 9's red step is `c83dfe0e` and its green step `80800a14`. Code review round 5 of PR B (round 10 below) asked for wording changes only: §2 G7's claim of linear time is corrected, and Ola ruled its suggested cap on runner and shell words goes to §6; the matching docstring fix is `85d39f5c`. Code review round 6 of PR B (round 11 below) approved it; `origin/master` was merged in as `3891ff11` and PR B pushed as #210. CI's Linux harness job failed there on two tests (last section): Ola ruled to fix the tests, not the guard; tests only, `195a9607`, no production change. Next, in order: a short code review of `3891ff11..HEAD`, then the push, on Ola's yes. `git log --oneline origin/master..HEAD` shows which of these have landed.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -678,13 +678,12 @@ two amendments, run against `fa9f3e1`'s `runs`, `publishes` and
   push' \;` (written as a raw string), `watch "dash -c 'git push'"`;
 - [UNKNOWN] `parallel git ::: push`, `parallel ::: git ::: push`,
   `parallel git {} ::: push`, `parallel -j2 git ::: push`;
-- a test that every basename listed in the running host's `/etc/shells`
-  that ends in `sh` is in `shell_scan.SHELLS`, skipped with a reason where
-  `/etc/shells` is absent (read from `/etc/shells`, not `ls /bin/*sh`: on a
-  merged-`/usr` Linux runner `/bin/*sh` also lists `ssh`; Ubuntu's bash
-  package lists `rbash` in `/etc/shells`, so the set holds `rbash` too;
-  not checked here, having no Linux host: CI's run of this test checks
-  it); and that
+- a test that `shell_scan.SHELLS` equals the twelve shells named above,
+  in both directions, whatever the host has installed. [Amended for PR
+  #210's CI failure (last section): this was a test that every shell in
+  the host's `/etc/shells` is in the set, and GitHub's Ubuntu runner lists
+  PowerShell (`pwsh`) there. A fixed list makes a shell added to or
+  dropped from the set a design change, red first.] And that
   `guard_push` holds no shell list of its own (`guard_push.SHELLS`, if it
   exists, is `shell_scan.SHELLS`).
 
@@ -833,90 +832,6 @@ push' file` [PUSH]: a runner's name as an argument now starts a chain.
 
 **Size, round 9.** About +3 (two flag lines, (d) one line, (b) reshaped in
 place).
-
-**Amendment for PR #210's CI failure: PowerShell and nu** (Ola's "yes to
-all three", 2026-10-07). CI's Linux runner lists `pwsh` in its
-`/etc/shells`, so the host test above failed there, and `pwsh -c 'git
-push'` passed the push guard: a real route, and part of the shell gap that
-§6 named. `@tester`'s red step `1184f610` pins it. Adding `pwsh` to the
-set is not enough: PowerShell reads its own flags, not `-c` alone. Its
-parser (`CommandLineParameterParser.cs` in PowerShell/PowerShell,
-`master`, read 2026-10-07) takes a flag after `-`, `--` or `/`, in any
-case, and as any prefix down to a shortest form, checked in a fixed order;
-`-Command` joins every later word with a space and runs that text.
-
-**Change.** In `tools/shell_scan.py`:
-
-    PWSH = {"pwsh", "pwsh-preview", "powershell"}   # SHELLS gains "nu" and *PWSH
-    def pwsh(args: list[str]) -> tuple[str | None, bool]
-        # (command text, hidden), read with PowerShell's own flags
-
-`pwsh` walks the words; for each that starts with `-` or `/`, the key is
-the word with those stripped, lower-cased:
-
-- **The command:** a key that is a non-empty prefix of `command` (`-c`,
-  `-co`, `-com` … `-Command`, any case; `-config` is a prefix of
-  `configurationname`, not `command`, and PowerShell checks it first).
-  The text is every later word joined with a space, as PowerShell joins
-  it, so `pwsh -c git push` and `pwsh -c 'git push'` read alike; `-` alone
-  (commands from stdin) is hidden.
-- **Hidden:** a key that is a non-empty prefix of `encodedcommand` (`-e`,
-  `-en` … `-EncodedCommand`; `-ex` and `-ep` are `-ExecutionPolicy`, and
-  `ex` is no prefix of it) or `ec`; or `cwa` or `commandwithargs`, which
-  builds the command from its later words, as `parallel` does.
-- The first word that matches decides; none gives `(None, False)`.
-
-`interpreter` returns `pwsh(args)[0]` as the program for a name in
-`PWSH`, so both guards read the command text through the nested parse, as
-for any shell (`pwsh -c 'cp x CLAUDE.md'` asks the governance guard too).
-`guard_push.segment_why` gives `UNKNOWN` ("… it cannot see what it runs")
-for a command whose program is in `shell_scan.PWSH` and whose
-`shell_scan.pwsh` is hidden; `guard_push.py` reads `PWSH`, it does not
-copy it. `nu` takes `-c` as the others do; its long form `--commands` is
-read beside `--eval` in `interpreter`'s existing check.
-
-**No decoding.** An encoded command asks as unknown, whatever it holds.
-Decoding (base64 of UTF-16LE text) costs about three lines more and gives
-the push reason in its place, on a form nobody here types; and a text
-that does not decode would still need the unknown ask, or it fails open
-where Python's and .NET's base64 rules differ.
-
-**Each form, ruled:**
-
-- Ask: `-c`, `-Command` in any case, its prefixes (`-co`, `-com`), `--command`,
-  `/c`; `-EncodedCommand`, `-ec`, `-e`, `-en` [unknown]; `-CommandWithArgs`,
-  `-cwa` [unknown, even with `git status`: the command is built from its
-  arguments]; `-Command -` [unknown]; `powershell` and `pwsh-preview` as
-  `pwsh`; `nu -c` and `nu --commands`.
-- Pass, a named gap (§6): `-File x.ps1` and a script as the first word
-  (`pwsh x.ps1`), as `bash x.sh` passes today; PowerShell's own ways to
-  run a string (`Invoke-Expression`, `Start-Process git -ArgumentList
-  push`, a command built at run time), as `python3 -c` with `subprocess`
-  passes (G5); `nu -e` (`--execute`).
-- Pinned false positive: a script's own argument read as a flag (`pwsh
-  x.ps1 -c 'git push'` asks): the scan does not stop at the script.
-
-Probed with a scratch prototype (about 15 net lines) in a scratch copy of
-`1184f610` made by `tools/scratch_copy.py`, removed: every `harness`-marked
-suite passed (2017 tests, 12 skipped), the red rows of `1184f610` among
-them, which fail on `1184f610` itself (25 failed); through the hook, every
-"ask" form above was refused (the copy has no git common directory, so the
-harness denies what it would ask), and `-File x.ps1`, `pwsh x.ps1`,
-`pwsh -config x -c 'git status'`, `pwsh -c 'git status; ls'`, `grep -n nu
-file`, `echo powershell` and `pwsh -NoLogo -NoProfile` passed.
-
-**Red test, PR #210 addendum** (`test_guard_push.py`, both modes), on top
-of `1184f610`, before the green step: ask [PUSH] `pwsh -co 'git push'`,
-`pwsh -com 'git push'`, `pwsh --command 'git push'`, `pwsh /c 'git
-push'`, `pwsh -ex Bypass -c 'git push'`, `powershell -Command 'git push'`,
-`nu -c 'git push'`, `nu --commands 'git push'`; ask [UNKNOWN] `pwsh -en
-<base64>`, `pwsh -cwa 'git status'`, `pwsh -Command -`; pass `pwsh -File
-x.ps1`, `pwsh x.ps1`, `pwsh -config x -c 'git status'`, `echo powershell`,
-`grep -n nu file`. `test_guard_governance.py`: `pwsh -c 'cp x CLAUDE.md'`
-asks.
-
-**Size, PR #210.** About +15 net production lines (`PWSH` and the wider
-`SHELLS` +2, `pwsh` +8, `interpreter` +2, `segment_why` +3).
 
 **The governance half stays in §6.** `guard_governance.py` would need the
 same tail rule with every writer as a tail start (`cp`, `mv`, `tee`, `ln`,
@@ -1284,9 +1199,7 @@ Question 1 asks Ola whether this is the item. **Red test**: `brief.py
   (G8); and again after review round 9, to say that a runner in front of
   `parallel`, `watch` or `flock` does not hide it (G7), that a path is
   judged also with `.`, `..` and a doubled `/` resolved (G4), and that a
-  write to a whole governed directory is not asked about (§6); and again for PR #210's CI failure, to name
-  `pwsh`, `powershell` and `nu`, and to say that a PowerShell command it
-  cannot read (encoded, built from its arguments, or from stdin) asks.
+  write to a whole governed directory is not asked about (§6).
 
 Prose; no red test. `@architect` writes them, in the PR that ships the
 tool or guard they describe. `CLAUDE.md` changes, so the main session
@@ -1316,7 +1229,7 @@ not held up by guard review rounds (h12's design took four):
 | PR | Items | Production lines, about |
 |---|---|---|
 | A, tools | T1, T2 (+P9 test), T3, G5's line, R1 but its *The harness* sentence | 187 (count_loc 120, scratch_copy 60, brief.py 7) |
-| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8); measured 77 at `a42d864` (`tools/count_loc.py origin/master a42d864`, merge base `7dde17a`); after review round 7 about 88 (77, G1's include/transport keys, text check and governed prefixes +3, G6's glued `gh api`/`curl` options +8); with G7 (Ola's ruling on §7 question 4) about 103 (+15); measured 97 at `fa9f3e1` (`tools/count_loc.py origin/master fa9f3e1`, merge base `7dde17a`); after review round 8 about 106 (G7's shells and `parallel` +1, G8 +8); measured 109 at `a0001d00` (`tools/count_loc.py origin/master a0001d00`, merge base `879ea493`); after review round 9 about 115 (G7's runner rule (d) and the reshaped (b) +3, G4's normalised path +3); for PR #210's CI failure about +15 (G7's PowerShell and `nu`) |
+| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8); measured 77 at `a42d864` (`tools/count_loc.py origin/master a42d864`, merge base `7dde17a`); after review round 7 about 88 (77, G1's include/transport keys, text check and governed prefixes +3, G6's glued `gh api`/`curl` options +8); with G7 (Ola's ruling on §7 question 4) about 103 (+15); measured 97 at `fa9f3e1` (`tools/count_loc.py origin/master fa9f3e1`, merge base `7dde17a`); after review round 8 about 106 (G7's shells and `parallel` +1, G8 +8); measured 109 at `a0001d00` (`tools/count_loc.py origin/master a0001d00`, merge base `879ea493`); after review round 9 about 115 (G7's runner rule (d) and the reshaped (b) +3, G4's normalised path +3) |
 
 PR B's branch took `origin/master` in before round 8's red step (merge
 `f86d3953`), so the guard test files carry the `harness` pytest marker as
@@ -1415,9 +1328,7 @@ guard's own functions (`runs`, `publishes`, `segment_why` over
   (it refuses to overwrite an existing tag).
 
 And from this design's amendments: a shell outside `shell_scan.SHELLS`
-(none on Ola's Mac; `pwsh`, `powershell` and `nu` were here, and PR
-#210's amendment of G7 closes them, but for a script file, PowerShell's
-own string runners and `nu -e`, which stay open), and an interpreter that
+(none on Ola's Mac; `pwsh`, `nu` and the like), and an interpreter that
 runs a command (`tclsh`, `expect`), which pass as `python3 -c` does (G5);
 a directory named with an extension (`cp x.py some.d`), read as a file
 (no governed directory is so named: G8).
@@ -1758,3 +1669,20 @@ On suggestion S1, a cap on runner and shell words per line, the main session's d
 Round 11: `@reviewer`, code, PR B, round 6, `80800a14..85d39f5c`. APPROVED. The range is docs 19d6b3d7 and docstring 85d39f5c. PR B is still 116 net production lines (`tools/count_loc.py origin/master HEAD`), and the round adds 0 (`tools/count_loc.py 80800a14 HEAD`: guard_push.py 0). Not pushed, so no CI. Both round 10 blockers are fixed: (1) "linear" is gone from .claude/hooks/guard_push.py@85d39f5c:238 and docs/increments/h16-harness-fixes.md@85d39f5c:765, and the deny threshold is now about 990 `sh` words (:774). (2) The Status line (:3) and §7 question 5 (:1402) now record Ola's answer. 3 suggestions (S1 to S3).
 
 Recorded word for word from `@reviewer`'s record line, as the main session passed it on. Its suggestions: S1, the `watch` count at §2 G7's constant (`docs/increments/h16-harness-fixes.md@85d39f5c:774-775`) holds only with the command after `watch` quoted; S2, the heading of Ola's rulings after round 10 held his answer to §7 question 5, which came before round 9's red step; S3, no change (the 31 s time is pinned to `80800a14`). Taken in the recording commit: S1 (§2 G7 now names each measured form, re-measured at `85d39f5c`: 993 quoted `watch` words here against the review's 995, 999 unquoted) and S2 (the ruling on question 5 has its own section, dated 2026-10-06, before round 10).
+
+## PR #210's CI failure and Ola's ruling, 2026-10-07
+
+CI's Linux job *Python harness tools* failed on PR #210 (run 37616359219):
+one test failed and 58 errored. The failure was the host shell test of §2
+G7: GitHub's Ubuntu runner has PowerShell preinstalled, and its
+`/etc/shells` lists `pwsh`. The errors were the scratch repository
+fixture's second commit, which needs a git identity the runner does not
+have. Red `1184f610` covered both, and a design amendment (`8fb43083`) and
+its red addendum (`666a1a9b`) added PowerShell and `nu` to the push guard.
+The main session then proposed fixing the test instead, since nobody here
+uses PowerShell and it is not on the Macs agents run on. Ola, verbatim:
+"Of course." So the guard is unchanged: `195a9607` reverts the addendum
+and the PowerShell rows, keeps the fixture's git identity, and pins
+`shell_scan.SHELLS` to the twelve shells §2 G7 names, both ways; this
+commit backs out `8fb43083`. PowerShell, `nu` and similar shells stay in
+§6's known gaps. No production change since `3891ff11`.
