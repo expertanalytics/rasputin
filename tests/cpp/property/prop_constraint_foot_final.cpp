@@ -31,7 +31,8 @@
 //
 // Mutants these cases are meant to kill (design, "Mutants to kill"):
 //   the foot's z from the point          CF4 z: 62, not the point's 80
-//   footed-once removed                  CF4 bound: no stored point owns two feet
+//   footed-once removed                  the two-lines case (no second foot on A1-B1);
+//                                        the wedge's bound does not reach it
 //   the fallback removed                 CF4 J2 at tolerance 0 and 3
 //   and beyond the list: L12 not first (the point within r(g) goes in at its
 //   own position), a point on an edge footed, the switch ignored.
@@ -47,7 +48,9 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/mesh/constraint_foot.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
+#include <terrain/mesh/lawson.hpp>
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/sample.hpp>
 #include <terrain/refinement/constraint_points.hpp>
@@ -71,6 +74,7 @@
 #include <random>
 #include <set>
 #include <span>
+#include <variant>
 #include <vector>
 
 using terrain::IndexedMesh2;
@@ -417,6 +421,103 @@ TEST_CASE("CF4: at tolerance 0 every footed point goes in after its foot, the ru
         footed += owned[k];
     }
     REQUIRE(out.feet <= footed);  // feet <= footed points
+}
+
+// ------------------------------------------------------------------ footed once, on a second line
+
+namespace {
+
+// @architect's fixture for the footed-once guard ("Rulings on the survivors",
+// (b)): two parallel constraint lines A1 (0, 0) - B1 (10, 0) and A2 (0, 0.6) -
+// B2 (10, 0.6) in world (x, y), the strip between them as (A1, B1, B2) and
+// (A1, B2, A2), its two short sides constrained too (mask 1), z 0 m. In
+// (col, row) = (x, 16 - y) the lines are rows 16 and 15.4; delta_p = 0.5
+// cells. The stored point P (5, 0.35), 5 m, lies in (A1, B2, A2), 0.25 cells
+// from A2-B2 and 0.35 from A1-B1. Its foot F (5, 0.6) on A2-B2 makes Lawson
+// flip A1-B2, after which P lies in (A1, B1, F), whose A1-B1 gives a second
+// Hit at (5, 0): the footed line is cut, but the other line is not.
+Start parallel_lines() {
+    Start s;
+    s.mesh = IndexedMesh2{{cff::world(0, 16), cff::world(10, 16), cff::world(10, 16 - 0.6), cff::world(0, 16 - 0.6)},
+                          {{0, 1, 2}, {0, 2, 3}},
+                          std::vector<std::uint8_t>(2, 0)};
+    s.edges = {{0, 1}, {3, 2}, {0, 3}, {1, 2}};
+    s.masks = {2, 4, 1, 1};
+    return s;
+}
+
+const MeshVertex kTwoLinesP{5.0, 16.0 - 0.35};
+
+// The triangle of m that holds p strictly inside.
+std::optional<std::uint32_t> holding(const terrain::mesh::LatticeMesh& m, MeshVertex p) {
+    for (std::uint32_t t = 0; t < m.triangle_count(); ++t) {
+        bool in = true;
+        for (unsigned k = 0; k < 3; ++k) in = in && terrain::mesh::orient_sign(m.corner(t, k), m.corner(t, (k + 1) % 3), p) > 0;
+        if (in) return t;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+TEST_CASE("CF4: the two-lines fixture is what it claims: after its first foot the point has a Hit on the other line",
+          "[refine_points][constraint_foot][CF4]") {
+    // Replayed with refine_points' own pieces: to_lattice, legalise_all, the
+    // search, the foot's split and legalise_around (seeds as refine_points
+    // gives them for an outline edge: the owner and the new triangle).
+    namespace mesh = terrain::mesh;
+    const auto g = cff::geometry();
+    const Start s = parallel_lines();
+    auto built = terrain::refinement::detail::to_lattice(g, s.mesh, s.edges, s.masks);
+    REQUIRE(std::holds_alternative<mesh::LatticeMesh>(built));
+    auto& m = std::get<mesh::LatticeMesh>(built);
+    const auto frame = mesh::lattice_frame(1.0, 1.0, g.rows(), g.cols());
+    REQUIRE(mesh::legalise_all<terrain::pred::DefaultKernel>(m, frame, [](std::uint32_t) {}) == 0);  // a rectangle: a tie, no flip
+
+    const auto t = holding(m, kTwoLinesP);
+    REQUIRE(t.has_value());
+    const auto first = mesh::constraint_foot(m, *t, kTwoLinesP, 0.5, frame);
+    REQUIRE(first.status == mesh::FootStatus::Hit);
+    REQUIRE(first.owner == *t);
+    REQUIRE(m.corner(first.owner, first.edge).row == m.corner(first.owner, (first.edge + 1) % 3).row);
+    REQUIRE(m.corner(first.owner, first.edge).row != 16.0);  // on A2-B2
+    REQUIRE(std::abs(first.at.col - 5.0) <= 1e-12);
+
+    const std::uint32_t before = static_cast<std::uint32_t>(m.triangle_count());
+    const auto q = m.split_edge(first.owner, first.edge, first.at);
+    const std::array<std::uint32_t, 2> seeds{first.owner, before};
+    mesh::FlipStack stack;
+    REQUIRE(mesh::legalise_around<terrain::pred::DefaultKernel>(m, q, std::span<const std::uint32_t>{seeds}, frame,
+                                                                stack, [](std::uint32_t) {}) >= 1);  // A1-B2 flipped
+
+    const auto t2 = holding(m, kTwoLinesP);
+    REQUIRE(t2.has_value());
+    const auto second = mesh::constraint_foot(m, *t2, kTwoLinesP, 0.5, frame);
+    REQUIRE(second.status == mesh::FootStatus::Hit);  // what the guard is for
+    REQUIRE(m.corner(second.owner, second.edge).row == 16.0);  // on A1-B1
+    REQUIRE(m.corner(second.owner, (second.edge + 1) % 3).row == 16.0);
+    REQUIRE(std::abs(second.at.col - 5.0) <= 1e-12);
+}
+
+TEST_CASE("CF4: a point footed on one line is not footed again on a second line; it goes in as itself",
+          "[refine_points][constraint_foot][CF4]") {
+    // Kills the footed-once guard dropped (the final check's `&& !was_footed`):
+    // a second foot at (5, 0), feet 2 and the point owning two feet.
+    const auto g = cff::geometry();
+    const Begin b = with_z(parallel_lines(), std::vector<double>(4, 0.0));
+    cff::ExactStore store{g};
+    store.add(kTwoLinesP, 5.0f);
+    const auto out = run_points(store, nullptr, b, options(0.0, true));
+    shape(g, b, out);
+    CHECK(out.feet_refused == 0);
+    REQUIRE(cfo::vertex_at(g, out, cfo::Frac{5.0, 16.0 - 0.6}, 1e-12).has_value());  // F, on A2-B2
+    REQUIRE_FALSE(cfo::vertex_at(g, out, cfo::Frac{5.0, 16.0}, 1e-9).has_value());   // no foot on A1-B1
+    REQUIRE(out.feet == 1);
+    REQUIRE(out.feet_fallback == 1);
+    const auto self = cfo::vertex_at(g, out, cfo::Frac{kTwoLinesP.col, kTwoLinesP.row}, 1e-12);
+    REQUIRE(self.has_value());
+    REQUIRE(out.z[*self] == 5.0);
+    REQUIRE(j2_over(g, store, b, out, 0.0) == 0);
 }
 
 // ------------------------------------------------------------------ 14b T3 and T6, rule on
