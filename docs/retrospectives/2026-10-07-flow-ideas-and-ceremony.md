@@ -1,8 +1,20 @@
 # Flow: three items in flight, a short path for small changes, and an ideas file
 
-Proposal by `@orchestrator`, 2026-10-07, written on `5c412383`. **No rule file
-is changed by this document.** Ola approves the wording; then the main session
+**Status: ruled by Ola, 2026-10-07; ready to apply.** Proposal by
+`@orchestrator`, written on `5c412383` (`c61c1aa0`), amended to Ola's rulings
+the same day. **No rule file is changed by this document**; the main session
 briefs the persona that owns each file. Times are UTC (Ola's clock is +2 h).
+
+Ola's rulings, verbatim (the main session showed him the questions at the end
+renumbered; the mapping is the main session's):
+
+- 12:40: "1: Yes, but after approving a warning 2: Yes, you do it. 3: No 4:
+  Yes 5: Yes". His 1 to 5 are Q1, Q2, Q3, Q7 and Q8 below.
+- 13:20: "yes, yes, yes. 1, 2, 3." His 1, 2, 3 are Q4, Q5 and Q6, each with
+  its default.
+
+What each ruling changes is under *Rulings* at the end; the diffs in parts 1
+to 3 already follow them.
 
 What Ola said, verbatim (main session transcript
 `6a989a29-4492-430f-99b0-9fe3058f931a.jsonl`, lines 23844 to 24072):
@@ -20,8 +32,8 @@ What Ola said, verbatim (main session transcript
 - 11:52: "Shall I give @orchestrator this shape to write up, together with the
   lighter-ceremony rule? Yes"
 
-So part 1 (the cap) is **ruled**; this document only words it. Parts 2 and 3
-are **proposals**.
+So part 1 (the cap) was ruled at 11:45 and this document only words it; parts
+2 and 3, and the questions, were ruled at 12:40 and 13:20.
 
 Labels used below: **31** = increment 31, binary `.vtk` and `.ply` by default
 (branch `worktree-binary-default`). **h18** = harness increment 18, the
@@ -64,6 +76,12 @@ return (05:34) and this run's start (11:52):
 
 Commands: `python3 tools/count_loc.py $(git merge-base master <branch>) <branch>`;
 `git show <branch>:docs/increments/<file> | wc -l`.
+
+After 11:52 (`gh pr view <n> --json mergedAt`): h19 merged as #211 at 12:19.
+31's verdict was recorded by the main session itself, on Ola's 12:40 ruling
+(`69e3551b`, "Recorded by the main session, per Ola 2026-10-07"), and 31
+merged as #212 at 13:04, 25 minutes after the ruling. #198 and #210 are still
+open.
 
 The harness items (h18, h19, guard PR B) took 279 of the 611 agent-minutes,
 46 %. The product items took 312.
@@ -127,8 +145,9 @@ would have gone back to `@tester`: later, not lost.
 8. **This run started over the cap.** The cap was adopted at 11:45 with five
    items open; at 11:46 the main session said this write-up "starts as soon as
    one item lands"; it started at 11:52, on Ola's direct yes, with none landed
-   (#210 was pushed, not merged). Not a breach if Ola's direct ask overrides
-   the cap; the rule below says so (question Q1).
+   (#210 was pushed, not merged). Ola ruled at 12:40 that his direct ask
+   overrides the cap only after a warning he approves (Q1); the rule below
+   says so. This run had no such warning.
 9. **#209 was pushed with no `@reviewer` run.** `.claude/REQUIRED-READING.md@5c412383:126-128`
    requires one on every branch before its first push, prose included. No
    spawn has `worktree=.../retro-1007b` in its brief except the morning check
@@ -141,7 +160,7 @@ would have gone back to `@tester`: later, not lost.
    lines, "no rulings, no history". At 11:34 it reported clearing a stale
    question from the same file.
 
-## 1. The cap: finish before starting (ruled; wording only)
+## 1. The cap: finish before starting (ruled)
 
 **Where it lives.** `CLAUDE.md` §3, *The main session dispatches*, because it
 binds the main session only, and every dispatch rule is there. Not in
@@ -153,24 +172,30 @@ recap tool (below).
 ```diff
    A performance fix is timed by `@perf` before review. Failing
    tests go back to `@developer`.
-+* **Finish before starting.** At most three items are in flight. An item
-+  counts from its first spawn until its PR merges or Ola parks or drops it.
-+  A new item starts only when one lands, or when Ola names it and is told
-+  the count. A free writer goes first to the item nearest to merging, then
-+  to product work before harness and process work. The next item is chosen
-+  with Ola from `docs/ideas.md`.
++* **Finish before starting.** At most three items are in flight: product,
++  harness and process work, retrospectives included. An item counts from
++  its first spawn until its PR merges or Ola parks or drops it; a PR waiting
++  only on Ola still counts. A new item starts only when one lands. If Ola
++  asks for one beyond that, warn him with the count ("this makes 4 of 3")
++  and start it only after he confirms. A free writer goes first to the item
++  nearest to merging, then to product work before harness and process work.
++  The next item is chosen with Ola from `docs/ideas.md`.
 ```
+
+Rulings in it: Ola's direct ask overrides the cap only after a warning he
+approves (Q1); a PR waiting only on Ola counts (Q7); retrospectives and
+process write-ups count (Q8).
 
 **The recap.** `tools/session_state.py` prints "In flight:" for the current
 branch only (`in_flight`, lines 143-151). Proposal: one line, "In flight: N
 of 3", listing each worktree branch with an open PR or with commits not on
 `origin/master` and touched in the last 7 days, each with its PR number. About
-25 lines with tests, in a governed file; its own small item, after one of the
-current five lands.
+25 lines with tests, in a governed file; its own small item, counted toward
+the three.
 
-Cost: about 70 words of rule text; the recap line above.
+Cost: about 95 words of rule text; the recap line above.
 
-## 2. A short path for small changes (proposal)
+## 2. A short path for small changes, and who records (ruled)
 
 **Source.** Anthropic, "Building effective agents" (read 2026-10-07):
 "we recommend finding the simplest solution possible, and only increasing
@@ -185,10 +210,11 @@ no C++ under `include/` (so no predicate, kernel, refine or mesh code, and no
 `@perf` run). Today 31 qualifies; h19 (67) and h18 (385) do not. The brief
 names the path; `@reviewer` may send an item back to the full path.
 
-**What changes for 31-sized items.** From 10 spawns to 5: design, red, green,
-one review, one recording. Saved on 31: two design review rounds and their fix
-run, the pin ruling run, the as-built run (about 20 agent-minutes), and, the
-larger part, the three-hour wait for a recording slot.
+**What changes for 31-sized items.** From 10 spawns to 4: design, red, green,
+one review; the main session writes the recording commit (Q2). Saved on 31:
+two design review rounds and their fix run, the pin ruling run, the as-built
+run (about 20 agent-minutes), and, the larger part, the three-hour wait for a
+recording slot.
 
 **Diff, `docs/increments/README.md`, new section after line 82** (before
 `## Acceptance`):
@@ -205,8 +231,8 @@ larger part, the three-hour wait for a recording slot.
 +- One `@reviewer` round judges the design, the red step and the green step
 +  together, and rules on the red step's pins. A pin that changes the design
 +  still goes to `@architect` before green.
-+- The verdict, the Status line and the ROADMAP row land in one commit,
-+  before the push.
++- The main session commits the verdict, the Status line and the ROADMAP
++  row together, before the push.
 +
 +Never dropped: the red commit ahead of the green one, a green commit with no
 +test file, `@reviewer` before every push, Ola's yes for each push, and the
@@ -223,26 +249,57 @@ larger part, the three-hour wait for a recording slot.
 +  (on the short path, only a pin that changes the design: `docs/increments/README.md`).
 ```
 
-**Diff, `.claude/agents/reviewer.md` after line 44** (check 5):
+**`.claude/agents/reviewer.md`: no edit.** The first version added a check 6
+saying the same as the short-path section's second bullet; `@reviewer` reads
+`docs/increments/README.md` already (`.claude/REQUIRED-READING.md@5c412383:60-61`)
+and the brief names the path, so the line was a second copy. Dropped in this
+amendment to keep the budget (part 4).
+
+**The full path's design review, written down (Q4).** Diff,
+`docs/increments/README.md@5c412383:26-29`, the end of step 1:
 
 ```diff
-+6. **On the short path** (`docs/increments/README.md`), the one round also
-+   judges the design and rules on the red step's pins.
+   The file carries a **Prior art: legacy and literature** section, written
+   before the design, not after it.
++  `@reviewer` reviews the design before `@tester` starts.
 ```
 
-**Conflicts lifted, each a question for Ola** (Q2 to Q4 below): who writes the
-recording commit; whether a recording counts as a writer; whether the full
-path's design review is written down.
+The short path's "one `@reviewer` round judges the design ..." is then the
+named exception to this line.
 
-## 3. The ideas file, `docs/ideas.md` (proposal)
+**Who records the verdict (Q2, Q3).** The rule already gives it to the
+spawner; Ola ruled that the main session does it itself, and that an agent
+spawned only to record still counts as one of the two writers (Q3, "No").
+Diff, `docs/increments/README.md@5c412383:59-63` (step 4):
 
-### The shape (as Ola approved it at 11:49-11:52)
+```diff
+   **The review leaves a trace in the increment file.** `@reviewer` is
+-  read-only, so its spawner copies the handback's verdict, the commit range
++  read-only, so the main session itself, not an agent it spawns, copies the
++  handback's verdict, the commit range
+   it reviewed and its LOC count, verbatim, into a `## Review` section of
+```
+
+`.claude/agents/reviewer.md@5c412383:46` ("your spawner records it") stays
+true and needs no edit. `.claude/REQUIRED-READING.md` gets no line: it
+already sends every reader to `docs/increments/README.md`
+(`.claude/REQUIRED-READING.md@5c412383:60-61`), so step 4 stays the one
+statement of the recording rule, and a second copy would drift from it.
+Until the review-copy tool (the morning check's P6) is built, the main
+session copies the verdict line by hand, verbatim; it did so for 31 in
+`69e3551b`.
+
+## 3. The ideas file, `docs/ideas.md` (ruled)
+
+### The shape (Ola approved it at 11:49-11:52; Q5 and Q6 ruled at 13:20)
 
 ```markdown
 # Ideas and future work
 
 Nothing here is in flight. An idea becomes a ROADMAP row when it starts.
 Newest last. A long idea keeps its own file; its entry points to it.
+ROADMAP rows approved before this file existed stay in ROADMAP; every new
+idea, approved or not, comes here only.
 
 ## <short name>
 
@@ -253,9 +310,13 @@ Newest last. A long idea keeps its own file; its entry points to it.
 - **Status:** idea | approved by Ola, <date> | started as ROADMAP row N | dropped: <reason>
 ```
 
-"approved by Ola" is added to Ola's three statuses: under the cap, approved
-work waits, and today's approved-but-unstarted work (the morning check's
-proposals, 30d, 20c-3) needs a place (Q5).
+"approved by Ola" is added to Ola's three statuses (Q5, ruled yes): under
+the cap, approved work waits, and today's approved-but-unstarted work (the
+morning check's proposals, 30d, 20c-3) needs a place. The ROADMAP sentence in
+the header is Q6, ruled with its default: the old approved-but-unstarted rows
+(5d, 16d, the rows "approved by Ola 2026-10-06; not designed", the parked
+backlog) stay where they are, because moving them would shift ROADMAP lines
+that about 45 citations quote.
 
 ### Who reads it and who adds to it
 
@@ -362,12 +423,26 @@ Written here because `docs/ideas.md` is outside this persona's write limit;
 - **Size:** about 2 lines each.
 - **Status:** idea; h18's fix round may take them.
 
-#### Report a missing shell_scan outside a work tree
-- **What:** when `tools/shell_scan.py` fails to import and the command ran outside any work tree, the after-commit hook should say so.
-- **Why:** today the import failure shows only on a commit made inside a tree.
-- **From:** h19 code review round 2, suggestion 1 (reviewer's default: leave it).
+#### After-commit hook: keep the cause when two faults meet
+- **What:** when `tools/shell_scan.py` cannot be imported and the session's directory is in no work tree, the after-commit hook drops the note that says why; keep it. The hook still prints NOT CHECKED naming the directory and exits 2; only the cause is lost.
+- **Why:** h19's design (§8 pin 7) asks for the cause; the fix for review suggestion S2 drops it in this one case (`committed_trees` returns the notes only when every entry is a `Path`).
+- **From:** h19 code review round 2, suggestion 1, left as noted (`docs/increments/h19-commit-gate-tree.md@2f84131e:421-426`); h19 merged as #211.
 - **Size:** a line or two in a governed file.
 - **Status:** idea.
+
+#### Push guard: PowerShell flags beyond -c and -Command
+- **What:** the guards read a PowerShell (`pwsh`) command string given with `-c` or `-Command`; make them read the other flags that pass one too. Which flags, unchecked here: #210's design file names them.
+- **Why:** a command string passed by another flag is a route past the push and governance guards.
+- **From:** the main session's brief for this amendment, 2026-10-07 ("being fixed in #210 now"); #210 is guard PR B, branch `worktree-h16b`.
+- **Size:** small; in `tools/shell_scan.py`, a governed file.
+- **Status:** started in #210 (guard PR B, harness increment 16), in progress.
+
+#### #198: rename `tests/python/cli_driver.py` to `cli_helpers.py`
+- **What:** the rename, as in the open PR #198.
+- **Why:** Ola ruled on 2026-10-05 that the old name was cryptic (PR body).
+- **From:** opened 2026-10-06 09:01; approved by `@reviewer` (PR body: `5c34390`, and the master merge `39f61b2`).
+- **Size:** a rename, no production lines.
+- **Status:** approved by `@reviewer`, waiting on Ola's yes to enqueue; counts toward the three in flight (Q7).
 
 #### Monitor in every persona's tool list
 - **What:** add `Monitor` to the `tools:` line of all six persona files, or make `.claude/briefs/common.md@5c412383:12` name the fallback.
@@ -388,7 +463,7 @@ Written here because `docs/ideas.md` is outside this persona's write limit;
 - **Why:** the recap shows only the current branch; #198 sat approved and unenqueued for over a day.
 - **From:** this proposal, part 1.
 - **Size:** about 25 lines with tests, governed.
-- **Status:** idea (follows Ola's yes to this proposal).
+- **Status:** approved by Ola, 2026-10-07 (with this proposal); its own item, counted toward the three.
 
 #### Clear out stale worktrees
 - **What:** list the worktrees whose branch is merged or abandoned, and remove them with Ola's yes.
@@ -400,11 +475,15 @@ Written here because `docs/ideas.md` is outside this persona's write limit;
 ## 4. Rule text: size and a matching cut
 
 `python3 tools/rule_sizes.py` at `5c412383`: **10,564 words**, unchanged since
-the night retrospective (`6ae60089`). Parts 1 to 3 add about 340 words (measured over the diff blocks above): the cap
-70, the short path 150, `tester.md` 15, `reviewer.md` 40, `REQUIRED-READING.md`
-30, `architect.md` 28, `orchestrator.md` 25, `common.md` 1.
+the night retrospective (`6ae60089`). Parts 1 to 3, as ruled, add about **365
+words** (counted over the `+` and `-` lines of the diff blocks above): the cap
+105, the short path 150, `tester.md` 12, the design-review line 7, the
+recording line 7, `REQUIRED-READING.md` 28, `architect.md` 26, `reviewer.md`
+13, `orchestrator.md` 17, `common.md` 1. The first version counted about 340;
+the rulings added the warning step and the two counting rules to the cap, the
+design-review line and the recording line, and dropped `reviewer.md`'s check 6.
 
-**Cut C1, about 300 words, so the net is about +40:**
+**Cut C1, about 320 words, so the net is about +45:**
 
 1. `.claude/REQUIRED-READING.md@5c412383:175-188` (149 words, the `SessionStart`
    paragraph) becomes:
@@ -426,39 +505,46 @@ the night retrospective (`6ae60089`). Parts 1 to 3 add about 340 words (measured
 4. `docs/increments/README.md@5c412383:75-77` and `:80-82`: drop the reasons after the
    rules ("It is a step rather than an expectation because ..."; "The whole
    protocol rests on ...") (saves about 65).
+5. `.claude/REQUIRED-READING.md@5c412383:191-194`: drop "Proposed and not
+   approved: ..." to the end of the paragraph, a status list of two hooks
+   that belongs in a retrospective; the audit it cites keeps them (saves 18).
 
 Cuts shift line numbers: run `python3 tools/check_citations.py` on the branch
 that makes them, and re-read its at-risk list.
 
-## Questions for Ola
+## Rulings
 
-Each has a default; the default is what the diffs above assume.
+Ola's answers to the questions of the first version (`c61c1aa0`), with what
+each changed above.
 
-- **Q1. Does your direct ask override the cap?** Default: yes; the main
-  session tells you the count when it starts a fourth item.
-- **Q2. Who writes the recording commit?** The rules already give it to the
-  main session (`docs/increments/README.md@5c412383:59-63`, `.claude/agents/reviewer.md@5c412383:46`), but today it went to
-  `@architect` five times, after role-bleed worries about the main session
-  editing design files (`next.md`, 2026-09-28 item). Default: the main session
-  runs the review-copy tool (morning check P6) once built; until then it
-  copies the verdict line by hand, verbatim, and touches nothing else.
-- **Q3. Does a docs-only recording commit count as one of the two writers?**
-  31 waited three hours for a slot. Default: no, when no other agent is writing
-  in that worktree. This changes your "agents in pairs" rule, so it is yours.
-- **Q4. Write the full path's design review into the rules?** It is practice,
-  not rule (finding 3), so "the short path has no design review" points at
-  nothing. Default: yes, one line in `docs/increments/README.md` step 1:
-  "`@reviewer` reviews the design before `@tester` starts."
-- **Q5. Add "approved by Ola" as a status in the ideas file?** Default: yes.
-- **Q6. What happens to ROADMAP rows that are approved but not started**
-  (5d, 16d, the rows "approved by Ola 2026-10-06; not designed", the parked
-  backlog)? Default: they stay where they are, since moving them shifts the
-  ROADMAP lines that about 45 citations quote (h18's design review counted 46
-  at-risk quotations of lines 50 and 54); from now on a new unstarted item goes
-  to `docs/ideas.md` only.
-- **Q7. Does an open PR waiting only on you (#198) count toward the three?**
-  Default: yes, until you enqueue it or park it; the recap line makes it
-  visible.
+- **Q1. Does Ola's direct ask override the cap?** "Yes, but after approving a
+  warning." The main session warns with the count ("this makes 4 of 3") and
+  starts the item only after Ola confirms. In the cap bullet (part 1).
+- **Q2. Who writes the recording commit?** "Yes, you do it": the main session
+  itself, not an agent it spawns. In step 4 of `docs/increments/README.md`
+  (part 2); first done for 31 in `69e3551b`.
+- **Q3. Does a docs-only recording commit by an agent count as one of the two
+  writers?** "No" to the proposed exception: it still counts. Moot in practice
+  once the main session records (Q2); Ola's "agents in pairs" rule is
+  unchanged.
+- **Q4. Write the full path's design review into the rules?** Yes: one line
+  at the end of step 1 of `docs/increments/README.md` (part 2).
+- **Q5. "approved by Ola" as a status in the ideas file?** Yes (part 3).
+- **Q6. ROADMAP rows approved but not started?** The default: they stay in
+  ROADMAP; a new idea goes only to `docs/ideas.md` (the file's header, part 3).
+- **Q7. Does a PR waiting only on Ola count toward the three?** Yes (the cap
+  bullet). #198 is such a PR today.
 - **Q8. Do retrospectives and process write-ups count toward the three?**
-  Default: yes, since they use writer slots and review rounds (#206 took
-  three review rounds on the night of 2026-10-06).
+  Yes (the cap bullet).
+
+## To apply
+
+The main session briefs the owner of each file: `CLAUDE.md` (the cap),
+`docs/increments/README.md` (the short path, the design-review line, the
+recording line, cuts 3 and 4), `.claude/agents/tester.md`,
+`.claude/agents/architect.md`, `.claude/agents/orchestrator.md`,
+`.claude/briefs/common.md`, `.claude/REQUIRED-READING.md` (the ideas line,
+cuts 1, 2 and 5), and the new `docs/ideas.md` with the seed entries of part 3.
+Every one of these is a governed file, so each edit meets Ola's prompt. The
+recap line (`tools/session_state.py`) is its own small item, counted toward
+the three.
