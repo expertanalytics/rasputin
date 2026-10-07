@@ -1,14 +1,26 @@
 # Harness h19: the after-commit gate checks the tree that was committed
 
-Status: designed on `worktree-commit-gate` off `5c41238`; not yet red. One
-PR, about 45 net production lines (§6), in one governed file,
-`.claude/hooks/gates_after_commit.py`, plus one new test file. Questions for
-Ola in §7.
+Status: design review round 1 answered on `worktree-commit-gate` off
+`5c41238`; next, design review round 2. Not yet red. One PR, about 45 net
+production lines (§6), in one governed file,
+`.claude/hooks/gates_after_commit.py`, plus one new test file. Ola's ruling
+in §7.
 
 What this is. Row T1 of the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
-"Proposals"), which Ola approved by default on 2026-10-07 ("1-3 default")
-and asked for now ("T1 and guard PR B now"). Labels used here:
+"Proposals"). Ola approved it twice on 2026-10-07:
+
+- 05:42 UTC, "1-3 default. 4 must wait", answering the main session's list
+  of 05:36 UTC, whose item 1 was 20c question 7, item 2 was 20c question 6,
+  and item 3 was the 2026-10-06 retrospective: push it, open its PR, and
+  its proposals T1-T6, R1, R2 and S1, each with the default yes. So the one
+  answer is both the 20c ruling that `20c-soft-quality.md` records (on its
+  questions 7 and 6) and the approval of T1 (checked against the session
+  transcript).
+- 08:39 UTC, "Both binary by default. T1 and guard PR B now/", which asked
+  for this work now.
+
+Labels used here:
 
 | Label | What it is |
 |---|---|
@@ -17,7 +29,7 @@ and asked for now ("T1 and guard PR B now"). Labels used here:
 | D3 | finding D3 of that retrospective: a master merge that dropped an import was gated in the main checkout, not in the worktree it was made in, and passed |
 | PR B | the guard fixes of `docs/increments/h16-harness-fixes.md`, on `worktree-h16b` |
 | h18 | `tools/new_worktree.py` and `tools/merge_master.py`, on `worktree-harness-tools` |
-| subagent-shaped event | a hook input as a subagent's Bash call produces it: `agent_id` and `agent_type` set, `cwd` the session's directory (the main checkout), the worktree named only inside the command |
+| subagent-shaped event | a hook input as a subagent's Bash call produces it: `agent_id` and `agent_type` set (a session started with `--agent` sets `agent_type` too; only `agent_id` is subagent-only), `cwd` the session's directory (the main checkout), the worktree named only inside the command |
 
 ## 1. The two faults, checked
 
@@ -57,8 +69,9 @@ and `post-merge` "is not executed, if the merge failed due to conflicts",
 nor does `post-commit` cover a merge. So the design keeps the Claude Code
 hook and recovers the directory the way the shell would: by following the
 command's own `cd` and `git -C`. Claude Code's hook input carries `cwd`,
-"Current working directory when the hook is invoked", and, for subagents
-only, `agent_id` and `agent_type` (code.claude.com/docs/en/hooks, read
+"Current working directory when the hook is invoked"; `agent_id`, only
+when the hook fires inside a subagent; and `agent_type`, inside a subagent
+or in a session started with `--agent` (code.claude.com/docs/en/hooks, read
 2026-10-07). No novelty is claimed.
 
 *Legacy.* Nothing; the legacy tree has no harness or git hooks.
@@ -71,9 +84,13 @@ $ git grep -l -i -e "post-commit" -e "after.commit" -e "show-toplevel" -e "PostT
 ## 3. Design
 
 All in the hook. It already imports nothing of the repository; it gains
-`shell_scan` the way `guard_push.py` imports it (`tools/` on `sys.path`, the
-import in `try`, `None` if it fails). `tools/shell_scan.py` is not changed
-(§4).
+`shell_scan` by `sys.path.append(str(<repo>/tools))` and the import in
+`try`, `shell_scan = None` if it fails. **Append, never
+`sys.path.insert(0, ...)`**: put first, a `tools/` file named after a
+standard-library module replaces it for every later import, the hole PR B's
+fix G4 closes in the four guards and three tools (the `insert(0, ...)` that
+`guard_push.py` still has at `5c41238`). `tools/shell_scan.py` is not
+changed (§4).
 
 ### 3.1 Which commands trigger it
 
@@ -90,7 +107,8 @@ the subcommands that make commits on the checked-out branch. The
 subcommand is the first word after git's own options; an option in
 `GIT_TAKES_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace",
 "--attr-source", "--config-env"}` (the set `guard_push.py` uses on PR B)
-consumes the next word. The set is copied, not imported from
+consumes the next word; the glued form (`--work-tree=/a`) is one word and
+consumes none. The set is copied, not imported from
 `guard_push.py`, so that one hook failing to load cannot take the other
 with it.
 
@@ -119,8 +137,9 @@ missing, as today):
 |---|---|
 | `cd D` or `pushd D` (options such as `-P` skipped) | `D` if absolute, else current / `D`; `~` expanded |
 | `cd`, `cd -`, `popd`, or a `D` containing `$` or a backtick | unknown, holding the word as written |
-| a committing git | not changed; its own directory is the current one with each `-C X` applied in order, by the row above |
-| a committing git with `--git-dir` or `--work-tree` | that command's directory is unknown, holding the option as written |
+| a relative `cd D` while the current directory is unknown | stays unknown, holding the first unknown word |
+| a committing git | not changed; its own directory is the current one with each `-C X` applied in order, by the rows above (so a relative `-C X` on an unknown directory stays unknown) |
+| a committing git with `--git-dir` or `--work-tree`, as two words (`--work-tree /a`) or glued (`--work-tree=/a`) | that command's directory is unknown, holding the option as written |
 
 Each committing git command yields a directory or an unknown word. A
 directory maps to `git rev-parse --show-toplevel` run there (the existing
@@ -143,6 +162,12 @@ towards a gate run, not towards silence where it can:
 - A variable assigned on the line (`WT=/a; cd $WT`) is not substituted;
   `shell_scan` substitutes such values only into write targets, and
   extending that touches PR B's file (§4). It reports NOT CHECKED.
+- A `cd` inside `$(...)`, backticks or `sh -c` leaks the same way, and
+  `shell_scan` emits a substitution's inner commands before the command
+  that holds it (checked at `5c41238`: `x=$(cd /b && pwd) && git commit`
+  parses as `cd /b`, `pwd`, `git commit`). That line gates `/b`, while the
+  commit ran in `cwd`. Wrong tree, but a gate run and the tree named in the
+  output, so the reader can see it.
 
 ### 3.3 What runs there
 
@@ -195,7 +220,8 @@ Two functions, loadable by path, pure apart from the `git rev-parse` call:
 def git_dirs(command: str, cwd: Path) -> list[Path | str] | None:
     """The directory each committing git command on the line runs in, in order:
     a Path where §3.2 resolves it, the word as written where it does not.
-    [] when no command commits; None when shell_scan cannot read the line."""
+    [] when no command commits; None when shell_scan cannot read the line
+    or failed to import (the hook then uses §3.1's text test)."""
 
 def committed_trees(event: dict) -> list[Path | str]:
     """The distinct work-tree tops to gate, in first-seen order; a str is a
@@ -223,7 +249,7 @@ retrospective's prose).
   rewrites that paragraph.
 
 No file is shared, so the order is free. Default: **PR B first** (it is
-further along, in review round 9), this PR merged after it with a master
+further along: past its review round 9), this PR merged after it with a master
 merge before its review, so that its tests run against PR B's
 `shell_scan.py`.
 
@@ -270,7 +296,10 @@ subagent-shaped: `hook_event_name` `PostToolUse`, `tool_name` `Bash`,
    `cd /a && git -C b commit` gives `/a/b`; a relative `cd b` from `cwd`;
    `cd ~/x` expands; `cd /a && git commit && cd /b && git commit` gives
    both in order; `cd "$WT" && git commit`, `cd - && git commit` and `git
-   --work-tree=/a commit` give the word as written (a `str`).
+   --work-tree=/a commit` give the word as written (a `str`); so do
+   `cd - && cd b && git commit` and `cd - && git -C b commit` (a relative
+   step from an unknown directory stays unknown), while `cd - && cd /a &&
+   git commit` gives `/a`.
 5. **NOT CHECKED, end to end**: `cd "$WT" && git commit -m x` exits 2,
    stderr has `NOT CHECKED` and `$WT`, and no gate ran (the stub
    gates write a marker file when run; none exists). The same for `cd
@@ -283,6 +312,12 @@ subagent-shaped: `hook_event_name` `PostToolUse`, `tool_name` `Bash`,
    the words "could not be read".
 8. **No trigger is fast**: `git status` and a non-Bash event exit 0 with no
    marker written.
+9. **Import form**: the hook's source has `sys.path.append(` and no
+   `sys.path.insert(0,` (the check PR B's `APPENDERS` test makes for seven
+   other files, written here so neither PR edits the other's test file).
+   And with `shell_scan` made unimportable (its copy in the temporary
+   repository deleted), `git_dirs` returns `None` and `git commit -m x`
+   still gates `cwd`'s tree through the text test.
 
 Mutation targets, if `@tester` chooses to spend a round (not required: this
 is not an invariant-critical suite): drop the `cd` row, drop `-C`
@@ -297,9 +332,18 @@ trees and the NOT CHECKED lines in `main` about 8, less `committed_tree`'s
 trigger, `-C` and the unknown-directory rule are the rest. Tests about 200
 lines, not counted (`CLAUDE.md` §2).
 
-## 7. Questions for Ola
+## 7. Ola's ruling
 
-1. Should a commit whose directory the hook cannot work out (for example
-   `cd "$WT" && git commit`) be reported back to the agent as "not
-   checked" (exit 2, the same channel as a red gate), or pass silently as
-   today? Default: report it.
+Question 1, closed. Asked: should a commit whose directory the hook cannot
+work out (for example `cd "$WT" && git commit`) be reported back to the
+agent as "not checked" (exit 2, the same channel as a red gate), or pass
+silently as today? Default: report it. Ola, 2026-10-07 09:38 UTC: "Still
+open for you: h19's question, telling the agent "not checked" when the hook
+can't tell the folder: yes." So §3.2 and §3.4 stand as written: NOT
+CHECKED, exit 2, no gate run in another tree in its place.
+
+## Review
+
+h19 design review round 1 (@reviewer, 5c412383..abeff234 on worktree-commit-gate, docs only, 0 counted lines): CHANGES REQUESTED, with two blocking items. B1: the design says to import `shell_scan` "the way guard_push.py imports it" (/Users/skavhaug/projects/rasputin/.claude/worktrees/commit-gate/docs/increments/h19-commit-gate-tree.md@abeff234:73-76). At the design's own base that way is `sys.path.insert(0, ...)`. PR B's fix G4 removes exactly that form as a live hole (/Users/skavhaug/projects/rasputin/.claude/worktrees/h16b/.claude/hooks/guard_push.py@c83dfe0e:32-35). The design must say `sys.path.append`. B2: the quote "1-3 default" (docs/increments/h19-commit-gate-tree.md@abeff234:10) is recorded in the tree only as Ola's answer on 20c questions 7 and 6 (/Users/skavhaug/projects/rasputin/docs/increments/20c-soft-quality.md@5c412383:1912-1913). Either check it against the transcript as an answer on the retrospective's questions, or drop it and keep the verbatim "T1 and guard PR B now". Everything else I checked holds. 6 suggestions: S1 Ola's "no" answer to question 1 spelled out, S2 unknown directory stays unknown, S3 `=` forms, S4 nested `cd` leaks, S5 `git_dirs` without shell_scan, S6 two wording fixes.
+
+`@architect` answer to round 1: B1 taken, §3 names `sys.path.append` and why not `insert(0, ...)`, with test 9; B2 checked against the session transcript (the 05:36 UTC list's item 3 was the retrospective with T1-T6, R1, R2, S1), both quotes now in the opening; S1 moot, Ola ruled yes at 09:38 UTC (§7); S2 taken (§3.2 row, test 4 cases); S3 taken (§3.1, §3.2); S4 taken as a limit, checked with `shell_scan.parse` at `5c41238`; S5 taken (docstring, test 9's second half; the `APPENDERS` idea done as test 9 so neither PR edits the other's file); S6 taken (`agent_type` under `--agent`, PR B past round 9). The round 1 line above is word for word but one change: its short citation of this file gains the `docs/increments/` prefix, so that `check_citations.py` resolves it.
