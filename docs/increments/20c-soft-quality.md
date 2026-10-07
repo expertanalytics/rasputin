@@ -3,16 +3,25 @@
 Status: **designed** (`@architect`, 2026-10-06, branch
 `worktree-soft-quality` off master `ed12512`), design review rounds 1 to
 5 answered and round 6 approved; in three PRs: **20c-1** the foot rule on
-every insertion path: red tests written (`a982d531`, `@tester`), their pins
-ruled (below, "Pins ruled for 20c-1's red step"), green step `8f275220`
-(`@developer`) with four items left failing, ruled below ("Rulings on
-20c-1's green step"); next `@tester`'s re-pins, oracle margin and test
-amendments, then `@developer`'s `MeshVertex` callable; **20c-2** the soft criterion and a split of the
+every insertion path: **built, not pushed** (Ola: "yes, build 20c-1, no
+push"), 163 net production lines (`python3 tools/count_loc.py c074f900
+69f37d1c`). Red tests `a982d531` (`@tester`), their pins ruled (below,
+"Pins ruled for 20c-1's red step"); green `8f275220` (`@developer`), its
+four open items ruled ("Rulings on 20c-1's green step") and answered
+(`b09b84f6` to `34b546c4`); `@perf`'s acceptance `b9e2d482`: every mesh and
+quality gate passes, refine time regressed; `@developer`'s exact
+performance fix `69f37d1c` (R3); `@perf`'s re-time `c9f62f7c`: the 1 m
+benchmark accepted, the split phase still over ruling 5's 2 % on both
+catchments; that limit is revised below ("The split-phase limit, judged
+after the fix"), 20c-1 meets the revised one, and question 7 asks Ola
+whether to accept the remaining time (default yes). **Next: code review (`@reviewer`), with the
+mutation round for the invariant-critical suite `test_constraint_foot`**;
+**20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
 **20c-3** input clean-up and coarsening, and Ola's outline rule (built
 either way; question 6 sets only whether it is on by default), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and question 5, 2026-10-07 ("Ola's rulings" below); question 6 open. Asked by Ola
+and question 5, 2026-10-07 ("Ola's rulings" below); questions 6 and 7 open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -666,12 +675,21 @@ the output independent of `threads`:
 | after | Lagan: slivers (share) | triangles | worst angle | Numedalslagen: slivers (share) | triangles | worst angle |
 |---|---|---|---|---|---|---|
 | master today | 1 598 (0.185 %) | 863 897 | 0.000412° | 1 644 (0.128 %) | 1 287 334 | 0.000399° |
-| PR 20c-1, constraint-aware insertion | about 680 (0.078 %) | +0.4 % | 0.0024° | about 430 (0.034 %) | +0.3 % | 0.00068° |
+| PR 20c-1, constraint-aware insertion (built, measured) | 679 (0.078 %) | +0.43 % | 0.0024° | 433 (0.034 %) | +0.27 % | 0.00068° |
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
 | PR 20c-3 with Ola's outline rule at 5 m (question 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
 
-From M5, and M6 for 20c-3. 20c-2 has the line split (Ola's yes to question 4); without
+20c-1's row is `@perf`'s measurement of the built code, the same
+triangle counts, sliver counts and worst angles as M5's prototype
+(`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:172-184`).
+Its cost in time, on the same runs (lines 203-221 there): the whole run
+−0.26 % on Lagan and +0.18 % on Numedalslagen against master; refine,
+which is under 1.2 s of those 81 s and 11 s runs, +4.1 % and +1.7 %
+(23 ms and 19 ms). The 1 m benchmark, where no constraint is near enough
+for a foot, is 0.3 to 2.0 % faster than master at every thread count
+(lines 261-306 there). The other rows are from M5, and M6 for 20c-3.
+20c-2 has the line split (Ola's yes to question 4); without
 it, the soft criterion alone would leave about 690 and 440 slivers with
 −12 % and −17 % triangles, and Numedalslagen's worst angle would fall back
 to 0.00040° (M5).
@@ -816,6 +834,13 @@ and quality during refinement, not only at the start (C3). Measured:
   node (R2.1), refinement and the final check insert the point itself
   (R3, R4). (Round 1's `std::optional<FootHit>` could not tell a skip from
   "no line near"; review round 1 did not raise it, the prototype did.)
+- **As built** (`include/terrain/mesh/constraint_foot.hpp@69f37d1c`): the
+  header also has `foot_reachable(m, t)`, true when `t`, or a neighbour
+  across an unconstrained edge of `t`, has a constrained, non-frozen edge:
+  exactly the edges `constraint_foot` can answer from, so when it is false
+  the search would return `None`. Refinement uses it to skip the search
+  (R3, `@developer`'s performance fix `69f37d1c`). `foot_fits` sits in
+  `mesh::detail`, where 15f's `strip_fits` calls it.
 - **Not across a constrained edge.** A neighbour behind a constraint is on
   the other side of a line the candidate is not near enough to matter for.
 - **Determinism**: a fixed search order and "first found" make the hit a
@@ -856,10 +881,22 @@ After the node is snapped, judged valid and located, and before insertion:
 6. **Off with the feet.** `QualityOptions::constraint_feet` (false by
    default); `refine` passes `RefineOptions::constraint_feet`, so
    `--no-constraint-feet` turns all three paths off and the mesh is
-   bit-identical to master's.
+   bit-identical to **master run with `--no-constraint-feet`**. It is not
+   master's default mesh: master's default already has 20b's refinement
+   feet on, and this switch turns those off too. Measured so by `@perf` on
+   both catchments, arrays and `.vtk` equal
+   (`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482:40-50` and
+   `:206-213`).
 7. **No vertex rule.** Skipping a node closer than δ_q to an off-node
    corner of its triangle was prototyped (`QVERT`) and changed no triangle
    on Lagan. Not designed in (as 20b's C3).
+8. **As built** (`include/terrain/mesh/quality.hpp@69f37d1c`): as above.
+   A foot is counted in `QualityOutcome::feet`, not in `inserted`, and
+   reaches `RefineOutcome::quality_feet`; `skipped_near_line` is summed
+   into `quality_skipped` (R5). Measured: 5 930 feet on Lagan and 4 233 on
+   Numedalslagen, M5's figures
+   (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/lagan-head-r1_stats.md@c9f62f7c:83`,
+   `docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/numed-head-r1_stats.md@c9f62f7c:87`).
 
 ### R3. Refinement (`refine.hpp`): 20b R1 widened
 
@@ -874,6 +911,33 @@ unconverged, and nothing else would rescan a slot the split did not write.
 today; `NotCounterClockwise` and a foot with no `vertex_z` count in
 `feet_refused` and insert the node, as today. Everything else in 20b (ε,
 footed once, the fallback) is unchanged.
+
+**As built, with `@developer`'s performance fix**
+(`include/terrain/refinement/refine.hpp@69f37d1c:339-350`). The green
+code computed ε (`foot_epsilon`, up to 16 DEM reads) and ran the search
+for every split; `@perf` measured the split phase +32 % on Lagan, +51 %
+on Numedalslagen and +42 % on the 1 m tile against `--no-constraint-feet`,
+the tile placing no foot at all
+(`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482:264-288`). The fix
+(`69f37d1c`), under ruling 5 below, does the foot work only when a
+constraint is within reach, in three steps:
+
+1. `foot_reachable(m, t)` (R1) false: no search, no ε.
+2. Otherwise the search runs first at the cap, min(dx, dy) / 2.
+3. Only when that finds an edge are the footed set and ε asked; the
+   search is rerun at ε when ε is below the cap.
+
+The answer is the one the green code gave: ε is at most the cap, so
+nothing within the cap means nothing within ε, and when ε equals the cap
+the first search is the ε search. The meshes are byte-identical to the
+green code's on the 1 m tile, the quarter, Lagan and Numedalslagen, feet
+on and off
+(`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:158-170`;
+the quarter's hash at `:259` equals the green code's at
+`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482:298`).
+Measured: 720 feet on Lagan and 4 629 on Numedalslagen, 0 refused
+(`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/lagan-head-r1_stats.md@c9f62f7c:84-85`,
+`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/numed-head-r1_stats.md@c9f62f7c:88-89`).
 
 ### R4. The final check (`refine_points.hpp`, `point_loop`)
 
@@ -927,6 +991,17 @@ point, not a void carve point), Inside its triangle, not yet footed:
    later inserted as themselves), `feet_refused`.
 6. `PointRefineOptions::constraint_feet`, false by default; the CLI passes
    the same switch as `refine`.
+7. **As built** (`include/terrain/refinement/refine_points.hpp@69f37d1c`):
+   as above, with three details the design left open. The wait rule is
+   R3's: the point waits a round when the owner or the triangle across the
+   split edge was touched this round. A foot counts in `inserted` as well
+   as in `feet`, and a footed DEM node's foot is not in `nodes_inserted`
+   (green-step ruling 5). The final check's `feet_refused` is counted but
+   not reported; the record's "Moves onto lines refused" row
+   (`snaps_refused`) is refinement's alone. Measured: 793 feet and 19
+   fallbacks on Lagan, as in M5, and 5 and 0 on Numedalslagen
+   (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/lagan-head-r1_stats.md@c9f62f7c:86-87`,
+   `docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/raw/numed-head-r1_stats.md@c9f62f7c:90-91`).
 
 ### R5. Report and options
 
@@ -943,6 +1018,16 @@ point, not a void carve point), Inside its triangle, not yet footed:
   `NotCounterClockwise` status, or a `Hit` refused for want of a z or by
   `strip_fits`. `NearEnd` (the foot too close to an end of the edge) is
   not counted on either path, as 20b's `foot_of` does not count it today.
+- **As built** (`src_python/tin_engine/run_record.py@69f37d1c:38` and
+  `:71-79`, `src_python/tin_engine/cli.py@69f37d1c:1649-1666`): the record
+  and `--stats` gain three rows, "Points moved onto lines while improving
+  the starting mesh" (`start_quality_points_snapped_to_lines`), "Points the
+  final check against the DEM moved onto lines"
+  (`final_check_points_snapped_to_lines`) and "Of them, also added where
+  they were" (`final_check_snapped_points_added_anyway`); refinement's row
+  now reads "Points refinement moved onto lines", and the switch's row
+  "Points very close to a line were moved onto it". `--stats` prints the
+  record's rows, so `stats.py` did not change.
 
 ### R6. Interactions
 
@@ -1086,7 +1171,7 @@ settles only its default.
 
 | PR | what | needs | gate (measured value in brackets, M5) |
 |---|---|---|---|
-| 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master; tolerance oracle; determinism |
+| 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1 |
 | 20c-3 | input coarsening, and the outline rule (built either way; question 6 sets its default) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on question 6's answer. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
 
@@ -1176,8 +1261,9 @@ figure, R4.3's z included.
 Property and integration:
 
 - **Off switch**: `constraint_feet = false` on all three paths gives
-  output bit-identical to master on 14b's T12 fixtures, a domain start and
-  a features start.
+  output bit-identical to master's with `constraint_feet = false` (not
+  master's default, which has 20b's refinement feet on) on 14b's T12
+  fixtures, a domain start and a features start.
 - 14b's T3 (tolerance) and T6 (determinism, threads 1, 2, 7 and hardware
   concurrency) re-run with the rule on; T6 is the TSan job's.
 - CLI: the new rows in `--stats` and the record; `--no-constraint-feet`.
@@ -1404,13 +1490,85 @@ five choices the design did not. Each was checked against the code first.
      `--no-constraint-feet`, on both catchments; if the feet-on figure is
      more than 2 % higher, `@developer` computes ε only when the triangle or
      a neighbour across an unconstrained edge has a constrained, non-frozen
-     edge (no change to the output).
+     edge (no change to the output). **Done**: `@perf` measured it over
+     (`b9e2d482`), and `@developer`'s `69f37d1c` does that and one step
+     more (R3, "As built"): no search where `foot_reachable` is false, the
+     search to the cap first, ε only when an edge is within the cap. The
+     limit itself is judged in the next section.
 
 **Next, in order.** `@tester`, one commit each: F2's re-pin (1); the CF4
 oracle margin with its mutant demonstration (2); the two stub tests (3);
 `test_mesh_quality_void.cpp`'s callables (5). Then `@developer`: the
 `MeshVertex` constraint on `improve` (5). Then the full C++ and Python runs,
-`@reviewer`, and `@perf`.
+`@reviewer`, and `@perf`. (All done: `b09b84f6` to `34b546c4`, then
+`@perf`, the fix and the re-time, as the Status says.)
+
+#### The split-phase limit, judged after the fix (`@architect`, 2026-10-07, on `69f37d1c`)
+
+**What `@perf` measured at `69f37d1c`**, median of 6 interleaved runs per
+build on AC power, threads 10
+(`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:203-241`):
+
+| run | split phase, feet on vs off | per split, on vs off | split phase, on vs master | start quality, on vs off | start quality, on vs master | refine, on vs master | whole run, on vs master |
+|---|---|---|---|---|---|---|---|
+| 1 m tile, tolerance 1 (no foot placed; one mesh for all three builds) | +0.86 % | +0.86 % | −0.37 % | a 0.6 ms phase | a 0.6 ms phase | −0.64 % | −0.85 % |
+| Lagan | +7.1 % | +8.3 % | −3.3 % | +6.9 % | +7.7 % (+25 ms) | +4.1 % (+23 ms) | −0.26 % |
+| Numedalslagen | +6.7 % | +8.9 % | −7.7 % | +5.7 % | +6.5 % (+32 ms) | +1.7 % (+19 ms) | +0.18 % |
+
+Master's own spread in the split phase is 2.1 to 2.5 % (same file, lines
+235-241). The 1 m benchmark (`tools/bench.py`, both domains, 1 to 20
+threads) is 0.3 to 2.0 % faster than master in every cell, the
+1-to-20-thread speed-up unchanged (2.56 × against 2.55 × on the tile, 2.54
+× against 2.51 × on the quarter; lines 261-321).
+
+**Did the 2 % limit measure the right thing? On the tile yes, on the
+catchments no.** It was written to catch work done for nothing: ε's DEM
+reads on every split, where no constraint is near. Feet on against feet
+off measures that only where both runs do the same work, which is the 1 m
+tile: no foot is placed and all three builds give one mesh. There it is
++0.86 %, inside master's own spread, so that work is gone. On the
+catchments the two runs build different meshes and do different work.
+Feet on places 720 and 4 629 feet in this phase, each a split of a
+constrained edge with its own legalisation, which feet off never does; it
+also does fewer splits (46 144 against 46 656 on Lagan, 183 368 against
+187 233 on Numedalslagen; lines 223-233). So the catchment figure measures
+the feature, not overhead, and neither seconds nor seconds per split
+compares like with like. Why a split costs more with feet on is **not
+known**: nothing has been profiled; it may be the remaining foot search
+and ε, or the feet themselves. The start-quality phase, which the limit
+never covered, rises about 6 % for the same reason (5 930 and 4 233
+feet).
+
+**The limit, revised** (replaces ruling 5's 2 % for 20c-1, and holds for
+20c-2, which touches the same paths):
+
+1. **No cost where no foot is placed.** On the 1 m tile, where the meshes
+   are byte-identical with feet on and off, the split phase with feet on
+   is within 2 % of feet off and of master. 20c-1: +0.86 % and −0.37 %:
+   **met**.
+2. **No slower than what Ola runs today.** On both catchments, against
+   master's default (20b's refinement feet on): the split phase not more
+   than 2 % slower, and the whole run within 2 %. 20c-1: split phase
+   −3.3 % and −7.7 %, whole run −0.26 % and +0.18 %: **met**.
+3. **Reported, not gated**: start quality and refine against master and
+   against feet off, as in the table. They pay for 58 to 74 % fewer
+   slivers, the product Ola asked for, and no cheaper form has been
+   measured.
+
+Scale of the 2 %: relative, a median of at least 6 interleaved runs, since
+a single phase's spread on master is itself about 2 %. Checked on the 1 m
+tile (464 290 triangles), Lagan (867 612) and Numedalslagen (1 290 807).
+At São Francisco's size the serial phases matter more than anywhere; point
+2 keeps the refinement split phase no slower than master's, and the
+start-quality phase is the one to watch (+6.5 to +7.7 % on master, serial).
+
+**Ola's question** (question 7 below): accept the remaining +7 to 9 %
+against feet off, or move the foot search into the parallel scan.
+Recommended: accept. The most a move could save is the whole feet-on
+excess of the split phase, 2.4 ms on Lagan and 9.7 ms on Numedalslagen,
+under 0.1 % of either run, and a scan-time answer would still be checked
+again in the serial phase, since an earlier split in the same round can
+change a neighbour the search reads.
 
 ### 20c-2
 
@@ -1487,7 +1645,16 @@ an outline; `@perf` reports the triangle count and the share under 1° beside
 the timings.
 Refine time within noise or better (M3: the whole refine is under 1.4 s of
 the 15 to 90 s runs; 20c-2 inserts a third fewer quality nodes). Plus the
-gate runs above. 20c-3 is Python only and needs no `bench.py` run.
+gate runs above, and the split-phase limit ("The split-phase limit, judged
+after the fix"). 20c-3 is Python only and needs no `bench.py` run.
+
+**20c-1, done.** First acceptance at `34b546c4`
+(`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482`): gates pass, refine
+time regressed (+6 to +24 % on the 1 m benchmark). Re-time after the fix
+at `69f37d1c`
+(`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c`): the 1 m
+benchmark accepted, −0.3 to −2.0 %, meshes byte-identical to master's;
+gates pass at the same figures.
 
 ## LOC
 
@@ -1501,6 +1668,7 @@ Counted in `CLAUDE.md` §2's unit.
 | | `refinement/refine_points.hpp` (foot branch, footed set, z along the strip, counters, option) | ~45 |
 | | `bindings/core.cpp`, `_core.pyi`, `final_check.py`, `edge_strip.py`, `cli.py`, `stats.py`, `run_record.py` | ~35 |
 | | **total** | **~150** |
+| 20c-1 built | `python3 tools/count_loc.py c074f900 69f37d1c`: `constraint_foot.hpp` 77, `quality.hpp` 20, `refine.hpp` −21, `refine_points.hpp` 53, `strip_scan.hpp` 0, `bindings/core.cpp` 8, `_core.pyi` 6, `cli.py` 3, `edge_strip.py` 3, `final_check.py` 7, `run_record.py` 7 | **163** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
 | 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 (either answer to question 6) | **~130** |
 
@@ -1554,6 +1722,19 @@ with the default no: "defaults on all four". So:
    default), like `--features-tolerance`. Either way the same code, tests
    and gate go into 20c-3; only the default and the CLI test that pins it
    differ.
+7. **20c-1's refinement step with feet on: accept the time, or move the
+   foot search into the parallel part?** After `@developer`'s fix, the
+   step of refinement that adds points one at a time is 7 % slower with
+   feet on than with `--no-constraint-feet` on Lagan and Numedalslagen
+   (8 to 9 % per point added), but 3 % and 8 % faster than master as you
+   run it today, and the whole run is within 0.3 % of master. On the 1 m
+   benchmark, where no point lands near a line, there is no cost at all.
+   Moving the search into the part that runs on all cores could save at
+   most 2 to 10 ms per run, and adds code. **Default: accept**, under the
+   revised limit ("The split-phase limit, judged after the fix"), which
+   20c-1 meets. The other choice: a follow-up PR moves the search and ε
+   into the parallel scan, with the serial phase checking the answer
+   again.
 
 ## Not in scope
 
