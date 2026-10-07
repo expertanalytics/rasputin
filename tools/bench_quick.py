@@ -86,8 +86,9 @@ def load_hotspots(path: Path) -> list[RuledHotspot]:
 
 
 def fingerprint(path: Path) -> str:
-    """A file: size, mtime and, under 100 MB, content. A directory: its sorted
-    relative file names, sizes and mtimes, recursive; no content read."""
+    """A file under 100 MB: size and content (git sets mtime at checkout). A
+    larger file: size and mtime. A directory: its sorted relative file names,
+    sizes and mtimes, recursive; no content read."""
     if path.is_dir():
         rows = sorted(
             f"{p.relative_to(path).as_posix()}\t{p.stat().st_size}\t{p.stat().st_mtime_ns}\n"
@@ -96,8 +97,9 @@ def fingerprint(path: Path) -> str:
         )
         return "dir:" + hashlib.sha256("".join(rows).encode()).hexdigest()
     stat = path.stat()
-    content = hashlib.sha256(path.read_bytes()).hexdigest() if stat.st_size < READ_UNDER else ""
-    return f"file:{stat.st_size}:{stat.st_mtime_ns}:{content}"
+    if stat.st_size < READ_UNDER:
+        return f"file:{stat.st_size}:{hashlib.sha256(path.read_bytes()).hexdigest()}"
+    return f"file:{stat.st_size}:{stat.st_mtime_ns}"
 
 
 # ----------------------------------------------------------------- judging
