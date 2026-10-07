@@ -183,6 +183,39 @@ class TestTheSlit:
         assert all(shapely.equals(a, b) for a, b in zip(slit(), got, strict=True))
 
 
+class TestEmptied:
+    """Ruling G6 (e): RP1's degenerate case. C, 1 cm thick between the slit
+    and a fifth polygon E east of it, is given wholly to its neighbours by
+    the repair at S; it is counted ``empty``, not ``outside`` (it is not
+    outside the domain). At S = 0 (the merge on, so the stage runs) C stays:
+    the premise."""
+
+    THIN = 0.01  # C's thickness, metres
+
+    def features(self) -> list[Feat]:
+        t = self.THIN
+        polygons = [
+            *slit()[:2],
+            poly((L, -50), (L + t, -50), (L + t, 50), (L, 50), (L, WIDTH), (L, 0)),
+            slit()[3],
+            box(L + t, -50, L + 50, 50),
+        ]
+        return [
+            coded(i + 1, p, c)
+            for i, (p, c) in enumerate(zip(polygons, (*CODES, "121"), strict=True))
+        ]
+
+    def test_g6e_the_premise_at_0_c_stays(self, fi: ModuleType, tmp_path: Path) -> None:
+        fs = opened(fi, tmp_path, self.features(), repair_m=0.0, merge_same_class=True)
+        assert [f.fid for f in fs.features] == [1, 2, 3, 4, 5]
+        assert (fs.outside, fs.empty) == (0, 0)
+
+    def test_g6e_the_emptied_polygon_is_counted_empty(self, fi: ModuleType, tmp_path: Path) -> None:
+        fs = opened(fi, tmp_path, self.features(), repair_m=S)
+        assert [f.fid for f in fs.features] == [1, 2, 4, 5]  # the premise: C emptied
+        assert (fs.outside, fs.empty) == (0, 1)
+
+
 class TestTheOrder:
     """RP6: repair before simplifying. A vertex 4.5 mm off A's straight
     border, halfway along and away from the slit, with

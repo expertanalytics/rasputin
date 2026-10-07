@@ -8,7 +8,9 @@ non-finite; the input row ``features_repair_m`` and the vertex rows in
 ``--stats`` and the record; the ``features clean-up`` timing sub-row present
 under ``features clip``") and the outline rule's CLI test (5 m whenever
 features are given, ruling 6; ``--features-outline-snap 0`` turns it off).
-Not mutation-critical.
+Not mutation-critical. Ruling G3 ("Rulings on 20c-3's green step"): the
+merge switch is the text ``on`` or ``off``, the same in ``--stats`` and the
+record, as ``snap_to_lines`` is (increment 25, "Values").
 
 **If Ola picks another value for question 9**, only ``REPAIR_DEFAULT`` and
 the row text ``"0.05"`` here change.
@@ -20,9 +22,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   ``outline_snap_m``; see ``test_feature_repair.py``), on every run with
   ``--features``: defaults 0.05, on, 0, 5, whatever the map.
 - ``--stats`` prints them as ``0.05``, ``0`` and ``5`` (as
-  ``start_quality_gain_deg``); the record holds floats, and the merge as a
-  JSON boolean. ``features_merge_same_class``'s printed text is not pinned,
-  only that on and off differ.
+  ``start_quality_gain_deg``); the record holds floats.
 - No features, none of the four rows.
 - The vertex rows are found by the design's wording, "Land-cover vertices
   before and after clean-up"; their name and value format are not pinned.
@@ -158,7 +158,7 @@ class TestDefaults:
         assert record["features_repair_m"] == REPAIR_DEFAULT
         assert record["features_tolerance_m"] == 0.0
         assert record["features_outline_snap_m"] == OUTLINE_DEFAULT
-        assert record["features_merge_same_class"] is True
+        assert record["features_merge_same_class"] == "on"
         assert VERTEX_WORDING in report
 
     def test_the_outline_rule_whenever_features_are_given(
@@ -216,7 +216,7 @@ class TestGiven:
         assert stats_row(report, "features_repair_m") == "0.1"
         assert stats_row(report, "features_tolerance_m") == "2"
         assert stats_row(report, "features_outline_snap_m") == "0"
-        assert record["features_merge_same_class"] is False
+        assert record["features_merge_same_class"] == "off"
 
     def test_the_merge_row_says_on_or_off(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
@@ -226,29 +226,21 @@ class TestGiven:
         (tmp_path / "off").mkdir()
         on, _, _ = run(tmp_path / "on", bumpy, square, *args)
         off, _, _ = run(tmp_path / "off", bumpy, square, *args, "--no-features-merge-same-class")
-        assert stats_row(on, "features_merge_same_class") != stats_row(
-            off, "features_merge_same_class"
-        )
+        assert stats_row(on, "features_merge_same_class") == "on"
+        assert stats_row(off, "features_merge_same_class") == "off"
 
     def test_the_timing_sub_row(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        """``features clean-up`` under ``features clip``. ``invoke`` puts the
-        output on one line, so the rows are found by their cells, in order."""
-        _, _, output = run(
-            tmp_path,
-            bumpy,
-            square,
-            "--features",
-            str(corine),
-            "--features-map",
-            "corine",
-            "--stats",
-            "-",
+        """``features clean-up`` under ``features clip``, in the timing table
+        of the ``--stats`` file ``run`` writes (ruling G1); the rows are found
+        by their cells, in order."""
+        report, _, _ = run(
+            tmp_path, bumpy, square, "--features", str(corine), "--features-map", "corine"
         )
-        clip = re.search(r"\|\s*features clip\s*\|", output)
-        sub = re.search(r"\|\s*features clip: clean-up\s*\|", output)
-        assert clip and sub, output
+        clip = re.search(r"\|\s*features clip\s*\|", report)
+        sub = re.search(r"\|\s*features clip: clean-up\s*\|", report)
+        assert clip and sub, report
         assert clip.start() < sub.start()
 
     def test_the_help_names_the_flags(self) -> None:

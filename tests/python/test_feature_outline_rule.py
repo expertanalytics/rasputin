@@ -1,7 +1,7 @@
 """Ola's outline rule: land-cover borders within D of the outline go onto it (20c-3).
 
 ``docs/increments/20c-soft-quality.md``, M6 (c), "Steps 2 to 4" and "Tests
-``@tester`` writes red first", 20c-3: OR1 to OR7. Invariant-critical
+``@tester`` writes red first", 20c-3: OR1 to OR8. Invariant-critical
 (mutation testing required: the rule rewrites input borders); the mutants
 the design names are run after the green step, on the built code:
 
@@ -10,6 +10,8 @@ the design names are run after the green step, on the built code:
 - the stretches on the outline kept: OR1, OR3;
 - the rounding removed: OR4 (``TestRounding``);
 - the inlet test removed: OR5 (``test_or5_an_inlet_is_joined_straight``).
+- the cuts counted from the edge's own end, not along its line: OR8
+  (``TestTheReadRegion``, added by ruling G4).
 
 The rule's own function is called directly, on polygons and an outline in
 EPSG:25833 at ``feature_fixtures``' UTM-shaped offset. The outline is a
@@ -342,3 +344,50 @@ class TestNoBuffer:
         crossing = box(4_990, 4_900, 5_010, 5_100)  # straddles the stairs at (5 000, 5 000)
         (lines,) = rule(fi, [crossing], outline).lines
         assert sum(shapely.length(line) for line in lines) > 0
+
+
+# ---------------------------------------------------------------- OR8
+
+
+def local(*points: tuple[float, float]) -> Polygon:
+    """A polygon in local coordinates, without ``at``'s UTM-shaped offset."""
+    return Polygon(points)
+
+
+class TestTheReadRegion:
+    """OR8 (ruling G4): the read region does not move the cuts. One polygon
+    whose long west edge runs from 3 m inside the square's west side, nearly
+    parallel to it, south out across the read region's edge, is clipped by
+    three regions whose margins do not differ by a multiple of D; the rule's
+    linework inside the domain is then the same for all three. The mutant:
+    the cuts counted from the edge's own end, not along its line (the
+    173.3 m clip then differs by 0.62 m, per the design).
+
+    Local coordinates, as ``@architect`` checked it: the square 0 to
+    1000 m, coordinates up to about 1 200 m from the origin, D = 5 m. The
+    1e-9 m bound is the design's ("to rounding, not bit for bit"); at this
+    scale a double resolves about 2e-13 m, and on ``7334b82b`` the three
+    agree exactly."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    SHAPE = local((3, -537.3), (53.1, -537.3), (53.1, 512.7), (3.4, 512.7))
+    MARGINS = (100.0, 150.0, 173.3)
+
+    def clipped(self, margin: float) -> BaseGeometry:
+        m = margin
+        region = local((-m, -m), (1000 + m, -m), (1000 + m, 1000 + m), (-m, 1000 + m))
+        return shapely.intersection(self.SHAPE, region)
+
+    def test_or8_the_premise_the_clips_differ(self) -> None:
+        a, b, c = (self.clipped(m) for m in self.MARGINS)
+        assert not shapely.equals(a, b) and not shapely.equals(b, c)
+        assert shapely.distance(self.SHAPE.exterior, self.SQUARE.boundary) <= D
+
+    def test_or8_the_same_lines_inside_the_domain(self, fi: ModuleType) -> None:
+        got = []
+        for margin in self.MARGINS:
+            (lines,) = rule(fi, [self.clipped(margin)], self.SQUARE).lines
+            got.append(shapely.normalize(inside(lines, self.SQUARE)))
+        assert not got[0].is_empty
+        for margin, other in zip(self.MARGINS[1:], got[1:], strict=True):
+            assert shapely.equals_exact(got[0], other, tolerance=1e-9), (margin, other.wkt)
