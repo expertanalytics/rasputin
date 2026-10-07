@@ -131,6 +131,12 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
+    #: 20c-3's land-cover stage, all off by default (the CLI's are 0.05, on, 0, 5):
+    #: the repair's tolerance, the same-class merge, the simplification and D.
+    repair_m: float = 0.0
+    merge_same_class: bool = False
+    tolerance_m: float = 0.0
+    outline_snap_m: float = 0.0
 
 
 class FeatureSet(BaseModel):
@@ -140,7 +146,10 @@ class FeatureSet(BaseModel):
     R-tree index (R3). ``crs``, ``layers`` and ``counts`` are per source
     (a layer for a GeoPackage only; ``counts`` the features kept from each,
     16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
-    ``features clip`` row."""
+    ``features clip`` row, ``cleanup_seconds`` the land-cover stage's share of
+    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip to
+    the read region and after the stage (None: no stage ran), and
+    ``area_changed`` the area the outline rule gave another polygon, m²."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -153,6 +162,9 @@ class FeatureSet(BaseModel):
     layers: tuple[str | None, ...] = ()
     counts: tuple[int, ...] = ()
     clip_seconds: float = 0.0
+    cleanup_seconds: float = 0.0
+    cover_vertices: tuple[int, int] | None = None
+    area_changed: float = 0.0
 
 
 def source_region(domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | CRS) -> Polygon:
@@ -252,6 +264,8 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
         except ValueError as exc:
             raise FeatureError(f"class map {cmap.name}: {exc}") from exc
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary)
+    switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
+    tally.cleanup = request if any(switches) or request.outline_snap_m else None
     crss: list[str] = []
     layers: list[str | None] = []
     counts: list[int] = []
@@ -271,6 +285,9 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
         layers=tuple(layers),
         counts=tuple(counts),
         clip_seconds=tally.seconds,
+        cleanup_seconds=tally.cleanup_seconds,
+        cover_vertices=tally.cover_vertices,
+        area_changed=tally.area_changed,
     )
 
 
@@ -282,7 +299,9 @@ class _Tally:
         self.features: list[TerrainFeature] = []
         self.outside = self.clipped = self.empty = 0
         self.scanned: list[str] = []
-        self.seconds = 0.0
+        self.seconds = self.cleanup_seconds = self.area_changed = 0.0
+        self.cleanup: FeatureRequest | None = None
+        self.cover_vertices: tuple[int, int] | None = None
         shapely.prepare(domain.polygon)
         self.inner = domain.polygon.point_on_surface()
 
@@ -315,6 +334,7 @@ class _Tally:
             steps = transform_definition(src, self.dem)
             if "gridshift" not in steps and "deformation" not in steps:
                 bound = _bound(self.dem, source_region(self.domain, self.dem, src))
+        cover: list[tuple[Any, int, int, BaseGeometry]] = []
         for fid, geometry, value in rows:
             t0 = time.perf_counter()
             if geometry is None or geometry.is_empty:
@@ -331,6 +351,15 @@ class _Tally:
             code = _code(value, f"{name}: feature {fid}") if cmap.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
+            if polygonal and code is not None and self.cleanup is not None:  # 20c-3: whole
+                moved = shapely.transform(geometry, move) if move is not None else geometry
+                if not _finite(moved):
+                    raise FeatureError(
+                        f"{name}: feature {fid} has a vertex with no image in the DEM"
+                    )
+                cover.append((fid, mask, code, moved))
+                self.seconds += time.perf_counter() - t0
+                continue
             if move is not None and bound is not None and bound[1](geometry):
                 # Pre-clipped where its edges are straight, then moved (R5).
                 chains = pre_clip(geometry, bound[2], bound[0])
@@ -344,29 +373,86 @@ class _Tally:
                 raise FeatureError(f"{name}: feature {fid} has a vertex with no image in the DEM")
             if moved is not None:  # a feature whose linework misses the region keeps no edge
                 kept = list(pre_clip(moved, region)) if region.intersects(_linework(moved)) else []
-            coded: dict[str, Any] = {"code": code, "polygon": polygon}
-            dom = self.domain.polygon
-            lines = tuple(
-                piece
-                for line in kept
-                for piece in (
-                    (line,)
-                    if _untouched(line, dom)
-                    else shapely.get_parts(shapely.intersection(line, dom))
-                )
-                if isinstance(piece, LineString) and piece.length > 0
-            )
-            if lines:
-                self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
-                # A dropped edge lies outside, so a pre-clipped chain is not covered.
-                self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
-            elif polygon is not None and polygon.intersects(self.inner):
-                # No boundary crosses the domain, and a point of it is inside: it
-                # covers the domain, and labels it (R5). Kept, not clipped.
-                self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
-            else:
-                self.outside += 1
+            self._add(fid, mask, kept, code, polygon)
             self.seconds += time.perf_counter() - t0
+        if cover and self.cleanup is not None:
+            self._clean(cover, region, self.cleanup)
+
+    def _add(
+        self, fid: Any, mask: int, kept: list[Any], code: int | None, polygon: BaseGeometry | None
+    ) -> None:
+        """One feature's linework clipped to the domain, kept, or counted outside."""
+        coded: dict[str, Any] = {"code": code, "polygon": polygon}
+        dom = self.domain.polygon
+        lines = tuple(
+            piece
+            for line in kept
+            for piece in (
+                (line,)
+                if _untouched(line, dom)
+                else shapely.get_parts(shapely.intersection(line, dom))
+            )
+            if isinstance(piece, LineString) and piece.length > 0
+        )
+        if lines:
+            self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
+            # A dropped edge lies outside, so a pre-clipped chain is not covered.
+            self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
+        elif polygon is not None and polygon.intersects(self.inner):
+            # No boundary crosses the domain, and a point of it is inside: it
+            # covers the domain, and labels it (R5). Kept, not clipped.
+            self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
+        else:
+            self.outside += 1
+
+    def _clean(
+        self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
+    ) -> None:
+        """20c-3: one source's land cover clipped to the read region, then
+        repaired, merged by class, simplified and put to the outline, as asked;
+        its lines and label polygons then go the usual way."""
+        t0 = time.perf_counter()
+        clipped = [_polygonal(shapely.intersection(g, region)) for *_, g in cover]
+        self.outside += sum(g is None for g in clipped)
+        if all(g is None for g in clipped):
+            return
+        items = [c[:3] for c, g in zip(cover, clipped, strict=True) if g is not None]
+        polys = np.array([g for g in clipped if g is not None], dtype=object)
+        before = int(shapely.get_num_coordinates(polys).sum())
+        polys = shapely.coverage_clean(
+            polys, snapping_distance=ask.repair_m, gap_width=ask.repair_m, merge_strategy="min_area"
+        )
+        if ask.merge_same_class:  # one polygon per class, under its first fid
+            groups: dict[int, list[int]] = {}
+            for i, (_, _, code) in enumerate(items):
+                groups.setdefault(code, []).append(i)
+            first = sorted(g[0] for g in groups.values())
+            merged = [shapely.coverage_union_all(polys[groups[items[i][2]]]) for i in first]
+            polys = np.array(merged, dtype=object)
+            items = [items[i] for i in first]
+        if ask.tolerance_m > 0:
+            polys = shapely.coverage_simplify(polys, ask.tolerance_m, simplify_boundary=False)
+        snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
+        self.area_changed += snapped.area_changed
+        after = sum(int(shapely.get_num_coordinates(line)) for ls in snapped.lines for line in ls)
+        old = self.cover_vertices or (0, 0)
+        self.cover_vertices = (old[0] + before, old[1] + after)
+        for (fid, mask, code), lines, polygon in zip(
+            items, snapped.lines, snapped.polygons, strict=True
+        ):
+            if polygon.is_empty:  # the repair gave all of it to its neighbours
+                self.outside += 1
+            else:
+                self._add(fid, mask, list(lines), code, polygon)
+        took = time.perf_counter() - t0
+        self.seconds += took
+        self.cleanup_seconds += took
+
+
+def _polygonal(geometry: BaseGeometry) -> BaseGeometry | None:
+    """The polygonal parts of ``geometry`` as one (Multi)Polygon; None if none."""
+    parts = [g for g in shapely.get_parts(geometry) if isinstance(g, Polygon) and not g.is_empty]
+    return None if not parts else parts[0] if len(parts) == 1 else MultiPolygon(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,3 +607,251 @@ def _bound(
         return bool((np.abs(xy[:, 1]) <= 80).all() and (np.abs(xy[:, 0] - lam0) <= 60).all())
 
     return widening, applies, region
+
+
+@dataclass(frozen=True, slots=True)
+class OutlineSnap:
+    """:func:`snap_to_outline`'s result, per input polygon in input order: its
+    linework (not yet clipped to the domain) and its polygon after the rule;
+    and ``area_changed``, the area inside the outline that changed polygon, m²."""
+
+    lines: tuple[tuple[LineString, ...], ...]
+    polygons: tuple[BaseGeometry, ...]
+    area_changed: float
+
+
+#: A cut point this close to the line through its neighbours is in line with
+#: them, metres; a micrometre, far above a double's rounding at 1e7 m.
+IN_LINE = 1e-6
+
+
+def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: float) -> OutlineSnap:
+    """Ola's outline rule (20c-3, M6 (c)) at D = ``distance``: every part of a
+    border within D of ``outline`` (every ring of it) goes onto it, and the
+    stretches then on it are dropped from the linework. No buffer, no snap:
+    the outline's segments are found in an ``STRtree``. D = 0 gives each
+    polygon's rings unchanged; D at or above 100 m (the read region's margin)
+    is refused."""
+    if not (math.isfinite(distance) and 0 <= distance < MARGIN):
+        raise ValueError(f"the outline snap must be >= 0 and under {MARGIN:g} m, got {distance}")
+    parts = [[q for q in shapely.get_parts(p) if not q.is_empty] for p in polygons]
+    if distance == 0:
+        whole = [tuple(LineString(r) for q in qs for r in shapely.get_rings(q)) for qs in parts]
+        return OutlineSnap(tuple(whole), tuple(polygons), 0.0)
+    path = _Outline(outline, distance)
+    out_lines: list[tuple[LineString, ...]] = []
+    out_polys: list[BaseGeometry] = []
+    changed: list[BaseGeometry] = []
+    for polygon, qs in zip(polygons, parts, strict=True):
+        lines: list[LineString] = []
+        rebuilt: list[BaseGeometry] = []
+        for q in qs:
+            rings = [path.ring(shapely.get_coordinates(r)) for r in shapely.get_rings(q)]
+            for ring, done in zip(shapely.get_rings(q), rings, strict=True):
+                lines += [LineString(ring)] if done is None else _chains(*done)
+            if all(r is None for r in rings):
+                rebuilt.append(q)
+                continue
+            closed = [
+                shapely.get_coordinates(r) if d is None else d[0]
+                for r, d in zip(shapely.get_rings(q), rings, strict=True)
+            ]
+            if len(closed[0]) >= 3:
+                shell = Polygon(closed[0], [h for h in closed[1:] if len(h) >= 3])
+                rebuilt.append(shell if shell.is_valid else shapely.make_valid(shell))
+        new = _polygonal(shapely.union_all(rebuilt)) if rebuilt else None
+        new = Polygon() if new is None else new
+        if not shapely.equals_exact(new, polygon, 0):
+            changed.append(shapely.symmetric_difference(polygon, new))
+        out_lines.append(tuple(lines))
+        out_polys.append(new)
+    area = shapely.intersection(shapely.union_all(changed), outline).area if changed else 0.0
+    return OutlineSnap(tuple(out_lines), tuple(out_polys), float(area))
+
+
+def _chains(xy: npt.NDArray[np.float64], on: list[bool]) -> list[LineString]:
+    """A closed path cut where its segments lie on the outline (``on[k]``:
+    the segment from point k to the next), those segments dropped."""
+    n = len(xy)
+    if not any(on):
+        return [LineString([*xy, xy[0]])]
+    start = on.index(True) + 1
+    out, chain = [], [xy[start % n]]
+    for k in range(start, start + n):
+        if on[k % n]:
+            out += [LineString(chain)] if len(chain) > 1 else []
+            chain = [xy[(k + 1) % n]]
+        else:
+            chain.append(xy[(k + 1) % n])
+    return out + ([LineString(chain)] if len(chain) > 1 else [])
+
+
+#: A point the rule put on the outline: (outline ring, arc length along it, xy).
+Placed = tuple[int, float, npt.NDArray[np.float64]]
+
+
+class _Outline:
+    """The outline's rings as arc-length paths, and an ``STRtree`` of their segments."""
+
+    def __init__(self, outline: Polygon, d: float) -> None:
+        self.d = d
+        self.xy = [shapely.get_coordinates(r) for r in shapely.get_rings(outline)]
+        self.cum: list[npt.NDArray[np.float64]] = []
+        self.lap: list[npt.NDArray[np.float64]] = []  # two laps, for a way past the start
+        self.owner: list[tuple[int, int]] = []
+        for i, xy in enumerate(self.xy):
+            lengths = np.hypot(*np.diff(xy, axis=0).T)
+            cum = np.concatenate([[0.0], np.cumsum(lengths)])
+            self.cum.append(cum)
+            self.lap.append(np.concatenate([cum[:-1], cum[:-1] + cum[-1]]))
+            self.owner += [(i, k) for k in range(len(lengths))]
+        segments = np.concatenate([np.stack([xy[:-1], xy[1:]], axis=1) for xy in self.xy])
+        self.tree = shapely.STRtree(shapely.linestrings(segments))
+
+    def ring(
+        self, xy: npt.NDArray[np.float64]
+    ) -> tuple[npt.NDArray[np.float64], list[bool]] | None:
+        """One closed ring after the rule, as points and on-outline flags; None if
+        nothing in it moved."""
+        edges = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
+        near = np.zeros(len(edges), dtype=bool)
+        near[self.tree.query(edges, predicate="dwithin", distance=self.d)[0]] = True
+        if not near.any():
+            return None
+        raw: list[tuple[npt.NDArray[np.float64], bool]] = []  # (point, is a cut point)
+        for k in range(len(edges)):  # step 1: near edges cut, the same way from either side
+            raw.append((xy[k], False))
+            if near[k]:
+                raw += [(c, True) for c in self._cut(xy[k], xy[k + 1])]
+        placed = self._place(np.array([r[0] for r in raw]))
+        if all(p is None for p in placed):
+            return None
+        m = len(raw)
+        moved = [p is not None for p in placed]
+        # Step 3: a cut point that did not move is kept only next to one that did.
+        seq = [
+            (placed[i], raw[i][0], raw[i][1])
+            for i in range(m)
+            if moved[i] or not raw[i][1] or moved[i - 1] or moved[(i + 1) % m]
+        ]
+        seq = [e for i, e in enumerate(seq) if not _same(e[0], seq[i - 1][0])] or seq[:1]
+        kept: list[Kept] = []
+        for i, e in enumerate(seq):  # ... and dropped when in line with its neighbours
+            a, b = (kept[-1] if kept else seq[i - 1]), seq[(i + 1) % len(seq)]
+            if e[0] is None and e[2] and _off_line(e[1], a, b) <= IN_LINE:
+                continue
+            kept.append(e)
+        if len(kept) < 2:
+            return np.array([_xy(e) for e in kept]).reshape(-1, 2), [True] * len(kept)
+        points: list[npt.NDArray[np.float64]] = []
+        on: list[bool] = []
+        for i, e in enumerate(kept):
+            nxt = kept[(i + 1) % len(kept)]
+            points.append(_xy(e))
+            if e[0] is None or nxt[0] is None:
+                on.append(False)
+                continue
+            *steps, last = self._join(e[0], nxt[0])
+            for point, flag in steps:
+                on.append(flag)
+                points.append(point)
+            on.append(last[1])
+        return np.array(points), on
+
+    def _cut(self, a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> Any:
+        """The points cutting edge ab into pieces of at most D: the multiples
+        of D along its line, counted from the foot of the CRS's origin and in
+        the direction of its lexicographically last end. So both polygons
+        sharing it get the same, and an edge the read region shortens keeps
+        its cuts (to rounding)."""
+        flip = tuple(b) < tuple(a)
+        lo, hi = (b, a) if flip else (a, b)
+        u = (hi - lo) / math.hypot(*(hi - lo))
+        t0 = float(np.dot(lo, u))
+        k = np.arange(math.floor(t0 / self.d) + 1, math.ceil(float(np.dot(hi, u)) / self.d))
+        cuts = lo + (k * self.d - t0)[:, None] * u
+        return cuts[::-1] if flip else cuts
+
+    def _place(self, xy: npt.NDArray[np.float64]) -> list[Placed | None]:
+        """Step 2: each point within D to its nearest point on the outline, then
+        to an outline vertex within D/2 of that, else to the nearest multiple of
+        D along the outline (and to a vertex within D/2 of that)."""
+        found = self.tree.query_nearest(shapely.points(xy), max_distance=self.d, all_matches=True)
+        best: dict[int, int] = {}
+        for i, k in zip(*found, strict=True):  # ties: the first segment, fixed
+            best[int(i)] = min(int(k), best.get(int(i), int(k)))
+        out: list[Placed | None] = [None] * len(xy)
+        for i, k in best.items():
+            r, j = self.owner[k]
+            a, b = self.xy[r][j], self.xy[r][j + 1]
+            ab = b - a
+            t = min(max(float(np.dot(xy[i] - a, ab) / max(np.dot(ab, ab), 1e-300)), 0.0), 1.0)
+            s = self.cum[r][j] + t * (self.cum[r][j + 1] - self.cum[r][j])
+            m = round(s / self.d) * self.d  # within D/2 of the end only if a vertex is
+            out[i] = self._vertex(r, s) or self._vertex(r, m) or (r, m, self._at(r, m))
+        return out
+
+    def _vertex(self, r: int, s: float) -> Placed | None:
+        cum = self.cum[r]
+        j = int(np.searchsorted(cum, s))
+        j = j if j < len(cum) and (j == 0 or cum[j] - s <= s - cum[j - 1]) else j - 1
+        if abs(cum[j] - s) > self.d / 2:
+            return None
+        j %= len(cum) - 1  # the last is the first
+        return (r, float(cum[j]), self.xy[r][j])
+
+    def _at(self, r: int, s: float) -> npt.NDArray[np.float64]:
+        cum, xy = self.cum[r], self.xy[r]
+        j = min(int(np.searchsorted(cum, s, "right")) - 1, len(cum) - 2)
+        t = (s - cum[j]) / max(cum[j + 1] - cum[j], 1e-300)
+        return xy[j] + t * (xy[j + 1] - xy[j])  # type: ignore[no-any-return]
+
+    def _join(self, p: Placed, q: Placed) -> list[tuple[npt.NDArray[np.float64], bool]]:
+        """The way from p to q, each point with whether the segment into it lies
+        on the outline: along the outline's shorter way through its vertices,
+        or straight where that way is an inlet (longer than twice |pq| plus 2D),
+        less what of the straight line lies on the outline at either end."""
+        gap = float(np.hypot(*(q[2] - p[2])))
+        if p[0] != q[0]:
+            return [(q[2], False)]
+        cum, xy, n = self.cum[p[0]], self.xy[p[0]], len(self.cum[p[0]]) - 1
+        length = cum[-1]
+        ahead = (q[1] - p[1]) % length
+        lap = self.lap[p[0]]
+        if ahead <= length - ahead:
+            lo, hi = np.searchsorted(lap, [p[1], p[1] + ahead], "right")
+            js = [j % n for j in range(lo, hi) if lap[j] < p[1] + ahead]
+        else:
+            lo, hi = np.searchsorted(lap, [q[1], q[1] + length - ahead], "right")
+            js = [j % n for j in range(lo, hi) if lap[j] < q[1] + length - ahead][::-1]
+        if min(ahead, length - ahead) <= 2 * gap + 2 * self.d:
+            return [*((xy[j], True) for j in js), (q[2], True)]
+        on = [_off_line(xy[j], (None, p[2], False), (None, q[2], False)) <= IN_LINE for j in js]
+        head = next((i for i, f in enumerate(on) if not f), len(js))
+        tail = next((i for i, f in enumerate(on[::-1]) if not f), len(js))
+        rest = js[len(js) - tail :] if tail else []
+        return [
+            *((xy[j], True) for j in js[:head]),
+            *((xy[j], i > 0) for i, j in enumerate(rest)),
+            (q[2], bool(rest)),
+        ]
+
+
+Kept = tuple[Placed | None, npt.NDArray[np.float64], bool]
+
+
+def _xy(e: Kept) -> npt.NDArray[np.float64]:
+    return e[1] if e[0] is None else e[0][2]
+
+
+def _same(p: Placed | None, q: Placed | None) -> bool:
+    return p is not None and q is not None and p[0] == q[0] and p[1] == q[1]
+
+
+def _off_line(x: npt.NDArray[np.float64], a: Kept, b: Kept) -> float:
+    """Distance from x to segment ab, its ends in a fixed order (either direction
+    gives the same answer)."""
+    u, v = sorted((_xy(a), _xy(b)), key=tuple)
+    uv = v - u
+    t = min(max(float(np.dot(x - u, uv) / max(np.dot(uv, uv), 1e-300)), 0.0), 1.0)
+    return float(np.hypot(*(x - u - t * uv)))

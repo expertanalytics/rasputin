@@ -33,6 +33,10 @@ WORDING = {
     "features": "Each features file: layer, class map, features, lines, vertices",
     "features_crs": "Each features file's coordinate system",
     "features_transform": "Conversion from each features file's coordinate system",
+    "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
+    "features_merge_same_class": "Borders between land-cover polygons of one class dropped",
+    "features_tolerance_m": "Land-cover borders simplified by this much (0 = off)",
+    "features_outline_snap_m": "Land-cover borders this close to the outline moved onto it",
     "start_mesh": "What refinement started from",
     "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",
     "start_quality_gain_deg": (
@@ -51,6 +55,8 @@ WORDING = {
     "heights": "Heights",
     "features_notice": "Credit for the features data",
     "land_cover_codes": "What land_cover_code holds",
+    "land_cover_vertices": "Land-cover vertices before and after clean-up",
+    "land_cover_area_moved_m2": "Land-cover area inside the outline that changed class, m2",
     "resampled_grid_max_error_m": "Largest error against the resampled grid",
     "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
     "dem_check_points_inserted": "Points that comparison added",
@@ -138,7 +144,9 @@ def _entry(name: str, value: str | int | float) -> Entry:
     """One entry: a ``_m`` or ``_deg`` name is a measured float, an int a
     count, anything else text. D3 rule 3: a zero count is not in the file."""
     number: float | int | None = None
-    if name.endswith(("_m", "_deg")):
+    if isinstance(value, bool):  # a switch: JSON true or false, printed on or off
+        number, text = value, "on" if value else "off"
+    elif name.endswith(("_m", "_deg")):
         number = float(value)
         text = _exact(number)
     elif isinstance(value, int):

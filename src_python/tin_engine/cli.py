@@ -216,6 +216,9 @@ DEFAULT_START_MIN_ANGLE = 25.0
 # Increment 20c, R7 (Ola's ruling, question 2): the gain a start-quality point
 # must bring, degrees; negative is increment 20's hard rule.
 DEFAULT_START_QUALITY_GAIN = 0.0
+#: 20c-3's four land-cover flags have their own help panel, so the long
+#: --[no-]features-merge-same-class does not narrow the main one's names.
+CLEAN_UP = "Land-cover clean-up"
 
 
 @app.callback()
@@ -735,6 +738,43 @@ def mesh(
             "Default: property.",
         ),
     ] = None,
+    features_repair: Annotated[
+        float,
+        typer.Option(
+            "--features-repair",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres: land-cover borders of one file closer than this become one "
+            "border, and gaps narrower than it are filled; 0 is off. Default: 0.05.",
+        ),
+    ] = 0.05,
+    features_merge_same_class: Annotated[
+        bool,
+        typer.Option(
+            help="Drop borders between neighbouring land-cover polygons of one class. Default: on.",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+        ),
+    ] = True,
+    features_tolerance: Annotated[
+        float,
+        typer.Option(
+            "--features-tolerance",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres: simplify land-cover borders by this much; 0 is off. Default: 0.",
+        ),
+    ] = 0.0,
+    features_outline_snap: Annotated[
+        float,
+        typer.Option(
+            "--features-outline-snap",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres, under 100: move land-cover borders this close to the domain "
+            "outline onto it; 0 is off. Default: 5.",
+        ),
+    ] = 5.0,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -827,6 +867,20 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
+    for flag, metres, top in (
+        ("--features-repair", features_repair, math.inf),
+        ("--features-tolerance", features_tolerance, math.inf),
+        ("--features-outline-snap", features_outline_snap, 100.0),
+    ):
+        if not (math.isfinite(metres) and 0 <= metres < top):
+            under = "" if top == math.inf else f" and under {top:g}"
+            raise typer.BadParameter(f"must be finite, >= 0{under}, got {metres}", param_hint=flag)
+    cleanup = {
+        "repair_m": features_repair,
+        "merge_same_class": features_merge_same_class,
+        "tolerance_m": features_tolerance,
+        "outline_snap_m": features_outline_snap,
+    }
     if not dem and (domain is not None or domain_crs is not None):
         raise typer.BadParameter("applies only with --dem", param_hint="--domain")
     if not dem and bbox is not None:
@@ -920,7 +974,7 @@ def mesh(
         sources: tuple[FeatureSource, ...] = ()
         if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
-            found = _open_features(sources, dem_domain, dem_crs, clock)
+            found = _open_features(sources, dem_domain, dem_crs, clock, cleanup)
         dem_run = _dem_mesh(
             held,
             ", ".join(map(str, dem)),
@@ -990,6 +1044,11 @@ def mesh(
             values["features_crs"] = "; ".join(crs_texts)
             values["features_transform"] = "; ".join(transforms)
             values["features_notice"] = "; ".join(notices) or None
+            values |= {f"features_{k}": v for k, v in cleanup.items()}
+            if found.cover_vertices is not None:
+                before, after = found.cover_vertices
+                values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
+                values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
             # R5: labelling runs iff a source carries codes (D1's single-system
             # invariant is enforced in _feature_sources). Every coded source's
             # polygons are labelled together over the merged FeatureSet.
@@ -1479,18 +1538,24 @@ def _feature_sources(
 
 
 def _open_features(
-    sources: tuple[FeatureSource, ...], domain: DomainPolygon, dem_crs: str, clock: PhaseClock
+    sources: tuple[FeatureSource, ...],
+    domain: DomainPolygon,
+    dem_crs: str,
+    clock: PhaseClock,
+    cleanup: dict[str, float],
 ) -> FeatureSet:
     """R5-R6 and R10: read and clip every source into one set, timed as
     ``features read`` and ``features clip``; a refusal is a usage error naming
     the feature."""
     t0 = time.perf_counter()
     try:
-        found = open_features(FeatureRequest(sources=sources), domain, dem_crs)
+        found = open_features(FeatureRequest(sources=sources, **cleanup), domain, dem_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
     clock.add("features clip", found.clip_seconds)
+    if found.cover_vertices is not None:
+        clock.add("features clip: clean-up", found.cleanup_seconds)
     typer.echo(
         f"features: {len(found.features)} kept ({found.clipped} cut at the domain outline), "
         f"{found.outside} outside the domain, {found.empty} empty",
