@@ -25,8 +25,7 @@
 // constraint_feet, a located node closer than min(dx, dy) / 2 to a constraint
 // (constraint_foot.hpp) goes in as its foot when that is a Hit the validity
 // callable accepts, and is skipped (skipped_near_line) for any other answer
-// but None. The callable is asked about the foot as a MeshVertex; one that
-// takes only a LatticeVertex refuses every foot.
+// but None. The callable is asked about the foot as a MeshVertex.
 //
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
@@ -115,7 +114,7 @@ struct QualityEntry {
 
 }  // namespace detail
 
-template <pred::GeometryKernel K, std::predicate<const LatticeVertex&> Valid = AllNodesValid>
+template <pred::GeometryKernel K, std::predicate<const MeshVertex&> Valid = AllNodesValid>
 QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptions& o,
                        const Valid& valid = {}) {
     QualityOutcome out;
@@ -201,10 +200,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
         if (o.constraint_feet) {
             const auto s = constraint_foot(m, t, p, std::min(f.dx, f.dy) / 2.0, f);
             if (s.status != FootStatus::None) {
-                bool ok = false;
-                if constexpr (std::predicate<const Valid&, const MeshVertex&>)
-                    ok = s.status == FootStatus::Hit && valid(s.at);
-                if (!ok) {
+                if (s.status != FootStatus::Hit || !valid(s.at)) {
                     ++out.skipped_near_line;
                     continue;
                 }
