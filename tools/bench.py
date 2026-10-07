@@ -58,19 +58,34 @@ class Completed(NamedTuple):
     stdout: str
     stderr: str
     wall_s: float
+    timed_out: bool = False
 
 
 class Runner(Protocol):
-    def run(self, argv: Sequence[str], cwd: Path | None = None) -> Completed: ...
+    def run(
+        self, argv: Sequence[str], cwd: Path | None = None, timeout: float | None = None
+    ) -> Completed: ...
 
 
 class SubprocessRunner:
-    def run(self, argv: Sequence[str], cwd: Path | None = None) -> Completed:
+    def run(
+        self, argv: Sequence[str], cwd: Path | None = None, timeout: float | None = None
+    ) -> Completed:
+        """Past ``timeout`` seconds the child is killed (``subprocess.run``
+        kills it on expiry) and the result is ``timed_out``."""
         t0 = time.perf_counter()
-        proc = subprocess.run(
-            [str(a) for a in argv], cwd=cwd, capture_output=True, text=True, check=False
-        )
+        try:
+            proc = subprocess.run([str(a) for a in argv], cwd=cwd, capture_output=True,
+                                  text=True, check=False, timeout=timeout)  # fmt: skip
+        except subprocess.TimeoutExpired:
+            return Completed(-9, "", "", time.perf_counter() - t0, timed_out=True)
         return Completed(proc.returncode, proc.stdout, proc.stderr, time.perf_counter() - t0)
+
+
+def time_left(deadline: float | None) -> float | None:
+    """A subprocess's timeout: the seconds to ``deadline`` (``time.monotonic``)
+    less 10 s, never under a millisecond; None without a deadline."""
+    return None if deadline is None else max(deadline - time.monotonic() - 10.0, 0.001)
 
 
 def make_runner() -> Runner:
@@ -193,6 +208,10 @@ class Child(NamedTuple):
     inserted: int
     flips: int
     hardening: str = "none"
+    #: The ``--stats`` phases of ``mesh``'s clock, in its order, and its total
+    #: (increment pq); a BENCH line from before them has none.
+    phases: tuple[tuple[str, float], ...] = ()
+    total_s: float | None = None
 
 
 class Ceiling(NamedTuple):
@@ -243,6 +262,8 @@ def parse_child(stderr: str, run: str) -> Child:
             float(values["refine_s"]), float(values["app_s"]), float(values["max_error"]),
             int(values["rounds"]), int(values["inserted"]), int(values["flips"]),
             str(values.get("hardening", "none")),
+            tuple((str(k), float(v)) for k, v in values.get("phases", {}).items()),
+            float(values["total_s"]) if "total_s" in values else None,
         )  # fmt: skip
     except (ValueError, KeyError, TypeError) as exc:
         raise ChildError(f"{run}: malformed BENCH line: {exc!r}") from exc
@@ -509,14 +530,18 @@ def _cache_value(cache: Path, key: str) -> str | None:
     return found.group(1) if found else None
 
 
-def _checked(runner: Runner, argv: Sequence[str], cwd: Path | None = None) -> Completed:
-    done = runner.run(argv, cwd)
+def _checked(
+    runner: Runner, argv: Sequence[str], cwd: Path | None = None, deadline: float | None = None
+) -> Completed:
+    done = runner.run(argv, cwd, time_left(deadline))
     if done.returncode != 0:
         raise BenchError(f"{' '.join(map(str, argv))} failed: {done.stderr.strip()[-2000:]}")
     return done
 
 
-def build(runner: Runner, tree: Path, hardening: str = "on") -> tuple[Path, Build]:
+def build(
+    runner: Runner, tree: Path, hardening: str = "on", deadline: float | None = None
+) -> tuple[Path, Build]:
     """Release ``_core`` in ``<tree>/build-bench``, and ``build-bench/pkg``: the
     tree's ``tin_engine`` as symlinks plus a copy of the fresh ``.so``. The
     hardening option is passed on every configure, so a cached one never decides."""
@@ -530,8 +555,8 @@ def build(runner: Runner, tree: Path, hardening: str = "on") -> tuple[Path, Buil
         "-DRASPUTIN_BUILD_PYTHON=ON", "-DRASPUTIN_BUILD_TESTS=OFF",
         f"-DPython_EXECUTABLE={sys.executable}", "-DPYBIND11_FINDPYTHON=ON",
         f"-DRASPUTIN_HARDENING={hardening.upper()}",
-    ])  # fmt: skip
-    _checked(runner, ["cmake", "--build", str(out), "-j", "--target", "_core"])
+    ], deadline=deadline)  # fmt: skip
+    _checked(runner, ["cmake", "--build", str(out), "-j", "--target", "_core"], deadline=deadline)
     built = sorted(out.glob("_core*.so"))
     if len(built) != 1:
         raise BenchError(f"{out}: expected one _core*.so after the build, found {len(built)}")
@@ -743,6 +768,7 @@ def child_main(argv: list[str]) -> int:
     import tin_engine
     import tin_engine._core
     import tin_engine.cli as cli
+    from tin_engine.stats import PhaseClock
 
     for module in (tin_engine, tin_engine._core) if pkg is not None else ():
         if not str(module.__file__).startswith(pkg or ""):
@@ -758,17 +784,26 @@ def child_main(argv: list[str]) -> int:
         seen.update(refine_s=time.perf_counter() - t0, out=out)
         return out
 
+    clocks: list[Any] = []
+
+    class KeptClock(PhaseClock):  # mesh's clock is the first one made
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            clocks.append(self)
+
     vars(cli)["refine"] = refine
+    vars(cli)["PhaseClock"] = KeptClock
     t0 = time.perf_counter()
     cli.app(args=rasputin, prog_name="rasputin", standalone_mode=False)
     app_s = time.perf_counter() - t0
+    clock = {"total_s": clocks[0].elapsed(), "phases": dict(clocks[0].phases())} if clocks else {}
     if "out" not in seen:
         print("bench child: refine was never called (no --tolerance?)", file=sys.stderr)
         return 1
     out = seen["out"]
     values = dict(refine_s=seen["refine_s"], app_s=app_s, max_error=out.max_error,
                   rounds=out.rounds, inserted=out.inserted, flips=out.flips,
-                  hardening=getattr(tin_engine._core, "hardening", "none"))  # fmt: skip
+                  hardening=getattr(tin_engine._core, "hardening", "none"), **clock)  # fmt: skip
     print("BENCH " + json.dumps(values), file=sys.stderr)
     return 0
 
