@@ -1,6 +1,6 @@
 # Harness h18: a new worktree with its own venv, and a master-merge runner
 
-Status: designed on `worktree-harness-tools` off `41bda81`; not yet red. One PR, both tools, about 255 net production lines (§5). §8 has three questions for Ola, each with a default.
+Status: designed on `worktree-harness-tools` off `41bda81`; design review round 1 (changes requested) answered, below under "Review"; not yet red. One PR, both tools, about 275 net production lines (§5). §8 has three questions for Ola, each with a default.
 
 What this is. Two tools from the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
@@ -126,12 +126,18 @@ below, skipping each whose product exists, so it is safe to run again.
 2. If `--from` is `origin/master`: `git fetch origin master`.
 3. `git worktree add -b worktree-<name> <main>/.claude/worktrees/<name> <from>`.
 4. Unless `<wt>/.venv` exists: `uv venv --python <version> <wt>/.venv`.
-5. Unless the venv already imports `tin_engine`: in `<wt>`,
+5. Unless the step-7 check already passes on this venv (it imports
+   `tin_engine` and its submodule from this worktree, not merely from
+   somewhere): in `<wt>`,
    `uv pip install --python <wt>/.venv/bin/python -e ".[dev,codecs]" pybind11`.
    This is `INSTALL.md`'s developer install (`.[dev,codecs]`, so ruff,
    mypy, pytest and the codec tests are there), plus `pybind11` so step 6
    can find its CMake files. scikit-build-core builds `_core` with this
-   venv's Python, by construction. `uv pip` writes no `uv.lock` (only `uv
+   venv's Python, by construction. On a venv whose finder points at another
+   checkout, this install is meant to replace that finder with one for this
+   worktree, so `--existing` repairs such a venv instead of skipping step 5
+   and then refusing at step 7 (a dead end); step 7 checks the result, so
+   if the install does not repair it, the refusal stands. `uv pip` writes no `uv.lock` (only `uv
    run` and `uv sync` do; `.gitignore` explains why that matters).
 6. Unless `<wt>/build-pyext/CMakeCache.txt` exists: configure, do not build,
 
@@ -157,7 +163,10 @@ below, skipping each whose product exists, so it is safe to run again.
    `<py> -c "import tin_engine, tin_engine.cli, tin_engine._core as c; print(tin_engine.__file__); print(tin_engine.cli.__file__); print(c.__file__)"`,
    then `<py> -m ruff --version` and `<py> -m mypy --version`. It passes
    only if the first two paths lie under `<wt>/src_python/tin_engine/` and
-   the third under `<wt>/.venv/`. On a pass it prints one block:
+   the third under `<wt>/.venv/`. Every path is compared after
+   `Path.resolve()`, `<wt>` and `<main>` included: on macOS a temporary
+   directory is `/var/...` as named and `/private/var/...` as Python reports
+   a module's file. On a pass it prints one block:
 
    ```
    worktree  <wt>  (branch worktree-<name> at <short sha>)
@@ -185,7 +194,8 @@ worktree, prints what exists, and names the command that finishes it
 | `uv --version` or `cmake --version` exits non-zero | `new_worktree: <uv or cmake> is not installed or does not run: <its stderr line>` |
 | the fetch fails | `new_worktree: could not fetch origin/master (<git's last line>); blocked on network: stop and hand back` |
 | `--existing` path is not the top of a checkout of this repository | `new_worktree: <path> is not the top of a checkout of this repository` |
-| a step's command fails | `new_worktree: <step> failed (exit <n>); its output is above. The worktree is kept; finish with: python3 tools/new_worktree.py --existing <wt>` |
+| step 3, `git worktree add`, fails | `new_worktree: git worktree add failed (exit <n>); its output is above. No worktree was made` |
+| a later step's command fails | `new_worktree: <step> failed (exit <n>); its output is above. The worktree is kept; finish with: python3 tools/new_worktree.py --existing <wt>` |
 | the check's paths are wrong | `new_worktree: <wt>/.venv imports <module> from <path>, not from <wt>; this venv runs another checkout's code` |
 
 The step commands run with their output passed through (not captured), so
@@ -216,7 +226,10 @@ unattended.
 Marked `harness`; no network, no uv, no C++ build. A temporary repository
 with a bare repository as its `origin`; `main([...], run=recorder)`, where
 the recorder runs `git` for real and answers `uv`, `cmake` and the venv's
-Python from a table (the check's three paths among them).
+Python from a table (the check's three paths among them). The temporary
+directory is passed to the tool unresolved, and the table answers with its
+resolved form (`/private/var/...` on macOS), as Python would; the tests
+compare paths after `Path.resolve()`.
 
 1. A new worktree lands at `<tmp main>/.claude/worktrees/<name>` on branch
    `worktree-<name>` at `origin/master`'s commit; run from inside another
@@ -227,12 +240,17 @@ Python from a table (the check's three paths among them).
    `-DPYTHON_EXECUTABLE=<wt>/.venv/bin/python` and
    `-DPython_EXECUTABLE=<wt>/.venv/bin/python`; no `cmake --build`.
 3. Each refusal of §3.3, with its message's first words, and nothing
-   created for the refusals before step 3.
+   created for the refusals before step 3. A `git worktree add` that fails
+   (`--from` a revision that does not exist) gives the "No worktree was
+   made" message, and neither the path nor the branch exists.
 4. The check: a table answer naming `<main>/src_python/tin_engine/cli.py`
    for the submodule is refused, naming both paths, and the worktree is
    kept.
-5. `--existing` on a worktree that has `.venv` and `build-pyext` makes no
-   `uv venv` and no `cmake` call, and runs the check.
+5. `--existing` on a worktree that has `.venv` and `build-pyext`, whose
+   check passes, makes no `uv venv`, no `uv pip install` and no `cmake`
+   call. Whose check first names another checkout's `src_python` (the
+   table answers so until the install has run): `uv pip install` is called,
+   then the check again, and it passes.
 6. A failing `uv pip install` exits 2 with the `--existing` hint and leaves
    the worktree.
 7. Every argv the recorder saw passes `guard_push.publishes(argv) == []`
@@ -242,7 +260,7 @@ Python from a table (the check's three paths among them).
 
 ### 3.7 Size
 
-About 85 net production lines (the retrospective said about 40 with tests;
+About 90 net production lines (the retrospective said about 40 with tests;
 the difference is `--existing`, the refusals and the path check).
 
 ## 4. T2: `tools/merge_master.py`
@@ -291,6 +309,11 @@ removed after the commit and on `--abort`. The state file plus git's
    <base>..origin/master`. PR numbers come from subjects of the form
    `Merge pull request #N from ...`. This is the command's output, never a
    typed range (D9 in the day retrospective).
+
+   Then, with `--no-build`: if `git diff --quiet <base> origin/master -- include
+   src bindings lib CMakeLists.txt` says master changed C++ since the merge
+   base, refuse (§4.6, "C++ came in and `--no-build`") before merging, so a
+   run that may not build never starts a merge it cannot finish.
 5. `git merge --no-ff --no-commit --no-autostash --no-rerere-autoupdate
    origin/master`. `--no-autostash` because the stash is shared by every
    worktree; `--no-rerere-autoupdate` so a recorded resolution, if a user
@@ -305,7 +328,8 @@ removed after the commit and on `--abort`. The state file plus git's
    Resolve hunk by hunk with Edit. Read each side with
      git show :2:<file>   (this branch)    git show :3:<file>   (origin/master)
    Never take a whole file with checkout --ours/--theirs: it drops the other
-   side's clean hunks. Then git add each file, and run
+   side's clean hunks. Then git add each file (git rm one whose deletion
+   you keep), and run
      python3 tools/merge_master.py <wt> --continue --persona <name> --trailer "<line>"
    or abandon the merge with --abort.
    ```
@@ -328,11 +352,20 @@ persona's `git add` is the statement that a file is resolved.
 3. `_core`: if `git diff --quiet HEAD -- include src bindings lib
    CMakeLists.txt` says the merged tree's C++ differs from the branch's
    (master brought in C++), the suite needs a rebuilt `_core`. With
-   `--no-build`, step 1 has already refused (§4.6), before any gate ran.
-   Otherwise `cmake --build <wt>/build-pyext
-   -j --target _core`, its exit status read, then the built `_core*.so`
-   copied into `<wt>/.venv/lib/python3.*/site-packages/tin_engine/` and its
-   time stamp touched (the recipe of `.claude/REQUIRED-READING.md`, "Stale
+   `--no-build`, step 1 has already refused (§4.6), before any gate ran; on
+   the first form that refusal came before the merge (§4.3 step 4), on
+   `--continue` it leaves the merge in progress. Otherwise `cmake --build
+   <wt>/build-pyext -j --target _core`, output passed through; a non-zero
+   exit is exit 4 (a gate is red: pytest not run, nothing committed, the
+   merge left in progress). Then `build-pyext` must hold exactly one
+   `_core*.so` at its top, and its name must end with the venv's extension
+   suffix (`<py> -c "import sysconfig;
+   print(sysconfig.get_config_var('EXT_SUFFIX'))"`, e.g.
+   `.cpython-314-darwin.so`); otherwise refuse (§4.6), since copying a
+   `_core` built for another Python is the "wrong-Python module" of the day
+   retrospective. That file is copied into
+   `<wt>/.venv/lib/python3.*/site-packages/tin_engine/` and its time stamp
+   touched (the recipe of `.claude/REQUIRED-READING.md`, "Stale
    artifacts"). No `build-pyext`: refuse, naming `new_worktree.py
    --existing`.
 4. The full suite: `<py> -m pytest -q`, with `pyproject.toml`'s options
@@ -352,6 +385,7 @@ persona's `git add` is the statement that a file is resolved.
      ed125121 Merge pull request #199 from expertanalytics/worktree-landcover-speed
      ...
    Conflicts resolved by hand: a.py, b.md     (or: Conflicts: none)
+   Changed by hand beyond git's merge: c.py   (line left out when empty)
    Gates on the merged tree, in <wt>/.venv: check_prohibited_deps,
    check_detria_boundary, check_citations --base origin/master, ruff check,
    ruff format --check, mypy, pytest. _core rebuilt: yes (or: no, no C++ came in).
@@ -361,6 +395,17 @@ persona's `git add` is the statement that a file is resolved.
 
    More than six PRs: the subject names six and "and N more". Without PR
    subjects: "brings in N commits". No body line starts with `#`.
+
+   The hand-changed list is what the persona staged beyond git's own merge:
+   `git merge-tree --write-tree HEAD MERGE_HEAD` gives the tree git's merge
+   makes on its own (its first output line, printed with exit 1 when there
+   are conflicts, conflicted files holding their markers), and `git diff
+   --cached --name-only <that tree>` lists every path the index differs in.
+   Paths in the conflict list go on the first line, the rest on the second.
+   This reads the index and writes only objects, so the tool still stages
+   nothing. Checked with git 2.55 on a scratch repository: a content
+   conflict, a modify/delete conflict and a hand edit of a cleanly merged
+   file all appear in that list, and nothing else.
 7. Remove the two state files; print the new head and the subject.
 
 The commit is made inside the tool, so the command line the hooks see is
@@ -392,8 +437,12 @@ refused a dirty tree. With no merge in progress: refuse.
 | unmerged paths remain | `merge_master: still unresolved: <files>; resolve with Edit, then git add` |
 | a recorded conflicted file has a line starting `<<<<<<< ` or `>>>>>>> ` | `merge_master: <file>:<line> still holds a conflict marker` |
 | tracked changes not staged | `merge_master: <file> is changed but not added; git add it if it belongs to the merge` |
-| C++ came in and `--no-build` | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. The merge is left in progress; hand back` |
+| start with `--no-build`, and master changed C++ since the merge base (§4.3 step 4) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. No merge was started; hand back` |
+| `--continue` with `--no-build`, and C++ came in (§4.4 step 3) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. The merge is left in progress; hand back` |
+| after the `_core` build, `build-pyext` holds no `_core*.so`, more than one, or one without the venv's extension suffix | `merge_master: <wt>/build-pyext holds <the names, or no _core*.so>, not one _core<suffix>; remove build-pyext and run: python3 tools/new_worktree.py --existing <wt>. The merge is left in progress` |
 
+A conflicted file that the resolution deleted (`git rm`, as a
+modify/delete conflict may end) has no markers to search and is skipped.
 Conflict markers are searched only in the files that conflicted, and only
 the start and end markers: a line of `=======` is a Markdown heading
 underline as often as it is a marker, and `git diff --check` would also
@@ -440,13 +489,19 @@ repository with a bare `origin`, whose `master` gets first-parent merge
 commits with subjects `Merge pull request #12 from x/y`; a worktree branch
 off an older master commit; a stub `<wt>/.venv/bin/python` path for the
 venv check. The recorder runs `git` for real and answers the gates and
-`cmake` from a table (red or green per test); for the `_core` tests the
-test puts a dummy `build-pyext/_core<suffix>.so` in place, and the tool
-finds it by the glob `_core*.so` (the suffix differs between macOS and
-Linux).
+`cmake` from a table (red or green per test), the venv's extension suffix
+among them; for the `_core` tests the test puts a dummy
+`build-pyext/_core<suffix>.so` in place, and the tool finds it by the glob
+`_core*.so` and checks its suffix (the suffix differs between macOS and
+Linux). The temporary repository is passed to the tool as the test made
+it, unresolved; every path the tests compare is compared after
+`Path.resolve()` (on macOS `/var` is `/private/var`).
 
-1. Each refusal of §4.6 with its message's first words, and no merge
-   started by a start-form refusal.
+1. Each refusal of §4.6 with its message's first words; no merge started
+   by any start-form refusal, the `--no-build` one included (it comes
+   before the merge, §4.3 step 4). The refusals that come after the merge
+   (`--continue` with `--no-build`, the `_core*.so` check) leave it in
+   progress: `MERGE_HEAD` and the state file still there.
 2. Up to date: exit 0, no new commit, no state file.
 3. Clean merge: the gates are called in §4.4's order with
    `<wt>/.venv/bin/python` and `cwd=<wt>`, pytest last; one commit with two
@@ -458,15 +513,26 @@ Linux).
    lists the file; a conflicted `CLAUDE.md` carries the "states rules"
    mark; the file still holds its markers (the tool resolved nothing).
 5. `--continue` with a marker left: refused, naming `file:line`. After the
-   test resolves and `git add`s: committed, body "Conflicts resolved by
-   hand: <file>".
+   test resolves and `git add`s, and also edits and `git add`s a file that
+   merged cleanly: committed, body "Conflicts resolved by hand: <file>"
+   and "Changed by hand beyond git's merge: <the other file>"; with no such
+   edit, no second line.
+
+   Modify/delete: master deletes a file this branch changed. Exit 3, the
+   stop message lists it; after the test `git rm`s it, `--continue`
+   commits without tripping on the missing file, and the body lists it
+   under "Conflicts resolved by hand".
 6. A red fast gate: exit 4, every fast gate still called, pytest not
    called, no commit, `MERGE_HEAD` present, the gate's output reaches the
    tool's output unchanged. A red pytest: exit 4, no commit.
 7. C++ on master (a file under `include/` changed): `cmake --build
    <wt>/build-pyext -j --target _core` is called after the fast gates and
-   before pytest; with `--no-build`, refused, no build call, merge left in
-   progress.
+   before pytest. With `--no-build` on the first form: refused, no build
+   call, no merge started. With `--no-build` on `--continue` after a
+   conflict: refused, no build call, merge left in progress. A build that
+   exits non-zero: exit 4, pytest not called, no commit, merge left in
+   progress. Two `_core*.so` files, or one with another suffix: refused,
+   nothing copied.
 8. `--continue` after the test deletes `MERGE_HEAD` (as a stray checkout
    would): refused with "the merge in <wt> was left"; nothing committed.
 9. Every argv the recorder saw passes `guard_push.publishes(argv) == []`
@@ -481,14 +547,15 @@ Not the invariant-critical suite of anything, so no mutation round
 
 ### 4.10 Size
 
-About 170 net production lines (the retrospective, after the 2026-10-03
+About 185 net production lines (the retrospective, after the 2026-10-03
 research, said about 120 with tests; the difference is the two-phase
-command line, the `_core` rebuild and the refusal table).
+command line, the `_core` rebuild with its suffix check, the hand-change
+list and the refusal table).
 
 ## 5. PR and who does what
 
 One PR, both tools, on a worktree branch made with `git worktree add` (T4
-does not exist yet): about 255 net production lines by `python3
+does not exist yet): about 275 net production lines by `python3
 tools/count_loc.py <base> <head>`, under `CLAUDE.md` §2's limit. Not
 refine or mesh code, so no `@perf` acceptance run.
 
@@ -528,10 +595,22 @@ the enqueue, as for every PR.
   commit, §4.4), and
   rebuild `_core` when C++ came in, without which the suite tests new
   Python against an old extension.
+- **Who builds `_core`.** The row says T4 builds `_core` "with
+  `-DPYTHON_EXECUTABLE` set to that venv's Python". Here the editable
+  install (§3.2 step 5) builds `_core`, with the venv's Python by
+  construction, and `build-pyext` is only configured, with
+  `-DPYTHON_EXECUTABLE` (step 6), for later rebuilds by the
+  `REQUIRED-READING.md` recipe and by T2. The step-7 import check, which
+  requires `_core` to load from `<wt>/.venv/`, is what shows the venv's
+  `_core` is the one in use.
 
-## 7. Follow-ups: rule text these tools let us shorten (not in this PR)
+## 7. Follow-ups: rule and brief text these tools let us change (not in this PR)
 
-Each is a write to a rule file, so each asks Ola (`guard_governance.py`).
+The saving is in briefs (item 3), not in rule files: items 1 and 2 keep
+their length and make the text name a route that sets up the venv; item 4
+cuts nothing, since no rule line states that lesson today; items 5 and 6
+add. Items 1, 2, 4, 5 and 6 are writes to governed files, so each asks Ola
+(`guard_governance.py`).
 
 1. `.claude/REQUIRED-READING.md`, "One session per working tree":
    "(`git worktree add`)" becomes "(`python3 tools/new_worktree.py
@@ -549,9 +628,11 @@ Each is a write to a rule file, so each asks Ola (`guard_governance.py`).
    tools/merge_master.py <wt>`". This is the largest saving, about 20 writer
    spawns a day of split merges on 2026-10-06 (the day retrospective, D8).
 4. `.claude/REQUIRED-READING.md`, "Stale artifacts": the rebuild recipe
-   stays (it is how a persona rebuilds outside a merge), but the "first
-   build-pyext needs `-DPYTHON_EXECUTABLE`" lesson needs no rule line,
-   because `build-pyext` now comes configured.
+   stays (it is how a persona rebuilds outside a merge), and the "first
+   build-pyext needs `-DPYTHON_EXECUTABLE`" lesson, which has no rule line
+   today (`grep -n PYTHON_EXECUTABLE .claude/REQUIRED-READING.md` finds
+   nothing), keeps needing none, because `build-pyext` now comes
+   configured.
 5. If question 1 is ruled: one line in `CLAUDE.md` §3 or the h6 role table
    saying who runs a master merge. That adds a line; it replaces the
    per-merge split that D8 counts.
@@ -583,3 +664,5 @@ output), so none is shortened.
    `.claude/hooks/guard_governance.py`, by day, with you at the keyboard.
 
 ## Review
+
+Design review round 1, @reviewer: CHANGES REQUESTED, 2 blockers: (1) the h18 row at /Users/skavhaug/projects/rasputin/ROADMAP.md@360259c0:45 shifts ROADMAP.md:50 and :54, which 45 citations quote as rows 27 and 29 (/Users/skavhaug/projects/rasputin/ROADMAP.md@41bda81a:50, @41bda81a:54); move the row below line 54; (2) the §4.9 test 1 pin "no merge started by a start-form refusal" (/Users/skavhaug/projects/rasputin/docs/increments/h18-worktree-and-merge-tools.md@360259c0:448-449) contradicts the --no-build refusal, which on a clean start comes after the merge (@360259c0:330-331, :395, :468-469).
