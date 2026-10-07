@@ -21,16 +21,33 @@ faults, one killed by the new test `4a64c1ef`), and each survivor is ruled
 there; `@tester` then killed the four (`cec2dda4` to `7bc41ebf`, tests
 only), so all 16 planted faults are killed; ctest 886 of 886, pytest
 5404 passed. Code review round 2 (`@reviewer`, on `74889310`): approved.
-**After approval, on Ola's yes:** the push, the PR and the enqueue, then a
-check that `CI result` is green; whether these have happened is shown by
-`gh pr list --head worktree-soft-quality --state all` and `gh pr checks
-<pr>`, not by this file;
-**20c-2** (still to build) the soft criterion and a split of the
-constraint line that blocks the walk to a quality point, after 20c-1;
+**Merged** as PR #207 (master `41bda81a`);
+**20c-2** the soft criterion and a split of the
+constraint line that blocks the walk to a quality point, after 20c-1
+(branch `worktree-soft-quality-2` off master `41bda81a`; Ola: "build
+20c-2 and 20c-3"): **built**, 158 net production lines (`python3
+tools/count_loc.py 41bda81a 50544838`; "LOC" says why above the ~110
+estimate). Red tests `100f5a09` (`@tester`), their pins ruled (below,
+"Pins ruled for 20c-2's red step"; R7 gains a slack and R8 needs the feet
+on) and amended `5b65941a`; green `d3c939d9` and `96119508`
+(`@developer`); mutation-round tests `600b2acb` (`@tester`, three cases
+added, tests only); `@perf`'s acceptance `fa136aa7`: every mesh gate
+passes, the time limit not met; `@developer`'s speed fix `65ae0792`
+(meshes byte-identical); `@perf`'s re-time `5b0afe04`: the whole run and
+the 1 m benchmark met, the split phase over 2 % in seconds but not per
+split, which Ola ruled is how 20c-2 is judged (ruling 8; "The split-phase
+limit for 20c-2, judged per split"); the green step and the fix ruled
+("Rulings on 20c-2's green step and speed fix"). Code review round 1
+(`@reviewer`, on `8ea0f32d`): changes requested, the `--start-quality-gain`
+help promised a line split that `--no-constraint-feet` turns off; fix
+round: red `9f54bc95` (`@tester`, the help-text test), green `50544838`
+(`@developer`, the help reworded, the atan2-skip comment corrected); the
+kill table copied in ("Mutation round for 20c-2"). **Next: `@reviewer`'s
+code review round 2**;
 **20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
 default at 5 m (question 6, ruling 6), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and questions 5 to 7, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
+and questions 5 to 8, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -1062,8 +1079,23 @@ point, not a void carve point), Inside its triangle, not yet footed:
   the exact `incircle` in the frame that `legalise_around` uses. The new
   triangles are the candidate joined to the cavity's boundary edges. Let
   `old` be the smallest angle among the cavity's triangles and `new` among
-  the new ones, both capped at θ. **Insert only if `new ≥ old + P`**;
-  otherwise skip (`skipped_no_gain`).
+  the new ones, both capped at θ. **Insert only if `new ≥ old + P − s`**,
+  with the slack s = 10⁻⁶°; otherwise skip (`skipped_no_gain`).
+  **Why the slack** (pins ruling, 20c-2's red step, observation (a)): a
+  foot on a constrained edge keeps the angle at that edge's end exactly
+  (the same two rays), so where that angle is the cavity's worst, `new`
+  equals `old` in exact arithmetic and a bare `≥` is decided by the foot's
+  last bit, which a fused multiply-add can move between the CI platforms.
+  The slack puts the threshold away from that equality. Scale: the
+  difference rounding makes is about a few ulp of the largest coordinate
+  over the foot's distance to the end (≥ δ_q, half a cell): four ulp on a
+  grid of 2¹⁷ cells a side (the São Francisco basin spans about 1 550 km
+  north to south, about 5.2 × 10⁴ cells at 30 m) give
+  1.3 × 10⁻⁸°, so s has a margin of about 75 there; derived, not
+  measured, and checked on no real input yet (the largest fixture is 33
+  cells a side). A candidate that lowers the
+  worst angle by less than s is accepted; R7 only refuses, so accepting
+  more cannot break termination.
 - **P = 0° by default** (Ola's ruling, question 2): a candidate is refused
   only if it would leave its neighbourhood's worst angle lower than before.
   M5: 12.6 % and 16.8 % fewer triangles than 20c-1 at about the same sliver
@@ -1085,9 +1117,14 @@ point, not a void carve point), Inside its triangle, not yet footed:
   `RefineOptions` and the binding carry it; the CLI passes 0.
 - **CLI**: `--start-quality-gain DEG`, default 0; `-1` restores the hard
   rule (bit-identical to 20c-1). Refused: non-finite, above 10.
-  `elevation_source` adds `start quality gain 0 deg` (ASCII, 20 R11).
-- Reported: `start_quality_points_skipped` keeps its total; a new row
-  "Tries that would not have improved the angles" in `--stats`.
+  The setting is an input row of the run record and `--stats`,
+  `start_quality_gain_deg`, beside `start_min_angle_deg` (printed `0` by
+  default). (This line first said `elevation_source` gains a clause;
+  increment 25 replaced that sentence by such rows, so it is not written.)
+- Reported: `start_quality_points_skipped` keeps its total, which holds
+  R7's refusals; a new row `start_quality_points_without_gain`, "Tries
+  that would not have improved the angles", in `--stats` and the record,
+  right after `start_quality_points_skipped`.
 
 ### R8. A quality point beyond a constraint line splits the line (Ola's yes, question 4)
 
@@ -1110,8 +1147,12 @@ point, not a void carve point), Inside its triangle, not yet footed:
 - **Not judged by R7's gain test**, as measured: the split answers the
   line, not the bad triangle alone, and the gain test would see only the
   two triangles beside e.
-- **Only with the soft criterion.** On exactly when R7 is (gain ≥ 0); gain
-  −1 turns both off and gives 20c-1's mesh bit for bit. Under the hard 25°
+- **Only with the soft criterion, and only with the feet.** On when R7 is
+  (gain ≥ 0) **and** `constraint_feet` is on (pins ruling, 20c-2's red
+  step, pin 4): the split puts a point on a line at a foot, and
+  `--no-constraint-feet` is the one switch that keeps every point off the
+  lines (R2.6, R5). M5's B was measured with the feet on, so the gate is
+  unchanged. Gain −1 turns both off and gives 20c-1's mesh bit for bit. Under the hard 25°
   rule the split costs +15 % (Lagan) and +51 % (Numedalslagen) triangles
   (M5), which is why it is not in 20c-1.
 - **Termination**: every split is at least δ_q from both ends of the
@@ -1122,8 +1163,9 @@ point, not a void carve point), Inside its triangle, not yet footed:
   and 0.0086° (20c-1: 0.00068°); triangles 7.5 % and 11.4 % under master's.
 - **The constraint stays the same set of lines**: `split_edge` keeps the
   bit and the mask on both halves (20 Q3's check), as for every foot.
-- Reported: a row "Land-cover and outline lines split to improve angles"
-  in `--stats` and the run record.
+- Reported: a row `start_quality_lines_split`, "Land-cover and outline
+  lines split to improve angles", in `--stats` and the run record, right
+  after `start_quality_points_snapped_to_lines`.
 
 ## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (ruled by Ola, question 6)
 
@@ -1181,7 +1223,7 @@ the gate is all three flags off, `--features-outline-snap 0` among them.
 | PR | what | needs | gate (measured value in brackets, M5) |
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
-| 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1 |
+| 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
 | 20c-3 | input coarsening, and the outline rule (on by default at 5 m, ruling 6) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on the default. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
@@ -1549,7 +1591,9 @@ never covered, rises about 6 % for the same reason (5 930 and 4 233
 feet).
 
 **The limit, revised** (replaces ruling 5's 2 % for 20c-1, and holds for
-20c-2, which touches the same paths):
+20c-2, which touches the same paths, except that 20c-2's split phase in
+point 2 is judged per split: ruling 8, "The split-phase limit for 20c-2,
+judged per split"):
 
 1. **No cost where no foot is placed.** On the 1 m tile, where the meshes
    are byte-identical with feet on and off, the split phase with feet on
@@ -1792,19 +1836,346 @@ code review round 2 (`@reviewer`). The kills and the full runs are done
   edge: the foot of the node goes on that edge, not the midpoint; none when
   the foot is within δ_q of an end, on an outline edge with nothing beyond,
   or on a frozen edge; the constraint edges as a set of lines are
-  unchanged, bits and masks on both halves; with gain −1, no split.
+  unchanged, bits and masks on both halves; with gain −1, no split; with
+  the feet off, no split.
 - Mutants to kill: the cavity crossing a constrained edge (T-P1); an
   inexact incircle, a plain double determinant instead of the kernel's
   (T-P1, on a near-cocircular fixture); the foot's second seed missing
-  (T-P1); the acceptance test reversed or made strict (T-P2); the split at
-  the midpoint (LS1); the end check removed (LS1); R8 left on at gain −1
-  (LS1, T-P3).
+  (T-P1); the acceptance test reversed (T-P2); the slack dropped and the
+  test made strict, `new > old + P` (T-P2, the equality fixture); the split
+  at the midpoint (LS1); the end check removed (LS1); R8 left on at gain −1
+  (LS1, T-P3); R8 left on with the feet off (LS1). (The slack dropped with
+  `≥` kept is killed only where the platform's rounding puts `new` below
+  `old` on CF2's own edge with the feet on; a survivor there is recorded
+  with that reason, not chased.)
 
 Not mutation-critical:
 
 - **T-P3**: gain −1 is bit-identical to 20c-1; determinism as T6.
 - CLI: `--start-quality-gain` (refusals: non-finite, above 10), the new
   `--stats` rows and the record.
+
+#### Pins ruled for 20c-2's red step (`@architect`, 2026-10-07, on `100f5a09`)
+
+`@tester`'s red commit `100f5a09` (on master `41bda81a`) fixed eleven
+details the design left open and made three observations. Each is ruled
+here; "kept" means `@developer` builds to it as written. `@tester` built a
+throwaway prototype of R7 and R8 beyond its brief; its numbers (pin 10,
+observations (a) to (c), the box's 20.87° to 20.66°) are a prototype's, not
+measurements of built code, and nothing below rests on them alone.
+
+1. **Names and defaults.** `QualityOptions::min_gain_deg` and
+   `RefineOptions::min_gain_deg`, negative = off, default negative, set by
+   member; binding keyword `min_gain_deg`, default `-1.0`; outcome fields
+   `QualityOutcome::skipped_no_gain` and `line_splits`,
+   `RefineOutcome::quality_no_gain` and `quality_line_splits` (Python
+   `RefineOutcome.quality_no_gain`, `.quality_line_splits`). Kept: off by
+   default keeps every existing C++ and binding caller on 20c-1's output;
+   only the CLI turns it on (R7).
+2. **The cavity helper.** `terrain::mesh::detail::quality_cavity<K>(m, t,
+   on, p, f)` in `quality.hpp`, returning `QualityCavity{removed,
+   created}`: `removed` the cavity's slots, `created` the new triangles as
+   corner triples, counter-clockwise on (col, −row); `on` 0..2 is t's edge
+   (a split, the triangle across seeding too, constrained or not), 3 is
+   strictly inside; order free. Kept: it is R7's prediction as a function
+   of the mesh alone, which is what lets T-P1 compare it with
+   `legalise_around`'s result without the whole pass. `improve` asks it
+   for the point it is about to insert (node or R2's foot), after every
+   existing skip, and reads `created` only for angles.
+3. **Angles and rounding.** In the frame `improve` is given, (col · dx,
+   −row · dy), each capped at θ. **Changed:** R7 now accepts `new ≥ old +
+   P − s` with s = 10⁻⁶° (R7, "Why the slack"; observation (a) below), and
+   T-P2's "by more than rounding" is the same s. Tests that change, by
+   `@tester`, its own commit before green: `kRounding` in
+   `tests/cpp/unit/test_quality_gain.cpp` becomes 1e-6 with a comment
+   citing R7's slack; a new case, CF2's own edge (`own_edge()`) with the
+   feet on at gain 0: the first insertion is the foot (10, 0.99), within
+   1e-12 cells, it is accepted (`feet ≥ 1`, and `check_gain` holds on
+   every step); its premise asserts the foot's two new triangles hold
+   18.43° at B and at C (the foot is 10 cells from both B and C). The
+   equality fixture's comment names its mutant as "the slack dropped and
+   the test made strict". The developer names the slack as a constant in
+   `quality.hpp`; the test keeps its own literal.
+4. **R8 and `constraint_feet`.** Pinned by the tester as independent of
+   the feet. **Changed:** R8 runs when R7 is on **and** `constraint_feet`
+   is (R8, "Only with the soft criterion, and only with the feet").
+   `--no-constraint-feet` has kept every point off the lines on every
+   path since 20c-1 (R2.6, R5); R8 is a fourth such path. Tests that
+   change, same commit: in `test_quality_gain.cpp`, every LS1 case that
+   expects no split (near an end, outline, frozen, refused foot, gain −1)
+   passes `feet = true`, so that what refuses the split is the rule under
+   test and not the switch; "splits the line at the node's foot" runs with
+   the feet on only, and a new case "LS1: with the feet off, no split" on
+   `line_beyond()` at gain 0 asserts `line_splits == 0`,
+   `skipped_blocked ≥ 1` and e whole (kills "R8 left on with the feet
+   off"); "across the line fixture every insertion ... is the predicted
+   cavity" keeps both feet values but asserts `line_splits > 0` only with
+   the feet on and `== 0` with them off. The pinned-list comment at the
+   head of the file and the Python module docstring ("R8's split is on
+   exactly when the gain test is") say so. No other file changes: the
+   refine suite's scenes run with the feet on.
+5. **An R8 split is not a skip; a declined split counts once in
+   `skipped_blocked`.** Kept: that is today's count for a blocked walk, and
+   a split is an insertion.
+6. **Counts.** `quality_skipped` holds `quality_no_gain` (R7: the total is
+   kept); a line split counts in none of `quality_inserted`,
+   `quality_feet`, `inserted`; vertices = start + `quality_inserted` +
+   `quality_feet` + `quality_line_splits` + `inserted` (and, in `improve`,
+   start + `inserted` + `feet` + `line_splits`). Kept: each counter names
+   one kind of vertex, as 20c-1's pin 5 has it.
+7. **The recorder's hook.** The tests rely on `improve` asking the validity
+   callable at least once in every loop turn that inserts, before it
+   inserts. Kept as a contract of `improve`, and written here so a later
+   change does not break it silently: today it asks about every node
+   before the walk; R2 asks about the foot and R8 about its foot. An
+   insertion with no call before it would make the recorder see two
+   insertions as one, which `recorded`'s `REQUIRE(ok)` fails loudly.
+8. **`--start-quality-gain`.** Finite values up to and including 10
+   accepted, a negative one is the hard rule; refused: `nan`, `inf`,
+   `-inf`, `10.5`, `11`; refused without `--tolerance` and without `--dem`,
+   as `--start-min-angle` is. Kept: R7's "refused: non-finite, above 10",
+   and the same dependencies as the setting it qualifies.
+9. **Report rows.** Input row `start_quality_gain_deg` beside
+   `start_min_angle_deg`, printed `0` by default; result rows
+   `start_quality_points_without_gain` ("Tries that would not have
+   improved the angles") and `start_quality_lines_split` ("Land-cover and
+   outline lines split to improve angles"), integers in the record, not in
+   the mesh file. Kept. R7's `elevation_source` line was stale (increment
+   25 replaced that sentence by rows); R7 and R8 now say the rows and
+   where they go (R7's after `start_quality_points_skipped`, R8's after
+   `start_quality_points_snapped_to_lines`). The input row's wording,
+   which the tests do not pin: "Starting mesh: a point is added only if it
+   raises the smallest angle around it by at least this many degrees
+   (negative = always added)".
+10. **CF2's own-edge start through `refine`, feet off**: `quality_no_gain
+    == 1`, `quality_skipped == 1`, nothing inserted by the pass. Kept, and
+    not on the prototype's word: the start is one triangle with one bad
+    candidate, N = (10, 1); its three new triangles hold a sliver under 1°
+    against the old 18.43° (the case's premise in `test_quality_gain.cpp`
+    asserts that), far outside any slack; once refused, the queue is empty.
+11. **T-P3's digests**, recorded from `41bda81a` (master with 20c-1, the
+    red commit's parent, no 20c-2 production change) on the three scenes in
+    `tests/cpp/support/quality_gain_fixtures.hpp`, and the CLI digests
+    hashing integers only. Kept; never re-recorded. Integers only is right:
+    a foot's last bit can differ between the fused multiply-add leg and
+    the plain one.
+
+**Observations.**
+
+- (a) **A foot whose cavity's worst angle sits at its edge's end keeps it
+  exactly, so a bare `≥` is decided by rounding.** Accepted as a defect of
+  R7's text; fixed by the slack (pin 3). In CF2's own-edge case both the
+  angle at B (the same two rays) and the angle at C (the foot is 10 cells
+  from B and from C, so the triangle is isosceles) equal the old 18.43°.
+- (b) **R8's end check is nearly unreachable on grid nodes.** Kept in
+  R8 all the same: it is R8's termination argument (at most L / δ_q
+  splits per segment), not an optimisation, and real starts are not grid
+  nodes (CORINE and outline vertices lie anywhere), as the test's own
+  `line_near_end()` fixture, with off-node vertices, reaches it.
+- (c) **On outline-only starts the prototype refused nothing at gain 0.**
+  Noted; no design change. The whole-run T-P1/T-P2 case requires
+  refusals over the Q7 ring and the nine-node mesh together for each
+  combination of frame, gain and feet; if at green a gain-0 combination
+  finds none, that is a premise for `@tester` to repair (another fixture),
+  not a reason to change the code.
+
+**The box tests at `--start-quality-gain -1`.** Kept. The amended tests in
+`tests/python/test_cli_start_quality.py` (the `--stats` count, NoData, and
+the void tests and their `pass_node` fixture) are about increment 20's pass
+when it inserts, and about what NoData does to an inserted node; at gain 0
+the box's two candidates are refused, so they would fail or check
+nothing. `-1` is the hard rule bit for bit (T-P3), so their claims stand
+unchanged; the default on the box is covered by
+`test_cli_start_quality_gain.py::test_the_default_changes_the_box`.
+
+**Open items.**
+
+- (a) **`@tester`, before green, its own commit:** pins 3 and 4's test
+  changes above.
+- (b) **Existing CLI pins at default flags, after green, by `@tester`, its
+  own commit, only those that fail.** The CLI's default gain is now 0, so
+  a digest recorded before 20c-2 at the default start-quality settings
+  may change. Each such test gets `--start-quality-gain -1` (beside
+  `--no-constraint-feet` where it has it), never a new digest, and the
+  commit lists each with its reason, as 20c-1's open item (b). Likely, by
+  reading: `test_cli_constraint_feet.py::test_no_constraint_feet_matches_increment_20`
+  and `::test_the_default_leaves_the_10m_quarter_circle_alone`, and
+  `test_refine_golden.py::test_the_cli_default_flags_digest_is_unchanged_by_node_sampling`.
+- (c) **The TSan job, by `@developer`, in the green commit.**
+  `test_quality_gain_refine` joins both lists in
+  `.github/workflows/main.yaml`'s `tsan` job (the build targets and the
+  run list, which must match). `test_quality_gain` does not; it starts no
+  threads.
+
+#### The split-phase limit for 20c-2, judged per split (`@architect`, 2026-10-07, on `5b0afe04`; Ola's ruling 8)
+
+**What `@perf` measured** at `65ae0792` against 20c-1 (master `41bda81a`),
+median of 6 interleaved runs after a warm-up, AC power, threads 10
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:199-217`,
+`:231-257`; the first acceptance, before the fix, is
+`docs/benchmarks/2026-10-07/20c-2/README.md@fa136aa7`):
+
+| catchment | split phase, seconds | split phase, per split | refinement's splits | whole run | start quality (reported) |
+|---|---|---|---|---|---|
+| Lagan | +16.29 % | −0.81 % | 54 097 against 46 144 (+17.2 %) | −0.04 % | +23.5 % (+0.082 s) |
+| Numedalslagen | +4.00 % | −2.60 % | 195 799 against 183 368 (+6.8 %) | −0.08 % | +20.1 % (+0.108 s) |
+
+On the 1 m tile, where every build gives one mesh, the split phase is
+−4.24 % against feet off and −4.52 % against 20c-1 over 6 runs, −0.34 %
+and +1.39 % over 20 (point 1: met). The 1 m benchmark is accepted, −0.8 to
++2.6 % per cell pooled over 3 pairs against a base spread of at most
+2.7 %, the speed-up unchanged (same file, `:37-46`).
+
+**Ruling.** For 20c-2, point 2's split phase is judged **per split**: the
+median split-phase seconds over refinement's points added (`--stats`),
+at most 2 % above 20c-1's. **Met: −0.81 % and −2.60 %.** The rest of the
+limit stands as written and is met as measured: point 1 in seconds, point
+2's whole run in seconds, point 3 reported.
+
+**Why.** As for 20c-1 ("Did the 2 % limit measure the right thing?"),
+the seconds compare two different meshes. R7 refuses 34 600 and 71 590
+quality points, so the start adds 29 % and 34 % fewer, and refinement adds
+17.2 % and 6.8 % more where the DEM needs them, for a mesh 7.5 % and
+11.4 % smaller than master's. The limit is there to catch a dearer split;
+a split at gain 0 is not dearer. Per split is not exact like for like
+either (the splits land in other places), so the bound stays 2 % and the
+whole run stays gated in seconds.
+
+**Reported, not gated.** Per split against feet off: +9.63 % and +14.77 %
+(20c-1's, accepted under ruling 7: +8.3 % and +8.9 %); the two runs also
+differ in R8, and nothing has been profiled. Start quality, serial, is the
+phase to watch at São Francisco's size: +0.082 s and +0.108 s here, 0.1 %
+and 1.6 % of the whole runs.
+
+Scale of the 2 %: relative, medians of at least 6 interleaved runs.
+Checked on the 1 m tile (464 290 triangles), Lagan (799 372) and
+Numedalslagen (1 141 207).
+
+#### Rulings on 20c-2's green step and speed fix (`@architect`, 2026-10-07, on `d3c939d9`, `96119508`, `65ae0792`)
+
+What the developer and `@perf` recorded beyond the design, each ruled;
+all kept.
+
+1. **One flip test, `detail::quad_flips`** (`lawson.hpp`): `must_flip`'s
+   quad test moved out so the cavity asks the same predicate; R7's "the
+   exact `incircle` in the frame that `legalise_around` uses" as one
+   function. T-P1 then compares two users of one predicate and cannot see
+   a fault inside it; `600b2acb`'s two named-cavity cases (a cocircular
+   point on the integer path, and test_mesh_lawson's L4b quad on the
+   frame-collinear branch) cover that. The fix forces it inline
+   (`gnu::always_inline`), which GCC and Clang, the CI compilers, accept.
+2. **`foot_on` takes the reach and the end distance apart**
+   (`constraint_foot.hpp`). 20c-1's paths pass δ for both, so they are
+   unchanged (gain −1 equals 20c-1 bit for bit); R8 passes no reach limit,
+   since the walk has already found the edge, and δ_q (half a cell) for
+   the ends, as R8 says.
+3. **`GainJudge::capped` skips atan2 when every corner clears θ by
+   1e-9 of |cross| + |dot|.** A relative margin, with no length scale: it
+   is at most about 8 × 10⁻⁸° of angle, far above the rounding of the test, atan2
+   and the degree conversion (about 10⁻¹⁴ relative). The argument holds
+   for any θ up to 180°; nothing in the C++ or the binding bounds θ, and
+   above 180° (already meaningless as an angle cap) the skip would wrongly
+   return θ; the comment says so (`50544838`). A corner within the margin falls back to the exact call, so
+   the capped value is unchanged; checked as byte-identical meshes at gain
+   0 and −1 on Lagan, Numedalslagen, the tile and the quarter
+   (`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:139-163`).
+4. **`pays` stops once the answer is known.** The worst angle before only
+   falls as more old triangles are read, so the bar `old + P − s` only
+   falls; a yes at any point is the final yes. Same answers, as item 3's
+   check shows.
+5. **The cavity's buffers are reused** inside one `improve` call (the
+   judge is a local of the serial pass): no state outlives the call or is
+   shared between threads. The value-returning `quality_cavity` stays for
+   T-P1.
+6. **`@perf`'s method**: the first head run of `bench.py` printed
+   `REGRESSION` against the single base run before it; the pooled table
+   of 3 pairs counts, as in 20c-1's acceptance. The tile series' slow
+   parallel scans from r14 on fell on all three builds in turn and are
+   left in the medians; the scan is not under the limit. Why gain 0 leaves
+   more to refinement is answered by the counts (ruling 8's "Why"); no
+   profile is needed for the ruling.
+7. **Open item (b) of the pins ruling needed no commit.** The three CLI
+   pins it named pass at the default gain 0, with
+   `test_cli_start_quality.py` and `test_cli_start_quality_gain.py` (57
+   passed, `@architect`, on this worktree's installed extension), so no
+   test needed `--start-quality-gain -1`; `@tester` checks it again on
+   the code under review.
+
+#### Mutation round for 20c-2 (`@tester`, 2026-10-07, test commit `600b2acb`, on code `96119508`)
+
+Copied from `@tester`'s hand-back for the round (code review round 1's
+S1). The suite is `test_quality_gain`, run on the green code (`d3c939d9`
+plus `96119508`) in a scratch copy from `tools/scratch_copy.py 96119508`,
+macOS arm64 Release. Before each build the target's object files and
+binary were deleted; each log shows the compile line of each test file and
+the diff of the planted fault; each binary ran under a timeout; after each
+restore the headers were compared byte for byte. Every fault this file
+lists was killed except D5b, which the design expected to survive. Three
+faults outside the list (QF3, QF4, I1) were not killed by
+`test_quality_gain`; `600b2acb` (tests only, +136 lines) kills each with a
+new case that fails on its fault and passes on the code (21 cases, 7313
+assertions; `test_quality_gain_refine` still passes, 6 cases). Line
+numbers in the two tables are in
+`tests/cpp/unit/test_quality_gain.cpp@96119508` (T) and
+`tests/cpp/property/prop_quality_gain_refine.cpp@96119508` (R); new-case
+lines are at `600b2acb`.
+
+**The round ran before the speed fix** (code review round 1's S2).
+`65ae0792` rewrote `pays` after the round: the acceptance test
+`new_w >= old + gain - s` is now made in two places, inside the loop over
+the removed triangles (the early stop, ruling 4 above) and once after it,
+so D4 and D5 now sit on two comparisons, not one; and `GainJudge::capped`
+(the atan2 skip, ruling 3) did not exist when the round ran, so no fault
+was planted in it. Two things carry the round over: the meshes are byte
+identical before and after the fix at gain 0 and −1 on Lagan,
+Numedalslagen, the tile and the quarter
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:139-163`),
+and `@reviewer`'s round 1 check of the early stop and the atan2 skip by
+argument (the bar only falls, so a yes at any point is final; a corner
+inside the margin falls back to the exact call).
+
+**Kill table: the increment file's list**
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| D1 | cavity crosses a constrained edge (`quality_cavity`: `is_constrained` test dropped) | killed | T:439, cavity `{0,1}` where `{0}` is expected; T:515, 3 new triangles, not 2 |
+| D2 | inexact incircle in the cavity (`quad_flips<pred::FastKernel>` in `quality_cavity` only) | killed | T:478, cavity `{1,0}` where `{1}` is expected (near-cocircular fixture) |
+| D3 | foot's second seed missing (the push of `neighbours(t)[on]` removed) | killed | T:499, cavity of 1 slot, not 2; T:177/178, prediction differs from what Lawson wrote (3 slots removed, 5 made), in the line fixture |
+| D4 | acceptance reversed (`new_w < old + gain - s`) | killed | T:187, worst angle falls 21.80° to 17.40°; T:590, 642, 680; R:129, R:191 |
+| D5 | slack dropped and test made strict (`new_w > old + gain`) | killed | T:641 (the equality fixture gets no insertion); T:680 (`feet` is 0, not ≥ 1) |
+| D5b | slack dropped, `>=` kept | **survived**, as the design expected | Only rounding decides it, and only where it puts `new` below `old` on CF2's own edge. Per the increment file, recorded and not chased. |
+| D6 | R8 splits at the midpoint, not the foot | killed | T:716/717, 0.861 cells off the foot in col, 0.0154 in row |
+| D7 | R8's end check removed (end = 0 in R8's `foot_on` call) | killed | T:768, `line_splits` is 2, not 0 |
+| D8 | R8 left on at gain −1 (`split_lines = constraint_feet`) | killed | T:732, 4 splits, not 0; R:110, T-P3 digest differs. 20c-1's foot suites (CF1, CF2, CF3, CF4 and 20b's suite) pass |
+| D9 | R8 left on with the feet off (`split_lines = judged`) | killed | T:563 and T:745, 4 splits, not 0 |
+
+**Kill table: further faults, including the new shared pieces**
+
+| # | fault planted | result | killed by |
+|---|---|---|---|
+| D10 | R8's outline guard dropped (an outline edge with nothing beyond gets split) | killed | T:779, 7 splits, not 0; T:791; R:81, R:129 |
+| D11 | the validity callable not asked about R8's foot | killed | T:802, 4 splits, not 0 |
+| QF2 | `quad_flips` (shared) uses FastKernel throughout | killed, both sides | Cavity suite: T:476, Lawson's own replay removes 2 slots, not 1; R:110. Lawson side: `test_mesh_lattice_incircle.cpp:894` and `:971`. Line 894 counts `must_flip` decisions (270) that differ from that suite's exact reference copy, so it is a sign disagreement, not a rounding-sized distance. `test_mesh_lawson` survives it. |
+| QF3 | `quad_flips`: the branch for a side that is not counter-clockwise in the frame dropped | Lawson side killed; cavity suite **survived**, now killed by 600b2acb | Lawson side: `test_mesh_lawson.cpp:466`. New case "a side collinear in the frame is decided from the triangle across…": fails at 600b2acb line 622, 1 slot removed, not 2 |
+| QF4 | `quad_flips`' integer path flips on Cocircular | Lawson side killed; cavity suite **survived** (only R:110 caught it), now killed by 600b2acb | Lawson side: `test_mesh_lattice_incircle.cpp:894`, with 890 failures, then the binary hung past the timeout. I count the hang as no part of the kill; line 894 is the kill. `test_mesh_lawson` survives it. New case "on the integer frame a candidate on the circle of the triangle across does not grow the cavity": fails at line 595, 2 slots removed, not 1 |
+| F1 | R8 passes delta (half a cell) for both reach and end | killed | T:561 and T:712 (no splits); R:129–131, R:205 |
+| F2 | `constraint_foot` passes infinity for both reach and end | killed | T:547, T:680; R:110, 123, 129; CF1 lines 119 (×9), 170, 310, 316, 348, 402; CF2 272, 328, 407; CF3 174; CF4 230, 252, 272, 416, 480, 513, 567, 599 |
+| F3 | inside `foot_on`, the end check reads `reach` (and its mirror, the distance check reading `end`) | killed by the compiler gate | `-Werror=unused-parameter` refuses the build (`end`, or `reach`, unused) |
+| I1 | insert routine: the slot across a split edge not seeded or offered | `test_quality_gain` **survived**, now killed by 600b2acb | Already killed elsewhere by `test_mesh_quality.cpp:446/524` and R:129. New case "a line split flips beyond the triangle across the line, as predicted": fails at line 650, the flip of D-E2 is missing from the split |
+| I2 | insert routine: written slots never offered to the queue | `test_quality_gain` survived; killed by `test_mesh_quality.cpp:381` (and 438, 441, 478, 527, 546, 599, 705, 720) and R:110/129 | Not added: "every written slot is offered" is increment 20's invariant, which its suite holds; it is not T-P1, T-P2 or LS1 |
+| I3 | insert routine: a node on an edge inserted as if strictly inside (`edge = 3`) | `test_quality_gain` survived; killed by `test_mesh_quality.cpp:255` (×4), 473, 720, 727 | Not added, for the same reason as I2: it is the node path's on-edge handling, which increment 20's suite covers |
+
+("I" in the QF4 row is `@tester`.) `edge = on` (without the zero-count
+test) is an equivalent mutant: with no zero side, `on` is already 3, so it
+was not run. Every kill above is an exact count, a cavity or slot set, a
+digest, or a distance far above rounding; none rests on a rounding-sized
+oracle violation. "Both suites" for a `quad_flips` fault was read as
+Lawson's side (`test_mesh_lawson` with `test_mesh_lattice_incircle`, the
+integer path's suite) and the cavity's side (`test_quality_gain`); all
+three `quad_flips` faults are caught on both. The QF3 and QF4 cases state
+the expected cavity outright, since a fault in the shared `quad_flips`
+moves the prediction and `legalise_around` together, and T-P1's
+comparison cannot see it.
 
 ### 20c-3
 
@@ -1863,6 +2234,15 @@ at `69f37d1c`
 benchmark accepted, −0.3 to −2.0 %, meshes byte-identical to master's;
 gates pass at the same figures.
 
+**20c-2, done.** First acceptance of `600b2acb`
+(`docs/benchmarks/2026-10-07/20c-2/README.md@fa136aa7`): every mesh gate
+passes; start quality about +60 %, Numedalslagen's whole run +3.2 %, the
+split phase over 2 %. Re-time after the speed fix `65ae0792`
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04`):
+meshes byte-identical to `600b2acb`'s, the 1 m benchmark accepted, the
+whole run −0.04 % and −0.08 %, the split phase met per split (ruling 8),
+start quality +23 % and +20 % (reported, not gated).
+
 ## LOC
 
 Counted in `CLAUDE.md` §2's unit.
@@ -1877,6 +2257,8 @@ Counted in `CLAUDE.md` §2's unit.
 | | **total** | **~150** |
 | 20c-1 built | `python3 tools/count_loc.py c074f900 69f37d1c`: `constraint_foot.hpp` 77, `quality.hpp` 20, `refine.hpp` −21, `refine_points.hpp` 53, `strip_scan.hpp` 0, `bindings/core.cpp` 8, `_core.pyi` 6, `cli.py` 3, `edge_strip.py` 3, `final_check.py` 7, `run_record.py` 7 | **163** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
+| 20c-2 built | `python3 tools/count_loc.py 41bda81a 65ae0792`: `quality.hpp` 102, `lawson.hpp` 3, `constraint_foot.hpp` 1, `refine.hpp` 6, `bindings/core.cpp` 5, `_core.pyi` 5, `cli.py` 29, `run_record.py` 6. Over the estimate by 47: the plumbing is 51 against ~30, mostly `cli.py`'s option declaration (the help text alone is five lines), its refusals (non-finite, above 10, without `--tolerance`, without `--dem`: pin 8, three checks the estimate did not see) and the wiring into the run and its rows; the speed fix `65ae0792` adds 27 to `quality.hpp` (the atan2 skip, the early stop, the reused buffer), which no estimate had; the green step's `quality.hpp` was 75 against ~80 | **157** (green 130, `count_loc.py 41bda81a 600b2acb`) |
+| 20c-2 review fix | `python3 tools/count_loc.py 41bda81a 50544838`: `cli.py` 30 (+1, the reworded help string); the rest as above | **158** |
 | 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
 
 On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
@@ -1921,7 +2303,26 @@ question 7 first and question 6 second): "1-3 default. 4 must wait". So:
    revised limit ("The split-phase limit, judged after the fix"); no
    follow-up moves it into the parallel scan.
 
-The two questions as asked:
+Ola, 2026-10-07, on question 8, asked by the main session after `@perf`'s
+re-time `5b0afe04`: "Yes to both" (the other item was an unrelated push).
+So:
+
+8. **20c-2's split phase is judged per split** (the default yes), because
+   its meshes differ from 20c-1's; recorded in "The split-phase limit for
+   20c-2, judged per split", where it is met.
+
+Question 8 as asked: "20c-2's time limit. The step that splits lines is
+over the 2 % limit when measured in seconds: +16 % on Lagan and +4 % on
+Ljungan. Measured per split, it's faster: −0.8 % and −2.6 %. The new rule
+produces a different mesh, with 17 % and 7 % more splits, and that
+accounts for the extra seconds. Should we judge it per split, as we did
+for 20c-1? Default: yes, and @architect writes that ruling down before the
+code review." "Ljungan" there is a slip for Numedalslagen, the catchment
+`@perf` measured; the figures are Numedalslagen's. (For 20c-1 the limit
+was revised to point 2 against master, not judged per split; the question
+stands on its figures.)
+
+Questions 6 and 7 as asked:
 
 - Question 6: **Your outline rule: on by default?** 20c-3 builds it either way, as
    `--features-outline-snap METRES`; this question sets only its default.
@@ -1987,3 +2388,7 @@ None open.
 20c design review round 6 (@reviewer, 51b4434a..c074f900, 0 counted LOC, docs only): APPROVED; round 5's B1, B2, S1 and S2 answered. (B1) /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@c074f900:741-742 now says the outline rule is "built either way (question 6 sets only its default)", and a grep for "says yes|if Ola|if he|question 6" finds no conditional build left outside round 4's quoted record. (B2) :502-505 counts each shared edge and point once: rerun on Numedalslagen's box read (8 017 polygons) gives 1 362 distinct short edges / 71 points put back (1 779 / 142 per polygon), matching the doc. (S1) :1045-1048 rerun: 3 polygons fail `coverage_invalid_edges`, none of them reach the domain, and the 1 611 that do reach it pass `coverage_is_valid`. (S2) :691 "about 6 % (0.006697° to 0.007080°)" checks out: 0.007080 / 0.006697 = 1.057. ROADMAP.md@c074f900:61 matches. 20c-1's part has not changed since round 2.
 20c-1 code review round 1 (@reviewer, c074f900..0346ac63, 163 counted LOC): CHANGES REQUESTED. (B1) no mutant kill record for the invariant-critical suite test_constraint_foot reached review, and none is on disk: /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@0346ac63:17-18 still names "the mutation round" as next; @tester's handback must cover all seven targets at :1255-1259, including CF3's "holding triangle dropped from the active set", which the brief's list left out; (B2) the CF4 oracle-margin mutant demonstration that ruling 2 asks for (:1430-1434, `legalise_around` skipped, depths far above η) is called done at :1503 but its result is recorded nowhere: one line with the measured depths, or the handback, is needed. Checked and true: LOC 163 against an estimate of ~150 (:1670-1671), all under 700; the green, MeshVertex and fix commits touch no test file; no red-step scaffolding is left; F2's re-pin to 2 refusals adds an assertion that both nodes are vertices, and the stub and void-callable edits are type and keyword changes only, so nothing was weakened; on HEAD, built on macOS arm64 Release (which fuses multiply-adds, as the macOS CI leg does), CF4 excuses 2 quads at 3.85e-10 and 4.11e-10 m, about 1 300 times under η = 5e-7 m; the fix 69f37d1c gives the same answers by reading: /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/mesh/constraint_foot.hpp@0346ac63:78-89 tests the same edge set constraint_foot searches, foot_epsilon clamps to the same foot_cap(g) (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/refinement/refine.hpp@0346ac63:219-241), and nothing found within the cap means nothing found within ε; R1-R5, R2.8, R4.7, the gate row and the split-phase table match /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482:40-50, :206-213, :264-288, :298 and /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:158-170, :186-241, :259, :261-321, and the raw/*_stats.md lines cited; the revised time limit is argued, not a moved goalpost (ruling 5's 2 % was the trigger for the fix, which is done; the tile at +0.86 % shows no work wasted where no foot is placed), and question 7 stays Ola's. Not pushed, so no CI yet.
 20c-1 code review round 2 (@reviewer, 0346ac63..74889310, 163 counted LOC c074f900..74889310, tests and docs only since round 1): APPROVED; round 1's B1 and B2 answered. (B1) /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@74889310:1590-1600 covers all seven targets named at :1260-1264, including the "foot a hair from an input vertex" case (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/tests/cpp/unit/test_constraint_foot.cpp@4a64c1ef:237) and CF3's holding triangle (line 177). Each cited kill line was spot-checked and asserts what the table says. :1625-1641 records the four survivors as killed, and each new test asserts its premise first. CF1's exact-δ case checks that the distance is exactly 0.5, which holds in doubles on both the fused multiply-add leg and the plain leg (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:168-170). Each `foot_reachable` false case also checks that `constraint_foot` returns None (:309-331). CF4's two-lines replay uses the same seeds as `refine_points` for a split edge with no neighbour, {owner, new} (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/refinement/refine_points.hpp@0346ac63:369, :423-426). It asserts no flip on the start, a first Hit on A2-B2, at least one flip, and a second Hit on A1-B1 at x = 5 (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/tests/cpp/property/prop_constraint_foot_final.cpp@7bc41ebf:475-499). So the guard at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/refinement/refine_points.hpp@0346ac63:386 is reached. R4.2's companion case asserts that the holding triangle t is unchanged and that no flip writes to it. The two line corrections hold: CF1 :170 and CF4 :514 at 7bc41ebf. (B2) The depths are recorded at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@74889310:1656-1675: the shallowest is 0.0196 m against η = 1e-7 m. Ola's rulings 6 and 7 at :1908-1918 quote "1-3 default. 4 must wait", dated 2026-10-07, with 1 = question 7 and 2 = question 6, matching the transcript. Round 1's record at :1984 is word for word the round 1 handback (2 413 characters, identical). `git diff --stat 0346ac63 74889310 -- include src bindings src_python` is empty, and no red-step scaffolding is left. ctest 886 of 886 passed in build-tester, whose binaries are newer than every source file and list the new cases. `pytest --no-cov` gave 5 404 passed and 17 skipped. mypy, ruff check, ruff format, the prohibited-dependency gate, the detria boundary gate and check_citations --base origin/master are all green, and none of the 110 at-risk citations comes from this round's edits. Not pushed, so no CI yet.
+
+20c-2 code review round 1 (@reviewer, 41bda81a..8ea0f32d, 157 counted LOC by `python3 tools/count_loc.py 41bda81a 8ea0f32d`): CHANGES REQUESTED. (B1) The `--start-quality-gain` help says the run will "split a line it lies beyond" (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/src_python/tin_engine/cli.py@8ea0f32d:694-696). That is false with `--no-constraint-feet`: the line split (R8) only runs when both the gain test and the feet are on (pin 4, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@8ea0f32d:1145-1150; `split_lines = judged && o.constraint_feet`, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@8ea0f32d:256). The binding's doc and `_core.pyi` already say "with constraint_feet"; the CLI help should say the same, for example "and, unless --no-constraint-feet, split a line it lies beyond". Checked and true: LOC; ruling 8's figures; the quoted question; the atan2 skip; the early stop; the mutation record; open item (b); ctest and pytest on a HEAD build; gates (details in the list below). Not pushed, so no CI yet. Suggestions: (S1) copy @tester's kill table into this file as "Mutation round for 20c-2"; (S2) say the round ran on 96119508, before the speed fix rewrote `pays`, and that byte-identical meshes carry it over; (S3) ruling 3 and the comment at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@8ea0f32d:199-204 say θ at most 35°, but the argument holds for θ up to 180°; (S4) tell Ola about the two slips (done in chat, 2026-10-07).
+
+20c-2 code review round 2 (@reviewer, 8ea0f32d..d4ac395f, 158 counted LOC by `python3 tools/count_loc.py 41bda81a d4ac395f`, 1 since round 1: the help string): APPROVED; round 1's B1 and S1-S3 answered. (B1) The `--start-quality-gain` help now reads "and, unless --no-constraint-feet, split a line it lies beyond" (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/src_python/tin_engine/cli.py@d4ac395f:694-697). That matches `split_lines = judged && o.constraint_feet` (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@d4ac395f:257). The red test reads the option's own help (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/tests/python/test_cli_start_quality_gain.py@9f54bc95:230-244). Applied to the help string at 8ea0f32d, its clause check fails; at HEAD the file's 26 tests pass. Red 9f54bc95 touches only that test file and green 50544838 touches no test. (S1) The 25 table rows at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@d4ac395f:2104-2178 are byte-identical to @tester's hand-back (session transcript 6a989a29, line 23672). (S2) :2123-2135 is true: at 96119508, `pays` made one comparison and `GainJudge::capped` did not exist. (S3) The comment at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@d4ac395f:199-205 and ruling 3 at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@d4ac395f:2072-2078 now give θ ≤ 180°. Nothing in the C++ or the binding sets an upper bound on θ, and `improve` returns early unless θ > 0, so a negative θ never reaches the skip. `git diff 8ea0f32d d4ac395f -- include src bindings` shows only that comment, so round 1's C++ build and ctest still stand. The LOC row (158 = 157 + 1) and the status lines :25-46 match. No red-step scaffolding is left. mypy, ruff check, ruff format, the prohibited-dependency gate, the detria boundary gate and `check_citations --base origin/master` (exit 0) are green, and none of the 67 at-risk citations comes from this round's edits. Not pushed, so no CI yet.

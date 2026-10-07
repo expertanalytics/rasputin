@@ -387,6 +387,10 @@ class RefineOutcome:
     def feet_refused(self) -> int: ...
     @property
     def quality_feet(self) -> int: ...
+    @property
+    def quality_no_gain(self) -> int: ...
+    @property
+    def quality_line_splits(self) -> int: ...
 
 def refine(
     view: RasterView,
@@ -399,6 +403,7 @@ def refine(
     min_angle_deg: float = ...,
     constraint_feet: bool = ...,
     frozen_mask: int = ...,
+    min_gain_deg: float = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
@@ -406,7 +411,10 @@ def refine(
     depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
     mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
     node's foot on a nearby constraint segment instead of the node. No vertex
-    goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off)."""
+    goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off).
+    ``min_gain_deg`` >= 0 adds a start-quality point only if it raises the
+    smallest angle around it by that much, and with ``constraint_feet``
+    splits a line the point lies beyond; negative is off."""
 
 @final
 class CheckPoints:

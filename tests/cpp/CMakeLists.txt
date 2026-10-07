@@ -471,3 +471,21 @@ add_terrain_backend_test(test_constraint_foot_refine property/prop_constraint_fo
 target_link_libraries(test_constraint_foot_refine PRIVATE Threads::Threads)
 add_terrain_backend_test(test_constraint_foot_final property/prop_constraint_foot_final.cpp)
 target_link_libraries(test_constraint_foot_final PRIVATE Threads::Threads)
+
+# The soft criterion and the line split in the quality start, increment 20c
+# PR 20c-2 (docs/increments/20c-soft-quality.md, R7 and R8 and "Tests @tester
+# writes red first", 20c-2). Two targets, so a compile failure in one leaves
+# the other built and run:
+#   test_quality_gain         the design's invariant-critical suite: T-P1 (the
+#                             predicted cavity is what legalise_around writes),
+#                             T-P2 (no accepted candidate lowers the worst
+#                             angle) and LS1 (R8's split), on improve; starts
+#                             no threads;
+#   test_quality_gain_refine  T-P3 (gain -1 is 20c-1's output, digests
+#                             recorded from 41bda81a), determinism over
+#                             threads, and the QA rules' section D oracles
+#                             with the gain on, through refine. It starts
+#                             threads; its determinism case is the TSan job's.
+add_terrain_backend_test(test_quality_gain unit/test_quality_gain.cpp)
+add_terrain_backend_test(test_quality_gain_refine property/prop_quality_gain_refine.cpp)
+target_link_libraries(test_quality_gain_refine PRIVATE Threads::Threads)
