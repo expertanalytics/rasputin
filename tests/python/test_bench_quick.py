@@ -485,9 +485,25 @@ def test_a_file_of_100_mb_or_more_is_not_read(quick: ModuleType, tmp_path: Path)
     assert quick.fingerprint(path) == before
 
 
-def test_a_file_fingerprint_sees_a_touch(quick: ModuleType, tmp_path: Path) -> None:
+def test_a_file_under_100_mb_that_is_touched_keeps_its_fingerprint(
+    quick: ModuleType, tmp_path: Path
+) -> None:
+    """Git sets a file's mtime at checkout, so the same fixture has another
+    mtime in each checkout: under 100 MB, size and content alone decide."""
     path = tmp_path / "outline.geojson"
     path.write_bytes(b"{}")
+    before = quick.fingerprint(path)
+    touch(path)
+    assert quick.fingerprint(path) == before
+
+
+def test_a_file_of_100_mb_or_more_that_is_touched_gets_a_new_fingerprint(
+    quick: ModuleType, tmp_path: Path
+) -> None:
+    """101 MiB, sparse, as above: its content is not read, so mtime stays in."""
+    path = tmp_path / "corine.gpkg"
+    with path.open("wb") as f:
+        f.truncate(101 * 2**20)
     before = quick.fingerprint(path)
     touch(path)
     assert quick.fingerprint(path) != before
