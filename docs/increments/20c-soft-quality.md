@@ -21,21 +21,28 @@ faults, one killed by the new test `4a64c1ef`), and each survivor is ruled
 there; `@tester` then killed the four (`cec2dda4` to `7bc41ebf`, tests
 only), so all 16 planted faults are killed; ctest 886 of 886, pytest
 5404 passed. Code review round 2 (`@reviewer`, on `74889310`): approved.
-**After approval, on Ola's yes:** the push, the PR and the enqueue, then a
-check that `CI result` is green; whether these have happened is shown by
-`gh pr list --head worktree-soft-quality --state all` and `gh pr checks
-<pr>`, not by this file;
+**Merged** as PR #207 (master `41bda81a`);
 **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1
 (branch `worktree-soft-quality-2` off master `41bda81a`; Ola: "build
-20c-2 and 20c-3"): red tests `100f5a09` (`@tester`), their pins ruled
-(below, "Pins ruled for 20c-2's red step"; R7 gains a slack and R8 needs
-the feet on), next `@tester`'s amendment for pins 3 and 4, then
-`@developer` (green);
+20c-2 and 20c-3"): **built**, 157 net production lines (`python3
+tools/count_loc.py 41bda81a 65ae0792`; "LOC" says why above the ~110
+estimate). Red tests `100f5a09` (`@tester`), their pins ruled (below,
+"Pins ruled for 20c-2's red step"; R7 gains a slack and R8 needs the feet
+on) and amended `5b65941a`; green `d3c939d9` and `96119508`
+(`@developer`); mutation-round tests `600b2acb` (`@tester`, three cases
+added, tests only); `@perf`'s acceptance `fa136aa7`: every mesh gate
+passes, the time limit not met; `@developer`'s speed fix `65ae0792`
+(meshes byte-identical); `@perf`'s re-time `5b0afe04`: the whole run and
+the 1 m benchmark met, the split phase over 2 % in seconds but not per
+split, which Ola ruled is how 20c-2 is judged (ruling 8; "The split-phase
+limit for 20c-2, judged per split"); the green step and the fix ruled
+("Rulings on 20c-2's green step and speed fix"). **Next: `@reviewer`'s
+code review**;
 **20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
 default at 5 m (question 6, ruling 6), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and questions 5 to 7, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
+and questions 5 to 8, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -1211,7 +1218,7 @@ the gate is all three flags off, `--features-outline-snap 0` among them.
 | PR | what | needs | gate (measured value in brackets, M5) |
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
-| 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1 |
+| 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
 | 20c-3 | input coarsening, and the outline rule (on by default at 5 m, ruling 6) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on the default. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
@@ -1579,7 +1586,9 @@ never covered, rises about 6 % for the same reason (5 930 and 4 233
 feet).
 
 **The limit, revised** (replaces ruling 5's 2 % for 20c-1, and holds for
-20c-2, which touches the same paths):
+20c-2, which touches the same paths, except that 20c-2's split phase in
+point 2 is judged per split: ruling 8, "The split-phase limit for 20c-2,
+judged per split"):
 
 1. **No cost where no foot is placed.** On the 1 m tile, where the meshes
    are byte-identical with feet on and off, the split phase with feet on
@@ -1993,6 +2002,98 @@ unchanged; the default on the box is covered by
   run list, which must match). `test_quality_gain` does not; it starts no
   threads.
 
+#### The split-phase limit for 20c-2, judged per split (`@architect`, 2026-10-07, on `5b0afe04`; Ola's ruling 8)
+
+**What `@perf` measured** at `65ae0792` against 20c-1 (master `41bda81a`),
+median of 6 interleaved runs after a warm-up, AC power, threads 10
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:199-217`,
+`:231-257`; the first acceptance, before the fix, is
+`docs/benchmarks/2026-10-07/20c-2/README.md@fa136aa7`):
+
+| catchment | split phase, seconds | split phase, per split | refinement's splits | whole run | start quality (reported) |
+|---|---|---|---|---|---|
+| Lagan | +16.29 % | −0.81 % | 54 097 against 46 144 (+17.2 %) | −0.04 % | +23.5 % (+0.082 s) |
+| Numedalslagen | +4.00 % | −2.60 % | 195 799 against 183 368 (+6.8 %) | −0.08 % | +20.1 % (+0.108 s) |
+
+On the 1 m tile, where every build gives one mesh, the split phase is
+−4.24 % against feet off and −4.52 % against 20c-1 over 6 runs, −0.34 %
+and +1.39 % over 20 (point 1: met). The 1 m benchmark is accepted, −0.8 to
++2.6 % per cell pooled over 3 pairs against a base spread of at most
+2.7 %, the speed-up unchanged (same file, `:37-46`).
+
+**Ruling.** For 20c-2, point 2's split phase is judged **per split**: the
+median split-phase seconds over refinement's points added (`--stats`),
+at most 2 % above 20c-1's. **Met: −0.81 % and −2.60 %.** The rest of the
+limit stands as written and is met as measured: point 1 in seconds, point
+2's whole run in seconds, point 3 reported.
+
+**Why.** As for 20c-1 ("Did the 2 % limit measure the right thing?"),
+the seconds compare two different meshes. R7 refuses 34 600 and 71 590
+quality points, so the start adds 29 % and 34 % fewer, and refinement adds
+17.2 % and 6.8 % more where the DEM needs them, for a mesh 7.5 % and
+11.4 % smaller than master's. The limit is there to catch a dearer split;
+a split at gain 0 is not dearer. Per split is not exact like for like
+either (the splits land in other places), so the bound stays 2 % and the
+whole run stays gated in seconds.
+
+**Reported, not gated.** Per split against feet off: +9.63 % and +14.77 %
+(20c-1's, accepted under ruling 7: +8.3 % and +8.9 %); the two runs also
+differ in R8, and nothing has been profiled. Start quality, serial, is the
+phase to watch at São Francisco's size: +0.082 s and +0.108 s here, 0.1 %
+and 1.6 % of the whole runs.
+
+Scale of the 2 %: relative, medians of at least 6 interleaved runs.
+Checked on the 1 m tile (464 290 triangles), Lagan (799 372) and
+Numedalslagen (1 141 207).
+
+#### Rulings on 20c-2's green step and speed fix (`@architect`, 2026-10-07, on `d3c939d9`, `96119508`, `65ae0792`)
+
+What the developer and `@perf` recorded beyond the design, each ruled;
+all kept.
+
+1. **One flip test, `detail::quad_flips`** (`lawson.hpp`): `must_flip`'s
+   quad test moved out so the cavity asks the same predicate; R7's "the
+   exact `incircle` in the frame that `legalise_around` uses" as one
+   function. T-P1 then compares two users of one predicate and cannot see
+   a fault inside it; `600b2acb`'s two named-cavity cases (a cocircular
+   point on the integer path, and test_mesh_lawson's L4b quad on the
+   frame-collinear branch) cover that. The fix forces it inline
+   (`gnu::always_inline`), which GCC and Clang, the CI compilers, accept.
+2. **`foot_on` takes the reach and the end distance apart**
+   (`constraint_foot.hpp`). 20c-1's paths pass δ for both, so they are
+   unchanged (gain −1 equals 20c-1 bit for bit); R8 passes no reach limit,
+   since the walk has already found the edge, and δ_q (half a cell) for
+   the ends, as R8 says.
+3. **`GainJudge::capped` skips atan2 when every corner clears θ by
+   1e-9 of |cross| + |dot|.** A relative margin, with no length scale: it
+   is at most about 8 × 10⁻⁸° of angle, far above the rounding of the test, atan2
+   and the degree conversion (about 10⁻¹⁴ relative), and θ is at most 35°
+   (the CLI). A corner within the margin falls back to the exact call, so
+   the capped value is unchanged; checked as byte-identical meshes at gain
+   0 and −1 on Lagan, Numedalslagen, the tile and the quarter
+   (`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:139-163`).
+4. **`pays` stops once the answer is known.** The worst angle before only
+   falls as more old triangles are read, so the bar `old + P − s` only
+   falls; a yes at any point is the final yes. Same answers, as item 3's
+   check shows.
+5. **The cavity's buffers are reused** inside one `improve` call (the
+   judge is a local of the serial pass): no state outlives the call or is
+   shared between threads. The value-returning `quality_cavity` stays for
+   T-P1.
+6. **`@perf`'s method**: the first head run of `bench.py` printed
+   `REGRESSION` against the single base run before it; the pooled table
+   of 3 pairs counts, as in 20c-1's acceptance. The tile series' slow
+   parallel scans from r14 on fell on all three builds in turn and are
+   left in the medians; the scan is not under the limit. Why gain 0 leaves
+   more to refinement is answered by the counts (ruling 8's "Why"); no
+   profile is needed for the ruling.
+7. **Open item (b) of the pins ruling needed no commit.** The three CLI
+   pins it named pass at the default gain 0, with
+   `test_cli_start_quality.py` and `test_cli_start_quality_gain.py` (57
+   passed, `@architect`, on this worktree's installed extension), so no
+   test needed `--start-quality-gain -1`; `@tester` checks it again on
+   the code under review.
+
 ### 20c-3
 
 Python only: a two-polygon coverage of one class merges to one; the
@@ -2050,6 +2151,15 @@ at `69f37d1c`
 benchmark accepted, −0.3 to −2.0 %, meshes byte-identical to master's;
 gates pass at the same figures.
 
+**20c-2, done.** First acceptance of `600b2acb`
+(`docs/benchmarks/2026-10-07/20c-2/README.md@fa136aa7`): every mesh gate
+passes; start quality about +60 %, Numedalslagen's whole run +3.2 %, the
+split phase over 2 %. Re-time after the speed fix `65ae0792`
+(`docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04`):
+meshes byte-identical to `600b2acb`'s, the 1 m benchmark accepted, the
+whole run −0.04 % and −0.08 %, the split phase met per split (ruling 8),
+start quality +23 % and +20 % (reported, not gated).
+
 ## LOC
 
 Counted in `CLAUDE.md` §2's unit.
@@ -2064,6 +2174,7 @@ Counted in `CLAUDE.md` §2's unit.
 | | **total** | **~150** |
 | 20c-1 built | `python3 tools/count_loc.py c074f900 69f37d1c`: `constraint_foot.hpp` 77, `quality.hpp` 20, `refine.hpp` −21, `refine_points.hpp` 53, `strip_scan.hpp` 0, `bindings/core.cpp` 8, `_core.pyi` 6, `cli.py` 3, `edge_strip.py` 3, `final_check.py` 7, `run_record.py` 7 | **163** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
+| 20c-2 built | `python3 tools/count_loc.py 41bda81a 65ae0792`: `quality.hpp` 102, `lawson.hpp` 3, `constraint_foot.hpp` 1, `refine.hpp` 6, `bindings/core.cpp` 5, `_core.pyi` 5, `cli.py` 29, `run_record.py` 6. Over the estimate by 47: the plumbing is 51 against ~30, mostly `cli.py`'s option declaration (the help text alone is five lines), its refusals (non-finite, above 10, without `--tolerance`, without `--dem`: pin 8, three checks the estimate did not see) and the wiring into the run and its rows; the speed fix `65ae0792` adds 27 to `quality.hpp` (the atan2 skip, the early stop, the reused buffer), which no estimate had; the green step's `quality.hpp` was 75 against ~80 | **157** (green 130, `count_loc.py 41bda81a 600b2acb`) |
 | 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
 
 On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
@@ -2108,7 +2219,26 @@ question 7 first and question 6 second): "1-3 default. 4 must wait". So:
    revised limit ("The split-phase limit, judged after the fix"); no
    follow-up moves it into the parallel scan.
 
-The two questions as asked:
+Ola, 2026-10-07, on question 8, asked by the main session after `@perf`'s
+re-time `5b0afe04`: "Yes to both" (the other item was an unrelated push).
+So:
+
+8. **20c-2's split phase is judged per split** (the default yes), because
+   its meshes differ from 20c-1's; recorded in "The split-phase limit for
+   20c-2, judged per split", where it is met.
+
+Question 8 as asked: "20c-2's time limit. The step that splits lines is
+over the 2 % limit when measured in seconds: +16 % on Lagan and +4 % on
+Ljungan. Measured per split, it's faster: −0.8 % and −2.6 %. The new rule
+produces a different mesh, with 17 % and 7 % more splits, and that
+accounts for the extra seconds. Should we judge it per split, as we did
+for 20c-1? Default: yes, and @architect writes that ruling down before the
+code review." "Ljungan" there is a slip for Numedalslagen, the catchment
+`@perf` measured; the figures are Numedalslagen's. (For 20c-1 the limit
+was revised to point 2 against master, not judged per split; the question
+stands on its figures.)
+
+Questions 6 and 7 as asked:
 
 - Question 6: **Your outline rule: on by default?** 20c-3 builds it either way, as
    `--features-outline-snap METRES`; this question sets only its default.
