@@ -25,8 +25,13 @@ only), so all 16 planted faults are killed; ctest 886 of 886, pytest
 check that `CI result` is green; whether these have happened is shown by
 `gh pr list --head worktree-soft-quality --state all` and `gh pr checks
 <pr>`, not by this file;
-**20c-2** (still to build) the soft criterion and a split of the
-constraint line that blocks the walk to a quality point, after 20c-1;
+**20c-2** the soft criterion and a split of the
+constraint line that blocks the walk to a quality point, after 20c-1
+(branch `worktree-soft-quality-2` off master `41bda81a`; Ola: "build
+20c-2 and 20c-3"): red tests `100f5a09` (`@tester`), their pins ruled
+(below, "Pins ruled for 20c-2's red step"; R7 gains a slack and R8 needs
+the feet on), next `@tester`'s amendment for pins 3 and 4, then
+`@developer` (green);
 **20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
 default at 5 m (question 6, ruling 6), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
@@ -1062,8 +1067,23 @@ point, not a void carve point), Inside its triangle, not yet footed:
   the exact `incircle` in the frame that `legalise_around` uses. The new
   triangles are the candidate joined to the cavity's boundary edges. Let
   `old` be the smallest angle among the cavity's triangles and `new` among
-  the new ones, both capped at θ. **Insert only if `new ≥ old + P`**;
-  otherwise skip (`skipped_no_gain`).
+  the new ones, both capped at θ. **Insert only if `new ≥ old + P − s`**,
+  with the slack s = 10⁻⁶°; otherwise skip (`skipped_no_gain`).
+  **Why the slack** (pins ruling, 20c-2's red step, observation (a)): a
+  foot on a constrained edge keeps the angle at that edge's end exactly
+  (the same two rays), so where that angle is the cavity's worst, `new`
+  equals `old` in exact arithmetic and a bare `≥` is decided by the foot's
+  last bit, which a fused multiply-add can move between the CI platforms.
+  The slack puts the threshold away from that equality. Scale: the
+  difference rounding makes is about a few ulp of the largest coordinate
+  over the foot's distance to the end (≥ δ_q, half a cell): four ulp on a
+  grid of 2¹⁷ cells a side (the São Francisco basin spans about 1 550 km
+  north to south, about 5.2 × 10⁴ cells at 30 m) give
+  1.3 × 10⁻⁸°, so s has a margin of about 75 there; derived, not
+  measured, and checked on no real input yet (the largest fixture is 33
+  cells a side). A candidate that lowers the
+  worst angle by less than s is accepted; R7 only refuses, so accepting
+  more cannot break termination.
 - **P = 0° by default** (Ola's ruling, question 2): a candidate is refused
   only if it would leave its neighbourhood's worst angle lower than before.
   M5: 12.6 % and 16.8 % fewer triangles than 20c-1 at about the same sliver
@@ -1085,9 +1105,14 @@ point, not a void carve point), Inside its triangle, not yet footed:
   `RefineOptions` and the binding carry it; the CLI passes 0.
 - **CLI**: `--start-quality-gain DEG`, default 0; `-1` restores the hard
   rule (bit-identical to 20c-1). Refused: non-finite, above 10.
-  `elevation_source` adds `start quality gain 0 deg` (ASCII, 20 R11).
-- Reported: `start_quality_points_skipped` keeps its total; a new row
-  "Tries that would not have improved the angles" in `--stats`.
+  The setting is an input row of the run record and `--stats`,
+  `start_quality_gain_deg`, beside `start_min_angle_deg` (printed `0` by
+  default). (This line first said `elevation_source` gains a clause;
+  increment 25 replaced that sentence by such rows, so it is not written.)
+- Reported: `start_quality_points_skipped` keeps its total, which holds
+  R7's refusals; a new row `start_quality_points_without_gain`, "Tries
+  that would not have improved the angles", in `--stats` and the record,
+  right after `start_quality_points_skipped`.
 
 ### R8. A quality point beyond a constraint line splits the line (Ola's yes, question 4)
 
@@ -1110,8 +1135,12 @@ point, not a void carve point), Inside its triangle, not yet footed:
 - **Not judged by R7's gain test**, as measured: the split answers the
   line, not the bad triangle alone, and the gain test would see only the
   two triangles beside e.
-- **Only with the soft criterion.** On exactly when R7 is (gain ≥ 0); gain
-  −1 turns both off and gives 20c-1's mesh bit for bit. Under the hard 25°
+- **Only with the soft criterion, and only with the feet.** On when R7 is
+  (gain ≥ 0) **and** `constraint_feet` is on (pins ruling, 20c-2's red
+  step, pin 4): the split puts a point on a line at a foot, and
+  `--no-constraint-feet` is the one switch that keeps every point off the
+  lines (R2.6, R5). M5's B was measured with the feet on, so the gate is
+  unchanged. Gain −1 turns both off and gives 20c-1's mesh bit for bit. Under the hard 25°
   rule the split costs +15 % (Lagan) and +51 % (Numedalslagen) triangles
   (M5), which is why it is not in 20c-1.
 - **Termination**: every split is at least δ_q from both ends of the
@@ -1122,8 +1151,9 @@ point, not a void carve point), Inside its triangle, not yet footed:
   and 0.0086° (20c-1: 0.00068°); triangles 7.5 % and 11.4 % under master's.
 - **The constraint stays the same set of lines**: `split_edge` keeps the
   bit and the mask on both halves (20 Q3's check), as for every foot.
-- Reported: a row "Land-cover and outline lines split to improve angles"
-  in `--stats` and the run record.
+- Reported: a row `start_quality_lines_split`, "Land-cover and outline
+  lines split to improve angles", in `--stats` and the run record, right
+  after `start_quality_points_snapped_to_lines`.
 
 ## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (ruled by Ola, question 6)
 
@@ -1792,19 +1822,176 @@ code review round 2 (`@reviewer`). The kills and the full runs are done
   edge: the foot of the node goes on that edge, not the midpoint; none when
   the foot is within δ_q of an end, on an outline edge with nothing beyond,
   or on a frozen edge; the constraint edges as a set of lines are
-  unchanged, bits and masks on both halves; with gain −1, no split.
+  unchanged, bits and masks on both halves; with gain −1, no split; with
+  the feet off, no split.
 - Mutants to kill: the cavity crossing a constrained edge (T-P1); an
   inexact incircle, a plain double determinant instead of the kernel's
   (T-P1, on a near-cocircular fixture); the foot's second seed missing
-  (T-P1); the acceptance test reversed or made strict (T-P2); the split at
-  the midpoint (LS1); the end check removed (LS1); R8 left on at gain −1
-  (LS1, T-P3).
+  (T-P1); the acceptance test reversed (T-P2); the slack dropped and the
+  test made strict, `new > old + P` (T-P2, the equality fixture); the split
+  at the midpoint (LS1); the end check removed (LS1); R8 left on at gain −1
+  (LS1, T-P3); R8 left on with the feet off (LS1). (The slack dropped with
+  `≥` kept is killed only where the platform's rounding puts `new` below
+  `old` on CF2's own edge with the feet on; a survivor there is recorded
+  with that reason, not chased.)
 
 Not mutation-critical:
 
 - **T-P3**: gain −1 is bit-identical to 20c-1; determinism as T6.
 - CLI: `--start-quality-gain` (refusals: non-finite, above 10), the new
   `--stats` rows and the record.
+
+#### Pins ruled for 20c-2's red step (`@architect`, 2026-10-07, on `100f5a09`)
+
+`@tester`'s red commit `100f5a09` (on master `41bda81a`) fixed eleven
+details the design left open and made three observations. Each is ruled
+here; "kept" means `@developer` builds to it as written. `@tester` built a
+throwaway prototype of R7 and R8 beyond its brief; its numbers (pin 10,
+observations (a) to (c), the box's 20.87° to 20.66°) are a prototype's, not
+measurements of built code, and nothing below rests on them alone.
+
+1. **Names and defaults.** `QualityOptions::min_gain_deg` and
+   `RefineOptions::min_gain_deg`, negative = off, default negative, set by
+   member; binding keyword `min_gain_deg`, default `-1.0`; outcome fields
+   `QualityOutcome::skipped_no_gain` and `line_splits`,
+   `RefineOutcome::quality_no_gain` and `quality_line_splits` (Python
+   `RefineOutcome.quality_no_gain`, `.quality_line_splits`). Kept: off by
+   default keeps every existing C++ and binding caller on 20c-1's output;
+   only the CLI turns it on (R7).
+2. **The cavity helper.** `terrain::mesh::detail::quality_cavity<K>(m, t,
+   on, p, f)` in `quality.hpp`, returning `QualityCavity{removed,
+   created}`: `removed` the cavity's slots, `created` the new triangles as
+   corner triples, counter-clockwise on (col, −row); `on` 0..2 is t's edge
+   (a split, the triangle across seeding too, constrained or not), 3 is
+   strictly inside; order free. Kept: it is R7's prediction as a function
+   of the mesh alone, which is what lets T-P1 compare it with
+   `legalise_around`'s result without the whole pass. `improve` asks it
+   for the point it is about to insert (node or R2's foot), after every
+   existing skip, and reads `created` only for angles.
+3. **Angles and rounding.** In the frame `improve` is given, (col · dx,
+   −row · dy), each capped at θ. **Changed:** R7 now accepts `new ≥ old +
+   P − s` with s = 10⁻⁶° (R7, "Why the slack"; observation (a) below), and
+   T-P2's "by more than rounding" is the same s. Tests that change, by
+   `@tester`, its own commit before green: `kRounding` in
+   `tests/cpp/unit/test_quality_gain.cpp` becomes 1e-6 with a comment
+   citing R7's slack; a new case, CF2's own edge (`own_edge()`) with the
+   feet on at gain 0: the first insertion is the foot (10, 0.99), within
+   1e-12 cells, it is accepted (`feet ≥ 1`, and `check_gain` holds on
+   every step); its premise asserts the foot's two new triangles hold
+   18.43° at B and at C (the foot is 10 cells from both B and C). The
+   equality fixture's comment names its mutant as "the slack dropped and
+   the test made strict". The developer names the slack as a constant in
+   `quality.hpp`; the test keeps its own literal.
+4. **R8 and `constraint_feet`.** Pinned by the tester as independent of
+   the feet. **Changed:** R8 runs when R7 is on **and** `constraint_feet`
+   is (R8, "Only with the soft criterion, and only with the feet").
+   `--no-constraint-feet` has kept every point off the lines on every
+   path since 20c-1 (R2.6, R5); R8 is a fourth such path. Tests that
+   change, same commit: in `test_quality_gain.cpp`, every LS1 case that
+   expects no split (near an end, outline, frozen, refused foot, gain −1)
+   passes `feet = true`, so that what refuses the split is the rule under
+   test and not the switch; "splits the line at the node's foot" runs with
+   the feet on only, and a new case "LS1: with the feet off, no split" on
+   `line_beyond()` at gain 0 asserts `line_splits == 0`,
+   `skipped_blocked ≥ 1` and e whole (kills "R8 left on with the feet
+   off"); "across the line fixture every insertion ... is the predicted
+   cavity" keeps both feet values but asserts `line_splits > 0` only with
+   the feet on and `== 0` with them off. The pinned-list comment at the
+   head of the file and the Python module docstring ("R8's split is on
+   exactly when the gain test is") say so. No other file changes: the
+   refine suite's scenes run with the feet on.
+5. **An R8 split is not a skip; a declined split counts once in
+   `skipped_blocked`.** Kept: that is today's count for a blocked walk, and
+   a split is an insertion.
+6. **Counts.** `quality_skipped` holds `quality_no_gain` (R7: the total is
+   kept); a line split counts in none of `quality_inserted`,
+   `quality_feet`, `inserted`; vertices = start + `quality_inserted` +
+   `quality_feet` + `quality_line_splits` + `inserted` (and, in `improve`,
+   start + `inserted` + `feet` + `line_splits`). Kept: each counter names
+   one kind of vertex, as 20c-1's pin 5 has it.
+7. **The recorder's hook.** The tests rely on `improve` asking the validity
+   callable at least once in every loop turn that inserts, before it
+   inserts. Kept as a contract of `improve`, and written here so a later
+   change does not break it silently: today it asks about every node
+   before the walk; R2 asks about the foot and R8 about its foot. An
+   insertion with no call before it would make the recorder see two
+   insertions as one, which `recorded`'s `REQUIRE(ok)` fails loudly.
+8. **`--start-quality-gain`.** Finite values up to and including 10
+   accepted, a negative one is the hard rule; refused: `nan`, `inf`,
+   `-inf`, `10.5`, `11`; refused without `--tolerance` and without `--dem`,
+   as `--start-min-angle` is. Kept: R7's "refused: non-finite, above 10",
+   and the same dependencies as the setting it qualifies.
+9. **Report rows.** Input row `start_quality_gain_deg` beside
+   `start_min_angle_deg`, printed `0` by default; result rows
+   `start_quality_points_without_gain` ("Tries that would not have
+   improved the angles") and `start_quality_lines_split` ("Land-cover and
+   outline lines split to improve angles"), integers in the record, not in
+   the mesh file. Kept. R7's `elevation_source` line was stale (increment
+   25 replaced that sentence by rows); R7 and R8 now say the rows and
+   where they go (R7's after `start_quality_points_skipped`, R8's after
+   `start_quality_points_snapped_to_lines`). The input row's wording,
+   which the tests do not pin: "Starting mesh: a point is added only if it
+   raises the smallest angle around it by at least this many degrees
+   (negative = always added)".
+10. **CF2's own-edge start through `refine`, feet off**: `quality_no_gain
+    == 1`, `quality_skipped == 1`, nothing inserted by the pass. Kept, and
+    not on the prototype's word: the start is one triangle with one bad
+    candidate, N = (10, 1); its three new triangles hold a sliver under 1°
+    against the old 18.43° (the case's premise in `test_quality_gain.cpp`
+    asserts that), far outside any slack; once refused, the queue is empty.
+11. **T-P3's digests**, recorded from `41bda81a` (master with 20c-1, the
+    red commit's parent, no 20c-2 production change) on the three scenes in
+    `tests/cpp/support/quality_gain_fixtures.hpp`, and the CLI digests
+    hashing integers only. Kept; never re-recorded. Integers only is right:
+    a foot's last bit can differ between the fused multiply-add leg and
+    the plain one.
+
+**Observations.**
+
+- (a) **A foot whose cavity's worst angle sits at its edge's end keeps it
+  exactly, so a bare `≥` is decided by rounding.** Accepted as a defect of
+  R7's text; fixed by the slack (pin 3). In CF2's own-edge case both the
+  angle at B (the same two rays) and the angle at C (the foot is 10 cells
+  from B and from C, so the triangle is isosceles) equal the old 18.43°.
+- (b) **R8's end check is nearly unreachable on grid nodes.** Kept in
+  R8 all the same: it is R8's termination argument (at most L / δ_q
+  splits per segment), not an optimisation, and real starts are not grid
+  nodes (CORINE and outline vertices lie anywhere), as the test's own
+  `line_near_end()` fixture, with off-node vertices, reaches it.
+- (c) **On outline-only starts the prototype refused nothing at gain 0.**
+  Noted; no design change. The whole-run T-P1/T-P2 case requires
+  refusals over the Q7 ring and the nine-node mesh together for each
+  combination of frame, gain and feet; if at green a gain-0 combination
+  finds none, that is a premise for `@tester` to repair (another fixture),
+  not a reason to change the code.
+
+**The box tests at `--start-quality-gain -1`.** Kept. The amended tests in
+`tests/python/test_cli_start_quality.py` (the `--stats` count, NoData, and
+the void tests and their `pass_node` fixture) are about increment 20's pass
+when it inserts, and about what NoData does to an inserted node; at gain 0
+the box's two candidates are refused, so they would fail or check
+nothing. `-1` is the hard rule bit for bit (T-P3), so their claims stand
+unchanged; the default on the box is covered by
+`test_cli_start_quality_gain.py::test_the_default_changes_the_box`.
+
+**Open items.**
+
+- (a) **`@tester`, before green, its own commit:** pins 3 and 4's test
+  changes above.
+- (b) **Existing CLI pins at default flags, after green, by `@tester`, its
+  own commit, only those that fail.** The CLI's default gain is now 0, so
+  a digest recorded before 20c-2 at the default start-quality settings
+  may change. Each such test gets `--start-quality-gain -1` (beside
+  `--no-constraint-feet` where it has it), never a new digest, and the
+  commit lists each with its reason, as 20c-1's open item (b). Likely, by
+  reading: `test_cli_constraint_feet.py::test_no_constraint_feet_matches_increment_20`
+  and `::test_the_default_leaves_the_10m_quarter_circle_alone`, and
+  `test_refine_golden.py::test_the_cli_default_flags_digest_is_unchanged_by_node_sampling`.
+- (c) **The TSan job, by `@developer`, in the green commit.**
+  `test_quality_gain_refine` joins both lists in
+  `.github/workflows/main.yaml`'s `tsan` job (the build targets and the
+  run list, which must match). `test_quality_gain` does not; it starts no
+  threads.
 
 ### 20c-3
 
