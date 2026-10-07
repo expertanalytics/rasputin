@@ -1,13 +1,15 @@
 # Increment 31: binary output by default
 
-**Status:** designed (`@architect`, 2026-10-07, on `2764ef71`); design
-approved in review round 2. Red step `e3fe391a` (`@tester`, tests only), and
-its four pins ruled (Rulings, P1-P4). Next: `@developer` (green), then code
-review. The worktree's `.venv` holds a plain copy of `tin_engine` and a copied
-`_core` (no editable install), so `@developer` copies each changed
-`src_python/tin_engine` file into `.venv/lib/python3.*/site-packages/tin_engine/`
-before running `pytest`. One small PR,
-Python only. Not refine or mesh code, so no `@perf` acceptance run (section 7).
+**Status:** implemented, as built in section 9; next: code review.
+Designed by `@architect` on `2764ef71`, design approved in review round 2.
+Red `e3fe391a` and `9008811c` (`@tester`, tests only; its four pins ruled
+in Rulings, P1-P4), green `29bc5ad3` (`@developer`). Question 1 is still
+open with Ola; what was built is its default, both formats binary. The
+worktree's `.venv` holds a plain copy of `tin_engine` and a copied `_core`
+(no editable install), so each changed `src_python/tin_engine` file is copied
+into `.venv/lib/python3.*/site-packages/tin_engine/` before running `pytest`.
+One small PR, Python only. Not refine or mesh code, so no `@perf` acceptance
+run (section 7).
 
 ## 1. What Ola asked
 
@@ -207,6 +209,37 @@ only the option's help and the README; Typer prints the docstring in
    text), and `tests/python/test_cli_mesh_vtk.py@e3fe391a:140-154`
    (`test_the_help_shows_binary_as_the_default` matches the two-default
    sentence instead of one `[default: ...]` marker).
+   *Still open with Ola after the green step.* What was built is the
+   default, one flag with both formats binary (section 9); a "no" now also
+   reopens the green code, `src_python/tin_engine/cli.py@29bc5ad3:632-638`
+   and the `mesh` description at `:759-760`.
+
+## 9. As built
+
+Green `29bc5ad3`, on red `e3fe391a` and its citation fix `9008811c`.
+
+- **D1, D2.** `src_python/tin_engine/cli.py@29bc5ad3:632-638`: the
+  `--binary/--ascii` pair now defaults to `True`, for `.vtk` and both `.ply`
+  files alike. The composition root is unchanged; it already passes the flag
+  to each writer.
+- **D3.** The help text is D3's sentence, and `COLUMNS=100 rasputin mesh
+  --help` ends the option's entry with `[default: binary]`. The `mesh`
+  description says Ruling P1's sentence, wrapped over two docstring lines
+  (`src_python/tin_engine/cli.py@29bc5ad3:759-760`).
+- **D4.** The writers keep `binary=False` and `ascii=True`; one sentence each
+  says `rasputin mesh` writes binary unless given `--ascii`
+  (`src_python/tin_engine/io/vtk_legacy.py@29bc5ad3:14-15`,
+  `src_python/tin_engine/io/ply.py@29bc5ad3:14-15`).
+- **D5.** `README.md`'s output section says both formats are binary by
+  default and `--ascii` writes text you can read with `head`.
+- **Production lines: 4 net** (6 added, 2 removed;
+  `python3 tools/count_loc.py 2764ef71 29bc5ad3`), against the estimate of
+  about 1. The overrun is formatting: with the longer help string the
+  option's inner line would be 118 characters, over ruff's 100, so
+  `ruff format` spreads the `binary` parameter over seven lines where it had
+  three. No logic beyond the flipped default.
+- **Tests:** the whole suite passes on `29bc5ad3`
+  (`.venv/bin/python -m pytest -q`: 5690 passed, 17 skipped).
 
 ## Rulings
 
