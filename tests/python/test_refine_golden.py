@@ -201,6 +201,8 @@ def test_the_cli_default_flags_digest_is_unchanged_by_node_sampling(
 @needs_codecs
 def test_the_kartverket_stride_vtk_is_unchanged_by_node_sampling(tmp_path: Path) -> None:
     out = tmp_path / "x.vtk"
-    code, output = invoke("mesh", "--dem", str(KARTVERKET), "--out", str(out))
+    # `--ascii` since increment 31 made binary the default: the hash was
+    # recorded from the text file, and a hash of it still pins the same mesh.
+    code, output = invoke("mesh", "--dem", str(KARTVERKET), "--ascii", "--out", str(out))
     assert code == 0, output
     assert hashlib.sha256(out.read_bytes()).hexdigest() == GOLDEN_STRIDE_VTK
