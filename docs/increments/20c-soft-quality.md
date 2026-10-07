@@ -42,12 +42,18 @@ limit for 20c-2, judged per split"); the green step and the fix ruled
 help promised a line split that `--no-constraint-feet` turns off; fix
 round: red `9f54bc95` (`@tester`, the help-text test), green `50544838`
 (`@developer`, the help reworded, the atan2-skip comment corrected); the
-kill table copied in ("Mutation round for 20c-2"). **Next: `@reviewer`'s
-code review round 2**;
-**20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
-default at 5 m (question 6, ruling 6), after
-20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and questions 5 to 8, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
+kill table copied in ("Mutation round for 20c-2"). Code review round 2
+(`@reviewer`, on `d4ac395f`): approved; PR #214, in the merge queue;
+**20c-3** the repair of land-cover borders that should be one (on at
+5 cm, ruling 9, question 9), input coarsening, and Ola's outline rule, on
+by default at 5 m (question 6, ruling 6), after 20c-2 (branch
+`worktree-soft-quality-3` from 20c-2's head `68cc96b6`; Ola: "build 20c-2
+and 20c-3"): **designed, brought up to date 2026-10-08** for ruling 9 and
+for what 20c-2 and 30d (PR #215) changed ("Design of PR 20c-3"; M7 the
+probe that set the tolerance). **Next: `@developer`'s shapely 2.2 commit,
+then `@tester`'s red step.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
+("Ola's rulings" below); question 9 open, designed on its default. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -68,7 +74,11 @@ triangle count. What is left is the input's own geometry (millimetre
 CORINE segments), which only a tolerance on the input removes: 20c-3's
 2 m simplification takes the slivers to 151 and 32, and Ola's outline
 rule (land-cover borders within 5 m of the catchment outline put onto it)
-to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6).
+to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6). Ola ruled
+that a mismatch such as Lagan's 1 cm slit is an error to repair (ruling 9):
+20c-3 first joins land-cover borders that come within 5 cm of each other,
+which closes the slit and removes nearly all of the land cover's
+millimetre edges (M7; not yet measured on a mesh).
 
 ## Prior art: legacy and literature
 
@@ -114,6 +124,18 @@ to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6).
   which is what Ruppert's size bound needs. The noder already snap-rounds at
   `--snap-spacing` (increment 5a; default 1 mm, 16 U6); shapely's
   `set_precision` does the same through GEOS.
+- **Coverage cleaning** (Davis 2025, "Coverage Cleaning in JTS",
+  http://lin-ear-th-inking.blogspot.com/2025/04/coverage-cleaning-in-jts.html;
+  ported to GEOS 3.14 as `CoverageCleaner`, PostGIS `ST_CoverageClean`,
+  shapely 2.2 `coverage_clean`): a set of polygons meant to be a partition
+  is noded with a snapping noder, its faces rebuilt, overlaps given to a
+  neighbour, and gaps narrower than a width (the diameter of the largest
+  inscribed circle) given to the neighbour with the longest shared border.
+  20c-3's repair is this, unchanged, with one tolerance for both the
+  snapping and the gap width, and run on the polygons clipped to the read
+  region. The snapping noder is not iterated snap rounding (Halperin and
+  Packer, above), so it gives no lower bound on the input's feature size,
+  and 20c-3 claims none.
 - **Garland and Heckbert 1995** (greedy insertion for terrain): the
   tolerance-driven refinement this project builds on (increment 14). It has
   no quality criterion; thin triangles are a known by-product.
@@ -149,6 +171,16 @@ $
 No file (exit status 1). The legacy triangulated every DEM point with CGAL
 and had no quality pass (increment 20's prior art). **Nothing is carried
 across.**
+
+For 20c-3's repair (ruling 9), the same check on its subject, run
+2026-10-08:
+
+```sh
+$ git grep -l -i -E "coverage|gap_width|clean_coverage|snapping" legacy-archive -- legacy
+$
+```
+
+No file (exit status 1). Nothing is carried across.
 
 ## The problem, measured
 
@@ -512,8 +544,9 @@ after the 2 m simplification, which keeps all three corners; the 1 cm snap
 of round 2 moved its two near corners by under a centimetre and lowered it
 to 0.006608°. Neither the snap nor `coverage_simplify` closes a gap
 between polygons; only a gap-closing step would (GEOS's coverage cleaning,
-GEOS 3.14; the venv's shapely has GEOS 3.13), and Ola ruled no
-gap-closing step (ruling 5, 2026-10-07). It is one of M1's two slivers
+GEOS 3.14; the venv's shapely has GEOS 3.13). Ruling 5 first said no
+gap-closing step; Ola reversed it (ruling 9), and 20c-3's repair closes
+this gap (M7). It is one of M1's two slivers
 forced by an input angle (M1, last point).
 
 **20c-3's worst triangle on Lagan is made by the simplification**
@@ -549,7 +582,8 @@ polygons, not filtered to the domain), 1 362 and 71. Meshes on 20c-2:
 | the same, with the guard | 742 831 | 151 | 19 | 0.007080° | 1 013 557 | 32 | 4 | 0.012446° |
 
 The guard lifts Lagan's worst angle only to the gap's own forced
-0.007080°, which no step can pass under ruling 5, removes no sliver on
+0.007080°, which no step could pass while ruling 5 stood (ruling 9 now
+repairs the gap, M7), removes no sliver on
 either catchment, and leaves Numedalslagen's worst triangle where it is
 (its 3.6 mm edge is not an edge of any land-cover ring, so the guard does
 not reach it; not traced further). For about 15 lines it buys 6 % of one
@@ -691,6 +725,52 @@ step, `--features-outline-snap`), on by default at 5 m (Ola, question 6,
 ruling 6).** Its tests, gate and lines below are the same under either
 default.
 
+### M7. Gaps in the land cover, and the repair's tolerance (`@architect`, 2026-10-08, for ruling 9)
+
+One short probe, to set the repair's tolerance (S, below). Shapely 2.2.0
+with GEOS 3.14.1 in a scratch venv (the repository's venv has 2.1.2 with
+GEOS 3.13, which lacks `coverage_clean`); AC power; one run each, no
+warm-up. The CORINE polygons that reach the domain, moved vertex by vertex
+into the computation CRS (Lagan: the GeoJSON in EPSG:3035 to EPSG:3006;
+Numedalslagen: the GeoPackage, already in EPSG:25833). The scripts are kept
+in `../rasputin_scratch/20c-prototype/m7/` (`gaps.py`, `snap.py`,
+`clip.py`; `clip.py` as kept is the hull version, which `sed` made from the
+first). A gap is a hole in the union of those polygons; its width is twice
+its largest inscribed circle's radius. Mesh figures were not measured: no
+C++ build was allowed in this round, and the meshes are `@perf`'s
+measurement of the built code.
+
+| | Lagan | Numedalslagen |
+|---|---|---|
+| polygons reaching the domain; vertices | 2 790; 1 006 098 | 1 611; 1 056 147 |
+| gaps touching the domain | 1, the slit (M5): width 1 cm, 0.40 m² | 0 |
+| gaps of any width between 0 and 100 m, anywhere | that one | none |
+| finding the gaps (union and widths) | 0.83 s | 0.79 s |
+| `coverage_is_valid` (the old design's check) | 15.76 s | 15.84 s |
+| ring edges under 10 cm, counted per polygon | 356 | 464 |
+| `coverage_clean`, gap width 1 m, snapping GEOS's default | 3.11 s; 0.40 m² moved; edges under 10 cm 347; the slit's two corners still 1.005 cm apart | 4.99 s; 461.88 m² moved; 38 |
+| the same, snapping 0 | 2.92 s; 0.40 m²; 357; corners apart | 4.40 s; 0.00 m²; 464 |
+| the same, snapping 1 cm | 3.11 s; 0.64 m²; 41; corners apart | 4.95 s; 494.70 m²; 51 |
+| the same, snapping 5 cm | 3.10 s; 0.72 m²; 5; **the corners one vertex** | 4.90 s; 1 085.05 m²; 1 |
+| clipped to the domain's convex hull grown by 100 m (30d's read region) first: vertices; clip; `coverage_clean` at 5 cm and 5 cm | 328 372; 0.36 s; 0.75 s | 407 753; 0.34 s; 0.76 s |
+| the same, clipped to the domain grown by 100 m (mitred) | 310 748; 3.41 s; 0.65 s | 290 567; 1.01 s; 0.54 s |
+
+Every cleaned coverage passed `coverage_is_valid`, and at gap widths of
+0.1, 1 and 5 m the results were the same (no gap between 5 cm and 100 m to
+fill). The other 5 690 and 2 877 holes in each union are 100 m wide or more
+and lie outside the domain: the land cover of polygons that do not reach it.
+
+- **The slit is the only gap on either catchment**, and 5 cm is the
+  smallest snapping distance probed that joins its two open corners.
+- **GEOS's default snapping distance is not zero**: on Numedalslagen, which
+  has no gap, it moved 462 m². 20c-3 passes S explicitly.
+- **The check costs more than the repair.** `coverage_is_valid` took 15.8 s,
+  `coverage_clean` 3 to 5 s, and after the clip to the read region about
+  0.75 s.
+- **The hull is the cheaper region to clip to**: a convex region with few
+  vertices, 0.35 s, against 1 to 3.4 s for the mitred domain on these
+  outlines (Lagan's is a staircase).
+
 ## What Ola gets
 
 Measured with `--stats`' own quality table (share under 1°, worst angle) and
@@ -705,6 +785,7 @@ the output independent of `threads`:
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
 | PR 20c-3 with Ola's outline rule at 5 m (its default, ruling 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
+| PR 20c-3 with the repair at 5 cm too (its default, ruling 9, question 9) | not yet measured on a mesh; on the land cover (M7) the slit is closed and its 1 cm edge gone, and land-cover edges under 10 cm fall from 356 to 5 | | | not yet measured; edges under 10 cm 464 to 1 | | |
 
 20c-1's row is `@perf`'s measurement of the built code, the same
 triangle counts, sliver counts and worst angles as M5's prototype
@@ -734,8 +815,9 @@ on Lagan, the 1 cm edge that closes a 1 cm wide gap between two CORINE
 polygons in the source data, seen from outside the gap, whose nearest
 vertex the 2 m simplification drops (0.088° in the source, 0.006697°
 after; M5, "Which triangle sets the worst angle"). The gap itself forces
-0.007080° on any mesh, so no step short of closing it (ruled out, ruling
-5) gets Lagan above about 0.007°, and keeping that vertex was measured to
+0.007080° on any mesh of the input as given, so no step short of closing
+it gets Lagan above about 0.007°; 20c-3's repair now closes it (ruling 9,
+M7), measured on the land cover but not yet on a mesh, and keeping that vertex was measured to
 gain only about 6 % (0.006697° to 0.007080°; M5). On Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
 before (and 20c-1 to master's), and promise no fixed angle.
 
@@ -1167,56 +1249,230 @@ point, not a void carve point), Inside its triangle, not yet footed:
   lines split to improve angles", in `--stats` and the run record, right
   after `start_quality_points_snapped_to_lines`.
 
-## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (ruled by Ola, question 6)
+## Design of PR 20c-3: input repair and coarsening (rulings 1 and 9), and the outline rule (ruling 6)
 
-Python, in the feature reader, after the polygons are moved to the
-computation CRS (vertex by vertex, as today) and before they are clipped
-and the chains are built; never in `_core` (the I/O boundary, `CLAUDE.md`
-§2). Three independent steps, in this order, each with its own flag:
+Brought up to date by `@architect`, 2026-10-08, on branch
+`worktree-soft-quality-3` (from 20c-2's approved head `68cc96b6`), for
+Ola's ruling 9 (the CORINE slit is an input error to repair; it amends
+ruling 5) and for what 20c-2 and increment 30d (PR #215) changed.
 
-1. **Same-class borders dropped** (`--features-merge-same-class`, on
-   whenever a class map is used, Ola's ruling; `--no-features-merge-same-class`
-   turns it off): under a class map, neighbouring polygons of one class
-   are unioned (shapely `coverage_union` per class), so a border with no
-   change of class is no constraint. Removes population 3's lines (E12).
-2. **A horizontal tolerance** (`--features-tolerance METRES`, default 0,
-   off, Ola's ruling): the polygons that reach the domain through
-   `coverage_simplify` at that tolerance (`simplify_boundary=False`, as
-   measured), with no 1 cm snap first (round 3:
-   it breaks the coverage, M6 (a)); polylines are left as given (a line
-   network is not a coverage, and nothing here measured them). Before
-   simplifying, `coverage_is_valid` over those polygons (the filter to
-   the domain is needed: Numedalslagen's CORINE as read for the domain's
-   box, 8 017 polygons, fails the check over 3 polygons that do not reach
-   the domain, and the 1 611 that do pass it); if they do not
-   form a coverage, the run stops with a plain error that says how many
-   polygons and how many metres of border do not match, and that
-   `--features-tolerance 0` reads them as given (both test catchments
-   pass this check). The record and `--stats` say the tolerance and the
-   vertex counts before and after.
-3. **Ola's outline rule** (`--features-outline-snap METRES`; on by
-   default at 5 m whenever features are given, Ola's ruling 6; 0 turns it
-   off): M6 (c)'s four
-   steps on the polygons' rings, against every ring of the domain polygon
-   as the mesh gets it (after increment 22's reduction, if any), in the
-   computation CRS. M6 (c)'s rounding (its step 2) then rounds once more: a
-   multiple of D within D/2 of an outline vertex goes to the vertex (the
-   prototype did not), so two distinct points the rule puts on the
-   outline are more than D/2 apart unless both are outline vertices. The
-   result is linework: rings cut where they leave the outline, the
-   stretches on it dropped, each piece keeping its polygon's class. The
-   record and `--stats` say D, the borders moved and the land-cover area
-   that changed class. D's scale: metres in the computation CRS, measured
-   at 5 and 10 m on DEM cells of 10 and 31 m (M6 (d)); about half a cell
-   or less is what was measured.
+**Speed judgment** (Ola's rule for every design): **yes, this changes
+the work a run does.** It adds a Python stage to every run with a land-cover
+source (the clip and the repair: 1.1 s per catchment in M7's probe, about
++6 % of Lagan's 17 s run (30d's figure) and +17 % of Numedalslagen's 6.6 s),
+and the outline rule (on by default) changes the mesh and so refinement's
+work; the outline rule itself has not been timed. It also drops the old
+design's coverage check, which M7 timed at 15.8 s on each catchment. So the
+main session runs a short timed check before the push: at most 15 minutes,
+Lagan and Numedalslagen once each with the defaults, against master, and
+the `features clip` row of `--stats` read; not a sweep.
+
+### Where it sits
+
+Python, in the feature reader (`feature_input.py`), never in `_core`
+(the I/O boundary, `CLAUDE.md` §2). It is a **land-cover stage** between
+reading a source and clipping its lines to the domain, and it works on one
+source at a time: a source is one coverage, and two sources (say CORINE and
+a lake file) are not one partition, so a gap between their polygons is not
+repaired.
+
+- **Which features.** The polygons of a source whose class map names a
+  code system (`ClassMap.codes`, 16c R5: `corine`, `corine-water`,
+  `clc18_kode`), after the map's drops. Lines, and polygons under a map
+  without codes (`property`), go through today's path unchanged.
+- **In the computation CRS.** Each polygon is moved whole, vertex by
+  vertex, as `_take` already does for the label polygon (`polygon`), and
+  the stage works on those. A land-cover source therefore always takes the
+  "moved first, then pre-clipped exactly in the DEM's CRS" route (16b R5's
+  second route, `w = 0`, exact), never the geographic pre-clip before the
+  move: the repair has to see whole borders in one CRS.
+- **Clipped to the read region first.** Each moved polygon is intersected
+  with `region` (16b R5's region in the DEM's CRS, which `_take` already
+  builds: since 30d, PR #215, the domain's convex hull grown by 100 m; before
+  30d merges, the domain grown by 100 m). The region is convex and lies at
+  least 100 m outside the outline, so the cut edges it makes are outside the
+  domain and farther than any outline-rule D (below) from the outline; only
+  polygonal parts are kept. M7: this takes Lagan's land cover from 1 006 098
+  to 328 372 vertices and the repair from 3.1 s to 0.75 s (the clip 0.36 s).
+  The label polygon of each feature is then the clipped, repaired one; the
+  region holds the domain, so every triangle's label inside it is found as
+  before.
+- **Steps, in this order**, the first four on the polygons, the last
+  turning them into lines:
+  1. **Repair** (`--features-repair METRES`, default 0.05, ruling 9 and
+     question 9): `shapely.coverage_clean(polygons, snapping_distance=S,
+     gap_width=S)`.
+  2. **Same-class borders dropped** (`--features-merge-same-class`, on;
+     `--no-features-merge-same-class` turns it off; ruling 1 (a)):
+     neighbouring polygons of one class are unioned (`coverage_union` per
+     class), so a border with no change of class is no constraint. Removes
+     population 3's lines (E12). A merged polygon keeps the first fid of its
+     class in source order.
+  3. **Horizontal tolerance** (`--features-tolerance METRES`, default 0,
+     off; ruling 1 (b)): `coverage_simplify` at that tolerance,
+     `simplify_boundary=False`, as measured (M5, M6), no 1 cm snap (M6 (a)).
+     The clip changes the border chains it simplifies only where a border
+     crosses the read region's edge, 100 m or more outside the domain;
+     the gates' margins are taken to cover that (not measured).
+  4. **Ola's outline rule** (`--features-outline-snap METRES`, default 5
+     whenever features are given; 0 turns it off; ruling 6): M6 (c)'s four
+     steps, unchanged below.
+  5. **Lines**: each polygon's rings (or the outline rule's linework) go
+     through today's pre-clip and clip to the domain.
+- **Off.** With `--features-repair 0 --no-features-merge-same-class
+  --features-tolerance 0 --features-outline-snap 0` the stage is skipped
+  entirely and the features are byte for byte today's (the off switch the
+  gates use). Any one of the four on runs the stage, with the repair at
+  whatever S says; S = 0 still runs `coverage_clean` at zero snapping and
+  zero gap width, which makes the coverage valid for steps 2 and 3 and on
+  a valid coverage moves nothing (M7: 0.00 m² on Numedalslagen).
+- **Recorded.** Input rows: `features_repair_m`,
+  `features_merge_same_class`, `features_tolerance_m`,
+  `features_outline_snap_m`. Result rows: the land-cover vertices after the
+  clip and after the stage, "Land-cover vertices before and after clean-up";
+  for the outline rule, the borders moved and the land-cover area that
+  changed class (as designed before). A `features clean-up` sub-row under
+  `features clip` in the timing table, so the timed check reads the stage's
+  own seconds.
+- **Dependency.** `shapely>=2.2` in `pyproject.toml` (2.2.0 is on PyPI;
+  its wheels carry GEOS 3.14, which `coverage_clean` needs). Not a new
+  dependency, and not on `CLAUDE.md` §2's list. CI installs with `pip
+  install -e .`, which already resolves to the newest shapely; local
+  venvs (2.1.2 with GEOS 3.13 today) must be upgraded. The bump is its own
+  commit by `@developer` before `@tester`'s red step, with the full pytest
+  run on it; any test that changes from the bump alone goes to `@architect`
+  before the red step, not into 20c-3's tests.
+
+### Step 1: the repair (ruling 9)
+
+**What it does.** GEOS's coverage cleaner (Davis 2025; prior art below)
+nodes the polygons' linework with a snapping noder at distance S, rebuilds
+the faces, gives each overlap to a neighbour, and fills each gap narrower
+than S (twice its largest inscribed circle's radius) into the neighbour
+with the longest shared border. The result is a valid coverage: where two
+neighbours' borders came within S of each other, they are now one border.
+
+**The tolerance S: two borders are the same border when they come within S
+of each other.** One number for both of the cleaner's tolerances (the
+snapping distance and the gap width), because they answer the same
+question for a partition that is meant to have no gaps. **Default 5 cm**
+(question 9, default yes), set by M7:
+
+- Lagan's slit has its two open ends 1.005 cm apart. Snapping at 1 cm (with
+  a 1 m gap width, M7) fills the gap but leaves its two corners apart, so
+  its 1 cm closing edge stays a constraint; snapping at 5 cm makes the
+  corners one vertex and the two 79 m borders one.
+- Below 100 m wide, the two catchments' land cover has no other gap (M7):
+  Lagan one (the slit), Numedalslagen none. So any gap width from 5 cm to
+  100 m fills the same gap here. The snapping distance moves more as it
+  grows (1 cm: 0.64 m² and 495 m²; 5 cm: 0.72 m² and 1 085 m²; nothing
+  larger was probed), so 5 cm is the smallest distance probed that joins
+  the slit's corners.
+- What else 5 cm changes, measured: ring edges shorter than 10 cm go from
+  356 to 5 (Lagan) and from 464 to 1 (Numedalslagen); this is population 1,
+  M2's millimetre vertex pairs, the same kind of error (borders that should
+  be one, millimetres apart). Land cover moved: 0.72 m² and 1 085 m² of
+  5 548 to 6 441 km², about 2 × 10⁻⁷ of the area.
+
+Scale: S is in metres in the computation CRS; it assumes a land-cover source
+mapped at a scale where centimetres carry no meaning (CORINE: 1:100 000,
+25 ha minimum mapping unit, 100 m minimum width) and DEM cells of 10 to 31 m;
+checked on the two catchments' CORINE, about 1 million vertices each before
+the clip, the largest inputs probed. On a source mapped to centimetres it
+would be too large; S is a flag for that reason.
+
+**A real gap wider than S stays.** It keeps its two borders as two
+constraints, and the land cover there has no class, as today. Step 3 does
+not simplify its sides (`simplify_boundary=False` keeps edges on a
+coverage's boundary, and a gap's sides are on it; RP6 below checks this).
+A gap open to the read region's edge is not a face of the cleaner's, so by
+its design (Davis 2025) the gap width does not fill it and only the
+snapping acts there; not tested. To be open there, a gap must run at least
+100 m past the outline; none was found (M7).
+
+**Against ruling 1 (b) (simplification off by default).** The repair is not
+the 2 m simplification: it moves a vertex only onto another border within
+5 cm, and it is on because Ola called that kind of mismatch an error
+(ruling 9). The simplification at a distance remains Ola's flag, off.
+
+**How it meets the other steps.**
+
+- **Coarsening (step 3).** Repair first: `coverage_simplify` needs a valid
+  coverage (M6 (a): one that is not breaks), and a repaired slit is an
+  inner border, simplified like any other. M5's mechanism, the 2 m
+  simplification dropping the vertex beside the slit's 1 cm edge (0.088° to
+  0.006697°), has no edge left to act on. The old design's coverage check
+  before simplifying (`coverage_is_valid`, with its plain error) is
+  dropped: `coverage_clean`'s output is a valid coverage by its contract,
+  and the check cost 15.8 s per catchment (M7).
+- **The outline rule (step 4).** S (5 cm) is a hundredth of D (5 m), and the
+  repair puts no point on the outline, so the rule's rounding (points it
+  places are an outline vertex or more than D/2 apart) is unchanged. Repair
+  first, so the rule never sees two copies of one border.
+- **The same-class merge (step 2).** `coverage_union` per class needs a
+  valid coverage; the repair gives one.
+- **The noder.** Unchanged; its `--snap-spacing` (1 mm) stays, and the
+  noder's failure at coarser spacing (M4, its own ROADMAP row) is not
+  needed.
+
+**Not guaranteed.** The snapping noder is not iterated snap rounding:
+nothing bounds the input's local feature size below by S, and a short ring
+edge can survive (on Lagan, 5 of the 356 edges under 10 cm). The gates below ask for what was
+measured, not for a minimum edge length.
+
+### Steps 2 to 4
+
+As designed in rounds 1 to 6, with three changes: the first from the
+repair, the other two from 30d:
+
+- **Step 3's coverage check is gone** (above). `--features-tolerance`
+  with `--features-repair 0` is allowed: step 1 then runs at zero
+  tolerance, which makes the coverage valid.
+- **The outline rule never buffers the outline.** 30d found GEOS's buffer
+  of Lagan's raster-traced outline (a staircase) to be 98 % of decode. The
+  rule finds the border vertices within D of the outline with an
+  `STRtree` of the outline's segments (`query(..., predicate="dwithin",
+  distance=D)`) and moves each to its nearest point on the nearest
+  segment; no `buffer`, no `snap`. D is refused at or above 100 m (the read
+  region's margin), so the clip's cut edges stay out of the rule's reach.
+- **Against the domain as the mesh gets it** (after increment 22's
+  reduction, if any), every ring; 30d grows only the read region, never
+  the domain itself, so this is unchanged.
+
+Step 4 in full (unchanged): M6 (c)'s four steps on the polygons' rings, in
+the computation CRS. M6 (c)'s rounding (its step 2) then rounds once more:
+a multiple of D within D/2 of an outline vertex goes to the vertex (the
+prototype did not), so two distinct points the rule puts on the outline are
+more than D/2 apart unless both are outline vertices. The result is
+linework: rings cut where they leave the outline, the stretches on it
+dropped, each piece keeping its polygon's class. D's scale: metres in the
+computation CRS, measured at 5 and 10 m on DEM cells of 10 and 31 m (M6
+(d)); about half a cell or less is what was measured.
+
+### What 20c-2 built, against what 20c-3 assumed
+
+- **R7, R8 and pin 4.** 20c-3's figures were measured on the prototype with
+  20c-2's switches (`run5.sh`: soft criterion at gain 0 and the line split,
+  feet on), which is what 20c-2 built (R8 only with the feet on, pin 4).
+  The built 20c-2 matches the prototype on Lagan (437 slivers) and is 2
+  under it on Numedalslagen (296 against 298). Nothing in 20c-3 depends on
+  R7 or R8 beyond the mesh it is measured on; the gates below are measured
+  against 20c-2 as built (master after PR #214).
+- **Ruling 8** (the split phase judged per split) is a time limit on C++
+  refinement; 20c-3 changes no C++ and has no `bench.py` run. Its time is
+  the speed judgment above.
+- **30d (PR #215, open when this was written)**: the read region is the
+  domain's convex hull grown by 100 m, so more polygons are read than
+  before. The clip to that region (above) is what keeps the repair's cost
+  down; the old design's "filter to the polygons that reach the domain" (for
+  the coverage check) is gone with the check. If 20c-3 merges before 30d,
+  the region is the domain grown by 100 m, and the clip is the same code.
 
 The domain outline itself is not touched (increment 22 has its own
-reduction). About 60 lines for steps 1 and 2 and about 70 for step 3.
-Measured in M3 to M6 on Lagan and Numedalslagen (the Norwegian CORINE
-rewritten as GeoJSON for round 3, M6). The merge changes the default mesh
-of every run with a class map, and step 3 changes every run with
-features, since its default is on (ruling 6), so 20c-3's off switch for
-the gate is all three flags off, `--features-outline-snap 0` among them.
+reduction). Measured in M3 to M7 on Lagan and Numedalslagen. The repair and
+the merge change the default mesh of every run with a land-cover map, and
+step 4 every run with features, so 20c-3's off switch for the gate is all
+four off.
 
 ## PRs and gates
 
@@ -1224,7 +1480,7 @@ the gate is all three flags off, `--features-outline-snap 0` among them.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
-| 20c-3 | input coarsening, and the outline rule (on by default at 5 m, ruling 6) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on the default. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
+| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 5 cm, ruling 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs** (not yet measured on a mesh, M7): every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle has its smallest angle between two constraint edges at the slit's far corner (413 677.295 6 331 664.081). `@perf` reports the measured figures, and `@architect` then raises these thresholds to them with a margin (never lowers them) |
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -2179,10 +2435,67 @@ comparison cannot see it.
 
 ### 20c-3
 
-Python only: a two-polygon coverage of one class merges to one; the
-partition stays valid and its area changes by less than tolerance ×
-perimeter; polygons that do not form a coverage stop the run with the
-plain error, and pass at tolerance 0; flags off are a no-op.
+Python only, all in `tests/python/`, on hand-made coverages of a few
+polygons in a projected CRS (no data files). Before the red step,
+`@developer`'s commit raises shapely to 2.2 ("Dependency" in the design);
+`@tester` runs on it.
+
+**The repair** (`test_feature_repair.py`, new; not mutation-critical: the
+geometry is GEOS's, and what 20c-3 owns is which polygons go in, with which
+tolerance, in which order, and each of those is an assertion below):
+
+- **RP1, the slit**: the M5 slit in local coordinates (two polygons that
+  share a far vertex, their borders 79 m long and ending 1 cm apart, the
+  wedge closed by a 1 cm edge of a third polygon) at S = 0.05: the union of
+  the result has no hole; the two long borders are one (the two polygons'
+  intersection is a line of length 79 m ± 1 mm); no ring edge shorter than
+  0.05 is left; the area that changed polygon (the summed symmetric
+  differences) is the wedge's plus the two thin triangles that the moved
+  corner sweeps on the third polygon's borders, within 1 mm². At S = 0:
+  the wedge is still a hole, and nothing moved. (Checked by `@architect`
+  on GEOS 3.14.1 with the third polygon 50 m tall on each side: no hole,
+  shortest edge 40.9 m, shared border 79.13 m, 0.4456 m² moved for a
+  0.3957 m² wedge; at S = 0 one hole, 0 m² moved. A third polygon only
+  1 cm thick collapses to empty, so the fixture must not be one.)
+- **RP2, a real gap wider than S**: a strip 2 m wide between two polygons,
+  closed at both ends by two more (a strip open at an end is not a hole),
+  at S = 0.05: still a hole of the same area (to 1e-9 relative), every
+  polygon equal (`shapely.equals`) to the input.
+- **RP3, nothing to repair**: a valid coverage with no near miss under S:
+  every polygon equal (`shapely.equals`) to the input, and the vertex count
+  unchanged.
+- **RP4, one source at a time**: two sources, each one polygon, with a
+  1 cm gap between them: the gap stays.
+- **RP5, land cover only**: a source under the `property` map (no codes)
+  whose polygons have the same 1 cm slit gives the same lines as today.
+- **RP6, the order**: RP1's coverage with one more vertex on the forest
+  side's long border, halfway along and 4.5 mm off the straight line, run
+  with `--features-tolerance 2`: that vertex is not in the result. Repair
+  first, the two borders are one inner border, which `coverage_simplify`
+  simplifies; simplified first, the border is a side of the gap, on the
+  coverage's boundary, which `simplify_boundary=False` keeps, and the
+  repair then snaps it onto the other border, where it stays. The test
+  asserts that premise by calling shapely in the reverse order itself.
+  (Checked by `@architect` on GEOS 3.14.1, RP1's fixture with the vertex
+  at (39.565, 0.0045): repair first, gone; simplified first, kept.)
+- **RP7, the clip**: a polygon much larger than the domain: its label
+  polygon after the stage lies within the read region and covers the
+  domain; the feature's lines inside the domain are those of today's path.
+- **RP8, all off**: with the four switches off (`--features-repair 0
+  --no-features-merge-same-class --features-tolerance 0
+  --features-outline-snap 0`), `open_features` gives a `FeatureSet` equal
+  to today's on the CORINE fixtures already in `tests/python/` (fids,
+  masks, codes, lines `equals_exact` at 0, label polygons).
+- **CLI**: `--features-repair` defaults to 0.05 whenever a land-cover map
+  is used (question 9's default); refused: negative, non-finite; the input
+  row `features_repair_m` and the vertex rows in `--stats` and the record;
+  the `features clean-up` timing sub-row present under `features clip`.
+
+**Steps 2 and 3**: a two-polygon coverage of one class merges to one and
+keeps the first fid; the partition stays valid and its area changes by less
+than tolerance × perimeter; `--features-tolerance 2` with
+`--features-repair 0` runs and gives a valid coverage (the coverage check
+and its plain error are gone with the old design's step 2).
 
 The outline rule (invariant-critical, mutation testing required: it
 rewrites input borders); a CLI test pins its default, 5 m whenever
@@ -2207,6 +2520,10 @@ it off:
   two moved points longer than twice their distance plus 2 D) is joined
   straight, not round the inlet.
 - **OR6** D = 0 is a no-op, byte for byte.
+- **OR7** D refused at or above 100 m (the read region's margin), and the
+  rule never calls `buffer` on the outline (the rule's own function, called
+  directly with `shapely.buffer` patched to raise, on a staircase outline
+  of 5 000 or more steps, 30d's case).
 - Mutants to kill: the cut not in a fixed order (OR2); the vertex dropped
   at a rounded point (OR4); the stretches on the outline kept (OR1); the
   rounding removed (OR4); the inlet test removed (OR5).
@@ -2224,7 +2541,9 @@ the timings.
 Refine time within noise or better (M3: the whole refine is under 1.4 s of
 the 15 to 90 s runs; 20c-2 inserts a third fewer quality nodes). Plus the
 gate runs above, and the split-phase limit ("The split-phase limit, judged
-after the fix"). 20c-3 is Python only and needs no `bench.py` run.
+after the fix"). 20c-3 is Python only and needs no `bench.py` run; its
+gate runs are `@perf`'s, and its time is the main session's short timed
+check ("Speed judgment", in its design).
 
 **20c-1, done.** First acceptance at `34b546c4`
 (`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482`): gates pass, refine
@@ -2259,9 +2578,10 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
 | 20c-2 built | `python3 tools/count_loc.py 41bda81a 65ae0792`: `quality.hpp` 102, `lawson.hpp` 3, `constraint_foot.hpp` 1, `refine.hpp` 6, `bindings/core.cpp` 5, `_core.pyi` 5, `cli.py` 29, `run_record.py` 6. Over the estimate by 47: the plumbing is 51 against ~30, mostly `cli.py`'s option declaration (the help text alone is five lines), its refusals (non-finite, above 10, without `--tolerance`, without `--dem`: pin 8, three checks the estimate did not see) and the wiring into the run and its rows; the speed fix `65ae0792` adds 27 to `quality.hpp` (the atan2 skip, the early stop, the reused buffer), which no estimate had; the green step's `quality.hpp` was 75 against ~80 | **157** (green 130, `count_loc.py 41bda81a 600b2acb`) |
 | 20c-2 review fix | `python3 tools/count_loc.py 41bda81a 50544838`: `cli.py` 30 (+1, the reworded help string); the rest as above | **158** |
-| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
+| 20c-3 (to 2026-10-07) | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | ~130 |
+| 20c-3 (2026-10-08, with the repair) | `feature_input.py`: the land-cover stage (polygons collected per source, clipped to the read region, repaired, merged, simplified; the coverage check gone) ~45; the outline rule (an `STRtree` of the outline's segments, no buffer) ~70; `cli.py`, `run_record.py`, `stats.py` (four flags, of which `--features-repair` is new, their refusals, the input and vertex rows, the timing sub-row) ~35; `pyproject.toml` is not counted | **~150** |
 
-On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
+On the worst overrun seen (+60 %), 240, 175 and 240. Each under 700.
 
 ## Ola's rulings
 
@@ -2290,6 +2610,8 @@ with the default no: "defaults on all four". So:
 5. **No gap-closing step.** Gaps between neighbouring land-cover polygons
    stay as the source has them; the thin triangle such a gap forces stays
    in the mesh (M5), and the worst-angle gates do not ask more of 20c.
+   **Reversed by ruling 9** (2026-10-07): this was the main session's
+   default, taken under "defaults on all four", not a call Ola made.
 
 Ola, 2026-10-07, on questions 7 and 6 (the main session's list put
 question 7 first and question 6 second): "1-3 default. 4 must wait". So:
@@ -2321,6 +2643,19 @@ code review." "Ljungan" there is a slip for Numedalslagen, the catchment
 `@perf` measured; the figures are Numedalslagen's. (For 20c-1 the limit
 was revised to point 2 against master, not judged per split; the question
 stands on its figures.)
+
+Ola, 2026-10-07 (08:19 UTC), on ruling 5: "I don't recall making the
+call that we should not fix errors in the input? I consider the cap in the
+CORINE-data an error. The edges should have been shared." And, three
+minutes later: "yes to the morning check proposals, build 20c-2 and
+20c-3". So:
+
+9. **Errors in the input are repaired** (amends ruling 5). Lagan's 1 cm
+   slit (M5), where two land-cover borders that should be one end 1 cm
+   apart, is an error in the source, and 20c-3 repairs it: borders of one
+   land-cover source that come within a tolerance of each other become one
+   border, and a gap narrower than it goes to a neighbour (20c-3's step 1,
+   `--features-repair`). The tolerance's default, 5 cm, is question 9.
 
 Questions 6 and 7 as asked:
 
@@ -2358,7 +2693,21 @@ Questions 6 and 7 as asked:
 
 ## Questions for Ola
 
-None open.
+9. **How close must two land-cover borders be to count as one?** Your
+   ruling: the CORINE slit is an error, and the borders should have been
+   shared. 20c-3 repairs it by joining borders of one land-cover file that
+   come within a set distance of each other, and filling any gap narrower
+   than that distance. Measured on Lagan's and Numedalslagen's CORINE (M7):
+   the slit is the only gap in either; its two open ends are 1 cm apart,
+   so 1 cm fills the gap but leaves its 1 cm closing edge, and 5 cm joins
+   the ends. At 5 cm the repair also joins the millimetre-apart vertex
+   pairs elsewhere (edges under 10 cm: 356 to 5 on Lagan, 464 to 1 on
+   Numedalslagen), and moves 0.7 m² and 1 085 m² of land cover in all.
+   Cost: about 1.1 s per catchment. **Default: yes, 5 cm, on whenever a
+   land-cover map is used** (`--features-repair 0` turns the joining
+   off). The other choices: 1 cm (fills the gap, keeps its 1 cm edge), or
+   a larger distance (the same gaps here, more vertices moved; not probed
+   beyond 5 cm); only the default and the CLI test that pins it change.
 
 ## Not in scope
 
@@ -2372,8 +2721,10 @@ None open.
   neighbour by overlay): reaches 4 to 7 % of 20c-3's slivers and makes
   millimetre segments of its own (M6 as of `a3a2b7ec`, round 2; superseded
   by M6's second form, which covers it).
-- Closing gaps between land-cover polygons (Lagan's 1 cm slit, M5): ruled
-  out by Ola (ruling 5, 2026-10-07).
+- Closing gaps between land-cover polygons of two different sources, or
+  gaps wider than `--features-repair` (none between 5 cm and 100 m wide
+  on either catchment, M7). Gaps narrower than it are 20c-3's step 1 (ruling
+  9, which reversed ruling 5).
 - Quality during refinement (increment 20's C3): ruled out of 20c by Ola
   (question 3).
 - A size bound or sizing field (increment 14's U2).
