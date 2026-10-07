@@ -1,10 +1,10 @@
 # Harness h19: the after-commit gate checks the tree that was committed
 
-Status: red `3907dcce`, pins ruled (§8); next `@developer` (green). On
-`worktree-commit-gate` off `5c41238`. One PR, about 45 net
-production lines (§6), in one governed file,
-`.claude/hooks/gates_after_commit.py`, plus one new test file. Ola's ruling
-in §7.
+Status: green `577087ac` + `f9e4648f`; code review approved in round 2; next
+the push, on Ola's yes. On `worktree-commit-gate` off `5c41238`. One PR, 67
+net production lines against about 45 (§6; why, under Review), in one
+governed file, `.claude/hooks/gates_after_commit.py`, plus one new test
+file. Ola's rulings in §7 and under Review.
 
 What this is. Row T1 of the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
@@ -398,3 +398,37 @@ h19 design review round 1 (@reviewer, 5c412383..abeff234 on worktree-commit-gate
 h19 design review round 2 (@reviewer, abeff234..80d1627b on worktree-commit-gate, docs only, 0 counted lines): APPROVED. Both blocking items from round 1 are fixed. B1: the design now names `sys.path.append` and says why `insert(0, ...)` is not used (docs/increments/h19-commit-gate-tree.md@80d1627b:84-93). B2: both of Ola's approvals are quoted with their context (docs/increments/h19-commit-gate-tree.md@80d1627b:12-21). Ola's ruling on question 1 is recorded in §7. S1-S6 are taken. 2 suggestions: S1 round 1's guard_push line numbers, S2 test 9's missing module must fail in a fresh process.
 
 `@architect` answer to round 2: nothing blocking. S1 noted: round 1's `guard_push.py` citation should read `.claude/hooks/guard_push.py@c83dfe0e:42-44` (the `sys.path.append` lines), not `:32-35`; the round 1 line stays word for word. S2 done in the red step `3907dcce`: test 9's missing-module half runs in a fresh, isolated interpreter (`python -I`). The red step's nine assumptions are ruled in §8.
+
+h19 code review round 1 (@reviewer, 5c412383..577087ac on worktree-commit-gate: design, red 3907dcce, pins 047c3dc5, green 577087ac; 67 counted lines against an estimate of about 45): APPROVED. Nothing blocks. The tests have not changed since the red step. The hook appends `tools/` to `sys.path` and imports `shell_scan` inside a `try`, setting it to `None` if the import fails (.claude/hooks/gates_after_commit.py@577087ac:35-41). The trigger and the directory-following match §3 and the §8 pins, with one exception (S1). Not pushed, so CI has not run yet; the job that runs this file is the harness job, "Python harness tools" (`pytest --no-cov -m harness`, Python 3.12). 4 suggestions: S1 `-C` after `--work-tree`, S2 a false "gates ran" sentence, S3 stale status lines, S4 formatter-clean.
+
+h19 code review round 2 (@reviewer, 577087ac..f9e4648f on worktree-commit-gate: red be6007ac adds 9 test cases, green f9e4648f changes 4 lines in the hook, 0 net counted lines this round, 67 for the whole PR against an estimate of about 45): APPROVED. Both suggestions are fixed and nothing else changed. S1: after `--git-dir` or `--work-tree`, a later `-C` no longer resolves the directory (.claude/hooks/gates_after_commit.py@f9e4648f:99-105). S2: the "could not be read" note is now added only when every entry resolved to a work tree (.claude/hooks/gates_after_commit.py@f9e4648f:134-135). The branch is not pushed, so CI has not run. It is ready for the recording commit and for Ola's decision on the push.
+
+`@architect` record of the code review. Ola's ruling on round 1, 2026-10-07
+10:44 UTC (as `tools/brief.py` checked it against the session transcript):
+"yes to default",
+answering whether to fix S1 and S2 before the push. Both were fixed, red
+`be6007ac`, green `f9e4648f`, and round 2 approved them. S1: a `-C` after
+`--git-dir` or `--work-tree` resolved the directory, though §3.2 says either
+option leaves it unknown. S2: an unreadable line, with the session's
+directory in no work tree, said the gates ran there, though none ran. S3
+(stale status lines) is fixed by this recording commit: the Status line at
+the top and ROADMAP row h19. Left as noted, not fixed:
+
+- S4: `ruff format` would change three hunks in the hook. The hook is a
+  governed file, and `ruff format` excludes `.claude/**` (`pyproject.toml`,
+  `[tool.ruff.format]`), so no gate fails on it; reformatting it waits for
+  its own yes from Ola.
+- Round 2's suggestion 1: when `shell_scan` cannot be imported and the
+  session's directory is in no work tree, S2's fix drops the note that says
+  why (`committed_trees` returns the trees without the notes unless every
+  entry is a `Path`). The hook still prints NOT CHECKED naming that
+  directory and exits 2; only the cause that §8 pin 7 asks for is lost, and
+  only when both faults meet.
+
+Over the §6 estimate (about 45; 67 counted by `tools/count_loc.py 5c412383
+f9e4648f`), as the diff shows: the text-test fallback for an unreadable line
+and its two cause strings (§8 pin 7), `GIT_TAKES_ARG` copied from
+`guard_push.py` so that neither hook imports the other, `pushd` and `popd`
+and the first-unknown-word rule in the helper `step`, the S1 flag, and
+`run_gates` split out of `main` so that each tree gets its own headed block
+(§8 pin 4). §6 priced none of these.
