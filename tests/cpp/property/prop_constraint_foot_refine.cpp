@@ -202,6 +202,29 @@ TEST_CASE("CF3: with the neighbour touched earlier in the round the oracles hold
     REQUIRE(refine_digest::digest(run(d, s, kTol, true, threads)) == refine_digest::digest(ref));
 }
 
+TEST_CASE("CF3: a node within the cap but beyond eps of the neighbour's edge goes in as itself, not as a foot",
+          "[refinement][constraint_foot][CF3]") {
+    // R3 with 69f37d1c's search order: the search to the cap (half a cell)
+    // finds P-Q 0.3 below N, and the search must then be rerun at eps(N). On
+    // the bump, G at N is sqrt(2) m per m (a 1 m step over each 1 m side), so
+    // at tolerance 0.35 m eps = 0.35 / sqrt(2) = 0.247 cells: P-Q is beyond
+    // it, and N goes in as a DEM node with nothing on P-Q at its foot. Kills
+    // "the search to the cap only, never rerun at eps", which 20b's F3 caught
+    // only through two quads 1e-11 m inside their circles (rounding).
+    namespace rd = terrain::refinement::detail;
+    constexpr double tol = 0.35;
+    const auto d = dem();
+    const auto s = start();
+    const double eps = rd::foot_epsilon(d, terrain::mesh::LatticeVertex{kNRow, kNCol}, tol);
+    REQUIRE(eps < 0.3);                               // P-Q is beyond eps of N ...
+    REQUIRE(0.3 < rd::foot_cap(d.geometry()));        // ... and within the cap
+    const auto out = run(d, s, tol, true);
+    REQUIRE(out.ok());
+    REQUIRE(cfo::vertex_at(d.geometry(), out, kN, 0.0).has_value());
+    REQUIRE_FALSE(cfo::vertex_at(d.geometry(), out, kFoot).has_value());
+    section_d(d, s, out, tol);
+}
+
 // ------------------------------------------------------------------ T3 and the off switch
 
 TEST_CASE("CF3 T3: a features start on rough ground, feet on, holds the section D oracles",
