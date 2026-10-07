@@ -1,8 +1,12 @@
 # Increment 31: binary output by default
 
-**Status:** designed (`@architect`, 2026-10-07, on `2764ef71`); design review
-round 1 answered (section 5's byte-identity claim corrected, three tests added
-to the red commit). One small PR,
+**Status:** designed (`@architect`, 2026-10-07, on `2764ef71`); design
+approved in review round 2. Red step `e3fe391a` (`@tester`, tests only), and
+its four pins ruled (Rulings, P1-P4). Next: `@developer` (green), then code
+review. The worktree's `.venv` holds a plain copy of `tin_engine` and a copied
+`_core` (no editable install), so `@developer` copies each changed
+`src_python/tin_engine` file into `.venv/lib/python3.*/site-packages/tin_engine/`
+before running `pytest`. One small PR,
 Python only. Not refine or mesh code, so no `@perf` acceptance run (section 7).
 
 ## 1. What Ola asked
@@ -69,6 +73,14 @@ same per-number cost. (Question 1 below.)
 Typer prints the default itself: today's `rasputin mesh --help` ends the
 line with `[default: ascii]`, and after the flip it reads `[default: binary]`.
 
+The `mesh` command's own description is printed on the same help page, and
+says the old default in words (`src_python/tin_engine/cli.py@2764ef71:755`,
+"Text is the default for both formats."). That sentence becomes:
+
+    Both formats are binary by default; ``--ascii`` writes text you can read.
+
+(Ruling P1; red test 3 checks the old sentence is gone.)
+
 **D4. The writers' own defaults stay.** `write_vtk(binary=False)` and
 `write_ply(ascii=True)` are library defaults the CLI overrides explicitly;
 flipping them would churn `test_io_vtk_legacy.py` and `test_io_ply.py` (their
@@ -77,7 +89,7 @@ docstrings get one sentence each saying `rasputin mesh` writes binary unless
 `--ascii` (increment 31), so the "ASCII by default" ruling text there is not
 read as the command's behaviour.
 
-**D5. Docs.** `README.md:82` ("Both formats are text by default; `--binary`
+**D5. Docs.** The `mesh` docstring sentence of D3, and `README.md:82` ("Both formats are text by default; `--binary`
 writes packed records.") becomes "Both formats are binary by default; `--ascii`
 writes text you can read with `head`." Nothing in `INSTALL.md` or
 `project_structure.md` names the default (`git grep -n -i -e ascii -e
@@ -157,6 +169,13 @@ leaving the flag out and makes each one name its flag:
 On `2764ef71` this finds only `test_cli_mesh_landcover.py:293`. No mutation
 round: a one-line default is not an invariant-critical suite.
 
+*Note for the next default change:* grep the command's own docstring too, not
+only the option's help and the README; Typer prints the docstring in
+`--help`. This design missed `src_python/tin_engine/cli.py@2764ef71:755`, and `@tester` found it
+(ruling P1). For this repository:
+
+    git grep -n -i -e 'is the default' -e 'by default' -- src_python README.md
+
 ## 7. Cost, `@perf`, LOC
 
 - **Production lines:** about +1 net (`cli.py`: the default and the help
@@ -180,11 +199,40 @@ round: a one-line default is not an invariant-critical suite.
    `[default: ...]` marker, so the help states the two defaults in words and
    test 3 matches that sentence. A few more production lines, still far under
    the limit.
+   On the red commit `e3fe391a`, a "no" changes these tests:
+   `tests/python/test_cli_mesh_vtk.py@e3fe391a:129-138`
+   (`test_ply_is_binary_by_default` goes back to text),
+   `tests/python/test_cli_mesh.py@e3fe391a:107-112`
+   (`test_both_files_are_binary_by_default`, the `.ply` pair, goes back to
+   text), and `tests/python/test_cli_mesh_vtk.py@e3fe391a:140-154`
+   (`test_the_help_shows_binary_as_the_default` matches the two-default
+   sentence instead of one `[default: ...]` marker).
 
 ## Rulings
 
-(none yet)
+Pins of the red step `e3fe391a` (`@tester`), ruled by `@architect`,
+2026-10-07. All four stand.
+
+- **P1. The `mesh` description loses "Text is the default".** Upheld. The
+  help test (`tests/python/test_cli_mesh_vtk.py@e3fe391a:140-154`) also asserts
+  that sentence (`src_python/tin_engine/cli.py@2764ef71:755`) is gone from
+  `--help`; D3 and D5 missed it. The new wording is set in D3:
+  "Both formats are binary by default; ``--ascii`` writes text you can read."
+  `@developer` writes exactly that sentence. A docstring line, so no
+  production-line cost.
+- **P2. The help test sets `COLUMNS=100`.** Upheld: without it the width of
+  the caller's terminal decides whether Rich cuts the option names, and the
+  test would pass or fail by terminal. 100 columns is a test pin, not a product
+  setting.
+- **P3. The `.vtk` default test also checks that the raw third line is
+  `BINARY`,** beside `read_vtk`'s encoding. Upheld: it checks the bytes
+  directly, as section 6 item 1 states it, so it does not depend on the reader.
+- **P4. A third stale docstring updated:** the module docstring of
+  `tests/python/test_cli_mesh_vtk.py@e3fe391a:1-7` (lines 3-7 describe the
+  pair's default). Upheld; section 5 should have listed it with the other two.
 
 ## Review
 
 Design review round 1 (@reviewer, 2026-10-07): CHANGES REQUESTED on 2764ef71..ad91b5dd (docs only, 0 net production lines by tools/count_loc.py): two byte-for-byte golden tests hash the default text output, contrary to section 5 (/Users/skavhaug/projects/rasputin/tests/python/test_refine_golden.py@2764ef71:185, /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_refine.py@2764ef71:134), and the ascii case of /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_landcover.py@2764ef71:293 would quietly become a second binary case.
+
+Design review round 2 (@reviewer, 2026-10-07): APPROVED on ad91b5dd..09cbee96 (docs only, 0 net production lines by tools/count_loc.py): round 1's two findings and four suggestions are answered in sections 5, 6 and 8; round 1's first two citations were wrong and are corrected here: the golden tests are at /Users/skavhaug/projects/rasputin/tests/python/test_refine_golden.py@2764ef71:202-206 and /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_refine.py@2764ef71:212-219, and the land-cover citation /Users/skavhaug/projects/rasputin/tests/python/test_cli_mesh_landcover.py@2764ef71:293 stands.
