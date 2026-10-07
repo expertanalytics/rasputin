@@ -1,4 +1,4 @@
-"""Red tests for `tools/new_worktree.py` (h18, T4).
+"""Tests for `tools/new_worktree.py` (h18, T4).
 
 The spec is `docs/increments/h18-worktree-and-merge-tools.md` §3, and the
 tests are its §3.6, numbered here as there. No network, no uv, no C++ build:
@@ -57,6 +57,10 @@ class NewTable:
     - `worktree`: both modules from `<wt>/src_python`, `_core` from `<wt>/.venv`;
     - `cli-main`: the package from the worktree, `tin_engine.cli` from `<main>`;
     - `main`: everything from the main checkout (a venv of another checkout).
+
+    `<py> -m pybind11 --cmakedir` answers `CMAKEDIR` while `pybind11` is true,
+    and exit 1 (no module) otherwise; a successful `uv pip install` whose
+    arguments name `pybind11` (a version pin too) makes it true, whichever other packages it names.
     """
 
     main: Path
@@ -66,6 +70,7 @@ class NewTable:
     cmake_version: Answer = field(default_factory=lambda: Answer(0, "cmake version 4.1.2\n"))
     install: Answer = field(default_factory=Answer)
     installed: bool = False
+    pybind11: bool = True
 
     def __call__(self, argv: list[str], cwd: Path | None) -> Answer:
         name, rest = program(argv), argv[1:]
@@ -77,6 +82,8 @@ class NewTable:
                 return Answer()
             if rest[:2] == ["pip", "install"]:
                 self.installed = self.install.returncode == 0
+                if self.installed and any(w.startswith("pybind11") for w in positionals(rest[2:])):
+                    self.pybind11 = True
                 return self.install
         if name == "cmake":
             if rest == ["--version"]:
@@ -95,6 +102,8 @@ class NewTable:
             if rest == ["-m", "mypy", "--version"]:
                 return Answer(0, "mypy 1.18.2 (compiled: yes)\n")
             if rest == ["-m", "pybind11", "--cmakedir"]:
+                if not self.pybind11:
+                    return Answer(1, "", f"{argv[0]}: No module named pybind11\n")
                 return Answer(0, CMAKEDIR + "\n")
             if rest == ["--version"]:
                 return Answer(0, "Python 3.14.7\n")
@@ -477,6 +486,27 @@ def test_existing_repairs_a_venv_that_runs_another_checkout(
     outcome = run_tool(repos, ["--existing", str(wt)], capsys, table)
     assert outcome.code == 0, outcome.text
     assert kinds(outcome.recorder, checks=True) == ["check", "install", "check"]
+
+
+def test_existing_gets_pybind11_when_the_check_passes_but_build_pyext_is_missing(
+    repos: Repos, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Code review round 1, finding 1: the venv imports this worktree's code, so
+    the check passes, but it has no pybind11 and there is no build-pyext. The
+    run must end with pybind11 installed and build-pyext configured, not with a
+    refusal that names `--existing` again (which would fail the same way).
+    Either fix the reviewer offered passes: install because build-pyext is not
+    configured, or install pybind11 alone before the configure."""
+    wt = existing_worktree(repos, "alpha", venv=True, configured=False)
+    table = NewTable(repos.main, before="worktree", after="worktree", pybind11=False)
+    outcome = run_tool(repos, ["--existing", str(wt)], capsys, table)
+    assert outcome.code == 0, outcome.text
+    assert table.pybind11, "no successful install named pybind11"
+    configures = [a for a in outcome.recorder.argvs() if kind(a) == "configure"]
+    assert len(configures) == 1, configures
+    assert defines(configures[0])["pybind11_DIR"] == CMAKEDIR
+    assert (wt / "build-pyext" / "CMakeCache.txt").is_file()
+    assert "venv" not in kinds(outcome.recorder)
 
 
 def test_existing_sets_up_what_is_missing(repos: Repos, capsys: pytest.CaptureFixture[str]) -> None:

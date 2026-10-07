@@ -182,7 +182,7 @@ def load(checkout: Path, relative: str) -> ModuleType:
     """Import `<checkout>/<relative>` under a name of its own, or fail naming the file."""
     path = checkout / relative
     if not path.exists():
-        pytest.fail(f"{relative} does not exist (h18 red step: the tool is not written yet)")
+        pytest.fail(f"{relative} does not exist in the temporary checkout")
     name = f"h18_{path.stem}_{abs(hash(str(path)))}"
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None

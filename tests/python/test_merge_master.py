@@ -1,4 +1,4 @@
-"""Red tests for `tools/merge_master.py` (h18, T2).
+"""Tests for `tools/merge_master.py` (h18, T2).
 
 The spec is `docs/increments/h18-worktree-and-merge-tools.md` §4, and the
 tests are its §4.9, numbered here as there. No network, no C++ build, no real
@@ -552,6 +552,46 @@ def test_a_conflict_stops_with_exit_3_and_resolves_nothing(setup: Setup) -> None
     assert sorted(unmerged) == ["CLAUDE.md", "a.py"]
     assert gates_called(outcome) == []
     assert "add" not in outcome.recorder.git_subs()
+
+
+def test_a_conflict_against_a_master_newer_than_recorded_is_refused_not_stopped(
+    setup: Setup,
+) -> None:
+    """Code review round 1, suggestion "merge-head-check-at-stop" (§10 item 8):
+    another worktree's fetch moves the shared origin/master between the tool's
+    `rev-parse` and its `git merge`, and the merge conflicts. The tool must
+    refuse with §4.6's MERGE_HEAD message before inviting a resolution that
+    --continue would then refuse; the merge is left in progress for --abort."""
+    conflict_on_a_py_and_claude_md(setup)
+    recorded = setup.origin_master()
+    moved: list[str] = []
+
+    def fetch_elsewhere(argv: list[str]) -> Answer | None:
+        if git_sub(argv) == "merge" and not moved:
+            setup.repos.master_commit({"notes.txt": "master moved again\n"}, "a later master")
+            setup.repos.publish()
+            git(setup.repos.main, "fetch", "-q", "origin", "master")
+            moved.append(setup.origin_master())
+        return None
+
+    tool: ModuleType = load(setup.repos.main, TOOL)
+    recorder = Recorder(MergeTable(), fetch_elsewhere)
+    args = [str(setup.wt), "--persona", "developer", "--trailer", TRAILER]
+    outcome = invoke(tool, args, recorder, setup.capsys)
+    assert moved and moved[0] != recorded, "the probe never moved origin/master"
+    assert setup.merge_head.read_text().strip() == moved[0], "git merged the moved master"
+    line = refusal(outcome)
+    assert line.startswith("merge_master: MERGE_HEAD is ")
+    assert line.endswith("; stop and hand back")
+    found, merged = line.removeprefix("merge_master: MERGE_HEAD is ").split(
+        ", but this tool merged "
+    )
+    assert moved[0].startswith(found.strip())
+    assert recorded.startswith(merged.removesuffix("; stop and hand back").strip())
+    assert "stopped for conflict resolution" not in outcome.text
+    assert setup.merge_head.exists(), "the merge is left in progress for --abort"
+    assert head(setup.wt) == setup.old_head
+    assert gates_called(outcome) == []
 
 
 # --- 5. --continue after a conflict --------------------------------------------------------
