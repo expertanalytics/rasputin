@@ -1,0 +1,14 @@
+{"tin_engine": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-30d2/pkg/tin_engine/__init__.py", "shapely": "2.1.2", "geos": "3.13.1"}
+{"catchment": "numedalslagen", "step": "footprints (tile headers)", "runs": [0.24169608391821384, 7.0908572524786e-07, 2.0803418010473251e-07], "median": 7.0908572524786e-07}
+{"catchment": "numedalslagen", "step": "_domain_plan (dem_input.py:250's buffer inside)", "runs": [0.1285226249601692, 0.10976541694253683, 0.10560441704001278], "median": 0.10976541694253683}
+{"catchment": "numedalslagen", "step": "buffer dem_input.py:250", "runs": [0.004778333939611912, 0.004691791953518987, 0.004709125030785799], "median": 0.004709125030785799, "distance": 14.142135623730951, "vertices": 14093}
+{"catchment": "numedalslagen", "step": "repository.check", "runs": [1.6669509932398796e-06, 4.169996827840805e-07, 1.6705598682165146e-07], "median": 4.169996827840805e-07}
+{"catchment": "numedalslagen", "step": "assemble (decode + seams)", "runs": [1.0238347919657826, 0.88752720807679, 0.6854848749935627], "median": 0.88752720807679}
+{"catchment": "numedalslagen", "step": "buffer feature_input.py:161", "runs": [0.018105332972481847, 0.017294208984822035, 0.017089582979679108], "median": 0.017294208984822035, "distance": 100.0, "vertices": 14093}
+{"catchment": "numedalslagen", "step": "feature_input.source_region(domain, dem, dem)", "runs": [0.036943583050742745, 0.03527316707186401, 0.03504570806398988], "median": 0.03527316707186401}
+{"catchment": "numedalslagen", "step": "feature_input.source_region(domain, dem, EPSG:25833) [gpkg33 box]", "runs": [0.03532766702119261, 0.03518474998418242, 0.03505045804195106], "median": 0.03518474998418242}
+{"catchment": "numedalslagen", "step": "query_features (gpkg33, 0.44 GB)", "runs": [0.31995875004213303, 0.2352120840223506, 0.1765095409937203], "median": 0.2352120840223506}
+{"catchment": "numedalslagen", "source": "gpkg33", "rows": 7932, "vertices": 5417093}
+{"catchment": "numedalslagen", "step": "feature_input.source_region(domain, dem, EPSG:3035) [gpkg box]", "runs": [0.0425008749589324, 0.039986209012568, 0.03987329197116196], "median": 0.039986209012568}
+{"catchment": "numedalslagen", "step": "query_features (gpkg, 8.86 GB)", "runs": [1.8876458749873564, 1.0771644579945132, 1.0759540839353576], "median": 1.0771644579945132}
+{"catchment": "numedalslagen", "source": "gpkg", "rows": 8115, "vertices": 16808734}

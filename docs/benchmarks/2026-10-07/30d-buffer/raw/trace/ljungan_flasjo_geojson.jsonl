@@ -1,0 +1,22 @@
+{"call": "buffer", "where": "target_grid.py:107", "vertices": 23260, "distance": 43.84062043356595, "args": [], "kwargs": {"join_style": "mitre"}, "s": 2.0902047500712797}
+{"call": "buffer", "where": "dem_input.py:213", "vertices": 23260, "distance": 43.84062043356595, "args": [], "kwargs": {"join_style": "mitre"}, "s": 2.070643875049427}
+{"call": "buffer", "where": "target_grid.py:145", "vertices": 18451, "distance": 0.0005007710104811096, "args": [], "kwargs": {"join_style": "mitre"}, "s": 0.08198195905424654}
+{"call": "read_json", "where": "feature_input.py:419", "s": 0.24173304194118828, "rows": null}
+{"call": "read_source", "where": "feature_input.py:290", "s": 0.5287887500599027, "rows": null}
+{"call": "buffer", "where": "feature_input.py:161", "vertices": 23260, "distance": 100.0, "args": [], "kwargs": {}, "s": 2.2107672500424087}
+{"call": "source_region", "where": "feature_input.py:311", "s": 2.2194166249828413, "rows": null}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0001580830430611968}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00046508293598890305}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0006249580765143037}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0007576659554615617}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0005992499645799398}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00013966707047075033}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0009031250374391675}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 1025, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0014266670914366841}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 812, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0004360419698059559}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 812, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0004432080313563347}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 923, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00032970798201859}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 923, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00033254106529057026}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 923, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00030862505082041025}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 710, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.0001460839994251728}
+{"call": "buffer", "where": "target_grid.py:243", "vertices": 923, "distance": 31.0, "args": [], "kwargs": {}, "s": 0.00015441596042364836}
