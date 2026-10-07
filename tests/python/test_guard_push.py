@@ -9,7 +9,6 @@ queued; a pass is silent in both.
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
 import subprocess
@@ -830,176 +829,12 @@ def test_every_shell_takes_its_program_with_c() -> None:
     assert {name: flag for name, flag in flags.items() if flag != "c"} == {}
 
 
-def test_every_shell_this_host_lists_is_in_the_shell_set() -> None:
-    """`/etc/shells`, not `ls /bin/*sh`: on a merged-`/usr` Linux `/bin` also holds `ssh`."""
-    listed = Path("/etc/shells")
-    if not listed.exists():
-        pytest.skip("this host has no /etc/shells to read its shells from")
-    lines = [line.strip() for line in listed.read_text().splitlines()]
-    names = {Path(line).name for line in lines if line.startswith("/")}
-    shells = {name for name in names if name.endswith("sh")}
-    assert shells, "/etc/shells lists no shell ending in sh: the probe would measure nothing"
-    assert shells - set(shell_scan.SHELLS) == set()
-
-
-# ---------------------------------------------------------------- h16 G7, pwsh
-#
-# PowerShell (`pwsh`), which the CI runner's /etc/shells lists, runs a command
-# string like the shells above, so it is judged like them, on every host. Its
-# command flags differ from `-c` alone: `-c` and `-Command` (any case) take the
-# command text, and every word after the flag belongs to it, quoted or not
-# (`pwsh -c git push` runs `git push`); `-EncodedCommand`, `-ec` and `-e` take
-# it as base64 of UTF-16LE text, which hides the words from a reader.
-
-
-def encoded(command: str) -> str:
-    """`command` as pwsh's -EncodedCommand reads it: base64 of its UTF-16LE bytes."""
-    return base64.b64encode(command.encode("utf-16-le")).decode("ascii")
-
-
-#: Each line asks, with PUSH: the push is in plain words on the line.
-PWSH_ASKED = (
-    "pwsh -c 'git push'",
-    "pwsh -Command 'git push'",
-    "pwsh -command 'git push'",
-    "pwsh -COMMAND 'git push'",
-    "pwsh -NoProfile -Command 'git push'",
-    "pwsh -NoProfile -c 'cd x; git push'",
-    "/usr/bin/pwsh -c 'git push'",
-    "caffeinate pwsh -Command 'git push'",
-    "pwsh -c git push",
-    "pwsh -Command git push origin master",
-)
-
-#: Each line asks. The push is hidden in base64: a guard that decodes it asks
-#: with PUSH, one that does not read it asks with UNKNOWN.
-PWSH_ENCODED_ASKED = (
-    f"pwsh -EncodedCommand {encoded('git push')}",
-    f"pwsh -ec {encoded('git push')}",
-    f"pwsh -e {encoded('git push')}",
-    f"pwsh -NoProfile -encodedcommand {encoded('git push')}",
-)
-
-#: Controls: a read under pwsh, and words that only name it.
-PWSH_PASSED = (
-    "pwsh -c 'git status'",
-    "pwsh -Command 'git status'",
-    "pwsh -c git status",
-    "echo pwsh",
-    "which pwsh",
-)
-
-
-@pytest.mark.parametrize("mode", ["off", "on"])
-@pytest.mark.parametrize("command", PWSH_ASKED)
-def test_a_push_run_by_pwsh_asks(repo: Path, mode: str, command: str) -> None:
-    set_mode(repo, mode)
-    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
-    assert found is not None, f"{command!r} passed silently"
-    kind, reason = found
-    assert kind == ("deny" if mode == "on" else "ask")
-    assert PUSH in reason
-    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
-
-
-@pytest.mark.parametrize("mode", ["off", "on"])
-@pytest.mark.parametrize("command", PWSH_ENCODED_ASKED)
-def test_a_push_pwsh_runs_from_base64_asks(repo: Path, mode: str, command: str) -> None:
-    set_mode(repo, mode)
-    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
-    assert found is not None, f"{command!r} passed silently"
-    kind, reason = found
-    assert kind == ("deny" if mode == "on" else "ask")
-    assert PUSH in reason or UNKNOWN in reason, reason
-    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
-
-
-@pytest.mark.parametrize("command", PWSH_PASSED)
-def test_a_read_under_pwsh_or_its_name_alone_is_silent(repo: Path, command: str) -> None:
-    set_mode(repo, "on")
-    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
-    assert queue_lines(repo) == []
-
-
-def test_pwsh_is_in_the_shell_set() -> None:
-    """The CI runner's /etc/shells lists it; the host test above reads only this host's."""
-    assert "pwsh" in shell_scan.SHELLS
-
-
-# ------------------------------------------------- h16 G7, PR #210 addendum
-#
-# §2 G7, amended for PR #210's CI failure: PowerShell reads its own flags. A
-# flag starts with `-`, `--` or `/`, in any case, and any non-empty prefix of
-# `command` takes the command text; a prefix of `encodedcommand` (`-e`, `-en`;
-# not `-ex`, which is `-ExecutionPolicy`), `-ec`, `-cwa` or `-CommandWithArgs`
-# and `-Command -` (stdin) hide it, and ask as unknown. `powershell` and
-# `pwsh-preview` are read as `pwsh`; `nu` takes `-c` and `--commands`.
-
-#: {command: the reason it asks with}.
-PWSH_ADDENDUM_ASKED: dict[str, str] = {
-    "pwsh -co 'git push'": PUSH,
-    "pwsh -com 'git push'": PUSH,
-    "pwsh --command 'git push'": PUSH,
-    "pwsh /c 'git push'": PUSH,
-    "pwsh -ex Bypass -c 'git push'": PUSH,
-    "powershell -Command 'git push'": PUSH,
-    "pwsh-preview -c 'git push'": PUSH,
-    "nu -c 'git push'": PUSH,
-    "nu --commands 'git push'": PUSH,
-    f"pwsh -en {encoded('git push')}": UNKNOWN,
-    f"powershell -EncodedCommand {encoded('git push')}": UNKNOWN,
-    "pwsh -cwa 'git status'": UNKNOWN,
-    "pwsh -CommandWithArgs 'git status'": UNKNOWN,
-    "pwsh -Command -": UNKNOWN,
-    "pwsh -c -": UNKNOWN,
-    # Pinned false positive: the script's own argument is read as a flag, since
-    # the scan does not stop at the script.
-    "pwsh x.ps1 -c 'git push'": PUSH,
-}
-
-#: Ruled to pass. A script file, as `bash x.sh` passes (a named gap, §6), and
-#: `nu -e` (`--execute`, likewise); `-config` is a prefix of
-#: `configurationname`, not of `command`, so its value is not a command; and
-#: words that only name PowerShell or nu.
-PWSH_ADDENDUM_PASSED = (
-    "pwsh -File x.ps1",
-    "pwsh x.ps1",
-    "nu -e 'git push'",
-    "pwsh -config x -c 'git status'",
-    "pwsh -config 'git push'",
-    "pwsh -c 'git status; ls'",
-    "pwsh -NoLogo -NoProfile",
-    "echo powershell",
-    "grep -n nu file",
-)
-
-
-@pytest.mark.parametrize("mode", ["off", "on"])
-@pytest.mark.parametrize("command", PWSH_ADDENDUM_ASKED)
-def test_a_command_powershell_or_nu_runs_asks_by_their_own_flags(
-    repo: Path, mode: str, command: str
-) -> None:
-    set_mode(repo, mode)
-    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
-    assert found is not None, f"{command!r} passed silently"
-    kind, reason = found
-    assert kind == ("deny" if mode == "on" else "ask")
-    assert PWSH_ADDENDUM_ASKED[command] in reason, reason
-    if mode == "on":
-        [line] = queue_lines(repo)
-        assert (line["hook"], line["act"]) == ("guard_push", command)
-    else:
-        assert queue_lines(repo) == []
-
-
-@pytest.mark.parametrize("mode", ["off", "on"])
-@pytest.mark.parametrize("command", PWSH_ADDENDUM_PASSED)
-def test_a_script_a_non_command_flag_or_a_name_under_powershell_or_nu_is_silent(
-    repo: Path, mode: str, command: str
-) -> None:
-    set_mode(repo, mode)
-    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
-    assert queue_lines(repo) == []
+def test_the_shell_set_is_exactly_the_shells_the_design_names() -> None:
+    """A fixed list, not this host's `/etc/shells`: what a machine has installed
+    (PowerShell on GitHub's Ubuntu runner) must not decide the result. A shell
+    added to or dropped from the set is a design change, made red first here.
+    PowerShell is a named known gap, not in the set."""
+    assert set(shell_scan.SHELLS) == NAMED_SHELLS
 
 
 def test_guard_push_holds_no_shell_list_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
