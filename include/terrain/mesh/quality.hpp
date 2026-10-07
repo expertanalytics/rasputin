@@ -197,11 +197,12 @@ struct GainJudge {
     QualityCavity c{};
 
     // min(theta, smallest_angle_deg(a, b, c)), with the atan2 calls skipped
-    // when every corner is above theta by a margin: corner angle phi > theta
-    // iff |cross| cos - dot sin = r sin(phi - theta) > 0, and the margin,
-    // 1e-9 of |cross| + |dot| >= |u||w|, is far above the rounding of these
-    // terms, of atan2 and of the degree conversion, so the skip leaves the
-    // value smallest_angle_deg's min with theta gives.
+    // when every corner is above theta by a margin: for theta <= 180 degrees
+    // (nothing here bounds it; past 180 the skip would wrongly give theta),
+    // corner angle phi > theta iff |cross| cos - dot sin = r sin(phi - theta)
+    // > 0, and the margin, 1e-9 of |cross| + |dot| >= |u||w|, is far above
+    // the rounding of these terms, of atan2 and of the degree conversion, so
+    // the skip leaves the value smallest_angle_deg's min with theta gives.
     [[nodiscard]] double capped(Point2 a, Point2 b, Point2 c) const {
         const std::array<Point2, 3> v{a, b, c};
         for (std::size_t k = 0; k < 3; ++k) {

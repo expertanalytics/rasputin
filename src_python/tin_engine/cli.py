@@ -692,8 +692,9 @@ def mesh(
         typer.Option(
             "--start-quality-gain",
             help="With --tolerance, add such a node only if it raises the smallest angle "
-            "around it by at least this many degrees, and split a line it lies beyond; "
-            "negative adds every node, as before. At most 10. Default: 0.",
+            "around it by at least this many degrees and, unless --no-constraint-feet, "
+            "split a line it lies beyond; negative adds every node, as before. "
+            "At most 10. Default: 0.",
         ),
     ] = None,
     no_constraint_feet: Annotated[
