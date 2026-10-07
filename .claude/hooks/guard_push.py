@@ -230,16 +230,24 @@ def segment_why(words: list[str], text: str = "") -> str | None:
     return None
 
 
-def runs(words: list[str]) -> list[tuple[list[str], bool]]:
-    """G7: (argv, bare) for the command and each command its later words run."""
+def runs(words: list[str], under=False, quoted=False) -> list[tuple[list[str], bool]]:
+    """G7: (argv, bare) for the command and each command its later words run.
+
+    under: this command or a runner before it is parallel; quoted: one is in
+    STRING_RUNNERS. A runner or shell word hands the rest of the line to one
+    call and the scan stops, so each word is read once per chain (linear).
+    """
     found, name = [(words, False)], words[0].rsplit("/", 1)[-1] if words else ""
+    under, quoted = under or name == "parallel", quoted or name in STRING_RUNNERS
     for at, word in enumerate(words[1:], 1):
-        if word.rsplit("/", 1)[-1] in ("git", "gh"):  # (a) a bare tail
-            found.append((words[at:], name != "parallel"))  # parallel builds it from inputs
-        texts = [shlex.join(words[at:])] if word.rsplit("/", 1)[-1] in SHELLS else []  # (b)
-        texts += [word] if name in STRING_RUNNERS and len(word.split()) > 1 else []  # (c)
-        for text in texts if shell_scan else []:
-            found += [pair for s in shell_scan.parse(text) or [] for pair in runs(s.argv)]
+        if (tail := word.rsplit("/", 1)[-1]) in ("git", "gh"):  # (a) a bare tail
+            found.append((words[at:], not under))  # parallel builds it from inputs
+        if tail in STRING_RUNNERS or tail in SHELLS:  # (d) a runner, (b) a shell
+            program = shell_scan.parse(shlex.join(words[at:])) or [] if tail in SHELLS else []
+            return found + runs(words[at:], under, quoted) + [
+                pair for s in program[1:] for pair in runs(s.argv)]
+        if quoted and len(word.split()) > 1 and shell_scan:  # (c) a command string
+            found += [pair for s in shell_scan.parse(word) or [] for pair in runs(s.argv)]
     return found
 
 

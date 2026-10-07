@@ -36,6 +36,7 @@ for Ola, and a write of the harness state or a run of away.py is always denied
 """
 
 import json
+import posixpath
 import re
 import sys
 from fnmatch import fnmatch
@@ -102,6 +103,11 @@ def governed(path: str, *, scratch_exempt: bool = True) -> bool:
     # removeprefix, not lstrip: lstrip("./") strips CHARACTERS, so it eats the
     # leading dot of ".claude/..." and every dotfile path stops matching.
     norm = path.replace("\\", "/").removeprefix("./")
+    # h16 G4: judged also with `.`, `..` and `//` resolved (lexically), as well as
+    # as written: normpath drops a trailing `/`, which the prefixes below need.
+    lexical = posixpath.normpath(norm)
+    if lexical not in (norm, ".") and governed(lexical, scratch_exempt=scratch_exempt):
+        return True
     parts = norm.split("/")
     tail = parts[-1]
     if any(norm.endswith(g) or tail == g for g in GOVERNED):
