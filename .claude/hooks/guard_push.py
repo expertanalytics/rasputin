@@ -235,7 +235,10 @@ def runs(words: list[str], under=False, quoted=False) -> list[tuple[list[str], b
 
     under: this command or a runner before it is parallel; quoted: one is in
     STRING_RUNNERS. A runner or shell word hands the rest of the line to one
-    call and the scan stops, so each word is read once per chain (linear).
+    call and the scan stops. Not linear: each shell word parses the rest of
+    the line again, so time grows with shell words times line length. A line
+    past Python's recursion limit (about 990 shell words) raises
+    RecursionError, which main's except turns into a deny (fails closed).
     """
     found, name = [(words, False)], words[0].rsplit("/", 1)[-1] if words else ""
     under, quoted = under or name == "parallel", quoted or name in STRING_RUNNERS
