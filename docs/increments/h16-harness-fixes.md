@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route, and then, on §7 question 4, the command-runner route past the push guard (last section). §2 G1 and G6 are amended and G7 is added for them, with §4, §6, §7 and R1 following; design `28b8292` and `1a1e5d3`, red `8c309a8`, green `fa9f3e1` (97 net production lines by `tools/count_loc.py origin/master fa9f3e1`). Code review round 3 of PR B (round 8 below) asked for changes; Ola ruled that PR B also closes the three routes it found (last section): §2 G7 is amended (every shell; a git or gh word under `parallel`) and G8 is added (a copy or move into a directory named without a trailing `/`), with §4, §6 and R1 following; `origin/master` merged in as `f86d3953`, red `2d44b462`, green `a0001d00` (109 net production lines by `tools/count_loc.py origin/master a0001d00`). Code review round 4 of PR B (round 9 below) asked for changes; Ola chose option A (last section): §2 G7 is amended (a runner in front of `parallel`, `watch` or `flock`, and the slow line of §7 question 5, which waits on Ola with default yes) and G4 is amended (a path judged also normalised), with §4, §6 and R1 following; writes to a whole governed directory go to §6. Next: Ola's answer to §7 question 5, then the red step for round 9 (`@tester`), then green (`@developer`).
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route, and then, on §7 question 4, the command-runner route past the push guard (last section). §2 G1 and G6 are amended and G7 is added for them, with §4, §6, §7 and R1 following; design `28b8292` and `1a1e5d3`, red `8c309a8`, green `fa9f3e1` (97 net production lines by `tools/count_loc.py origin/master fa9f3e1`). Code review round 3 of PR B (round 8 below) asked for changes; Ola ruled that PR B also closes the three routes it found (last section): §2 G7 is amended (every shell; a git or gh word under `parallel`) and G8 is added (a copy or move into a directory named without a trailing `/`), with §4, §6 and R1 following; `origin/master` merged in as `f86d3953`, red `2d44b462`, green `a0001d00` (109 net production lines by `tools/count_loc.py origin/master a0001d00`). Code review round 4 of PR B (round 9 below) asked for changes; Ola chose option A (last section): §2 G7 is amended (a runner in front of `parallel`, `watch` or `flock`, and the slow line of §7 question 5, which waits on Ola with default yes) and G4 is amended (a path judged also normalised), with §4, §6 and R1 following; writes to a whole governed directory go to §6. Ola answered §7 question 5 with its default on 2026-10-06 (fix the slow line); round 9's red step is `c83dfe0e` and its green step `80800a14`. Code review round 5 of PR B (round 10 below) asked for wording changes only: §2 G7's claim of linear time is corrected, and Ola ruled its suggested cap on runner and shell words goes to §6. Next, in order: the matching fix to the docstring of `runs` in `.claude/hooks/guard_push.py` (`@developer`), a re-review of that diff (`@reviewer`), a merge of `origin/master` (`git rev-list --count HEAD..origin/master` shows how far behind the branch is), then the push, on Ola's yes. `git log --oneline origin/master..HEAD` shows which of these have landed.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -761,17 +761,27 @@ STRING_RUNNERS`. Then, for each word after the first:
   the scan stops. A word is a shell or a string runner, never both, so (b)
   and (d) do not meet.
 
-Each word is then read once per chain, and the depth of the recursion is
-the number of runner and shell words on the line. **Constant:** Python's
-default recursion limit, 1000 frames. Checked at 400 `bash` words before
-`-c 'git status'` (passes, 0.15 s through the hook in a prototype); a
-line of a thousand or more such words raises `RecursionError`, which the
-guard's `except Exception` turns into a deny, so it fails closed.
+The depth of the recursion is the number of runner and shell words on
+the line. The time is not linear (corrected after review round 10): each
+shell word parses the rest of the line again (`shell_scan.parse` in (b)),
+so the time grows with the number of shell words times the length of the
+line. Measured by `@reviewer` through the hook at `80800a14`: 400 `sh`
+words before `-c 'git push'`, 0.16 s; 800, 0.39 s; 800 followed by 100 KB
+of plain words, 31 s; the same line with no `sh` words, 0.08 s. Its
+cause, the slow line of §7 question 5, grew with the number of shell
+words alone (about 30 of them passed 600 s); this one needs a long line
+as well. **Constant:** Python's default recursion limit, 1000
+frames. From about 990 `sh` words on (989 `caffeinate sh -c` groups, 995
+`watch` words), the call raises `RecursionError`, which the guard's
+`except Exception` turns into a deny (`guard_push failed: RecursionError:
+…`), so it fails closed, but with a reason worded as a crash. A cap on
+runner and shell words per line would bound the time and give a plain
+reason; it is in §6, for a later harness increment.
 
 **Why not memoise instead.** Caching `runs` by its words keeps the parse
 count linear but not the result: each call's list holds every later
 call's, so the list itself doubles per word. Stopping the scan is what
-bounds both.
+bounds the list; the parse count is bounded only by the line (above).
 
 Probed with a scratch prototype of the reshaped `runs` (about +3 net
 lines on `guard_push.py`), in a scratch copy of `a0001d00` made by
@@ -1346,6 +1356,18 @@ parallel git ::: x`, `echo parallel gh ::: pr` and `grep watch 'git push'
 file` ask; `caffeinate parallel git ::: status` asks as `parallel git :::
 status` does.
 
+Added after review round 10 (Ola's ruling on its suggestion: a later
+harness increment, not this PR):
+
+- **No cap on runner and shell words per line.** G7's `runs` parses the
+  rest of the line again at each shell word, so its time grows with the
+  shell words times the line's length (31 s for 800 `sh` words and 100 KB
+  of plain words, measured by `@reviewer` at `80800a14`), and from about
+  990 `sh` words on it ends in a `RecursionError` that the guard turns
+  into a deny worded as a crash (§2 G7). A fix asks, with a plain reason,
+  on any line with more runner and shell words than a small cap; that
+  bounds the time and replaces the crash-worded deny.
+
 ## 7. Questions for Ola
 
 1. **Which `brief.py` item did you approve as "a limit on root-file size it
@@ -1377,6 +1399,9 @@ status` does.
    through unasked. This PR's own new code causes it; `master` has no such
    delay. The fix is the same change that closes the round 9 runner route,
    at no extra lines. Default: yes, fix it in this round.
+   [Answered: yes, the default (last section). Fixed by round 9's green
+   step, `80800a14`; the time that remains, shell words times line length,
+   is in §2 G7 and §6.]
 
 ## Ola's rulings
 
@@ -1618,3 +1643,15 @@ Recorded word for word from `@reviewer`'s "One-line record" in its handback, tak
 The option the main session offered as its default, A: close the two routes now, and list writes to a whole governed directory (`rm -rf .claude/hooks`, `mv .claude/agents /tmp/`, `cp -R hooks .claude/`; also open on `master`) as a known gap for a later harness increment.
 
 Ola, verbatim: "A, close the two now". So: PR B also closes a runner in front of `parallel`, `watch` or `flock` (§2 G7, amendment after review round 9) and a governed path written with `.`, `..` or a doubled `/` (§2 G4, amendment after review round 9). Writes to a whole governed directory are in §6. The slow line found while designing the G7 amendment is §7 question 5, not ruled on.
+
+### Round 10: `@reviewer`, code, PR B, round 5, `a0001d00..80800a14`
+
+Round 10: `@reviewer`, code, PR B, round 5, `a0001d00..80800a14`. CHANGES REQUESTED. The range is red c83dfe0e and green 80800a14. PR B is 116 net production lines (`tools/count_loc.py origin/master HEAD`, merge base 879ea493) against about 115; the round adds 7 (`tools/count_loc.py a0001d00 HEAD`: guard_governance.py +4, guard_push.py +3). Not pushed, so no CI. Blockers: (1) the "linear" claim is false: every shell word parses the rest of the line again (.claude/hooks/guard_push.py@80800a14:238, :246; docs/increments/h16-harness-fixes.md@80800a14:764, :768), so time grows with shell words x line length (800 x sh plus 100 KB: 31 s); deny starts at about 990 sh words, not "a thousand or more"; (2) the status line (docs/increments/h16-harness-fixes.md@80800a14:3) and §7 question 5 (:1373) still read as unanswered. 1 suggestion: S1 an explicit cap on runner/shell words per line.
+
+Recorded word for word from `@reviewer`'s record text, as the main session passed it on. Taken in the recording commit: blocking item 1 in this file (§2 G7's time and its constant); its other half, the docstring at `.claude/hooks/guard_push.py` line 238, is `@developer`'s, in its own commit. Blocking item 2 (the status line and §7 question 5). Suggestion S1 is in §6.
+
+## Ola's rulings after review round 10, 2026-10-07
+
+On §7 question 5, Ola, verbatim, 2026-10-06: "defaults on all four". So: the slow line is fixed in this round, by round 9's green step.
+
+On suggestion S1, a cap on runner and shell words per line, the main session's default was no cap in this PR and a later harness increment. Ola, verbatim: "Ok, go for defaults." So: no cap now; §6 lists it, with the reason (it bounds the time, and replaces the crash-worded deny with a plain reason).
