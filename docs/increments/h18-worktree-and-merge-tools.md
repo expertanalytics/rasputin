@@ -1,6 +1,6 @@
 # Harness h18: a new worktree with its own venv, and a master-merge runner
 
-Status: designed on `worktree-harness-tools` off `41bda81`; design review round 1 (changes requested) answered, below under "Review"; not yet red. One PR, both tools, about 275 net production lines (§5). §8 has three questions for Ola, each with a default.
+Status: designed on `worktree-harness-tools` off `41bda81`; design review round 2 approved (below under "Review"); red at `e36a5dd6` (72 tests, all failing at load because neither tool exists yet), its pins ruled in §9; next `@developer`, green. One PR, both tools, about 275 net production lines (§5). §8's three questions were ruled by Ola on 2026-10-07: the defaults.
 
 What this is. Two tools from the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
@@ -87,8 +87,9 @@ run)`: every subprocess goes through one function, `run(argv, cwd, *,
 capture=True) -> subprocess.CompletedProcess[str]`, which the tests replace
 (§3.6, §4.9). The default `run` returns exit 127 with "not found" on stderr
 for a missing program, so "uv is not installed" is a refusal, not a
-traceback. Neither imports `tin_engine`. A refusal is exit 2 with one line
-on stderr starting `new_worktree:` or `merge_master:`, as
+traceback. Neither imports `tin_engine`. A refusal is exit 2 with its
+reason as the last line on stderr, starting `new_worktree:` or
+`merge_master:` (a passed-through command's output may come before it), as
 `tools/scratch_copy.py` does. Both go into `pyproject.toml`'s mypy `files`
 list (strict), as `tools/shell_scan.py` is.
 
@@ -184,7 +185,7 @@ The tool never deletes anything. A failure after step 3 leaves the
 worktree, prints what exists, and names the command that finishes it
 (`--existing <wt>`).
 
-### 3.3 Refusals (exit 2, one line on stderr)
+### 3.3 Refusals (exit 2, the reason the last line on stderr)
 
 | When | Message |
 |---|---|
@@ -281,7 +282,7 @@ know the model, so the persona passes it. `--persona` gives the subject
 tag `(@<name>)`. `--no-build` is for a run whose brief says "You may not
 build C++ in this run" (§4.4).
 
-Exit codes: 0 committed, or nothing to merge; 2 refused; 3 stopped for
+Exit codes: 0 committed, nothing to merge, or aborted; 2 refused; 3 stopped for
 conflict resolution; 4 a gate is red, merge not committed.
 
 The suite takes about 6 minutes (§4.8), so a persona runs the first form
@@ -304,16 +305,23 @@ removed after the commit and on `--abort`. The state file plus git's
 3. If `git merge-base --is-ancestor origin/master HEAD`: print
    `merge_master: <branch> already contains origin/master (<short>); nothing to merge`
    and exit 0.
-4. Print, and record, what comes in: `git merge-base HEAD origin/master`
+4. Print what comes in (recorded in the state file, below): `git merge-base HEAD origin/master`
    as the base, and `git log --merges --first-parent --oneline
    <base>..origin/master`. PR numbers come from subjects of the form
    `Merge pull request #N from ...`. This is the command's output, never a
    typed range (D9 in the day retrospective).
 
-   Then, with `--no-build`: if `git diff --quiet <base> origin/master -- include
-   src bindings lib CMakeLists.txt` says master changed C++ since the merge
-   base, refuse (§4.6, "C++ came in and `--no-build`") before merging, so a
-   run that may not build never starts a merge it cannot finish.
+   Then, if `git diff --quiet <base> origin/master -- include src bindings
+   lib CMakeLists.txt` says master changed C++ since the merge base: with
+   `--no-build`, refuse (§4.6, the row "start with `--no-build`, and master
+   changed C++ since the merge base"); with no `<wt>/build-pyext`, refuse
+   (§4.6, the row "C++ came in and no `build-pyext`"). Both come before the
+   merge, so a run that cannot rebuild `_core` never starts a merge it
+   cannot finish.
+
+   Only now, after every start-form check, is the state file (§4.2)
+   written; a start that refuses or finds nothing to merge leaves none.
+   The conflicted files are added to it after step 5.
 5. `git merge --no-ff --no-commit --no-autostash --no-rerere-autoupdate
    origin/master`. `--no-autostash` because the stash is shared by every
    worktree; `--no-rerere-autoupdate` so a recorded resolution, if a user
@@ -366,8 +374,9 @@ persona's `git add` is the statement that a file is resolved.
    retrospective. That file is copied into
    `<wt>/.venv/lib/python3.*/site-packages/tin_engine/` and its time stamp
    touched (the recipe of `.claude/REQUIRED-READING.md`, "Stale
-   artifacts"). No `build-pyext`: refuse, naming `new_worktree.py
-   --existing`.
+   artifacts"). No `build-pyext`: refused (§4.6, "C++ came in and no
+   `build-pyext`"), on the first form before the merge (§4.3 step 4), on
+   `--continue` in step 1, the merge left in progress.
 4. The full suite: `<py> -m pytest -q`, with `pyproject.toml`'s options
    (coverage floor included, as CI). Red: exit 4.
 5. Print `git diff --cached --stat HEAD` (what the merge changes on this
@@ -388,7 +397,8 @@ persona's `git add` is the statement that a file is resolved.
    Changed by hand beyond git's merge: c.py   (line left out when empty)
    Gates on the merged tree, in <wt>/.venv: check_prohibited_deps,
    check_detria_boundary, check_citations --base origin/master, ruff check,
-   ruff format --check, mypy, pytest. _core rebuilt: yes (or: no, no C++ came in).
+   ruff format --check, mypy, pytest.
+   _core rebuilt: yes.     (or: _core rebuilt: no, no C++ came in.)
 
    Co-Authored-By: <as given>
    ```
@@ -417,9 +427,11 @@ in the right tree).
 ### 4.5 `--abort`
 
 `git merge --abort`, then remove the state files. Safe because the start
-refused a dirty tree. With no merge in progress: refuse.
+refused a dirty tree. "A merge in progress" here is `MERGE_HEAD`, whether
+or not this tool started the merge (the start-form refusal for a merge in
+progress names `--abort`). With no `MERGE_HEAD`: refuse (§4.6).
 
-### 4.6 Refusals (exit 2, one line on stderr)
+### 4.6 Refusals (exit 2, the reason the last line on stderr)
 
 | When | Message |
 |---|---|
@@ -428,7 +440,8 @@ refused a dirty tree. With no merge in progress: refuse.
 | no `<wt>/.venv/bin/python` | `merge_master: <wt> has no .venv; run: python3 tools/new_worktree.py --existing <wt>` |
 | start, and `git status --porcelain` is not empty | `merge_master: <wt> has uncommitted changes (<first file>); commit them first. Do not use git stash: every worktree shares one stash` |
 | start, and a merge is already in progress | `merge_master: a merge is already in progress in <wt>; finish it with --continue or abandon it with --abort` |
-| `--persona` not a persona of `tools/brief.py`, or a read-only one | `merge_master: --persona <name>: give one of developer, tester, architect, perf, orchestrator` (the writers, read from `brief.WRITES`) |
+| the first form or `--continue` without `--persona` or `--trailer` | `merge_master: <the missing option> is missing; starting or continuing a merge needs --persona and --trailer` |
+| `--persona` not a persona of `tools/brief.py`, or a read-only one | `merge_master: --persona <name>: give one of architect, developer, orchestrator, perf, tester` (the writers, read from `brief.WRITES`, in its order) |
 | `--trailer` does not match `^Co-Authored-By: [^<>]+ <[^<>@]+@[^<>]+>$` | `merge_master: --trailer must be the Co-Authored-By line from your system context` |
 | the fetch fails | `merge_master: could not fetch origin/master (<git's last line>); blocked on network: stop and hand back` |
 | `--continue`, and no state file | `merge_master: no merge started by this tool in <wt>; start one with: python3 tools/merge_master.py <wt>` |
@@ -437,8 +450,10 @@ refused a dirty tree. With no merge in progress: refuse.
 | unmerged paths remain | `merge_master: still unresolved: <files>; resolve with Edit, then git add` |
 | a recorded conflicted file has a line starting `<<<<<<< ` or `>>>>>>> ` | `merge_master: <file>:<line> still holds a conflict marker` |
 | tracked changes not staged | `merge_master: <file> is changed but not added; git add it if it belongs to the merge` |
+| `--abort`, and no `MERGE_HEAD` | `merge_master: no merge in progress in <wt>; nothing to abort` |
 | start with `--no-build`, and master changed C++ since the merge base (§4.3 step 4) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. No merge was started; hand back` |
 | `--continue` with `--no-build`, and C++ came in (§4.4 step 3) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. The merge is left in progress; hand back` |
+| C++ came in and no `build-pyext` (start: §4.3 step 4; `--continue`: §4.4 step 1) | `merge_master: origin/master changed C++ (<first file>) and <wt> has no build-pyext to rebuild _core in; run: python3 tools/new_worktree.py --existing <wt>. ` then `No merge was started` (start) or `The merge is left in progress` (`--continue`) |
 | after the `_core` build, `build-pyext` holds no `_core*.so`, more than one, or one without the venv's extension suffix | `merge_master: <wt>/build-pyext holds <the names, or no _core*.so>, not one _core<suffix>; remove build-pyext and run: python3 tools/new_worktree.py --existing <wt>. The merge is left in progress` |
 
 A conflicted file that the resolution deleted (`git rm`, as a
@@ -462,8 +477,8 @@ Three things follow.
 - **The tool is not a route around the push guard, by test.** The hooks
   see only the line typed, not what a script runs, so a later edit adding
   `git push` to the tool would not be asked about. Red test 9 below fails
-  on any argv the push guard would ask about. Whether to also put the two
-  tools on `guard_governance.py`'s list is §8 question 3.
+  on any argv the push guard would ask about. The two tools stay off
+  `guard_governance.py`'s list (§8 question 3, ruled).
 - **A merge writes rule files without asking, as it does today.** A clean
   merge that brings in master's changes to `CLAUDE.md` or a hook writes
   them through git, unseen by the guards, exactly as a hand-typed `git
@@ -575,7 +590,7 @@ the enqueue, as for every PR.
 ## 6. Where this differs from the retrospective's rows
 
 - **T4's `--base <sha>`, a scratch venv for a base install, is left out**
-  (§8 question 2). Its two uses are covered: `tools/bench.py run --tree`
+  (§8 question 2, ruled: left out). Its two uses are covered: `tools/bench.py run --tree`
   builds an older tree into its own `build-bench/pkg`, and
   `tools/scratch_copy.py` runs the suites against an older revision in the
   worktree's interpreter. The lesson behind it, "base installs go in
@@ -588,7 +603,7 @@ the enqueue, as for every PR.
   T2's authority is Ola's yes of 2026-10-07, not stage 3.
 - **"One persona runs it end to end"** meets the write limits: a conflict in
   `tests/` or `docs/` is outside `@developer`'s limit (`tools/brief.py`'s
-  `WRITES`). §8 question 1.
+  `WRITES`). Ruled by Ola: §8 question 1.
 - **The gates** add `check_prohibited_deps.py` and
   `check_detria_boundary.py` to the row's list (both fast; both are
   `gates_after_commit.py` gates, and that hook does not fire on the tool's
@@ -633,7 +648,7 @@ add. Items 1, 2, 4, 5 and 6 are writes to governed files, so each asks Ola
    today (`grep -n PYTHON_EXECUTABLE .claude/REQUIRED-READING.md` finds
    nothing), keeps needing none, because `build-pyext` now comes
    configured.
-5. If question 1 is ruled: one line in `CLAUDE.md` §3 or the h6 role table
+5. Question 1 is ruled (§8): one line in `CLAUDE.md` §3 or the h6 role table
    saying who runs a master merge. That adds a line; it replaces the
    per-merge split that D8 counts.
 6. Optional, a check rather than a cut: `tools/brief.py` refuses a brief
@@ -644,25 +659,113 @@ No persona file mentions venvs or master merges today (`grep -n -i -e
 venv -e "merge master" -e "--theirs" .claude/agents/*.md` exits 1 with no
 output), so none is shortened.
 
-## 8. Questions for Ola
+## 8. Questions for Ola: ruled
 
-1. **Who runs a master merge, and may that persona resolve a conflict in a
-   file outside its write limit?** Default: `@developer` runs
-   `merge_master.py` end to end and resolves conflicts in any file, because
-   choosing between two already-reviewed versions hunk by hunk is not
+Ola, 2026-10-07: "defaults on the h18 questions". So:
+
+1. **Who runs a master merge.** `@developer` runs `merge_master.py` end
+   to end and may resolve a conflict in any file, inside its write limit or
+   not: choosing between two already-reviewed versions hunk by hunk is not
    authoring. A test that fails after the merge but did not conflict (as in
    audit D's merge, where a cleanly merged test broke on master's changed
    helper) goes to `@tester` in the same worktree while the merge is still
    in progress; then `@developer` runs `--continue`.
-2. **Leave out T4's `--base` scratch venv?** Default: yes, leave it out;
-   `bench.py --tree` and `scratch_copy.py` already cover its two uses (§6).
-3. **Put the two new tools on the governed list?** The hooks see only
-   `python3 tools/merge_master.py ...`, not the git commands inside, so a
-   later edit that added a push to the tool would not be asked about.
-   Default: no; red test 9 of §4.9 and §3.6's test 7 fail on any such
-   command, and review sees the failure. Yes would mean an edit to
-   `.claude/hooks/guard_governance.py`, by day, with you at the keyboard.
+2. **T4's `--base` scratch venv is left out.** `bench.py --tree` and
+   `scratch_copy.py` cover its two uses (§6).
+3. **The two tools are not added to `guard_governance.py`'s list.** Red
+   test 9 of §4.9 and test 7 of §3.6 fail on any command the push guard
+   would ask about, and review sees the failure.
+
+## 9. The red step's pins, ruled
+
+`@tester`'s red commit `e36a5dd6` (`tests/python/test_new_worktree.py`,
+`tests/python/test_merge_master.py`, fixture
+`tests/python/worktree_fixtures.py`) stated 19 assumptions beyond §3.6 and
+§4.9. Each is ruled here; the sections above carry the ones that set text.
+One changes a test (18); the rest keep the suite as committed.
+
+1. **Kept.** Each tool is loaded from its copy in the temporary main
+   checkout. "This repository" is the one holding the tool's own file
+   (`Path(__file__).resolve()`, then its `git rev-parse --git-common-dir`),
+   not the current directory (§2).
+2. **Kept.** `main(argv: list[str], run: Run = run) -> int`, with `run` a
+   keyword the tests pass; the exit code is returned (argparse's own usage
+   errors may raise `SystemExit(2)`). A module-level `run(argv, cwd, *,
+   capture=True)` is the default.
+3. **Kept.** The tools run only `git`, `uv`, `cmake` and
+   `<wt>/.venv/bin/python*`. Copying `_core`, touching it, globbing and
+   reading files are done in Python (`shutil`, `Path`), never by `cp` or
+   `touch` subprocesses.
+4. **Kept.** The probe commands are exactly: `uv --version`, `cmake
+   --version`, `<py> -m ruff --version`, `<py> -m mypy --version`, `<py>
+   -m pybind11 --cmakedir`, the §3.2 step 7 check (one `-c` naming
+   `tin_engine.cli` and `tin_engine._core`, three lines out), and, for
+   `merge_master.py`, `<py> -c` printing `sysconfig`'s `EXT_SUFFIX`. The
+   pass block's Python version comes from `<py> --version`.
+5. **Kept.** The refusal is the last line on stderr (§2 and the §3.3 and
+   §4.6 headings now say so); a refusal before any passed-through command
+   (bad name, existing path, existing branch) is the only line.
+6. **Kept.** `Alpha`, `a/b`, `_a`, `.hidden`, `a b` and the empty name are
+   refused with §3.3's line exactly. A name the pattern allows but git
+   refuses as a branch (`a..b`) fails at `git worktree add`: "No worktree
+   was made".
+7. **Kept.** The fetch is `git fetch origin master` (the argv ends `origin
+   master`), on the first form only; `--existing` fetches nothing. The
+   `uv` and `cmake` probes are step 1 on both forms, so `--existing` with a
+   good venv and a configured `build-pyext` runs the probes and the check
+   and nothing else. A failing install stops before the configure;
+   `<step>` in its message is the command's name (`uv pip install`).
+   `--existing` on a worktree with neither runs venv, install and
+   configure.
+8. **Kept; messages set.** A missing `--persona` or `--trailer` on the
+   first form or on `--continue` is exit 2 with the new §4.6 row naming the
+   missing option; `--abort` with no `MERGE_HEAD` is exit 2 with the new
+   row "`--abort`, and no `MERGE_HEAD`" (§4.5).
+9. **Kept.** The persona list is compared as a set; the message lists
+   `brief.WRITES`'s writers in its order (§4.6 now says so).
+10. **Kept.** The citations gate's argv ends `--base origin/master`; the
+    build is `cmake --build <wt>/build-pyext -j --target _core`, nothing
+    after `_core`. The gate scripts run as `<py> tools/<script>`.
+11. **Kept.** The marker refusal names the first marker line of the first
+    recorded conflicted file that still holds one, files in the order git
+    listed them.
+12. **Kept.** Both hashes in the `MERGE_HEAD` message are `git rev-parse
+    --short` prefixes (7 or more characters).
+13. **Kept; template pinned.** The body lines are literally `Conflicts:
+    none`, `Conflicts resolved by hand: <a>, <b>` (comma and space),
+    `Changed by hand beyond git's merge: <list>`, and the `_core` sentence
+    on a line of its own, `_core rebuilt: yes.` or `_core rebuilt: no, no
+    C++ came in.` (§4.4 step 6 now shows it so). Merge list lines are
+    indented in the body and printed to stdout; the tests compare them
+    trimmed. "brings in N commits" counts `git rev-list --first-parent
+    --count <base>..<master>`.
+14. **Kept.** The conflict stop message goes to stdout, all of it (it is
+    instructions, not an error); one file per line, indented two spaces.
+15. **Kept.** "Never stages" is tested as no `git add` or `git rm`, and no
+    `stash`, `reset`, `rebase`, `checkout`, `restore` or `push`. The tool
+    also runs no `update-index` or `read-tree`; `git merge --abort` and
+    `git merge-tree --write-tree` are allowed.
+16. **Kept.** A successful `--abort` exits 0 (§4.1's exit codes now say
+    so).
+17. **Kept.** The copy goes into the one directory matching
+    `<wt>/.venv/lib/python3.*/site-packages/tin_engine/` (the stub venv's
+    is `python3.12`); "touched" means its mtime is set to now after the
+    copy (`Path.touch()`).
+18. **Changed.** No `build-pyext` when C++ came in is a refusal with a set
+    message (§4.6, "C++ came in and no `build-pyext`"), and on the first
+    form it comes before the merge, beside the `--no-build` check (§4.3
+    step 4), for the same reason. Test change, for `@tester`: in
+    `test_cpp_from_master_without_build_pyext_is_refused_naming_new_worktree`,
+    replace the head check with `assert_no_merge_started(setup, outcome)`
+    and add `assert builds(outcome) == []`. The suite stays red either way.
+    On `--continue` with `--no-build` and no `build-pyext`, the `--no-build`
+    row wins (it comes first in §4.6).
+19. **Kept.** "already contains origin/master … nothing to merge" goes to
+    stdout. The gates, the build and pytest run with `capture=False`, so
+    their output passes through unchanged.
 
 ## Review
 
 Design review round 1, @reviewer: CHANGES REQUESTED, 2 blockers: (1) the h18 row at /Users/skavhaug/projects/rasputin/ROADMAP.md@360259c0:45 shifts ROADMAP.md:50 and :54, which 45 citations quote as rows 27 and 29 (/Users/skavhaug/projects/rasputin/ROADMAP.md@41bda81a:50, @41bda81a:54); move the row below line 54; (2) the §4.9 test 1 pin "no merge started by a start-form refusal" (/Users/skavhaug/projects/rasputin/docs/increments/h18-worktree-and-merge-tools.md@360259c0:448-449) contradicts the --no-build refusal, which on a clean start comes after the merge (@360259c0:330-331, :395, :468-469).
+
+Design review round 2, @reviewer: APPROVED, range 360259c0..9e11868e (docs only, 0 production lines), both round 1 blockers answered: (1) the h18 row now sits at /Users/skavhaug/projects/rasputin/ROADMAP.md@9e11868e:70, and against 41bda81a the only change is that inserted line, so :50 and :54 are byte-identical to @41bda81a:50 and :54 (rows 27 and 29); (2) the --no-build check now runs before the merge on the first form (/Users/skavhaug/projects/rasputin/docs/increments/h18-worktree-and-merge-tools.md@9e11868e:313-316, :440), refuses after it on --continue (@9e11868e:441), and tests 1 and 7 pin both cases (@9e11868e:500-504, :528-535).
