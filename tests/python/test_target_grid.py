@@ -36,8 +36,7 @@ fails on its assertion (no refusal), because `RasterMeta` ignores
 `geographic` before 15c-2.
 
 AMENDED for 30d (`docs/increments/30d-outline-buffer-speed.md`, section 3.1):
-the two G3 tests unpack `(grid, grown)`. Red until 30d: `target_grid_for`
-returns the grid alone.
+the two G3 tests unpack `(grid, grown)`.
 """
 
 from __future__ import annotations
