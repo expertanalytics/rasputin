@@ -633,8 +633,12 @@ def mesh(
         str, typer.Option("--crs", help="Free text recorded as a header comment. Not validated.")
     ] = "",
     binary: Annotated[
-        bool, typer.Option("--binary/--ascii", help="Packed records, or text `head` can read.")
-    ] = False,
+        bool,
+        typer.Option(
+            "--binary/--ascii",
+            help="Binary files, small and fast; --ascii writes text you can read.",
+        ),
+    ] = True,
     delaunay: Annotated[
         bool, typer.Option("--delaunay/--no-delaunay", help="Triangulate with or without it.")
     ] = True,
@@ -765,7 +769,8 @@ def mesh(
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
     feature masks, one 0/1 array per feature that occurs, and the vocabulary
     (``13-bundled-mesh.md``). There is no ``--format``, because it could
-    contradict the suffix. Text is the default for both formats.
+    contradict the suffix. Both formats are binary by default; ``--ascii``
+    writes text you can read.
 
     ``.ply`` is for QGIS. Two files, never one holding both element types:
     MDAL's own caveat is that a host application expects either a 1D mesh or a

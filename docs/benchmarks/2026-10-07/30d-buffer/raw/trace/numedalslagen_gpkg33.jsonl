@@ -1,0 +1,7 @@
+{"call": "buffer", "where": "dem_input.py:250", "vertices": 14093, "distance": 14.142135623730951, "args": [], "kwargs": {"join_style": "mitre"}, "s": 0.0067064170725643635}
+{"call": "buffer", "where": "feature_input.py:161", "vertices": 14093, "distance": 100.0, "args": [], "kwargs": {}, "s": 0.018450916977599263}
+{"call": "source_region", "where": "feature_input.py:294", "s": 0.03890691697597504, "rows": null}
+{"call": "query_features", "where": "feature_input.py:407", "s": 0.19418687501456589, "rows": 7932}
+{"call": "read_source", "where": "feature_input.py:290", "s": 0.24084233294706792, "rows": null}
+{"call": "buffer", "where": "feature_input.py:161", "vertices": 14093, "distance": 100.0, "args": [], "kwargs": {}, "s": 0.017649417044594884}
+{"call": "source_region", "where": "feature_input.py:311", "s": 0.03641375002916902, "rows": null}

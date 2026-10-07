@@ -490,3 +490,16 @@ docs merge conflict was resolved once by the main session (027e8f9) and once
 by `@developer` on the main session's brief (9c791d6), and `@developer`'s
 green commit 3ffae13 moved a citation in `15f-edge-strip.md`. Whose job a
 merge conflict in a docs file is needs an owner.
+
+## The night of 2026-10-06/07 and Ola's "not so much work": proposals waiting on Ola
+
+Evidence and wording: `docs/retrospectives/2026-10-07-night-20c-1.md`.
+Throughput: P1 (by day, parallel work first, `@perf` timing at quiet times),
+P2 (the day's check and its questions before Ola leaves), P3 (measure a
+prose-only neighbour beside `@perf` before deciding), P4 (keep two writers).
+Tools and rules: P5 (`brief.py` cuts at a word boundary), P6 (review records
+copied by a tool, not through scratch), P7 (the mutation round placed before
+review in the step list), P8 (`session.md` format enforced by the recap),
+P9 (CI's GCC locally), P10 (T6 covers checkouts, not scratch), P11 (three
+guard false positives), P12 (`Monitor` for `@architect`); one cut, about 120
+words of `tester.md`.

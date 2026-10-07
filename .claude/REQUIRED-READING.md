@@ -135,13 +135,35 @@ round of findings.** On a prose or tooling branch its scope is:
 ## The harness
 
 Active in `.claude/settings.json`: `guard_push.py` asks
-before `git push`, `gh pr create/merge/ready/edit/update-branch`, `gh release`,
-`gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
-`filter-branch` and `commit --amend`, and before `git update-ref`, `git remote`
-writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing
-method, and `curl` with a writing method to the forge (not `gh pr close` or
-`gh pr comment`); `guard_governance.py` asks
-before any write to a file that states rules; `guard_unattended.py` refuses
+before `git push`, `gh pr create/new/merge/ready/edit/update-branch`,
+`gh release` and `gh repo create/new/delete/edit` (with or without `-R`),
+`--no-verify`, `rebase`, `reset --hard`,
+`filter-branch` and `commit --amend`; before `git update-ref`, `git remote`,
+`git config`, `git symbolic-ref` and `git replace` writes, a `git fetch`,
+`git pull` or `git remote update` into a named ref (a refspec, `--refmap`,
+`--stdin`, a `remote.*`, `url.*`, `include.*`, `includeIf.*`,
+`core.sshCommand` or `fetch.bundleURI` override, or `GIT_CONFIG*`,
+`GIT_SSH*`, `HOME` or `XDG_CONFIG_HOME` set on the line), and `gh api` or a
+forge `curl` with a writing method or a body, glued options included
+(`-fquery=…`, `-iXPUT`, `-sd x`, `-Tfile`; not `gh pr close` or
+`gh pr comment`); and before a git or gh command
+it does not know, such as an alias. It judges the rest of these (not an
+unknown command) also when another program runs them (`caffeinate git push`, `find … -exec git push`,
+`watch 'git push'`, a shell's `-c '…'`: `sh`, `dash`, `tcsh` and every shell
+`/etc/shells` lists on the Mac);
+a git or gh word under `parallel`, which builds its commands from its
+inputs, asks as an unknown command, and a runner in front of `parallel`,
+`watch` or `flock` (`caffeinate parallel …`) does not hide it. `guard_governance.py` asks before any write
+to a file that states rules or to a `tools/` file named after a standard-library
+module, a copy or move into their directories included (`cp json.py tools`,
+with or without the trailing `/`), and a path is judged also with `.`,
+`..` and a doubled `/` resolved (`tools/./json.py`); not a write to a
+whole governed directory (`rm -r .claude/hooks`),
+except an absolute path in a session scratchpad, written by Edit or
+Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
+substitution or interpreter program). `guard_push.py` passes no git write in
+a scratchpad repository.
+`guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while
 unattended mode is on; `guard_spawn.py` refuses a persona spawn without an
 unchanged, current block from `python3 tools/brief.py`, and any spawn or

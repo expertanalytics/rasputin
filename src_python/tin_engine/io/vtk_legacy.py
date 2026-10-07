@@ -11,7 +11,8 @@ THE RULINGS THE BYTES ENCODE.
 
 *Ruling 3*: ASCII by default. Binary legacy VTK is big-endian by the format's
 definition, so every packed dtype here is `>`-prefixed -- the PLY writer's
-opposite.
+opposite. Text is this writer's own default; `rasputin mesh` writes binary
+unless given `--ascii` (increment 31).
 
 *Rulings 4 and 5*: every `LINES` cell precedes every `POLYGONS` cell, in the
 file and in every cell array, and every cell array covers every cell, with 0

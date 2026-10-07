@@ -3,7 +3,8 @@
 `13-bundled-mesh.md` ruling 8: the suffix of `--out` picks the format, an
 unknown suffix is refused naming both valid ones, `--out-edges` beside a `.vtk`
 is refused because the edges are already in the file, and `--binary/--ascii`
-is one flag pair defaulting to text for both formats (U2 (a)).
+is one flag pair for both formats. It defaulted to text under U2 (a);
+increment 31 (`31-binary-default.md`) makes it binary for both.
 
 The `.vtk` bytes are parsed with `vtkread`, not with VTK; the read-back through
 VTK's own readers is `test_io_vtk_readback.py`. The oracle for the lines is the
@@ -22,6 +23,7 @@ pins that the new dispatch keeps it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -29,7 +31,7 @@ import pytest
 from numpy.testing import assert_array_equal
 
 import tin_engine.cli as cli
-from cli_driver import invoke
+from cli_driver import invoke, plain, runner
 from plyread import parse_header
 from test_cli_mesh import constrained_edge_set
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -100,12 +102,17 @@ class TestOutEdgesWithVtk:
 
 
 class TestEncoding:
-    """`--binary/--ascii`, one pair for both formats, text by default (U2 (a))."""
+    """`--binary/--ascii`, one pair for both formats, binary by default (increment 31)."""
 
-    def test_vtk_is_ascii_by_default(self, tmp_path: Path) -> None:
+    def test_vtk_is_binary_by_default(self, tmp_path: Path) -> None:
+        # Increment 31 (`31-binary-default.md`, D1): binary unless `--ascii`.
+        # This was `test_vtk_is_ascii_by_default` under increment 13's U2 (a).
         out = tmp_path / "mesh.vtk"
-        assert invoke("mesh", FIXTURE, "--flat", "--out", str(out))[0] == 0
-        assert read_vtk(out.read_bytes()).encoding == "ASCII"
+        code, output = invoke("mesh", FIXTURE, "--flat", "--out", str(out))
+        assert code == 0, output
+        blob = out.read_bytes()
+        assert blob.split(b"\n")[2] == b"BINARY"
+        assert read_vtk(blob).encoding == "BINARY"
 
     def test_binary_writes_the_binary_header(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
@@ -119,14 +126,33 @@ class TestEncoding:
         assert code == 0, output
         assert read_vtk(out.read_bytes()).encoding == "ASCII"
 
-    def test_ply_is_ascii_by_default(self, tmp_path: Path) -> None:
+    def test_ply_is_binary_by_default(self, tmp_path: Path) -> None:
+        # Increment 31, D2: the pair's one default covers `.ply` too.
+        # This was `test_ply_is_ascii_by_default` under increment 13's U2 (a).
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         code, output = invoke(
             "mesh", FIXTURE, "--flat", "--out", str(surface), "--out-edges", str(edges)
         )
         assert code == 0, output
-        assert parse_header(surface.read_bytes()).fmt == "ascii"
-        assert parse_header(edges.read_bytes()).fmt == "ascii"
+        assert parse_header(surface.read_bytes()).fmt == "binary_little_endian"
+        assert parse_header(edges.read_bytes()).fmt == "binary_little_endian"
+
+    def test_the_help_shows_binary_as_the_default(self) -> None:
+        # Increment 31, D3: Typer prints the default itself, so the help and
+        # the behaviour cannot drift apart. The marker is read from the
+        # `--binary --ascii` row onward, so another option's marker cannot
+        # stand in for it. COLUMNS is pinned so the caller's terminal cannot
+        # truncate the option names; `plain` undoes Rich's wrapping.
+        result = runner.invoke(cli.app, ["mesh", "--help"], env={"COLUMNS": "100"})
+        text = plain(result.output)
+        assert result.exit_code == 0, text
+        marker = re.search(r"--binary --ascii\b.*?\[default: ([^\]]+)\]", text)
+        assert marker is not None, text
+        assert marker.group(1) == "binary", text
+        # The command's own description is part of the same help page, and
+        # until increment 31 said so in words
+        # (`src_python/tin_engine/cli.py@2764ef71:755`).
+        assert "Text is the default" not in text, text
 
     def test_binary_switches_both_ply_files(self, tmp_path: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"

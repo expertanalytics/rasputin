@@ -77,7 +77,7 @@ def main() -> int:
         notes.append("guard_spawn: the working directory was not compared (no cwd in the "
                      "event, or CLAUDE_PROJECT_DIR unset)")  # fmt: skip
     try:
-        sys.path.insert(0, str(ROOT / "tools"))
+        sys.path.append(str(ROOT / "tools"))  # appended: the stdlib wins (h16 G4)
         import brief
 
         reason = refusal(brief, event)
