@@ -290,7 +290,9 @@ class TestRecord:
     def test_every_cell_carries_a_code_in_both_encodings(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, two_squares: Path, binary: bool
     ) -> None:
-        extra = ["--binary"] if binary else []
+        # Each case names its flag, so the default (binary since increment 31)
+        # cannot quietly turn the ascii case into a second binary one.
+        extra = ["--binary"] if binary else ["--ascii"]
         code, output, target = run(
             tmp_path,
             bumpy,

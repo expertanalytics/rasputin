@@ -1,7 +1,10 @@
 """`rasputin mesh`: increment 10's command.
 
 Amended red by increment 13's U2 (a), and only there: the default-encoding
-test is inverted, and the vertex-block identity test asks for `--binary`.
+test is inverted (text by default), and the vertex-block identity test asks
+for `--binary`. Amended red again by increment 31 (`31-binary-default.md`):
+the default-encoding test is inverted back, so both files are binary by
+default and `--ascii` asks for text.
 
 Committed red at `1d4ec8b`; `tin_engine.cli` already existed, so the intended
 failure was Click's `No such command 'mesh'` -- exit code 2, no file written. Every test that
@@ -101,10 +104,12 @@ class TestTheAcceptanceInvocation:
     def test_the_constraint_file_is_a_1d_mesh(self, written: tuple[bytes, bytes]) -> None:
         assert parse_header(written[1]).names == ("vertex", "edge")
 
-    def test_both_files_are_ascii_by_default(self, written: tuple[bytes, bytes]) -> None:
-        # Increment 13, U2 (a): text by default for both formats. This was
-        # `test_both_files_are_binary_by_default` under increment 10's ruling 1.
-        assert {parse_header(blob).fmt for blob in written} == {"ascii"}
+    def test_both_files_are_binary_by_default(self, written: tuple[bytes, bytes]) -> None:
+        # Increment 31 (D1, D2): binary by default for both formats, reversing
+        # increment 13's U2 (a), under which this was
+        # `test_both_files_are_ascii_by_default`. Before that it was this test,
+        # under increment 10's ruling 1.
+        assert {parse_header(blob).fmt for blob in written} == {"binary_little_endian"}
 
     def test_the_vertex_blocks_are_byte_identical(self, tmp_path: Path) -> None:
         # Ruling 3. The two layers register on each other only because of this.

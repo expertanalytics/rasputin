@@ -212,7 +212,11 @@ class TestWithoutTolerance:
     def test_the_uniform_mesh_is_unchanged(self, tmp_path: Path) -> None:
         tif = write_tiff(tmp_path / "larger.tif", micro_tiff(elevations(rows=7, cols=9)))
         out = tmp_path / "x.vtk"
-        code, output = invoke("mesh", "--dem", str(tif), "--stride", "2", "--out", str(out))
+        # `--ascii` since increment 31 made binary the default: the hash was
+        # recorded from increment 12's text file.
+        code, output = invoke(
+            "mesh", "--dem", str(tif), "--stride", "2", "--ascii", "--out", str(out)
+        )
         assert code == 0, output
         blob = out.read_bytes()
         mesh = blob[blob.index(b"\nPOINTS ") + 1 :]

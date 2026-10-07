@@ -79,7 +79,8 @@ every option.
   and the constraint edges, if you want them, to a second file named by
   `--out-edges`.
 
-Both formats are text by default; `--binary` writes packed records.
+Both formats are binary by default; `--ascii` writes text you can read with
+`head`.
 
 ## How it is built
 
