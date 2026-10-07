@@ -247,7 +247,7 @@ the extensive run, or for a diagnosis."
 Net: +249 words across three files; none removed. The `description:` line
 of `perf.md`'s front matter stays as it is.
 
-## 10. Questions for Ola (question 3 ruled 2026-10-07; 1, 2 and 4 open)
+## 10. Questions for Ola (all ruled 2026-10-07)
 
 Asked in the design's handback at `a7a15f1b`; recorded here as asked.
 
@@ -265,3 +265,5 @@ Asked in the design's handback at `a7a15f1b`; recorded here as asked.
    one-line speed judgment decides.*
 4. Should the full extensive run happen on master on the first unattended
    night of each month? Default: yes.
+
+**Ola, 2026-10-07, on the main session's list "3. The measuring process: the main session runs the quick check itself; the hotspot thresholds are 40 % for a phase and 25 % for a single call; the full run happens once a month on an unattended night": "3: yes".** *Ruled: questions 1, 2 and 4 take their defaults. Recorded by the main session.*
