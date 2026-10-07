@@ -21,6 +21,13 @@
 // lies in (docs/increments/23-basin-scale.md, N4). The walk is bounded by
 // triangle_count() steps.
 //
+// Constraint feet (docs/increments/20c-soft-quality.md, R2). With
+// constraint_feet, a located node closer than min(dx, dy) / 2 to a constraint
+// (constraint_foot.hpp) goes in as its foot when that is a Hit the validity
+// callable accepts, and is skipped (skipped_near_line) for any other answer
+// but None. The callable is asked about the foot as a MeshVertex; one that
+// takes only a LatticeVertex refuses every foot.
+//
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
 // stale and dropped. It ends because every insertion is a new node of a finite
@@ -31,6 +38,7 @@
 // whether a node holds data comes in as a callable.
 
 #include <terrain/core/point.hpp>
+#include <terrain/mesh/constraint_foot.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/mesh/lawson.hpp>
 #include <terrain/predicates/kernel.hpp>
@@ -44,6 +52,7 @@
 #include <numbers>
 #include <queue>
 #include <span>
+#include <tuple>
 #include <vector>
 
 namespace terrain::mesh {
@@ -52,6 +61,7 @@ struct QualityOptions {
     double min_angle_deg = 0.0;  // <= 0 (or NaN): the pass does nothing
     std::size_t rows = 0;        // the node rectangle, [0, cols-1] x [0, rows-1]
     std::size_t cols = 0;
+    bool constraint_feet = false;  // R2.6: a node near a constraint goes in as its foot
 };
 
 struct QualityOutcome {
@@ -63,11 +73,13 @@ struct QualityOutcome {
     std::size_t walk_bound_hits = 0;  // the walk took triangle_count() steps
     std::size_t skipped_frozen = 0;   // the snapped node lies on a frozen edge
     std::size_t skipped_void = 0;     // the snapped node is not valid (NoData)
+    std::size_t feet = 0;               // feet inserted instead of the node, not in `inserted`
+    std::size_t skipped_near_line = 0;  // near a constraint with no usable foot
 };
 
 // The default validity callable: every node holds data.
 struct AllNodesValid {
-    constexpr bool operator()(const LatticeVertex&) const noexcept { return true; }
+    constexpr bool operator()(const MeshVertex&) const noexcept { return true; }
 };
 
 namespace detail {
@@ -182,20 +194,38 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
             ++out.skipped_frozen;
             continue;
         }
+        std::uint32_t owner = t;
+        unsigned edge = on;
+        MeshVertex at = p;
+        bool foot = false;
+        if (o.constraint_feet) {
+            const auto s = constraint_foot(m, t, p, std::min(f.dx, f.dy) / 2.0, f);
+            if (s.status != FootStatus::None) {
+                bool ok = false;
+                if constexpr (std::predicate<const Valid&, const MeshVertex&>)
+                    ok = s.status == FootStatus::Hit && valid(s.at);
+                if (!ok) {
+                    ++out.skipped_near_line;
+                    continue;
+                }
+                foot = true;
+                std::tie(owner, edge, at) = std::tuple{s.owner, s.edge, s.at};
+            }
+        }
         const auto before = static_cast<std::uint32_t>(m.triangle_count());
-        written.assign({t, before, before + 1});
+        written.assign({owner, before, before + 1});
         std::uint32_t q = 0;
-        if (zeros == 0) {
+        if (zeros == 0 && !foot) {
             q = m.split_inside(t, node);
         } else {
-            const auto u = m.neighbours(t)[on];
-            q = m.split_edge(t, on, node);
+            const auto u = m.neighbours(owner)[edge];
+            q = m.split_edge(owner, edge, at);
             if (u == kNoNeighbour)
                 written.pop_back();
             else
                 written.push_back(u);
         }
-        ++out.inserted;
+        ++(foot ? out.feet : out.inserted);
         const std::vector<std::uint32_t> seeds = written;
         legalise_around<K>(m, q, std::span<const std::uint32_t>{seeds}, f,
                            [&](std::uint32_t w) { written.push_back(w); });
