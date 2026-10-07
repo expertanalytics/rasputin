@@ -13,15 +13,20 @@ quality gate passes, refine time regressed; `@developer`'s exact
 performance fix `69f37d1c` (R3); `@perf`'s re-time `c9f62f7c`: the 1 m
 benchmark accepted, the split phase still over ruling 5's 2 % on both
 catchments; that limit is revised below ("The split-phase limit, judged
-after the fix"), 20c-1 meets the revised one, and question 7 asks Ola
-whether to accept the remaining time (default yes). **Next: code review (`@reviewer`), with the
-mutation round for the invariant-critical suite `test_constraint_foot`**;
+after the fix"), 20c-1 meets the revised one, and Ola accepted the
+remaining time (question 7, ruling 7). Code review round 1 (`@reviewer`,
+on `0346ac63`): changes requested, no mutation record; `@tester`'s
+mutation round then ran ("Mutation round for 20c-1": 4 survivors of 16
+faults, one killed by the new test `4a64c1ef`), and each survivor is ruled
+there. **Next: `@tester`'s kills as ruled there (three test additions and
+one header fix, no production change), then code review round 2
+(`@reviewer`)**;
 **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
-**20c-3** input clean-up and coarsening, and Ola's outline rule (built
-either way; question 6 sets only whether it is on by default), after
+**20c-3** input clean-up and coarsening, and Ola's outline rule, on by
+default at 5 m (question 6, ruling 6), after
 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and question 5, 2026-10-07 ("Ola's rulings" below); questions 6 and 7 open. Asked by Ola
+and questions 5 to 7, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -661,9 +666,9 @@ Numedalslagen (5 548 km²), about 0.0001 % of each; at 10 m, 2.65 and
   computation CRS, as production will (design below).
 
 **Verdict: it pays off on 20c-3's input, so 20c-3 builds it (its third
-step, `--features-outline-snap`); question 6 asks Ola only whether it is
-on by default.** Its tests, gate and lines below apply under either
-answer.
+step, `--features-outline-snap`), on by default at 5 m (Ola, question 6,
+ruling 6).** Its tests, gate and lines below are the same under either
+default.
 
 ## What Ola gets
 
@@ -678,7 +683,7 @@ the output independent of `threads`:
 | PR 20c-1, constraint-aware insertion (built, measured) | 679 (0.078 %) | +0.43 % | 0.0024° | 433 (0.034 %) | +0.27 % | 0.00068° |
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
-| PR 20c-3 with Ola's outline rule at 5 m (question 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
+| PR 20c-3 with Ola's outline rule at 5 m (its default, ruling 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
 
 20c-1's row is `@perf`'s measurement of the built code, the same
 triangle counts, sliver counts and worst angles as M5's prototype
@@ -760,8 +765,8 @@ before the noder (`feature_input.py`'s side of the I/O boundary), with
 shapely's `coverage_simplify`, which keeps a partition a partition
 (`set_precision` polygon by polygon does not: M6 (a), so round 3 dropped
 it). Not the noder's `--snap-spacing`: it fails above 1 cm today (M4).
-About 60 lines of Python, and about 70 more for Ola's outline rule, built
-either way (question 6 sets only its default; M6). **Worth its own PR**; it does not depend on (a)
+About 60 lines of Python, and about 70 more for Ola's outline rule, on by
+default at 5 m (question 6, ruling 6; M6). **Worth its own PR**; it does not depend on (a)
 in code, but its gate is measured on 20c-2's mesh, so it goes after 20c-2.
 
 ### (c) The soft criterion, and splitting constraints in general
@@ -1116,7 +1121,7 @@ point, not a void carve point), Inside its triangle, not yet footed:
 - Reported: a row "Land-cover and outline lines split to improve angles"
   in `--stats` and the run record.
 
-## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (question 6)
+## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (ruled by Ola, question 6)
 
 Python, in the feature reader, after the polygons are moved to the
 computation CRS (vertex by vertex, as today) and before they are clipped
@@ -1143,8 +1148,9 @@ and the chains are built; never in `_core` (the I/O boundary, `CLAUDE.md`
    `--features-tolerance 0` reads them as given (both test catchments
    pass this check). The record and `--stats` say the tolerance and the
    vertex counts before and after.
-3. **Ola's outline rule** (`--features-outline-snap METRES`; its default is
-   question 6: 5 m whenever features are given, or 0, off): M6 (c)'s four
+3. **Ola's outline rule** (`--features-outline-snap METRES`; on by
+   default at 5 m whenever features are given, Ola's ruling 6; 0 turns it
+   off): M6 (c)'s four
    steps on the polygons' rings, against every ring of the domain polygon
    as the mesh gets it (after increment 22's reduction, if any), in the
    computation CRS. M6 (c)'s rounding (its step 2) then rounds once more: a
@@ -1163,9 +1169,8 @@ reduction). About 60 lines for steps 1 and 2 and about 70 for step 3.
 Measured in M3 to M6 on Lagan and Numedalslagen (the Norwegian CORINE
 rewritten as GeoJSON for round 3, M6). The merge changes the default mesh
 of every run with a class map, and step 3 changes every run with
-features if its default is on (question 6), so 20c-3's off switch for the
-gate is all three flags off. Step 3 is built either way; question 6
-settles only its default.
+features, since its default is on (ruling 6), so 20c-3's off switch for
+the gate is all three flags off, `--features-outline-snap 0` among them.
 
 ## PRs and gates
 
@@ -1173,7 +1178,7 @@ settles only its default.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1 |
-| 20c-3 | input coarsening, and the outline rule (built either way; question 6 sets its default) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on question 6's answer. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
+| 20c-3 | input coarsening, and the outline rule (on by default at 5 m, ruling 6) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on the default. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -1562,13 +1567,167 @@ At São Francisco's size the serial phases matter more than anywhere; point
 2 keeps the refinement split phase no slower than master's, and the
 start-quality phase is the one to watch (+6.5 to +7.7 % on master, serial).
 
-**Ola's question** (question 7 below): accept the remaining +7 to 9 %
+**Ola's question** (question 7, now ruling 7: accepted): accept the remaining +7 to 9 %
 against feet off, or move the foot search into the parallel scan.
 Recommended: accept. The most a move could save is the whole feet-on
 excess of the split phase, 2.4 ms on Lagan and 9.7 ms on Numedalslagen,
 under 0.1 % of either run, and a scan-time answer would still be checked
 again in the serial phase, since an earlier split in the same round can
 change a neighbour the search reads.
+
+#### Mutation round for 20c-1 (`@tester`, 2026-10-07, test commit `4a64c1ef`, on code `0346ac63`)
+
+Answers code review round 1's B1 (no kill record) and B2 (the CF4 margin
+demonstration's depths). Run on a scratch copy (`tools/scratch_copy.py`),
+macOS arm64 Release, with the targets `test_constraint_foot`,
+`test_constraint_foot_quality`, `prop_constraint_foot_refine`,
+`prop_constraint_foot_final` and 20b's `prop_refinement_constraint_feet`.
+Each fault was planted in the production code, the targets rebuilt and
+run, and the fault removed. Line numbers are in the test files at
+`4a64c1ef` (`test_constraint_foot.cpp` is the CF1 file; `_quality` CF2,
+`_refine` CF3, `_final` CF4; "20b" is `prop_refinement_constraint_feet.cpp`).
+
+**The design's seven faults** ("Mutants to kill", 20c-1 above):
+
+| # | fault planted | result | caught by |
+|---|---|---|---|
+| 1 | the end check removed (`foot_on`: a foot within δ of an end of its edge is still a hit) | killed | CF1 "a foot within delta of either end of its edge is NearEnd", lines 218 and 228 (a hit where NearEnd is expected); 20b "R2 step 2", line 708. The variant that checks only the first end: lines 219 and 708 |
+| 2 | the neighbour search crosses a constrained edge | killed | CF1 "no search across a constrained edge", line 255 (constrained) and 262 (frozen) |
+| 3 | the edge's midpoint instead of the foot | killed | CF1's position check in 8 of 10 cases (line 121, off by up to 9.4 cells); CF2 line 331; CF3 line 174; CF4 lines 230, 250, 291, 419; 20b line 229 |
+| 4 | footed once removed (the final check's `&& !was_footed` dropped, so a point already footed may be footed again) | **survived** | no fixture reached it; ruled below (b) |
+| 5 | the fallback removed (a footed point that comes up again is dropped, not inserted as itself) | killed | CF4 "at tolerance 0 every footed point goes in after its foot", line 382 (39, 40 and 40 points with error above 0 m for seeds 1 to 3); also lines 227 (`feet_fallback` 0, not 1) and 253 |
+| 6 | the foot's height taken from the point (its own z, not the foot's) | killed | CF4 line 252 (z 80 where 73.5 is expected), line 227, and the projected path's height case, lines 272 and 289 (z off by 0.245 m) |
+| 7 | refinement: the holding triangle dropped from the active set when the foot goes on a neighbour's edge | killed | CF3 "the foot goes on the neighbour's edge, and the node still goes in from the rescanned holding triangle", line 177 |
+
+**Further faults in `constraint_foot.hpp`:**
+
+| fault planted | result | caught by |
+|---|---|---|
+| row and column swapped in the world distance | killed | CF1 "distance and foot are measured in the world frame", lines 293 and 121; 20b line 229 |
+| the frozen-edge test dropped | killed | CF1 "a frozen edge is never a foot", lines 272, 277 and 262 |
+| the nearest edge instead of the first in search order | killed | CF1 "t's own constrained edges come first, in edge order", lines 118 and 119 |
+| "closer than δ" made non-strict (`>= delta` to `> delta`) | **survived** | no case puts a point exactly δ from an edge (CF1 tests 0.4 and 0.6 cells against δ = 0.5); the suite's header comment says it kills this fault, which is false; ruled below (a) |
+
+**Faults against the speed fix `69f37d1c`** (`foot_reachable`, and the search to the cap before ε):
+
+| fault planted | result | caught by |
+|---|---|---|
+| `foot_reachable` ignores the neighbours (false where only a neighbour has a live edge) | killed | CF3 line 174; 20b F2 line 498 (`feet_refused` 1, not 2) |
+| `foot_reachable` ignores the triangle's own edges | killed, by 20b only | 20b F3 line 514 (no feet at tolerance 0 on slope 0.1287); no 20c test catches it; ruled below (d) |
+| `foot_reachable` always true | **survived** | the output cannot change, only work is added; no test calls `foot_reachable` directly; ruled below (d) |
+| ε never computed: the search to the cap alone decides | killed by `4a64c1ef` | before it, only 20b F3's Delaunay oracle reacted (line 365, two violations 1.43e-11 m and 9.77e-11 m inside a circle of radius 6.52 m: rounding, so counted as a survivor). `4a64c1ef` adds CF3 "a node within the cap but beyond eps of the neighbour's edge goes in as itself, not as a foot" (tolerance 0.35 m, slope √2 m/m, so ε = 0.247 cells; the node 0.3 cells from the edge; cap 0.5 cells; the case asserts both facts first). It fails at line 224 on the fault and passes on `0346ac63` (7 CF3 cases, 131 assertions) |
+
+**Also tried**: the final check's holding triangle dropped from the active
+set when its foot goes on a neighbour's edge (R4.2): **survived**; no CF4
+fixture puts a final-check foot on a neighbour's edge. Ruled below (c).
+
+**The CF4 margin demonstration** (green-step ruling 2; code review round
+1's B2). Fault: `legalise_around` skipped after a final-check foot split.
+Every CF4 case that places a foot then fails in its Delaunay check
+(`prop_constraint_foot_final.cpp` line 181). How deep the offending apex
+lies inside the circumcircle:
+
+| case | depths | η (the check's allowance) |
+|---|---|---|
+| strip and no-strip cases | 4.96 m, 3.87 m | 1e-7 m |
+| projected path's height case | 6.93 m, 1.29 m | 5e-7 m |
+| tolerance 0, seed 1 | 10.33, 0.411, 0.234, 0.0196 m | 1e-7 m |
+| tolerance 0, seed 2 | 10.41, 0.288 m | 1e-7 m |
+| tolerance 0, seed 3 | 10.33, 0.425 m | 1e-7 m |
+
+η is 1e-7 × the cell side (1 m in these fixtures, 5 m on the projected
+path). The shallowest depth, 0.0196 m, is about 2e5 times its η. On
+`0346ac63`, without the fault, the
+two quads CF4 excuses are 3.85e-10 m and 4.11e-10 m deep, about 1 300
+times under η. So η sits between rounding and the smallest real failure
+with more than three orders of magnitude on each side.
+
+#### Rulings on the survivors (`@architect`, 2026-10-07, on `4a64c1ef`)
+
+**(a) "Closer than δ" made non-strict.** `@tester` adds the case
+proposed: a CF1 fixture point at `V(5, 0.5)`, exactly 0.5 cells (δ) from
+the edge in doubles, expecting `None`; the case first asserts that the
+distance it recomputes is exactly 0.5. And corrects the header comment
+(`tests/cpp/unit/test_constraint_foot.cpp@4a64c1ef:44`), which today
+claims the 0.4 and 0.6 cases kill this fault. R1's "closer than δ is
+strict" stands; no production change.
+
+**(b) Footed once removed. Keep the guard: it is reachable, and the
+fixtures so far could not reach it.** `@tester`'s explanation (the cut at
+the foot makes the repeated search NearEnd) is right for the line that
+was footed, and only for that line:
+
+- *The footed line never gives a second hit.* After the foot F goes in,
+  the line is cut at F into constrained edges that end at F, and later
+  splits only add vertices on it. F is p's orthogonal projection onto the
+  line, and F is a mesh vertex, so it lies in the open interior of no
+  edge. For any edge on that line, p's nearest point on the closed edge
+  is therefore an end of it (the clamped s is 0 or 1, up to rounding of
+  F's stored position, which is far below δ). `foot_on` then returns
+  NearEnd (s·len < δ holds at an end) or nothing (too far); never a hit
+  (`include/terrain/mesh/constraint_foot.hpp@0346ac63:63-67`).
+- *A second line can.* `constraint_foot` returns the first verdict in its
+  search order. If, after the foot, p's triangle has an edge of another
+  constrained line within δ, and no edge of the footed line comes before
+  it, that edge gives a hit. The wedge runs met the footed line's edge
+  first every time: two lines meeting at a vertex keep the cut sub-edge
+  on p's new triangle.
+- *A fixture that does it* (computed with exact predicates on these
+  coordinates, not yet run through the code): two parallel constrained
+  edges A1 = (0, 0) to B1 = (10, 0) and A2 = (0, 0.6) to B2 = (10, 0.6),
+  in a frame with dx = dy = 1 (so δ_p = 0.5 cells), the strip between
+  them triangulated (A1, B1, B2), (A1, B2, A2), and a stored point
+  p = (5, 0.35) with error above the tolerance (tolerance 0). p lies in
+  (A1, B2, A2), whose only edge within δ is A2-B2 (0.25 cells): a hit at
+  F = (5, 0.6). After the split, B1 lies inside the circumcircle of
+  (A1, B2, F), so Lawson flips A1-B2, and p is now in (A1, B1, F), whose
+  edge A1-B1 is 0.35 cells away with its foot (5, 0) 5 cells from either
+  end: a second hit. With the guard, p goes in as itself (feet 1,
+  fallback 1); without it, a second foot goes in at (5, 0), and p owns
+  two feet, which CF4's oracle "no stored point owns two feet" refuses
+  (the bound the design named for this fault). CF4's wedge was meant to
+  reach this ("a point footed on one line can find the other next
+  round"); it does not, for the reason in the second point.
+- **Who does what**: `@tester` adds this case to CF4 (or one like it, if
+  the hand-built mesh needs more around it) and shows it fails with the
+  guard removed. If the code does not reach the guard on it, `@tester`
+  says so in the handback, and the guard comes back to me before code
+  review round 2. R4's text ("recorded as footed … inserted later as
+  itself") already states the guard; it is unchanged, and there is no
+  work for `@developer`.
+
+**(c) The final check's holding triangle dropped (R4.2).** This one is a
+correctness fault, not dead code: if the holding triangle t is neither
+touched nor kept active when the foot goes on a neighbour's edge, t is
+not rescanned and its point is never inserted, which breaks the tolerance
+guarantee R4.2 states. `@tester` adds the CF4 analogue of CF3's
+neighbour case: a stored point at tolerance 0 whose holding triangle has
+no constrained edge but whose neighbour, across an unconstrained edge,
+has one within δ_p, laid out so that no flip after the foot touches the
+holding triangle (as CF3's case is; a flip would mark it touched and hide
+the fault); asserted: the foot is on the neighbour's edge, the
+point then goes in as itself, and the tolerance oracle over all stored
+points passes. It must fail with
+`include/terrain/refinement/refine_points.hpp@0346ac63:428-429` removed.
+
+**(d) `foot_reachable`.** Yes, a direct CF1 unit test. It is the contract
+the speed fix rests on (where it is false, `constraint_foot` finds
+nothing), and today one of its faults is caught only by 20b's F3. On
+CF1's fixtures, four cases: true where only the triangle's own edge is
+constrained and live; true where only a neighbour's is; false where the
+only constrained edge lies beyond a constrained edge of the triangle;
+false where the only one is frozen. Each false case also asserts that
+`constraint_foot` returns `None` for a point next to that edge. These
+kill "ignores own edges" and "ignores neighbours" in a 20c target, and
+"always true" too, although that fault changes only the work done
+(`@perf`'s split-phase figures cover the work).
+
+**Next, in order.** `@tester`, in one test commit or one per item: (a),
+(b), (c), (d), each shown to fail on its fault and pass on the code; the
+handback adds one line per item to the tables above (the commit, and the
+line that kills). No production change; no `@developer` step unless (b)'s
+fixture does not reach the guard. Then the full C++ and Python runs, and
+code review round 2 (`@reviewer`).
 
 ### 20c-2
 
@@ -1607,9 +1766,10 @@ partition stays valid and its area changes by less than tolerance ×
 perimeter; polygons that do not form a coverage stop the run with the
 plain error, and pass at tolerance 0; flags off are a no-op.
 
-The outline rule, under either answer to question 6 (invariant-critical,
-mutation testing required: it rewrites input borders); a CLI test pins
-the default question 6 sets:
+The outline rule (invariant-critical, mutation testing required: it
+rewrites input borders); a CLI test pins its default, 5 m whenever
+features are given (ruling 6), and that `--features-outline-snap 0` turns
+it off:
 
 - **OR1** a border 3 m inside a straight outline edge, parallel to it for
   100 m, at D = 5: no linework is left within D of the outline except
@@ -1670,7 +1830,7 @@ Counted in `CLAUDE.md` §2's unit.
 | | **total** | **~150** |
 | 20c-1 built | `python3 tools/count_loc.py c074f900 69f37d1c`: `constraint_foot.hpp` 77, `quality.hpp` 20, `refine.hpp` −21, `refine_points.hpp` 53, `strip_scan.hpp` 0, `bindings/core.cpp` 8, `_core.pyi` 6, `cli.py` 3, `edge_strip.py` 3, `final_check.py` 7, `run_record.py` 7 | **163** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
-| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 (either answer to question 6) | **~130** |
+| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
 
 On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
 
@@ -1702,9 +1862,21 @@ with the default no: "defaults on all four". So:
    stay as the source has them; the thin triangle such a gap forces stays
    in the mesh (M5), and the worst-angle gates do not ask more of 20c.
 
-## Questions for Ola
+Ola, 2026-10-07, on questions 7 and 6 (the main session's list put
+question 7 first and question 6 second): "1-3 default. 4 must wait". So:
 
-6. **Your outline rule: on by default?** 20c-3 builds it either way, as
+6. **The outline rule is on by default** (question 6, the default yes):
+   20c-3's `--features-outline-snap` defaults to 5 m whenever features are
+   given; `--features-outline-snap 0` turns it off. 20c-3's code, tests
+   and gate are as designed; its CLI test pins 5 m.
+7. **20c-1's split-phase time is accepted** (question 7, the default
+   accept): the foot search stays in the serial split phase, under the
+   revised limit ("The split-phase limit, judged after the fix"); no
+   follow-up moves it into the parallel scan.
+
+The two questions as asked:
+
+- Question 6: **Your outline rule: on by default?** 20c-3 builds it either way, as
    `--features-outline-snap METRES`; this question sets only its default.
    Every part of a
    land-cover border within 5 m of the catchment outline is moved onto the
@@ -1722,7 +1894,7 @@ with the default no: "defaults on all four". So:
    default), like `--features-tolerance`. Either way the same code, tests
    and gate go into 20c-3; only the default and the CLI test that pins it
    differ.
-7. **20c-1's refinement step with feet on: accept the time, or move the
+- Question 7: **20c-1's refinement step with feet on: accept the time, or move the
    foot search into the parallel part?** After `@developer`'s fix, the
    step of refinement that adds points one at a time is 7 % slower with
    feet on than with `--no-constraint-feet` on Lagan and Numedalslagen
@@ -1735,6 +1907,10 @@ with the default no: "defaults on all four". So:
    20c-1 meets. The other choice: a follow-up PR moves the search and ε
    into the parallel scan, with the serial phase checking the answer
    again.
+
+## Questions for Ola
+
+None open.
 
 ## Not in scope
 
@@ -1762,3 +1938,4 @@ with the default no: "defaults on all four". So:
 20c design review round 4 (@reviewer, a3a2b7ec..6ac8ab2d, 0 counted LOC, docs only): CHANGES REQUESTED; round 3's B1-B3, S1 and S2 answered (S1's 0.86 × bound recomputed; both catchments' CORINE pass `coverage_is_valid` in the computation CRS, as 20c-3 step 2 says); 20c-1's part unchanged since round 2 and independent of question 6: ready to build. (B1) 20c-3's Lagan worst triangle (0.006697°) is made by the 2 m simplification, not the input: it stands on the slit's own 1 cm closing edge (EPSG:3006 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244), its apex 413 527.395 6 331 662.317 78.9 m away, because `coverage_simplify` drops the source vertex 413 596.806 6 331 640.083 that stands 5.98 m from that edge (0.088° in the source); so docs/increments/20c-soft-quality.md@6ac8ab2d:164-166, :448, :452-453, :455-456, :480-484, :597 and :643-648 and ROADMAP.md@6ac8ab2d:61 ("stays set by the input", "150 m from the slit") are false, and :474-475's "needs no guard" needs re-judging for it; (B2) question 6's other choice (the rule as a flag, off by default) still builds the rule, but the Status, gate, tests and LOC build and gate it only "if Ola says yes" (docs/increments/20c-soft-quality.md@6ac8ab2d:8-9, :611-613, :1028-1030, :1038, :1173, :1225); say question 6 sets only the default, or add a plain no and what it drops.
 20c design review round 5 (@reviewer, 6ac8ab2d..51b4434a, 0 counted LOC, docs only): CHANGES REQUESTED; round 4's B1, B2, S1 and S2 answered (rerun on the source: in the designed order (moved to EPSG:3006 first) `coverage_simplify` at 2 m drops 413 596.806 6 331 640.083, which is 4.47 mm off the border and 5.98 m from the 1 cm edge; angles 0.0882° before and 0.006697° after; the gap's corners 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244 now match the source; 27 % and 33 % correct); 20c-1's part unchanged since round 2: ready to build. (B1) docs/increments/20c-soft-quality.md@51b4434a:739-740 still says the outline rule's ~70 lines come "if he says yes (question 6, M6)": round 4's B2, missed in section (b); (B2) docs/increments/20c-soft-quality.md@51b4434a:502-503 "Lagan has 616 such edges and puts back 78 vertices" counts each shared edge and vertex once per polygon: the source has 417 distinct edges under 10 cm, and the guard puts back 39 distinct points (Numedalslagen's 1 779 and 142 not rerun; restate both in one unit).
 20c design review round 6 (@reviewer, 51b4434a..c074f900, 0 counted LOC, docs only): APPROVED; round 5's B1, B2, S1 and S2 answered. (B1) /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@c074f900:741-742 now says the outline rule is "built either way (question 6 sets only its default)", and a grep for "says yes|if Ola|if he|question 6" finds no conditional build left outside round 4's quoted record. (B2) :502-505 counts each shared edge and point once: rerun on Numedalslagen's box read (8 017 polygons) gives 1 362 distinct short edges / 71 points put back (1 779 / 142 per polygon), matching the doc. (S1) :1045-1048 rerun: 3 polygons fail `coverage_invalid_edges`, none of them reach the domain, and the 1 611 that do reach it pass `coverage_is_valid`. (S2) :691 "about 6 % (0.006697° to 0.007080°)" checks out: 0.007080 / 0.006697 = 1.057. ROADMAP.md@c074f900:61 matches. 20c-1's part has not changed since round 2.
+20c-1 code review round 1 (@reviewer, c074f900..0346ac63, 163 counted LOC): CHANGES REQUESTED. (B1) no mutant kill record for the invariant-critical suite test_constraint_foot reached review, and none is on disk: /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/increments/20c-soft-quality.md@0346ac63:17-18 still names "the mutation round" as next; @tester's handback must cover all seven targets at :1255-1259, including CF3's "holding triangle dropped from the active set", which the brief's list left out; (B2) the CF4 oracle-margin mutant demonstration that ruling 2 asks for (:1430-1434, `legalise_around` skipped, depths far above η) is called done at :1503 but its result is recorded nowhere: one line with the measured depths, or the handback, is needed. Checked and true: LOC 163 against an estimate of ~150 (:1670-1671), all under 700; the green, MeshVertex and fix commits touch no test file; no red-step scaffolding is left; F2's re-pin to 2 refusals adds an assertion that both nodes are vertices, and the stub and void-callable edits are type and keyword changes only, so nothing was weakened; on HEAD, built on macOS arm64 Release (which fuses multiply-adds, as the macOS CI leg does), CF4 excuses 2 quads at 3.85e-10 and 4.11e-10 m, about 1 300 times under η = 5e-7 m; the fix 69f37d1c gives the same answers by reading: /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/mesh/constraint_foot.hpp@0346ac63:78-89 tests the same edge set constraint_foot searches, foot_epsilon clamps to the same foot_cap(g) (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/include/terrain/refinement/refine.hpp@0346ac63:219-241), and nothing found within the cap means nothing found within ε; R1-R5, R2.8, R4.7, the gate row and the split-phase table match /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482:40-50, :206-213, :264-288, :298 and /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality/docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:158-170, :186-241, :259, :261-321, and the raw/*_stats.md lines cited; the revised time limit is argued, not a moved goalpost (ruling 5's 2 % was the trigger for the fix, which is done; the tile at +0.86 % shows no work wasted where no foot is placed), and question 7 stays Ola's. Not pushed, so no CI yet.
