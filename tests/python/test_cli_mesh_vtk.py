@@ -150,7 +150,8 @@ class TestEncoding:
         assert marker is not None, text
         assert marker.group(1) == "binary", text
         # The command's own description is part of the same help page, and
-        # until increment 31 said so in words (`cli.py@2764ef71:755`).
+        # until increment 31 said so in words
+        # (`src_python/tin_engine/cli.py@2764ef71:755`).
         assert "Text is the default" not in text, text
 
     def test_binary_switches_both_ply_files(self, tmp_path: Path) -> None:
