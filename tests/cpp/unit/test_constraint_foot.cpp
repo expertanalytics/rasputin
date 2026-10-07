@@ -323,7 +323,7 @@ TEST_CASE("CF1: foot_reachable is true where t's own edge or a neighbour's is co
         REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::None);
     }
     SECTION("the only constrained edge is frozen: false, on t and on the neighbour") {
-        for (const Pair e : {Pair{0u, 1u}, Pair{0u, 3u}}) {
+        for (const Pair& e : {Pair{0u, 1u}, Pair{0u, 3u}}) {
             CAPTURE(e.first, e.second);
             LatticeMesh m = build(fx.v, fx.tris, {{e, 4u}});
             m.set_frozen_mask(4u);
