@@ -36,16 +36,23 @@ for Ola, and a write of the harness state or a run of away.py is always denied
 """
 
 import json
+import posixpath
 import re
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+# Appended, not put first: a tools/ file named after a stdlib module must not
+# replace it here (docs/increments/h16-harness-fixes.md §2 G4).
+sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
 try:
     import shell_scan
 except ImportError:  # every line is then judged as text, as before h4
     shell_scan = None
+try:
+    import scratchpad
+except ImportError:  # no exemption then: a scratchpad path is judged like any other
+    scratchpad = None
 
 #: Files whose content is normative. A change here changes what is allowed.
 GOVERNED = (
@@ -60,6 +67,8 @@ GOVERNED = (
     "tools/rule_sizes.py",
     "tools/shell_scan.py",
     "tools/brief.py",  # h9: guard_spawn.py imports it
+    "tools/scratchpad.py",  # h16: this guard imports it
+    "tools/count_loc.py",  # h16: it computes the arithmetic of CLAUDE.md §2
     ".claude/profile.toml",
 )
 
@@ -70,7 +79,7 @@ GOVERNED_GLOBS = (".claude/settings*.json*",)
 
 #: Directory prefixes where every file is a gate: these turn prose into refusals.
 GOVERNED_PREFIXES = ("tools/check_", ".claude/agents/", ".claude/hooks/", ".claude/skills/",
-                     ".git/hooks/", ".claude/briefs/")
+                     ".git/hooks/", ".claude/briefs/", ".git/remotes/", ".git/branches/")
 
 #: Matched with endswith only: a basename rule would govern every file named config.
 GOVERNED_SUFFIXES = (".git/config",)
@@ -86,17 +95,32 @@ WRITES = re.compile(
 )
 
 
-def governed(path: str) -> bool:
+def governed(path: str, *, scratch_exempt: bool = True) -> bool:
+    # h16 G3a, before every rule below: a scratchpad is temporary, and nothing
+    # the harness reads lives there. By real path, so a symlink out is followed.
+    if scratch_exempt and scratchpad is not None and scratchpad.under(path):
+        return False
     # removeprefix, not lstrip: lstrip("./") strips CHARACTERS, so it eats the
     # leading dot of ".claude/..." and every dotfile path stops matching.
     norm = path.replace("\\", "/").removeprefix("./")
-    tail = norm.split("/")[-1]
+    # h16 G4: judged also with `.`, `..` and `//` resolved (lexically), as well as
+    # as written: normpath drops a trailing `/`, which the prefixes below need.
+    lexical = posixpath.normpath(norm)
+    if lexical not in (norm, ".") and governed(lexical, scratch_exempt=scratch_exempt):
+        return True
+    parts = norm.split("/")
+    tail = parts[-1]
     if any(norm.endswith(g) or tail == g for g in GOVERNED):
         return True
     if any(fnmatch(norm, f"*{pattern}") or fnmatch(tail, pattern.split("/")[-1])
            for pattern in GOVERNED_GLOBS):
         return True
     if any(norm.endswith(suffix) for suffix in GOVERNED_SUFFIXES):
+        return True
+    # h16 G4: `python3 tools/x.py` puts tools/ first on sys.path, so a tools/ file
+    # named after a stdlib module (tools/json/__init__.py, tools/ast.py) replaces it.
+    if any(parts[at - 1] == "tools" and part.split(".")[0] in sys.stdlib_module_names
+           for at, part in enumerate(parts) if at):
         return True
     return any(prefix in norm for prefix in GOVERNED_PREFIXES)
 
@@ -131,8 +155,12 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
                 or any(runs_away(s) for s in simples)
                 or (".git/harness" in command and any(s.writes or s.unknown for s in simples))):
             return "deny", [], ""
-        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md.
-        hits = list(dict.fromkeys(t for t in targets if governed(shell_scan.static(t))))
+        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md. The scratchpad
+        # holds only for one plain command, which cannot link a path and write through it.
+        one = simples[0] if len(simples) == 1 else None
+        plain = one is not None and one.program is None and one.script is None and not one.unknown
+        hits = list(dict.fromkeys(t for t in targets
+                                  if governed(shell_scan.static(t), scratch_exempt=plain)))
         if hits:
             return "ask", hits, f"it writes {', '.join(hits)}"
         if not any(s.unknown or any(not shell_scan.static(w).strip("/") for w in s.writes)

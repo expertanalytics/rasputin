@@ -73,7 +73,7 @@ def settle(event: dict) -> dict | None:
     found = act_of(event)
     if found is None:
         return None
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))  # the stdlib wins (h16 G4)
     import harness_mode
 
     act, why = found

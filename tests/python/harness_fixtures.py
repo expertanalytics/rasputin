@@ -47,6 +47,9 @@ COPIED = (
     # text, and here it would change test_rule_sizes.py's totals.
     "tools/brief.py",
     ".claude/hooks/guard_spawn.py",
+    # h16 G3a: guard_governance asks it whether a path lies under a session
+    # scratchpad (docs/increments/h16-harness-fixes.md §3).
+    "tools/scratchpad.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
@@ -305,3 +308,33 @@ class Tool:
         if self._module is None:
             self._module = load_tool(self._name)
         return getattr(self._module, attr)
+
+
+#: h16 G3: the fixed head of the scratchpad pattern, as the design states it
+#: (`^/private/tmp/claude-\d+/[^/]+/[^/]+/scratchpad(/|$)`).
+SCRATCHPAD_HEAD = "/private/tmp/claude-"
+
+
+def point_scratchpad(repo: Path, base: Path) -> Path:
+    """Point the copy's scratchpad pattern at `base`; return a scratchpad made under it.
+
+    The hooks run as subprocesses, so the pattern cannot be patched in memory:
+    the copied `tools/scratchpad.py` is rewritten instead, with `/private/tmp`
+    in its one pattern literal replaced by `base`. The rest of the pattern is
+    kept, so the scratchpad returned has the real shape,
+    `<base>/claude-501/<project>/<session>/scratchpad`.
+    """
+    module = repo / "tools" / "scratchpad.py"
+    if not module.exists():
+        pytest.fail("tools/scratchpad.py is missing from the copy (h16 §3)")
+    base = base.resolve()
+    assert all(c.isalnum() or c in "/._-" for c in str(base)), base  # no regex specials but '.'
+    text = module.read_text()
+    assert text.count(SCRATCHPAD_HEAD) == 1, (
+        f"tools/scratchpad.py states {SCRATCHPAD_HEAD!r} {text.count(SCRATCHPAD_HEAD)} times, "
+        "not once; the test cannot point the pattern elsewhere"
+    )
+    module.write_text(text.replace(SCRATCHPAD_HEAD, f"{base}/claude-"))
+    pad = base / "claude-501" / "-Users-x-project" / "0f1e2d3c-session" / "scratchpad"
+    pad.mkdir(parents=True)
+    return pad

@@ -1636,8 +1636,8 @@ branch had moved, so it is pinned with the design's, at `55c043e`.
 | `docs/increments/25-plain-output.md:830` | `tests/python/test_cli_mesh_mosaic.py@5e235eb:278` (and its `:302`, `:331-336`) |
 | `docs/increments/25-plain-output.md:942`, `:944` | `tests/python/test_cli_mesh_refine.py@55c043e:133` |
 | `docs/increments/27-node-sampling.md:315` | `tests/python/test_cli_mesh_plain_output.py@80990e0:279` |
-| `docs/increments/h16-harness-fixes.md:579` | `tests/python/test_cli_mesh_geographic.py@97eea35:886` |
-| `docs/increments/h16-harness-fixes.md:615` | `tests/python/test_hardening.py@a61e848:247` |
+| `docs/increments/h16-harness-fixes.md@abd7c68:579` | `tests/python/test_cli_mesh_geographic.py@97eea35:886` |
+| `docs/increments/h16-harness-fixes.md@abd7c68:615` | `tests/python/test_hardening.py@a61e848:247` |
 
 Several of these were already stale at `b63132e` (for example
 `tests/python/test_cli_mesh_landcover.py@b63132e:13` no longer quoted the line the record

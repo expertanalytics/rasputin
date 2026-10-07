@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
 import session_state  # beside this file, as the hooks import it
 
 ROOT = Path(__file__).resolve().parent.parent
