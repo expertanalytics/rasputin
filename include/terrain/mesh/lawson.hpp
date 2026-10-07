@@ -125,10 +125,11 @@ namespace detail {
 // (col, -row), must flip against the apex dv across it: the quad's incircle
 // determinant positive in the frame -- dv inside the triangle's circle, or cv
 // inside the neighbour's. must_flip asks it, and so does quality.hpp's
-// read-only cavity (20c R7), so the two cannot disagree.
+// read-only cavity (20c R7), so the two cannot disagree. Forced inline:
+// must_flip is on the split phase's path, and before 20c-2 made no call here.
 template <pred::GeometryKernel K>
-[[nodiscard]] bool quad_flips(MeshVertex av, MeshVertex bv, MeshVertex cv, MeshVertex dv,
-                              const LatticeFrame& f) {
+[[nodiscard, gnu::always_inline]] inline bool quad_flips(MeshVertex av, MeshVertex bv, MeshVertex cv,
+                                                         MeshVertex dv, const LatticeFrame& f) {
     // The integer path first; it answers only where the kernel would give the
     // same sign. Answering without consulting K assumes K's incircle sign is
     // exact, as DefaultKernel's (FilteredKernel<DetriaExact>) is: for an

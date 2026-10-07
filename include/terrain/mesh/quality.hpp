@@ -143,13 +143,16 @@ struct QualityCavity {
     std::vector<std::array<MeshVertex, 3>> created;
 };
 
+// Into c, whose buffers are reused from call to call.
 template <pred::GeometryKernel K>
-[[nodiscard]] QualityCavity quality_cavity(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p,
-                                           const LatticeFrame& f) {
-    QualityCavity c{{t}, {}};
+void quality_cavity(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p, const LatticeFrame& f,
+                    QualityCavity& c) {
+    c.removed.assign(1, t);
+    c.created.clear();
     if (on < 3 && m.neighbours(t)[on] != kNoNeighbour)
         c.removed.push_back(m.neighbours(t)[on]);
-    const auto in = [&](std::uint32_t u) { return std::find(c.removed.begin(), c.removed.end(), u) != c.removed.end(); };
+    // A few slots: a loop, not std::find, which libc++ hands to wmemchr.
+    const auto in = [&](std::uint32_t u) { return std::ranges::any_of(c.removed, [u](auto r) { return r == u; }); };
     for (std::size_t i = 0; i < c.removed.size(); ++i)
         for (unsigned k = 0; k < 3; ++k) {
             const std::uint32_t r = c.removed[i], u = m.neighbours(r)[k];
@@ -165,6 +168,13 @@ template <pred::GeometryKernel K>
         for (unsigned k = 0; k < 3; ++k)
             if (const auto u = m.neighbours(r)[k]; u == kNoNeighbour ? !(r == t && k == on) : !in(u))
                 c.created.push_back({m.corner(r, k), m.corner(r, (k + 1) % 3), p});
+}
+
+template <pred::GeometryKernel K>
+[[nodiscard]] QualityCavity quality_cavity(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p,
+                                           const LatticeFrame& f) {
+    QualityCavity c;
+    quality_cavity<K>(m, t, on, p, f, c);
     return c;
 }
 
@@ -180,18 +190,48 @@ template <pred::GeometryKernel K>
     return best * 180.0 / std::numbers::pi;
 }
 
+// R7's constants and scratch: theta, the gain, theta's cosine and sine, the cavity.
+struct GainJudge {
+    double theta, gain, cos_t = std::cos(theta * std::numbers::pi / 180.0),
+                        sin_t = std::sin(theta * std::numbers::pi / 180.0);
+    QualityCavity c{};
+
+    // min(theta, smallest_angle_deg(a, b, c)), with the atan2 calls skipped
+    // when every corner is above theta by a margin: corner angle phi > theta
+    // iff |cross| cos - dot sin = r sin(phi - theta) > 0, and the margin,
+    // 1e-9 of |cross| + |dot| >= |u||w|, is far above the rounding of these
+    // terms, of atan2 and of the degree conversion, so the skip leaves the
+    // value smallest_angle_deg's min with theta gives.
+    [[nodiscard]] double capped(Point2 a, Point2 b, Point2 c) const {
+        const std::array<Point2, 3> v{a, b, c};
+        for (std::size_t k = 0; k < 3; ++k) {
+            const double ux = v[(k + 1) % 3].x - v[k].x, uy = v[(k + 1) % 3].y - v[k].y;
+            const double wx = v[(k + 2) % 3].x - v[k].x, wy = v[(k + 2) % 3].y - v[k].y;
+            const double cross = std::abs(ux * wy - uy * wx), dot = ux * wx + uy * wy;
+            if (!(cross * cos_t - dot * sin_t > 1e-9 * (cross + std::abs(dot))))
+                return std::min(theta, smallest_angle_deg(a, b, c));
+        }
+        return theta;
+    }
+};
+
 // R7: inserting p at (t, on) leaves the worst angle, capped at theta, no lower
-// than before plus gain, less the slack.
+// than before plus gain, less the slack. The worst before only lowers the
+// bar, so (by monotone rounding) the answer is yes once the worst after
+// clears it at theta, or at any worst-before-so-far.
 template <pred::GeometryKernel K>
 [[nodiscard]] bool pays(const LatticeMesh& m, std::uint32_t t, unsigned on, MeshVertex p, const LatticeFrame& f,
-                        double theta, double gain) {
-    const auto c = quality_cavity<K>(m, t, on, p, f);
-    double old_w = theta, new_w = theta;
-    for (const auto r : c.removed)
-        old_w = std::min(old_w, smallest_angle_deg(f.at(m.corner(r, 0)), f.at(m.corner(r, 1)), f.at(m.corner(r, 2))));
-    for (const auto& x : c.created)
-        new_w = std::min(new_w, smallest_angle_deg(f.at(x[0]), f.at(x[1]), f.at(x[2])));
-    return new_w >= old_w + gain - kGainSlackDeg;
+                        GainJudge& j) {
+    quality_cavity<K>(m, t, on, p, f, j.c);
+    double old_w = j.theta, new_w = j.theta;
+    for (const auto& x : j.c.created)
+        new_w = std::min(new_w, j.capped(f.at(x[0]), f.at(x[1]), f.at(x[2])));
+    for (const auto r : j.c.removed) {
+        if (new_w >= old_w + j.gain - kGainSlackDeg)
+            return true;
+        old_w = std::min(old_w, j.capped(f.at(m.corner(r, 0)), f.at(m.corner(r, 1)), f.at(m.corner(r, 2))));
+    }
+    return new_w >= old_w + j.gain - kGainSlackDeg;
 }
 
 }  // namespace detail
@@ -215,6 +255,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
 
     const bool judged = o.min_gain_deg >= 0.0, split_lines = judged && o.constraint_feet;
     const double half_cell = std::min(f.dx, f.dy) / 2.0;  // delta_q, R2.2
+    detail::GainJudge judge{o.min_angle_deg, o.min_gain_deg};
     std::vector<std::uint32_t> written;
     // p into t (`on` 3) or onto t's edge `on`, legalised; written slots offered.
     const auto insert = [&](std::uint32_t t, unsigned on, MeshVertex p) {
@@ -325,7 +366,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
                 std::tie(owner, edge, at) = std::tuple{s.owner, s.edge, s.at};
             }
         }
-        if (judged && !detail::pays<K>(m, owner, edge, at, f, o.min_angle_deg, o.min_gain_deg)) {
+        if (judged && !detail::pays<K>(m, owner, edge, at, f, judge)) {
             ++out.skipped_no_gain;
             continue;
         }
