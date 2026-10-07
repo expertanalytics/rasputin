@@ -520,6 +520,91 @@ TEST_CASE("CF4: a point footed on one line is not footed again on a second line;
     REQUIRE(j2_over(g, store, b, out, 0.0) == 0);
 }
 
+// ------------------------------------------------------------------ R4.2, a foot on a neighbour's edge
+
+namespace {
+
+// CF3's neighbour fixture (prop_constraint_foot_refine.cpp), for the final
+// check: nodes at integer world (x, y), x_min -5, y_max 32, dx = dy = 1, 31
+// columns and 39 rows, so (col, row) = (x + 5, 32 - y). The only constraint
+// P (0, -0.3) - Q (20, -0.3); above it the sliver u = (P, Q, V) with V (4, 0.1),
+// then t = (P, V, W) and (V, Q, W) with W (2, 29.7) far up. The stored point
+// N (2, 0), 1 m on 0 m ground, lies in t, which has no constrained edge; P-Q,
+// u's edge across t's free P-V, is 0.3 cells from N. The foot's split is on
+// the outline, and no flip after it reaches t.
+RasterGeometry neighbour_geometry() { return RasterGeometry{-5.0, 32.0, 1.0, 1.0, 31, 39}; }
+
+Start neighbour_start() {
+    Start s;
+    s.mesh = IndexedMesh2{{{0, -0.3}, {20, -0.3}, {4, 0.1}, {2, 29.7}},
+                          {{0, 1, 2}, {0, 2, 3}, {2, 1, 3}},
+                          std::vector<std::uint8_t>(3, 0)};
+    s.edges = {{0, 1}};
+    s.masks = {1};
+    return s;
+}
+
+const MeshVertex kNeighbourN{7.0, 32.0};
+const cfo::Frac kNeighbourFoot{7.0, 32.3};
+
+}  // namespace
+
+TEST_CASE("CF4: the neighbour fixture is what it claims: the foot is on the neighbour's edge and no flip touches t",
+          "[refine_points][constraint_foot][CF4]") {
+    namespace mesh = terrain::mesh;
+    const auto g = neighbour_geometry();
+    const Start s = neighbour_start();
+    auto built = terrain::refinement::detail::to_lattice(g, s.mesh, s.edges, s.masks);
+    REQUIRE(std::holds_alternative<mesh::LatticeMesh>(built));
+    auto& m = std::get<mesh::LatticeMesh>(built);
+    const auto frame = mesh::lattice_frame(1.0, 1.0, g.rows(), g.cols());
+    REQUIRE(mesh::legalise_all<terrain::pred::DefaultKernel>(m, frame, [](std::uint32_t) {}) == 0);
+
+    const auto t = holding(m, kNeighbourN);
+    REQUIRE(t.has_value());
+    for (unsigned k = 0; k < 3; ++k) REQUIRE_FALSE(m.is_constrained(*t, k));
+    const auto foot = mesh::constraint_foot(m, *t, kNeighbourN, 0.5, frame);
+    REQUIRE(foot.status == mesh::FootStatus::Hit);
+    REQUIRE(foot.owner != *t);  // the neighbour's edge
+    REQUIRE(std::abs(foot.at.col - kNeighbourFoot.col) <= 1e-12);
+    REQUIRE(std::abs(foot.at.row - kNeighbourFoot.row) <= 1e-12);
+    REQUIRE(m.neighbours(foot.owner)[foot.edge] == mesh::kNoNeighbour);  // the outline: seeds owner and new
+
+    const auto held = m.triangles()[*t];
+    const std::uint32_t before = static_cast<std::uint32_t>(m.triangle_count());
+    const auto q = m.split_edge(foot.owner, foot.edge, foot.at);
+    const std::array<std::uint32_t, 2> seeds{foot.owner, before};
+    mesh::FlipStack stack;
+    std::vector<std::uint32_t> written;
+    mesh::legalise_around<terrain::pred::DefaultKernel>(m, q, std::span<const std::uint32_t>{seeds}, frame, stack,
+                                                        [&](std::uint32_t w) { written.push_back(w); });
+    REQUIRE(m.triangles()[*t] == held);  // t unchanged ...
+    REQUIRE(std::find(written.begin(), written.end(), *t) == written.end());  // ... and not touched
+    REQUIRE(holding(m, kNeighbourN) == t);
+}
+
+TEST_CASE("CF4: the foot goes on the neighbour's edge, and the point still goes in from the holding triangle (R4.2)",
+          "[refine_points][constraint_foot][CF4]") {
+    // Kills the final check's holding triangle dropped from the active set
+    // when its foot goes on a neighbour's edge (refine_points.hpp, R4.2's
+    // `if (owner != t) skipped.push_back(t)`): t is untouched, so without it N
+    // is never scanned again and stays 1 m off.
+    const auto g = neighbour_geometry();
+    const Begin b = with_z(neighbour_start(), std::vector<double>(4, 0.0));
+    cff::ExactStore store{g};
+    store.add(kNeighbourN, 1.0f);
+    const auto out = run_points(store, nullptr, b, options(0.0, true));
+    shape(g, b, out);
+    CHECK(out.feet_refused == 0);
+    REQUIRE(cfo::vertex_at(g, out, kNeighbourFoot, 1e-12).has_value());  // the foot, on P-Q
+    REQUIRE(out.feet == 1);
+    const auto self = cfo::vertex_at(g, out, cfo::Frac{kNeighbourN.col, kNeighbourN.row}, 0.0);
+    REQUIRE(self.has_value());  // N, after its foot
+    REQUIRE(out.z[*self] == 1.0);
+    REQUIRE(out.feet_fallback == 1);
+    REQUIRE(j2_over(g, store, b, out, 0.0) == 0);  // the tolerance oracle over every stored point
+}
+
 // ------------------------------------------------------------------ 14b T3 and T6, rule on
 
 TEST_CASE("CF4 T3 T6: refine_points with a strip and feet on keeps J2 and is bit-identical over threads",
