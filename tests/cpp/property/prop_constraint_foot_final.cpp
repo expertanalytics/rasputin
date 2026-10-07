@@ -24,7 +24,9 @@
 // Oracles: on the reprojected path the tolerance oracle is J2 at every stored
 // point (support/j2_oracle.hpp), as ES9 has it; on the projected path the DEM
 // node oracle; Delaunay and the constraint lines on both
-// (support/constraint_foot_oracles.hpp). Feet are recognised from the output:
+// (support/constraint_foot_oracles.hpp). The Delaunay oracle excuses an apex
+// inside by no more than 1e-7 * min(dx, dy) (20c-1's green-step ruling 2) and
+// every case prints the depth of each quad it excuses. Feet are recognised from the output:
 // an inserted vertex that is neither a stored point, a strip point nor a node.
 //
 // Mutants these cases are meant to kill (design, "Mutants to kill"):
@@ -175,7 +177,9 @@ void shape(const RasterGeometry& g, const Begin& b, const PointRefineOutcome& ou
     REQUIRE(out.ok());
     CHECK(out.vertices.size() == b.mesh.vertices().size() + out.inserted);
     CHECK(out.feet_fallback <= out.feet);
-    CHECK(cfo::delaunay_violations(g, out) == 0);
+    std::vector<double> excused;
+    CHECK(cfo::delaunay_violations(g, out, &excused) == 0);
+    for (const double depth : excused) WARN("Delaunay oracle excused a quad, apex inside by " << depth << " m");
     const std::vector<Point2> sv(b.mesh.vertices().begin(), b.mesh.vertices().end());
     const auto l = cfo::line_findings(g, sv, b.edges, b.masks, out);
     CHECK(l.unplaced == 0);

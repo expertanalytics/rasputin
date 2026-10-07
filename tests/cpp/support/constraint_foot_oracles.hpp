@@ -11,7 +11,8 @@
 //   - delaunay_violations: no interior edge that is not a constraint edge has
 //     an apex strictly inside the other triangle's circle, by the exact
 //     incircle in the producer's frame (col dx, -(row dy)), on the fractional
-//     (col, row) recovered from the world point;
+//     (col, row) recovered from the world point, and (since 20c-1's
+//     green-step ruling 2) inside by more than a margin, see below;
 //   - node_findings: every valid DEM node in every closed output triangle with
 //     three valid vertices is within tolerance of that triangle's plane,
 //     recomputed here (orientation and membership exact on (col, -row)).
@@ -63,8 +64,31 @@ inline std::pair<double, double> param_dist(Frac a, Frac b, Frac p) {
             std::abs((p.col - a.col) * uy - (p.row - a.row) * ux) / std::sqrt(len2)};
 }
 
+// How far `d` lies inside the circle through a, b, c: R - |d - centre|, in the
+// units of the points, centre and radius in double (relative to a).
+inline double incircle_depth(Point2 a, Point2 b, Point2 c, Point2 d) {
+    const double bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y;
+    const double den = 2.0 * (bx * cy - by * cx);
+    const double b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+    const double ux = (cy * b2 - by * c2) / den, uy = (bx * c2 - cx * b2) / den;
+    return std::hypot(ux, uy) - std::hypot(d.x - a.x - ux, d.y - a.y - uy);
+}
+
+// The margin (20c-1's green-step ruling 2): an edge is a violation when the
+// exact incircle says Inside AND the apex is inside the circle by more than
+// eta = 1e-7 * min(dx, dy) in the producer frame. Scale: 5e-7 m on the 10 m x
+// 5 m fixtures, about 500 times the rounding of the (col, row) rebuild at
+// y_max = 7e6 m, where it was checked; it holds while half an ulp of the
+// largest world coordinate stays under eta / 100 (world coordinates below
+// about 4e7 m at 5 m cells). The producer makes near-cocircular quads along a
+// footed line (exact incircle +1.77e-8 on terms around 60), which rounding in
+// the rebuild or in the producer's contracted arithmetic can tip to Inside; a
+// real missed flip is off by a fraction of a cell. Every quad the margin
+// excuses has its depth appended to `excused`, if given, for the case to print.
 template <typename Outcome>
-std::size_t delaunay_violations(const terrain::raster::RasterGeometry& g, const Outcome& out) {
+std::size_t delaunay_violations(const terrain::raster::RasterGeometry& g, const Outcome& out,
+                                std::vector<double>* excused = nullptr) {
+    const double eta = 1e-7 * std::min(g.delta_x(), g.delta_y());
     auto lf = [&](std::uint32_t i) {
         const Frac f = frac(g, out.vertices[i]);
         return Point2{f.col * g.delta_x(), -(f.row * g.delta_y())};
@@ -84,8 +108,13 @@ std::size_t delaunay_violations(const terrain::raster::RasterGeometry& g, const 
             std::uint32_t apex = 0;
             for (const auto x : out.triangles[ts[1 - s]])
                 if (x != e.first && x != e.second) apex = x;
-            if (DefaultKernel::incircle(lf(tri[0]), lf(tri[1]), lf(tri[2]), lf(apex)) == terrain::pred::Incircle::Inside)
+            const Point2 a = lf(tri[0]), b = lf(tri[1]), c = lf(tri[2]), d = lf(apex);
+            if (DefaultKernel::incircle(a, b, c, d) != terrain::pred::Incircle::Inside) continue;
+            const double depth = incircle_depth(a, b, c, d);
+            if (!(depth <= eta))  // a NaN depth (a flat triangle) is not excused
                 ++bad;
+            else if (excused != nullptr)
+                excused->push_back(depth);
         }
     }
     return bad;
