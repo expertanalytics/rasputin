@@ -272,6 +272,23 @@ def test_git_dir_and_work_tree_options_make_the_directory_unknown(
     assert found[0].startswith(option.split()[0].split("=")[0])
 
 
+OPTION_WORDS = ["--work-tree=/a", "--work-tree /a", "--git-dir=/a/.git", "--git-dir /a/.git"]
+
+
+@pytest.mark.parametrize("dash_c", ["-C /b", "-C b"])
+@pytest.mark.parametrize("option", OPTION_WORDS)
+def test_a_later_dash_c_does_not_replace_git_dir_or_work_tree(
+    git_dirs: Any, option: str, dash_c: str
+) -> None:
+    """§3.2: a committing git with --git-dir or --work-tree is unknown. A `-C`
+    after the option, absolute or relative, does not make it known again."""
+    alone = git_dirs(f"git {option} commit", CWD)
+    assert len(alone) == 1 and isinstance(alone[0], str), f"premise: {alone}"
+    found = git_dirs(f"git {option} {dash_c} commit", CWD)
+    assert found == alone, f"-C after {option} replaced the option word: {found}"
+    assert [type(x) for x in found] == [str]
+
+
 # --------------------------------------------------------------------------- 5
 
 
@@ -339,6 +356,29 @@ def test_unreadable_line_gates_cwd_and_says_it_could_not_be_read(repos: Repos) -
     assert "NOT CHECKED" in result.stderr
     assert "could not be read" in result.stderr
     assert sorted(repos.ran_in(repos.main)) == sorted([*CHECKS, "ruff", "ruff"])
+
+
+def test_unreadable_line_outside_any_work_tree_claims_no_gate_ran(
+    repos: Repos, git_dirs: Any
+) -> None:
+    """§3.2: cwd in no work tree is NOT CHECKED. With nothing gated, the hook
+    must not say the gates ran in the session's directory."""
+    plain = repos.main.parent / "plain"
+    plain.mkdir()
+    top = subprocess.run(
+        ["git", "-C", str(plain), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, env=clean_env(), check=False,
+    )  # fmt: skip
+    assert top.returncode != 0, f"premise: {plain} is inside the work tree {top.stdout}"
+    command = 'git commit -m "x'
+    assert git_dirs(command, plain) is None, "premise: the line is unreadable"
+
+    result = repos.hook(command, cwd=str(plain), **SUBAGENT)
+    assert result.returncode == 2, result.stderr
+    not_checked = [line for line in result.stderr.splitlines() if "NOT CHECKED" in line]
+    assert any(str(plain) in line for line in not_checked), result.stderr
+    assert repos.ran() == [], "a gate ran though cwd is in no work tree"
+    assert "gates ran" not in result.stderr, f"claims a gate run that never was:\n{result.stderr}"
 
 
 # --------------------------------------------------------------------------- 8
