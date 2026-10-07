@@ -488,8 +488,17 @@ TEST_CASE("F2: a foot in a NoData cell is refused and the node inserted instead"
     const auto start = feet_fixtures::needle_start(g);
     const auto out = run(dem, start, 0.5, true);
     check(dem, start, out, 0.5);
-    REQUIRE(out.feet_refused == 1);  // measured: the needle alone is refused
+    // Two refusals (20c-1's green-step ruling 1): the needle (row 16, col 8) and
+    // the node above it (row 15, col 8), 0.0158 cells right of the side. That
+    // node's own triangle has no constrained edge; its neighbour's does, so
+    // R3's search through a neighbour foots it, and its foot (col 7.984,
+    // row 15.0008) lies in a cell whose column-7 corners are the NaN nodes
+    // above: vertex_z refuses it, and by R3 and R5 the refusal is counted and
+    // the node inserted. Without the NoData column the same run foots it.
+    REQUIRE(out.feet_refused == 2);
+    const Frac above{static_cast<double>(feet_fixtures::kNeedleCol), static_cast<double>(feet_fixtures::kNeedleRow - 1)};
     REQUIRE(has_vertex(g, out.vertices, kNeedle));
+    REQUIRE(has_vertex(g, out.vertices, above));
 }
 
 // ------------------------------------------------------------------------ F3
