@@ -2,11 +2,12 @@
 
 Status: **designed** (`@architect`, 2026-10-06, branch
 `worktree-soft-quality` off master `ed12512`), design review rounds 1 to
-3 answered; in three PRs: **20c-1** the foot rule on every insertion path,
+4 answered; in three PRs: **20c-1** the foot rule on every insertion path,
 ready for `@tester`; **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
-**20c-3** input clean-up and coarsening, and Ola's outline rule if he says
-yes to question 6, after 20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
+**20c-3** input clean-up and coarsening, and Ola's outline rule (built
+either way; question 6 sets only whether it is on by default), after
+20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
 and question 5, 2026-10-07 ("Ola's rulings" below); question 6 open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
@@ -162,8 +163,9 @@ vertex opposite its longest side.
   source closed by a short third input edge (review round 3, B3; rerun on
   master with the kept prototype, all switches off, `forcedlist.py`). One
   is M5's 1 cm slit: 0.007080° at EPSG:3006 413 677.295 6 331 664.081, two
-  79.13 m sides, a 1 cm closing side, the triangle that sets 20c-3's worst
-  angle. The other is 0.674° at 382 340.000 6 253 375.946, two 5.95 m
+  79.13 m sides, a 1 cm closing side; in 20c-3's Lagan mesh it is the
+  second-worst triangle, and the worst (0.006697°) stands on the same 1 cm
+  side from outside the slit, made by the 2 m simplification (M5). The other is 0.674° at 382 340.000 6 253 375.946, two 5.95 m
   sides and a 7 cm closing side. The other 1 596 are avoidable in
   principle; the input-vertex ones only at a cost (M4).
 
@@ -304,8 +306,8 @@ What M3 shows:
   3.2 mm over 75 m, has a circumradius of 38 m against the 43.8 m floor.
   Even a node one cell away would give only 0.006° on that segment, so with
   the input as given no on-lattice rule gets near 1°; input coarsening moves
-  it further (0.0066° to 0.018°, M4), until a gap between two polygons sets
-  it (M5).
+  it further (0.0066° to 0.018°, M4), until a gap between two polygons
+  and the simplification beside it set it (M5).
 - **What is left after A + R is input geometry**: of Lagan's 709, 185 have
   a side under 10 cm (population 1 and its like), and 494 of the other 524
   have an input vertex as apex (median 0.76 m off the long side, shortest
@@ -382,7 +384,7 @@ Lagan exactly (triangles, slivers, worst angle).
 | 20c-1 + soft, 1 cm input | 757 755 | 566 (0.075 %) | 59 | 287 | 43 | 4.95 % | 0.006608° | 34.94° |
 | 20c-1 + soft, 2 m coverage input | 704 353 | 292 (0.041 %) | 19 | 162 | 9 | 3.11 % | 0.006608° | 35.33° |
 | 20c-2 + 1 cm snap + 2 m coverage input (20c-3 as designed to round 2) | 742 689 | 151 (0.020 %) | 19 | 44 | 5 | 2.61 % | 0.006608° | 35.90° |
-| **20c-2 + 2 m coverage input** (20c-3, no 1 cm snap, round 3) | **742 717** | **151 (0.020 %)** | 19 | 44 | 5 | 2.61 % | 0.006697° | 35.90° |
+| **20c-2 + 2 m coverage input** (20c-3, no 1 cm snap, round 3; simplified in the source's EPSG:3035, then moved to EPSG:3006, as `run5.sh` does; moved first, as 20c-3 is designed, round 4: 742 725 triangles, every other column the same) | **742 717** | **151 (0.020 %)** | 19 | 44 | 5 | 2.61 % | 0.006697° | 35.90° |
 
 **Numedalslagen:**
 
@@ -445,43 +447,77 @@ The quality start's floor (20 R5) is a circumradius of one cell diagonal:
 | 20c-1 + soft criterion alone | the same triangle | 0.000398°: the same 7.1 mm segment, apex now a refinement node 631 m away. Still blocked; the soft criterion leaves the mesh around it coarser, and the triangle keeps whatever corner the rest of the mesh gives it (631 / 369 = 1.71 = 0.000680 / 0.000398) |
 | 20c-2 (soft + B) | the same triangle, corner for corner (rerun, round 2) | 0.008623°: a needle on a 4.1 mm segment, apex a quality node 27 m away. Circumradius 13.7 m, under the floor |
 | 20c-3 (1 cm snap and 2 m coverage input, on 20c-2) | 0.006608°: a gap in the land cover, made only of input lines (below) | 0.000006°: a flat triangle on two near-coincident CORINE borders that the 1 cm snap pulled apart (M6) |
-| 20c-3 (2 m coverage input, no snap, round 3) | 0.006697°: three input vertices with a 1 cm input edge, 150 m from the gap (below) | 0.012446°: three input vertices, a 3.6 mm input edge |
+| 20c-3 (2 m coverage input, no snap, round 3) | 0.006697°: the gap's own 1 cm closing edge seen from outside the gap, apex 78.9 m away, made by the simplification (below) | 0.012446°: three input vertices, a 3.6 mm input edge, apex 15.7 m away |
 
 So the remaining thin triangle after 20c-2 is, on both catchments, a
 millimetre CORINE segment with a lattice node about a cell or more away,
-which the lattice cannot bring closer. After 20c-3 on Lagan it is a gap
-between two CORINE polygons.
+which the lattice cannot bring closer. After 20c-3 on Lagan it is the
+1 cm edge that closes a gap between two CORINE polygons, with its nearest
+vertex pushed 78.9 m away by the simplification.
 
-**20c-3's worst triangle is in the input as given, not made by the
-simplification** (review round 2 B2, checked on the inputs directly). Its
-three corners are input vertices (EPSG:3006 413 677.295 6 331 664.081,
-413 602.501 6 331 638.254 and 413 602.500 6 331 638.244), and all three
-sides are constraint segments: the border of a forest polygon (CORINE 312)
-and the border of an arable polygon (CORINE 231), 79.13 m long each, which
-share their far vertex and end 1 cm apart, closed by a 1 cm edge of a third
-polygon (CORINE 243). Between the two borders lies a wedge 1 cm wide and
-79 m long that belongs to no polygon (0.40 m² of gap; the source coverage
-is valid, since a valid coverage may have gaps). It sits on M2's easting
-pair (E 4 537 579.53 in EPSG:3035), population 1. Since the angle between
-two constraint segments meeting at a vertex is a ceiling on the worst angle
-of any mesh of that input, every mesh of these inputs has it: master's mesh
-of the 1 cm input and of the 2 m coverage input both contain it as their
-only triangle under 0.1° whose smallest angle lies between two constraint
-edges (rerun, round 2). In the original input the same wedge is there at
-0.007080° (20c-1's mesh, rerun), hidden below the worse needles (0.0024°);
-the snap to 1 cm moved its two near corners by under a centimetre and
-lowered it to 0.006608°, and the 2 m simplification left it unchanged.
-**So the 2 m simplification did not make it, and 20c-3 needs no guard
-against it.** Neither the snap to 1 cm nor
-`coverage_simplify` closes a gap between polygons; only a gap-closing step
-would (GEOS's coverage cleaning, GEOS 3.14; the venv's shapely has GEOS
-3.13), which is not designed here: Ola ruled no gap-closing step
-(ruling 5, 2026-10-07). It is one of M1's two slivers forced by an input
-angle (M1, last point). Without the 1 cm snap (20c-3 as now designed, M6)
-the slit keeps its source angle, 0.007080°, and the worst triangle on
-Lagan is 0.006697°: three input vertices 150 m west of the slit
-(413 527.4 6 331 662.32), with a 1 cm input edge, two of its sides
-constraints, so not forced.
+**The gap: in the input as given** (review round 2 B2, checked on the
+inputs directly). A wedge of three input vertices (EPSG:3006
+413 677.295 6 331 664.081, 413 602.500 6 331 638.254 and
+413 602.501 6 331 638.244) whose three sides are all constraint segments:
+the border of a forest polygon (CORINE 312) and the border of an arable
+polygon (CORINE 231), 79.13 m long each, which share their far vertex and
+end 1 cm apart, closed by a 1 cm edge of a third polygon (CORINE 243).
+Between the two borders lies a wedge 1 cm wide and 79 m long that belongs
+to no polygon (0.40 m² of gap; the source coverage is valid, since a valid
+coverage may have gaps). It sits on M2's easting pair (E 4 537 579.53 in
+EPSG:3035), population 1. Since the angle between two constraint segments
+meeting at a vertex is a ceiling on the worst angle of any mesh of that
+input, every mesh of these inputs has it, at 0.007080° in the source
+(20c-1's mesh, rerun, hidden there below the worse needles, 0.0024°) and
+after the 2 m simplification, which keeps all three corners; the 1 cm snap
+of round 2 moved its two near corners by under a centimetre and lowered it
+to 0.006608°. Neither the snap nor `coverage_simplify` closes a gap
+between polygons; only a gap-closing step would (GEOS's coverage cleaning,
+GEOS 3.14; the venv's shapely has GEOS 3.13), and Ola ruled no
+gap-closing step (ruling 5, 2026-10-07). It is one of M1's two slivers
+forced by an input angle (M1, last point).
+
+**20c-3's worst triangle on Lagan is made by the simplification**
+(review round 4, B1; rerun on the kept prototype, round 4). It is the
+triangle on the other side of the same 1 cm closing edge: corners
+413 602.500 6 331 638.254 and 413 602.501 6 331 638.244 (the edge) and
+413 527.395 6 331 662.317 (the apex, 78.9 m away), 0.006697°; one side,
+the 1 cm edge, and the 78.9 m side from 413 602.500 to the apex are
+constraint segments, the third is free, so it is not forced. In the
+source, the border shared by the 243 and 312 polygons has a vertex at
+413 596.806 6 331 640.083, 5.98 m from the closing edge, and that is
+where the triangle on that edge has its apex: 0.088°. `coverage_simplify`
+at 2 m drops that vertex (it lies 4.5 mm off the straight border from
+413 527.395 to 413 602.500), so the nearest vertex beside the edge is
+then 78.9 m away, and the angle falls by the same factor, to 0.006697°,
+just below the gap's own 0.007080°. Round 3 placed it "150 m west of the
+slit", measuring from the gap's far vertex; it stands on the gap's near
+end.
+
+**A guard against it, measured, and not designed in.** The guard: before
+simplifying, mark the two ring neighbours of each end of every source
+edge under 10 cm, and after `coverage_simplify` put back every marked
+vertex it dropped, in ring order and at the same coordinates in both
+polygons that share it, so the result is still a coverage
+(`covkeep.py`, kept beside the prototype). Lagan has 616 such edges and
+puts back 78 vertices; Numedalslagen, 1 779 and 142. Meshes on 20c-2:
+
+| input | Lagan: triangles | slivers | side < 10 cm | worst | Numedalslagen: triangles | slivers | side < 10 cm | worst |
+|---|---|---|---|---|---|---|---|---|
+| 2 m coverage, moved to the mesh's CRS first (as designed) | 742 725 | 151 | 19 | 0.006697° | 1 013 251 | 32 | 4 | 0.012446° |
+| the same, with the guard | 742 831 | 151 | 19 | 0.007080° | 1 013 557 | 32 | 4 | 0.012446° |
+
+The guard lifts Lagan's worst angle only to the gap's own forced
+0.007080°, which no step can pass under ruling 5, removes no sliver on
+either catchment, and leaves Numedalslagen's worst triangle where it is
+(its 3.6 mm edge is not an edge of any land-cover ring, so the guard does
+not reach it; not traced further). For about 15 lines it buys 6 % of one
+angle on one catchment, so **20c-3 has no guard**, and its gates allow for
+the simplified triangle (Lagan's worst-angle gate, 0.005°, sits below
+0.006697°). The mechanism to keep in mind: a simplification that drops a
+vertex beside a short input edge moves that edge's nearest apex away and
+lowers its angle by the ratio of the distances (here 78.9 / 5.98 = 13.2,
+and 0.088° / 0.006697° = 13.2).
 
 **M3's 1 cm run (0.008589°) used a different file.** The CLI read 330 529
 vertices from it, against 330 559 from the 1 cm file that the kept script
@@ -578,7 +614,7 @@ class inside the catchment (`area.py`).
 
 | input (all on 20c-2) | Lagan: triangles | slivers | side < 10 cm | worst | Numedalslagen: triangles | slivers | side < 10 cm | worst |
 |---|---|---|---|---|---|---|---|---|
-| 2 m coverage (20c-3 without the rule) | 742 717 | 151 (0.020 %) | 19 | 0.006697° | 1 013 251 | 32 (0.003 %) | 4 | 0.012446° |
+| 2 m coverage (20c-3 without the rule; Lagan's coverage simplified before the move to EPSG:3006 in all three rows, M5) | 742 717 | 151 (0.020 %) | 19 | 0.006697° | 1 013 251 | 32 (0.003 %) | 4 | 0.012446° |
 | **2 m coverage, rule at D = 5 m** | **743 385 (+0.09 %)** | **61 (0.008 %)** | 2 | 0.006697° | **1 015 416 (+0.21 %)** | **4 (0.0004 %)** | 0 | **0.832°** |
 | 2 m coverage, rule at D = 10 m | 742 465 (−0.03 %) | 61 (0.008 %) | 2 | 0.006697° | 1 013 906 (+0.06 %) | 4 (0.0004 %) | 0 | 0.832° |
 | the input as given (20c-2) | 799 120 | 437 | 185 | 0.002384° | 1 140 774 | 298 | 118 | 0.008623° |
@@ -594,13 +630,14 @@ Numedalslagen (5 548 km²), about 0.0001 % of each; at 10 m, 2.65 and
   On Lagan 38 more go, 5 to 50 m inside.
 - **Numedalslagen's worst angle rises from 0.0124° to 0.83°**, a triangle
   of two refinement nodes and an input vertex, its shortest side 20 m. Lagan's
-  stays at 0.006697°, a triangle 150 m from the slit (M5), out of the
-  rule's reach.
+  stays at 0.006697°, the triangle the 2 m simplification makes on the
+  slit's 1 cm closing edge (M5), which the rule does not change.
 - **On the input as given it helps less** (21 % and 9 %), because there
   the millimetre segments elsewhere dominate; the worst angles are those
   segments' and do not move.
-- **D = 5 m and 10 m give the same slivers**; 5 m moves a third of the
-  area. D is in metres in the computation CRS; it assumes DEM cells of
+- **D = 5 m and 10 m give the same slivers**; 5 m moves about a quarter
+  to a third of the area 10 m moves (Lagan 0.71 / 2.65 = 27 %,
+  Numedalslagen 0.77 / 2.36 = 33 %). D is in metres in the computation CRS; it assumes DEM cells of
   10 to 31 m (the two catchments, the largest inputs it was measured at)
   and is about half a cell or less there.
 - An early version run in Lagan's features' own CRS (EPSG:3035, the
@@ -608,9 +645,10 @@ Numedalslagen (5 548 km²), about 0.0001 % of each; at 10 m, 2.65 and
   under 10 cm; not traced further. Every run in the table works in the
   computation CRS, as production will (design below).
 
-**Verdict: it pays off on 20c-3's input; whether it goes in is Ola's
-call (question 6).** The design below gives it as 20c-3's third step,
-off unless Ola says yes.
+**Verdict: it pays off on 20c-3's input, so 20c-3 builds it (its third
+step, `--features-outline-snap`); question 6 asks Ola only whether it is
+on by default.** Its tests, gate and lines below apply under either
+answer.
 
 ## What Ola gets
 
@@ -640,12 +678,15 @@ than master; 20c-2 leaves 437 at 799 120 (26 % fewer triangles than E11),
 and 20c-3 at 2 m 151 at 742 717 (61 with the outline rule). So 20c-1 beats E11 per triangle but not in
 count; 20c-2 and 20c-3 beat it in both.
 
-The **worst angle** rises with each PR, but stays set by the input: by
-millimetre CORINE segments with the input as given, and after 20c-3 by a
-1 cm wide gap between two CORINE polygons, present in the source data, and
-a 1 cm input edge beside it (M5, "Which triangle sets the worst angle").
-Even 20c-3 leaves about 0.007° on Lagan, on a triangle whose corners are
-all input vertices; on Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
+The **worst angle** rises with each PR, and stays set by short input
+edges: with the input as given, millimetre CORINE segments; after 20c-3
+on Lagan, the 1 cm edge that closes a 1 cm wide gap between two CORINE
+polygons in the source data, seen from outside the gap, whose nearest
+vertex the 2 m simplification drops (0.088° in the source, 0.006697°
+after; M5, "Which triangle sets the worst angle"). The gap itself forces
+0.007080° on any mesh, so no step short of closing it (ruled out, ruling
+5) gets Lagan above about 0.007°, and keeping that vertex was measured to
+gain only that 6 % (M5). On Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
 before (and 20c-1 to master's), and promise no fixed angle.
 
 What stays: slivers whose apex is an input vertex about a metre from
@@ -1025,9 +1066,10 @@ The domain outline itself is not touched (increment 22 has its own
 reduction). About 60 lines for steps 1 and 2 and about 70 for step 3.
 Measured in M3 to M6 on Lagan and Numedalslagen (the Norwegian CORINE
 rewritten as GeoJSON for round 3, M6). The merge changes the default mesh
-of every run with a class map, and step 3 would change every run with
-features if Ola says yes, so 20c-3's off switch for the gate is all three
-flags off.
+of every run with a class map, and step 3 changes every run with
+features if its default is on (question 6), so 20c-3's off switch for the
+gate is all three flags off. Step 3 is built either way; question 6
+settles only its default.
 
 ## PRs and gates
 
@@ -1035,7 +1077,7 @@ flags off.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master; tolerance oracle; determinism |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1 |
-| 20c-3 | input coarsening, and the outline rule if Ola says yes (question 6) | 20c-2 merged | measured without the merge. **`--features-tolerance 2` alone**: Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
+| 20c-3 | input coarsening, and the outline rule (built either way; question 6 sets its default) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on question 6's answer. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -1170,8 +1212,9 @@ partition stays valid and its area changes by less than tolerance ×
 perimeter; polygons that do not form a coverage stop the run with the
 plain error, and pass at tolerance 0; flags off are a no-op.
 
-The outline rule, if Ola says yes (invariant-critical, mutation testing
-required: it rewrites input borders):
+The outline rule, under either answer to question 6 (invariant-critical,
+mutation testing required: it rewrites input borders); a CLI test pins
+the default question 6 sets:
 
 - **OR1** a border 3 m inside a straight outline edge, parallel to it for
   100 m, at D = 5: no linework is left within D of the outline except
@@ -1222,9 +1265,9 @@ Counted in `CLAUDE.md` §2's unit.
 | | `bindings/core.cpp`, `_core.pyi`, `final_check.py`, `edge_strip.py`, `cli.py`, `stats.py`, `run_record.py` | ~35 |
 | | **total** | **~150** |
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
-| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule (question 6) ~70 | **~60, or ~130 with the outline rule** |
+| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 (either answer to question 6) | **~130** |
 
-On the worst overrun seen (+60 %), 240, 175 and 100 (210 with the outline rule). Each under 700.
+On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
 
 ## Ola's rulings
 
@@ -1256,7 +1299,9 @@ with the default no: "defaults on all four". So:
 
 ## Questions for Ola
 
-6. **Your outline rule: in 20c-3, and on by default?** Every part of a
+6. **Your outline rule: on by default?** 20c-3 builds it either way, as
+   `--features-outline-snap METRES`; this question sets only its default.
+   Every part of a
    land-cover border within 5 m of the catchment outline is moved onto the
    outline, and a land-cover piece thinner than that along the outline
    goes to its neighbour (both halves of your proposal, M6). Measured on
@@ -1265,12 +1310,13 @@ with the default no: "defaults on all four". So:
    more triangles; Numedalslagen's worst angle 0.012° to 0.83°, Lagan's
    unchanged (set elsewhere). On the input as given it removes 21 % and 9 %.
    It changes the class of about 0.7 ha per catchment (0.0001 % of the
-   area). **Default: yes, in 20c-3, as `--features-outline-snap 5`, on
-   whenever features are given** (0 turns it off), since it moves borders
-   only within 5 m of the outline, far below CORINE's 25 ha minimum mapping
-   unit, and helps with or without `--features-tolerance`. The other
-   choice is the same step as a flag that is off unless asked for, like
-   `--features-tolerance`.
+   area). **Default: yes, on at 5 m whenever features are given** (0 turns
+   it off), since it moves borders only within 5 m of the outline, far
+   below CORINE's 25 ha minimum mapping unit, and helps with or without
+   `--features-tolerance`. The other choice is off unless asked for (0 by
+   default), like `--features-tolerance`. Either way the same code, tests
+   and gate go into 20c-3; only the default and the CLI test that pins it
+   differ.
 
 ## Not in scope
 
@@ -1295,3 +1341,4 @@ with the default no: "defaults on all four". So:
 20c design review round 1 (@reviewer, ed12512..7fcac1e0, 0 counted LOC, docs only): CHANGES REQUESTED. (B1) the 20c-2 gate "share under 1° ≤ 1.15 × 20c-1's" fails on the design's own Lagan numbers (1.162); (B2) no gate on the worst angle, and the claim that the worst angle "does not improve without 20c-3" contradicts the design's own table; (B3) R4 does not mention the final check's existing near-edge rule L12; (B4) R4.3's interpolated foot height was never measured, and the 20c-1 gate's margin is smaller than what the final-check foot contributes.
 20c design review round 2 (@reviewer, 7fcac1e0..3d1df11f, 0 counted LOC, docs only): CHANGES REQUESTED; round 1's B1-B4 answered. (B1) the 20c-2 gate "worst angle ≥ 20c-1's" sits exactly on its measured value on Lagan (0.002384° both), against the file's own "a margin for the production code"; (B2) the 20c-3 worst triangle (0.006608°) is called a spike in the outlines themselves, but M3's 1 cm run reached 0.008589°, impossible if those two 79 m sides met as constraints in the 1 cm input, so the 2 m simplification likely made it; reconcile, and fix the reason (two constraint segments meeting at that angle at a shared vertex); (B3) the 20c-3 gate's "19" slivers with a side under 10 cm has no row in M5.
 20c design review round 3 (@reviewer, 3d1df11f..a3a2b7ec, 0 counted LOC, docs only): CHANGES REQUESTED; round 2's B1-B3 answered (B2's 1 cm gap confirmed in the CORINE source, M5's 20c-3 Lagan row reproduced exactly). (B1) M6 measures Ola's outline rule on 20c-2's mesh, but the rule was proposed for 20c-3: on 20c-3's mesh 34 of 151 slivers (22.5 %) lie within 5 m of the outline with a CORINE line nearby, and the thin-piece rule reaches 6 and 11 of them (4 % and 7 %), against M6's 8 % and "at most 2.5 %"; (B2) the file says "Questions for Ola: None open" while M6 sets aside Ola's own proposal; (B3) M1's "None is forced by an input angle" contradicts the new finding that the 1 cm gap's thin triangle is in every mesh of that input.
+20c design review round 4 (@reviewer, a3a2b7ec..6ac8ab2d, 0 counted LOC, docs only): CHANGES REQUESTED; round 3's B1-B3, S1 and S2 answered (S1's 0.86 × bound recomputed; both catchments' CORINE pass `coverage_is_valid` in the computation CRS, as 20c-3 step 2 says); 20c-1's part unchanged since round 2 and independent of question 6: ready to build. (B1) 20c-3's Lagan worst triangle (0.006697°) is made by the 2 m simplification, not the input: it stands on the slit's own 1 cm closing edge (EPSG:3006 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244), its apex 413 527.395 6 331 662.317 78.9 m away, because `coverage_simplify` drops the source vertex 413 596.806 6 331 640.083 that stands 5.98 m from that edge (0.088° in the source); so docs/increments/20c-soft-quality.md@6ac8ab2d:164-166, :448, :452-453, :455-456, :480-484, :597 and :643-648 and ROADMAP.md@6ac8ab2d:61 ("stays set by the input", "150 m from the slit") are false, and :474-475's "needs no guard" needs re-judging for it; (B2) question 6's other choice (the rule as a flag, off by default) still builds the rule, but the Status, gate, tests and LOC build and gate it only "if Ola says yes" (docs/increments/20c-soft-quality.md@6ac8ab2d:8-9, :611-613, :1028-1030, :1038, :1173, :1225); say question 6 sets only the default, or add a plain no and what it drops.
