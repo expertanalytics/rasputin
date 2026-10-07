@@ -72,6 +72,22 @@ namespace detail {
 
 }  // namespace detail
 
+// Whether constraint_foot can find anything at t: t, or a neighbour across an
+// unconstrained edge of t, has a constrained, non-frozen edge. A cheap test so
+// a caller skips work it does only for a foot (refine's eps).
+[[nodiscard]] inline bool foot_reachable(const LatticeMesh& m, std::uint32_t t) noexcept {
+    const auto live = [&](std::uint32_t o, unsigned e) { return m.is_constrained(o, e) && !m.is_frozen(o, e); };
+    for (unsigned e = 0; e < 3; ++e)
+        if (live(t, e))
+            return true;
+    for (unsigned e = 0; e < 3; ++e)
+        if (const std::uint32_t u = m.neighbours(t)[e]; u != kNoNeighbour && !m.is_constrained(t, e))
+            for (unsigned j = 0; j < 3; ++j)
+                if (live(u, j))
+                    return true;
+    return false;
+}
+
 [[nodiscard]] inline FootSearch constraint_foot(const LatticeMesh& m, std::uint32_t t, MeshVertex p, double delta,
                                                 const LatticeFrame& f) {
     for (unsigned e = 0; e < 3; ++e)

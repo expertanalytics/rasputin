@@ -216,6 +216,10 @@ inline void rebuild_active(std::span<const char> touched, std::span<const std::u
     return r.node.has_value() && (r.is_void || r.max_error > tolerance);
 }
 
+[[nodiscard]] inline double foot_cap(const raster::RasterGeometry& g) noexcept {
+    return std::min(g.delta_x(), g.delta_y()) / 2.0;
+}
+
 // R3: eps(n) = clamp(tol / G, floor, cap), G the largest bilinear slope bound
 // over the valid cells sharing n; the cap where G is 0 (flat, or no cell).
 template <raster::RasterSource R>
@@ -234,7 +238,7 @@ template <raster::RasterSource R>
             grad = std::max(grad, std::hypot(std::max(std::abs(*z01 - *z00), std::abs(*z11 - *z10)) / dx,
                                              std::max(std::abs(*z10 - *z00), std::abs(*z11 - *z01)) / dy));
         }
-    const double cap = std::min(dx, dy) / 2.0, floor = std::min(dx, dy) / 100.0;
+    const double cap = foot_cap(g), floor = std::min(dx, dy) / 100.0;
     return grad > 0.0 ? std::clamp(tol / grad, floor, cap) : cap;
 }
 
@@ -290,6 +294,7 @@ template <raster::RasterSource R>
     }
     std::vector<ScanResult> results;
     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+    const double foot_cap = detail::foot_cap(g);
     mesh::FlipStack flip_stack;  // one buffer for every legalise_around
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -331,9 +336,14 @@ template <raster::RasterSource R>
             std::uint32_t owner = t;
             std::size_t refused = 0;
             std::optional<mesh::FootSearch> foot;
-            if (options.constraint_feet && !r.is_void && !footed.contains({r.node->row, r.node->col})) {
-                const auto s = mesh::constraint_foot(m, t, p, detail::foot_epsilon(dem, *r.node, options.tolerance),
-                                                     frame);
+            // eps <= cap, so a search to cap that finds nothing is the eps search's answer;
+            // eps (DEM reads) is computed only when an edge is within cap.
+            auto s = options.constraint_feet && !r.is_void && mesh::foot_reachable(m, t)
+                         ? mesh::constraint_foot(m, t, p, foot_cap, frame)
+                         : mesh::FootSearch{};
+            if (s.status != mesh::FootStatus::None && !footed.contains({r.node->row, r.node->col})) {
+                if (const double eps = detail::foot_epsilon(dem, *r.node, options.tolerance); eps < foot_cap)
+                    s = mesh::constraint_foot(m, t, p, eps, frame);
                 foot = detail::usable(s, s.status == mesh::FootStatus::Hit && vertex_z(dem, s.at), refused);
                 if (foot)
                     std::tie(owner, edge, p) = std::tuple{foot->owner, foot->edge, foot->at};
