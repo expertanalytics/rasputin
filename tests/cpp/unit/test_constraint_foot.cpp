@@ -41,7 +41,8 @@
 //                                       exactly, and frozen)
 //   M-mid   the midpoint instead of the foot
 //                                       every `at` check, the tilted world edge
-//   and, beyond the design's list: a strict/non-strict delta flip (0.6 vs 0.4),
+//   and, beyond the design's list: a strict/non-strict delta flip (the point
+//   exactly delta from the edge; 0.4 and 0.6 alone do not tell the two apart),
 //   a row/col swap in the world distance (the dx = 10, dy = 5 case), the
 //   frozen test dropped, and "nearest edge" instead of "first in order".
 
@@ -152,6 +153,20 @@ TEST_CASE("CF1: a point 0.01 and 0.4 cells from a constrained edge of its triang
         require_hit(constraint_foot(m, 0, p, kDelta, kUnit), 0, 0, pr.at);
     }
     REQUIRE(constraint_foot(m, 0, V(5, 0.6), kDelta, kUnit).status == FootStatus::None);
+}
+
+TEST_CASE("CF1: a point exactly delta from a constrained edge of its triangle is None (closer than delta is strict)",
+          "[mesh][constraint_foot][CF1]") {
+    // V(5, 0.5) is (5, 19.5): every coordinate and the 0.5 cells to a-b are
+    // exact in doubles, so the helper's distance is delta itself, not a
+    // rounding of it. Kills ">= delta" made "> delta".
+    const FixtureA fx;
+    const LatticeMesh m = build(fx.v, fx.tris, {{{0u, 1u}, 1u}});  // a-b only
+    const MeshVertex p = V(5, 0.5);
+    const auto pr = project(fx.v[0], fx.v[1], p, kUnit);
+    REQUIRE(pr.distance == kDelta);  // the fixture is what it claims: exactly delta
+    REQUIRE(pr.along == 5.0);        // far from both ends: a near point would be a Hit, not NearEnd
+    REQUIRE(constraint_foot(m, 0, p, kDelta, kUnit).status == FootStatus::None);
 }
 
 TEST_CASE("CF1: the foot is the orthogonal projection, not the edge's midpoint", "[mesh][constraint_foot][CF1]") {
