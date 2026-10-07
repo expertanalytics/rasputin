@@ -1604,14 +1604,14 @@ def _dem_mesh(
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
         strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
         if grid is None or checks is None:
-            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock)
+            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet=feet)
             del tile
             # 15f, D7: refine's maximum and the strip run's make an upper bound.
             max_error = max(out.max_error, final.max_error)
             values["line_check_dem_nodes_inserted"] = final.nodes_inserted
         else:
             del tile  # 15e fix 3: phase 2 runs without the target tile
-            final, n = final_check.run(out, grid, checks, tolerance, clock, strip=strip)
+            final, n = final_check.run(out, grid, checks, tolerance, clock, strip=strip, feet=feet)
             max_error = final.max_error
             values |= {
                 "resampled_grid_max_error_m": out.max_error,
@@ -1653,8 +1653,11 @@ def _dem_mesh(
             "edge_flips": out.flips,
             "start_quality_points_inserted": out.quality_inserted,
             "start_quality_points_skipped": out.quality_skipped,
+            "start_quality_points_snapped_to_lines": out.quality_feet,
             "points_snapped_to_lines": out.feet,
             "snaps_refused": out.feet_refused,
+            "final_check_points_snapped_to_lines": final.feet,
+            "final_check_snapped_points_added_anyway": final.feet_fallback,
             "start_vertices_between_dem_nodes": _off_node(np.asarray(run.mesh.vertices), meta),
         }
     if len(trimmed.triangles) == 0:

@@ -162,7 +162,7 @@ inline void cut(SubEdges& subs, const ConstraintCheckPoints& strip, const mesh::
 inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, mesh::MeshVertex f,
                        const mesh::LatticeFrame& fr) {
     using K = pred::DefaultKernel;
-    if (!foot_fits(m, t, e, f))
+    if (!mesh::detail::foot_fits(m, t, e, f))
         return false;
     // Whether edge (p, q) of the counter-clockwise (p, q, r) must flip, s across it (lawson.hpp's must_flip).
     const auto flips = [&](mesh::MeshVertex p, mesh::MeshVertex q, mesh::MeshVertex r, mesh::MeshVertex s) {

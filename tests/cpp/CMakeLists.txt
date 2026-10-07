@@ -447,3 +447,27 @@ catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)
 # refine.hpp names DefaultKernel, hence the backend target.
 add_terrain_backend_test(test_raster_node_at unit/test_raster_node_at.cpp)
 target_link_libraries(test_raster_node_at PRIVATE Threads::Threads)
+
+# The foot rule on every insertion path, increment 20c PR 20c-1
+# (docs/increments/20c-soft-quality.md, R1 to R6 and "Tests @tester writes red
+# first", 20c-1). The design's invariant-critical suite test_constraint_foot,
+# in four targets so a compile failure in one leaves the others built and run:
+#   test_constraint_foot          CF1, the helper constraint_foot on
+#                                 hand-built meshes; starts no threads;
+#   test_constraint_foot_quality  CF2, the quality start's foot, through
+#                                 improve and through refine, with 14b's T3
+#                                 and T6 re-run with the rule on;
+#   test_constraint_foot_refine   CF3, refinement's search through a
+#                                 neighbour, and the features-start off switch;
+#   test_constraint_foot_final    CF4, the final check's foot on both paths,
+#                                 its bound and fallback, T3 and T6, and the
+#                                 off switch.
+# The last three start threads through refine's scheduler; their T6 cases are
+# the TSan job's (the design: "T6 is the TSan job's").
+add_terrain_backend_test(test_constraint_foot unit/test_constraint_foot.cpp)
+add_terrain_backend_test(test_constraint_foot_quality unit/test_constraint_foot_quality.cpp)
+target_link_libraries(test_constraint_foot_quality PRIVATE Threads::Threads)
+add_terrain_backend_test(test_constraint_foot_refine property/prop_constraint_foot_refine.cpp)
+target_link_libraries(test_constraint_foot_refine PRIVATE Threads::Threads)
+add_terrain_backend_test(test_constraint_foot_final property/prop_constraint_foot_final.cpp)
+target_link_libraries(test_constraint_foot_final PRIVATE Threads::Threads)

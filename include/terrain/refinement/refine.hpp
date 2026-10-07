@@ -34,9 +34,12 @@
 //
 // Constraint feet (docs/increments/20b-min-insertion-distance.md, R2 to R6).
 // With constraint_feet, a worst node N closer than eps(N) to a constrained edge
-// of its triangle is replaced by its foot F on that edge, once per node; N may
-// still go in later if its error stays above tolerance (R5). An inserted
-// off-node vertex is output at (x_min + col dx, y_max - row dy) with vertex_z.
+// of its triangle or of a neighbour (mesh::constraint_foot, 20c R3) is replaced
+// by its foot F on that edge, once per node; N may still go in later if its
+// error stays above tolerance (R5). When F is on a neighbour's edge, N's
+// triangle stays active. The quality start foots too (20c R2), counted in
+// quality_feet. An inserted off-node vertex is output at
+// (x_min + col dx, y_max - row dy) with vertex_z.
 //
 // Frozen edges (docs/increments/23-basin-scale.md, "Refine with the seam
 // frozen", N1-N5). An edge whose mask meets frozen_mask gets no vertex: the
@@ -45,6 +48,7 @@
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
+#include <terrain/mesh/constraint_foot.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/mesh/lawson.hpp>
 #include <terrain/mesh/quality.hpp>
@@ -101,6 +105,7 @@ struct RefineOutcome {
     std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
     std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
     std::size_t quality_skipped = 0;   // start-quality skips, every reason summed
+    std::size_t quality_feet = 0;      // start-quality feet (20c R2), in neither count above
     std::size_t feet = 0;              // feet inserted, a subset of `inserted`
     std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
 
@@ -211,6 +216,10 @@ inline void rebuild_active(std::span<const char> touched, std::span<const std::u
     return r.node.has_value() && (r.is_void || r.max_error > tolerance);
 }
 
+[[nodiscard]] inline double foot_cap(const raster::RasterGeometry& g) noexcept {
+    return std::min(g.delta_x(), g.delta_y()) / 2.0;
+}
+
 // R3: eps(n) = clamp(tol / G, floor, cap), G the largest bilinear slope bound
 // over the valid cells sharing n; the cap where G is 0 (flat, or no cell).
 template <raster::RasterSource R>
@@ -229,59 +238,18 @@ template <raster::RasterSource R>
             grad = std::max(grad, std::hypot(std::max(std::abs(*z01 - *z00), std::abs(*z11 - *z10)) / dx,
                                              std::max(std::abs(*z10 - *z00), std::abs(*z11 - *z01)) / dy));
         }
-    const double cap = std::min(dx, dy) / 2.0, floor = std::min(dx, dy) / 100.0;
+    const double cap = foot_cap(g), floor = std::min(dx, dy) / 100.0;
     return grad > 0.0 ? std::clamp(tol / grad, floor, cap) : cap;
 }
 
-struct Foot {
-    unsigned edge;
-    mesh::MeshVertex at;
-};
-
-// R2 steps 1 and 2: on the first constrained edge of t that n is closer to
-// than eps (in world distance), the foot, or nothing when that foot is within
-// eps of an end or no such edge exists. n exactly on an edge is skipped, and
-// so is a frozen edge (N5).
-template <raster::RasterSource R>
-[[nodiscard]] std::optional<Foot> foot_of(const R& dem, const mesh::LatticeMesh& m,
-                                          std::uint32_t t, mesh::LatticeVertex n, double tol) {
-    const double dx = dem.geometry().delta_x(), dy = dem.geometry().delta_y();
-    std::optional<double> eps;
-    for (unsigned e = 0; e < 3; ++e) {
-        const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3), p{n};
-        if (!m.is_constrained(t, e) || m.is_frozen(t, e) || mesh::orient_sign(a, b, p) == 0)
-            continue;
-        const double ux = (b.col - a.col) * dx, uy = (b.row - a.row) * dy;
-        const double px = (p.col - a.col) * dx, py = (p.row - a.row) * dy;
-        const double s = std::clamp((px * ux + py * uy) / (ux * ux + uy * uy), 0.0, 1.0);
-        if (!eps)
-            eps = foot_epsilon(dem, n, tol);
-        if (std::hypot(px - s * ux, py - s * uy) >= *eps)
-            continue;
-        const double len = std::hypot(ux, uy);
-        if (s * len < *eps || (1.0 - s) * len < *eps)
-            return std::nullopt;
-        return Foot{e, {a.col + s * (b.col - a.col), a.row + s * (b.row - a.row)}};
-    }
+// A Hit of `found` that may go in: a z there, else counted in `refused`.
+// Anything but a Hit is nothing; NotCounterClockwise counts as refused (R5).
+[[nodiscard]] inline std::optional<mesh::FootSearch> usable(const mesh::FootSearch& found, bool has_z,
+                                                            std::size_t& refused) {
+    if (found.status == mesh::FootStatus::Hit && has_z)
+        return found;
+    refused += found.status == mesh::FootStatus::NotCounterClockwise || found.status == mesh::FootStatus::Hit ? 1 : 0;
     return std::nullopt;
-}
-
-// R2 step 4: every child of splitting t's edge e (and its neighbour's) at f
-// is strictly counter-clockwise.
-[[nodiscard]] inline bool foot_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e,
-                                    mesh::MeshVertex f) {
-    const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3),
-                           c = m.corner(t, (e + 2) % 3);
-    if (mesh::orient_sign(a, f, c) <= 0 || mesh::orient_sign(f, b, c) <= 0)
-        return false;
-    const std::uint32_t u = m.neighbours(t)[e];
-    if (u == mesh::kNoNeighbour)
-        return true;
-    unsigned k = 0;
-    while (m.neighbours(u)[k] != t)
-        ++k;
-    const mesh::MeshVertex d = m.corner(u, (k + 2) % 3);
-    return mesh::orient_sign(b, f, d) > 0 && mesh::orient_sign(f, a, d) > 0;
 }
 
 }  // namespace detail
@@ -312,18 +280,21 @@ template <raster::RasterSource R>
     out.legalise_seconds = since(t0);
     if (options.min_angle_deg > 0.0) {
         t0 = clock::now();
-        // The pass never inserts a NoData node: trim would remove it.
+        // The pass never inserts a NoData node or a foot without a z: trim would remove it.
         const auto q = mesh::improve<pred::DefaultKernel>(
-            m, frame, mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols()},
-            [&](const mesh::LatticeVertex& v) { return !dem.is_nodata({v.row, v.col}); });
+            m, frame,
+            mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols(), options.constraint_feet},
+            [&](const mesh::MeshVertex& v) { return vertex_z(dem, v).has_value(); });
         out.quality_inserted = q.inserted;
+        out.quality_feet = q.feet;
         out.quality_skipped = q.skipped_floor + q.skipped_outside + q.skipped_vertex
                             + q.skipped_blocked + q.walk_bound_hits + q.skipped_frozen
-                            + q.skipped_void;
+                            + q.skipped_void + q.skipped_near_line;
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;
     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+    const double foot_cap = detail::foot_cap(g);
     mesh::FlipStack flip_stack;  // one buffer for every legalise_around
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -362,32 +333,40 @@ template <raster::RasterSource R>
             if (r.where != NodeLocation::Inside)
                 edge = static_cast<unsigned>(r.where) - 1;
             mesh::MeshVertex p = *r.node;
-            bool foot = false, refused = false;
-            if (options.constraint_feet && !r.is_void && !footed.contains({r.node->row, r.node->col}))
-                if (const auto f = detail::foot_of(dem, m, t, *r.node, options.tolerance)) {
-                    refused = !vertex_z(dem, f->at) || !detail::foot_fits(m, t, f->edge, f->at);
-                    foot = !refused;
-                    if (foot) {
-                        edge = f->edge;
-                        p = f->at;
-                    }
-                }
+            std::uint32_t owner = t;
+            std::size_t refused = 0;
+            std::optional<mesh::FootSearch> foot;
+            // eps <= cap, so a search to cap that finds nothing is the eps search's answer;
+            // eps (DEM reads) is computed only when an edge is within cap.
+            auto s = options.constraint_feet && !r.is_void && mesh::foot_reachable(m, t)
+                         ? mesh::constraint_foot(m, t, p, foot_cap, frame)
+                         : mesh::FootSearch{};
+            if (s.status != mesh::FootStatus::None && !footed.contains({r.node->row, r.node->col})) {
+                if (const double eps = detail::foot_epsilon(dem, *r.node, options.tolerance); eps < foot_cap)
+                    s = mesh::constraint_foot(m, t, p, eps, frame);
+                foot = detail::usable(s, s.status == mesh::FootStatus::Hit && vertex_z(dem, s.at), refused);
+                if (foot)
+                    std::tie(owner, edge, p) = std::tuple{foot->owner, foot->edge, foot->at};
+            }
             if (!edge) {
                 q = m.split_inside(t, *r.node);
             } else {
                 const auto e = *edge;
-                const std::uint32_t u = m.neighbours(t)[e];
-                if (u != mesh::kNoNeighbour && touched[u] != 0) {
+                const std::uint32_t u = m.neighbours(owner)[e];
+                if (touched[owner] != 0 || (u != mesh::kNoNeighbour && touched[u] != 0)) {
                     skipped.push_back(t);
                     continue;
                 }
-                q = m.split_edge(t, e, p);
+                q = m.split_edge(owner, e, p);
+                seeds[0] = owner;
                 n_seeds = u != mesh::kNoNeighbour ? 4 : 2;
                 if (n_seeds == 4)
                     seeds[3] = u;
             }
+            if (owner != t)  // R3: t is unchanged and unconverged; rescan it
+                skipped.push_back(t);
             touched.resize(m.triangle_count(), 1);
-            touched[t] = 1;
+            touched[owner] = 1;
             if (n_seeds == 4)
                 touched[seeds[3]] = 1;
             out.flips += mesh::legalise_around<pred::DefaultKernel>(
@@ -396,7 +375,7 @@ template <raster::RasterSource R>
             ++out.inserted;
             out.carved += r.is_void ? 1 : 0;
             out.feet += foot ? 1 : 0;
-            out.feet_refused += refused ? 1 : 0;
+            out.feet_refused += refused;
             if (foot)
                 footed.insert({r.node->row, r.node->col});
         }
