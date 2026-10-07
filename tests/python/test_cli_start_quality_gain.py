@@ -9,7 +9,9 @@ and the CLI. Not mutation-critical.
 
 R7: ``--start-quality-gain DEG``, default 0; ``-1`` restores the hard rule
 and, with it, 20c-1's mesh; refused when non-finite or above 10. R8's split
-is on exactly when the gain test is. Reported: ``start_quality_points_skipped``
+is on when the gain test is and the constraint feet are (``@architect``'s
+"Pins ruled for 20c-2's red step", pin 4: ``--no-constraint-feet`` keeps
+every point off the lines). Reported: ``start_quality_points_skipped``
 keeps its total, and two new rows, "Tries that would not have improved the
 angles" and "Land-cover and outline lines split to improve angles" (the
 design's wording, asserted here).

@@ -34,8 +34,13 @@
 //     the order of `removed` and `created` is free, each created triangle is
 //     counter-clockwise on (col, -row) like a mesh triangle;
 //   - the angles are in the frame (col dx, -(row dy)) improve is given, each
-//     capped at theta, and "by more than rounding" (T-P2) is 1e-9 degrees;
-//   - R8 runs whatever constraint_feet says: it is on exactly when R7 is;
+//     capped at theta, and "by more than rounding" (T-P2) is R7's slack,
+//     1e-6 degrees: R7 accepts new >= old + P - s (ruled by @architect,
+//     docs/increments/20c-soft-quality.md, "Pins ruled for 20c-2's red
+//     step", pin 3);
+//   - R8 runs only when R7 is on and constraint_feet is on (same ruling,
+//     pin 4); every LS1 case that expects no split turns the feet on, so
+//     that what refuses the split is the rule under test, not the switch;
 //   - a split by R8 is not a skip; a blocked walk R8 declines is counted in
 //     skipped_blocked, once, as today;
 //   - the validity callable is asked at least once between two insertions
@@ -54,11 +59,14 @@
 //         the foot's second seed missing                 "on a constrained edge, both sides"
 //   T-P2  the acceptance test reversed                   "the only candidate ... refused",
 //                                                        "every accepted candidate"
-//         the acceptance test made strict                "a candidate that keeps the worst
-//                                                        angle exactly is accepted"
+//         the slack dropped and the test made strict     "a candidate that keeps the worst
+//                                                        angle exactly is accepted",
+//                                                        "a foot that keeps its edge's end
+//                                                        angle is accepted"
 //   LS1   the split at the midpoint                      "splits the line at the node's foot"
 //         the end check removed                          "within half a cell of an end"
-//         R8 left on at gain -1                          "gain -1: no split"
+//         R8 left on at gain -1                          "gain -1 turns the split off"
+//         R8 left on with the feet off                   "with the feet off, no split"
 // Each case's comment names the fault it is for.
 
 #include <catch2/catch_test_macros.hpp>
@@ -80,6 +88,7 @@
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <numbers>
 #include <optional>
 #include <set>
 #include <utility>
@@ -106,7 +115,10 @@ namespace cfo = constraint_foot_oracles;
 namespace {
 
 constexpr double kTheta = 25.0;
-constexpr double kRounding = 1e-9;  // degrees; T-P2's "by more than rounding" (pinned)
+// Degrees; T-P2's "by more than rounding", R7's slack s (docs/increments/20c-soft-quality.md,
+// R7, "Why the slack"). The test keeps its own literal, not quality.hpp's constant.
+// Scale: angles under theta = 25 degrees on grids up to 33 cells a side.
+constexpr double kRounding = 1e-6;
 constexpr double kOnLine = 1e-9;    // cells, for grids up to 33 nodes a side
 
 QualityOptions options(const qg::Fixture& fx, double gain, bool feet = false) {
@@ -270,6 +282,13 @@ MeshVertex centre(MeshVertex a, MeshVertex b, MeshVertex c) {
     const double bx = b.col - a.col, by = b.row - a.row, cx = c.col - a.col, cy = c.row - a.row;
     const double d = 2.0 * (bx * cy - by * cx), b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
     return MeshVertex{a.col + (cy * b2 - by * c2) / d, a.row + (bx * c2 - cx * b2) / d};
+}
+
+// The angle at o between the rays to u and v, degrees, in frame f.
+double angle_at(MeshVertex o, MeshVertex u, MeshVertex v, const LatticeFrame& f) {
+    const Point2 po = f.at(o), pu = f.at(u), pv = f.at(v);
+    const double ux = pu.x - po.x, uy = pu.y - po.y, vx = pv.x - po.x, vy = pv.y - po.y;
+    return std::atan2(std::abs(ux * vy - uy * vx), ux * vx + uy * vy) * 180.0 / std::numbers::pi;
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -531,13 +550,17 @@ TEST_CASE("T-P1 and T-P2: on whole runs every insertion is the predicted cavity 
 
 TEST_CASE("T-P1: across the line fixture every insertion, R8's splits included, is the predicted cavity",
           "[mesh][quality][gain][T-P1][LS1]") {
+    // R8 runs only with the feet on (pin 4): splits with them, none without.
     const LatticeFrame f{1.0, 1.0};
     const auto fx = line_beyond();
     const bool feet = GENERATE(false, true);
     CAPTURE(feet);
     LatticeMesh m = built(fx, f);
     const auto r = recorded(m, f, options(fx, 0.0, feet));
-    REQUIRE(r.out.line_splits > 0);
+    if (feet)
+        REQUIRE(r.out.line_splits > 0);
+    else
+        REQUIRE(r.out.line_splits == 0);
     REQUIRE(r.steps.size() == r.out.inserted + r.out.feet + r.out.line_splits);
     for (const auto& s : r.steps) check_prediction(s, f);
     check_mesh(m, fx, f);
@@ -585,7 +608,7 @@ TEST_CASE("T-P2: with gain -1 the same candidate goes in, as the hard rule has i
 
 TEST_CASE("T-P2: a candidate that keeps the worst angle exactly is accepted at gain 0",
           "[mesh][quality][gain][T-P2]") {
-    // Planted fault: the acceptance test made strict (new > old + P).
+    // Planted fault: the slack dropped and the test made strict (new > old + P).
     const LatticeFrame f{1.0, 1.0};
     const auto fx = equal_gain();
     const MeshVertex node{7, 3};
@@ -623,12 +646,55 @@ TEST_CASE("T-P2: a candidate that keeps the worst angle exactly is accepted at g
     }
 }
 
+TEST_CASE("T-P2: a foot that keeps its edge's end angle is accepted at gain 0", "[mesh][quality][gain][T-P2]") {
+    // Planted fault: the slack dropped and the test made strict (pin 3). CF2's
+    // own edge with the feet on: the node N = (10, 1) lies 0.01 cells inside
+    // the outline A-B, so R2 inserts its foot F = (10, 0.99) instead. (F, B, C)
+    // keeps the angle at B (the same two rays), and F is 10 cells from both B
+    // and C, so the triangle is isosceles with the same angle at C: new equals
+    // old, 18.43 degrees, in exact arithmetic, and only the slack keeps the
+    // decision off F's last bit.
+    const LatticeFrame f{1.0, 1.0};
+    const auto fx = own_edge();
+    const MeshVertex c = fx.vertices[1], b = fx.vertices[2], foot{10, 0.99};
+    const double end_angle = std::atan(1.0 / 3.0) * 180.0 / std::numbers::pi;  // 18.43 degrees
+    {  // the premise. 1e-9 degrees: coordinates up to 20 cells, checked on this fixture only
+        LatticeMesh probe = built(fx, f);
+        const auto at = qg::locate(probe, foot);
+        REQUIRE(at.has_value());
+        REQUIRE(at->on < 3);  // on A-B
+        const LatticeMesh before = probe;
+        qg::replay<DefaultKernel>(probe, *at, foot, f);
+        const auto d = qg::diff(before, probe);
+        REQUIRE(d.removed.size() == 1);
+        REQUIRE(d.created.size() == 2);
+        REQUIRE(d.created.count(qg::tri(foot, c, b)) == 1);  // (F, C, B), counter-clockwise as A C B
+        CAPTURE(angle_at(b, foot, c, f), angle_at(c, b, foot, f), end_angle);
+        REQUIRE(std::abs(angle_at(b, foot, c, f) - end_angle) <= 1e-9);
+        REQUIRE(std::abs(angle_at(c, b, foot, f) - end_angle) <= 1e-9);
+        REQUIRE(std::abs(qg::worst_capped(d.removed, f, kTheta) - end_angle) <= 1e-9);
+        REQUIRE(std::abs(qg::worst_capped(d.created, f, kTheta) - end_angle) <= 1e-9);
+    }
+    LatticeMesh m = built(fx, f);
+    const auto r = recorded(m, f, options(fx, 0.0, true));
+    REQUIRE(r.out.feet >= 1);
+    REQUIRE_FALSE(r.steps.empty());
+    const auto& first = r.steps.front();  // improve's first insertion is the foot
+    CAPTURE(first.p.col, first.p.row);
+    CHECK(std::abs(first.p.col - foot.col) <= 1e-12);  // cells
+    CHECK(std::abs(first.p.row - foot.row) <= 1e-12);
+    for (const auto& s : r.steps) {
+        check_prediction(s, f);
+        check_gain(s, f, 0.0);
+    }
+}
+
 // ================================================================== LS1, R8
 
 TEST_CASE("LS1: a node beyond a long constraint line splits the line at the node's foot",
           "[mesh][quality][gain][LS1]") {
-    // Planted fault: the split at the midpoint. Also: R8 tied to
-    // constraint_feet (pinned: it runs either way).
+    // Planted fault: the split at the midpoint. The feet on: R8 runs only
+    // with them (pin 4).
     const LatticeFrame f{1.0, 1.0};
     const auto fx = line_beyond();
     const MeshVertex foot = foot_on_e(fx, kBeyondNode);
@@ -641,10 +707,8 @@ TEST_CASE("LS1: a node beyond a long constraint line splits the line at the node
         REQUIRE(std::hypot(foot.col - mid.col, foot.row - mid.row) > 0.5);
         REQUIRE(std::hypot(foot.col - fx.vertices[0].col, foot.row - fx.vertices[0].row) > 10.0);
     }
-    const bool feet = GENERATE(false, true);
-    CAPTURE(feet);
     LatticeMesh m = built(fx, f);
-    const auto r = recorded(m, f, options(fx, 0.0, feet));
+    const auto r = recorded(m, f, options(fx, 0.0, true));
     REQUIRE(r.out.line_splits >= 1);
     REQUIRE_FALSE(r.steps.empty());
     const auto& first = r.steps.front();  // P Q R is the worst triangle, so the first candidate
@@ -660,11 +724,24 @@ TEST_CASE("LS1: a node beyond a long constraint line splits the line at the node
 }
 
 TEST_CASE("LS1: gain -1 turns the split off", "[mesh][quality][gain][LS1][T-P3]") {
-    // Planted fault: R8 left on at gain -1.
+    // Planted fault: R8 left on at gain -1. The feet on, so the gain is what refuses.
     const LatticeFrame f{1.0, 1.0};
     const auto fx = line_beyond();
     LatticeMesh m = built(fx, f);
-    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, -1.0));
+    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, -1.0, true));
+    REQUIRE(q.line_splits == 0);
+    REQUIRE(q.skipped_blocked >= 1);
+    REQUIRE(edges_with_mask(m, kLineMask) == 1);  // e is whole
+    REQUIRE_FALSE(has_vertex(m, foot_on_e(fx, kBeyondNode), 1e-9));
+}
+
+TEST_CASE("LS1: with the feet off, no split", "[mesh][quality][gain][LS1]") {
+    // Planted fault: R8 left on with the feet off (pin 4: --no-constraint-feet
+    // keeps every point off the lines).
+    const LatticeFrame f{1.0, 1.0};
+    const auto fx = line_beyond();
+    LatticeMesh m = built(fx, f);
+    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0, false));
     REQUIRE(q.line_splits == 0);
     REQUIRE(q.skipped_blocked >= 1);
     REQUIRE(edges_with_mask(m, kLineMask) == 1);  // e is whole
@@ -687,7 +764,7 @@ TEST_CASE("LS1: no split within half a cell of an end of the line", "[mesh][qual
         REQUIRE(terrain::mesh::detail::foot_fits(probe, 0, 0, MeshVertex{2, 10}));  // only the end check refuses it
     }
     LatticeMesh m = built(fx, f);
-    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0));
+    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0, true));
     REQUIRE(q.line_splits == 0);
     REQUIRE(q.skipped_blocked == 1);  // pinned: a declined split stays one blocked skip
     REQUIRE(m.vertices().size() == fx.vertices.size());
@@ -698,7 +775,7 @@ TEST_CASE("LS1: an outline edge with nothing beyond is not split", "[mesh][quali
     const auto fx = line_beyond_outline();
     LatticeMesh m = built(fx, f);
     REQUIRE(m.neighbours(0)[1] == kNoNeighbour);  // the premise: (Q, E1, E2)'s edge E1-E2 has no neighbour
-    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0));
+    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0, true));
     REQUIRE(q.line_splits == 0);
     REQUIRE(q.skipped_blocked >= 1);
     REQUIRE(edges_with_mask(m, kLineMask) == 1);
@@ -710,7 +787,7 @@ TEST_CASE("LS1: a frozen line is not split", "[mesh][quality][gain][LS1]") {
     const auto fx = line_beyond();
     LatticeMesh m = built(fx, f);
     m.set_frozen_mask(kLineMask);
-    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0));
+    const QualityOutcome q = improve<DefaultKernel>(m, f, options(fx, 0.0, true));
     REQUIRE(q.line_splits == 0);
     REQUIRE(q.skipped_blocked >= 1);
     REQUIRE(edges_with_mask(m, kLineMask) == 1);
@@ -721,7 +798,7 @@ TEST_CASE("LS1: a foot the validity callable refuses is not split in", "[mesh][q
     const LatticeFrame f{1.0, 1.0};
     const auto fx = line_beyond();
     LatticeMesh m = built(fx, f);
-    const auto r = recorded(m, f, options(fx, 0.0), [](const MeshVertex& v) { return v.is_node(); });
+    const auto r = recorded(m, f, options(fx, 0.0, true), [](const MeshVertex& v) { return v.is_node(); });
     REQUIRE(r.out.line_splits == 0);
     REQUIRE(edges_with_mask(m, kLineMask) == 1);
     REQUIRE_FALSE(has_vertex(m, foot_on_e(fx, kBeyondNode), 1e-9));
