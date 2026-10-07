@@ -5,10 +5,13 @@
 //
 // Interface, as the design gives it:
 //
-//   struct AllNodesValid { bool operator()(const LatticeVertex&) const; };  // true
+//   struct AllNodesValid { bool operator()(const MeshVertex&) const; };  // true
 //   template <class K, class Valid = AllNodesValid>
 //   QualityOutcome improve(LatticeMesh&, const LatticeFrame&, const QualityOptions&,
 //                          const Valid& valid = {});
+//
+// The callables take a MeshVertex (20c R2.3; 20c-1's green-step ruling 5), so
+// that improve can ask the same callable about a foot, which is no node.
 //
 // The callable is asked after the node is snapped and found inside the
 // rectangle, before the visibility walk: the floor and outside skips come
@@ -149,8 +152,8 @@ std::size_t delaunay_violations(const LatticeMesh& m, const LatticeFrame& f) {
 static_assert(AllNodesValid{}(LatticeVertex{0, 0}));
 
 TEST_CASE("Q-V1: a bad triangle whose node is invalid is skipped and counted", "[mesh][quality][void]") {
-    std::vector<LatticeVertex> asked;
-    const auto valid = [&](const LatticeVertex& v) {
+    std::vector<MeshVertex> asked;
+    const auto valid = [&](const MeshVertex& v) {
         asked.push_back(v);
         return !(v == kThinNode);
     };
@@ -159,13 +162,13 @@ TEST_CASE("Q-V1: a bad triangle whose node is invalid is skipped and counted", "
     CHECK(q.inserted == 0);
     CHECK(q.skipped_void == 1);
     CHECK(skips(q) == 1);
-    CHECK(asked == std::vector<LatticeVertex>{kThinNode});  // asked once, about the snapped node
+    CHECK(asked == std::vector<MeshVertex>{kThinNode});  // asked once, about the snapped node
     CHECK(m.vertices().size() == 3);
     CHECK(triangles_of(m) == std::vector<TriangleIndices>{{0, 1, 2}});  // left as it is
 }
 
 TEST_CASE("Q-V1: the control, every node valid, inserts that node", "[mesh][quality][void]") {
-    const auto valid = [](const LatticeVertex&) { return true; };
+    const auto valid = [](const MeshVertex&) { return true; };
     LatticeMesh m = build(thin());
     const QualityOutcome q = improve<DefaultKernel>(m, kThinFrame, options(thin()), valid);
     CHECK(q.inserted == 1);
@@ -177,7 +180,7 @@ TEST_CASE("Q-V1: an invalid node elsewhere changes nothing", "[mesh][quality][vo
     // The callable is about the snapped node, not about some node near it.
     const LatticeVertex neighbour = GENERATE(LatticeVertex{12, 15}, LatticeVertex{13, 14}, LatticeVertex{14, 16});
     CAPTURE(neighbour.row, neighbour.col);
-    const auto valid = [&](const LatticeVertex& v) { return !(v == neighbour); };
+    const auto valid = [&](const MeshVertex& v) { return !(v == neighbour); };
     LatticeMesh m = build(thin());
     const QualityOutcome q = improve<DefaultKernel>(m, kThinFrame, options(thin()), valid);
     CHECK(q.inserted == 1);
@@ -198,7 +201,7 @@ TEST_CASE("Q-V1: the default call, AllNodesValid and an always-true callable agr
     LatticeMesh a = legalised(), b = legalised(), c = legalised();
     const QualityOutcome qa = improve<DefaultKernel>(a, frame, options(s));
     const QualityOutcome qb = improve<DefaultKernel>(b, frame, options(s), AllNodesValid{});
-    const QualityOutcome qc = improve<DefaultKernel>(c, frame, options(s), [](const LatticeVertex&) { return true; });
+    const QualityOutcome qc = improve<DefaultKernel>(c, frame, options(s), [](const MeshVertex&) { return true; });
     REQUIRE(qa.inserted > 0);  // the fixture exercises the pass
     for (const QualityOutcome* q : {&qb, &qc}) {
         CHECK(q->inserted == qa.inserted);
@@ -218,7 +221,7 @@ TEST_CASE("Q-V1: the default call, AllNodesValid and an always-true callable agr
 }
 
 TEST_CASE("Q-V1: the earlier skips come first; the void check precedes the walk", "[mesh][quality][void]") {
-    const auto none = [](const LatticeVertex&) { return false; };
+    const auto none = [](const MeshVertex&) { return false; };
     SECTION("outside the rectangle: an outside skip, never asked") {
         // Q9's fixture: circumcentre at row -99.
         const Start s = single(MeshVertex{0, 0}, MeshVertex{20, 2}, MeshVertex{40, 0}, 3, 41);
@@ -254,7 +257,7 @@ TEST_CASE("Q-V1: the earlier skips come first; the void check precedes the walk"
         // Q3's right triangle: the circumcentre is node (10, 1) on the hypotenuse.
         const Start s = single(MeshVertex{0, 1}, MeshVertex{2, 7}, MeshVertex{20, 1}, 8, 21);
         LatticeMesh m = build(s);
-        const auto valid = [](const LatticeVertex& v) { return !(v == LatticeVertex{1, 10}); };
+        const auto valid = [](const MeshVertex& v) { return !(v == LatticeVertex{1, 10}); };
         const QualityOutcome q = improve<DefaultKernel>(m, LatticeFrame{1.0, 1.0}, options(s), valid);
         CHECK(q.inserted == 0);
         CHECK(q.skipped_void == 1);
@@ -271,7 +274,7 @@ TEST_CASE("Q-V1: over a block of invalid nodes no vertex lands in it, and the me
     CAPTURE(dy);
     const LatticeFrame frame{10.0, dy};
     const Start s = quarter_circle();
-    const auto valid = [](const LatticeVertex& v) { return v.col < 20 || v.col > 40; };
+    const auto valid = [](const MeshVertex& v) { return v.col < 20 || v.col > 40; };
     LatticeMesh m = build(s);
     legalise_all<DefaultKernel>(m, frame, [](std::uint32_t) {});
     const QualityOutcome q = improve<DefaultKernel>(m, frame, options(s), valid);

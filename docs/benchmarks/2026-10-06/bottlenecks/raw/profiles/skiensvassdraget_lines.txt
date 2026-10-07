@@ -1,0 +1,430 @@
+Timer unit: 0.001 s
+
+Total time: 6.09852 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/feature_input.py
+Function: pre_clip at line 186
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   186                                           def pre_clip(
+   187                                               geometry: BaseGeometry, region: Polygon, widening: Widening | None = None
+   188                                           ) -> tuple[LineString, ...]:
+   189                                               """R5: whole edges within ``widening(a, b)`` (0 if None) of ``region``, as
+   190                                               chains of the original vertices: a polygon's exterior's, then each hole's.
+   191                                               A ring with no edge dropped stays closed with its start vertex."""
+   192      5522         10.1      0.0      0.2      shapely.prepare(region)
+   193      5522          1.0      0.0      0.0      out: list[LineString] = []
+   194     11332        225.6      0.0      3.7      for part in shapely.get_parts(geometry):
+   195      5810          1.5      0.0      0.0          if isinstance(part, Polygon):
+   196      5810        281.5      0.0      4.6              rings = [(r, True) for r in (part.exterior, *part.interiors)]
+   197                                                   else:
+   198                                                       rings = [(part, False)]
+   199     31966          7.9      0.0      0.1          for ring, closed in rings:
+   200     26156         91.9      0.0      1.5              xy = shapely.get_coordinates(ring)
+   201     26156          5.3      0.0      0.1              if len(xy) < 2:
+   202                                                           continue
+   203     26156        999.9      0.0     16.4              segments = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
+   204     26156       1167.7      0.0     19.1              keep = np.asarray(shapely.intersects(segments, region))
+   205     26156          5.4      0.0      0.1              if widening is not None:
+   206                                                           for k in np.flatnonzero(~keep):
+   207                                                               w = widening((xy[k, 0], xy[k, 1]), (xy[k + 1, 0], xy[k + 1, 1]))
+   208                                                               keep[k] = shapely.distance(segments[k], region) <= w
+   209     26156       3299.1      0.1     54.1              out += _runs(xy, keep, closed)
+   210      5522          1.5      0.0      0.0      return tuple(out)
+
+Total time: 2.79607 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/feature_input.py
+Function: _runs at line 213
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   213                                           def _runs(
+   214                                               xy: npt.NDArray[np.float64], keep: npt.NDArray[np.bool_], closed: bool
+   215                                           ) -> list[LineString]:
+   216                                               """Each maximal run of kept edges as a chain; a ring's run through its
+   217                                               start vertex is one chain, joined across it."""
+   218     26156         43.5      0.0      1.6      if keep.all():
+   219      4064         56.7      0.0      2.0          return [LineString(xy)]
+   220     22092          4.9      0.0      0.2      n = len(keep)
+   221     22092        106.7      0.0      3.8      first = int(np.flatnonzero(~keep)[0]) + 1 if closed else 0
+   222     22092          4.0      0.0      0.1      chains: list[LineString] = []
+   223     22092          3.7      0.0      0.1      run: list[int] = []
+   224   4533873        878.7      0.0     31.4      for k in [(first + i) % n for i in range(n)] + [-1]:
+   225   4511781        832.7      0.0     29.8          if k >= 0 and keep[k]:
+   226     95314         15.9      0.0      0.6              run.append(k)
+   227   4416467        709.2      0.0     25.4          elif run:
+   228       381        135.3      0.4      4.8              chains.append(LineString([xy[run[0]], *(xy[j + 1] for j in run)]))
+   229       381          0.2      0.0      0.0              run = []
+   230     22092          4.5      0.0      0.2      return chains
+
+Total time: 3.12494 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/landcover.py
+Function: regions at line 42
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    42                                           def regions(triangles: npt.ArrayLike, edges: npt.ArrayLike) -> npt.NDArray[np.int64]:
+    43                                               """Each triangle's component across unconstrained edges, as the smallest
+    44                                               triangle index in that component."""
+    45         1          0.0      0.0      0.0      tri = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+    46         1          0.1      0.1      0.0      cut = np.asarray(edges, dtype=np.int64).reshape(-1, 2)
+    47         1          1.3      1.3      0.0      n = int(max(tri.max(initial=-1), cut.max(initial=-1))) + 1
+    48         1         16.6     16.6      0.5      sides = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
+    49         1         22.6     22.6      0.7      keys = _keys(sides, n)
+    50         1          2.6      2.6      0.1      owner = np.tile(np.arange(len(tri), dtype=np.int64), 3)
+    51         1        991.0    991.0     31.7      free = ~np.isin(keys, _keys(cut, n))
+    52         1       1600.4   1600.4     51.2      order = np.argsort(keys[free], kind="stable")
+    53         1         95.1     95.1      3.0      keys, owner = keys[free][order], owner[free][order]
+    54                                               # A manifold mesh: an interior edge's key appears exactly twice.
+    55         1          7.2      7.2      0.2      pair = np.flatnonzero(keys[1:] == keys[:-1])
+    56         1          7.3      7.3      0.2      u, v = owner[pair], owner[pair + 1]
+    57         1          0.4      0.4      0.0      parent = np.arange(len(tri), dtype=np.int64)
+    58         7          0.0      0.0      0.0      while True:
+    59         7        162.2     23.2      5.2          ru, rv = parent[u], parent[v]
+    60         7          8.0      1.1      0.3          if np.array_equal(ru, rv):
+    61         1          0.0      0.0      0.0              return parent
+    62                                                   # Hook the larger root onto the smaller: labels only fall, no cycle.
+    63         6         98.1     16.3      3.1          np.minimum.at(parent, np.maximum(ru, rv), np.minimum(ru, rv))
+    64        31        111.9      3.6      3.6          while not np.array_equal(parent, jumped := parent[parent]):
+    65        25          0.0      0.0      0.0              parent = jumped
+
+Total time: 2.16919 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/landcover.py
+Function: _lookup at line 116
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   116                                           def _lookup(
+   117                                               points: npt.NDArray[np.float64], polygons: Sequence[tuple[BaseGeometry, int]]
+   118                                           ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
+   119                                               """Each point's code by D2, and how many polygons it lies in."""
+   120         1          0.0      0.0      0.0      codes = np.zeros(len(points), dtype=np.int64)
+   121         1          0.0      0.0      0.0      hits = np.zeros(len(points), dtype=np.int64)
+   122         1          0.0      0.0      0.0      if not polygons or not len(points):
+   123                                                   return codes, hits
+   124         1          0.7      0.7      0.0      tree = shapely.STRtree([p for p, _ in polygons])
+   125         1       2153.6   2153.6     99.3      found, which = tree.query(shapely.points(points), predicate="intersects")
+   126         1         14.4     14.4      0.7      rank = np.array([(p.area, code) for p, code in polygons], dtype=[("a", "f8"), ("c", "i8")])
+   127                                               # Sort the hits by point, then area, then code: each point's first hit wins.
+   128         1          0.4      0.4      0.0      order = np.lexsort((rank["c"][which], rank["a"][which], found))
+   129         1          0.0      0.0      0.0      found, which = found[order], which[order]
+   130         1          0.0      0.0      0.0      np.add.at(hits, found, 1)
+   131         1          0.1      0.1      0.0      head = np.unique(found, return_index=True)[1]
+   132         1          0.0      0.0      0.0      codes[found[head]] = rank["c"][which[head]]
+   133         1          0.0      0.0      0.0      return codes, hits
+
+Total time: 1.95967 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/dem_input.py
+Function: open_dem at line 130
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   130                                           def open_dem(request: DemRequest) -> DemInput:
+   131                                               """List, plan and assemble. Every refusal is a `ValueError` (`GeoTiffError`,
+   132                                               `MosaicError`) or, for a file that cannot be opened, an `OSError`."""
+   133         1         24.7     24.7      1.3      repository, label = repository_for(request.sources, request.nodata, request.cached)
+   134         1        657.5    657.5     33.6      footprints = repository.footprints()
+   135         1          0.0      0.0      0.0      if footprints and _reprojected(request, [f.meta for f in footprints]):
+   136                                                   return _open_reprojected(request, repository, footprints, label)
+   137         1          0.0      0.0      0.0      if request.domain is None or not footprints:
+   138                                                   plan, domain, grown = plan_mosaic(footprints, request.bounds, None), None, None
+   139                                               else:
+   140         1        106.4    106.4      5.4          plan, domain, grown = _domain_plan(footprints, request.domain)
+   141                                               # With a domain the seam report counts only the needed region's nodes
+   142                                               # (Ola, 2026-09-28); which value a node takes does not depend on it.
+   143         1          0.0      0.0      0.0      repository.check(plan)
+   144         1       1171.1   1171.1     59.8      mosaic = assemble(plan, repository.load, grown, load_window=repository.load_window)
+   145         1          0.0      0.0      0.0      return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
+
+Total time: 1.17097 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/mosaic.py
+Function: assemble at line 231
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   231                                           def assemble(
+   232                                               plan: MosaicPlan,
+   233                                               load: Callable[[str], DemTile],
+   234                                               needed: Any = None,
+   235                                               *,
+   236                                               load_window: Callable[[str, IndexWindow], DemTile] | None = None,
+   237                                           ) -> Mosaic:
+   238                                               """Load the plan's tiles one at a time, in plan order, into one canvas (R5).
+   239                                           
+   240                                               One tile whose grid is the mosaic's is returned as loaded: no canvas, no
+   241                                               copy (I7). Otherwise the canvas is allocated once, NaN-filled, in the
+   242                                               planned dtype (the placements' result dtype, from the headers), and handed
+   243                                               to `DemTile` without a copy (R7). A hand-built footprint may under-state
+   244                                               its dtype, so a loaded tile that promotes further re-casts the canvas.
+   245                                           
+   246                                               Each tile is written whole, then dropped before the next load; what it
+   247                                               holds where it meets another tile's placement is kept as a strip. Once all
+   248                                               are in, every overlap is decided from the strips (Ola's Q1 revised,
+   249                                               `_decide`) and each pair that disagrees is reported (`_seam`).
+   250                                           
+   251                                               `needed`, a shapely geometry in the DEM's CRS as for `plan_mosaic`, limits
+   252                                               the report to the overlap nodes it covers (closed; Ola, 2026-09-28: with
+   253                                               `--domain`, the needed region). Only the report: every node is decided as
+   254                                               without it, and only overlap nodes are tested, never the canvas.
+   255                                           
+   256                                               Memory: the peak is the canvas, the strips, and one load's own peak, which
+   257                                               is not one tile: decoding a DTM10 tile peaks at 2.0 to 3.0 tiles,
+   258                                               depending on the tile (the decoder's buffers and `DemTile`'s read-only
+   259                                               copy). Measured with
+   260                                               tracemalloc on the 15a acceptance box (nine DTM10 tiles, 404 MB canvas,
+   261                                               102 MB tiles): 720 MB, the canvas plus 3.1 tiles.
+   262                                           
+   263                                               With `load_window` (23a-1), each placement's source window is loaded
+   264                                               instead of its whole tile, `load_window(name, placement.source)`, and is
+   265                                               copied whole; its meta must be `window_meta` of the listed one.
+   266                                               """
+   267         1          0.0      0.0      0.0      if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
+   268                                                   return Mosaic(tile=_loaded(plan.tiles[0], load, load_window), plan=plan)
+   269         1          0.0      0.0      0.0      if not plan.tiles:
+   270                                                   raise MosaicError("the plan has no tiles")
+   271         1          0.0      0.0      0.0      planned = np.result_type(*(t.dtype for t in plan.tiles))
+   272         1         62.3     62.3      5.3      canvas: npt.NDArray[Any] = np.full((plan.meta.rows, plan.meta.cols), np.nan, dtype=planned)
+   273         1          0.0      0.0      0.0      ordered = sorted(plan.tiles, key=lambda t: t.name)
+   274         1          0.0      0.0      0.0      strips: dict[tuple[str, str], npt.NDArray[Any]] = {}
+   275        13          0.0      0.0      0.0      for placement in plan.tiles:
+   276        12        766.7     63.9     65.5          array = _loaded(placement, load, load_window).array
+   277        12          0.0      0.0      0.0          if np.result_type(canvas.dtype, array.dtype) != canvas.dtype:
+   278                                                       canvas = canvas.astype(np.result_type(canvas.dtype, array.dtype))
+   279        12          0.0      0.0      0.0          c, s = placement.canvas, placement.source
+   280        12          0.0      0.0      0.0          rows, cols = slice(s.row0, s.row0 + s.rows), slice(s.col0, s.col0 + s.cols)
+   281        12          0.0      0.0      0.0          incoming = array if load_window else array[rows, cols]  # a window comes cut
+   282        12         53.4      4.4      4.6          canvas[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols] = incoming
+   283       156          0.0      0.0      0.0          for other in ordered:
+   284       144          0.5      0.0      0.0              box = _meet(c, other.canvas)
+   285       144          0.0      0.0      0.0              if other.name != placement.name and box is not None:
+   286        58          3.4      0.1      0.3                  strips[placement.name, other.name] = incoming[_within(box, c)].copy()
+   287        12          0.0      0.0      0.0          del array, incoming  # before the next load, or two tiles outlive this one
+   288         1          0.0      0.0      0.0      seams = []
+   289         1          0.0      0.0      0.0      if needed is not None:
+   290         1          0.0      0.0      0.0          shapely.prepare(needed)
+   291        13          0.0      0.0      0.0      for i, a in enumerate(ordered):
+   292        78          0.0      0.0      0.0          for b in ordered[i + 1 :]:
+   293        66          0.2      0.0      0.0              box = _meet(a.canvas, b.canvas)
+   294        66          0.0      0.0      0.0              if box is None:
+   295        37          0.0      0.0      0.0                  continue
+   296        29         30.6      1.1      2.6              _decide(canvas, box, ordered, strips, (a.name, b.name), plan.meta.nodata)
+   297        29        243.4      8.4     20.8              kept = _covered(box, plan.meta, needed)
+   298        29          3.2      0.1      0.3              first, second = strips[a.name, b.name][kept], strips[b.name, a.name][kept]
+   299        29          7.0      0.2      0.6              seam = _seam(a.name, b.name, first, second, plan)
+   300        29          0.0      0.0      0.0              if seam is not None:
+   301                                                           seams.append(seam)
+   302         1          0.1      0.1      0.0      return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan, seams=tuple(seams))
+
+Total time: 0.030321 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/mosaic.py
+Function: _decide at line 513
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   513                                           def _decide(
+   514                                               canvas: npt.NDArray[Any],
+   515                                               box: IndexWindow,
+   516                                               ordered: list[TilePlacement],
+   517                                               strips: dict[tuple[str, str], npt.NDArray[Any]],
+   518                                               pair: tuple[str, str],
+   519                                               nodata: float | None,
+   520                                           ) -> None:
+   521                                               """Ola's Q1 revised over `box`, the overlap of `pair`: each node takes the
+   522                                               valid value of the tile it lies deepest in, depth being
+   523                                               `min(r, c, rows - 1 - r, cols - 1 - c)` in the whole tile's own indices;
+   524                                               ties to the name that sorts first (`ordered` is by name, and only a deeper
+   525                                               tile replaces). No valid value: the sentinel if any tile holds it, else
+   526                                               NaN, in every order. A third tile's values come from its strip with one
+   527                                               of the pair, which holds every node of `box` it covers."""
+   528        29          0.4      0.0      1.4      best = np.full((box.rows, box.cols), -1, dtype=np.int64)
+   529        29          0.2      0.0      0.8      value = np.full((box.rows, box.cols), np.nan, dtype=canvas.dtype)
+   530        29          0.1      0.0      0.5      sentinel = np.zeros((box.rows, box.cols), dtype=bool)
+   531       377          0.1      0.0      0.3      for t in ordered:
+   532       348          0.7      0.0      2.4          part = _meet(t.canvas, box)
+   533       348          0.1      0.0      0.2          if part is None:
+   534       218          0.1      0.0      0.2              continue
+   535       130          0.1      0.0      0.5          other = next(p for p in ordered if p.name == (pair[1] if t.name == pair[0] else pair[0]))
+   536       130          0.4      0.0      1.2          held = _meet(t.canvas, other.canvas)
+   537       130          0.0      0.0      0.1          assert held is not None  # it holds `part`
+   538       130          0.2      0.0      0.7          values = strips[t.name, other.name][_within(part, held)]
+   539       130          0.5      0.0      1.5          row = np.arange(part.rows) + part.row0 - t.canvas.row0 + t.source.row0
+   540       130          0.4      0.0      1.2          col = np.arange(part.cols) + part.col0 - t.canvas.col0 + t.source.col0
+   541       260          3.0      0.0      9.8          depth = np.minimum.outer(
+   542       130          0.4      0.0      1.2              np.minimum(row, t.meta.rows - 1 - row), np.minimum(col, t.meta.cols - 1 - col)
+   543                                                   )
+   544       130          0.1      0.0      0.4          here = _within(part, box)
+   545       130          5.6      0.0     18.5          take = _valid(values, nodata) & (depth > best[here])
+   546       130          6.3      0.0     20.8          value[here][take] = values[take]
+   547       130          6.9      0.1     22.6          best[here][take] = depth[take]
+   548       130          0.0      0.0      0.1          if nodata is not None:
+   549       130          2.4      0.0      8.1              sentinel[here] |= values == nodata
+   550        29          0.0      0.0      0.0      if nodata is not None:
+   551        29          0.6      0.0      1.9          value[(best < 0) & sentinel] = nodata
+   552        29          1.7      0.1      5.7      canvas[box.row0 : box.row0 + box.rows, box.col0 : box.col0 + box.cols] = value
+
+Total time: 0.739274 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/io/cog.py
+Function: decode_window at line 116
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   116                                           def decode_window(
+   117                                               source: BlockSource,
+   118                                               meta: RasterMeta,
+   119                                               dtype: np.dtype[Any],
+   120                                               window: IndexWindow,
+   121                                               *,
+   122                                               threads: int = 4,
+   123                                           ) -> DemTile:
+   124                                               """`window` of the page `source` holds, decoded and cast to `dtype`.
+   125                                           
+   126                                               `meta` and `dtype` are the page's, as `read_page` gives them. A window
+   127                                               outside the raster, or empty, is a `ValueError` (a caller's bug). A block
+   128                                               `source` lacks is `NotCached`, before any block is read; a sparse or
+   129                                               undecodable block is a `GeoTiffError` naming `source.where` and the block.
+   130                                               """
+   131        12          0.0      0.0      0.0      w, page = window, source.page
+   132        12          0.0      0.0      0.0      ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
+   133        12          0.0      0.0      0.0      if min(w.row0, w.col0, *ends) < 0 or min(w.rows, w.cols) < 1:
+   134                                                   raise ValueError(f"{w} is not a non-empty window of {meta.rows} x {meta.cols} nodes")
+   135        12          0.6      0.1      0.1      indices = blocks_meeting(page, w)
+   136        12          0.0      0.0      0.0      if absent := source.missing(indices):
+   137                                                   raise NotCached(len(absent), len(indices), source.where)
+   138       882          0.1      0.0      0.0      for index in indices:
+   139       870          0.1      0.0      0.0          if page.databytecounts[index] == 0:
+   140                                                       raise GeoTiffError(
+   141                                                           f"{source.where}: block {index} is sparse (byte count 0); "
+   142                                                           "a DEM's NoData must be stored, not implied"
+   143                                                       )
+   144        12          0.1      0.0      0.0      out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
+   145                                           
+   146        12          0.0      0.0      0.0      def put(index: int) -> None:
+   147                                                   data = source.block(index)
+   148                                                   with _stage(f"{source.where}, block {index}"):
+   149                                                       segment, (_, _, r0, c0, _), _ = page.decode(data, index)
+   150                                                   assert segment is not None  # a sparse block was refused above
+   151                                                   rows = slice(max(r0, w.row0), min(r0 + segment.shape[1], w.row0 + w.rows))
+   152                                                   cols = slice(max(c0, w.col0), min(c0 + segment.shape[2], w.col0 + w.cols))
+   153                                                   block = segment[0, rows.start - r0 : rows.stop - r0, cols.start - c0 : cols.stop - c0, 0]
+   154                                                   out[rows.start - w.row0 : rows.stop - w.row0, cols.start - w.col0 : cols.stop - w.col0] = (
+   155                                                       block
+   156                                                   )
+   157                                           
+   158        24          1.8      0.1      0.2      with ThreadPoolExecutor(threads) as pool:
+   159        12        668.1     55.7     90.4          list(pool.map(put, indices))
+   160                                               # The public constructor's copy, not the canvas's no-copy route: M15
+   161                                               # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
+   162                                               # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
+   163        12         68.3      5.7      9.2      return DemTile(meta=window_meta(meta, w), array=out)
+
+Total time: 9.5138 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/feature_input.py
+Function: _Tally._take at line 297
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   297                                               def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
+   298         1          0.0      0.0      0.0          name, cmap = source.path.name, source.class_map
+   299         1          0.1      0.1      0.0          src = parse_crs(own)
+   300         1          8.6      8.6      0.1          move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
+   301         1         40.1     40.1      0.4          bound, region = None, source_region(self.domain, self.dem, self.dem)
+   302         1          0.0      0.0      0.0          if move is not None and src.is_geographic:
+   303                                                       steps = transform_definition(src, self.dem)
+   304                                                       if "gridshift" not in steps and "deformation" not in steps:
+   305                                                           bound = _bound(self.dem, source_region(self.domain, self.dem, src))
+   306      5523          1.9      0.0      0.0          for fid, geometry, value in rows:
+   307      5522          1.3      0.0      0.0              t0 = time.perf_counter()
+   308      5522         27.2      0.0      0.3              if geometry is None or geometry.is_empty:
+   309                                                           self.empty += 1
+   310                                                           continue
+   311      5522         37.9      0.0      0.4              geometry = shapely.force_2d(geometry)
+   312      5522         26.2      0.0      0.3              if geometry.geom_type not in ACCEPTED:
+   313                                                           raise FeatureError(
+   314                                                               f"{name}: feature {fid} is a {geometry.geom_type}; input is polygons and lines"
+   315                                                           )
+   316      5522         28.8      0.0      0.3              mask = _mask(cmap, self.vocabulary, value, f"{name}: feature {fid}")
+   317      5522          1.1      0.0      0.0              if mask is None:
+   318                                                           continue
+   319      5522          8.6      0.0      0.1              code = _code(value, f"{name}: feature {fid}") if cmap.codes else None
+   320      5522         26.4      0.0      0.3              polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
+   321      5522          1.2      0.0      0.0              moved = polygon = None
+   322      5522          1.1      0.0      0.0              if move is not None and bound is not None and bound[1](geometry):
+   323                                                           # Pre-clipped where its edges are straight, then moved (R5).
+   324                                                           chains = pre_clip(geometry, bound[2], bound[0])
+   325                                                           kept = [shapely.transform(c, move) for c in chains]
+   326                                                           polygon = shapely.transform(geometry, move) if polygonal else None
+   327                                                       else:  # moved first, then pre-clipped exactly in the DEM's CRS
+   328      5522          1.3      0.0      0.0                  moved = shapely.transform(geometry, move) if move is not None else geometry
+   329      5522          1.9      0.0      0.0                  kept = [moved]
+   330      5522          1.2      0.0      0.0                  polygon = moved if polygonal else None
+   331      5522         44.4      0.0      0.5              if not all(_finite(g) for g in kept):
+   332                                                           raise FeatureError(f"{name}: feature {fid} has a vertex with no image in the DEM")
+   333      5522          1.1      0.0      0.0              if moved is not None:
+   334      5522       6152.1      1.1     64.7                  kept = list(pre_clip(moved, region))
+   335      5522          3.7      0.0      0.0              coded: dict[str, Any] = {"code": code, "polygon": polygon}
+   336     11044       2924.1      0.3     30.7              lines = tuple(
+   337                                                           piece
+   338      5522          1.2      0.0      0.0                  for line in kept
+   339                                                           for piece in shapely.get_parts(shapely.intersection(line, self.domain.polygon))
+   340                                                           if isinstance(piece, LineString) and piece.length > 0
+   341                                                       )
+   342      5522          1.2      0.0      0.0              if lines:
+   343      2628          8.4      0.0      0.1                  self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
+   344                                                           # A dropped edge lies outside, so a pre-clipped chain is not covered.
+   345      2628         36.2      0.0      0.4                  self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
+   346      2894        124.0      0.0      1.3              elif polygon is not None and polygon.intersects(self.domain.polygon.point_on_surface()):
+   347                                                           # No boundary crosses the domain, and a point of it is inside: it
+   348                                                           # covers the domain, and labels it (R5). Kept, not clipped.
+   349                                                           self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
+   350                                                       else:
+   351      2894          0.7      0.0      0.0                  self.outside += 1
+   352      5522          1.8      0.0      0.0              self.seconds += time.perf_counter() - t0
+
+Total time: 6.60269 s
+File: /Users/skavhaug/projects/rasputin/.claude/worktrees/bottlenecks/.venv/lib/python3.13/site-packages/tin_engine/landcover.py
+Function: label_triangles at line 68
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    68                                           def label_triangles(
+    69                                               vertices: npt.ArrayLike,
+    70                                               triangles: npt.ArrayLike,
+    71                                               edges: npt.ArrayLike,
+    72                                               *,
+    73                                               polygons: Sequence[tuple[BaseGeometry, int]],
+    74                                               margin: float,
+    75                                           ) -> CoverLabels:
+    76                                               """A code per triangle from `(polygon, code)` pairs; 0 in no polygon.
+    77                                           
+    78                                               Args:
+    79                                                   vertices: `(N, 2)` or `(N, 3)`; only x and y are used.
+    80                                                   triangles: `(T, 3)` vertex indices.
+    81                                                   edges: `(E, 2)` constraint edges; they block the spread.
+    82                                                   polygons: the coded polygons, in the vertices' CRS.
+    83                                                   margin: how far a constraint edge may lie from its input boundary.
+    84                                               """
+    85         1          0.0      0.0      0.0      xy = np.asarray(vertices, dtype=np.float64)[:, :2]
+    86         1          1.8      1.8      0.0      tri = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+    87         1       3125.0   3125.0     47.3      ids = regions(tri, edges)
+    88         1        164.2    164.2      2.5      a, b, c = xy[tri[:, 0]], xy[tri[:, 1]], xy[tri[:, 2]]
+    89         1         28.3     28.3      0.4      la, lb, lc = (np.hypot(*(q - p).T) for p, q in ((b, c), (c, a), (a, b)))
+    90         1          2.5      2.5      0.0      perimeter = la + lb + lc
+    91         1          9.0      9.0      0.1      cross = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (c[:, 0] - a[:, 0]) * (b[:, 1] - a[:, 1])
+    92         1          2.4      2.4      0.0      safe = np.where(perimeter > 0, perimeter, 1.0)
+    93         1          3.9      3.9      0.1      r = np.where(perimeter > 0, np.abs(cross) / safe, 0.0)
+    94         1         28.6     28.6      0.4      centre = (la[:, None] * a + lb[:, None] * b + lc[:, None] * c) / safe[:, None]
+    95                                               # Per component, the triangle of largest r, ties to the lowest index.
+    96         1       1041.6   1041.6     15.8      order = np.lexsort((np.arange(len(tri)), -r, ids))
+    97         1         22.9     22.9      0.3      best = order[np.unique(ids[order], return_index=True)[1]]
+    98         1       2169.4   2169.4     32.9      comp_codes, hits = _lookup(centre[best], polygons)
+    99         1          0.7      0.7      0.0      by_id = np.zeros(len(tri), dtype=np.int32)
+   100         1          0.0      0.0      0.0      by_id[ids[best]] = comp_codes
+   101         1          2.3      2.3      0.0      codes = by_id[ids]
+   102         2          0.0      0.0      0.0      return CoverLabels(
+   103         1          0.0      0.0      0.0          codes=codes,
+   104         1          0.0      0.0      0.0          regions=len(best),
+   105         1          0.0      0.0      0.0          outside=int((hits == 0).sum()),
+   106         1          0.0      0.0      0.0          overlapped=int((hits > 1).sum()),
+   107         1          0.0      0.0      0.0          thin=int((r[best] <= margin).sum()),
+   108                                               )
+

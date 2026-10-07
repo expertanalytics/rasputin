@@ -1,0 +1,124 @@
+ply surface | empty | text | 5e325b502d641b27
+ply edges | empty | text | 402d664ee0217f12
+vtk | empty | text | dab4aa6c7cfba8df
+ply surface | empty | binary | a6ed2d89a571aea2
+ply edges | empty | binary | c5c91126bdac55fd
+vtk | empty | binary | a186185c40c5ff83
+ply surface | one triangle | text | 5406767399a4cca8
+ply edges | one triangle | text | c8bb7a37a1204f95
+vtk | one triangle | text | 449bdef3732d00f9
+ply surface | one triangle | binary | 24898320073e2b79
+ply edges | one triangle | binary | 34b9dd10e33c2754
+vtk | one triangle | binary | 3c7f5c3b428d8a06
+ply surface | two with edges | text | a18e393263195ee6
+ply edges | two with edges | text | ee6f8301ce2aaf5d
+vtk | two with edges | text | 8b3eec0729598775
+ply surface | two with edges | binary | 63a51af080718f53
+ply edges | two with edges | binary | fd3cc1c406691fdf
+vtk | two with edges | binary | 8d814dece3ce6111
+ply surface | nan z | text | 6bd6ea77b9d951a3
+ply edges | nan z | text | 8748d29cdc60c3ca
+vtk | nan z | text | 6938d243ca40a04f
+ply surface | nan z | binary | 80f8d00fa89577e8
+ply edges | nan z | binary | 2a6b1e9c0098d585
+vtk | nan z | binary | bca2112da62a11af
+ply surface | utm | text | 06fd7222d723edcb
+ply edges | utm | text | 50867a1c06cc3b76
+vtk | utm | text | 3ca505af8eb0e07a
+ply surface | utm | binary | 38347462915a348d
+ply edges | utm | binary | 952a8fa69210a22a
+vtk | utm | binary | 4f4885e1acff658d
+ply comment | plain | text | 3edf52bdc8435566
+vtk field | plain | text | 46cbf1c74b30dafd
+ply comment | plain | binary | b5dbcda2544ad0a4
+vtk field | plain | binary | 7d13ea1929f503be
+ply comment | non-ascii | text | refused: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+vtk field | non-ascii | text | refused: a string must be ASCII; got '°' in 'crs ETRS89 °N'
+ply comment | non-ascii | binary | refused: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+vtk field | non-ascii | binary | refused: a string must be ASCII; got '°' in 'crs ETRS89 °N'
+ply comment | cr | text | refused: a comment may not contain a control character; got '\r'
+vtk field | cr | text | refused: a string may not contain a control character; got '\r'
+ply comment | cr | binary | refused: a comment may not contain a control character; got '\r'
+vtk field | cr | binary | refused: a string may not contain a control character; got '\r'
+ply comment | tab | text | refused: a comment may not contain a control character; got '\t'
+vtk field | tab | text | refused: a string may not contain a control character; got '\t'
+ply comment | tab | binary | refused: a comment may not contain a control character; got '\t'
+vtk field | tab | binary | refused: a string may not contain a control character; got '\t'
+ply comment | del | text | refused: a comment may not contain a control character; got '\x7f'
+vtk field | del | text | refused: a string may not contain a control character; got '\x7f'
+ply comment | del | binary | refused: a comment may not contain a control character; got '\x7f'
+vtk field | del | binary | refused: a string may not contain a control character; got '\x7f'
+ply comment | nul | text | refused: a comment may not contain a control character; got '\x00'
+vtk field | nul | text | refused: a string may not contain a control character; got '\x00'
+ply comment | nul | binary | refused: a comment may not contain a control character; got '\x00'
+vtk field | nul | binary | refused: a string may not contain a control character; got '\x00'
+ply comment | percent space | text | 47b5be04a0b8558f
+vtk field | percent space | text | a7ed9dfcdf3a3c6b
+ply comment | percent space | binary | 4cbcca5787820a1c
+vtk field | percent space | binary | 0e1836bf2f62b401
+ply comment | empty | text | 01e56ae1cff700d5
+vtk field | empty | text | 8f59c7cf888b6570
+ply comment | empty | binary | a6e65c6a367689c6
+vtk field | empty | binary | d6c0344a6046cb5e
+ply codes | none | text | 5d390aa383089f02
+vtk codes | none | text | 8b3eec0729598775
+ply codes | none | binary | 3e2de5bcf32834f2
+vtk codes | none | binary | 8d814dece3ce6111
+ply codes | small | text | 78c940d47270eec6
+vtk codes | small | text | 5497a8cf03160a1b
+ply codes | small | binary | 3fa06f21c1818194
+vtk codes | small | binary | 809cba432be287b6
+ply codes | int32 bounds | text | 25415244ba47ade5
+vtk codes | int32 bounds | text | 4afd8dfcb00cfe7b
+ply codes | int32 bounds | binary | 95294c8c5e254db0
+vtk codes | int32 bounds | binary | 0f74a1beb86ceee2
+ply codes | past int32 | text | refused: face_codes must fit int32
+vtk codes | past int32 | text | refused: triangle_codes must fit int32
+ply codes | past int32 | binary | refused: face_codes must fit int32
+vtk codes | past int32 | binary | refused: triangle_codes must fit int32
+ply codes | below int32 | text | refused: face_codes must fit int32
+vtk codes | below int32 | text | refused: triangle_codes must fit int32
+ply codes | below int32 | binary | refused: face_codes must fit int32
+vtk codes | below int32 | binary | refused: triangle_codes must fit int32
+ply codes | float nan | text | d8d165fb6834fa7f
+vtk codes | float nan | text | a59406579e24d3b9
+ply codes | float nan | binary | 8665cfb0fef6ebc8
+vtk codes | float nan | binary | 8bf22721e2b3bb91
+ply codes | one short | text | refused: face_codes has 1 entries for 2 faces
+vtk codes | one short | text | refused: triangle_codes has 1 entries, 2 triangles
+ply codes | one short | binary | refused: face_codes has 1 entries for 2 faces
+vtk codes | one short | binary | refused: triangle_codes has 1 entries, 2 triangles
+ply edges | unnamed bit | refused: bit 30 is named by no property of this vocabulary
+vtk | unnamed bit | refused: bit 30 is named by no property of this vocabulary
+vtk field | reserved name | refused: field name 'elevation' is reserved or not ^[a-z][a-z0-9_]*$
+crs_label | EPSG:25833 | EPSG:25833
+crs_label | OGC:CRS84 | OGC:CRS84
+crs_label | PROJ string | +proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs +type=crs
+crs_label | WKT ascii | ENGCRS["local",EDATUM["d"],CS[Cartesian,2],AXIS["x",east],AXIS["y",north],LENGTHUNIT["metre",1]]
+crs_label | WKT non-ascii | ENGCRS["l\xf8kal",EDATUM["d"],CS[Cartesian,2],AXIS["x",east],AXIS["y",north],LENGTHUNIT["metre",1]]
+mesh river --flat --ascii --crs plain | .vtk | 20c623e687dc6fc5
+mesh river --flat --ascii --crs plain | .ply --out-edges | fd3b1eb200c1bcbb 86b3d94c28ab13ac
+mesh river --flat --ascii --crs non-ascii | .vtk | refused (exit 2): Invalid value for --crs: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+mesh river --flat --ascii --crs non-ascii | .ply --out-edges | refused (exit 2): Invalid value for --crs: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+mesh river --flat --ascii --crs cr | .vtk | refused (exit 2): Invalid value for --crs: a comment may not contain a control character; got '\r'
+mesh river --flat --ascii --crs cr | .ply --out-edges | refused (exit 2): Invalid value for --crs: a comment may not contain a control character; got '\r'
+mesh river --flat --ascii --crs empty | .vtk | ff43d672f2c7b0b7
+mesh river --flat --ascii --crs empty | .ply --out-edges | 72b5789ac8217bf1 22bb1a33c4442ac6
+mesh --dem --ascii | .vtk | 18a9507df2c9bfc2 | holds land_cover_code, d\xe9m.tif
+mesh --dem --ascii | .ply --out-edges | 04602625b31bb87e 2b94ef04bbdefe14 | holds land_cover_code, d\xe9m.tif
+mesh --dem --ascii | .ply --record | 04602625b31bb87e | holds land_cover_code, d\xe9m.tif
+mesh --dem --ascii | .ply --record | record {"dem_source": "d\\xe9m.tif", "dem_tiles": null, "features": "l\\xe5nd.geojson, class map corine: 2 features, 2 lines, 4 vertices", "land_cover_codes": "CORINE Land Cover level-3 code, attribute Code_18, map corine; 0 = in no polygon, and every constraint line"}
+mesh river --flat --binary --crs plain | .vtk | 7251f44f7dd7b476
+mesh river --flat --binary --crs plain | .ply --out-edges | 9d4c5e15153adde3 d29dd25d163e7786
+mesh river --flat --binary --crs non-ascii | .vtk | refused (exit 2): Invalid value for --crs: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+mesh river --flat --binary --crs non-ascii | .ply --out-edges | refused (exit 2): Invalid value for --crs: a comment must be ASCII; got '°' in 'crs ETRS89 °N'
+mesh river --flat --binary --crs cr | .vtk | refused (exit 2): Invalid value for --crs: a comment may not contain a control character; got '\r'
+mesh river --flat --binary --crs cr | .ply --out-edges | refused (exit 2): Invalid value for --crs: a comment may not contain a control character; got '\r'
+mesh river --flat --binary --crs empty | .vtk | 2644598c1e9b5f87
+mesh river --flat --binary --crs empty | .ply --out-edges | 425a1d5dbed1fa6d 318174c9532ce7e6
+mesh --dem --binary | .vtk | 0939db782b9bd1ea | holds land_cover_code, d\xe9m.tif
+mesh --dem --binary | .ply --out-edges | 0580cc972fa068fe fa689120cc95d2ae | holds land_cover_code, d\xe9m.tif
+mesh --dem --binary | .ply --record | 0580cc972fa068fe | holds land_cover_code, d\xe9m.tif
+mesh --dem --binary | .ply --record | record {"dem_source": "d\\xe9m.tif", "dem_tiles": null, "features": "l\\xe5nd.geojson, class map corine: 2 features, 2 lines, 4 vertices", "land_cover_codes": "CORINE Land Cover level-3 code, attribute Code_18, map corine; 0 = in no polygon, and every constraint line"}
+mesh river --flat | .obj | refused (exit 2): Invalid value for --out: a.obj has no known suffix; use .vtk or .ply
+mesh river --flat | .vtk --out-edges | refused (exit 2): Invalid value for --out-edges: a .vtk file already carries the constraint edges

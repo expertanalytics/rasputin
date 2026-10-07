@@ -1,4 +1,6 @@
-"""The edge-property vocabulary: which bit of an edge's property word means what.
+"""The edge-property vocabulary (which bit of an edge's property word means what), and
+:class:`TerrainFeature`, one feature's mask and lines (moved from ``feature_input``
+by audit PR C, so ``chains`` imports it from layer 0).
 
 The C++ core carries a per-edge set of 32 opaque bits and never spells a feature
 name. The names live here, at the boundary, exactly as CRS metadata does -- and
@@ -8,7 +10,7 @@ constant in the source.
 **This module imports nothing first-party and never imports the compiled
 extension**, so it is constructible and testable with no extension in the
 process. It is emphatically *not* a module ``tin_engine.viz`` may reach for:
-``test_viz_svg.py::TestModuleIsolation`` pins that ``style.py`` and
+``tests/python/test_layering.py`` pins that ``style.py`` and
 ``fixtures.py`` import no first-party module at all, and ``viz/`` needs no
 vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
 ``cli.py``, the composition root, is the only module that imports both this
@@ -57,6 +59,7 @@ import hashlib
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 # The C++ ceiling (``EdgeProperties::kMaxProperties``), restated at the only
 # layer that meets untrusted input.
@@ -144,6 +147,10 @@ class EdgeVocabulary(BaseModel):
                 found.append(name_of[bit])
         return tuple(found)
 
+    def table(self) -> list[tuple[int, str]]:
+        """The (bit, name) pairs in ascending bit order, as files write them."""
+        return sorted((prop.bit, prop.name) for prop in self.properties)
+
     def fingerprint(self) -> str:
         """A stable digest over the sorted ``(bit, name)`` pairs.
 
@@ -157,8 +164,7 @@ class EdgeVocabulary(BaseModel):
         property renamed -- and a digest that cannot see either blesses exactly
         the disagreement it is here to detect.
         """
-        pairs = sorted((prop.bit, prop.name) for prop in self.properties)
-        payload = ";".join(f"{bit}:{name}" for bit, name in pairs)
+        payload = ";".join(f"{bit}:{name}" for bit, name in self.table())
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -189,3 +195,18 @@ DEFAULT_VOCABULARY = EdgeVocabulary(
 PIECE_VOCABULARY = EdgeVocabulary(
     properties=(*DEFAULT_VOCABULARY.properties, EdgeProperty(name="seam", bit=9))
 )
+
+
+class TerrainFeature(BaseModel):
+    """One feature: its fid, mask, and clipped lines in the DEM's CRS; a
+    closed line (first point repeated) is an unclipped ring. Under a coded
+    map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
+    ``polygon`` moved into the DEM's CRS by the transform its lines took."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    fid: int | str
+    mask: int
+    lines: tuple[LineString, ...]
+    code: int | None = None
+    polygon: Polygon | MultiPolygon | None = None

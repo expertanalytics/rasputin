@@ -34,10 +34,14 @@ def run(
     start: RefineOutcome,
     tolerance: float,
     clock: PhaseClock,
+    feet: bool = False,
 ) -> PointRefineOutcome:
-    """``refine_strip`` from ``start``; ``clock`` gets the run's own two times."""
+    """``refine_strip`` from ``start``; ``clock`` gets the run's own two times.
+    ``feet`` puts points near a line onto it first (20c, R4)."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
-    out = refine_strip(view, strip, *(np.asarray(a) for a in arrays), tolerance=tolerance)
+    out = refine_strip(
+        view, strip, *(np.asarray(a) for a in arrays), tolerance=tolerance, constraint_feet=feet
+    )
     clock.add("edge strip: scan (parallel)", out.scan_seconds)
     clock.add("edge strip: split + flip (serial)", out.split_seconds)
     return out

@@ -32,10 +32,12 @@ def run(
     tolerance: float,
     clock: PhaseClock,
     strip: ConstraintCheckPoints | None = None,
+    feet: bool = False,
 ) -> tuple[PointRefineOutcome, int]:
     """Phase 2 from phase 1's outcome `start`; the outcome and the number of
     check points stored. `clock` gets D7's rows. `strip`, the edge strip on
-    the target grid (15f, D6), joins the same loop."""
+    the target grid (15f, D6), joins the same loop. `feet` puts points near
+    a line onto it first (20c, R4)."""
     h = float(grid.spacing)
     store = CheckPoints(
         x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h, rows=grid.rows, cols=grid.cols
@@ -49,7 +51,13 @@ def run(
     with clock.phase("check points: store"):
         store.freeze()
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
-    out = refine_points(store, *(np.asarray(a) for a in arrays), tolerance=tolerance, strip=strip)
+    out = refine_points(
+        store,
+        *(np.asarray(a) for a in arrays),
+        tolerance=tolerance,
+        strip=strip,
+        constraint_feet=feet,
+    )
     clock.add("check points: store", adding)
     clock.add("final check: scan (parallel)", out.scan_seconds)
     clock.add("final check: split + flip (serial)", out.split_seconds)

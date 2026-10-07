@@ -385,6 +385,8 @@ class RefineOutcome:
     def feet(self) -> int: ...
     @property
     def feet_refused(self) -> int: ...
+    @property
+    def quality_feet(self) -> int: ...
 
 def refine(
     view: RasterView,
@@ -459,6 +461,9 @@ class PointRefineOutcome(RefineOutcome):
     @property
     def nodes_inserted(self) -> int:
         """``refine_strip`` only: DEM nodes its rescan inserted."""
+    @property
+    def feet_fallback(self) -> int:
+        """Points put onto a line at their foot and later added where they were."""
 
 @final
 class ConstraintCheckPoints:
@@ -494,6 +499,7 @@ def refine_strip(
     tolerance: float,
     threads: int = ...,
     frozen_mask: int = ...,
+    constraint_feet: bool = ...,
 ) -> PointRefineOutcome:
     """The edge strip on the projected path: refine's output refined until every
     strip point is within ``tolerance``, the DEM's nodes rescanned in every
@@ -514,6 +520,7 @@ def refine_points(
     threads: int = ...,
     strip: ConstraintCheckPoints | None = ...,
     frozen_mask: int = ...,
+    constraint_feet: bool = ...,
 ) -> PointRefineOutcome:
     """Refine phase 1's mesh until every check point in a frozen store, and
     every point of ``strip``, is within ``tolerance``. Releases the GIL; the

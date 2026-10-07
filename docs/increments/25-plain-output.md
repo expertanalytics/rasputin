@@ -85,7 +85,7 @@ master `586fbc1`'s, before this increment; read them there
 
 | field | produced at | what it is | when |
 |---|---|---|---|
-| `feature_bits`, `feature_names`, `feature_vocabulary` | `io/vtk_legacy.py:123-126` | the edge vocabulary: bit numbers, names, a fingerprint | always; structural, unchanged by this design |
+| `feature_bits`, `feature_names`, `feature_vocabulary` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:123-126` | the edge vocabulary: bit numbers, names, a fingerprint | always; structural, unchanged by this design |
 | `crs` | `src_python/tin_engine/cli.py@586fbc1:876` | the mesh's CRS | always |
 | `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
 | `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
@@ -93,7 +93,7 @@ master `586fbc1`'s, before this increment; read them there
 | `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `src_python/tin_engine/mosaic.py@44fa7f5:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
 | `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
 | `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
-| `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
+| `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:118-119` | what `land_cover_code` holds | a coded `--features-map` |
 
 The `.ply` carries only some of these as comments (`src_python/tin_engine/cli.py@586fbc1:877`, `:892`,
 `:900`, `:929`, `:933`, `:1009`): `crs`, `elevation` (the same sentence under
@@ -112,12 +112,12 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `refined from DEM nodes, constrained Delaunay` | `:1549` | the method: DEM nodes inserted until within tolerance, Delaunay except across lines | | `--tolerance` |
 | `bilinear from DEM, stride 8` | `:1496` | no tolerance: every 8th DEM node triangulated, z interpolated | | no `--tolerance` |
 | `tolerance 5 m` | `:1549` | the tolerance asked for | m | always on the refined path |
-| `achieved max error 4.9997 m` | `:1550`, `out.max_error` | the largest \|DEM − mesh\| over DEM nodes in triangles whose three vertices have data; exact today (`refine.hpp:409-416`). **On the reprojected path this is phase 1's figure against the resampled grid, not against the source DEM** | m | always |
+| `achieved max error 4.9997 m` | `:1550`, `out.max_error` | the largest \|DEM − mesh\| over DEM nodes in triangles whose three vertices have data; exact today (`include/terrain/refinement/refine.hpp@ed125121:409-416`). **On the reprojected path this is phase 1's figure against the resampled grid, not against the source DEM** | m | always |
 | `against the resampled grid; checked against 21615 source nodes: 37 inserted in 5 rounds, max error 4.9926 m at source nodes, 0 coincident with a start vertex (max 0 m)` | `:1518-1524`, `final_check.py:22-48` | reprojected path: the source DEM's nodes in the grown domain's rectangle (`store.size`, after duplicates); vertices the final check inserted and its rounds; the largest error at source nodes (`final.max_error`); source nodes equal to a start vertex, never checked, and their largest \|z − vertex z\| | count; m | reprojected only |
 | `start stride 40` / `start domain boundary, boundary z bilinear` / `start domain boundary and features, vertex z bilinear` | `:1462`, `:1465`, `:1475` | what the starting mesh was: every 40th node, or the domain outline (and feature lines), with z interpolated at those vertices | | always |
 | `start min angle 25 deg` / `start quality off` | `:1545-1547` | the start-quality setting (increment 20) | deg | always |
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
-| `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:409-410`), so this is a **self-check, always 0** | count | never, by construction |
+| `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`include/terrain/refinement/refine.hpp@ed125121:409-410`), so this is a **self-check, always 0** | count | never, by construction |
 | `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below). *Changed by increment 27: a vertex on a node reads that node alone, so without `--tolerance` too only vertices on NoData cells go (`27-node-sampling.md`)* | count | the DEM has NoData cells inside the area |
 | `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`src_python/tin_engine/io/geotiff.py@65cd528:139-143`); always set for cache blocks (`src_python/tin_engine/fetch/run.py@44fa7f5:249`) | | the key is missing |
 
@@ -131,7 +131,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | features read | `:1364-1368` | `60 features kept, 9 dropped outside, 19 clipped, 0 empty skipped` |
 | no index | `:1370` | `<table>: no R-tree index, table scanned` |
 | lines noded | `:1468` | `10802 input vertices, 5627 noded vertices` |
-| land cover | `:1040-1044`, `landcover.py:100-108` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
+| land cover | `:1040-1044`, `src_python/tin_engine/landcover.py@3066d60:103-109` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
 | `--out-crs` suggestion | `:1299` | a line to paste; plain already |
 | fetch progress | `:1222` | `N of M bytes`; plain already |
 | catchment command | `:1690-1729` | `window k: ... flood 0.12 s, contained`; `seed: ...`; `catchment: N nodes, X km2 of node area`; `fine outline: ... rings dropped ... holes filled ...`; `reduced outline: ...` |
@@ -268,10 +268,10 @@ unreadable or break a legal requirement, so they stay, unchanged.
 
 | field | written by | why it must stay |
 |---|---|---|
-| `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
-| `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `feature_bits`, `feature_names` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:124-125`; `.ply` `feature_bit <bit> <name>` comments, `src_python/tin_engine/io/ply.py@44fa7f5:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
+| `feature_vocabulary` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:126`, `src_python/tin_engine/io/ply.py@44fa7f5:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
+| `land_cover_codes` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `src_python/tin_engine/feature_input.py@44fa7f5:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 

@@ -35,7 +35,7 @@ WORDING = {
     "features_transform": "Conversion from each features file's coordinate system",
     "start_mesh": "What refinement started from",
     "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",
-    "snap_to_lines": "DEM nodes very close to a line were moved onto it",
+    "snap_to_lines": "Points very close to a line were moved onto it",
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
     "max_error_m": "Largest height error",
@@ -68,8 +68,15 @@ WORDING = {
     "edge_flips": "Edge swaps",
     "start_quality_points_inserted": "Points added to improve the starting mesh",
     "start_quality_points_skipped": "Tries skipped while improving it",
-    "points_snapped_to_lines": "Points moved onto lines",
+    "start_quality_points_snapped_to_lines": (
+        "Points moved onto lines while improving the starting mesh"
+    ),
+    "points_snapped_to_lines": "Points refinement moved onto lines",
     "snaps_refused": "Moves onto lines refused",
+    "final_check_points_snapped_to_lines": (
+        "Points the final check against the DEM moved onto lines"
+    ),
+    "final_check_snapped_points_added_anyway": "Of them, also added where they were",
     "start_vertices_between_dem_nodes": "Starting-mesh vertices not on a DEM node",
 }
 _NAMES = list(WORDING)
@@ -102,6 +109,11 @@ def _exact(value: float) -> str:
     maximum can never read as above the tolerance it met."""
     short = f"{value:g}"
     return short if float(short) == value else repr(value)
+
+
+def escaped_ascii(text: str) -> str:
+    """`text` with non-ASCII escaped (`\\xe9`), as a file field holds it."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
 
 
 def plural(n: int, one: str, many: str) -> str:

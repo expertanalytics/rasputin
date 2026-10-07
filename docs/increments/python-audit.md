@@ -33,6 +33,9 @@ round 1 asked for changes, made in `e2baa5f`; round 2 approved `e2baa5f`
 (`e4f7a42`, test side done by `@tester`) was reviewed (Review, below); the
 second (`8c2bc9a`) takes master with #188 to #192; `@reviewer` reviewed
 and approved it (Review, below). F merged into master as #196.
+PR A (`audit-lattice`) is designed in its own file,
+`docs/increments/python-audit-pr-a.md`, not here, and merged into master
+as #197 (-27 net production lines, measured there).
 
 PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
 `worktree-audit-crs` after T2. `@tester`'s red commit `29aff00` has red
@@ -41,7 +44,7 @@ tests 1-7 (43 failing, each for its own reason); its step found three more
 8-10 are in `7dddda8`, which also showed rule 2 of `same_crs` wrong (a
 west-pointing UTM 33 counted as EPSG:25833); rule 2 now also checks the
 axes and the prime meridian (section 9, "After red tests 8-10"). `5074ef6`
-adds the `+pm=paris` pair and found a thirteenth site (`domain.py:103`); a
+adds the `+pm=paris` pair and found a thirteenth site (`src_python/tin_engine/domain.py@44fa7f5:103`); a
 final sweep over `src_python/` and `tools/` (section 9, "The final sweep")
 finds no fourteenth. Red tests 11 and 12 are in `20bcf2c`; `@developer`'s
 first green commit is `5197f9a`. Code review round 1 found a third false "the
@@ -58,6 +61,75 @@ no longer claims B's rule accepts the Austrian Lambert built from its GeoKeys.
 Pushed as PR #192 at `618328b`; B merged into master as #192. T1 (PR #189) then merged
 into master and conflicted with it, so master is merged into the branch;
 the merge renumbers T1's design to section 10.
+
+PR C (`audit-geojson-io`, F5) is designed in section 12, on branch
+`worktree-audit-geojson` from PR B's head `fe12bbb` (B lands first). Design
+review rounds 1 (`151d35f`) and 2 (`957cac9`) are recorded below and their
+fixes are in section 12. `@tester`'s red commit is `1928569` and
+`@developer`'s green commit `3b739ac`, +24 net production lines as designed.
+Code review round 1 approved the code and asked for prose only: the
+`project_structure.md` rows, the wordings section 12 missed ("Refusal
+wordings that change", below the line, and its known gaps), and this
+paragraph; fixed in `574a9a9`. That probe showed the station, reference,
+NVE lake and river readers saying `None is a None, not a Point` for a file
+with no usable geometry, so one check was added: `@tester`'s red commit
+`28fe0cf` (8 tests) and `@developer`'s green commit `693f560`, in which
+`features_of` refuses a feature whose geometry is missing, null or has no
+`type` with `<name>: feature <i> has no geometry`. The PR is now +28 net
+production lines against the designed +24 (section 12, "Net production
+lines"). Code review round 2 asked for prose only (`591c026`); its probe
+found that an empty non-null `geometry` (`""`, `0`, `false`, `[]`, `{}`)
+crashed `--features` and `catchment --lakes`, so that fix was taken into
+this PR: `@tester`'s red commit `af5cb4e` (30 tests) and `@developer`'s
+green commit `0a11a34`, in which `read_source` reads every empty
+`geometry` as `null`; still +28 net. Code review round 3 approved the code
+and asked for prose only. Each of rounds 1 to 3 found more rows missing
+from a hand-written wording table, so the table is now a short summary and
+the record is a committed probe and its outputs at the base and the head
+(section 12, "Refusal wordings that change"). The probe found that a
+top-level `Feature` whose `geometry` is not an object (`7`, `"Point"`,
+`[1, 2]`) crashed the station, reference, NVE lake and river readers,
+which the base refused, so that fix was taken into this PR too:
+`@tester`'s red commit `5a02bc9` (64 tests) and `@developer`'s green
+commit `21f49d6`, in which `features_of` refuses a geometry that is not an
+object, or whose `type` is missing or empty, with `feature <i> has no
+geometry`; +29 net, this fix +1. Code review round 4 approved the code
+and the tests and found one row false (summary row 4 said `--features`
+reads a bare geometry; under the `property` map it refuses it). `efe0eea`
+fixed that row, gap 3, row 8, section 6's row C, the probe docstring and
+this paragraph, with no code change. Code review round 5 (prose only)
+checked all of these and approved `efe0eea`, +29 net. Master `d9aeb1c`
+(#188 T2, #189 T1, #190, #191, #192 PR B) is then merged into the branch.
+It conflicted only in this file: master's T1 design is section 10, so
+this PR's design, section 10 until then, is now section 11, and the
+review records below that say "section 10" for this PR now say section
+11, as do the source and test docstrings that cite it (`git grep -n
+"section 1[01]" -- src_python tests` lists them; only `cli_driver.py` and
+`gil_probe.py`, which cite T1's design, keep section 10). The probe re-run on the
+merged tree matches `geojson_wordings-21f49d6.txt` byte for byte, so PR
+B's final `same_crs` changes no wording here. Master `879ea49` (#193,
+#195, #196 PR F, #197 PR A) is then merged into the branch a second time,
+since F merged first and this PR runs the merge-tree rule (section 12,
+top). F's design took section 11 on master, so this PR's design is now
+section 12; the status, section 6's row C and this PR's review records
+below say section 12, as must the source and test docstrings that cite
+this PR's design (`git grep -n "section 1[0-2]" -- src_python tests
+docs/increments/python-audit-probes` lists them; `catchment_core.py`,
+`hydrography.py`, `test_catchment.py` and `catchment_bytes.py` cite F's
+design and keep section 11). It conflicted in this file,
+`project_structure.md`, `cli.py`, `io/station_set.py` and
+`test_layering.py`; the docs side is resolved by `@architect`, the code
+side by `@developer` (`49f8849d`). Code review round 6 checked both
+master merges (suite, gates, probe byte-identical, +29 net against master)
+and asked for prose only: finding F5 still said section 11 for this PR's
+design. Ola took the defaults to questions 1 to 4 (section 12, "Questions
+for Ola") on 2026-10-06. Question 5 (the odd `None is a Point` wording) is
+still open; its default, a later PR, holds until he answers and changes
+nothing in this PR. Code review round 7 approved the commit that fixes F5.
+Master was then merged in at `5c2b771a`, bringing #200 (the clip-speed
+change); code review round 8 found that the merge dropped the `MultiPolygon`
+import that master's new `_linework` uses, and round 9 approved the one-line
+fix `800c4adf`. Next: the push and the re-enqueue, on Ola's yes.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -245,7 +317,9 @@ share the polygon-part filter. Ola's ruling (section 7): both `--lakes`
 behaviours stay, and each command's `--help` for `--lakes` says which file it
 takes. Risk: medium; the refusal wordings differ today
 and the suites pin them, so the PR either keeps each wording or lands a
-`@tester` amendment.
+`@tester` amendment. Section 12 revises this shape: the reader takes the
+parsed document and a default CRS, `read_domain` moves to `io/domain_file.py`,
+and the two lake readers share no filter.
 
 ### F6. Mesh topology joins duplicated between `cli.py` and `viz/scene.py` — about 35 lines, low risk (PR E)
 
@@ -434,8 +508,9 @@ L3  core adapters     raster.to_core (the one raster adapter), start_mesh
                       catchment_core (PR F), final_check: the only
                       importers of _core
 L2  io/ codecs        bytes <-> values: geotiff, cog, geopackage, gml,
-                      geojson (read AND write), ply, vtk_legacy, tables
-                      (csv/json/palette), mesh_index, station_set, rivers;
+                      geojson (read AND write), domain_file (PR C), ply,
+                      vtk_legacy, tables (csv/json/palette), mesh_index,
+                      station_set, rivers;
                       repository.py the one module that opens files;
                       fetch/http, the one module that opens a connection
 L1  pure algorithms   crs (same_crs, transform_label, single_crs), mosaic,
@@ -475,20 +550,20 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 (section 10) | 0 (tests only, about -100; X1's -350 is corrected there) | T2 | none; `@tester` then `@reviewer`, no `@developer` |
 | B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | +22, measured at `65cd528` (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
-| A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
-| F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about +15 (section 11; was about -40) | nothing | red test for the lakes type; the byte probe (section 11) |
-| C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
-| D | `audit-encoders` | F7 | about -30 | C (shares `io/geojson.py`) | none |
+| A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | -27, measured at `b3b38d2` (`python-audit-pr-a.md`; first estimated about -100) | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
+| F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | +29, measured at `5c6a9f9` (section 11; first estimated about -40, then about +15) | nothing | red test for the lakes type; the byte probe (section 11) |
+| C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | +29, measured at `21f49d6` (section 12; first estimated -40) | B | red tests for the one `crs` rule, the shapes, the renames and the two `--help` texts |
+| D | `audit-encoders` | F7 | +7, measured at `083712d` (`python-audit-pr-d.md`; first estimated -30) | C, merged as #201 (shares `cli.py`, `features.py`, `test_layering.py`) | red tests for the shared checks, `EdgeVocabulary.table`, `run_record.escaped_ascii`, the one `.ply` refusal wording change, and the layering rows; the encoder probe's diff (the 12 wording lines only) |
 | E | `audit-topology` | F6, X2 for `_chain_masks`/`_undirected` | about -35 | 23c-2 merged | none |
 | G | `audit-cli-options` | F1, F11 | about -95 | 23c-2 merged | none |
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
-Total: about -345 production lines, the sum of the rows above, tools
-included (B at its measured +22, F at its estimated +15; F's measured +29,
-section 11, makes it about -330; the first estimate was about -440), about
--100 test lines (T2 came out at +1 and T1 is re-estimated at about -100,
-against the -385 first estimated), and the drift points
+Total: about -150 production lines by the rows above as they now stand,
+tools included (B +22, A -27, F +29, C +29 and D +7 measured; the rest
+estimated; the first estimate was about -440), about -100 test lines (T2
+came out at +1 and T1 is re-estimated at about -100, against the -385
+first estimated), and the drift points
 (lattice spelling, NoData rule, CRS checks, GeoJSON `crs` rules, mask
 convention) each written once.
 
@@ -1150,9 +1225,9 @@ differ).
 
 **After the red step** (`29aff00`), one line each:
 
-- `domain.py:62` uses `same_crs`: one rule everywhere; otherwise a domain spelt as a PROJ string of the DEM's CRS goes through a transform while the record says `domain_transform` "none".
+- `src_python/tin_engine/domain.py@44fa7f5:62` uses `same_crs`: one rule everywhere; otherwise a domain spelt as a PROJ string of the DEM's CRS goes through a transform while the record says `domain_transform` "none".
 - When the same, `to_crs` returns the same polygon labelled `target.to_string()`, not `self`: today's output exactly (probe: the PROJ-string domain comes back bit-identical, labelled `EPSG:25833`), and the result's `crs` is always `dst`'s.
-- `feature_input.py:300` and `src_python/tin_engine/fetch/plan.py@618328b:118` use `same_crs` too, by the same rule; neither changes a wording.
+- `src_python/tin_engine/feature_input.py@618328b:300` and `src_python/tin_engine/fetch/plan.py@618328b:118` use `same_crs` too, by the same rule; neither changes a wording.
 - Red tests 8-10 below are needed: each site's output is the same today, so only a refused point-moving `Transformer` method can tell the fix from the bug.
 - `@tester`'s departure, accepted: `TestTheSameCrs`'s guard refuses the point-moving methods (`transform`, `itransform`, `transform_bounds`), not `Transformer.from_crs`, since `same_crs` builds one to compare; the invariant (no point moved) is unchanged and the guard was shown still to catch a real transform.
 - `@tester`'s departure, accepted: wording pins at the other two `single_crs` sites (the `--out-crs` path and `catchment.delineate`), beyond test 4's one.
@@ -1204,7 +1279,7 @@ differ).
 
 **After red test 1's `+pm=paris` pair** (`5074ef6`), one line each:
 
-- Ruled: site 13, `domain.py:103`, uses `same_crs` with its wording unchanged (table above); red test 11.
+- Ruled: site 13, `src_python/tin_engine/domain.py@44fa7f5:103`, uses `same_crs` with its wording unchanged (table above); red test 11.
 - Ruled: the final sweep above replaces grep; its script is in `docs/increments/python-audit-probes/`, its list in this section, and it finds no fourteenth site; seven text comparisons stay text, each with its reason.
 - Ruled: `float(pm.unit_conversion_factor)` is the accepted form for mypy (rule 2 above).
 - Ruled: a None `source_crs` or `target_crs` is "not the same", with red test 12.
@@ -1286,13 +1361,13 @@ The `cli.py` edit moves every later line up about 6, `catchment.py` about
 line count. Unpinned citations into those files, at or after the
 edited lines, whose quotations hold at `44fa7f5`, were pinned to `44fa7f5`
 in this design's commit, so the green commit breaks none:
-`docs/increments/15c-geographic-dem.md` line 931 (`catchment.py:194-195`),
-`docs/increments/15f-edge-strip.md` line 591 (`cli.py:1612`),
+`docs/increments/15c-geographic-dem.md` line 931 (`src_python/tin_engine/catchment.py@44fa7f5:194-195`),
+`docs/increments/15f-edge-strip.md` line 591 (`src_python/tin_engine/cli.py@44fa7f5:1612`),
 `docs/increments/25-plain-output.md` lines 53, 273, 274, 397 and 665
-(`cli.py:1966-1969`, `:1040`, `:961`, `:1113-1125`, `:1145-1147`),
+(`src_python/tin_engine/cli.py@44fa7f5:1966-1969`, `:1040`, `:961`, `:1113-1125`, `:1145-1147`),
 `docs/increments/29-nve-reference-catchments.md` lines 538 and 3130
-(`dem_input.py:248`), 3134 (`cli.py:1956`) and 3380 (`catchment.py:259`), and
-`docs/benchmarks/2026-10-05/nve-hrd/README.md` line 53 (`catchment.py:259`).
+(`src_python/tin_engine/dem_input.py@44fa7f5:248`), 3134 (`src_python/tin_engine/cli.py@44fa7f5:1956`) and 3380 (`src_python/tin_engine/catchment.py@44fa7f5:259`), and
+`docs/benchmarks/2026-10-05/nve-hrd/README.md` line 53 (`src_python/tin_engine/catchment.py@44fa7f5:259`).
 Left alone: unpinned citations whose text had already moved before this PR
 (`15f-edge-strip.md` lines 1539 and 1904, `24-release-hardening.md` lines 515
 and 517, `29-nve-reference-catchments.md` lines 3098 and 3114). They are
@@ -1977,6 +2052,527 @@ in `_seed_mask`, `_outline`, `_extent` and `run_batch`'s boxes: it changes
 the `TileFootprint` import this PR adds to `catchment.py`, and lines next
 to the signatures this PR retypes.
 
+## 12. PR C design: `audit-geojson-io` (F5)
+
+Branch `worktree-audit-geojson`, from PR B's head `fe12bbb`; B lands first,
+and every citation in this section is pinned to `fe12bbb`. PR F
+(`worktree-audit-catchment`, head `e2baa5f`) edits some of the same lines.
+The rule, not a hand list: whichever of C and F merges second runs `git
+merge-tree --write-tree <its head> master` and resolves every file it
+names; edits designed but not yet committed (the red and green commits) are
+checked with `git merge-file` on scratch copies of the file at F's head, the
+merge base `b63132e`, and the design applied to C's head. The merged texts
+worked out so far, as examples:
+
+- `src_python/tin_engine/io/station_set.py`: F drops the `dataclass` and
+  `pydantic` imports and adds `from tin_engine.hydrography import Lake,
+  Station` under `from tin_engine.crs import parse_crs`, the line C swaps for
+  `read_collection`; and F drops `"Lake"` and `"Station"` from `__all__`,
+  next to the `"read_lakes"` C renames. Merged: both, with no `parse_crs`
+  import and `__all__` without `Lake` and `Station`, with `read_nve_lakes`.
+- `src_python/tin_engine/cli.py`: F rewrites the line `from
+  tin_engine.io.station_set import read_references, read_stations`, to which
+  C adds `read_nve_lakes`. Merged: F's line plus `read_nve_lakes`.
+- `tests/python/test_layering.py`: the `io.station_set` row (F: `crs
+  hydrography io.repository`; C: `io.geojson io.repository`; merged:
+  `hydrography io.geojson io.repository`; F's `io.rivers` row above it is
+  in the same hunk and keeps F's text); the `feature_input` row (C adds
+  `io.geojson`; F rewrites the `catchment` row under it, so the two make one
+  hunk; merged: C's `feature_input` row and F's `catchment` row); the `cli` row (F adds
+  `hydrography`, C adds `io.domain_file` on the same line; merged: F's string
+  with `io.domain_file` after `io.cog`, re-wrapped under 100 characters); and
+  the `UPWARD` block (F deletes the three `F, audit-catchment-shared` lines,
+  C deletes `("chains", "feature_input")` beside them; merged: all four go).
+- `docs/increments/25-plain-output.md` line 274 (the `features_notice`
+  row): both pin its `cli.py` citation to `44fa7f5`; C also pins
+  its `feature_input.py` citation to `44fa7f5`, F leaves it bare. Merged: C's line.
+- `src_python/tin_engine/catchment.py`'s imports: B (in C's history) adds
+  `same_crs, single_crs` to the `tin_engine.crs` import, and F replaces the
+  `_core` and `burn` imports beside it; merged: F's block with B's `crs`
+  line. This is a B and F conflict, whichever of them merges second.
+- This file: each branch adds its own section after section 9 and edits the
+  status paragraph and section 6; merged, both stand.
+
+The two share no function body.
+
+### What is there, measured
+
+Three readers, run on one matrix of `crs` members and document shapes
+(probe: a scratch copy of `fe12bbb` with the main venv's `_core`, the script
+`architect-audit-geojson-231421-probe.py`, scratch only). "Domain" is
+`read_domain` (`src_python/tin_engine/domain.py@fe12bbb:79-139`),
+"features" is `read_source`'s GeoJSON branch
+(`src_python/tin_engine/feature_input.py@fe12bbb:403-414`), "stations" is
+`features_of` (`src_python/tin_engine/io/station_set.py@fe12bbb:52-65`),
+which `read_stations`, `read_references`, `read_lakes` and `io/rivers.py`'s
+`read_segments` all call.
+
+| Input | Domain | Features | Stations |
+|---|---|---|---|
+| no `crs` member | EPSG:4326 | EPSG:4326 | refused, `no crs member; the file must name its CRS` |
+| `"crs": null` | EPSG:4326 | EPSG:4326 | refused, as no member |
+| `"crs": {}` | refused, `cannot parse f.geojson: 'properties'` | **EPSG:4326** | refused, as no member |
+| a member with no `properties.name` (a string, `{"type": "name"}`, a `link` member) | refused, `cannot parse f.geojson: '<key>'`; a string member `string indices must be integers, not 'str'` | refused, `not a GeoJSON FeatureCollection ('<key>')`; a string member `(string indices must be integers, not 'str')` | refused, `the crs member has no name; it must name the CRS` |
+| `"name": null` | refused, `cannot read the CRS 'None'` | refused, `cannot read the CRS None` | refused, has no name |
+| `"name": 4326` (a number) | `'4326'` | **the int `4326`** | `'4326'` |
+| an unreadable name | `cannot read the CRS ...`, no file name | `f.geojson: cannot read the CRS ...` | `cannot read the CRS ...`, no file name |
+| a `Feature`, or a bare geometry | read | refused | refused |
+| `"features": {}` (not a list) | refused, `need exactly one feature, got 0` | **read as no features** | refused, `no features list; ...` |
+| `"features": [7]` | refused | refused | **`AttributeError`**, a traceback from the CLI |
+| a JSON list at the top | refused | refused | refused, wrongly, as `no crs member` |
+| not JSON | `cannot parse f.geojson: ...` | `f.geojson: ...` | the bare `JSONDecodeError` text, no file name |
+
+The bold cells are defects. The int `4326` reaches `FeatureSet(crs=...)`,
+whose field is `tuple[str, ...]`: pydantic refuses it with a
+`ValidationError`, not a `FeatureError` (probe:
+`FeatureSet(features=(), crs=(4326,))`). `[7]` reaches
+`_geometry_type`'s `feature.get` (`src_python/tin_engine/io/station_set.py@fe12bbb:85`),
+and `station-catchments` catches only `OSError` and `ValueError`
+(`src_python/tin_engine/cli.py@fe12bbb:2119`).
+
+The two writers build the same document: `catchment_geojson`
+(`src_python/tin_engine/io/geojson.py@fe12bbb:18-35`) and `fetch/nve`'s
+`_collection` (`src_python/tin_engine/fetch/nve.py@fe12bbb:115-121`).
+
+### Prior art: legacy and literature
+
+*Literature.* Two specifications. GeoJSON 2008 (`geojson.org/geojson-spec.html`,
+section 3) defines the `crs` member: "The default CRS is a geographic
+coordinate reference system, using the WGS84 datum, and with longitude and
+latitude units of decimal degrees"; "If the value of CRS is null, no CRS can
+be assumed"; a named CRS is `{"type": "name", "properties": {"name": ...}}`,
+a linked one `{"type": "link", "properties": {"href": ..., "type": ...}}`;
+and the member "should be on the top-level GeoJSON object in a hierarchy
+(in feature collection, feature, geometry order) and should not be repeated
+or overridden on children". RFC 7946 (section 4) fixes every coordinate to
+WGS 84 longitude and latitude, "equivalent to ... urn:ogc:def:crs:OGC::CRS84",
+and its appendix B.1 says "the 'crs' member of [GJ2008] is no longer used".
+Section 3 lists the nine object types; section 2: "A GeoJSON text ...
+consists of a single GeoJSON object".
+
+The rule below is GeoJSON 2008's named CRS, with RFC 7946's WGS 84 as the
+default where a caller allows one. Departures: a linked CRS is refused
+(nothing here dereferences a URL, and no file the project meets has one);
+a `crs` member on a feature or geometry inside the top object is ignored, as
+today (the 2008 text says it should not be there). The default is written
+`EPSG:4326`, as today, not `OGC:CRS84`: the two are the same under PR B's
+`same_crs`, and the records keep their wording. Nothing new is claimed.
+
+*Legacy.* `git grep -nE "\"crs\"|'crs'|geojson|GeoJSON|read_lakes" legacy-archive -- legacy`
+returns nothing. `git grep -niE "geojson|json\.load|lake" legacy-archive -- legacy`
+returns `legacy/bindings.cpp:371`, `legacy/rasputin/avalanche.py:32`,
+`legacy/rasputin/globcov_repository.py:10, 74`,
+`legacy/rasputin/gml_repository.py:10, 126`,
+`legacy/rasputin/material_specification.py:3`,
+`legacy/rasputin/triangulate_dem.h:846` and
+`legacy/rasputin/web_visualize.py:97, 99, 101`: a JSON web response and `extract_lakes`, which
+picks flat triangles out of a mesh. No GeoJSON reader, no lake file. Nothing
+to carry across.
+
+### The one reading path (`io/geojson.py`, layer L2)
+
+```python
+GEOJSON_SUFFIXES = (".geojson", ".json")   # one copy; today two
+RFC7946_CRS = "EPSG:4326"                  # moved from domain.GEOJSON_DEFAULT_CRS
+
+def read_collection(doc: object, *, default_crs: str | None) -> tuple[list[dict[str, Any]], str]:
+    """The features of one GeoJSON object and the text of its `crs` member.
+    Opens nothing; a refusal is a ValueError in words without the file's
+    name, which the caller adds."""
+
+def feature_collection(crs: str, features: list[dict[str, Any]]) -> dict[str, Any]:
+    """{"type": "FeatureCollection", "crs": <named crs>, "features": features}."""
+```
+
+It takes the parsed document, not a path: `io/geojson.py` opens nothing, and
+`tests/python/test_io_geojson.py@fe12bbb:77-85` pins that by text. The
+callers get the document from `io/repository.py`, the one module that opens
+files.
+
+**The `crs` rule** (one, for every reader):
+
+1. The document must be a JSON object; else `not a GeoJSON object; the file
+   must hold a FeatureCollection, a Feature or a geometry`.
+2. No `crs` member: `default_crs` when the caller gives one; else `no crs
+   member; the file must name its CRS`.
+3. `"crs": null`: refused, `the crs member is null; the file must name its
+   CRS`, whatever the default ("no CRS can be assumed", GeoJSON 2008).
+   Question 1.
+4. Otherwise the member's `properties.name`, when the member and its
+   `properties` are objects and the name is not null; else `the crs member
+   has no name; it must name the CRS`. The text is `str(name)`, so a number
+   is read as its digits, as two of the three readers do today.
+5. The text must be one `parse_crs` reads; its own `cannot read the CRS ...`
+   is the refusal.
+
+**The shape rule.** A `Feature` is one feature; an object with
+`"type": "FeatureCollection"` or a `features` member is a collection (a
+collection without `type` reads today through `--features` and the station
+readers, and keeps reading; `--domain`, which refuses one today because
+`shape()` finds no `type`, reads it too); anything else is
+taken as a geometry, wrapped as one feature with no properties, and left to
+the caller's `shape()` to accept or refuse. A collection's `features` must be
+a list of objects; else `no features list; the file is not a
+FeatureCollection` (today's stations wording). Every reader therefore accepts
+all three object types, where only `--domain` did (question 2).
+
+Not the reader's: what a feature's geometry or properties must be. Each
+caller keeps its own checks and wordings (the domain's "exactly one
+feature", the stations' geometry types and duplicate numbers, the features'
+null-geometry count).
+
+A prototype of rules 1-5 and the shape rule, run on the matrix above
+(`architect-audit-geojson-231421-proto.py`, scratch only), gives each
+refusal above, and reads the bench's domain
+(`docs/benchmarks/2026-09-26/quarter.geojson`, a bare Polygon whose member
+names `urn:ogc:def:crs:EPSG::25833`) to that text and one feature whose
+geometry is the file's own object. About 20 lines.
+
+### The callers
+
+| Caller | Today | After |
+|---|---|---|
+| `read_domain` | reads the text itself, `_geojson` (`src_python/tin_engine/domain.py@fe12bbb:126-139`) | moves to `io/domain_file.py` (below); GeoJSON: `read_collection(read_json(path), default_crs=RFC7946_CRS)`, then its own "exactly one feature" and `shape()`; every refusal still `DomainError`, `cannot parse <name>: <words>` |
+| `read_source`, GeoJSON | `json.loads(path.read_text())`, its own member parse | `read_collection(read_json(path), default_crs=RFC7946_CRS)`; the per-feature `try` (`id`, `geometry`, `properties`) and its wording stay; the reader's `ValueError` reaches the existing handler, `<name>: <words>` (`src_python/tin_engine/feature_input.py@fe12bbb:417-418`) |
+| `features_of` (stations, references, NVE lakes, rivers) | its own rule, member required | stays, as the binding with no default: `read_collection(read_json(path), default_crs=None)`, a `ValueError` re-raised as `<name>: <words>` |
+| `catchment_geojson`, `fetch/nve._collection` | each builds the document | `feature_collection(crs, features)`; `json.dumps` arguments unchanged, so the bytes are |
+
+**Why `read_domain` moves.** `domain.py` is layer L1 (section 5), and
+`io/geojson.py` is L2: `domain` importing it is an upward edge, which
+`test_layering.py` refuses. `read_domain` turns a file into a value, which is
+L2's job, so it moves to a new codec module, `io/domain_file.py`, with
+`WKT_SUFFIXES`, `_parsed` and the polygon checks (one Polygon, not empty,
+valid, oriented). It opens no file itself, as `io/station_set.py` opens none:
+a GeoJSON domain is read by `repository.read_json(path)`, the same bytes
+reader as `--features` and the station files (after this PR), so the three
+decode a file alike; a WKT domain by a new `repository.read_text(path)`,
+UTF-8 (today `Path.read_text()` uses the locale's encoding). `read_json`
+hands bytes to `json.load`, which finds UTF-8, -16 or -32 and skips a UTF-8
+byte order mark; RFC 8259 section 8.1 requires UTF-8 between systems and lets
+a parser ignore the mark, and RFC 7946 section 11.1 points GeoJSON at I-JSON
+(RFC 7493, UTF-8 only). Probe: a FeatureCollection written with a leading
+mark reads through `json.load` on the open binary file, and
+`json.loads(path.read_text(encoding="utf-8"))` refuses it with `Unexpected
+UTF-8 BOM`. Had `--domain` read text, a file with a mark would read through
+`--features` and be refused by `--domain`.
+
+The wordings stay: the one read is `raw = read_text(path) if suffix in
+WKT_SUFFIXES else read_json(path)` inside the existing `try`, whose
+`(OSError, UnicodeDecodeError)` clause keeps `cannot read <path>: ...`
+(`json.load` raises `UnicodeDecodeError` on bytes that are not UTF-8), and a
+second clause, `except ValueError`, gives a JSON decode error `cannot parse
+<name>: ...`, as `json.loads` in the parsing `try` does today.
+`domain.py` keeps `DomainError`, `DomainPolygon`, `to_crs` and
+`check_extent`, and drops `json`, `Path`, `Any`, `shapely.wkt`,
+`explain_validity` and the three constants. Rejected: keeping `read_domain`
+in `domain.py` with an `UPWARD` exception (a new upward edge, in the PR meant
+to remove one); moving `domain` up a layer (`target_grid`, L1, imports it).
+
+**`TerrainFeature` moves down** (F12): from `feature_input.py`
+(`src_python/tin_engine/feature_input.py@fe12bbb:137-149`) to `features.py`
+(L0), so `chains` imports it from there and the `("chains",
+"feature_input")` exception goes. `feature_input` imports it back, so
+`feature_input.TerrainFeature` still names it. `features.py`'s docstring
+still names the deleted `test_viz_svg.py::TestModuleIsolation`
+(`src_python/tin_engine/features.py@fe12bbb:11`; section 8, "Left for a
+later PR"): it says `tests/python/test_layering.py` instead.
+
+**Docstrings the green commit rewrites**, so each says what its module holds
+after the move:
+
+- `domain.py`'s module docstring (`src_python/tin_engine/domain.py@fe12bbb:1-19`):
+  "what `--domain` reads" and the reading rules go to `io/domain_file.py`'s;
+  `domain.py`'s says it holds the domain's types, `to_crs` and
+  `check_extent`.
+- `io/geojson.py`'s first line (`src_python/tin_engine/io/geojson.py@fe12bbb:1`,
+  "The catchment file's bytes: one polygon as GeoJSON"): it now also holds
+  the one reading path and the `crs` rule.
+- `features.py`'s first line (`src_python/tin_engine/features.py@fe12bbb:1`,
+  "The edge-property vocabulary"): it now also holds `TerrainFeature`.
+- `tests/python/test_cli_catchment.py@fe12bbb:15` says
+  `domain.read_domain reads it`; it becomes `io.domain_file.read_domain`.
+  That is a test file, so `@tester` changes it in red test 9, with the same
+  file's import line.
+
+### The two lake readers
+
+| Today | After | Reads |
+|---|---|---|
+| `feature_input.read_lakes` (`src_python/tin_engine/feature_input.py@fe12bbb:429-446`) | `feature_input.read_lake_polygons` | any polygon source (`.gpkg`, `.geojson`, `.json`), in any CRS, a GeoPackage queried at the seed; lines and points skipped; bare geometries |
+| `station_set.read_lakes` (`src_python/tin_engine/io/station_set.py@fe12bbb:126-142`) | `station_set.read_nve_lakes` | `fetch-stations`' `lakes.geojson` or GeoJSON like it: `crs` member required, every feature a polygon with an area, else refused; `Lake` records, a MultiPolygon split |
+
+No alias keeps the old names. `cli.py` imports `read_nve_lakes` at the top
+with the other `station_set` names, and the local aliased import
+(`src_python/tin_engine/cli.py@fe12bbb:2132`) goes.
+
+**No shared polygon filter**, against F5's shape: one reader skips what is
+not a polygon, the other refuses it, and Ola's ruling keeps both. A helper
+taking a skip-or-refuse flag would be wider than the two expressions it
+replaces.
+
+### The two `--help` texts
+
+- `rasputin catchment --lakes` (`src_python/tin_engine/cli.py@fe12bbb:1803-1810`):
+  "Any polygon file (.gpkg, .geojson or .json, in any CRS; lines and points
+  in it are skipped): the lake polygon under the seed is the seed. Without
+  it, the seed is the DEM node nearest the point."
+- `rasputin station-catchments --lakes` (`src_python/tin_engine/cli.py@fe12bbb:2070-2077`):
+  "The lakes.geojson that rasputin fetch-stations writes, or GeoJSON like it:
+  polygons only, with a crs member naming the river file's CRS. A gauge in a
+  lake, or on a lake line within 30 m of it, is seeded with the whole lake."
+
+### Layering table (`tests/python/test_layering.py`)
+
+| Row | Today | After |
+|---|---|---|
+| `io.domain_file` (new, L2) | none | `crs domain io.geojson io.repository` |
+| `io.geojson` | (none) | `crs` |
+| `io.station_set` | `crs io.repository` | `io.geojson io.repository` |
+| `feature_input` | `crs domain features io.geopackage io.gml io.repository` | adds `io.geojson` |
+| `chains` | `domain feature_input features` | `domain features` |
+| `fetch.nve` | `fetch.http sources` | adds `io.geojson` |
+| `cli` | as today | adds `io.domain_file` |
+| `UPWARD` | `("chains", "feature_input")` | deleted |
+
+`domain` stays `crs io.models`; `io.rivers` stays `io.station_set`. Every new
+edge goes down or sideways (L2 to L1 or L2; L4 and L5 to L2).
+
+### Refusal wordings that change
+
+**The record is a probe, not this section.** Code review rounds 1, 2 and 3
+each found rows missing from a hand-written table of changed wordings, so
+the full list is now produced, not written:
+`docs/increments/python-audit-probes/geojson_wordings.py` reads 68 shapes of
+GeoJSON file with each of 8 readers (`--domain`, `read_source`,
+`--features` through `open_features`, `catchment --lakes`, and the station,
+reference, NVE lake and river readers) and prints one line per pair: what
+was read, the refusal the command line shows, or `UNCAUGHT` for a
+traceback. Its docstring lists the shapes and says how to run it on a
+scratch copy of one revision. Its outputs at the base and the head are
+committed beside it, `geojson_wordings-32b5092.txt` and
+`geojson_wordings-21f49d6.txt`, so
+
+    diff docs/increments/python-audit-probes/geojson_wordings-{32b5092,21f49d6}.txt
+
+is every wording this PR changes on those shapes. A later change to a
+reader re-runs the probe and commits a new output beside these.
+
+**What matters to a user** (a summary, not the list; "stations" means the
+station, reference, NVE lake and river readers):
+
+| Change | Readers | Before | After |
+|---|---|---|---|
+| `"crs": null` | all | read as WGS 84 (domain, features, `catchment --lakes`); `no crs member; ...` (stations) | refused: `the crs member is null; the file must name its CRS` |
+| `"crs": {}`, or a member whose name is null or missing | all | by reader and shape: read as WGS 84, a refusal quoting a Python key or `cannot read the CRS None`, or `no crs member; ...` | refused: `the crs member has no name; it must name the CRS` |
+| an unreadable CRS name | stations | refused without the file's name | the same, after `<name>: ` |
+| one `Feature` or one bare geometry, not a collection | features, `catchment --lakes`, stations | refused | read; but a bare geometry has no properties, so a reader that needs one refuses it: `--features` under the `property` map, which refuses an unlisted value (`src_python/tin_engine/feature_input.py@a400064:101-106`, `:457`), with `feature 0: property None is not in the map property` (the probe's map), and under `corine` and `clc18_kode` with `feature 0: None is not a class code in 1 .. 2**31 - 1` (`:443`); under `corine-water`, which drops an unlisted value, it reads, as no feature; the station, reference and river readers refuse it for the missing property (gaps 2 and 3) |
+| a collection with no `type` | domain | refused | read |
+| `"features"` not a list, or a JSON list, not an object | all | various, one a traceback in stations | `no features list; the file is not a FeatureCollection`; `not a GeoJSON object; ...` |
+| a feature whose geometry is missing, null, empty, not an object (`7`, `"Point"`, `[1, 2]`), typeless, or of an empty `type` (null, `""`, `0`, `false`, `[]`, `{}`) | stations | in a collection, `<label> is a None, not a Point` and the like (`is a , not`, `is a 0, not`, `with an area ()`), or a traceback (`AttributeError ... 'get'`) for a geometry that is not an object; a top-level `Feature`, whatever its geometry, refused as not a collection (row 4) | `feature <i> has no geometry`, `<i>` its index in the file |
+| an empty `geometry` (`""`, `0`, `false`, `[]`, `{}`) | features, `catchment --lakes` | a traceback (`AttributeError ... is_empty`) | read as `null`: an empty feature, skipped and counted |
+| a leading UTF-8 byte order mark | domain, features, `catchment --lakes` | refused (`Unexpected UTF-8 BOM ...`) | read (stations read it before and after) |
+
+**Known gaps at `21f49d6`, not fixed here.** Each is a line of
+`geojson_wordings-21f49d6.txt`. `grep -c UNCAUGHT` gives 2 there (50 at
+the base), both gap 1.
+
+1. **Traceback: `--domain` with a geometry whose `type` is `""`** raises
+   shapely's `GeometryTypeError` (`Unknown geometry type: ''`), which
+   `read_domain` does not turn into a refusal: it catches
+   `shapely.errors.GEOSException`
+   (`src_python/tin_engine/io/domain_file.py@21f49d6:72`), and
+   `GeometryTypeError` is a `ShapelyError` but not a `GEOSException`.
+   As a top-level `Feature` and as the first feature of a collection;
+   before and after (`tin_engine/domain.py` at the base).
+2. **pydantic's message:** a station feature with no `station` property
+   gives the multi-line `1 validation error for Station ... Field
+   required`, without the file's name. A bare `Point`, which has no
+   properties, now reaches it (the base refused it as not a collection).
+3. **`None` names nothing:** a bare geometry of the wrong type for the
+   station, reference or river reader is refused as `None is a <type>, not
+   a ...`, from this PR (the base said `no features list; ...`); `None`
+   stands for the station number the file lacks. Question 5 below.
+   `--features` names the same missing value `None` for a bare geometry
+   (summary row 4).
+4. **Python's words in a refusal:** `--domain`, `--features`, `read_source`
+   and `catchment --lakes` refuse many malformed geometries naming the file
+   but quoting a Python error, e.g. `not a GeoJSON FeatureCollection
+   ('NoneType' object has no attribute 'lower')` for an object with only a
+   `crs` member, or `cannot parse <name>: 'int' object has no attribute
+   'get'` for `"geometry": 0` in `--domain` (`grep -v UNCAUGHT ... | grep
+   -c 'object has no attribute'`: 115 lines at `21f49d6`, 94 at the base,
+   where every top-level `Feature` was refused as `('features')`).
+
+**Ruling after code review round 2, taken** (`@architect`). The
+`--features` and `catchment --lakes` traceback on an empty non-null
+`geometry` was the one gap that round found this PR widening into a crash;
+`read_source` now treats every empty `geometry` as `null`
+(`src_python/tin_engine/feature_input.py@0a11a34:390`): red `af5cb4e`,
+green `0a11a34`. Between `483e4ae` and `0a11a34` the probe's output changes
+in exactly those 45 lines (15 shapes in each of `read_source`,
+`--features` and `catchment --lakes`).
+
+**Ruling after code review round 3, taken** (`@architect`). The probe
+found one more refusal at the base that this PR had turned into a
+traceback: a top-level `Feature` whose `geometry` is `7`, `"Point"` or
+`[1, 2]`, in the station, reference, NVE lake and river readers (in a
+collection it was a traceback at the base too). `features_of` now counts
+a geometry that is not an object, or whose `type` is missing or empty, as
+no geometry
+(`src_python/tin_engine/io/station_set.py@21f49d6:62-64`): red `5a02bc9`,
+green `21f49d6`, +1 net. Between `0a11a34` and `21f49d6` the probe's
+output changes in exactly 96 lines, every one now `feature <i> has no
+geometry` in those four readers: the 36 tracebacks (3 values, 3
+positions, 4 readers) and the 60 odd wordings of an empty `type` (`""`,
+`0`, `false`, `[]`, `{}`; 3 positions, 4 readers).
+
+### Red tests (`@tester`, one commit, before any code)
+
+Lean: no throwaway implementation, no mutation round.
+
+1. **`tests/python/test_io_geojson.py`, `read_collection`** (red: it does
+   not exist): every row of the rule above, with and without a default:
+   the default text; each refusal by its wording; `"name": 4326` gives the
+   text `"4326"`; a `Feature`, a bare geometry and a collection each give
+   their features, the geometry wrapped with properties `{}`; the bench's
+   `quarter.geojson` gives its member's text and one feature whose geometry
+   equals the file's. `feature_collection("EPSG:25833", [])` is the dict
+   above. `test_the_writer_has_moved_out_of_cli` stays as it is.
+2. **`tests/python/test_feature_input.py`**, through `read_source`: `"crs":
+   null` and `"crs": {}` refused naming the file (red: read as EPSG:4326); a
+   `Feature` file and a bare-geometry file read, one row each (red);
+   `"features": {}` refused (red); `"name": 4326` gives `read.crs == "4326"`,
+   a `str` (red).
+3. **`tests/python/test_station_set.py`**: a station file that is one
+   `Feature` (a `Point` with a `station` property) reads as one station
+   (red); `"features": [7]` is a `ValueError` naming the file (red); an
+   unreadable name and a non-JSON file are refused with messages that start
+   with the file's name (red).
+4. **`tests/python/test_domain.py`** (through `io.domain_file.read_domain`):
+   `"crs": null` refused with `is null` (red); `"features": {}` refused with
+   `no features list` (red); an unreadable name names the file (red); a
+   GeoJSON domain written with a leading UTF-8 byte order mark reads (red:
+   today `Unexpected UTF-8 BOM`).
+5. **Renames** (red): `feature_input.read_lake_polygons` and
+   `station_set.read_nve_lakes` exist and the two `read_lakes` do not.
+   `test_station_set.py`'s and `test_fetch_nve.py`'s `read_lakes` calls
+   become `read_nve_lakes`.
+6. **`--help`**, `tests/python/test_cli_catchment.py` and
+   `test_cli_station_catchments.py` (red): with `test_cli_draw.py`'s
+   `plain()`, `catchment --help` contains `Any polygon file` and `.gpkg`
+   and not `fetch-stations`; `station-catchments --help` contains
+   `lakes.geojson` and `fetch-stations`.
+7. **`TerrainFeature`** (red): `features.TerrainFeature is
+   feature_input.TerrainFeature`.
+8. **`test_layering.py`**: the table above (red until the imports move).
+9. **Re-point `read_domain`** to `tin_engine.io.domain_file`: the import
+   line in `test_io_geojson.py`, `test_cli_mesh_geographic.py`,
+   `test_refine_golden.py`, `test_cli_fetch.py`, `test_cli_catchment.py`,
+   `test_cli_station_catchments.py`, `test_cli_mesh_domain_crs.py` and
+   `test_cli_mesh_edge_strip.py`; the 27 `domain.read_domain` calls in
+   `test_domain.py` and the two `dm.read_domain` calls in
+   `test_dem_input_domain.py` (a second module fixture in each); `DomainError`
+   and `DomainPolygon` stay in `tin_engine.domain`. The docstring at line 180 of
+   `test_domain.py` cites line 103 of `domain.py`: pin it to `src_python/tin_engine/domain.py@44fa7f5:103`,
+   the site it names. The docstring at `tests/python/test_cli_catchment.py@fe12bbb:15`
+   says `io.domain_file.read_domain` instead of `domain.read_domain`.
+
+The rest of the suite must stay green, the refine golden suite among them
+(it reads its domain through `read_domain`).
+
+### Net production lines: about +24
+
+Costed with import lines and the formatter's splits (the lesson of PR B):
+
+| File | Net | What |
+|---|---|---|
+| `io/geojson.py` | +31 | 2 imports, 2 constants, `read_collection` 18, `feature_collection` 6 (the formatter splits its dict over 5), `catchment_geojson` -3, `__all__` +6 (past 100 characters, one name a line) |
+| `io/domain_file.py` (new) | +53 | 13 imports, 1 constant, `read_domain` 33 (the `except ValueError` clause 2), `_parsed` 5, `__all__` 1 |
+| `domain.py` | -53 | 6 imports, 3 constants, `read_domain` 28, `_parsed` 5, `_geojson` 11 |
+| `feature_input.py` | -10 | `json` and the suffix constant -2, one import +1, the branch -2, `TerrainFeature` -7 |
+| `features.py` | +8 | one shapely import, `TerrainFeature` 7 |
+| `io/station_set.py` | -6 | `features_of` 11 to 5; `parse_crs` import swapped for `read_collection` |
+| `io/repository.py` | +3 | `read_text` 2, `__all__` 1 |
+| `fetch/nve.py` | -3 | `_collection` 6 to 2, one import |
+| `cli.py` | +2 | one import, the local import -1, the two help strings one line longer each |
+| `chains.py` | -1 | one import line |
+
+The audit's about -40 assumed the three rules were copies to delete; they are
+about ten lines each, and the one rule, now total over the inputs above,
+costs about twenty. The new module costs its import block. No packing under
+`# fmt: skip` is designed.
+
+As built: +29 net (`python3 tools/count_loc.py 32b5092 21f49d6`) against the
+designed about +24. The first green commit `3b739ac` was +24; the check that
+code review round 1 led to (`693f560`, in `features_of`, shared by the
+station, reference, NVE lake and river readers) adds 4: the loop, the test,
+the raise, and the `return` split from the call (`count_loc.py 3b739ac
+693f560`: 5 added, 1 removed). `0a11a34` is 0 net (`count_loc.py 693f560
+0a11a34`), and `21f49d6` +1 (`count_loc.py 0a11a34 21f49d6`: 2 added, 1
+removed; the test split into a binding and a test).
+
+### `@perf`
+
+Nothing owed. No refine or mesh code changes. The domain reader does feed
+the mesh, but runs once per run, and the polygon it returns is unchanged:
+the refine golden suite reads `quarter.geojson` through `read_domain` and
+pins the refined mesh's bytes, and the bench (`tools/bench.py@fe12bbb:606`,
+`--domain` that same file) reads it through the same path.
+
+### Citations this PR moves, pinned now
+
+Found by committing a one-line change to every file the PR edits, in a
+scratch clone at `fe12bbb`, and running `python3 tools/check_citations.py
+--base fe12bbb` there (28 at risk). `domain.py`, `feature_input.py`,
+`cli.py` and `fetch/nve.py` change above every cited line. Pinned in this
+commit to `44fa7f5` (on master; each quotation re-read there):
+`docs/increments/16e-multi-features.md` lines 79, 81, 83, 87 and 310
+(`feature_input.py`), `docs/increments/25-plain-output.md` lines 274
+(`feature_input.py`) and 286 (`cli.py`), `docs/increments/27-node-sampling.md`
+line 143 (`cli.py`), `docs/increments/29-nve-reference-catchments.md` line
+3384 (`fetch/nve.py`), and this file's own: the status paragraph's
+`domain.py` site 13, section 9's "After the red step" lines (`domain.py`,
+`feature_input.py`, `test_cli_mesh_geographic.py`), its "After red test 1's
+`+pm=paris` pair" line, and the `cli.py` citations quoted in its "Citations
+this PR moves". `docs/increments/15-dem-mosaic.md` line 756 said "at
+`d34d79d`" and is pinned there (`check_crs`, line 97 of that commit). Left
+alone, as PR B left them: unpinned citations whose text had already moved
+(`15f-edge-strip.md` lines 1539 and 1904, `24-release-hardening.md` lines
+515 and 517, `27-node-sampling.md` line 400, `29-nve-reference-catchments.md`
+lines 3098 and 3114). The test files' edits replace import lines one for
+one, so no cited test line moves; the docstring citation at line 180 of
+`test_domain.py` is in red test 9.
+
+`project_structure.md`'s rows for `domain.py`, `feature_input.py`,
+`io/geojson.py` and `io/station_set.py`, and a new row for
+`io/domain_file.py`, are rewritten by `@architect` after the green commit,
+so they describe the code as written.
+
+### Questions for Ola (defaults hold until he answers)
+
+1. **A GeoJSON file whose `crs` is written as `null`:** refuse it everywhere,
+   as the GeoJSON 2008 text says ("no CRS can be assumed")? Today `--domain`
+   and `--features` read it as WGS 84 and the station files refuse it.
+   Default: refuse everywhere.
+2. **A file that holds one `Feature`, or one bare geometry, rather than a
+   FeatureCollection:** read it everywhere, as `--domain` does today? Today
+   `--features`, `--stations`, `--rivers`, `--reference` and
+   `station-catchments --lakes` refuse it. Default: read it everywhere.
+3. **A GeoJSON file with no `crs` member:** WGS 84 for `--domain`,
+   `--features` and `catchment --lakes` (RFC 7946), refused for the station,
+   river, reference and NVE lake files, as today? Default: keep that split.
+4. **The two `--help` texts above.** Default: as written.
+5. **Odd refusal words for a station, reference, NVE lake or river file
+   holding one bare geometry of the wrong type:** the refusal is right and
+   names the file, but says `None is a Point, not a Polygon or
+   MultiPolygon`, where `None` stands for the station number the file
+   lacks. Fix it in this PR, or in a later one with the other known gaps
+   above? Default: a later PR.
+
+Ola took the defaults to questions 1 to 4 on 2026-10-06. Question 5 is
+still open; its default holds meanwhile.
+
+
 ## Review
 
 **T2 (`audit-layering-test`), code review, round 1, 2026-10-05.** Range `44fa7f5..97eea35` (e86b86d audit, 8190438 rulings and T2 design, 2f47ebb tests, 97eea35 citation pins). Verdict: CHANGES REQUESTED. LOC: 0 production lines (`count_loc.py`); test lines +184 -185, -1 net against about -35. Not pushed; no CI. Whole Python suite 5132 passed, 17 skipped; ruff, format, mypy and check_citations clean. An independent AST resolver agrees with the table for all 52 modules. Seven planted breaks in a scratch copy each failed only their own check: a row for a missing module, a deferred import, a relative import in a package `__init__`, `_core` imported from layer 4, two stale exceptions, and `importlib.import_module`. Check 4's stricter reading is sound. Every deleted firewall assertion is carried by a row that is equal or stricter. All 16 new pins quote what their records say. Blocking: (1) `@tester`: the `# fmt: off` comment at `tests/python/test_layering.py@97eea35:27-28` describes the formatter wrongly; (2) `@architect`: the -1 net explanation at `docs/increments/python-audit.md@97eea35:12-15` names the wrong cause. Suggestions: check 4's wording in section 8; `testing.md@97eea35:183-185`'s "no compiled extension" claim, false before this branch.
@@ -2000,3 +2596,25 @@ PR F code review r2 (5c6a9f9..e2baa5f): APPROVED.
 PR F master merge review (e2baa5f..e4f7a42): CHANGES REQUESTED — resolution correct (+29 unchanged; layering rows and four UPWARD true; r2 APPROVED confirmed); `docs/increments/python-audit.md@e4f7a42:894-896` (B 'becomes section 10') and `:35-37` (status names @tester next; #190 missing) wrong; fixed in the next master merge.
 
 PR F second master merge review (e4f7a42..8c2bc9a): APPROVED — resolution is only `catchment.py`'s import block (catchment_core and GaugePath, plus master's same_crs and single_crs, no _core) and `python-audit.md` (status, section 6 total, section 11 numbering, review records); +29 unchanged; both blockers from the first merge review closed; headings 8, 9 B, 10 T1, 11 F unique, and every section-N citation in src, tests and probes resolves; a planted `_core` import fails test_layering.
+
+**PR C (`audit-geojson-io`), design review, round 1, 2026-10-05.** Head `151d35f`. Verdict: CHANGES REQUESTED, prose only. Blocking, all `@architect`: (1) the claim that PR F conflicts only in `cli.py`'s imports is false (F also edits `io/station_set.py`'s imports and `__all__`, `test_layering.py`'s `io.station_set` row and `UPWARD` block, and this file); (2) `--domain` would decode bytes unlike `--features` (`read_text` against `read_json`); (3) "UTF-8, as RFC 7946 requires" is wrong (RFC 7946 section 11.1 points to I-JSON); (4) section 9's three short citations unpinned; (5) the matrix's string-member wording; (6) "29 calls" is 27. Suggestions: section 6's total, line 101 of the legacy `web_visualize`, `--domain` reading a collection with no `type`, the docstrings the green commit rewrites. All fixed in section 12 (and sections 6 and 9); the `cli` row of `test_layering.py` and `cli.py`'s `station_set` import line were found to conflict with F as well; `read_domain` reads GeoJSON through `read_json`, about +24 net.
+
+**PR C (`audit-geojson-io`), design review, round 2, 2026-10-05.** Head `957cac9`. Verdict: CHANGES REQUESTED, prose only. Blocking (`@architect`): the PR F overlap list missed `test_layering.py`'s `feature_input` row (one hunk with F's rewritten `catchment` row) and `docs/increments/25-plain-output.md` line 274 (pinned differently by C and F). Fixed in section 12: the hand list is replaced by a rule (the second of C and F to merge runs `git merge-tree --write-tree` and resolves every file it names; designed edits are checked with `git merge-file` on scratch copies), the worked merges kept as examples with the two missing ones added, and B and F's conflict in `catchment.py`'s imports named.
+
+**PR C (`audit-geojson-io`), code review, round 1, 2026-10-06.** Range `32b5092..3b739ac` (red `1928569`, green `3b739ac`). Verdict: CHANGES REQUESTED, prose only. +24 net production (`count_loc.py 32b5092 3b739ac`), as designed. Suite 5302 passed, 17 skipped; mypy, ruff, gates and check_citations clean. Behaviour matrix re-run at base and head: `crs` rules 1-5 and the shape rule as designed, four bugs fixed, the writers' bytes unchanged; `git merge-tree` against PR F (`e2baa5f`) conflicts only in section 12's six files. Blocking (`@architect`): stale rows in `project_structure.md@3b739ac:112`, `:139-145`, `:224`, `:244-249`, and no `io/domain_file.py` row; "Every other wording stays" (`docs/increments/python-audit.md@3b739ac:1607`) misses the byte order mark, the typeless domain feature and the `--features` wordings; the status paragraph (`docs/increments/python-audit.md@3b739ac:48-54`). Fixed in this file (status, section 12's wordings and known gaps) and `project_structure.md`; no code change.
+
+**PR C (`audit-geojson-io`), code review, round 2, 2026-10-06.** Range `3b739ac..483e4ae` (round-1 prose `574a9a9`, red `28fe0cf`, green `693f560`, prose `483e4ae`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 483e4ae`; this round +4). Suite 5310 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 8 new tests fail at `3b739ac` and pass at `483e4ae`. Round-1 blockers closed (`project_structure.md@483e4ae:112-115`, `:137-152`, `:230-242`, `:260-268`, `:279-280`). `features_of` (`src_python/tin_engine/io/station_set.py@483e4ae:51-63`) reaches only the station, reference, NVE lake and river readers. Probe of 22 shapes x 7 readers at three revisions. Blocking (`@architect`): row 6 (`docs/increments/python-audit.md@483e4ae:1649`) misses a missing `geometry` key, a feature with neither `type` nor `geometry`, and empty non-object geometries; known gap 1 (`:1653-1657`) is false for `""`, `0`, `false`, `[]`; the wrong-typed bare geometry's `None is a <type>, not a ...` wording (from `3b739ac`) is not recorded. Fixed in section 12 (the wording rows, known gaps, a ruling on a `--features` and `catchment --lakes` crash the fix's probe found, question 5) and the status paragraph; no code change.
+
+**PR C (`audit-geojson-io`), code review, round 3, 2026-10-06.** Range `483e4ae..0a11a34` (prose `591c026`, red `af5cb4e`, green `0a11a34`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 0a11a34`; this round 0). Suite 5340 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 30 new tests fail at `591c026` and pass at `0a11a34`. The fix (`src_python/tin_engine/feature_input.py@0a11a34:390`) leaves no crash in `--features` or `catchment --lakes` (probe: 56 shapes x 8 readers at three revisions). Blocking (`@architect`): stale status paragraph, known gap 6, heading and ruling; the wording table lacks `--features` and `catchment --lakes` rows. Answered by making a probe the record instead of the table: `docs/increments/python-audit-probes/geojson_wordings.py` (68 shapes x 8 readers) with its outputs at `32b5092` and `0a11a34`, whose diff is the full list; section 12's table cut to a summary; known gaps rewritten from the probe (the old gap 6, the empty-geometry crash, dropped as fixed; a new one: a top-level `Feature` with `"geometry": 7` now crashes the station readers, which the base refused; `--domain` with `"type": ""` crashes, as at the base); the ruling past tense; the status paragraph; no code change. The new crash was then fixed in this PR (red `5a02bc9`, green `21f49d6`; ruled in section 12, "Ruling after code review round 3"), and the head's output became `geojson_wordings-21f49d6.txt`.
+
+**PR C (`audit-geojson-io`), code review, round 4, 2026-10-06.** Range `0a11a34..a400064` (prose `9e002e2`, red `5a02bc9`, green `21f49d6`, prose `a400064`). Verdict: CHANGES REQUESTED, prose only. +29 net production (`count_loc.py 32b5092 a400064`; this round +1). Suite 5404 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 64 new tests fail at `9e002e2` and pass at head. Probe re-run through `tools/scratch_copy.py` matches `docs/increments/python-audit-probes/geojson_wordings-32b5092.txt@a400064` and `docs/increments/python-audit-probes/geojson_wordings-21f49d6.txt@a400064` byte for byte (UNCAUGHT 50 and 2, both gap 1); the rulings' 45- and 96-line diffs reproduce; summary rows 1-3 and 5-9 and gaps 1-4 hold. Blocking (`@architect`): the bare-geometry row `docs/increments/python-audit.md@a400064:1662` says `--features` reads a bare geometry; under the `property` map it refuses it (`docs/increments/python-audit-probes/geojson_wordings-21f49d6.txt@a400064:188`).
+
+**PR C (`audit-geojson-io`), code review, round 5, 2026-10-06.** Range `a400064..efe0eea` (prose `efe0eea`). Verdict: APPROVED. +29 net production (`count_loc.py 32b5092 efe0eea`; this round 0). Summary row 4 (`docs/increments/python-audit.md@efe0eea:1663`) matches `open_features` on a bare Polygon at `efe0eea` under all four `CLASS_MAPS` (`property`, `corine`, `clc18_kode` refuse with the quoted wordings; `corine-water` reads 0 features); pins `src_python/tin_engine/feature_input.py@a400064:101-106`, `:457`, `:443` hold; gap 3, rows 8 and C, the probe docstring (`docs/increments/python-audit-probes/geojson_wordings.py@efe0eea:6-12`, checked against a `tools/scratch_copy.py` run) and the round-4 record hold; check_citations clean.
+
+**PR C (`audit-geojson-io`), code review, round 6, 2026-10-06.** Range `b26beb83..49f8849d` (master merges `5495774d` and `49f8849d`). Verdict: CHANGES REQUESTED, prose only. +29 net production (`count_loc.py origin/master 49f8849d`; this round 0); suite 5570 passed, 17 skipped; mypy, ruff and gates clean; probe output at `49f8849d` byte-identical to `geojson_wordings-21f49d6.txt`; conflict resolution in `src_python/tin_engine/cli.py@49f8849d:110-118`, `src_python/tin_engine/io/station_set.py@49f8849d:19-22`, `tests/python/test_layering.py@49f8849d:56-91` and `project_structure.md@49f8849d:110-117` keeps both sides; `merge-tree` against `ed12512` clean. Blocking (`@architect`): `docs/increments/python-audit.md@49f8849d:314` says "Section 11 revises this shape" for C's design, now section 12.
+
+**PR C (`audit-geojson-io`), code review, round 7, 2026-10-06.** Range `49f8849d..67634d78` (prose `67634d78`). Verdict: APPROVED. +29 net production (`count_loc.py origin/master 67634d78`; this round 0); not pushed, no CI. F5 now reads "Section 12 revises this shape" (`/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/docs/increments/python-audit.md@67634d78:317`); `git grep "section 1[0-2]"` over `src_python`, `tests`, the probes and `project_structure.md` finds C's design cited only as section 12 (11 stays for F's, 10 for T1's); the round 6 record (`:2611`) matches the round 6 handback byte for byte; Ola's "P1 yes, all defaults" (2026-10-06) answered C1, which lists questions 1 to 4, so the status (`:119-129`) and note (`:2569-2570`) are true that question 5 is still open, and its default, a later PR, does not block the push; check_citations clean. Suggestion (`@architect`, in the commit that records this round): the "Next:" sentence (`:128-129`) still says `@reviewer` "records round 6".
+
+**PR C (`audit-geojson-io`), code review, round 8, 2026-10-06.** Merge `5c2b771a` (parents `f56952b5`, `c77eec32`). Verdict: CHANGES REQUESTED. Text merge clean; three citation pins re-read and correct; check_citations exit 0; +29 net production (`count_loc.py origin/master 5c2b771a`). Blocking: master's `_linework` (`src_python/tin_engine/feature_input.py@5c2b771a:226`) uses `MultiPolygon`, whose import C removed (`:39`), so 145 tests fail and 26 error. Restoring the import gives 5616 passed, 31 skipped.
+
+**PR C (`audit-geojson-io`), code review, round 9, 2026-10-06.** Range `5c2b771a..800c4adf`. Verdict: APPROVED. +29 net production (`count_loc.py origin/master 800c4adf`; this round 0). The diff is one line, restoring `MultiPolygon` at `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/src_python/tin_engine/feature_input.py@800c4adf:39`. `ruff check` passes, and F821 reproduces on the `5c2b771a` file. Full suite 5630 passed, 17 skipped. check_citations clean. Merges clean with origin/master `f7f6553f`. Not pushed, so no CI on this head.

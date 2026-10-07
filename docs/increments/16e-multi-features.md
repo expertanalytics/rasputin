@@ -76,15 +76,15 @@ delivery and made no constraint of it (`constraints()` returned `[]`, cited in
 
 The plumbing below `cli.py` already models several sources. Read directly:
 
-- `src_python/tin_engine/feature_input.py:133` — `FeatureRequest.sources:
+- `src_python/tin_engine/feature_input.py@44fa7f5:133` — `FeatureRequest.sources:
   tuple[FeatureSource, ...]`.
-- `feature_input.py:121-128` — each `FeatureSource` carries its own `path`,
+- `src_python/tin_engine/feature_input.py@44fa7f5:121-128` — each `FeatureSource` carries its own `path`,
   `class_map`, `layer` and `crs`.
-- `feature_input.py:235-248` — `open_features` **loops over
+- `src_python/tin_engine/feature_input.py@3599be1:235-248` — `open_features` **loops over
   `request.sources`**, accumulates every source's features into one `_Tally`,
   and returns per-source tuples `crs=(...)` and `layers=(...)` alongside the
   flat `features` tuple.
-- `feature_input.py:152-169` — `FeatureSet.crs` and `.layers` are **already
+- `src_python/tin_engine/feature_input.py@44fa7f5:152-169` — `FeatureSet.crs` and `.layers` are **already
   per-source tuples**; only `cli.py` reads them as `[0]` today
   (`src_python/tin_engine/cli.py@7d9882d:836` and `src_python/tin_engine/cli.py@7d9882d:842`; on master 16e's per-source loop in `mesh`,
   `src_python/tin_engine/cli.py@390b516:905-911`, replaces both).
@@ -307,7 +307,7 @@ Today `src_python/tin_engine/cli.py@7d9882d:834-854` writes one `features`, one 
   `TerrainFeature` does not carry today. **Ruling (D2, for Ola):** rather than
   add a field to the frozen `TerrainFeature`, `open_features` returns a new
   per-source count tuple `FeatureSet.counts: tuple[int, ...]` (features kept per
-  source), filled in the existing per-source loop (`feature_input.py:245-248`).
+  source), filled in the existing per-source loop (`src_python/tin_engine/feature_input.py@3599be1:245-248`).
   This is ~3 lines in `feature_input.py` and keeps the file record honest per
   source. Chains and noded-vertex counts stay whole-run (they are properties of
   the merged PSLG, not of a source).

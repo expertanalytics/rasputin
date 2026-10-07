@@ -1,7 +1,8 @@
 """A PLY writer: arrays in, bytes out.
 
 Increment 10, ruling 6. This module is pure. It takes no path, opens no file,
-imports nothing first-party but `features` (increment 13), and returns
+imports nothing first-party but `features` (increment 13) and the shared
+checks of `io/mesh_checks.py`, and returns
 `bytes`, which is what keeps the whole format testable with no filesystem, no
 raster and no compiled extension: hand it three arrays and compare the bytes.
 
@@ -40,6 +41,7 @@ import numpy as np
 import numpy.typing as npt
 
 from tin_engine.features import EdgeVocabulary
+from tin_engine.io.mesh_checks import check_int32, checked_ascii
 
 #: The edge element's third property: the feature mask of `_core.pyi`'s
 #: `NodedPslg.edge_properties`, one `uint32` per edge. PLY fixes no name for
@@ -105,30 +107,15 @@ def write_ply(
         if edge_properties is not None:
             for mask in np.unique(np.asarray(edge_properties)):
                 vocabulary.names(int(mask))
-        table = sorted((prop.bit, prop.name) for prop in vocabulary.properties)
         comments = [
             *comments,
-            *(f"feature_bit {bit} {name}" for bit, name in table),
+            *(f"feature_bit {bit} {name}" for bit, name in vocabulary.table()),
             f"feature_vocabulary {vocabulary.fingerprint()}",
         ]
+    # Any control character forges a header line (\r too, for CRLF-tolerant
+    # readers), and --crs is free text (ruling 5): io/mesh_checks.py's gate.
     for comment in comments:
-        # Any control character, not just \n. A PLY header is line-oriented and
-        # \r terminates a line for every CRLF-tolerant reader, which is most of
-        # them -- so an unguarded \r forges a header line exactly as \n would.
-        # Measured before this guard was widened: `--crs "x\rcomment forged"`
-        # wrote that second line into the header and exited 0.
-        bad = next((ch for ch in comment if ch < " " or ch == "\x7f"), None)
-        if bad is not None:
-            raise ValueError(f"a comment may not contain control characters; got {bad!r}")
-        # ASCII is the header's encoding, so a non-ASCII comment cannot be
-        # written. --crs is unvalidated free text by ruling 5 and a degree sign
-        # in a projection string is ordinary, so this is a refusal a caller
-        # meets, not an internal invariant: it must be the documented
-        # ValueError and not a UnicodeEncodeError escaping from the encode
-        # below.
-        if not comment.isascii():
-            bad = next(ch for ch in comment if not ch.isascii())
-            raise ValueError(f"a comment must be ASCII; got {bad!r} in {comment!r}")
+        checked_ascii(comment, "comment")
 
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:
@@ -142,6 +129,11 @@ def write_ply(
     lines.append("end_header")
     header = ("\n".join(lines) + "\n").encode("ascii")
     return header + b"".join(body for _, body in blocks)
+
+
+def field_comments(fields: Iterable[tuple[str, str]]) -> list[str]:
+    """A file's `(name, value)` fields as header comments, `name value`."""
+    return [f"{name} {value}" for name, value in fields]
 
 
 def _vertex_declaration(count: int) -> list[str]:
@@ -173,8 +165,7 @@ def _face_block(
         values = np.asarray(codes).reshape(-1)
         if len(values) != len(faces):
             raise ValueError(f"face_codes has {len(values)} entries for {len(faces)} faces")
-        if len(values) and (values.min() < -(2**31) or values.max() >= 2**31):
-            raise ValueError("face_codes must fit int32")
+        check_int32(values, "face_codes")
         declaration.append("property int land_cover_code")
         columns.append(values)
         layout.append(("c", "<i4"))

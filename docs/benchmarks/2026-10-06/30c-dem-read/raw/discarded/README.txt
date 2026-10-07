@@ -1,0 +1,1 @@
+Discarded for a reason other than power: base_numedalslagen_r1 ran while @perf's own shell busy-waited (an empty until-loop polling for the run's power file) on one core; branch_numedalslagen_r1 is its pair, discarded with it so repeat 1 is rerun in the same order (base, then branch). Both were on AC.

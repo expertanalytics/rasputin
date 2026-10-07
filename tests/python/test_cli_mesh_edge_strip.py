@@ -94,7 +94,7 @@ from test_cli_mesh_refine import file_field, stats_row
 from test_cli_mesh_stats import seconds
 from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
-from tin_engine.domain import read_domain
+from tin_engine.io.domain_file import read_domain
 from vtkread import VtkFile, lines_as_array, read_vtk
 
 TOLERANCE = 1.0

@@ -10,6 +10,14 @@
 //   RefineOutcome::feet              std::size_t, feet inserted, counted in `inserted`
 //   RefineOutcome::feet_refused      std::size_t, R2 step 4 refusals (N inserted instead)
 //
+// Since 20c-1 (docs/increments/20c-soft-quality.md, "Pins ruled for 20c-1's
+// red step", item 5 and open item (a)): the quality start foots too, and its
+// feet are in RefineOutcome::quality_feet alone, so vertices = start +
+// quality_inserted + quality_feet + inserted, and the feet found here number
+// feet + quality_feet. 20b's detail::foot_of is gone: its case below asks
+// terrain::mesh::constraint_foot, and foot_fits is
+// terrain::mesh::detail::foot_fits in constraint_foot.hpp.
+//
 // CHOSEN HERE, where the design leaves it open:
 //   - the output world point of a foot is (x_min + col dx, y_max - row dy) of
 //     its stored fractional vertex (R4), so the oracles below map an output
@@ -32,6 +40,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/mesh/constraint_foot.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/sample.hpp>
@@ -180,7 +189,8 @@ Feet classify(const Raster<float>& dem, const Start& start, const Outcome& out) 
     const RasterGeometry& g = dem.geometry();
     const auto segs = segments(g, start);
     const std::size_t n0 = start.mesh.vertices().size();
-    REQUIRE(out.vertices.size() == n0 + out.quality_inserted + out.inserted);
+    // 20c-1 ruling 5: quality-start feet are counted in quality_feet alone.
+    REQUIRE(out.vertices.size() == n0 + out.quality_inserted + out.quality_feet + out.inserted);
     Feet feet;
     for (std::size_t i = 0; i < out.vertices.size(); ++i) {
         CAPTURE(i);
@@ -225,7 +235,7 @@ Feet classify(const Raster<float>& dem, const Start& start, const Outcome& out) 
         feet.segment.push_back(*s);
         feet.source.push_back(*src);
     }
-    REQUIRE(feet.vertex.size() == out.feet);
+    REQUIRE(feet.vertex.size() == out.feet + out.quality_feet);
     return feet;
 }
 
@@ -478,8 +488,17 @@ TEST_CASE("F2: a foot in a NoData cell is refused and the node inserted instead"
     const auto start = feet_fixtures::needle_start(g);
     const auto out = run(dem, start, 0.5, true);
     check(dem, start, out, 0.5);
-    REQUIRE(out.feet_refused == 1);  // measured: the needle alone is refused
+    // Two refusals (20c-1's green-step ruling 1): the needle (row 16, col 8) and
+    // the node above it (row 15, col 8), 0.0158 cells right of the side. That
+    // node's own triangle has no constrained edge; its neighbour's does, so
+    // R3's search through a neighbour foots it, and its foot (col 7.984,
+    // row 15.0008) lies in a cell whose column-7 corners are the NaN nodes
+    // above: vertex_z refuses it, and by R3 and R5 the refusal is counted and
+    // the node inserted. Without the NoData column the same run foots it.
+    REQUIRE(out.feet_refused == 2);
+    const Frac above{static_cast<double>(feet_fixtures::kNeedleCol), static_cast<double>(feet_fixtures::kNeedleRow - 1)};
     REQUIRE(has_vertex(g, out.vertices, kNeedle));
+    REQUIRE(has_vertex(g, out.vertices, above));
 }
 
 // ------------------------------------------------------------------------ F3
@@ -600,8 +619,10 @@ TEST_CASE("T6 with feet: bit-identical for 1 2 7 and all threads", "[refinement]
 
 // ---------------------------------------------------------------- the helpers, directly
 //
-// detail::foot_epsilon, foot_of and foot_fits on hand-built inputs. Each case
-// names the mutant it was checked against; see the commit that added them.
+// refinement::detail::foot_epsilon, mesh::constraint_foot (which replaced
+// 20b's foot_of in 20c-1) and mesh::detail::foot_fits on hand-built inputs.
+// Each case names the mutant it was checked against; see the commit that
+// added them.
 
 namespace {
 
@@ -657,25 +678,40 @@ TEST_CASE("R2 step 2: no foot within eps of a segment end", "[refinement][feet][
     // One triangle (col, row): A (6, 0.8), B (1.8, 0.8), C (1, 3); A-B is
     // constrained and runs along row 0.8, 1 m from row 1. Flat DEM, so eps is
     // the cap, 2.5 m. The node (row 1, col 4) projects 22 m from B: a foot.
-    // The node (row 1, col 2) projects 2 m from B, inside eps: no foot (N goes in).
+    // The node (row 1, col 2) projects 2 m from B, inside eps: NearEnd (N goes in).
+    // Since 20c-1 asked through constraint_foot with eps = foot_epsilon at the
+    // node, tolerance 1 m, in the world frame of refinement_fixtures (dx 10, dy 5).
+    // Scale: coordinates under 8 cells; `at` to 1e-12 cells, as CF1 pins it.
     const auto dem = plane(6, 8, 0.0);
     auto m = LatticeMesh::build(std::vector<MeshVertex>{{6.0, 0.8}, {1.8, 0.8}, {1.0, 3.0}}, {{0, 1, 2}}, {1u}, {{{7u, 0u, 0u}}});
     REQUIRE(m.has_value());
-    using terrain::refinement::detail::foot_of;
+    using terrain::mesh::constraint_foot;
+    using terrain::mesh::FootStatus;
+    using terrain::mesh::LatticeFrame;
+    using terrain::refinement::detail::foot_epsilon;
+    const LatticeFrame frame{10.0, 5.0};
+    const auto search = [&](const LatticeMesh& mesh, std::uint32_t row, std::uint32_t col) {
+        const LatticeVertex node{row, col};
+        const double eps = foot_epsilon(dem, node, 1.0);
+        REQUIRE(eps == cap(dem.geometry()));  // flat: the cap, 2.5 m
+        return constraint_foot(mesh, 0, MeshVertex{static_cast<double>(col), static_cast<double>(row)}, eps, frame);
+    };
 
-    const auto far = foot_of(dem, *m, 0, LatticeVertex{1, 4}, 1.0);
-    REQUIRE(far.has_value());
-    REQUIRE(far->edge == 0u);
-    REQUIRE(std::abs(far->at.col - 4.0) <= 1e-12);  // the projection of N
-    REQUIRE(far->at.row == 0.8);
+    const auto far = search(*m, 1, 4);
+    REQUIRE(far.status == FootStatus::Hit);
+    REQUIRE(far.owner == 0u);
+    REQUIRE(far.edge == 0u);
+    CAPTURE(far.at.col, far.at.row);
+    REQUIRE(std::abs(far.at.col - 4.0) <= 1e-12);  // the projection of N
+    REQUIRE(std::abs(far.at.row - 0.8) <= 1e-12);
 
-    REQUIRE_FALSE(foot_of(dem, *m, 0, LatticeVertex{1, 2}, 1.0).has_value());  // M2
+    REQUIRE(search(*m, 1, 2).status == FootStatus::NearEnd);  // M2
 
     // The same at A's end: A moved to (4.1, 0.8), the node at col 4 is 1 m from it.
     auto m2 = LatticeMesh::build(std::vector<MeshVertex>{{4.1, 0.8}, {1.8, 0.8}, {1.0, 3.0}}, {{0, 1, 2}}, {1u}, {{{7u, 0u, 0u}}});
     REQUIRE(m2.has_value());
-    REQUIRE_FALSE(foot_of(dem, *m2, 0, LatticeVertex{1, 4}, 1.0).has_value());  // M2
-    REQUIRE(foot_of(dem, *m2, 0, LatticeVertex{1, 3}, 1.0).has_value());          // the control, 11 m from A
+    REQUIRE(search(*m2, 1, 4).status == FootStatus::NearEnd);  // M2
+    REQUIRE(search(*m2, 1, 3).status == FootStatus::Hit);      // the control, 11 m from A
 }
 
 TEST_CASE("R2 step 4: foot_fits refuses a foot that folds either side of the edge", "[refinement][feet][helpers]") {
@@ -687,7 +723,7 @@ TEST_CASE("R2 step 4: foot_fits refuses a foot that folds either side of the edg
                                 {{0, 1, 2}, {1, 0, 3}}, {1u, 1u}, {{{1u, 0u, 0u}, {1u, 0u, 0u}}});
     REQUIRE(m.has_value());
     REQUIRE(m->neighbours(0)[0] == 1u);
-    using terrain::refinement::detail::foot_fits;
+    using terrain::mesh::detail::foot_fits;  // moved from refinement::detail in 20c-1, same signature
 
     REQUIRE(foot_fits(*m, 0, 0, MeshVertex{1.0, 2.0}));         // on the edge: fits
     REQUIRE_FALSE(foot_fits(*m, 0, 0, MeshVertex{1.0, 1.99}));  // M5: past C, t's side folds

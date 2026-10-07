@@ -20,8 +20,7 @@ import numpy.typing as npt
 import shapely
 
 from tin_engine.domain import DomainPolygon
-from tin_engine.feature_input import TerrainFeature
-from tin_engine.features import EdgeVocabulary
+from tin_engine.features import EdgeVocabulary, TerrainFeature
 
 Chain = tuple[list[int], str, int]
 

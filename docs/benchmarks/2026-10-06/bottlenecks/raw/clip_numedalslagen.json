@@ -1,0 +1,85 @@
+{
+ "catchment": "numedalslagen",
+ "sizes": {
+  "features_read": 7932,
+  "domain_vertices": 14093,
+  "region_vertices": 96,
+  "vertices_read": 5417093,
+  "rings_read": 29183,
+  "read_seconds": 0.208,
+  "outside": 6321,
+  "chains": 4672,
+  "vertices_in_chains": 603400,
+  "intersection: chain cut": 2912,
+  "kept": 1611,
+  "intersection: chain covered": 1760,
+  "vertices_kept": 275713,
+  "rings_no_edge_kept": 24722,
+  "rings_all_edges_kept": 4175,
+  "segments_tested": 5387910
+ },
+ "steps_s": {
+  "pre_clip": 3.536,
+  "after": 0.222,
+  "covers_probe(not in prod)": 0.026,
+  "intersection: chain cut": 0.868,
+  "intersection: chain covered": 1.136
+ },
+ "pre_clip_internals_s": {
+  "coords+linestrings": 0.917,
+  "intersects(segments, region)": 1.733,
+  "_runs": 0.608
+ },
+ "variants": {
+  "baseline (prod pre_clip)": {
+   "median_s": 5.749,
+   "runs": [
+    5.749,
+    5.735,
+    5.782
+   ],
+   "identical_wkb": true,
+   "differing_features": 0
+  },
+  "A: endpoint prefilter + early exit": {
+   "median_s": 5.278,
+   "runs": [
+    5.278,
+    5.274,
+    5.281
+   ],
+   "identical_wkb": true,
+   "differing_features": 0
+  },
+  "A + whole-feature region test": {
+   "median_s": 3.234,
+   "runs": [
+    3.234,
+    3.24,
+    3.229
+   ],
+   "identical_wkb": true,
+   "differing_features": 0
+  },
+  "A + skip intersection when domain covers chain": {
+   "median_s": 4.136,
+   "runs": [
+    4.262,
+    4.136,
+    4.123
+   ],
+   "identical_wkb": true,
+   "differing_features": 0
+  },
+  "A + whole test + skip covered": {
+   "median_s": 2.106,
+   "runs": [
+    2.106,
+    2.096,
+    2.146
+   ],
+   "identical_wkb": true,
+   "differing_features": 0
+  }
+ }
+}

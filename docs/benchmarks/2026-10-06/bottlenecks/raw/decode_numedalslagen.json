@@ -1,0 +1,115 @@
+{
+ "catchment": "numedalslagen",
+ "footprints (all headers)_s": 0.106,
+ "tiles in directory": 254,
+ "baseline": {
+  "footprints (all 254 headers)": 0.083,
+  "domain plan": 0.104,
+  "assemble: load windows (decode)": 0.876,
+  "assemble: _decide": 0.048,
+  "assemble: _covered (seam report mask)": 0.412,
+  "assemble: _seam": 0.006,
+  "open_dem total": 1.687,
+  "overlap nodes tested": 5226633
+ },
+ "canvas": {
+  "rows": 17882,
+  "cols": 15667,
+  "dtype": "float32",
+  "MB": 1121,
+  "tiles": 16,
+  "sha256": "a186d215264b3b85"
+ },
+ "cand: decode threads 10": {
+  "footprints (all 254 headers)": 0.087,
+  "domain plan": 0.104,
+  "assemble: load windows (decode)": 0.483,
+  "assemble: _decide": 0.048,
+  "assemble: _covered (seam report mask)": 0.411,
+  "assemble: _seam": 0.006,
+  "open_dem total": 1.302,
+  "identical canvas": true
+ },
+ "cand: seam mask on qualifying nodes only": {
+  "footprints (all 254 headers)": 0.084,
+  "domain plan": 0.594,
+  "assemble: load windows (decode)": 1.011,
+  "assemble: _decide": 0.051,
+  "assemble: _seam": 0.002,
+  "open_dem total": 2.401,
+  "identical canvas": true,
+  "identical seams": true
+ },
+ "seams": [
+  "Seam(first='6601_1_10m_z33.tif', second='6602_3_10m_z33.tif', nodes=1804, largest=0.0433349609375, median=0.005035400390625)",
+  "Seam(first='6601_1_10m_z33.tif', second='6602_4_10m_z33.tif', nodes=8379, largest=1.186767578125, median=0.04486083984375)",
+  "Seam(first='6601_2_10m_z33.tif', second='6602_3_10m_z33.tif', nodes=56278, largest=0.207977294921875, median=0.00482177734375)",
+  "Seam(first='6601_2_10m_z33.tif', second='6602_4_10m_z33.tif', nodes=2026, largest=1.186767578125, median=0.047027587890625)",
+  "Seam(first='6602_3_10m_z33.tif', second='6602_4_10m_z33.tif', nodes=2029, largest=1.1937255859375, median=0.0465087890625)",
+  "Seam(first='6700_2_10m_z33.tif', second='6701_3_10m_z33.tif', nodes=31004, largest=0.2672119140625, median=0.0020751953125)"
+ ],
+ "interleaved medians (5 rounds, canvas and seams identical every run)": {
+  "baseline": {
+   "open_dem total": 1.607,
+   "runs": [
+    2.013,
+    1.607,
+    1.604,
+    1.599,
+    1.619
+   ],
+   "footprints (all 254 headers)": 0.087,
+   "domain plan": 0.105,
+   "assemble: load windows (decode)": 0.875,
+   "assemble: _decide": 0.048,
+   "assemble: _covered (seam report mask)": 0.411,
+   "assemble: _seam": 0.006
+  },
+  "decode threads 10": {
+   "open_dem total": 1.224,
+   "runs": [
+    1.678,
+    1.211,
+    1.213,
+    1.247,
+    1.224
+   ],
+   "footprints (all 254 headers)": 0.085,
+   "domain plan": 0.105,
+   "assemble: load windows (decode)": 0.482,
+   "assemble: _decide": 0.049,
+   "assemble: _covered (seam report mask)": 0.414,
+   "assemble: _seam": 0.006
+  },
+  "seam mask on qualifying nodes": {
+   "open_dem total": 1.268,
+   "runs": [
+    1.558,
+    1.268,
+    1.247,
+    1.239,
+    1.368
+   ],
+   "footprints (all 254 headers)": 0.087,
+   "domain plan": 0.105,
+   "assemble: load windows (decode)": 0.891,
+   "assemble: _decide": 0.048,
+   "assemble: _seam": 0.002
+  },
+  "both": {
+   "open_dem total": 0.868,
+   "runs": [
+    0.902,
+    0.844,
+    0.868,
+    0.843,
+    0.927
+   ],
+   "footprints (all 254 headers)": 0.086,
+   "domain plan": 0.105,
+   "assemble: load windows (decode)": 0.482,
+   "assemble: _decide": 0.048,
+   "assemble: _seam": 0.002
+  }
+ }
+}

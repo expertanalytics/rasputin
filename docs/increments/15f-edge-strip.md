@@ -61,7 +61,7 @@ These came from reading the code the strip builds on. Each one adds lines
 beyond 15c's estimate of 160-210.
 
 **F1. Membership cannot find a point on a constraint.** `scan_points`
-(`include/terrain/refinement/refine_points.hpp:113`) decides which triangle
+(`include/terrain/refinement/refine_points.hpp@ed125121:113`) decides which triangle
 holds a check point with three exact orientation tests on the point's stored
 position. A crossing computed in floating point lies within rounding of its
 edge, on one side or the other. On the domain's outline, a point on the
@@ -1551,7 +1551,7 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
 - **A1. 15f-3 is not blocked; the fix is a follow-up PR, 15f-4.**
   - The cost is not new to the code base. On master, the reprojected path's
     final check already calls `to_lattice` on refine's output
-    (`refine_points.hpp:248`, reached from `final_check.run`). 15f-3 adds the
+    (`include/terrain/refinement/refine_points.hpp@ed125121:248`, reached from `final_check.run`). 15f-3 adds the
     same rebuild to the projected path; on the reprojected path it adds
     nothing of this kind (Velhas: +2.6 to +7.5 % process time, the strip's
     own work).
@@ -1901,7 +1901,7 @@ None blocks `@tester`.
 
 **15f-2, round 1, 2026-10-03.** Range `9815ea4..fdbf93c` (red afd2498 … test fixes fadcc77, merge fdbf93c). Verdict: CHANGES REQUESTED. LOC: 316 net (379 added, 63 deleted): `refine_points.hpp` 138 net, `strip_scan.hpp` 165, `scan.hpp` 12, `geometry.hpp` 1; estimate about 295 (290 plus L16), +7 %. Code holds against D4 and L1-L16; `refine` and the no-strip `refine_points` unchanged by reading (measured identity is @perf's); fadcc77's ES15/ES16 corrections are fair (ES15 still fails against 3b59934's headers). Default build 897/897, nofma strip suites 47/47, TSan clean locally. Blocking: (1) the L9 TSan entry in `.github/workflows/main.yaml`; (2) red-step scaffolding in `tests/cpp/CMakeLists.txt` and the two test headers ("while the helper is missing", "ES1 to ES11", "see the handback"); (3) doc prose at :1143, :1191 (the (15, 8) behaviour since 99e95d7), the `scan.hpp` citations for `scan` and `vertex_z`, and the status line; (4) the ROADMAP 15f row. Not pushed; no CI.
 
-**15f-2, round 2, 2026-10-03.** Range `beb6505..17c2d14` (4f3e2cb test comments, 5a5486e docs, 17c2d14 TSan list and C++ comments); whole PR `9815ea4..17c2d14`. Verdict: APPROVED. LOC: 316 net (379 added, 63 deleted), unchanged from round 1 (this round's `include/` changes are comments only); about 7 % over the ~295 estimate. All four round-1 blockers closed; no production behaviour change in this range; citations re-read at 17c2d14 (`scan.hpp:96`, `:73`, `refine_points.hpp:101`, `cli.py:1417`, `:1500`, `:1511`, `:1517`, `final_check.py:22`) hold. Not pushed; no CI (the TSan entry's first CI run is pending the push).
+**15f-2, round 2, 2026-10-03.** Range `beb6505..17c2d14` (4f3e2cb test comments, 5a5486e docs, 17c2d14 TSan list and C++ comments); whole PR `9815ea4..17c2d14`. Verdict: APPROVED. LOC: 316 net (379 added, 63 deleted), unchanged from round 1 (this round's `include/` changes are comments only); about 7 % over the ~295 estimate. All four round-1 blockers closed; no production behaviour change in this range; citations re-read at 17c2d14 (`scan.hpp:96`, `:73`, `include/terrain/refinement/refine_points.hpp@17c2d14:101`, `cli.py:1417`, `:1500`, `:1511`, `:1517`, `final_check.py:22`) hold. Not pushed; no CI (the TSan entry's first CI run is pending the push).
 
 **15f-3, code review, round 1, 2026-10-03.** Range `c193cb1..2dda16a` (red 4157dab, merge 8decdbf, amendments 86e1074 and 0a192f0, rulings cfd93b7, green 7d841f3, rulings 2f23a6d, tests 2dda16a). Verdict: CHANGES REQUESTED. LOC: 179 net (222 added) against 187. Code sound: bindings per PY1 (GIL released, read-only store, keyword-only strip, shape checks, refusals), the CLI order per D6, the `--stats`/`--record` rows per P1-P3, `max_error_m` per P1/P4; S4 still fails on real changes; @tester's three pins accepted. 901/901 ctest, 4062 pytest. Blocking: (1) present-tense red-step text in three test files; (2) this file's status line and ROADMAP row 15f say 15f-3 not started (and 15f-2 unmerged); (3) `test_edge_strip.py:174` cites `final_check.py:22` (now :28); (4) `project_structure.md` lacks `edge_strip.py`. Suggestions: a unit test for the refused-points warning; `refined_record`'s docstring on `max_error_m`; a docstring sentence on S4's start-vertex prefix. @perf's acceptance outstanding. Not pushed; no CI.
 

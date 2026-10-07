@@ -1,0 +1,42 @@
+== base: tin_engine from venv-base/lib/python3.14/site-packages/tin_engine / tin_engine from venv-base/lib/python3.14/site-packages/tin_engine
+== base: base lines missing or changed (must be empty):
+== base: lines the base file lacks (allowed on the branch: the red suite's new tests, section 6):
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[cores_unknown] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[seven_cores] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[threads_given] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[stripped] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[stripped] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate_fp_predictor] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate_fp_predictor] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_int16] #1 decode_window window=5,9,40,55 dtype=float32 sha=3b62a53c66658977
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_int16] #2 decode_window window=5,9,40,55 dtype=float32 sha=3b62a53c66658977
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_lzw] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_lzw] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_p1_edge_cases_under_a_needed_region[even_count] #1 assemble shape=6x9 dtype=float64 sha=6049f69784dc1633 seams=[a.tif/b.tif/4/inf/1.5]
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_p1_edge_cases_under_a_needed_region[odd_count] #1 assemble shape=6x9 dtype=float64 sha=f310b7c7cf07ba90 seams=[a.tif/b.tif/3/inf/1.0]
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_r2_the_region_is_tested_only_on_nodes_that_could_count #1 assemble shape=6x9 dtype=float32 sha=8bbe171a32a27678 seams=[a.tif/b.tif/3/5.0/3.0]
+== base: counts: base file 1180, this run 1196; fixtures: pytest exit 1, 1194 calls recorded; pytest summary: 3 failed, 717 passed, 4 skipped in 36.46s
+
+== branch: tin_engine from venv-branch/lib/python3.14/site-packages/tin_engine / tin_engine from venv-branch/lib/python3.14/site-packages/tin_engine
+== branch: base lines missing or changed (must be empty):
+== branch: lines the base file lacks (allowed on the branch: the red suite's new tests, section 6):
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[cores_unknown] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[seven_cores] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestR1DefaultThreadsAreTheMachines::test_the_pool_is_built_with_the_machines_core_count[threads_given] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[stripped] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[stripped] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate_fp_predictor] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate_fp_predictor] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_deflate] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_int16] #1 decode_window window=5,9,40,55 dtype=float32 sha=3b62a53c66658977
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_int16] #2 decode_window window=5,9,40,55 dtype=float32 sha=3b62a53c66658977
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_lzw] #1 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_io_cog.py::TestW2Determinism::test_p2_the_default_thread_count_changes_no_byte[tiled_lzw] #2 decode_window window=5,9,40,55 dtype=float32 sha=e0c2cdb842b96264
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_p1_edge_cases_under_a_needed_region[even_count] #1 assemble shape=6x9 dtype=float64 sha=6049f69784dc1633 seams=[a.tif/b.tif/4/inf/1.5]
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_p1_edge_cases_under_a_needed_region[odd_count] #1 assemble shape=6x9 dtype=float64 sha=f310b7c7cf07ba90 seams=[a.tif/b.tif/3/inf/1.0]
+fixture tests/python/test_mosaic.py::TestSeamRegionOnCountedNodes::test_r2_the_region_is_tested_only_on_nodes_that_could_count #1 assemble shape=6x9 dtype=float32 sha=8bbe171a32a27678 seams=[a.tif/b.tif/3/5.0/3.0]
+== branch: counts: base file 1180, this run 1196; fixtures: pytest exit 0, 1194 calls recorded; pytest summary: 720 passed, 4 skipped in 30.63s
+
