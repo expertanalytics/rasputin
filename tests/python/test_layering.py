@@ -35,7 +35,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "palettes": "", "hydrography": "", "tin_engine": "",
     },
     {  # L1: pure algorithms
-        "crs": "",
+        "crs": "run_record",
         "mosaic": "io.models",
         "target_grid": "crs domain io.models",
         "grid_domain": "io.models",
@@ -55,14 +55,14 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.cog": "io.geotiff io.models",
         "io.domain_file": "crs domain io.geojson io.repository",
         "io.geojson": "crs",
-        "io.geopackage": "", "io.gml": "",
+        "io.geopackage": "", "io.gml": "", "io.mesh_checks": "",
         "io.geotiff": "crs io.models",
         "io.mesh_index": "io.models",
-        "io.ply": "features",
+        "io.ply": "features io.mesh_checks",
         "io.repository": "io.cog io.geotiff io.models mosaic",
         "io.rivers": "hydrography io.station_set",
         "io.station_set": "hydrography io.geojson io.repository",
-        "io.vtk_legacy": "features",
+        "io.vtk_legacy": "features io.mesh_checks",
         "fetch.http": "tin_engine",
     },
     {  # L3: the only importers of _core
@@ -87,9 +87,9 @@ LAYERS: tuple[dict[str, str], ...] = (
         "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
-               " io.models io.ply io.repository io.rivers io.station_set io.vtk_legacy"
-               " landcover mosaic palettes raster run_record sources stats target_grid"
-               " tin_engine viz.fixtures viz.protocols viz.scene viz.style viz.svg",
+               " io.mesh_checks io.models io.ply io.repository io.rivers io.station_set"
+               " io.vtk_legacy landcover mosaic palettes raster run_record sources stats"
+               " target_grid tin_engine viz.fixtures viz.protocols viz.scene viz.style viz.svg",
     },
 )
 # fmt: on

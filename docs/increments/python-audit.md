@@ -553,14 +553,14 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | -27, measured at `b3b38d2` (`python-audit-pr-a.md`; first estimated about -100) | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | +29, measured at `5c6a9f9` (section 11; first estimated about -40, then about +15) | nothing | red test for the lakes type; the byte probe (section 11) |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | +29, measured at `21f49d6` (section 12; first estimated -40) | B | red tests for the one `crs` rule, the shapes, the renames and the two `--help` texts |
-| D | `audit-encoders` | F7 | about -30 | C (shares `io/geojson.py`) | none |
+| D | `audit-encoders` | F7 | +7, measured at `083712d` (`python-audit-pr-d.md`; first estimated -30) | C, merged as #201 (shares `cli.py`, `features.py`, `test_layering.py`) | red tests for the shared checks, `EdgeVocabulary.table`, `run_record.escaped_ascii`, the one `.ply` refusal wording change, and the layering rows; the encoder probe's diff (the 12 wording lines only) |
 | E | `audit-topology` | F6, X2 for `_chain_masks`/`_undirected` | about -35 | 23c-2 merged | none |
 | G | `audit-cli-options` | F1, F11 | about -95 | 23c-2 merged | none |
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
-Total: about -185 production lines by the rows above as they now stand,
-tools included (B +22, A -27, F +29 and C +29 measured; the rest
+Total: about -150 production lines by the rows above as they now stand,
+tools included (B +22, A -27, F +29, C +29 and D +7 measured; the rest
 estimated; the first estimate was about -440), about -100 test lines (T2
 came out at +1 and T1 is re-estimated at about -100, against the -385
 first estimated), and the drift points

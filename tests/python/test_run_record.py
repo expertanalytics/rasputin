@@ -580,3 +580,26 @@ class TestAsJson:
 
     def test_the_same_record_gives_the_same_bytes(self, rr: ModuleType) -> None:
         assert self.text(rr, downloaded(rr)) == self.text(rr, downloaded(rr))
+
+
+class TestEscapedAscii:
+    """PR D (`python-audit-pr-d.md`, section 3): the one ASCII escape, which
+    `cli._ascii` and `crs_label` each carried before. Appended at the end of
+    the file, because `27-node-sampling.md` cites a line above unpinned."""
+
+    def test_non_ascii_is_escaped_as_a_python_escape(self, rr: ModuleType) -> None:
+        assert (
+            rr.escaped_ascii(
+                "d\N{LATIN SMALL LETTER E WITH ACUTE}m; \N{LATIN SMALL LETTER O WITH STROKE}"
+            )
+            == "d\\xe9m; \\xf8"
+        )
+
+    def test_a_character_beyond_latin_1_is_escaped_too(self, rr: ModuleType) -> None:
+        assert rr.escaped_ascii("\N{SNOWMAN} \N{GRINNING FACE}") == "\\u2603 \\U0001f600"
+
+    @pytest.mark.parametrize("text", ["", "EPSG:25833", "a\rb"], ids=["empty", "plain", "control"])
+    def test_ascii_text_is_unchanged(self, rr: ModuleType, text: str) -> None:
+        # A control character is ASCII: escaping it is not this function's
+        # job, refusing it is the writers' gate's.
+        assert rr.escaped_ascii(text) == text
