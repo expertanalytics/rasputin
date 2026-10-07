@@ -1686,3 +1686,9 @@ and the PowerShell rows, keeps the fixture's git identity, and pins
 `shell_scan.SHELLS` to the twelve shells §2 G7 names, both ways; this
 commit backs out `8fb43083`. PowerShell, `nu` and similar shells stay in
 §6's known gaps. No production change since `3891ff11`.
+
+### Round 12: `@reviewer`, code, PR B (#210) CI fix, `3891ff11..1b9091fc`
+
+APPROVED. The net change against `3891ff11` touches only tests/python/test_guard_push.py and docs/increments/h16-harness-fixes.md; nothing under tools/ or .claude/ (REQUIRED-READING.md included); `tools/count_loc.py 3891ff11 HEAD` gives 0 and PR B stays at 116 net production lines. CI run 37616359219's two failures are fixed: the 58 errors of `test_a_git_write_in_a_scratch_repository_asks` by the repository-level identity at tests/python/test_guard_push.py@1b9091fc:420-433, reproduced and cleared under a HOME with no git identity on Python 3.12 (1937 passed + 58 errors at 3891ff11; 1995 passed at 1b9091fc); the `{'pwsh'}` failure by the fixed-list equality at tests/python/test_guard_push.py@1b9091fc:832-837. No suggestions. Merge-ready only once `gh pr checks 210` is green on the pushed head.
+
+Recorded by the main session (Ola, 2026-10-07: the main session records review verdicts).
