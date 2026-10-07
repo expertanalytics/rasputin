@@ -1,6 +1,6 @@
 # Flow: three items in flight, a short path for small changes, and an ideas file
 
-**Status: review round 1 answered; next round 2.** Ruled by Ola on
+**Status: approved in review round 2; next the push, on Ola's yes.** Ruled by Ola on
 2026-10-07 (11:45, 12:40, 13:20 and 13:36, below), except the recap line of
 part 1, which waits on Ola. Proposal by `@orchestrator`, written on
 `5c412383` (`c61c1aa0`), amended to Ola's rulings the same day (`db51001c`)
@@ -607,3 +607,7 @@ its own small item, counted toward the three.
 ## Review
 
 Review round 1 (@reviewer, 2026-10-07, 5c412383..db51001c, docs only): CHANGES REQUESTED; 5 blocking: 30d-not-measured, 209-started-today, short-path-cpp-hole, short-path-not-ruled, cut2-docstring; 11 suggestions: line-numbers-0-based, q3-reading, window-and-product-split, cap-word-count, ruff-hunks, morning-check-list, corine-quote, citation-offsets, step1-placement, orchestrator-context, cut3-keep-source-of-truth.
+
+Review round 2 (@reviewer, 2026-10-07, db51001c..d482ff8c, docs only, 0 net production lines): APPROVED; 0 blocking; 2 suggestions: harness-minutes-rounding, cut2-forge-writes.
+
+Recorded by the main session (Ola, 2026-10-07: the main session records review verdicts). Both suggestions left as noted: harness-minutes-rounding is cosmetic (279.8 minutes); cut2-forge-writes (whether cut 2 names `gh api`/`curl` writes to the forge) is for whoever applies cut 2.
