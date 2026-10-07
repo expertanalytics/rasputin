@@ -1,6 +1,6 @@
 # Harness h18: a new worktree with its own venv, and a master-merge runner
 
-Status: designed on `worktree-harness-tools` off `41bda81`; design review round 2 approved (below under "Review"); red at `e36a5dd6` (72 tests, all failing at load because neither tool exists yet), its pins ruled in §9; next `@developer`, green. One PR, both tools, about 275 net production lines (§5). §8's three questions were ruled by Ola on 2026-10-07: the defaults.
+Status: designed on `worktree-harness-tools` off `41bda81`; design review round 2 approved (below under "Review"); red at `e36a5dd6`, amended at `666381ed` per §9; green at `965f7d96` (both tools; the 77 tests of `tests/python/test_new_worktree.py` and `tests/python/test_merge_master.py` pass); as built in §10, the developer's eight assumptions ruled there, all kept; next `@reviewer`, code review. One PR, both tools, 385 net production lines (§5; the design said about 275). §8's three questions were ruled by Ola on 2026-10-07: the defaults.
 
 What this is. Two tools from the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
@@ -198,6 +198,9 @@ worktree, prints what exists, and names the command that finishes it
 | step 3, `git worktree add`, fails | `new_worktree: git worktree add failed (exit <n>); its output is above. No worktree was made` |
 | a later step's command fails | `new_worktree: <step> failed (exit <n>); its output is above. The worktree is kept; finish with: python3 tools/new_worktree.py --existing <wt>` |
 | the check's paths are wrong | `new_worktree: <wt>/.venv imports <module> from <path>, not from <wt>; this venv runs another checkout's code` |
+| as built: the check itself exits non-zero or prints other than three lines, after the install | `new_worktree: the import check failed (exit <n>: <its last line>). The worktree is kept; finish with: python3 tools/new_worktree.py --existing <wt>` |
+| as built: the tool's own file is not in a git checkout | `new_worktree: <tools dir> is not in a checkout of this repository` |
+| as built: both or neither of `<name>` and `--existing` | argparse's usage error, exit 2 |
 
 The step commands run with their output passed through (not captured), so
 a failed build's own words are on screen.
@@ -262,7 +265,8 @@ compare paths after `Path.resolve()`.
 ### 3.7 Size
 
 About 90 net production lines (the retrospective said about 40 with tests;
-the difference is `--existing`, the refusals and the path check).
+the difference is `--existing`, the refusals and the path check). As
+built: 135 (§5).
 
 ## 4. T2: `tools/merge_master.py`
 
@@ -293,7 +297,8 @@ and `--continue` with `run_in_background` and waits with Monitor.
 One file, `<git-dir>/merge_master.json` (the worktree's own git dir,
 `git rev-parse --git-dir`, never tracked): the `origin/master` commit being
 merged, the merge base, the merge list as printed (§4.3 step 4), the PR
-numbers, and the files that conflicted. The commit message is rendered
+numbers (oldest first), the first-parent commit count (for "brings in N
+commits"), and the files that conflicted. The commit message is rendered
 from it at commit time into `<git-dir>/MERGE_MASTER_MSG`. Both files are
 removed after the commit and on `--abort`. The state file plus git's
 `MERGE_HEAD` is "a merge this tool started".
@@ -311,7 +316,7 @@ removed after the commit and on `--abort`. The state file plus git's
    `Merge pull request #N from ...`. This is the command's output, never a
    typed range (D9 in the day retrospective).
 
-   Then, if `git diff --quiet <base> origin/master -- include src bindings
+   Then, if `git diff --name-only <base> origin/master -- include src bindings
    lib CMakeLists.txt` says master changed C++ since the merge base: with
    `--no-build`, refuse (§4.6, the row "start with `--no-build`, and master
    changed C++ since the merge base"); with no `<wt>/build-pyext`, refuse
@@ -356,9 +361,13 @@ persona's `git add` is the statement that a file is resolved.
    all of them run, output passed through:
    `tools/check_prohibited_deps.py`, `tools/check_detria_boundary.py`,
    `tools/check_citations.py --base origin/master`, `-m ruff check .`,
-   `-m ruff format --check .`, `-m mypy`. Any red: exit 4 after the last.
-3. `_core`: if `git diff --quiet HEAD -- include src bindings lib
-   CMakeLists.txt` says the merged tree's C++ differs from the branch's
+   `-m ruff format --check .`, `-m mypy`. Any red: exit 4 after the last,
+   with one stderr line naming the red ones (`merge_master: red: <gates>.
+   Nothing committed; the merge is left in progress`); a red build or
+   pytest gets the same kind of line.
+3. `_core`: if `git diff --name-only --cached HEAD -- include src bindings lib
+   CMakeLists.txt` names a file (the index, which equals the tree here
+   because step 1 refused unstaged changes), the merged tree's C++ differs from the branch's
    (master brought in C++), the suite needs a rebuilt `_core`. With
    `--no-build`, step 1 has already refused (§4.6), before any gate ran; on
    the first form that refusal came before the merge (§4.3 step 4), on
@@ -390,21 +399,22 @@ persona's `git add` is the statement that a file is resolved.
    Merge origin/master <short> into <branch>: brings in #199, #200 (@developer)
 
    Merge base <short>. First-parent merges brought in
-   (git log --merges --first-parent --oneline <base>..<master>):
+   (git log --merges --first-parent --oneline <base short>..<master short>):
      ed125121 Merge pull request #199 from expertanalytics/worktree-landcover-speed
-     ...
+     ...                                      (or one line: (none))
    Conflicts resolved by hand: a.py, b.md     (or: Conflicts: none)
    Changed by hand beyond git's merge: c.py   (line left out when empty)
-   Gates on the merged tree, in <wt>/.venv: check_prohibited_deps,
-   check_detria_boundary, check_citations --base origin/master, ruff check,
-   ruff format --check, mypy, pytest.
+   Gates on the merged tree, in <wt>/.venv:
+   check_prohibited_deps, check_detria_boundary, check_citations --base origin/master, ruff check, ruff format --check, mypy, pytest.
    _core rebuilt: yes.     (or: _core rebuilt: no, no C++ came in.)
 
    Co-Authored-By: <as given>
    ```
 
-   More than six PRs: the subject names six and "and N more". Without PR
-   subjects: "brings in N commits". No body line starts with `#`.
+   The PR numbers in the subject are oldest first. More than six PRs: the
+   subject names the six oldest and "and N more". Without PR subjects:
+   "brings in N commits", and the merge list is the one line `(none)`. No
+   body line starts with `#`.
 
    The hand-changed list is what the persona staged beyond git's own merge:
    `git merge-tree --write-tree HEAD MERGE_HEAD` gives the tree git's merge
@@ -429,7 +439,10 @@ in the right tree).
 `git merge --abort`, then remove the state files. Safe because the start
 refused a dirty tree. "A merge in progress" here is `MERGE_HEAD`, whether
 or not this tool started the merge (the start-form refusal for a merge in
-progress names `--abort`). With no `MERGE_HEAD`: refuse (§4.6).
+progress names `--abort`). With no `MERGE_HEAD`: refuse (§4.6). As
+built, `--abort` checks only that `<worktree>` is the top of a checkout
+and on a branch that is not `master`; it needs no `.venv`, `--persona` or
+`--trailer`.
 
 ### 4.6 Refusals (exit 2, the reason the last line on stderr)
 
@@ -454,7 +467,10 @@ progress names `--abort`). With no `MERGE_HEAD`: refuse (§4.6).
 | start with `--no-build`, and master changed C++ since the merge base (§4.3 step 4) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. No merge was started; hand back` |
 | `--continue` with `--no-build`, and C++ came in (§4.4 step 3) | `merge_master: origin/master changed C++ (<first file>); the suite needs a rebuilt _core and this run may not build C++. The merge is left in progress; hand back` |
 | C++ came in and no `build-pyext` (start: §4.3 step 4; `--continue`: §4.4 step 1) | `merge_master: origin/master changed C++ (<first file>) and <wt> has no build-pyext to rebuild _core in; run: python3 tools/new_worktree.py --existing <wt>. ` then `No merge was started` (start) or `The merge is left in progress` (`--continue`) |
-| after the `_core` build, `build-pyext` holds no `_core*.so`, more than one, or one without the venv's extension suffix | `merge_master: <wt>/build-pyext holds <the names, or no _core*.so>, not one _core<suffix>; remove build-pyext and run: python3 tools/new_worktree.py --existing <wt>. The merge is left in progress` |
+| after the `_core` build, `build-pyext` holds no `_core*.so`, more than one, or one without the venv's extension suffix; as built, also when the venv has not exactly one `lib/python3.*/site-packages/tin_engine` | `merge_master: <wt>/build-pyext holds <the names, or no _core*.so>[ (and <wt>/.venv has <n> tin_engine package dirs)], not one _core<suffix>; remove build-pyext and run: python3 tools/new_worktree.py --existing <wt>. The merge is left in progress` |
+| as built: start, `git merge` exits non-zero with no unmerged path or no `MERGE_HEAD` (git refused to start it, e.g. an untracked file in the way) | `merge_master: git merge failed (exit <n>); its output is above`; the state file is removed |
+| as built: `git commit -F` exits non-zero | `merge_master: git commit failed (exit <n>); its output is above. The merge is left in progress` |
+| as built: `git merge --abort` exits non-zero | `merge_master: git merge --abort failed (exit <n>)`; the state files are kept |
 
 A conflicted file that the resolution deleted (`git rm`, as a
 modify/delete conflict may end) has no markers to search and is skipped.
@@ -565,7 +581,7 @@ Not the invariant-critical suite of anything, so no mutation round
 About 185 net production lines (the retrospective, after the 2026-10-03
 research, said about 120 with tests; the difference is the two-phase
 command line, the `_core` rebuild with its suffix check, the hand-change
-list and the refusal table).
+list and the refusal table). As built: 250 (§5).
 
 ## 5. PR and who does what
 
@@ -573,6 +589,19 @@ One PR, both tools, on a worktree branch made with `git worktree add` (T4
 does not exist yet): about 275 net production lines by `python3
 tools/count_loc.py <base> <head>`, under `CLAUDE.md` §2's limit. Not
 refine or mesh code, so no `@perf` acceptance run.
+
+As built, `python3 tools/count_loc.py origin/master HEAD` at `965f7d96`
+counts 385 (`tools/merge_master.py` 250, `tools/new_worktree.py` 135),
+40 % over the estimate and still under the limit. Why it overran: the
+estimate priced the steps, not the refusals' text. The refusal conditions
+and messages alone take 75 counted lines (23 in `new_worktree.py`, 52 in
+`merge_master.py`: each `raise Refusal(...)` with the `if` that guards it),
+because the set messages of §3.3 and §4.6 are long and wrap at ruff's 100
+columns. §9 then added rows after the estimate (missing `--persona` or
+`--trailer`, `--abort` with nothing to abort, no `build-pyext` on both
+forms), and the code adds five refusals of its own (§10). The commit
+message template and the stop message (`message` and `stop` in
+`tools/merge_master.py`) are about 35 more.
 
 - `@tester`: §3.6 and §4.9, red, committed before any tool exists.
 - `@developer`: both tools, the two `pyproject.toml` mypy entries; touches
@@ -763,6 +792,76 @@ One changes a test (18); the rest keep the suite as committed.
 19. **Kept.** "already contains origin/master … nothing to merge" goes to
     stdout. The gates, the build and pytest run with `capture=False`, so
     their output passes through unchanged.
+
+## 10. As built: the green step's assumptions, ruled
+
+`@developer`'s green commit `965f7d96` (`tools/new_worktree.py`,
+`tools/merge_master.py`, the two `pyproject.toml` mypy entries; no test
+file) stated eight assumptions beyond §3, §4 and §9. All eight are kept;
+none changes code. The sections above now carry the ones that set text
+(§3.3, §4.2 to §4.6).
+
+1. **Kept.** `merge_master.py` puts its own directory on `sys.path` and
+   imports `run`, `Refusal`, `check_checkout`, `last_line` and `HERE` from
+   `new_worktree.py`; it loads `tools/brief.py` and
+   `.claude/hooks/guard_governance.py` by path, registering each in
+   `sys.modules` before `exec_module` (a dataclass looks its module up
+   there). One subprocess route and one checkout check for both tools is
+   the point of §2; a third shared module would be a file for five names.
+   The cost, that `merge_master.py` does not run without its sibling, is
+   the same as for any two files in `tools/`. `brief.py` is loaded only on
+   the first form and `--continue` (for `WRITES`); the guard only for the
+   stop message's mark, and a guard that fails to load leaves the mark out
+   (§4.3 step 6).
+2. **Kept.** The extra refusals, now rows of §3.3 and §4.6: `git merge`
+   failing without conflicts (state file removed, exit 2); `git commit -F`
+   or `git merge --abort` failing (exit 2, naming git's exit code); a venv
+   without exactly one `site-packages/tin_engine` folded into the `_core`
+   suffix refusal; the import check exiting non-zero after the install.
+   Each is a case the design left as a traceback or an unhandled state.
+   The folded one's remedy (`--existing`) holds: the step-7 check requires
+   `_core` to load from under `<wt>/.venv/`, and the editable install puts
+   it in that venv's `site-packages/tin_engine/`.
+3. **Kept.** Exit 4 writes one stderr line naming the red gates (or the
+   `_core` build, or pytest), so a refusal and a red gate both end on a
+   line that says why (§2's "last line on stderr" convention, extended to
+   exit 4; §4.4 step 2).
+4. **Kept.** PR numbers oldest first in the subject (the order they
+   landed, as §4.4's example `#199, #200` already showed); `(none)` as the
+   merge list when no first-parent merge came in, so the body never has an
+   empty list under its heading; the gate list on the line after its
+   heading (§4.4 step 6).
+5. **Kept.** `--abort` checks only the checkout top and that the branch
+   is not `master` or detached; no `.venv`, `--persona` or `--trailer`
+   (§4.5). Abandoning a merge must work in a worktree whose venv is broken,
+   which is when a persona most needs it.
+6. **Kept.** Probe steps (`--version`, `--cmakedir`) are captured; the real
+   steps (`uv venv`, `uv pip install`, the `cmake` configure) pass their
+   output through (§3.3, last paragraph). As built, `step` in
+   `tools/new_worktree.py` captures exactly when the command's last
+   argument starts with `--`; `@reviewer` may ask for an explicit flag
+   instead, which would not change behaviour.
+7. **Kept.** The exception is named `Refusal`, with `# noqa: N818` (ruff
+   wants an `Error` suffix); a refusal is the tool working, not failing,
+   and §3.3 and §4.6 call it that.
+8. **Kept.** The merge runs on the name `origin/master` (so conflict
+   markers read `>>>>>>> origin/master`), and `MERGE_HEAD` is checked
+   against the full hash recorded from `git rev-parse origin/master` after
+   the fetch. Every worktree shares `refs/remotes/origin/master`, so a
+   fetch in another worktree between that `rev-parse` and the `git merge`
+   (well under a second of `git log`, `git diff` and `git rev-list` calls)
+   would merge a newer master than the one recorded. The check catches
+   it: the clean form and `--continue` both refuse "MERGE_HEAD is <a>, but
+   this tool merged <b>" before any gate, and nothing is committed;
+   `--abort` and a rerun recover. Merging the recorded hash would close the
+   window at the cost of hash-labelled markers; not worth a round.
+
+As built, beyond the eight: `Tree` reads the git dir with `git rev-parse
+--absolute-git-dir` (§4.2 says `--git-dir`; the same directory, absolute);
+the C++ checks use `git diff --name-only` rather than `--quiet` so the
+refusal can name the first file (§4.3 step 4, §4.4 step 3); and the start
+prints the merge base and list before the C++ refusal, so a refused start
+still shows what would have come in.
 
 ## Review
 
