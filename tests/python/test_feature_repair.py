@@ -57,7 +57,7 @@ and simplified with the clearance at the repair distance. ``TestTheFixOrder``
 checks that order through the stage's own names (``snap_to_outline`` and
 ``simplify_borders`` as ``feature_input`` imports them). PINNED HERE: the
 clearance reaches ``simplify_borders`` as its third argument or as
-``clearance_m``. RED at the commit that added it (section 15's red step):
+``clearance_m``. RED at the commit that added it (``2fba4349``):
 the simplifier ran before the outline rule, on the domain clip, with no
 clearance.
 """

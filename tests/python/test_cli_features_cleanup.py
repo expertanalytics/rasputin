@@ -57,7 +57,7 @@ with the default band the outline rule sees the band-0 input, so the record's
 lines are cut where the simplified rings lie on the domain outline, so no
 line keeps an edge on it; ``BAND_HELP`` and ``BAND_WORDING`` are 15.4's.
 Test 14's band-0 digest is unchanged. RED at the commit that added them
-(section 15's red step): the rule ran after the domain clip and the
+(``2fba4349``): the rule ran after the domain clip and the
 simplifier, and the help and record said "repaired, clipped border".
 
 RED at the commit that added increment 32's tests (``44f25968``): the default

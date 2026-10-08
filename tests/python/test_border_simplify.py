@@ -54,9 +54,9 @@ Scale of test 21's bound: 1 m less 1e-6 m. At EPSG:3035 coordinates near
 two distance computations (the kernel's and GEOS's) that may round
 differently (15.3).
 
-RED at the commit that added test 21 and the clearance tests (section 15's
-red step): ``_core.simplify_borders`` took no clearance, so every call that
-passes one is a ``TypeError``; the adapter had no ``clearance_m``; there was
+RED at the commit that added test 21 and the clearance tests (``2fba4349``):
+``_core.simplify_borders`` took no clearance, so every call that passed one
+was a ``TypeError``; the adapter had no ``clearance_m``; there was
 no ``InvalidClearance`` and no ``rejected_clearance`` or
 ``skipped_placements``.
 
