@@ -43,7 +43,8 @@ help promised a line split that `--no-constraint-feet` turns off; fix
 round: red `9f54bc95` (`@tester`, the help-text test), green `50544838`
 (`@developer`, the help reworded, the atan2-skip comment corrected); the
 kill table copied in ("Mutation round for 20c-2"). Code review round 2
-(`@reviewer`, on `d4ac395f`): approved; PR #214, in the merge queue;
+(`@reviewer`, on `d4ac395f`): approved; **merged** as PR #214 (master
+`4abacf65`);
 **20c-3** the repair of land-cover borders that should be one (on at
 5 cm, ruling 9, question 9), input coarsening, and Ola's outline rule, on
 by default at 5 m (question 6, ruling 6), after 20c-2 (branch
@@ -73,11 +74,18 @@ question 10). Fix round: red `51c24772` (`@tester`, OR9 and the far
 part), green T1 `35b7a873` and T2 `8716f062` (`@developer`), 355 net
 production lines (`python3 tools/count_loc.py 483221d2 8716f062`);
 `@perf`'s re-time `41db7333`: T2 leaves the mesh unchanged, the clean-up
-5.92 s and 5.48 s (limits met), every outline-rule gate met; the T2 pins
+5.92 s and 5.48 s (limits met), the outline-rule rows of the gate met
+(the repair rows and three checks of that gate were not run on the fixed
+code; "Rulings on 20c-3's code review round 1", R3); the T2 pins
 ruled ("Rulings on the fix round"): one changed, the area moved for a
-ring with no kept vertex (P1, a test and a few lines, no mesh change).
-**Built. Next: `@tester` red for P1, `@developer` green, then
-`@reviewer`'s code review round 1.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+ring with no kept vertex (P1): red `48aca5f7` (`@tester`), green
+`1e011cec` (`@developer`), 356 net production lines (`python3
+tools/count_loc.py 483221d2 1e011cec`). Code review round 1 (`@reviewer`,
+on `1e011cec`): changes requested; ruled ("Rulings on 20c-3's code review
+round 1": a hole the rule puts onto the outline is filled, fixed in code;
+the record row's wording; the gate's unrun checks, run by `@perf`).
+**Built. Next: `@tester` red for R1 and R4, `@developer` green, `@perf`'s
+check (R1, R3), then `@reviewer`'s code review round 2.** Questions 1 to 4 ruled by Ola, 2026-10-06,
 and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
 ("Ola's rulings" below); questions 9 and 10 open, designed on their defaults. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
@@ -1314,8 +1322,8 @@ repaired.
   move: the repair has to see whole borders in one CRS.
 - **Clipped to the read region first.** Each moved polygon is intersected
   with `region` (16b R5's region in the DEM's CRS, which `_take` already
-  builds: since 30d, PR #215, the domain's convex hull grown by 100 m; before
-  30d merges, the domain grown by 100 m). The region is convex and lies at
+  builds: since 30d, PR #215, merged as `769ed992`, the domain's convex
+  hull grown by 100 m). The region is convex and lies at
   least 100 m outside the outline, so the new edges the clip makes are
   outside the domain and farther than any outline-rule D (below) from the
   outline; only polygonal parts are kept. **The clip also shortens edges**
@@ -1503,12 +1511,11 @@ computation CRS, measured at 5 and 10 m on DEM cells of 10 and 31 m (M6
 - **Ruling 8** (the split phase judged per split) is a time limit on C++
   refinement; 20c-3 changes no C++ and has no `bench.py` run. Its time is
   the speed judgment above.
-- **30d (PR #215, open when this was written)**: the read region is the
-  domain's convex hull grown by 100 m, so more polygons are read than
-  before. The clip to that region (above) is what keeps the repair's cost
-  down; the old design's "filter to the polygons that reach the domain" (for
-  the coverage check) is gone with the check. If 20c-3 merges before 30d,
-  the region is the domain grown by 100 m, and the clip is the same code.
+- **30d (PR #215, merged as `769ed992`, in this branch's base)**: the
+  read region is the domain's convex hull grown by 100 m, so more polygons
+  are read than before. The clip to that region (above) is what keeps the
+  repair's cost down; the old design's "filter to the polygons that reach
+  the domain" (for the coverage check) is gone with the check.
 
 The domain outline itself is not touched (increment 22 has its own
 reduction). Measured in M3 to M7 on Lagan and Numedalslagen. The repair and
@@ -1541,7 +1548,10 @@ outline rule at 5 m on top, Numedalslagen **met** (4 slivers, 0 near,
 worst 0.8322°, triangles +0.27 %), Lagan met (61, 0 near, worst
 0.006697°, 1.000 × the tolerance-only figure, +0.09 %): the design's
 figures. T2's mesh is T1's byte for byte (`.vtk` SHA-256 Lagan
-`ef67e65c…`, Numedalslagen `1f11f291…`).
+`ef67e65c…`, Numedalslagen `1f11f291…`). The repair runs above predate
+T1, and the shared-border, population-3 and far-corner checks were never
+run: what is run and what is ruled out is "Rulings on 20c-3's code review
+round 1", R3.
 
 Slivers with the defaults (every switch at its default; `@perf`, same
 commit), master `483221d2` against the branch:
@@ -2745,6 +2755,8 @@ of "PRs and gates", then review.
 
 Copied word for word from `@tester`'s hand-back for the round, as for
 20c-2; pins ruled below ("Rulings on 20c-3's mutation round").
+It ran on `e07d5921`, before T1 and T2 rewrote `_cut` and `ring`; the
+killing tests are unchanged since (code review round 1's R5).
 
 - **Where it ran:** a scratch copy made by `tools/scratch_copy.py e07d5921`, with the worktree's `.venv`. Every mutant was a single text replacement in the copy's `src_python/tin_engine/feature_input.py`. After each run the file was restored and compared byte for byte with the original. The copy is now removed.
 - **What ran on each mutant:** `test_feature_outline_rule.py` and `test_feature_repair.py`. No mutant failed a repair test.
@@ -2994,6 +3006,9 @@ Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
   on `35b7a873`): a band narrower than D along the whole outline comes
   back as the whole domain, not empty, because its shell and hole both
   go onto the outline. Not fixed in 20c-3; the review notes it.
+  *The band case is fixed after all* by code review round 1's R1 (below):
+  with `make_valid`'s "structure" method the band comes back empty and
+  its neighbour as the whole square (probe on `1e011cec`, patched).
 - **P5, the citation `tests/python/test_grow.py:185`. Kept, not stale.**
   Its docstring names the commit the lines are read at (`f81b20b7`), and
   `src_python/tin_engine/feature_input.py@f81b20b7:158-167` is master's
@@ -3002,6 +3017,122 @@ Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
   `@tester` may rewrite it in the pinned form just used (full path, `@`,
   commit) to take it off that list (one line, a test file); the short
   path with `@` is reported broken.
+
+#### Rulings on 20c-3's code review round 1 (`@architect`, 2026-10-08, on `05b0fd7a`)
+
+The review is the last entry under "Review". Ola was asleep; each ruling
+is on the default the main session proposed, and none is a question for
+him.
+
+- **R1 (review B1), a hole the outline rule puts onto the outline is
+  filled. Fixed: D and T.** `snap_to_outline` rebuilds a changed part as
+  `Polygon(shell, holes)` and repairs it with `shapely.make_valid`, whose
+  default "linework" method keeps a hole's area once the hole touches the
+  shell along a line; with the merge on, the smallest polygon wins the
+  label, so a lake inside a thin ring of a rarer class takes the ring's
+  class. Reproduced on `1e011cec` with the review's fixture (1 km square
+  outline, D = 5 m; water = box(3,200,103,300) ∪ box(500,500,800,700);
+  ring = box(2,190,113,310) less the first box; rest = the square less
+  both): the ring comes back as 13 560 m² and holds the lake's centre
+  (53, 250). *Fix (D):* `shapely.make_valid(shell, method="structure")`
+  at that one call; the call in `_loops` (ruling P1) stays, as it repairs
+  a single ring with no holes and gives only an area. Patched, the three
+  polygons are 70 300, 3 260 and 926 440 m², a partition of the square,
+  the ring no longer holds (53, 250), and `area_changed` is 340 m² both
+  ways. The same patch fixes P4's band case (a band narrower than D along
+  the whole outline, its inside a second polygon): the band comes back
+  empty and the inside as the whole square, `area_changed` 11 964 m²,
+  against both polygons the whole square today. *Test (T):* the review's
+  fixture (the ring's area 3 260 m² to 1e-6 m², the ring not covering
+  (53, 250), the three areas summing to 1e6 m²) and the band case (the
+  band empty, the inside 1e6 m²); both red on `1e011cec`. Not
+  mutation-critical: one keyword. *The mesh:* "structure" and "linework"
+  differ only on a rebuilt part that is invalid, where a hole touches or
+  crosses its shell (filled before, cut out now) or a ring overlaps
+  itself (an overlap counted once, not cut out). The review's patched run
+  found no filled hole on Lagan or Numedalslagen, but did not look for
+  the second kind, so the meshes should not change and `@perf` checks
+  that they do not (R3 (a)). Whose defect: the green step's design
+  (`@architect`), which named `make_valid` without its method.
+- **R2 (review B2), prose the branch made untrue. Fixed in this commit:**
+  PR #214 merged (`4abacf65`) in the status and the ROADMAP row; the
+  "Next" line; the LOC table (356 built, `python3 tools/count_loc.py
+  483221d2 1e011cec`); the two passages that waited on 30d (merged,
+  `769ed992`).
+- **R3 (review B3), the gate's unrun parts.** The status said "every
+  outline-rule gate met"; what was met is the outline-rule rows. The rest
+  of the 20c-3 gate row, each ruled:
+  - *Run (`@perf`, on `@developer`'s R1 green commit, one session of at
+    most 15 minutes, AC power, the catchment arguments of
+    `docs/benchmarks/2026-10-08/20c-3/scripts/gates.sh`):*
+    (a) **the mesh unchanged by R1**: default runs on both catchments;
+    `.vtk` SHA-256 equal to T2's (Lagan `ef67e65c…`, Numedalslagen
+    `1f11f291…`). If either differs, stop and report it to `@architect`.
+    (b) **the repair on top of the outline rule, on the fixed code**:
+    `--no-features-merge-same-class --features-tolerance 2
+    --features-outline-snap 5 --features-repair 0.05` on both catchments,
+    against the outline-rule row's thresholds (Lagan: at most 90 slivers,
+    at most 5 within 20 m of the outline, triangles at most +1 % of the
+    tolerance-only mesh `g-tol2-lagan`, worst angle at least 0.95 ×
+    0.006697°; Numedalslagen: at most 10, at most 5, at most +1 %, at
+    least 0.1°), and on Lagan `scripts/corners.py` (the slit's two open
+    corners not both mesh vertices). The repair on the tolerance-only
+    run (`--features-outline-snap 0`) is not rerun: everything changed
+    since `@perf`'s runs on `745bcb0d` is inside the outline rule, which
+    D = 0 skips (`git diff 745bcb0d 1e011cec -- src_python` touches only
+    `snap_to_outline` and `_Outline`).
+    (c) **the slit's far corner**, on Lagan's two repair meshes (the new
+    one from (b) and `g-tol2rep-lagan.vtk` from the earlier runs): no
+    triangle whose smallest angle is under 1° has a corner within 1 mm
+    of 413 677.295 6 331 664.081. Restated because the `.vtk` does not
+    say which edges are constraints: the gate's wording asked for no
+    smallest angle between two constraint edges there; a sliver at that
+    corner whatever its edges is the stricter test.
+    (d) **no shared border left unmatched**: from the run in (b), the
+    polygons `snap_to_outline` returns (a driver that wraps the function
+    and runs the mesh command in-process), measured as the prototype's
+    `../rasputin_scratch/20c-prototype/covfar.py` does (mismatched
+    border inside the domain, more than 1 mm from its outline): 0.000 m
+    on both. The probe can fail: the same measure with one vertex of one
+    shared border moved 0.5 m gives more than 0.
+    (e) **population 3 carries no land-cover line with the merge on**:
+    Lagan with the defaults, and again with
+    `--no-features-merge-same-class`; from the same driver,
+    `snap_to_outline`'s lines moved to EPSG:3035, the total length of
+    segments with both ends within 1 m of the line N 3 811 923.31 or of
+    the line E 4 585 680.19 (M2's two population-3 lines), inside the
+    domain. Merge on: 0 m. Merge off: more than 0 (the probe that can
+    fail). Read on the land-cover lines, not the mesh, because the lines
+    are the only source of land-cover constraint edges and the `.vtk`
+    does not mark constraints.
+  - *Ruled out: raising the thresholds to the measured figures.* The
+    measured figures after T1 are the design's own (61 and 4 slivers, 0
+    near the outline, 0.006697° and 0.8322°, "PRs and gates"), and the
+    thresholds were set from those figures with the margin for the
+    production code; there is nothing new to raise them to. The repair
+    rows keep "every threshold of the run without it" (M7 gave no
+    figures of their own).
+- **R4 (review S2), the record row's wording. Taken: D and T.**
+  `run_record.py`'s label for `land_cover_area_moved_m2` says "changed
+  class", but with the merge off the outline rule can move area between
+  two polygons of one class. *Change (D):* "Land-cover area inside the
+  outline that the outline rule gave to another polygon, m2". *Test (T):*
+  the label, red on `1e011cec`.
+- **R5 (review S1), where the mutation round ran. Taken.** The round ran
+  on `e07d5921`, before T1 (`35b7a873`) and T2 (`8716f062`) rewrote
+  `_cut` and `ring`. The killing tests are unchanged since: between
+  `5cc0639c` and `1e011cec` the test file gained tests and lost only
+  docstring lines (`git diff 5cc0639c 1e011cec --
+  tests/python/test_feature_outline_rule.py`). The review found that the
+  record covers every mutation target plus T1's end test.
+- **R6 (review S3), P1's check on the real inputs, recorded.** From
+  `@developer`'s hand-back for P1's green step: `area_changed` on the four
+  real inputs, to four decimals, Numedalslagen with the defaults
+  13 243.1104 m², Lagan with the defaults 16 050.3242 m², Numedalslagen
+  with the gate's flags 13 481.8453 m², Lagan with the gate's flags
+  16 165.0077 m², the same under T1, T2 and the P1 fix. No ring on those
+  inputs reaches P1's branch (a ring with no kept input vertex), so the
+  equality says only that the fix does not touch them.
 
 ## `@perf`'s acceptance
 
@@ -3057,7 +3188,9 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-3 (2026-10-08, with the repair) | `feature_input.py`: the land-cover stage (polygons collected per source, clipped to the read region, repaired, merged, simplified; the coverage check gone) ~45; the outline rule (an `STRtree` of the outline's segments, no buffer) ~70; `cli.py`, `run_record.py`, `stats.py` (four flags, of which `--features-repair` is new, their refusals, the input and vertex rows, the timing sub-row) ~35; `pyproject.toml` is not counted | **~150** |
 | 20c-3 green | `python3 tools/count_loc.py 483221d2 7334b82b`: `feature_input.py` 260 (the outline rule 188 against ~70; the stage 68, part of it moved from the old loop), `cli.py` 63, `run_record.py` 8. Over the estimate by 181 (+121 %), almost all in the outline rule, whose estimate was not taken from its 146-line prototype (ruling G5); under 700, one PR | **331** |
 | 20c-3 rulings T1, T2 | `feature_input.py`: the cut's end test ~2 (T1); `ring`'s index list, the loops, the assembly and its validity guard, less the whole-polygon overlay ~+25 (T2) | **~360** |
-| 20c-3 fix round built | `python3 tools/count_loc.py 483221d2 8716f062`: `feature_input.py` 285, `cli.py` 64, `run_record.py` 6; P1's fix (rulings on the fix round) about +3 more | **355** |
+| 20c-3 fix round built | `python3 tools/count_loc.py 483221d2 8716f062`: `feature_input.py` 285, `cli.py` 64, `run_record.py` 6 | **355** |
+| 20c-3 P1 built | `python3 tools/count_loc.py 483221d2 1e011cec`: `feature_input.py` 286, `cli.py` 64, `run_record.py` 6 | **356** |
+| 20c-3 code review round 1 rulings | R1 a keyword argument on an existing line (ruff may wrap it: 0 to 2 lines), R4 a string: 0 | **~357** |
 
 On the worst overrun seen when estimated (+60 %), 240, 175 and 240. Each under 700. 20c-3 then overran by more than that, +121 % to 331 (ruling G5), still under 700.
 
