@@ -256,6 +256,13 @@ class TestSelection:
         segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
         assert as_set(segs) == as_set(np.vstack([line_rows(east_in), line_rows(west_in)]))
 
+    def test_a_segment_exactly_at_the_reach_is_kept(self, tf: ModuleType, tmp_path: Path) -> None:
+        """Section 9.1: the box test is closed. 504 001 = 501 000 + 3 001, exact."""
+        at_reach = self.vertical(X0 + 1000 + 3001)
+        path = write(tmp_path / "edge.geojson", [at_reach])
+        segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert as_set(segs) == as_set(line_rows(at_reach))
+
     def test_no_line_within_reach_is_an_empty_array(self, tf: ModuleType, tmp_path: Path) -> None:
         path = write(tmp_path / "far.geojson", [self.vertical(X0 + 1000 + 3002)])
         segs, margin = segments_of(tf, spec(tf, path), WINDOW, UTM33)
@@ -306,6 +313,19 @@ class TestMargin:
         assert excess.max() <= 1e-9, f"{(excess > 1e-9).sum()} points over, worst {excess.max()} m"
         # Not vacuous: without the margin the bound breaks here.
         assert (here - there).max() > 0.5
+
+    def test_the_margin_returned_is_the_one_simplified_by(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        """0.8 m either side: Douglas-Peucker keeps every vertex at 1 m and
+        flattens the line at 2 m (GEOS 3.14), so a line simplified by more
+        than the margin it returns breaks the bound by about 0.6 m."""
+        utm = zigzag(0.8, 5.0, 200.0)
+        path = write(tmp_path / "zig.geojson", [utm])
+        segs, margin = segments_of(tf, spec(tf, path, margin=1.0), WINDOW, UTM33)
+        points = near_points(utm, 3.0, 1000, seed=35)
+        excess = point_segment(points, segs) - margin - point_segment(points, line_rows(utm))
+        assert excess.max() <= 1e-9, f"worst {excess.max()} m"
 
     def test_a_closed_loop_smaller_than_the_margin_is_kept(
         self, tf: ModuleType, tmp_path: Path
