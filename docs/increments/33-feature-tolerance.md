@@ -803,6 +803,17 @@ Layering amendment be414c9a: tolerance_field imports only tin_engine.crs and tin
 
 Added after code review round 1: the emptied-line mutant (`xy[[0, 0]]` → `xy[:0]`) is now killed by `c2ddd679`'s `test_a_line_simplification_empties_is_a_zero_length_segment` in `tests/python/test_tolerance_field.py`, which monkeypatches `shapely.simplify` to return an empty line so the fallback is reached on any GEOS.
 
+Mutants on `detail::max_error_near` (code review round 2's fix; @tester, `2a2d5f05`, copied verbatim by the main session; each planted in a scratch copy, built in Release and under TSan):
+
+| mutant on `detail::max_error_near` (refine.hpp) | Release | TSan | verdict |
+|---|---|---|---|
+| `part[begin / b]` → `part[0]` | passes | data race reported, abort (exit −6) | killed by TSan only |
+| `*std::max_element(part…)` → `part.back()` | 3 assertions fail | 3 fail | killed |
+| `policy.at(m, t) <= policy.lowest()` → `<` | 9 fail | 9 fail | killed |
+| `e > w` → `e >= w` | passes | passes | survived; equivalent (same maximum) |
+
+The `part[0]` mutant keeps the right maximum and only adds a data race, so the new case must stay on the TSan job's list.
+
 ### 9.3 Pins after the green step
 
 `@developer`'s green step (and code review round 1's fixes, `7101f514`)
