@@ -69,8 +69,15 @@ on Numedalslagen, the clean-up 8.0 s and 8.8 s against the design's
 outline, worst 0.0814°); both ruled ("Rulings on 20c-3's timed check and
 gate runs": T1 a defect in ruling G4's cuts, fixed in code; T2 the
 rebuild and area measure restricted to what moved; T3 the hotspot,
-question 10). **Next: `@tester` red for T1 and T2, `@developer` green,
-`@perf`'s re-time and gate reruns, then review.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+question 10). Fix round: red `51c24772` (`@tester`, OR9 and the far
+part), green T1 `35b7a873` and T2 `8716f062` (`@developer`), 355 net
+production lines (`python3 tools/count_loc.py 483221d2 8716f062`);
+`@perf`'s re-time `41db7333`: T2 leaves the mesh unchanged, the clean-up
+5.92 s and 5.48 s (limits met), every outline-rule gate met; the T2 pins
+ruled ("Rulings on the fix round"): one changed, the area moved for a
+ring with no kept vertex (P1, a test and a few lines, no mesh change).
+**Built. Next: `@tester` red for P1, `@developer` green, then
+`@reviewer`'s code review round 1.** Questions 1 to 4 ruled by Ola, 2026-10-06,
 and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
 ("Ola's rulings" below); questions 9 and 10 open, designed on their defaults. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
@@ -1528,10 +1535,13 @@ the prototype's `strip.py`, checked by reading both scripts). Tolerance
 held without it fails; Lagan's slit corners are not both mesh vertices;
 the far-corner check, the shared-border check and the population-3 check
 not run. All four off: 20c-2's mesh bit for bit on both. The cause of
-Numedalslagen's miss and its fix are ruling T1 below; with the fix
-(probe, not `@perf`'s run) the outline-rule runs give the design's
-figures: Numedalslagen 4 slivers, 0 near, worst 0.832158°; Lagan 61, 0
-near, worst 0.006697°.
+Numedalslagen's miss and its fix are ruling T1 below. **After T1 and T2**
+(`@perf`, on `8716f062`, `docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:91-130`):
+outline rule at 5 m on top, Numedalslagen **met** (4 slivers, 0 near,
+worst 0.8322°, triangles +0.27 %), Lagan met (61, 0 near, worst
+0.006697°, 1.000 × the tolerance-only figure, +0.09 %): the design's
+figures. T2's mesh is T1's byte for byte (`.vtk` SHA-256 Lagan
+`ef67e65c…`, Numedalslagen `1f11f291…`).
 
 Slivers with the defaults (every switch at its default; `@perf`, same
 commit), master `483221d2` against the branch:
@@ -1541,9 +1551,9 @@ commit), master `483221d2` against the branch:
 | Lagan | 799 378 | 437 | 0.002384° | 799 408 | 186 | 0.1917° |
 | Numedalslagen | 1 141 207 | 296 | 0.008623° | 1 142 108 | 169 | 0.08145° |
 
-With ruling T1's fix (probe): Lagan 180 slivers, worst 0.1917°;
-Numedalslagen 158, worst 0.6302°. `@perf` remeasures both tables on the
-fixed code.
+After T1 and T2 (`@perf`, on `8716f062`, same README at `41db7333`):
+Lagan 799 368 triangles, 437 → 180 slivers under 1°, worst 0.002384° →
+0.1917°; Numedalslagen 1 141 983, 296 → 158, worst 0.008623° → 0.6302°.
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -2754,6 +2764,14 @@ Copied word for word from `@tester`'s hand-back for the round, as for
 
 Every kill is an exact coordinate, an area or a length far above rounding, except M1, whose oracle is bit-identity on purpose. I also changed `TestTheCorner`'s docstring: it claimed the test catches "round 3's prototype defect", which it cannot, so it now points to the new test.
 
+**Added in the fix round (`@architect`, from `@tester`'s red step `51c24772`).**
+One fault more, ruling T1's target, "`_cut`'s end test removed": **killed** by OR9,
+`test_or9_no_edge_shorter_than_half_d` (both directions). Shown in the red
+step, not as a separate planted run: the code before T1 (`eb810a90`) is
+exactly that mutant, OR9 failed on it (a 2.4 cm edge beside V), and passed
+with T1 (`35b7a873`). T2's test (`test_t2_the_far_part_passes_through`) is
+not mutation-critical (ruling T2).
+
 #### Rulings on 20c-3's mutation round (`@architect`, 2026-10-08, on `5cc0639c`)
 
 `@tester`'s three pins from the round above, ruled. No code change follows
@@ -2932,6 +2950,58 @@ the changes are described in full below.
   clip for chains the rule already knows to be inside. It might save
   1.5 to 2 s; that is not measured. The gates do not change.
 
+#### Rulings on the fix round (`@architect`, 2026-10-08, on `8716f062` and `41db7333`)
+
+**Outcome of T1 and T2** (`@perf`'s re-time,
+`docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:91-130`). T1: both
+outline-rule gates met at the design's figures ("PRs and gates"). T2: the
+mesh is T1's byte for byte; the clean-up 5.92 s on Lagan (limit 6.5 s)
+and 5.48 s on Numedalslagen (limit 6.0 s), met; the whole run 20.59 s
+and 10.51 s, +17 % and +54 % against master (question 10, open).
+Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
+0.002384° → 0.1917° and 0.008623° → 0.6302°.
+
+`@developer`'s five pins on T2, ruled. One changes code.
+
+- **P1, a ring with no kept input vertex adds its old and its new polygon
+  to the area moved. Changed: D and T.** That is T2's wording, and it is
+  wrong whenever the two polygons overlap. Probe (a 1 km square outline,
+  D = 5, polygon A the 2 × 10 m rectangle (0,100)-(2,110) on the outline,
+  B the square less A): `area_changed` is 1 000 000 m² on `8716f062`
+  against 20 m² on `35b7a873`. B's eight vertices all lie within D, so
+  none is kept, and B's old and new polygons together are the whole
+  square. *Fix (D):* such a ring gives the symmetric difference of its
+  old and its new polygon, each made valid (a probe patching `_loops` so
+  gives 20 m²). It can only lower the figure (the difference lies in the
+  union), so `@developer` checks the four real inputs' `area_changed`
+  still equal T1's to four decimals. *Test (T):* that fixture,
+  `area_changed` 20 m² to 1e-6, and A empty, B the whole square; red on
+  `8716f062`. Not mutation-critical. The area is the run record's
+  `land_cover_area_moved_m2` only, never the mesh, so no `@perf` rerun.
+  Whose defect: T2's design (`@architect`).
+- **P2, nested `make_valid` output flattened two levels. Kept.**
+  `make_valid` and `union_all` return at most a collection of
+  (multi-)geometries, so two levels of `get_parts` reach every polygon;
+  `_polygonal` drops the lines.
+- **P3, the fallback union is not exercised by any test. Kept.** The
+  guard covers a case argued not to arise (a rebuilt part changes only
+  near the outline, where an unchanged part has no edge); no fixture that
+  reaches it is known. It stays untested, and the review notes it.
+- **P4, the holes of a part whose shell collapsed still add loops. Kept,
+  a known limit.** The part is gone, so the figure can count the hole's
+  area as moved, which overstates `area_changed` by at most the area of
+  the holes of parts thinner than about 2D. Related and older (the same
+  on `35b7a873`): a band narrower than D along the whole outline comes
+  back as the whole domain, not empty, because its shell and hole both
+  go onto the outline. Not fixed in 20c-3; the review notes it.
+- **P5, the citation `tests/python/test_grow.py:185`. Kept, not stale.**
+  It names its commit: "`feature_input.py:158-167` at `f81b20b7`", and
+  those lines at `f81b20b7` are master's `source_region`, the function the
+  test copies. `check_citations.py` lists it only because this branch
+  edits `feature_input.py`. No edit needed. `@tester` may rewrite it
+  as `feature_input.py@f81b20b7:158-167` to take it off that list (one
+  line, a test file).
+
 ## `@perf`'s acceptance
 
 20c-1 and 20c-2 touch `include/terrain/mesh/` and
@@ -2986,6 +3056,7 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-3 (2026-10-08, with the repair) | `feature_input.py`: the land-cover stage (polygons collected per source, clipped to the read region, repaired, merged, simplified; the coverage check gone) ~45; the outline rule (an `STRtree` of the outline's segments, no buffer) ~70; `cli.py`, `run_record.py`, `stats.py` (four flags, of which `--features-repair` is new, their refusals, the input and vertex rows, the timing sub-row) ~35; `pyproject.toml` is not counted | **~150** |
 | 20c-3 green | `python3 tools/count_loc.py 483221d2 7334b82b`: `feature_input.py` 260 (the outline rule 188 against ~70; the stage 68, part of it moved from the old loop), `cli.py` 63, `run_record.py` 8. Over the estimate by 181 (+121 %), almost all in the outline rule, whose estimate was not taken from its 146-line prototype (ruling G5); under 700, one PR | **331** |
 | 20c-3 rulings T1, T2 | `feature_input.py`: the cut's end test ~2 (T1); `ring`'s index list, the loops, the assembly and its validity guard, less the whole-polygon overlay ~+25 (T2) | **~360** |
+| 20c-3 fix round built | `python3 tools/count_loc.py 483221d2 8716f062`: `feature_input.py` 285, `cli.py` 64, `run_record.py` 6; P1's fix (rulings on the fix round) about +3 more | **355** |
 
 On the worst overrun seen when estimated (+60 %), 240, 175 and 240. Each under 700. 20c-3 then overran by more than that, +121 % to 331 (ruling G5), still under 700.
 
@@ -3121,9 +3192,9 @@ Questions 6 and 7 as asked:
    on Numedalslagen. The design estimated 1.1 s (question 9), counting only the clip
    and the repair, and those two alone take about 1.9 s. A fix in this
    PR (ruling T2: rebuild and measure only the land cover that moved,
-   with the same output) brings the step to about 5.9 s and 5.5 s. The
-   whole run is then about +17 % on Lagan (17.6 to 20.6 s) and +55 % on
-   Numedalslagen (6.8 to 10.6 s) against master. On Numedalslagen that
+   with the same output) brought the step to 5.92 s and 5.48 s (measured,
+   `@perf`, one run each). The whole run is now +17 % on Lagan (17.64 to
+   20.59 s) and +54 % on Numedalslagen (6.81 to 10.51 s) against master. On Numedalslagen that
    step is about half the run. The rest is the outline rule (about
    2.4 s), the repair (1.2 s), and clipping the land cover to the
    catchment (1.0 s) and to the read area (0.75 s). **Default: accept
