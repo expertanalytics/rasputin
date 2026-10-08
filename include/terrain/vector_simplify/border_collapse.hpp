@@ -10,7 +10,10 @@
 // swept region or on a new edge, and the anchored check holds: E has an anchor
 // F_E on the source border, F_A <= F_E <= F_D in order along it, |E - F_E| <=
 // band, and every source vertex between the anchors is within the band of its
-// new edge. That bounds the Hausdorff distance both ways (section 7).
+// new edge. That bounds the Hausdorff distance both ways (section 7). With a
+// clearance (section 15.2), E is placed at least that far from A and D, and a
+// collapse is refused if a vertex comes closer than it to a new edge it does
+// not end, or E to an edge other than A-B, B-C, C-D.
 //
 // Locality: every collapse reads four nodes, a stretch of its source border and
 // a grid query; the heap is global and the loop serial, ordered by (deviation,
@@ -41,12 +44,13 @@
 
 namespace terrain::vector_simplify {
 
-enum class BorderStatus : std::uint8_t { Ok, InvalidBand, BadRings };
+enum class BorderStatus : std::uint8_t { Ok, InvalidBand, BadRings, InvalidClearance };
 
 struct BorderCounts {
     std::size_t junctions{}, borders{}, fixed_borders{};
     std::size_t collinear{}, collapses{};
     std::size_t rejected_crossing{}, rejected_side{};
+    std::size_t rejected_clearance{}, skipped_placements{}; // section 15.2
 };
 
 struct BorderOutcome {
@@ -136,12 +140,16 @@ template <pred::GeometryKernel K>
 template <pred::GeometryKernel K>
 [[nodiscard]] BorderOutcome simplify_borders(std::span<const Point2> points,
                                              std::span<const std::uint64_t> ring_starts,
-                                             double band) {
+                                             double band, double clearance = 0.0) {
     using noding::SegmentRelation;
     using detail::no_node;
     BorderOutcome out;
     if (!std::isfinite(band) || band < 0.0) {
         out.status = BorderStatus::InvalidBand;
+        return out;
+    }
+    if (!std::isfinite(clearance) || clearance < 0.0) {
+        out.status = BorderStatus::InvalidClearance;
         return out;
     }
     bool bad = ring_starts.empty() || ring_starts.front() != 0 || ring_starts.back() != points.size();
@@ -332,6 +340,10 @@ template <pred::GeometryKernel K>
         const auto consider = [&](Point2 e) {
             if (!std::isfinite(e.x) || !std::isfinite(e.y))
                 return;
+            if (std::hypot(e.x, e.y) < clearance || std::hypot(e.x - vd.x, e.y - vd.y) < clearance) {
+                ++out.counts.skipped_placements; // too close to A or D
+                return;
+            }
             const auto placed = detail::anchored(g, anchor[a], anchor[d], A, A + e, p[d]);
             if (placed && (!best || placed->deviation < best->deviation))
                 best = placed;
@@ -376,13 +388,16 @@ template <pred::GeometryKernel K>
         const std::array<Point2, 5> loop{A, p[b], p[c], D, E};
         Point2 lo = A, hi = A;
         for (const Point2& q : loop) {
-            lo = Point2{std::min(lo.x, q.x), std::min(lo.y, q.y)};
-            hi = Point2{std::max(hi.x, q.x), std::max(hi.y, q.y)};
+            lo = Point2{std::min(lo.x, q.x - clearance), std::min(lo.y, q.y - clearance)};
+            hi = Point2{std::max(hi.x, q.x + clearance), std::max(hi.y, q.y + clearance)};
         }
         // (i) A-E and E-D cross or touch no current edge but at a shared end;
-        // (ii) no vertex lies in the swept region or on a new edge.
+        // (ii) no vertex lies in the swept region or on a new edge; the
+        // clearance (near), in floating point, does not end the scan. The scan
+        // skips the edge from A, so A against E-D and D against A-E here.
         const Segment2 ae{A, E}, ed{E, D};
         bool crosses = noding::classify<K>(ae, ed) != SegmentRelation::Touching, side = false;
+        bool near = detail::segment_distance(A, E, D) < clearance || detail::segment_distance(D, A, E) < clearance;
         ++round;
         grid.query(lo, hi, hi, [&](std::size_t u) {
             if (crosses || side || !alive[u] || next[u] == no_node || stamp[u] == round)
@@ -396,8 +411,14 @@ template <pred::GeometryKernel K>
                 return p[u] == end || p[v] == end ? SegmentRelation::Touching : SegmentRelation::Disjoint;
             };
             crosses = noding::classify<K>(ae, edge) != want(A) || noding::classify<K>(ed, edge) != want(D);
+            near = near || detail::segment_distance(E, p[u], p[v]) < clearance;
             for (const std::size_t w : {u, v}) {
-                if (crosses || w == b || w == c || p[w] == A || p[w] == D)
+                if (crosses || w == b || w == c)
+                    continue;
+                // A's copies only from A-E, D's only from E-D (15.2).
+                near = near || (p[w] != A && detail::segment_distance(p[w], A, E) < clearance)
+                       || (p[w] != D && detail::segment_distance(p[w], E, D) < clearance);
+                if (p[w] == A || p[w] == D)
                     continue;
                 const Segment2 at{p[w], p[w]};
                 side = side || detail::winding<K>(loop, p[w]) != 0
@@ -405,8 +426,8 @@ template <pred::GeometryKernel K>
                        || noding::classify<K>(at, ed) != SegmentRelation::Disjoint;
             }
         });
-        if (crosses || side) {
-            ++(crosses ? out.counts.rejected_crossing : out.counts.rejected_side);
+        if (crosses || side || near) {
+            ++(crosses ? out.counts.rejected_crossing : side ? out.counts.rejected_side : out.counts.rejected_clearance);
             continue;
         }
         // Apply, then re-evaluate the candidates whose four nodes changed.

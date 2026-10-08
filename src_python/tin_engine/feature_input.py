@@ -149,8 +149,8 @@ class FeatureSet(BaseModel):
     (a layer for a GeoPackage only; ``counts`` the features kept from each,
     16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
     ``features clip`` row, ``cleanup_seconds`` the land-cover stage's share of
-    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip (to
-    the read region, or the domain with the band on) and after the stage (None: no stage ran), and
+    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip to
+    the read region and after the stage (None: no stage ran), and
     ``area_changed`` the area the outline rule gave another polygon, m²."""
 
     model_config = ConfigDict(frozen=True)
@@ -410,13 +410,14 @@ class _Tally:
     def _clean(
         self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
     ) -> None:
-        """20c-3: one source's land cover clipped to the read region (to the
-        domain with the band on, 32), then repaired, merged by class,
-        simplified within the band and put to the outline, as asked;
-        its lines and label polygons then go the usual way."""
+        """20c-3: one source's land cover clipped to the read region, then
+        repaired, merged by class and put to the outline, as asked; with the
+        band on (32, section 15.2) then clipped to the domain, simplified
+        within the band at the repair distance's clearance, and its lines cut
+        where they lie on the outline. Its lines and label polygons then go
+        the usual way."""
         t0 = time.perf_counter()
-        clip = self.domain.polygon if ask.tolerance_m > 0 else region  # 32: area kept inside
-        clipped = [_polygonal(shapely.intersection(g, clip)) for *_, g in cover]
+        clipped = [_polygonal(shapely.intersection(g, region)) for *_, g in cover]
         self.outside += sum(g is None for g in clipped)
         if all(g is None for g in clipped):
             return
@@ -434,17 +435,24 @@ class _Tally:
             merged = [shapely.coverage_union_all(polys[groups[items[i][2]]]) for i in first]
             polys = np.array(merged, dtype=object)
             items = [items[i] for i in first]
-        if ask.tolerance_m > 0:
-            polys = np.array(simplify_borders(list(polys), ask.tolerance_m).polygons, dtype=object)
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
-        after = sum(int(shapely.get_num_coordinates(line)) for ls in snapped.lines for line in ls)
+        lines_of, polygons = snapped.lines, snapped.polygons
+        if ask.tolerance_m > 0:  # 32: area kept inside the domain
+            dom = self.domain.polygon
+            inside = [
+                Polygon() if (c := _polygonal(shapely.intersection(g, dom))) is None else c
+                for g in polygons
+            ]
+            polygons = simplify_borders(inside, ask.tolerance_m, ask.repair_m).polygons
+            lines_of = tuple(_outline_lines(g, dom) for g in polygons)
+        after = sum(int(shapely.get_num_coordinates(line)) for ls in lines_of for line in ls)
         old = self.cover_vertices or (0, 0)
         self.cover_vertices = (old[0] + before, old[1] + after)
-        for (fid, mask, code), lines, polygon in zip(
-            items, snapped.lines, snapped.polygons, strict=True
+        for (fid, mask, code), lines, polygon, ruled in zip(
+            items, lines_of, polygons, snapped.polygons, strict=True
         ):
-            if polygon.is_empty:  # the repair gave all of it to its neighbours
+            if ruled.is_empty:  # the repair gave all of it to its neighbours
                 self.empty += 1
             else:
                 self._add(fid, mask, list(lines), code, polygon)
@@ -701,6 +709,29 @@ def _loops(
             )
             out.append(shapely.make_valid(Polygon(xy)))
     return out
+
+
+def _outline_lines(polygon: BaseGeometry, outline: Polygon) -> tuple[LineString, ...]:
+    """32, section 15.2: every ring of ``polygon`` cut where an edge lies on
+    ``outline`` (one outline segment within ``IN_LINE`` of both its ends),
+    those edges dropped, as :func:`snap_to_outline`'s lines."""
+    rims = [shapely.get_coordinates(r) for r in shapely.get_rings(outline)]
+    segments = shapely.linestrings(
+        np.concatenate([np.stack([r[:-1], r[1:]], axis=1) for r in rims])
+    )
+    tree = shapely.STRtree(segments)
+    out: list[LineString] = []
+    for ring in shapely.get_rings(shapely.get_parts(polygon)):
+        xy = shapely.get_coordinates(ring)
+        edges = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
+        ei, si = tree.query(edges, predicate="dwithin", distance=IN_LINE)
+        near = [
+            shapely.distance(shapely.points(xy[ei + k]), segments[si]) <= IN_LINE for k in (0, 1)
+        ]
+        on = np.zeros(len(xy) - 1, dtype=bool)
+        on[ei[near[0] & near[1]]] = True
+        out += _chains(xy[:-1], on.tolist())
+    return tuple(out)
 
 
 def _chains(xy: npt.NDArray[np.float64], on: list[bool]) -> list[LineString]:

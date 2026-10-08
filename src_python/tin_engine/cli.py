@@ -766,8 +766,9 @@ def mesh(
             rich_help_panel=CLEAN_UP,
             show_default=False,
             help="Metres: simplify land-cover borders, each moved at most this far from its "
-            "repaired, clipped border and each class keeping its area; the repair and the "
-            "outline rule move borders on top of this. 0 is off. Default: 50.",
+            "border after the repair and the outline rule, each class keeping its area; the "
+            "simplification can bring a border back within the outline-snap distance of the "
+            "outline, but not closer than the repair distance. 0 is off. Default: 50.",
         ),
     ] = 50.0,
     features_outline_snap: Annotated[

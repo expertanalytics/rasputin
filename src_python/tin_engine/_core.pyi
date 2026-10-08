@@ -653,6 +653,7 @@ class BorderStatus(Enum):
     Ok = 0
     InvalidBand = 1
     BadRings = 2
+    InvalidClearance = 3
 
 @final
 class BorderCounts:
@@ -672,6 +673,10 @@ class BorderCounts:
     def rejected_crossing(self) -> int: ...
     @property
     def rejected_side(self) -> int: ...
+    @property
+    def rejected_clearance(self) -> int: ...
+    @property
+    def skipped_placements(self) -> int: ...
 
 @final
 class BorderOutcome:
@@ -687,7 +692,8 @@ class BorderOutcome:
     def counts(self) -> BorderCounts: ...
 
 def simplify_borders(
-    points: npt.ArrayLike, ring_starts: npt.ArrayLike, band: float
+    points: npt.ArrayLike, ring_starts: npt.ArrayLike, band: float, clearance: float = 0.0
 ) -> BorderOutcome:
     """Simplify a coverage's borders within ``band``, keeping every ring's area,
-    the junctions and the outer boundary. Releases the GIL."""
+    the junctions and the outer boundary, no new vertex or edge closer than
+    ``clearance`` to what it does not share an end with. Releases the GIL."""

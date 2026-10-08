@@ -36,8 +36,8 @@ WORDING = {
     "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
     "features_merge_same_class": "Borders between land-cover polygons of one class dropped",
     "features_tolerance_m": (
-        "Land-cover borders simplified, each at most this far from its repaired, clipped "
-        "border, each class's area kept (0 = off)"
+        "Land-cover borders simplified, each at most this far from its border after the "
+        "repair and the outline rule, each class's area kept (0 = off)"
     ),
     "features_outline_snap_m": "Land-cover borders this close to the outline moved onto it",
     "start_mesh": "What refinement started from",

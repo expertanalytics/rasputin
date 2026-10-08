@@ -1362,11 +1362,13 @@ Why simplify_borders simplified the rings or did not: Ok, or a refusal of the in
 )doc")
         .value("Ok", BorderStatus::Ok)
         .value("InvalidBand", BorderStatus::InvalidBand)
-        .value("BadRings", BorderStatus::BadRings);
+        .value("BadRings", BorderStatus::BadRings)
+        .value("InvalidClearance", BorderStatus::InvalidClearance);
 
     py::class_<BorderCounts>(m, "BorderCounts", R"doc(
 What simplify_borders found and did: junctions, borders (fixed ones included),
-collinear vertices dropped, collapses made, and collapses refused.
+collinear vertices dropped, collapses made, collapses refused, and placements
+skipped for the clearance.
 )doc")
         .def_readonly("junctions", &BorderCounts::junctions)
         .def_readonly("borders", &BorderCounts::borders)
@@ -1374,7 +1376,9 @@ collinear vertices dropped, collapses made, and collapses refused.
         .def_readonly("collinear", &BorderCounts::collinear)
         .def_readonly("collapses", &BorderCounts::collapses)
         .def_readonly("rejected_crossing", &BorderCounts::rejected_crossing)
-        .def_readonly("rejected_side", &BorderCounts::rejected_side);
+        .def_readonly("rejected_side", &BorderCounts::rejected_side)
+        .def_readonly("rejected_clearance", &BorderCounts::rejected_clearance)
+        .def_readonly("skipped_placements", &BorderCounts::skipped_placements);
 
     py::class_<BorderOutcome>(m, "BorderOutcome", R"doc(
 What simplify_borders returned: the rings, open, back to back, their starts, a
@@ -1400,22 +1404,23 @@ status and the counts.
 
     m.def(
         "simplify_borders",
-        [](const py::object& points, const py::object& ring_starts, double band) {
+        [](const py::object& points, const py::object& ring_starts, double band, double clearance) {
             const std::vector<Point2> xy = xy_points(points, "simplify_borders: points");
             const auto starts = py::array_t<std::uint64_t, py::array::c_style | py::array::forcecast>::ensure(ring_starts);
             if (!starts || starts.ndim() != 1)
                 throw py::value_error("simplify_borders: ring_starts must be one-dimensional, shape (R + 1,)");
             const std::vector<std::uint64_t> s(starts.data(), starts.data() + starts.size());
             const py::gil_scoped_release unlocked;
-            return terrain::vector_simplify::simplify_borders<terrain::pred::DefaultKernel>(xy, s, band);
+            return terrain::vector_simplify::simplify_borders<terrain::pred::DefaultKernel>(xy, s, band, clearance);
         },
-        py::arg("points"), py::arg("ring_starts"), py::arg("band"), R"doc(
+        py::arg("points"), py::arg("ring_starts"), py::arg("band"), py::arg("clearance") = 0.0, R"doc(
 Simplify the borders of a coverage within a band, keeping every ring's area,
 the junctions and the outer boundary (area-preserving segment collapse, exact
 crossing and side tests).
 
 points is (N, 2) float64-convertible and ring_starts (R + 1,) unsigned; any
-other shape is a ValueError. Band 0 returns the input. A refused input comes
-back as a status. Releases the GIL.
+other shape is a ValueError. Band 0 returns the input. No new vertex or edge
+comes closer than clearance to a vertex or edge it does not share an end with.
+A refused input comes back as a status. Releases the GIL.
 )doc");
 }
