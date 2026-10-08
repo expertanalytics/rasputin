@@ -1,0 +1,713 @@
+# Increment 32: land-cover borders simplified within a band, each class's area kept
+
+**Status:** designed by `@architect` on `0b5e0d4c` (step 2 of the round:
+research and design). No test or production code yet. Next: `@tester` writes
+the red suite of section 9. Questions for Ola in section 12; the design is
+written on their defaults. Not refine or mesh code (section 10 says what
+`@perf` is asked instead).
+
+## 1. What Ola asked
+
+Ola, 2026-10-08: "So, one thing that we need to implement is a CORINE
+simplification, similar to what we do on the outline of the auto-catchments.
+We get too many triangles (150k) and still only 777m vtol. We need to research
+an algorithm for this."
+
+The probe of step 1 (`0b5e0d4c`,
+`docs/benchmarks/2026-10-08/clc-simplify/README.md`) measured today's switch,
+`--features-tolerance` (GEOS's coverage simplifier, Visvalingam-Whyatt by
+area). It asked two questions; Ola answered "Defaults on all." (2026-10-08),
+so:
+
+1. The simplifier keeps every land-cover border within a **distance band** of
+   its source border, tied to CORINE's accuracy, starting at **50 m**, and
+   **each class keeps its area exactly**.
+2. The research also covers the **default start angle** (`--start-min-angle`)
+   when land cover is on, because the 25° start pass doubles the 50 m mesh.
+
+What the probe found, in short: the 777 m is the height error of a mesh with
+no height refinement and is not the land cover's doing (a height target needs
+`--tolerance`); today's tolerance is not a distance bound (borders move up to
+3.25 times the value given) and keeps no class area; the clean-up costs 1.1 to
+1.4 s, of which the simplification 0.12 s.
+
+## 2. Prior art: legacy and literature
+
+### Literature, read
+
+"Read" below means what was read: the full text where it could be had, the
+abstract and the authors' code where the full text is paywalled. Publisher
+pages (Taylor & Francis, ACM, SIAM) refused the fetch (HTTP 403); abstracts
+came from OpenAlex and Crossref, by DOI.
+
+- **Kronenfeld, Stanislawski, Buttenfield and Brockmeyer 2020**,
+  "Simplification of polylines by segment collapse: minimizing areal
+  displacement while preserving area", *Int. J. Cartography* 6(1):22-46,
+  doi:10.1080/23729333.2019.1631535 (APSC). Read: the abstract, and the first
+  author's MIT-licensed Python implementation, `apsc.py` in
+  `github.com/geobarry/line-simplify` (June 2020). The abstract: segment
+  collapse to Steiner points "under the constraint that the areas of
+  adjoining polygons are preserved exactly", self-intersections avoided "by
+  testing for intersections with two new line segments". The code: one
+  polyline at a time, its two end points never collapsed; the replacement
+  point E lies on the line parallel to A-D where A-E-D encloses what A-B-C-D
+  did (`__equalAreaLine`), placed where that line meets A-B or C-D, chosen
+  by a geometric rule (`__placement_AP_EAmin`); priority is the areal displacement; the stopping
+  rule a displacement or a point count; the topology check tests the two new
+  segments against the line's own segments and, optionally, against *other*
+  lines held fixed (`other_pt_lists`). **What it gives:** the operation this
+  increment uses, and the fact that it keeps the area on both sides of a
+  shared border, so one collapse keeps both neighbours' areas. **What it does
+  not:** no distance bound (its stopping rule is displacement or count), no
+  coverage (other lines are fixed obstacles, not simplified together), and
+  no test that a whole feature (an island) stays on its side when no segment
+  crosses.
+- **Buchin, Meulemans, van Renssen and Speckmann 2016**, "Area-preserving
+  simplification and schematization of polygonal subdivisions", *ACM TSAS*
+  2(1), doi:10.1145/2818373. Read: the abstract (the TU/e author version
+  refused the fetch). The edge-move: area and topology kept, no new
+  orientations, quadratic time, proven to reduce any non-convex simple
+  polygon. **Gives:** the subdivision case with area and topology. **Does not
+  (from the abstract):** a distance bound to the source; its aim is
+  schematization. An open implementation exists (`jakoblistabarth/schemapify`).
+- **de Berg, van Kreveld and Schirra 1998**, "Topologically correct
+  subdivision simplification using the bandwidth criterion", *CaGIS*
+  25(4):243-257, doi:10.1559/152304098782383007. Read: the abstract, and the
+  full text of the conference version, "A new approach to subdivision
+  simplification", Auto-Carto 12 (1995), from p. 79 (open at cartogis.org).
+  The subdivision is cut into **chains between junctions** (vertices of
+  degree three or more) and leaves; "Keep the positions of all leafs and
+  junctions fixed"; each chain is simplified so that no point of it is
+  further than ε from its simplification, it does not cross itself or other
+  chains, and a set of points stays on the same side, where "we temporarily
+  add to the set P of points all vertices of other chains of the
+  subdivision". O(n(n + m) log n) per chain. **Gives:** exactly this
+  increment's frame: chains between fixed junctions, other chains' vertices
+  as side points. **Does not:** keep area (vertices are a subset of the
+  input, no Steiner points); its ε is one-sided (source to simplification).
+- **Saalfeld 1999**, "Topologically consistent line simplification with the
+  Douglas-Peucker algorithm", *CaGIS* 26:7-18,
+  doi:10.1559/152304099782424901. Read: the abstract. A test added to the
+  stopping condition of Douglas-Peucker-like (vertex-subset) algorithms keeps
+  the line consistent with itself and its neighbours; a dynamic convex hull
+  finds conflicts. **Gives:** the side-of-feature idea for vertex subsets.
+  **Does not:** keep area; no Steiner points.
+- **Estkowski and Mitchell 2001**, "Simplifying a polygonal subdivision
+  while keeping it simple", *Proc. 17th SoCG*, pp. 40-49,
+  doi:10.1145/378583.378612. **It exists** (the probe cited it from memory;
+  checked by DOI in OpenAlex and Semantic Scholar). Read: the abstract.
+  Simplifying a subdivision within an error bound, keeping its topology, with
+  no Steiner points, is MIN PB-complete: unless P = NP no polynomial
+  algorithm comes within a factor n^(1/5) of the fewest vertices; heuristics
+  work well in practice. **Gives:** why this increment is greedy and claims
+  no minimum.
+- **Guibas, Hershberger, Mitchell and Snoeyink 1993**, "Approximating
+  polygons and subdivisions with minimum-link paths", *Int. J. Comput. Geom.
+  Appl.* 3(4):383-415 (UBC TR-92-05). Read: the abstract. Fatten the object
+  (convolve with disks: a band) and approximate inside it; for subdivisions or
+  chains with no self-intersections the best approximation is NP-hard.
+- **Mendel 2018**, "Area-preserving subdivision simplification with topology
+  constraints: exactly and in practice", *ALENEX 2018*, pp. 117-128,
+  doi:10.1137/1.9781611975055.11. Read: the abstract. Removes degree-two
+  vertices so that given points stay in their faces, each face's area
+  changes by at most a factor, and the lines stay within ε; heuristic for
+  continental instances in seconds, ILP for city-size optimum. **Gives:** the
+  nearest published combination (area, distance, topology on a subdivision).
+  **Does not:** keep area exactly (bounded factor), and adds no Steiner
+  points.
+- **Haunert and Wolff 2010**, "Area aggregation in map generalisation by
+  mixed-integer programming", *IJGIS* 24(12):1871-1897,
+  doi:10.1080/13658810903401008. Read: the abstract. Merging areas too small
+  for the target scale into neighbours, minimising class change, is NP-hard;
+  MIP with heuristics. **Gives:** the method if small pieces are ever to be
+  merged (section 5.2 rules against it for now).
+- **JTS/GEOS `CoverageSimplifier` (Davis 2023)**, what `--features-tolerance`
+  calls today through shapely 2.2.0 on GEOS 3.14.1. Read: the JTS source
+  (`CoverageSimplifier.java`, `TPVWSimplifier.java`, `CoverageRingEdges.java`,
+  master). Coverage edges are cut at nodes ("inner vertices shared by three
+  or more polygons, or boundary vertices shared by two or more") and simplified once
+  each; Visvalingam-Whyatt by corner area against the *current* line, so
+  removals compound; a corner is removable if no vertex of a nearby edge lies
+  in its triangle; "Rings smaller than the area tolerance are removed where
+  possible"; the tolerance "equates roughly to the maximum distance" and is
+  "the square root of the area tolerance". **Gives:** the edge extraction and
+  the vertex-in-corner test this design mirrors. **Does not:** bound the
+  distance (the probe measured 3.25 times) or keep any area.
+- **Visvalingam and Whyatt 1993**, *Cartographic J.* 30:46-51,
+  doi:10.1179/000870493786962263, and **Bose, Cabello, Cheong, Gudmundsson,
+  van Kreveld and Speckmann 2006**, *J. Discrete Algorithms* 4(4):554-566,
+  doi:10.1016/j.jda.2005.06.008: the baseline and the fewest-vertex
+  area-preserving path, as in `docs/increments/22-auto-catchment.md`.
+- **CORINE Land Cover 2018** product page (Copernicus Land Monitoring
+  Service, `land.copernicus.eu/en/products/corine-land-cover/clc2018`):
+  positional accuracy "100 m or better", thematic accuracy "≥ 85%", "25
+  ha/100 m" (minimum mapping unit 25 ha, minimum width 100 m).
+
+**What this increment takes and where it departs.** The frame is de Berg,
+van Kreveld and Schirra's (chains between fixed junctions, other chains'
+vertices as side points); the operation is Kronenfeld et al.'s collapse,
+which keeps both neighbours' areas exactly; the band is a two-sided Hausdorff
+bound checked by a new, cheap test (section 7). Departures, each with its
+reason: (a) the stopping rule is the band, not a count or displacement,
+because Ola asked for a band; (b) the priority is the band deviation, as in
+`reduce_ring`, not areal displacement, so the two reductions behave alike;
+(c) the placement tries both of APSC's lines and keeps the one with the
+smaller deviation (APSC picks by a geometric rule); no guarantee is lost,
+since any point on the equal-area line keeps the area; (d) all chains are
+simplified in one global order with a shared crossing index, not one chain
+at a time against fixed others.
+
+### Novelty
+
+Searched (2026-10-08): the papers above and their citing work; web searches
+for area-preserving simplification of subdivisions, coverages and shared
+boundaries (2019-2026), and for follow-ups to APSC. Found: exact area with
+topology (APSC, Buchin et al.), a band with topology and no Steiner points
+(de Berg et al., Estkowski and Mitchell), a bounded area factor with a band
+and no Steiner points (Mendel). Not found: a coverage simplifier that keeps
+every face's area exactly *and* holds a two-sided Hausdorff band, with
+topology, using Steiner points. Nor the check of section 7 (anchors on the
+source, which turn vertex-to-segment tests into a proved Hausdorff bound at
+the cost of today's test). **No novelty is claimed here.** Two limits on the
+search: the full texts of Kronenfeld et al. and Buchin et al. were not read,
+and Mendel 2018 only by its abstract. A write-up that wants to claim the
+combination must read those three first.
+
+### Legacy
+
+Nothing to carry. The archive's simplification is CGAL's 3-D mesh edge
+collapse, not vector borders:
+
+```
+$ git grep -il -E 'simplif|douglas|visvalingam|coverage|land.?cover|corine' legacy-archive -- legacy
+legacy-archive:legacy/bindings.cpp
+legacy-archive:legacy/rasputin/application.py
+legacy-archive:legacy/rasputin/geo_tiff_reader.py
+legacy-archive:legacy/rasputin/globcov_repository.py
+legacy-archive:legacy/rasputin/gml_repository.py
+legacy-archive:legacy/rasputin/land_cover_repository.py
+legacy-archive:legacy/rasputin/mesh.py
+legacy-archive:legacy/rasputin/tin_repository.py
+legacy-archive:legacy/rasputin/triangulate_dem.h
+legacy-archive:legacy/rasputin/web_visualize.py
+legacy-archive:legacy/rasputin/wfs_repository.py
+legacy-archive:legacy/tests/test_gml_repository.py
+legacy-archive:legacy/tests/test_land_cover_repository.py
+$ git grep -n -i -E 'simplif|douglas|visvalingam' legacy-archive -- legacy
+```
+
+The second grep's hits are all `CGAL::Surface_mesh_simplification`
+(Lindstrom-Turk edge collapse of the 3-D TIN, `legacy/bindings.cpp`,
+`legacy/rasputin/triangulate_dem.h`) and the Python `simplify(ratio=...)`
+calls on it; the land-cover files match on "land cover", not on
+simplification.
+
+## 3. How `reduce_ring` works today, and what carries over
+
+`terrain::vector_simplify::reduce_ring<K>`
+(`include/terrain/vector_simplify/area_collapse.hpp`, bound as
+`_core.reduce_ring`, used by `catchment.py` for the auto-catchment outline),
+read from the code:
+
+1. Input: one closed ring, counter-clockwise, open (first vertex not
+   repeated), a tolerance, and keep-points (the catchment seed).
+2. A collinear pass drops every vertex exactly between its neighbours
+   (`include/terrain/vector_simplify/area_collapse.hpp@b39426c0:177`).
+3. The ring is a doubly linked list. Each current edge stands for a range of
+   fine (source) vertices: `start` and `count`.
+4. For each vertex B, with A before it and C, D after: the candidate point E
+   lies on line A-B or on line C-D, where the triangle fan A-E-D has the
+   signed area of A-B-C-D (or on the foot of B-C's midpoint when both lines
+   are parallel to A-D), and the one with the smaller deviation is kept
+   (`include/terrain/vector_simplify/area_collapse.hpp@b39426c0:226-245`). Replacing B, C by E keeps the
+   ring's area up to rounding.
+5. The deviation (`deviation_of`, `include/terrain/vector_simplify/area_collapse.hpp@b39426c0:131-151`): the
+   best split of the fine range between A-E and E-D, the largest distance of
+   a fine vertex to its edge; and E's distance to the *nearest fine segment
+   anywhere in the range* (`include/terrain/vector_simplify/area_collapse.hpp@b39426c0:146-149`).
+6. A global heap ordered by (deviation, id); a candidate over the tolerance
+   is never queued; the loop stops at four vertices.
+7. At pop: A-E and E-D are tested with the exact `noding::classify` against
+   every current edge in the grid cells of the box of A, E, D (touching only
+   where they share an end), and every keep-point must have winding number
+   zero about A-B-C-D-E and lie on neither new edge
+   (`include/terrain/vector_simplify/area_collapse.hpp@b39426c0:275-312`).
+8. Apply, then re-evaluate the four candidates whose vertices changed.
+   Serial; the output depends only on the input.
+
+**Can it run per shared border, keeping both neighbours' areas?** Yes, with
+four changes; the prototype of section 4 made them and measured the result.
+
+- *Both areas.* The collapse keeps the signed area between the old chain
+  A-B-C-D and the new A-E-D at zero. That region's area is what one side of
+  the border gains and the other loses, so both neighbours keep their area,
+  and so does every face, since every face is bounded by borders. Nothing
+  new is needed: the same area rule.
+- *Fixed ends.* A border runs from junction to junction. A junction (a
+  vertex where three or more borders meet, or where a border meets the
+  outline) never moves: it may be A or D, never B or C. A border with no
+  junction (an island's whole outline) is a closed chain, as today's ring.
+- *Topology across the coverage.* One crossing index over all borders. Two
+  tests per collapse: (i) A-E and E-D cross or touch no edge of any border,
+  except at a shared end (A with its own neighbour and with other borders'
+  first edges at junction A; D likewise); (ii) **no vertex of any other
+  border, and no vertex of this border outside A..D, lies in the region
+  swept** (winding number about A-B-C-D-E not zero) **or on A-E or E-D**.
+  Test (ii) is today's keep-point test with every nearby vertex as a
+  keep-point; it is de Berg et al.'s "all vertices of other chains" and
+  JTS's vertex-in-corner test. Without it, a border could sweep over a small
+  island whole, crossing nothing: the island would change face.
+- *The band, enforced.* Today's deviation is not a distance bound: E is
+  checked against the nearest fine segment anywhere in the range, so the
+  fine segment that straddles the split may pass further from the new chain
+  than the tolerance. `docs/increments/22-auto-catchment.md` records this
+  ("Measured, not guaranteed: the Hausdorff distance", with an open
+  question for Ola). The prototype hit it on CORINE: one border of the
+  German case at 58.6 m with a 50 m band. Section 7's anchored check closes
+  it with a proof, at today's cost.
+
+## 4. The evidence: a prototype on the German fused case
+
+A throwaway Python prototype (not production code):
+`docs/benchmarks/2026-10-08/clc-simplify/design-probe/border_apsc.py`. It
+re-enacts the land-cover stage (CORINE moved to EPSG:25832, clipped to the
+fused outline, `coverage_clean` at 1 m, one polygon per class), cuts the
+coverage into borders between junctions (by exact coordinates; an edge used
+by one ring is on the outline and stays fixed), runs the collapse of section
+3 with the four changes in floating point, rebuilds the polygons and writes
+a GeoJSON; then `runs.sh` meshes each with today's `rasputin mesh`
+(`--features-tolerance 0`, so the stage only repairs, merges and applies the
+outline rule). Mac on AC power. Output: `prototype.txt` and `meshes.txt` in
+that folder; meshes in
+`rasputin_scratch/germany/isar-loisach/clc_simplify/proto/`.
+
+The coverage: 18 classes in 819 pieces, 151 579 ring vertices, 1 576
+junctions, 2 393 borders (481 on the outline, fixed; 27 closed).
+
+| band | polygon vertices | collapses | refused by topology | largest class area change | Hausdorff source to simplified, max | simplified to source, max | ground now in another class |
+|---|---|---|---|---|---|---|---|
+| 0 | 152 426 | 0 | 0 | 2e-13 % | 0 | 0 | 0 |
+| 20 m | 53 082 | 49 672 | 17 | 2.4e-11 % | 20.0 m | 20.0 m | 13.7 km² (1.15 %) |
+| **50 m** | **31 878** | 60 274 | 46 | 2.6e-11 % | **50.0 m** | **50.0 m** | 40.2 km² (3.36 %) |
+| 100 m | 20 430 | 65 998 | 145 | 5.8e-11 % | 100.0 m | 99.7 m | 77.9 km² (6.52 %) |
+| 50 m, today's check (section 3) | 31 866 | 60 280 | 52 | 2.6e-11 % | **58.6 m** (1 border) | 50.0 m | 40.2 km² |
+
+Every output is a valid coverage (`shapely.coverage_is_valid`) of valid
+polygons. Hausdorff: each border's source and simplified polyline, both
+`segmentize`d to 0.5 m, every point's distance to the other line.
+
+**Ground in another class** is the area where the simplified class polygon
+lies outside its source (the probe's "labelled with a different class",
+here measured on the polygons before meshing, not on a mesh). It is the
+price of any band: border length times mean displacement. At 50 m it is
+3.4 % of the catchment, every class's total unchanged, and it lies within
+CORINE's own positional accuracy (100 m). For comparison, the probe
+measured today's switch on meshes: 0.7 % at FT 30 (borders moved up to
+147 m) and 4.9 % at FT 100 (up to 325 m), class totals off by up to 1.9 %.
+
+## 5. Rulings on the four research questions
+
+### 5.1 Per shared border
+
+Yes: section 3's four changes. The pieces are published (section 2); the
+anchored band check is this design's.
+
+### 5.2 Small pieces: not merged
+
+Of the 819 pieces, 169 are under CORINE's 25 ha minimum mapping unit (7.09
+km² in all), and **160 of them touch the outline**: they are the cut-off
+edges of larger CORINE polygons, real ground of that class, not mapping
+noise. (CORINE maps nothing under 25 ha; where the other 9 come from was
+not checked.) They hold 3 017 of 151 579 vertices (2 %). Ruling: **no
+merge**. Merging would relabel real ground and break the exact class area
+Ola ruled, for 2 % of the vertices. The collapse cannot shrink a piece
+away (its area is kept), and a closed border keeps at least four vertices.
+If a merge is ever wanted, Haunert and Wolff 2010 is the method, as its own
+increment.
+
+### 5.3 The band in plan, not over the DEM
+
+Ruling: **2-D**. Reasons:
+
+- The height accuracy is the refinement's job, and it is kept: every DEM
+  node inside the mesh is checked against its triangle whatever the borders
+  are, and refinement puts points back on a border where the terrain needs
+  them (increment 20b inserts on constraint segments). Measured: at 10 m
+  vertical tolerance the 50 m band's mesh is 291 932 triangles at 15°
+  against 268 175 with no land cover at all (+9 %); the terrain decides.
+- A 3-D band could only keep more vertices than the refinement asks for.
+- CORINE's accuracy is planar (100 m positional).
+- On the mesh without height refinement a 3-D band would buy height, but
+  the probe showed that borders are not the fix for that error: the 50 m
+  band's minimal mesh has 30 266 triangles and a largest height error of
+  779 m, against 150 622 and 777 m unsimplified.
+- It keeps the vector kernel free of the raster.
+
+### 5.4 The start angle with land cover: measured
+
+`--start-min-angle` (θ), German case, the 50 m band, 50 m vertical
+tolerance (`meshes.txt`):
+
+| θ | triangles | under 1° | under 10° | worst angle |
+|---|---|---|---|---|
+| 0° | 43 288 | 0.18 % | 6.57 % | 0.069° |
+| **15°** | **53 177** | 0.05 % | 2.83 % | 0.473° |
+| 20° | 61 364 | 0.04 % | 2.36 % | 0.473° |
+| 25° (default) | 72 125 | 0.02 % | 1.87 % | 0.574° |
+| 25°, gain 2 / 5 / 10 | 65 141 / 59 194 / 54 358 | 0.09 / 0.11 / 0.11 % | 2.05 / 2.70 / 3.83 % | 0.239° |
+| no land cover, 0° / 15° / 25° | 23 684 / 23 726 / 23 912 | 0.00 % | 0.98 / 0.90 / 0.85 % | 1.18° |
+
+Without land cover the start pass costs 1 %; with land cover it is all at
+the borders: +67 % at 25°, +23 % at 15°. 15° keeps most of the gain in
+slivers (under 10°: 6.57 % to 2.83 %, against 1.87 % at 25°) for a third of
+the cost. Raising the quality gain (increment 20c) at 25° leaves more
+slivers than lowering θ for about the same triangle count (gain 10: 54 358
+triangles, 0.11 % under 1°, 3.83 % under 10°; θ 15°: 53 177, 0.05 %,
+2.83 %). At 20 m: 117 127 at 15° against 130 613 at 25°; at
+10 m: 291 932 against 298 786.
+
+**Proposed default: 15° when the land-cover stage ran, 25° otherwise; an
+explicit `--start-min-angle` always wins** (question 1). Land cover only,
+so every mesh without it, and every stored benchmark baseline without it,
+stays bit for bit. Measured on this one case: the scale it assumes is a
+30 m DEM and CORINE; the largest input checked is this case.
+
+## 6. The blueprint
+
+### Data flow
+
+```
+cli.py mesh
+  | --features-tolerance BAND (default 50 m; 0 = off)  -> FeatureRequest.tolerance_m
+  v
+feature_input._clean(cover, region, ask)                       [Python, shapely]
+  1. clip each coded polygon to   ask.tolerance_m > 0 ? the domain polygon
+                                                      : the read region (today)
+  2. coverage_clean (repair, today)  3. merge by class (today)
+  4. ask.tolerance_m > 0: border_simplify.simplify_borders(polys, band)   (new;
+     replaces shapely.coverage_simplify: feature_input.py line 434 at b39426c0)
+  5. snap_to_outline (today)  -> lines and label polygons, as today
+                                    |
+border_simplify.simplify_borders(polygons, band) -> BorderResult      [Python]
+  polygons -> flat (N, 2) float64 points + ring starts (+ which ring is
+  which part's shell or hole, which part which polygon, kept in Python)
+                                    |
+_core.simplify_borders(points, ring_starts, band) -> BorderOutcome   [binding,
+                                    |                                 GIL released]
+terrain::vector_simplify::simplify_borders<K>(...)                   [C++]
+  a. vertices identified by exact coordinates; edges counted by ring use
+  b. junctions; borders (chains) between them; each ring as a list of
+     (border, direction)
+  c. the collapse loop of section 3 over all borders at once
+  d. rings rebuilt from their borders: same rings, same order, same
+     orientation
+                                    |
+  <- points + ring starts; Python rebuilds the same polygons, parts, holes
+```
+
+Step 1's domain clip, when the band is on, makes the domain outline the
+coverage's outer boundary; its edges are used by one ring, so they are fixed,
+and every class's area **inside the domain** is kept exactly. Clipping to
+the read region instead would let a collapse straddle the outline and move
+area across it. With the band off, step 1 is today's, so `--features-tolerance
+0` keeps today's mesh bit for bit. The outline rule (step 5) still moves
+borders within 5 m of the outline onto it, and reports the area it moved
+(`area_changed`), as today.
+
+### The C++ interface
+
+New header `include/terrain/vector_simplify/border_collapse.hpp`, beside
+`area_collapse.hpp`, whose `detail::segment_distance` and `detail::EdgeGrid`
+it reuses as they are (all borders' vertices live in one array, so the
+grid's vertex ids are global). `reduce_ring` is not changed in this
+increment.
+
+```cpp
+namespace terrain::vector_simplify {
+enum class BorderStatus : std::uint8_t { Ok, InvalidBand, BadRings };
+struct BorderCounts {
+    std::size_t junctions{}, borders{}, fixed_borders{};
+    std::size_t collinear{}, collapses{};
+    std::size_t rejected_crossing{}, rejected_side{};
+};
+struct BorderOutcome {
+    std::vector<Point2> points;            // every ring, open, back to back
+    std::vector<std::uint64_t> ring_starts; // ring k is [starts[k], starts[k+1])
+    BorderStatus status{BorderStatus::Ok};
+    BorderCounts counts{};
+};
+template <pred::GeometryKernel K>
+[[nodiscard]] BorderOutcome simplify_borders(std::span<const Point2> points,
+                                             std::span<const std::uint64_t> ring_starts,
+                                             double band);
+}
+```
+
+- Input rings are open (first vertex not repeated), any orientation, at
+  least three vertices; `ring_starts` has one entry per ring plus the end.
+  `BadRings` otherwise (and for a non-finite coordinate); `InvalidBand` for a
+  negative or non-finite band. On a refusal, `points` and `ring_starts` are
+  empty.
+- Output: the same number of rings in the same order, each with the same
+  orientation; a ring may start at a different vertex (its first vertex may
+  have been collapsed).
+- `band == 0` returns the input unchanged, bit for bit.
+- Pure: no state outside the call, thread-safe, deterministic (heap ordered
+  by deviation, then vertex id).
+- The edge rule: an edge used by exactly two rings is a shared border edge;
+  an edge used by one ring (the outline) or by three or more (a broken
+  coverage) is **fixed**. A junction is a vertex with other than two distinct
+  incident edges, or whose two edges are not used by the same rings. So an
+  input that is not edge-matched to the bit is simplified less, never wrongly.
+
+### The Python interface
+
+New module `src_python/tin_engine/border_simplify.py`, no I/O:
+
+```python
+@dataclass(frozen=True, slots=True)
+class BorderResult:
+    polygons: tuple[BaseGeometry, ...]   # same count and order as the input
+    counts: BorderCounts                 # the binding's counts
+
+def simplify_borders(polygons: Sequence[BaseGeometry], band_m: float) -> BorderResult: ...
+```
+
+It raises `ValueError` on a refusal status, with the status in plain words.
+
+### What replaces `--features-tolerance`
+
+Nothing beside it: **the flag keeps its name and changes its meaning**.
+Today: "simplify land-cover borders by this much", a GEOS area threshold's
+square root, default 0. Now: the band, a distance no border moves past, each
+class's area kept, **default 50**. `shapely.coverage_simplify` is no longer
+called. The help text becomes "Metres: move land-cover borders at most this
+far to simplify them, each class keeping its area; 0 is off. Default: 50.";
+the record's `features_tolerance_m` sentence becomes "Land-cover borders
+moved at most this far, each class's area kept (0 = off)". The record and
+`--stats` key `features_tolerance_m` stay. Metres in the mesh's projected
+CRS, as every other land-cover flag (a geographic DEM already needs
+`--out-crs`).
+
+The band applies wherever today's flag did: to every source whose class map
+has codes (`corine`, `corine-water`), the polygons the land-cover stage
+cleans. 50 m is half CORINE's positional accuracy; it assumes CORINE
+(1:100 000) and was checked on the German case (1 195 km², 151 579
+vertices). A future source with its own accuracy (NMD, 10 m) would carry its
+own default; not this increment.
+
+The start angle: `src_python/tin_engine/cli.py@b39426c0:988` picks `DEFAULT_START_MIN_ANGLE`; it
+picks a new `LANDCOVER_START_MIN_ANGLE = 15.0` instead when the land-cover
+stage ran (`FeatureSet.cover_vertices is not None`) and no
+`--start-min-angle` was given. The record's `start_min_angle_deg` already
+says which was used. The `--start-min-angle` help gains "Default: 25, or 15
+with land cover."
+
+### Assessment against the architect's criteria
+
+Data and execution apart: the band is a field of the frozen
+`FeatureRequest`; the kernel takes a number. State: the kernel is a pure
+function, the binding releases the GIL. Dependencies: none new (shapely and
+the kernel already present; CLAUDE.md §2 untouched). Async: one synchronous
+call inside feature reading, which already runs off the event loop.
+
+## 7. Guarantees and the checks that enforce them
+
+1. **Every class keeps its area; so does every polygon part**, up to the
+   rounding of E (measured: 6e-13 relative at 100 m). Mechanism: section 3.
+   Before the outline rule; the outline rule then changes area by what it
+   reports.
+2. **The band, two-sided.** For every border, the Hausdorff distance between
+   its source polyline γ and its simplification is at most the band ε.
+   Enforced by **anchors**: every simplified vertex V carries an anchor F, a
+   point of γ, with |V − F| ≤ ε; the anchors are in order along γ; an
+   original vertex is its own anchor; junctions are fixed and their own
+   anchors. A collapse A-B-C-D to A-E-D is allowed only if E's anchor F_E
+   (the point nearest E on one source segment, tried for each segment
+   between F_A and F_D) has |E − F_E| ≤ ε, every source vertex between F_A
+   and F_E is within ε of segment A-E, and every one between F_E and F_D
+   within ε of E-D. The cost per candidate is today's: one pass over the
+   range with prefix and suffix maxima.
+
+   *Why that bounds Hausdorff.* Take an edge S = V-W with anchors F_V, F_W
+   and γ' the part of γ from F_V to F_W. (a) γ' lies within ε of S: its
+   inner vertices by the check, F_V and F_W because they are within ε of V
+   and W, and every point of a segment of γ' because the distance to a
+   segment is convex. γ is the union of such parts, so γ is within ε of the
+   simplification. (b) Every point P of S is within ε of γ'. Measure x along
+   S from V (x = 0) to W (x = L). If γ' has points with x ≤ x_P and with
+   x ≥ x_P, it is connected, so some X on it has x_X = x_P; X is within ε of
+   S and 0 ≤ x_P ≤ L, so its nearest point on S is P, and |X − P| ≤ ε.
+   Otherwise all of γ' lies beyond P, say x > x_P (the other side is the
+   same with W): then 0 ≤ x_P < x_{F_V}, and with h the offset of F_V from
+   the line, |F_V − P|² = (x_{F_V} − x_P)² + h² ≤ x_{F_V}² + h² =
+   |F_V − V|² ≤ ε². ∎
+3. **Topology.** The output is a valid coverage with the same polygons,
+   parts and holes, every part in the same face relations: each border
+   keeps the same two neighbours, each junction the same borders around it,
+   each island its enclosing face. Mechanism: tests (i) and (ii) of section
+   3. With both, no other edge can reach into the swept region: entering it
+   means crossing A-E or E-D (the old edges A-B, B-C, C-D are crossed by
+   nothing, the input being planar), or ending inside it, or leaving a
+   junction A or D into it and then doing one of those. So the sweep from
+   A-B-C-D to A-E-D passes over nothing.
+4. **Fixed:** junctions, and the coverage's outer boundary (the domain
+   outline when the band is on), at their input coordinates bit for bit.
+5. **Not guaranteed:** the fewest vertices (greedy; the problem is hard,
+   section 2); that the swept regions are small (the band bounds distance,
+   not relabelled area, which section 4 measures).
+
+## 8. Degeneracies
+
+- Exactly collinear runs inside a border: dropped first, as today (distance
+  0, area unchanged); never at a junction.
+- A border of two or three vertices: no collapse is possible (a collapse
+  needs four); it stays.
+- A closed border (an island, or a loop through one junction): keeps at
+  least four vertices, as `reduce_ring` does; a loop's junction never moves.
+- A lens (two borders between the same two junctions): each keeps at least
+  three vertices; the area keeps the lens open, tests (i) and (ii) keep the
+  two apart.
+- E exactly on another edge or vertex: `classify` says Touching or
+  Overlapping, the collapse is refused (exact predicates).
+- E undefined (A-B or C-D parallel to A-D): that line is skipped; both
+  parallel: the midpoint foot, as today.
+- Coordinates −0.0 and 0.0 are the same vertex.
+- Polygons from `coverage_clean` that are still not edge-matched to the bit:
+  their unmatched edges are fixed (section 6).
+
+## 9. Tests `@tester` writes red first
+
+**C++, `tests/cpp/unit/test_border_collapse.cpp` — the invariant-critical
+suite of this increment** (README, cost constraints). Mutation targets its
+kill record must cover: M1 drop test (ii), the swept-region side test; M2
+test crossings against the border's own edges only; M3 let a junction be B
+or C; M4 replace the anchored check by `deviation_of`'s (E against any
+segment in the range); M5 place E on the wrong side of the equal-area line
+(sign of the area flipped).
+
+1. Two squares sharing a zig-zag border: both areas kept (relative 1e-12);
+   the border within the band both ways (oracle: points sampled every 1/1000
+   of each polyline's length plus every vertex, distance to the other line;
+   a lower estimate of the Hausdorff distance, so it cannot be red on a
+   correct output); fewer vertices than the input.
+2. **The overshoot case** (kills M4): the CORINE border saved as
+   `docs/benchmarks/2026-10-08/clc-simplify/design-probe/overshoot_fixture.json`
+   (177 vertices, local origin, 1 cm; `iso.py` there shows today's check
+   gives 58.7 m against a 50 m band on it alone, the anchored check 48.3 m),
+   closed into two polygons by a frame far outside the band; band 50 m;
+   both directions within 50 m.
+3. Three polygons meeting at a junction, and a junction on the outer
+   boundary: junctions unchanged bit for bit (kills M3); outer-boundary
+   edges unchanged.
+4. An island inside a polygon: the island's ring and the hole's ring come
+   out as the same points in opposite order; both areas kept; at least four
+   vertices.
+5. A small island next to a border with a wide bulge, placed so that the
+   bulge's collapse sweeps over the whole island without crossing it: the
+   island stays in its face (kills M1).
+6. Two borders of different polygon pairs running side by side closer than
+   the band: no crossing in the output (kills M2).
+7. A junction A where another border leaves into the region the collapse
+   would sweep: refused.
+8. Area sign: an asymmetric chain where E on the wrong side changes the
+   area (kills M5; test 1's area check may already).
+9. Refusals: band −1, NaN, ∞ → `InvalidBand`; starts not increasing, a ring
+   under three vertices, last start not the point count, a NaN coordinate →
+   `BadRings`; empty output on refusal.
+10. Band 0: output equals input bit for bit. Same input twice: same bits.
+11. Degeneracies of section 8: a collinear run, two- and three-vertex
+    borders, a lens, an edge used three times (fixed), two rings that differ
+    by 1e-9 on a shared border (their edges fixed, no crash).
+
+**Python, `tests/python/test_border_simplify.py`** (the binding and the
+adapter, shapely as the oracle):
+
+12. On a small coverage (hand-made, or a committed CORINE clip if one is
+    in the test data): `shapely.coverage_is_valid` after; same number of
+    polygons, parts, holes; each part's area within 1e-9 relative; each
+    class's boundary Hausdorff to its source (`hausdorff_distance` with
+    `densify`) at most the band plus 1e-6 m; the set of class pairs that
+    share a border unchanged; every junction point present in the output.
+13. `simplify_borders` raises `ValueError` naming the refusal.
+
+**CLI, amendments to `tests/python/test_cli_features_cleanup.py` and the
+land-cover CLI suites:**
+
+14. The default: record and `--stats` say `features_tolerance_m` 50;
+    `--features-tolerance 0` gives today's mesh bit for bit (the region clip
+    and no simplification).
+15. With land cover and no `--start-min-angle`: `start_min_angle_deg` 15;
+    without features: 25; `--start-min-angle 25` with land cover: 25.
+16. Existing tests that assume the old default (0) or the old meaning
+    (Visvalingam-Whyatt) are updated in the red commit, each with the reason
+    in the message.
+
+## 10. Size, split point, speed
+
+Real sizes to scale from: `reduce_ring`'s green commit `ac778e43` counted
+403 lines (`python3 tools/count_loc.py ac778e43^ ac778e43`): 286 in
+`area_collapse.hpp`, 46 binding, 22 stub, 49 Python. The prototype's
+collapse loop is 128 Python lines plus 25 for the anchored check, its
+border extraction 54, its rebuild 22.
+
+| part | counted lines (estimate) |
+|---|---|
+| `border_collapse.hpp`: extraction of junctions and borders, ring rebuild | 80-100 |
+| `border_collapse.hpp`: the collapse loop over many borders, anchored band, tests (i) and (ii) | 230-280 |
+| binding and `_core.pyi` | 60-75 |
+| `border_simplify.py` (polygons to arrays and back) | 30-45 |
+| `feature_input._clean`, `cli.py` (flag text, default, start angle), record text | 20-30 |
+| **total** | **420-530** |
+
+Under 700 in one PR. **Split point** if the red suite pushes the estimate
+past 600: PR A, the kernel, binding, stub and `border_simplify.py` (nothing
+the user sees changes); PR B, the wiring, the 50 m default and the 15° start
+angle.
+
+**Speed, one line:** O(n log n) in the border vertices; the Python prototype
+took 8 s for 60 000 collapses, and the C++ kernel is expected well under the
+clean-up's 1.1 to 1.4 s (`reduce_ring` does the same work per collapse),
+while the mesh it feeds is 5.7 times smaller at 50 m (1.6 times at 10 m), so
+the whole run should get faster. Not measured: no C++ exists yet. This is not refine or mesh code, so no `bench.py` acceptance run;
+the default changes every land-cover mesh, so the main session should have
+`@perf` run `tools/bench_quick.py` (its Lagan case has CORINE) once, to
+time the new stage and see the run get faster, and to note that Lagan's
+baseline moves.
+
+## 11. Expected effect on the German fused case
+
+Triangles (`meshes.txt`, the prototype's borders meshed by today's
+`rasputin mesh`; "today" is the probe's FT 0 at the default 25°):
+
+| vertical tolerance | today (25°) | 50 m band, 25° | **50 m band, 15° (proposed)** | 50 m band, 0° | no land cover (25°) |
+|---|---|---|---|---|---|
+| none (minimal) | 150 697 | 30 266 | 30 266 | 30 266 | 513 |
+| 50 m | 303 470 | 72 125 | **53 177** | 43 288 | 23 912 |
+| 20 m | 336 943 | 130 613 | **117 127** | 110 665 | 96 189 |
+| 10 m | 462 120 | 298 786 | **291 932** | 289 200 | 267 748 |
+
+At 50 m, 5.7 times fewer triangles than today; at 10 m, 1.6 times, the
+terrain deciding. The minimal mesh's height error stays (779 m): that is
+`--tolerance`'s to fix, not the borders'.
+
+## 12. Questions for Ola
+
+1. **The start angle with land cover.** 15° when land cover is in the mesh,
+   25° otherwise (section 5.4: +23 % triangles at 50 m instead of +67 %,
+   under-1° triangles 0.05 % instead of 0.02 %). Alternatives: 15° for every
+   mesh (measured to cost nothing either way without land cover here, but
+   changes every mesh and benchmark), or 25° everywhere. **Default: 15° with
+   land cover only.**
+2. **The catchment outline gets the same band check.** `reduce_ring`'s band
+   can be passed by up to half a source segment
+   (`docs/increments/22-auto-catchment.md`, "Measured, not guaranteed: the
+   Hausdorff distance", left open for you). The anchored check of section 7
+   proves the band at the same cost. Outlines would change slightly.
+   **Default: yes, as its own small pull request after this one.**
+3. **Lakes-only CORINE (`corine-water`) gets the band too.** **Default: yes,
+   50 m, same source accuracy.**
+
+## 13. ROADMAP
+
+Row 32 added: designed, this file.

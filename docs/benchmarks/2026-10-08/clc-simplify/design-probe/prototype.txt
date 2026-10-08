@@ -1,0 +1,55 @@
+== band 0 m
+prep 1.1 s; valid coverage: True
+pieces 819; under 25 ha 169 (7.09 km2), of which touch outline 160; vertices of small pieces 3017
+vertices 151579, distinct edges 76269, nodes 1576
+chains 2393 (481 fixed, outline); closed 27
+simplify 0.0 m: 0.0 s, collapses 0, rejected {}
+valid polygons True; valid coverage True
+polygon vertices 152426 -> 152426
+largest class area change 1.76e-13 %
+source->simplified: max 0.0 m, over band 0 borders; simplified->source: max 0.0 m, over band 0; median Hausdorff 0.0 m
+ground with a different class: 0.00 km2 (0.00 %)
+== band 20 m
+prep 1.1 s; valid coverage: True
+pieces 819; under 25 ha 169 (7.09 km2), of which touch outline 160; vertices of small pieces 3017
+vertices 151579, distinct edges 76269, nodes 1576
+chains 2393 (481 fixed, outline); closed 27
+simplify 20.0 m: 7.6 s, collapses 49672, rejected {'topology': 17}
+valid polygons True; valid coverage True
+polygon vertices 152426 -> 53082
+largest class area change 2.43e-11 %
+source->simplified: max 20.0 m, over band 0 borders; simplified->source: max 20.0 m, over band 0; median Hausdorff 16.6 m
+ground with a different class: 13.73 km2 (1.15 %)
+== band 50 m
+prep 1.1 s; valid coverage: True
+pieces 819; under 25 ha 169 (7.09 km2), of which touch outline 160; vertices of small pieces 3017
+vertices 151579, distinct edges 76269, nodes 1576
+chains 2393 (481 fixed, outline); closed 27
+simplify 50.0 m: 8.2 s, collapses 60274, rejected {'topology': 46}
+valid polygons True; valid coverage True
+polygon vertices 152426 -> 31878
+largest class area change 2.58e-11 %
+source->simplified: max 50.0 m, over band 0 borders; simplified->source: max 50.0 m, over band 0; median Hausdorff 37.6 m
+ground with a different class: 40.21 km2 (3.36 %)
+== band 100 m
+prep 1.1 s; valid coverage: True
+pieces 819; under 25 ha 169 (7.09 km2), of which touch outline 160; vertices of small pieces 3017
+vertices 151579, distinct edges 76269, nodes 1576
+chains 2393 (481 fixed, outline); closed 27
+simplify 100.0 m: 9.4 s, collapses 65998, rejected {'topology': 145}
+valid polygons True; valid coverage True
+polygon vertices 152426 -> 20430
+largest class area change 5.75e-11 %
+source->simplified: max 100.0 m, over band 0 borders; simplified->source: max 99.7 m, over band 0; median Hausdorff 65.8 m
+ground with a different class: 77.93 km2 (6.52 %)
+== band 50 m, unanchored
+prep 1.1 s; valid coverage: True
+pieces 819; under 25 ha 169 (7.09 km2), of which touch outline 160; vertices of small pieces 3017
+vertices 151579, distinct edges 76269, nodes 1576
+chains 2393 (481 fixed, outline); closed 27
+simplify 50.0 m: 7.9 s, collapses 60280, rejected {'topology': 52}
+valid polygons True; valid coverage True
+polygon vertices 152426 -> 31866
+largest class area change 2.58e-11 %
+source->simplified: max 58.6 m, over band 1 borders; simplified->source: max 50.0 m, over band 0; median Hausdorff 37.6 m
+ground with a different class: 40.24 km2 (3.37 %)
