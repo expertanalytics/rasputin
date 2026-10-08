@@ -916,9 +916,16 @@ TEST_CASE("10. pure: four threads at once give the first run's bits",
     const BorderOutcome first = run_flat(o.points, o.starts, 50.0);
     std::vector<BorderOutcome> outs(4);
     {
+        // The workers call the kernel directly, not run_flat: run_flat's
+        // identity check uses Catch2's INFO and CHECK, which are not
+        // thread-safe (an ASan double free and a TSan race, found after
+        // 2fba4349). Every comparison is made on this thread.
         std::vector<std::jthread> threads;
         for (std::size_t t = 0; t < outs.size(); ++t)
-            threads.emplace_back([&, t] { outs[t] = run_flat(o.points, o.starts, 50.0); });
+            threads.emplace_back([&, t] {
+                outs[t] = simplify_borders<DefaultKernel>(std::span<const Point2>{o.points},
+                                                          std::span<const std::uint64_t>{o.starts}, 50.0);
+            });
     }
     for (const BorderOutcome& out : outs) {
         CHECK(same_bits(out.points, first.points));
