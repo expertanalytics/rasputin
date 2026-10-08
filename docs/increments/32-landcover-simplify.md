@@ -11,8 +11,9 @@ commit after it; red-step notes put in the past tense (`29fbe35c`). Code
 review round 2 asked for one more red note (Review section), fixed by
 `633808b9`; round 3 approved. `@perf`'s short timing check (`35f220b9`)
 found the runs about 70 % slower and the worst angle far lower; cause and
-fix in section 15, designed on the default of question 5 (section 12),
-which waits on Ola. Next: `@tester`'s red tests 17 to 22, `@developer`'s
+fix in section 15, designed on the defaults of question 5 (section 12),
+decided on default while Ola was away, reversible; fix-design review
+round 1 asked for changes, made in the commit after `4b810983`. Next: `@tester`'s red tests 17 to 22, `@developer`'s
 change (section 15.4), then the quick check again. Not refine or mesh
 code, so no `bench.py` acceptance run.
 
@@ -434,6 +435,10 @@ The calls, by name (today's at `src_python/tin_engine/feature_input.py@b39426c0:
   (default 1 m).
 - **Step 3:** today's `shapely.coverage_union_all` per class.
 
+*Superseded for the order of the steps by section 15.2* (the outline rule
+now runs before the domain clip and the simplifier); the reasons below for
+the domain clip still hold.
+
 Step 1's domain clip, when the band is on, makes the domain outline the
 coverage's outer boundary; its edges are used by one ring, so they are fixed,
 and every class's area **inside the domain** is kept exactly. Clipping to
@@ -824,8 +829,19 @@ the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
    time and area exactly as before 32; the 50 m band then counts from the
    borders after the rule, not before it. The other way, keeping the order
    and reworking the outline rule for borders that end on the outline, is
-   larger and touched one polygon by about 1 km² in the probe.
-   **Default: run the outline rule first.** Section 15 is designed on it.
+   larger and touched one polygon by about 1 km² in the probe. The price
+   of running the rule first: the 50 m simplifier runs after it and can
+   bring a border back within 5 m of the outline, which the rule had just
+   cleared. On Numedalslagen 7 vertices of 51 349 came back within 5 m,
+   measured without a clearance (`probe.txt`, `clearR.py`'s lines); with
+   the 1 m clearance of section 15.2 none can come closer than 1 m. Accept those, or keep them out with a second, 5 m clearance
+   against the outline only (more code, fewer collapses near the outline).
+   **Default: run the outline rule first, and accept the few vertices back
+   within 5 m.** Section 15 is designed on it.
+
+   *Decided on default while Ola was away, reversible: both parts (outline
+   rule first; the vertices back within 5 m accepted). The main session
+   took the defaults, 2026-10-08; recorded by `@architect`.*
 
 ## 13. ROADMAP
 
@@ -1004,6 +1020,13 @@ outer boundary, fixed in the simplifier, so every class keeps its area
 inside the domain. The band is now measured from the borders as repaired,
 put to the outline and clipped.
 
+**What the order gives up** (question 5, second part, decided on default).
+The simplifier runs after the rule, so it can bring a border back within
+5 m of the outline: 0 such vertices after the rule and the clip, 7 of
+51 349 after simplifying, without the clearance (`probe.txt`, `clearR.py`'s
+lines). With the clearance, none of them can come closer than 1 m to the
+outline's edges. They are accepted, and the help text says so (15.4).
+
 **Lines (step 7).** New private helper in `feature_input.py`,
 `_outline_lines(polygon, outline) -> tuple[LineString, ...]`: for every ring
 of every part, an edge lies on the outline when **one** outline segment is
@@ -1029,13 +1052,22 @@ template <pred::GeometryKernel K>
 - **At placement** (`candidate`): a placement with |E − A| or |E − D| under
   the clearance is not considered (the other line's placement still is).
 - **At pop**, beside tests (i) and (ii), over the grid cells of the box of
-  A, B, C, D, E grown by the clearance: refused if any vertex other than A,
-  B, C, D lies closer than the clearance to A-E or E-D, or E lies closer
-  than the clearance to any edge other than A-B, B-C, C-D. Distances in
+  A, B, C, D, E grown by the clearance: refused if any vertex lies closer
+  than the clearance to A-E or E-D, other than B and C (by node) and any
+  vertex at A's or D's coordinates (**by coordinate**, as test (ii)
+  excludes them, `include/terrain/vector_simplify/border_collapse.hpp@633808b9:400`:
+  the junction's copies in the other borders are other nodes at the same
+  point); or if E lies closer than the clearance to any edge other than
+  A-B, B-C, C-D. Distances in
   floating point (`detail::segment_distance`): a refusal criterion, so
   rounding can only refuse a collapse or let one through at the clearance
   to rounding; the exact tests (i) and (ii) stay as they are and still
-  decide topology. A collapse failing (i) or (ii) is counted there first.
+  decide topology. **A clearance hit does not end the scan**: the scan
+  over the cells goes on as today and ends only on a failure of (i) or
+  (ii), so a collapse failing (i) is counted under `rejected_crossing`,
+  else one failing (ii) under `rejected_side`, and only one failing
+  neither but the clearance under `rejected_clearance`. The existing
+  counts keep their meaning.
 - Clearance 0 gives today's output bit for bit (every existing test).
 - Binding: keyword `clearance: float = 0.0`; `border_simplify.simplify_borders(
   polygons, band_m, clearance_m=0.0)`; `_clean` passes `ask.repair_m`.
@@ -1073,18 +1105,35 @@ C++, `tests/cpp/unit/test_border_collapse.cpp`:
     accepts it.
 19. **E near an edge.** As 18 with E 0.5 m from the other border's edge and
     the new edges far from its vertices.
+20b. **Room to spare** (fails a check that refuses too much). Test 1's
+    two squares and test 12's hand-made coverage (the C++ copy of it, or
+    the Python test 21 on it) at band as today and clearance 1: every
+    collapse made at clearance 0 whose new edges and E are at least 2 m
+    from everything they do not touch is still made, so the output has the
+    same vertex count as at clearance 0 (`@tester` picks the shapes so that
+    this holds, and shows it at clearance 0 first); `rejected_clearance`
+    is 0. And a junction case: a border leaving a junction shared by three
+    rings, the collapse next to it with 2 m to spare, is made at
+    clearance 1 (kills M10).
 20. **Refusals and identity.** Clearance −1, NaN, ∞ → `InvalidClearance`,
     empty output; clearance 0 equals the three-argument call bit for bit on
     every existing case.
 
 Mutation targets: M7 drop the vertex-to-new-edge check; M8 drop the
-E-to-edge check; M9 drop the short-edge check at placement.
+E-to-edge check; M9 drop the short-edge check at placement; M10 exclude A
+and D from the vertex check by node number instead of by coordinate (the
+junction's copies in the other borders then sit at distance 0 from A-E and
+E-D and refuse every collapse next to a junction; test 20b's junction case
+is red); M11 refuse at a clearance twice the one given (test 20b red).
 
 Python:
 
 21. `tests/python/test_border_simplify.py`: on test 12's coverage with
     `clearance_m=1`, every output vertex not in the input is at least 1 m
-    (less 1e-9) from every edge it is not an end of.
+    (less 1e-9) from every edge it is not an end of; and the output's vertex
+    count is within 5 % of the `clearance_m=0` output's (the check does not
+    refuse what has room; `@tester` confirms the margin on the coverage and
+    states the count).
 22. `tests/python/test_cli_features_cleanup.py` (test 14's `run`, `corine`
     fixture): the record's `land_cover_area_moved_m2` with the default band
     equals the band-0 run's exactly (the rule sees the same input); no
@@ -1095,14 +1144,37 @@ Python:
 
 `_clean` reordered as in 15.2 (the band-0 path untouched), `_outline_lines`,
 the clearance through kernel, binding, stub and adapter, the help and record
-text updated: the band is "at most this far from its border after the
-repair and the outline rule". Estimate 60 to 90 counted lines (kernel 30 to
-45, binding and stub 8, Python 25 to 35): 519 becomes about 580 to 610,
-under 700 in one PR.
+text updated. `--features-tolerance` help: "Metres: simplify land-cover
+borders, each moved at most this far from its border after the repair and
+the outline rule, each class keeping its area; the simplification can bring
+a border back within the outline-snap distance of the outline, but not
+closer than the repair distance. 0 is off. Default: 50." Record sentence:
+"Land-cover borders simplified, each at most this far from its border after
+the repair and the outline rule, each class's area kept (0 = off)".
+
+Estimate 60 to 90 counted lines (kernel 30 to 45, binding and stub 8,
+Python 25 to 35): 519 becomes about 580 to 610.
+
+**Split or not.** Section 10 set a split at an estimate past 600 (PR A the
+kernel, binding and adapter; PR B the wiring), so that the first PR changes
+nothing the user sees. This estimate reaches 610. Ruling: **one PR**. The
+split point was for code not yet written; the wiring is now built, reviewed
+and is what the fix changes, so splitting now separates reviewed code from
+its fix and adds a review round without making either PR easier to review.
+The margin to the 700 ceiling is 90 lines at the top of the estimate.
+**Stop line:** if `count_loc.py b39426c0 <green>` passes 640, `@developer`
+hands back before committing more, and the split is then PR A = kernel,
+binding, stub, `border_simplify.py` and the clearance; PR B = `_clean`,
+`_outline_lines`, `cli.py`, record text.
 
 ### 15.5 Expected effect
 
-From the probe's single runs (not `bench.py`, another agent running):
+From the probe's single runs (not `bench.py`, another agent running).
+The rows marked "(bench)" take base and branch from `bench_quick.py` and add
+the differences the probe measured, so they mix two kinds of run; read them
+as estimates. The triangle and angle rows are expectations for the code
+**with** the clearance, which no run has had (no C++ was built for the
+fix); the probe's 91 132 vertices are without it.
 
 | Numedalslagen | base | branch now | after the fix (expected) |
 |---|---|---|---|

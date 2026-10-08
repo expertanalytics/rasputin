@@ -67,6 +67,10 @@ band0.pkl invalid input polygons 0 {'Self-intersection': 1, 'Ring Self-intersect
 
 7. orderprobe.py   (the rule on base's input, then the domain clip, the simplifier, the linework less the outline)
 valid after rule+clip: True  coverage valid: True
+   (second run, 2026-10-08, after the fix-design review, with the counts printed; times differ by up to 0.12 s:)
+simplifier counts: {'junctions': 2828, 'borders': 4590, 'fixed_borders': 813, 'collinear': 0, 'collapses': 98583, 'rejected_crossing': 64, 'rejected_side': 3}
+rule 2.37s (area 13238 m2), domain clip 0.83s, simplify 0.75s, linework 0.23s; 91132 polygon vertices after; 88876 ring edges, 16700 on the outline, 2570 lines
+   (first run:)
 rule 2.24s (area 13238 m2), domain clip 0.80s, simplify 0.63s, linework 0.21s; 91132 polygon vertices after; 88876 ring edges, 16700 on the outline, 2570 lines
    clearR.py:
 after rule and clip, before simplifying: 149932 vertices; clearance to a non-incident edge under 1 m: 310, under 5 m: 8780, smallest 0.0026 m; vertices off the outline but within 5 m of it: 0
