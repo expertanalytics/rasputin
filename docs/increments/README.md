@@ -39,10 +39,7 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    re-derivation, and a domain constant guessed wrong is then guarded by a test
    that agrees with it.
    `@reviewer` reviews the design before `@tester` starts (on the short path,
-   below, with the code), and again when a design update adds a step. It
-   checks that every step the design adds to a mesh run has a speed estimate
-   timed on both catchments with default flags, and
-   that every library repair or coverage call names its method and tolerance.
+   below, with the code), and again when a design update adds a step.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
