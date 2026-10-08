@@ -1,10 +1,12 @@
 # Increment 32: land-cover borders simplified within a band, each class's area kept
 
 **Status:** designed by `@architect` on `0b5e0d4c` (step 2 of the round:
-research and design). No test or production code yet. Next: `@tester` writes
-the red suite of section 9. Questions for Ola in section 12; the design is
-written on their defaults. Not refine or mesh code (section 10 says what
-`@perf` is asked instead).
+research and design); Ola has ruled all four questions of section 12; the
+design review's round 1 findings are answered (start angle at band 0,
+per-step costs, named calls, anchor order). No test or production code yet.
+Next: `@reviewer`, design review round 2; then `@tester` writes the red suite
+of section 9. Not refine or mesh code (section 10 says what `@perf` is asked
+instead).
 
 ## 1. What Ola asked
 
@@ -310,7 +312,7 @@ measured today's switch on meshes: 0.7 % at FT 30 (borders moved up to
 ### 5.1 Per shared border
 
 Yes: section 3's four changes. The pieces are published (section 2); the
-anchored band check is this design's.
+anchored band check was written for this design.
 
 ### 5.2 Small pieces: not merged
 
@@ -366,11 +368,15 @@ triangles, 0.11 % under 1°, 3.83 % under 10°; θ 15°: 53 177, 0.05 %,
 2.83 %). At 20 m: 117 127 at 15° against 130 613 at 25°; at
 10 m: 291 932 against 298 786.
 
-**Proposed default: 15° when the land-cover stage ran, 25° otherwise; an
-explicit `--start-min-angle` always wins** (question 1). Land cover only,
-so every mesh without it, and every stored benchmark baseline without it,
-stays bit for bit. Measured on this one case: the scale it assumes is a
-30 m DEM and CORINE; the largest input checked is this case.
+**Default (ruled, questions 1 and 4): 15° when the land-cover stage ran
+with the band above 0, 25° otherwise; an explicit `--start-min-angle`
+always wins.** So every mesh without land cover, every mesh with
+`--features-tolerance 0`, and every stored benchmark baseline without land
+cover stays bit for bit. The start angle only acts with `--tolerance`: the
+start pass is part of the refinement, and `--start-min-angle` without
+`--tolerance` is refused today (`src_python/tin_engine/cli.py@b39426c0:930-933`).
+Measured on this one case: the scale it assumes is a 30 m DEM and CORINE;
+the largest input checked is this case.
 
 ## 6. The blueprint
 
@@ -405,14 +411,29 @@ terrain::vector_simplify::simplify_borders<K>(...)                   [C++]
   <- points + ring starts; Python rebuilds the same polygons, parts, holes
 ```
 
+The calls, by name (today's at `src_python/tin_engine/feature_input.py@b39426c0:415-434`):
+
+- **Step 1, band above 0:** `_polygonal(shapely.intersection(g,
+  self.domain.polygon))` per coded polygon: the domain polygon `_add` and
+  `snap_to_outline` already use, overlay in floating point, **no
+  `grid_size`**; `_polygonal` keeps the polygon parts and drops the lines and
+  points an intersection leaves where a polygon only touches the outline
+  (None if nothing is left, counted in `outside`, as today). **Band 0:**
+  today's `shapely.intersection(g, region)`, unchanged.
+- **Step 2:** today's `shapely.coverage_clean(polys,
+  snapping_distance=ask.repair_m, gap_width=ask.repair_m,
+  merge_strategy="min_area")`, where `ask.repair_m` is `--features-repair`
+  (default 1 m).
+- **Step 3:** today's `shapely.coverage_union_all` per class.
+
 Step 1's domain clip, when the band is on, makes the domain outline the
 coverage's outer boundary; its edges are used by one ring, so they are fixed,
 and every class's area **inside the domain** is kept exactly. Clipping to
 the read region instead would let a collapse straddle the outline and move
-area across it. With the band off, step 1 is today's, so `--features-tolerance
-0` keeps today's mesh bit for bit. The outline rule (step 5) still moves
-borders within 5 m of the outline onto it, and reports the area it moved
-(`area_changed`), as today.
+area across it. With the band at 0, step 1 is today's and the start angle is
+25° (section 5.4), so `--features-tolerance 0` keeps today's mesh bit for bit
+(test 14). The outline rule (step 5) still moves borders within 5 m of the
+outline onto it, and reports the area it moved (`area_changed`), as today.
 
 ### The C++ interface
 
@@ -481,10 +502,15 @@ Nothing beside it: **the flag keeps its name and changes its meaning**.
 Today: "simplify land-cover borders by this much", a GEOS area threshold's
 square root, default 0. Now: the band, a distance no border moves past, each
 class's area kept, **default 50**. `shapely.coverage_simplify` is no longer
-called. The help text becomes "Metres: move land-cover borders at most this
-far to simplify them, each class keeping its area; 0 is off. Default: 50.";
-the record's `features_tolerance_m` sentence becomes "Land-cover borders
-moved at most this far, each class's area kept (0 = off)". The record and
+called. The band is measured from the borders as repaired and clipped
+(steps 1 to 3), not from the file's: the repair (`--features-repair`, 1 m)
+and the outline rule (`--features-outline-snap`, 5 m) move borders on top
+of it, as today. The help text becomes "Metres: simplify land-cover borders,
+each moved at most this far from its repaired, clipped border and each class
+keeping its area; the repair and the outline rule move borders on top of
+this. 0 is off. Default: 50."; the record's `features_tolerance_m` sentence
+becomes "Land-cover borders simplified, each at most this far from its
+repaired, clipped border, each class's area kept (0 = off)". The record and
 `--stats` key `features_tolerance_m` stay. Metres in the mesh's projected
 CRS, as every other land-cover flag (a geographic DEM already needs
 `--out-crs`).
@@ -498,10 +524,11 @@ own default; not this increment.
 
 The start angle: `src_python/tin_engine/cli.py@b39426c0:988` picks `DEFAULT_START_MIN_ANGLE`; it
 picks a new `LANDCOVER_START_MIN_ANGLE = 15.0` instead when the land-cover
-stage ran (`FeatureSet.cover_vertices is not None`) and no
-`--start-min-angle` was given. The record's `start_min_angle_deg` already
-says which was used. The `--start-min-angle` help gains "Default: 25, or 15
-with land cover."
+stage ran (`FeatureSet.cover_vertices is not None`), the band is above 0
+(`--features-tolerance`), and no `--start-min-angle` was given. The record's
+`start_min_angle_deg` already says which was used. The `--start-min-angle`
+help gains "Default: 25, or 15 with land cover simplified
+(--features-tolerance above 0)."
 
 ### Assessment against the architect's criteria
 
@@ -522,14 +549,23 @@ call inside feature reading, which already runs off the event loop.
    Enforced by **anchors**: every simplified vertex V carries an anchor F, a
    point of γ, with |V − F| ≤ ε; the anchors are in order along γ; an
    original vertex is its own anchor; junctions are fixed and their own
-   anchors. A collapse A-B-C-D to A-E-D is allowed only if E's anchor F_E
-   (the point nearest E on one source segment, tried for each segment
-   between F_A and F_D) has |E − F_E| ≤ ε, every source vertex between F_A
-   and F_E is within ε of segment A-E, and every one between F_E and F_D
-   within ε of E-D. The cost per candidate is today's: one pass over the
-   range with prefix and suffix maxima.
+   anchors. An anchor is a position on γ, (segment index i, parameter t in
+   [0, 1]), ordered by i, then t. A collapse A-B-C-D to A-E-D is allowed
+   only if E's anchor F_E (the point nearest E on one source segment, tried
+   for each segment from the one holding F_A to the one holding F_D) has
+   **F_A ≤ F_E ≤ F_D in that order**, including on the segments that hold
+   F_A and F_D (there, t at least F_A's, or at most F_D's), |E − F_E| ≤ ε,
+   every source vertex between F_A and F_E is within ε of segment A-E, and
+   every one between F_E and F_D within ε of E-D. A candidate segment whose
+   nearest point breaks the order is skipped, as the prototype does
+   (`docs/benchmarks/2026-10-08/clc-simplify/design-probe/border_apsc.py@29d7346e:133`).
+   The cost per candidate is today's: one pass over the range with prefix
+   and suffix maxima.
 
-   *Why that bounds Hausdorff.* Take an edge S = V-W with anchors F_V, F_W
+   *Why that bounds Hausdorff.* By the order condition, the anchors of a
+   border's simplified vertices are in order along γ at every step, so
+   consecutive anchors cut γ into parts that follow each other and cover
+   it. Take an edge S = V-W with anchors F_V ≤ F_W
    and γ' the part of γ from F_V to F_W. (a) γ' lies within ε of S: its
    inner vertices by the check, F_V and F_W because they are within ε of V
    and W, and every point of a segment of γ' because the distance to a
@@ -584,7 +620,8 @@ kill record must cover: M1 drop test (ii), the swept-region side test; M2
 test crossings against the border's own edges only; M3 let a junction be B
 or C; M4 replace the anchored check by `deviation_of`'s (E against any
 segment in the range); M5 place E on the wrong side of the equal-area line
-(sign of the area flipped).
+(sign of the area flipped); M6 drop the anchor-order condition (accept F_E
+before F_A or after F_D).
 
 1. Two squares sharing a zig-zag border: both areas kept (relative 1e-12);
    the border within the band both ways (oracle: points sampled every 1/1000
@@ -597,6 +634,13 @@ segment in the range); M5 place E on the wrong side of the equal-area line
    gives 58.7 m against a 50 m band on it alone, the anchored check 48.3 m),
    closed into two polygons by a frame far outside the band; band 50 m;
    both directions within 50 m.
+2b. **The anchor order** (kills M6): a border that runs out and back, its
+   two arms closer than the band, so that after earlier collapses some E's
+   nearest source point lies on the other arm, before F_A or after F_D.
+   With the order dropped, the collapse passes the per-collapse check and
+   leaves a stretch of γ further than the band from the output; with it,
+   both directions within the band (test 1's oracle). `@tester` builds the
+   chain and shows the mutant red before relying on it.
 3. Three polygons meeting at a junction, and a junction on the outer
    boundary: junctions unchanged bit for bit (kills M3); outer-boundary
    edges unchanged.
@@ -626,19 +670,28 @@ adapter, shapely as the oracle):
 12. On a small coverage (hand-made, or a committed CORINE clip if one is
     in the test data): `shapely.coverage_is_valid` after; same number of
     polygons, parts, holes; each part's area within 1e-9 relative; each
-    class's boundary Hausdorff to its source (`hausdorff_distance` with
-    `densify`) at most the band plus 1e-6 m; the set of class pairs that
+    class's boundary Hausdorff to its source (`shapely.hausdorff_distance(a,
+    b, densify=0.001)`: every segment cut into 1 000, a lower estimate of
+    the true distance, so it cannot be red on a correct output) at most the
+    band plus 1e-6 m; the set of class pairs that
     share a border unchanged; every junction point present in the output.
 13. `simplify_borders` raises `ValueError` naming the refusal.
 
 **CLI, amendments to `tests/python/test_cli_features_cleanup.py` and the
 land-cover CLI suites:**
 
-14. The default: record and `--stats` say `features_tolerance_m` 50;
-    `--features-tolerance 0` gives today's mesh bit for bit (the region clip
-    and no simplification).
-15. With land cover and no `--start-min-angle`: `start_min_angle_deg` 15;
-    without features: 25; `--start-min-angle 25` with land cover: 25.
+14. The default: record and `--stats` say `features_tolerance_m` 50.
+    **Band 0 is today's mesh bit for bit:** `test_cli_features_cleanup.py`'s
+    `run` (the `bumpy` DEM, the `square` domain, `--tolerance 1`) with
+    `--features` (the `corine` fixture) `--features-map corine --features-tolerance
+    0`; the reference is the SHA-256 of the output's points and triangles
+    (read back from the `.vtk`, not the file's bytes, whose header may carry
+    record text), computed by `@tester` with the same command at
+    `b39426c0` and written into the test as a constant, with that commit
+    named beside it; and the record's `start_min_angle_deg` is 25.
+15. With land cover, band above 0 and no `--start-min-angle`:
+    `start_min_angle_deg` 15; with land cover and `--features-tolerance 0`:
+    25; without features: 25; `--start-min-angle 25` with land cover: 25.
 16. Existing tests that assume the old default (0) or the old meaning
     (Visvalingam-Whyatt) are updated in the red commit, each with the reason
     in the message.
@@ -665,11 +718,30 @@ past 600: PR A, the kernel, binding, stub and `border_simplify.py` (nothing
 the user sees changes); PR B, the wiring, the 50 m default and the 15° start
 angle.
 
-**Speed, one line:** O(n log n) in the border vertices; the Python prototype
-took 8 s for 60 000 collapses, and the C++ kernel is expected well under the
-clean-up's 1.1 to 1.4 s (`reduce_ring` does the same work per collapse),
-while the mesh it feeds is 5.7 times smaller at 50 m (1.6 times at 10 m), so
-the whole run should get faster. Not measured: no C++ exists yet. This is not refine or mesh code, so no `bench.py` acceptance run;
+**Speed, per step, on the German CORINE case with the default flags** (band
+50 m, repair 1 m). Measured by
+`docs/benchmarks/2026-10-08/clc-simplify/design-probe/clip_probe.py`
+(output `clip_probe.txt` there; Mac on battery, best of three for the
+clips), in EPSG:25832, with the read region approximated as the domain's
+convex hull plus 100 m:
+
+| step | today | with this design | basis |
+|---|---|---|---|
+| 1. clip (1 881 CORINE polygons) | 0.12 s, to the read region | 0.12 s, to the domain polygon (516 vertices) | measured |
+| 2. `coverage_clean` | 0.35 s (221 147 vertices in) | 0.23 s (152 639 in) | measured |
+| 3. merge by class | unchanged | unchanged | |
+| 4. simplify | 0.12 s, `coverage_simplify` (step 1's probe) | 0.2-0.6 s, estimated | 60 274 collapses × 3.3 µs, `reduce_ring`'s measured time per collapse (121 177 collapses on the same rings one by one, 0.40 s), times 1 to 3 for test (ii) against every nearby vertex instead of one keep-point |
+| 4. array conversion and polygon rebuild | none | under 0.1 s, estimated | 150 000 points through `shapely.get_coordinates` and back |
+| 5. outline rule | unchanged | unchanged | |
+
+So the stage costs about what it does today (−0.24 s measured on steps 1,
+2 and the dropped simplifier, +0.2 to 0.7 s estimated for the kernel and
+conversion), while the mesh it feeds is 5.7 times smaller at 50 m vertical
+tolerance (1.6 times at 10 m). The 15° start angle acts only with
+`--tolerance` (section 5.4). **Without land cover: 0 s added, nothing
+changed** (`_clean` is not called; the start angle stays 25°). With
+`--features-tolerance 0`: today's steps exactly. The kernel is O(n log n) in
+the border vertices. Not measured: no C++ exists yet. This is not refine or mesh code, so no `bench.py` acceptance run;
 the default changes every land-cover mesh, so the main session should have
 `@perf` run `tools/bench_quick.py` (its Lagan case has CORINE) once, to
 time the new stage and see the run get faster, and to note that Lagan's
@@ -710,9 +782,21 @@ terrain deciding. The minimal mesh's height error stays (779 m): that is
 
 **Ola, 2026-10-08, on the main session's summary of this section** ("Three questions, all default yes: 1. Start angle: use 15° when land cover is present and keep 25° otherwise ... 2. Outline reducer: give `reduce_ring` the same proven distance check, as its own small PR afterwards ... 3. Water-only map: the 50 m limit also applies to the lakes-only CORINE map."): **"Go for it."** *Ruled: all three defaults; build 32 now. Recorded by the main session.*
 
+4. **The start angle when simplification is off** (raised by the design
+   review, round 1). With land cover but `--features-tolerance 0`, keep
+   today's 25°, so that 0 really is off and gives today's mesh bit for bit.
+   **Default: 15° only when the band is above 0.**
+
+**Ola, 2026-10-08, on the main session's question** ("With land cover
+present but simplification set to 0, should the mesh keep today's 25° start
+angle? Default: yes. Use 15° only when simplification is on, so 0 really
+means off."): **"I'm fine with keeping 25 start angle when turning off
+simpl."** *Ruled: the default. Relayed to `@architect` by the main session;
+the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
+
 ## 13. ROADMAP
 
-Row 32 added: designed, this file.
+Row 32: designed, Ola's rulings on all four questions, this file.
 
 ## Review
 
