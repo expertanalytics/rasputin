@@ -56,9 +56,14 @@ probe that set the tolerance); **built**: shapely 2.2 `985b4a47`
 production lines (`python3 tools/count_loc.py 483221d2 7334b82b`, +121 %
 on ~150, ruling G5); the green step ruled ("Rulings on 20c-3's green
 step": two broken or conflicting tests, the record's switch as text, the
-clip's shortened edges, the assumptions). **Next: `@tester`'s test
-changes, `@developer` for rulings G3 and G6 (e), the mutation round on the
-outline rule, `@perf`'s timed check and gate runs, then review.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+clip's shortened edges, the assumptions); test changes `737e5250`
+(`@tester`), green for rulings G3 and G6 (e) `e07d5921` (`@developer`);
+mutation round on the outline rule done, test commit `5cc0639c`
+(`@tester`, tests only: two survivors of eight faults, M2 and M2b, killed
+by two new tests; "Mutation round for 20c-3"), its three pins ruled
+("Rulings on 20c-3's mutation round"; OR5's wording corrected). **Next:
+`@perf`'s short timed check (at most 15 minutes, "Speed judgment") and
+the gate runs, then review.** Questions 1 to 4 ruled by Ola, 2026-10-06,
 and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
 ("Ola's rulings" below); question 9 open, designed on its default. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
@@ -2536,7 +2541,8 @@ it off:
   more than D/2 from every other such point; one rounded onto an outline
   vertex keeps that vertex in the path (round 3's prototype defect).
 - **OR5** a border crossing the outline at a right angle keeps one
-  crossing, within D/2 of where it was; an inlet (the outline's way between
+  crossing, within D/2 of where it was, or within D where it goes onto
+  an outline vertex (ruling P1); an inlet (the outline's way between
   two moved points longer than twice their distance plus 2 D) is joined
   straight, not round the inlet.
 - **OR6** D = 0 is a no-op, byte for byte.
@@ -2686,6 +2692,74 @@ change for `@developer`.
 outline rule (invariant-critical; the six targets above), then `@perf`'s
 short timed check (at most 15 minutes, "Speed judgment") and the gate runs
 of "PRs and gates", then review.
+
+#### Mutation round for 20c-3 (`@tester`, 2026-10-08, test commit `5cc0639c`, on code `e07d5921`)
+
+Copied word for word from `@tester`'s hand-back for the round, as for
+20c-2; pins ruled below ("Rulings on 20c-3's mutation round").
+
+- **Where it ran:** a scratch copy made by `tools/scratch_copy.py e07d5921`, with the worktree's `.venv`. Every mutant was a single text replacement in the copy's `src_python/tin_engine/feature_input.py`. After each run the file was restored and compared byte for byte with the original. The copy is now removed.
+- **What ran on each mutant:** `test_feature_outline_rule.py` and `test_feature_repair.py`. No mutant failed a repair test.
+- **Line numbers:** they are in `tests/python/test_feature_outline_rule.py@5cc0639c`. I re-ran every mutant against that final file to get them.
+- **Code line numbers:** the "where" column cites `feature_input.py@e07d5921`.
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| M1 | the cut not in a fixed order: `_cut` never flips to the lexicographically last end (`flip = False`, :767) | killed | :184 `test_or2_one_border_from_either_side[same-straight]` and `[same-diagonal]`. The two polygons' shared segments differ in the last bit (500105.4588256424 against …425). The reversed cases pass, as they should. This kill is rounding-sized: under ruling G4's cuts along the line, direction moves only rounding. But OR2's oracle needs both sides of a border to have bit-identical coordinates ("the noder sees one border"), so it is the right oracle. |
+| M2 | the vertex dropped at a rounded point: `_place` loses the second rounding, "a multiple of D within D/2 of an outline vertex goes to the vertex" (`self._vertex(r, m) or` removed, :791) | **survived**, now killed by `5cc0639c` | New test `test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it`, fails at :262: the crossing ends at (60, 0), not at the vertex (61, 0). It survived because `TestTheCorner`'s vertex V = (100, 0) sits at a multiple of D along the outline, so the first rounding already lands on V. `TestRounding` has no point whose own position is more than D/2 from the vertex at 61 while its rounded multiple is within D/2 of it. |
+| M2b | same target, second form: a join drops the outline's own vertices between two placed points and goes straight (`_join`'s along-the-outline branch returns `[(q[2], True)]`, :828) | **survived**, now killed by `5cc0639c` | New test `test_or5_a_shallow_notch_is_followed`, fails at :327: the polygon after the rule covers 0 m² of a 2 m by 1 m notch, not 2. It survived because the straight join is still flagged as lying on the outline, so it is dropped from the linework, and every existing test checks linework only. The defect shows in `OutlineSnap.polygons`, which `_Tally._add` receives (`feature_input.py:441-446`), and in `area_changed`. |
+| M2c | both roundings onto a vertex removed (`out[i] = (r, m, self._at(r, m))`, :791) | killed | :241 `test_or4_placed_points_are_apart` (the vertex at 61 is never used); :262 |
+| M3 | the stretches on the outline kept: `_chains` never cuts (`if True:` for `if not any(on):`, :676) | killed | :135 OR1 (linework left in the band), :207 OR3 (strip length not 0), :281 OR4 corner, :310 OR5 inlet |
+| M4 | the rounding removed (`m = s`, :790) | killed | :246 two placed points 2.0 m apart, under D/2 = 2.5; :262 |
+| M5 | the inlet test removed (`if True:` for `if min(ahead, length - ahead) <= 2 * gap + 2 * self.d:`, :827) | killed | :309 `test_or5_an_inlet_is_joined_straight`: the mouth's linework is empty, distance NaN, not ≤ 1e-9 m |
+| M6 | the cuts counted from the edge's own end, not along its line: `_cut` uses `k = 1 .. ceil(len/D) - 1`, `cuts = lo + k D u` (:770-772) | killed | :432 `test_or8_the_same_lines_inside_the_domain`: the 173.3 m clip gives the vertex (53.1, 6.7) where the 100 m clip gives (53.1, 10), 3.3 m apart. The design measured 0.62 m for its own version of this mutant; mine counts from the lexicographically first end, so the number differs, and both are far above rounding. |
+
+Every kill is an exact coordinate, an area or a length far above rounding, except M1, whose oracle is bit-identity on purpose. I also changed `TestTheCorner`'s docstring: it claimed the test catches "round 3's prototype defect", which it cannot, so it now points to the new test.
+
+#### Rulings on 20c-3's mutation round (`@architect`, 2026-10-08, on `5cc0639c`)
+
+`@tester`'s three pins from the round above, ruled. No code change follows
+from any of them.
+
+- **P1, how far a crossing may move: OR5's wording corrected.** Step 4
+  (above, "Steps 2 to 4") sends a multiple of D within D/2 of an outline
+  vertex to the vertex, and `_place` does that
+  (`src_python/tin_engine/feature_input.py@e07d5921:775-791`): a point goes
+  first to an outline vertex within D/2 of its own place, else to the
+  nearest multiple of D along the outline, then to a vertex within D/2 of
+  that multiple. Each of the last two moves is at most D/2 along the
+  outline, so a point on the outline moves at most D along it, and no
+  farther in a straight line. OR5 said "within D/2 of where it was", which
+  only the case without a vertex nearby meets; its fixture is that case,
+  so no test disagreed. The design is right and OR5's words were short;
+  OR5 now reads "within D/2 of where it was, or within D where it goes
+  onto an outline vertex", and `test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it`
+  (a crossing moved 2.6 m at D = 5, onto the vertex) is inside it.
+- **P2, the rule has two outputs. Noted; the tests now check both.**
+  `snap_to_outline` returns `OutlineSnap.lines`, the linework the noder
+  gets, and `OutlineSnap.polygons`, the label polygons
+  (`_Tally._clean`, `src_python/tin_engine/feature_input.py@e07d5921:435-446`)
+  from which `area_changed` is summed. A fault in a stretch that is dropped
+  from the linework (M2b, a straight join flagged as on the outline) shows
+  only in the polygons, so a test of the rule that reads only the linework
+  cannot see it. `test_or5_a_shallow_notch_is_followed` reads the polygon;
+  any later test of the rule states which of the two outputs it checks.
+- **P3, OR2 is bit for bit; ruling G4's "to rounding" is about another
+  object. Confirmed.** Within one run, the two polygons sharing a border
+  reach the rule with that border's vertices bit-identical: `_clean` runs
+  `coverage_clean` before the rule in every run where the rule runs
+  (`src_python/tin_engine/feature_input.py@e07d5921:422-435`; at
+  `--features-repair 0` too), and its noder makes shared vertices one.
+  `_cut` orders each edge by its lexicographically last end before any
+  arithmetic, so both sides compute the same cuts from the same two
+  points in the same order, which gives the same bits. That is what OR2's
+  "the noder sees one border" asks, and M1's kill (the last bit apart) is
+  the oracle working, not a rounding-sized flake. G4's "to rounding, not
+  bit for bit" compares one edge clipped by two different read regions,
+  so two different runs; it does not weaken OR2.
+
+**Next**: `@perf`'s short timed check (at most 15 minutes, "Speed
+judgment") and the gate runs of "PRs and gates", then review.
 
 ## `@perf`'s acceptance
 
