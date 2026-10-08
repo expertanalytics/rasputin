@@ -1,12 +1,13 @@
 # Increment 32: land-cover borders simplified within a band, each class's area kept
 
-**Status:** designed by `@architect` on `0b5e0d4c` (step 2 of the round:
-research and design); Ola has ruled all four questions of section 12; the
-design review's round 1 findings are answered (start angle at band 0,
-per-step costs, named calls, anchor order). No test or production code yet.
-Next: `@reviewer`, design review round 2; then `@tester` writes the red suite
-of section 9. Not refine or mesh code (section 10 says what `@perf` is asked
-instead).
+**Status:** built. Designed on `0b5e0d4c`, Ola's four rulings (section
+12), design review round 2 approved. Red step `44f25968` (`@tester`), green
+step `82c0a7d4` (`@developer`, 519 net production lines), mutation round
+`30f939b6` (`@tester`, one new test case); `@architect`'s rulings on both
+hand-backs are in section 14. Next: `@perf`'s short timing check
+(`tools/bench_quick.py`, base and branch back to back, section 10), then
+`@reviewer`'s code review. Not refine or mesh code, so no `bench.py`
+acceptance run.
 
 ## 1. What Ola asked
 
@@ -588,7 +589,9 @@ call inside feature reading, which already runs off the event loop.
    junction A or D into it and then doing one of those. So the sweep from
    A-B-C-D to A-E-D passes over nothing.
 4. **Fixed:** junctions, and the coverage's outer boundary (the domain
-   outline when the band is on), at their input coordinates bit for bit.
+   outline when the band is on), at their input coordinates bit for bit,
+   except that −0.0 and 0.0 are one vertex, output at its first occurrence's
+   bits (section 14, pin 4).
 5. **Not guaranteed:** the fewest vertices (greedy; the problem is hard,
    section 2); that the swept regions are small (the band bounds distance,
    not relabelled area, which section 4 measures).
@@ -599,8 +602,10 @@ call inside feature reading, which already runs off the event loop.
   0, area unchanged); never at a junction.
 - A border of two or three vertices: no collapse is possible (a collapse
   needs four); it stays.
-- A closed border (an island, or a loop through one junction): keeps at
-  least four vertices, as `reduce_ring` does; a loop's junction never moves.
+- A closed border (an island): collapses stop at four vertices, as
+  `reduce_ring`'s do; the collinear pass alone may leave three (section 14,
+  pin 6). A loop through one junction is an open border from the junction
+  back to it, so the junction never moves.
 - A lens (two borders between the same two junctions): each keeps at least
   three vertices; the area keeps the lens open, tests (i) and (ii) keep the
   two apart.
@@ -640,7 +645,10 @@ before F_A or after F_D).
    With the order dropped, the collapse passes the per-collapse check and
    leaves a stretch of γ further than the band from the output; with it,
    both directions within the band (test 1's oracle). `@tester` builds the
-   chain and shows the mutant red before relying on it.
+   chain and shows the mutant red before relying on it. *As built:* M6
+   changes the output on this chain but stays within the band; the test is
+   kept as a band test of the out-and-back shape, and M6 is recorded
+   unkilled (section 14).
 3. Three polygons meeting at a junction, and a junction on the outer
    boundary: junctions unchanged bit for bit (kills M3); outer-boundary
    edges unchanged.
@@ -741,11 +749,16 @@ tolerance (1.6 times at 10 m). The 15° start angle acts only with
 `--tolerance` (section 5.4). **Without land cover: 0 s added, nothing
 changed** (`_clean` is not called; the start angle stays 25°). With
 `--features-tolerance 0`: today's steps exactly. The kernel is O(n log n) in
-the border vertices. Not measured: no C++ exists yet. This is not refine or mesh code, so no `bench.py` acceptance run;
-the default changes every land-cover mesh, so the main session should have
-`@perf` run `tools/bench_quick.py` (its Lagan case has CORINE) once, to
-time the new stage and see the run get faster, and to note that Lagan's
-baseline moves.
+the border vertices. Not measured at design time (no C++ existed yet). This
+is not refine or mesh code, so no `bench.py` acceptance run; the default
+changes every land-cover mesh, so the main session should have `@perf` run
+`tools/bench_quick.py` once, to time the new stage and see the run get
+faster. **As built:** both catchment cases of the quick check
+(`docs/benchmarks/quick/cases.toml`: Numedalslagen and Lagan) run with
+CORINE, so both meshes are expected to change. No quick-check baseline
+exists yet (`docs/benchmarks/quick/` holds only `cases.toml` and
+`hotspots.toml`), so `@perf` times the base `b39426c0` and the branch back
+to back, on the same power state.
 
 ## 11. Expected effect on the German fused case
 
@@ -796,7 +809,86 @@ the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
 
 ## 13. ROADMAP
 
-Row 32: designed, Ola's rulings on all four questions, this file.
+Row 32: built (green `82c0a7d4`, 519 net production lines; mutation round
+`30f939b6`, M6 recorded as not killed, section 14); next `@perf`'s short
+check (section 10), then `@reviewer`'s code review.
+
+## 14. As built
+
+### The mutation round (`@tester`'s hand-back, copied unchanged)
+
+#### Mutation round for 32 (`@tester`, 2026-10-08, test commit `30f939b6`, on code `82c0a7d4`)
+
+The suite is `test_border_collapse`, run in a scratch copy from `tools/scratch_copy.py 82c0a7d4`, macOS arm64 Release. Each mutant was one or two text replacements in the copy's `include/terrain/vector_simplify/border_collapse.hpp`. Before each build the suite's object file and binary were deleted, and only `test_border_collapse` was built. Each binary ran under a 300 s timeout. After each run the header was restored, touched, and compared byte for byte with the original. Every mutant was re-run against the final test file (`30f939b6`), so all T line numbers are in `tests/cpp/unit/test_border_collapse.cpp@30f939b6`. H line numbers are in `include/terrain/vector_simplify/border_collapse.hpp@82c0a7d4`. Lines 296 to 412 of T are inside the shared oracle `check()`; the "via" column gives the test's own call.
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| M1 | test (ii) dropped entirely: `side` never set, both the swept-region term and the on-new-edge term (H:403-405, wrapped as `w == no_node && (…)`) | killed | Test 5 (via T:692). T:384 ×16: island vertices change winding about rings 0 and 3, so they left their face. T:695 ×4: island vertex winding about P is 0, not 1. T:696: `rejected_side` is 0, not ≥ 1. |
+| M1b | only the swept-region term dropped (`winding(loop, p[w]) != 0` removed, H:403) | killed | Same lines as M1: T:384 ×16, T:695 ×4, T:696. |
+| M2 | crossings tested against the collapsing border's own edges only (`crosses = owner[u] == owner[b] && (…)`, H:398) | killed | Test 6 (via T:708). T:364 ×2: two output edges are Crossing, not Disjoint. T:709: `rejected_crossing` is 0, not ≥ 1. |
+| M3 | a loop through one junction becomes a closed border, so its junction is an inner node that can be B or C (a ring with exactly one junction goes to `border_of(ids, true)`; inserted before H:276) | **survived** at `82c0a7d4`; now killed by `30f939b6` | New case "3. a loop through one junction keeps it" (T:639, via T:655). T:336 ×2: J = (50, 0) is missing from the hole ring and from the island ring. T:402: the per-border cut no longer starts at J. It survived because no case had a loop through one junction: test 4's island has no junction, test 5's islands have none, and the lens has two. |
+| M3b | junctions with exactly three edges do not cut borders, so they can be B or C (`junction[id(r)] && degree[id(r)] != 3`, H:264) | killed | Test 3 (via T:618): T:336 ×3 (junctions missing), T:346 ×7 (outline edges gone), T:399. Also tests 1, 1-scale, 2, 2b, 5, 7, 8 and four test-11 cases (12 of 19 cases fail). |
+| M4 | E's distance taken to the nearest of any segment in the range, not to its anchor F_E: `std::hypot(e − f)` replaced by the minimum distance to every segment from F_A's to F_D's (H:99-113) | killed | Test 2 (via T:583). T:407 ×2: source to output 58.32 m against the 50 m band. That matches the design's 58.3 m for this probe. |
+| M5 | E on the wrong side of the equal-area line (`area = -(cross(vb, vc) + cross(vc, vd))`, H:330) | killed | Test 8 (via T:741). T:329 ×2: area changed by 2.545 m² against an allowed 2.4e-9 m². T:329 also fails in 8 other cases; T:674, T:696, T:709, T:864 fail too (12 of 19 cases fail). |
+| M6 | the anchor-order condition dropped (H:110-111 removed: F_E may lie before F_A on F_A's segment, or after F_D on F_D's) | **survived** | Discussed below the table. No test added. |
+
+**M6.** It is not equivalent in output: the output changes, and the suite runs 5227 assertions on it against 5203 on the code. But I found no input where it breaks the band.
+
+- **Fuzz evidence.** A scratch fuzz of out-and-back borders like test 2b used three generator settings with 5 000 + 20 000 + 20 000 seeds: gap 5 to 25 m, offsets up to 0.49 of the gap, band 0.5 to 6.5 times the gap, and long segments in one setting. M6 changed the output on 2 199 of the 45 000. None went past the band; the worst was 0.99981 of the band, the same as the code. The fuzz could fail: with the queue limit planted at 1.5 times the band, it flagged 117 of 2 000.
+- **Why one reversal is safe.** Dropping the order lets F_E sit only on F_A's own segment before F_A, or on F_D's own segment after F_D. The piece of γ between F_E and F_A is then a straight piece of one segment with no source vertex in it. It lies within ε of A-E, because its points are interpolations of the two pairs (A, F_A) and (E, F_E), each pair within ε. The piece from F_E to F_D is covered by the suffix check plus convexity. Section 7.2's step (b) needs only a connected part from one anchor to the other, not the order. So each reversed collapse keeps the band.
+- **What I could not exclude by argument.** The design's covering argument does rely on the order across later collapses. If three or more output vertices end up anchored in reversed order on one source segment, a later collapse's range can omit a straight piece of that segment that only the removed edges covered. The fuzz never produced such a case.
+
+So my verdict is equivalent for every oracle this suite has and for 45 000 fuzzed chains, but not proven equivalent. If @architect wants it killed, a test would need a long source segment carrying three or more placed vertices. I have not built one.
+
+### Rulings on the mutation round (`@architect`)
+
+- **M3.** M3 and M3b together are the design's M3 (a junction moved into
+  a border's middle): M3b moves a three-edge junction, M3 the junction of a
+  loop through one junction. Both are killed at `30f939b6`.
+- **M6** (the anchor-order condition dropped) stays in the code as defence
+  in depth and is recorded as **not killed**, with `@tester`'s reason: the
+  output changes, but the band held on all 45 000 fuzzed out-and-back
+  chains (worst 0.99981 of the band, the same as the code), and the
+  covering argument across later collapses is not proven without the
+  order. No new test is asked for. Test 2b stays as a band test of the
+  out-and-back shape (section 9).
+
+### Rulings on the green step's pins (`@developer`)
+
+The green step pinned nine behaviours the design left open. All nine are
+accepted as the design's:
+
+1. `ring_starts[0]` must be 0; otherwise the call refuses with `BadRings`.
+2. An edge used twice by the same ring is fixed (never collapsed).
+3. A zero-length edge makes its vertex a junction.
+4. Each vertex is output at its first occurrence's coordinates. So −0.0 and
+   0.0 in one place are one vertex, and at a band above 0 the output may
+   carry the other occurrence's sign bit; at band 0 the input bits are kept
+   (section 7, guarantee 4).
+5. The fallback placement is used only when both A-B and C-D are parallel
+   to A-D.
+6. The collinear pass may reduce an open border to two vertices; a closed
+   border keeps at least three (section 8).
+7. A collapse that fails both test (i) and test (ii) counts under
+   `rejected_crossing`.
+8. The adapter skips empty parts, and returns a polygon with no parts
+   unchanged.
+9. `xy_points` names its caller in its refusals.
+
+### As-built facts
+
+- Green step `82c0a7d4`: 519 net production lines by
+  `python3 tools/count_loc.py b39426c0 82c0a7d4`. `border_collapse.hpp`
+  387 (section 10 estimated 310-380), binding 50, `_core.pyi` 33,
+  `border_simplify.py` 35, `cli.py` 9, `feature_input.py` 2,
+  `run_record.py` 3. Inside section 10's 420-530 total; no split.
+- `ctest` 931 of 931 at `82c0a7d4` (one more case at `30f939b6`, the
+  loop-through-one-junction case); ASan and UBSan clean; the suite passes
+  built with `-ffp-contract=off`; `pytest` 6 979 passed.
+- The CI TSan job (`.github/workflows/main.yaml`) builds and runs
+  `test_border_collapse`, which starts its own threads to check purity.
+- Speed: not yet measured; `@perf`'s short check is section 10's last
+  paragraph.
 
 ## Review
 
