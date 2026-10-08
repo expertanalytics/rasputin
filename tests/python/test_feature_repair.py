@@ -22,7 +22,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   ``merge_same_class: bool``, ``tolerance_m: float`` and
   ``outline_snap_m: float``, each defaulting to OFF (0.0, False, 0.0,
   0.0): the library default is today's path, and the CLI supplies the
-  run defaults (0.05, on, 0, 5). So every older ``open_features`` test,
+  run defaults (1, on, 0, 5). So every older ``open_features`` test,
   which builds a request without them, keeps today's output.
 - The label polygon after the stage is ``TerrainFeature.polygon``, in
   source order; with the merge off, one feature per input polygon.
@@ -59,7 +59,7 @@ from feature_fixtures import UTM33, X0, Y0, Feat, at, domain_of, write_geojson
 from gpkg_fixtures import EXTRACT
 from test_cli_mesh_domain import quarter_circle
 
-S = 0.05  # question 9's default repair tolerance, metres (ruling 9)
+S = 0.05  # a repair tolerance, metres: 5 cm, wider than the 1 cm slit
 L = 79.13  # the slit's border length (M5, in local coordinates)
 WIDTH = 0.01  # the slit's open end, 1 cm
 WEDGE = 0.5 * L * WIDTH  # its area, 0.39565 m²

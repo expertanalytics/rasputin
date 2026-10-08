@@ -13,15 +13,15 @@ merge switch is the text ``on`` or ``off``, the same in ``--stats`` and the
 record, as ``snap_to_lines`` is (increment 25, "Values").
 
 **If Ola picks another value for question 9**, only ``REPAIR_DEFAULT`` and
-the row text ``"0.05"`` here change.
+the row text (``"1"``) here change.
 
 PINNED HERE, where the design leaves it open (listed for ``@architect``):
 
 - The CLI hands the four switches to ``open_features`` in its
   ``FeatureRequest`` (``repair_m``, ``merge_same_class``, ``tolerance_m``,
   ``outline_snap_m``; see ``test_feature_repair.py``), on every run with
-  ``--features``: defaults 0.05, on, 0, 5, whatever the map.
-- ``--stats`` prints them as ``0.05``, ``0`` and ``5`` (as
+  ``--features``: defaults 1, on, 0, 5, whatever the map.
+- ``--stats`` prints them as ``1``, ``0`` and ``5`` (as
   ``start_quality_gain_deg``); the record holds floats.
 - No features, none of the four rows.
 - The vertex rows are found by the design's wording, "Land-cover vertices
@@ -60,7 +60,7 @@ from recordread import stats_names, stats_row
 from test_cli_mesh_features import GALLERY
 from test_cli_mesh_landcover import EAST, WEST, coded
 
-REPAIR_DEFAULT = 0.05  # question 9's default (ruling 9)
+REPAIR_DEFAULT = 1.0  # question 9's default, 1 m (Ola, 2026-10-08)
 OUTLINE_DEFAULT = 5.0  # ruling 6
 ROWS = (
     "features_repair_m",
@@ -163,7 +163,7 @@ class TestDefaults:
         )
         (request,) = spy.requests
         assert switches(request) == (REPAIR_DEFAULT, True, 0.0, OUTLINE_DEFAULT)
-        assert stats_row(report, "features_repair_m") == "0.05"
+        assert stats_row(report, "features_repair_m") == "1"
         assert stats_row(report, "features_tolerance_m") == "0"
         assert stats_row(report, "features_outline_snap_m") == "5"
         assert record["features_repair_m"] == REPAIR_DEFAULT
