@@ -1,0 +1,20 @@
+MESH CHANGED: numedalslagen mesh sha256 979d5b35de76 -> 7101ea0017bb (reported, not judged)
+FASTER: numedalslagen total 10.34 -> 9.18 s (-11.2 %, band 5.0 %)
+SLOWER: numedalslagen features clip 5.35 -> 6.22 s (+16.3 %, band 5.0 %)
+SLOWER: numedalslagen features clip: clean-up 5.29 -> 6.16 s (+16.5 %, band 5.0 %)
+FASTER: numedalslagen refine 1.29 -> 0.67 s (-48.4 %, band 5.0 %)
+FASTER: numedalslagen refine: start quality 0.69 -> 0.04 s (-94.9 %, band 5.0 %)
+FASTER: numedalslagen land cover 0.61 -> 0.30 s (-50.5 %, band 5.0 %)
+MESH CHANGED: lagan mesh sha256 94ca501ee688 -> c0f3b555ddaf (reported, not judged)
+SLOWER: lagan features clip 9.96 -> 11.47 s (+15.2 %, band 5.0 %)
+SLOWER: lagan features clip: clean-up 5.78 -> 7.29 s (+26.2 %, band 5.0 %)
+HOTSPOT: tile refine 46 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip 68 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: lagan features clip 58 % of the run (ruled at 41 %, grown 10 points or more)
+baseline saved: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/quick/tool/docs/benchmarks/quick/baseline-ac.json
+SLOWER
+exit=1
