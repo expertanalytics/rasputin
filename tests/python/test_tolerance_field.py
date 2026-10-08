@@ -246,6 +246,23 @@ class TestSelection:
         assert segs.shape == (0, 4)
         assert margin == 1.0
 
+    def test_a_geopackage_with_a_polygon_in_reach_and_lines_out_of_reach_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """Code review round 3: the R-tree returns only the polygon, so the file
+        must be read whole to see its lines, and is then a mixed file (section
+        9.1, pin 10), not one with no lines."""
+        polygon = Polygon([(X0 + 100, Y0 + 100), (X0 + 200, Y0 + 100), (X0 + 200, Y0 + 200)])
+        far = self.vertical(X0 + 1000 + 10_000)
+        layer = Layer("shapes", 25833, [Row(1, polygon), Row(2, far)])
+        path = write_gpkg(tmp_path / "mixed_far.gpkg", [layer])
+        with pytest.raises(
+            ValueError,
+            match=r"mixed_far\.gpkg holds lines and other shapes; "
+            r"polygons and points are not used here",
+        ):
+            tf.line_segments(spec(path), WINDOW, UTM33)
+
     def test_no_line_within_reach_is_an_empty_array(self, tmp_path: Path) -> None:
         path = write(tmp_path / "far.geojson", [self.vertical(X0 + 1000 + 3002)])
         segs, margin = segments_of(spec(path), WINDOW, UTM33)
