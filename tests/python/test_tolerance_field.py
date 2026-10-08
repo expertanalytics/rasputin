@@ -1,0 +1,322 @@
+"""``tolerance_field.line_segments``: the lines a tolerance follows, ready for C++.
+
+Increment 33 (``docs/increments/33-feature-tolerance.md``, sections 3, 4.5, 8
+and 9, test 11; invariant-critical, mutants M8 and M9). ``line_segments(spec,
+window, mesh_crs)`` reads the file through ``feature_input.read_source``,
+transforms every LineString and MultiLineString to ``mesh_crs``
+(``always_xy``), simplifies each by ``margin_m`` (Douglas-Peucker, no topology
+kept), keeps the whole segments whose box meets ``window`` grown by ``end_m +
+margin_m``, and returns them as a float64 ``(k, 4)`` array ``x0 y0 x1 y1`` with
+the margin they were simplified by. A line the simplification empties comes
+back as a zero-length segment at its first vertex. Polygons and points are
+refused in words.
+
+The guarantee checked (G7): for every point, its distance to the returned
+segments less the returned margin is never above its distance to the original
+line, transformed and not simplified. Distances here are this file's own
+(point to segment, clamped projection), not the product's.
+
+PINNED HERE, where the design leaves it open (listed for ``@architect``):
+
+- ``window`` is ``(x_min, y_min, x_max, y_max)`` in ``mesh_crs``, the order of
+  ``io.geopackage.Box`` and of shapely's ``bounds``;
+- no line within reach is not an error: the array is ``(0, 4)``;
+- a refusal is a ``ValueError`` (``feature_input.FeatureError`` is one) naming
+  the file; a file with no lines says "<name> has no lines; polygons and
+  points are not used here" (section 5's words), and a file mixing lines with
+  a polygon or a point is refused with "polygons and points are not used
+  here".
+
+The module is imported inside a fixture, so before increment 33 each test
+fails on ``No module named 'tin_engine.tolerance_field'`` and the rest of the
+session still collects.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import numpy as np
+import numpy.typing as npt
+import pytest
+from pyproj import Transformer
+from shapely.geometry import LineString, MultiLineString, Point, Polygon, mapping
+from shapely.geometry.base import BaseGeometry
+
+UTM33 = "EPSG:25833"
+UTM33_URN = "urn:ogc:def:crs:EPSG::25833"
+UTM32 = "EPSG:25832"
+X0, Y0 = 500_000.0, 6_600_000.0
+#: A 1 km window in UTM33.
+WINDOW = (X0, Y0, X0 + 1000.0, Y0 + 1000.0)
+
+
+@pytest.fixture
+def tf() -> ModuleType:
+    return importlib.import_module("tin_engine.tolerance_field")
+
+
+def write(path: Path, geometries: list[BaseGeometry], crs: str | None = UTM33_URN) -> Path:
+    """A FeatureCollection of ``geometries``; ``crs`` None writes no ``crs``
+    member, so the file is RFC 7946's EPSG:4326."""
+    doc: dict[str, Any] = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "geometry": mapping(g), "properties": {}} for g in geometries
+        ],
+    }
+    if crs is not None:
+        doc["crs"] = {"type": "name", "properties": {"name": crs}}
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def spec(
+    tf: ModuleType,
+    path: Path,
+    *,
+    crs: str | None = None,
+    near: float = 1.0,
+    start: float = 0.0,
+    end: float = 3000.0,
+    margin: float = 1.0,
+) -> Any:
+    return tf.ToleranceLines(
+        path=path, crs=crs, near_m=near, start_m=start, end_m=end, margin_m=margin
+    )
+
+
+def segments_of(
+    tf: ModuleType, s: Any, window: tuple[float, float, float, float], mesh_crs: str
+) -> tuple[npt.NDArray[np.float64], float]:
+    segs, margin = tf.line_segments(s, window, mesh_crs)
+    assert isinstance(segs, np.ndarray)
+    assert segs.dtype == np.float64
+    assert segs.ndim == 2
+    assert segs.shape[1] == 4
+    return segs, margin
+
+
+def as_set(segs: npt.NDArray[np.float64]) -> set[tuple[float, ...]]:
+    return {tuple(round(v, 6) for v in row) for row in segs}
+
+
+def point_segment(p: npt.NDArray[np.float64], segs: npt.NDArray[np.float64]) -> np.ndarray:
+    """Each point's distance to the nearest of ``segs`` (``(k, 4)``), clamped
+    projection; a zero-length segment is a point."""
+    a, b = segs[:, 0:2], segs[:, 2:4]
+    u = b - a
+    len2 = np.einsum("ij,ij->i", u, u)
+    w = p[:, None, :] - a[None, :, :]
+    t = np.divide(np.einsum("pij,ij->pi", w, u), len2, out=np.zeros(w.shape[:2]), where=len2 > 0)
+    t = np.clip(t, 0.0, 1.0)
+    foot = a[None, :, :] + t[:, :, None] * u[None, :, :]
+    return np.asarray(np.hypot(*(p[:, None, :] - foot).transpose(2, 0, 1)).min(axis=1))
+
+
+def line_rows(line: LineString) -> npt.NDArray[np.float64]:
+    xy = np.asarray(line.coords, dtype=np.float64)
+    return np.hstack([xy[:-1], xy[1:]])
+
+
+def zigzag(amplitude: float, period: float, length: float) -> LineString:
+    """A line along x from (X0 + 100, Y0 + 500), ``amplitude`` metres either side."""
+    n = int(length / (period / 2))
+    xs = X0 + 100.0 + np.arange(n + 1) * period / 2
+    ys = Y0 + 500.0 + amplitude * np.where(np.arange(n + 1) % 2 == 0, 1.0, -1.0)
+    return LineString(np.column_stack([xs, ys]))
+
+
+def near_points(line: LineString, band: float, count: int, seed: int) -> npt.NDArray[np.float64]:
+    """``count`` points within ``band`` metres of ``line``'s box, seeded."""
+    rng = np.random.default_rng(seed)
+    x0, y0, x1, y1 = line.bounds
+    return np.column_stack(
+        [rng.uniform(x0 - band, x1 + band, count), rng.uniform(y0 - band, y1 + band, count)]
+    )
+
+
+def to_lonlat(line: LineString, crs: str) -> LineString:
+    back = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    x, y = back.transform(*np.asarray(line.coords).T)
+    return LineString(np.column_stack([x, y]))
+
+
+def to_crs(line: LineString, crs: str) -> LineString:
+    there = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    x, y = there.transform(*np.asarray(line.coords).T)
+    return LineString(np.column_stack([x, y]))
+
+
+# ---------------------------------------------------------------- the CRS
+
+
+class TestTransform:
+    def test_a_line_in_epsg_4326_comes_back_in_the_mesh_crs(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        """No ``crs`` member: RFC 7946's EPSG:4326. Both ends are the PROJ
+        transform's, to 1e-6 m (coordinates up to 7e6 m, checked there)."""
+        lonlat = LineString([(8.00, 60.60), (8.01, 60.61)])
+        path = write(tmp_path / "line.geojson", [lonlat], crs=None)
+        expected = to_crs(lonlat, UTM32)
+        x0, y0, x1, y1 = expected.bounds
+        segs, margin = segments_of(tf, spec(tf, path), (x0 - 10, y0 - 10, x1 + 10, y1 + 10), UTM32)
+        assert margin == 1.0
+        assert segs.shape == (1, 4)
+        np.testing.assert_allclose(segs[0], line_rows(expected)[0], rtol=0, atol=1e-6)
+
+    def test_the_crs_given_is_used_when_the_file_says_none(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        lonlat = LineString([(8.00, 60.60), (8.01, 60.61)])
+        path = write(tmp_path / "line.geojson", [lonlat], crs=None)
+        expected = to_crs(lonlat, UTM32)
+        x0, y0, x1, y1 = expected.bounds
+        given = spec(tf, path, crs="EPSG:4326")
+        segs, _ = segments_of(tf, given, (x0 - 10, y0 - 10, x1 + 10, y1 + 10), UTM32)
+        np.testing.assert_allclose(segs[0], line_rows(expected)[0], rtol=0, atol=1e-6)
+
+
+# ---------------------------------------------------------------- the shapes
+
+
+class TestShapes:
+    def test_a_multilinestring_is_split_into_its_segments(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        a = LineString([(X0 + 100, Y0 + 100), (X0 + 300, Y0 + 100)])
+        b = LineString([(X0 + 100, Y0 + 500), (X0 + 300, Y0 + 500), (X0 + 300, Y0 + 800)])
+        path = write(tmp_path / "multi.geojson", [MultiLineString([a, b])])
+        segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert as_set(segs) == as_set(np.vstack([line_rows(a), line_rows(b)]))
+
+    def test_a_linestring_gives_one_row_per_kept_segment(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        line = LineString([(X0 + 10, Y0 + 10), (X0 + 400, Y0 + 20), (X0 + 420, Y0 + 600)])
+        path = write(tmp_path / "line.geojson", [line])
+        segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert as_set(segs) == as_set(line_rows(line))
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            Polygon([(X0, Y0), (X0 + 10, Y0), (X0 + 10, Y0 + 10)]),
+            Point(X0 + 5, Y0 + 5),
+        ],
+        ids=["polygon", "point"],
+    )
+    def test_a_file_with_no_lines_is_refused_in_words(
+        self, tf: ModuleType, tmp_path: Path, geometry: BaseGeometry
+    ) -> None:
+        path = write(tmp_path / "bergen_line.geojson", [geometry])
+        with pytest.raises(
+            ValueError,
+            match=r"bergen_line\.geojson has no lines; polygons and points are not used here",
+        ):
+            tf.line_segments(spec(tf, path), WINDOW, UTM33)
+
+    @pytest.mark.parametrize(
+        "other",
+        [Polygon([(X0, Y0), (X0 + 10, Y0), (X0 + 10, Y0 + 10)]), Point(X0 + 5, Y0 + 5)],
+        ids=["polygon", "point"],
+    )
+    def test_a_polygon_or_point_beside_lines_is_refused(
+        self, tf: ModuleType, tmp_path: Path, other: BaseGeometry
+    ) -> None:
+        line = LineString([(X0 + 100, Y0 + 100), (X0 + 300, Y0 + 100)])
+        path = write(tmp_path / "mixed.geojson", [line, other])
+        with pytest.raises(
+            ValueError, match=r"mixed\.geojson.*polygons and points are not used here"
+        ):
+            tf.line_segments(spec(tf, path), WINDOW, UTM33)
+
+
+# ---------------------------------------------------------------- the selection
+
+
+class TestSelection:
+    """``E = 3000``, margin 1: the window grows by 3001 m (M9)."""
+
+    @staticmethod
+    def vertical(x: float) -> LineString:
+        return LineString([(x, Y0 + 100), (x, Y0 + 900)])
+
+    def test_a_line_2999_m_outside_is_kept_and_one_at_3002_m_dropped(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        east_in, east_out = self.vertical(X0 + 1000 + 2999), self.vertical(X0 + 1000 + 3002)
+        west_in, west_out = self.vertical(X0 - 2999), self.vertical(X0 - 3002)
+        path = write(tmp_path / "lines.geojson", [east_in, east_out, west_in, west_out])
+        segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert as_set(segs) == as_set(np.vstack([line_rows(east_in), line_rows(west_in)]))
+
+    def test_no_line_within_reach_is_an_empty_array(self, tf: ModuleType, tmp_path: Path) -> None:
+        path = write(tmp_path / "far.geojson", [self.vertical(X0 + 1000 + 3002)])
+        segs, margin = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert segs.shape == (0, 4)
+        assert margin == 1.0
+
+    def test_a_segment_reaching_into_the_window_is_kept_whole(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        """Kept whole, never cut at the window (section 4.6: two pieces beside
+        a seam hold the same segments)."""
+        long = LineString([(X0 + 500, Y0 + 500), (X0 + 20_000, Y0 + 500)])
+        path = write(tmp_path / "long.geojson", [long])
+        segs, _ = segments_of(tf, spec(tf, path), WINDOW, UTM33)
+        assert as_set(segs) == as_set(line_rows(long))
+
+
+# ---------------------------------------------------------------- the margin (G7)
+
+
+class TestMargin:
+    """M8: ``d(segments) - margin <= d(original)`` at 1 000 seeded points
+    within 3 m of the line's box. Slack 1e-9 m (coordinates to 7e6 m)."""
+
+    @pytest.mark.parametrize("given_in", ["utm33", "epsg4326"])
+    def test_the_distance_less_the_margin_is_never_above_the_original(
+        self, tf: ModuleType, tmp_path: Path, given_in: str
+    ) -> None:
+        # 0.45 m either side every 2.5 m: Douglas-Peucker at 1 m flattens it to
+        # one segment along the upper peaks (GEOS 3.14: 81 vertices to 2), so a
+        # lower peak is 0.9 m from the simplified line.
+        utm = zigzag(0.45, 5.0, 200.0)
+        if given_in == "utm33":
+            path, original = write(tmp_path / "zig.geojson", [utm]), utm
+        else:
+            lonlat = to_lonlat(utm, UTM33)
+            path, original = (
+                write(tmp_path / "zig.geojson", [lonlat], crs=None),
+                to_crs(lonlat, UTM33),
+            )
+        segs, margin = segments_of(tf, spec(tf, path, margin=1.0), WINDOW, UTM33)
+        assert margin == 1.0
+        assert 1 <= len(segs) < len(original.coords) - 1, "the line was not simplified"
+        points = near_points(original, 3.0, 1000, seed=33)
+        here = point_segment(points, segs)
+        there = point_segment(points, line_rows(original))
+        excess = here - margin - there
+        assert excess.max() <= 1e-9, f"{(excess > 1e-9).sum()} points over, worst {excess.max()} m"
+        # Not vacuous: without the margin the bound breaks here.
+        assert (here - there).max() > 0.5
+
+    def test_a_closed_loop_smaller_than_the_margin_is_kept(
+        self, tf: ModuleType, tmp_path: Path
+    ) -> None:
+        loop = LineString(
+            [(X0 + 500, Y0 + 500), (X0 + 500.5, Y0 + 500), (X0 + 500.5, Y0 + 500.5),
+             (X0 + 500, Y0 + 500.5), (X0 + 500, Y0 + 500)]
+        )  # fmt: skip
+        path = write(tmp_path / "loop.geojson", [loop])
+        segs, margin = segments_of(tf, spec(tf, path, margin=1.0), WINDOW, UTM33)
+        assert len(segs) >= 1, "a loop smaller than the margin came back as nothing"
+        points = near_points(loop, 3.0, 1000, seed=34)
+        excess = point_segment(points, segs) - margin - point_segment(points, line_rows(loop))
+        assert excess.max() <= 1e-9

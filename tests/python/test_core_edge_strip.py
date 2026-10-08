@@ -644,12 +644,14 @@ class TestStubs:
         ]
         # 23b's N18 adds frozen_mask; N18 gives no order, so it goes last, after
         # threads, as on refine_points (test_core_frozen.py). 20c-1 (pin 10)
-        # adds constraint_feet, last, after frozen_mask (23b's "goes last").
+        # adds constraint_feet, last, after frozen_mask (23b's "goes last");
+        # increment 33 adds field, last (test_cli_tolerance_near.py's pin).
         assert [a.arg for a in fn.args.kwonlyargs] == [
             "tolerance",
             "threads",
             "frozen_mask",
             "constraint_feet",
+            "field",
         ]
 
     def test_the_outcome_carries_the_strip_fields(self) -> None:

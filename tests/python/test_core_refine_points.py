@@ -405,13 +405,15 @@ class TestStubs:
         fn = self.declared().get("refine_points")
         assert isinstance(fn, ast.FunctionDef), "refine_points is not stubbed"
         # 23b (N13) adds frozen_mask, after 15f-3's strip (merged first);
-        # 20c-1 (pin 10) adds constraint_feet, last, after frozen_mask.
+        # 20c-1 (pin 10) adds constraint_feet, last, after frozen_mask;
+        # increment 33 adds field, last (test_cli_tolerance_near.py's pin).
         assert [a.arg for a in fn.args.kwonlyargs] == [
             "tolerance",
             "threads",
             "strip",
             "frozen_mask",
             "constraint_feet",
+            "field",
         ]
 
     def test_point_refine_outcome_carries_the_two_counters(self) -> None:
