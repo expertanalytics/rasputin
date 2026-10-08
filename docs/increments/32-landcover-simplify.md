@@ -1115,6 +1115,22 @@ C++, `tests/cpp/unit/test_border_collapse.cpp`:
     is 0. And a junction case: a border leaving a junction shared by three
     rings, the collapse next to it with 2 m to spare, is made at
     clearance 1 (kills M10).
+    **Inside the over-refusal band** (kills M11). Two more cases, each a
+    collapse that is made at clearance 0 and whose closest approach is
+    1.5 m: the smallest of |E − A|, |E − D|, the distance from any vertex
+    the check looks at to A-E or E-D, and the distance from E to any edge
+    it looks at (the three quantities of 15.2) is 1.5 m, well inside
+    [1, 2) so rounding cannot move it across either end. (a) Between two
+    borders: the other border's nearest vertex 1.5 m from the new edge.
+    (b) At a junction: the collapse next to a junction shared by three
+    rings, the nearest other border leaving that junction 1.5 m from E.
+    Both must be made at clearance 1: the refusals in 15.2 are strict
+    (closer than the clearance, |E − A| or |E − D| under it), and 1.5 is
+    not under 1. Checked by the output: E's border has one vertex fewer
+    than its input, and `rejected_clearance` is 0. Under M11 (refusing
+    under 2 m) both are refused, so both go red; (b) also goes red under
+    M10, whose copies of the junction sit at 0. `@tester` shows each
+    case's 1.5 m with a printed distance at clearance 0 first.
 20. **Refusals and identity.** Clearance −1, NaN, ∞ → `InvalidClearance`,
     empty output; clearance 0 equals the three-argument call bit for bit on
     every existing case.
@@ -1124,7 +1140,8 @@ E-to-edge check; M9 drop the short-edge check at placement; M10 exclude A
 and D from the vertex check by node number instead of by coordinate (the
 junction's copies in the other borders then sit at distance 0 from A-E and
 E-D and refuse every collapse next to a junction; test 20b's junction case
-is red); M11 refuse at a clearance twice the one given (test 20b red).
+is red); M11 refuse at a clearance twice the one given (test 20b's two
+1.5 m cases red; the 2 m-to-spare cases are not, by design).
 
 Python:
 
