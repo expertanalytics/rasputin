@@ -708,6 +708,8 @@ terrain deciding. The minimal mesh's height error stays (779 m): that is
 3. **Lakes-only CORINE (`corine-water`) gets the band too.** **Default: yes,
    50 m, same source accuracy.**
 
+**Ola, 2026-10-08, on the main session's summary of this section** ("Three questions, all default yes: 1. Start angle: use 15° when land cover is present and keep 25° otherwise ... 2. Outline reducer: give `reduce_ring` the same proven distance check, as its own small PR afterwards ... 3. Water-only map: the 50 m limit also applies to the lakes-only CORINE map."): **"Go for it."** *Ruled: all three defaults; build 32 now. Recorded by the main session.*
+
 ## 13. ROADMAP
 
 Row 32 added: designed, this file.
