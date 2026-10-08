@@ -50,5 +50,5 @@ Feedback format:
 2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
 3. **Blocking Issues:** What *must* be fixed before merging (e.g., red CI, exceeding the LOC ceiling, surviving red-step scaffolding, a prose claim the change made false).
 4. **Suggestions:** Non-blocking, and only where no gate would catch it. One
-   the branch does not take goes into `docs/ideas.md`, added by your spawner.
+   the branch does not take goes into the private ideas file, added by your spawner.
 

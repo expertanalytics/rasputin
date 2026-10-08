@@ -61,9 +61,11 @@ caller.
 Also read `docs/increments/README.md` (the protocol and a round's cost
 constraints) and the increment file for whatever you are working on.
 
-**Ideas and future work live in `docs/ideas.md`.** Read it before you plan.
-An idea outside your task goes in your handback under *Ideas*; the main
-session adds it.
+**Ideas and idea-stage research live in
+`/Users/skavhaug/projects/rasputin_scratch/ideas/`: private to Ola, outside
+git; commit nothing from it.** An idea enters git only when picked for
+building. Read its `ideas.md` before you plan. An idea outside your task goes
+in your handback under *Ideas*; the main session adds it.
 
 ## Claims: run the check before you write it down
 
