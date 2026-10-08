@@ -60,6 +60,11 @@
 // lies within delta_p of a constraint (mesh::constraint_foot) goes in as its
 // foot, once; if its error stays above the tolerance it goes in later as
 // itself (feet_fallback). Feet are counted in `inserted`.
+//
+// A tolerance policy (docs/increments/33-feature-tolerance.md, 4.4): each
+// triangle's error is compared with the policy's allowed error, asked only
+// between lowest() and highest(), as refine does; options.tolerance is not
+// read by the overloads that take one.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -224,13 +229,14 @@ struct NoSet {};  // point_loop without a store, or without a DEM
 // The loop of refine_points and refine_strip (D4). `points` (a store) or `dem`
 // may be null, `strip` too; refusals (2) to (4) of L2, the tolerance being the
 // caller's.
-template <class Store, class R>
+template <class Store, class R, TolerancePolicy P>
 [[nodiscard]] PointRefineOutcome point_loop(const std::string& name, const raster::RasterGeometry& g,
                                             const Store* points, const R* dem, const ConstraintCheckPoints* strip,
                                             const IndexedMesh2& start, std::span<const double> z,
                                             std::span<const std::uint8_t> valid,
                                             std::span<const std::array<std::uint32_t, 2>> edges,
-                                            std::span<const std::uint32_t> masks, const PointRefineOptions& options) {
+                                            std::span<const std::uint32_t> masks, const PointRefineOptions& options,
+                                            const P& policy) {
     constexpr bool has_store = !std::is_same_v<Store, NoSet>, has_dem = !std::is_same_v<R, NoSet>;
     SubEdges subs;
     std::vector<std::size_t> offset{0};
@@ -273,6 +279,7 @@ template <class Store, class R>
     std::vector<char> written(m.triangle_count(), 0), refused(offset.back(), 0);  // L3, L1
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [&](std::uint32_t s) { written[s] = 1; });
     std::vector<PointScan> results;
+    [[maybe_unused]] Allowed<P> allowed;
     mesh::FlipStack flip_stack;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -347,11 +354,17 @@ template <class Store, class R>
     while (true) {
         ++out.rounds;
         results.resize(m.triangle_count());
+        if constexpr (varies<P>)
+            allowed.resize(m.triangle_count());
         auto t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
-                                          for (std::size_t i = begin; i < end; ++i)
+                                          for (std::size_t i = begin; i < end; ++i) {
                                               results[active[i]] = scan_one(active[i]);
+                                              if constexpr (varies<P>)
+                                                  allowed[active[i]] =
+                                                      allowed_at(policy, m, active[i], results[active[i]].error);
+                                          }
                                       });
         out.scan_seconds += since(t0);
         t0 = clock::now();
@@ -360,7 +373,10 @@ template <class Store, class R>
         bool any = false;
         for (const std::uint32_t t : active) {
             const PointScan& r = results[t];
-            if (!r.point || !(r.is_void || r.error > options.tolerance))
+            double limit = policy.lowest();
+            if constexpr (varies<P>)
+                limit = allowed[t];
+            if (!r.point || !(r.is_void || r.error > limit))
                 continue;
             any = true;
             if (touched[t] != 0)
@@ -460,6 +476,13 @@ template <class Store, class R>
         out.on_frozen += r.on_frozen;
         out.on_frozen_max_error = std::max(out.on_frozen_max_error, r.frozen_error);
     }
+    out.max_error_near = out.max_error;
+    if constexpr (varies<P>) {
+        out.max_error_near = 0.0;
+        for (std::uint32_t t = 0; t < results.size(); ++t)
+            if (results[t].max_error > out.max_error_near && policy.at(m, t) <= policy.lowest())
+                out.max_error_near = results[t].max_error;
+    }
     // Step 6: every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
         if (std::isnan(zt[se.a]) || std::isnan(zt[se.b]))
@@ -532,6 +555,23 @@ template <class Store, class R>
 // With a strip (the reprojected path), its points join the loop (D4); a strip
 // on another geometry, or with an edge that is not a constraint edge of the
 // start, is std::logic_error (L2).
+template <class Store, TolerancePolicy P>
+[[nodiscard]] PointRefineOutcome refine_points(const Store& points, const IndexedMesh2& start,
+                                               std::span<const double> z, std::span<const std::uint8_t> valid,
+                                               std::span<const std::array<std::uint32_t, 2>> edges,
+                                               std::span<const std::uint32_t> masks,
+                                               const PointRefineOptions& options, const P& policy,
+                                               const ConstraintCheckPoints* strip = nullptr) {
+    if (detail::bad_policy(policy))
+        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
+                                                     "refine_points: tolerance must be finite and >= 0"));
+    if (!points.frozen())
+        throw std::logic_error("refine_points: the check-point store is not frozen");
+    return detail::point_loop("refine_points", points.geometry(), &points,
+                              static_cast<const detail::NoSet*>(nullptr), strip, start, z, valid, edges, masks,
+                              options, policy);
+}
+
 template <class Store>
 [[nodiscard]] PointRefineOutcome refine_points(const Store& points, const IndexedMesh2& start,
                                                std::span<const double> z, std::span<const std::uint8_t> valid,
@@ -539,19 +579,26 @@ template <class Store>
                                                std::span<const std::uint32_t> masks,
                                                const PointRefineOptions& options,
                                                const ConstraintCheckPoints* strip = nullptr) {
-    if (!std::isfinite(options.tolerance) || options.tolerance < 0.0)
-        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
-                                                     "refine_points: tolerance must be finite and >= 0"));
-    if (!points.frozen())
-        throw std::logic_error("refine_points: the check-point store is not frozen");
-    return detail::point_loop("refine_points", points.geometry(), &points,
-                              static_cast<const detail::NoSet*>(nullptr), strip, start, z, valid, edges, masks,
-                              options);
+    return refine_points(points, start, z, valid, edges, masks, options, UniformTolerance{options.tolerance}, strip);
 }
 
 // The projected path (D4, F2): the strip's points, and the DEM's nodes in every
 // triangle the run has written (L3), with refine's own scan. Refusals as
 // refine_points', against dem.geometry() (L2).
+template <raster::RasterSource R, TolerancePolicy P>
+[[nodiscard]] PointRefineOutcome refine_strip(const R& dem, const ConstraintCheckPoints& strip,
+                                              const IndexedMesh2& start, std::span<const double> z,
+                                              std::span<const std::uint8_t> valid,
+                                              std::span<const std::array<std::uint32_t, 2>> edges,
+                                              std::span<const std::uint32_t> masks,
+                                              const PointRefineOptions& options, const P& policy) {
+    if (detail::bad_policy(policy))
+        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
+                                                     "refine_strip: tolerance must be finite and >= 0"));
+    return detail::point_loop("refine_strip", dem.geometry(), static_cast<const detail::NoSet*>(nullptr), &dem,
+                              &strip, start, z, valid, edges, masks, options, policy);
+}
+
 template <raster::RasterSource R>
 [[nodiscard]] PointRefineOutcome refine_strip(const R& dem, const ConstraintCheckPoints& strip,
                                               const IndexedMesh2& start, std::span<const double> z,
@@ -559,11 +606,7 @@ template <raster::RasterSource R>
                                               std::span<const std::array<std::uint32_t, 2>> edges,
                                               std::span<const std::uint32_t> masks,
                                               const PointRefineOptions& options) {
-    if (!std::isfinite(options.tolerance) || options.tolerance < 0.0)
-        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
-                                                     "refine_strip: tolerance must be finite and >= 0"));
-    return detail::point_loop("refine_strip", dem.geometry(), static_cast<const detail::NoSet*>(nullptr), &dem,
-                              &strip, start, z, valid, edges, masks, options);
+    return refine_strip(dem, strip, start, z, valid, edges, masks, options, UniformTolerance{options.tolerance});
 }
 
 }  // namespace terrain::refinement

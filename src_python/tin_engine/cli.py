@@ -63,6 +63,7 @@ from tin_engine import edge_strip, final_check, installed_version
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
+    LineTolerance,
     NodedPslg,
     RefineOutcome,
     build_pslg,
@@ -139,6 +140,7 @@ from tin_engine.run_record import (
 from tin_engine.sources import SOURCES, STATION_SOURCES
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
+from tin_engine.tolerance_field import ToleranceLines, line_segments
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -661,6 +663,30 @@ def mesh(
             "of the DEM; --stride then sets the start grid. Default: no refinement.",
         ),
     ] = None,
+    tolerance_near: Annotated[
+        tuple[Path, float] | None,
+        typer.Option(
+            "--tolerance-near",
+            metavar="FILE N",
+            help="Hold the mesh to N metres on these lines (.geojson, .gpkg or .gml). "
+            "Needs --tolerance-ramp.",
+        ),
+    ] = None,
+    tolerance_near_crs: Annotated[
+        str | None,
+        typer.Option(
+            "--tolerance-near-crs", help="The --tolerance-near file's CRS when it does not say."
+        ),
+    ] = None,
+    tolerance_ramp: Annotated[
+        tuple[float, float] | None,
+        typer.Option(
+            "--tolerance-ramp",
+            metavar="START END",
+            help="From START metres from the lines, where N stops, to END metres, where "
+            "--tolerance starts.",
+        ),
+    ] = None,
     domain: Annotated[
         Path | None,
         typer.Option(
@@ -887,6 +913,9 @@ def mesh(
         raise typer.BadParameter("applies only with --dem", param_hint="--bbox")
     if domain is None and domain_crs is not None:
         raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
+    lines = _tolerance_lines(
+        bool(dem), tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp
+    )
     if domain is not None and bbox is not None:
         raise typer.BadParameter("--bbox and --domain exclude each other", param_hint="--bbox")
     if name is not None and name not in GALLERY:
@@ -991,6 +1020,7 @@ def mesh(
             grid,
             checks,
             DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
+            lines,
         )
         surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
@@ -1567,6 +1597,80 @@ def _open_features(
     return found
 
 
+def _tolerance_lines(
+    dem: bool,
+    far: float | None,
+    near: tuple[Path, float] | None,
+    crs: str | None,
+    ramp: tuple[float, float] | None,
+) -> ToleranceLines | None:
+    """Increment 33, section 5: the three flags checked, as one spec or None."""
+    if near is None:
+        if crs is not None:
+            raise typer.BadParameter(
+                "applies only with --tolerance-near", param_hint="--tolerance-near-crs"
+            )
+        if ramp is not None:
+            raise typer.BadParameter(
+                "--tolerance-ramp needs --tolerance-near", param_hint="--tolerance-ramp"
+            )
+        return None
+    hint = "--tolerance-near"
+    if not dem:
+        raise typer.BadParameter("applies only with --dem", param_hint=hint)
+    if far is None:
+        raise typer.BadParameter("--tolerance-near needs --tolerance", param_hint=hint)
+    if ramp is None:
+        raise typer.BadParameter("--tolerance-near needs --tolerance-ramp", param_hint=hint)
+    (path, n), (start, end) = near, ramp
+    for flag, values in ((hint, (n,)), ("--tolerance-ramp", ramp)):
+        if not all(math.isfinite(v) and v >= 0 for v in values):
+            got = " ".join(f"{v:g}" for v in values)
+            raise typer.BadParameter(f"must be finite and >= 0, got {got}", param_hint=flag)
+    if n > far:
+        raise typer.BadParameter(f"N {n:g} is above --tolerance {far:g}", param_hint=hint)
+    if start > end:
+        raise typer.BadParameter(
+            f"START {start:g} is above END {end:g}", param_hint="--tolerance-ramp"
+        )
+    return ToleranceLines(path=path, crs=crs, near_m=n, start_m=start, end_m=end)
+
+
+def _line_field(
+    lines: ToleranceLines, tile: DemTile, far: float
+) -> tuple[LineTolerance | None, dict[str, Value]]:
+    """Increment 33: the field on ``tile``'s grid, None when no line is in
+    reach (then stderr says so), and the record's three input entries."""
+    m = tile.meta
+    window = (
+        m.x_min,
+        m.y_max - (m.rows - 1) * m.delta_y,
+        m.x_min + (m.cols - 1) * m.delta_x,
+        m.y_max,
+    )
+    try:
+        segs, margin = line_segments(lines, window, m.crs)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--tolerance-near") from exc
+    values: dict[str, Value] = {
+        "tolerance_near_m": lines.near_m,
+        "tolerance_ramp_m": f"{lines.start_m:g} to {lines.end_m:g}",
+        "tolerance_lines": f"{lines.path.name}: {plural(len(segs), 'segment', 'segments')}",
+    }
+    if len(segs) == 0:
+        typer.echo(
+            f"no tolerance lines within {lines.end_m:g} m of the domain; "
+            f"every triangle is held to {far:g} m",
+            err=True,
+        )
+        return None, values
+    near, start, end = lines.near_m, lines.start_m, lines.end_m
+    try:
+        return LineTolerance(to_core(tile), segs, near, far, start, end, margin), values
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--tolerance-near") from exc
+
+
 def _words(exc: ValueError) -> str:
     """A refusal's own words: Pydantic's messages without its wrapper."""
     if isinstance(exc, ValidationError):
@@ -1620,6 +1724,7 @@ def _dem_mesh(
     grid: TargetGrid | None = None,
     checks: Iterator[Block] | None = None,
     gain: float = -1.0,
+    lines: ToleranceLines | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -1632,7 +1737,8 @@ def _dem_mesh(
     20c's soft criterion; ``feet`` inserts
     constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
     the refined mesh is checked against the source's nodes (D5), after the
-    tile is dropped (15e, fix 3).
+    tile is dropped (15e, fix 3). ``lines`` (increment 33) builds a tolerance
+    field on the tile's grid and passes it to all three refinement calls.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets R5's phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -1689,6 +1795,10 @@ def _dem_mesh(
                 valid=valid,
             )
     else:
+        field = None
+        if lines is not None:
+            field, line_values = _line_field(lines, tile, tolerance)
+            values |= line_values
         t0 = time.perf_counter_ns()
         out = refine(
             to_core(tile),
@@ -1699,21 +1809,23 @@ def _dem_mesh(
             min_angle_deg=min_angle,
             constraint_feet=feet,
             min_gain_deg=gain,
+            field=field,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
         strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
         if grid is None or checks is None:
-            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet=feet)
+            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet, field)
             del tile
             # 15f, D7: refine's maximum and the strip run's make an upper bound.
             max_error = max(out.max_error, final.max_error)
+            near_error = max(out.max_error_near, final.max_error_near)
             values["line_check_dem_nodes_inserted"] = final.nodes_inserted
         else:
             del tile  # 15e fix 3: phase 2 runs without the target tile
-            final, n = final_check.run(out, grid, checks, tolerance, clock, strip=strip, feet=feet)
-            max_error = final.max_error
+            final, n = final_check.run(out, grid, checks, tolerance, clock, strip, feet, field)
+            max_error, near_error = final.max_error, final.max_error_near
             values |= {
                 "resampled_grid_max_error_m": out.max_error,
                 "dem_nodes_checked": n,
@@ -1748,6 +1860,7 @@ def _dem_mesh(
             "snap_to_lines": "on" if feet else "off",
             "tolerance_m": tolerance,
             "max_error_m": max_error,
+            "max_error_near_lines_m": near_error if field is not None else None,
             "dem_nodes_outside_mesh": final.uncovered,
             "refinement_rounds": out.rounds,
             "points_inserted": out.inserted,

@@ -45,6 +45,13 @@
 // frozen", N1-N5). An edge whose mask meets frozen_mask gets no vertex: the
 // scan skips the nodes on it, no foot is taken on it, and the quality pass
 // skips a node on it. frozen_mask 0 is the run as before, bit for bit (K1).
+//
+// A tolerance policy (docs/increments/33-feature-tolerance.md, 4.3 and 4.4).
+// The overload taking one compares each triangle with the policy's allowed
+// error, and so does the foot's epsilon; options.tolerance is not read. The
+// scan asks at() only for an error between lowest() and highest(), and the
+// serial phase for a foot where the scan did not. UniformTolerance never asks
+// and keeps no per-slot vector, so the plain overload is today's run.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -56,6 +63,7 @@
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/sample.hpp>
+#include <terrain/refinement/line_tolerance.hpp>
 #include <terrain/refinement/scan.hpp>
 
 #include <algorithm>
@@ -65,11 +73,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <set>
 #include <span>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -102,6 +112,7 @@ struct RefineOutcome {
     std::size_t inserted = 0;   // vertices added
     std::size_t flips = 0;      // Lawson flips, the start mesh's included
     double max_error = 0.0;     // over triangles with three valid vertices
+    double max_error_near = 0.0;  // the same over triangles allowed only the policy's lowest() (33, 9.1)
     std::size_t uncovered = 0;  // valid nodes still inside void triangles
     std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
     std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
@@ -255,14 +266,36 @@ template <raster::RasterSource R>
     return std::nullopt;
 }
 
+// A policy that may allow different triangles different errors keeps one
+// allowed error per slot; UniformTolerance keeps none (4.4).
+template <class P>
+inline constexpr bool varies = !std::is_same_v<P, UniformTolerance>;
+struct NoVector {};
+template <class P>
+using Allowed = std::conditional_t<varies<P>, std::vector<double>, NoVector>;
+
+// The allowed error of slot t, whose scan found `error`: lowest() when that
+// converges whatever t's distance, -inf when it splits whatever (at() not asked).
+template <TolerancePolicy P>
+[[nodiscard]] double allowed_at(const P& policy, const mesh::LatticeMesh& m, std::uint32_t t, double error) {
+    return error <= policy.lowest()   ? policy.lowest()
+           : error > policy.highest() ? -std::numeric_limits<double>::infinity()
+                                      : policy.at(m, t);
+}
+
+template <TolerancePolicy P>
+[[nodiscard]] bool bad_policy(const P& policy) {
+    return !std::isfinite(policy.lowest()) || policy.lowest() < 0.0;
+}
+
 }  // namespace detail
 
-template <raster::RasterSource R>
+template <raster::RasterSource R, TolerancePolicy P>
 [[nodiscard]] RefineOutcome refine(const R& dem, const IndexedMesh2& start,
                                    std::span<const std::array<std::uint32_t, 2>> edges,
                                    std::span<const std::uint32_t> masks,
-                                   const RefineOptions& options) {
-    if (!std::isfinite(options.tolerance) || options.tolerance < 0.0)
+                                   const RefineOptions& options, const P& policy) {
+    if (detail::bad_policy(policy))
         return detail::refusal(RefineStatus::InvalidTolerance,
                                "refine: tolerance must be finite and >= 0");
     const raster::RasterGeometry& g = dem.geometry();
@@ -299,6 +332,13 @@ template <raster::RasterSource R>
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;
+    [[maybe_unused]] detail::Allowed<P> allowed;
+    const auto limit = [&](std::uint32_t t) {
+        if constexpr (detail::varies<P>)
+            return allowed[t];
+        else
+            return policy.lowest();
+    };
     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
     const double foot_cap = detail::foot_cap(g);
     mesh::FlipStack flip_stack;  // one buffer for every legalise_around
@@ -309,11 +349,17 @@ template <raster::RasterSource R>
     while (true) {
         ++out.rounds;
         results.resize(m.triangle_count());
+        if constexpr (detail::varies<P>)
+            allowed.resize(m.triangle_count());
         t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
-                                          for (std::size_t i = begin; i < end; ++i)
+                                          for (std::size_t i = begin; i < end; ++i) {
                                               results[active[i]] = scan(dem, m, active[i]);
+                                              if constexpr (detail::varies<P>)
+                                                  allowed[active[i]] = detail::allowed_at(
+                                                      policy, m, active[i], results[active[i]].max_error);
+                                          }
                                       });
         out.scan_seconds += since(t0);
         t0 = clock::now();
@@ -326,7 +372,7 @@ template <raster::RasterSource R>
         bool any = false;
         for (const std::uint32_t t : active) {
             const ScanResult& r = results[t];
-            if (!detail::needs_split(r, options.tolerance))
+            if (!detail::needs_split(r, limit(t)))
                 continue;
             any = true;
             if (touched[t] != 0)
@@ -348,7 +394,8 @@ template <raster::RasterSource R>
                          ? mesh::constraint_foot(m, t, p, foot_cap, frame)
                          : mesh::FootSearch{};
             if (s.status != mesh::FootStatus::None && !footed.contains({r.node->row, r.node->col})) {
-                if (const double eps = detail::foot_epsilon(dem, *r.node, options.tolerance); eps < foot_cap)
+                const double tol = limit(t) >= 0.0 ? limit(t) : policy.at(m, t);  // 4.4: t is unchanged here
+                if (const double eps = detail::foot_epsilon(dem, *r.node, tol); eps < foot_cap)
                     s = mesh::constraint_foot(m, t, p, eps, frame);
                 foot = detail::usable(s, s.status == mesh::FootStatus::Hit && vertex_z(dem, s.at), refused);
                 if (foot)
@@ -399,6 +446,13 @@ template <raster::RasterSource R>
         else
             out.max_error = std::max(out.max_error, r.max_error);
     }
+    out.max_error_near = out.max_error;
+    if constexpr (detail::varies<P>) {
+        out.max_error_near = 0.0;
+        for (std::uint32_t t = 0; t < results.size(); ++t)
+            if (!results[t].is_void && results[t].max_error > out.max_error_near && policy.at(m, t) <= policy.lowest())
+                out.max_error_near = results[t].max_error;
+    }
     for (std::size_t i = 0; i < m.vertices().size(); ++i) {
         const mesh::MeshVertex v = m.vertices()[i];
         const bool node = v.is_node();
@@ -416,6 +470,13 @@ template <raster::RasterSource R>
     out.triangles.assign(m.triangles().begin(), m.triangles().end());
     std::tie(out.edges, out.masks) = m.constraint_edges();
     return out;
+}
+
+template <raster::RasterSource R>
+[[nodiscard]] RefineOutcome refine(const R& dem, const IndexedMesh2& start,
+                                   std::span<const std::array<std::uint32_t, 2>> edges,
+                                   std::span<const std::uint32_t> masks, const RefineOptions& options) {
+    return refine(dem, start, edges, masks, options, UniformTolerance{options.tolerance});
 }
 
 }  // namespace terrain::refinement
