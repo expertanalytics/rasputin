@@ -47,8 +47,8 @@ instead of the read region. RP6 and ``TestTolerance`` assumed GEOS's
 Visvalingam-Whyatt (a three-vertex border's bend dropped, area changed), and
 are rewritten for the band: a border keeps its ends, a collapse needs four
 vertices, and each polygon keeps its area. ``TestTheBand`` checks the wiring.
-RED at the commit that adds them: the stage calls ``coverage_simplify`` and
-clips to the read region.
+RED at the commit that added them (``44f25968``): the stage called
+``coverage_simplify`` and clipped to the read region.
 """
 
 from __future__ import annotations
