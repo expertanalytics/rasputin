@@ -105,6 +105,13 @@ NOTCHED: list[tuple[float, float]] = [
     rel(13.9, -7.1),
 ]
 BAND = rect(50.2, -30.1, 150.3, -15.2)
+#: 20c-3's four land-cover switches off: today's features, byte for byte.
+CLEAN_UP_OFF = (
+    "--features-repair=0",
+    "--no-features-merge-same-class",
+    "--features-tolerance=0",
+    "--features-outline-snap=0",
+)
 
 
 bumpy = rough_dem(16)
@@ -166,12 +173,12 @@ def polygons_of(features: list[Feat]) -> list[tuple[BaseGeometry, int]]:
 
 
 def mesh_corine(
-    tmp_path: Path, tif: Path, features: list[Feat], domain: Path | None = None
+    tmp_path: Path, tif: Path, features: list[Feat], domain: Path | None = None, *extra: str
 ) -> Labelled:
     path = write_geojson(tmp_path / "corine.geojson", features)
     domain = domain or geojson(tmp_path / "square.geojson", SQUARE)
     code, output, target = run(
-        tmp_path, tif, domain, "--features", str(path), "--features-map", "corine"
+        tmp_path, tif, domain, "--features", str(path), "--features-map", "corine", *extra
     )
     assert code == 0, output
     return labelled_vtk(read_vtk(target.read_bytes()), output, polygons_of(features))
@@ -216,8 +223,13 @@ class TestFixtures:
         assert got.stderr_counts()["v"] == 0
 
     def test_a_lake_in_an_unholed_forest(self, tmp_path: Path, bumpy: Path) -> None:
-        """D2: the smaller polygon wins, and stderr counts the overlap."""
-        got = mesh_corine(tmp_path, bumpy, [coded("f", FOREST, "312"), coded("l", LAKE, "512")])
+        """D2: the smaller polygon wins, and stderr counts the overlap. With
+        20c-3's land-cover clean-up off (``CLEAN_UP_OFF``): by default its
+        repair resolves the overlap before labelling, so stderr would count
+        none (20c-3 red step; the default is ``test_feature_repair.py``'s
+        ``TestOverlap``)."""
+        features = [coded("f", FOREST, "312"), coded("l", LAKE, "512")]
+        got = mesh_corine(tmp_path, bumpy, features, None, *CLEAN_UP_OFF)
         assert set(got.codes[got.inside(LAKE)].tolist()) == {512}
         assert set(got.codes[got.inside(FOREST.difference(LAKE))].tolist()) == {312}
         assert got.stderr_counts()["v"] > 0
@@ -225,8 +237,15 @@ class TestFixtures:
     def test_a_polygon_clipped_by_the_domain_into_two_pieces(
         self, tmp_path: Path, bumpy: Path
     ) -> None:
+        """16c's labelling of one polygon the domain clips into two pieces.
+        With 20c-3's outline rule off (``--features-outline-snap=0``, ruling
+        G2): the band's borders cross the notch's sides, and the rule, on by
+        default, moves them there as designed (OR3), while this oracle
+        checks every triangle against the input polygon as given. The repair
+        and the merge stay at their defaults."""
         domain = geojson(tmp_path / "notched.geojson", NOTCHED)
-        got = mesh_corine(tmp_path, bumpy, [coded("b", BAND, "324")], domain=domain)
+        features = [coded("b", BAND, "324")]
+        got = mesh_corine(tmp_path, bumpy, features, domain, "--features-outline-snap=0")
         west = got.inside(BAND.intersection(rect(12, -80, 80.1, 0)))
         east = got.inside(BAND.intersection(rect(119.9, -80, 190, 0)))
         assert west.any() and east.any()

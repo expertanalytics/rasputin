@@ -1,0 +1,14 @@
+features: 22 kept (21 cut at the domain outline), 4638 outside the domain, 0 empty
+lines: 290062 vertices read, 150659 after joining shared edges and adding crossings
+DEM: 16 files, 15667 columns x 17882 rows
+land cover: 1839 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+1141959 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 9.9999 m).
+$SCRATCH/m8-s0.25-num.vtk
+$SCRATCH/m8-s0.25-num.md
+s0.25-num: whole run in-process 11.10 s
+s0.25-num: coverage_clean {'snapping_distance': 0.25, 'gap_width': 0.25, 'merge_strategy': 'min_area'} 1.24 s; polygons 3297; vertices 603977 -> 603570; land cover moved 1127.56 m2; ring edges < 10 cm 393 -> 0; emptied 1
+s0.25-num: gaps touching the domain (width m, area m2) before [] after []
+s0.25-num: valid after True
+real 15.84
+user 20.72
+sys 0.88

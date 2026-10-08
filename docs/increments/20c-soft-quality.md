@@ -42,12 +42,66 @@ limit for 20c-2, judged per split"); the green step and the fix ruled
 help promised a line split that `--no-constraint-feet` turns off; fix
 round: red `9f54bc95` (`@tester`, the help-text test), green `50544838`
 (`@developer`, the help reworded, the atan2-skip comment corrected); the
-kill table copied in ("Mutation round for 20c-2"). **Next: `@reviewer`'s
-code review round 2**;
-**20c-3** (still to build) input clean-up and coarsening, and Ola's outline rule, on by
-default at 5 m (question 6, ruling 6), after
-20c-2. Questions 1 to 4 ruled by Ola, 2026-10-06,
-and questions 5 to 8, 2026-10-07 ("Ola's rulings" below); none open. Asked by Ola
+kill table copied in ("Mutation round for 20c-2"). Code review round 2
+(`@reviewer`, on `d4ac395f`): approved; **merged** as PR #214 (master
+`4abacf65`);
+**20c-3** the repair of land-cover borders that should be one (on at
+1 m, ruling 9, Ola's answer to question 9 on 2026-10-08), input coarsening, and Ola's outline rule, on
+by default at 5 m (question 6, ruling 6), after 20c-2 (branch
+`worktree-soft-quality-3` from 20c-2's head `68cc96b6`; Ola: "build 20c-2
+and 20c-3"): **designed, brought up to date 2026-10-08** for ruling 9 and
+for what 20c-2 and 30d (PR #215) changed ("Design of PR 20c-3"; M7 the
+probe that set the tolerance); **built**: shapely 2.2 `985b4a47`
+(`@developer`), red `6459e87c` (`@tester`), green `7334b82b`
+(`@developer`; 46 of 49 red tests pass, full suite 3 failures), 331 net
+production lines (`python3 tools/count_loc.py 483221d2 7334b82b`, +121 %
+on ~150, ruling G5); the green step ruled ("Rulings on 20c-3's green
+step": two broken or conflicting tests, the record's switch as text, the
+clip's shortened edges, the assumptions); test changes `737e5250`
+(`@tester`), green for rulings G3 and G6 (e) `e07d5921` (`@developer`);
+mutation round on the outline rule done, test commit `5cc0639c`
+(`@tester`, tests only: two survivors of eight faults, M2 and M2b, killed
+by two new tests; "Mutation round for 20c-3"), its three pins ruled
+("Rulings on 20c-3's mutation round"; OR5's wording corrected);
+`@perf`'s timed check and gate runs `16143f4c` and profile `4d52dec0`
+(`docs/benchmarks/2026-10-08/20c-3/`): the run +30 % on Lagan and +107 %
+on Numedalslagen, the clean-up 8.0 s and 8.8 s against the design's
+1.1 s; Numedalslagen's outline-rule gate missed (15 slivers, 11 near the
+outline, worst 0.0814°); both ruled ("Rulings on 20c-3's timed check and
+gate runs": T1 a defect in ruling G4's cuts, fixed in code; T2 the
+rebuild and area measure restricted to what moved; T3 the hotspot,
+question 10, ruled 10). Fix round: red `51c24772` (`@tester`, OR9 and the far
+part), green T1 `35b7a873` and T2 `8716f062` (`@developer`), 355 net
+production lines (`python3 tools/count_loc.py 483221d2 8716f062`);
+`@perf`'s re-time `41db7333`: T2 leaves the mesh unchanged, the clean-up
+5.92 s and 5.48 s (limits met), the outline-rule rows of the gate met
+(the repair rows and three checks of that gate were not run on the fixed
+code; "Rulings on 20c-3's code review round 1", R3); the T2 pins
+ruled ("Rulings on the fix round"): one changed, the area moved for a
+ring with no kept vertex (P1): red `48aca5f7` (`@tester`), green
+`1e011cec` (`@developer`), 356 net production lines (`python3
+tools/count_loc.py 483221d2 1e011cec`). Code review round 1 (`@reviewer`,
+on `1e011cec`): changes requested; ruled ("Rulings on 20c-3's code review
+round 1": a hole the rule puts onto the outline is filled, fixed in code;
+the record row's wording; the gate's unrun checks, run by `@perf`).
+Fix round: red `1f7f8335` (`@tester`, R1 and R4), green `aaee898b`
+(`@developer`), 360 net production lines (`python3 tools/count_loc.py
+483221d2 aaee898b`); `@perf`'s R3 run `63065a15`: (a) to (d) met, (e)
+met once its wording is corrected (R3's outcome, below: the 26.194 m left
+are borders between different classes in the source data). Code review
+round 2 (`@reviewer`, on `05b0fd7a..07d97ee4`): "Review" below. M8
+`d7a3462a` (`@architect`): the repair's tolerance probed at 5 cm, 25 cm
+and 1 m on the built code, question 9 asked again with 1 m as its
+default; Ola: 1 m (ruling 9's default, 2026-10-08). Red `f6e0f287`
+(`@tester`), green `c71ccf57` (`@developer`, three lines changed; 360 net
+production lines, unchanged); `@tester`'s docstring line `52f6a5d6`
+(tests only). Ola accepted the clean-up's time (ruling 10, question 10,
+2026-10-08); the speed-up is its own ROADMAP row. **Built. Next:
+`@reviewer`'s code review round 3, on `9a04c3c1..` this record's
+commit.** Questions 1 to 4 ruled by Ola, 2026-10-06, and questions 5 to
+8, 2026-10-07, ruling 9 (amending 5) 2026-10-07, and its default
+(question 9) and question 10 2026-10-08 ("Ola's rulings" below); no
+question open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -68,7 +122,12 @@ triangle count. What is left is the input's own geometry (millimetre
 CORINE segments), which only a tolerance on the input removes: 20c-3's
 2 m simplification takes the slivers to 151 and 32, and Ola's outline
 rule (land-cover borders within 5 m of the catchment outline put onto it)
-to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6).
+to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6). Ola ruled
+that a mismatch such as Lagan's 1 cm slit is an error to repair (ruling 9):
+20c-3 first joins land-cover borders that come within 1 m of each other
+(Ola's default, question 9), which closes the slit, removes the land
+cover's millimetre edges, and takes the slivers with the defaults to 26
+and 2, the worst angle to 0.73° and 0.83° (M7, M8).
 
 ## Prior art: legacy and literature
 
@@ -114,6 +173,18 @@ to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6).
   which is what Ruppert's size bound needs. The noder already snap-rounds at
   `--snap-spacing` (increment 5a; default 1 mm, 16 U6); shapely's
   `set_precision` does the same through GEOS.
+- **Coverage cleaning** (Davis 2025, "Coverage Cleaning in JTS",
+  http://lin-ear-th-inking.blogspot.com/2025/04/coverage-cleaning-in-jts.html;
+  ported to GEOS 3.14 as `CoverageCleaner`, PostGIS `ST_CoverageClean`,
+  shapely 2.2 `coverage_clean`): a set of polygons meant to be a partition
+  is noded with a snapping noder, its faces rebuilt, overlaps given to a
+  neighbour, and gaps narrower than a width (the diameter of the largest
+  inscribed circle) given to the neighbour with the longest shared border.
+  20c-3's repair is this, unchanged, with one tolerance for both the
+  snapping and the gap width, and run on the polygons clipped to the read
+  region. The snapping noder is not iterated snap rounding (Halperin and
+  Packer, above), so it gives no lower bound on the input's feature size,
+  and 20c-3 claims none.
 - **Garland and Heckbert 1995** (greedy insertion for terrain): the
   tolerance-driven refinement this project builds on (increment 14). It has
   no quality criterion; thin triangles are a known by-product.
@@ -149,6 +220,16 @@ $
 No file (exit status 1). The legacy triangulated every DEM point with CGAL
 and had no quality pass (increment 20's prior art). **Nothing is carried
 across.**
+
+For 20c-3's repair (ruling 9), the same check on its subject, run
+2026-10-08:
+
+```sh
+$ git grep -l -i -E "coverage|gap_width|clean_coverage|snapping" legacy-archive -- legacy
+$
+```
+
+No file (exit status 1). Nothing is carried across.
 
 ## The problem, measured
 
@@ -512,8 +593,9 @@ after the 2 m simplification, which keeps all three corners; the 1 cm snap
 of round 2 moved its two near corners by under a centimetre and lowered it
 to 0.006608°. Neither the snap nor `coverage_simplify` closes a gap
 between polygons; only a gap-closing step would (GEOS's coverage cleaning,
-GEOS 3.14; the venv's shapely has GEOS 3.13), and Ola ruled no
-gap-closing step (ruling 5, 2026-10-07). It is one of M1's two slivers
+GEOS 3.14; the venv's shapely has GEOS 3.13). Ruling 5 first said no
+gap-closing step; Ola reversed it (ruling 9), and 20c-3's repair closes
+this gap (M7). It is one of M1's two slivers
 forced by an input angle (M1, last point).
 
 **20c-3's worst triangle on Lagan is made by the simplification**
@@ -549,7 +631,8 @@ polygons, not filtered to the domain), 1 362 and 71. Meshes on 20c-2:
 | the same, with the guard | 742 831 | 151 | 19 | 0.007080° | 1 013 557 | 32 | 4 | 0.012446° |
 
 The guard lifts Lagan's worst angle only to the gap's own forced
-0.007080°, which no step can pass under ruling 5, removes no sliver on
+0.007080°, which no step could pass while ruling 5 stood (ruling 9 now
+repairs the gap, M7), removes no sliver on
 either catchment, and leaves Numedalslagen's worst triangle where it is
 (its 3.6 mm edge is not an edge of any land-cover ring, so the guard does
 not reach it; not traced further). For about 15 lines it buys 6 % of one
@@ -691,6 +774,127 @@ step, `--features-outline-snap`), on by default at 5 m (Ola, question 6,
 ruling 6).** Its tests, gate and lines below are the same under either
 default.
 
+### M7. Gaps in the land cover, and the repair's tolerance (`@architect`, 2026-10-08, for ruling 9)
+
+One short probe, to set the repair's tolerance (S, below). Shapely 2.2.0
+with GEOS 3.14.1 in a scratch venv (the repository's venv has 2.1.2 with
+GEOS 3.13, which lacks `coverage_clean`); AC power; one run each, no
+warm-up. The CORINE polygons that reach the domain, moved vertex by vertex
+into the computation CRS (Lagan: the GeoJSON in EPSG:3035 to EPSG:3006;
+Numedalslagen: the GeoPackage, already in EPSG:25833). The scripts are kept
+in `../rasputin_scratch/20c-prototype/m7/` (`gaps.py`, `snap.py`,
+`clip.py`; `clip.py` as kept is the hull version, which `sed` made from the
+first). A gap is a hole in the union of those polygons; its width is twice
+its largest inscribed circle's radius. Mesh figures were not measured: no
+C++ build was allowed in this round, and the meshes are `@perf`'s
+measurement of the built code.
+
+| | Lagan | Numedalslagen |
+|---|---|---|
+| polygons reaching the domain; vertices | 2 790; 1 006 098 | 1 611; 1 056 147 |
+| gaps touching the domain | 1, the slit (M5): width 1 cm, 0.40 m² | 0 |
+| gaps of any width between 0 and 100 m, anywhere | that one | none |
+| finding the gaps (union and widths) | 0.83 s | 0.79 s |
+| `coverage_is_valid` (the old design's check) | 15.76 s | 15.84 s |
+| ring edges under 10 cm, counted per polygon | 356 | 464 |
+| `coverage_clean`, gap width 1 m, snapping GEOS's default | 3.11 s; 0.40 m² moved; edges under 10 cm 347; the slit's two corners still 1.005 cm apart | 4.99 s; 461.88 m² moved; 38 |
+| the same, snapping 0 | 2.92 s; 0.40 m²; 357; corners apart | 4.40 s; 0.00 m²; 464 |
+| the same, snapping 1 cm | 3.11 s; 0.64 m²; 41; corners apart | 4.95 s; 494.70 m²; 51 |
+| the same, snapping 5 cm | 3.10 s; 0.72 m²; 5; **the corners one vertex** | 4.90 s; 1 085.05 m²; 1 |
+| clipped to the domain's convex hull grown by 100 m (30d's read region) first: vertices; clip; `coverage_clean` at 5 cm and 5 cm | 328 372; 0.36 s; 0.75 s | 407 753; 0.34 s; 0.76 s |
+| the same, clipped to the domain grown by 100 m (mitred) | 310 748; 3.41 s; 0.65 s | 290 567; 1.01 s; 0.54 s |
+
+Every cleaned coverage passed `coverage_is_valid`, and at gap widths of
+0.1, 1 and 5 m the results were the same (no gap between 5 cm and 100 m to
+fill). The other 5 690 and 2 877 holes in each union are 100 m wide or more
+and lie outside the domain: the land cover of polygons that do not reach it.
+
+- **The slit is the only gap on either catchment**, and 5 cm is the
+  smallest snapping distance probed that joins its two open corners.
+- **GEOS's default snapping distance is not zero**: on Numedalslagen, which
+  has no gap, it moved 462 m². 20c-3 passes S explicitly.
+- **The check costs more than the repair.** `coverage_is_valid` took 15.8 s,
+  `coverage_clean` 3 to 5 s, and after the clip to the read region about
+  0.75 s.
+- **The hull is the cheaper region to clip to**: a convex region with few
+  vertices, 0.35 s, against 1 to 3.4 s for the mitred domain on these
+  outlines (Lagan's is a staircase).
+
+### M8. The repair's tolerance on the built code: 5 cm, 25 cm and 1 m (`@architect`, 2026-10-08, for question 9)
+
+Ola, on question 9: try 1 m as well; he thinks 5 cm is still only noise.
+One short probe, not a sweep, on the built code at `9a04c3c1` with the
+worktree's `.venv` (shapely 2.2.0, GEOS 3.14.1; the extension built after
+the last C++ change, `50544838`), AC power, one run each, no warm-up. The
+defaults (merge on, simplification off, outline rule at 5 m) plus
+`--features-repair S`, with the catchment arguments of
+`docs/benchmarks/quick/cases.toml` on branch `worktree-perf-process`
+(tolerance 10 m). A driver runs `rasputin mesh` in-process and wraps
+`shapely.coverage_clean` and `snap_to_outline` to keep the repair's input
+and output and the domain; the mesh checks are `@perf`'s `gate.py`,
+`corners.py` and `farcorner.py`
+(`docs/benchmarks/2026-10-08/20c-3/scripts/`). Scripts, `--stats` files
+and logs: `docs/benchmarks/2026-10-08/20c-3/m8/`. The 5 cm and 1 m runs
+were repeated and gave the same `.vtk` byte for byte; times are the first
+runs'.
+
+Unlike M7, the land-cover figures are the repair's own input: the polygons
+after the clip to the read region (Lagan 3 674 pieces, 380 826 vertices;
+Numedalslagen 3 297, 603 977). Area moved is M7's measure, the symmetric
+difference of each polygon before and after, summed, so each square metre
+given from one polygon to another counts twice.
+
+| S | Lagan | Numedalslagen |
+|---|---|---|
+| **5 cm** (the default when probed; 1 m since Ola's answer): slivers under 1°; worst angle; triangles | 180 (0.0225 %); 0.1917°; 799 368 | 158 (0.0138 %); 0.6302°; 1 141 983 |
+| 25 cm | 176 (0.0220 %); 0.1917°; 799 336 | 158 (0.0138 %); 0.6302°; 1 141 959 |
+| **1 m** | **26 (0.0033 %); 0.7293°; 798 554** (−0.10 %) | **2 (0.0002 %); 0.8322°; 1 118 006** (−2.1 %) |
+| ring edges under 10 cm (M7's count), before the repair → after, at 5 cm / 25 cm / 1 m | 231 → 0 / 0 / 0 | 393 → 2 / 0 / 0 |
+| land cover moved, in all; inside the domain (m², counted twice), at 5 cm / 25 cm / 1 m | 0.6; 0.5 / 370; 83 / 13 342; 6 789 | 548; 151 / 1 128; 151 / 42 164; 17 020 |
+| thickest piece of moved land cover, at 5 cm / 25 cm / 1 m | 0.010 / 0.241 / 0.988 m | 0.011 / 0.250 / 0.992 m |
+| gaps touching the domain: before; after, at every S | the slit (1 cm wide, 0.40 m²); none | none; none |
+| polygons the repair empties, at 1 m | one, 6.35 m² and 0.63 m wide, 1.5 km outside the outline | one, under 0.01 m² and 6 mm wide, at every S (the clip's crumb) |
+| `--stats`' clean-up time (the whole land-cover step), at 5 cm / 1 m; `coverage_clean` alone | 5.86 / 5.98 s; 0.90 s at every S | 5.51 / 5.46 s; 1.22 to 1.25 s |
+| the whole run, at 5 cm / 1 m (`--stats` total) | 21.80 / 21.62 s | 11.28 / 10.82 s |
+| the slit's two open corners both mesh vertices? (`corners.py`), at every S | no: one is, the other is 1.0 cm from the nearest vertex | (not on this catchment) |
+| slivers at the slit's far corner (`farcorner.py`), at every S | 0 of the 6 triangles there | |
+| slivers with a side under 10 cm; with the centre within 20 m of the outline, at 5 cm / 1 m | 0 / 0; 0 / 0 | 0 / 0; 1 / 0 |
+
+- **What 1 m removes is borders of two polygons that come within 1 m of
+  each other**, not mismatched shared borders: the repair's input is a
+  valid coverage on both catchments, with no overlap (`m8ov.py`), and
+  M7 found no gap between 5 cm and 100 m wide. At 1 m the moved land cover
+  is long thin pieces: those thicker than 25 cm are 198 pieces, 45 km of
+  border on Lagan (median 93 m long, the longest 7 km, about 0.3 m
+  thick on average), and 4 629 pieces, 123 km on Numedalslagen (median
+  1.5 m long). They lie spread over the basins, not on M2's CORINE seam
+  or easting pair (2 pieces of 198 within 15 m of them on Lagan). No
+  vertex moves farther than S (the thickest piece is 0.99 m).
+- **That is where the slivers were.** Of the 5 cm meshes' slivers, 157 of
+  180 (Lagan) and 156 of 158 (Numedalslagen) lie within 2 m of land cover
+  the 1 m repair moved; on the 1 m meshes, 2 of 26 and 0 of 2
+  (`m8moved.py`). The check can fail: it counts slivers of either mesh
+  against the same moved land cover, and the 1 m meshes' remaining slivers
+  mostly lie elsewhere.
+- **25 cm gives nothing over 5 cm on the mesh** (4 slivers fewer on Lagan,
+  none on Numedalslagen, the same worst angles). The gain is between
+  25 cm and 1 m; no S between them, and none above 1 m, was probed.
+- **The cost**: land cover moved by under 1 m along about 45 km (Lagan) and
+  123 km (Numedalslagen) of border, 6 789 m² and 17 020 m² inside the
+  domains counted twice, so about 3 400 m² and 8 500 m² given from one
+  polygon to another: 5 × 10⁻⁷ and 1.5 × 10⁻⁶ of their 6 441 and
+  5 548 km². CORINE is mapped at 1:100 000, with a 100 m minimum width and
+  a positional accuracy the producers state as better than 100 m; a 1 m
+  move is 1 % of the smallest feature it may hold. No measurable time.
+- **Scale.** S = 1 m assumes a land-cover source whose borders carry no
+  meaning below a metre (CORINE: 1:100 000) and DEM cells of 10 to 31 m;
+  checked on these two catchments' CORINE, about 380 000 and 600 000
+  vertices after the clip, the largest inputs probed. On a source mapped
+  to the decimetre it moves real borders; the flag is there for that.
+  MapBiomas polygons made by rasputin from a 30 m raster (São Francisco)
+  have no two vertices closer than a pixel side unless the conversion
+  puts them there; not measured.
+
 ## What Ola gets
 
 Measured with `--stats`' own quality table (share under 1°, worst angle) and
@@ -705,6 +909,7 @@ the output independent of `threads`:
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
 | PR 20c-3 with Ola's outline rule at 5 m (its default, ruling 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
+| PR 20c-3 with the repair at 1 m too (its default, ruling 9, question 9 as ruled 2026-10-08) | on a mesh with the defaults, which do not coarsen (M8): 26 (0.0033 %); at 5 cm, 180 (0.0225 %); on the land cover the slit is closed and its 1 cm edge gone (M7, M8) | 798 554; at 5 cm 799 368 | 0.73°; at 5 cm 0.19° | on a mesh with the defaults (M8): 2 (0.0002 %); at 5 cm, 158 (0.0138 %) | 1 118 006; at 5 cm 1 141 983 | 0.83°; at 5 cm 0.63° |
 
 20c-1's row is `@perf`'s measurement of the built code, the same
 triangle counts, sliver counts and worst angles as M5's prototype
@@ -734,8 +939,9 @@ on Lagan, the 1 cm edge that closes a 1 cm wide gap between two CORINE
 polygons in the source data, seen from outside the gap, whose nearest
 vertex the 2 m simplification drops (0.088° in the source, 0.006697°
 after; M5, "Which triangle sets the worst angle"). The gap itself forces
-0.007080° on any mesh, so no step short of closing it (ruled out, ruling
-5) gets Lagan above about 0.007°, and keeping that vertex was measured to
+0.007080° on any mesh of the input as given, so no step short of closing
+it gets Lagan above about 0.007°; 20c-3's repair now closes it (ruling 9,
+M7), measured on the land cover but not yet on a mesh, and keeping that vertex was measured to
 gain only about 6 % (0.006697° to 0.007080°; M5). On Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
 before (and 20c-1 to master's), and promise no fixed angle.
 
@@ -1167,56 +1373,263 @@ point, not a void carve point), Inside its triangle, not yet footed:
   lines split to improve angles", in `--stats` and the run record, right
   after `start_quality_points_snapped_to_lines`.
 
-## Design of PR 20c-3: input coarsening (ruled by Ola, question 1), and the outline rule (ruled by Ola, question 6)
+## Design of PR 20c-3: input repair and coarsening (rulings 1 and 9), and the outline rule (ruling 6)
 
-Python, in the feature reader, after the polygons are moved to the
-computation CRS (vertex by vertex, as today) and before they are clipped
-and the chains are built; never in `_core` (the I/O boundary, `CLAUDE.md`
-§2). Three independent steps, in this order, each with its own flag:
+Brought up to date by `@architect`, 2026-10-08, on branch
+`worktree-soft-quality-3` (from 20c-2's approved head `68cc96b6`), for
+Ola's ruling 9 (the CORINE slit is an input error to repair; it amends
+ruling 5) and for what 20c-2 and increment 30d (PR #215) changed.
 
-1. **Same-class borders dropped** (`--features-merge-same-class`, on
-   whenever a class map is used, Ola's ruling; `--no-features-merge-same-class`
-   turns it off): under a class map, neighbouring polygons of one class
-   are unioned (shapely `coverage_union` per class), so a border with no
-   change of class is no constraint. Removes population 3's lines (E12).
-2. **A horizontal tolerance** (`--features-tolerance METRES`, default 0,
-   off, Ola's ruling): the polygons that reach the domain through
-   `coverage_simplify` at that tolerance (`simplify_boundary=False`, as
-   measured), with no 1 cm snap first (round 3:
-   it breaks the coverage, M6 (a)); polylines are left as given (a line
-   network is not a coverage, and nothing here measured them). Before
-   simplifying, `coverage_is_valid` over those polygons (the filter to
-   the domain is needed: Numedalslagen's CORINE as read for the domain's
-   box, 8 017 polygons, fails the check over 3 polygons that do not reach
-   the domain, and the 1 611 that do pass it); if they do not
-   form a coverage, the run stops with a plain error that says how many
-   polygons and how many metres of border do not match, and that
-   `--features-tolerance 0` reads them as given (both test catchments
-   pass this check). The record and `--stats` say the tolerance and the
-   vertex counts before and after.
-3. **Ola's outline rule** (`--features-outline-snap METRES`; on by
-   default at 5 m whenever features are given, Ola's ruling 6; 0 turns it
-   off): M6 (c)'s four
-   steps on the polygons' rings, against every ring of the domain polygon
-   as the mesh gets it (after increment 22's reduction, if any), in the
-   computation CRS. M6 (c)'s rounding (its step 2) then rounds once more: a
-   multiple of D within D/2 of an outline vertex goes to the vertex (the
-   prototype did not), so two distinct points the rule puts on the
-   outline are more than D/2 apart unless both are outline vertices. The
-   result is linework: rings cut where they leave the outline, the
-   stretches on it dropped, each piece keeping its polygon's class. The
-   record and `--stats` say D, the borders moved and the land-cover area
-   that changed class. D's scale: metres in the computation CRS, measured
-   at 5 and 10 m on DEM cells of 10 and 31 m (M6 (d)); about half a cell
-   or less is what was measured.
+**Speed judgment** (Ola's rule for every design): **yes, this changes
+the work a run does.** It adds a Python stage to every run with a land-cover
+source (the clip and the repair: 1.1 s per catchment in M7's probe, about
++6 % of Lagan's 17 s run (30d's figure) and +17 % of Numedalslagen's 6.6 s),
+and the outline rule (on by default) changes the mesh and so refinement's
+work; the outline rule itself has not been timed. It also drops the old
+design's coverage check, which M7 timed at 15.8 s on each catchment. So
+`@perf` runs a short timed check before the review: at most 15 minutes,
+Lagan and Numedalslagen once each with the defaults, against master, and
+the `features clip` row of `--stats` read; not a sweep.
+
+### Where it sits
+
+Python, in the feature reader (`feature_input.py`), never in `_core`
+(the I/O boundary, `CLAUDE.md` §2). It is a **land-cover stage** between
+reading a source and clipping its lines to the domain, and it works on one
+source at a time: a source is one coverage, and two sources (say CORINE and
+a lake file) are not one partition, so a gap between their polygons is not
+repaired.
+
+- **Which features.** The polygons of a source whose class map names a
+  code system (`ClassMap.codes`, 16c R5: `corine`, `corine-water`,
+  `clc18_kode`), after the map's drops. Lines, and polygons under a map
+  without codes (`property`), go through today's path unchanged.
+- **In the computation CRS.** Each polygon is moved whole, vertex by
+  vertex, as `_take` already does for the label polygon (`polygon`), and
+  the stage works on those. A land-cover source therefore always takes the
+  "moved first, then pre-clipped exactly in the DEM's CRS" route (16b R5's
+  second route, `w = 0`, exact), never the geographic pre-clip before the
+  move: the repair has to see whole borders in one CRS.
+- **Clipped to the read region first.** Each moved polygon is intersected
+  with `region` (16b R5's region in the DEM's CRS, which `_take` already
+  builds: since 30d, PR #215, merged as `769ed992`, the domain's convex
+  hull grown by 100 m). The region is convex and lies at
+  least 100 m outside the outline, so the new edges the clip makes are
+  outside the domain and farther than any outline-rule D (below) from the
+  outline; only polygonal parts are kept. **The clip also shortens edges**
+  that cross the region's edge, and such an edge can still reach within D
+  of the outline (an input edge longer than about 95 m). The rule therefore
+  places its cuts on an edge at multiples of D along the edge's line,
+  counted from the foot of the CRS's origin on that line, not from the
+  edge's end, so where the clip cut the edge does not move them (as built,
+  `7334b82b`; corrected in "Rulings on 20c-3's green step", ruling G4, after
+  30d's `test_grow.py::test_7b` caught the first build), **less any
+  multiple within D/2 of either end of the edge** (ruling T1: a cut
+  centimetres from an edge's own vertex made a centimetre constraint
+  edge). M7: this takes Lagan's land cover from 1 006 098
+  to 328 372 vertices and the repair from 3.1 s to 0.75 s (the clip 0.36 s).
+  The label polygon of each feature is then the clipped, repaired one; the
+  region holds the domain, so every triangle's label inside it is found as
+  before.
+- **Steps, in this order**, the first four on the polygons, the last
+  turning them into lines:
+  1. **Repair** (`--features-repair METRES`, default 1, ruling 9 and
+     question 9): `shapely.coverage_clean(polygons, snapping_distance=S,
+     gap_width=S)`.
+  2. **Same-class borders dropped** (`--features-merge-same-class`, on;
+     `--no-features-merge-same-class` turns it off; ruling 1 (a)):
+     the polygons of one class are unioned (`coverage_union_all` per
+     class), so a border with no change of class is no constraint. Removes
+     population 3's lines (E12). As built: each class becomes one feature
+     under the first fid of its class in source order, a MultiPolygon where
+     its parts do not touch (ruling G6 (d)).
+  3. **Horizontal tolerance** (`--features-tolerance METRES`, default 0,
+     off; ruling 1 (b)): `coverage_simplify` at that tolerance,
+     `simplify_boundary=False`, as measured (M5, M6), no 1 cm snap (M6 (a)).
+     The clip changes the border chains it simplifies only where a border
+     crosses the read region's edge, 100 m or more outside the domain;
+     the gates' margins are taken to cover that (not measured).
+  4. **Ola's outline rule** (`--features-outline-snap METRES`, default 5
+     whenever features are given; 0 turns it off; ruling 6): M6 (c)'s four
+     steps, unchanged below.
+  5. **Lines**: each polygon's rings (or the outline rule's linework) go
+     through today's pre-clip and clip to the domain.
+- **Off.** With `--features-repair 0 --no-features-merge-same-class
+  --features-tolerance 0 --features-outline-snap 0` the stage is skipped
+  entirely and the features are byte for byte today's (the off switch the
+  gates use). Any one of the four on runs the stage, with the repair at
+  whatever S says; S = 0 still runs `coverage_clean` at zero snapping and
+  zero gap width, which makes the coverage valid for steps 2 and 3 and on
+  a valid coverage moves nothing (M7: 0.00 m² on Numedalslagen).
+- **Recorded.** Input rows: `features_repair_m`,
+  `features_merge_same_class` (the text `on` or `off`, as `snap_to_lines`;
+  ruling G3), `features_tolerance_m`,
+  `features_outline_snap_m`. Result rows: the land-cover vertices after the
+  clip and after the stage, "Land-cover vertices before and after clean-up";
+  for the outline rule, the land-cover area inside the outline that changed
+  class (the count of borders moved, designed before, is dropped: ruling
+  G6 (g)). A `features clip: clean-up` sub-row under
+  `features clip` in the timing table, so the timed check reads the stage's
+  own seconds. The vertex, area and timing rows appear only when the stage
+  ran. The four flags sit in their own help panel, "Land-cover clean-up"
+  (ruling G7).
+- **Dependency.** `shapely>=2.2` in `pyproject.toml` (2.2.0 is on PyPI;
+  its wheels carry GEOS 3.14, which `coverage_clean` needs). Not a new
+  dependency, and not on `CLAUDE.md` §2's list. CI installs with `pip
+  install -e .`, which already resolves to the newest shapely; local
+  venvs (2.1.2 with GEOS 3.13 today) must be upgraded. The bump is its own
+  commit by `@developer` before `@tester`'s red step, with the full pytest
+  run on it; any test that changes from the bump alone goes to `@architect`
+  before the red step, not into 20c-3's tests.
+
+### Step 1: the repair (ruling 9)
+
+**What it does.** GEOS's coverage cleaner (Davis 2025; prior art below)
+nodes the polygons' linework with a snapping noder at distance S, rebuilds
+the faces, gives each overlap to a neighbour, and fills each gap narrower
+than S (twice its largest inscribed circle's radius) into the neighbour
+with the longest shared border. The result is a valid coverage: where two
+neighbours' borders came within S of each other, they are now one border.
+
+**The tolerance S: two borders are the same border when they come within S
+of each other.** One number for both of the cleaner's tolerances (the
+snapping distance and the gap width), because they answer the same
+question for a partition that is meant to have no gaps. **Default 1 m**
+(question 9 as asked again with M8, Ola's yes 2026-10-08). M7 set the
+first default, 5 cm, the smallest distance probed that joins the slit's
+corners (the first three points below); M8 then probed 25 cm and 1 m on
+the built code with the defaults, and 1 m is the probed distance that
+removes the thin triangles (the last two points):
+
+- Lagan's slit has its two open ends 1.005 cm apart. Snapping at 1 cm (with
+  a 1 m gap width, M7) fills the gap but leaves its two corners apart, so
+  its 1 cm closing edge stays a constraint; snapping at 5 cm makes the
+  corners one vertex and the two 79 m borders one.
+- Below 100 m wide, the two catchments' land cover has no other gap (M7):
+  Lagan one (the slit), Numedalslagen none. So any gap width from 5 cm to
+  100 m fills the same gap here. The snapping distance moves more as it
+  grows (1 cm: 0.64 m² and 495 m²; 5 cm: 0.72 m² and 1 085 m²; nothing
+  larger was probed), so 5 cm is the smallest distance probed that joins
+  the slit's corners.
+- What else 5 cm changes, measured: ring edges shorter than 10 cm go from
+  356 to 5 (Lagan) and from 464 to 1 (Numedalslagen); this is population 1,
+  M2's millimetre vertex pairs, the same kind of error (borders that should
+  be one, millimetres apart). Land cover moved: 0.72 m² and 1 085 m² of
+  5 548 to 6 441 km², about 2 × 10⁻⁷ of the area.
+- At 1 m (M8, on the repair's own input after the clip): slivers under 1°
+  with the defaults 180 to 26 (Lagan) and 158 to 2 (Numedalslagen) against
+  5 cm, worst angle 0.19° to 0.73° and 0.63° to 0.83°; 25 cm gives what
+  5 cm gives. What 1 m joins is borders of two polygons that run within a
+  metre of each other, 157 of Lagan's 180 slivers and 156 of
+  Numedalslagen's 158 at 5 cm lying within 2 m of land cover it moved;
+  ring edges under 10 cm go to 0 on both.
+- What 1 m moves: about 45 km and 123 km of border, by under 1 m, some
+  3 400 m² and 8 500 m² of land cover inside the domains given to a
+  neighbour (5 × 10⁻⁷ and 1.5 × 10⁻⁶ of the area), 1 % of CORINE's 100 m
+  minimum width; no measurable time.
+
+Scale: S is in metres in the computation CRS; the 1 m default assumes a
+land-cover source whose borders carry no meaning below a metre (CORINE:
+1:100 000, 25 ha minimum mapping unit, 100 m minimum width) and DEM cells
+of 10 to 31 m; checked on the two catchments' CORINE, about 380 000 and
+600 000 vertices after the clip (about 1 million each before it), the
+largest inputs probed (M8). On a source mapped to the decimetre it moves
+real borders; S is a flag for that reason.
+
+**A real gap wider than S stays.** It keeps its two borders as two
+constraints, and the land cover there has no class, as today. Step 3 does
+not simplify its sides (`simplify_boundary=False` keeps edges on a
+coverage's boundary, and a gap's sides are on it; RP6 below checks this).
+A gap open to the read region's edge is not a face of the cleaner's, so by
+its design (Davis 2025) the gap width does not fill it and only the
+snapping acts there; not tested. To be open there, a gap must run at least
+100 m past the outline; none was found (M7).
+
+**Against ruling 1 (b) (simplification off by default).** The repair is not
+the 2 m simplification: it moves a vertex only onto another border within
+S (1 m by default), and it is on because Ola called that kind of mismatch
+an error (ruling 9) and set its default (question 9). The
+simplification at a distance remains Ola's flag, off.
+
+**How it meets the other steps.**
+
+- **Coarsening (step 3).** Repair first: `coverage_simplify` needs a valid
+  coverage (M6 (a): one that is not breaks), and a repaired slit is an
+  inner border, simplified like any other. M5's mechanism, the 2 m
+  simplification dropping the vertex beside the slit's 1 cm edge (0.088° to
+  0.006697°), has no edge left to act on. The old design's coverage check
+  before simplifying (`coverage_is_valid`, with its plain error) is
+  dropped: `coverage_clean`'s output is a valid coverage by its contract,
+  and the check cost 15.8 s per catchment (M7).
+- **The outline rule (step 4).** S (1 m by default) is a fifth of D (5 m),
+  under D/2, and the repair puts no point on the outline, so the rule's rounding (points it
+  places are an outline vertex or more than D/2 apart) is unchanged. Repair
+  first, so the rule never sees two copies of one border.
+- **The same-class merge (step 2).** `coverage_union` per class needs a
+  valid coverage; the repair gives one.
+- **The noder.** Unchanged; its `--snap-spacing` (1 mm) stays, and the
+  noder's failure at coarser spacing (M4, its own ROADMAP row) is not
+  needed.
+
+**Not guaranteed.** The snapping noder is not iterated snap rounding:
+nothing bounds the input's local feature size below by S, and a short ring
+edge can survive (at 5 cm, on Lagan, 5 of the 356 edges under 10 cm; at
+1 m none of the edges under 10 cm on either catchment, M8). The gates below ask for what was
+measured, not for a minimum edge length.
+
+### Steps 2 to 4
+
+As designed in rounds 1 to 6, with three changes: the first from the
+repair, the other two from 30d:
+
+- **Step 3's coverage check is gone** (above). `--features-tolerance`
+  with `--features-repair 0` is allowed: step 1 then runs at zero
+  tolerance, which makes the coverage valid.
+- **The outline rule never buffers the outline.** 30d found GEOS's buffer
+  of Lagan's raster-traced outline (a staircase) to be 98 % of decode. The
+  rule finds the border vertices within D of the outline with an
+  `STRtree` of the outline's segments (`query(..., predicate="dwithin",
+  distance=D)`) and moves each to its nearest point on the nearest
+  segment; no `buffer`, no `snap`. D is refused at or above 100 m (the read
+  region's margin), so the clip's new edges stay out of the rule's reach;
+  the edges it shortens are cut along their line (ruling G4).
+- **Against the domain as the mesh gets it** (after increment 22's
+  reduction, if any), every ring; 30d grows only the read region, never
+  the domain itself, so this is unchanged.
+
+Step 4 in full (unchanged): M6 (c)'s four steps on the polygons' rings, in
+the computation CRS. M6 (c)'s rounding (its step 2) then rounds once more:
+a multiple of D within D/2 of an outline vertex goes to the vertex (the
+prototype did not), so two distinct points the rule puts on the outline are
+more than D/2 apart unless both are outline vertices. The result is
+linework: rings cut where they leave the outline, the stretches on it
+dropped, each piece keeping its polygon's class. D's scale: metres in the
+computation CRS, measured at 5 and 10 m on DEM cells of 10 and 31 m (M6
+(d)); about half a cell or less is what was measured.
+
+### What 20c-2 built, against what 20c-3 assumed
+
+- **R7, R8 and pin 4.** 20c-3's figures were measured on the prototype with
+  20c-2's switches (`run5.sh`: soft criterion at gain 0 and the line split,
+  feet on), which is what 20c-2 built (R8 only with the feet on, pin 4).
+  The built 20c-2 matches the prototype on Lagan (437 slivers) and is 2
+  under it on Numedalslagen (296 against 298). Nothing in 20c-3 depends on
+  R7 or R8 beyond the mesh it is measured on; the gates below are measured
+  against 20c-2 as built (master after PR #214).
+- **Ruling 8** (the split phase judged per split) is a time limit on C++
+  refinement; 20c-3 changes no C++ and has no `bench.py` run. Its time is
+  the speed judgment above.
+- **30d (PR #215, merged as `769ed992`, in this branch's base)**: the
+  read region is the domain's convex hull grown by 100 m, so more polygons
+  are read than before. The clip to that region (above) is what keeps the
+  repair's cost down; the old design's "filter to the polygons that reach
+  the domain" (for the coverage check) is gone with the check.
 
 The domain outline itself is not touched (increment 22 has its own
-reduction). About 60 lines for steps 1 and 2 and about 70 for step 3.
-Measured in M3 to M6 on Lagan and Numedalslagen (the Norwegian CORINE
-rewritten as GeoJSON for round 3, M6). The merge changes the default mesh
-of every run with a class map, and step 3 changes every run with
-features, since its default is on (ruling 6), so 20c-3's off switch for
-the gate is all three flags off, `--features-outline-snap 0` among them.
+reduction). Measured in M3 to M7 on Lagan and Numedalslagen. The repair and
+the merge change the default mesh of every run with a land-cover map, and
+step 4 every run with features, so 20c-3's off switch for the gate is all
+four off.
 
 ## PRs and gates
 
@@ -1224,7 +1637,66 @@ the gate is all three flags off, `--features-outline-snap 0` among them.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
-| 20c-3 | input coarsening, and the outline rule (on by default at 5 m, ruling 6) | 20c-2 merged | measured without the merge, the rule's flag given explicitly, so the gate does not depend on the default. **`--features-tolerance 2` alone** (`--features-outline-snap 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All three flags off give 20c-2's mesh |
+| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 1 m, ruling 9 and question 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no land-cover line between two polygons of the same class (M2's bands; borders between different classes that lie within 1 m of the lines are real and stay, R3's outcome). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs** (5 cm given explicitly, the default when the gate was set; the 1 m default's runs are M8's, below): every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle with its smallest angle under 1° has a corner at the slit's far corner (413 677.295 6 331 664.081). The thresholds are not raised to the measured figures (R3: they are the design's figures already) |
+
+**20c-3's gate results so far** (`@perf`, on `745bcb0d`,
+`docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`; "near" is the
+sliver's centre within 20 m of the domain outline, the same measure as
+the prototype's `strip.py`, checked by reading both scripts). Tolerance
+2 m alone: met on both. Outline rule at 5 m on top: Lagan met (65 slivers,
+4 near, worst 1.000 × the tolerance-only figure); Numedalslagen **not met**
+(15 slivers against ≤ 10, 11 near against ≤ 5, worst 0.0814° against
+≥ 0.1°; triangles +0.28 %, met). Repair at 5 cm on top: no threshold that
+held without it fails; Lagan's slit corners are not both mesh vertices;
+the far-corner check, the shared-border check and the population-3 check
+not run. All four off: 20c-2's mesh bit for bit on both. The cause of
+Numedalslagen's miss and its fix are ruling T1 below. **After T1 and T2**
+(`@perf`, on `8716f062`, `docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:91-130`):
+outline rule at 5 m on top, Numedalslagen **met** (4 slivers, 0 near,
+worst 0.8322°, triangles +0.27 %), Lagan met (61, 0 near, worst
+0.006697°, 1.000 × the tolerance-only figure, +0.09 %): the design's
+figures. T2's mesh is T1's byte for byte (`.vtk` SHA-256 Lagan
+`ef67e65c…`, Numedalslagen `1f11f291…`). The repair runs above predate
+T1, and the shared-border, population-3 and far-corner checks were never
+run: what is run and what is ruled out is "Rulings on 20c-3's code review
+round 1", R3.
+
+**R3's run** (`@perf`, on `aaee898b`,
+`docs/benchmarks/2026-10-08/20c-3/README.md@63065a15:132-183`, raw output
+in `stats/r3/`): (a) the default meshes unchanged by R1 (Lagan
+`ef67e65c…`, Numedalslagen `1f11f291…`): met. (b) the repair on top of the
+outline rule: met on both, Lagan 743 614 triangles (+0.09 %), 59 slivers,
+0 near the outline, worst 0.2320°; Numedalslagen 1 016 194 (+0.26 %), 4,
+0, 0.8322°; `corners.py` on Lagan: the slit's open corners not both mesh
+vertices, met. (c) the slit's far corner: met (6 triangles meet there,
+none under 1°). (d) shared borders: 0.000 m on both, met; one shared vertex
+moved 0.5 m gives 208.170 m and 337.081 m. (e) met on the corrected
+wording (R3's outcome, in "Rulings on 20c-3's code review round 1"):
+26.194 m with the merge on, all of it borders between different classes;
+161 164.495 m with it off.
+
+Slivers with the defaults (every switch at its default; `@perf`, same
+commit), master `483221d2` against the branch:
+
+| catchment | master: triangles | slivers under 1° | worst | branch: triangles | slivers under 1° | worst |
+|---|---|---|---|---|---|---|
+| Lagan | 799 378 | 437 | 0.002384° | 799 408 | 186 | 0.1917° |
+| Numedalslagen | 1 141 207 | 296 | 0.008623° | 1 142 108 | 169 | 0.08145° |
+
+After T1 and T2 (`@perf`, on `8716f062`, same README at `41db7333`),
+with the repair's default then at 5 cm: Lagan 799 368 triangles, 437 →
+180 slivers under 1°, worst 0.002384° → 0.1917°; Numedalslagen
+1 141 983, 296 → 158, worst 0.008623° → 0.6302°.
+
+**With the repair's default at 1 m** (Ola's answer to question 9; M8's
+1 m row, `@architect`, on `9a04c3c1`, one run each, AC power,
+`docs/benchmarks/2026-10-08/20c-3/m8/stats/m8-s1-lagan.md` and
+`m8-s1-num.md`; the code at `c71ccf57` differs only in the default, so
+these are its default meshes): Lagan 798 554 triangles, 437 → 26 slivers
+under 1°, worst 0.002384° → 0.7293°; Numedalslagen 1 118 006, 296 → 2,
+worst 0.008623° → 0.8322°. Not re-timed by `@perf`; M8's single runs
+give the land-cover clean-up 5.98 s and 5.46 s and the whole run 21.62 s
+and 10.82 s (`--stats` total).
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -2179,10 +2651,67 @@ comparison cannot see it.
 
 ### 20c-3
 
-Python only: a two-polygon coverage of one class merges to one; the
-partition stays valid and its area changes by less than tolerance ×
-perimeter; polygons that do not form a coverage stop the run with the
-plain error, and pass at tolerance 0; flags off are a no-op.
+Python only, all in `tests/python/`, on hand-made coverages of a few
+polygons in a projected CRS (no data files). Before the red step,
+`@developer`'s commit raises shapely to 2.2 ("Dependency" in the design);
+`@tester` runs on it.
+
+**The repair** (`test_feature_repair.py`, new; not mutation-critical: the
+geometry is GEOS's, and what 20c-3 owns is which polygons go in, with which
+tolerance, in which order, and each of those is an assertion below):
+
+- **RP1, the slit**: the M5 slit in local coordinates (two polygons that
+  share a far vertex, their borders 79 m long and ending 1 cm apart, the
+  wedge closed by a 1 cm edge of a third polygon) at S = 0.05: the union of
+  the result has no hole; the two long borders are one (the two polygons'
+  intersection is a line of length 79 m ± 1 mm); no ring edge shorter than
+  0.05 is left; the area that changed polygon (the summed symmetric
+  differences) is the wedge's plus the two thin triangles that the moved
+  corner sweeps on the third polygon's borders, within 1 mm². At S = 0:
+  the wedge is still a hole, and nothing moved. (Checked by `@architect`
+  on GEOS 3.14.1 with the third polygon 50 m tall on each side: no hole,
+  shortest edge 40.9 m, shared border 79.13 m, 0.4456 m² moved for a
+  0.3957 m² wedge; at S = 0 one hole, 0 m² moved. A third polygon only
+  1 cm thick collapses to empty, so the fixture must not be one.)
+- **RP2, a real gap wider than S**: a strip 2 m wide between two polygons,
+  closed at both ends by two more (a strip open at an end is not a hole),
+  at S = 0.05: still a hole of the same area (to 1e-9 relative), every
+  polygon equal (`shapely.equals`) to the input.
+- **RP3, nothing to repair**: a valid coverage with no near miss under S:
+  every polygon equal (`shapely.equals`) to the input, and the vertex count
+  unchanged.
+- **RP4, one source at a time**: two sources, each one polygon, with a
+  1 cm gap between them: the gap stays.
+- **RP5, land cover only**: a source under the `property` map (no codes)
+  whose polygons have the same 1 cm slit gives the same lines as today.
+- **RP6, the order**: RP1's coverage with one more vertex on the forest
+  side's long border, halfway along and 4.5 mm off the straight line, run
+  with `--features-tolerance 2`: that vertex is not in the result. Repair
+  first, the two borders are one inner border, which `coverage_simplify`
+  simplifies; simplified first, the border is a side of the gap, on the
+  coverage's boundary, which `simplify_boundary=False` keeps, and the
+  repair then snaps it onto the other border, where it stays. The test
+  asserts that premise by calling shapely in the reverse order itself.
+  (Checked by `@architect` on GEOS 3.14.1, RP1's fixture with the vertex
+  at (39.565, 0.0045): repair first, gone; simplified first, kept.)
+- **RP7, the clip**: a polygon much larger than the domain: its label
+  polygon after the stage lies within the read region and covers the
+  domain; the feature's lines inside the domain are those of today's path.
+- **RP8, all off**: with the four switches off (`--features-repair 0
+  --no-features-merge-same-class --features-tolerance 0
+  --features-outline-snap 0`), `open_features` gives a `FeatureSet` equal
+  to today's on the CORINE fixtures already in `tests/python/` (fids,
+  masks, codes, lines `equals_exact` at 0, label polygons).
+- **CLI**: `--features-repair` defaults to 1 whenever a land-cover map
+  is used (question 9's default); refused: negative, non-finite; the input
+  row `features_repair_m` and the vertex rows in `--stats` and the record;
+  the `features clean-up` timing sub-row present under `features clip`.
+
+**Steps 2 and 3**: a two-polygon coverage of one class merges to one and
+keeps the first fid; the partition stays valid and its area changes by less
+than tolerance × perimeter; `--features-tolerance 2` with
+`--features-repair 0` runs and gives a valid coverage (the coverage check
+and its plain error are gone with the old design's step 2).
 
 The outline rule (invariant-critical, mutation testing required: it
 rewrites input borders); a CLI test pins its default, 5 m whenever
@@ -2203,13 +2732,562 @@ it off:
   more than D/2 from every other such point; one rounded onto an outline
   vertex keeps that vertex in the path (round 3's prototype defect).
 - **OR5** a border crossing the outline at a right angle keeps one
-  crossing, within D/2 of where it was; an inlet (the outline's way between
+  crossing, within D/2 of where it was, or within D where it goes onto
+  an outline vertex (ruling P1); an inlet (the outline's way between
   two moved points longer than twice their distance plus 2 D) is joined
   straight, not round the inlet.
 - **OR6** D = 0 is a no-op, byte for byte.
+- **OR7** D refused at or above 100 m (the read region's margin), and the
+  rule never calls `buffer` on the outline (the rule's own function, called
+  directly with `shapely.buffer` patched to raise, on a staircase outline
+  of 5 000 or more steps, 30d's case).
+- **OR8** (added by ruling G4) the read region does not move the cuts: a
+  polygon with one long edge running from 3 m inside a straight outline
+  edge, nearly parallel to it, out across the read region's edge, clipped
+  by three regions whose margins do not differ by a multiple of D (for
+  example 100, 150 and 173.3 m), then `snap_to_outline` at D = 5: the
+  linework inside the domain is the same for all three (`equals_exact` at
+  1e-9 m). (Checked by `@architect` on `7334b82b` with the polygon
+  (3, −537.3), (53.1, −537.3), (53.1, 512.7), (3.4, 512.7) against the
+  square 0 to 1000: equal for all three; with the cuts counted from the
+  edge's own end instead, the 173.3 m clip differs by 0.62 m.)
 - Mutants to kill: the cut not in a fixed order (OR2); the vertex dropped
   at a rounded point (OR4); the stretches on the outline kept (OR1); the
-  rounding removed (OR4); the inlet test removed (OR5).
+  rounding removed (OR4); the inlet test removed (OR5); the cuts counted
+  from the edge's own end, not along its line (OR8).
+
+#### Rulings on 20c-3's green step (`@architect`, 2026-10-08, on `7334b82b`)
+
+Green `7334b82b` on red `6459e87c`: 46 of the 49 red tests pass; the full
+suite 6 860 passed, 3 failed, 17 skipped. The three failures and the
+other items, ruled; **T** marks a test change for `@tester`, **D** a code
+change for `@developer`.
+
+- **G1, `test_cli_features_cleanup.py::TestGiven::test_the_timing_sub_row`
+  is a broken test. T.** Its `run()` helper already passes `--stats x.md`;
+  the test adds `--stats -`, the last one wins, and `run()` then reads an
+  `x.md` that was never written (FileNotFoundError). Drop `--stats -` and
+  look for the two rows in the report `run()` returns (its first value):
+  the `--stats` file carries the timing table (`stats.py`, `_timings`).
+  No code change.
+- **G2, `test_cli_mesh_landcover.py::TestFixtures::
+  test_a_polygon_clipped_by_the_domain_into_two_pieces`: run it with the
+  outline rule off. T.** The test's oracle (`labelled_vtk`) checks every
+  triangle against the input polygons as given; the band's borders cross
+  the notch's sides, and the rule, on by default, moves them there, as
+  designed (OR3: area changes class near the outline). Probed on
+  `7334b82b` with the fixture's coordinates: 12.3 m² changes class, all of
+  it within 2 D (10 m) of the outline, and each crossing stays one
+  crossing. The test is about 16c's labelling of a polygon clipped into
+  two pieces, not about the rule, so it passes `--features-outline-snap=0`
+  (only that flag; the repair and merge stay at their defaults), with a
+  docstring line saying why, as `test_a_lake_in_an_unholed_forest` does
+  for the repair. Changing the oracle to the moved polygons would make it
+  check the code against itself. No code change.
+- **G3, `test_cli_mesh_plain_output.py::TestRecord::test_values_follow_stats
+  [features]` wins over `@tester`'s pin. T and D.** Increment 25 already
+  settled how a switch is recorded: a text `"on"`/`"off"` equal to its
+  `--stats` text (`docs/increments/25-plain-output.md`, "Values", which
+  names `snap_to_lines`; `cli.py` writes `"on" if feet else "off"`). A JSON
+  boolean would be the record's only one, and `True` passes Python's
+  `isinstance(..., int)`, which is how it broke the integer rule. So:
+  `@tester` changes `test_cli_features_cleanup.py`'s two asserts to
+  `record["features_merge_same_class"] == "on"` and `== "off"`, pins the
+  `--stats` text as `on` and `off` in `test_the_merge_row_says_on_or_off`,
+  and drops the module docstring's "the merge as a JSON boolean";
+  `@developer` writes the row as `"on"`/`"off"` in `cli.py` and removes the
+  `isinstance(value, bool)` branch from `run_record._entry`.
+  `FeatureRequest.merge_same_class` stays a `bool`: the model is typed, the
+  record is text.
+- **G4, the read-region clip and the outline rule. Design corrected; T.**
+  The design said the clip cannot reach the rule; that held for the new
+  edges the clip makes (at least 100 m outside the outline, D under
+  100 m), not for the input edges it shortens, which can still run within
+  D of the outline. With cuts counted from an edge's end, a different
+  region moved them, and 30d's byte-identity test
+  (`tests/python/test_grow.py::test_7b_projected_staircase_with_corine_is_byte_identical`)
+  failed. `@developer`'s fix, cuts at multiples of D along the edge's
+  line counted from the foot of the CRS's origin, in the direction of the
+  edge's lexicographically last end, is ruled correct: both polygons
+  sharing an edge get the same cuts, and a shortened edge keeps its cuts.
+  **To rounding, not bit for bit**: the shortened edge's unit vector and
+  offset are recomputed from the new end, so a cut can move in its last
+  bits, and a cut that the rule does not move onto the outline carries
+  that into the linework. That costs nanometres, and only for an input
+  edge longer than about 95 m that both crosses the region's edge and
+  comes within D of the outline. The design sentence ("Clipped to the read
+  region first") is corrected, and OR8 above pins it with a unit test, so
+  the slow real-data test is not the only guard. Scale: D in metres in the
+  computation CRS, checked at D = 5 on a 1 km square, coordinates up to
+  about 540 m from the origin; the multiples are exact in doubles up to
+  2^53 D, far beyond any UTM coordinate.
+- **G5, size: 331 counted lines against about 150 (+121 %). Accepted;
+  one PR.** `python3 tools/count_loc.py 483221d2 7334b82b`:
+  `feature_input.py` 260, `cli.py` 63, `run_record.py` 8. Of
+  `feature_input.py`'s, the outline rule (`OutlineSnap` to the end of the
+  file) is 188 counted lines against the ~70 estimated; the stage itself
+  (`_add`, `_clean`, `_polygonal`) 68, much of `_add` moved from the old
+  loop (19 lines removed). The estimate was low because it was not taken
+  from the prototype it was measured with: `snapline.py` in
+  `../rasputin_scratch/20c-prototype/` is already 146 non-blank lines, and
+  the design then asked for more than it does (rounding onto outline
+  vertices, cuts the same from either side, the inlet test, a polygon
+  rebuilt for the labels and the area changed). Under 700, so no split.
+  The design should have named one: the land-cover stage (repair, merge,
+  simplification, four flags) and the outline rule were separable, each
+  with its own tests and gates, and the rule carried the estimate's risk.
+  Splitting now would cost a review round and a CI run for nothing the
+  limit asks, so it stays one PR. G3 removes a few lines; no other
+  shrinking is asked.
+- **G6, `@developer`'s pinned assumptions.**
+  (a) *An inlet joined straight drops the parts of that line that lie on
+  the outline at either end*: kept; it is the design's "stretches on the
+  outline dropped" applied to the straight join.
+  (b) *Arc-length rounding*: a placed point goes to the nearest multiple of
+  D along its outline ring, counted from the ring's first vertex, then to
+  a vertex within D/2: kept. The outline is the same object for every
+  polygon, so every polygon rounds alike.
+  (c) *"Within D" inclusive, ties to the lowest segment index*: kept;
+  deterministic, and GEOS's `dwithin` and `query_nearest(max_distance=)`
+  are both inclusive.
+  (d) *The merge unites a whole class into one feature under its first
+  fid, a MultiPolygon if its parts are apart*: kept; the design's "per
+  class" and "the first fid of its class" read that way, and it is
+  simplest. Noted: labelling ranks overlapping polygons by area (16c D2,
+  the smallest wins), so a polygon of another source now wins an overlap
+  against a merged class more often than against the single polygon it
+  replaced. That is the useful direction (the finer source wins); within
+  one source the repaired coverage has no overlaps, so the ranking does
+  not arise there.
+  (e) *Dropped polygons count as "outside"*: **changed for one case. T
+  and D.** A polygon the clip leaves nothing of lies outside the read
+  region, so outside the domain, and stays counted there. A polygon the
+  repair gives wholly to its neighbours is not outside the domain, and
+  the stderr line would say so; it is counted `empty` instead (one word
+  in `_clean`). `@tester` pins it with RP1's degenerate case, a third
+  polygon 1 cm thick (which the repair empties, as noted in RP1): `empty`
+  rises by one and `outside` does not.
+  (f) *The vertex, area and timing rows appear only when the stage ran*:
+  kept, as the design's off switch requires (all four off: today's output).
+  (g) *The "borders moved" count was not built*: kept out; the design
+  drops it. The area row carries the rule's effect, a border count needs
+  a definition of its own (vertices? chains?), and the PR is over its
+  estimate.
+- **G7, the help panel.** The four flags sit in a new help panel,
+  "Land-cover clean-up" (`cli.py`, `CLEAN_UP`), because in the main panel
+  the long `--[no-]features-merge-same-class` cut off older flags' names
+  in an 80-column help table. Noted; the design now says so ("Recorded").
+
+**Next**: `@tester`'s test changes (G1, G2, G3, G4's OR8, G6 (e)), then
+`@developer` for G3 and G6 (e), then `@tester`'s mutation round on the
+outline rule (invariant-critical; the six targets above), then `@perf`'s
+short timed check (at most 15 minutes, "Speed judgment") and the gate runs
+of "PRs and gates", then review.
+
+#### Mutation round for 20c-3 (`@tester`, 2026-10-08, test commit `5cc0639c`, on code `e07d5921`)
+
+Copied word for word from `@tester`'s hand-back for the round, as for
+20c-2; pins ruled below ("Rulings on 20c-3's mutation round").
+It ran on `e07d5921`, before T1 and T2 rewrote `_cut` and `ring`; the
+killing tests are unchanged since (code review round 1's R5).
+
+- **Where it ran:** a scratch copy made by `tools/scratch_copy.py e07d5921`, with the worktree's `.venv`. Every mutant was a single text replacement in the copy's `src_python/tin_engine/feature_input.py`. After each run the file was restored and compared byte for byte with the original. The copy is now removed.
+- **What ran on each mutant:** `test_feature_outline_rule.py` and `test_feature_repair.py`. No mutant failed a repair test.
+- **Line numbers:** they are in `tests/python/test_feature_outline_rule.py@5cc0639c`. I re-ran every mutant against that final file to get them.
+- **Code line numbers:** the "where" column cites `feature_input.py@e07d5921`.
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| M1 | the cut not in a fixed order: `_cut` never flips to the lexicographically last end (`flip = False`, :767) | killed | :184 `test_or2_one_border_from_either_side[same-straight]` and `[same-diagonal]`. The two polygons' shared segments differ in the last bit (500105.4588256424 against …425). The reversed cases pass, as they should. This kill is rounding-sized: under ruling G4's cuts along the line, direction moves only rounding. But OR2's oracle needs both sides of a border to have bit-identical coordinates ("the noder sees one border"), so it is the right oracle. |
+| M2 | the vertex dropped at a rounded point: `_place` loses the second rounding, "a multiple of D within D/2 of an outline vertex goes to the vertex" (`self._vertex(r, m) or` removed, :791) | **survived**, now killed by `5cc0639c` | New test `test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it`, fails at :262: the crossing ends at (60, 0), not at the vertex (61, 0). It survived because `TestTheCorner`'s vertex V = (100, 0) sits at a multiple of D along the outline, so the first rounding already lands on V. `TestRounding` has no point whose own position is more than D/2 from the vertex at 61 while its rounded multiple is within D/2 of it. |
+| M2b | same target, second form: a join drops the outline's own vertices between two placed points and goes straight (`_join`'s along-the-outline branch returns `[(q[2], True)]`, :828) | **survived**, now killed by `5cc0639c` | New test `test_or5_a_shallow_notch_is_followed`, fails at :327: the polygon after the rule covers 0 m² of a 2 m by 1 m notch, not 2. It survived because the straight join is still flagged as lying on the outline, so it is dropped from the linework, and every existing test checks linework only. The defect shows in `OutlineSnap.polygons`, which `_Tally._add` receives (`feature_input.py:441-446`), and in `area_changed`. |
+| M2c | both roundings onto a vertex removed (`out[i] = (r, m, self._at(r, m))`, :791) | killed | :241 `test_or4_placed_points_are_apart` (the vertex at 61 is never used); :262 |
+| M3 | the stretches on the outline kept: `_chains` never cuts (`if True:` for `if not any(on):`, :676) | killed | :135 OR1 (linework left in the band), :207 OR3 (strip length not 0), :281 OR4 corner, :310 OR5 inlet |
+| M4 | the rounding removed (`m = s`, :790) | killed | :246 two placed points 2.0 m apart, under D/2 = 2.5; :262 |
+| M5 | the inlet test removed (`if True:` for `if min(ahead, length - ahead) <= 2 * gap + 2 * self.d:`, :827) | killed | :309 `test_or5_an_inlet_is_joined_straight`: the mouth's linework is empty, distance NaN, not ≤ 1e-9 m |
+| M6 | the cuts counted from the edge's own end, not along its line: `_cut` uses `k = 1 .. ceil(len/D) - 1`, `cuts = lo + k D u` (:770-772) | killed | :432 `test_or8_the_same_lines_inside_the_domain`: the 173.3 m clip gives the vertex (53.1, 6.7) where the 100 m clip gives (53.1, 10), 3.3 m apart. The design measured 0.62 m for its own version of this mutant; mine counts from the lexicographically first end, so the number differs, and both are far above rounding. |
+
+Every kill is an exact coordinate, an area or a length far above rounding, except M1, whose oracle is bit-identity on purpose. I also changed `TestTheCorner`'s docstring: it claimed the test catches "round 3's prototype defect", which it cannot, so it now points to the new test.
+
+**Added in the fix round (`@architect`, from `@tester`'s red step `51c24772`).**
+One fault more, ruling T1's target, "`_cut`'s end test removed": **killed** by OR9,
+`test_or9_no_edge_shorter_than_half_d` (both directions). Shown in the red
+step, not as a separate planted run: the code before T1 (`eb810a90`) is
+exactly that mutant, OR9 failed on it (a 2.4 cm edge beside V), and passed
+with T1 (`35b7a873`). T2's test (`test_t2_the_far_part_passes_through`) is
+not mutation-critical (ruling T2).
+
+#### Rulings on 20c-3's mutation round (`@architect`, 2026-10-08, on `5cc0639c`)
+
+`@tester`'s three pins from the round above, ruled. No code change follows
+from any of them.
+
+- **P1, how far a crossing may move: OR5's wording corrected.** Step 4
+  (above, "Steps 2 to 4") sends a multiple of D within D/2 of an outline
+  vertex to the vertex, and `_place` does that
+  (`src_python/tin_engine/feature_input.py@e07d5921:775-791`): a point goes
+  first to an outline vertex within D/2 of its own place, else to the
+  nearest multiple of D along the outline, then to a vertex within D/2 of
+  that multiple. Each of the last two moves is at most D/2 along the
+  outline, so a point on the outline moves at most D along it, and no
+  farther in a straight line. OR5 said "within D/2 of where it was", which
+  only the case without a vertex nearby meets; its fixture is that case,
+  so no test disagreed. The design is right and OR5's words were short;
+  OR5 now reads "within D/2 of where it was, or within D where it goes
+  onto an outline vertex", and `test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it`
+  (a crossing moved 2.6 m at D = 5, onto the vertex) is inside it.
+- **P2, the rule has two outputs. Noted; the tests now check both.**
+  `snap_to_outline` returns `OutlineSnap.lines`, the linework the noder
+  gets, and `OutlineSnap.polygons`, the label polygons
+  (`_Tally._clean`, `src_python/tin_engine/feature_input.py@e07d5921:435-446`)
+  from which `area_changed` is summed. A fault in a stretch that is dropped
+  from the linework (M2b, a straight join flagged as on the outline) shows
+  only in the polygons, so a test of the rule that reads only the linework
+  cannot see it. `test_or5_a_shallow_notch_is_followed` reads the polygon;
+  any later test of the rule states which of the two outputs it checks.
+- **P3, OR2 is bit for bit; ruling G4's "to rounding" is about another
+  object. Confirmed.** Within one run, the two polygons sharing a border
+  reach the rule with that border's vertices bit-identical: `_clean` runs
+  `coverage_clean` before the rule in every run where the rule runs
+  (`src_python/tin_engine/feature_input.py@e07d5921:422-435`; at
+  `--features-repair 0` too), and its noder makes shared vertices one.
+  `_cut` orders each edge by its lexicographically last end before any
+  arithmetic, so both sides compute the same cuts from the same two
+  points in the same order, which gives the same bits. That is what OR2's
+  "the noder sees one border" asks, and M1's kill (the last bit apart) is
+  the oracle working, not a rounding-sized flake. G4's "to rounding, not
+  bit for bit" compares one edge clipped by two different read regions,
+  so two different runs; it does not weaken OR2.
+
+**Next**: `@perf`'s short timed check (at most 15 minutes, "Speed
+judgment") and the gate runs of "PRs and gates", then review.
+
+#### Rulings on 20c-3's timed check and gate runs (`@architect`, 2026-10-08, on `16143f4c` and `4d52dec0`)
+
+`@perf`'s check (`docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`)
+and profile (`profile.md@4d52dec0`, same folder). **D** marks a code
+change for `@developer`, **T** a test for `@tester`. The probe behind
+these rulings: the outline rule's inputs taken from the CLI at
+`4d52dec0` (the four runs below: both catchments, with the defaults and
+with the gate's flags), and each candidate change applied by patching
+the module from a script outside the tree; AC power, one run each, no
+warm-up. The scripts were in the session's scratchpad and are not kept;
+the changes are described in full below.
+
+- **T1, Numedalslagen's outline-rule gate: a defect in ruling G4's cuts,
+  not a gate on the wrong basis. D and T; the gate stands.**
+  *The basis matches.* The design's figures (4 slivers, 0 near, 0.832°;
+  M6 (d)) are the prototype's at tolerance 2 m, no merge, no repair, on
+  20c-2's switches; `@perf`'s gate runs use the same flags
+  (`scripts/gates.sh`), and the tolerance-only mesh they start from
+  agrees with the prototype's within the 20c-2 build's own difference
+  (29 slivers and 25 near, against 32 and 27; 20c-2 built is 2 slivers
+  under the prototype, "What 20c-2 built"). "Near" is the same measure
+  in both (`scripts/gate.py` and the prototype's `strip.py`: the
+  sliver's centre within 20 m of the domain's boundary).
+  *The built rule differs from the prototype in its cuts.* The
+  prototype (`snapline.py`, `cut`) split an edge into ⌈L/D⌉ equal pieces,
+  each longer than D/2. Ruling G4 put the cuts at multiples of D along
+  the edge's line, counted from the foot of the CRS's origin, and such a
+  multiple can fall any distance from the edge's own vertex. Where that
+  vertex lies just beyond D and the next cut within D, step 3 keeps the
+  cut (the step off the outline), and the linework gets an edge of
+  centimetres, nearly in line with the input edge; the mesh makes
+  slivers on it. In `@perf`'s mesh (`g-tol2snap5-num`), 10 of the 11
+  near slivers stand on such an edge, 2.9 to 21 cm long. The worst
+  (0.0814°, centre 219 550.8 6 599 776.3) has the input vertex
+  219 551.178 6 599 769.462, 5.52 m from the outline, and the cut
+  219 551.207 6 599 769.467, 2.9 cm from it. The eleventh (shortest side
+  1.1 m, no land-cover line within 30 m) is also gone with the fix.
+  *The fix (D):* `_cut` drops a multiple within D/2 of either end of the
+  edge. The pieces at an edge's ends are then D/2 to 3D/2 long and those
+  inside D; an edge shorter than D gets no cut, as in the prototype. G4
+  still holds. A cut within D/2 of a clipped end lies more than 97 m
+  from the outline, so it never moves and is never kept, and OR8 stands.
+  The test reads both ends alike, so OR2 stands too. Probed: Numedalslagen
+  4 slivers, 0 near, worst 0.832158°, 1 016 301 triangles; Lagan 61, 0
+  near, 0.006697°, 743 616: M6 (d)'s figures exactly. The rule's test
+  files (`test_feature_outline_rule.py`, `test_feature_repair.py`,
+  `test_cli_features_cleanup.py`, `test_grow.py`) pass with it patched in
+  (76 passed; the patch was shown to take effect by a `_cut` returning no
+  cuts, which fails 8).
+  *The test (T), OR9:* at D = 5, a straight outline edge and a border
+  edge from a vertex V 5.5 m inside it to a point 1 m inside, placed so
+  that a multiple of D along the edge's line (counted as `_cut` counts)
+  falls within 5 cm of V. No edge of the rule's linework inside the
+  domain is shorter than D/2, with the edge given in either direction.
+  On `4d52dec0` that edge is under 5 cm, so the test fails. Mutation
+  target: the end test removed (OR9 kills it).
+  *Whose defect:* ruling G4 ruled the cut correct without comparing its
+  piece lengths with the prototype's. `@developer` built what G4 said.
+- **T2, the speed: rebuild and measure only what moved. D and T.**
+  *What costs the time (profile).* With the merge on, each class is one
+  polygon (Numedalslagen: up to 590 parts and 125 000 vertices). For
+  every class with a moved ring, the rule rebuilds the whole class with
+  `union_all` over all its parts, moved or not (2.17 s), and measures the
+  area changed with `symmetric_difference` of the whole class, old
+  against new (2.20 s).
+  *The design.*
+  (1) A part with no moved ring is passed through unchanged, as now, and
+  no longer goes into a union. The polygon after the rule is the
+  unchanged parts plus the parts of `union_all` over the rebuilt parts
+  only, with no union when one part was rebuilt. If that polygon is not
+  valid, the rule falls back to today's union of all parts. The guard is
+  there because validity is argued, not proven: a rebuilt part changes
+  only within reach of the outline, where an unchanged part has no edge.
+  It cost about 0.1 to 0.2 s on the changed polygons in the probe. The
+  union over the rebuilt parts stays: without it, the probe lost about
+  1 000 km² of one Lagan polygon, because `make_valid` output overlapped.
+  (2) `_Outline.ring` also returns, for each point it gives back, the
+  index of the input vertex it is (−1 for a cut, a moved point or an
+  outline vertex). Between two consecutive kept input vertices whose
+  stretch changed, the old stretch and the new one form a closed loop
+  that bounds the region that changed there. A ring with no kept input
+  vertex contributes its old and its new polygon. Each loop is made
+  valid, and `area_changed` is the area of the union of all loops of all
+  polygons, intersected with the outline. Today it is the union of the
+  symmetric differences, intersected with the outline. Neighbours moving
+  one border both give the same loop, and the union counts it once, as
+  today.
+  *Outputs identical (probed on all four inputs).* The lines are
+  identical bit for bit, because they come from the same `ring` and
+  `_chains`. Every polygon is `shapely.equals` to today's, so the labels
+  are the same. `area_changed` is equal to four decimals in m²: 13 215.9606
+  and 16 074.3979 with the defaults, 13 467.6887 and 16 185.5619 with the
+  gate's flags, for Numedalslagen and Lagan.
+  Existing tests that pin this: OR1 to OR5 and OR8 (lines), OR5's notch
+  and RP7 (polygons), OR3 (area to 1e-6 m²) and OR6 (area 0).
+  *The test (T), not mutation-critical:* a polygon of two parts, one far
+  from the outline and one with two separate stretches within D of it.
+  The far part comes back `equals_exact` at 0 to its input. The area
+  equals the overlay measure that the test computes itself (the input
+  and output's symmetric difference, intersected with the outline) to
+  1e-6 m².
+  *Commits:* T1 and T2 as separate green commits, so that `@perf` can
+  check that T2 leaves the mesh the same bit for bit.
+  *Target* (the probe, both fixes, defaults, against `@perf`'s figures):
+  the rule alone, 5.9 → 2.7 s on Numedalslagen and 4.4 → 2.4 s on Lagan.
+  The clean-up 8.78 → 5.51 s and 8.04 → 5.92 s. The whole run
+  14.10 → 10.57 s (master 6.81 s, **+55 %**) and 22.87 → 20.59 s (master
+  17.64 s, **+17 %**). `@perf`'s limit for the re-time: clean-up at most
+  6.0 s on Numedalslagen and 6.5 s on Lagan, one run each.
+  *Size:* T1 about 2 counted lines, T2 about +25 (`ring`'s index list,
+  the loops, the assembly and its guard, less the overlay). About 360 in
+  all, under 700.
+- **T3, the hotspot: recorded, and question 10.** After T2,
+  Numedalslagen's clean-up is still about 52 % of its run (Lagan's about
+  29 %, its `features clip` 49 %). The design's 1.1 s was M7's clip and
+  repair alone (0.34 + 0.76 s, scratch probe). It never timed the
+  outline rule or the clip of the lines to the domain, and in the built
+  stage the clip and the repair alone take about 1.9 s on Numedalslagen
+  (0.75 + 1.18 s, profile). So the stage cannot get near 1.1 s with
+  the rule on. What remains on Numedalslagen after T2 (the profile, less
+  T2):
+  - the outline rule, about 2.4 s: its Python loop over ring edges
+    0.8 s, `make_valid` of the big rebuilt parts 0.6 s, their union
+    0.7 s, the loops 0.45 s;
+  - `coverage_clean`, 1.2 s;
+  - the clip of the lines to the domain (`_add`), 1.0 s;
+  - the clip to the read region, 0.75 s;
+  - the merge, 0.1 s.
+  Further work, not designed here, could cut that: a vectorised ring
+  loop, no whole-part repair and union for the big parts, and no domain
+  clip for chains the rule already knows to be inside. It might save
+  1.5 to 2 s; that is not measured. The gates do not change. Ola
+  accepted the time for 20c-3 (ruling 10); that further work is the
+  ROADMAP row "Speed up the land-cover clean-up step".
+
+#### Rulings on the fix round (`@architect`, 2026-10-08, on `8716f062` and `41db7333`)
+
+**Outcome of T1 and T2** (`@perf`'s re-time,
+`docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:91-130`). T1: both
+outline-rule gates met at the design's figures ("PRs and gates"). T2: the
+mesh is T1's byte for byte; the clean-up 5.92 s on Lagan (limit 6.5 s)
+and 5.48 s on Numedalslagen (limit 6.0 s), met; the whole run 20.59 s
+and 10.51 s, +17 % and +54 % against master (question 10; Ola
+accepted it, ruling 10).
+Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
+0.002384° → 0.1917° and 0.008623° → 0.6302°.
+
+`@developer`'s five pins on T2, ruled. One changes code.
+
+- **P1, a ring with no kept input vertex adds its old and its new polygon
+  to the area moved. Changed: D and T.** That is T2's wording, and it is
+  wrong whenever the two polygons overlap. Probe (a 1 km square outline,
+  D = 5, polygon A the 2 × 10 m rectangle (0,100)-(2,110) on the outline,
+  B the square less A): `area_changed` is 1 000 000 m² on `8716f062`
+  against 20 m² on `35b7a873`. B's eight vertices all lie within D, so
+  none is kept, and B's old and new polygons together are the whole
+  square. *Fix (D):* such a ring gives the symmetric difference of its
+  old and its new polygon, each made valid (a probe patching `_loops` so
+  gives 20 m²). It can only lower the figure (the difference lies in the
+  union), so `@developer` checks the four real inputs' `area_changed`
+  still equal T1's to four decimals. *Test (T):* that fixture,
+  `area_changed` 20 m² to 1e-6, and A empty, B the whole square; red on
+  `8716f062`. Not mutation-critical. The area is the run record's
+  `land_cover_area_moved_m2` only, never the mesh, so no `@perf` rerun.
+  Whose defect: T2's design (`@architect`).
+- **P2, nested `make_valid` output flattened two levels. Kept.**
+  `make_valid` and `union_all` return at most a collection of
+  (multi-)geometries, so two levels of `get_parts` reach every polygon;
+  `_polygonal` drops the lines.
+- **P3, the fallback union is not exercised by any test. Kept.** The
+  guard covers a case argued not to arise (a rebuilt part changes only
+  near the outline, where an unchanged part has no edge); no fixture that
+  reaches it is known. It stays untested, and the review notes it.
+- **P4, the holes of a part whose shell collapsed still add loops. Kept,
+  a known limit.** The part is gone, so the figure can count the hole's
+  area as moved, which overstates `area_changed` by at most the area of
+  the holes of parts thinner than about 2D. Related and older (the same
+  on `35b7a873`): a band narrower than D along the whole outline comes
+  back as the whole domain, not empty, because its shell and hole both
+  go onto the outline. Not fixed in 20c-3; the review notes it.
+  *The band case is fixed after all* by code review round 1's R1 (below):
+  with `make_valid`'s "structure" method the band comes back empty and
+  its neighbour as the whole square (probe on `1e011cec`, patched).
+- **P5, the citation `tests/python/test_grow.py:185`. Kept, not stale.**
+  Its docstring names the commit the lines are read at (`f81b20b7`), and
+  `src_python/tin_engine/feature_input.py@f81b20b7:158-167` is master's
+  `source_region`, the function the test copies. `check_citations.py`
+  lists it only because this branch edits that file. No edit needed.
+  `@tester` may rewrite it in the pinned form just used (full path, `@`,
+  commit) to take it off that list (one line, a test file); the short
+  path with `@` is reported broken.
+
+#### Rulings on 20c-3's code review round 1 (`@architect`, 2026-10-08, on `05b0fd7a`)
+
+The review is the last entry under "Review". Ola was asleep; each ruling
+is on the default the main session proposed, and none is a question for
+him.
+
+- **R1 (review B1), a hole the outline rule puts onto the outline is
+  filled. Fixed: D and T.** `snap_to_outline` rebuilds a changed part as
+  `Polygon(shell, holes)` and repairs it with `shapely.make_valid`, whose
+  default "linework" method keeps a hole's area once the hole touches the
+  shell along a line; with the merge on, the smallest polygon wins the
+  label, so a lake inside a thin ring of a rarer class takes the ring's
+  class. Reproduced on `1e011cec` with the review's fixture (1 km square
+  outline, D = 5 m; water = box(3,200,103,300) ∪ box(500,500,800,700);
+  ring = box(2,190,113,310) less the first box; rest = the square less
+  both): the ring comes back as 13 560 m² and holds the lake's centre
+  (53, 250). *Fix (D):* `shapely.make_valid(shell, method="structure")`
+  at that one call; the call in `_loops` (ruling P1) stays, as it repairs
+  a single ring with no holes and gives only an area. Patched, the three
+  polygons are 70 300, 3 260 and 926 440 m², a partition of the square,
+  the ring no longer holds (53, 250), and `area_changed` is 340 m² both
+  ways. The same patch fixes P4's band case (a band narrower than D along
+  the whole outline, its inside a second polygon): the band comes back
+  empty and the inside as the whole square, `area_changed` 11 964 m²,
+  against both polygons the whole square today. *Test (T):* the review's
+  fixture (the ring's area 3 260 m² to 1e-6 m², the ring not covering
+  (53, 250), the three areas summing to 1e6 m²) and the band case (the
+  band empty, the inside 1e6 m²); both red on `1e011cec`. Not
+  mutation-critical: one keyword. *The mesh:* "structure" and "linework"
+  differ only on a rebuilt part that is invalid, where a hole touches or
+  crosses its shell (filled before, cut out now) or a ring overlaps
+  itself (an overlap counted once, not cut out). The review's patched run
+  found no filled hole on Lagan or Numedalslagen, but did not look for
+  the second kind, so the meshes should not change and `@perf` checks
+  that they do not (R3 (a)). Whose defect: the green step's design
+  (`@architect`), which named `make_valid` without its method.
+- **R2 (review B2), prose the branch made untrue. Fixed in this commit:**
+  PR #214 merged (`4abacf65`) in the status and the ROADMAP row; the
+  "Next" line; the LOC table (356 built, `python3 tools/count_loc.py
+  483221d2 1e011cec`); the two passages that waited on 30d (merged,
+  `769ed992`).
+- **R3 (review B3), the gate's unrun parts.** The status said "every
+  outline-rule gate met"; what was met is the outline-rule rows. The rest
+  of the 20c-3 gate row, each ruled:
+  - *Run (`@perf`, on `@developer`'s R1 green commit, one session of at
+    most 15 minutes, AC power, the catchment arguments of
+    `docs/benchmarks/2026-10-08/20c-3/scripts/gates.sh`):*
+    (a) **the mesh unchanged by R1**: default runs on both catchments;
+    `.vtk` SHA-256 equal to T2's (Lagan `ef67e65c…`, Numedalslagen
+    `1f11f291…`). If either differs, stop and report it to `@architect`.
+    (b) **the repair on top of the outline rule, on the fixed code**:
+    `--no-features-merge-same-class --features-tolerance 2
+    --features-outline-snap 5 --features-repair 0.05` on both catchments,
+    against the outline-rule row's thresholds (Lagan: at most 90 slivers,
+    at most 5 within 20 m of the outline, triangles at most +1 % of the
+    tolerance-only mesh `g-tol2-lagan`, worst angle at least 0.95 ×
+    0.006697°; Numedalslagen: at most 10, at most 5, at most +1 %, at
+    least 0.1°), and on Lagan `scripts/corners.py` (the slit's two open
+    corners not both mesh vertices). The repair on the tolerance-only
+    run (`--features-outline-snap 0`) is not rerun: everything changed
+    since `@perf`'s runs on `745bcb0d` is inside the outline rule, which
+    D = 0 skips (`git diff 745bcb0d 1e011cec -- src_python` touches only
+    `snap_to_outline` and `_Outline`).
+    (c) **the slit's far corner**, on Lagan's two repair meshes (the new
+    one from (b) and `g-tol2rep-lagan.vtk` from the earlier runs): no
+    triangle whose smallest angle is under 1° has a corner within 1 mm
+    of 413 677.295 6 331 664.081. Restated because the `.vtk` does not
+    say which edges are constraints: the gate's wording asked for no
+    smallest angle between two constraint edges there; a sliver at that
+    corner whatever its edges is the stricter test.
+    (d) **no shared border left unmatched**: from the run in (b), the
+    polygons `snap_to_outline` returns (a driver that wraps the function
+    and runs the mesh command in-process), measured as the prototype's
+    `../rasputin_scratch/20c-prototype/covfar.py` does (mismatched
+    border inside the domain, more than 1 mm from its outline): 0.000 m
+    on both. The probe can fail: the same measure with one vertex of one
+    shared border moved 0.5 m gives more than 0.
+    (e) **population 3 carries no land-cover line with the merge on**:
+    Lagan with the defaults, and again with
+    `--no-features-merge-same-class`; from the same driver,
+    `snap_to_outline`'s lines moved to EPSG:3035, the total length of
+    segments with both ends within 1 m of the line N 3 811 923.31 or of
+    the line E 4 585 680.19 (M2's two population-3 lines), inside the
+    domain. Merge on: 0 m. Merge off: more than 0 (the probe that can
+    fail). Read on the land-cover lines, not the mesh, because the lines
+    are the only source of land-cover constraint edges and the `.vtk`
+    does not mark constraints.
+  - *Ruled out: raising the thresholds to the measured figures.* The
+    measured figures after T1 are the design's own (61 and 4 slivers, 0
+    near the outline, 0.006697° and 0.8322°, "PRs and gates"), and the
+    thresholds were set from those figures with the margin for the
+    production code; there is nothing new to raise them to. The repair
+    rows keep "every threshold of the run without it" (M7 gave no
+    figures of their own).
+  - *Outcome of (e) (`@architect`, on `@perf`'s `63065a15`): the check's
+    wording was wrong, not the code.* With the merge on, 26.194 m remains:
+    13.097 m of border, counted once for each of its two polygons, in four
+    stretches of 0.69 to 9.46 m
+    (`docs/benchmarks/2026-10-08/20c-3/stats/r3/e-where.txt`), between
+    merged polygons 10 and 12 and 10 and 11. With the merge on, each
+    polygon is one class (`feature_input.py`'s `_clean`, "one polygon per
+    class"), so these are borders between different classes. The source
+    data agrees: read from the CORINE GeoPackage in EPSG:3035 at each
+    stretch's middle, 0.3 m to either side, three stretches have coniferous
+    forest (312, OBJECTID 2000793) against transitional woodland-shrub
+    (324, OBJECTIDs 1933839 and 1933737), and the fourth coniferous forest
+    (312, 2373011) against mixed forest (313, 1929199). A polygon of another
+    class reaches the straight cut there, and its border runs within 1 m of
+    the line. Population 3 is the cut through one class (312 on both sides),
+    and none of it is left. Corrected wording of (e): with the merge on, no
+    land-cover line within 1 m of either line has the same class on both
+    sides: 0 m, met; with the merge off, more than 0 (161 164.495 m, the
+    probe that can fail). No code change and no new test.
+- **R4 (review S2), the record row's wording. Taken: D and T.**
+  `run_record.py`'s label for `land_cover_area_moved_m2` says "changed
+  class", but with the merge off the outline rule can move area between
+  two polygons of one class. *Change (D):* "Land-cover area inside the
+  outline that the outline rule gave to another polygon, m2". *Test (T):*
+  the label, red on `1e011cec`.
+- **R5 (review S1), where the mutation round ran. Taken.** The round ran
+  on `e07d5921`, before T1 (`35b7a873`) and T2 (`8716f062`) rewrote
+  `_cut` and `ring`. The killing tests are unchanged since: between
+  `5cc0639c` and `1e011cec` the test file gained tests and lost only
+  docstring lines (`git diff 5cc0639c 1e011cec --
+  tests/python/test_feature_outline_rule.py`). The review found that the
+  record covers every mutation target plus T1's end test.
+- **R6 (review S3), P1's check on the real inputs, recorded.** From
+  `@developer`'s hand-back for P1's green step: `area_changed` on the four
+  real inputs, to four decimals, Numedalslagen with the defaults
+  13 243.1104 m², Lagan with the defaults 16 050.3242 m², Numedalslagen
+  with the gate's flags 13 481.8453 m², Lagan with the gate's flags
+  16 165.0077 m², the same under T1, T2 and the P1 fix. No ring on those
+  inputs reaches P1's branch (a ring with no kept input vertex), so the
+  equality says only that the fix does not touch them.
 
 ## `@perf`'s acceptance
 
@@ -2224,7 +3302,9 @@ the timings.
 Refine time within noise or better (M3: the whole refine is under 1.4 s of
 the 15 to 90 s runs; 20c-2 inserts a third fewer quality nodes). Plus the
 gate runs above, and the split-phase limit ("The split-phase limit, judged
-after the fix"). 20c-3 is Python only and needs no `bench.py` run.
+after the fix"). 20c-3 is Python only and needs no `bench.py` run; its
+gate runs are `@perf`'s, and so is its short timed
+check ("Speed judgment", in its design).
 
 **20c-1, done.** First acceptance at `34b546c4`
 (`docs/benchmarks/2026-10-07/20c-1/README.md@b9e2d482`): gates pass, refine
@@ -2259,9 +3339,15 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-2 | `quality.hpp` (cavity, angles, acceptance) ~55; R8's split ~25; option plumbing, CLI and the two rows ~30 | **~110** |
 | 20c-2 built | `python3 tools/count_loc.py 41bda81a 65ae0792`: `quality.hpp` 102, `lawson.hpp` 3, `constraint_foot.hpp` 1, `refine.hpp` 6, `bindings/core.cpp` 5, `_core.pyi` 5, `cli.py` 29, `run_record.py` 6. Over the estimate by 47: the plumbing is 51 against ~30, mostly `cli.py`'s option declaration (the help text alone is five lines), its refusals (non-finite, above 10, without `--tolerance`, without `--dem`: pin 8, three checks the estimate did not see) and the wiring into the run and its rows; the speed fix `65ae0792` adds 27 to `quality.hpp` (the atan2 skip, the early stop, the reused buffer), which no estimate had; the green step's `quality.hpp` was 75 against ~80 | **157** (green 130, `count_loc.py 41bda81a 600b2acb`) |
 | 20c-2 review fix | `python3 tools/count_loc.py 41bda81a 50544838`: `cli.py` 30 (+1, the reworded help string); the rest as above | **158** |
-| 20c-3 | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | **~130** |
+| 20c-3 (to 2026-10-07) | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | ~130 |
+| 20c-3 (2026-10-08, with the repair) | `feature_input.py`: the land-cover stage (polygons collected per source, clipped to the read region, repaired, merged, simplified; the coverage check gone) ~45; the outline rule (an `STRtree` of the outline's segments, no buffer) ~70; `cli.py`, `run_record.py`, `stats.py` (four flags, of which `--features-repair` is new, their refusals, the input and vertex rows, the timing sub-row) ~35; `pyproject.toml` is not counted | **~150** |
+| 20c-3 green | `python3 tools/count_loc.py 483221d2 7334b82b`: `feature_input.py` 260 (the outline rule 188 against ~70; the stage 68, part of it moved from the old loop), `cli.py` 63, `run_record.py` 8. Over the estimate by 181 (+121 %), almost all in the outline rule, whose estimate was not taken from its 146-line prototype (ruling G5); under 700, one PR | **331** |
+| 20c-3 rulings T1, T2 | `feature_input.py`: the cut's end test ~2 (T1); `ring`'s index list, the loops, the assembly and its validity guard, less the whole-polygon overlay ~+25 (T2) | **~360** |
+| 20c-3 fix round built | `python3 tools/count_loc.py 483221d2 8716f062`: `feature_input.py` 285, `cli.py` 64, `run_record.py` 6 | **355** |
+| 20c-3 P1 built | `python3 tools/count_loc.py 483221d2 1e011cec`: `feature_input.py` 286, `cli.py` 64, `run_record.py` 6 | **356** |
+| 20c-3 code review round 1 rulings | R1 a keyword argument on an existing line (ruff may wrap it: 0 to 2 lines), R4 a string: 0 | **~357** |
 
-On the worst overrun seen (+60 %), 240, 175 and 210. Each under 700.
+On the worst overrun seen when estimated (+60 %), 240, 175 and 240. Each under 700. 20c-3 then overran by more than that, +121 % to 331 (ruling G5), still under 700.
 
 ## Ola's rulings
 
@@ -2290,6 +3376,8 @@ with the default no: "defaults on all four". So:
 5. **No gap-closing step.** Gaps between neighbouring land-cover polygons
    stay as the source has them; the thin triangle such a gap forces stays
    in the mesh (M5), and the worst-angle gates do not ask more of 20c.
+   **Reversed by ruling 9** (2026-10-07): this was the main session's
+   default, taken under "defaults on all four", not a call Ola made.
 
 Ola, 2026-10-07, on questions 7 and 6 (the main session's list put
 question 7 first and question 6 second): "1-3 default. 4 must wait". So:
@@ -2321,6 +3409,78 @@ code review." "Ljungan" there is a slip for Numedalslagen, the catchment
 `@perf` measured; the figures are Numedalslagen's. (For 20c-1 the limit
 was revised to point 2 against master, not judged per split; the question
 stands on its figures.)
+
+Ola, 2026-10-07 (08:19 UTC), on ruling 5: "I don't recall making the
+call that we should not fix errors in the input? I consider the cap in the
+CORINE-data an error. The edges should have been shared." And, three
+minutes later: "yes to the morning check proposals, build 20c-2 and
+20c-3". So:
+
+9. **Errors in the input are repaired** (amends ruling 5). Lagan's 1 cm
+   slit (M5), where two land-cover borders that should be one end 1 cm
+   apart, is an error in the source, and 20c-3 repairs it: borders of one
+   land-cover source that come within a tolerance of each other become one
+   border, and a gap narrower than it goes to a neighbour (20c-3's step 1,
+   `--features-repair`). The tolerance's default is question 9, ruled
+   below.
+
+Ola, 2026-10-08 (06:47 UTC), on question 9 as asked again with M8
+(`d7a3462a`), the main session's question to him being "Question: set
+the default to 1 m? @architect's default: yes.": "yes, set default to
+1 m." So:
+
+9 (default). **The repair's tolerance defaults to 1 m** (question 9's
+   default as asked again), on whenever a land-cover map is used;
+   `--features-repair 0` turns it off, and a smaller value suits a
+   land-cover file drawn to the decimetre. It replaces M7's 5 cm. Red
+   `f6e0f287` (`@tester`), green `c71ccf57` (`@developer`); the mesh
+   figures are M8's 1 m row ("PRs and gates", "With the repair's default
+   at 1 m").
+
+Ola, 2026-10-08 (05:54 UTC), on question 10, as the main session put it
+to him: the clean-up step adds about 5.5 to 6 s (+17 % on Lagan, +54 %
+on Numedalslagen against master; the step itself takes 5.92 s and 5.48 s,
+and the whole run grows by 2.95 s and 3.70 s,
+`docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:105-106`), with the options "(a) Default: accept
+it now and add a ROADMAP row to speed the step up later" or "(b) Hold
+20c-3 for another speed round first". Ola: "Let's accept it. One future
+option could be to fix the CORINE data itself, as a preprocessing step,
+for areas of interest. Goes into the ideas file." So:
+
+10. **The clean-up's time is accepted for 20c-3** (option (a), the
+   default): no further speed round before its code review and push. The
+   speed-up is the ROADMAP row "Speed up the land-cover clean-up step"
+   (T3's hotspots), which also carries Ola's preprocessing idea as an
+   option: repair the CORINE data once per area of interest and keep the
+   repaired copy, so a run does not repeat the repair. There is no ideas
+   file yet (`docs/ideas.md` does not exist), so the row holds the idea
+   until there is one.
+
+Question 9 as asked again with M8 (`d7a3462a`):
+
+9. **How close must two land-cover borders be to count as one?** (asked
+   again with M8, after your "try increasing to 1m as well".) 20c-3 joins
+   borders of one land-cover file that come within this distance of each
+   other, and fills any gap narrower than it. Measured on the built code
+   with the defaults, Lagan and Numedalslagen (M8):
+   - **5 cm** (today's default): the slit closed; triangles with an angle
+     under 1°: 180 and 158; the smallest angle in the mesh 0.19° and 0.63°.
+   - **25 cm**: the same as 5 cm (176 and 158).
+   - **1 m**: the slit closed as well; **26 and 2** such triangles, the
+     smallest angle **0.73° and 0.83°**, and 2 % fewer triangles on
+     Numedalslagen. Almost all the triangles 1 m removes sat where two
+     land-cover borders ran under a metre apart. The price: borders move
+     by under 1 m along about 45 km and 123 km of border, some 3 400 m²
+     and 8 500 m² of land cover changing class inside the catchments, out
+     of 6 441 and 5 548 km². CORINE's smallest feature is 100 m wide, so
+     that is 1 % of it. No measurable time.
+   **Default: 1 m, on whenever a land-cover map is used** — it is the
+   probed distance that removes the thin triangles, and it moves land cover
+   by less than CORINE's own precision. `--features-repair 0` turns the
+   joining off, and a smaller value suits a land-cover file drawn to the
+   decimetre. Not probed: distances between 25 cm and 1 m, or above 1 m.
+   The other choice: keep 5 cm. Either way only the default and the tests
+   that pin it change.
 
 Questions 6 and 7 as asked:
 
@@ -2356,6 +3516,29 @@ Questions 6 and 7 as asked:
    into the parallel scan, with the serial phase checking the answer
    again.
 
+Question 10 as this file put it (the main session asked it in the
+shorter form quoted above ruling 10):
+
+10. **The land-cover clean-up is slower than the design said: accept it
+   for now?** You asked to hear about any step that takes a large share of a
+   run. The new land-cover step (the clip, the repair of question 9, the
+   merge by class and your outline rule) takes 8.0 s on Lagan and 8.8 s
+   on Numedalslagen. The design estimated 1.1 s (question 9 as first asked), counting only the clip
+   and the repair, and those two alone take about 1.9 s. A fix in this
+   PR (ruling T2: rebuild and measure only the land cover that moved,
+   with the same output) brought the step to 5.92 s and 5.48 s (measured,
+   `@perf`, one run each). The whole run is now +17 % on Lagan (17.64 to
+   20.59 s) and +54 % on Numedalslagen (6.81 to 10.51 s) against master. On Numedalslagen that
+   step is about half the run. The rest is the outline rule (about
+   2.4 s), the repair (1.2 s), and clipping the land cover to the
+   catchment (1.0 s) and to the read area (0.75 s). **Default: accept
+   that time for 20c-3**, and add a ROADMAP row to make the step faster
+   later (perhaps 1.5 to 2 s less; not designed or measured). The other
+   choice: hold 20c-3 for a further speed round first. Turning the
+   outline rule off by default would save about 2.4 s, but it would give
+   up most of the rule's gain near the outline; that was not measured
+   with the defaults.
+
 ## Questions for Ola
 
 None open.
@@ -2372,8 +3555,10 @@ None open.
   neighbour by overlay): reaches 4 to 7 % of 20c-3's slivers and makes
   millimetre segments of its own (M6 as of `a3a2b7ec`, round 2; superseded
   by M6's second form, which covers it).
-- Closing gaps between land-cover polygons (Lagan's 1 cm slit, M5): ruled
-  out by Ola (ruling 5, 2026-10-07).
+- Closing gaps between land-cover polygons of two different sources, or
+  gaps wider than `--features-repair` (none between 5 cm and 100 m wide
+  on either catchment, M7). Gaps narrower than it are 20c-3's step 1 (ruling
+  9, which reversed ruling 5).
 - Quality during refinement (increment 20's C3): ruled out of 20c by Ola
   (question 3).
 - A size bound or sizing field (increment 14's U2).
@@ -2392,3 +3577,9 @@ None open.
 20c-2 code review round 1 (@reviewer, 41bda81a..8ea0f32d, 157 counted LOC by `python3 tools/count_loc.py 41bda81a 8ea0f32d`): CHANGES REQUESTED. (B1) The `--start-quality-gain` help says the run will "split a line it lies beyond" (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/src_python/tin_engine/cli.py@8ea0f32d:694-696). That is false with `--no-constraint-feet`: the line split (R8) only runs when both the gain test and the feet are on (pin 4, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@8ea0f32d:1145-1150; `split_lines = judged && o.constraint_feet`, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@8ea0f32d:256). The binding's doc and `_core.pyi` already say "with constraint_feet"; the CLI help should say the same, for example "and, unless --no-constraint-feet, split a line it lies beyond". Checked and true: LOC; ruling 8's figures; the quoted question; the atan2 skip; the early stop; the mutation record; open item (b); ctest and pytest on a HEAD build; gates (details in the list below). Not pushed, so no CI yet. Suggestions: (S1) copy @tester's kill table into this file as "Mutation round for 20c-2"; (S2) say the round ran on 96119508, before the speed fix rewrote `pays`, and that byte-identical meshes carry it over; (S3) ruling 3 and the comment at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@8ea0f32d:199-204 say θ at most 35°, but the argument holds for θ up to 180°; (S4) tell Ola about the two slips (done in chat, 2026-10-07).
 
 20c-2 code review round 2 (@reviewer, 8ea0f32d..d4ac395f, 158 counted LOC by `python3 tools/count_loc.py 41bda81a d4ac395f`, 1 since round 1: the help string): APPROVED; round 1's B1 and S1-S3 answered. (B1) The `--start-quality-gain` help now reads "and, unless --no-constraint-feet, split a line it lies beyond" (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/src_python/tin_engine/cli.py@d4ac395f:694-697). That matches `split_lines = judged && o.constraint_feet` (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@d4ac395f:257). The red test reads the option's own help (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/tests/python/test_cli_start_quality_gain.py@9f54bc95:230-244). Applied to the help string at 8ea0f32d, its clause check fails; at HEAD the file's 26 tests pass. Red 9f54bc95 touches only that test file and green 50544838 touches no test. (S1) The 25 table rows at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@d4ac395f:2104-2178 are byte-identical to @tester's hand-back (session transcript 6a989a29, line 23672). (S2) :2123-2135 is true: at 96119508, `pays` made one comparison and `GainJudge::capped` did not exist. (S3) The comment at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/include/terrain/mesh/quality.hpp@d4ac395f:199-205 and ruling 3 at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/docs/increments/20c-soft-quality.md@d4ac395f:2072-2078 now give θ ≤ 180°. Nothing in the C++ or the binding sets an upper bound on θ, and `improve` returns early unless θ > 0, so a negative θ never reaches the skip. `git diff 8ea0f32d d4ac395f -- include src bindings` shows only that comment, so round 1's C++ build and ctest still stand. The LOC row (158 = 157 + 1) and the status lines :25-46 match. No red-step scaffolding is left. mypy, ruff check, ruff format, the prohibited-dependency gate, the detria boundary gate and `check_citations --base origin/master` (exit 0) are green, and none of the 67 at-risk citations comes from this round's edits. Not pushed, so no CI yet.
+
+20c-3 code review round 1 (@reviewer, 483221d2..1e011cec, 356 counted LOC by `python3 tools/count_loc.py 483221d2 1e011cec`): CHANGES REQUESTED. (B1) A hole the outline rule moves onto the outline gets filled: `shapely.make_valid(shell)` at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/src_python/tin_engine/feature_input.py@1e011cec:663 uses the default "linework" method, so a part whose hole now touches its shell keeps the hole's area. With the merge on, a lake inside a thin ring of a rarer class then takes the ring's label, because the smallest polygon wins. Probe: 1 km square, D 5 m; water = lakes box(3,200,103,300) and box(500,500,800,700); ring = box(2,190,113,310) less the first lake. After the rule the ring's polygon is 13 560 m² and covers the lake centre, so the ring's class wins over water (70 300 m²). The input labels it water. The bug is there since the green step: e07d5921 and 35b7a873 give the same polygons. `make_valid(..., method="structure")` gives 70 300 / 3 260 / 926 440 m², a partition summing to 1e6, with area_changed unchanged at 340 m². Neither catchment hits it: a patched run found no filled hole on Lagan or Numedalslagen. Either fix it with this fixture as a test, or have @architect rule it a known limit next to P4. (B2) Prose the branch made untrue: "PR #214, in the merge queue" at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/increments/20c-soft-quality.md@1e011cec:46 and /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/ROADMAP.md@1e011cec:67. #214 is merged as 4abacf65, inside this branch's own base. "Next: @tester red for P1, @developer green" at :78-80 and at ROADMAP :67: both are done (48aca5f7, 1e011cec). The LOC table at :3060 says 355 plus "about +3"; the built count is 356. "before 30d merges" at :1317-1318 and "open when this was written ... If 20c-3 merges before 30d" at :1506-1511: 30d is merged (769ed992, in the base). (B3) The 20c-3 gate row at :1525 asks for four things that were neither run nor ruled: the shared-border check, the population-3 check, the slit's far-corner check, and @architect raising the thresholds to the measured figures. @perf records the three checks as not run (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:79-89). The "+ repair 5 cm" runs predate T1. Yet :76 says "every outline-rule gate met". Either run them or have @architect rule them out. Checked and true: 356 lines under 700, size explained, mutation record covers all targets plus T1's end test, P1 reproduced, default meshes equal @perf's T2 (ef67e65c, 1f11f291), full pytest 6 878 passed, real-data files 171 passed from the main checkout, all static and governance gates green, merge-tree clean; not pushed, so no CI yet. Suggestions: (S1) say the mutation round ran on e07d5921, before T1 and T2 rewrote `_cut` and `ring`; (S2) the record row "Land-cover area inside the outline that changed class" counts only what the outline rule moved; "...that the outline rule gave another polygon" would be exact; (S3) P1's four-decimal check on the real inputs is not recorded in any file.
+
+20c-3 code review round 2 (@reviewer, 05b0fd7a..07d97ee4, 360 counted LOC by `python3 tools/count_loc.py 483221d2 aaee898b`; the only production change since round 1 is aaee898b's +4 lines): APPROVED; round 1's B1-B3 and S1-S3 answered. (B1) `shapely.make_valid(shell, method="structure")` at /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/src_python/tin_engine/feature_input.py@aaee898b:663-665. With aaee898b's two code changes reverted in memory and 1f7f8335's tests applied, four tests fail (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/tests/python/test_feature_outline_rule.py@1f7f8335:593-663, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/tests/python/test_cli_features_cleanup.py@1f7f8335:175-187); on aaee898b both files pass, 54 of 54. Default meshes rerun: Lagan `ef67e65c…`, Numedalslagen `1f11f291…`, equal to @perf's /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/benchmarks/2026-10-08/20c-3/stats/r3/sha256.txt@63065a15. (B2) /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/increments/20c-soft-quality.md@07d97ee4:46 and /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/ROADMAP.md@07d97ee4:67 say #214 is merged; the "Next" lines name this round; :1519-1523 says 30d is merged; no stale phrase remains outside round 1's quoted record. (B3) :3081-3152 rules (a)-(e) and rules out raising the thresholds; :1561-1573 and the gate row at :1537 match /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/benchmarks/2026-10-08/20c-3/README.md@63065a15:132-183; (e)'s corrected wording checked against the CORINE source (312 against 324 and 313 at each stretch). (S1) :3159-3165 true. (S2) R4 matches /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/src_python/tin_engine/run_record.py@aaee898b:59-61. (S3) R6 agrees with @perf's stats rows. LOC 360 against ~357, under 700. No red-step scaffolding. Full pytest 6 885 passed, 17 skipped; real-data files 417 + 26 passed from the main checkout with this venv; mypy, ruff, prohibited-dependency, detria boundary and check_citations green; merge-tree clean against origin/master 483221d2. Not pushed, so no CI yet. Suggestions: add a "built" 360 row to the LOC table; point @perf's README :178-183 to R3 (e)'s outcome; script the source lookup behind (e).
+
+20c-3 code review round 3 (@reviewer, 9a04c3c1..e2a00d37, 360 counted LOC by `python3 tools/count_loc.py 483221d2 e2a00d37`; the round's only production change is c71ccf57, 2 lines added and 2 removed, net 0): APPROVED. The default change matches the red test f6e0f287 exactly (/Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/tests/python/test_cli_features_cleanup.py@e2a00d37:63, :166; /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/src_python/tin_engine/cli.py@e2a00d37:748-750, /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/src_python/tin_engine/feature_input.py@e2a00d37:134); the library default stays 0. Full pytest 6 885 passed, 17 skipped; real-data files 428 passed from the main checkout with this venv, including CORINE through the 1 m default. The design's 1 m figures match /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/benchmarks/2026-10-08/20c-3/m8/stats/m8-s1-lagan.md@e2a00d37:16, :112, :133 and /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/benchmarks/2026-10-08/20c-3/m8/stats/m8-s1-num.md@e2a00d37:16, :116, :135; sliver counts reproduced by a fresh mesh with no flag (Lagan 798 554 triangles, 26 slivers, worst 0.729258°; Numedalslagen 1 118 006, 2, 0.832158°), matching /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-3/docs/increments/20c-soft-quality.md@e2a00d37:849-851 and :1691-1699. Ola's rulings 9 (default) and 10 recorded word for word (:3427-3459), checked against the transcript; no stale "5 cm default" claim outside history. Gates green; check_citations exit 0; merge-tree against origin/master 64481aae clean. Not pushed, no CI yet. Suggestions: commit gate.py's output for M8; add a "20c-3 built, 360" LOC row.

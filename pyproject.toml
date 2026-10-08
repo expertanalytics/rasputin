@@ -35,7 +35,7 @@ classifiers = [
 # input format is a packaging defect.
 dependencies = [
     "pydantic>=2.6",
-    "shapely>=2.0",
+    "shapely>=2.2",
     "pyproj>=3.6",
     "typer>=0.12",
     "numpy>=1.26",

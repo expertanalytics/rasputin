@@ -1,0 +1,7 @@
+b-lagan.vtk: tri 743614 | <1deg 59 (0.0079 %) | worst 0.231964 | <1deg with side<10cm 0 | <1deg centre within 20 m of outline 0
+b-num.vtk: tri 1016194 | <1deg 4 (0.0004 %) | worst 0.832158 | <1deg with side<10cm 0 | <1deg centre within 20 m of outline 0
+open1: nearest vertex 0.0100 m away (413602.501 6331638.244); vertex within 1 mm: False
+open2: nearest vertex 0.0000 m away (413602.501 6331638.244); vertex within 1 mm: True
+far: nearest vertex 0.0000 m away (413677.295 6331664.081); vertex within 1 mm: True
+b-lagan.vtk: nearest vertex 0.0000 m; triangles at the corner 6; of them under 1 deg 0
+g-tol2rep-lagan.vtk: nearest vertex 0.0000 m; triangles at the corner 6; of them under 1 deg 0
