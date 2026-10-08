@@ -19,7 +19,9 @@ the design names are run after the green step, on the built code:
   (``TestTheReadRegion``, added by ruling G4);
 - ``_cut``'s end test removed (a multiple of D within D/2 of the edge's
   end kept): OR9 (``TestACutBesideAVertex``, added by ruling T1). The T2
-  test (``TestOnlyWhatMovedIsRebuilt``) is not mutation-critical.
+  test (``TestOnlyWhatMovedIsRebuilt``) and the P1 test
+  (``TestARingWithNoKeptVertex``, added by ruling P1 of "Rulings on the fix
+  round") are not mutation-critical.
 
 The rule's own function is called directly, on polygons and an outline in
 EPSG:25833 at ``feature_fixtures``' UTM-shaped offset. The outline is a
@@ -52,6 +54,10 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   parts; the far part is the one holding its input's centroid, and
   ``equals_exact`` at 0 also pins its ring's start and orientation (it is
   the input part itself, not a union's rewrite of it).
+
+RED at the commit that adds the P1 test (on ``7a45dabc``, the code as on
+``8716f062``): ``test_p1_the_area_moved_is_a_alone`` (``area_changed``
+1 000 000 m², not 20 m²).
 
 RED at the commit that adds OR9 and the T2 test (on ``eb810a90``): OR9's
 two cases (a 2.4 cm edge beside V) and ``test_t2_the_far_part_passes_through``
@@ -526,3 +532,42 @@ class TestOnlyWhatMovedIsRebuilt:
         moved = shapely.intersection(shapely.symmetric_difference(self.BOTH, after), self.SQUARE)
         assert moved.area > 0
         assert out.area_changed == pytest.approx(moved.area, abs=1e-6)
+
+
+# ---------------------------------------------------------------- P1
+
+
+class TestARingWithNoKeptVertex:
+    """Ruling P1 ("Rulings on the fix round"): a ring none of whose input
+    vertices stays where it was adds the symmetric difference of its old and
+    its new polygon to ``area_changed``, not the two polygons whole. A 1 km
+    square outline; A, the 2 x 10 m rectangle (0,100)-(2,110) on its west
+    side; B, the square less A, whose eight vertices all lie within D of the
+    outline, so none is kept. A goes onto the outline and comes back empty;
+    B comes back as the whole square; what changed polygon is A's 20 m².
+    On ``8716f062`` ``area_changed`` is 1 000 000 m² (B's old and new
+    polygon together cover the square).
+
+    Local coordinates, the square 0 to 1000 m, D = 5 m; areas up to 1e6 m²
+    from coordinates up to 1000 m, where a double resolves about 1e-13 m
+    and an overlay of these axis-parallel rings is exact. The 1e-6 m² bound
+    is the ruling's."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    A = local((0, 100), (2, 100), (2, 110), (0, 110))
+    B = local((0, 0), (1000, 0), (1000, 1000), (0, 1000), (0, 110), (2, 110), (2, 100), (0, 100))
+
+    def test_p1_the_premise_a_coverage_with_no_vertex_of_b_beyond_d(self) -> None:
+        assert self.B.is_valid and self.B.area == pytest.approx(1e6 - 20, abs=1e-6)
+        assert shapely.equals(shapely.union_all([self.A, self.B]), self.SQUARE)
+        vertices = shapely.points(shapely.get_coordinates(self.B))
+        assert (np.asarray(shapely.distance(self.SQUARE.boundary, vertices)) <= D).all()
+
+    def test_p1_a_goes_empty_and_b_becomes_the_square(self, fi: ModuleType) -> None:
+        a, b = rule(fi, [self.A, self.B], self.SQUARE).polygons
+        assert a.is_empty, a.wkt
+        assert shapely.equals(b, self.SQUARE), b.wkt
+
+    def test_p1_the_area_moved_is_a_alone(self, fi: ModuleType) -> None:
+        out = rule(fi, [self.A, self.B], self.SQUARE)
+        assert out.area_changed == pytest.approx(20.0, abs=1e-6)
