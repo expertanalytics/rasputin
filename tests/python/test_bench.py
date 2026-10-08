@@ -22,6 +22,7 @@ import math
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import ModuleType
@@ -146,6 +147,24 @@ def test_parse_child_refuses_with_the_run_named(bench: ModuleType, stderr: str) 
 
 def test_child_error_is_a_value_error(bench: ModuleType) -> None:
     assert issubclass(bench.ChildError, ValueError)
+
+
+# Increment pq (docs/increments/perf-quick-check.md, section 3): the child adds
+# `phases` and `total_s` to its BENCH line, and a line without them still parses.
+
+
+def test_parse_child_reads_phases_and_the_clock_total(bench: ModuleType) -> None:
+    phases = {"decode": 1.25, "features clip": 6.89, "refine": 3.5}
+    child = bench.parse_child(bench_line({**CHILD_JSON, "phases": phases, "total_s": 16.97}), "t")
+    assert dict(child.phases) == phases
+    assert list(dict(child.phases)) == ["decode", "features clip", "refine"]  # the clock's order
+    assert child.total_s == pytest.approx(16.97)
+
+
+def test_parse_child_of_an_older_line_has_no_phases_and_no_total(bench: ModuleType) -> None:
+    child = bench.parse_child(bench_line(CHILD_JSON), run="t")
+    assert dict(child.phases) == {}
+    assert child.total_s is None
 
 
 # ------------------------------------------------------- statistics, ceiling
@@ -313,6 +332,32 @@ def test_read_vtk_ascii_refuses_binary(bench: ModuleType, tmp_path: Path) -> Non
     write_mesh(tmp_path / "bin.vtk", binary=True)
     with pytest.raises(ValueError, match="BINARY"):
         bench.read_vtk_ascii(tmp_path / "bin.vtk")
+
+
+# ------------------------------------------- increment pq: Runner.run timeout
+#
+# docs/increments/perf-quick-check.md, section 3: every subprocess gets a
+# `timeout`, through a new argument of `Runner.run`; on expiry the child is
+# killed and `Completed.timed_out` says so.
+
+
+def test_completed_is_not_timed_out_by_default(bench: ModuleType) -> None:
+    assert bench.Completed(0, "", "", 0.1).timed_out is False
+
+
+def test_subprocess_runner_without_a_timeout_is_not_timed_out(bench: ModuleType) -> None:
+    done = bench.SubprocessRunner().run([sys.executable, "-c", "print('ok')"])
+    assert (done.returncode, done.stdout.strip(), done.timed_out) == (0, "ok", False)
+
+
+def test_subprocess_runner_kills_a_child_past_its_timeout(bench: ModuleType) -> None:
+    """*Scale:* a 60 s sleep against a 0.5 s timeout; the call returning within
+    20 s, timed from outside, is what shows the child was killed, not awaited."""
+    sleeper = [sys.executable, "-c", "import time; time.sleep(60)"]
+    start = time.perf_counter()
+    done = bench.SubprocessRunner().run(sleeper, timeout=0.5)
+    assert time.perf_counter() - start < 20.0
+    assert done.timed_out is True
 
 
 # ------------------------------------------------------------ run records
@@ -879,7 +924,9 @@ class FakeRunner:
         self.child_code = child_code
         self.calls: list[list[str]] = []
 
-    def run(self, argv: Sequence[str], cwd: Path | None = None) -> Any:
+    def run(
+        self, argv: Sequence[str], cwd: Path | None = None, timeout: float | None = None
+    ) -> Any:
         args = [str(a) for a in argv]
         self.calls.append(args)
         program = Path(args[0]).name
