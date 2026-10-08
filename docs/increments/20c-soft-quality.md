@@ -61,11 +61,18 @@ clip's shortened edges, the assumptions); test changes `737e5250`
 mutation round on the outline rule done, test commit `5cc0639c`
 (`@tester`, tests only: two survivors of eight faults, M2 and M2b, killed
 by two new tests; "Mutation round for 20c-3"), its three pins ruled
-("Rulings on 20c-3's mutation round"; OR5's wording corrected). **Next:
-`@perf`'s short timed check (at most 15 minutes, "Speed judgment") and
-the gate runs, then review.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+("Rulings on 20c-3's mutation round"; OR5's wording corrected);
+`@perf`'s timed check and gate runs `16143f4c` and profile `4d52dec0`
+(`docs/benchmarks/2026-10-08/20c-3/`): the run +30 % on Lagan and +107 %
+on Numedalslagen, the clean-up 8.0 s and 8.8 s against the design's
+1.1 s; Numedalslagen's outline-rule gate missed (15 slivers, 11 near the
+outline, worst 0.0814°); both ruled ("Rulings on 20c-3's timed check and
+gate runs": T1 a defect in ruling G4's cuts, fixed in code; T2 the
+rebuild and area measure restricted to what moved; T3 the hotspot,
+question 10). **Next: `@tester` red for T1 and T2, `@developer` green,
+`@perf`'s re-time and gate reruns, then review.** Questions 1 to 4 ruled by Ola, 2026-10-06,
 and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
-("Ola's rulings" below); question 9 open, designed on its default. Asked by Ola
+("Ola's rulings" below); questions 9 and 10 open, designed on their defaults. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -1311,7 +1318,10 @@ repaired.
   counted from the foot of the CRS's origin on that line, not from the
   edge's end, so where the clip cut the edge does not move them (as built,
   `7334b82b`; corrected in "Rulings on 20c-3's green step", ruling G4, after
-  30d's `test_grow.py::test_7b` caught the first build). M7: this takes Lagan's land cover from 1 006 098
+  30d's `test_grow.py::test_7b` caught the first build), **less any
+  multiple within D/2 of either end of the edge** (ruling T1: a cut
+  centimetres from an edge's own vertex made a centimetre constraint
+  edge). M7: this takes Lagan's land cover from 1 006 098
   to 328 372 vertices and the repair from 3.1 s to 0.75 s (the clip 0.36 s).
   The label polygon of each feature is then the clipped, repaired one; the
   region holds the domain, so every triangle's label inside it is found as
@@ -1506,6 +1516,34 @@ four off.
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
 | 20c-3 | the repair, input coarsening, and the outline rule (repair on at 5 cm, ruling 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs** (not yet measured on a mesh, M7): every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle has its smallest angle between two constraint edges at the slit's far corner (413 677.295 6 331 664.081). `@perf` reports the measured figures, and `@architect` then raises these thresholds to them with a margin (never lowers them) |
+
+**20c-3's gate results so far** (`@perf`, on `745bcb0d`,
+`docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`; "near" is the
+sliver's centre within 20 m of the domain outline, the same measure as
+the prototype's `strip.py`, checked by reading both scripts). Tolerance
+2 m alone: met on both. Outline rule at 5 m on top: Lagan met (65 slivers,
+4 near, worst 1.000 × the tolerance-only figure); Numedalslagen **not met**
+(15 slivers against ≤ 10, 11 near against ≤ 5, worst 0.0814° against
+≥ 0.1°; triangles +0.28 %, met). Repair at 5 cm on top: no threshold that
+held without it fails; Lagan's slit corners are not both mesh vertices;
+the far-corner check, the shared-border check and the population-3 check
+not run. All four off: 20c-2's mesh bit for bit on both. The cause of
+Numedalslagen's miss and its fix are ruling T1 below; with the fix
+(probe, not `@perf`'s run) the outline-rule runs give the design's
+figures: Numedalslagen 4 slivers, 0 near, worst 0.832158°; Lagan 61, 0
+near, worst 0.006697°.
+
+Slivers with the defaults (every switch at its default; `@perf`, same
+commit), master `483221d2` against the branch:
+
+| catchment | master: triangles | slivers under 1° | worst | branch: triangles | slivers under 1° | worst |
+|---|---|---|---|---|---|---|
+| Lagan | 799 378 | 437 | 0.002384° | 799 408 | 186 | 0.1917° |
+| Numedalslagen | 1 141 207 | 296 | 0.008623° | 1 142 108 | 169 | 0.08145° |
+
+With ruling T1's fix (probe): Lagan 180 slivers, worst 0.1917°;
+Numedalslagen 158, worst 0.6302°. `@perf` remeasures both tables on the
+fixed code.
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -2761,6 +2799,139 @@ from any of them.
 **Next**: `@perf`'s short timed check (at most 15 minutes, "Speed
 judgment") and the gate runs of "PRs and gates", then review.
 
+#### Rulings on 20c-3's timed check and gate runs (`@architect`, 2026-10-08, on `16143f4c` and `4d52dec0`)
+
+`@perf`'s check (`docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`)
+and profile (`profile.md@4d52dec0`, same folder). **D** marks a code
+change for `@developer`, **T** a test for `@tester`. The probe behind
+these rulings: the outline rule's inputs taken from the CLI at
+`4d52dec0` (the four runs below: both catchments, with the defaults and
+with the gate's flags), and each candidate change applied by patching
+the module from a script outside the tree; AC power, one run each, no
+warm-up. The scripts were in the session's scratchpad and are not kept;
+the changes are described in full below.
+
+- **T1, Numedalslagen's outline-rule gate: a defect in ruling G4's cuts,
+  not a gate on the wrong basis. D and T; the gate stands.**
+  *The basis matches.* The design's figures (4 slivers, 0 near, 0.832°;
+  M6 (d)) are the prototype's at tolerance 2 m, no merge, no repair, on
+  20c-2's switches; `@perf`'s gate runs use the same flags
+  (`scripts/gates.sh`), and the tolerance-only mesh they start from
+  agrees with the prototype's within the 20c-2 build's own difference
+  (29 slivers and 25 near, against 32 and 27; 20c-2 built is 2 slivers
+  under the prototype, "What 20c-2 built"). "Near" is the same measure
+  in both (`scripts/gate.py` and the prototype's `strip.py`: the
+  sliver's centre within 20 m of the domain's boundary).
+  *The built rule differs from the prototype in its cuts.* The
+  prototype (`snapline.py`, `cut`) split an edge into ⌈L/D⌉ equal pieces,
+  each longer than D/2. Ruling G4 put the cuts at multiples of D along
+  the edge's line, counted from the foot of the CRS's origin, and such a
+  multiple can fall any distance from the edge's own vertex. Where that
+  vertex lies just beyond D and the next cut within D, step 3 keeps the
+  cut (the step off the outline), and the linework gets an edge of
+  centimetres, nearly in line with the input edge; the mesh makes
+  slivers on it. In `@perf`'s mesh (`g-tol2snap5-num`), 10 of the 11
+  near slivers stand on such an edge, 2.9 to 21 cm long. The worst
+  (0.0814°, centre 219 550.8 6 599 776.3) has the input vertex
+  219 551.178 6 599 769.462, 5.52 m from the outline, and the cut
+  219 551.207 6 599 769.467, 2.9 cm from it. The eleventh (shortest side
+  1.1 m, no land-cover line within 30 m) is also gone with the fix.
+  *The fix (D):* `_cut` drops a multiple within D/2 of either end of the
+  edge. The pieces at an edge's ends are then D/2 to 3D/2 long and those
+  inside D; an edge shorter than D gets no cut, as in the prototype. G4
+  still holds. A cut within D/2 of a clipped end lies more than 97 m
+  from the outline, so it never moves and is never kept, and OR8 stands.
+  The test reads both ends alike, so OR2 stands too. Probed: Numedalslagen
+  4 slivers, 0 near, worst 0.832158°, 1 016 301 triangles; Lagan 61, 0
+  near, 0.006697°, 743 616: M6 (d)'s figures exactly. The rule's test
+  files (`test_feature_outline_rule.py`, `test_feature_repair.py`,
+  `test_cli_features_cleanup.py`, `test_grow.py`) pass with it patched in
+  (76 passed; the patch was shown to take effect by a `_cut` returning no
+  cuts, which fails 8).
+  *The test (T), OR9:* at D = 5, a straight outline edge and a border
+  edge from a vertex V 5.5 m inside it to a point 1 m inside, placed so
+  that a multiple of D along the edge's line (counted as `_cut` counts)
+  falls within 5 cm of V. No edge of the rule's linework inside the
+  domain is shorter than D/2, with the edge given in either direction.
+  On `4d52dec0` that edge is under 5 cm, so the test fails. Mutation
+  target: the end test removed (OR9 kills it).
+  *Whose defect:* ruling G4 ruled the cut correct without comparing its
+  piece lengths with the prototype's. `@developer` built what G4 said.
+- **T2, the speed: rebuild and measure only what moved. D and T.**
+  *What costs the time (profile).* With the merge on, each class is one
+  polygon (Numedalslagen: up to 590 parts and 125 000 vertices). For
+  every class with a moved ring, the rule rebuilds the whole class with
+  `union_all` over all its parts, moved or not (2.17 s), and measures the
+  area changed with `symmetric_difference` of the whole class, old
+  against new (2.20 s).
+  *The design.*
+  (1) A part with no moved ring is passed through unchanged, as now, and
+  no longer goes into a union. The polygon after the rule is the
+  unchanged parts plus the parts of `union_all` over the rebuilt parts
+  only, with no union when one part was rebuilt. If that polygon is not
+  valid, the rule falls back to today's union of all parts. The guard is
+  there because validity is argued, not proven: a rebuilt part changes
+  only within reach of the outline, where an unchanged part has no edge.
+  It cost about 0.1 to 0.2 s on the changed polygons in the probe. The
+  union over the rebuilt parts stays: without it, the probe lost about
+  1 000 km² of one Lagan polygon, because `make_valid` output overlapped.
+  (2) `_Outline.ring` also returns, for each point it gives back, the
+  index of the input vertex it is (−1 for a cut, a moved point or an
+  outline vertex). Between two consecutive kept input vertices whose
+  stretch changed, the old stretch and the new one form a closed loop
+  that bounds the region that changed there. A ring with no kept input
+  vertex contributes its old and its new polygon. Each loop is made
+  valid, and `area_changed` is the area of the union of all loops of all
+  polygons, intersected with the outline. Today it is the union of the
+  symmetric differences, intersected with the outline. Neighbours moving
+  one border both give the same loop, and the union counts it once, as
+  today.
+  *Outputs identical (probed on all four inputs).* The lines are
+  identical bit for bit, because they come from the same `ring` and
+  `_chains`. Every polygon is `shapely.equals` to today's, so the labels
+  are the same. `area_changed` is equal to four decimals in m²: 13 215.9606
+  and 16 074.3979 with the defaults, 13 467.6887 and 16 185.5619 with the
+  gate's flags, for Numedalslagen and Lagan.
+  Existing tests that pin this: OR1 to OR5 and OR8 (lines), OR5's notch
+  and RP7 (polygons), OR3 (area to 1e-6 m²) and OR6 (area 0).
+  *The test (T), not mutation-critical:* a polygon of two parts, one far
+  from the outline and one with two separate stretches within D of it.
+  The far part comes back `equals_exact` at 0 to its input. The area
+  equals the overlay measure that the test computes itself (the input
+  and output's symmetric difference, intersected with the outline) to
+  1e-6 m².
+  *Commits:* T1 and T2 as separate green commits, so that `@perf` can
+  check that T2 leaves the mesh the same bit for bit.
+  *Target* (the probe, both fixes, defaults, against `@perf`'s figures):
+  the rule alone, 5.9 → 2.7 s on Numedalslagen and 4.4 → 2.4 s on Lagan.
+  The clean-up 8.78 → 5.51 s and 8.04 → 5.92 s. The whole run
+  14.10 → 10.57 s (master 6.81 s, **+55 %**) and 22.87 → 20.59 s (master
+  17.64 s, **+17 %**). `@perf`'s limit for the re-time: clean-up at most
+  6.0 s on Numedalslagen and 6.5 s on Lagan, one run each.
+  *Size:* T1 about 2 counted lines, T2 about +25 (`ring`'s index list,
+  the loops, the assembly and its guard, less the overlay). About 360 in
+  all, under 700.
+- **T3, the hotspot: recorded, and question 10.** After T2,
+  Numedalslagen's clean-up is still about 52 % of its run (Lagan's about
+  29 %, its `features clip` 49 %). The design's 1.1 s was M7's clip and
+  repair alone (0.34 + 0.76 s, scratch probe). It never timed the
+  outline rule or the clip of the lines to the domain, and in the built
+  stage the clip and the repair alone take about 1.9 s on Numedalslagen
+  (0.75 + 1.18 s, profile). So the stage cannot get near 1.1 s with
+  the rule on. What remains on Numedalslagen after T2 (the profile, less
+  T2):
+  - the outline rule, about 2.4 s: its Python loop over ring edges
+    0.8 s, `make_valid` of the big rebuilt parts 0.6 s, their union
+    0.7 s, the loops 0.45 s;
+  - `coverage_clean`, 1.2 s;
+  - the clip of the lines to the domain (`_add`), 1.0 s;
+  - the clip to the read region, 0.75 s;
+  - the merge, 0.1 s.
+  Further work, not designed here, could cut that: a vectorised ring
+  loop, no whole-part repair and union for the big parts, and no domain
+  clip for chains the rule already knows to be inside. It might save
+  1.5 to 2 s; that is not measured. The gates do not change.
+
 ## `@perf`'s acceptance
 
 20c-1 and 20c-2 touch `include/terrain/mesh/` and
@@ -2814,6 +2985,7 @@ Counted in `CLAUDE.md` §2's unit.
 | 20c-3 (to 2026-10-07) | `feature_input.py` (merge, tolerance, coverage check) ~35; CLI and record ~25; the outline rule ~70 | ~130 |
 | 20c-3 (2026-10-08, with the repair) | `feature_input.py`: the land-cover stage (polygons collected per source, clipped to the read region, repaired, merged, simplified; the coverage check gone) ~45; the outline rule (an `STRtree` of the outline's segments, no buffer) ~70; `cli.py`, `run_record.py`, `stats.py` (four flags, of which `--features-repair` is new, their refusals, the input and vertex rows, the timing sub-row) ~35; `pyproject.toml` is not counted | **~150** |
 | 20c-3 green | `python3 tools/count_loc.py 483221d2 7334b82b`: `feature_input.py` 260 (the outline rule 188 against ~70; the stage 68, part of it moved from the old loop), `cli.py` 63, `run_record.py` 8. Over the estimate by 181 (+121 %), almost all in the outline rule, whose estimate was not taken from its 146-line prototype (ruling G5); under 700, one PR | **331** |
+| 20c-3 rulings T1, T2 | `feature_input.py`: the cut's end test ~2 (T1); `ring`'s index list, the loops, the assembly and its validity guard, less the whole-polygon overlay ~+25 (T2) | **~360** |
 
 On the worst overrun seen when estimated (+60 %), 240, 175 and 240. Each under 700. 20c-3 then overran by more than that, +121 % to 331 (ruling G5), still under 700.
 
@@ -2942,6 +3114,25 @@ Questions 6 and 7 as asked:
    off). The other choices: 1 cm (fills the gap, keeps its 1 cm edge), or
    a larger distance (the same gaps here, more vertices moved; not probed
    beyond 5 cm); only the default and the CLI test that pins it change.
+10. **The land-cover clean-up is slower than the design said: accept it
+   for now?** You asked to hear about any step that takes a large share of a
+   run. The new land-cover step (the clip, the repair of question 9, the
+   merge by class and your outline rule) takes 8.0 s on Lagan and 8.8 s
+   on Numedalslagen. The design estimated 1.1 s (question 9), counting only the clip
+   and the repair, and those two alone take about 1.9 s. A fix in this
+   PR (ruling T2: rebuild and measure only the land cover that moved,
+   with the same output) brings the step to about 5.9 s and 5.5 s. The
+   whole run is then about +17 % on Lagan (17.6 to 20.6 s) and +55 % on
+   Numedalslagen (6.8 to 10.6 s) against master. On Numedalslagen that
+   step is about half the run. The rest is the outline rule (about
+   2.4 s), the repair (1.2 s), and clipping the land cover to the
+   catchment (1.0 s) and to the read area (0.75 s). **Default: accept
+   that time for 20c-3**, and add a ROADMAP row to make the step faster
+   later (perhaps 1.5 to 2 s less; not designed or measured). The other
+   choice: hold 20c-3 for a further speed round first. Turning the
+   outline rule off by default would save about 2.4 s, but it would give
+   up most of the rule's gain near the outline; that was not measured
+   with the defaults.
 
 ## Not in scope
 
