@@ -636,6 +636,29 @@ TEST_CASE("3. junctions and the outline stay bit for bit (M3); the counts of bor
     CHECK(out.counts.fixed_borders == 3);
 }
 
+TEST_CASE("3. a loop through one junction keeps it: an island touching its hole's outline at J (M3)",
+          "[vector_simplify][border_collapse][junction][loop]") {
+    // A 100 m square whose hole is an island Q touching the outline at one
+    // point, J = (50, 0), a vertex of both. J has four edges, so it is a
+    // junction, and Q's ring (and the hole's) is one border from J round to
+    // J (section 8: "a loop's junction never moves"). J is the tip of a
+    // 10 m spike: the collapse that removes it puts E near (46.7, 3.3),
+    // within the band of 10 m and crossing nothing, so only the rule that
+    // a junction is never B or C keeps it. The mutation round's M3 (the loop
+    // made a closed border, so J is an inner node) moves it.
+    const Point2 J{50.0, 0.0};
+    const Ring Q{J, {60.0, 10.0}, {70.0, 10.0}, {70.0, 30.0}, {30.0, 30.0}, {30.0, 10.0}, {40.0, 10.0}};
+    const Ring shell{{0.0, 0.0}, J, {100.0, 0.0}, {100.0, 100.0}, {0.0, 100.0}};
+    const Rings in{shell, reversed(Q), Q};
+    REQUIRE(area(Q) > 0.0);
+    const BorderOutcome out = run(in, 10.0);
+    const Rings got = check(in, out, 10.0);
+    for (const Ring& r : got)
+        CHECK(has(r, J));
+    CHECK(same_cycle(got[0], shell));
+    CHECK(same_cycle(got[1], reversed(got[2])));
+}
+
 TEST_CASE("4. an island: its ring and the hole's are the same points in opposite order",
           "[vector_simplify][border_collapse][island]") {
     // A 64-gon on a circle of radius 100 at (500, 500) (cocircular up to
