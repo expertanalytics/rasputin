@@ -1,10 +1,14 @@
 # Increment 33: a vertical tolerance that varies with distance to named lines
 
-**Status:** designed (`@architect`, 2026-10-08), design review round 3
-approved; red step `6c64b120`; its pins ruled in section 9.1. Next: `@tester`
-adds the three cases 9.1 asks for (A, B, and the `--tolerance-near-crs`
-refusal), then `@developer`'s green step. Questions for Ola in section 12; the design is written on their
-defaults.
+**Status:** built (`@developer`), 464 counted lines against section 10's
+estimate of 310-425 (reconciled there); not pushed. Design review round 3
+approved; red step `6c64b120`, its pins ruled in 9.1; kill record in 9.2;
+green-step pins in 9.3. Code review round 1 asked for changes; the code fixes
+are in (`c2ddd679` tests, `7101f514` code) and its prose fixes in this file.
+Next: `@reviewer`'s code review round 2, and `@perf`'s acceptance run.
+Questions for Ola in section 12; the design is written on their defaults, and
+section 8's refusal of a non-finite coordinate on a default taken while Ola
+was away.
 
 ## 1. What Ola asked
 
@@ -189,7 +193,9 @@ network at 69 479 vertices (mean segment 14 m), which it reduces to 13 628
         v
 tolerance_field.line_segments(spec, window, mesh_crs)             (Python, pure)
    read_source (feature_input.py, unchanged)  -> line geometries in the file's CRS
-   pyproj Transformer(file CRS -> mesh CRS, always_xy=True)
+      (a GeoPackage's R-tree queried with crs.transform_bounds(mesh CRS -> file CRS)
+       of the window grown by E + margin)
+   crs.reprojector(file CRS, mesh CRS)        -> coordinates; non-finite refused (8)
    shapely.simplify(margin, preserve_topology=False)
    keep whole segments whose box meets the window grown by E + margin
         |  float64 array (k, 4): x0 y0 x1 y1, in the mesh CRS; margin
@@ -440,7 +446,12 @@ rasputin mesh --dem DTM10 --domain corridor.geojson \
   number; a file with no lines ("bergen_line.geojson has no lines; polygons
   and points are not used here"). Lines wholly beyond END of the window are
   not an error: stderr says "no tolerance lines within 3000 m of the domain;
-  every triangle is held to 20 m".
+  every triangle is held to 20 m". For a GeoPackage, whose R-tree is queried
+  with the reachable box and so returns no rows when every line is out of
+  reach, `line_segments` then reads the layer again with an unbounded box:
+  a file with lines, all out of reach, gives zero segments and this stderr
+  line; only a file with no lines at all is refused (code review round 1,
+  fix 1).
 - **The lines do not become constraint lines** (default, Q3). A railway's
   centre line is not a break line of the terrain at 10 m (the track bed is an
   embankment or a cut about that wide), forcing mesh edges along it adds
@@ -541,7 +552,17 @@ rasputin fetch its own data); the script is the stopgap.
   reason (a finite lattice).
 - Lines in a geographic CRS: transformed to the mesh CRS first; the mesh CRS
   is always projected (a geographic DEM needs `--out-crs`).
-- A line with a NaN or infinite coordinate: refused by `make`.
+- A line with a NaN or infinite coordinate, or a point with no image in the
+  mesh CRS (which `crs.reprojector` returns as infinity): refused by
+  `line_segments`, after the transform to the mesh CRS and before
+  `shapely.simplify` (which would drop a NaN vertex silently), with a
+  `FeatureError` naming the file: "<name>: a line has a NaN or infinite
+  coordinate, or one with no image in <mesh CRS>"; the CLI makes it a usage
+  error on `--tolerance-near`. `make` still refuses a non-finite coordinate
+  ("coordinate", 9.1 pin 3), for a caller that skips `line_segments`. This
+  refusal was chosen on a default by the main session while Ola was away
+  (code review round 1, fix 3; the other choice was to restate this line and
+  let simplify drop the vertex). It is reversible: Ola may rule the other way.
 
 ## 9. Tests `@tester` writes red first
 
@@ -608,7 +629,7 @@ Python (`tests/python`):
     mesh is asserted).
 
 **Invariant-critical suite: tests 1-8, 11** (3 includes its new part (b);
-8 is the strip). Mutation targets the kill record
+8 is the strip). Mutation targets the kill record (9.2)
 must cover:
 
 - M1 the ramp interpolates from `E` instead of `S` (or drops the margin);
@@ -755,6 +776,99 @@ other geometry: each a `ValueError` matching "another raster geometry".
 to the TSan job in `.github/workflows/main.yaml`, in both of its lists (the
 `--target` build list and the list of binaries it runs).
 
+### 9.2 Kill record
+
+Increment 33 kill record, copied verbatim by the main session from @tester's handback (mutation round on 9c277856; test amendments be414c9a and 86a6ec43). Each mutant was planted in a scratch copy (tools/scratch_copy.py); the two new C++ tests' objects were deleted before every rebuild. Unmutated: test_refinement_line_tolerance 26 cases, prop_refinement_line_tolerance 9, test_tolerance_field.py 14 (16 after additions), all pass.
+
+| mutant | planted in | change | result | failing cases |
+|---|---|---|---|---|
+| M1a: ramp from E | line_tolerance.hpp, `ToleranceRamp::at` | `(x - start)` → `(x - end)` | killed | 6 unit (test 4: five cases; test 6 `at()`), 1 property (test 7) |
+| M1b: margin dropped | line_tolerance.hpp, `ToleranceRamp::at` | `max(0, distance - margin)` → `max(0, distance)` | killed | 4 unit (test 4 margin, test 4 sweep, test 6 step ramp, test 6 `at()`) |
+| M2: centroid distance | line_tolerance.hpp, `search` | `pair(v, s)` → point-to-segment from the centroid | killed | 13 unit (test 6), 3 property (tests 5, 7, 8) |
+| M3: crossing not 0 | line_tolerance.hpp, `pair` | `meet(...) → return 0` removed | killed | 2 unit (test 6 crossing, test 6 random) |
+| M4: stop at 2g | line_tolerance.hpp, `search` | `best <= g` → `best <= 2 * g` | killed | 2 unit (test 6 search stop, test 6 random) |
+| 9.1 A: `at` from the capped distance | line_tolerance.hpp, `at` | `ramp_.at(search(m, t))` → `ramp_.at(distance(m, t))` | killed | 1 unit (test 6 step ramp) |
+| M5: laziness swapped | refine.hpp, `detail::allowed_at` (shared by `point_loop`) | `error <= lowest() ? lowest()` → `error <= highest() ? highest()` | killed | 5 property (tests 3 (b), 5, 7, 8, 9) |
+| M6: foot epsilon from F | refine.hpp, the foot branch | `tol = limit(t) or at(m, t)` → `tol = options.tolerance` | killed | 1 property (test 3 (b)) |
+| M7: `refine_points` compares with `options.tolerance` | refine_points.hpp, `point_loop` | `limit = allowed[t]` → `limit = options.tolerance` | killed | 2 property (tests 3 (b), 8) |
+| M8a: margin correction dropped | tolerance_field.py, the return | `spec.margin_m` → `0.0` | killed | 5 (test 11: EPSG:4326 transform, empty array, margin bound ×2, closed loop) |
+| M8b: simplified by 2 × margin, returns margin | tolerance_field.py, `simplify` | `spec.margin_m` → `2 * spec.margin_m` | survived, then killed after `86a6ec43` | 1 (new: `test_the_margin_returned_is_the_one_simplified_by`) |
+| M9: window not grown by E | tolerance_field.py, `reach` | `end_m + margin_m` → `margin_m` | killed | 1 before the additions, 2 after (2 999 m kept; exactly at reach kept) |
+| extra: open box test | tolerance_field.py, `keep` | `<=` / `>=` → `<` / `>` | survived, then killed after `86a6ec43` | 1 (new: `test_a_segment_exactly_at_the_reach_is_kept`) |
+| extra: an emptied line dropped | tolerance_field.py, the fallback | `xy[[0, 0]]` → `xy[:0]` | survived, equivalent on GEOS 3.14 | none |
+
+Why the last cannot be killed here: with `preserve_topology=False`, GEOS 3.14.1 never returns an empty line (a loop smaller than the margin, a doubled point, a tripled point and a there-and-back line all come back as a 2-point zero-length line), so the fallback is unreachable on this GEOS. The closed-loop test still checks the visible behaviour.
+
+Layering amendment be414c9a: tolerance_field imports only tin_engine.crs and tin_engine.feature_input; full pytest 7000 passed, 17 skipped, 0 failed, coverage 98.64%.
+
+Added after code review round 1: the emptied-line mutant (`xy[[0, 0]]` → `xy[:0]`) is now killed by `c2ddd679`'s `test_a_line_simplification_empties_is_a_zero_length_segment` in `tests/python/test_tolerance_field.py`, which monkeypatches `shapely.simplify` to return an empty line so the fallback is reached on any GEOS.
+
+### 9.3 Pins after the green step
+
+`@developer`'s green step (and code review round 1's fixes, `7101f514`)
+settled what the design left open. Each is listed from the code; none
+changes a guarantee of section 7.
+
+1. *The lazy lookup's storage* (`detail::allowed_at`, `refine.hpp`; used by
+   `refine` and `point_loop`). For a policy other than `UniformTolerance`
+   (`detail::varies<P>`) one `double` per slot, `allowed[t]`, written by the
+   parallel scan: `lowest()` when the error is at most `lowest()` (converges
+   at any distance), minus infinity when the error is above `highest()`
+   (splits at any distance; `at()` not asked), and `at(m, t)` in between.
+   The serial phase compares the error with `allowed[t]`. The foot's epsilon
+   takes `allowed[t]` when it is at least 0, and otherwise asks `at(m, t)`
+   there (4.4: the triangle is unchanged at that point). With
+   `UniformTolerance` the vector's type is an empty struct, so nothing is
+   allocated, and the limit is `lowest()`.
+2. *The `max_error_near` loop* (`detail::max_error_near`, shared by `refine`
+   and `refine_points`). Parallel over fixed blocks of 4096 slots, one
+   partial maximum per block, the largest taken at the end; the maximum does
+   not depend on order, so the result is the same at any thread count. A slot
+   counts when its error beats the block's maximum so far, `allowed[t]` is
+   not above `lowest()` (a slot above it already holds `at(m, t)`, so it is
+   far without a query), and `at(m, t) <= lowest()`. `refine` counts a void
+   slot's error as 0. This is 9.1's definition, computed lazily.
+3. *The fixed block size.* 4096 slots per block in `max_error_near`, not
+   `parallel_util::default_block`; the partial maxima are indexed by block,
+   so the block size has to be known before the loop. *Constant:* a count of
+   triangle slots, independent of scale; not measured, `@perf` times the
+   step (section 10).
+4. *The policy refusal checks only `lowest()`* (`detail::bad_policy`): a
+   policy whose `lowest()` is not finite or is below 0 is refused with the
+   existing "tolerance must be finite and >= 0" words. `highest()` is not
+   checked: `UniformTolerance`'s equals its `lowest()`, and `LineTolerance`'s
+   is `far`, which `make` already refuses when not finite or below `near`.
+   The policy overloads read no `options.tolerance`; the plain overloads pass
+   `UniformTolerance{options.tolerance}`, so their refusal is today's.
+5. *The CLI wording* (`_tolerance_lines`, `cli.py`): the help texts are
+   section 5's. The refusals are 9.1 pin 13's, with the values added: "must
+   be finite and >= 0, got <values>", "N <n> is above --tolerance <F>",
+   "START <S> is above END <E>". They are checked in this order:
+   `--tolerance-near-crs` or `--tolerance-ramp` without `--tolerance-near`,
+   then `--dem`, `--tolerance`, `--tolerance-ramp`, the numbers, N against F,
+   START against END. A `ValueError` from `line_segments` or from
+   `LineTolerance` becomes a usage error on `--tolerance-near`.
+6. *The window comes from the tile's metadata* (`_line_field`): the box of
+   the held tile's nodes, `(x_min, y_max - (rows - 1) dy, x_min + (cols - 1)
+   dx, y_max)`, in the tile's CRS, not the domain polygon's box. On the
+   resampled path the tile is the target grid's, so the CRS is the mesh CRS
+   (test 13). The stderr line's "of the domain" therefore means within reach
+   of the tile meshed, which holds the domain.
+7. *The record's placement.* The three input entries (`tolerance_near_m`,
+   `tolerance_ramp_m`, `tolerance_lines`) come right after `snap_to_lines` in
+   `run_record.WORDING`, whose order is the record's;
+   `max_error_near_lines_m` right after `resampled_grid_max_error_m`. The
+   input entries are written whenever `--tolerance-near` is given, zero
+   segments included; `max_error_near_lines_m` only when a field was built
+   (9.1, "Zero segments kept").
+8. *The `_entry` change* (`run_record.py`): a name ending in `_m` or `_deg`
+   is read as a measured number only when its value is not text, so
+   `tolerance_ramp_m`'s "0 to 3000" stays text.
+9. *The fallback re-read* (`line_segments`): when a GeoPackage's R-tree query
+   returns no row, the layer is read again with an unbounded box (section 5),
+   so a file whose lines are all out of reach gives zero segments, not "has
+   no lines". It reads the whole layer once more, only in that case.
+
 ## 10. Size, split point, speed
 
 | part | counted lines (estimate) | basis |
@@ -771,6 +885,20 @@ The counts are `tools/count_loc.py`'s rule applied to the files at
 `700f57a6` (`counted_lines` on each file whole), and to 23b's green commit
 (`python3 tools/count_loc.py 3c464ec3~1 3c464ec3`).
 
+**As built**, `python3 tools/count_loc.py 837ebc8a <head>` (the branch's base
+to its head; at `7101f514` it gives 464 against 310-425):
+
+| part | estimate | built at `7101f514` | why it differs |
+|---|---|---|---|
+| `line_tolerance.hpp` | 110-140 | 143 | at the top |
+| `refine.hpp` | 30-40 | 59 | the shared helpers the estimate did not list: `allowed_at`, `max_error_near` (parallel since code review round 1), `bad_policy`, the `Allowed` type, and the plain overload forwarding to the policy one |
+| `refine_points.hpp` | 25-35 | 33 | within |
+| `bindings/core.cpp` and `_core.pyi` | 60-85 | 37 + 17 = 54 | below |
+| `tolerance_field.py` | 45-65 | 56 | within, with code review round 1's fallback re-read and non-finite refusal |
+| `cli.py` | 40-60 | 105 | the three options (24 lines of Typer declarations), `_tolerance_lines` (the refusals), and `_line_field`, which builds the field: the window, `line_segments`, the record's three input entries, the stderr line. The table above had no row for building the field. This is nearly all the overrun |
+| `edge_strip.py`, `final_check.py`, `run_record.py` | not listed | 7 + 3 + 4 = 14 | passing the field on; the record's wording and the `_entry` change (9.3, pin 8) |
+| **total** | **310-425** | **464** | under 700, one PR |
+
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ header, the entry-point overloads, the binding and stub
 (nothing a user sees changes); PR B `tolerance_field.py`, the CLI and the
@@ -781,15 +909,22 @@ record.
 | step | quick check's cases, default flags | Hokksund-Bergen corridor with the ramp | basis |
 |---|---|---|---|
 | read the line file (`read_source`, GeoJSON) | not run | under 0.5 s (69 479 vertices) | estimate; `json` plus `shapely.shape` |
-| transform (`pyproj.Transformer.from_crs(..., always_xy=True).transform`, PROJ's default operation, no tolerance) | not run | none if prepared in EPSG:25833; about 0.02 s for 69 479 points otherwise | estimate |
+| transform (`crs.reprojector(file CRS, mesh CRS)`: pyproj's `always_xy` transform, PROJ's default operation, no tolerance) | not run | none if prepared in EPSG:25833; about 0.02 s for 69 479 points otherwise | estimate |
 | simplify (`shapely.simplify(geom, 1.0, preserve_topology=False)`, GEOS Douglas-Peucker, tolerance 1 m) | not run | 0.0 s measured (to 13 628 vertices) | probe item 1 |
 | select segments (NumPy box test) | not run | milliseconds | O(n) |
 | build the field (`BroadPhase` over about 12 000 segments) | not run | milliseconds | O(n) |
 | per-triangle query in the scan | none: `UniformTolerance` never queries | 0.675 µs per occupied bucket met (about 45 segments, about 15 ns per distance); an index query meets one to four occupied buckets up to `g = 750 m`, two to four at 1.5 km and four to six at 3 km; a triangle within `E/16` runs one query (0.7 to 2.7 µs), one beyond `E` all six (8.8 to 18.9 µs), each band charged the queries its far edge needs; per scanned triangle 2.7 to 8.3 µs, weighted by triangles per distance band; 3.5 scans per final triangle, 1.37 million final triangles: 13.1 to 40.4 s of CPU, 1.3 to 4.0 s of wall time on 10 threads | estimate, not measured (no C++ exists): `33-probes/query_cost.py`, its assumptions stated there; errs high, as it does not count the queries the laziness skips |
-| `max_error_near_lines_m` at the end | not run | one query per final triangle, under 0.3 s wall | estimate |
+| `max_error_near_lines_m` at the end (`detail::max_error_near`, inside the `refine` call and the edge strip's and final check's) | none: `UniformTolerance` copies `max_error`, no query | parallel over blocks of 4096 slots, one partial maximum per block; a slot whose `allowed[t]` is above `lowest()` is far without a query; the others are queried only where their error beats the block's maximum so far; at most one query per final triangle | not timed: `@perf` times it in the acceptance run (code review round 1, fix 4, replaced a serial loop of one query per final triangle, about 4 to 11 s on the corridor by the reviewer's estimate) |
 
-**Library calls**, with method and tolerance: `pyproj.Transformer.from_crs(
-src, dst, always_xy=True)` (PROJ's best available operation; no tolerance);
+**Library calls**, with method and tolerance, through `tin_engine.crs` (which
+holds the only `pyproj.Transformer.from_crs` in `src_python/`, always with
+`always_xy=True`): `crs.reprojector(file CRS, mesh CRS)` (PROJ's best
+available operation, point by point; no tolerance; a point with no image comes
+back as infinity); `crs.transform_bounds(mesh CRS, file CRS, box)`, the box a
+GeoPackage's R-tree is queried with (pyproj's `transform_bounds` with
+`densify_pts=21`: 21 points added to each edge of the box, the corners and
+those points transformed, and the box holding their images taken; no
+tolerance);
 `shapely.simplify(..., tolerance=margin_m, preserve_topology=False)`
 (Douglas-Peucker in GEOS); `shapely.get_coordinates` (exact copy). No GEOS
 distance or buffer runs in the product; the distances are the C++ header's.
