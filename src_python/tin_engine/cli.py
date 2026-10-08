@@ -1045,6 +1045,7 @@ def mesh(
             values["features_transform"] = "; ".join(transforms)
             values["features_notice"] = "; ".join(notices) or None
             values |= {f"features_{k}": v for k, v in cleanup.items()}
+            values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
             if found.cover_vertices is not None:
                 before, after = found.cover_vertices
                 values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"

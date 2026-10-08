@@ -441,7 +441,7 @@ class _Tally:
             items, snapped.lines, snapped.polygons, strict=True
         ):
             if polygon.is_empty:  # the repair gave all of it to its neighbours
-                self.outside += 1
+                self.empty += 1
             else:
                 self._add(fid, mask, list(lines), code, polygon)
         took = time.perf_counter() - t0

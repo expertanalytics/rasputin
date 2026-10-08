@@ -144,9 +144,7 @@ def _entry(name: str, value: str | int | float) -> Entry:
     """One entry: a ``_m`` or ``_deg`` name is a measured float, an int a
     count, anything else text. D3 rule 3: a zero count is not in the file."""
     number: float | int | None = None
-    if isinstance(value, bool):  # a switch: JSON true or false, printed on or off
-        number, text = value, "on" if value else "off"
-    elif name.endswith(("_m", "_deg")):
+    if name.endswith(("_m", "_deg")):
         number = float(value)
         text = _exact(number)
     elif isinstance(value, int):
