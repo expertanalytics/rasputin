@@ -745,9 +745,9 @@ def mesh(
             rich_help_panel=CLEAN_UP,
             show_default=False,
             help="Metres: land-cover borders of one file closer than this become one "
-            "border, and gaps narrower than it are filled; 0 is off. Default: 0.05.",
+            "border, and gaps narrower than it are filled; 0 is off. Default: 1.",
         ),
-    ] = 0.05,
+    ] = 1.0,
     features_merge_same_class: Annotated[
         bool,
         typer.Option(

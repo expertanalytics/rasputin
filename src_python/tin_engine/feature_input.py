@@ -131,7 +131,7 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-    #: 20c-3's land-cover stage, all off by default (the CLI's are 0.05, on, 0, 5):
+    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 0, 5):
     #: the repair's tolerance, the same-class merge, the simplification and D.
     repair_m: float = 0.0
     merge_same_class: bool = False
