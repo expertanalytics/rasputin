@@ -560,3 +560,94 @@ TEST_CASE("33 test 9: 1 and 8 threads give the same mesh with a field", "[line_t
     const auto store = store_of(g, scattered(sc.dem, 17));
     same(points_run(store, b, point_options(3.0, true, 1), f), points_run(store, b, point_options(3.0, true, 8), f));
 }
+
+// ------------------------------------------------- max_error_near, many blocks
+
+namespace {
+
+// A policy whose at() depends on the slot alone: N = 1 on every third slot,
+// otherwise 1.5 to 4.5, so lowest() 1 and highest() 4.5 (the mesh is unread).
+struct BySlot {
+    [[nodiscard]] double lowest() const noexcept { return 1.0; }
+    [[nodiscard]] double highest() const noexcept { return 4.5; }
+    [[nodiscard]] double at(const terrain::mesh::LatticeMesh&, std::uint32_t t) const noexcept {
+        return t % 3 == 0 ? 1.0 : 1.0 + 0.5 * static_cast<double>(1 + t % 7);
+    }
+};
+static_assert(TolerancePolicy<BySlot>);
+
+// No slot is held to lowest(): every at() is 2.
+struct FarSlots {
+    [[nodiscard]] double lowest() const noexcept { return 1.0; }
+    [[nodiscard]] double highest() const noexcept { return 4.5; }
+    [[nodiscard]] double at(const terrain::mesh::LatticeMesh&, std::uint32_t) const noexcept { return 2.0; }
+};
+
+// Section 9.1's definition, serially: the largest error over the slots whose
+// at() is at most lowest(); 0.0 when there are none.
+double brute_near(const BySlot& p, const terrain::mesh::LatticeMesh& m, const std::vector<double>& error) {
+    double best = 0.0;
+    for (std::uint32_t t = 0; t < error.size(); ++t)
+        if (p.at(m, t) <= p.lowest()) best = std::max(best, error[t]);
+    return best;
+}
+
+}  // namespace
+
+TEST_CASE("33: max_error_near over many blocks is the serial definition, for 1 and 8 threads",
+          "[line_tolerance][property][max_error_near]") {
+    // Code review round 2: detail::max_error_near works in blocks of 4 096
+    // slots, and for_each_block runs a single block inline, so test 9's
+    // 33 x 33 grid never starts a second worker. 3 x 4 096 + 17 slots here.
+    const BySlot p;
+    auto built = terrain::mesh::LatticeMesh::build(
+        std::vector<terrain::mesh::MeshVertex>{{0.0, 0.0}, {1.0, 1.0}, {1.0, 0.0}}, {{0, 1, 2}},
+        std::vector<std::uint8_t>(1, 0), std::vector<std::array<std::uint32_t, 3>>(1, {0, 0, 0}));
+    REQUIRE(built.has_value());
+    const terrain::mesh::LatticeMesh& m = *built;
+
+    const std::uint32_t seed = GENERATE(1u, 2u, 3u);
+    CAPTURE(seed);
+    constexpr std::size_t n = 3 * 4096 + 17;
+    std::mt19937 gen{seed};
+    std::vector<double> error(n), allowed(n);
+    std::size_t at_lowest = 0, splits = 0, asked = 0;
+    for (std::uint32_t t = 0; t < n; ++t) {
+        error[t] = static_cast<double>(gen() % 6001u) / 1000.0;  // 0 to 6 m in mm steps
+        allowed[t] = terrain::refinement::detail::allowed_at(p, m, t, error[t]);
+        at_lowest += allowed[t] == p.lowest() ? 1 : 0;
+        splits += allowed[t] == -std::numeric_limits<double>::infinity() ? 1 : 0;
+        asked += allowed[t] > p.lowest() ? 1 : 0;
+    }
+    REQUIRE(at_lowest > 0);  // all three of allowed_at's values occur
+    REQUIRE(splits > 0);
+    REQUIRE(asked > 0);
+    // The largest near error sits in the last, partial block, so a block
+    // writing to another block's slot of the partial maxima shows.
+    error[3 * 4096 + 6] = 7.0;  // 12 294 % 3 == 0: a near slot
+    allowed[3 * 4096 + 6] = -std::numeric_limits<double>::infinity();
+    // And a far slot above it everywhere else, which must not count.
+    error[4097] = 9.0;  // 4 097 % 3 == 2: far
+    allowed[4097] = -std::numeric_limits<double>::infinity();
+
+    const auto err = [&](std::uint32_t t) { return error[t]; };
+    const double expected = brute_near(p, m, error);
+    REQUIRE(expected == 7.0);
+    const double one = terrain::refinement::detail::max_error_near(p, m, allowed, 1, err);
+    const double eight = terrain::refinement::detail::max_error_near(p, m, allowed, 8, err);
+    CHECK(bits(one) == bits(expected));
+    CHECK(bits(eight) == bits(expected));
+
+    // Per block: each block's own near maximum is found (the last block's
+    // 7.0 removed, the result is the brute force over the rest).
+    error[3 * 4096 + 6] = 0.0;
+    const double rest = brute_near(p, m, error);
+    CHECK(bits(terrain::refinement::detail::max_error_near(p, m, allowed, 8, err)) == bits(rest));
+    CHECK(rest < 7.0);
+
+    // No slot is near: 0.0, whatever the errors.
+    const FarSlots far;
+    std::vector<double> far_allowed(n);
+    for (std::uint32_t t = 0; t < n; ++t) far_allowed[t] = terrain::refinement::detail::allowed_at(far, m, t, error[t]);
+    CHECK(terrain::refinement::detail::max_error_near(far, m, far_allowed, 8, err) == 0.0);
+}
