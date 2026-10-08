@@ -87,3 +87,44 @@ Against the gate table:
 * Not run: the "no shared border inside the catchment left unmatched by the
   rule" check, and the "population-3 lines carry no constraint edge with the
   merge on" check.
+
+## Re-time after rulings T1 and T2 (`35b7a873`, `8716f062`)
+
+Apple M1 Max, AC power, one run each, defaults as above; master figures are
+the run above at `16143f4c` (not re-run). Both commits change Python only
+(`feature_input.py`), so the editable install's extension was not rebuilt.
+Script: `scripts/t12.sh` (T1's `feature_input.py` checked out for its two runs,
+then restored); raw reports: `stats/t12/`. Meshes stay out of the repository
+(scratch `rasputin_scratch/perf-20c3-t12-20261008/`).
+
+**T2 leaves the mesh unchanged:** `.vtk` SHA-256 on T1 and on T2 equal for both
+catchments (Lagan `ef67e65c…`, Numedalslagen `1f11f291…`). **Met.**
+
+| catchment | master total | T1 total | T2 total | T2 vs master | clean-up T1 | clean-up T2 | limit |
+|---|---|---|---|---|---|---|---|
+| Lagan | 17.64 s | 22.68 s | 20.59 s | +2.95 s (+17 %) | 7.98 s | 5.92 s | ≤ 6.5 s, met |
+| Numedalslagen | 6.81 s | 13.67 s | 10.51 s | +3.70 s (+54 %) | 8.68 s | 5.48 s | ≤ 6.0 s, met |
+
+**Phases at 40 % or more (T2):** `features clip` 48.5 % of Lagan's run;
+`features clip` 52.9 % and its sub-row `features clip: clean-up` 52.2 % of
+Numedalslagen's.
+
+Slivers with the defaults, T2 (master as above):
+
+| catchment | triangles | under 1° | worst angle | master under 1° | master worst |
+|---|---|---|---|---|---|
+| Lagan | 799 368 | 180 | 0.1917° | 437 | 0.002384° |
+| Numedalslagen | 1 141 983 | 158 | 0.6302° | 296 | 0.008623° |
+
+Max vertex degree Lagan 14, Numedalslagen 19; largest height error 9.99993 m
+and 9.99994 m (unchanged). Delaunay check not run.
+
+Outline-rule gate on T2 (`--no-features-merge-same-class --features-tolerance 2
+--features-outline-snap 5 --features-repair 0`), against the tolerance-2 run
+above (`g-tol2-*`, made before T1; T1 and T2 touch only the outline rule, so it
+was not re-run):
+
+| catchment | triangles (vs tolerance 2) | under 1° | centre within 20 m of outline | worst | verdict |
+|---|---|---|---|---|---|
+| Numedalslagen | 1 016 301 (+0.27 %) | 4 (≤ 10) | 0 (≤ 5) | 0.8322° (≥ 0.1°) | met |
+| Lagan | 743 616 (+0.09 %) | 61 (≤ 90) | 0 (≤ 5) | 0.006697° (1.000 × tolerance-2) | met |
