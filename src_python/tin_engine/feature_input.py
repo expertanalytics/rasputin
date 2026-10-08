@@ -660,7 +660,9 @@ def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: fl
             ]
             if len(closed[0]) >= 3:
                 shell = Polygon(closed[0], [h for h in closed[1:] if len(h) >= 3])
-                rebuilt.append(shell if shell.is_valid else shapely.make_valid(shell))
+                rebuilt.append(
+                    shell if shell.is_valid else shapely.make_valid(shell, method="structure")
+                )
         new: BaseGeometry | None = polygon
         if len(same) < len(qs):  # ruling T2: only the rebuilt parts are unioned
             new = rebuilt[0] if len(rebuilt) == 1 else shapely.union_all(rebuilt)

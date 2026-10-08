@@ -56,7 +56,9 @@ WORDING = {
     "features_notice": "Credit for the features data",
     "land_cover_codes": "What land_cover_code holds",
     "land_cover_vertices": "Land-cover vertices before and after clean-up",
-    "land_cover_area_moved_m2": "Land-cover area inside the outline that changed class, m2",
+    "land_cover_area_moved_m2": (
+        "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
+    ),
     "resampled_grid_max_error_m": "Largest error against the resampled grid",
     "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
     "dem_check_points_inserted": "Points that comparison added",
