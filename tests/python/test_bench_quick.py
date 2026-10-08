@@ -305,6 +305,24 @@ def test_an_indeterminate_power_state_is_never_a_baseline(quick: ModuleType, pow
     assert v.exit_code == 2
 
 
+def test_a_geos_upgrade_is_no_baseline_naming_geos(quick: ModuleType) -> None:
+    """Section 12: the machine record carries the GEOS and PROJ libraries the
+    parent runs on (shapely and pyproj as imported here), so a baseline taken
+    on another GEOS is never compared."""
+    import pyproj
+    import shapely
+
+    machine = sys.modules["bench"]._machine(FakeRunner()).model_dump()
+    assert machine["geos"] == shapely.geos_version_string
+    assert machine["proj"] == pyproj.proj_version_str
+    new, base = record(), record()
+    new["machine"] = machine
+    base["machine"] = {**machine, "geos": "0.0.0-older"}
+    v = judge(quick, new, base)
+    assert v.status == f"NO BASELINE: machine geos: {machine['geos']} vs 0.0.0-older"
+    assert v.exit_code == 2
+
+
 # ------------------------------------------------------------------ hotspots
 
 

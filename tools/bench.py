@@ -35,6 +35,8 @@ from typing import Annotated, Any, Literal, NamedTuple, Protocol
 
 import numpy as np
 import numpy.typing as npt
+import pyproj
+import shapely
 import typer
 from pydantic import BaseModel
 
@@ -159,6 +161,10 @@ class Machine(BaseModel):
     macos: str
     python: str
     numpy: str
+    shapely: str | None = None
+    geos: str | None = None
+    pyproj: str | None = None
+    proj: str | None = None
 
 
 class Domain(BaseModel):
@@ -474,7 +480,8 @@ def _readme(r: RunRecord) -> list[str]:
         f"- Started {r.started.isoformat()}; tree `{r.tree.commit}`{' (dirty)' * r.tree.dirty}; "
         f"bench.py blob `{r.bench_blob}`. Build: {build}; bounds checks: {r.hardening}.",
         f"- {m.cpu_brand}, {m.p_cores} P + {m.e_cores} E cores, {m.memory_bytes / 2**30:.0f} GiB, "
-        f"macOS {m.macos}, Python {m.python}, numpy {m.numpy}.",
+        f"macOS {m.macos}, Python {m.python}, numpy {m.numpy}, "
+        f"shapely {m.shapely} (GEOS {m.geos}), pyproj {m.pyproj} (PROJ {m.proj}).",
         f"- Power **{p.state}** ({p.percent}%), `pmset -g batt` before and after (in run.json).",
         f"- DEM `{i.dem}` (sha256 `{i.dem_sha256}`), tolerance {i.tolerance}, extra mesh args "
         f"`{' '.join(i.extra_args)}`; domains: "
@@ -586,6 +593,8 @@ def _machine(runner: Runner) -> Machine:
         cpu_brand=brand, p_cores=p, e_cores=e, memory_bytes=mem,
         macos=runner.run(["sw_vers", "-productVersion"]).stdout.strip(),
         python=platform.python_version(), numpy=np.__version__,
+        shapely=shapely.__version__, geos=shapely.geos_version_string,
+        pyproj=pyproj.__version__, proj=pyproj.proj_version_str,
     )  # fmt: skip
 
 
