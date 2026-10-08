@@ -41,7 +41,7 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    `@reviewer` reviews the design before `@tester` starts (on the short path,
    below, with the code), and again when a design update adds a step. It
    checks that every step the design adds to a mesh run has a speed estimate
-   timed with default flags on a case with land cover and one without, and
+   timed on both catchments with default flags, and
    that every library repair or coverage call names its method and tolerance.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.

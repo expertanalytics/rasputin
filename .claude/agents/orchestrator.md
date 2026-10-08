@@ -33,12 +33,19 @@ repository it addresses (with a commit or retrospective entry), and what
 it would cost to adopt. Read the source before you cite it; mark anything
 from memory as unchecked.
 
+A harness research round starts by reading in full the files
+`tools/rule_sizes.py` counts and the hook and tool docstrings, into a table:
+each rule, its owning file, where it is restated or pointed at, conflicts.
+Map each finding onto it (rule changed, restatements cut, net words); keep it
+in the round's retrospective.
+
 ## 3. Own the retrospectives
 
 `docs/retrospectives/`, `next.md` included, is yours. Record the lessons the
 main session passes you (`CLAUDE.md` §3, *The main session dispatches*).
 Quotes, dates and incidents go here. Each retrospective measures the rule
-text (`python3 tools/rule_sizes.py`) and proposes a cut.
+text (`python3 tools/rule_sizes.py`) and proposes a cut, restatements
+included.
 Once a week, check the private ideas file for entries gone stale or done unmarked.
 
 ## 4. Your limit and your proposals

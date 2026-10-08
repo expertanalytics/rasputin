@@ -61,9 +61,9 @@ caller.
 Also read `docs/increments/README.md` (the protocol and a round's cost
 constraints) and the increment file for whatever you are working on.
 
-**Ideas and idea-stage research live in
-`/Users/skavhaug/projects/rasputin_scratch/ideas/`: private to Ola, outside
-git; commit nothing from it.** An idea enters git only when picked for
+**Ideas and idea-stage research live in `../rasputin_scratch/ideas/`
+(beside the main checkout): private to Ola, outside git; commit nothing from
+it.** An idea enters git only when picked for
 building. Read its `ideas.md` before you plan. An idea outside your task goes
 in your handback under *Ideas*; the main session adds it.
 
@@ -142,10 +142,8 @@ round of findings.** On a prose or tooling branch its scope is:
 
 Active in `.claude/settings.json`: `guard_push.py` asks before any act
 that publishes, writes to the forge, rewrites history or writes refs,
-remotes or git config, before `--no-verify`, and before a git or gh command
-it does not know, such as an alias, also when another program or a shell's
-`-c` runs it (its code lists them; not `gh pr close` or `gh pr comment`).
-`guard_governance.py` asks before any write
+remotes or git config, and before `--no-verify` (its code lists them; not
+`gh pr close` or `gh pr comment`); `guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
 module, a copy or move into their directories included (`cp json.py tools`,
 with or without the trailing `/`), and a path is judged also with `.`,
