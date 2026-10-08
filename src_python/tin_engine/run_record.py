@@ -35,7 +35,10 @@ WORDING = {
     "features_transform": "Conversion from each features file's coordinate system",
     "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
     "features_merge_same_class": "Borders between land-cover polygons of one class dropped",
-    "features_tolerance_m": "Land-cover borders simplified by this much (0 = off)",
+    "features_tolerance_m": (
+        "Land-cover borders simplified, each at most this far from its repaired, clipped "
+        "border, each class's area kept (0 = off)"
+    ),
     "features_outline_snap_m": "Land-cover borders this close to the outline moved onto it",
     "start_mesh": "What refinement started from",
     "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",

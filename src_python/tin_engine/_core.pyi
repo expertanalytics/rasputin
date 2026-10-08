@@ -646,3 +646,48 @@ class ReduceOutcome:
 def reduce_ring(ring: npt.ArrayLike, tolerance: float, keep: npt.ArrayLike) -> ReduceOutcome:
     """Reduce an open counter-clockwise ``(N, 2)`` ring to ``tolerance``, keeping
     its area and the ``(K, 2)`` keep-points inside. Releases the GIL."""
+
+class BorderStatus(Enum):
+    """Why :func:`simplify_borders` refused, or ``Ok``."""
+
+    Ok = 0
+    InvalidBand = 1
+    BadRings = 2
+
+@final
+class BorderCounts:
+    """What :func:`simplify_borders` found and did."""
+
+    @property
+    def junctions(self) -> int: ...
+    @property
+    def borders(self) -> int: ...
+    @property
+    def fixed_borders(self) -> int: ...
+    @property
+    def collinear(self) -> int: ...
+    @property
+    def collapses(self) -> int: ...
+    @property
+    def rejected_crossing(self) -> int: ...
+    @property
+    def rejected_side(self) -> int: ...
+
+@final
+class BorderOutcome:
+    """What :func:`simplify_borders` returned: the rings, open, back to back."""
+
+    @property
+    def points(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def ring_starts(self) -> npt.NDArray[np.uint64]: ...
+    @property
+    def status(self) -> BorderStatus: ...
+    @property
+    def counts(self) -> BorderCounts: ...
+
+def simplify_borders(
+    points: npt.ArrayLike, ring_starts: npt.ArrayLike, band: float
+) -> BorderOutcome:
+    """Simplify a coverage's borders within ``band``, keeping every ring's area,
+    the junctions and the outer boundary. Releases the GIL."""

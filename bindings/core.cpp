@@ -26,6 +26,7 @@
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
+#include <terrain/vector_simplify/border_collapse.hpp>
 
 #include <array>
 #include <cmath>
@@ -322,7 +323,7 @@ struct BoundAccumulate {
 [[nodiscard]] std::vector<Point2> xy_points(const py::object& a, const char* what) {
     const auto xy = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(a);
     if (!xy || xy.ndim() != 2 || xy.shape(1) != 2)
-        throw py::value_error(std::format("reduce_ring: {} must have shape (N, 2)", what));
+        throw py::value_error(std::format("{} must have shape (N, 2)", what));
     std::vector<Point2> out(static_cast<std::size_t>(xy.shape(0)));
     for (std::size_t i = 0; i < out.size(); ++i)
         out[i] = Point2{xy.at(static_cast<py::ssize_t>(i), 0), xy.at(static_cast<py::ssize_t>(i), 1)};
@@ -1338,8 +1339,8 @@ What reduce_ring returned: the reduced ring, open, a status, and the counts.
     m.def(
         "reduce_ring",
         [](const py::object& ring, double tolerance, const py::object& keep) {
-            const std::vector<Point2> points = xy_points(ring, "ring");
-            const std::vector<Point2> kept = xy_points(keep, "keep");
+            const std::vector<Point2> points = xy_points(ring, "reduce_ring: ring");
+            const std::vector<Point2> kept = xy_points(keep, "reduce_ring: keep");
             const py::gil_scoped_release unlocked;
             return terrain::vector_simplify::reduce_ring<terrain::pred::DefaultKernel>(
                 points, tolerance, kept);
@@ -1351,5 +1352,70 @@ keep-points inside (area-preserving segment collapse, exact crossing tests).
 ring is (N, 2) and keep (K, 2), float64-convertible; any other shape is a
 ValueError. Tolerance 0 only drops exactly collinear vertices. A refused input
 comes back as a status. Releases the GIL.
+)doc");
+
+    using terrain::vector_simplify::BorderCounts;
+    using terrain::vector_simplify::BorderOutcome;
+    using terrain::vector_simplify::BorderStatus;
+    py::enum_<BorderStatus>(m, "BorderStatus", R"doc(
+Why simplify_borders simplified the rings or did not: Ok, or a refusal of the input.
+)doc")
+        .value("Ok", BorderStatus::Ok)
+        .value("InvalidBand", BorderStatus::InvalidBand)
+        .value("BadRings", BorderStatus::BadRings);
+
+    py::class_<BorderCounts>(m, "BorderCounts", R"doc(
+What simplify_borders found and did: junctions, borders (fixed ones included),
+collinear vertices dropped, collapses made, and collapses refused.
+)doc")
+        .def_readonly("junctions", &BorderCounts::junctions)
+        .def_readonly("borders", &BorderCounts::borders)
+        .def_readonly("fixed_borders", &BorderCounts::fixed_borders)
+        .def_readonly("collinear", &BorderCounts::collinear)
+        .def_readonly("collapses", &BorderCounts::collapses)
+        .def_readonly("rejected_crossing", &BorderCounts::rejected_crossing)
+        .def_readonly("rejected_side", &BorderCounts::rejected_side);
+
+    py::class_<BorderOutcome>(m, "BorderOutcome", R"doc(
+What simplify_borders returned: the rings, open, back to back, their starts, a
+status and the counts.
+)doc")
+        .def_property_readonly(
+            "points",
+            [](const py::object& self) {
+                return point_view(self, self.cast<const BorderOutcome&>().points);
+            },
+            "Read-only (M, 2) float64: every ring, open, back to back.")
+        .def_property_readonly(
+            "ring_starts",
+            [](const py::object& self) {
+                const auto& starts = self.cast<const BorderOutcome&>().ring_starts;
+                return readonly_view<std::uint64_t>(self, starts.data(),
+                                                    {static_cast<py::ssize_t>(starts.size())},
+                                                    {static_cast<py::ssize_t>(sizeof(std::uint64_t))});
+            },
+            "Read-only (R + 1,) uint64: ring k is points[starts[k]:starts[k + 1]].")
+        .def_readonly("status", &BorderOutcome::status)
+        .def_readonly("counts", &BorderOutcome::counts);
+
+    m.def(
+        "simplify_borders",
+        [](const py::object& points, const py::object& ring_starts, double band) {
+            const std::vector<Point2> xy = xy_points(points, "simplify_borders: points");
+            const auto starts = py::array_t<std::uint64_t, py::array::c_style | py::array::forcecast>::ensure(ring_starts);
+            if (!starts || starts.ndim() != 1)
+                throw py::value_error("simplify_borders: ring_starts must be one-dimensional, shape (R + 1,)");
+            const std::vector<std::uint64_t> s(starts.data(), starts.data() + starts.size());
+            const py::gil_scoped_release unlocked;
+            return terrain::vector_simplify::simplify_borders<terrain::pred::DefaultKernel>(xy, s, band);
+        },
+        py::arg("points"), py::arg("ring_starts"), py::arg("band"), R"doc(
+Simplify the borders of a coverage within a band, keeping every ring's area,
+the junctions and the outer boundary (area-preserving segment collapse, exact
+crossing and side tests).
+
+points is (N, 2) float64-convertible and ring_starts (R + 1,) unsigned; any
+other shape is a ValueError. Band 0 returns the input. A refused input comes
+back as a status. Releases the GIL.
 )doc");
 }

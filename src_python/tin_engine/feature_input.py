@@ -39,6 +39,7 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
+from tin_engine.border_simplify import simplify_borders
 from tin_engine.crs import parse_crs, reprojector, same_crs, transform_definition
 from tin_engine.domain import DomainPolygon
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary, TerrainFeature
@@ -408,11 +409,13 @@ class _Tally:
     def _clean(
         self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
     ) -> None:
-        """20c-3: one source's land cover clipped to the read region, then
-        repaired, merged by class, simplified and put to the outline, as asked;
+        """20c-3: one source's land cover clipped to the read region (to the
+        domain with the band on, 32), then repaired, merged by class,
+        simplified within the band and put to the outline, as asked;
         its lines and label polygons then go the usual way."""
         t0 = time.perf_counter()
-        clipped = [_polygonal(shapely.intersection(g, region)) for *_, g in cover]
+        clip = self.domain.polygon if ask.tolerance_m > 0 else region  # 32: area kept inside
+        clipped = [_polygonal(shapely.intersection(g, clip)) for *_, g in cover]
         self.outside += sum(g is None for g in clipped)
         if all(g is None for g in clipped):
             return
@@ -431,7 +434,7 @@ class _Tally:
             polys = np.array(merged, dtype=object)
             items = [items[i] for i in first]
         if ask.tolerance_m > 0:
-            polys = shapely.coverage_simplify(polys, ask.tolerance_m, simplify_boundary=False)
+            polys = np.array(simplify_borders(list(polys), ask.tolerance_m).polygons, dtype=object)
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
         after = sum(int(shapely.get_num_coordinates(line)) for ls in snapped.lines for line in ls)
