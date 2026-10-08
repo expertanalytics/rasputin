@@ -8,8 +8,9 @@ rules on the green step's assumptions; its one change, the file fingerprint,
 is done: red `166f2528`, green `db1ce78e`. Code review round 1 asked for
 changes (the Review section); master merged in as `8c05d65e`. 242 net
 production lines (`python3 tools/count_loc.py 483221d2 8c05d65e`) against the
-estimate of about 220. Code review round 2 approved; next, the push
-waits on Ola's yes.
+estimate of about 220. Code review round 2 approved; merged as #217
+(`64481aae`). Follow-up (section 12): record the shapely, GEOS, pyproj and
+PROJ versions, designed 2026-10-08; next `@tester`'s red step.
 Tooling only: `tools/bench.py` and a new `tools/bench_quick.py`. One PR. No
 refine or mesh code, so no acceptance run of its own. Its first baseline is
 taken on master after this PR merges (30d, the outline-buffer fix, merged as
@@ -316,7 +317,7 @@ name is the `--stats` row `mesh` writes (`src_python/tin_engine/cli.py@b3439629:
    feature reading run in Python. A version change gives `NO BASELINE`, and
    rule (b) of section 3 takes a new master baseline in about 2.5 minutes. A
    known gap: the shapely, pyproj and GEOS versions are not recorded, and
-   GEOS does `features clip`'s work.
+   GEOS does `features clip`'s work. Closed by the follow-up in section 12.
 4. **The verdict:** BROKEN over SLOWER over FASTER over NO CHANGE; `OUT OF
    TIME` replaces any of them, with exit 4, and the lines of what was measured
    are still printed. *Kept*, as section 3 says. A known gap, from code review
@@ -340,6 +341,71 @@ name is the `--stats` row `mesh` writes (`src_python/tin_engine/cli.py@b3439629:
 9. **Each run's mesh goes to a `tempfile.mkdtemp` folder that is not
    removed.** *Kept.* It holds one mesh, overwritten case by case (about the
    size of Lagan's binary mesh), in the per-user temporary folder.
+
+## 12. Follow-up: the GEOS version
+
+A second PR, after #217 merged pq (`64481aae`). Designed by `@architect`,
+2026-10-08.
+
+**The ruling.** The main session asked, in its list after pq's code review
+round 2 (as given to `@architect`, with its elisions): "3. Record the GEOS
+version in the quick check ... The fix: about 2 lines, plus a test.
+@architect's default: no, not in this PR ... My recommendation: yes, because
+the upgrade lands this week. Your call." **Ola, 2026-10-08: "On 1, try
+increasing to 1m as well. I'm pretty sure 5cm is still only noise. Yes to
+rest."** ("On 1" answers another question of that list, not this
+increment's.) *Ruled: yes, as its own PR.*
+
+**What is recorded.** Four versions, added to `bench.py`'s `Machine`:
+`shapely` (`shapely.__version__`), `geos` (`shapely.geos_version_string`, the
+GEOS library shapely runs on), `pyproj` (`pyproj.__version__`) and `proj`
+(`pyproj.proj_version_str`). GEOS does `features clip`'s work and the buffer
+of the outline; PROJ does the reprojection that `lagan` runs
+(`--out-crs EPSG:3006`, the continental GeoPackage reprojected), so a PROJ
+upgrade can move `lagan`'s `features read` as a GEOS upgrade can move its
+`features clip`. The two Python package versions are kept beside them
+because the wheels bundle the libraries: an upgrade normally arrives as a
+new wheel, and the package version is what `pip` and the lock file show.
+*Object identity:* `_machine` runs in the parent, and the children run with
+the same `sys.executable` (`tools/bench_quick.py@64481aae:227`); `--pkg`
+redirects only `tin_engine`, so the parent's shapely and pyproj are the ones
+the children import. (Checked on this machine's main venv: shapely 2.1.2,
+GEOS 3.13.1, pyproj 3.8.0, PROJ 9.8.1.)
+
+**Where.** The four fields are `str | None = None` on `Machine`. The default
+is needed: `bench.py` loads committed `run.json` records under
+`docs/benchmarks/` (for example `docs/benchmarks/2026-09-27/21a/run.json`),
+which lack them. `bench.py`'s own comparison key stays the CPU and the core
+counts, so its acceptance is unchanged. `bench_quick.py` changes not at all:
+it already compares every `Machine` field (`tools/bench_quick.py@64481aae:110-113`),
+so a version that differs from the baseline's gives
+`NO BASELINE: machine geos: <new> vs <old>`, exit 2, as numpy does today.
+`bench.py`'s report names the four in its *Method* line beside numpy.
+
+*Consequence, for the upgrade itself:* the quick check does not judge a run
+across a GEOS or PROJ upgrade; it says `NO BASELINE`, and rule (b) of
+section 3 takes a new master baseline. To measure what the upgrade did to
+speed, run the quick check on master with `--save-baseline` before
+upgrading, upgrade, and compare the two baseline files' medians by hand, or
+run `bench.py`'s acceptance, whose key ignores the versions.
+
+**The one red test** (`@tester`, `tests/python/test_bench_quick.py`): build
+a `Machine` through `bench._machine` with a fake `Runner` for `sysctl` and
+`sw_vers`; assert its `geos` and `proj` equal `shapely.geos_version_string`
+and `pyproj.proj_version_str`; then judge a record carrying that machine
+against a baseline whose machine differs only in `geos`, and assert
+`NO BASELINE` naming `geos`, exit 2. Red today: `Machine` has no `geos`
+field. Existing tests that build `Machine` from a dict keep passing, since
+the new fields default to `None`.
+
+**Speed.** No effect on speed: it adds four version strings to the run
+record and changes nothing `rasputin mesh` does, so the quick check does not
+run for this PR.
+
+**Size**, counted as CLAUDE.md section 2 counts, all in `tools/bench.py`:
+the four fields 4, the two imports 2, two more arguments in `_machine`'s
+packed `Machine(...)` call (already under `# fmt: skip`) 2, the *Method*
+line 1. About 9 net production lines.
 
 ## Review
 
