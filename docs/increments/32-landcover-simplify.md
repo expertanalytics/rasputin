@@ -19,7 +19,7 @@ M7 to M12 killed (M12b and M13 ruled in section 15.6). `@perf`'s quick
 check `b192a2c6` met section 15.5 except Numedalslagen's worst angle,
 0.311° against a 0.4° floor; section 15.6 finds that triangle made by the
 height refinement, not by the borders' clearance, and restates the floor
-(question 6, decided on default while Ola is away, reversible). Next: the
+(question 6, waiting on Ola; written on the default). Next: the
 test for M13 (section 15.6), then code review. Not refine or mesh code,
 so no `bench.py` acceptance run.
 
@@ -863,8 +863,7 @@ the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
    floor and keep the fix as built; the 500 m split, if wanted, as its own
    small change later.**
 
-   *Decided on default while Ola was away, reversible. The main session
-   took the default, 2026-10-09; recorded by `@architect`.*
+   *Waits on Ola; section 15.6 is written on the default.*
 
 ## 13. ROADMAP
 
