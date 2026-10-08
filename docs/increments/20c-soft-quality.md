@@ -46,7 +46,7 @@ kill table copied in ("Mutation round for 20c-2"). Code review round 2
 (`@reviewer`, on `d4ac395f`): approved; **merged** as PR #214 (master
 `4abacf65`);
 **20c-3** the repair of land-cover borders that should be one (on at
-5 cm, ruling 9, question 9), input coarsening, and Ola's outline rule, on
+1 m, ruling 9, Ola's answer to question 9 on 2026-10-08), input coarsening, and Ola's outline rule, on
 by default at 5 m (question 6, ruling 6), after 20c-2 (branch
 `worktree-soft-quality-3` from 20c-2's head `68cc96b6`; Ola: "build 20c-2
 and 20c-3"): **designed, brought up to date 2026-10-08** for ruling 9 and
@@ -88,11 +88,19 @@ Fix round: red `1f7f8335` (`@tester`, R1 and R4), green `aaee898b`
 (`@developer`), 360 net production lines (`python3 tools/count_loc.py
 483221d2 aaee898b`); `@perf`'s R3 run `63065a15`: (a) to (d) met, (e)
 met once its wording is corrected (R3's outcome, below: the 26.194 m left
-are borders between different classes in the source data).
-**Built. Next: `@reviewer`'s code review round 2, on `05b0fd7a..` the
-branch head.** Questions 1 to 4 ruled by Ola, 2026-10-06,
-and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
-("Ola's rulings" below); questions 9 and 10 open, designed on their defaults. Asked by Ola
+are borders between different classes in the source data). Code review
+round 2 (`@reviewer`, on `05b0fd7a..07d97ee4`): "Review" below. M8
+`d7a3462a` (`@architect`): the repair's tolerance probed at 5 cm, 25 cm
+and 1 m on the built code, question 9 asked again with 1 m as its
+default; Ola: 1 m (ruling 9's default, 2026-10-08). Red `f6e0f287`
+(`@tester`), green `c71ccf57` (`@developer`, three lines changed; 360 net
+production lines, unchanged). **Built. Next: `@tester` changes the
+docstring line of `tests/python/test_cli_features_cleanup.py` that
+quotes the CLI item of "Tests `@tester` writes red first", 20c-3, then
+`@reviewer`'s code review round 3.** Questions 1 to 4 ruled by Ola,
+2026-10-06, and questions 5 to 8, 2026-10-07, ruling 9 (amending 5)
+2026-10-07 and its default (question 9) 2026-10-08 ("Ola's rulings"
+below); question 10 open, designed on its default. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -115,9 +123,10 @@ CORINE segments), which only a tolerance on the input removes: 20c-3's
 rule (land-cover borders within 5 m of the catchment outline put onto it)
 to 61 and 4, with Numedalslagen's worst angle at 0.83° (M6). Ola ruled
 that a mismatch such as Lagan's 1 cm slit is an error to repair (ruling 9):
-20c-3 first joins land-cover borders that come within 5 cm of each other,
-which closes the slit and removes nearly all of the land cover's
-millimetre edges (M7; not yet measured on a mesh).
+20c-3 first joins land-cover borders that come within 1 m of each other
+(Ola's default, question 9), which closes the slit, removes the land
+cover's millimetre edges, and takes the slivers with the defaults to 26
+and 2, the worst angle to 0.73° and 0.83° (M7, M8).
 
 ## Prior art: legacy and literature
 
@@ -836,7 +845,7 @@ given from one polygon to another counts twice.
 
 | S | Lagan | Numedalslagen |
 |---|---|---|
-| **5 cm** (the default): slivers under 1°; worst angle; triangles | 180 (0.0225 %); 0.1917°; 799 368 | 158 (0.0138 %); 0.6302°; 1 141 983 |
+| **5 cm** (the default when probed; 1 m since Ola's answer): slivers under 1°; worst angle; triangles | 180 (0.0225 %); 0.1917°; 799 368 | 158 (0.0138 %); 0.6302°; 1 141 983 |
 | 25 cm | 176 (0.0220 %); 0.1917°; 799 336 | 158 (0.0138 %); 0.6302°; 1 141 959 |
 | **1 m** | **26 (0.0033 %); 0.7293°; 798 554** (−0.10 %) | **2 (0.0002 %); 0.8322°; 1 118 006** (−2.1 %) |
 | ring edges under 10 cm (M7's count), before the repair → after, at 5 cm / 25 cm / 1 m | 231 → 0 / 0 / 0 | 393 → 2 / 0 / 0 |
@@ -899,7 +908,7 @@ the output independent of `threads`:
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
 | PR 20c-3 with Ola's outline rule at 5 m (its default, ruling 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
-| PR 20c-3 with the repair at 5 cm too (its default, ruling 9, question 9) | on the land cover (M7) the slit is closed and its 1 cm edge gone, and land-cover edges under 10 cm fall from 356 to 5; on a mesh with the defaults, which do not coarsen (M8): 180 (0.0225 %); at 1 m, 26 (0.0033 %) | 799 368; at 1 m 798 554 | 0.19°; at 1 m 0.73° | edges under 10 cm 464 to 1; on a mesh with the defaults (M8): 158 (0.0138 %); at 1 m, 2 (0.0002 %) | 1 141 983; at 1 m 1 118 006 | 0.63°; at 1 m 0.83° |
+| PR 20c-3 with the repair at 1 m too (its default, ruling 9, question 9 as ruled 2026-10-08) | on a mesh with the defaults, which do not coarsen (M8): 26 (0.0033 %); at 5 cm, 180 (0.0225 %); on the land cover the slit is closed and its 1 cm edge gone (M7, M8) | 798 554; at 5 cm 799 368 | 0.73°; at 5 cm 0.19° | on a mesh with the defaults (M8): 2 (0.0002 %); at 5 cm, 158 (0.0138 %) | 1 118 006; at 5 cm 1 141 983 | 0.83°; at 5 cm 0.63° |
 
 20c-1's row is `@perf`'s measurement of the built code, the same
 triangle counts, sliver counts and worst angles as M5's prototype
@@ -1423,7 +1432,7 @@ repaired.
   before.
 - **Steps, in this order**, the first four on the polygons, the last
   turning them into lines:
-  1. **Repair** (`--features-repair METRES`, default 0.05, ruling 9 and
+  1. **Repair** (`--features-repair METRES`, default 1, ruling 9 and
      question 9): `shapely.coverage_clean(polygons, snapping_distance=S,
      gap_width=S)`.
   2. **Same-class borders dropped** (`--features-merge-same-class`, on;
@@ -1484,9 +1493,12 @@ neighbours' borders came within S of each other, they are now one border.
 **The tolerance S: two borders are the same border when they come within S
 of each other.** One number for both of the cleaner's tolerances (the
 snapping distance and the gap width), because they answer the same
-question for a partition that is meant to have no gaps. **Default 5 cm**
-(question 9, default yes), set by M7; M8 probed 25 cm and 1 m on the
-built code, and question 9 is asked again with 1 m as its default:
+question for a partition that is meant to have no gaps. **Default 1 m**
+(question 9 as asked again with M8, Ola's yes 2026-10-08). M7 set the
+first default, 5 cm, the smallest distance probed that joins the slit's
+corners (the first three points below); M8 then probed 25 cm and 1 m on
+the built code with the defaults, and 1 m is the probed distance that
+removes the thin triangles (the last two points):
 
 - Lagan's slit has its two open ends 1.005 cm apart. Snapping at 1 cm (with
   a 1 m gap width, M7) fills the gap but leaves its two corners apart, so
@@ -1503,13 +1515,25 @@ built code, and question 9 is asked again with 1 m as its default:
   M2's millimetre vertex pairs, the same kind of error (borders that should
   be one, millimetres apart). Land cover moved: 0.72 m² and 1 085 m² of
   5 548 to 6 441 km², about 2 × 10⁻⁷ of the area.
+- At 1 m (M8, on the repair's own input after the clip): slivers under 1°
+  with the defaults 180 to 26 (Lagan) and 158 to 2 (Numedalslagen) against
+  5 cm, worst angle 0.19° to 0.73° and 0.63° to 0.83°; 25 cm gives what
+  5 cm gives. What 1 m joins is borders of two polygons that run within a
+  metre of each other, 157 of Lagan's 180 slivers and 156 of
+  Numedalslagen's 158 at 5 cm lying within 2 m of land cover it moved;
+  ring edges under 10 cm go to 0 on both.
+- What 1 m moves: about 45 km and 123 km of border, by under 1 m, some
+  3 400 m² and 8 500 m² of land cover inside the domains given to a
+  neighbour (5 × 10⁻⁷ and 1.5 × 10⁻⁶ of the area), 1 % of CORINE's 100 m
+  minimum width; no measurable time.
 
-Scale: S is in metres in the computation CRS; it assumes a land-cover source
-mapped at a scale where centimetres carry no meaning (CORINE: 1:100 000,
-25 ha minimum mapping unit, 100 m minimum width) and DEM cells of 10 to 31 m;
-checked on the two catchments' CORINE, about 1 million vertices each before
-the clip, the largest inputs probed. On a source mapped to centimetres it
-would be too large; S is a flag for that reason.
+Scale: S is in metres in the computation CRS; the 1 m default assumes a
+land-cover source whose borders carry no meaning below a metre (CORINE:
+1:100 000, 25 ha minimum mapping unit, 100 m minimum width) and DEM cells
+of 10 to 31 m; checked on the two catchments' CORINE, about 380 000 and
+600 000 vertices after the clip (about 1 million each before it), the
+largest inputs probed (M8). On a source mapped to the decimetre it moves
+real borders; S is a flag for that reason.
 
 **A real gap wider than S stays.** It keeps its two borders as two
 constraints, and the land cover there has no class, as today. Step 3 does
@@ -1522,8 +1546,9 @@ snapping acts there; not tested. To be open there, a gap must run at least
 
 **Against ruling 1 (b) (simplification off by default).** The repair is not
 the 2 m simplification: it moves a vertex only onto another border within
-5 cm, and it is on because Ola called that kind of mismatch an error
-(ruling 9). The simplification at a distance remains Ola's flag, off.
+S (1 m by default), and it is on because Ola called that kind of mismatch
+an error (ruling 9) and set its default (question 9). The
+simplification at a distance remains Ola's flag, off.
 
 **How it meets the other steps.**
 
@@ -1535,8 +1560,8 @@ the 2 m simplification: it moves a vertex only onto another border within
   before simplifying (`coverage_is_valid`, with its plain error) is
   dropped: `coverage_clean`'s output is a valid coverage by its contract,
   and the check cost 15.8 s per catchment (M7).
-- **The outline rule (step 4).** S (5 cm) is a hundredth of D (5 m), and the
-  repair puts no point on the outline, so the rule's rounding (points it
+- **The outline rule (step 4).** S (1 m by default) is a fifth of D (5 m),
+  under D/2, and the repair puts no point on the outline, so the rule's rounding (points it
   places are an outline vertex or more than D/2 apart) is unchanged. Repair
   first, so the rule never sees two copies of one border.
 - **The same-class merge (step 2).** `coverage_union` per class needs a
@@ -1547,7 +1572,8 @@ the 2 m simplification: it moves a vertex only onto another border within
 
 **Not guaranteed.** The snapping noder is not iterated snap rounding:
 nothing bounds the input's local feature size below by S, and a short ring
-edge can survive (on Lagan, 5 of the 356 edges under 10 cm). The gates below ask for what was
+edge can survive (at 5 cm, on Lagan, 5 of the 356 edges under 10 cm; at
+1 m none of the edges under 10 cm on either catchment, M8). The gates below ask for what was
 measured, not for a minimum edge length.
 
 ### Steps 2 to 4
@@ -1610,7 +1636,7 @@ four off.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
-| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 5 cm, ruling 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no land-cover line between two polygons of the same class (M2's bands; borders between different classes that lie within 1 m of the lines are real and stay, R3's outcome). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs**: every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle with its smallest angle under 1° has a corner at the slit's far corner (413 677.295 6 331 664.081). The thresholds are not raised to the measured figures (R3: they are the design's figures already) |
+| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 1 m, ruling 9 and question 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no land-cover line between two polygons of the same class (M2's bands; borders between different classes that lie within 1 m of the lines are real and stay, R3's outcome). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs** (5 cm given explicitly, the default when the gate was set; the 1 m default's runs are M8's, below): every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle with its smallest angle under 1° has a corner at the slit's far corner (413 677.295 6 331 664.081). The thresholds are not raised to the measured figures (R3: they are the design's figures already) |
 
 **20c-3's gate results so far** (`@perf`, on `745bcb0d`,
 `docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`; "near" is the
@@ -1656,9 +1682,20 @@ commit), master `483221d2` against the branch:
 | Lagan | 799 378 | 437 | 0.002384° | 799 408 | 186 | 0.1917° |
 | Numedalslagen | 1 141 207 | 296 | 0.008623° | 1 142 108 | 169 | 0.08145° |
 
-After T1 and T2 (`@perf`, on `8716f062`, same README at `41db7333`):
-Lagan 799 368 triangles, 437 → 180 slivers under 1°, worst 0.002384° →
-0.1917°; Numedalslagen 1 141 983, 296 → 158, worst 0.008623° → 0.6302°.
+After T1 and T2 (`@perf`, on `8716f062`, same README at `41db7333`),
+with the repair's default then at 5 cm: Lagan 799 368 triangles, 437 →
+180 slivers under 1°, worst 0.002384° → 0.1917°; Numedalslagen
+1 141 983, 296 → 158, worst 0.008623° → 0.6302°.
+
+**With the repair's default at 1 m** (Ola's answer to question 9; M8's
+1 m row, `@architect`, on `9a04c3c1`, one run each, AC power,
+`docs/benchmarks/2026-10-08/20c-3/m8/stats/m8-s1-lagan.md` and
+`m8-s1-num.md`; the code at `c71ccf57` differs only in the default, so
+these are its default meshes): Lagan 798 554 triangles, 437 → 26 slivers
+under 1°, worst 0.002384° → 0.7293°; Numedalslagen 1 118 006, 296 → 2,
+worst 0.008623° → 0.8322°. Not re-timed by `@perf`; M8's single runs
+give the land-cover clean-up 5.98 s and 5.46 s and the whole run 21.62 s
+and 10.82 s (`--stats` total).
 
 **Why counts, not shares, for 20c-2** (review B1). The soft criterion
 removes triangles where the angles are already fine, so even at an equal
@@ -2664,7 +2701,7 @@ tolerance, in which order, and each of those is an assertion below):
   --features-outline-snap 0`), `open_features` gives a `FeatureSet` equal
   to today's on the CORINE fixtures already in `tests/python/` (fids,
   masks, codes, lines `equals_exact` at 0, label polygons).
-- **CLI**: `--features-repair` defaults to 0.05 whenever a land-cover map
+- **CLI**: `--features-repair` defaults to 1 whenever a land-cover map
   is used (question 9's default); refused: negative, non-finite; the input
   row `features_repair_m` and the vertex rows in `--stats` and the record;
   the `features clean-up` timing sub-row present under `features clip`.
@@ -3380,7 +3417,47 @@ minutes later: "yes to the morning check proposals, build 20c-2 and
    apart, is an error in the source, and 20c-3 repairs it: borders of one
    land-cover source that come within a tolerance of each other become one
    border, and a gap narrower than it goes to a neighbour (20c-3's step 1,
-   `--features-repair`). The tolerance's default, 5 cm, is question 9.
+   `--features-repair`). The tolerance's default is question 9, ruled
+   below.
+
+Ola, 2026-10-08 (06:47 UTC), on question 9 as asked again with M8
+(`d7a3462a`), the main session's question to him being "Question: set
+the default to 1 m? @architect's default: yes.": "yes, set default to
+1 m." So:
+
+9 (default). **The repair's tolerance defaults to 1 m** (question 9's
+   default as asked again), on whenever a land-cover map is used;
+   `--features-repair 0` turns it off, and a smaller value suits a
+   land-cover file drawn to the decimetre. It replaces M7's 5 cm. Red
+   `f6e0f287` (`@tester`), green `c71ccf57` (`@developer`); the mesh
+   figures are M8's 1 m row ("PRs and gates", "With the repair's default
+   at 1 m").
+
+Question 9 as asked again with M8 (`d7a3462a`):
+
+9. **How close must two land-cover borders be to count as one?** (asked
+   again with M8, after your "try increasing to 1m as well".) 20c-3 joins
+   borders of one land-cover file that come within this distance of each
+   other, and fills any gap narrower than it. Measured on the built code
+   with the defaults, Lagan and Numedalslagen (M8):
+   - **5 cm** (today's default): the slit closed; triangles with an angle
+     under 1°: 180 and 158; the smallest angle in the mesh 0.19° and 0.63°.
+   - **25 cm**: the same as 5 cm (176 and 158).
+   - **1 m**: the slit closed as well; **26 and 2** such triangles, the
+     smallest angle **0.73° and 0.83°**, and 2 % fewer triangles on
+     Numedalslagen. Almost all the triangles 1 m removes sat where two
+     land-cover borders ran under a metre apart. The price: borders move
+     by under 1 m along about 45 km and 123 km of border, some 3 400 m²
+     and 8 500 m² of land cover changing class inside the catchments, out
+     of 6 441 and 5 548 km². CORINE's smallest feature is 100 m wide, so
+     that is 1 % of it. No measurable time.
+   **Default: 1 m, on whenever a land-cover map is used** — it is the
+   probed distance that removes the thin triangles, and it moves land cover
+   by less than CORINE's own precision. `--features-repair 0` turns the
+   joining off, and a smaller value suits a land-cover file drawn to the
+   decimetre. Not probed: distances between 25 cm and 1 m, or above 1 m.
+   The other choice: keep 5 cm. Either way only the default and the tests
+   that pin it change.
 
 Questions 6 and 7 as asked:
 
@@ -3418,29 +3495,6 @@ Questions 6 and 7 as asked:
 
 ## Questions for Ola
 
-9. **How close must two land-cover borders be to count as one?** (asked
-   again with M8, after your "try increasing to 1m as well".) 20c-3 joins
-   borders of one land-cover file that come within this distance of each
-   other, and fills any gap narrower than it. Measured on the built code
-   with the defaults, Lagan and Numedalslagen (M8):
-   - **5 cm** (today's default): the slit closed; triangles with an angle
-     under 1°: 180 and 158; the smallest angle in the mesh 0.19° and 0.63°.
-   - **25 cm**: the same as 5 cm (176 and 158).
-   - **1 m**: the slit closed as well; **26 and 2** such triangles, the
-     smallest angle **0.73° and 0.83°**, and 2 % fewer triangles on
-     Numedalslagen. Almost all the triangles 1 m removes sat where two
-     land-cover borders ran under a metre apart. The price: borders move
-     by under 1 m along about 45 km and 123 km of border, some 3 400 m²
-     and 8 500 m² of land cover changing class inside the catchments, out
-     of 6 441 and 5 548 km². CORINE's smallest feature is 100 m wide, so
-     that is 1 % of it. No measurable time.
-   **Default: 1 m, on whenever a land-cover map is used** — it is the
-   probed distance that removes the thin triangles, and it moves land cover
-   by less than CORINE's own precision. `--features-repair 0` turns the
-   joining off, and a smaller value suits a land-cover file drawn to the
-   decimetre. Not probed: distances between 25 cm and 1 m, or above 1 m.
-   The other choice: keep 5 cm. Either way only the default and the tests
-   that pin it change.
 10. **The land-cover clean-up is slower than the design said: accept it
    for now?** You asked to hear about any step that takes a large share of a
    run. The new land-cover step (the clip, the repair of question 9, the
