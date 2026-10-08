@@ -35,9 +35,10 @@ EPSG:3035 near (4.8e6, 5.4e6) m, where one ulp is 9.3e-10 m, and a part's
 area is checked to 1e-9 relative or 1e-6 m2, whichever is larger (a few
 collapses' rounding on its smallest parts).
 
-RED at the commit that adds this file: ``_core`` has no ``simplify_borders``
-and ``tin_engine.border_simplify`` does not exist; every test fails on the
-``core`` or ``adapter`` fixture's assertion naming what is missing.
+RED at the commit that added this file (``44f25968``): ``_core`` had no
+``simplify_borders`` and ``tin_engine.border_simplify`` did not exist; every
+test failed on the ``core`` or ``adapter`` fixture's assertion naming what was
+missing.
 """
 
 from __future__ import annotations

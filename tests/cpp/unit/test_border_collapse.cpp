@@ -54,9 +54,10 @@
 //   (test 5) and in rejected_crossing when test (i) does (test 6).
 // - A collinear vertex on the outline is kept: its edges are fixed (test 3).
 //
-// RED at the commit that adds this file: the header does not exist, so the
-// target test_border_collapse does not compile ("'terrain/vector_simplify/
-// border_collapse.hpp' file not found"); every other target builds.
+// RED at the commit that added this file (44f25968): the header did not
+// exist, so the target test_border_collapse did not compile ("'terrain/
+// vector_simplify/border_collapse.hpp' file not found"); every other target
+// built.
 
 #include <catch2/catch_test_macros.hpp>
 

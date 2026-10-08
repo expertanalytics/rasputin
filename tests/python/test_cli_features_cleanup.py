@@ -51,10 +51,10 @@ PINNED for increment 32: "the land-cover stage ran" is a ``--features`` file
 with coded polygons under a class map with codes (``corine``); features with
 no class codes (``gallery``) keep 25 at any band.
 
-RED at the commit that adds increment 32's tests: the default is 0, the start
-angle is always 25, the help and record text are the old ones, and
-``cli.LANDCOVER_START_MIN_ANGLE`` does not exist. Band 0's digest and its 25
-pass today (they are today's).
+RED at the commit that added increment 32's tests (``44f25968``): the default
+was 0, the start angle was always 25, the help and record text were the old
+ones, and ``cli.LANDCOVER_START_MIN_ANGLE`` did not exist. Band 0's digest and
+its 25 passed there (they were that commit's mesh).
 """
 
 from __future__ import annotations
