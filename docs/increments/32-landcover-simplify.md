@@ -1059,13 +1059,23 @@ template <pred::GeometryKernel K>
 - **At placement** (`candidate`): a placement with |E − A| or |E − D| under
   the clearance is not considered (the other line's placement still is).
 - **At pop**, beside tests (i) and (ii), over the grid cells of the box of
-  A, B, C, D, E grown by the clearance: refused if any vertex lies closer
-  than the clearance to A-E or E-D, other than B and C (by node) and any
-  vertex at A's or D's coordinates (**by coordinate**, as test (ii)
-  excludes them, `include/terrain/vector_simplify/border_collapse.hpp@633808b9:400`:
+  A, B, C, D, E grown by the clearance: refused if a vertex lies closer
+  than the clearance to a new edge it does not end. Edge by edge: against
+  **A-E**, every vertex but B and C (by node) and any vertex at A's
+  coordinates; against **E-D**, every vertex but B and C and any vertex
+  at D's coordinates. So D is checked against A-E and A against E-D.
+  A's and D's copies are excluded **by coordinate**, each only from the
+  edge it ends, as test (ii) excludes them
+  (`include/terrain/vector_simplify/border_collapse.hpp@633808b9:400`):
   the junction's copies in the other borders are other nodes at the same
-  point); or if E lies closer than the clearance to any edge other than
-  A-B, B-C, C-D. Distances in
+  point. Also refused if E lies closer than the clearance to any edge
+  other than A-B, B-C, C-D (edges ending at A or D included, E ends none
+  of them). These cover every new approach: the distance between a new
+  edge and an old edge is reached at an end of one of them, and of those
+  ends A and D are old (their distances to old edges do not change),
+  while E and the old edge's ends are checked. B and C need no copies
+  rule: a vertex with a copy in another border has other edges, so it is
+  a junction and is never B or C. Distances in
   floating point (`detail::segment_distance`): a refusal criterion, so
   rounding can only refuse a collapse or let one through at the clearance
   to rounding; the exact tests (i) and (ii) stay as they are and still
@@ -1114,15 +1124,30 @@ collapses. The quantities of 15.2 are taken over every vertex and edge, a
 superset of what the grid looks at, so a floor they meet holds for the
 kernel. Figures in metres.
 
-| fixture | B, C | island | winner E (deviation) | other E (deviation) | clearance 0: collapses | winner: \|E−A\|, \|E−D\|, vertex to new edge, E to edge | other: \|E−A\|, \|E−D\| |
+| fixture | B, C | island | winner E (deviation) | other E (deviation) | clearance 0: collapses | winner: \|E−A\|, \|E−D\|, other vertex to new edge, A to E-D, D to A-E, E to edge | other: \|E−A\|, \|E−D\| |
 |---|---|---|---|---|---|---|---|
-| F17a | (102, 24), (99, 40) | none | (100.04, 0.48) (1.969) | (100.04, 102.4) (2.400) | 1 | 0.482, 99.52, 99.96, 0.480 | 102.4, 2.400 |
-| F17b | (104.1, 52.4), (99.5, 4.9) | none | (99.9629, −0.4742) (4.118) | (99.9629, 92.9436) (4.121) | 0 (`rejected_crossing` 1) | 0.476, 100.47, 99.96, 0.474 | 92.94, 7.057 |
-| S4 | (84, 10), (84, 55) | none | (76.8, 14.5) (7.200) | (76.8, 34.75) (7.754) | 1 | 27.36, 88.59, 78.16, 14.50 | 41.78, 69.25 |
-| F18 | as S4 | (95.24, 10.64), (88.45, 14.88), (88.66, 7.67) | as S4 | as S4 | 1 | 27.36, 88.59, **0.494**, 11.66 | 41.78, 69.25 |
-| F19 | as S4 | (75.44, 19.34), (70.4, 13.37), (77.18, 9.49) | as S4 | as S4 | 1 | 27.36, 88.59, 2.580, **0.497** | 41.78, 69.25 |
-| F20a | as S4 | (95.77, 11.49), (88.98, 15.73), (89.19, 8.52) | as S4 | as S4 | 1 | 27.36, 88.59, **1.496**, 12.21 | 41.78, 69.25 |
-| F20b | (116.5, 45), (84.5, 55) | none | (100.55, 1.5) (16.193) | (100.55, 101.597) (16.256) | 1 | **1.598**, 98.50, 99.46, **1.500** | 101.6, **1.689** |
+| F17a | (102, 24), (99, 40) | none | (100.04, 0.48) (1.969) | (100.04, 102.4) (2.400) | 1 | 0.482, 99.52, 99.96, 0.482, 99.52, 0.480 | 102.4, 2.400 |
+| F17b | (104.1, 52.4), (99.5, 4.9) | none | (99.9629, −0.4742) (4.118) | (99.9629, 92.9436) (4.121) | 0 (`rejected_crossing` 1) | 0.476, 100.47, 99.96, 0.037, 100.00, 0.474 | 92.94, 7.057 |
+| S4 | (84, 10), (84, 55) | none | (76.8, 14.5) (7.200) | (76.8, 34.75) (7.754) | 1 | 27.36, 88.59, 78.16, 27.36, 88.59, 14.50 | 41.78, 69.25 |
+| F18 | as S4 | (95.24, 10.64), (88.45, 14.88), (88.66, 7.67) | as S4 | as S4 | 1 | 27.36, 88.59, **0.494**, 27.36, 88.59, 11.66 | 41.78, 69.25 |
+| F19 | as S4 | (75.44, 19.34), (70.4, 13.37), (77.18, 9.49) | as S4 | as S4 | 1 | 27.36, 88.59, 2.580, 27.36, 88.59, **0.497** | 41.78, 69.25 |
+| F20a | as S4 | (95.77, 11.49), (88.98, 15.73), (89.19, 8.52) | as S4 | as S4 | 1 | 27.36, 88.59, **1.496**, 27.36, 88.59, 12.21 | 41.78, 69.25 |
+| F20b | (116.5, 45), (84.5, 55) | none | (100.55, 1.5) (16.193) | (100.55, 101.597) (16.256) | 1 | **1.598**, 98.50, 99.46, **1.598**, 98.50, **1.500** | 101.6, **1.689** |
+| F12 (band 60, own frame, below) | (0, −1.25), (−20, 0) | none | (0, −0.25) (1.000) | (50, 0) (50.000) | 1 | 0.750, 100.0, 49.50, 0.750, 100.0, 0.750 | 50.00, 150.0 |
+
+F12 is the fold of fix-design review round 6, in its own frame: A = (0, 0.5)
+and D = (−100, 0), each a junction of three polygons,
+`[A, (0,50), (−50,50)]`, `[A, (−50,50), (−100,50), D, C, B]` and
+`[A, B, C, D, (−100,−50), (100,−50), (100,50), (0,50)]` (a valid coverage,
+checked in `fixtures32.py`). Its other placement E = (50, 0) has deviation
+exactly 50.000, so the band is 60. As a collapse it crosses and touches
+nothing but at A and D, and its quantities are: other vertices 49.50 from
+the new edges, **A 0.500 from E-D**, D 100.0 from A-E, E 50.00 from every
+edge. The "A to E-D" and "D to A-E" columns are the two distances section
+15.2 now checks; in F17b the other placement, made at clearance 1, has
+them at 92.94 and 7.057. `fixtures32.py` prints the git blob of
+`border_collapse.hpp` it ran against (`dc879c84`, the blob at `633808b9`,
+unchanged since `82c0a7d4`); the `_core` in the `.venv` was built from it.
 
 In F17a the other placement crosses the top edge; in F17b the winner lies
 below the bottom edge (so the kernel refuses it by test (i) today) and the
@@ -1139,8 +1164,9 @@ in the swept region (checked there too).
       `rejected_crossing` 1).
     - *F17b* (kills M9). At clearance 0 no collapse (the winner crosses).
       At clearance 1 the winner (|E − A| 0.476) is skipped at placement
-      and the collapse is made with the other placement, 7.057 m clear of
-      A and D and 7.056 m of every other edge: `skipped_placements` ≥ 1,
+      and the collapse is made with the other placement: |E − D| 7.057,
+      A 92.94 from E-D, D 7.057 from A-E, E 7.056 from every other edge,
+      other vertices 99.999 from the new edges: `skipped_placements` ≥ 1,
       `rejected_clearance` 0, the border has one vertex fewer, and the new
       vertex is (99.9629…, 92.9436…) as the re-enacted placement gives it
       (compared to 1e-9). Under M9 the winner is kept, refused at removal
@@ -1153,6 +1179,15 @@ in the swept region (checked there too).
     (at least 1 m, so only the vertex check can refuse). Clearance 1:
     refused (`rejected_clearance` ≥ 1), the output equals the input.
     Clearance 0: made.
+18b. **A junction near the far new edge** (F12, band 60, kills M12). At
+    clearance 0 the collapse is made with the A-B placement, E = (0, −0.25).
+    At clearance 1 that placement is skipped (|E − A| 0.750,
+    `skipped_placements` ≥ 1); the C-D placement E = (50, 0) is queued and
+    refused at removal, because A lies 0.500 m from E-D
+    (`rejected_clearance` ≥ 1); the output equals the input. Under M12 A is
+    excluded from both new edges, every other quantity is at least 49.50,
+    so the collapse is made with E = (50, 0), E-D passing 0.5 m from the
+    junction (a 0.6° corner): red.
 19. **E near an edge** (F19, kills M8). The island's edge 0.497 m from E;
     every island vertex at least 2.580 m from A-E and E-D (at least 1 m, so
     only the E-to-edge check can refuse). Clearance 1: refused, output
@@ -1178,8 +1213,8 @@ in the swept region (checked there too).
     - **Inside the over-refusal band** (kills M11). F20a: an island vertex
       1.496 m from the new edge A-E. F20b: E 1.500 m from the bottom edge
       leaving the junction A, |E − A| 1.598, the other placement's
-      |E − D| 1.689. Floor 1.2 m (every quantity in the table is at least
-      1.496). Also a run at clearance 2, whose output must differ from
+      |E − D| 1.689. Floor 1.2 m (in rows F20a and F20b of the table,
+      every quantity is at least 1.496). Also a run at clearance 2, whose output must differ from
       the clearance-0 output: at clearance 2 a check fires that changes
       the output (in F20a the removal is refused; in F20b both placements
       are skipped). Result at clearance 1: the output equals the
@@ -1198,7 +1233,9 @@ placement (test 17, F17b); M10 exclude A and D from the vertex check by
 node number instead of by coordinate (the junction's copies in the other
 borders then sit at distance 0 from A-E and E-D; test 20b, S4); M11 the
 clearance doubled where the kernel reads it, so every check uses twice
-the value given (test 20b, F20a and F20b).
+the value given (test 20b, F20a and F20b); M12 skip A's and D's
+coordinates for both new edges instead of each only for its own edge
+(test 18b, F12).
 
 Python:
 

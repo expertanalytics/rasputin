@@ -49,38 +49,41 @@ def rings(B, C, island=None):
         rs.append(list(island)[::-1])      # the hole in the right square (as its own ring of the coverage)
     return rs
 
-def quantities(B, C, E, island=None):
-    """The three quantities of 15.2 for placement E (one collapse; checked over everything,
-    a superset of what the grid looks at): |E-A|, |E-D|; vertices (not B, C, not at A's or D's
-    coordinates) to A-E and E-D; E to edges other than A-B, B-C, C-D."""
-    A, D = (100.0, 0.0), (100.0, 100.0)
-    rs = rings(B, C, island)
+def quantities(B, C, E, island=None, frame=None):
+    """The quantities of 15.2 for placement E (one collapse; checked over everything,
+    a superset of what the grid looks at): |E-A|, |E-D|; every vertex other than B, C
+    and A's and D's coordinates to A-E and E-D; A to E-D and D to A-E (each end is
+    excluded only from its own edge); E to every edge other than A-B, B-C, C-D.
+    ``frame`` = (A, D, rings) replaces the two squares."""
+    A, D, rs = frame if frame else ((100.0, 0.0), (100.0, 100.0), rings(B, C, island))
     verts = {p for r in rs for p in r} - {B, C, A, D}
     edges = {tuple(sorted((r[k], r[(k+1) % len(r)]))) for r in rs for k in range(len(r))}
     edges -= {tuple(sorted(e)) for e in ((A, B), (B, C), (C, D))}
     ends = (math.dist(E, A), math.dist(E, D))
     vq = min(min(segd(v, A, E), segd(v, E, D)) for v in verts)
+    a_ed, d_ae = segd(A, E, D), segd(D, A, E)
     eq = min(segd(E, *e) for e in edges)
-    return dict(EA=ends[0], ED=ends[1], vertex_to_new=vq, E_to_edge=eq, min=min(*ends, vq, eq))
+    return dict(EA=ends[0], ED=ends[1], vertex_to_new=vq, A_to_ED=a_ed, D_to_AE=d_ae, E_to_edge=eq,
+                min=min(*ends, vq, a_ed, d_ae, eq))
 
-def run(B, C, island=None, band=50.0):
-    rs = rings(B, C, island)
+def run(B, C, island=None, band=50.0, frame=None):
+    rs = frame[2] if frame else rings(B, C, island)
     pts = np.array([p for r in rs for p in r], dtype=np.float64)
     starts = np.cumsum([0, *map(len, rs)]).astype(np.uint64)
     return _core.simplify_borders(pts, starts, band), rs
 
-def report(name, B, C, island=None):
-    A, D = (100.0, 0.0), (100.0, 100.0)
+def report(name, B, C, island=None, band=50.0, frame=None):
+    A, D = frame[:2] if frame else ((100.0, 0.0), (100.0, 100.0))
     src = [A, B, C, D]
-    pl = [(lab, e, deviation(src, e), quantities(B, C, e, island)) for lab, e in placements(A, B, C, D)]
+    pl = [(lab, e, deviation(src, e), quantities(B, C, e, island, frame)) for lab, e in placements(A, B, C, D)]
     win = min(pl, key=lambda x: x[2])
-    out, rs = run(B, C, island)
+    out, rs = run(B, C, island, band, frame)
     c = out.counts
     newpts = {tuple(p) for p in out.points.tolist()} - {p for r in rs for p in r}
     print(f"{name}: B={B} C={C} island={island}")
     for lab, e, dev, q in pl:
         tag = "WINNER" if (lab, e) == win[:2] else "other "
-        print(f"   {tag} {lab}: E=({e[0]:.4f},{e[1]:.4f}) deviation {dev:.3f}; |E-A| {q['EA']:.3f} |E-D| {q['ED']:.3f} vertex-to-new-edge {q['vertex_to_new']:.3f} E-to-edge {q['E_to_edge']:.3f}; min {q['min']:.3f}")
+        print(f"   {tag} {lab}: E=({e[0]:.4f},{e[1]:.4f}) deviation {dev:.3f}; |E-A| {q['EA']:.3f} |E-D| {q['ED']:.3f} vertex-to-new-edge {q['vertex_to_new']:.3f} A-to-ED {q['A_to_ED']:.3f} D-to-AE {q['D_to_AE']:.3f} E-to-edge {q['E_to_edge']:.3f}; min {q['min']:.3f}")
     ok = len(newpts) == 1 and math.dist(next(iter(newpts)), win[1]) < 1e-9 if newpts else False
     print(f"   kernel, clearance 0: collapses {c.collapses}, rejected crossing {c.rejected_crossing}, side {c.rejected_side}; new vertices {sorted(newpts)}; equals the re-enacted winner: {ok}")
     return pl, win
