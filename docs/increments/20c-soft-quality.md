@@ -810,6 +810,81 @@ and lie outside the domain: the land cover of polygons that do not reach it.
   vertices, 0.35 s, against 1 to 3.4 s for the mitred domain on these
   outlines (Lagan's is a staircase).
 
+### M8. The repair's tolerance on the built code: 5 cm, 25 cm and 1 m (`@architect`, 2026-10-08, for question 9)
+
+Ola, on question 9: try 1 m as well; he thinks 5 cm is still only noise.
+One short probe, not a sweep, on the built code at `9a04c3c1` with the
+worktree's `.venv` (shapely 2.2.0, GEOS 3.14.1; the extension built after
+the last C++ change, `50544838`), AC power, one run each, no warm-up. The
+defaults (merge on, simplification off, outline rule at 5 m) plus
+`--features-repair S`, with the catchment arguments of
+`docs/benchmarks/quick/cases.toml` on branch `worktree-perf-process`
+(tolerance 10 m). A driver runs `rasputin mesh` in-process and wraps
+`shapely.coverage_clean` and `snap_to_outline` to keep the repair's input
+and output and the domain; the mesh checks are `@perf`'s `gate.py`,
+`corners.py` and `farcorner.py`
+(`docs/benchmarks/2026-10-08/20c-3/scripts/`). Scripts, `--stats` files
+and logs: `docs/benchmarks/2026-10-08/20c-3/m8/`. The 5 cm and 1 m runs
+were repeated and gave the same `.vtk` byte for byte; times are the first
+runs'.
+
+Unlike M7, the land-cover figures are the repair's own input: the polygons
+after the clip to the read region (Lagan 3 674 pieces, 380 826 vertices;
+Numedalslagen 3 297, 603 977). Area moved is M7's measure, the symmetric
+difference of each polygon before and after, summed, so each square metre
+given from one polygon to another counts twice.
+
+| S | Lagan | Numedalslagen |
+|---|---|---|
+| **5 cm** (the default): slivers under 1°; worst angle; triangles | 180 (0.0225 %); 0.1917°; 799 368 | 158 (0.0138 %); 0.6302°; 1 141 983 |
+| 25 cm | 176 (0.0220 %); 0.1917°; 799 336 | 158 (0.0138 %); 0.6302°; 1 141 959 |
+| **1 m** | **26 (0.0033 %); 0.7293°; 798 554** (−0.10 %) | **2 (0.0002 %); 0.8322°; 1 118 006** (−2.1 %) |
+| ring edges under 10 cm (M7's count), before the repair → after, at 5 cm / 25 cm / 1 m | 231 → 0 / 0 / 0 | 393 → 2 / 0 / 0 |
+| land cover moved, in all; inside the domain (m², counted twice), at 5 cm / 25 cm / 1 m | 0.6; 0.5 / 370; 83 / 13 342; 6 789 | 548; 151 / 1 128; 151 / 42 164; 17 020 |
+| thickest piece of moved land cover, at 5 cm / 25 cm / 1 m | 0.010 / 0.241 / 0.988 m | 0.011 / 0.250 / 0.992 m |
+| gaps touching the domain: before; after, at every S | the slit (1 cm wide, 0.40 m²); none | none; none |
+| polygons the repair empties, at 1 m | one, 6.35 m² and 0.63 m wide, 1.5 km outside the outline | one, under 0.01 m² and 6 mm wide, at every S (the clip's crumb) |
+| `--stats`' clean-up time (the whole land-cover step), at 5 cm / 1 m; `coverage_clean` alone | 5.86 / 5.98 s; 0.90 s at every S | 5.51 / 5.46 s; 1.22 to 1.25 s |
+| the whole run, at 5 cm / 1 m (`--stats` total) | 21.80 / 21.62 s | 11.28 / 10.82 s |
+| the slit's two open corners both mesh vertices? (`corners.py`), at every S | no: one is, the other is 1.0 cm from the nearest vertex | (not on this catchment) |
+| slivers at the slit's far corner (`farcorner.py`), at every S | 0 of the 6 triangles there | |
+| slivers with a side under 10 cm; with the centre within 20 m of the outline, at 5 cm / 1 m | 0 / 0; 0 / 0 | 0 / 0; 1 / 0 |
+
+- **What 1 m removes is borders of two polygons that come within 1 m of
+  each other**, not mismatched shared borders: the repair's input is a
+  valid coverage on both catchments, with no overlap (`m8ov.py`), and
+  M7 found no gap between 5 cm and 100 m wide. At 1 m the moved land cover
+  is long thin pieces: those thicker than 25 cm are 198 pieces, 45 km of
+  border on Lagan (median 93 m long, the longest 7 km, about 0.3 m
+  thick on average), and 4 629 pieces, 123 km on Numedalslagen (median
+  1.5 m long). They lie spread over the basins, not on M2's CORINE seam
+  or easting pair (2 pieces of 198 within 15 m of them on Lagan). No
+  vertex moves farther than S (the thickest piece is 0.99 m).
+- **That is where the slivers were.** Of the 5 cm meshes' slivers, 157 of
+  180 (Lagan) and 156 of 158 (Numedalslagen) lie within 2 m of land cover
+  the 1 m repair moved; on the 1 m meshes, 2 of 26 and 0 of 2
+  (`m8moved.py`). The check can fail: it counts slivers of either mesh
+  against the same moved land cover, and the 1 m meshes' remaining slivers
+  mostly lie elsewhere.
+- **25 cm gives nothing over 5 cm on the mesh** (4 slivers fewer on Lagan,
+  none on Numedalslagen, the same worst angles). The gain is between
+  25 cm and 1 m; no S between them, and none above 1 m, was probed.
+- **The cost**: land cover moved by under 1 m along about 45 km (Lagan) and
+  123 km (Numedalslagen) of border, 6 789 m² and 17 020 m² inside the
+  domains counted twice, so about 3 400 m² and 8 500 m² given from one
+  polygon to another: 5 × 10⁻⁷ and 1.5 × 10⁻⁶ of their 6 441 and
+  5 548 km². CORINE is mapped at 1:100 000, with a 100 m minimum width and
+  a positional accuracy the producers state as better than 100 m; a 1 m
+  move is 1 % of the smallest feature it may hold. No measurable time.
+- **Scale.** S = 1 m assumes a land-cover source whose borders carry no
+  meaning below a metre (CORINE: 1:100 000) and DEM cells of 10 to 31 m;
+  checked on these two catchments' CORINE, about 380 000 and 600 000
+  vertices after the clip, the largest inputs probed. On a source mapped
+  to the decimetre it moves real borders; the flag is there for that.
+  MapBiomas polygons made by rasputin from a 30 m raster (São Francisco)
+  have no two vertices closer than a pixel side unless the conversion
+  puts them there; not measured.
+
 ## What Ola gets
 
 Measured with `--stats`' own quality table (share under 1°, worst angle) and
@@ -824,7 +899,7 @@ the output independent of `threads`:
 | PR 20c-2, the soft criterion and the line split | about 440 (0.055 %) | −7.5 % | 0.0024° | about 300 (0.026 %) | −11 % | 0.0086° |
 | PR 20c-3, input coarsening at 2 m (flag, off by default) | about 150 (0.020 %) | −14 % | 0.0067° | about 30 (0.003 %) | −21 % | 0.012° |
 | PR 20c-3 with Ola's outline rule at 5 m (its default, ruling 6) | about 60 (0.008 %) | −14 % | 0.0067° | about 4 (0.0004 %) | −21 % | 0.83° |
-| PR 20c-3 with the repair at 5 cm too (its default, ruling 9, question 9) | not yet measured on a mesh; on the land cover (M7) the slit is closed and its 1 cm edge gone, and land-cover edges under 10 cm fall from 356 to 5 | | | not yet measured; edges under 10 cm 464 to 1 | | |
+| PR 20c-3 with the repair at 5 cm too (its default, ruling 9, question 9) | on the land cover (M7) the slit is closed and its 1 cm edge gone, and land-cover edges under 10 cm fall from 356 to 5; on a mesh with the defaults, which do not coarsen (M8): 180 (0.0225 %); at 1 m, 26 (0.0033 %) | 799 368; at 1 m 798 554 | 0.19°; at 1 m 0.73° | edges under 10 cm 464 to 1; on a mesh with the defaults (M8): 158 (0.0138 %); at 1 m, 2 (0.0002 %) | 1 141 983; at 1 m 1 118 006 | 0.63°; at 1 m 0.83° |
 
 20c-1's row is `@perf`'s measurement of the built code, the same
 triangle counts, sliver counts and worst angles as M5's prototype
@@ -1410,7 +1485,8 @@ neighbours' borders came within S of each other, they are now one border.
 of each other.** One number for both of the cleaner's tolerances (the
 snapping distance and the gap width), because they answer the same
 question for a partition that is meant to have no gaps. **Default 5 cm**
-(question 9, default yes), set by M7:
+(question 9, default yes), set by M7; M8 probed 25 cm and 1 m on the
+built code, and question 9 is asked again with 1 m as its default:
 
 - Lagan's slit has its two open ends 1.005 cm apart. Snapping at 1 cm (with
   a 1 m gap width, M7) fills the gap but leaves its two corners apart, so
@@ -3342,26 +3418,34 @@ Questions 6 and 7 as asked:
 
 ## Questions for Ola
 
-9. **How close must two land-cover borders be to count as one?** Your
-   ruling: the CORINE slit is an error, and the borders should have been
-   shared. 20c-3 repairs it by joining borders of one land-cover file that
-   come within a set distance of each other, and filling any gap narrower
-   than that distance. Measured on Lagan's and Numedalslagen's CORINE (M7):
-   the slit is the only gap in either; its two open ends are 1 cm apart,
-   so 1 cm fills the gap but leaves its 1 cm closing edge, and 5 cm joins
-   the ends. At 5 cm the repair also joins the millimetre-apart vertex
-   pairs elsewhere (edges under 10 cm: 356 to 5 on Lagan, 464 to 1 on
-   Numedalslagen), and moves 0.7 m² and 1 085 m² of land cover in all.
-   Cost: about 1.1 s per catchment. **Default: yes, 5 cm, on whenever a
-   land-cover map is used** (`--features-repair 0` turns the joining
-   off). The other choices: 1 cm (fills the gap, keeps its 1 cm edge), or
-   a larger distance (the same gaps here, more vertices moved; not probed
-   beyond 5 cm); only the default and the CLI test that pins it change.
+9. **How close must two land-cover borders be to count as one?** (asked
+   again with M8, after your "try increasing to 1m as well".) 20c-3 joins
+   borders of one land-cover file that come within this distance of each
+   other, and fills any gap narrower than it. Measured on the built code
+   with the defaults, Lagan and Numedalslagen (M8):
+   - **5 cm** (today's default): the slit closed; triangles with an angle
+     under 1°: 180 and 158; the smallest angle in the mesh 0.19° and 0.63°.
+   - **25 cm**: the same as 5 cm (176 and 158).
+   - **1 m**: the slit closed as well; **26 and 2** such triangles, the
+     smallest angle **0.73° and 0.83°**, and 2 % fewer triangles on
+     Numedalslagen. Almost all the triangles 1 m removes sat where two
+     land-cover borders ran under a metre apart. The price: borders move
+     by under 1 m along about 45 km and 123 km of border, some 3 400 m²
+     and 8 500 m² of land cover changing class inside the catchments, out
+     of 6 441 and 5 548 km². CORINE's smallest feature is 100 m wide, so
+     that is 1 % of it. No measurable time.
+   **Default: 1 m, on whenever a land-cover map is used** — it is the
+   probed distance that removes the thin triangles, and it moves land cover
+   by less than CORINE's own precision. `--features-repair 0` turns the
+   joining off, and a smaller value suits a land-cover file drawn to the
+   decimetre. Not probed: distances between 25 cm and 1 m, or above 1 m.
+   The other choice: keep 5 cm. Either way only the default and the tests
+   that pin it change.
 10. **The land-cover clean-up is slower than the design said: accept it
    for now?** You asked to hear about any step that takes a large share of a
    run. The new land-cover step (the clip, the repair of question 9, the
    merge by class and your outline rule) takes 8.0 s on Lagan and 8.8 s
-   on Numedalslagen. The design estimated 1.1 s (question 9), counting only the clip
+   on Numedalslagen. The design estimated 1.1 s (question 9 as first asked), counting only the clip
    and the repair, and those two alone take about 1.9 s. A fix in this
    PR (ruling T2: rebuild and measure only the land cover that moved,
    with the same output) brought the step to 5.92 s and 5.48 s (measured,
