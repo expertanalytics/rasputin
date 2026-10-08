@@ -13,9 +13,15 @@ review round 2 asked for one more red note (Review section), fixed by
 found the runs about 70 % slower and the worst angle far lower; cause and
 fix in section 15, designed on the defaults of question 5 (section 12),
 decided on default while Ola was away, reversible; fix design approved
-in fix-design review round 7 (`8a8c2488`). Next: `@tester`'s red tests 17 to 22 (with 18b), `@developer`'s
-change (section 15.4), then the quick check again. Not refine or mesh
-code, so no `bench.py` acceptance run.
+in fix-design review round 7 (`8a8c2488`). Fix built: red `2fba4349`,
+green `05c8f73a` (573 counted lines), test fix `8605f607`; mutation round
+M7 to M12 killed (M12b and M13 ruled in section 15.6). `@perf`'s quick
+check `b192a2c6` met section 15.5 except Numedalslagen's worst angle,
+0.311° against a 0.4° floor; section 15.6 finds that triangle made by the
+height refinement, not by the borders' clearance, and restates the floor
+(question 6, decided on default while Ola is away, reversible). Next: the
+test for M13 (section 15.6), then code review. Not refine or mesh code,
+so no `bench.py` acceptance run.
 
 ## 1. What Ola asked
 
@@ -843,6 +849,23 @@ the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
    rule first; the vertices back within 5 m accepted). The main session
    took the defaults, 2026-10-08; recorded by `@architect`.*
 
+6. **The worst-angle floor** (raised by `@perf`'s quick check of the
+   fix, section 15.6). I expected the worst angle back at 0.4° or more;
+   Numedalslagen has one triangle at 0.311°, the next at 0.487°. It is not
+   made by the land-cover borders being too close: it is a height
+   refinement point 5.2 m beside a 1 km straight border, which the
+   simplifier makes long by design. Splitting long borders every 500 m
+   brings the triangles under 1° from 76 to 13, but the worst becomes a
+   0.326° triangle elsewhere that touches no border closely. Proposed:
+   drop the 0.4° expectation; the borders' promise is the 1 m clearance,
+   and the worst single angle is decided by the height refinement, as it
+   was before 32 (0.83° there was not a bound either). **Default: drop the
+   floor and keep the fix as built; the 500 m split, if wanted, as its own
+   small change later.**
+
+   *Decided on default while Ola was away, reversible. The main session
+   took the default, 2026-10-09; recorded by `@architect`.*
+
 ## 13. ROADMAP
 
 Row 32: built (green `82c0a7d4`, 519 net production lines; mutation round
@@ -1309,6 +1332,82 @@ whole run is expected within about 10 % of base, not faster: the design's
 and the mesh is about 40 % smaller. If `@perf`'s re-run shows the worst
 angle under 0.4° on either case, or the area moved different from base's,
 it comes back to `@architect`.
+
+### 15.6 As built: the worst angle, and two mutants (`@architect`)
+
+Probe: `docs/benchmarks/2026-10-09/clc-simplify/quick/angle-probe/`
+(`probe.txt` has the commands and output), the fix as built (`.venv`'s
+`_core` rebuilt from HEAD by `@perf`), Numedalslagen, the quick check's
+flags. The mesh is 653 039 triangles, as `@perf`'s.
+
+**The 0.311° triangle.** It is 6.7 km from the outline. Its vertices: a
+simplifier point E on the border between polygons 13 and 16; a point P on
+that border's constraint 1 038 m from E (a split point the refinement put
+on the line, not a cover vertex); and the DEM node (121 300, 6 712 580),
+5.209 m from segment E-P. Two of its edges are free; E-P is the
+constraint. The refinement puts a DEM node within half a cell (5 m on
+this 10 m grid, `delta_p`,
+`include/terrain/refinement/refine_points.hpp@05c8f73a:287`) of a
+constraint in as its foot on the segment; this node is 0.209 m beyond
+that, so it went in as itself, and with nothing else near the 1 km
+segment the triangle is a needle: 5.2 m across 1 km. So:
+
+- *Not the simplifier's clearance:* no two cover elements are close here;
+  the near point is a DEM node, which the clearance does not see. No
+  clearance on the borders can prevent it.
+- *Not the outline rule:* 6.7 km inside.
+- *Made by:* the height refinement beside a long border. The simplifier
+  makes the border long (that is its job); the 1 km edge is within the
+  band.
+- *The rest of the tail:* the next five (0.487° to 0.520°) are the same
+  kind: one cover vertex and DEM nodes or a point on a constraint line.
+  None has two cover vertices closer than 1 m.
+
+**Whether a border change would help, measured.** `cap_probe.py` splits
+every simplified edge longer than L into equal collinear pieces (the same
+points on both sides of a shared edge) and meshes again. At L = 500 m:
+8 274 points added, 650 407 triangles (−0.4 %), triangles under 1° from
+76 to 13, worst 0.326°: a new needle 5.3 km from the outline, a source
+vertex and two diagonal DEM neighbours 14.1 m apart, 200 m away, with no
+constraint edge at all. So the worst single angle is the height
+refinement's (no quality pass after the start pass), and moves with any
+change; a border rule bounds the count under 1°, not the worst one. The
+0.4° floor of 15.5 was a wrong expectation: it was drawn from the
+millimetre pairs of cause 3, which the clearance removed (none left). The
+floor is restated (question 6, default): **the borders' promise is the
+1 m clearance, checked by tests 17 to 21; the worst angle is reported,
+not bounded.** Lagan, 0.49°, is consistent with this.
+
+**M12b** (only the explicit A-to-E-D and D-to-A-E line dropped):
+**equivalent, confirmed.** The grid scan visits every edge in the cells
+of the grown box except those starting at A, B or C (by node), and checks
+both ends of each edge, A's coordinates only against E-D and D's only
+against A-E. A always reaches that scan as an end of a visited edge: if A
+is inside its border, as the end of its own incoming edge P-A (it starts
+at P, not at A, so it is visited); if A is a junction, as the start of an
+edge of another border or of a fixed edge at A (a junction has at least
+one, and every live edge is in the grid); in both cases the edge has A in
+the box, so its cell is queried. D likewise: its own outgoing edge D-X
+starts at D, not A, B or C, so it is visited, and so are the edges of
+D's copies. So the explicit line checks nothing the scan does not.
+It stays as written, a cheap statement of the rule; no test.
+
+**M13** (the query box not grown by the clearance): **a reachable gap,
+worth one case.** The grid's cell side is the larger of the band and the
+mean edge length, and its origin is the lowest corner of all points
+(`include/terrain/vector_simplify/border_collapse.hpp@05c8f73a`, the
+grid's construction). A vertex within the clearance of a new edge, across
+a cell boundary that lies within the clearance outside the box of A, B,
+C, D, E, whose own edges lie wholly beyond that boundary, is found only
+by the grown box. New test **19b** (`@tester`, in the mutation round's
+manner: it passes on `05c8f73a` and is red under M13): compute the cell
+side and origin from the input by that rule; place an island so that one
+of its vertices lies 0.5 m from a new edge across a cell boundary that
+is 0.3 m beyond the box, with the island's bounding box wholly beyond
+the boundary; measure the fixture at clearance 0 as in 15.3 and print
+the cell side, the boundary and the distances. Expected at clearance 1:
+refused (`rejected_clearance` ≥ 1), output equals input. Under M13:
+made.
 
 ## Review
 
