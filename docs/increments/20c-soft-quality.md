@@ -84,8 +84,13 @@ tools/count_loc.py 483221d2 1e011cec`). Code review round 1 (`@reviewer`,
 on `1e011cec`): changes requested; ruled ("Rulings on 20c-3's code review
 round 1": a hole the rule puts onto the outline is filled, fixed in code;
 the record row's wording; the gate's unrun checks, run by `@perf`).
-**Built. Next: `@tester` red for R1 and R4, `@developer` green, `@perf`'s
-check (R1, R3), then `@reviewer`'s code review round 2.** Questions 1 to 4 ruled by Ola, 2026-10-06,
+Fix round: red `1f7f8335` (`@tester`, R1 and R4), green `aaee898b`
+(`@developer`), 360 net production lines (`python3 tools/count_loc.py
+483221d2 aaee898b`); `@perf`'s R3 run `63065a15`: (a) to (d) met, (e)
+met once its wording is corrected (R3's outcome, below: the 26.194 m left
+are borders between different classes in the source data).
+**Built. Next: `@reviewer`'s code review round 2, on `05b0fd7a..` the
+branch head.** Questions 1 to 4 ruled by Ola, 2026-10-06,
 and questions 5 to 8, 2026-10-07, ruling 9 (amending 5) 2026-10-07
 ("Ola's rulings" below); questions 9 and 10 open, designed on their defaults. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
@@ -1529,7 +1534,7 @@ four off.
 |---|---|---|---|
 | 20c-1 | R1 to R6: the foot rule on the quality start, refinement's neighbours and the final check | nothing | Lagan: share under 1° ≤ 0.09 % (0.078 %), triangles ≤ +1 % of master's (+0.43 %), worst angle ≥ master's 0.000412° (0.0024°); Numedalslagen: share ≤ 0.04 % (0.034 %), triangles ≤ +1 % (+0.27 %), worst angle ≥ master's 0.000399° (0.00068°); `--no-constraint-feet` bit-identical to master run with `--no-constraint-feet` (master's default has 20b's feet on, so it is not the comparison); tolerance oracle; determinism. **Built: every gate passes, at M5's figures** (`docs/benchmarks/2026-10-07/20c-1/fix-69f37d1c/README.md@c9f62f7c:186-201`); time: the split-phase limit below |
 | 20c-2 | R7 and R8: the soft criterion and the line split | 20c-1 merged | on both catchments: triangles ≤ 0.95 × master's (0.925, 0.886); sliver count ≤ 0.75 × 20c-1's (0.64, 0.69); worst angle ≥ 0.95 × 20c-1's (Lagan 1.000, the same triangle; Numedalslagen 12.7 ×); `--start-quality-gain -1` bit-identical to 20c-1. **Built: every gate passes** (triangles 0.9253 and 0.8865; slivers 437 and 296, 0.64 and 0.68; worst angle 1.000 and 12.68 ×; gain −1 equal to 20c-1 bit for bit; `docs/benchmarks/2026-10-07/20c-2/fix-65ae0792/README.md@5b0afe04:20-28`); time: the split-phase limit, judged per split for 20c-2 (ruling 8) |
-| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 5 cm, ruling 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no constraint edge (M2's bands). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs** (not yet measured on a mesh, M7): every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle has its smallest angle between two constraint edges at the slit's far corner (413 677.295 6 331 664.081). `@perf` reports the measured figures, and `@architect` then raises these thresholds to them with a margin (never lowers them) |
+| 20c-3 | the repair, input coarsening, and the outline rule (repair on at 5 cm, ruling 9; outline rule on at 5 m, ruling 6) | 20c-2 merged | measured without the merge and, for the rows M5 and M6 measured, without the repair, every flag given explicitly, so the gate does not depend on a default. **`--features-tolerance 2` alone** (`--features-outline-snap 0 --features-repair 0`): Lagan: slivers with a side under 10 cm ≤ 25 (19, from 185), share under 1° ≤ 0.03 % (0.020 %), worst angle ≥ 0.005° (0.006697°); Numedalslagen: share ≤ 0.006 % (0.003 %), worst angle ≥ 0.008° (0.012446°). **With the outline rule at 5 m on top**: Lagan: sliver count ≤ 90 (61), at most 5 with the centre within 20 m of the outline (0; 83 without the rule), triangles ≤ +1 % of the tolerance-only mesh (+0.09 %), worst angle ≥ 0.95 × the tolerance-only figure (1.000, the same triangle); Numedalslagen: sliver count ≤ 10 (4), at most 5 within 20 m of the outline (0; 27 without), triangles ≤ +1 % (+0.21 %), worst angle ≥ 0.1° (0.832°); no shared border inside the catchment left unmatched by the rule. With the merge on, the two population-3 lines carry no land-cover line between two polygons of the same class (M2's bands; borders between different classes that lie within 1 m of the lines are real and stay, R3's outcome). All four off give 20c-2's mesh bit for bit. **The repair at 5 cm on top of each of those two runs**: every threshold of the run without it still met; on Lagan the slit's two open corners (413 602.500 6 331 638.254 and 413 602.501 6 331 638.244) are not both mesh vertices, and no triangle with its smallest angle under 1° has a corner at the slit's far corner (413 677.295 6 331 664.081). The thresholds are not raised to the measured figures (R3: they are the design's figures already) |
 
 **20c-3's gate results so far** (`@perf`, on `745bcb0d`,
 `docs/benchmarks/2026-10-08/20c-3/README.md@16143f4c`; "near" is the
@@ -1552,6 +1557,20 @@ figures. T2's mesh is T1's byte for byte (`.vtk` SHA-256 Lagan
 T1, and the shared-border, population-3 and far-corner checks were never
 run: what is run and what is ruled out is "Rulings on 20c-3's code review
 round 1", R3.
+
+**R3's run** (`@perf`, on `aaee898b`,
+`docs/benchmarks/2026-10-08/20c-3/README.md@63065a15:132-183`, raw output
+in `stats/r3/`): (a) the default meshes unchanged by R1 (Lagan
+`ef67e65c…`, Numedalslagen `1f11f291…`): met. (b) the repair on top of the
+outline rule: met on both, Lagan 743 614 triangles (+0.09 %), 59 slivers,
+0 near the outline, worst 0.2320°; Numedalslagen 1 016 194 (+0.26 %), 4,
+0, 0.8322°; `corners.py` on Lagan: the slit's open corners not both mesh
+vertices, met. (c) the slit's far corner: met (6 triangles meet there,
+none under 1°). (d) shared borders: 0.000 m on both, met; one shared vertex
+moved 0.5 m gives 208.170 m and 337.081 m. (e) met on the corrected
+wording (R3's outcome, in "Rulings on 20c-3's code review round 1"):
+26.194 m with the merge on, all of it borders between different classes;
+161 164.495 m with it off.
 
 Slivers with the defaults (every switch at its default; `@perf`, same
 commit), master `483221d2` against the branch:
@@ -3112,6 +3131,25 @@ him.
     production code; there is nothing new to raise them to. The repair
     rows keep "every threshold of the run without it" (M7 gave no
     figures of their own).
+  - *Outcome of (e) (`@architect`, on `@perf`'s `63065a15`): the check's
+    wording was wrong, not the code.* With the merge on, 26.194 m remains:
+    13.097 m of border, counted once for each of its two polygons, in four
+    stretches of 0.69 to 9.46 m
+    (`docs/benchmarks/2026-10-08/20c-3/stats/r3/e-where.txt`), between
+    merged polygons 10 and 12 and 10 and 11. With the merge on, each
+    polygon is one class (`feature_input.py`'s `_clean`, "one polygon per
+    class"), so these are borders between different classes. The source
+    data agrees: read from the CORINE GeoPackage in EPSG:3035 at each
+    stretch's middle, 0.3 m to either side, three stretches have coniferous
+    forest (312, OBJECTID 2000793) against transitional woodland-shrub
+    (324, OBJECTIDs 1933839 and 1933737), and the fourth coniferous forest
+    (312, 2373011) against mixed forest (313, 1929199). A polygon of another
+    class reaches the straight cut there, and its border runs within 1 m of
+    the line. Population 3 is the cut through one class (312 on both sides),
+    and none of it is left. Corrected wording of (e): with the merge on, no
+    land-cover line within 1 m of either line has the same class on both
+    sides: 0 m, met; with the merge off, more than 0 (161 164.495 m, the
+    probe that can fail). No code change and no new test.
 - **R4 (review S2), the record row's wording. Taken: D and T.**
   `run_record.py`'s label for `land_cover_area_moved_m2` says "changed
   class", but with the merge off the outline rule can move area between
