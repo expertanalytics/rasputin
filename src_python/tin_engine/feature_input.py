@@ -763,12 +763,13 @@ class _Outline:
         of D along its line, counted from the foot of the CRS's origin and in
         the direction of its lexicographically last end. So both polygons
         sharing it get the same, and an edge the read region shortens keeps
-        its cuts (to rounding)."""
+        its cuts (to rounding). A multiple within D/2 of either end is dropped
+        (ruling T1), so no piece is shorter than D/2."""
         flip = tuple(b) < tuple(a)
         lo, hi = (b, a) if flip else (a, b)
         u = (hi - lo) / math.hypot(*(hi - lo))
-        t0 = float(np.dot(lo, u))
-        k = np.arange(math.floor(t0 / self.d) + 1, math.ceil(float(np.dot(hi, u)) / self.d))
+        t0, t1, h = float(np.dot(lo, u)), float(np.dot(hi, u)), self.d / 2
+        k = np.arange(math.floor((t0 + h) / self.d) + 1, math.ceil((t1 - h) / self.d))
         cuts = lo + (k * self.d - t0)[:, None] * u
         return cuts[::-1] if flip else cuts
 
