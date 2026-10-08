@@ -44,8 +44,9 @@ was on AC power (`pmset -g batt`: "Now drawing from 'AC Power'").
 
 2. `section.py`: the first case, Geilo to Ål: the links inside
    x 127 000-150 000, y 6 720 000-6 745 000 (EPSG:25833), buffered 5 km, cut
-   to that x range and simplified by 20 m: 266.9 km², 53 vertices.
-   `section_domain.geojson` gets a `crs` member naming EPSG:25833 by hand.
+   to that x range and simplified by 20 m: 266.9 km², 53 vertices
+   (`section_domain.geojson`, with a `crs` member naming EPSG:25833). It also
+   writes the corridor of item 4 (`corridor_domain.geojson`).
 
 3. Uniform meshes of the section, `rasputin mesh --dem <DTM10> --domain
    section_domain.geojson --tolerance T`, then `bands.py` (triangles by the
