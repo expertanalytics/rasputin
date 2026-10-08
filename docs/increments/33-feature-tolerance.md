@@ -1,7 +1,9 @@
 # Increment 33: a vertical tolerance that varies with distance to named lines
 
 **Status:** designed (`@architect`, 2026-10-08), design review round 3
-approved, not built. Next: `@tester`'s red step. Questions for Ola in section 12; the design is written on their
+approved; red step `6c64b120`; its pins ruled in section 9.1. Next: `@tester`
+adds the three cases 9.1 asks for (A, B, and the `--tolerance-near-crs`
+refusal), then `@developer`'s green step. Questions for Ola in section 12; the design is written on their
 defaults.
 
 ## 1. What Ola asked
@@ -622,6 +624,136 @@ must cover:
   (killed by test 3 (b));
 - M8 Python drops the margin correction;
 - M9 Python selects with the window not grown by `E`.
+
+### 9.1 Pins after the red step
+
+`@tester`'s red commit `6c64b120` pinned what this design left open. Each pin
+is ruled here; where this section and the text above differ, this section
+wins. Two rulings add a test case (A and B below), which `@tester` writes
+before the green step.
+
+**Confirmed as pinned:**
+
+1. *Argument order.* The policy comes right after the options in all three
+   entry points: `refine(dem, start, edges, masks, options, policy)`,
+   `refine_points(store, start, z, valid, edges, masks, options, policy,
+   strip = nullptr)`, `refine_strip(dem, strip, start, z, valid, edges, masks,
+   options, policy)`. No overload is ambiguous: the policy overload has no
+   default for the policy, and a pointer or `nullptr` does not satisfy
+   `TolerancePolicy`.
+2. *`distance` and `at`.* `distance(m, t)` is the raw distance to the
+   simplified segments (margin not subtracted), capped at `E + margin`;
+   `ToleranceRamp::at(d)` subtracts the margin. With one amendment (A).
+3. *`make`'s reasons* name the bound broken: "near" (below 0, or above far),
+   "start" (below 0, or above end), "margin", "coordinate". A non-finite ramp
+   value's reason names that value ("near", "far", "start", "end" or
+   "margin"); the binding's `ValueError` carries the same sentence, so the
+   Python test's "far" for a NaN far holds.
+4. *"Exactly" in test 6:* the indexed distance equals, bit for bit, the
+   minimum over one single-segment field per segment, each capped; the pair
+   distance against the test's own formula to 1e-9 m. Sound: the pair
+   distance is a pure function of the triangle and one segment, the frame
+   conversion is per segment, and taking a minimum (or a correctly rounded
+   square root of one) does not depend on the order.
+5. *The M4 case:* laid out for `noding::BroadPhase`'s grid (14 segments, k =
+   4, a bucket edge at x = 5115), repeated at 64 shifts of 7.3 m so a
+   different bucket size (down to about 10 m, the 40-line fallback index of
+   4.2 included) also puts Q outside the first query.
+6. *`max_error_near`* in test 3 (b) equals `max_error` when every triangle is
+   held to N; in test 5 it is at most N. Its definition is settled under
+   "Gaps" below.
+7. *Tests 3 (b), 7, 8:* `refine_strip` and `refine_points` start from a phase 1
+   run with the field, as `_dem_mesh` runs them.
+8. *Extras* (test 1 with the start quality on at 20 degrees; tests 7 and 9 on
+   the strip and the points; the section-D oracles on every field output):
+   kept.
+9. *`window`* is `(x_min, y_min, x_max, y_max)` in the mesh CRS; no line in
+   reach returns a float64 `(0, 4)` array and the margin.
+10. *Refusals in `line_segments`:* a `ValueError` naming the file; "<name> has
+    no lines; polygons and points are not used here"; a file mixing lines
+    with polygons or points is refused with "polygons and points are not used
+    here", naming the file.
+11. *The binding:* `_core.LineTolerance(view, segments, near, far, start, end,
+    margin)`, positional, `view` a `RasterView` (Python has no bare
+    geometry), `segments` a float64 `(k, 4)` array. The field copies the
+    view's geometry and the segments; it keeps no reference to the view or
+    its array. `field=None` keyword-only and last on `refine`,
+    `refine_points` and `refine_strip`; `RefineOutcome.max_error_near` a
+    float; `_core.pyi` declares all of it. With one addition (B).
+12. *The CLI* passes the field to all three calls (`refine`, the edge strip's
+    `refine_strip`, the final check's `refine_points`).
+13. *The CLI's refusal words:* "--tolerance-near needs --tolerance",
+    "--tolerance-near needs --tolerance-ramp", "--tolerance-ramp needs
+    --tolerance-near", "applies only with --dem" (flag named), "must be finite
+    and >= 0" (flag named), and "above" with both numbers for N above F and
+    START above END. They follow the CLI's existing style (`--domain needs
+    --tolerance`).
+14. *The record:* `tolerance_near_m` a float; `tolerance_ramp_m` "<S> to <E>"
+    with `:g`; `tolerance_lines` "<file name>: 1 segment", or "<file name>: <k>
+    segments" for any other k, 0 included; the out-of-reach mesh equals the
+    plain `--tolerance F` mesh. The four new fields get plain labels in
+    `run_record.WORDING`, as every record field has.
+15. *Test 14* uses `--tolerance-ramp 0 40` on the 176 by 66 m test DEM: a
+    3000 m ramp would hold the whole DEM near N.
+
+**A. Amendment to pin 2: the far value at the cap for a step.** With `S = E`
+the ramp gives N at `d = E` (`d <= S`), so `ramp.at(E + margin)` is N, and a
+triangle with no segment within reach would be held to N, not F (and `at`
+would fall below `lowest()` with zero segments, breaking the lazy test of
+4.4). The rule: `at(m, t)` is `ramp.at(d)` with `d` the search's uncapped
+result, infinity when no segment lies within `E + margin`; `ramp.at` of
+infinity is F. `distance(m, t)` stays `min(d, E + margin)`. Wherever
+`S < E` this equals the pin (`ramp.at(E + margin)` is F there); the random
+case's `at == ramp.at(brute)` uses no step, so it stands. *New case
+(`@tester`, test 6):* a step ramp `{0.5, 8, 250, 250, margin 1}` with one
+segment 400 m from the triangle: `distance` is 251 and `at` is 8; the same
+ramp with zero segments: `at` is 8 and `lowest()` is 8. It kills the mutant
+`at = ramp.at(distance)`.
+
+**B. Addition to pin 11: a field on another raster geometry is refused.** The
+field measures in the lattice frame of the geometry it was built on; used
+with another, every distance is silently wrong. `LineTolerance` exposes
+`geometry()`; the binding compares it (`RasterGeometry`'s `==`) with the
+call's own: `dem.geometry()` for `refine` and `refine_strip`, the store's for
+`refine_points`, and raises `ValueError("the tolerance field was built on
+another raster geometry")`. This is the field's form of the existing strip
+rule (L2 in `refine_points.hpp`). The resampled path builds the target view
+and the check-point store from the same expressions (`grid.col0 * h`,
+`-grid.row0 * h`, `h`, rows, cols, in `target_grid.py` and
+`final_check.py`), so they compare equal. *New cases (`@tester`, Python):*
+a field built on the 25 by 25 view, passed to `refine` on a view whose
+`x_min` differs by one cell, and to `refine_points` with a store on that
+other geometry: each a `ValueError` matching "another raster geometry".
+
+**Gaps `@tester` found, settled:**
+
+- *Which box selects a segment.* Each simplified segment's own box (its two
+  ends), compared closed (`<=`) with the window grown by `end_m + margin_m`
+  on all four sides; the segment is then kept whole, never cut. A segment
+  whose box misses the grown window is farther than `E + margin` from every
+  point in the window, so it cannot change any allowed error there. Not the
+  whole line's box: a 370 km line would then go whole into every piece.
+- *`max_error_near`.* Each entry point fills it by the rule of its own
+  `max_error`, restricted to the final triangles whose allowed error
+  `at(m, t)` is at most the policy's `lowest()`; 0.0 when there are none.
+  With `UniformTolerance` it is `max_error`, copied, no query. In the record,
+  `max_error_near_lines_m` takes the same form as `max_error_m` today: on the
+  DEM path the larger of refine's and the edge strip's, on the resampled path
+  the final check's.
+- *Zero segments kept.* Python builds no field and calls all three entry
+  points with `field=None`, so the mesh is today's `--tolerance F` mesh by
+  construction (G2); stderr prints section 5's line; the record has
+  `tolerance_near_m`, `tolerance_ramp_m` and `tolerance_lines` ("...: 0
+  segments") and **no** `max_error_near_lines_m`, since no triangle is near a
+  line. C++ test 2 still covers a field with zero segments.
+- *`--tolerance-near-crs` without `--tolerance-near`:* a usage error, "applies
+  only with --tolerance-near", with `--tolerance-near-crs` as the flag named,
+  as `--domain-crs` does today ("applies only with --domain"). *New case
+  (`@tester`, test 12)*, one line beside the other refusals.
+
+**For `@developer`, in the green commit:** add `prop_refinement_line_tolerance`
+to the TSan job in `.github/workflows/main.yaml`, in both of its lists (the
+`--target` build list and the list of binaries it runs).
 
 ## 10. Size, split point, speed
 
