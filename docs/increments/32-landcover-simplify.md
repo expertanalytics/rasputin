@@ -1048,7 +1048,9 @@ template <pred::GeometryKernel K>
 ```
 
 - `BorderStatus::InvalidClearance` for a negative or non-finite clearance;
-  `BorderCounts::rejected_clearance` counts the refusals.
+  `BorderCounts::rejected_clearance` counts the refusals at pop, and
+  `BorderCounts::skipped_placements` the placements left out at placement
+  (test 20b reads both to pin its shapes).
 - **At placement** (`candidate`): a placement with |E − A| or |E − D| under
   the clearance is not considered (the other line's placement still is).
 - **At pop**, beside tests (i) and (ii), over the grid cells of the box of
@@ -1105,35 +1107,42 @@ C++, `tests/cpp/unit/test_border_collapse.cpp`:
     accepts it.
 19. **E near an edge.** As 18 with E 0.5 m from the other border's edge and
     the new edges far from its vertices.
-20b. **Room to spare** (fails a check that refuses too much). Test 1's
-    two squares and test 12's hand-made coverage (the C++ copy of it, or
-    the Python test 21 on it) at band as today and clearance 1: every
-    collapse made at clearance 0 whose new edges and E are at least 2 m
-    from everything they do not touch is still made, so the output has the
-    same vertex count as at clearance 0 (`@tester` picks the shapes so that
-    this holds, and shows it at clearance 0 first); `rejected_clearance`
-    is 0. And a junction case: a border leaving a junction shared by three
-    rings, the collapse next to it with 2 m to spare, is made at
-    clearance 1 (kills M10).
-    **Inside the over-refusal band** (kills M11). Two more cases, each a
-    collapse that is made at clearance 0 and whose closest approach is
-    1.5 m: the smallest of |E − A|, |E − D|, the distance from any vertex
-    the check looks at to A-E or E-D, and the distance from E to any edge
-    it looks at (the three quantities of 15.2) is 1.5 m, well inside
-    [1, 2) so rounding cannot move it across either end. (a) Between two
-    borders: the other border's nearest vertex 1.5 m from the new edge.
-    (b) At a junction: the collapse next to a junction shared by three
-    rings, the nearest other border leaving that junction 1.5 m from E.
-    Both must be made at clearance 1: the refusals in 15.2 are strict
-    (closer than the clearance, |E − A| or |E − D| under it), and 1.5 is
-    not under 1. Checked by the output: E's border has one vertex fewer
-    than its input, and `rejected_clearance` is 0. **And the whole output at
-    clearance 1 equals the clearance-0 output bit for bit**, so a mutant
-    that skips the 1.5 m placement and makes the collapse with the other
-    line's E instead still goes red. Under M11 (refusing
-    under 2 m) both are refused, so both go red; (b) also goes red under
-    M10, whose copies of the junction sit at 0. `@tester` shows each
-    case's 1.5 m with a printed distance at clearance 0 first.
+20b. **Room to spare** (fails a check that refuses too much). The
+    expected results below depend on the shapes, so each case pins its
+    shape first, with correct code, and asserts the pin before the result.
+    *The pin:* in the clearance-0 run, the three quantities of 15.2
+    (|E − A| and |E − D| at every placement considered; the distance from
+    every vertex the check looks at to A-E and E-D, and from E to every
+    edge it looks at, at every pop) are at least a stated floor, except
+    one stated approach. *Shown by:* a run at the floor as clearance, which
+    must report `skipped_placements` 0 and `rejected_clearance` 0 (the
+    refusals are strict, so nothing fires there exactly when every
+    quantity is at least the floor, and the run then follows the
+    clearance-0 run step for step); `@tester` prints both counters and the
+    output's equality with the clearance-0 output, bit for bit.
+    `skipped_placements` is a new count beside `rejected_clearance`: the
+    placements left out at placement because |E − A| or |E − D| is under
+    the clearance (15.2).
+    - **2 m to spare.** Test 1's two squares, and a junction case (a border
+      leaving a junction shared by three rings, a collapse next to it).
+      Pin: floor 2 m, no exception. Result at clearance 1: output equal to
+      the clearance-0 output bit for bit. The junction case kills M10,
+      whose copies of the junction sit at 0 from A-E and E-D.
+    - **Inside the over-refusal band** (kills M11). (a) Between two
+      borders: the other border's nearest vertex 1.5 m from one winning
+      placement's new edge. (b) At a junction: the collapse next to a
+      junction shared by three rings, the nearest other border leaving
+      that junction 1.5 m from the winning E. Pin: floor 1.2 m, except
+      that one 1.5 m approach, which lies at a winning placement or a pop;
+      shown by the run at 1.2 as above, and by a run at clearance 2 whose
+      output differs from the clearance-0 output (so the 1.5 m approach
+      decides something). Result at clearance 1: output equal to the
+      clearance-0 output bit for bit, `rejected_clearance` and
+      `skipped_placements` 0. Correct code passes by the pin: every
+      quantity is at least 1.2, and 1.2 is not under 1. M11 at
+      clearance 1 refuses under 2, so it behaves as correct code at
+      clearance 2, whose output the pin shows to differ from the
+      clearance-0 output: red. Case (b) is also red under M10.
 20. **Refusals and identity.** Clearance −1, NaN, ∞ → `InvalidClearance`,
     empty output; clearance 0 equals the three-argument call bit for bit on
     every existing case.
@@ -1144,16 +1153,17 @@ and D from the vertex check by node number instead of by coordinate (the
 junction's copies in the other borders then sit at distance 0 from A-E and
 E-D and refuse every collapse next to a junction; test 20b's junction case
 is red); M11 refuse at a clearance twice the one given (test 20b's two
-1.5 m cases red; the 2 m-to-spare cases are not, by design).
+1.5 m cases differ from the clearance-0 output; the 2 m-to-spare cases
+do not, by design).
 
 Python:
 
 21. `tests/python/test_border_simplify.py`: on test 12's coverage with
     `clearance_m=1`, every output vertex not in the input is at least 1 m
-    (less 1e-9) from every edge it is not an end of; and the output's vertex
-    count is within 5 % of the `clearance_m=0` output's (the check does not
-    refuse what has room; `@tester` confirms the margin on the coverage and
-    states the count).
+    (less 1e-9) from every edge it is not an end of. (The 5 % vertex-count
+    clause of round 1 is dropped: its truth depended on the coverage's
+    shape and was not measured; test 20b now covers over-refusal with its
+    shapes pinned.)
 22. `tests/python/test_cli_features_cleanup.py` (test 14's `run`, `corine`
     fixture): the record's `land_cover_area_moved_m2` with the default band
     equals the band-0 run's exactly (the rule sees the same input); no
