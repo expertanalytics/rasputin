@@ -22,6 +22,7 @@ from tin_engine.feature_input import FeatureError, read_source
 
 #: (x_min, y_min, x_max, y_max) in the mesh's CRS.
 Box = tuple[float, float, float, float]
+EVERYWHERE: Box = (-np.inf, -np.inf, np.inf, np.inf)
 
 
 class ToleranceLines(BaseModel, frozen=True):
@@ -41,7 +42,8 @@ def line_segments(
     """Every line of ``spec.path`` in ``mesh_crs``, simplified by the margin
     (Douglas-Peucker), as whole segments whose own box meets ``window`` grown
     by ``end_m + margin_m``; and the margin. A line simplification empties is
-    a zero-length segment at its first vertex. Polygons and points refused."""
+    a zero-length segment at its first vertex. Polygons and points, and a
+    non-finite coordinate, refused."""
     reach = spec.end_m + spec.margin_m
     x0, y0, x1, y1 = window[0] - reach, window[1] - reach, window[2] + reach, window[3] + reach
 
@@ -50,6 +52,10 @@ def line_segments(
 
     name = spec.path.name
     found = read_source(spec.path, None, None, box_for, spec.crs)
+    if not found.rows and found.layer is not None:
+        # The R-tree found nothing in reach: read every row, to tell zero
+        # segments (section 5) from a file with no lines at all.
+        found = read_source(spec.path, None, None, lambda _: EVERYWHERE, spec.crs)
     shapes = [g for _, g, _ in found.rows if g is not None and not g.is_empty]
     lines = [g for g in shapes if g.geom_type in ("LineString", "MultiLineString")]
     if not lines:
@@ -62,6 +68,11 @@ def line_segments(
     rows = [np.empty((0, 4))]
     for part in shapely.get_parts(lines):
         xy = to_mesh(shapely.get_coordinates(part))
+        if not np.isfinite(xy).all():  # before simplify, which drops a NaN vertex
+            raise FeatureError(
+                f"{name}: a line has a NaN or infinite coordinate, or one with no image"
+                f" in {mesh_crs}"
+            )
         kept = shapely.get_coordinates(
             shapely.simplify(LineString(xy), spec.margin_m, preserve_topology=False)
         )

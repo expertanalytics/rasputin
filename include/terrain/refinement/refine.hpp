@@ -283,6 +283,26 @@ template <TolerancePolicy P>
                                       : policy.at(m, t);
 }
 
+// max_error_near (9.1): the largest error(t) over the final slots whose at(m, t)
+// is at most lowest(); 0.0 when there are none. A slot with allowed[t] > lowest()
+// holds at(m, t) there (allowed_at), so it is far without a query; the rest are
+// queried in parallel, only where error(t) beats the block's maximum so far.
+template <TolerancePolicy P, class Error>
+[[nodiscard]] double max_error_near(const P& policy, const mesh::LatticeMesh& m,
+                                    const std::vector<double>& allowed, unsigned threads, Error error) {
+    constexpr std::size_t b = 4096;
+    std::vector<double> part(allowed.size() / b + 1, 0.0);
+    parallel_util::for_each_block(allowed.size(), threads, parallel_util::BlockSchedule{b},
+                                  [&](std::size_t begin, std::size_t end) {
+                                      double& w = part[begin / b];
+                                      for (auto t = static_cast<std::uint32_t>(begin); t < end; ++t)
+                                          if (const double e = error(t); e > w && !(allowed[t] > policy.lowest())
+                                                                         && policy.at(m, t) <= policy.lowest())
+                                              w = e;
+                                  });
+    return *std::max_element(part.begin(), part.end());
+}
+
 template <TolerancePolicy P>
 [[nodiscard]] bool bad_policy(const P& policy) {
     return !std::isfinite(policy.lowest()) || policy.lowest() < 0.0;
@@ -447,12 +467,10 @@ template <raster::RasterSource R, TolerancePolicy P>
             out.max_error = std::max(out.max_error, r.max_error);
     }
     out.max_error_near = out.max_error;
-    if constexpr (detail::varies<P>) {
-        out.max_error_near = 0.0;
-        for (std::uint32_t t = 0; t < results.size(); ++t)
-            if (!results[t].is_void && results[t].max_error > out.max_error_near && policy.at(m, t) <= policy.lowest())
-                out.max_error_near = results[t].max_error;
-    }
+    if constexpr (detail::varies<P>)
+        out.max_error_near = detail::max_error_near(policy, m, allowed, options.threads, [&](std::uint32_t t) {
+            return results[t].is_void ? 0.0 : results[t].max_error;
+        });
     for (std::size_t i = 0; i < m.vertices().size(); ++i) {
         const mesh::MeshVertex v = m.vertices()[i];
         const bool node = v.is_node();

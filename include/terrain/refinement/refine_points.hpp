@@ -477,12 +477,9 @@ template <class Store, class R, TolerancePolicy P>
         out.on_frozen_max_error = std::max(out.on_frozen_max_error, r.frozen_error);
     }
     out.max_error_near = out.max_error;
-    if constexpr (varies<P>) {
-        out.max_error_near = 0.0;
-        for (std::uint32_t t = 0; t < results.size(); ++t)
-            if (results[t].max_error > out.max_error_near && policy.at(m, t) <= policy.lowest())
-                out.max_error_near = results[t].max_error;
-    }
+    if constexpr (varies<P>)
+        out.max_error_near = max_error_near(policy, m, allowed, options.threads,
+                                            [&](std::uint32_t t) { return results[t].max_error; });
     // Step 6: every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
         if (std::isnan(zt[se.a]) || std::isnan(zt[se.b]))
