@@ -5,7 +5,8 @@
 feature's attribute goes through a :class:`ClassMap` to vocabulary names and so
 to a mask; its rings and lines are pre-clipped to a region around the domain
 (R5), moved into the DEM's CRS vertex by vertex, and clipped to the domain as
-linework, never as areas (R6). What comes out is frozen data in the DEM's CRS.
+linework (R6); land cover with the band on (32) is cut by the domain as areas.
+What comes out is frozen data in the DEM's CRS.
 
 **The pre-clip keeps whole edges** (R5, Ola 2026-09-28): an edge is kept when
 it lies within its widening ``w(e)`` of the region, and dropped whole
@@ -17,7 +18,7 @@ DEM; any other pair is moved first and pre-clipped in the DEM's CRS with
 ``w = 0``, which is exact.
 
 Blocking (sqlite3, GEOS): an async caller runs :func:`open_features` in
-``asyncio.to_thread``. No ``_core``.
+``asyncio.to_thread``. ``_core`` only through :func:`simplify_borders` (32).
 """
 
 from __future__ import annotations
@@ -132,7 +133,7 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 0, 5):
+    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 50, 5):
     #: the repair's tolerance, the same-class merge, the simplification and D.
     repair_m: float = 0.0
     merge_same_class: bool = False
@@ -148,8 +149,8 @@ class FeatureSet(BaseModel):
     (a layer for a GeoPackage only; ``counts`` the features kept from each,
     16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
     ``features clip`` row, ``cleanup_seconds`` the land-cover stage's share of
-    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip to
-    the read region and after the stage (None: no stage ran), and
+    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip (to
+    the read region, or the domain with the band on) and after the stage (None: no stage ran), and
     ``area_changed`` the area the outline rule gave another polygon, m²."""
 
     model_config = ConfigDict(frozen=True)
