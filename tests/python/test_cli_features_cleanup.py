@@ -2,7 +2,7 @@
 
 ``docs/increments/20c-soft-quality.md``, "Design of PR 20c-3" ("Steps",
 "Off", "Recorded") and "Tests ``@tester`` writes red first", 20c-3: the CLI
-item under the repair ("``--features-repair`` defaults to 0.05 whenever a
+item under the repair ("``--features-repair`` defaults to 1 whenever a
 land-cover map is used (question 9's default); refused: negative,
 non-finite; the input row ``features_repair_m`` and the vertex rows in
 ``--stats`` and the record; the ``features clean-up`` timing sub-row present
