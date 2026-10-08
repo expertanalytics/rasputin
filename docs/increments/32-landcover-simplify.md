@@ -9,9 +9,12 @@ hand-backs are in section 14. Code review round 1 done: changes requested
 made false), fixed by `@developer`'s `4d4f0411` and `@architect`'s docs
 commit after it; red-step notes put in the past tense (`29fbe35c`). Code
 review round 2 asked for one more red note (Review section), fixed by
-`633808b9`; round 3 approved. Next: `@perf`'s short timing check
-(`tools/bench_quick.py`, base and branch back to back, section 10). Not refine or mesh code, so no
-`bench.py` acceptance run.
+`633808b9`; round 3 approved. `@perf`'s short timing check (`35f220b9`)
+found the runs about 70 % slower and the worst angle far lower; cause and
+fix in section 15, designed on the default of question 5 (section 12),
+which waits on Ola. Next: `@tester`'s red tests 17 to 22, `@developer`'s
+change (section 15.4), then the quick check again. Not refine or mesh
+code, so no `bench.py` acceptance run.
 
 ## 1. What Ola asked
 
@@ -811,11 +814,25 @@ means off."): **"I'm fine with keeping 25 start angle when turning off
 simpl."** *Ruled: the default. Relayed to `@architect` by the main session;
 the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
 
+5. **The order of the outline rule and the simplifier** (raised by
+   `@perf`'s quick check, section 15). Today the land cover is clipped to
+   the catchment, simplified, then the 5 m outline rule runs; the rule was
+   built for borders that cross the outline, and on borders that end on it
+   it takes 4 times as long and reports about 80 times the area it really
+   moves. Proposed: run the outline rule first, on the same input as
+   before 32, then clip to the catchment and simplify. Effect: the rule's
+   time and area exactly as before 32; the 50 m band then counts from the
+   borders after the rule, not before it. The other way, keeping the order
+   and reworking the outline rule for borders that end on the outline, is
+   larger and touched one polygon by about 1 km² in the probe.
+   **Default: run the outline rule first.** Section 15 is designed on it.
+
 ## 13. ROADMAP
 
 Row 32: built (green `82c0a7d4`, 519 net production lines; mutation round
-`30f939b6`, M6 recorded as not killed, section 14); next `@perf`'s short
-check (section 10), then `@reviewer`'s code review.
+`30f939b6`, M6 recorded as not killed, section 14); code review approved;
+`@perf`'s short check found it slower (section 15); next the fix of
+section 15 (red tests, change, quick check again, review).
 
 ## 14. As built
 
@@ -903,6 +920,209 @@ accepted as the design's:
   length, and an edge is filed in every cell of its bounding box, so a long
   diagonal fixed edge fills about (length / 50 m)² cells at the default
   band: worth watching at São Francisco scale.
+
+## 15. The quick check's finding: cause and fix (`@architect`)
+
+`@perf`'s quick check (`35f220b9`,
+`docs/benchmarks/2026-10-08/clc-simplify/quick/README.md`) found both
+catchment runs about 70 % slower, the time in the 5 m outline rule
+(`snap_to_outline`, 2.76 s to 12.18 s under the profiler on Numedalslagen),
+the area the rule reports as moved 80 to 95 times larger, and the worst
+angle down from 0.83° to 0.0157° (Numedalslagen) and from 0.73° to 0.00066°
+(Lagan). One probe on Numedalslagen, run from the scripts in
+`docs/benchmarks/2026-10-08/clc-simplify/quick/fix-probe/` (output, with
+the commands, in `probe.txt` there), captured the rule's input three ways:
+band off (base `b39426c0`'s input), band on, and band on with the simplifier
+replaced by "return the input". Lagan was not probed; the fix below is
+expected to act there the same way, and `@perf`'s re-run checks it.
+
+### 15.1 Causes
+
+Three separate causes. The suspicion in the brief holds for the time, not
+for the area or the worst angle.
+
+1. **Time: the domain clip, not the simplifier.** With the band on, step 1
+   clips land cover to the domain polygon (section 6), so every class ring
+   that reaches the outline now runs *along* it: 14 844 ring edges lie on
+   the outline, against none at base. The rule treats each as an edge
+   within 5 m: it cuts it every 5 m, places and joins every piece in
+   Python. And where a border comes within 5 m of the outline, the rule
+   now pinches the part against its own outline stretch, so the rebuilt
+   shell touches itself: 245 rebuilt shells invalid (202 "Ring
+   Self-intersection"), each through `make_valid`, against 3 at base
+   (`probe.txt`, steps 2 and 6). The rule on the input clipped but not
+   simplified takes 14.0 s, on the simplified one 10.3 s, at base 2.3 s
+   (step 2): the simplifier makes it faster, the clip slower.
+2. **Moved area: the report is wrong, not the borders.** The area the rule
+   really moves, each polygon inside the outline before against after, is
+   13 573 m² lost and 14 073 m² gained on the branch, against 13 238 m² at
+   base (step 4). The reported 1 097 391 m² comes from `_loops`
+   (`src_python/tin_engine/feature_input.py@633808b9:683-703`): for a ring
+   with exactly one kept input vertex it builds one loop from the whole
+   old ring and the whole new ring; where the two coincide along the
+   outline, `make_valid` returns the whole part as the loop. 76 loops over
+   1 000 m² make up 1 083 899 m², each the area of a whole part that is
+   still in place (the largest, 119 080 m², is 119 043 m² still covered
+   after the rule; steps 3 and 4). Simplified rings near the outline have
+   few interior vertices, so more of them keep one; the clip alone already
+   reports 94 709 m² (7 times base) the same way. It is a defect of the
+   rule's bookkeeping that the domain clip exposes; base's input does not
+   reach it (its report equals the real change, 13 238 m²).
+3. **Worst angle: the simplifier, not the outline rule.** The eight worst
+   triangles lie 0.8 to 11.9 km from the outline (step 5). Each has two
+   constraint vertices 7 to 32 mm apart, and in the four checked one is a
+   junction (three classes meet, fixed) and the other a point E the
+   simplifier placed on a border leaving that junction, so the new edge
+   A-E is about 1 cm long. Tests (i) and (ii) refuse exact touches only;
+   nothing keeps E, or a new edge, any distance from what it does not
+   touch. The repaired, clipped source has no vertex within 1 m of an edge
+   it is not an end of (the repair's promise, `--features-repair`); the
+   simplified output has 12, the closest 5.6 mm (`clear.py`). Same cause
+   for Lagan expected, not checked.
+
+### 15.2 Ruling (on the default of question 5)
+
+**Order.** The outline rule moves back to where it was built to act: on the
+coverage clipped to the read region, before the domain clip and the
+simplifier. `_clean`'s steps become:
+
+```
+band 0 (unchanged, today's mesh bit for bit):
+  1. clip to the read region  2. coverage_clean  3. merge  4. snap_to_outline -> lines, polygons
+band above 0:
+  1. clip to the read region  2. coverage_clean  3. merge   (as band 0)
+  4. snap_to_outline, as today, on that input        -> polygons, area_changed (lines unused)
+  5. clip each polygon to the domain polygon (_polygonal(shapely.intersection(g, domain)))
+  6. simplify_borders(polygons, band, clearance=ask.repair_m)
+  7. lines: each simplified ring cut where it lies on the outline (_outline_lines)
+```
+
+Steps 1 to 4 are then base's, so the rule gets base's input, takes base's
+time, moves base's area and reports it correctly, by construction. The
+domain clip (step 5) keeps section 6's reason: the outline is the coverage's
+outer boundary, fixed in the simplifier, so every class keeps its area
+inside the domain. The band is now measured from the borders as repaired,
+put to the outline and clipped.
+
+**Lines (step 7).** New private helper in `feature_input.py`,
+`_outline_lines(polygon, outline) -> tuple[LineString, ...]`: for every ring
+of every part, an edge lies on the outline when **one** outline segment is
+within `IN_LINE` (1 µm) of both its ends (an `STRtree` of the outline's
+segments, query `dwithin IN_LINE`, then the two end distances to that
+segment); the ring is then cut with today's `_chains(xy, on)`, which drops
+those edges. Same output shape as `OutlineSnap.lines`. A gap border (a class
+against no class) is not on the outline and stays a line, as today. Probe
+(`orderprobe.py`): 88 876 ring edges, 16 700 on the outline, 2 570 lines,
+0.21 s.
+
+**Clearance (the worst angle).** `simplify_borders` gains a clearance:
+
+```cpp
+template <pred::GeometryKernel K>
+[[nodiscard]] BorderOutcome simplify_borders(std::span<const Point2> points,
+                                             std::span<const std::uint64_t> ring_starts,
+                                             double band, double clearance = 0.0);
+```
+
+- `BorderStatus::InvalidClearance` for a negative or non-finite clearance;
+  `BorderCounts::rejected_clearance` counts the refusals.
+- **At placement** (`candidate`): a placement with |E − A| or |E − D| under
+  the clearance is not considered (the other line's placement still is).
+- **At pop**, beside tests (i) and (ii), over the grid cells of the box of
+  A, B, C, D, E grown by the clearance: refused if any vertex other than A,
+  B, C, D lies closer than the clearance to A-E or E-D, or E lies closer
+  than the clearance to any edge other than A-B, B-C, C-D. Distances in
+  floating point (`detail::segment_distance`): a refusal criterion, so
+  rounding can only refuse a collapse or let one through at the clearance
+  to rounding; the exact tests (i) and (ii) stay as they are and still
+  decide topology. A collapse failing (i) or (ii) is counted there first.
+- Clearance 0 gives today's output bit for bit (every existing test).
+- Binding: keyword `clearance: float = 0.0`; `border_simplify.simplify_borders(
+  polygons, band_m, clearance_m=0.0)`; `_clean` passes `ask.repair_m`.
+- Why the repair distance: the repair already promises borders at least
+  that far apart (measured: none closer on the source), and the simplifier
+  only refuses what would break that promise. Scale assumed: metres, 1 m
+  default, CORINE at 1:100 000; checked at Numedalslagen (147 429 vertices
+  in). Guarantees 1 to 4 of section 7 are untouched: a refusal only keeps
+  vertices. Guarantee added: **no vertex or edge the simplifier creates
+  comes closer than the clearance to a vertex or edge it does not share an
+  end with.** What it does not promise: vertices the outline rule placed
+  (310 under 1 m after the rule and clip, the closest 2.6 mm, base's too,
+  `clearR.py`) stay as they are.
+
+**Not in this fix.** `_loops`' one-kept-vertex report (cause 2) and the rule's
+self-touching rebuild on borders that end on the outline are defects of the
+outline rule (20c-3), out of 32's reach once the rule gets base's input
+again. Recorded for a later increment; the first fix tried for the time
+(no cuts on edges lying on the outline) changed one polygon by 961 767 m²
+through that rebuild (`fixprobe.py`, `rebuild_diff.py`), so the rule is not
+to be patched for the clipped input here.
+
+### 15.3 Tests `@tester` writes red first
+
+C++, `tests/cpp/unit/test_border_collapse.cpp`:
+
+17. **Short edge at a junction.** A border whose best placement puts E
+    within 1 cm of the junction A (three polygons meeting at A): with
+    clearance 1, no output edge shorter than 1 m that the input did not
+    have; with clearance 0 the output has one (the test shows it can fail).
+18. **Near another border.** Two borders where a collapse's new edge passes
+    0.5 m from a vertex of the other, touching nothing: clearance 1 refuses
+    it (`rejected_clearance` ≥ 1, no output vertex closer than 1 m to an
+    edge it does not end, other than those in the input); clearance 0
+    accepts it.
+19. **E near an edge.** As 18 with E 0.5 m from the other border's edge and
+    the new edges far from its vertices.
+20. **Refusals and identity.** Clearance −1, NaN, ∞ → `InvalidClearance`,
+    empty output; clearance 0 equals the three-argument call bit for bit on
+    every existing case.
+
+Mutation targets: M7 drop the vertex-to-new-edge check; M8 drop the
+E-to-edge check; M9 drop the short-edge check at placement.
+
+Python:
+
+21. `tests/python/test_border_simplify.py`: on test 12's coverage with
+    `clearance_m=1`, every output vertex not in the input is at least 1 m
+    (less 1e-9) from every edge it is not an end of.
+22. `tests/python/test_cli_features_cleanup.py` (test 14's `run`, `corine`
+    fixture): the record's `land_cover_area_moved_m2` with the default band
+    equals the band-0 run's exactly (the rule sees the same input); no
+    land-cover line has an edge lying on the domain outline (one outline
+    segment within 1 µm of both ends); test 14's band-0 hash unchanged.
+
+### 15.4 Change for `@developer`
+
+`_clean` reordered as in 15.2 (the band-0 path untouched), `_outline_lines`,
+the clearance through kernel, binding, stub and adapter, the help and record
+text updated: the band is "at most this far from its border after the
+repair and the outline rule". Estimate 60 to 90 counted lines (kernel 30 to
+45, binding and stub 8, Python 25 to 35): 519 becomes about 580 to 610,
+under 700 in one PR.
+
+### 15.5 Expected effect
+
+From the probe's single runs (not `bench.py`, another agent running):
+
+| Numedalslagen | base | branch now | after the fix (expected) |
+|---|---|---|---|
+| outline rule | 2.27 s | 10.28 s | 2.24 s (same input as base) |
+| domain clip, after the rule | - | - | 0.80 s |
+| simplifier | - | 0.66 s | 0.63 s, a little more with the clearance |
+| lines from the simplified rings | - | - | 0.21 s |
+| clean-up phase (bench) | 5.19 s | 13.97 s | about 6.8 s (base + 1.6 s) |
+| whole run (bench) | 9.92 s | 16.95 s | about 10.7 s (about +8 %; the refine and land-cover savings, 0.8 s, kept) |
+| area moved, reported | 13 238 m² | 1 097 391 m² | 13 238 m², exactly base's |
+| worst angle | 0.832° | 0.0157° | back near base's: the eight worst are all simplifier-made pairs under 4 cm; expected at or above 0.4° (the German probe's 0.473°) |
+| output triangles | 1 118 006 | 654 920 | about the same as now (91 132 simplified polygon vertices against 87 066) |
+
+Lagan, by the same reasoning: the outline rule back to base's time and
+area (16 050 m²), the clean-up about base's 5.65 s plus 1.5 to 2 s. So the
+whole run is expected within about 10 % of base, not faster: the design's
+"the stage costs about what it does today" (section 10) holds within that,
+and the mesh is about 40 % smaller. If `@perf`'s re-run shows the worst
+angle under 0.4° on either case, or the area moved different from base's,
+it comes back to `@architect`.
 
 ## Review
 
