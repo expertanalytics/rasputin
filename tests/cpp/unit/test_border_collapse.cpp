@@ -81,6 +81,8 @@
 // - At clearance 1 in F18 and F19 the refusal is at removal, so
 //   skipped_placements is 0 in F18; in test 20 any positive clearance,
 //   down to the smallest subnormal, is Ok.
+// - Test 19b (M13, added in the mutation round) computes the grid's cell
+//   side and origin by the kernel's rule, each distinct edge counted once.
 // - The clearance oracle (check_clearance) also checks every new edge
 //   against every vertex it does not end, with 1e-9 m slack.
 
@@ -1375,6 +1377,75 @@ TEST_CASE("19. F19: E 0.497 m from an island edge: refused at clearance 1 (M8)",
         CHECK(unchanged(in, one));
         const auto zero4 = run_c<K>(in, 50.0, 0.0);
         CHECK(zero4.counts.collapses == 1);
+    });
+}
+
+TEST_CASE("19b. an island vertex 0.5 m from a new edge across a grid cell boundary: refused at clearance 1 (M13)",
+          "[vector_simplify][border_collapse][clearance][grid]") {
+    // Section 15's mutation round, M13 (the query box not grown by the
+    // clearance), ruled a reachable gap by @architect. S4's collapse, E =
+    // (76.8, 14.5); the band 76.5, so the grid's cell side is the band
+    // (larger than the mean edge length) and its origin (0, 0), the lowest
+    // corner of all points: a cell boundary at x = 76.5, 0.3 m beyond the
+    // box of A, B, C, D, E (x from 76.8). The island's vertex V = (76.3,
+    // 14.5) is 0.5 m from A-E and E-D (their nearest point is E), and the
+    // whole island lies beyond the boundary, so only the grown box finds it.
+    using namespace clr;
+    constexpr double band = 76.5;
+    const Ring island{{76.3, 14.5}, {70.3, 17.5}, {70.3, 11.5}};
+    const Rings in = squares(b4, c4, island);
+    REQUIRE(area(island) > 0.0);
+    // The grid, by the kernel's rule: side the larger of the band and the
+    // mean edge length (each edge once), origin the lowest corner.
+    double total = 0.0;
+    std::size_t n = 0;
+    Point2 low = in[0][0];
+    std::set<EdgeKey> seen;
+    for (const Ring& r : in)
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            low = Point2{std::min(low.x, r[i].x), std::min(low.y, r[i].y)};
+            const Point2& q = r[(i + 1) % r.size()];
+            if (seen.insert(edge_key(r[i], q)).second) {
+                total += std::hypot(q.x - r[i].x, q.y - r[i].y);
+                ++n;
+            }
+        }
+    const double side = std::max(band, total / static_cast<double>(n));
+    const auto column = [&](double x) { return std::floor((x - low.x) / side); };
+    const Placements pl = placements(A, b4, c4, D);
+    const double box_left = std::min({A.x, b4.x, c4.x, D.x, pl.on_ab.x});
+    const double boundary = low.x + side * column(box_left);
+    double island_right = -inf_v;
+    for (const Point2& p : island)
+        island_right = std::max(island_right, p.x);
+    const Quantities q = quantities(in, A, b4, c4, D, pl.on_ab);
+    INFO("cell side " << side << " (mean edge " << total / static_cast<double>(n) << "), origin (" << low.x << ", "
+                      << low.y << "), boundary x = " << boundary << ", box from x = " << box_left
+                      << ", island to x = " << island_right << "; vertex to new edge " << q.vertex_to_new
+                      << ", E to edge " << q.e_to_edge);
+    WARN("19b fixture: cell side " << side << ", boundary x = " << boundary << ", box from x = " << box_left
+                                   << ", island to x = " << island_right << ", vertex to new edge "
+                                   << q.vertex_to_new << ", E to edge " << q.e_to_edge);
+    REQUIRE(side == band);
+    REQUIRE(low.x == 0.0);
+    REQUIRE(near(pl.on_ab, {76.8, 14.5}, 1e-9));
+    REQUIRE(std::abs(box_left - boundary - 0.3) < 1e-9);   // the boundary 0.3 m beyond the box
+    REQUIRE(column(island_right) < column(box_left));      // the island wholly beyond it
+    REQUIRE(std::abs(q.vertex_to_new - 0.5) < 1e-9);
+    REQUIRE(std::min({q.ea, q.ed, q.a_to_ed, q.d_to_ae}) >= 1.0);
+    // At clearance 0 the collapse is made, with S4's E.
+    const BorderOutcome zero = run(in, band);
+    const Rings got0 = check(in, zero, band);
+    REQUIRE(zero.counts.collapses == 1);
+    CHECK(near(new_vertices(in, got0).at(0), pl.on_ab));
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, band, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        check(in, one, band);
+        CHECK(one.counts.rejected_clearance >= 1);
+        CHECK(one.counts.collapses == 0);
+        CHECK(unchanged(in, one));
     });
 }
 
