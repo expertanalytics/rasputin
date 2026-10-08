@@ -70,7 +70,7 @@ on Numedalslagen, the clean-up 8.0 s and 8.8 s against the design's
 outline, worst 0.0814°); both ruled ("Rulings on 20c-3's timed check and
 gate runs": T1 a defect in ruling G4's cuts, fixed in code; T2 the
 rebuild and area measure restricted to what moved; T3 the hotspot,
-question 10). Fix round: red `51c24772` (`@tester`, OR9 and the far
+question 10, ruled 10). Fix round: red `51c24772` (`@tester`, OR9 and the far
 part), green T1 `35b7a873` and T2 `8716f062` (`@developer`), 355 net
 production lines (`python3 tools/count_loc.py 483221d2 8716f062`);
 `@perf`'s re-time `41db7333`: T2 leaves the mesh unchanged, the clean-up
@@ -94,13 +94,14 @@ round 2 (`@reviewer`, on `05b0fd7a..07d97ee4`): "Review" below. M8
 and 1 m on the built code, question 9 asked again with 1 m as its
 default; Ola: 1 m (ruling 9's default, 2026-10-08). Red `f6e0f287`
 (`@tester`), green `c71ccf57` (`@developer`, three lines changed; 360 net
-production lines, unchanged). **Built. Next: `@tester` changes the
-docstring line of `tests/python/test_cli_features_cleanup.py` that
-quotes the CLI item of "Tests `@tester` writes red first", 20c-3, then
-`@reviewer`'s code review round 3.** Questions 1 to 4 ruled by Ola,
-2026-10-06, and questions 5 to 8, 2026-10-07, ruling 9 (amending 5)
-2026-10-07 and its default (question 9) 2026-10-08 ("Ola's rulings"
-below); question 10 open, designed on its default. Asked by Ola
+production lines, unchanged); `@tester`'s docstring line `52f6a5d6`
+(tests only). Ola accepted the clean-up's time (ruling 10, question 10,
+2026-10-08); the speed-up is its own ROADMAP row. **Built. Next:
+`@reviewer`'s code review round 3, on `9a04c3c1..` this record's
+commit.** Questions 1 to 4 ruled by Ola, 2026-10-06, and questions 5 to
+8, 2026-10-07, ruling 9 (amending 5) 2026-10-07, and its default
+(question 9) and question 10 2026-10-08 ("Ola's rulings" below); no
+question open. Asked by Ola
 ("2: yes", 2026-10-06, after calling Lagan's worst angle of 0.000412°
 "pretty unacceptable!"). Carries increment 20's C1-C3 rulings
 (`docs/increments/20-start-quality.md`, "Ola's rulings").
@@ -3092,7 +3093,9 @@ the changes are described in full below.
   Further work, not designed here, could cut that: a vectorised ring
   loop, no whole-part repair and union for the big parts, and no domain
   clip for chains the rule already knows to be inside. It might save
-  1.5 to 2 s; that is not measured. The gates do not change.
+  1.5 to 2 s; that is not measured. The gates do not change. Ola
+  accepted the time for 20c-3 (ruling 10); that further work is the
+  ROADMAP row "Speed up the land-cover clean-up step".
 
 #### Rulings on the fix round (`@architect`, 2026-10-08, on `8716f062` and `41db7333`)
 
@@ -3101,7 +3104,8 @@ the changes are described in full below.
 outline-rule gates met at the design's figures ("PRs and gates"). T2: the
 mesh is T1's byte for byte; the clean-up 5.92 s on Lagan (limit 6.5 s)
 and 5.48 s on Numedalslagen (limit 6.0 s), met; the whole run 20.59 s
-and 10.51 s, +17 % and +54 % against master (question 10, open).
+and 10.51 s, +17 % and +54 % against master (question 10; Ola
+accepted it, ruling 10).
 Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
 0.002384° → 0.1917° and 0.008623° → 0.6302°.
 
@@ -3433,6 +3437,25 @@ the default to 1 m? @architect's default: yes.": "yes, set default to
    figures are M8's 1 m row ("PRs and gates", "With the repair's default
    at 1 m").
 
+Ola, 2026-10-08 (05:54 UTC), on question 10, as the main session put it
+to him: the clean-up step adds about 5.5 to 6 s (+17 % on Lagan, +54 %
+on Numedalslagen against master; the step itself takes 5.92 s and 5.48 s,
+and the whole run grows by 2.95 s and 3.70 s,
+`docs/benchmarks/2026-10-08/20c-3/README.md@41db7333:105-106`), with the options "(a) Default: accept
+it now and add a ROADMAP row to speed the step up later" or "(b) Hold
+20c-3 for another speed round first". Ola: "Let's accept it. One future
+option could be to fix the CORINE data itself, as a preprocessing step,
+for areas of interest. Goes into the ideas file." So:
+
+10. **The clean-up's time is accepted for 20c-3** (option (a), the
+   default): no further speed round before its code review and push. The
+   speed-up is the ROADMAP row "Speed up the land-cover clean-up step"
+   (T3's hotspots), which also carries Ola's preprocessing idea as an
+   option: repair the CORINE data once per area of interest and keep the
+   repaired copy, so a run does not repeat the repair. There is no ideas
+   file yet (`docs/ideas.md` does not exist), so the row holds the idea
+   until there is one.
+
 Question 9 as asked again with M8 (`d7a3462a`):
 
 9. **How close must two land-cover borders be to count as one?** (asked
@@ -3493,7 +3516,8 @@ Questions 6 and 7 as asked:
    into the parallel scan, with the serial phase checking the answer
    again.
 
-## Questions for Ola
+Question 10 as this file put it (the main session asked it in the
+shorter form quoted above ruling 10):
 
 10. **The land-cover clean-up is slower than the design said: accept it
    for now?** You asked to hear about any step that takes a large share of a
@@ -3514,6 +3538,10 @@ Questions 6 and 7 as asked:
    outline rule off by default would save about 2.4 s, but it would give
    up most of the rule's gain near the outline; that was not measured
    with the defaults.
+
+## Questions for Ola
+
+None open.
 
 ## Not in scope
 
