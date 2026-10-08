@@ -641,16 +641,18 @@ def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: fl
     path = _Outline(outline, distance)
     out_lines: list[tuple[LineString, ...]] = []
     out_polys: list[BaseGeometry] = []
-    changed: list[BaseGeometry] = []
+    loops: list[BaseGeometry] = []
     for polygon, qs in zip(polygons, parts, strict=True):
         lines: list[LineString] = []
         rebuilt: list[BaseGeometry] = []
+        same: list[BaseGeometry] = []
         for q in qs:
             rings = [path.ring(shapely.get_coordinates(r)) for r in shapely.get_rings(q)]
             for ring, done in zip(shapely.get_rings(q), rings, strict=True):
-                lines += [LineString(ring)] if done is None else _chains(*done)
+                lines += [LineString(ring)] if done is None else _chains(done[0], done[1])
+                loops += [] if done is None else _loops(shapely.get_coordinates(ring), *done)
             if all(r is None for r in rings):
-                rebuilt.append(q)
+                same.append(q)
                 continue
             closed = [
                 shapely.get_coordinates(r) if d is None else d[0]
@@ -659,14 +661,38 @@ def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: fl
             if len(closed[0]) >= 3:
                 shell = Polygon(closed[0], [h for h in closed[1:] if len(h) >= 3])
                 rebuilt.append(shell if shell.is_valid else shapely.make_valid(shell))
-        new = _polygonal(shapely.union_all(rebuilt)) if rebuilt else None
-        new = Polygon() if new is None else new
-        if not shapely.equals_exact(new, polygon, 0):
-            changed.append(shapely.symmetric_difference(polygon, new))
+        new: BaseGeometry | None = polygon
+        if len(same) < len(qs):  # ruling T2: only the rebuilt parts are unioned
+            new = rebuilt[0] if len(rebuilt) == 1 else shapely.union_all(rebuilt)
+            whole = [*same, *shapely.get_parts(shapely.get_parts(new))]  # make_valid nests
+            new = _polygonal(shapely.geometrycollections(whole))
+            if new is not None and not new.is_valid:  # argued, not proven: today's union
+                new = _polygonal(shapely.union_all([*same, *rebuilt]))
         out_lines.append(tuple(lines))
-        out_polys.append(new)
-    area = shapely.intersection(shapely.union_all(changed), outline).area if changed else 0.0
+        out_polys.append(Polygon() if new is None else new)
+    area = shapely.intersection(shapely.union_all(loops), outline).area if loops else 0.0
     return OutlineSnap(tuple(out_lines), tuple(out_polys), float(area))
+
+
+def _loops(
+    old: npt.NDArray[np.float64], new: npt.NDArray[np.float64], on: list[bool], index: list[int]
+) -> list[BaseGeometry]:
+    """The regions one ring's rule changed (ruling T2): between two consecutive
+    kept input vertices whose stretch changed, the loop of the old stretch and
+    the new one; with no kept input vertex, the old and the new polygon."""
+    n, m = len(old) - 1, len(new)
+    at = [(a, i) for a, i in enumerate(index) if i >= 0]
+    if not at:
+        return [shapely.make_valid(Polygon(xy)) for xy in (old, new) if len(xy) >= 3]
+    out = []
+    for (a, i), (b, j) in zip(at, at[1:] + at[:1], strict=True):
+        span, step = ((j - i) % n, (b - a) % m) if len(at) > 1 else (n, m)
+        if span > 1 or step > 1:
+            xy = np.concatenate(
+                [old[(i + np.arange(span + 1)) % n], new[(a + np.arange(step, -1, -1)) % m]]
+            )
+            out.append(shapely.make_valid(Polygon(xy)))
+    return out
 
 
 def _chains(xy: npt.NDArray[np.float64], on: list[bool]) -> list[LineString]:
@@ -710,19 +736,20 @@ class _Outline:
 
     def ring(
         self, xy: npt.NDArray[np.float64]
-    ) -> tuple[npt.NDArray[np.float64], list[bool]] | None:
-        """One closed ring after the rule, as points and on-outline flags; None if
-        nothing in it moved."""
+    ) -> tuple[npt.NDArray[np.float64], list[bool], list[int]] | None:
+        """One closed ring after the rule, as points, on-outline flags and each
+        point's input-vertex index (-1 for a cut, a moved point or an outline
+        vertex); None if nothing in it moved."""
         edges = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
         near = np.zeros(len(edges), dtype=bool)
         near[self.tree.query(edges, predicate="dwithin", distance=self.d)[0]] = True
         if not near.any():
             return None
-        raw: list[tuple[npt.NDArray[np.float64], bool]] = []  # (point, is a cut point)
+        raw: list[tuple[npt.NDArray[np.float64], int]] = []  # (point, input index; -1 a cut)
         for k in range(len(edges)):  # step 1: near edges cut, the same way from either side
-            raw.append((xy[k], False))
+            raw.append((xy[k], k))
             if near[k]:
-                raw += [(c, True) for c in self._cut(xy[k], xy[k + 1])]
+                raw += [(c, -1) for c in self._cut(xy[k], xy[k + 1])]
         placed = self._place(np.array([r[0] for r in raw]))
         if all(p is None for p in placed):
             return None
@@ -732,22 +759,25 @@ class _Outline:
         seq = [
             (placed[i], raw[i][0], raw[i][1])
             for i in range(m)
-            if moved[i] or not raw[i][1] or moved[i - 1] or moved[(i + 1) % m]
+            if moved[i] or raw[i][1] >= 0 or moved[i - 1] or moved[(i + 1) % m]
         ]
         seq = [e for i, e in enumerate(seq) if not _same(e[0], seq[i - 1][0])] or seq[:1]
         kept: list[Kept] = []
         for i, e in enumerate(seq):  # ... and dropped when in line with its neighbours
             a, b = (kept[-1] if kept else seq[i - 1]), seq[(i + 1) % len(seq)]
-            if e[0] is None and e[2] and _off_line(e[1], a, b) <= IN_LINE:
+            if e[0] is None and e[2] < 0 and _off_line(e[1], a, b) <= IN_LINE:
                 continue
             kept.append(e)
+        own = [e[2] if e[0] is None else -1 for e in kept]
         if len(kept) < 2:
-            return np.array([_xy(e) for e in kept]).reshape(-1, 2), [True] * len(kept)
+            return np.array([_xy(e) for e in kept]).reshape(-1, 2), [True] * len(kept), own
         points: list[npt.NDArray[np.float64]] = []
         on: list[bool] = []
+        index: list[int] = []
         for i, e in enumerate(kept):
             nxt = kept[(i + 1) % len(kept)]
             points.append(_xy(e))
+            index.append(own[i])
             if e[0] is None or nxt[0] is None:
                 on.append(False)
                 continue
@@ -755,8 +785,9 @@ class _Outline:
             for point, flag in steps:
                 on.append(flag)
                 points.append(point)
+                index.append(-1)
             on.append(last[1])
-        return np.array(points), on
+        return np.array(points), on, index
 
     def _cut(self, a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> Any:
         """The points cutting edge ab into pieces of at most D: the multiples
@@ -827,7 +858,7 @@ class _Outline:
             js = [j % n for j in range(lo, hi) if lap[j] < q[1] + length - ahead][::-1]
         if min(ahead, length - ahead) <= 2 * gap + 2 * self.d:
             return [*((xy[j], True) for j in js), (q[2], True)]
-        on = [_off_line(xy[j], (None, p[2], False), (None, q[2], False)) <= IN_LINE for j in js]
+        on = [_off_line(xy[j], (None, p[2], -1), (None, q[2], -1)) <= IN_LINE for j in js]
         head = next((i for i, f in enumerate(on) if not f), len(js))
         tail = next((i for i, f in enumerate(on[::-1]) if not f), len(js))
         rest = js[len(js) - tail :] if tail else []
@@ -838,7 +869,7 @@ class _Outline:
         ]
 
 
-Kept = tuple[Placed | None, npt.NDArray[np.float64], bool]
+Kept = tuple[Placed | None, npt.NDArray[np.float64], int]  # the int: input index, -1 a cut
 
 
 def _xy(e: Kept) -> npt.NDArray[np.float64]:
