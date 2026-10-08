@@ -1,7 +1,8 @@
 """Ola's outline rule: land-cover borders within D of the outline go onto it (20c-3).
 
 ``docs/increments/20c-soft-quality.md``, M6 (c), "Steps 2 to 4" and "Tests
-``@tester`` writes red first", 20c-3: OR1 to OR8. Invariant-critical
+``@tester`` writes red first", 20c-3: OR1 to OR8; OR9 and the T2 test are
+added by "Rulings on 20c-3's timed check and gate runs". Invariant-critical
 (mutation testing required: the rule rewrites input borders); the mutants
 the design names are run after the green step, on the built code:
 
@@ -15,7 +16,10 @@ the design names are run after the green step, on the built code:
 - the rounding removed: OR4 (``TestRounding``);
 - the inlet test removed: OR5 (``test_or5_an_inlet_is_joined_straight``).
 - the cuts counted from the edge's own end, not along its line: OR8
-  (``TestTheReadRegion``, added by ruling G4).
+  (``TestTheReadRegion``, added by ruling G4);
+- ``_cut``'s end test removed (a multiple of D within D/2 of the edge's
+  end kept): OR9 (``TestACutBesideAVertex``, added by ruling T1). The T2
+  test (``TestOnlyWhatMovedIsRebuilt``) is not mutation-critical.
 
 The rule's own function is called directly, on polygons and an outline in
 EPSG:25833 at ``feature_fixtures``' UTM-shaped offset. The outline is a
@@ -44,12 +48,22 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
 - OR7's guard patches ``shapely.buffer`` and ``shapely.snap`` (the design:
   "no ``buffer``, no ``snap``"); both geometry methods go through them.
 
+- T2: the polygon's parts are read back from ``polygons`` as shapely
+  parts; the far part is the one holding its input's centroid, and
+  ``equals_exact`` at 0 also pins its ring's start and orientation (it is
+  the input part itself, not a union's rewrite of it).
+
+RED at the commit that adds OR9 and the T2 test (on ``eb810a90``): OR9's
+two cases (a 2.4 cm edge beside V) and ``test_t2_the_far_part_passes_through``
+(the far part comes back through ``union_all``, its ring restarted).
+
 RED at the commit that adds this file: ``feature_input`` has no
 ``snap_to_outline``.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from itertools import pairwise
 from types import ModuleType
@@ -430,3 +444,85 @@ class TestTheReadRegion:
         assert not got[0].is_empty
         for margin, other in zip(self.MARGINS[1:], got[1:], strict=True):
             assert shapely.equals_exact(got[0], other, tolerance=1e-9), (margin, other.wkt)
+
+
+# ---------------------------------------------------------------- OR9
+
+
+class TestACutBesideAVertex:
+    """OR9 (ruling T1): a cut that falls a hair from an edge's own vertex
+    leaves no linework edge shorter than D/2. A border edge runs from W, 1 m
+    inside the square's south side, to V, 5.5 m inside it (beyond D), placed
+    so that a multiple of D along the edge's line, counted as ``_cut``
+    counts (from the foot of the origin, towards the lexicographically last
+    end), falls 2.4 cm short of V. That cut is more than D from the outline,
+    so it does not move, and step 3 keeps it beside the moved W: on
+    ``4d52dec0`` the linework gets a 2.4 cm edge, as Numedalslagen's did
+    (2.9 cm). The mutant: ``_cut``'s end test removed.
+
+    Local coordinates, the square 0 to 1000 m, D = 5 m; coordinates up to
+    about 100 m, where a double resolves about 1e-14 m. The bound D/2 is the
+    ruling's: after the fix an end piece is D/2 to 3D/2 long."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    W, V = (100.37, 1.0), (102.28, 5.5)
+    SHAPE = local(W, V, (102.28, 60.2), (60.37, 60.2), (58.1, 1.0))
+
+    def test_or9_the_premise_a_cut_lies_beside_v(self) -> None:
+        w, v = np.array(self.W), np.array(self.V)
+        u = (v - w) / np.hypot(*(v - w))  # W is the lexicographically first end
+        t = np.arange(np.floor(w @ u / D) + 1, np.ceil(v @ u / D)) * D
+        cuts = w + (t - w @ u)[:, None] * u
+        gaps = np.hypot(*(cuts - v).T)
+        assert len(cuts) == 1 and 0 < gaps[0] < 0.05, gaps
+        assert cuts[0][1] > D  # beyond D from the south side: it does not move
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["same", "reversed"])
+    def test_or9_no_edge_shorter_than_half_d(self, fi: ModuleType, reverse: bool) -> None:
+        shape = Polygon(self.SHAPE.exterior.coords[::-1]) if reverse else self.SHAPE
+        (lines,) = rule(fi, [shape], self.SQUARE).lines
+        kept = inside(lines, self.SQUARE)
+        short = [
+            (a, b) for a, b in segments(list(shapely.get_parts(kept))) if math.dist(a, b) < D / 2
+        ]
+        assert not short, short
+
+
+# ---------------------------------------------------------------- T2
+
+
+class TestOnlyWhatMovedIsRebuilt:
+    """Ruling T2: a polygon of two parts, one far from the outline and one
+    with two separate stretches 3 m inside its south side. The far part
+    comes back as it went in (``equals_exact`` at 0: passed through, not
+    through a union), and ``area_changed`` equals the overlay measure the
+    test computes itself: the input's and output's symmetric difference,
+    intersected with the outline.
+
+    Local coordinates, the square 0 to 1000 m, D = 5 m; areas up to about
+    600 m² from coordinates up to 400 m, where an overlay's rounding is far
+    under the 1e-6 m² bound (the ruling's)."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    FAR = local((300, 300), (400, 300), (400, 400), (300, 400))
+    NEAR = local((20, 3), (40, 3), (40, 30), (80, 30), (80, 3), (100, 3), (100, 60), (20, 60))
+    BOTH = shapely.MultiPolygon([NEAR, FAR])
+
+    def test_t2_the_premise_two_stretches_near_one_far(self) -> None:
+        band = shapely.intersection(self.NEAR.exterior, local((0, 0), (1000, 0), (1000, D), (0, D)))
+        assert len(shapely.get_parts(shapely.line_merge(band))) == 2
+        assert shapely.distance(self.FAR, self.SQUARE.boundary) > D
+
+    def test_t2_the_far_part_passes_through(self, fi: ModuleType) -> None:
+        out = rule(fi, [self.BOTH], self.SQUARE)
+        (after,) = out.polygons
+        far = [q for q in shapely.get_parts(after) if q.intersects(self.FAR.centroid)]
+        assert len(far) == 1, after.wkt
+        assert shapely.equals_exact(far[0], self.FAR, tolerance=0), far[0].wkt
+
+    def test_t2_the_area_is_the_overlay_measure(self, fi: ModuleType) -> None:
+        out = rule(fi, [self.BOTH], self.SQUARE)
+        (after,) = out.polygons
+        moved = shapely.intersection(shapely.symmetric_difference(self.BOTH, after), self.SQUARE)
+        assert moved.area > 0
+        assert out.area_changed == pytest.approx(moved.area, abs=1e-6)
