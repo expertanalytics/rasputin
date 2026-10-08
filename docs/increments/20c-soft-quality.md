@@ -2995,12 +2995,13 @@ Defaults: slivers under 1° 437 → 180 and 296 → 158, worst angle
   back as the whole domain, not empty, because its shell and hole both
   go onto the outline. Not fixed in 20c-3; the review notes it.
 - **P5, the citation `tests/python/test_grow.py:185`. Kept, not stale.**
-  It names its commit: "`feature_input.py:158-167` at `f81b20b7`", and
-  those lines at `f81b20b7` are master's `source_region`, the function the
-  test copies. `check_citations.py` lists it only because this branch
-  edits `feature_input.py`. No edit needed. `@tester` may rewrite it
-  as `feature_input.py@f81b20b7:158-167` to take it off that list (one
-  line, a test file).
+  Its docstring names the commit the lines are read at (`f81b20b7`), and
+  `src_python/tin_engine/feature_input.py@f81b20b7:158-167` is master's
+  `source_region`, the function the test copies. `check_citations.py`
+  lists it only because this branch edits that file. No edit needed.
+  `@tester` may rewrite it in the pinned form just used (full path, `@`,
+  commit) to take it off that list (one line, a test file); the short
+  path with `@` is reported broken.
 
 ## `@perf`'s acceptance
 
