@@ -52,7 +52,7 @@ PHRASES = (
     "blocked on power, network or a lock",
     "Co-Authored-By trailer",
     "plain words",
-    "Result; Pinned or assumed beyond the design; Questions for Ola; Lessons; "
+    "Result; Pinned or assumed beyond the design; Questions for Ola; Lessons; Ideas; "
     "ASK OLA and GUARD FALSE POSITIVE lines",
 )
 
