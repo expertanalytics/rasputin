@@ -211,6 +211,36 @@ class TestBinding:
             _core.LineTolerance(view, bad, 1.0, 4.0, 0.0, 300.0, 1.0)
 
 
+class TestOtherGeometry:
+    """Section 9.1, B: a field measures in the lattice frame it was built on,
+    so a call on another raster geometry is refused, not silently wrong."""
+
+    WORDS = "the tolerance field was built on another raster geometry"
+
+    def test_refine_on_another_view(self) -> None:
+        dem, view, start_mesh, edges, masks = start()
+        f = _core.LineTolerance(view, CROSSING, 0.5, 4.0, 0.0, 300.0, 1.0)
+        # One cell further west and one column wider, so the start mesh is
+        # still inside the other view's node rectangle.
+        wider = np.ascontiguousarray(np.hstack([dem[:, :1], dem]))
+        other = _core.raster_view(
+            wider, x_min=X_MIN - H, y_max=Y_MAX, delta_x=float(H), delta_y=float(H)
+        )
+        with pytest.raises(ValueError, match=self.WORDS):
+            _core.refine(other, start_mesh, edges, masks, tolerance=4.0, field=f)
+
+    def test_refine_points_with_a_store_on_another_geometry(self) -> None:
+        phase1 = Phase1(n=25, tolerance=4.0)
+        _dem, view, *_ = start()
+        f = _core.LineTolerance(view, CROSSING, 0.5, 4.0, 0.0, 300.0, 1.0)
+        xy, z = scattered(25, 2, seed=33)
+        cp = _core.CheckPoints(x_min=X_MIN - H, y_max=Y_MAX, spacing=H, rows=25, cols=26)
+        cp.add(xy, z)
+        cp.freeze()
+        with pytest.raises(ValueError, match=self.WORDS):
+            _core.refine_points(cp, *phase1.args(), tolerance=4.0, field=f)
+
+
 class TestStub:
     """``_core.pyi`` declares what the binding adds (mypy reads the stub, not
     the module)."""
@@ -260,6 +290,16 @@ class TestRefusals:
             *("catchment", "--flat", "--tolerance-near", str(line), "1"),
             *("--tolerance-ramp", "0", "40"),
             says=("applies only with --dem", "--tolerance-near"),
+        )
+
+    def test_a_crs_without_lines(self, tmp_path: Path, bumpy: Path, box: Path, line: Path) -> None:
+        """Section 9.1: as --domain-crs without --domain."""
+        args = ramp_args(bumpy, box, line, "--tolerance", "20", "--tolerance-near-crs", "EPSG:4326")
+        refused(
+            tmp_path,
+            "mesh",
+            *args,
+            says=("applies only with --tolerance-near", "--tolerance-near-crs"),
         )
 
     def test_without_the_ramp(self, tmp_path: Path, bumpy: Path, box: Path, line: Path) -> None:
@@ -369,7 +409,7 @@ class TestRecord:
         assert record["tolerance_ramp_m"] == "0 to 40"
         lines = record["tolerance_lines"]
         assert lines.startswith("line.geojson: "), lines
-        assert lines.removeprefix("line.geojson: ") in {"1 segment", "1 segments"}, lines
+        assert lines == "line.geojson: 1 segment", lines  # section 9.1, pin 14
         assert 0.0 <= record["max_error_near_lines_m"] <= 1.0
 
     def test_none_of_them_without_the_flag(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
@@ -378,7 +418,7 @@ class TestRecord:
             assert name not in record, name
 
     def test_lines_out_of_reach_say_so_and_give_the_far_mesh(
-        self, tmp_path: Path, bumpy: Path, box: Path
+        self, tmp_path: Path, bumpy: Path, box: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """G2: no segment within reach is the ``--tolerance F`` mesh."""
         far = lines_file(
@@ -387,8 +427,18 @@ class TestRecord:
         )
         args = ("--dem", str(bumpy), "--domain", str(box), "--tolerance", "20")
         ramp = ("--tolerance-near", str(far), "1", "--tolerance-ramp", "0", "3000")
-        vtk, _, output = run(tmp_path, *args, *ramp, out="ramp")
+        phase = Spy(monkeypatch, cli, "refine")
+        strip = Spy(monkeypatch, edge_strip, "refine_strip")
+        vtk, record, output = run(tmp_path, *args, *ramp, out="ramp")
+        # No field is built for zero segments (section 9.1).
+        assert [k.get("field") for k in phase.kwargs + strip.kwargs] == [None, None]
         plain_vtk, _, _ = run(tmp_path, *args, out="plain")
+        # Section 9.1, "Zero segments kept": three of the four fields, no
+        # max_error_near_lines_m, since no triangle is near a line.
+        assert record["tolerance_lines"] == "far.geojson: 0 segments"
+        assert record["tolerance_near_m"] == 1.0
+        assert record["tolerance_ramp_m"] == "0 to 3000"
+        assert "max_error_near_lines_m" not in record
         text = " ".join(output.split())
         assert (
             "no tolerance lines within 3000 m of the domain; every triangle is held to 20 m" in text

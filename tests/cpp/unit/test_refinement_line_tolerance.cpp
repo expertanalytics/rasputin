@@ -279,6 +279,26 @@ TEST_CASE("33 test 6: the distance is capped at end + margin", "[line_tolerance]
     CHECK(distance_to(Seg{0.0, -50.0, 10.0, -50.0}, r) == Catch::Approx(50.0).epsilon(1e-12));
 }
 
+TEST_CASE("33 test 6: a step ramp holds a triangle beyond reach to F, not to N at the cap",
+          "[line_tolerance][distance]") {
+    // Section 9.1, A. With S = E = 250 and margin 1, ramp.at(251) is N (251 - 1
+    // <= S), so at() must use the uncapped search result (infinity when no
+    // segment is within E + margin), whose ramp value is F. distance() stays
+    // capped. Kills the mutant at = ramp.at(distance).
+    const auto g = unit_geometry();
+    const auto m = disjoint(g, {kT});
+    const ToleranceRamp step{0.5, 8.0, 250.0, 250.0, 1.0};
+    REQUIRE(step.at(251.0) == 0.5);  // the trap: the cap's own ramp value is N
+    CHECK(step.at(std::numeric_limits<double>::infinity()) == 8.0);
+    const auto one = field(g, {Seg{0.0, -400.0, 10.0, -400.0}}, step);  // 400 m below edge AB
+    CHECK(one.distance(m, 0) == 251.0);
+    CHECK(one.at(m, 0) == 8.0);
+    const auto none = field(g, {}, step);
+    CHECK(none.at(m, 0) == 8.0);
+    CHECK(none.lowest() == 8.0);
+    CHECK(none.distance(m, 0) == 251.0);
+}
+
 TEST_CASE("33 test 6: at() is the ramp at the triangle's distance", "[line_tolerance][distance]") {
     const auto g = unit_geometry();
     const auto m = disjoint(g, {kT});
