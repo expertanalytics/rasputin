@@ -6,7 +6,11 @@
 the design names are run after the green step, on the built code:
 
 - the cut not in a fixed order: OR2;
-- the vertex dropped at a rounded point: OR4 (``TestTheCorner``);
+- the vertex dropped at a rounded point: OR4
+  (``test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it``, added by the
+  mutation round; ``TestTheCorner`` does not catch it, as its corner lies at
+  a multiple of D); the outline's vertices dropped from a join:
+  ``test_or5_a_shallow_notch_is_followed`` (added by the mutation round);
 - the stretches on the outline kept: OR1, OR3;
 - the rounding removed: OR4 (``TestRounding``);
 - the inlet test removed: OR5 (``test_or5_an_inlet_is_joined_straight``).
@@ -241,12 +245,31 @@ class TestRounding:
                     continue
                 assert np.hypot(*(placed[i] - placed[j])) > D / 2, (placed[i], placed[j])
 
+    def test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it(self, fi: ModuleType) -> None:
+        """The design's second rounding (step 4): a multiple of D within D/2 of
+        an outline vertex goes to the vertex. A side crossing at x = 58.4 is
+        2.6 m (over D/2) from the vertex at 61, so it rounds to the multiple
+        60, which is 1 m from 61: it must land on (61, 0) itself. Without the
+        second rounding (the prototype's defect) it lands on (60, 0), 1 m from
+        the vertex the path then passes through (mutation round, 20c-3)."""
+        (lines,) = rule(fi, [box(58.4, -50, 120, 60)], self.OUTLINE).lines
+        kept = inside(lines, self.OUTLINE)
+        ends = np.array(
+            [shapely.get_coordinates(p)[k] for p in shapely.get_parts(kept) for k in (0, -1)]
+        )
+        west = ends[on_outline(ends, self.OUTLINE) & (rel_x(ends) < 90)]
+        assert len(west) == 1, west
+        assert tuple(west[0]) == at(61, 0), west  # the vertex's own coordinates
+
 
 class TestTheCorner:
     """OR4: a border 2 m inside the outline across one of its corners, at
     V = (100, 0), where the outline bends by 11.3°. Its points round onto V,
     and V stays in the path, so the whole stretch lies on the outline and is
-    dropped; losing V (round 3's prototype defect) leaves a chord off it."""
+    dropped. V lies at a multiple of D along the outline, so this fixture
+    does not separate the second rounding from the first; the prototype's
+    defect is pinned by ``TestRounding``'s
+    ``test_or4_a_rounded_point_next_to_a_vertex_goes_onto_it``."""
 
     OUTLINE = poly((0, 0), (100, 0), (200, 20), (200, 200), (0, 200))
     NEAR = poly((30, 60), (30, 2), (100, 2), (170, 16), (170, 60))
@@ -286,6 +309,22 @@ class TestCrossings:
         assert shapely.distance(mouth, Point(at(101, 0))) <= ON
         assert shapely.length(mouth) == pytest.approx(2.0, abs=1e-9)
         assert shapely.intersection(kept, box(99, -30, 103, -1)).is_empty
+
+    def test_or5_a_shallow_notch_is_followed(self, fi: ModuleType) -> None:
+        """Not an inlet: the outline's way round a notch 2 m wide and 1 m deep
+        at x = 100..102 is 4 m, under 2 x 2 + 2 D = 14 m, so the points the
+        border rounds onto, (100, 0) and (102, 0), are joined along the outline
+        through its vertices (100, -1) and (102, -1). The stretch lies on the
+        outline and leaves no linework either way; the polygon after the rule
+        shows it: it fills the notch, 2 m². A straight join (the outline's
+        vertices on the way dropped, mutation round, 20c-3) leaves the notch
+        out. Scale: areas in m² at coordinates near 5e5 m, 1e-6 m² bound."""
+        outline = poly(
+            (0, 0), (100, 0), (100, -1), (102, -1), (102, 0), (200, 0), (200, 200), (0, 200)
+        )
+        out = rule(fi, [poly((60, 60), (60, 3), (140, 3), (140, 60))], outline)
+        notch = box(100, -1, 102, 0)
+        assert shapely.intersection(out.polygons[0], notch).area == pytest.approx(2.0, abs=1e-6)
 
 
 # ---------------------------------------------------------------- OR6, OR7
