@@ -128,3 +128,56 @@ was not re-run):
 |---|---|---|---|---|---|
 | Numedalslagen | 1 016 301 (+0.27 %) | 4 (≤ 10) | 0 (≤ 5) | 0.8322° (≥ 0.1°) | met |
 | Lagan | 743 616 (+0.09 %) | 61 (≤ 90) | 0 (≤ 5) | 0.006697° (1.000 × tolerance-2) | met |
+
+## Ruling R3: the gate's unrun checks (`aaee898b`)
+
+Apple M1 Max, AC power, one session (04:17 to 04:23), the catchment arguments
+of `scripts/gates.sh`. `aaee898b` changes Python only (`feature_input.py`,
+`run_record.py` since `8716f062`), so the editable install was not rebuilt.
+Scripts: `scripts/r3.sh` ((a), (b)), `scripts/r3de.sh` with
+`scripts/r3drive.py` ((d), (e): wraps `snap_to_outline` and runs `rasputin
+mesh` in-process), `scripts/farcorner.py` ((c)), `scripts/r3e_where.py` (the
+(e) follow-up); `scripts/gate.py` and `scripts/corners.py` as before. Raw
+output: `stats/r3/`. Meshes stay out of the repository (scratch
+`rasputin_scratch/perf-20c3-r3-20261008/`; rerun the scripts to regenerate).
+
+**(a) Defaults, mesh unchanged by R1: met.** `.vtk` SHA-256 Lagan
+`ef67e65c…`, Numedalslagen `1f11f291…`, equal to T2's.
+
+**(b) Repair with the outline rule** (`--no-features-merge-same-class
+--features-tolerance 2 --features-outline-snap 5 --features-repair 0.05`),
+against the tolerance-only meshes `g-tol2-*`:
+
+| catchment | triangles (vs tolerance 2) | under 1° | centre within 20 m of outline | worst | verdict |
+|---|---|---|---|---|---|
+| Lagan | 743 614 (+0.09 %, ≤ +1 %) | 59 (≤ 90) | 0 (≤ 5) | 0.2320° (≥ 0.006362°) | met |
+| Numedalslagen | 1 016 194 (+0.26 %, ≤ +1 %) | 4 (≤ 10) | 0 (≤ 5) | 0.8322° (≥ 0.1°) | met |
+
+`corners.py` on Lagan: open corner 1 has no vertex within 1 mm (nearest
+1.00 cm), open corner 2 has one; not both: **met**. Largest height error
+9.99993 m and 9.99996 m. Max vertex degree and the Delaunay check not run.
+
+**(c) The slit's far corner: met.** Both Lagan repair meshes (the new one
+from (b) and `g-tol2rep-lagan.vtk`) have a vertex at 413 677.295
+6 331 664.081; 6 triangles meet there, none with a smallest angle under 1°.
+
+**(d) No shared border left unmatched: met.** `snap_to_outline`'s polygons
+from the (b) runs, measured as `covfar.py` does: 0.000 m on both. The probe
+fails when it should: one vertex of one shared border moved 0.5 m gives
+208.170 m (Lagan) and 337.081 m (Numedalslagen).
+
+**(e) Population 3 with the merge on: not met as worded.** Length of
+`snap_to_outline`'s land-cover line segments in EPSG:3035 with both ends
+within 1 m of N 3 811 923.31 or E 4 585 680.19, inside the domain, Lagan:
+
+| run | length |
+|---|---|
+| defaults (merge on) | 26.194 m (expected 0) |
+| `--no-features-merge-same-class` | 161 164.495 m (more than 0: the probe can fail) |
+
+The 26.194 m is 13.097 m of border counted once for each of its two owners
+(`stats/r3/e-where.txt`): four stretches of 0.69 to 9.46 m, each a border
+between two polygons that the merge left separate, so of different classes
+(merged polygons 10 and 12, and 10 and 11). Whether these are population-3
+artefacts or land-cover borders that happen to lie within 1 m of the line has
+not been measured.

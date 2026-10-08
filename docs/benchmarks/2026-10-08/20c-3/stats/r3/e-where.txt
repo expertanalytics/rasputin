@@ -1,0 +1,8 @@
+E line: polygon 10, 1.118 m from [4585680.19 3819911.2 ] to [4585680.88 3819912.08]; polygons touching its middle [10, 12]
+E line: polygon 10, 9.455 m from [4585680.88 3819912.08] to [4585680.19 3819921.51]; polygons touching its middle [10, 12]
+E line: polygon 10, 0.693 m from [4585680.19 3811809.51] to [4585680.85 3811809.3 ]; polygons touching its middle [10, 11]
+N line: polygon 10, 1.831 m from [4602134.13 3811923.99] to [4602132.43 3811923.31]; polygons touching its middle [10, 12]
+E line: polygon 11, 0.693 m from [4585680.85 3811809.3 ] to [4585680.19 3811809.51]; polygons touching its middle [10, 11]
+N line: polygon 12, 1.831 m from [4602132.43 3811923.31] to [4602134.13 3811923.99]; polygons touching its middle [10, 12]
+E line: polygon 12, 9.455 m from [4585680.19 3819921.51] to [4585680.88 3819912.08]; polygons touching its middle [10, 12]
+E line: polygon 12, 1.118 m from [4585680.88 3819912.08] to [4585680.19 3819911.2 ]; polygons touching its middle [10, 12]
