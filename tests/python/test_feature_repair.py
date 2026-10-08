@@ -38,11 +38,23 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
 
 RED at the commit that adds this file: ``FeatureRequest`` forbids extra
 fields, so every request with a switch is refused by Pydantic.
+
+Increment 32 (``docs/increments/32-landcover-simplify.md``, section 6, "Data
+flow" and "The calls, by name"; test 16): ``tolerance_m`` is now the band of
+``border_simplify.simplify_borders``, which replaces
+``shapely.coverage_simplify``, and a band above 0 clips to the domain polygon
+instead of the read region. RP6 and ``TestTolerance`` assumed GEOS's
+Visvalingam-Whyatt (a three-vertex border's bend dropped, area changed), and
+are rewritten for the band: a border keeps its ends, a collapse needs four
+vertices, and each polygon keeps its area. ``TestTheBand`` checks the wiring.
+RED at the commit that adds them: the stage calls ``coverage_simplify`` and
+clips to the read region.
 """
 
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from pathlib import Path
 from types import ModuleType
@@ -55,7 +67,7 @@ from shapely.geometry import LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 
 import feature_fixtures as ff
-from feature_fixtures import UTM33, X0, Y0, Feat, at, domain_of, write_geojson
+from feature_fixtures import UTM33, Feat, at, domain_of, write_geojson
 from gpkg_fixtures import EXTRACT
 from test_cli_mesh_domain import quarter_circle
 
@@ -217,28 +229,43 @@ class TestEmptied:
 
 
 class TestTheOrder:
-    """RP6: repair before simplifying. A vertex 4.5 mm off A's straight
-    border, halfway along and away from the slit, with
-    ``--features-tolerance 2``: repaired first, the two borders are one inner
-    border and the simplification drops it; simplified first, the border is
-    a side of the gap, which ``simplify_boundary=False`` keeps."""
+    """RP6: repair before simplifying. Two vertices 4.5 mm off A's straight
+    border, at a third and two thirds of it, with ``--features-tolerance 2``:
+    repaired first, A's and B's borders are one shared border of four
+    vertices, and its one collapse drops both; simplified first, A's border is
+    a side of the gap, used by one ring, so fixed (increment 32, section 6's
+    edge rule), and both stay. Rewritten for increment 32: with one vertex,
+    as before, the border would have three vertices and no collapse."""
 
-    EXTRA = (L / 2, WIDTH / 2 + 0.0045)
+    EXTRAS = ((L / 3, WIDTH / 2 + 0.0045), (2 * L / 3, WIDTH / 2 + 0.0045))
 
-    def nearest(self, xy: np.ndarray) -> float:
-        return float(
-            np.hypot(xy[:, 0] - (X0 + self.EXTRA[0]), xy[:, 1] - (Y0 + self.EXTRA[1])).min()
+    def polygons(self) -> list[Polygon]:
+        a = [(0.0, 0.0), *self.EXTRAS, (L, WIDTH), (L, 50.0), (0.0, 50.0)]
+        return [poly(*a), *slit()[1:]]
+
+    def features(self) -> list[Feat]:
+        return [
+            coded(i + 1, p, c) for i, (p, c) in enumerate(zip(self.polygons(), CODES, strict=True))
+        ]
+
+    def test_rp6_the_premise_simplified_first_keeps_both(self) -> None:
+        simplify = importlib.import_module("tin_engine.border_simplify").simplify_borders
+        got = simplify(self.polygons(), 2.0).polygons
+        assert shapely.get_num_coordinates(got[0]) == shapely.get_num_coordinates(
+            self.polygons()[0]
         )
 
-    def test_rp6_the_premise_simplified_first_keeps_the_vertex(self) -> None:
-        polygons = np.array(slit(self.EXTRA), dtype=object)
-        simplified = shapely.coverage_simplify(polygons, 2.0, simplify_boundary=False)
-        cleaned = shapely.coverage_clean(simplified, snapping_distance=S, gap_width=S)
-        assert self.nearest(np.concatenate([shapely.get_coordinates(g) for g in cleaned])) < 0.01
-
-    def test_rp6_repaired_first_drops_it(self, fi: ModuleType, tmp_path: Path) -> None:
-        fs = opened(fi, tmp_path, slit_features(self.EXTRA), repair_m=S, tolerance_m=2.0)
-        assert self.nearest(all_xy(fs)) > 1.0
+    def test_rp6_repaired_first_drops_them(self, fi: ModuleType, tmp_path: Path) -> None:
+        (tmp_path / "0").mkdir()
+        (tmp_path / "2").mkdir()
+        off = opened(fi, tmp_path / "0", self.features(), repair_m=S, merge_same_class=True)
+        on = opened(fi, tmp_path / "2", self.features(), repair_m=S, tolerance_m=2.0)
+        # The premise: the repair keeps both on the shared border.
+        assert shapely.get_num_coordinates(labels(off)[0]) == 7
+        assert shapely.get_num_coordinates(labels(on)[0]) < 7
+        assert shapely.get_num_coordinates(labels(on)[1]) < shapely.get_num_coordinates(
+            labels(off)[1]
+        )
 
 
 # ---------------------------------------------------------------- RP2-RP5
@@ -440,18 +467,18 @@ class TestMerge:
 
 
 class TestTolerance:
-    """Step 3: ``coverage_simplify`` at the tolerance, also with the repair
-    at 0 (the old design's coverage check and its error are gone)."""
-
-    #: A 100 m border with a vertex 5 cm off its straight line: a triangle of
-    #: 2.5 m², under the 4 m² (tolerance squared) that ``coverage_simplify``
-    #: removes (its tolerance is about the square root of the area dropped).
-    BENT = (50.0, 0.05)
+    """Step 3 is now the band (increment 32; this class assumed GEOS's
+    simplifier, test 16): a border 100 m long zig-zagging 0.5 m either side
+    in 10 m steps, with ``--features-tolerance 2``, also with the repair at
+    0. The coverage stays valid, the zig-zag goes, every polygon keeps its
+    area (1e-9 relative; coordinates near 5e5 and 6.6e6 m, where one ulp is
+    1e-9 m, on areas of 2 500 to 5 000 m2)."""
 
     def inputs(self) -> list[Polygon]:
+        bends = [(10.0 * k, 0.5 if k % 2 else -0.5) for k in range(1, 10)]
         return [
-            poly((0, 0), self.BENT, (100, 0), (100, 50), (0, 50)),
-            poly((0, 0), (0, -50), (100, -50), (100, 0), self.BENT),
+            poly((0, 0), *bends, (100, 0), (100, 50), (0, 50)),
+            poly((0, 0), (0, -50), (100, -50), (100, 0), *bends[::-1]),
             box(-50, -50, 0, 50),
         ]
 
@@ -462,10 +489,70 @@ class TestTolerance:
         fs = opened(fi, tmp_path, feats, repair_m=repair, tolerance_m=2.0)
         got = labels(fs)
         assert shapely.coverage_is_valid(np.array(got, dtype=object))
-        bent = np.array(at(*self.BENT))
-        assert np.hypot(*(all_xy(fs) - bent).T).min() > 1.0  # simplified: the bend is gone
+        assert shapely.get_num_coordinates(got[0]) < shapely.get_num_coordinates(inputs[0])
         for before, after in zip(inputs, got, strict=True):
-            assert abs(after.area - before.area) < 2.0 * before.length
+            assert after.area == pytest.approx(before.area, rel=1e-9)
+
+
+class TestTheBand:
+    """Increment 32, section 6, steps 1 and 4: with the band above 0 the land
+    cover is clipped to the domain polygon, not the read region, the band
+    replaces ``coverage_simplify``, and each class keeps its area inside the
+    domain. The domain is 100 x 50 m; two polygons overhang it by 20 m and
+    share a border zig-zagging up to 3 m either side of x = 60 in 5 m steps,
+    so the read region (the domain's hull grown by 100 m) holds them whole.
+    The offsets are irregular: in a regular zig-zag every inner four-vertex
+    chain encloses no area, so its E falls on A or D and no collapse is
+    possible."""
+
+    DOMAIN = box(0, 0, 100, 50)
+    OFFSETS = (
+        3.0,
+        -2.0,
+        2.5,
+        -3.0,
+        1.5,
+        -2.5,
+        3.0,
+        -1.0,
+        2.0,
+        -3.0,
+        2.5,
+        -2.0,
+        1.0,
+        -1.5,
+        3.0,
+        -2.5,
+        2.0,
+    )
+
+    def features(self) -> list[Feat]:
+        bends = [(60.0 + dx, -20.0 + 5.0 * (k + 1)) for k, dx in enumerate(self.OFFSETS)]
+        west = poly((-20, -20), (60, -20), *bends, (60, 70), (-20, 70))
+        east = poly((60, -20), (120, -20), (120, 70), (60, 70), *bends[::-1])
+        return [coded(1, west, "311"), coded(2, east, "512")]
+
+    def test_band_0_clips_to_the_read_region(self, fi: ModuleType, tmp_path: Path) -> None:
+        """Today's step 1, the premise: the polygons overhang the domain."""
+        fs = opened(fi, tmp_path, self.features(), domain_of(self.DOMAIN), repair_m=S)
+        assert not all(self.DOMAIN.buffer(1e-6).covers(g) for g in labels(fs))
+
+    def test_a_band_clips_to_the_domain_and_keeps_each_area(
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def refused(*_: Any, **__: Any) -> Any:
+            raise AssertionError("coverage_simplify is not the band")
+
+        monkeypatch.setattr(shapely, "coverage_simplify", refused)
+        feats = self.features()
+        fs = opened(fi, tmp_path, feats, domain_of(self.DOMAIN), repair_m=S, tolerance_m=10.0)
+        got = labels(fs)
+        assert len(got) == 2
+        for f, g in zip(feats, got, strict=True):
+            assert self.DOMAIN.buffer(1e-6).covers(g)
+            clipped = shapely.intersection(f.geometry, self.DOMAIN)
+            assert g.area == pytest.approx(clipped.area, rel=1e-9)
+            assert shapely.get_num_coordinates(g) < shapely.get_num_coordinates(clipped)
 
 
 # ---------------------------------------------------------------- overlaps (pinned)
