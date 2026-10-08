@@ -4,10 +4,14 @@
 12), design review round 2 approved. Red step `44f25968` (`@tester`), green
 step `82c0a7d4` (`@developer`, 519 net production lines), mutation round
 `30f939b6` (`@tester`, one new test case); `@architect`'s rulings on both
-hand-backs are in section 14. Next: `@perf`'s short timing check
+hand-backs are in section 14. Code review round 1 done: changes requested
+(claims in comments, docstrings and `project_structure.md` that the change
+made false), fixed by `@developer`'s `4d4f0411` and `@architect`'s docs
+commit after it. Next: `@tester` puts the red-step notes of the test files
+in the past tense, then `@perf`'s short timing check
 (`tools/bench_quick.py`, base and branch back to back, section 10), then
-`@reviewer`'s code review. Not refine or mesh code, so no `bench.py`
-acceptance run.
+`@reviewer`'s code review round 2. Not refine or mesh code, so no
+`bench.py` acceptance run.
 
 ## 1. What Ola asked
 
@@ -889,6 +893,16 @@ accepted as the design's:
   `test_border_collapse`, which starts its own threads to check purity.
 - Speed: not yet measured; `@perf`'s short check is section 10's last
   paragraph.
+
+### Left for later (code review round 1's non-blocking observations)
+
+- A rejected collapse is not queued again unless a later collapse beside it
+  re-evaluates its node (`border_collapse.hpp`'s main loop), so a collapse
+  blocked only for a while is lost.
+- The edge grid's cell side is the larger of the band and the mean edge
+  length, and an edge is filed in every cell of its bounding box, so a long
+  diagonal fixed edge fills about (length / 50 m)² cells at the default
+  band: worth watching at São Francisco scale.
 
 ## Review
 
