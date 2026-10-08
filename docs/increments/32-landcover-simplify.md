@@ -19,9 +19,13 @@ M7 to M12 killed (M12b and M13 ruled in section 15.6). `@perf`'s quick
 check `b192a2c6` met section 15.5 except Numedalslagen's worst angle,
 0.311° against a 0.4° floor; section 15.6 finds that triangle made by the
 height refinement, not by the borders' clearance, and restates the floor
-(question 6, waiting on Ola; written on the default). Next: the
-test for M13 (section 15.6), then code review. Not refine or mesh code,
-so no `bench.py` acceptance run.
+(question 6, decided on default while Ola was away, reversible). Test 19b
+(`179ad71f`, `@tester`) kills M13. Fix code review round 1 (`e33c0e65`):
+production code sound, changes requested in prose and in the test file
+(red-step staging left in `test_border_collapse.cpp`, this Status,
+sections 13 and 14, the ROADMAP row, `project_structure.md`). Next:
+`@tester` removes the staging, then fix code review round 2. Not refine
+or mesh code, so no `bench.py` acceptance run.
 
 ## 1. What Ola asked
 
@@ -863,14 +867,20 @@ the design (sections 5.4 and 6, tests 14 and 15) is written on it.*
    floor and keep the fix as built; the 500 m split, if wanted, as its own
    small change later.**
 
-   *Waits on Ola; section 15.6 is written on the default.*
+   *Decided on default while Ola was away, reversible. The main session
+   took the default (drop the 0.4° expectation, keep the fix as built),
+   2026-10-09; recorded by `@architect`.*
 
 ## 13. ROADMAP
 
 Row 32: built (green `82c0a7d4`, 519 net production lines; mutation round
 `30f939b6`, M6 recorded as not killed, section 14); code review approved;
-`@perf`'s short check found it slower (section 15); next the fix of
-section 15 (red tests, change, quick check again, review).
+`@perf`'s short check found it slower (section 15). The fix of section 15
+is done: red `2fba4349`, green `05c8f73a` (573 counted lines in all),
+mutation round M7 to M13 killed (M12b equivalent), quick check `b192a2c6`
+(Numedalslagen −11 %, Lagan −1.3 %, outline rule and moved area as base,
+triangles −42 %; worst angle restated, question 6). Next: the test file's
+red-step staging removed, then fix code review round 2.
 
 ## 14. As built
 
@@ -898,6 +908,34 @@ The suite is `test_border_collapse`, run in a scratch copy from `tools/scratch_c
 - **What I could not exclude by argument.** The design's covering argument does rely on the order across later collapses. If three or more output vertices end up anchored in reversed order on one source segment, a later collapse's range can omit a straight piece of that segment that only the removed edges covered. The fuzz never produced such a case.
 
 So my verdict is equivalent for every oracle this suite has and for 45 000 fuzzed chains, but not proven equivalent. If @architect wants it killed, a test would need a long source segment carrying three or more placed vertices. I have not built one.
+
+#### Mutation round for the fix of section 15 (`@tester`, copied unchanged)
+
+Increment 32 fix (section 15) kill record, copied verbatim by the main session from @tester's handback (2026-10-09; test file at 8605f607, kernel code at 05c8f73a; scratch copy from tools/scratch_copy.py 8605f607, macOS arm64 Release; per mutant: text replacement in border_collapse.hpp, suite object and binary deleted, only test_border_collapse rebuilt, 300 s limit, JUnit report, header restored and checked byte for byte). Baseline: all 29 cases pass (8459 assertions). T lines are in tests/cpp/unit/test_border_collapse.cpp@8605f607; T:1157 is inside check_clearance, T:491 inside check().
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| M7 | vertex-to-new-edge check dropped (the `near = near || (p[w] != A && …A, E…) || (p[w] != D && …E, D…)` line in the grid scan) | killed | Test 18, F18: T:1309 `rejected_clearance` ≥ 1, T:1311 `collapses` 0, T:1312 output unchanged. Also 20b F20a: T:1157 ×2 (clearance oracle at clearance 2), T:1420 (clearance-2 output differs). |
+| M8 | E-to-edge check dropped (`near = near || segment_distance(E, p[u], p[v]) < clearance`) | killed | Test 19, F19: T:1373 `rejected_clearance` ≥ 1, T:1374 `collapses` 0, T:1375 output unchanged. |
+| M9 | short-edge check at placement dropped (the `consider` condition wrapped as `false && (…)`) | killed | Test 17, F17b: T:1279 `skipped_placements` ≥ 1, T:1281 `collapses` 1, T:1282 one vertex fewer, T:1284 one new vertex. Also F17a T:1244, T:1245 and 18b T:1346. |
+| M10 | A and D excluded from the vertex check by node number (`w != a`, `w != d`), not by coordinate | killed | 20b S4: T:1408 `rejected_clearance` 0 at the floor, T:1409 floor output = clearance 0's, T:1414 and T:1415 the same at clearance 1. Also F20a and F20b T:1408, T:1409, T:1414, T:1415, and F17b T:1280, T:1281, T:1282, T:1284. |
+| M11 | clearance doubled where read (`clearance *= 2.0` after validation) | killed | 20b F20a: T:1408, T:1409, T:1414, T:1415. 20b F20b: T:1407 `skipped_placements` 0 at the floor, T:1409, T:1413, T:1415. |
+| M12 | A's and D's coordinates skipped for both new edges, and the explicit A-to-E-D and D-to-A-E line dropped | killed | Test 18b, F12: T:1347 `rejected_clearance` ≥ 1, T:1348 `collapses` 0, T:1349 output unchanged. |
+| M1 | test (ii) dropped entirely: `side` never set (wrapped as `w == no_node && (…)`); re-run because the green step moved the A/D exclusion in this block | killed | Test 5: T:491 ×16 (winding numbers change), T:802 ×4 (island winding about P not 1), T:803 `rejected_side` ≥ 1. |
+| M1b | only the swept-region term dropped (`winding(loop, p[w]) != 0`) | killed | Same lines as M1: T:491 ×16, T:802 ×4, T:803. |
+| M12b (extra) | only the explicit A-to-E-D and D-to-A-E line dropped (`bool near = false;`) | survived (equivalent, argued) | Survives because the scan already checks A's copies in other borders against E-D, and D's copies against A-E. A junction always has a copy in another border, and that copy's edge starts at A, which is inside the query box, so the grid always returns it. Argued, not proved. |
+| M13 (extra) | the query box not grown by the clearance | survived | No fixture puts a near vertex in a grid cell that only the grown box reaches. Cells are at least the band wide (50 m here); growing the box by 1 m changes the set of cells only next to a cell boundary. |
+
+Not re-run: M2 to M6 (crossing test, junction rule, anchored check, placement formula unchanged by the green step: git diff 2fba4349 05c8f73a -- include/).
+Test 10 fix 8605f607: workers call simplify_borders<DefaultKernel> directly; ASan+UBSan 10/10, TSan halt_on_error=1 10/10 (+3/3 test 10 alone); the pre-fix file reproduces the Catch2 race under TSan (then hangs).
+
+Follow-up (@tester, 179ad71f, copied verbatim): test 19b added (S4's collapse, band 76.5, cell boundary x = 76.5 is 0.3 m beyond the box from x = 76.8; island triangle (76.3, 14.5), (70.3, 17.5), (70.3, 11.5), first vertex 0.5 m from A-E and E-D). On 05c8f73a's kernel: 30 cases, 8856 assertions pass; TSan halt_on_error=1 exit 0.
+
+| # | fault planted (where) | result | killed by test:line, what it checks |
+|---|---|---|---|
+| M13 | the query box not grown by the clearance (both `lo`/`hi` lines in the pop, `q.x ∓ clearance` and `q.y ∓ clearance` made `q.x` and `q.y`), in a scratch copy of HEAD with the new test file | killed | Test 19b: T:1446 `rejected_clearance` ≥ 1, T:1447 `collapses` 0, T:1448 output unchanged (`tests/cpp/unit/test_border_collapse.cpp@179ad71f`). The other 29 cases pass. |
+
+@architect (621d46e2) confirmed M12b equivalent against the built scan (border_collapse.hpp@05c8f73a): the scan reaches A as the end of its own incoming edge P-A, or through another border's or a fixed edge at a junction; D through D-X and its copies.
 
 ### Rulings on the mutation round (`@architect`)
 
@@ -946,8 +984,14 @@ accepted as the design's:
   built with `-ffp-contract=off`; `pytest` 6 979 passed.
 - The CI TSan job (`.github/workflows/main.yaml`) builds and runs
   `test_border_collapse`, which starts its own threads to check purity.
-- Speed: not yet measured; `@perf`'s short check is section 10's last
-  paragraph.
+- Speed: `@perf`'s first quick check (`35f220b9`) found the runs about
+  70 % slower; section 15 has the cause and the fix. The fix's quick
+  check (`b192a2c6`, `docs/benchmarks/2026-10-09/clc-simplify/quick/`,
+  base `b39426c0` against `8605f607`): Numedalslagen 9.18 s against
+  10.34 s (−11 %), Lagan −1.3 %; the outline rule at base's time, the
+  moved area exactly base's; output triangles −42 % on Numedalslagen
+  (653 039 against 1 118 006); worst angle 0.311° on Numedalslagen and
+  0.49° on Lagan (section 15.6, question 6).
 
 ### Left for later (code review round 1's non-blocking observations)
 
