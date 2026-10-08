@@ -1,7 +1,7 @@
 # Increment 33: a vertical tolerance that varies with distance to named lines
 
-**Status:** designed (`@architect`, 2026-10-08), not built. Next: design
-review. Questions for Ola in section 12; the design is written on their
+**Status:** designed (`@architect`, 2026-10-08), round 1's findings answered,
+not built. Next: design review round 2. Questions for Ola in section 12; the design is written on their
 defaults.
 
 ## 1. What Ola asked
@@ -265,10 +265,16 @@ private:
 - **The search.** `noding::BroadPhase` (k = ceil(sqrt(n)) buckets a side over
   the segments' box; its contract: every segment whose closed box meets the
   query box is visited) is queried with the triangle's box grown by `g`,
-  starting at `g = E / 16` and doubling. Any segment within `g` of the
-  triangle has its box inside the grown box, so once the best distance found
-  is at most `g` it is the true minimum; the search stops there, or when `g`
-  passes `E + margin` (the distance is then "far"). *Constant:* `E / 16`
+  starting at `g = E / 16` and doubling, the last value being `E + margin`
+  itself (`E/16, E/8, E/4, E/2, E, E + margin`: at most six index queries).
+  Any segment within `g` of the triangle has its box inside the grown box, so
+  once the best distance found is at most `g` (the distance this query's box
+  grew by, not a multiple of it) it is the true minimum and the search stops;
+  after the query at `E + margin` finds nothing that near, the distance is
+  "far" (capped at `E + margin`). A segment between `g` and `2g` away can lie
+  outside the box grown by `g` while a farther one lies inside it (a box
+  reaches `g` straight out but about `1.41 g` at its corners), so stopping at
+  "best at most `2g`" would miss it (M4). *Constant:* `E / 16`
   assumes `E` in metres of a projected CRS; checked at `E = 3000` on the
   corridor's 12 129 segments, where it is 187 m against buckets of about
   2.6 by 1.2 km (111 a side over the segments' box). Reuse of
@@ -301,7 +307,10 @@ to `far` so a message or a record that prints it still says the far value.
   its distance; only in between is `allowed = at(m, t)` computed, and stored
   in a vector beside `results` (one `double` per slot). The serial phase
   compares `max_error` with it. With `UniformTolerance`, `lowest() ==
-  highest()`, so no query ever runs and the comparisons are today's.
+  highest()`, so no query ever runs and the comparisons are today's; and the
+  `allowed` vector exists only for a policy whose bounds can differ, chosen
+  at compile time (`if constexpr` on the policy type, or a policy trait), so
+  the default path allocates nothing it did not allocate before.
 - **Constraint feet** (increment 20b's `eps(n) = clamp(tol / G, ...)`): `tol`
   becomes the triangle's allowed error. When the scan skipped the query
   (error above `highest()`), the serial phase computes it there, only when a
@@ -326,15 +335,21 @@ class ToleranceLines(BaseModel, frozen=True):
     end_m: float             # E
     margin_m: float = 1.0
 
-def line_segments(spec: ToleranceLines, window: Box, mesh_crs: str) -> npt.NDArray[np.float64]:
-    """(k, 4) segments in mesh_crs: every LineString and MultiLineString of
-    the file, transformed, simplified by margin_m, kept whole when its box
-    meets window grown by end_m + margin_m. Polygons and points refused."""
+def line_segments(
+    spec: ToleranceLines, window: Box, mesh_crs: str
+) -> tuple[npt.NDArray[np.float64], float]:
+    """(k, 4) segments in mesh_crs, and the margin they were simplified by:
+    every LineString and MultiLineString of the file, transformed, simplified
+    by margin_m, kept whole when its box meets window grown by end_m +
+    margin_m. A line that simplification empties (a closed loop smaller than
+    the margin) is kept as a zero-length segment at its first vertex, never
+    dropped. Polygons and points refused."""
 ```
 
 It reads through `feature_input.read_source`, so GeoJSON (with or without a
 `crs` member), GeoPackage and GML 2 work as `--features` files do, with the
-same CRS checks. `cli.py` builds the spec, `_dem_mesh` builds the field once
+same CRS checks. The margin returned is the one the binding passes to `LineTolerance`, so the
+correction C++ applies is the simplification Python did. `cli.py` builds the spec, `_dem_mesh` builds the field once
 from the tile's geometry and passes it to `refine`, `edge_strip.run` and
 `final_check.run`. The record (increment 25) gains `tolerance_near_m`,
 `tolerance_ramp_m` ("0 to 3000"), `tolerance_lines` (the file's name and its
@@ -353,14 +368,29 @@ Without `--tolerance-near`, none of these appear and nothing is built.
   grown by `E + margin`. Beyond that distance a segment cannot change any
   triangle's allowed error, so the field per piece equals the global one on
   that piece. Segments are kept whole, never cut at the window, so two pieces
-  beside a seam hold the same segments near it and compute the same distance
-  bit for bit (a cut segment's new end would round differently). The seam
-  pass (`refine_seam`, increment 23b) then needs the allowed error of a piece
-  of seam, `t(d(segment piece))`, a segment-to-segment distance: a
-  `LineTolerance::at(Point2 a, Point2 b)` of about 15 lines. It is **not in
-  this increment**, because nothing on master calls `refine_seam` yet; it
-  goes in with whichever of 23c-2 and 33 lands second, with a test that both
-  pieces beside a seam get the same allowed error.
+  beside a seam hold the same segments near it.
+- **Seam identity comes from the seam pass, not from the piece fields.** Each
+  piece converts the segments into its own lattice-metre frame, measured from
+  the corner of its own raster (increment 23's N17,
+  `docs/increments/23-basin-scale.md`, section N17), so two pieces' fields
+  give the same distance to rounding, not bit for bit. That is enough inside
+  a piece, which only its own field ever judges; a 1e-9 m difference in
+  distance moves the allowed error by about 1e-11 m. Anchoring every piece's
+  segments to one shared origin was not chosen: the triangle corners would
+  then need the piece's offset added, which rounds in the same way unless the
+  offset and the cell size are exact binary fractions. At a seam, both pieces
+  call `refine_seam` on the same strip raster (23's N17: the strip is a
+  function of the edge alone), so the seam pass builds its field in the
+  strip's frame from the segments selected by the strip's window, the same
+  inputs for both pieces, and gets the same bits. That needs the allowed
+  error of a piece of seam, `t(d(segment piece))`, a segment-to-segment
+  distance: a `LineTolerance::at(Point2 a, Point2 b)` of about 15 lines. It
+  is **not in this increment**, because nothing on master calls
+  `refine_seam` yet; it goes in with whichever of 23c-2 and 33 lands second.
+  Its test checks the seam pass, not the piece fields: two pieces beside a
+  seam, each running the seam pass on it, get the same allowed error for
+  every piece of seam, bit for bit; and the two pieces' own fields agree on
+  a triangle near the seam to within 1e-9 m of distance.
 - 23c's memory estimate (`decompose.bytes_per_node`, by tolerance) would
   take, per piece, the node count in each distance band times the band's
   `b(t)`; also with 23c-2.
@@ -457,10 +487,12 @@ Drammen-Hokksund is added.
 | Hokksund-Bergen corridor, 4 196 km² | 229 611, 2.5 s, 2.4 GB | 21 669 768, 37 s, 11.8 GB | about 1.37 million |
 
 At 1.37 million triangles, refine's measured rate at 1 m on the corridor
-(21.7 million in 17.9 s) gives about 1.1 s; with the 1.6 s decode and the
-field's queries (section 10) the whole corridor should take 4 to 6 s. The
-estimate is a lower bound on triangles (section 3's extra refinement is not
-in it).
+(21.7 million in 17.9 s) gives about 1.1 s; the field's queries add 0.9 to
+3.1 s of wall time on 10 threads (section 10, from `33-probes/query_cost.py`);
+with the 1.6 s decode the whole corridor should take about 4 to 7 s. The
+triangle count is an estimate, likely low: section 3's extra refinement where
+a large triangle reaches towards the line is not in it, and was not
+measured.
 
 **The first, small case: Geilo to Ål**, 23 km of x (127 000 to 150 000 in
 EPSG:25833) of Bergensbanen through Hallingdal, the 5 km buffer cut to that
@@ -481,10 +513,11 @@ rasputin fetch its own data); the script is the stopgap.
 |---|---|---|
 | G1 | Without `--tolerance-near` every output byte is today's | test 1, the bench run |
 | G2 | With `N = F`, or with no segment within reach, the mesh is the `--tolerance F` mesh, bit for bit | tests 2, 3 |
-| G3 | Every valid DEM node's error is at most `t(d(n))`, `d` to the original, unsimplified lines | test 5 |
+| G3 | Every valid DEM node's error is at most `t(d(n))`, `d` to the original lines: after the transform to the mesh CRS, before simplification | test 5 |
 | G4 | Every edge-strip and final-check point's error is at most `t` at its triangle's distance | test 8 |
 | G5 | The output is the same for any thread count | test 9 |
 | G6 | The lazy query changes nothing | test 7 |
+| G8 | The field reaches every comparison: a ramp that holds every triangle at `N` gives the `--tolerance N` mesh, bit for bit, feet included | test 3 (b) |
 | G7 | Simplification never makes the allowed error larger | test 11 |
 
 ## 8. Degeneracies
@@ -512,8 +545,16 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
    and counters; the same for `refine_points` and `refine_strip`.
 2. `LineTolerance` with zero segments equals `UniformTolerance{F}`, bit for
    bit, for all three entry points.
-3. `LineTolerance` with segments and `N = F` equals `UniformTolerance{F}`, bit
-   for bit.
+3. Two equalities with segments, bit for bit, on all three entry points, on
+   test 1's fixtures with constraints and feet on:
+   (a) `LineTolerance` with `N = F` equals `UniformTolerance{F}`;
+   (b) `LineTolerance` with `N` well below `F` and `S` beyond the largest
+   distance any triangle can have to the lines (a line crossing the domain,
+   `S` above the domain's diagonal), so the ramp holds every triangle at `N`,
+   equals `UniformTolerance{N}`; the `LineTolerance` run has
+   `options.tolerance = F`, as the binding sets it. (b) is the case where the
+   field, not `options.tolerance`, must reach the foot's epsilon and
+   `refine_points`' comparison (M6, M7).
 4. **The ramp:** `t` at 0, `S`, the middle, `E` and beyond; the step `S = E`;
    the margin; never decreasing (a sweep of 10 000 distances).
 5. **The guarantee, oracle independent of the field.** A synthetic DEM (a
@@ -524,7 +565,10 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
 6. **Distance:** triangle and segment crossing with both ends outside (0), an
    end inside (0), touching an edge (0), along an edge (0), parallel at a
    known offset, nearest at a corner, nearest at an end, a zero-length
-   segment; then 10 000 random triangles against random segment sets: the
+   segment; the search's stop: a small triangle, one segment about `1.3 g`
+   away diagonally (inside the box grown by `g = E / 16`) and one about
+   `1.1 g` away straight out (outside it), where the answer is the second
+   (M4); then 10 000 random triangles against random segment sets: the
    indexed distance equals the brute-force minimum exactly, with and without
    the cap.
 7. **Laziness changes nothing:** a test-only policy that reports the full
@@ -540,8 +584,11 @@ Python (`tests/python`):
 11. `line_segments`: transformation from EPSG:4326 to a UTM CRS; MultiLineString
     split into segments; polygons and points refused in words; a line 2 999 m
     outside the window kept and one at 3 002 m dropped (`E = 3000`, margin 1);
-    on 1 000 random points, the corrected distance to the simplified line is
-    never above the distance to the original.
+    on 1 000 random points, the distance to the returned segments less the
+    margin `line_segments` returns is never above the distance to the
+    original line (transformed, not simplified); the same for a closed loop
+    smaller than the margin, which comes back as at least one segment, not
+    as nothing.
 12. CLI: each refusal of section 5, in its words; the stderr line for lines
     out of reach; the record's four new fields; `max_error_near_lines_m <= N`.
 13. The resampled path (`--out-crs`): the lines are transformed to the
@@ -552,32 +599,39 @@ Python (`tests/python`):
     not monotone in the tolerance, so no count against the `--tolerance N`
     mesh is asserted).
 
-**Invariant-critical suite: tests 1-7, 11.** Mutation targets the kill record
+**Invariant-critical suite: tests 1-8, 11** (3 includes its new part (b);
+8 is the strip). Mutation targets the kill record
 must cover:
 
 - M1 the ramp interpolates from `E` instead of `S` (or drops the margin);
 - M2 `d(T)` measured from the centroid instead of the closed triangle;
 - M3 a segment crossing a triangle with both ends outside gets a positive
   distance;
-- M4 the search stops when the best is at most the previous `g` instead of
-  the current one;
+- M4 the search stops when the best is at most `2g` instead of `g`, the
+  distance the box grew by (killed by test 6's stop case);
 - M5 the laziness swapped: converge when the error is at most `highest()`;
-- M6 the foot's epsilon uses `F` instead of the triangle's allowed error;
-- M7 `refine_points` compares with `options.tolerance` instead of the field;
+- M6 the foot's epsilon uses `F` instead of the triangle's allowed error
+  (killed by test 3 (b));
+- M7 `refine_points` compares with `options.tolerance` instead of the field
+  (killed by test 3 (b));
 - M8 Python drops the margin correction;
 - M9 Python selects with the window not grown by `E`.
 
 ## 10. Size, split point, speed
 
-| part | counted lines (estimate) |
-|---|---|
-| `line_tolerance.hpp`: ramp, policy concept, uniform policy, distance, search, `make` | 110-140 |
-| `refine.hpp`: the policy overload, lazy allowed, foot epsilon, `max_error_near` | 30-40 |
-| `refine_points.hpp`: the policy overloads, lazy allowed | 25-35 |
-| binding (`LineTolerance` class, optional field argument on three functions) and `_core.pyi` | 50-70 |
-| `tolerance_field.py` | 45-65 |
-| `cli.py` (three flags, refusals, passing the field, record) | 40-60 |
-| **total** | **300-410** |
+| part | counted lines (estimate) | basis |
+|---|---|---|
+| `line_tolerance.hpp`: ramp, policy concept, uniform policy, distance, search, `make` | 110-140 | `seam.hpp` counts 102, `constraint_points.hpp` 133 |
+| `refine.hpp`: the policy overload, lazy allowed, foot epsilon, `max_error_near` | 30-40 | the parts listed; no close comparable |
+| `refine_points.hpp`: the policy overloads, lazy allowed | 25-35 | 23b's green commit added 22 to it for one entry point |
+| binding (`LineTolerance` class, optional field argument on three functions) and `_core.pyi` | 60-85 | 23b's green commit: 46 in `bindings/core.cpp` and 31 in `_core.pyi`, 77, for one entry point |
+| `tolerance_field.py` | 45-65 | `outline.py` counts 50, `decompose.py` 55 |
+| `cli.py` (three flags, refusals, passing the field, record) | 40-60 | the parts listed; no close comparable |
+| **total** | **310-425** | |
+
+The counts are `tools/count_loc.py`'s rule applied to the files at
+`700f57a6` (`counted_lines` on each file whole), and to 23b's green commit
+(`python3 tools/count_loc.py 3c464ec3~1 3c464ec3`).
 
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ header, the entry-point overloads, the binding and stub
@@ -593,7 +647,7 @@ record.
 | simplify (`shapely.simplify(geom, 1.0, preserve_topology=False)`, GEOS Douglas-Peucker, tolerance 1 m) | not run | 0.0 s measured (to 13 628 vertices) | probe item 1 |
 | select segments (NumPy box test) | not run | milliseconds | O(n) |
 | build the field (`BroadPhase` over about 12 000 segments) | not run | milliseconds | O(n) |
-| per-triangle query in the scan | none: `UniformTolerance` never queries | at most about 1.5 µs per query (one to four buckets of about 45 segments, about 15 ns per distance) for about 4 scans of each of 1.37 million triangles, skipped where the error is outside `[N, F]`: under 8 s of CPU, under 1 s of wall time on 10 threads | estimate, not measured: no C++ exists |
+| per-triangle query in the scan | none: `UniformTolerance` never queries | 0.7 to 2.7 µs per index query (one to four occupied buckets of about 45 segments, about 15 ns per distance); a triangle beyond `E` runs all six queries of the doubling search, one within `E/16` runs one; per scanned triangle 1.8 to 6.4 µs, weighted by triangles per distance band; 3.5 scans per final triangle, 1.37 million final triangles: 8.8 to 30.8 s of CPU, 0.9 to 3.1 s of wall time on 10 threads | estimate, not measured (no C++ exists): `33-probes/query_cost.py`, its assumptions stated there; errs high, as it does not count the queries the laziness skips |
 | `max_error_near_lines_m` at the end | not run | one query per final triangle, under 0.3 s wall | estimate |
 
 **Library calls**, with method and tolerance: `pyproj.Transformer.from_crs(
@@ -609,9 +663,15 @@ band, with the mesh's SHA-256 unchanged (G1). The quick check
 (`tools/bench_quick.py`) gains the Geilo-Ål case with the ramp
 (`docs/benchmarks/quick/cases.toml`), which has no baseline at first; `@perf`
 records one. Accepted when the default-flag runs are unchanged and the
-Geilo-Ål ramp run's refine time per output triangle is at most 1.5 times
-the uniform 1 m run's on the same section; the corridor run is timed once
-for the record, not judged.
+Geilo-Ål ramp run's refine time per output triangle is at most 4 times the
+uniform 1 m run's on the same section. The basis: the uniform 1 m corridor
+refines at 0.83 µs of wall time per output triangle (17.89 s for 21.7
+million), and the queries add 0.64 to 2.26 µs per output triangle (3.5 scans
+at 1.8 to 6.4 µs, on 10 threads), so the estimate is 1.8 to 3.7 times; the
+first draft's 1.5 was below the estimate's own low end. Above 4 times, the
+query is what `@developer` cuts first (a bucket index sized to `E / 16`, or
+asking only whether a segment lies within the distance the error needs). The
+corridor run is timed once for the record, not judged.
 
 ## 11. Not in scope
 
@@ -623,8 +683,8 @@ a driver; a `rasputin fetch` source for Bane NOR; DTM1.
 
 Each with the default this design is written on.
 
-- **Q1. Hold 1 m for a band before the ramp starts?** Measured estimate on the
-  corridor: linear from the line out to 3 km, about 1.37 million triangles; 1 m
+- **Q1. Hold 1 m for a band before the ramp starts?** Estimated from the
+  measured uniform meshes on the corridor (`33-probes/README.md`, item 4): linear from the line out to 3 km, about 1.37 million triangles; 1 m
   held to 100 m first, about 1.75 million; to 500 m, about 3.1 million.
   *Default: no, the ramp starts at the line (`--tolerance-ramp 0 3000`); the
   flag lets you choose per run.*

@@ -7,6 +7,8 @@ NLOD 1.0, dated 2025-03-06 in Geonorge's metadata), with the DTM10 tiles at
 `../rasputin_data/DTM10_UTM33_20260925` (the scripts name the absolute path).
 Python is the repository's `.venv`; `rasputin` is master at `4cd7e050`. The Mac
 was on AC power (`pmset -g batt`: "Now drawing from 'AC Power'").
+Any web request a probe or a literature check makes (the download above, a
+paper's page) sends a generic User-Agent, never Ola's email address.
 
 1. `probe_line.py`: the line's length, tunnels, corridor areas and DTM10
    coverage. Output, word for word (the first line of the Counter is the
@@ -82,6 +84,33 @@ was on AC power (`pmset -g batt`: "Now drawing from 'AC Power'").
    simplified by 1 m, 12 129 segments) estimates **1 372 967** triangles for
    the linear ramp from 0 to 3 km, 1 747 968 holding 1 m to 100 m, and
    3 115 974 holding it to 500 m.
+
+5. `query_cost.py`: arithmetic only, no data read. The field's query cost
+   on the corridor, from items 1, 3 and 4, the scans per final triangle of
+   the bench's 1 m tile
+   (`docs/benchmarks/2026-10-04/23b-fix-base-r3/run.json`: 219 837 inserted,
+   445 675 flips; created triangles, 3 per insert and 2 per flip, over final
+   triangles, 2 per insert), and a cost per scanned triangle per distance
+   band that the script states as an assumption. Output, word for word:
+
+   ```
+   band (0, 100): share 0.300, cost us (0.7, 2.7)
+   band (100, 500): share 0.368, cost us (1.4, 5.4)
+   band (500, 1000): share 0.146, cost us (2.1, 8.1)
+   band (1000, 2000): share 0.096, cost us (3.5, 10.8)
+   band (2000, 3000): share 0.037, cost us (5.0, 15.0)
+   band beyond E: share 0.053, cost us (5.0, 15.0)
+   scans per final triangle 3.53
+   mean cost per scanned triangle us 1.8 to 6.4
+   corridor CPU s 8.8 to 30.8
+   corridor wall s on 10 threads 0.9 to 3.1
+   ```
+
+   The shares come from a cruder density model than item 4's (the section's
+   uniform densities applied to the corridor's band areas; it totals about
+   0.78 million triangles, not 1.37 million), and are used only as shares.
+   The laziness (section 4.4 of the design) skips the query for a triangle
+   whose error is above `F`; the script does not, so it errs high there.
 
 The estimates ignore the extra refinement that the per-triangle rule costs
 where a large triangle reaches towards the line (section 3 of the design), so
