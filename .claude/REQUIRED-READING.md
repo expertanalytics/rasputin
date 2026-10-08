@@ -61,6 +61,10 @@ caller.
 Also read `docs/increments/README.md` (the protocol and a round's cost
 constraints) and the increment file for whatever you are working on.
 
+**Ideas and future work live in `docs/ideas.md`.** Read it before you plan.
+An idea outside your task goes in your handback under *Ideas*; the main
+session adds it.
+
 ## Claims: run the check before you write it down
 
 - Name the command, file or commit a sceptical reader would use to check a
@@ -134,26 +138,12 @@ round of findings.** On a prose or tooling branch its scope is:
 
 ## The harness
 
-Active in `.claude/settings.json`: `guard_push.py` asks
-before `git push`, `gh pr create/new/merge/ready/edit/update-branch`,
-`gh release` and `gh repo create/new/delete/edit` (with or without `-R`),
-`--no-verify`, `rebase`, `reset --hard`,
-`filter-branch` and `commit --amend`; before `git update-ref`, `git remote`,
-`git config`, `git symbolic-ref` and `git replace` writes, a `git fetch`,
-`git pull` or `git remote update` into a named ref (a refspec, `--refmap`,
-`--stdin`, a `remote.*`, `url.*`, `include.*`, `includeIf.*`,
-`core.sshCommand` or `fetch.bundleURI` override, or `GIT_CONFIG*`,
-`GIT_SSH*`, `HOME` or `XDG_CONFIG_HOME` set on the line), and `gh api` or a
-forge `curl` with a writing method or a body, glued options included
-(`-fquery=…`, `-iXPUT`, `-sd x`, `-Tfile`; not `gh pr close` or
-`gh pr comment`); and before a git or gh command
-it does not know, such as an alias. It judges the rest of these (not an
-unknown command) also when another program runs them (`caffeinate git push`, `find … -exec git push`,
-`watch 'git push'`, a shell's `-c '…'`: `sh`, `dash`, `tcsh` and every shell
-`/etc/shells` lists on the Mac);
-a git or gh word under `parallel`, which builds its commands from its
-inputs, asks as an unknown command, and a runner in front of `parallel`,
-`watch` or `flock` (`caffeinate parallel …`) does not hide it. `guard_governance.py` asks before any write
+Active in `.claude/settings.json`: `guard_push.py` asks before any act
+that publishes, writes to the forge, rewrites history or writes refs,
+remotes or git config, before `--no-verify`, and before a git or gh command
+it does not know, such as an alias, also when another program or a shell's
+`-c` runs it (its code lists them; not `gh pr close` or `gh pr comment`).
+`guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
 module, a copy or move into their directories included (`cp json.py tools`,
 with or without the trailing `/`), and a path is judged also with `.`,
@@ -194,26 +184,13 @@ least one fallback that needs no ruling and writes no governed path, and one
 such item stays queued for the window's last hour; idle is accepted only when
 no such item exists.
 
-`SessionStart` runs `tools/session_state.py`, so the
-cold-start recap is in context before the first prompt, on every source:
-startup, resume, `/clear`, compaction and fork. It never blocks: a failure
-exits non-zero, the session starts without the recap, and the recap is then
-run by hand (step 1 above). Spawned subagents have their own event,
-`SubagentStart`; the hooks documentation does not say outright that
-`SessionStart` skips them, so the main session checks the first persona it
-spawns with the hook live for a recap it should not have. Claude Code caps
-the hook's stdout at 10,000 characters (`python3 tools/session_state.py | wc
--m` measures it) and passes only a 2,000-character preview past the cap, so
-keep `session.md` and the subagent files short. The recap finds the main
-checkout from the repository's common git dir, so a session launched inside
-a worktree gets the main checkout's `session.md` and every worktree's
-`ASK OLA:` lines.
+`SessionStart` runs `tools/session_state.py` on every source; if the recap
+is missing, run it by hand (step 1). Its output is capped at 10,000
+characters (`python3 tools/session_state.py | wc -m`), so keep
+`session.md` and the note files short.
 
 Propose any further hook for Ola's approval; never add one to
-`.claude/settings.json` on your own initiative. Proposed and not approved:
-`PreToolUse` denying a subagent `Write`/`Edit` on
-`.claude/current-task/session.md`; the per-persona path guard (R-B in
-`docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`).
+`.claude/settings.json` on your own initiative.
 
 ## Data, scratch and temp folders are not a channel
 
