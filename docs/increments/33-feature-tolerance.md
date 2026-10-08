@@ -390,7 +390,13 @@ Without `--tolerance-near`, none of these appear and nothing is built.
   Its test checks the seam pass, not the piece fields: two pieces beside a
   seam, each running the seam pass on it, get the same allowed error for
   every piece of seam, bit for bit; and the two pieces' own fields agree on
-  a triangle near the seam to within 1e-9 m of distance.
+  a triangle near the seam to within 1e-9 m of distance. *Constant:* 1e-9 m
+  assumes frame coordinates below 1e6 m (a piece plus its `E + margin` band;
+  a UTM zone is about that wide), where one unit in the last place of a
+  double is 1.2e-10 m. The conversion `x - x_min` and the distance each round
+  at the size of the frame coordinate, not of the UTM coordinate, so the bound
+  is about eight such units; for a larger frame the test scales it, as eight
+  units in the last place of its largest frame coordinate.
 - 23c's memory estimate (`decompose.bytes_per_node`, by tolerance) would
   take, per piece, the node count in each distance band times the band's
   `b(t)`; also with 23c-2.
@@ -487,9 +493,9 @@ Drammen-Hokksund is added.
 | Hokksund-Bergen corridor, 4 196 km² | 229 611, 2.5 s, 2.4 GB | 21 669 768, 37 s, 11.8 GB | about 1.37 million |
 
 At 1.37 million triangles, refine's measured rate at 1 m on the corridor
-(21.7 million in 17.9 s) gives about 1.1 s; the field's queries add 0.9 to
-3.1 s of wall time on 10 threads (section 10, from `33-probes/query_cost.py`);
-with the 1.6 s decode the whole corridor should take about 4 to 7 s. The
+(21.7 million in 17.9 s) gives about 1.1 s; the field's queries add 1.3 to
+4.0 s of wall time on 10 threads (section 10, from `33-probes/query_cost.py`);
+with the 1.6 s decode the whole corridor should take about 4 to 8 s. The
 triangle count is an estimate, likely low: section 3's extra refinement where
 a large triangle reaches towards the line is not in it, and was not
 measured.
@@ -517,8 +523,8 @@ rasputin fetch its own data); the script is the stopgap.
 | G4 | Every edge-strip and final-check point's error is at most `t` at its triangle's distance | test 8 |
 | G5 | The output is the same for any thread count | test 9 |
 | G6 | The lazy query changes nothing | test 7 |
-| G8 | The field reaches every comparison: a ramp that holds every triangle at `N` gives the `--tolerance N` mesh, bit for bit, feet included | test 3 (b) |
 | G7 | Simplification never makes the allowed error larger | test 11 |
+| G8 | The field reaches every comparison: a ramp that holds every triangle at `N` gives the `--tolerance N` mesh, bit for bit, feet included | test 3 (b) |
 
 ## 8. Degeneracies
 
@@ -647,7 +653,7 @@ record.
 | simplify (`shapely.simplify(geom, 1.0, preserve_topology=False)`, GEOS Douglas-Peucker, tolerance 1 m) | not run | 0.0 s measured (to 13 628 vertices) | probe item 1 |
 | select segments (NumPy box test) | not run | milliseconds | O(n) |
 | build the field (`BroadPhase` over about 12 000 segments) | not run | milliseconds | O(n) |
-| per-triangle query in the scan | none: `UniformTolerance` never queries | 0.7 to 2.7 µs per index query (one to four occupied buckets of about 45 segments, about 15 ns per distance); a triangle beyond `E` runs all six queries of the doubling search, one within `E/16` runs one; per scanned triangle 1.8 to 6.4 µs, weighted by triangles per distance band; 3.5 scans per final triangle, 1.37 million final triangles: 8.8 to 30.8 s of CPU, 0.9 to 3.1 s of wall time on 10 threads | estimate, not measured (no C++ exists): `33-probes/query_cost.py`, its assumptions stated there; errs high, as it does not count the queries the laziness skips |
+| per-triangle query in the scan | none: `UniformTolerance` never queries | 0.675 µs per occupied bucket met (about 45 segments, about 15 ns per distance); an index query meets one to four occupied buckets up to `g = 750 m`, two to four at 1.5 km and four to six at 3 km; a triangle within `E/16` runs one query (0.7 to 2.7 µs), one beyond `E` all six (8.8 to 18.9 µs), each band charged the queries its far edge needs; per scanned triangle 2.7 to 8.3 µs, weighted by triangles per distance band; 3.5 scans per final triangle, 1.37 million final triangles: 13.1 to 40.4 s of CPU, 1.3 to 4.0 s of wall time on 10 threads | estimate, not measured (no C++ exists): `33-probes/query_cost.py`, its assumptions stated there; errs high, as it does not count the queries the laziness skips |
 | `max_error_near_lines_m` at the end | not run | one query per final triangle, under 0.3 s wall | estimate |
 
 **Library calls**, with method and tolerance: `pyproj.Transformer.from_crs(
@@ -663,13 +669,19 @@ band, with the mesh's SHA-256 unchanged (G1). The quick check
 (`tools/bench_quick.py`) gains the Geilo-Ål case with the ramp
 (`docs/benchmarks/quick/cases.toml`), which has no baseline at first; `@perf`
 records one. Accepted when the default-flag runs are unchanged and the
-Geilo-Ål ramp run's refine time per output triangle is at most 4 times the
-uniform 1 m run's on the same section. The basis: the uniform 1 m corridor
+Geilo-Ål ramp run's refine time per output triangle is at most 5 times the
+uniform 1 m run's on the same section (Q8). "Refine time" is the quick
+check's `refine` phase, the one `--stats` prints: the wall time of the
+`refine` call. The field is built before that call, in `_dem_mesh`, so
+building it is not in it (its cost is the row "build the field" above); the
+worker threads are started inside every `refine` call, uniform or ramp, so
+their start-up is in both runs alike. The basis: the uniform 1 m corridor
 refines at 0.83 µs of wall time per output triangle (17.89 s for 21.7
-million), and the queries add 0.64 to 2.26 µs per output triangle (3.5 scans
-at 1.8 to 6.4 µs, on 10 threads), so the estimate is 1.8 to 3.7 times; the
-first draft's 1.5 was below the estimate's own low end. Above 4 times, the
-query is what `@developer` cuts first (a bucket index sized to `E / 16`, or
+million), and the queries add 0.96 to 2.94 µs per output triangle (3.5 scans
+at 2.7 to 8.3 µs, on 10 threads), so the estimate is 2.2 to 4.6 times
+(`33-probes/query_cost.py`'s last line); 5 sits above its high end, which
+errs high already (the laziness's skipped queries are not subtracted).
+Above 5 times, the query is what `@developer` cuts first (a bucket index sized to `E / 16`, or
 asking only whether a segment lies within the distance the error needs). The
 corridor run is timed once for the record, not judged.
 
@@ -704,6 +716,12 @@ Each with the default this design is written on.
   OpenStreetMap (share-alike licence)? *Default: Bane NOR.*
 - **Q7. Corridor width:** 5 km each side, so 2 km of 20 m ground shows beyond
   the ramp. *Default: 5 km.*
+- **Q8. How much slower per triangle may a ramp run be?** Looking up each
+  triangle's distance to the line costs time; the estimate is 2.2 to 4.6
+  times the uniform 1 m run's refine time per output triangle. On the
+  corridor that is still a few seconds, against 37 s for the uniform 1 m
+  mesh. *Default: accept up to 5 times (section 10); above it, the lookup is
+  made cheaper before the increment merges.*
 
 ## 13. ROADMAP
 

@@ -3,12 +3,11 @@
 Run by hand from one working directory holding Bane NOR's national
 Banenettverk file, `Samferdsel_0000_Norge_25833_Banenettverk_GML.gml` (from
 `https://nedlasting.geonorge.no/geonorge/Samferdsel/Banenettverk/GML/Samferdsel_0000_Norge_25833_Banenettverk_GML.zip`,
-NLOD 1.0, dated 2025-03-06 in Geonorge's metadata), with the DTM10 tiles at
+NLOD 1.0, dated 2025-03-06 in Geonorge's metadata; whoever fetches it again
+sends a generic User-Agent, never Ola's email address), with the DTM10 tiles at
 `../rasputin_data/DTM10_UTM33_20260925` (the scripts name the absolute path).
 Python is the repository's `.venv`; `rasputin` is master at `4cd7e050`. The Mac
 was on AC power (`pmset -g batt`: "Now drawing from 'AC Power'").
-Any web request a probe or a literature check makes (the download above, a
-paper's page) sends a generic User-Agent, never Ola's email address.
 
 1. `probe_line.py`: the line's length, tunnels, corridor areas and DTM10
    coverage. Output, word for word (the first line of the Counter is the
@@ -91,19 +90,24 @@ paper's page) sends a generic User-Agent, never Ola's email address.
    (`docs/benchmarks/2026-10-04/23b-fix-base-r3/run.json`: 219 837 inserted,
    445 675 flips; created triangles, 3 per insert and 2 per flip, over final
    triangles, 2 per insert), and a cost per scanned triangle per distance
-   band that the script states as an assumption. Output, word for word:
+   band computed from the rule the script states as an assumption (0.675 µs
+   per occupied bucket; the buckets a query meets by its `g`; each band
+   charged the queries its far edge needs). Output, word for word:
 
    ```
-   band (0, 100): share 0.300, cost us (0.7, 2.7)
-   band (100, 500): share 0.368, cost us (1.4, 5.4)
-   band (500, 1000): share 0.146, cost us (2.1, 8.1)
-   band (1000, 2000): share 0.096, cost us (3.5, 10.8)
-   band (2000, 3000): share 0.037, cost us (5.0, 15.0)
-   band beyond E: share 0.053, cost us (5.0, 15.0)
+   band (0, 100): share 0.300, cost us 0.7 to 2.7
+   band (100, 500): share 0.368, cost us 2.0 to 8.1
+   band (500, 1000): share 0.146, cost us 3.4 to 10.8
+   band (1000, 2000): share 0.096, cost us 6.1 to 14.8
+   band (2000, 3000): share 0.037, cost us 6.1 to 14.8
+   band beyond E: share 0.053, cost us 8.8 to 18.9
    scans per final triangle 3.53
-   mean cost per scanned triangle us 1.8 to 6.4
-   corridor CPU s 8.8 to 30.8
-   corridor wall s on 10 threads 0.9 to 3.1
+   mean cost per scanned triangle us 2.7 to 8.3
+   corridor CPU s 13.1 to 40.4
+   corridor wall s on 10 threads 1.3 to 4.0
+   uniform 1 m refine wall us per output triangle 0.83
+   queries' wall us per output triangle 0.96 to 2.94
+   ratio to uniform 1 m 2.2 to 4.6
    ```
 
    The shares come from a cruder density model than item 4's (the section's
