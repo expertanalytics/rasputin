@@ -15,31 +15,6 @@ the lines and to ``--tolerance`` (F) from ``END`` metres out, linearly between.
 - test 14: more vertices within 100 m of the line than the ``--tolerance F``
   mesh has there (no count against the ``--tolerance N`` mesh: greedy
   insertion is not monotone in the tolerance).
-
-PINNED HERE, where the design leaves it open (listed for ``@architect``):
-
-- the binding: ``_core.LineTolerance(view, segments, near, far, start, end,
-  margin)``, positional, ``view`` a ``RasterView`` whose geometry is the frame
-  (4.1 writes ``geometry``; Python holds no bare geometry), ``segments`` a
-  float64 ``(k, 4)`` array; a bad ramp or coordinate is a ``ValueError`` whose
-  message names the bound (``near``) or ``coordinate``;
-- the keyword ``field`` on ``_core.refine``, ``_core.refine_points`` and
-  ``_core.refine_strip``, keyword-only, last, default ``None`` (today's run);
-  ``RefineOutcome.max_error_near`` a float;
-- the CLI passes the field to all three calls (``refine``, the edge strip's
-  ``refine_strip``, the final check's ``refine_points``);
-- the refusals' words, in the CLI's existing style: "--tolerance-near needs
-  --tolerance", "--tolerance-near needs --tolerance-ramp", "--tolerance-ramp
-  needs --tolerance-near", "applies only with --dem" (with the flag named),
-  "must be finite and >= 0" (with the flag named), and "above" for N above F
-  and START above END, each with both numbers;
-- the record: ``tolerance_near_m`` a float, ``tolerance_ramp_m`` "<S> to <E>"
-  (``:g``), ``tolerance_lines`` "<file name>: <k> segments";
-- the out-of-reach stderr line in section 5's words, numbers ``:g``.
-
-Every new symbol is fetched inside a test, so before increment 33 each test
-fails on its own (``No such option: --tolerance-near``, a missing
-``LineTolerance``, an unexpected keyword ``field``) and the session collects.
 """
 
 from __future__ import annotations
@@ -61,6 +36,7 @@ import tin_engine.edge_strip as edge_strip
 import tin_engine.final_check as final_check
 from cli_driver import SQUARE, UTM33, geojson, invoke, refused, rough_dem
 from geotiff_fixtures import TIE_X, TIE_Y
+from gpkg_fixtures import Layer, Row, write_gpkg
 from test_cli_constraint_feet_all_paths import Spy
 from test_cli_mesh_geographic import TARGET, domain_4674, geographic_dem, lonlat_ring
 from test_cli_mesh_stats import mesh
@@ -417,14 +393,24 @@ class TestRecord:
         for name in FIELDS:
             assert name not in record, name
 
+    @pytest.mark.parametrize("suffix", ["geojson", "gpkg"])
     def test_lines_out_of_reach_say_so_and_give_the_far_mesh(
-        self, tmp_path: Path, bumpy: Path, box: Path, monkeypatch: pytest.MonkeyPatch
+        self,
+        tmp_path: Path,
+        bumpy: Path,
+        box: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        suffix: str,
     ) -> None:
-        """G2: no segment within reach is the ``--tolerance F`` mesh."""
-        far = lines_file(
-            tmp_path / "far.geojson",
-            [LineString([(TIE_X + 10_000, TIE_Y), (TIE_X + 10_000, TIE_Y - 100)])],
-        )
+        """G2: no segment within reach is the ``--tolerance F`` mesh. In a
+        GeoPackage the R-tree query finds no row at all, which is still zero
+        segments, not a file with no lines (code review round 1, fix 1)."""
+        far_line = LineString([(TIE_X + 10_000, TIE_Y), (TIE_X + 10_000, TIE_Y - 100)])
+        if suffix == "gpkg":
+            layer = Layer("lines", 25833, [Row(1, far_line)])
+            far = write_gpkg(tmp_path / "far.gpkg", [layer])
+        else:
+            far = lines_file(tmp_path / "far.geojson", [far_line])
         args = ("--dem", str(bumpy), "--domain", str(box), "--tolerance", "20")
         ramp = ("--tolerance-near", str(far), "1", "--tolerance-ramp", "0", "3000")
         phase = Spy(monkeypatch, cli, "refine")
@@ -435,7 +421,7 @@ class TestRecord:
         plain_vtk, _, _ = run(tmp_path, *args, out="plain")
         # Section 9.1, "Zero segments kept": three of the four fields, no
         # max_error_near_lines_m, since no triangle is near a line.
-        assert record["tolerance_lines"] == "far.geojson: 0 segments"
+        assert record["tolerance_lines"] == f"far.{suffix}: 0 segments"
         assert record["tolerance_near_m"] == 1.0
         assert record["tolerance_ramp_m"] == "0 to 3000"
         assert "max_error_near_lines_m" not in record

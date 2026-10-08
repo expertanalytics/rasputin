@@ -500,9 +500,7 @@ target_link_libraries(test_quality_gain_refine PRIVATE Threads::Threads)
 #                                    refine_strip: tests 1, 2, 3, 5, 7, 8 and 9,
 #                                    with the QA rules' section D oracles. It
 #                                    starts threads; test 9 is the TSan job's.
-# Tests 1 to 8 are the design's invariant-critical suite. Both files are
-# guarded on terrain/refinement/line_tolerance.hpp: without it each compiles to
-# one failing case that names the missing header, and the tree still builds.
+# Tests 1 to 8 are the design's invariant-critical suite.
 add_terrain_backend_test(test_refinement_line_tolerance unit/test_refinement_line_tolerance.cpp)
 add_terrain_backend_test(prop_refinement_line_tolerance property/prop_refinement_line_tolerance.cpp)
 target_link_libraries(prop_refinement_line_tolerance PRIVATE Threads::Threads)

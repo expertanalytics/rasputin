@@ -25,16 +25,10 @@
 // index can lose it), each capped at end + margin as distance() is. The pair
 // distance itself is checked against this file's own formula
 // (support/line_tolerance_oracle.hpp) to 1e-9 m, its coordinates below 1e3 m.
-//
-// Guarded: until include/terrain/refinement/line_tolerance.hpp exists, this
-// file compiles to one failing case that says so, and the rest of the tree
-// builds.
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-
-#if __has_include(<terrain/refinement/line_tolerance.hpp>)
 
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
@@ -487,12 +481,3 @@ TEST_CASE("33 test 10: make accepts the edges of the bounds", "[line_tolerance][
     std::string why;
     CHECK(LineTolerance::make(g, std::span<const Seg>{}, kWide, why).has_value());  // zero segments
 }
-
-#else
-
-TEST_CASE("33: include/terrain/refinement/line_tolerance.hpp does not exist yet", "[line_tolerance]") {
-    FAIL("increment 33 is not built: no terrain/refinement/line_tolerance.hpp (LineTolerance, "
-         "ToleranceRamp, UniformTolerance, TolerancePolicy), so tests 4, 6 and 10 cannot compile");
-}
-
-#endif

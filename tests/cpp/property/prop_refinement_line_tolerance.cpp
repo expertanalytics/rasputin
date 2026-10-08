@@ -42,15 +42,9 @@
 // from the output, d(n) by brute force to the original segments). Test 5 and
 // test 8 show the ramp oracle fails on the uniform-F mesh of the same input,
 // so it can fail.
-//
-// Guarded: until include/terrain/refinement/line_tolerance.hpp exists, this
-// file compiles to one failing case that says so, and the rest of the tree
-// builds.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-
-#if __has_include(<terrain/refinement/line_tolerance.hpp>)
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -566,12 +560,3 @@ TEST_CASE("33 test 9: 1 and 8 threads give the same mesh with a field", "[line_t
     const auto store = store_of(g, scattered(sc.dem, 17));
     same(points_run(store, b, point_options(3.0, true, 1), f), points_run(store, b, point_options(3.0, true, 8), f));
 }
-
-#else
-
-TEST_CASE("33: include/terrain/refinement/line_tolerance.hpp does not exist yet", "[line_tolerance][property]") {
-    FAIL("increment 33 is not built: no terrain/refinement/line_tolerance.hpp, so refine, refine_points and "
-         "refine_strip take no tolerance policy and tests 1, 2, 3, 5, 7, 8 and 9 cannot compile");
-}
-
-#endif
