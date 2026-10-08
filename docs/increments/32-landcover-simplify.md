@@ -1127,7 +1127,10 @@ C++, `tests/cpp/unit/test_border_collapse.cpp`:
     Both must be made at clearance 1: the refusals in 15.2 are strict
     (closer than the clearance, |E − A| or |E − D| under it), and 1.5 is
     not under 1. Checked by the output: E's border has one vertex fewer
-    than its input, and `rejected_clearance` is 0. Under M11 (refusing
+    than its input, and `rejected_clearance` is 0. **And the whole output at
+    clearance 1 equals the clearance-0 output bit for bit**, so a mutant
+    that skips the 1.5 m placement and makes the collapse with the other
+    line's E instead still goes red. Under M11 (refusing
     under 2 m) both are refused, so both go red; (b) also goes red under
     M10, whose copies of the junction sit at 0. `@tester` shows each
     case's 1.5 m with a printed distance at clearance 0 first.
