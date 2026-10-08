@@ -679,11 +679,13 @@ def _loops(
 ) -> list[BaseGeometry]:
     """The regions one ring's rule changed (ruling T2): between two consecutive
     kept input vertices whose stretch changed, the loop of the old stretch and
-    the new one; with no kept input vertex, the old and the new polygon."""
+    the new one; with no kept input vertex, the symmetric difference of the old
+    and the new polygon (ruling P1)."""
     n, m = len(old) - 1, len(new)
     at = [(a, i) for a, i in enumerate(index) if i >= 0]
     if not at:
-        return [shapely.make_valid(Polygon(xy)) for xy in (old, new) if len(xy) >= 3]
+        was, now = (shapely.make_valid(Polygon(xy if len(xy) >= 3 else None)) for xy in (old, new))
+        return [shapely.symmetric_difference(was, now)]
     out = []
     for (a, i), (b, j) in zip(at, at[1:] + at[:1], strict=True):
         span, step = ((j - i) % n, (b - a) % m) if len(at) > 1 else (n, m)
