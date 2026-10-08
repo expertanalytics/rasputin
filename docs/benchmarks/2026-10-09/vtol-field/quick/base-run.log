@@ -1,0 +1,9 @@
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip 53 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 52 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/vtol-field/docs/benchmarks/quick/baseline-ac.json
+NO BASELINE: no stored baseline
+exit 2
