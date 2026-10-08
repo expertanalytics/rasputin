@@ -21,7 +21,9 @@ the design names are run after the green step, on the built code:
   end kept): OR9 (``TestACutBesideAVertex``, added by ruling T1). The T2
   test (``TestOnlyWhatMovedIsRebuilt``) and the P1 test
   (``TestARingWithNoKeptVertex``, added by ruling P1 of "Rulings on the fix
-  round") are not mutation-critical.
+  round") are not mutation-critical, nor are the R1 tests
+  (``TestAHoleOnTheOutline``, ``TestABandAlongTheWholeOutline``, added by
+  ruling R1 of "Rulings on 20c-3's code review round 1").
 
 The rule's own function is called directly, on polygons and an outline in
 EPSG:25833 at ``feature_fixtures``' UTM-shaped offset. The outline is a
@@ -42,7 +44,8 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   one tuple of ``LineString`` per input polygon in input order (its
   linework after the rule, not yet clipped to the domain), and
   ``area_changed``, the land-cover area inside the outline that changed
-  polygon, m² (the record's "land-cover area that changed class").
+  polygon, m² (the record's "land-cover area inside the outline that the
+  outline rule gave to another polygon", ruling R4).
 - D = 0 returns each polygon's rings, exterior first, as ``LineString``,
   coordinates identical (OR6).
 - D at or above 100 m raises ``ValueError`` naming 100 (OR7); the CLI
@@ -54,6 +57,17 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   parts; the far part is the one holding its input's centroid, and
   ``equals_exact`` at 0 also pins its ring's start and orientation (it is
   the input part itself, not a union's rewrite of it).
+
+- R1: the band case's inside is checked by area (1e6 m² to 1e-6), not
+  ``equals`` the square; the ``area_changed`` of 11 964 m² is pinned from
+  the ruling's probe, and is already that on ``1e011cec``.
+
+RED at the commit that adds the R1 tests (on ``a4d50033``, the code as on
+``1e011cec``): ``test_r1_the_ring_keeps_its_hole`` (the ring 13 560 m²,
+holding (53, 250)), ``test_r1_the_three_still_cover_the_square_once``
+(1 023 860 m²) and
+``test_r1_the_band_goes_empty_and_the_inside_becomes_the_square`` (the
+band 1e6 m²).
 
 RED at the commit that adds the P1 test (on ``7a45dabc``, the code as on
 ``8716f062``): ``test_p1_the_area_moved_is_a_alone`` (``area_changed``
@@ -571,3 +585,79 @@ class TestARingWithNoKeptVertex:
     def test_p1_the_area_moved_is_a_alone(self, fi: ModuleType) -> None:
         out = rule(fi, [self.A, self.B], self.SQUARE)
         assert out.area_changed == pytest.approx(20.0, abs=1e-6)
+
+
+# ---------------------------------------------------------------- R1
+
+
+class TestAHoleOnTheOutline:
+    """Ruling R1 ("Rulings on 20c-3's code review round 1", review B1): a
+    hole the outline rule moves onto the outline stays a hole. The
+    review's fixture: a 1 km square outline, D = 5 m; water, two lakes
+    (the first 3 m inside the west side); a ring of another class around
+    the first lake, its west side 2 m inside; the rest of the square. The
+    rule moves the lake and the ring onto the outline, so the ring's hole
+    touches its shell along a line. Water comes back as 70 300 m², the
+    ring as 3 260 m², the rest as 926 440 m²: a partition of the square.
+    On ``1e011cec`` the ring comes back as 13 560 m², holding the lake
+    (``make_valid``'s "linework" method fills a hole that touches the
+    shell), and the three sum to 1 023 860 m².
+
+    Local coordinates, the square 0 to 1000 m; areas up to 1e6 m² from
+    coordinates up to 1000 m, where a double resolves about 1e-13 m and an
+    overlay of these axis-parallel rings is exact. The 1e-6 m² bound is the
+    ruling's."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    LAKE = local((3, 200), (103, 200), (103, 300), (3, 300))
+    WATER = shapely.MultiPolygon([LAKE, local((500, 500), (800, 500), (800, 700), (500, 700))])
+    RING = shapely.difference(local((2, 190), (113, 190), (113, 310), (2, 310)), LAKE)
+    REST = shapely.difference(SQUARE, shapely.union_all([WATER, RING]))
+    CENTRE = Point(53, 250)  # the first lake's centre
+
+    def test_r1_the_premise_a_coverage_of_the_square_with_a_lake_in_the_ring(self) -> None:
+        parts = (self.WATER, self.RING, self.REST)
+        assert all(p.is_valid for p in parts)
+        assert sum(p.area for p in parts) == pytest.approx(1e6, abs=1e-6)
+        assert len(self.RING.interiors) == 1 and not self.RING.covers(self.CENTRE)
+        assert shapely.distance(self.LAKE, self.SQUARE.boundary) < D
+        assert shapely.distance(self.RING, self.SQUARE.boundary) < D
+
+    def test_r1_the_ring_keeps_its_hole(self, fi: ModuleType) -> None:
+        _, ring, _ = rule(fi, [self.WATER, self.RING, self.REST], self.SQUARE).polygons
+        assert ring.area == pytest.approx(3260.0, abs=1e-6), ring.wkt
+        assert not ring.covers(self.CENTRE), ring.wkt
+
+    def test_r1_the_three_still_cover_the_square_once(self, fi: ModuleType) -> None:
+        polygons = rule(fi, [self.WATER, self.RING, self.REST], self.SQUARE).polygons
+        assert sum(p.area for p in polygons) == pytest.approx(1e6, abs=1e-6)
+
+
+class TestABandAlongTheWholeOutline:
+    """Ruling R1, and P4's band case ("Rulings on the fix round"): a band
+    3 m wide, narrower than D, along the whole outline of a 1 km square,
+    its inside a second polygon. Both of the band's rings go onto the
+    outline, so the band comes back empty and the inside as the whole
+    square; the band's 11 964 m² (1e6 less 994²) changed polygon. On
+    ``1e011cec`` both come back as the whole square (the band's hole
+    filled), with ``area_changed`` already 11 964 m².
+
+    Local coordinates and the bound as ``TestAHoleOnTheOutline``."""
+
+    SQUARE = local((0, 0), (1000, 0), (1000, 1000), (0, 1000))
+    INSIDE = local((3, 3), (997, 3), (997, 997), (3, 997))
+    BAND = shapely.difference(SQUARE, INSIDE)
+
+    def test_r1_the_premise_a_band_narrower_than_d(self) -> None:
+        assert self.BAND.is_valid and len(self.BAND.interiors) == 1
+        assert self.BAND.area == pytest.approx(11964.0, abs=1e-6)
+        assert shapely.distance(self.INSIDE.exterior, self.SQUARE.boundary) < D
+
+    def test_r1_the_band_goes_empty_and_the_inside_becomes_the_square(self, fi: ModuleType) -> None:
+        band, inside = rule(fi, [self.BAND, self.INSIDE], self.SQUARE).polygons
+        assert band.is_empty, f"{band.area} m2"
+        assert inside.area == pytest.approx(1e6, abs=1e-6), inside.wkt
+
+    def test_r1_the_area_moved_is_the_band(self, fi: ModuleType) -> None:
+        out = rule(fi, [self.BAND, self.INSIDE], self.SQUARE)
+        assert out.area_changed == pytest.approx(11964.0, abs=1e-6)

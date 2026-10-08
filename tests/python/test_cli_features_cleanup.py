@@ -32,6 +32,10 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   ``--features-tolerance`` negative or non-finite;
   ``--features-outline-snap`` negative, non-finite, or at or above 100.
 
+RED at the commit that adds ``test_the_area_row_says_another_polygon``
+(on ``a4d50033``): the row's wording is "... that changed class, m2"
+(ruling R4).
+
 RED at the commit that adds this file: none of the four flags exists, so
 every run that passes one exits 2 with "No such option" (which every refusal
 test excludes), and the default runs hand ``open_features`` a request without
@@ -49,6 +53,7 @@ import pytest
 import typer
 
 import tin_engine.cli as cli
+import tin_engine.run_record as rr
 from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from recordread import stats_names, stats_row
@@ -70,6 +75,12 @@ FLAGS = (
     "--features-outline-snap",
 )
 VERTEX_WORDING = "Land-cover vertices before and after clean-up"
+#: Ruling R4 ("Rulings on 20c-3's code review round 1"): with the merge off
+#: the rule can move area between two polygons of one class, so not "changed
+#: class".
+AREA_WORDING = (
+    "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
+)
 
 bumpy = rough_dem(16)
 
@@ -160,6 +171,20 @@ class TestDefaults:
         assert record["features_outline_snap_m"] == OUTLINE_DEFAULT
         assert record["features_merge_same_class"] == "on"
         assert VERTEX_WORDING in report
+
+    def test_the_area_row_says_another_polygon(
+        self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
+    ) -> None:
+        """Ruling R4: ``land_cover_area_moved_m2``'s wording, in ``--stats``
+        on a land-cover run and in the record's table. Red on ``1e011cec``
+        ("... that changed class, m2")."""
+        report, _, _ = run(
+            tmp_path, bumpy, square, "--features", str(corine), "--features-map", "corine"
+        )
+        assert "land_cover_area_moved_m2" in stats_names(report)
+        assert AREA_WORDING in report
+        assert "changed class" not in report
+        assert rr.WORDING["land_cover_area_moved_m2"] == AREA_WORDING
 
     def test_the_outline_rule_whenever_features_are_given(
         self,
