@@ -51,6 +51,15 @@ PINNED for increment 32: "the land-cover stage ran" is a ``--features`` file
 with coded polygons under a class map with codes (``corine``); features with
 no class codes (``gallery``) keep 25 at any band.
 
+Increment 32's fix (section 15.2's order; 15.3, test 22; 15.4's wording):
+with the default band the outline rule sees the band-0 input, so the record's
+``land_cover_area_moved_m2`` is the band-0 run's exactly; the land-cover
+lines are cut where the simplified rings lie on the domain outline, so no
+line keeps an edge on it; ``BAND_HELP`` and ``BAND_WORDING`` are 15.4's.
+Test 14's band-0 digest is unchanged. RED at the commit that added them
+(section 15's red step): the rule ran after the domain clip and the
+simplifier, and the help and record said "repaired, clipped border".
+
 RED at the commit that added increment 32's tests (``44f25968``): the default
 was 0, the start angle was always 25, the help and record text were the old
 ones, and ``cli.LANDCOVER_START_MIN_ANGLE`` did not exist. Band 0's digest and
@@ -62,11 +71,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import shapely
 import typer
 
 import tin_engine.cli as cli
@@ -75,7 +86,7 @@ from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from recordread import stats_names, stats_row
 from test_cli_mesh_features import GALLERY
-from test_cli_mesh_landcover import EAST, WEST, coded
+from test_cli_mesh_landcover import EAST, WEST, coded, rect
 from vtkread import polygons_as_array, read_vtk
 
 REPAIR_DEFAULT = 1.0  # question 9's default, 1 m (Ola, 2026-10-08)
@@ -87,15 +98,21 @@ BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accurac
 #: 0``; computed by @tester with that command at b39426c0 (325 points, 586
 #: triangles, start angle 25), three runs alike.
 BAND_0_TODAY = "29963a44f6fb48f8c1d2bd64671bd007a15e3031c1d33a564ae41371dc2efca3"
+#: Section 15.4's wording (the fix moved the band after the outline rule; the
+#: section 6 wording this replaced said "repaired, clipped border").
 BAND_HELP = (
-    "Metres: simplify land-cover borders, each moved at most this far from its repaired, "
-    "clipped border and each class keeping its area; the repair and the outline rule move "
-    "borders on top of this. 0 is off. Default: 50."
+    "Metres: simplify land-cover borders, each moved at most this far from its border after "
+    "the repair and the outline rule, each class keeping its area; the simplification can "
+    "bring a border back within the outline-snap distance of the outline, but not closer "
+    "than the repair distance. 0 is off. Default: 50."
 )
 BAND_WORDING = (
-    "Land-cover borders simplified, each at most this far from its repaired, clipped border, "
-    "each class's area kept (0 = off)"
+    "Land-cover borders simplified, each at most this far from its border after the repair "
+    "and the outline rule, each class's area kept (0 = off)"
 )
+#: Section 15.2: an edge lies on the outline when one outline segment is
+#: within this of both its ends (``feature_input.IN_LINE``, 1 µm).
+ON_OUTLINE = 1e-6
 START_HELP = "Default: 25, or 15 with land cover simplified (--features-tolerance above 0)."
 ROWS = (
     "features_repair_m",
@@ -130,6 +147,21 @@ def corine(tmp_path: Path) -> Path:
     return write_geojson(
         tmp_path / "corine.geojson", [coded(1, WEST, "311"), coded(2, EAST, "512")]
     )
+
+
+@pytest.fixture
+def near_outline(tmp_path: Path) -> Path:
+    """Test 22's second fixture: ``corine`` lies wholly inside ``square``,
+    more than 5 m from its outline, so the outline rule moves nothing there.
+    Here a forest covers the square and overhangs it, and a lake strip along
+    its south side has its north border 2.9 to 3.3 m inside the outline
+    (``SQUARE``'s south edge runs from y = -73.3 to -72.9), which the rule
+    puts onto it: the band-0 run moves area. The forest is two classes split
+    at x = 100.7, as ``corine``, so a border crosses the square: a line."""
+    west, east = rect(0.0, -70.0, 100.7, 20.0), rect(100.7, -70.0, 200.0, 20.0)
+    south = rect(0.0, -90.0, 200.0, -70.0)
+    features = [coded(1, west, "311"), coded(2, east, "312"), coded(3, south, "512")]
+    return write_geojson(tmp_path / "near_outline.geojson", features)
 
 
 @pytest.fixture
@@ -386,6 +418,79 @@ class TestTheBand:
         assert params["features_tolerance"].help == BAND_HELP
         assert START_HELP in (params["start_min_angle"].help or "")
         assert rr.WORDING["features_tolerance_m"] == BAND_WORDING
+
+
+class TestTheFixOrder:
+    """Increment 32, test 22 (section 15.3): the outline rule sees the same
+    input with the band on as with it off, and no land-cover line lies on
+    the domain outline. ``run``'s ``bumpy`` DEM, ``square`` domain and the
+    ``corine`` fixture, whose two polygons overhang the square."""
+
+    def captured(
+        self, tmp_path: Path, bumpy: Path, square: Path, corine: Path, *extra: str
+    ) -> tuple[dict[str, Any], Any, Any]:
+        """The record, the ``FeatureSet`` and the domain of one run."""
+        seen: list[tuple[Any, Any]] = []
+        real = cli.open_features
+
+        def spy(request: Any, domain: Any, *args: Any, **kwargs: Any) -> Any:
+            fs = real(request, domain, *args, **kwargs)
+            seen.append((fs, domain))
+            return fs
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(cli, "open_features", spy)
+            _, record, _ = run(
+                tmp_path,
+                bumpy,
+                square,
+                "--features",
+                str(corine),
+                "--features-map",
+                "corine",
+                *extra,
+            )
+        ((fs, domain),) = seen
+        return record, fs, domain
+
+    @pytest.mark.parametrize("cover", ["corine", "near_outline"])
+    def test_22_the_area_moved_is_band_0s(
+        self, tmp_path: Path, bumpy: Path, square: Path, cover: str, request: pytest.FixtureRequest
+    ) -> None:
+        source = request.getfixturevalue(cover)
+        (tmp_path / "on").mkdir()
+        (tmp_path / "off").mkdir()
+        on, fs_on, _ = self.captured(tmp_path / "on", bumpy, square, source)
+        off, fs_off, _ = self.captured(
+            tmp_path / "off", bumpy, square, source, "--features-tolerance", "0"
+        )
+        assert on["features_tolerance_m"] == BAND_DEFAULT
+        if cover == "near_outline":
+            assert fs_off.area_changed > 0  # the premise: the rule moved area
+        # The record holds the area as text, to 0.1 m2; the stage's float exactly.
+        assert on["land_cover_area_moved_m2"] == off["land_cover_area_moved_m2"]
+        assert fs_on.area_changed == fs_off.area_changed
+
+    @pytest.mark.parametrize("cover", ["corine", "near_outline"])
+    def test_22_no_land_cover_line_lies_on_the_outline(
+        self, tmp_path: Path, bumpy: Path, square: Path, cover: str, request: pytest.FixtureRequest
+    ) -> None:
+        _, fs, domain = self.captured(tmp_path, bumpy, square, request.getfixturevalue(cover))
+        segments = [
+            shapely.LineString(seg)
+            for r in shapely.get_rings(domain.polygon)
+            for seg in zip(
+                shapely.get_coordinates(r)[:-1], shapely.get_coordinates(r)[1:], strict=True
+            )
+        ]
+        assert segments
+        lines = [line for f in fs.features for line in f.lines]
+        assert lines  # the premise: the land cover has lines
+        for line in lines:
+            for a, b in pairwise(shapely.get_coordinates(line)):
+                ends = shapely.points(np.array([a, b]))
+                on = [bool(np.all(shapely.distance(ends, s) <= ON_OUTLINE)) for s in segments]
+                assert not any(on), (a.tolist(), b.tolist())
 
 
 # ---------------------------------------------------------------- refusals

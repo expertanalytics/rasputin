@@ -35,6 +35,31 @@ EPSG:3035 near (4.8e6, 5.4e6) m, where one ulp is 9.3e-10 m, and a part's
 area is checked to 1e-9 relative or 1e-6 m2, whichever is larger (a few
 collapses' rounding on its smallest parts).
 
+Increment 32's fix (section 15.2, the clearance; 15.3, test 21), PINNED
+HERE where it leaves the Python spelling open (listed in the handback):
+
+- ``_core.simplify_borders(points, ring_starts, band, clearance=0.0)``, the
+  clearance a keyword; ``_core.BorderStatus.InvalidClearance`` for a negative
+  or non-finite one; ``BorderCounts`` gains ``rejected_clearance`` and
+  ``skipped_placements``.
+- ``border_simplify.simplify_borders(polygons, band_m, clearance_m=0.0)``; a
+  refused clearance is a ``ValueError`` whose message says "clearance";
+  ``clearance_m`` 0 gives the call without it, ``equals_exact`` tolerance 0.
+- Test 21 also checks every output edge with a new vertex as an end against
+  every output vertex it does not end (the other half of 15.2's added
+  guarantee), with the same slack.
+
+Scale of test 21's bound: 1 m less 1e-6 m. At EPSG:3035 coordinates near
+(4.8e6, 5.4e6) m one ulp is 9.3e-10 m, so 1e-9 would leave about one ulp for
+two distance computations (the kernel's and GEOS's) that may round
+differently (15.3).
+
+RED at the commit that added test 21 and the clearance tests (section 15's
+red step): ``_core.simplify_borders`` took no clearance, so every call that
+passes one is a ``TypeError``; the adapter had no ``clearance_m``; there was
+no ``InvalidClearance`` and no ``rejected_clearance`` or
+``skipped_placements``.
+
 RED at the commit that added this file (``44f25968``): ``_core`` had no
 ``simplify_borders`` and ``tin_engine.border_simplify`` did not exist; every
 test failed on the ``core`` or ``adapter`` fixture's assertion naming what was
@@ -64,6 +89,8 @@ COUNTS = (
     "collapses",
     "rejected_crossing",
     "rejected_side",
+    "rejected_clearance",  # section 15.2
+    "skipped_placements",
 )
 RELEASED_TICKS = 20  # as test_core_noding.py: a released call lets the ticker run
 
@@ -278,7 +305,13 @@ class TestBinding:
     def test_the_statuses_cross_the_binding(self, core: Any) -> None:
         points, starts = flat([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])
         status = core.BorderStatus
-        assert {s.name for s in status.__members__.values()} == {"Ok", "InvalidBand", "BadRings"}
+        # Section 15.2 adds InvalidClearance (this line said three, test 16).
+        assert {s.name for s in status.__members__.values()} == {
+            "Ok",
+            "InvalidBand",
+            "BadRings",
+            "InvalidClearance",
+        }
         for band in (-1.0, float("nan"), float("inf")):
             out = core.simplify_borders(points, starts, band)
             assert out.status == status.InvalidBand
@@ -401,3 +434,88 @@ class TestAdapter:
         bad = Polygon([(0.0, 0.0), (10.0, 0.0), (float("nan"), 10.0), (0.0, 10.0)])
         with pytest.raises(ValueError, match=r"(?i)ring|coordinate|finite"):
             adapter.simplify_borders([bad], 1.0)
+
+
+# ---------------------------------------------------------------- the clearance (section 15)
+
+
+def new_vertex_clearance(
+    before: list[BaseGeometry], after: tuple[BaseGeometry, ...]
+) -> tuple[float, float, int]:
+    """Test 21's distances, from input and output alone: the smallest
+    distance from an output vertex the input did not have to an output edge
+    it does not end, and from an output edge with such a vertex as an end to
+    an output vertex it does not end; and the number of new vertices. Ends
+    by exact coordinates, -0.0 and 0.0 alike."""
+    old = {p for r in rings_of(before) for p in r}
+    edges: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    for ring in rings_of(list(after)):
+        for i, p in enumerate(ring):
+            q = ring[(i + 1) % len(ring)]
+            edges.add((min(p, q), max(p, q)))
+    vertices = sorted({v for e in edges for v in e})
+    new = [v for v in vertices if v not in old]
+    lines = list(edges)
+    tree = shapely.STRtree([shapely.LineString(e) for e in lines])
+    points = shapely.points(np.array(vertices, dtype=np.float64))
+    vertex_side = edge_side = float("inf")
+    # Candidates within 2 m only: test 21's floor is 1 m.
+    hits = tree.query(points, predicate="dwithin", distance=2.0)
+    new_set = set(new)
+    for vi, ei in hits.T.tolist():
+        v, (a, b) = vertices[vi], lines[ei]
+        if v in (a, b):
+            continue
+        d = float(shapely.distance(points[vi], tree.geometries[ei]))
+        if v in new_set:
+            vertex_side = min(vertex_side, d)
+        if a in new_set or b in new_set:
+            edge_side = min(edge_side, d)
+    return vertex_side, edge_side, len(new)
+
+
+class TestClearance:
+    """Section 15.2's clearance through the binding and the adapter."""
+
+    def test_the_binding_takes_a_clearance(self, core: Any) -> None:
+        points, starts = flat([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])
+        out = core.simplify_borders(points, starts, 1.0, clearance=1.0)
+        assert out.status == core.BorderStatus.Ok
+        assert out.counts.rejected_clearance == 0
+        assert out.counts.skipped_placements == 0
+
+    @pytest.mark.parametrize("clearance", [-1.0, float("nan"), float("inf")])
+    def test_20_an_invalid_clearance_crosses_the_binding(self, core: Any, clearance: float) -> None:
+        points, starts = flat([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])
+        out = core.simplify_borders(points, starts, 1.0, clearance=clearance)
+        assert out.status == core.BorderStatus.InvalidClearance
+        assert len(np.asarray(out.points)) == 0 and len(np.asarray(out.ring_starts)) == 0
+
+    @pytest.mark.parametrize("clearance", [-1.0, float("nan"), float("inf")])
+    def test_20_an_invalid_clearance_is_a_value_error(self, adapter: Any, clearance: float) -> None:
+        with pytest.raises(ValueError, match=r"(?i)clearance"):
+            adapter.simplify_borders(hand_made(), 12.0, clearance_m=clearance)
+
+    def test_20_clearance_0_is_the_call_without_it(self, adapter: Any) -> None:
+        polygons = hand_made()
+        without = adapter.simplify_borders(polygons, 12.0)
+        at_0 = adapter.simplify_borders(polygons, 12.0, clearance_m=0.0)
+        for a, b in zip(without.polygons, at_0.polygons, strict=True):
+            assert shapely.equals_exact(a, b, tolerance=0.0)
+        assert at_0.counts.collapses == without.counts.collapses
+
+    @pytest.mark.parametrize(
+        ("coverage", "band", "area_abs", "densify"),
+        [(hand_made, TestAdapter.BAND, 0.0, True), (corine_coverage, 50.0, 1e-6, False)],
+        ids=["hand_made", "corine"],
+    )
+    def test_21_new_vertices_keep_the_clearance(
+        self, adapter: Any, coverage: Any, band: float, area_abs: float, densify: bool
+    ) -> None:
+        polygons = coverage()
+        result = adapter.simplify_borders(polygons, band, clearance_m=1.0)
+        check_coverage(polygons, result.polygons, band, area_abs=area_abs, densify=densify)
+        vertex_side, edge_side, made = new_vertex_clearance(polygons, result.polygons)
+        assert made > 0  # the premise: the simplifier placed vertices
+        assert vertex_side >= 1.0 - 1e-6, vertex_side
+        assert edge_side >= 1.0 - 1e-6, edge_side

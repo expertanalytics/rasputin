@@ -49,6 +49,17 @@ are rewritten for the band: a border keeps its ends, a collapse needs four
 vertices, and each polygon keeps its area. ``TestTheBand`` checks the wiring.
 RED at the commit that added them (``44f25968``): the stage called
 ``coverage_simplify`` and clipped to the read region.
+
+Increment 32's fix (section 15.2, "Order"; 15.3): with the band above 0 the
+outline rule runs on the coverage clipped to the read region, repaired and
+merged, as with the band at 0; then each polygon is clipped to the domain
+and simplified with the clearance at the repair distance. ``TestTheFixOrder``
+checks that order through the stage's own names (``snap_to_outline`` and
+``simplify_borders`` as ``feature_input`` imports them). PINNED HERE: the
+clearance reaches ``simplify_borders`` as its third argument or as
+``clearance_m``. RED at the commit that added it (section 15's red step):
+the simplifier ran before the outline rule, on the domain clip, with no
+clearance.
 """
 
 from __future__ import annotations
@@ -553,6 +564,79 @@ class TestTheBand:
             clipped = shapely.intersection(f.geometry, self.DOMAIN)
             assert g.area == pytest.approx(clipped.area, rel=1e-9)
             assert shapely.get_num_coordinates(g) < shapely.get_num_coordinates(clipped)
+
+
+class TestTheFixOrder:
+    """Increment 32, section 15.2's order: band above 0 is steps 1 to 4 as
+    band 0 (clip to the read region, repair, merge, outline rule), then the
+    domain clip, then the simplifier with ``clearance = repair_m``. On
+    ``TestTheBand``'s two polygons, which overhang the domain by 20 m, with
+    the outline rule at 5 m."""
+
+    SNAP = 5.0
+    BAND = 10.0
+
+    def spied(
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, band: float
+    ) -> tuple[Any, list[tuple[str, Any]]]:
+        """The ``FeatureSet``, and every call of the two steps in order:
+        ("snap", (its polygons, its result)) and ("simplify", (its polygons,
+        band, clearance))."""
+        calls: list[tuple[str, Any]] = []
+        real_snap, real_simplify = fi.snap_to_outline, fi.simplify_borders
+
+        def snap(polygons: list[BaseGeometry], *args: Any, **kwargs: Any) -> Any:
+            result = real_snap(polygons, *args, **kwargs)
+            calls.append(("snap", (list(polygons), result)))
+            return result
+
+        def simplify(polygons: Any, band_m: float, *args: Any, **kwargs: Any) -> Any:
+            clearance = args[0] if args else kwargs.get("clearance_m")
+            calls.append(("simplify", (list(polygons), band_m, clearance)))
+            return real_simplify(polygons, band_m, *args, **kwargs)
+
+        (tmp_path / str(band)).mkdir()
+        with monkeypatch.context() as patch:  # undone before the next run is spied
+            patch.setattr(fi, "snap_to_outline", snap)
+            patch.setattr(fi, "simplify_borders", simplify)
+            fs = opened(
+                fi,
+                tmp_path / str(band),
+                TestTheBand().features(),
+                domain_of(TestTheBand.DOMAIN),
+                repair_m=S,
+                outline_snap_m=self.SNAP,
+                tolerance_m=band,
+            )
+        return fs, calls
+
+    def test_the_outline_rule_then_the_simplifier_with_the_repair_as_clearance(
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _, calls = self.spied(fi, tmp_path, monkeypatch, self.BAND)
+        assert [name for name, _ in calls] == ["snap", "simplify"]
+        polygons, band, clearance = calls[1][1]
+        assert band == self.BAND
+        assert clearance == S
+        for g in polygons:  # clipped to the domain between the two
+            assert TestTheBand.DOMAIN.buffer(1e-6).covers(g)
+
+    def test_the_outline_rule_sees_band_0s_input(
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        off, calls_off = self.spied(fi, tmp_path, monkeypatch, 0.0)
+        on, calls_on = self.spied(fi, tmp_path, monkeypatch, self.BAND)
+        assert [name for name, _ in calls_off] == ["snap"]
+        snap_off, snap_on = calls_off[0][1], next(c for n, c in calls_on if n == "snap")
+        assert len(snap_on[0]) == len(snap_off[0]) == 2
+        for a, b in zip(snap_on[0], snap_off[0], strict=True):
+            assert shapely.equals_exact(a, b, tolerance=0.0)
+        assert snap_on[1].area_changed == snap_off[1].area_changed
+        # Each label keeps the area of its band-0 polygon inside the domain.
+        for g, ruled in zip(labels(on), snap_off[1].polygons, strict=True):
+            inside = shapely.intersection(ruled, TestTheBand.DOMAIN)
+            assert g.area == pytest.approx(inside.area, rel=1e-9)
+        assert on.area_changed == off.area_changed
 
 
 # ---------------------------------------------------------------- overlaps (pinned)

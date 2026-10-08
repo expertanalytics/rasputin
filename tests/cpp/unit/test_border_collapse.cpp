@@ -58,6 +58,31 @@
 // exist, so the target test_border_collapse did not compile ("'terrain/
 // vector_simplify/border_collapse.hpp' file not found"); every other target
 // built.
+//
+// Section 15 (the fix): tests 17 to 20b, the clearance of section 15.2, at
+// the end of this file; its kill record covers M7 to M12 (15.3). The API it
+// adds:
+//
+//   enum class BorderStatus { ..., InvalidClearance };
+//   struct BorderCounts { ...; rejected_clearance, skipped_placements; };
+//   simplify_borders<K>(points, ring_starts, band, double clearance = 0.0);
+//
+// It is reached only through templates (staged_clearance), so the file
+// builds before it exists. RED at the commit that added section 15's tests:
+// each of their ten cases failed with "section 15.2's clearance is not
+// built; missing: ..." naming the four parts, after its fixture pins (which
+// need no clearance) passed; every case of tests 1 to 11 passed, and the
+// clearance-0 identity check in run_flat was off until the API existed.
+//
+// PINNED HERE for section 15 (listed in the handback):
+// - "The output equals the input" is every ring the same cycle bit for bit
+//   (a closed border comes out started at its smallest vertex, and an open
+//   ring at its first junction, as at clearance 0).
+// - At clearance 1 in F18 and F19 the refusal is at removal, so
+//   skipped_placements is 0 in F18; in test 20 any positive clearance,
+//   down to the smallest subnormal, is Ok.
+// - The clearance oracle (check_clearance) also checks every new edge
+//   against every vertex it does not end, with 1e-9 m slack.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -71,12 +96,14 @@
 #include <bit>
 #include <cmath>
 #include <cstddef>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <map>
 #include <numbers>
 #include <set>
 #include <span>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -87,6 +114,7 @@ using terrain::noding::classify;
 using terrain::noding::SegmentRelation;
 using terrain::pred::DefaultKernel;
 using terrain::pred::Orientation;
+using terrain::vector_simplify::BorderCounts;
 using terrain::vector_simplify::BorderOutcome;
 using terrain::vector_simplify::BorderStatus;
 using terrain::vector_simplify::simplify_borders;
@@ -112,10 +140,88 @@ Flat flatten(const Rings& rings) {
     return f;
 }
 
+// ------------------------------------------- section 15's clearance, staged
+
+// The clearance API of section 15.2, detected rather than named, so that this
+// file builds before it exists: every name of it is reached through a
+// template parameter. Until all four parts exist, each clearance test case
+// fails with a message naming the missing ones (staged_clearance below).
+template <class S>
+concept has_invalid_clearance = requires { S::InvalidClearance; };
+template <class C>
+concept has_clearance_counts = requires(const C& c) {
+    { c.rejected_clearance } -> std::convertible_to<std::size_t>;
+    { c.skipped_placements } -> std::convertible_to<std::size_t>;
+};
+template <class C>
+concept has_rejected_clearance = requires(const C& c) { c.rejected_clearance; };
+template <class C>
+concept has_skipped_placements = requires(const C& c) { c.skipped_placements; };
+template <class K>
+concept takes_clearance = requires(std::span<const Point2> p, std::span<const std::uint64_t> s) {
+    { simplify_borders<K>(p, s, 1.0, 1.0) } -> std::same_as<BorderOutcome>;
+};
+template <class K>
+constexpr bool clearance_built = takes_clearance<K> && has_invalid_clearance<BorderStatus>
+                                 && has_clearance_counts<BorderCounts>;
+
+[[maybe_unused]] std::string clearance_missing() { // unused once the clearance is built
+    std::string out;
+    if (!takes_clearance<DefaultKernel>)
+        out += " the clearance parameter of simplify_borders (a fourth argument, double clearance = 0.0);";
+    if (!has_invalid_clearance<BorderStatus>)
+        out += " BorderStatus::InvalidClearance;";
+    if (!has_rejected_clearance<BorderCounts>)
+        out += " BorderCounts::rejected_clearance;";
+    if (!has_skipped_placements<BorderCounts>)
+        out += " BorderCounts::skipped_placements;";
+    return out;
+}
+
+// Runs `body.template operator()<K>()` once the clearance API exists, else
+// fails naming what is missing. The body is a generic lambda, instantiated
+// only here.
+template <class K = DefaultKernel, class F>
+void staged_clearance([[maybe_unused]] F&& body) {
+    if constexpr (clearance_built<K>)
+        body.template operator()<K>();
+    else
+        FAIL("section 15.2's clearance is not built; missing:" << clearance_missing());
+}
+
+// Test 20, identity: once the clearance exists, every call this file makes
+// through run_flat is also made with clearance 0, which must give the same
+// bits, status and counts as the three-argument call.
+template <class K>
+void same_at_clearance_0([[maybe_unused]] const std::vector<Point2>& points,
+                         [[maybe_unused]] const std::vector<std::uint64_t>& starts, [[maybe_unused]] double band,
+                         [[maybe_unused]] const BorderOutcome& three) {
+    if constexpr (clearance_built<K>) {
+        const auto four = simplify_borders<K>(std::span<const Point2>{points}, std::span<const std::uint64_t>{starts},
+                                              band, 0.0);
+        INFO("test 20: clearance 0 against the three-argument call");
+        CHECK(four.status == three.status);
+        CHECK(four.ring_starts == three.ring_starts);
+        CHECK(four.points.size() == three.points.size());
+        bool bits = four.points.size() == three.points.size();
+        for (std::size_t i = 0; bits && i < four.points.size(); ++i)
+            bits = std::bit_cast<std::uint64_t>(four.points[i].x) == std::bit_cast<std::uint64_t>(three.points[i].x)
+                   && std::bit_cast<std::uint64_t>(four.points[i].y) == std::bit_cast<std::uint64_t>(three.points[i].y);
+        CHECK(bits);
+        CHECK(four.counts.collapses == three.counts.collapses);
+        CHECK(four.counts.rejected_crossing == three.counts.rejected_crossing);
+        CHECK(four.counts.rejected_side == three.counts.rejected_side);
+        CHECK(four.counts.rejected_clearance == 0);
+        CHECK(four.counts.skipped_placements == 0);
+    }
+}
+
 BorderOutcome run_flat(const std::vector<Point2>& points, const std::vector<std::uint64_t>& starts,
                        double band) {
-    return simplify_borders<DefaultKernel>(std::span<const Point2>{points},
-                                           std::span<const std::uint64_t>{starts}, band);
+    BorderOutcome out = simplify_borders<DefaultKernel>(std::span<const Point2>{points},
+                                                        std::span<const std::uint64_t>{starts}, band);
+    same_at_clearance_0<DefaultKernel>(points, starts, band, out);
+    return out;
 }
 
 BorderOutcome run(const Rings& rings, double band) {
@@ -925,4 +1031,448 @@ TEST_CASE("11. -0.0 and 0.0 are the same vertex", "[vector_simplify][border_coll
     const BorderOutcome out = run(in, 10.0);
     check(in, out, 10.0);
     CHECK(out.counts.collapses > 0);
+}
+
+// ======================================================================
+// Section 15: the clearance (docs/increments/32-landcover-simplify.md, 15.2
+// and 15.3, tests 17 to 20b). Every fixture but F12 is two 100 m squares,
+// left [(0,0), A, B, C, D, (0,100)] and right [A, (200,0), (200,100), D, C,
+// B], A = (100, 0) and D = (100, 100) junctions, so the one possible collapse
+// is of B and C; some add a triangle island (its ring, then the hole's, as
+// two rings of the coverage, as fixtures32.py builds them). Coordinates are
+// 15.3's table's, measured by
+// docs/benchmarks/2026-10-08/clc-simplify/quick/fix-probe/fixtures/fixtures32.py.
+//
+// Scale of the bounds: coordinates under 200 m, where one ulp is 2.8e-14 m.
+// A re-enacted placement is compared to 1e-9 m (15.3); the clearance oracle
+// allows 1e-9 m of rounding (the kernel's distances and these are both in
+// floating point); the stated floors and fixture distances have at least
+// 3e-3 m of margin (15.3's table, three decimals). Checked at these fixtures
+// only.
+
+namespace {
+namespace clr {
+
+const Point2 A{100.0, 0.0}, D{100.0, 100.0};
+
+Rings squares(Point2 b, Point2 c, const Ring& island = {}) {
+    Rings rings{{{0.0, 0.0}, A, b, c, D, {0.0, 100.0}}, {A, {200.0, 0.0}, {200.0, 100.0}, D, c, b}};
+    if (!island.empty()) {
+        rings.push_back(island);
+        rings.push_back(reversed(island));
+    }
+    return rings;
+}
+
+// The fixtures of 15.3's table.
+const Point2 b17a{102.0, 24.0}, c17a{99.0, 40.0};
+const Point2 b17b{104.1, 52.4}, c17b{99.5, 4.9};
+const Point2 b4{84.0, 10.0}, c4{84.0, 55.0}; // S4, and F18, F19, F20a with an island
+const Ring island18{{95.24, 10.64}, {88.45, 14.88}, {88.66, 7.67}};
+const Ring island19{{75.44, 19.34}, {70.4, 13.37}, {77.18, 9.49}};
+const Ring island20a{{95.77, 11.49}, {88.98, 15.73}, {89.19, 8.52}};
+const Point2 b20b{116.5, 45.0}, c20b{84.5, 55.0};
+
+// F12, the fold of fix-design review round 6, in its own frame: A12 a junction
+// of three polygons, D12 of two and the outline (fix-design review round 7);
+// band 60.
+const Point2 A12{0.0, 0.5}, B12{0.0, -1.25}, C12{-20.0, 0.0}, D12{-100.0, 0.0};
+Rings fold() {
+    return {{A12, {0.0, 50.0}, {-50.0, 50.0}},
+            {A12, {-50.0, 50.0}, {-100.0, 50.0}, D12, C12, B12},
+            {A12, B12, C12, D12, {-100.0, -50.0}, {100.0, -50.0}, {100.0, 50.0}, {0.0, 50.0}}};
+}
+
+// The two placements of the collapse A-B-C-D, re-enacted from the kernel's
+// candidate (fx.py's placements): E on line A-B, then E on line C-D, each
+// enclosing the chain's area with A-E-D.
+struct Placements {
+    Point2 on_ab, on_cd;
+};
+Placements placements(Point2 a, Point2 b, Point2 c, Point2 d) {
+    const Point2 vb = b - a, vc = c - a, vd = d - a;
+    const double area2 = cross(vb, vc) + cross(vc, vd);
+    return {a + vb * (area2 / cross(vb, vd)), a + (vc + (vd - vc) * (1.0 - area2 / cross(vc, vd)))};
+}
+
+bool near(const Point2& p, const Point2& q, double tol = 1e-9) { return std::hypot(p.x - q.x, p.y - q.y) <= tol; }
+
+// The quantities of 15.2 for a placement E (fx.py's quantities): |E - A|,
+// |E - D|; every vertex but B, C and those at A's or D's coordinates to A-E
+// and E-D; A to E-D and D to A-E; E to every edge but A-B, B-C, C-D. Over
+// every vertex and edge: a superset of what the kernel's grid looks at.
+struct Quantities {
+    double ea, ed, vertex_to_new, a_to_ed, d_to_ae, e_to_edge;
+    double min() const { return std::min({ea, ed, vertex_to_new, a_to_ed, d_to_ae, e_to_edge}); }
+};
+Quantities quantities(const Rings& rings, Point2 a, Point2 b, Point2 c, Point2 d, Point2 e) {
+    Quantities q{std::hypot(e.x - a.x, e.y - a.y), std::hypot(e.x - d.x, e.y - d.y), inf_v, distance(a, e, d),
+                 distance(d, a, e), inf_v};
+    const auto is = [](const Point2& p, const Point2& r) { return key(p) == key(r); };
+    for (const Ring& r : rings)
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            const Point2& p = r[i];
+            const Point2& n = r[(i + 1) % r.size()];
+            if (!is(p, a) && !is(p, b) && !is(p, c) && !is(p, d))
+                q.vertex_to_new = std::min({q.vertex_to_new, distance(p, a, e), distance(p, e, d)});
+            const EdgeKey k = edge_key(p, n);
+            if (k != edge_key(a, b) && k != edge_key(b, c) && k != edge_key(c, d))
+                q.e_to_edge = std::min(q.e_to_edge, distance(e, p, n));
+        }
+    return q;
+}
+
+// Section 15.2's guarantee, from input and output alone: every output
+// vertex the input did not have is at least `c` from every output edge it
+// does not end, and every output edge with such a vertex as an end is at
+// least `c` from every output vertex it does not end. Ends by coordinates.
+// [[maybe_unused]]: called only inside the staged bodies until the clearance is built.
+[[maybe_unused]] void check_clearance(const Rings& in, const Rings& got, double c) {
+    std::set<Key> old;
+    for (const Ring& r : in)
+        for (const Point2& p : r)
+            old.insert(key(p));
+    std::vector<std::pair<Point2, Point2>> edges;
+    std::set<Key> all;
+    for (const Ring& r : got)
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            edges.push_back({r[i], r[(i + 1) % r.size()]});
+            all.insert(key(r[i]));
+        }
+    for (const auto& [p, q] : edges) {
+        const bool new_edge = !old.contains(key(p)) || !old.contains(key(q));
+        for (const Key& v : all) {
+            if (v == key(p) || v == key(q) || (!new_edge && old.contains(v)))
+                continue;
+            const Point2 at{v.first, v.second};
+            INFO("vertex (" << at.x << ", " << at.y << ") and edge (" << p.x << ", " << p.y << ")-(" << q.x << ", "
+                            << q.y << ")");
+            CHECK(distance(at, p, q) >= c - 1e-9);
+        }
+    }
+}
+
+// Output edges the input did not have that are shorter than `c`.
+std::size_t new_short_edges(const Rings& in, const Rings& got, double c) {
+    std::set<EdgeKey> old;
+    for (const Ring& r : in)
+        for (std::size_t i = 0; i < r.size(); ++i)
+            old.insert(edge_key(r[i], r[(i + 1) % r.size()]));
+    std::size_t n = 0;
+    for (const Ring& r : got)
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            const Point2& p = r[i];
+            const Point2& q = r[(i + 1) % r.size()];
+            n += !old.contains(edge_key(p, q)) && std::hypot(q.x - p.x, q.y - p.y) < c;
+        }
+    return n;
+}
+
+// The output points that are not input points.
+std::vector<Point2> new_vertices(const Rings& in, const Rings& got) {
+    std::set<Key> old;
+    for (const Ring& r : in)
+        for (const Point2& p : r)
+            old.insert(key(p));
+    std::set<Key> seen;
+    std::vector<Point2> out;
+    for (const Ring& r : got)
+        for (const Point2& p : r)
+            if (!old.contains(key(p)) && seen.insert(key(p)).second)
+                out.push_back(p);
+    return out;
+}
+
+template <class K>
+auto run_c(const Rings& rings, double band, double clearance) {
+    const Flat f = flatten(rings);
+    return simplify_borders<K>(std::span<const Point2>{f.points}, std::span<const std::uint64_t>{f.starts}, band,
+                               clearance);
+}
+
+// The output equals the input: every ring the same cycle, bit for bit (a
+// closed border, such as an island, may come out started at another vertex,
+// as test 7 allows).
+template <class O>
+bool unchanged(const Rings& in, const O& out) {
+    if (out.status != BorderStatus::Ok || out.ring_starts.size() != in.size() + 1)
+        return false;
+    const Rings got = rings_of(out);
+    for (std::size_t k = 0; k < in.size(); ++k)
+        if (!same_cycle(got[k], in[k]))
+            return false;
+    return true;
+}
+
+template <class O>
+bool same_output(const O& a, const O& b) {
+    return same_bits(a.points, b.points) && a.ring_starts == b.ring_starts;
+}
+
+} // namespace clr
+} // namespace
+
+TEST_CASE("17. F17a: a short edge at a junction is not made at clearance 1",
+          "[vector_simplify][border_collapse][clearance][short_edge]") {
+    using namespace clr;
+    const Rings in = squares(b17a, c17a);
+    const Placements pl = placements(A, b17a, c17a, D);
+    // The pins of 15.3's table: the winner on A-B 0.482 m from A; the other,
+    // on C-D, crosses the top edge (rejected_crossing below).
+    REQUIRE(near(pl.on_ab, {100.04, 0.48}, 1e-12));
+    CHECK(quantities(in, A, b17a, c17a, D, pl.on_ab).ea < 1.0);
+    const BorderOutcome zero = run(in, 50.0);
+    const Rings got0 = check(in, zero, 50.0);
+    REQUIRE(zero.counts.collapses == 1);
+    const std::vector<Point2> made = new_vertices(in, got0);
+    REQUIRE(made.size() == 1);
+    CHECK(near(made[0], pl.on_ab));
+    CHECK(new_short_edges(in, got0, 1.0) >= 1); // the premise: clearance 0 makes it
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, 50.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        const Rings got = check(in, one, 50.0);
+        CHECK(new_short_edges(in, got, 1.0) == 0);
+        CHECK(one.counts.skipped_placements >= 1);
+        CHECK(one.counts.rejected_crossing == 1);
+        CHECK(one.counts.collapses == 0);
+        CHECK(unchanged(in, one));
+    });
+}
+
+TEST_CASE("17. F17b: the winner skipped at placement, the collapse made with the other placement (M9)",
+          "[vector_simplify][border_collapse][clearance][short_edge][placement]") {
+    using namespace clr;
+    const Rings in = squares(b17b, c17b);
+    const Placements pl = placements(A, b17b, c17b, D);
+    // Pins: the winner (A-B, deviation 4.118) lies below the bottom edge,
+    // 0.476 m from A; the other (C-D, 4.121) clears everything by 7.056 m.
+    REQUIRE(near(pl.on_ab, {99.9629, -0.4741560975609791}, 1e-9));
+    REQUIRE(near(pl.on_cd, {99.9629, 92.94357999999995}, 1e-9));
+    const Quantities qw = quantities(in, A, b17b, c17b, D, pl.on_ab);
+    const Quantities qo = quantities(in, A, b17b, c17b, D, pl.on_cd);
+    CHECK(qw.ea < 1.0);
+    CHECK(qo.min() >= 7.0);
+    CHECK(std::abs(qo.ed - 7.057) < 1e-3);
+    CHECK(std::abs(qo.a_to_ed - 92.944) < 1e-3);
+    // At clearance 0 the winner is queued and refused by test (i): this
+    // asserts the winner's identity (the kernel's arithmetic, deterministic).
+    const BorderOutcome zero = run(in, 50.0);
+    check(in, zero, 50.0);
+    REQUIRE(zero.counts.collapses == 0);
+    REQUIRE(zero.counts.rejected_crossing == 1);
+    REQUIRE(unchanged(in, zero));
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, 50.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        const Rings got = check(in, one, 50.0);
+        check_clearance(in, got, 1.0);
+        CHECK(one.counts.skipped_placements >= 1);
+        CHECK(one.counts.rejected_clearance == 0);
+        CHECK(one.counts.collapses == 1);
+        CHECK(vertices(got) == vertices(in) - 2); // one fewer in each of the border's two rings
+        const std::vector<Point2> made = new_vertices(in, got);
+        REQUIRE(made.size() == 1);
+        CHECK(near(made[0], pl.on_cd));
+    });
+}
+
+TEST_CASE("18. F18: an island vertex 0.494 m from the new edge A-E: refused at clearance 1 (M7)",
+          "[vector_simplify][border_collapse][clearance][vertex]") {
+    using namespace clr;
+    const Rings in = squares(b4, c4, island18);
+    const Placements pl = placements(A, b4, c4, D);
+    REQUIRE(near(pl.on_ab, {76.8, 14.5}, 1e-9));
+    const Quantities q = quantities(in, A, b4, c4, D, pl.on_ab);
+    // Only the vertex check can refuse: every other quantity at least 1 m.
+    CHECK(q.vertex_to_new < 1.0);
+    CHECK(std::abs(q.vertex_to_new - 0.494) < 1e-3);
+    CHECK(std::min({q.ea, q.ed, q.a_to_ed, q.d_to_ae, q.e_to_edge}) >= 11.0);
+    const BorderOutcome zero = run(in, 50.0);
+    const Rings got0 = check(in, zero, 50.0);
+    REQUIRE(zero.counts.collapses == 1);
+    CHECK(near(new_vertices(in, got0).at(0), pl.on_ab));
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, 50.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        check(in, one, 50.0);
+        CHECK(one.counts.rejected_clearance >= 1);
+        CHECK(one.counts.skipped_placements == 0);
+        CHECK(one.counts.collapses == 0);
+        CHECK(unchanged(in, one));
+        const auto zero4 = run_c<K>(in, 50.0, 0.0);
+        CHECK(zero4.counts.collapses == 1);
+    });
+}
+
+TEST_CASE("18b. F12: a junction 0.5 m from the far new edge E-D: refused at clearance 1 (M12)",
+          "[vector_simplify][border_collapse][clearance][vertex][fold]") {
+    using namespace clr;
+    const Rings in = fold();
+    for (const Ring& r : in)
+        REQUIRE(area(r) > 0.0);
+    const Topology t = topology(in);
+    REQUIRE(t.junctions.contains(key(A12)));
+    REQUIRE(t.junctions.contains(key(D12)));
+    const Placements pl = placements(A12, B12, C12, D12);
+    REQUIRE(near(pl.on_ab, {0.0, -0.25}, 1e-12));
+    REQUIRE(near(pl.on_cd, {50.0, 0.0}, 1e-12));
+    // The pins: the A-B placement 0.750 m from A; the C-D placement's only
+    // quantity under 1 m is A's distance to E-D, 0.500 m; the rest >= 49.5.
+    const Quantities qw = quantities(in, A12, B12, C12, D12, pl.on_ab);
+    const Quantities qo = quantities(in, A12, B12, C12, D12, pl.on_cd);
+    CHECK(std::abs(qw.ea - 0.75) < 1e-9);
+    CHECK(std::abs(qo.a_to_ed - 0.5) < 1e-3);
+    CHECK(std::min({qo.ea, qo.ed, qo.vertex_to_new, qo.d_to_ae, qo.e_to_edge}) >= 49.5);
+    const BorderOutcome zero = run(in, 60.0);
+    const Rings got0 = check(in, zero, 60.0);
+    REQUIRE(zero.counts.collapses == 1);
+    CHECK(near(new_vertices(in, got0).at(0), pl.on_ab));
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, 60.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        check(in, one, 60.0);
+        CHECK(one.counts.skipped_placements >= 1);
+        CHECK(one.counts.rejected_clearance >= 1);
+        CHECK(one.counts.collapses == 0);
+        CHECK(unchanged(in, one));
+    });
+}
+
+TEST_CASE("19. F19: E 0.497 m from an island edge: refused at clearance 1 (M8)",
+          "[vector_simplify][border_collapse][clearance][edge]") {
+    using namespace clr;
+    const Rings in = squares(b4, c4, island19);
+    const Placements pl = placements(A, b4, c4, D);
+    const Quantities q = quantities(in, A, b4, c4, D, pl.on_ab);
+    // Only the E-to-edge check can refuse: every island vertex >= 2.580 m
+    // from A-E and E-D.
+    CHECK(q.e_to_edge < 1.0);
+    CHECK(std::abs(q.e_to_edge - 0.497) < 1e-3);
+    CHECK(std::min({q.ea, q.ed, q.vertex_to_new, q.a_to_ed, q.d_to_ae}) >= 2.5);
+    const BorderOutcome zero = run(in, 50.0);
+    const Rings got0 = check(in, zero, 50.0);
+    REQUIRE(zero.counts.collapses == 1);
+    CHECK(near(new_vertices(in, got0).at(0), pl.on_ab));
+
+    staged_clearance([&]<class K>() {
+        const auto one = run_c<K>(in, 50.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        check(in, one, 50.0);
+        CHECK(one.counts.rejected_clearance >= 1);
+        CHECK(one.counts.collapses == 0);
+        CHECK(unchanged(in, one));
+        const auto zero4 = run_c<K>(in, 50.0, 0.0);
+        CHECK(zero4.counts.collapses == 1);
+    });
+}
+
+namespace {
+// Test 20b's run: the pin first (every quantity of both placements' ends
+// and the winner's vertex and edge distances at least `floor`, computed
+// here over every vertex and edge), then, staged, the floor run (no
+// clearance check fires, output equals clearance 0's bit for bit), and the
+// result at clearance 1 (the same). `fires` is a clearance at which a check
+// must change the output (0 for none asked).
+void room_to_spare(const Rings& in, Point2 b, Point2 c, double floor, double fires) {
+    using namespace clr;
+    const Placements pl = placements(A, b, c, D);
+    const Quantities qw = quantities(in, A, b, c, D, pl.on_ab);
+    const Quantities qo = quantities(in, A, b, c, D, pl.on_cd);
+    INFO("winner's smallest quantity " << qw.min() << "; other placement's ends " << qo.ea << ", " << qo.ed);
+    REQUIRE(qw.min() >= floor);
+    REQUIRE(std::min(qo.ea, qo.ed) >= floor);
+    const BorderOutcome zero = run(in, 50.0);
+    const Rings got0 = check(in, zero, 50.0);
+    REQUIRE(zero.counts.collapses == 1);
+    REQUIRE(near(new_vertices(in, got0).at(0), pl.on_ab));
+
+    staged_clearance([&]<class K>() {
+        const auto base = run_c<K>(in, 50.0, 0.0);
+        const auto at_floor = run_c<K>(in, 50.0, floor);
+        INFO("at the floor " << floor << ": skipped_placements " << at_floor.counts.skipped_placements
+                             << ", rejected_clearance " << at_floor.counts.rejected_clearance
+                             << ", output equal to clearance 0's: " << same_output(at_floor, base));
+        CHECK(at_floor.counts.skipped_placements == 0);
+        CHECK(at_floor.counts.rejected_clearance == 0);
+        CHECK(same_output(at_floor, base));
+        const auto one = run_c<K>(in, 50.0, 1.0);
+        REQUIRE(one.status == BorderStatus::Ok);
+        check_clearance(in, check(in, one, 50.0), 1.0);
+        CHECK(one.counts.skipped_placements == 0);
+        CHECK(one.counts.rejected_clearance == 0);
+        CHECK(same_output(one, base));
+        if (fires > 0.0) {
+            const auto high = run_c<K>(in, 50.0, fires);
+            REQUIRE(high.status == BorderStatus::Ok);
+            check_clearance(in, check(in, high, 50.0), fires);
+            CHECK_FALSE(same_output(high, base));
+        }
+    });
+}
+} // namespace
+
+TEST_CASE("20b. S4: 2 m to spare at a junction; clearance 1 changes nothing (M10)",
+          "[vector_simplify][border_collapse][clearance][spare]") {
+    using namespace clr;
+    // The smallest quantity is E's 14.50 m to the bottom edge; floor 2 m.
+    room_to_spare(squares(b4, c4), b4, c4, 2.0, 0.0);
+}
+
+TEST_CASE("20b. F20a: an island vertex 1.496 m from A-E; clearance 1 changes nothing, 2 does (M11)",
+          "[vector_simplify][border_collapse][clearance][spare]") {
+    using namespace clr;
+    const Rings in = squares(b4, c4, island20a);
+    CHECK(std::abs(quantities(in, A, b4, c4, D, placements(A, b4, c4, D).on_ab).vertex_to_new - 1.496) < 1e-3);
+    room_to_spare(in, b4, c4, 1.2, 2.0);
+}
+
+TEST_CASE("20b. F20b: E 1.500 m from the bottom edge at the junction; clearance 1 changes nothing, 2 does (M11)",
+          "[vector_simplify][border_collapse][clearance][spare]") {
+    using namespace clr;
+    const Rings in = squares(b20b, c20b);
+    const Placements pl = placements(A, b20b, c20b, D);
+    CHECK(std::abs(quantities(in, A, b20b, c20b, D, pl.on_ab).e_to_edge - 1.5) < 1e-3);
+    CHECK(std::abs(quantities(in, A, b20b, c20b, D, pl.on_ab).ea - 1.598) < 1e-3);
+    CHECK(std::abs(quantities(in, A, b20b, c20b, D, pl.on_cd).ed - 1.689) < 1e-3);
+    room_to_spare(in, b20b, c20b, 1.2, 2.0);
+}
+
+TEST_CASE("20. refusals: a negative or non-finite clearance is InvalidClearance, empty output",
+          "[vector_simplify][border_collapse][clearance][status]") {
+    staged_clearance([&]<class K>() {
+        const Flat ok = flatten(two_squares());
+        for (const double c : {-1.0, nan_v, inf_v, -inf_v}) {
+            INFO("clearance " << c);
+            const auto out = simplify_borders<K>(std::span<const Point2>{ok.points},
+                                                 std::span<const std::uint64_t>{ok.starts}, 10.0, c);
+            CHECK(out.status == decltype(out.status)::InvalidClearance);
+            CHECK(out.points.empty());
+            CHECK(out.ring_starts.empty());
+        }
+        // PINNED: a good band and a good clearance are Ok; the smallest
+        // positive clearance too.
+        CHECK(simplify_borders<K>(std::span<const Point2>{ok.points}, std::span<const std::uint64_t>{ok.starts}, 10.0,
+                                  std::numeric_limits<double>::denorm_min())
+                  .status
+              == BorderStatus::Ok);
+    });
+}
+
+TEST_CASE("20. clearance 0 is the three-argument call, bit for bit",
+          "[vector_simplify][border_collapse][clearance][determinism]") {
+    // Every call this file makes through run_flat (tests 1 to 11 and 17 to
+    // 20b) also checks this (same_at_clearance_0); here on a few by name.
+    staged_clearance([&]<class K>() {
+        for (const Rings& in : {two_squares(), overshoot_coverage(), tongue_coverage(), clr::fold()}) {
+            const Flat f = flatten(in);
+            const BorderOutcome three = simplify_borders<K>(std::span<const Point2>{f.points},
+                                                            std::span<const std::uint64_t>{f.starts}, 50.0);
+            same_at_clearance_0<K>(f.points, f.starts, 50.0, three);
+        }
+    });
 }
