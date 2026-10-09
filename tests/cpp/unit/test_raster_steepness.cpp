@@ -17,8 +17,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
-#if __has_include(<terrain/raster/steepness.hpp>)
-
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/steepness.hpp>
 
@@ -181,12 +179,3 @@ TEST_CASE("34 test 2: 1 and 8 threads give the same classes", "[slope][steepness
     CHECK(steepness(tall, 1) == steepness(tall, 8));
     check_classes(tall, 8);
 }
-
-#else
-
-TEST_CASE("34: include/terrain/raster/steepness.hpp does not exist yet", "[slope][steepness]") {
-    FAIL("increment 34 is not built: no terrain/raster/steepness.hpp, so terrain::raster::steepness, "
-         "kSteepnessClasses and kNoDataClass do not exist and test 2 cannot compile");
-}
-
-#endif

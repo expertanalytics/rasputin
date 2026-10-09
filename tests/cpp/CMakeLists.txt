@@ -517,11 +517,7 @@ target_link_libraries(prop_refinement_line_tolerance PRIVATE Threads::Threads)
 #                                    the laziness count (M8), with the QA rules'
 #                                    section D oracles. It starts threads; test 7
 #                                    is the TSan job's.
-# Tests 2, 4, 5, 6 and 8 are the design's invariant-critical suite. The files
-# are guarded on terrain/raster/steepness.hpp and
-# terrain/refinement/slope_tolerance.hpp: without them each compiles to one
-# failing case that names the missing header (test 1 runs today), and the tree
-# still builds.
+# Tests 2, 4, 5, 6 and 8 are the design's invariant-critical suite.
 add_terrain_test(test_raster_steepness unit/test_raster_steepness.cpp)
 target_link_libraries(test_raster_steepness PRIVATE Threads::Threads)
 add_terrain_backend_test(test_refinement_slope_tolerance unit/test_refinement_slope_tolerance.cpp)

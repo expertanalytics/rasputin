@@ -3,7 +3,7 @@
 //
 //   test 1  on V1c (constraints and feet on), refine(..., options) and
 //           refine(..., options, UniformTolerance{t}) give the same output,
-//           bit for bit, on all three entry points (G1). Runs today.
+//           bit for bit, on all three entry points (G1).
 //   test 4  equalities, bit for bit, on all three entry points, on V1c:
 //           (a) Sloped<UniformTolerance{10}> with N = F = 10 equals
 //               UniformTolerance{10} (G2);
@@ -56,6 +56,7 @@
 #include <terrain/refinement/line_tolerance.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
+#include <terrain/refinement/slope_tolerance.hpp>
 
 #include "line_tolerance_oracle.hpp"
 #include "slope_oracle.hpp"
@@ -87,6 +88,9 @@ using terrain::refinement::refine_points;
 using terrain::refinement::refine_strip;
 using terrain::refinement::RefineOptions;
 using terrain::refinement::RefineOutcome;
+using terrain::refinement::SlopeRamp;
+using terrain::refinement::Sloped;
+using terrain::refinement::SlopeTolerance;
 using terrain::refinement::ToleranceRamp;
 using terrain::refinement::TolerancePolicy;
 using terrain::refinement::UniformTolerance;
@@ -241,14 +245,6 @@ TEST_CASE("34 test 1: on V1c, refine with UniformTolerance{t} is today's refine 
     const auto store = store_of(dem.geometry(), slope_oracle::scattered(dem, 7));
     same(points_run(store, b, po), points_run(store, b, po, UniformTolerance{tol}));
 }
-
-#if __has_include(<terrain/refinement/slope_tolerance.hpp>)
-
-#include <terrain/refinement/slope_tolerance.hpp>
-
-using terrain::refinement::SlopeRamp;
-using terrain::refinement::Sloped;
-using terrain::refinement::SlopeTolerance;
 
 namespace {
 
@@ -703,12 +699,3 @@ TEST_CASE("34 (M8): the triangle part is not asked about a triangle its nodes' s
     CHECK(over_asked.load() == 0);
     same(out, run(dem, slope_oracle::outline(dem.geometry()), options(1.0, false, 4), UniformTolerance{1.0}));
 }
-
-#else
-
-TEST_CASE("34: include/terrain/refinement/slope_tolerance.hpp does not exist yet", "[slope][property]") {
-    FAIL("increment 34 is not built: no terrain/refinement/slope_tolerance.hpp, so SlopeTolerance, Sloped<P>, "
-         "RefineOutcome::max_slope_share and slope_nodes do not exist and tests 4 to 8 cannot compile");
-}
-
-#endif

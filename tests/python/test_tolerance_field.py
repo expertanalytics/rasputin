@@ -375,11 +375,11 @@ class TestToleranceSlope:
     beside ``ToleranceLines``. The bounds are the CLI's to check (section 5)."""
 
     def test_its_fields(self) -> None:
-        s = tf.ToleranceSlope(near_m=2.0, start_deg=25.0, end_deg=35.0)  # type: ignore[attr-defined]
+        s = tf.ToleranceSlope(near_m=2.0, start_deg=25.0, end_deg=35.0)
         assert (s.near_m, s.start_deg, s.end_deg) == (2.0, 25.0, 35.0)
         assert set(type(s).model_fields) == {"near_m", "start_deg", "end_deg"}
 
     def test_it_is_frozen(self) -> None:
-        s = tf.ToleranceSlope(near_m=2.0, start_deg=30.0, end_deg=30.0)  # type: ignore[attr-defined]
+        s = tf.ToleranceSlope(near_m=2.0, start_deg=30.0, end_deg=30.0)
         with pytest.raises(ValidationError, match="frozen"):
             s.near_m = 1.0

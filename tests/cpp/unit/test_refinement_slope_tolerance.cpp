@@ -21,8 +21,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
-#if __has_include(<terrain/refinement/slope_tolerance.hpp>)
-
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/steepness.hpp>
@@ -221,12 +219,3 @@ TEST_CASE("34: histogram() counts every node once, NoData in entry 255, as row()
     for (std::size_t c = 60; c <= 180; ++c) steep += h[c];
     CHECK(steep == (hole ? 1495u : 1496u));
 }
-
-#else
-
-TEST_CASE("34: include/terrain/refinement/slope_tolerance.hpp does not exist yet", "[slope]") {
-    FAIL("increment 34 is not built: no terrain/refinement/slope_tolerance.hpp, so SlopeRamp and "
-         "SlopeTolerance do not exist and tests 3, 6 (b) and 9 cannot compile");
-}
-
-#endif
