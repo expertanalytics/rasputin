@@ -1,0 +1,770 @@
+# Increment 34: a tighter vertical tolerance where the ground is steep
+
+**Status:** designed (`@architect`, 2026-10-09), not reviewed. Next: design
+review. Questions for Ola in section 12; the design is written on their
+defaults, taken while Ola was out.
+
+## 1. What Ola asked
+
+Ola, 2026-10-08: "Another idea; if the slope of a surface is steeper than a
+certain angle, we want a finer refinement." Asked whether finer means a tighter
+vertical tolerance or smaller triangles, and how the slope should be measured:
+"vtol means finer. Second question is very good, and needs to be researched.
+Deriving slope from a coarse triangle might miss local steeps." 2026-10-09:
+"perhaps you can work on the slope adaptive refinement in the meantime?"
+
+"vtol" is the vertical tolerance, `--tolerance`: the largest allowed height
+difference between the mesh and the DEM at a DEM node. Increment 33 made it
+depend on the distance to named lines. This increment makes it depend on the
+slope of the ground as well: on ground steeper than a set angle the mesh is
+held closer to the DEM.
+
+The answer to Ola's research question (section 3): the slope is measured at
+every DEM node, from the DEM at its own spacing, and **every node is held to
+the tolerance of its own slope**. No triangle's slope is used, so no triangle,
+however coarse, can hide a steep node. The probe shows what the triangle's own
+slope would miss: 0.45 to 1.0 % of the nodes end above the tolerance their
+slope asks for (section 3, "The rules compared").
+
+## 2. Prior art: legacy and literature
+
+### Literature, read
+
+- **Greedy insertion against a sup-norm bound**, the method `refine` is
+  (increment 14): Garland and Heckbert, *Fast Polygonal Approximation of
+  Terrains and Height Fields*, CMU-CS-95-181, 1995
+  (`https://www.mgarland.org/files/papers/scape.pdf`, read as text through
+  `pdftotext`). Its section 3 compares "importance measures": "We explored four
+  categories of importance measures: local error, curvature, global error, and
+  products of selected other measures." Its section 3.4, *Product Measures*:
+  "The method we used was to combine one or more of the importance measures
+  given above with some bias measures. [...] Using these product measures, we
+  were able to achieve results which were only slightly poorer than those
+  produced by the local error measure. However, product measures are more
+  complex, and hence more expensive, than any of the measures discussed so far
+  with the exception of global error." Its footnote 2: "We use products rather
+  than sums because the units of measure of the constituent terms are
+  generally unrelated."
+  *What this increment takes from it:* the node inserted is the one with the
+  largest error divided by its node's allowed error, which is a product
+  measure in their sense (the error times a weight, 1 / allowed). *What
+  differs:* they judged products by how well they approximate under one
+  global threshold, and found them slightly worse; here the threshold itself
+  varies by node, and the product is what makes the inserted node one that
+  breaks its own bound. Their stopping rule, one threshold for all, becomes
+  "no node above its own allowed error".
+- **Curvature rather than slope.** The same report, section 3.2: "The
+  piecewise-linear reconstruction effected by T approximates nearly planar
+  functions well, but does more poorly on curved surfaces." A plane at any
+  slope is fitted exactly by one triangle; the vertical error a TIN makes is
+  driven by curvature, not slope. Slope here does not predict error; it
+  selects where the user wants a smaller error. That is Ola's intent as
+  stated, and the reason the driver is a tolerance, not an importance
+  measure.
+- **Mesh size from the slope of the bed, in coastal ocean meshing.** Roberts,
+  Pringle and Westerink, *OceanMesh2D 1.0*, Geoscientific Model Development
+  12:1847-1868, 2019 (`https://gmd.copernicus.org/articles/12/1847/2019/`,
+  the PDF read as text through `pdftotext`), section 3.3.3, the topographic slope
+  mesh size function `h_slp = (2 pi / alpha_slp) b / |grad b|`: "where
+  2π/αslp is the number of elements that resolve the topographic slope, and
+  ∇b is the gradient of the bathymetry evaluated on a structured grid". On
+  noise: "Typically the gradient of the bathymetry often contains a high
+  degree of noise, which results in high mesh refinement" and "Therefore, we
+  propose low-pass filtering the bathymetry before calculating the gradient."
+  The filter's cutoff there is a physical length of the ocean (the Rossby
+  radius). *What differs:* they size elements horizontally from the gradient;
+  here the vertical tolerance follows it, and the triangle size follows from
+  greedy insertion. Smoothing is not taken over: the noise probe (section 3,
+  "Noise") finds it does not matter on DTM10.
+- **The slope formula.** Horn, *Hill shading and the reflectance map*, Proc.
+  IEEE 69:14-47, 1981, the 3 by 3 weighted difference used by GIS packages
+  (found, not read; the formula is written out in section 3). GDAL's `gdaldem`
+  manual (`https://gdal.org/en/stable/programs/gdaldem.html`, read): "The
+  literature suggests Zevenbergen & Thorne to be more suited to smooth
+  landscapes, whereas Horn's formula to perform better on rougher terrain."
+  Jones, *A comparison of algorithms used to compute hill slope as a property
+  of the DEM*, Computers & Geosciences 24:315-323, 1998 (found, not read):
+  the search engine's summary says it compares eight algorithms and ranks the
+  second-order finite difference first. The probe measured the two on DTM10
+  (section 3, "Which slope"): their shares of nodes at or above each angle tried
+  differ by at most 0.8 percentage points.
+- **Slope as a quality measure of terrain simplification.** Biniaz, *Slope
+  Preserving Terrain Simplification — An Experimental Study*, CCCG 2009
+  (`https://cccg.ca/proceedings/2009/cccg09_16.pdf`, read): "This paper
+  introduces a new measure of quality for terrain surface simplification
+  aiming at preserving the slope of the surface"; "a simplification is
+  considered “good” by slope measure if for most points p of output terrain,
+  the slope at p on the simplified terrain is not significantly different
+  from the corresponding slope on the original terrain." It also names the
+  exact vertical bound this project keeps: "specifying an exact numerical
+  error tolerance ε such that the simplified terrain must lie within vertical
+  distance ε of the original, at every point". *What differs:* that work
+  preserves slope as the output quality; this increment keeps the vertical
+  bound and only lets its value depend on slope.
+- **Hydrological TINs.** Vivoni, Ivanov, Bras and Entekhabi, *Generation of
+  Triangulated Irregular Networks Based on Hydrological Similarity*, Journal
+  of Hydrologic Engineering 9(4):288, 2004 (the abstract, as OpenAlex
+  rebuilds it from its word index, which can drop words; the full text was
+  not reachable): three ways of building TINs, "(1) Traditional, (2)
+  hydrographic features (3) hydrological similarity TINs", the last "using
+  the concept of hydrological similarity provided by a topographic or wetness
+  index". The wetness index of Beven and Kirkby (1979) contains the local
+  slope (recalled, not re-read). This is resolution set by a terrain
+  attribute that includes slope, by a different mechanism (a sampling filter
+  on an index, not a vertical bound).
+- **DEM error grows on steep ground.** Hutchinson, Xu and Stein, *Recent
+  Progress in the ANUDEM Elevation Gridding Procedure*, Geomorphometry 2011
+  (`http://www.geomorphometry.org/uploads/pdf/pdf2011/HutchinsonXu2011geomorphometry.pdf`,
+  read): "all remotely sensed elevation data have significant random errors
+  that depend on the inherent limitations of the observing instrument, as
+  well as surface slope and roughness". ANUDEM itself grids elevation data
+  ("by minimizing the sum of a user-specified roughness penalty and a
+  weighted sum of squares of the residuals"); it builds no TIN and has no
+  slope-dependent tolerance. Its relevance here: a tolerance tighter than the
+  DEM's own error on steep ground buys fidelity to the DEM's noise, not to
+  the ground. Section 12, Q5, says so to Ola.
+- **Distance-driven tolerance**, increment 33
+  (`docs/increments/33-feature-tolerance.md`, section 2): Gmsh's `Threshold`
+  and `Min` fields, view-dependent level of detail. The ramp below is the
+  same ramp with the slope in place of the distance, and "the tightest of the
+  drivers" is Gmsh's `Min`.
+- Found, not read: *3D Simplification Methods and Large Scale Terrain
+  Tiling*, Remote Sensing 12(3):437, 2020 (MDPI refused the fetch); the
+  search engine's summary says greedy insertion with a height error adds
+  more vertices on very steep ground. The probe measures that directly
+  (section 3: uniform 10 m leaves 17.7 % of Romsdalen's nodes above the
+  slope tolerance, 2.4 % of Geilo-Ål's).
+
+### Novelty
+
+None is claimed. A tolerance or a mesh size that varies over the domain is in
+all the work of increment 33's section 2; one that follows the slope is in the
+coastal meshing work above; a product of the error and a weight is Garland and
+Heckbert's. What is specific here is small: a sup-norm greedy insertion in
+which every DEM node is held to the tolerance at its own DEM slope, exactly
+(an exact comparison per node, not a ratio test; section 4.3), composed with a
+per-triangle distance tolerance. Searches for an error-bounded TIN whose
+vertical bound follows the slope ("TIN generation from DEM vertical error
+threshold depends on slope adaptive tolerance steep terrain greedy insertion";
+"terrain TIN maximum vertical error varies with slope tolerance per point
+adaptive mesh steep slopes tighter tolerance") found nothing of the kind; that
+is weak evidence and is not a claim. If Ola publishes, this is an application
+of known ideas.
+
+### Legacy
+
+Nothing to carry across. The legacy tree computed slopes of the output's
+triangle normals, to colour the mesh; no refinement read them:
+
+```
+$ git grep -l -i -E "slope|steep|gradient" legacy-archive -- legacy
+legacy-archive:legacy/bindings.cpp
+legacy-archive:legacy/rasputin/geo_tiff_reader.py
+legacy-archive:legacy/rasputin/geometry.py
+legacy-archive:legacy/rasputin/mesh_colouring.py
+legacy-archive:legacy/rasputin/solar_position.h
+legacy-archive:legacy/rasputin/triangulate_dem.h
+```
+
+The hits are `compute_slopes` from face normals
+(`legacy/bindings.cpp@legacy-archive:372`), a `-slope` output field in
+`legacy/rasputin/geo_tiff_reader.py@legacy-archive:26`, a cached `slopes`
+property, and colour bands in `legacy/rasputin/mesh_colouring.py@legacy-archive:26-36`
+(dark from 55 degrees, red from 30). Those bands are the only domain hint: the
+legacy viewer marked 30 degrees, which is also this design's example
+threshold.
+
+## 3. The slope, and the rule each node is held to
+
+**The slope of a node** is Horn's: with the node's eight neighbours `a b c /
+d . f / g h i` (rows top to bottom), `gx = ((c + 2f + i) - (a + 2d + g)) /
+(8 dx)`, `gy = ((g + 2h + i) - (a + 2b + c)) / (8 dy)`, slope `atan(hypot(gx,
+gy))`, from the DEM refine runs on, at its own spacing (`dx`, `dy` may differ;
+the CLI fixtures' grid is 10 by 5 m). A neighbour that is NoData or outside
+the grid takes the node's own z. A NoData node has slope 0; its error is never
+measured, so its value only matters to the cells around it (below).
+
+**Classes.** The slope is stored as a class, one byte per node: the slope in
+half degrees, **rounded up**, 0 to 180. Rounding up means the stored slope is
+never below Horn's, so the tolerance it gives is never looser than the ramp
+at Horn's slope. *Constant:* 0.5 degrees, an angle, independent of scale;
+checked on DTM10 at 2.55e7 nodes (tile `6901_3`, `34-probes/README.md`,
+item 5). The classes are computed by comparing `gx^2 + gy^2` with a table of
+`tan^2(c / 2 degrees)`, no `atan` per node; that is `@developer`'s choice to
+make or not, the rule is "the smallest class whose angle is at least the
+slope".
+
+**The ramp.** With the steep tolerance `N`, the general one `F`
+(`--tolerance`) and two angles `START <= END` in degrees, the allowed error at
+slope `s` is
+
+```
+t(s) = N                                      for s >= END
+t(s) = F                                      for s <= START (and s < END)
+t(s) = F + (N - F) (s - START) / (END - START) for START < s < END
+```
+
+tested in that order, so a step (`START = END`) gives `N` from `END` up and
+`START = END = 0` holds every node to `N`; evaluated at `s = class / 2`.
+Requires `0 < N <= F` and `0 <= START <= END < 90`. `N = F` is today's mesh
+(G2). It is increment 33's ramp turned round: tight at the far
+end of the variable, not the near one.
+
+**The rule: every DEM node is held to the tolerance at its own slope.** A
+triangle converges when every node of its scan set (the DEM nodes in the
+closed triangle, as today) has error at most `t(s(n))`, and every check point
+or strip point (the resampled path and the edge strip, increments 15c and 15f)
+has error at most `t` of the **cell it is filed in**: the largest class of the
+four DEM nodes at that cell's corners (the cell `CheckPoints` files the point
+in; `include/terrain/refinement/check_points.hpp@9ba38490:10-13`). When a
+triangle does not converge, the node inserted is the one with the largest
+`error / t(s(n))`; ties go to the larger error, then to the first in today's
+order (section 4.3). With one tolerance everywhere that is today's worst node,
+so `N = F` is today's mesh bit for bit (G2).
+
+*Why per node.* Three other rules were simulated (`34-probes/greedy_sim.py`, a
+Python model of greedy insertion; `34-probes/README.md`, item 2). On two
+10 by 10 km windows of DTM10, `N = 2`, `F = 10`, a step at 30 degrees:
+
+| rule | Romsdalen (37 % of nodes at 30° or more) | Geilo-Ål (4.8 %) | nodes above their own tolerance |
+|---|---|---|---|
+| uniform `F` (today, `--tolerance 10`) | 56 193 | 16 460 | 17.7 %, 2.4 % |
+| **per node** (this design) | **278 199** | **42 174** | 0 |
+| per triangle, the steepest node in it | 321 685 (+16 %) | 59 364 (+41 %) | 0 |
+| per triangle, the steepest node of every cell it meets | 344 821 (+24 %) | 73 792 (+75 %) | 0 |
+| per triangle, the slope of its own plane | 271 457 | 39 019 | 1.0 %, 0.45 % |
+| uniform `N` (`--tolerance 2`) | 412 641 | 197 623 | 0 |
+
+The simulation's own counts (it overcounts rasputin by 28 to 57 %; item 3);
+the relative order is what is used. The per-triangle rules keep the
+guarantee but hold a whole triangle to the tolerance of its steepest node,
+which costs most where steep ground is patchy, as around Geilo: +41 % and
++75 %. The last of them is the rule needed to cover check points
+on the resampled path, so it is the per-triangle rule one would actually
+build. The triangle's own plane is cheapest and is what Ola warned against: a
+coarse triangle across a steep slope and a flat shelf reports a middling slope,
+and 1.0 % (Romsdalen) and 0.45 % (Geilo-Ål) of the nodes end above the
+tolerance their own slope asks for.
+
+This departs from increment 33's sketch of a slope driver
+(`docs/increments/33-feature-tolerance.md@9ba38490:414-418`: a policy whose
+per-triangle `at(m, t)` reads "its steepest cell, say"). That sketch is one of
+the two per-triangle rows of the table; the per-node rule needs fewer
+triangles for the same guarantee.
+
+*Why a byte per node, not a per-triangle query.* The scan already walks every
+node of the triangle in contiguous row segments
+(`include/terrain/refinement/scan.hpp@9ba38490:204-250`); the class row is a
+second contiguous byte row at the same index, so the weight rides on the same
+pass. Recomputing Horn's slope per node per scan would read nine heights per
+node in every scan; a precomputed class costs one byte per node once.
+
+**Which slope** (`34-probes/README.md`, item 1). On Romsdalen and on 33's whole
+Geilo-Ål section, the share of nodes at or above 15 to 45 degrees by Horn's
+formula and by centred differences (Zevenbergen and Thorne's gradient) differ
+by at most 0.8 percentage points (Geilo-Ål at 15 degrees: 18.8 against
+19.6 %). The largest bilinear cell gradient (the bound `foot_epsilon` uses,
+`include/terrain/refinement/refine.hpp@9ba38490:240`) is an upper bound, not a
+slope: it puts 51 % of Romsdalen at 30 degrees or more against Horn's 37 %.
+Horn it is: the two agree on DTM10, and GDAL's manual (section 2) leans to
+Horn on rough ground.
+
+**Noise and smoothing** (item 1). Gaussian noise added to DTM10's z: 0.1 m
+moves Horn's slope by 0.16 to 0.19 degrees on average, 1.0 m by 1.57 to 1.94
+degrees, and the share at 30 degrees or more by at most 0.3 percentage points.
+Horn's differences are linear in z, so the slope noise scales as noise over
+spacing: 1.0 m on the 10 m grid stands for 0.1 m on a 1 m grid (DTM1). A 3 by
+3 mean filter before Horn changes the shares by at most 1.6 percentage points
+(Geilo-Ål at 15 degrees). The per-node rule is also the one that noise hurts
+least: a node's tolerance depends on its own slope only, where any
+per-triangle rule takes the largest slope over many nodes, and the largest of
+many noisy values is pulled up by the noise. No smoothing in this increment;
+a smoothing radius for DTM1 is a later flag if a DTM1 run shows the need
+(section 11).
+
+**Step or ramp.** On Romsdalen the ramp from 25 to 35 degrees gives 253 808
+simulated triangles against 278 199 for the step at 30, 9 % fewer
+(item 2). The flag takes both angles, so either is one command (section 5).
+
+## 4. Where it sits
+
+### 4.1 Data flow
+
+```
+--tolerance F, --tolerance-slope N START END             (cli.py)
+        |  ToleranceSlope (Pydantic, frozen): near_m, start_deg, end_deg
+        v
+_core.SlopeTolerance(view, N, F, START, END, threads)    (binding; the GIL released)
+        |  terrain::raster::steepness(view, threads): one byte per node, parallel by rows
+        |  the 181-entry table t(class / 2) and its inverse
+        v  immutable C++ object on the view's geometry, built once per run
+refine(..., field=..., slope=...) / refine_strip(...) / refine_points(...)
+   scan: per node, error vs t(class) exactly, and the largest error / t(class)
+```
+
+The C++ core receives no path, no CRS and no file (CLAUDE.md §2): the slope is
+computed from the raster view refine already reads. On the resampled path
+(`--out-crs`, increment 15c) it is the target grid's view, and the check points
+of the final check use the target grid's classes (Q4).
+
+### 4.2 C++: `include/terrain/raster/steepness.hpp` (new)
+
+```cpp
+namespace terrain::raster {
+inline constexpr std::size_t kSteepnessClasses = 181;  // half degrees, 0 to 90
+// Horn's slope of every node, as section 3's class (half degrees, rounded up),
+// row-major, rows() * cols() bytes. Parallel over blocks of rows; each byte is
+// a function of the node's 3 by 3 neighbourhood only, so the result does not
+// depend on the thread count.
+template <RasterSource R>
+[[nodiscard]] std::vector<std::uint8_t> steepness(const R& dem, unsigned threads);
+}
+```
+
+It is a raster function, not a refinement one: it reads heights and the
+geometry and nothing of the mesh, and it is the module a later slope output
+(a per-triangle slope array, increment 10's "per-triangle datasets") would
+reuse.
+
+### 4.3 C++: `include/terrain/refinement/slope_tolerance.hpp` (new)
+
+```cpp
+namespace terrain::refinement {
+
+struct SlopeRamp {  // metres and degrees; 0 < near <= far, 0 <= start <= end < 90, all finite
+    double near, far, start_deg, end_deg;
+    [[nodiscard]] double at(double slope_deg) const noexcept;  // section 3's t(s)
+};
+
+class SlopeTolerance {
+public:
+    // nullopt with one plain sentence in `why` for a ramp value that breaks
+    // its bound or is not finite. Computes steepness(dem, threads).
+    template <raster::RasterSource R>
+    static std::optional<SlopeTolerance> make(const R& dem, SlopeRamp ramp, unsigned threads,
+                                              std::string& why);
+    const raster::RasterGeometry& geometry() const noexcept;
+    std::span<const std::uint8_t> row(std::size_t r) const noexcept;    // the classes of one row
+    std::uint8_t cell_class(mesh::MeshVertex p) const noexcept;         // largest of the 4 corners of p's cell
+    double allowed(std::uint8_t c) const noexcept;  // ramp.at(c / 2.0), from the table
+    double weight(std::uint8_t c) const noexcept;   // 1 / allowed(c), from the table
+    std::array<std::size_t, raster::kSteepnessClasses> histogram() const;  // for the record
+    double near() const noexcept;
+    double far() const noexcept;
+private:
+    raster::RasterGeometry geometry_;
+    SlopeRamp ramp_;
+    std::vector<std::uint8_t> classes_;
+    std::array<double, raster::kSteepnessClasses> allowed_, weight_;
+};
+
+// A per-triangle policy (33's TolerancePolicy) with the per-node slope beside it.
+// lowest(), highest() and at() are the triangle part's; refine reads `slope` in the scan.
+template <TolerancePolicy P>
+struct Sloped {
+    P triangle;
+    const SlopeTolerance* slope;
+    [[nodiscard]] double lowest() const { return triangle.lowest(); }
+    [[nodiscard]] double highest() const { return triangle.highest(); }
+    [[nodiscard]] double at(const mesh::LatticeMesh& m, std::uint32_t t) const { return triangle.at(m, t); }
+};
+}
+```
+
+`Sloped<P>` models 33's `TolerancePolicy`, so the entry points keep their
+signatures; refine tells it apart at compile time (`if constexpr`, a trait
+`is_sloped<P>`), and `detail::varies` judges its triangle part, so
+`Sloped<UniformTolerance>` keeps no `allowed` vector. Without a slope, every
+instantiation is today's: G1.
+
+`cell_class` is the cell `CheckPoints` would file `p` in, `(floor(row),
+floor(col))` clamped to the last cell, so a check point and the class it is
+judged by come from one rule. For a node it is still the cell's largest
+corner, not the node's own class; nodes are judged by `row()` in the scan.
+
+**The scan with a slope** (`scan.hpp`). A second result, filled only when the
+policy is `Sloped`, kept in its own vector beside `results` so the default
+path's `ScanResult` and its memory stay as they are:
+
+```cpp
+struct SlopeScan {
+    bool over = false;                        // some node's error > allowed(class), compared exactly
+    double ratio = 0.0;                       // the largest error * weight(class)
+    std::optional<mesh::LatticeVertex> node;  // where; ties: larger error, then today's order
+    NodeLocation where = NodeLocation::Inside;
+};
+```
+
+- `over` is the exact comparison `error > allowed(class)`, never `ratio > 1`:
+  `error * (1 / t)` can round to 1 for an error one unit in the last place
+  above `t`. The guarantee rests on `over` alone; `ratio` only chooses the node
+  (M1).
+- The ranking key is the pair `(error * weight, error)`, compared
+  lexicographically, strictly larger replacing, in today's row-major walk.
+  Rounding is monotone, so with one weight for every node the product never
+  reverses the order of two errors, and where it makes two different errors
+  equal, the second key picks the larger: the node chosen is today's (G2, M2).
+- The void branch (a NoData corner) is unchanged and fills no `SlopeScan`.
+- The node walk keeps its frozen-edge unswitching
+  (`include/terrain/refinement/scan.hpp@9ba38490:222-226`); the slope adds a
+  byte row read beside each `RowSegment` and the ranking, under `if
+  constexpr`, so the scan refine runs without a slope is compiled as today.
+
+**The serial phase** (`refine.hpp`, and `point_loop` in `refine_points.hpp`):
+
+- a triangle splits when `slope_scan.over`, or when today's test fails against
+  the triangle part (`needs_split(r, limit(t))`,
+  `include/terrain/refinement/refine.hpp@9ba38490:395`);
+- the node inserted: `slope_scan.node` when `over`, else today's `r.node`;
+- **laziness** (33's §4.4): when `over`, the scan stores `-infinity` in the
+  `allowed` slot, where the triangle part keeps one (split, no query), as for an error above `highest()`; the
+  triangle part is asked only for a triangle that no node's slope already
+  splits. With `Sloped<UniformTolerance>` nothing is ever asked;
+- **the foot's epsilon** (20b's `eps = clamp(tol / G, ...)`): `tol` is the
+  smaller of the triangle part's allowed error (asked there if the scan did
+  not, as 33 does at `include/terrain/refinement/refine.hpp@9ba38490:417`) and
+  `allowed(class)` of the node being inserted;
+- `RefineOutcome` gains `max_slope_share`: the largest `ratio` over the final
+  triangles (0 without a slope). By the guarantee it is at most 1, to
+  rounding (the weight is rounded): the test bound is `1 + 1e-12`.
+
+**Check points and strip points** (`refine_points.hpp`, `strip_scan.hpp`).
+The same pair of results per triangle: a stored point's or a strip point's
+class is `cell_class` of its position; a DEM node rescanned by `refine_strip`
+is the scan's. Across the three sets the rule stays "first void wins", then
+the larger key `(error * weight, error)`, ties to the earlier set
+(`include/terrain/refinement/strip_scan.hpp@9ba38490:51-53`), and `over` is
+the OR of the sets'.
+
+### 4.4 Composition with increment 33's lines
+
+A node is held to the smaller of the two: the lines' ramp at its triangle's
+distance (33, per triangle) and the slope's ramp at its own slope (per node).
+`--tolerance-near` and `--tolerance-slope` together build
+`Sloped<LineTolerance>`. The two tests are independent and both must pass: a
+node above its slope tolerance splits the triangle whatever the distance; a
+triangle whose largest error is above the lines' allowed error splits whatever
+the slopes. The tightest driver wins, as 33's §4.6 asked, without the slope
+becoming a per-triangle number.
+
+### 4.5 Python
+
+`src_python/tin_engine/tolerance_field.py` gains the data, beside 33's
+`ToleranceLines`:
+
+```python
+class ToleranceSlope(BaseModel, frozen=True):
+    near_m: float     # N, > 0
+    start_deg: float  # START, 0 <= START <= END
+    end_deg: float    # END, < 90
+```
+
+`cli.py` checks the flag (section 5), builds the spec, and in `_dem_mesh`
+builds `_core.SlopeTolerance(view, N, F, START, END, threads)` once from the
+view refine reads (the target grid's on the resampled path), timed as a new
+`--stats` phase, `slope`. It passes `slope=` to `refine`, `edge_strip.run`
+and `final_check.run`, as 33 passes `field=`. Without the flag nothing is
+built and every call is today's.
+
+The binding's `with_policy` (`bindings/core.cpp@9ba38490:386-391`) dispatches
+four ways (field or not, slope or not), and refuses a slope built on another
+raster geometry: `ValueError("the slope tolerance was built on another raster
+geometry")`, 33's pin B for the slope.
+
+**The run record** (increment 25) gains, only with the flag:
+
+| name | value | plain label |
+|---|---|---|
+| `tolerance_slope_m` | `N`, a number | Tolerance on steep ground |
+| `tolerance_slope_deg` | `"25 to 35"`, text | Slope where the tolerance starts to tighten, and where it reaches the steep value |
+| `slope_nodes_tightened` | `"<k> of <n> DEM nodes (<p> %)"`, text | DEM nodes held to less than the general tolerance because of their slope |
+| `max_error_slope_share_of_tolerance` | a number, at most 1 | Largest error as a share of the tolerance its slope allows |
+
+`slope_nodes_tightened` comes from `histogram()`: the nodes of the grid refine
+ran on (the canvas, not only the domain) whose class gives `t < F`. On the DEM
+path `max_error_slope_share_of_tolerance` is the larger of refine's and the
+edge strip's `max_slope_share`, on the resampled path the final check's, as
+`max_error_m` is today.
+
+### 4.6 Locality, threads, pieces, memory
+
+- The classes are computed once, read-only after, shared by every scan thread;
+  the scan's extra work is per node and local. No global operation is added.
+- **Pieces** (increment 23): each piece computes the classes of its own
+  raster. They equal the global ones except on the raster's outer ring of
+  nodes, where a missing neighbour takes the node's own z. A piece whose
+  raster holds one node beyond its domain on every side gets the global
+  classes everywhere it meshes. The seam pass's slope (on the seam strip's
+  raster) goes in with whichever of 23c-2 and 34 lands second, as 33's seam
+  distance does (33, §4.6); nothing on master calls `refine_seam` yet.
+- **Memory**: one byte per node of the grid refine runs on, plus one
+  `SlopeScan` (about 32 bytes) per triangle slot with the flag. Numedalslagen's
+  canvas (2.80e8 nodes) needs 0.28 GB beside a run that peaks at 2.60 GB
+  today (+11 %); the whole Romsdalen tile 25.5 MB; the São Francisco basin
+  at 30 m about 0.71 GB in one piece (637 000 km² over 900 m²), less per
+  piece. *Constant:* about 32 bytes per slot (a flag, a `double`, an
+  optional node and its location), independent of scale; at 3.5 million triangles
+  (section 6's high estimate) about 0.11 GB.
+
+### 4.7 Against the four criteria
+
+1. *Data and execution:* `ToleranceSlope` and `SlopeRamp` are data; the
+   classes are computed from them once and only read.
+2. *State:* no global state; the classes and the tables are immutable after
+   `make`; the scan stays pure.
+3. *Dependencies:* none added. The probe's SciPy is not a rasputin dependency
+   and nothing in the product calls it.
+4. *Async:* the classes are computed in the binding with the GIL released, on
+   the thread that then calls `refine`, as the field is today.
+
+## 5. Interface
+
+```
+rasputin mesh --dem DTM10 --domain basin.geojson \
+    --tolerance 10 --tolerance-slope 2 25 35 --out basin.vtk
+```
+
+- `--tolerance-slope N START END`: "Hold DEM nodes on steep ground to N metres:
+  the general --tolerance up to START degrees of slope, N from END degrees,
+  linear between (START = END: a step). The slope is the DEM's own, at each
+  node." Three numbers (a Typer tuple, as `--tolerance-ramp`).
+- Refusals, in the CLI's existing style (33's §9.3, pin 5), checked in this
+  order: "applies only with --dem"; "--tolerance-slope needs --tolerance";
+  "must be finite, got <values>"; "N must be above 0, got <n>"; "N <n> is above
+  --tolerance <F>"; "START <S> is below 0"; "START <S> is above END <E>";
+  "END <E> must be below 90". Each with `--tolerance-slope` as the flag named.
+- With `--tolerance-near` too: both apply (section 4.4).
+- `N = F`: the CLI builds no slope (every node would get `F`), so the mesh is
+  `--tolerance F`'s by construction, and says so on stderr: "--tolerance-slope:
+  N equals --tolerance, so slope changes nothing". C++ still has G2's test.
+
+## 6. The demonstration case: Romsdalen
+
+Tile `6901_3` of DTM10 (`../rasputin_data/DTM10_UTM33_20260925`, 2 550 km²,
+5051 by 5051 nodes): Romsdalen, Isfjorden and the walls below Trollveggen; 22 %
+of its nodes are at 30 degrees or more, 31 % at 25 or more (item 5). One
+command, no domain file:
+
+```
+rasputin mesh --dem DTM10_UTM33_20260925/6901_3_10m_z33.tif \
+    --tolerance 10 --tolerance-slope 2 25 35 --out romsdal-slope.vtk
+```
+
+**Expected size and time** (`34-probes/README.md`, items 3 and 5; Mac on AC):
+
+| case | uniform 10 m | uniform 2 m | slope, 2 m from 35° (estimate) |
+|---|---|---|---|
+| Romsdalen window, 100 km² | 38 935 triangles | 321 985 | about 196 000 (ramp 25-35), 215 000 (step 30) |
+| Geilo-Ål window, 100 km² | 10 502 | 143 783 | about 29 000 (step 30) |
+| tile `6901_3`, 2 550 km² | 615 459, refine 0.38 s, 0.68 s in all, 0.47 GB | 5 916 344, refine 3.74 s, 6.32 s in all, 2.19 GB | 1.4 to 3.6 million |
+
+The estimates place each rule where the simulation places it between its own
+uniform counts, applied to rasputin's uniform counts (`estimate.py`). The
+tile's range runs from Geilo-Ål's position (0.14) to Romsdalen's (0.55); its
+steep share lies between the two windows'. At the high end, refine at the
+uniform 2 m rate (0.63 µs per output triangle, wall) and section 10's
+per-triangle slowdown give about 2.4 to 2.6 s of refine; the whole run about
+4 to 5 s. These are estimates; `@perf` measures the real ones.
+
+The tests use synthetic DEMs (section 9), not this data.
+
+## 7. Guarantees and the checks that enforce them
+
+| # | guarantee | checked by (section 9) |
+|---|---|---|
+| G1 | Without `--tolerance-slope` every output byte is today's | test 1, the bench run |
+| G2 | With `N = F` the mesh is the `--tolerance F` mesh, bit for bit (C++); the CLI builds no slope then | tests 4 (a), 12 |
+| G3 | Every valid DEM node's error is at most `t(class(n) / 2)`, and with lines at most the smaller of that and 33's ramp at its triangle's distance | test 5 |
+| G4 | Every check point's and strip point's error is at most `t` of its cell's class | test 6 |
+| G5 | `class(n)` is the smallest half degree at or above Horn's slope of n, NoData and border neighbours replaced by the node's z | test 2 |
+| G6 | The slope reaches every comparison: `START = END = 0` (every node steep) gives the `--tolerance N` mesh, bit for bit, feet included | test 4 (b) |
+| G7 | The output is the same for any thread count | test 7 |
+| G8 | With lines, the slope adds only its own condition: slope with `N = F` and lines equals the lines alone, bit for bit | test 4 (c) |
+
+## 8. Degeneracies
+
+- A flat DEM (every class 0): `t = F` everywhere, unless `END = 0` (then
+  `START = 0` too), which holds every node to `N` (G6).
+- A NoData node: class 0, never measured; its neighbours replace it by their
+  own z. A void triangle (a NoData corner) is carved as today; no
+  `SlopeScan`.
+- A one-row or one-column grid: every neighbour above or below is missing, so
+  `gy = 0` (or `gx`); refine refuses such grids already where it does today.
+- A check point exactly on a grid line: filed in one cell by `CheckPoints`'
+  floor rule; judged by that cell's corners only, as stored.
+- `END = 90` is refused: no finite DEM gives a slope of 90 degrees, and the
+  ramp would never reach N.
+- `N > 0` is required (33 allows `N = 0` for lines): the weight is `1 / N`,
+  and a zero tolerance would make it infinite. `--tolerance 0` without the
+  slope is unchanged.
+
+## 9. Tests `@tester` writes red first
+
+Fixtures (`34-probes/fixture_figures.py`; figures in `34-probes/README.md`, item 4):
+
+- **V1**, 65 by 65 nodes at 10 m: a flat floor (x below 200 m), a 40-degree
+  wall to x = 440 m, a plateau, plus 3 m bumps `3 sin(2 pi y / 80) sin(2 pi x
+  / 130)`. 35.4 % of its nodes are at 30 degrees or more (classes); with
+  `N = 2`, `F = 10` and a step at 30, 1 495 of 4 225 nodes are held to 2 m.
+  rasputin's uniform meshes from the node rectangle's outline: 28 triangles
+  at 10 m, 796 at 2 m. Simulated: per node 408 triangles, uniform 2 m 1 142.
+- **V2**, the same valley on the CLI fixtures' `micro_tiff` grid, 33 rows by
+  41 columns, 10 m by 5 m: 46.3 % at 30 degrees or more; 627 of 1 353 nodes
+  held to 2 m by the step at 30; rasputin uniform 6 triangles at 10 m, 112 at
+  2 m.
+
+C++ (`tests/cpp/unit`, `tests/cpp/property`):
+
+1. **Today's mesh, bit for bit**: increment 33's test 1 stands; the new
+   headers change no default instantiation. On V1 with constraints and feet
+   on, `refine(..., options)` and `refine(..., options, UniformTolerance{t})`
+   equal, for all three entry points.
+2. **Steepness** against the test's own Horn in `long double`: every class on
+   V1 and V2 is the smallest half degree at or above the test's slope (equal,
+   or one class above where the test's slope lies within 1e-9 degrees of a
+   class boundary); a NoData neighbour, a border node, a NoData node (class 0);
+   `dx != dy` (V2: a mutant using `dx` for both axes, M4, changes classes on
+   the wall); rounding up (M5); 1 and 8 threads equal.
+3. **The ramp**: `t` at 0, START, the middle, END, 89.5; the step; never
+   increasing with slope over all 181 classes.
+4. **Equalities, bit for bit, on all three entry points, V1 and a sum of
+   ridges, constraints and feet on**: (a) `Sloped<UniformTolerance{F}>` with
+   `N = F` equals `UniformTolerance{F}`; (b) `START = END = 0` with `N` below
+   `F` equals `UniformTolerance{N}` (the slope must reach the feet's epsilon
+   and `refine_points`' comparison, M6, M7); (c) `Sloped<LineTolerance>` with
+   `N = F` equals `LineTolerance` alone.
+5. **The guarantee, oracle independent of the code**: after refine on V1 and
+   a sum of ridges, every valid DEM node's `|z - plane|` is at most the ramp
+   at the test's own class (test 2's oracle); with a line too (33's test 5
+   layout), at most the smaller of that and 33's ramp at the brute-force
+   distance.
+6. **Check points and the strip**: on 33's resampled-path setup (a check-point
+   store over V1's geometry, points scattered inside cells) every point's
+   error is at most `t` of the largest class of its cell's four corners,
+   computed in the test (M3); and the edge strip along a constraint on the
+   wall: every strip point within its cell's `t`.
+7. **Threads**: 1 and 8 threads give the same mesh, with the slope alone and
+   with lines (the steepness pass and the scan on the TSan job's list).
+8. **Exactness of `over`** (M1): a scan of one triangle whose single inner
+   node has an error one unit in the last place above its `allowed(class)`,
+   chosen by the test so that `error * weight` rounds to exactly 1; the
+   triangle must split.
+9. `SlopeTolerance::make`'s refusals, one each ("near", "far", "start",
+   "end"); the binding's other-geometry refusal.
+
+Python (`tests/python`):
+
+10. The binding: `SlopeTolerance(view, ...)`'s `histogram()` sums to the
+    node count and matches the test's own classes on V1; `slope=None` is
+    today's call.
+11. CLI refusals of section 5, each in its words.
+12. CLI on V2: the record's four fields; `max_error_slope_share_of_tolerance <=
+    1 + 1e-12`; more vertices on the wall (x from 200 to 440 m) than the
+    `--tolerance F` mesh has there; `N = F` gives the `--tolerance F` mesh
+    and the stderr line; without the flag the record has none of the four
+    fields.
+13. The resampled path (`--out-crs`): the slope is built on the target grid
+    and passed to the final check (its record value is the final check's).
+
+**Invariant-critical suite: tests 2, 4, 5, 6, 8.** Mutation targets the kill
+record must cover:
+
+- M1 converge on `ratio <= 1` instead of the exact `over` (test 8);
+- M2 rank by `error * weight` alone, no second key (test 4 (a), on a fixture
+  where two different errors give one product; `@tester` finds or builds one,
+  or reports M2 as equivalent on the fixtures with the evidence);
+- M3 a check point's class from its nearest node instead of its cell's
+  largest corner (test 6);
+- M4 Horn with `dx` for both axes (test 2, V2);
+- M5 the class rounded down (test 2);
+- M6 the foot's epsilon with the triangle part's tolerance only (test 4 (b));
+- M7 `point_loop` ignores the slope (test 4 (b) on `refine_points`, test 6);
+- M8 the lazy test asks the triangle part even when `over` (no output change:
+  an efficiency mutant, killed only by counting `at()` calls; `@tester` adds a
+  counting test policy, or reports it as equivalent in output).
+
+## 10. Size, split point, speed
+
+| part | counted lines (estimate) | basis |
+|---|---|---|
+| `raster/steepness.hpp`: Horn, classes, parallel rows | 45-60 | `line_tolerance.hpp`'s ramp and `make` (33): about 40 of its 143 |
+| `refinement/slope_tolerance.hpp`: ramp, tables, `make`, `cell_class`, `histogram`, `Sloped`, trait | 70-95 | 33's `line_tolerance.hpp`, 143, less its search |
+| `scan.hpp`: `SlopeScan`, the ranking, the byte row | 40-60 | the node and off-node branches, about 50 lines today |
+| `refine.hpp`: the slope vector, the split test, the node choice, the foot, `max_slope_share` | 30-45 | 33 added 59 to it, with `max_error_near` (not repeated here) |
+| `refine_points.hpp`, `strip_scan.hpp`: the point classes, the choice across sets | 40-60 | 33 added 33 to `refine_points.hpp` |
+| binding and `_core.pyi`: the class, `slope=` on three functions, four-way dispatch | 50-70 | 33: 54 |
+| `tolerance_field.py`: `ToleranceSlope` | 8-12 | |
+| `cli.py`: one flag, the refusals, building and timing, the record | 50-70 | 33's three flags and the field: 105; one flag and no file here |
+| `edge_strip.py`, `final_check.py`, `run_record.py` | 12-18 | 33: 14 |
+| **total** | **345-490** | |
+
+Under 700 in one PR. **Split point** if the red suite pushes the estimate past
+600: PR A the C++ headers, the entry points, the binding and stub (nothing a
+user sees changes); PR B the model, the CLI and the record.
+
+**Cost of every added step** (the quick check's catchments are measured at
+default flags in item 3: Numedalslagen 11.12 s, Lagan 21.56 s; they gain
+nothing, G1):
+
+| step | default flags | with `--tolerance-slope` | basis |
+|---|---|---|---|
+| classes (`steepness`) | none: not built | one pass over the grid: at most 24 ns per node on one thread (NumPy's float64 Horn, 15.5-24.0 ns, items 1 and 5, an upper bound for one fused C++ loop); tile `6901_3` at most 0.61 s of CPU, Numedalslagen's canvas at most 6.7 s of CPU, Lagan's target grid at most 0.42 s; about a tenth of that in wall time on 10 threads | estimate, not measured (no C++ built) |
+| the scan | none: compiled as today | per node one byte read, two table reads, a multiply, two comparisons; the scan is 24 % of refine at uniform 2 m on the tile (0.891 of 3.744 s); if the scan slows by 30 to 60 %, refine per output triangle slows by 7 to 15 % | estimate, not measured |
+| the triangle part's query | none | none with the slope alone (`UniformTolerance`); with lines fewer than 33's, since `over` skips them | section 4.3 |
+| memory | none | one byte per node, about 32 bytes per triangle slot (4.6) | |
+
+**Speed judgment.** This touches refine and scan code, so `@perf`'s
+acceptance applies (`docs/increments/README.md`): `tools/bench.py`'s 1 m
+benchmark and thread sweep at default flags show no change beyond the bench's
+band, with the mesh's SHA-256 unchanged (G1). The quick check gains the case
+`romsdal-slope`: `mesh --dem $RASPUTIN_DATA/DTM10_UTM33_20260925/6901_3_10m_z33.tif
+--tolerance 10 --tolerance-slope 2 25 35` (threads `[0]`, runs 3, warmup 1),
+no baseline at first. Accepted when the default runs are unchanged and the
+case's refine time per output triangle is at most 1.5 times the uniform
+`--tolerance 2` run's on the same tile (0.633 µs: 3.744 s for 5 916 344, one
+run, item 3; `@perf` re-measures it beside the slope run), and its `slope`
+phase is under 0.5 s of wall time (Q7). "Refine time" is `--stats`' `refine`
+phase; the classes are built before it, in their own phase.
+
+## 11. Not in scope
+
+A slope-dependent largest triangle size (Ola ruled "vtol means finer");
+curvature as a driver; smoothing the DEM before the slope (a later flag for
+DTM1, section 3); the slope from the original DEM on the resampled path (Q4);
+the seam pass's slope with increment 23's pieces (4.6); a per-node rule for
+33's lines (a distance query per node is what 33 avoided); a slope output on
+the mesh.
+
+## 12. Questions for Ola
+
+Each with the default this design is written on.
+
+- **Q1. The flag.** `--tolerance-slope N START END`: the general tolerance up
+  to START degrees, N from END degrees, linear between; a step when START =
+  END. The other shape would be `--tolerance-steep N ANGLE`, a step only.
+  *Default: the three-number flag; your "steeper than a certain angle" is
+  `--tolerance-slope N A A`.*
+- **Q2. Each node held to its own slope's tolerance**, not each triangle to
+  its steepest node's. Measured in the simulation: the triangle rule needs
+  16 to 24 % more triangles in Romsdalen and 41 to 75 % more around Geilo,
+  for the same guarantee. *Default: per node.*
+- **Q3. Which slope.** Horn's 3 by 3 slope on the DEM's own grid, no
+  smoothing (on DTM10 the choice of formula and 1 m of added noise move the
+  steep share by under 1 percentage point at 30 degrees). *Default: Horn, no
+  smoothing; a smoothing option later if DTM1 shows noise.*
+- **Q4. With `--out-crs`**, the slope comes from the grid rasputin meshes on
+  (the resampled one), not from the original DEM. *Default: the resampled
+  grid; it is the grid the check uses, and its spacing is the original's.*
+- **Q5. How tight is useful on steep ground?** The DEM's own error grows with
+  slope (Hutchinson et al., section 2). A steep tolerance below the DEM's
+  error there follows the DEM's noise. *Default: no floor is enforced; the
+  example uses 2 m on DTM10.*
+- **Q6. The demonstration and quick-check case**: the Romsdalen tile with
+  `--tolerance 10 --tolerance-slope 2 25 35`. *Default: that case.*
+- **Q7. How much slower per triangle may a slope run be?** Estimated 7 to 15
+  % slower per output triangle than a uniform run. *Default: accept up to 1.5
+  times, and the slope pass under 0.5 s on the tile.*
+
+## 13. ROADMAP
+
+Row 34, added with this design: "designed, not reviewed".
