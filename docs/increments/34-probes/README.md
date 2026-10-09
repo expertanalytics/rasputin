@@ -190,7 +190,8 @@ section of Hallingdal).
    ```
 
    4b. `mutant_fixtures.py`: the layouts that let tests 4 (b) and 6 kill M6
-   and M3, and V1's line (its docstring says how each figure is counted).
+   and M3, V1's line, and V1n for M9 and the node counts (its docstrings say
+   how each figure is counted).
    Command: `python mutant_fixtures.py PYTHON RASPUTIN_PY PKG`. Output, word
    for word:
 
@@ -198,6 +199,11 @@ section of Hallingdal).
    M6: --tolerance 2 on V1 cut by the edge (640.0, -300.0) to (150.0, -640.0): 339 vertices, 10 feet; DEM-node vertices on the wall within 5 m of the edge: 3, of them between eps(2) and eps(10) from it (footed under M6): 3
    M3: V1 cells whose corners straddle 30 deg: 129; check points (scattered(65, 4, 7)) in them nearest a corner below 30 deg: 253; of those with noise above N = 2 m: 136
    line: V1 nodes within 200 m of it 2871 of 4225; held tighter by the line than by the slope 1752, by the slope than by the line 1341
+   M9: cell (31, 29): corners [79, 82, 83, 255], largest valid 83; check points 4, noise above 2 m 2
+   M9: cell (31, 30): corners [81, 83, 86, 255], largest valid 86; check points 4, noise above 2 m 3
+   M9: cell (32, 29): corners [79, 82, 83, 255], largest valid 83; check points 4, noise above 2 m 1
+   M9: cell (32, 30): corners [74, 79, 81, 255], largest valid 81; check points 4, noise above 2 m 2
+   V1n counts: valid nodes 4224 of 4225; held to N = 2 1495; the NoData node in neither: True
    ```
 
 5. `estimate.py`: the estimates of sections 6 and 10 from items 2 and 3, and

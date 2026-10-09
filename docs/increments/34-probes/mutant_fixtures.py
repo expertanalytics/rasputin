@@ -142,12 +142,48 @@ def line(s):
     )
 
 
+def m9(z):
+    """V1n: V1 with one NoData node on the wall, row 32, column 30 (x = 300 m).
+    Classes by section 3 (255 for the NoData node). The four cells around it
+    have that NoData corner; their valid corners' largest class against 60
+    (30 deg), and the check points scattered(65, 4, 7) puts in them, which M9
+    (`cell_class` the plain largest, 255 included) holds to F = 10 instead of
+    N = 2. Then the counts slope_nodes_tightened would report over V1n's node
+    rectangle (step 30, N 2, F 10)."""
+    valid = np.ones(z.shape, bool)
+    valid[32, 30] = False
+    s = horn(z, DX, DX, valid)
+    cls = np.where(valid, np.ceil(2.0 * s), 255)
+    n, per_cell = z.shape[0], 4
+    rng = np.random.default_rng(7)
+    cells = (n - 1) * (n - 1) * per_cell
+    base_r, base_c = np.divmod(np.repeat(np.arange((n - 1) * (n - 1)), per_cell), n - 1)
+    rng.integers(1, 1024, cells)  # the column offsets, not needed here
+    rng.integers(1, 1024, cells)  # the row offsets
+    noise = rng.integers(-256, 257, cells) / 64.0
+    for r, c in ((31, 29), (31, 30), (32, 29), (32, 30)):
+        corners = cls[r : r + 2, c : c + 2].ravel()
+        good = corners[corners != 255]
+        here = (base_r == r) & (base_c == c)
+        print(
+            f"M9: cell ({r}, {c}): corners {sorted(int(v) for v in corners)}, largest valid "
+            f"{int(good.max())}; check points {int(here.sum())}, noise above 2 m "
+            f"{int((here & (np.abs(noise) > 2.0)).sum())}"
+        )
+    tight = valid & (cls >= 60)
+    print(
+        f"V1n counts: valid nodes {int(valid.sum())} of {valid.size}; held to N = 2 "
+        f"{int(tight.sum())}; the NoData node in neither: {bool(cls[32, 30] == 255)}"
+    )
+
+
 def main():
     z = valley(65, 65, DX, DX).astype(np.float64)
     s = horn(z, DX, DX)
     m6(z)
     m3(z, s)
     line(s)
+    m9(z)
 
 
 if __name__ == "__main__":

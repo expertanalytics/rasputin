@@ -2,9 +2,10 @@
 
 **Status:** designed (`@architect`, 2026-10-09). Design review round 1 asked
 for changes (five blockers, ten suggestions), round 2 for two one-line fixes
-and five suggestions; all are answered in this file and its probes. Next:
-design review round 3. Questions for Ola in section 12;
-the design is written on their defaults, taken while Ola was out.
+and five suggestions, round 3 for two holes around the NoData class; all are
+answered in this file and its probes. Next: design review round 4. Questions
+for Ola in section 12; the design is written on their defaults, taken while
+Ola was out.
 
 ## 1. What Ola asked
 
@@ -245,8 +246,9 @@ triangle converges when every node of its scan set (the DEM nodes in the
 closed triangle, as today) has error at most `t(s(n))`, and every check point
 or strip point (the resampled path and the edge strip, increments 15c and 15f)
 has error at most `t` of the **cell it is filed in**: the largest class of the
-four DEM nodes at that cell's corners (the cell `CheckPoints` files the point
-in; `include/terrain/refinement/check_points.hpp@9ba38490:10-13`). When a
+cell's valid corners, the DEM nodes at its corners that are not NoData (0 when
+none is valid; 4.5), in the cell `CheckPoints` files the point in
+(`include/terrain/refinement/check_points.hpp@9ba38490:10-13`). When a
 triangle does not converge, the node inserted is the one with the largest
 `error / t(s(n))`; ties go to the larger error, then to the first in today's
 order (section 4.3). With one tolerance everywhere that is today's worst node,
@@ -339,7 +341,7 @@ simulated triangles against 279 337 for the step at 30, 9 % fewer
         v
 _core.SlopeTolerance(view, N, F, START, END, threads)    (binding; the GIL released)
         |  terrain::raster::steepness(view, threads): one byte per node, parallel by rows
-        |  the 181-entry table t(class / 2) and its inverse
+        |  two 256-entry tables: t(class / 2) for classes 0-180, F for 181-255, and the inverses
         v  immutable C++ object on the view's geometry, built once per run
 refine(..., field=..., slope=...) / refine_strip(...) / refine_points(...)
    scan: per node, error vs t(class) exactly, and the largest error / t(class)
@@ -391,8 +393,8 @@ public:
                                               std::string& why);
     const raster::RasterGeometry& geometry() const noexcept;
     std::span<const std::uint8_t> row(std::size_t r) const noexcept;    // the classes of one row
-    std::uint8_t cell_class(mesh::MeshVertex p) const noexcept;         // largest of the 4 corners of p's cell
-    double allowed(std::uint8_t c) const noexcept;  // ramp.at(c / 2.0), from the table
+    std::uint8_t cell_class(mesh::MeshVertex p) const noexcept;         // largest valid corner class of p's cell, 0 if none
+    double allowed(std::uint8_t c) const noexcept;  // ramp.at(c / 2.0) for c <= 180, else F; from the table
     double weight(std::uint8_t c) const noexcept;   // 1 / allowed(c), from the table
     std::array<std::size_t, 256> histogram() const;  // for the tests; entry 255 counts NoData
     double near() const noexcept;
@@ -426,7 +428,7 @@ instantiation is today's: G1.
 `cell_class` is the cell `CheckPoints` would file `p` in, `(floor(row),
 floor(col))` clamped to the last cell, so a check point and the class it is
 judged by come from one rule. For a node it is still the cell's largest
-corner, not the node's own class; nodes are judged by `row()` in the scan.
+valid corner, not the node's own class; nodes are judged by `row()` in the scan.
 
 **The scan with a slope** (`scan.hpp`). A second result, filled only when the
 policy is `Sloped`, kept in its own vector beside `results` so the default
@@ -546,8 +548,12 @@ the result is the same at any thread count (G7). *NoData:* class 0 does not
 tell NoData from flat ground, so the classes reserve the value 255
 (`kNoDataClass`) for a NoData node: the count skips it, `cell_class` takes the
 largest of a cell's valid corners (0 when none is), and the two tables have
-256 entries, entry 255 set to `F`, so a lookup of it is harmless (the scan
-never ranks a NoData node: its error is set to 0 before, as today). It is
+256 entries. `make` fills entries 0-180 from the ramp and 181-255 with `F`
+(and the weight `1 / F`): `steepness` writes only 0-180 and 255, so 181-254
+are never read, and entry 255 is read only for a NoData node, which the scan
+never ranks (its error is set to 0 before, as today). If `cell_class` took
+the plain largest corner, 255 included (M9), a point beside NoData would be
+held to `F`; hence the valid-corner rule and test 6 (b). It is
 `RefineOutcome::slope_nodes` (two counts); on the resampled path the final
 check computes it over the target grid's nodes, from the same classes.
 `histogram()` stays, for the tests. On the DEM path
@@ -663,7 +669,7 @@ The tests use synthetic DEMs (section 9), not this data.
 | G1 | Without `--tolerance-slope` every output byte is today's | test 1, the bench run |
 | G2 | With `N = F` the mesh is the `--tolerance F` mesh, bit for bit (C++); the CLI builds no slope then | tests 4 (a), 12 |
 | G3 | Every valid DEM node's error is at most `t(class(n) / 2)`, and with lines at most the smaller of that and 33's ramp at its triangle's distance | test 5 |
-| G4 | Every check point's and strip point's error is at most `t` of its cell's class, except a point on a frozen edge (increment 23's seam: never named, counted in `on_frozen`, as today) | test 6 |
+| G4 | Every check point's and strip point's error is at most `t` of its cell's class (the largest valid corner, 0 if none), except a point on a frozen edge (increment 23's seam: never named, counted in `on_frozen`, as today) | test 6 |
 | G5 | `class(n)` is the smallest half degree at or above Horn's slope of n, missing neighbours filled as section 3 says; at a class boundary, within rounding, the higher class | test 2 |
 | G6 | The slope reaches every comparison: `START = END = 0` (every node steep) gives the `--tolerance N` mesh, bit for bit, feet included | test 4 (b) |
 | G7 | The output is the same for any thread count | test 7 |
@@ -718,6 +724,12 @@ Fixtures (`34-probes/fixture_figures.py`; figures in `34-probes/README.md`, item
   nearest a corner below 30 degrees, which M3 would hold to 10 m instead of 2, and 136 of those
   carry noise above 2 m (item 4b). Whether one of them ends between 2 and
   10 m under M3 depends on the mesh; hence M3's escape in the mutant list.
+- **V1n**, V1 with one NoData node on the wall, row 32, column 30 (x =
+  300 m). Its four cells (rows 31-32, columns 29-30) each have that NoData
+  corner, and their largest valid corner classes are 83, 86, 83 and 81 (41.5
+  to 43 degrees); `scattered(65, 4, 7)` puts 4 check points in each, 8 of the
+  16 with noise above 2 m. Over the node rectangle 4 224 nodes are valid and
+  1 495 are held to 2 m by the step at 30 (item 4b).
 - **V1's line** (tests 5 and 7, with lines): a segment from (100, -50) to
   (600, -600) m off V1's north-west node, `N = 1`, ramp 0 to 200 m, `F = 10`,
   the slope's step at 30 with `N = 2`: 2 871 of 4 225 nodes are within 200 m
@@ -745,7 +757,7 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
    `dx != dy` (V2: a mutant using `dx` for both axes, M4, changes classes on
    the wall); rounding up (M5); 1 and 8 threads equal.
 3. **The ramp**: `t` at 0, START, the middle, END, 89.5; the step; never
-   increasing with slope over all 181 classes.
+   increasing with slope over classes 0-180; entries 181-255 equal `F`.
 4. **Equalities, bit for bit, on all three entry points, on V1c (V1 cut by
    the diagonal edge, above; constraints and feet on)**: (a)
    `Sloped<UniformTolerance{10}>` with `N = F = 10` equals
@@ -763,9 +775,16 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
    bilinear surface plus noise of up to 4 m, as
    `tests/python/test_core_refine_points.py`'s `scattered(65, 4, 7)`), with
    `N = 2`, `F = 10` and a step at 30 degrees, every point's
-   error is at most `t` of the largest class of its cell's four corners,
-   computed in the test (M3); and the edge strip along the diagonal edge:
-   every strip point within its cell's `t`, on V1c.
+   error is at most `t` of the largest class of its cell's valid corners
+   (0 when none is), computed in the test (M3); and the edge strip along the
+   diagonal edge: every strip point within its cell's `t`, on V1c.
+   (b) **V1n** (*Fixtures* above), the same store and flags: the 16 check
+   points in the four cells around the NoData node, each cell with that
+   NoData corner and valid corners at 37 degrees or more, end within
+   `N = 2`, whatever triangle holds them (none has the NoData node as a
+   corner: refine never inserts one); and a `cell_class` unit test on V1n's
+   cell (31, 30) gives 86, not 255 (M9). (c) On V1n, `slope_nodes` reports
+   4 224 valid nodes and 1 495 tightened: the NoData node is in neither.
 7. **Threads**: 1 and 8 threads give the same mesh, with the slope alone and
    with lines (the steepness pass and the scan on the TSan job's list).
 8. **Exactness of `over`** (M1): a scan of one triangle whose single inner
@@ -789,7 +808,7 @@ Python (`tests/python`):
 13. The resampled path (`--out-crs`): the slope is built on the target grid
     and passed to the final check (its record value is the final check's).
 
-**Invariant-critical suite: tests 2, 4, 5, 6, 8.** Mutation targets the kill
+**Invariant-critical suite: tests 2, 4, 5, 6 (with (b) and (c)), 8.** Mutation targets the kill
 record must cover:
 
 - M1 converge on `ratio <= 1` instead of the exact `over` (test 8);
@@ -797,7 +816,7 @@ record must cover:
   where two different errors give one product; `@tester` finds or builds one,
   or reports M2 as equivalent on the fixtures with the evidence);
 - M3 a check point's class from its nearest node instead of its cell's
-  largest corner (test 6; layout and figures under *Fixtures* above; if no point ends between
+  largest valid corner (test 6; layout and figures under *Fixtures* above; if no point ends between
   N and F under the mutant, `@tester` reports M3 as equivalent on the fixture
   with that evidence);
 - M4 Horn with `dx` for both axes (test 2, V2);
@@ -807,6 +826,9 @@ record must cover:
   equal, `@tester` reports M6 as equivalent on the fixture with that
   evidence);
 - M7 `point_loop` ignores the slope (test 4 (b) on `refine_points`, test 6);
+- M9 `cell_class` takes the plain largest of the four corners, 255 included
+  (test 6 (b): the unit case always; the 16 points, 8 of them with noise
+  above 2 m, if one ends between N and F under the mutant);
 - M8 the lazy test asks the triangle part even when `over` (no output change:
   an efficiency mutant, killed only by counting `at()` calls; `@tester` adds a
   counting test policy, or reports it as equivalent in output).
