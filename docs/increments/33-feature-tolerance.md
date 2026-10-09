@@ -1,6 +1,6 @@
 # Increment 33: a vertical tolerance that varies with distance to named lines
 
-**Status:** built (`@developer`), 464 counted lines against section 10's
+**Status:** built (`@developer`), 469 counted lines against section 10's
 estimate of 310-425 (reconciled there); not pushed. Design review round 3
 approved; red step `6c64b120`, its pins ruled in 9.1; kill record in 9.2;
 green-step pins in 9.3. Code review round 1 asked for changes; the code fixes
@@ -898,7 +898,7 @@ The counts are `tools/count_loc.py`'s rule applied to the files at
 (`python3 tools/count_loc.py 3c464ec3~1 3c464ec3`).
 
 **As built**, `python3 tools/count_loc.py 837ebc8a <head>` (the branch's base
-to its head; at `7101f514` it gives 464 against 310-425):
+to its head; at `7101f514` it gave 464, at `0b1235a7` 469, against 310-425):
 
 | part | estimate | built at `7101f514` | why it differs |
 |---|---|---|---|
@@ -906,10 +906,10 @@ to its head; at `7101f514` it gives 464 against 310-425):
 | `refine.hpp` | 30-40 | 59 | the shared helpers the estimate did not list: `allowed_at`, `max_error_near` (parallel since code review round 1), `bad_policy`, the `Allowed` type, and the plain overload forwarding to the policy one |
 | `refine_points.hpp` | 25-35 | 33 | within |
 | `bindings/core.cpp` and `_core.pyi` | 60-85 | 37 + 17 = 54 | below |
-| `tolerance_field.py` | 45-65 | 56 | within, with code review round 1's fallback re-read and non-finite refusal |
+| `tolerance_field.py` | 45-65 | 61 | within, with code review round 1's fallback re-read and non-finite refusal, and round 3's suggestion (re-read when no line came back, `0b1235a7`) |
 | `cli.py` | 40-60 | 105 | the three options (24 lines of Typer declarations), `_tolerance_lines` (the refusals), and `_line_field`, which builds the field: the window, `line_segments`, the record's three input entries, the stderr line. The table above had no row for building the field. This is nearly all the overrun |
 | `edge_strip.py`, `final_check.py`, `run_record.py` | not listed | 7 + 3 + 4 = 14 | passing the field on; the record's wording and the `_entry` change (9.3, pin 8) |
-| **total** | **310-425** | **464** | under 700, one PR |
+| **total** | **310-425** | **469** | under 700, one PR |
 
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ header, the entry-point overloads, the binding and stub
