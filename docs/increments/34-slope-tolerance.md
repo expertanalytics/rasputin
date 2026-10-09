@@ -5,10 +5,12 @@ for changes (five blockers, ten suggestions), round 2 for two one-line fixes
 and five suggestions, round 3 for two holes around the NoData class; all are
 answered in this file and its probes; round 4 found one figure, fixed;
 round 5 approved. Built on branch `worktree-slope-tol`: red `3ce92a7e`,
-green `952bd1ee` (512 counted lines against 376-533), red-step scaffolding
+green `952bd1ee` (512 counted lines against 376-533; 513 with code review
+round 1's S1, `d06a0a8c`), red-step scaffolding
 removed `f68a9440`, mutation round `7d661ae9` (M1-M9 all killed); the
-as-built record is sections 9.1-9.3 and 10's *As built* table. Next: code
-review, then `@perf`'s acceptance run, which adds the `romsdal-slope` case to
+as-built record is sections 9.1-9.3 and 10's *As built* table. Code review
+rounds 1 and 2 asked for changes, answered. Next: code review round 3, then
+`@perf`'s acceptance run, which adds the `romsdal-slope` case to
 `docs/benchmarks/quick/cases.toml` and so turns the quick-check pin
 (`test_the_shipped_cases_are_sections_3_table`) green. Questions for Ola in
 section 12; the design is written on their defaults, taken while Ola was
@@ -538,7 +540,7 @@ geometry")`, 33's pin B for the slope.
 | `tolerance_slope_m` | `N`, a number | Tolerance on steep ground |
 | `tolerance_slope_deg` | `"25 to 35"`, text | Slope where the tolerance starts to tighten, and where it reaches the steep value |
 | `slope_nodes_tightened` | `"<k> of <n> DEM nodes (<p> %)"`, text | DEM nodes held to less than the general tolerance because of their slope |
-| `max_error_slope_share_of_tolerance` | a number, at most 1 | Largest error as a share of the tolerance its slope allows |
+| `max_error_slope_share_of_tolerance` | a number, at most 1, to rounding (1 + 1e-12) | Largest error as a share of the tolerance its slope allows |
 
 `slope_nodes_tightened` counts the DEM nodes inside the mesh (the domain, not
 the canvas around it) whose class gives `t < F`, out of all valid nodes inside
@@ -572,8 +574,10 @@ strip's `max_slope_share`, on the resampled path the final check's, as
 the mesh is within F m of it", which stays true. With the flag it gains one
 sentence: "Nodes on steep ground are within the tolerance their slope allows
 (largest error <s> of it)." with `<s>` the share as a percentage; and when the
-share is above 1 a `Warning:` line, as `max_error_m` above the tolerance
-gets today.
+share is above 1 + 1e-12 (the rounding bound of section 4.3) a `Warning:`
+line instead, as `max_error_m` above the tolerance gets today. A share that
+is not a number (NaN) also gets the `Warning:` line, reading "nan % of";
+this is meant.
 
 ### 4.6 Locality, threads, pieces, memory
 
@@ -1002,11 +1006,14 @@ commit's message and from the code at `7d661ae9`; recorded, not ruled.
     decimal, `n` floored at 1 in the division. `run_record._entry` now records
     any float as a number (before: only names ending `_m` or `_deg`), so the
     share is a JSON number; the rule reaches every float-valued entry,
-    whatever its name. The summary: with the share at most 1, the sentence
+    whatever its name. The summary: with the share at most 1 + 1e-12 (code
+    review round 1's S1, `d06a0a8c`; before it, at most 1), the sentence
     "Nodes on steep ground are within the tolerance their slope allows
-    (largest error <s> % of it)." with s to 4 significant digits; above 1,
+    (largest error <s> % of it)." with s to 4 significant digits; otherwise
     no such sentence, and a separate line "Warning: the largest error on
-    steep ground is <s> % of what its slope allows."
+    steep ground is <s> % of what its slope allows." A NaN share is not
+    within, so it gets the Warning line, reading "nan % of"; this is
+    meant.
 12. *N = F:* `_tolerance_slope` returns nothing after the stderr line, so no
     slope is built, no `slope` phase is timed, and the record has none of
     the four slope fields.
@@ -1034,6 +1041,8 @@ last commit to the mutation round; `9ba38490`, the branch's base, gives the
 same 512, since the design commits are prose only). The green commit alone,
 `python3 tools/count_loc.py 3ce92a7e 952bd1ee`, also gives 512: the red
 step, the scaffolding removal and the mutation round touch no counted file.
+After code review round 1, `python3 tools/count_loc.py da3d1d63 d06a0a8c`
+gives 513: S1 adds one line to `run_record.py` (21 to 22).
 
 | part | estimate | built | why it differs |
 |---|---|---|---|
@@ -1045,8 +1054,9 @@ step, the scaffolding removal and the mutation round touch no counted file.
 | `bindings/core.cpp` and `_core.pyi` | 50-70 | 38 + 19 = 57 | within |
 | `tolerance_field.py` | 8-12 | 4 | under |
 | `cli.py` | 50-70 | 63 | within |
-| `edge_strip.py`, `final_check.py`, `run_record.py` | 18-26 | 3 + 3 + 21 = 27 | 1 over: the summary sentence and its warning line, and the `_entry` change (9.3, pin 11) |
-| **total** | **376-533** | **512** | within; under 700, one PR |
+| `edge_strip.py`, `final_check.py`, `run_record.py` | 18-26 | 3 + 3 + 22 = 28 | 2 over: the summary sentence and its warning line, the `_entry` change (9.3, pin 11), and S1's rounding bound (+1, `d06a0a8c`, below) |
+| S1: the warning at 1 + 1e-12 (`d06a0a8c`, in `run_record.py`) | none | +1 | code review round 1's suggestion S1; counted in the row above |
+| **total** | **376-533** | **513** | within; under 700, one PR |
 
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ headers, the entry points, the binding and stub (nothing a
