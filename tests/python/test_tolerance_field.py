@@ -27,6 +27,7 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 import shapely
+from pydantic import ValidationError
 from pyproj import Transformer
 from shapely.geometry import LineString, MultiLineString, Point, Polygon, mapping
 from shapely.geometry.base import BaseGeometry
@@ -364,3 +365,21 @@ class TestMargin:
         points = near_points(loop, 3.0, 1000, seed=34)
         excess = point_segment(points, segs) - margin - point_segment(points, line_rows(loop))
         assert excess.max() <= 1e-9
+
+
+# ---------------------------------------------------------------- increment 34
+
+
+class TestToleranceSlope:
+    """Increment 34, section 4.5: ``--tolerance-slope N START END`` as data,
+    beside ``ToleranceLines``. The bounds are the CLI's to check (section 5)."""
+
+    def test_its_fields(self) -> None:
+        s = tf.ToleranceSlope(near_m=2.0, start_deg=25.0, end_deg=35.0)  # type: ignore[attr-defined]
+        assert (s.near_m, s.start_deg, s.end_deg) == (2.0, 25.0, 35.0)
+        assert set(type(s).model_fields) == {"near_m", "start_deg", "end_deg"}
+
+    def test_it_is_frozen(self) -> None:
+        s = tf.ToleranceSlope(near_m=2.0, start_deg=30.0, end_deg=30.0)  # type: ignore[attr-defined]
+        with pytest.raises(ValidationError, match="frozen"):
+            s.near_m = 1.0

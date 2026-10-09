@@ -402,13 +402,23 @@ def test_the_shipped_cases_are_sections_3_table(quick: ModuleType) -> None:
         ("numedalslagen", [0], 1, 3),
         ("lagan", [0], 1, 3),
         ("geilo-al-ramp", [0], 1, 3),
+        ("romsdal-slope", [0], 1, 3),
     ]
     # Exact match on "--tolerance": geilo-al-ramp's "--tolerance-near" is a different flag.
     tolerance = {c.name: c.args[c.args.index("--tolerance") + 1] for c in cases}
     assert {k: float(v) for k, v in tolerance.items()} == {
         "tile": 1.0, "quarter": 1.0, "numedalslagen": 10.0, "lagan": 10.0,
-        "geilo-al-ramp": 20.0,
+        "geilo-al-ramp": 20.0, "romsdal-slope": 10.0,
     }  # fmt: skip
+    # Increment 34, section 10: the Romsdalen tile with the slope's ramp, and the
+    # DTM10 directory as its input key, so every case's baseline still matches.
+    romsdal = next(c for c in cases if c.name == "romsdal-slope")
+    at = romsdal.args.index("--tolerance-slope")
+    assert romsdal.args[at : at + 4] == ["--tolerance-slope", "2", "25", "35"]
+    assert romsdal.args[romsdal.args.index("--dem") + 1] == (
+        "$RASPUTIN_DATA/DTM10_UTM33_20260925/6901_3_10m_z33.tif"
+    )
+    assert romsdal.inputs == ["$RASPUTIN_DATA/DTM10_UTM33_20260925"]
     lagan_args = next(c.args for c in cases if c.name == "lagan")
     assert lagan_args[lagan_args.index("--out-crs") + 1] == "EPSG:3006"
     for c in cases:

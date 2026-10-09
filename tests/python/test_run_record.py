@@ -35,7 +35,7 @@ import json
 import math
 import re
 from types import ModuleType
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -603,3 +603,62 @@ class TestEscapedAscii:
         # A control character is ASCII: escaping it is not this function's
         # job, refusing it is the writers' gate's.
         assert rr.escaped_ascii(text) == text
+
+
+# ---------------------------------------------------------------- increment 34, the slope
+
+
+class TestSlopeFields:
+    """Increment 34, section 4.5: ``--tolerance-slope``'s four fields, their
+    plain labels, and the summary's sentence about steep ground."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "tolerance_slope_m": "Tolerance on steep ground",
+        "tolerance_slope_deg": (
+            "Slope where the tolerance starts to tighten, and where it reaches the steep value"
+        ),
+        "slope_nodes_tightened": (
+            "DEM nodes held to less than the general tolerance because of their slope"
+        ),
+        "max_error_slope_share_of_tolerance": (
+            "Largest error as a share of the tolerance its slope allows"
+        ),
+    }
+    SENTENCE = "Nodes on steep ground are within the tolerance their slope allows (largest error "
+
+    @staticmethod
+    def steep(rr: ModuleType, share: float) -> Any:
+        return projected(
+            rr,
+            tolerance_slope_m=2.0,
+            tolerance_slope_deg="25 to 35",
+            slope_nodes_tightened="661 of 1353 DEM nodes (48.9 %)",
+            max_error_slope_share_of_tolerance=share,
+        )
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_the_values_in_the_file(self, rr: ModuleType) -> None:
+        got = fields(rr, self.steep(rr, 0.83))
+        assert got["tolerance_slope_deg"] == "25 to 35"
+        assert got["slope_nodes_tightened"] == "661 of 1353 DEM nodes (48.9 %)"
+
+    def test_the_summary_gains_one_sentence(self, rr: ModuleType) -> None:
+        text = rr.summary(self.steep(rr, 0.83))
+        first = text.splitlines()[0]
+        assert "Every DEM node inside the mesh is within 5 m of it" in first, first
+        assert self.SENTENCE + "83" in first, first
+        assert first.endswith("of it)."), first
+        assert "Warning" not in text
+
+    def test_a_share_above_one_is_a_warning(self, rr: ModuleType) -> None:
+        warnings = [
+            ln for ln in rr.summary(self.steep(rr, 1.25)).splitlines() if ln.startswith("Warning:")
+        ]
+        assert len(warnings) == 1, warnings
+        assert "slope" in warnings[0], warnings
+
+    def test_nothing_about_steep_ground_without_the_flag(self, rr: ModuleType) -> None:
+        assert "steep" not in rr.summary(projected(rr))

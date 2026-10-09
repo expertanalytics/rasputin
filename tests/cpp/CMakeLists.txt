@@ -504,3 +504,26 @@ target_link_libraries(test_quality_gain_refine PRIVATE Threads::Threads)
 add_terrain_backend_test(test_refinement_line_tolerance unit/test_refinement_line_tolerance.cpp)
 add_terrain_backend_test(prop_refinement_line_tolerance property/prop_refinement_line_tolerance.cpp)
 target_link_libraries(prop_refinement_line_tolerance PRIVATE Threads::Threads)
+
+# A vertical tolerance that follows the slope, increment 34
+# (docs/increments/34-slope-tolerance.md, sections 3, 4 and 9). Three targets:
+#   test_raster_steepness            test 2: every node's class against the
+#                                    test's own Horn; starts threads (1 and 8);
+#   test_refinement_slope_tolerance  the ramp (test 3), cell_class beside NoData
+#                                    (test 6 (b), M9), make's refusals (test 9),
+#                                    the histogram; starts no threads;
+#   prop_refinement_slope_tolerance  the slope in refine, refine_strip and
+#                                    refine_points: tests 1, 4, 5, 6, 7 and 8 and
+#                                    the laziness count (M8), with the QA rules'
+#                                    section D oracles. It starts threads; test 7
+#                                    is the TSan job's.
+# Tests 2, 4, 5, 6 and 8 are the design's invariant-critical suite. The files
+# are guarded on terrain/raster/steepness.hpp and
+# terrain/refinement/slope_tolerance.hpp: without them each compiles to one
+# failing case that names the missing header (test 1 runs today), and the tree
+# still builds.
+add_terrain_test(test_raster_steepness unit/test_raster_steepness.cpp)
+target_link_libraries(test_raster_steepness PRIVATE Threads::Threads)
+add_terrain_backend_test(test_refinement_slope_tolerance unit/test_refinement_slope_tolerance.cpp)
+add_terrain_backend_test(prop_refinement_slope_tolerance property/prop_refinement_slope_tolerance.cpp)
+target_link_libraries(prop_refinement_slope_tolerance PRIVATE Threads::Threads)
