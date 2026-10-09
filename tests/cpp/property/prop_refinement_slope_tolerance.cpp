@@ -7,6 +7,9 @@
 //   test 4  equalities, bit for bit, on all three entry points, on V1c:
 //           (a) Sloped<UniformTolerance{10}> with N = F = 10 equals
 //               UniformTolerance{10} (G2);
+//               also on a 5 x 5 fixture whose two inner errors are adjacent
+//               doubles with one product, so only the second key picks
+//               today's node (M2);
 //           (b) START = END = 0 with N = 2, F = 10 equals UniformTolerance{2}
 //               (G6; the slope must reach the foot's epsilon, M6, and
 //               refine_points' comparison, M7);
@@ -657,6 +660,41 @@ TEST_CASE("34 test 8: an error one ulp above allowed splits even when error * we
                           Sloped<UniformTolerance>{UniformTolerance{1000.0}, &exact});
     REQUIRE(none.ok());
     CHECK(none.inserted == 0);
+}
+
+namespace {
+
+// M2's fixture: a 5 x 5 grid at 10 m, one start triangle on nodes (0, 0),
+// (4, 0), (0, 4), z 0 but for its corner (0, 4) at -2^-50 and nodes (1, 1) and
+// (1, 2) at 1.5. The plane falls by 2^-52 per column, so the two nodes'
+// errors are 1.5 + 2^-52 and 1.5 + 2^-51: adjacent doubles, the smaller
+// first in the row-major walk.
+OneNode two_errors() {
+    const auto g = slope_oracle::geometry(5, 5, 10.0, 10.0);
+    std::vector<float> v(25, 0.0f);
+    v[0 * 5 + 4] = -std::ldexp(1.0f, -50);
+    v[1 * 5 + 1] = v[1 * 5 + 2] = 1.5f;
+    return OneNode{Raster<float>{g, std::move(v)}, slope_oracle::fan({{0.0, 0.0}, {0.0, -40.0}, {40.0, 0.0}})};
+}
+
+}  // namespace
+
+TEST_CASE("34 test 4 (a): two different errors with one product: the larger error is inserted, as today (M2)",
+          "[slope][property][test4]") {
+    // F is the first of 1.4, 1.39, ... whose weight 1 / F maps both errors to
+    // one product, so only the second key, the error, picks today's node.
+    const double e1 = 1.5 + std::ldexp(1.0, -52), e2 = 1.5 + std::ldexp(1.0, -51);
+    double far = 1.4;
+    for (int k = 0; k < 1000 && e1 * (1.0 / far) != e2 * (1.0 / far); ++k) far -= 0.0001;
+    CAPTURE(far);
+    REQUIRE(e1 * (1.0 / far) == e2 * (1.0 / far));
+    const auto fx = two_errors();
+    const auto s = slope_of(fx.dem, SlopeRamp{far, far, 30.0, 30.0});
+    const auto uniform = run(fx.dem, fx.start, options(far, false), UniformTolerance{far});
+    REQUIRE(uniform.ok());
+    REQUIRE(uniform.vertices.size() > 3);
+    CHECK(uniform.vertices[3] == Point2{20.0, -10.0});  // node (1, 2): the larger error goes in first
+    same(run(fx.dem, fx.start, options(far, false), Sloped<UniformTolerance>{UniformTolerance{far}, &s}), uniform);
 }
 
 // ------------------------------------------------------------------- M8
