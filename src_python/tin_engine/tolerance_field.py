@@ -9,7 +9,9 @@ tolerance anywhere.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -18,11 +20,12 @@ from pydantic import BaseModel
 from shapely.geometry import LineString
 
 from tin_engine.crs import reprojector, transform_bounds
-from tin_engine.feature_input import FeatureError, read_source
+from tin_engine.feature_input import FeatureError, SourceRows, read_source
 
 #: (x_min, y_min, x_max, y_max) in the mesh's CRS.
 Box = tuple[float, float, float, float]
 EVERYWHERE: Box = (-np.inf, -np.inf, np.inf, np.inf)
+LINES = ("LineString", "MultiLineString")
 
 
 class ToleranceLines(BaseModel, frozen=True):
@@ -51,13 +54,17 @@ def line_segments(
         return transform_bounds(mesh_crs, own, (x0, y0, x1, y1))
 
     name = spec.path.name
-    found = read_source(spec.path, None, None, box_for, spec.crs)
-    if not found.rows and found.layer is not None:
-        # The R-tree found nothing in reach: read every row, to tell zero
-        # segments (section 5) from a file with no lines at all.
-        found = read_source(spec.path, None, None, lambda _: EVERYWHERE, spec.crs)
-    shapes = [g for _, g, _ in found.rows if g is not None and not g.is_empty]
-    lines = [g for g in shapes if g.geom_type in ("LineString", "MultiLineString")]
+
+    def shapes_in(box: Callable[[str], Box]) -> tuple[SourceRows, list[Any], list[Any]]:
+        found = read_source(spec.path, None, None, box, spec.crs)
+        shapes = [g for _, g, _ in found.rows if g is not None and not g.is_empty]
+        return found, shapes, [g for g in shapes if g.geom_type in LINES]
+
+    found, shapes, lines = shapes_in(box_for)
+    if not lines and found.layer is not None:
+        # The R-tree found no line in reach: read every row, to tell zero
+        # segments (section 5) from a file with no lines, or a mixed one.
+        found, shapes, lines = shapes_in(lambda _: EVERYWHERE)
     if not lines:
         raise FeatureError(f"{name} has no lines; polygons and points are not used here")
     if len(lines) < len(shapes):
