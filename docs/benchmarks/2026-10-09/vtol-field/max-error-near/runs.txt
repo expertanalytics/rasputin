@@ -1,0 +1,36 @@
+== section run 1
+core /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/instr33/src_python/tin_engine/_core.cpython-314-darwin.so libc++ fast
+MAX_ERROR_NEAR seconds 0.000498 slots 64156 queries 964
+MAX_ERROR_NEAR seconds 0.000164 slots 64162 queries 1
+DEM: 2 files, 2301 columns x 1970 rows
+64162 triangles. Every DEM node inside the mesh is within 20 m of it (largest difference 19.984 m).
+| refine | 0.100 | 29.8 % |
+| refine: setup + output | 0.003 | 0.8 % |
+| **total** | **0.337** | **100 %** |
+== section run 2
+core /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/instr33/src_python/tin_engine/_core.cpython-314-darwin.so libc++ fast
+MAX_ERROR_NEAR seconds 0.000523 slots 64156 queries 964
+MAX_ERROR_NEAR seconds 0.000141 slots 64162 queries 1
+DEM: 2 files, 2301 columns x 1970 rows
+64162 triangles. Every DEM node inside the mesh is within 20 m of it (largest difference 19.984 m).
+| refine | 0.101 | 30.3 % |
+| refine: setup + output | 0.003 | 0.9 % |
+| **total** | **0.333** | **100 %** |
+== section run 3
+core /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/instr33/src_python/tin_engine/_core.cpython-314-darwin.so libc++ fast
+MAX_ERROR_NEAR seconds 0.000555 slots 64156 queries 964
+MAX_ERROR_NEAR seconds 0.000145 slots 64162 queries 1
+DEM: 2 files, 2301 columns x 1970 rows
+64162 triangles. Every DEM node inside the mesh is within 20 m of it (largest difference 19.984 m).
+| refine | 0.100 | 30.1 % |
+| refine: setup + output | 0.003 | 0.8 % |
+| **total** | **0.332** | **100 %** |
+== corridor run 1
+core /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/instr33/src_python/tin_engine/_core.cpython-314-darwin.so libc++ fast
+MAX_ERROR_NEAR seconds 0.022006 slots 1587214 queries 30588
+MAX_ERROR_NEAR seconds 0.001483 slots 1587426 queries 14
+DEM: 24 files, 28376 columns x 13211 rows
+1587426 triangles. Every DEM node inside the mesh is within 20 m of it (largest difference 19.999 m).
+| refine | 4.392 | 69.6 % |
+| refine: setup + output | 0.094 | 1.5 % |
+| **total** | **6.312** | **100 %** |

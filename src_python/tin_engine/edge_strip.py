@@ -13,6 +13,7 @@ import numpy as np
 
 from tin_engine._core import (
     ConstraintCheckPoints,
+    LineTolerance,
     PointRefineOutcome,
     RasterView,
     RefineOutcome,
@@ -35,12 +36,19 @@ def run(
     tolerance: float,
     clock: PhaseClock,
     feet: bool = False,
+    field: LineTolerance | None = None,
 ) -> PointRefineOutcome:
     """``refine_strip`` from ``start``; ``clock`` gets the run's own two times.
-    ``feet`` puts points near a line onto it first (20c, R4)."""
+    ``feet`` puts points near a line onto it first (20c, R4); ``field``, if
+    any, sets each triangle's tolerance (increment 33)."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
     out = refine_strip(
-        view, strip, *(np.asarray(a) for a in arrays), tolerance=tolerance, constraint_feet=feet
+        view,
+        strip,
+        *(np.asarray(a) for a in arrays),
+        tolerance=tolerance,
+        constraint_feet=feet,
+        field=field,
     )
     clock.add("edge strip: scan (parallel)", out.scan_seconds)
     clock.add("edge strip: split + flip (serial)", out.split_seconds)

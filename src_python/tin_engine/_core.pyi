@@ -307,6 +307,24 @@ class RasterView:
     """A zero-copy view over a 2-D DEM array. Built by :func:`raster_view`;
     holds the array alive."""
 
+@final
+class LineTolerance:
+    """A tolerance that varies with distance to lines (increment 33): ``near``
+    on them, ``far`` from ``end`` metres out, linear from ``start``; distances
+    less ``margin``. Copies ``view``'s geometry and the ``(K, 4)`` float64
+    segments ``x0 y0 x1 y1``. A bad bound or coordinate is a ``ValueError``."""
+
+    def __init__(
+        self,
+        view: RasterView,
+        segments: npt.NDArray[np.float64],
+        near: float,
+        far: float,
+        start: float,
+        end: float,
+        margin: float,
+    ) -> None: ...
+
 def raster_view(
     array: npt.NDArray[np.float32] | npt.NDArray[np.float64],
     *,
@@ -366,6 +384,10 @@ class RefineOutcome:
     @property
     def max_error(self) -> float: ...
     @property
+    def max_error_near(self) -> float:
+        """``max_error`` over the triangles a field holds to its near value;
+        ``max_error`` without a field."""
+    @property
     def uncovered(self) -> int: ...
     @property
     def carved(self) -> int: ...
@@ -404,6 +426,7 @@ def refine(
     constraint_feet: bool = ...,
     frozen_mask: int = ...,
     min_gain_deg: float = ...,
+    field: LineTolerance | None = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
@@ -414,7 +437,9 @@ def refine(
     goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off).
     ``min_gain_deg`` >= 0 adds a start-quality point only if it raises the
     smallest angle around it by that much, and with ``constraint_feet``
-    splits a line the point lies beyond; negative is off."""
+    splits a line the point lies beyond; negative is off. ``field``, built on
+    this view's geometry, sets each triangle's tolerance instead of
+    ``tolerance``; another geometry is a ``ValueError``."""
 
 @final
 class CheckPoints:
@@ -508,6 +533,7 @@ def refine_strip(
     threads: int = ...,
     frozen_mask: int = ...,
     constraint_feet: bool = ...,
+    field: LineTolerance | None = ...,
 ) -> PointRefineOutcome:
     """The edge strip on the projected path: refine's output refined until every
     strip point is within ``tolerance``, the DEM's nodes rescanned in every
@@ -529,6 +555,7 @@ def refine_points(
     strip: ConstraintCheckPoints | None = ...,
     frozen_mask: int = ...,
     constraint_feet: bool = ...,
+    field: LineTolerance | None = ...,
 ) -> PointRefineOutcome:
     """Refine phase 1's mesh until every check point in a frozen store, and
     every point of ``strip``, is within ``tolerance``. Releases the GIL; the

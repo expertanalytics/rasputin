@@ -7,18 +7,6 @@ work already shipped, answered with evidence and dated to the commit that
 answered it, rather than a design for work not yet done. Such a file says so
 in its own status line; `kernel-sufficiency-audit.md` is the first.
 
-## Why these exist on disk rather than in a conversation
-
-Agent transcripts do not survive a session. A design that lives only in a
-prompt is a design that gets re-derived, and re-derivation is where the errors
-enter. These files are the source of truth.
-A prompt should say "read `docs/increments/02-core-geometry.md`", not contain
-it.
-
-The same argument applies to *what is currently being asked*, one level up from
-what was designed; `.claude/REQUIRED-READING.md` rules on that, and on what a
-cold session must do before it acts.
-
 ## The loop
 
 Per `CLAUDE.md` §3, with the artifact each step produces:
@@ -50,6 +38,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    — before, because a suite written against re-derived intent pins the
    re-derivation, and a domain constant guessed wrong is then guarded by a test
    that agrees with it.
+   `@reviewer` reviews the design before `@tester` starts (on the short path,
+   below, with the code), and again when a design update adds a step.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
@@ -57,7 +47,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
 4. `@reviewer` audits before merge (CI is authoritative, `CLAUDE.md` §4). An increment that
    touches refine or mesh code also needs `@perf`'s acceptance run (below).
    **The review leaves a trace in the increment file.** `@reviewer` is
-   read-only, so its spawner copies the handback's verdict, the commit range
+   read-only, so the main session itself, not an agent it spawns, copies the
+   handback's verdict, the commit range
    it reviewed and its LOC count, verbatim, into a `## Review` section of
    `docs/increments/NN-name.md` (one entry per review round), and commits it
    before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
@@ -71,15 +62,28 @@ folded into the green one. The rule is not "tests are frozen after red"; it is
 implementation commit".
 
 **The merge updates `ROADMAP.md`'s row for that increment**, in the same PR,
-before the merge rather than after it. The table is an index of what shipped and
-it is the only file a newcomer reads to orient themselves. It is a step rather
-than an expectation because an index that no step maintains goes stale: a
-ledger nobody settles is worse than none.
+before the merge rather than after it.
 
-**Increment PRs merge with a merge commit, never a squash.** The whole protocol
-rests on the red commit staying ahead of the green one in history — the only
-thing that makes the test-first claim verifiable after the fact — and one
-squash destroys that evidence silently and irreversibly.
+**Increment PRs merge with a merge commit, never a squash**, so the red commit
+stays ahead of the green one in history.
+
+## Small changes: the short path
+
+An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
+C++ file and nothing the *Acceptance* section covers takes the short path;
+the brief says so, and `@reviewer` may send it back to the full path.
+
+- Its increment file is short: what changes, the tests that pin it, what is
+  left out, the estimate, and the *Prior art* section (step 1).
+- One `@reviewer` round judges the design, the red step and the green step
+  together, and rules on the red step's pins. A pin that changes the design
+  still goes to `@architect` before green.
+- The main session commits the verdict, the Status line and the ROADMAP
+  row together, before the push.
+
+Never dropped: the red commit ahead of the green one, a green commit with no
+test file, `@reviewer` before every push, Ola's yes for each push, and the
+prompt on a governed file.
 
 ## Acceptance: an increment that touches refine or mesh code
 
@@ -105,9 +109,11 @@ newer one's baseline. Only runs in `bench.py`'s format are baselines.
 These exist because a round that costs three times what it needs to is a round
 that gets skipped next time.
 
-**Reference, do not restate.** Prompts point at the increment file. If a fact
-is wrong there, fix the file rather than correcting it in a prompt — the
-correction is otherwise lost with the transcript.
+**Reference, do not restate.** The increment files are the source of truth,
+and `.claude/REQUIRED-READING.md` rules on what is currently being asked.
+Prompts point at them. If a fact is wrong there, fix the file rather than
+correcting it in a prompt — the correction is otherwise lost with the
+transcript.
 
 **Mutation testing is required only for the invariant-critical suite of an
 increment**, named as such in its increment file with the mutation targets its

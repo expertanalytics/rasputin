@@ -15,5 +15,5 @@ End each commit message with the **Co-Authored-By trailer** from your
 system context. End each commit subject you write with `(@$persona)`.
 Write in **plain words**: say what any internal label means.
 Hand back under: **Result; Pinned or assumed beyond the design; Questions
-for Ola; Lessons; ASK OLA and GUARD FALSE POSITIVE lines** ("none" under an
+for Ola; Lessons; Ideas; ASK OLA and GUARD FALSE POSITIVE lines** ("none" under an
 empty one). Each question for Ola is in plain words, with a default.
