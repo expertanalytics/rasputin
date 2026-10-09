@@ -3,7 +3,8 @@ and how DEM noise moves it (docs/increments/34-probes/README.md, item 1).
 
 Reads DTM10 windows straight from the tiles (tifffile), so nothing of rasputin
 runs here. Measures, all in degrees, per node:
-  horn     Horn (1981) 3x3 weighted differences, the GIS default;
+  horn     Horn (1981) 3x3 weighted differences, by section 3's rule at the
+           border and next to NoData (reflection through the node);
   central  centred differences over the 4 neighbours (Zevenbergen-Thorne's gradient);
   cellmax  the largest bilinear-cell gradient over the 4 cells sharing the node,
            the bound refine.hpp's foot_epsilon uses (|dz| along each cell edge);
@@ -35,7 +36,46 @@ def window(tile, x0, x1, y0, y1):
     return z
 
 
-def horn(z, d=10.0):
+def horn(z, dx=10.0, dy=None, valid=None):
+    """Section 3's slope in degrees: Horn's 3x3 differences with every missing
+    neighbour (outside the grid, or NoData) filled so that a plane is exact:
+    an edge neighbour by its reflection through the node, 2 z(node) -
+    z(opposite), or z(node) when the opposite is missing too; a corner
+    neighbour by its reflection when the opposite corner is there, else by
+    z(row neighbour) + z(column neighbour) - z(node), from the filled edge
+    neighbours. A NoData node gets 0."""
+    dy = dx if dy is None else dy
+    z = np.asarray(z, dtype=np.float64)
+    ok = np.ones(z.shape, bool) if valid is None else np.asarray(valid, bool)
+    p = np.pad(np.where(ok, z, np.nan), 1, mode="constant", constant_values=np.nan)
+    rows, cols = z.shape
+
+    def at(di, dj):  # the neighbour at row offset di, column offset dj, NaN if missing
+        return p[1 + di : 1 + di + rows, 1 + dj : 1 + dj + cols]
+
+    def edge(di, dj):
+        v, o = at(di, dj), at(-di, -dj)
+        return np.where(np.isnan(v), np.where(np.isnan(o), z, 2.0 * z - o), v)
+
+    e = {k: edge(*k) for k in ((-1, 0), (1, 0), (0, -1), (0, 1))}
+
+    def corner(di, dj):
+        v, o = at(di, dj), at(-di, -dj)
+        return np.where(
+            np.isnan(v), np.where(np.isnan(o), e[(di, 0)] + e[(0, dj)] - z, 2.0 * z - o), v
+        )
+
+    a, b, c = corner(-1, -1), e[(-1, 0)], corner(-1, 1)
+    d, f = e[(0, -1)], e[(0, 1)]
+    g, h, i = corner(1, -1), e[(1, 0)], corner(1, 1)
+    gx = ((c + 2 * f + i) - (a + 2 * d + g)) / (8 * dx)
+    gy = ((g + 2 * h + i) - (a + 2 * b + c)) / (8 * dy)
+    return np.where(ok, np.degrees(np.arctan(np.hypot(gx, gy))), 0.0)
+
+
+def horn_edge(z, d=10.0):
+    """Round 1's rule, kept for the comparison of item 1b: a missing neighbour
+    takes the node's own z (numpy's edge padding)."""
     p = np.pad(z, 1, mode="edge")
     a, b, c = p[:-2, :-2], p[:-2, 1:-1], p[:-2, 2:]
     dd, f = p[1:-1, :-2], p[1:-1, 2:]

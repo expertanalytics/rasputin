@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 TREE = HERE.parents[2]
 sys.path.insert(0, str(TREE / "tests" / "python"))
 from greedy_sim import run, tol_of  # noqa: E402
+from slope_stats import horn  # noqa: E402
 
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff  # noqa: E402
 
@@ -39,16 +40,6 @@ def valley(rows: int, cols: int, dx: float, dy: float) -> np.ndarray:
     return (base + 3.0 * np.sin(2 * np.pi * y / 80.0) * np.sin(2 * np.pi * x / 130.0)).astype(
         np.float32
     )
-
-
-def horn(z: np.ndarray, dx: float, dy: float) -> np.ndarray:
-    p = np.pad(z.astype(np.float64), 1, mode="edge")
-    a, b, c = p[:-2, :-2], p[:-2, 1:-1], p[:-2, 2:]
-    d, f = p[1:-1, :-2], p[1:-1, 2:]
-    g, h, i = p[2:, :-2], p[2:, 1:-1], p[2:, 2:]
-    gx = ((c + 2 * f + i) - (a + 2 * d + g)) / (8 * dx)
-    gy = ((g + 2 * h + i) - (a + 2 * b + c)) / (8 * dy)
-    return np.degrees(np.arctan(np.hypot(gx, gy)))
 
 
 def counts(z: np.ndarray, dx: float, dy: float, tol: str) -> str:

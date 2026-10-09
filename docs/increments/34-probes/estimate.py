@@ -13,24 +13,24 @@ import time
 
 import numpy as np
 import tifffile
-from slope_stats import DTM, horn
+from slope_stats import DTM, horn, horn_edge
 
 SIM = {  # README item 2, word for word from greedy_sim.py's output
     ("romsdalen", "step 30"): {
         "uniform-F": 56193,
         "uniform-N": 412641,
-        "node": 278199,
-        "tri": 321685,
-        "tri+halo": 344821,
+        "node": 279337,
+        "tri": 321830,
+        "tri+halo": 344937,
         "normal": 271457,
     },
-    ("romsdalen", "ramp 25-35"): {"node": 253808, "tri": 302249, "tri+halo": 325719},
+    ("romsdalen", "ramp 25-35"): {"node": 253061, "tri": 302486, "tri+halo": 325818},
     ("geilo-al", "step 30"): {
         "uniform-F": 16460,
         "uniform-N": 197623,
-        "node": 42174,
-        "tri": 59364,
-        "tri+halo": 73792,
+        "node": 42016,
+        "tri": 59394,
+        "tri+halo": 73816,
         "normal": 39019,
     },
 }
@@ -56,8 +56,12 @@ def main() -> None:
     t0 = time.perf_counter()
     s = horn(z)
     ns = (time.perf_counter() - t0) * 1e9 / z.size
+    t0 = time.perf_counter()
+    horn_edge(z)
+    plain = (time.perf_counter() - t0) * 1e9 / z.size
     print(
-        f"tile 6901_3: {z.shape[0]} x {z.shape[1]} nodes; NumPy Horn {ns:.1f} ns/node, one thread"
+        f"tile 6901_3: {z.shape[0]} x {z.shape[1]} nodes; NumPy, one thread: section 3's rule "
+        f"{ns:.1f} ns/node, plain Horn (the interior's arithmetic) {plain:.1f} ns/node"
     )
     print("  shares: " + " ".join(f">={a}: {100 * np.mean(s >= a):.1f}%" for a in (25, 30, 35)))
     # README item 3: rasputin on the whole tile, F = 10 and N = 2. Its steep share
@@ -69,6 +73,16 @@ def main() -> None:
     print(
         f"  node rule, ramp 25-35: {f_t + lo * (n_t - f_t):.0f} to "
         f"{f_t + hi * (n_t - f_t):.0f} triangles"
+    )
+
+    # README item 6: the Geilo-Al window with 33's lines (F 20, N 1, 0 to 3000 m),
+    # alone and with the slope (2 m, 25 to 35 deg); simulation and rasputin.
+    s_u1, s_lines, s_both = 473736, 5667, 24288
+    r_u1, r_lines = 366418, 3687
+    pos = (s_both - s_lines) / (s_u1 - s_lines)
+    print(
+        f"geilo-al window, lines with the slope: position {pos:.4f}  "
+        f"rasputin estimate {r_lines + pos * (r_u1 - r_lines):.0f} (lines alone {r_lines})"
     )
 
 
