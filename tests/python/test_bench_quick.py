@@ -401,10 +401,13 @@ def test_the_shipped_cases_are_sections_3_table(quick: ModuleType) -> None:
         ("quarter", [0], 0, 5),
         ("numedalslagen", [0], 1, 3),
         ("lagan", [0], 1, 3),
+        ("geilo-al-ramp", [0], 1, 3),
     ]
+    # Exact match on "--tolerance": geilo-al-ramp's "--tolerance-near" is a different flag.
     tolerance = {c.name: c.args[c.args.index("--tolerance") + 1] for c in cases}
     assert {k: float(v) for k, v in tolerance.items()} == {
-        "tile": 1.0, "quarter": 1.0, "numedalslagen": 10.0, "lagan": 10.0
+        "tile": 1.0, "quarter": 1.0, "numedalslagen": 10.0, "lagan": 10.0,
+        "geilo-al-ramp": 20.0,
     }  # fmt: skip
     lagan_args = next(c.args for c in cases if c.name == "lagan")
     assert lagan_args[lagan_args.index("--out-crs") + 1] == "EPSG:3006"
