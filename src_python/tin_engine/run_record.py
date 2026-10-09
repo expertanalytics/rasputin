@@ -240,13 +240,15 @@ def summary(record: RunRecord) -> str:
         said.append("The heights are not real: every z is 0 (--flat).")
     share = by.get("max_error_slope_share_of_tolerance")
     steep = f"{100 * float(share.value):.4g} % of" if share is not None else ""
-    if share is not None and float(share.value) <= 1.0:
+    # 34, 4.3: the weight 1 / t is rounded, so up to 1 + 1e-12 is within.
+    within = share is not None and float(share.value) <= 1.0 + 1e-12
+    if within:
         said.append(
             "Nodes on steep ground are within the tolerance their slope allows "
             f"(largest error {steep} it)."
         )
     lines = [" ".join(said)]
-    if share is not None and float(share.value) > 1.0:
+    if share is not None and not within:
         lines.append(
             f"Warning: the largest error on steep ground is {steep} what its slope allows."
         )
