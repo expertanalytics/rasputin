@@ -14,11 +14,11 @@ largest bilinear slope bound over the cells around the node
 The line of tests 5 and 7: how many nodes each driver holds tighter.
 
 M3 (a check point's class from its nearest node instead of its cell's largest
-corner). Check points as test_core_refine_points.scattered places them: 4 per
-cell at dyadic offsets, z the bilinear surface plus noise of up to 4 m. A point
-is exposed when its cell's corners straddle the step at 30 degrees and its
-nearest corner is below it: M3 holds it to F = 10 where the rule holds it to
-N = 2.
+corner). Check points as test_core_refine_points.scattered(65, 4, 7) places
+them, in its draw order: 4 per cell at dyadic offsets, z the bilinear surface
+plus noise of up to 4 m. A point is exposed when its cell's corners straddle
+the step at 30 degrees and its nearest corner is below it: M3 holds it to
+F = 10 where the rule holds it to N = 2.
 
 Usage: python mutant_fixtures.py PYTHON RASPUTIN_PY PKG
 """
@@ -102,28 +102,28 @@ def m6(z):
 
 
 def m3(z, s):
+    """The check points in tests/python/test_core_refine_points.py's
+    scattered(65, 4, 7) draw order: all column offsets, then all row offsets,
+    then all noise, over the cells in row-major order, 4 per cell."""
     cls = np.ceil(2.0 * s)
     step = 60  # 30 degrees in half degrees
+    n, per_cell = z.shape[0], 4
     rng = np.random.default_rng(7)
-    rows, cols = z.shape
-    mixed = exposed = big = 0
-    for r in range(rows - 1):
-        for c in range(cols - 1):
-            corners = cls[r : r + 2, c : c + 2]
-            if not (corners.max() >= step > corners.min()):
-                continue
-            mixed += 1
-            fr = rng.integers(1, 1024, 4) / 1024.0
-            fc = rng.integers(1, 1024, 4) / 1024.0
-            noise = rng.integers(-256, 257, 4) / 64.0
-            for a, b, e in zip(fr, fc, noise, strict=True):
-                if cls[r + round(a), c + round(b)] < step:
-                    exposed += 1
-                    big += abs(e) > 2.0
+    cells = (n - 1) * (n - 1) * per_cell
+    base_r, base_c = np.divmod(np.repeat(np.arange((n - 1) * (n - 1)), per_cell), n - 1)
+    col = base_c + rng.integers(1, 1024, cells) / 1024.0
+    row = base_r + rng.integers(1, 1024, cells) / 1024.0
+    noise = rng.integers(-256, 257, cells) / 64.0
+    lo = np.minimum.reduce([cls[:-1, :-1], cls[:-1, 1:], cls[1:, :-1], cls[1:, 1:]])
+    hi = np.maximum.reduce([cls[:-1, :-1], cls[:-1, 1:], cls[1:, :-1], cls[1:, 1:]])
+    mixed_cell = (hi >= step) & (lo < step)
+    in_mixed = mixed_cell[base_r, base_c]
+    near = cls[np.round(row).astype(int), np.round(col).astype(int)] < step
+    exposed = in_mixed & near
     print(
-        f"M3: V1 cells whose corners straddle 30 deg: {mixed}; check points (4 per cell, "
-        f"seed 7) in them nearest a corner below 30 deg: {exposed}; of those with noise "
-        f"above N = 2 m: {big}"
+        f"M3: V1 cells whose corners straddle 30 deg: {int(mixed_cell.sum())}; check points "
+        f"(scattered(65, 4, 7)) in them nearest a corner below 30 deg: {int(exposed.sum())}; "
+        f"of those with noise above N = 2 m: {int((exposed & (np.abs(noise) > 2.0)).sum())}"
     )
 
 

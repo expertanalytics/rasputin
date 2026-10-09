@@ -1,8 +1,9 @@
 # Increment 34: a tighter vertical tolerance where the ground is steep
 
 **Status:** designed (`@architect`, 2026-10-09). Design review round 1 asked
-for changes (five blockers, ten suggestions); all are answered in this file
-and its probes. Next: design review round 2. Questions for Ola in section 12;
+for changes (five blockers, ten suggestions), round 2 for two one-line fixes
+and five suggestions; all are answered in this file and its probes. Next:
+design review round 3. Questions for Ola in section 12;
 the design is written on their defaults, taken while Ola was out.
 
 ## 1. What Ola asked
@@ -197,19 +198,21 @@ On any plane this is exact at every node that has a neighbour on at least one
 side along each axis: the border, the four corners, and nodes beside NoData
 (`34-probes/README.md`, item 1b: a plane at 37.3 degrees on the 10 by 5 m grid,
 with a NoData node in it, reads 37.300 degrees at every valid node). *The one
-departure:* a node with neither neighbour along an axis (a one-row or
-one-column grid, or a one-node-wide strip of data between NoData) loses that
-axis's part of the slope, and reads low: 36.0 degrees for a 40-degree plane
-facing 30 degrees off the row (item 1b). Round 1's rule (a missing neighbour
+departure:* a node with neither edge neighbour along an axis. Its two edge
+neighbours on that axis take `z(node)`, so that axis's part of the slope comes
+from the corner neighbours alone, at half Horn's weight, where they are valid
+(a 40-degree plane facing north, NoData above and below the node, reads
+22.8 degrees), and is lost where they are missing too, as in a one-row or
+one-column grid (36.0 degrees for a 40-degree plane facing 30 degrees off the
+row); both in item 1b. Either way it reads low. Round 1's rule (a missing neighbour
 takes the node's own z) read a 40-degree plane facing 30 degrees as 30.3
 degrees at a border node, 12.9 at a corner and 34.5 beside a NoData node
 (item 1b). Round 1's probes computed neither rule (NumPy's edge padding
 repeats the outermost row, not the node); on the Romsdalen window that put
 27.0 % of the outer ring at 30 degrees or more against 41.0 % with this rule
 and 38.2 % inside, and the two differ only on the outer ring (item 1b). Every
-probe now computes this rule (`34-probes/slope_stats.py`, `horn`). A NoData node has
-slope 0; its error is never measured, so its value only matters to the cells
-around it (below).
+probe now computes this rule (`34-probes/slope_stats.py`, `horn`). A NoData
+node gets the reserved class 255 (4.5); its error is never measured.
 
 **Classes.** The slope is stored as a class, one byte per node: the slope in
 half degrees, **rounded up**, 0 to 180. Rounding up means the stored slope is
@@ -353,8 +356,10 @@ resampled path*).
 ```cpp
 namespace terrain::raster {
 inline constexpr std::size_t kSteepnessClasses = 181;  // half degrees, 0 to 90
+inline constexpr std::uint8_t kNoDataClass = 255;     // a NoData node (4.5)
 // Horn's slope of every node, as section 3's class (half degrees, rounded up),
-// missing neighbours filled as section 3 says, row-major, rows() * cols() bytes. Parallel over blocks of rows; each byte is
+// missing neighbours filled as section 3 says, kNoDataClass for a NoData node,
+// row-major, rows() * cols() bytes. Parallel over blocks of rows; each byte is
 // a function of the node's 3 by 3 neighbourhood only, so the result does not
 // depend on the thread count.
 template <RasterSource R>
@@ -389,14 +394,14 @@ public:
     std::uint8_t cell_class(mesh::MeshVertex p) const noexcept;         // largest of the 4 corners of p's cell
     double allowed(std::uint8_t c) const noexcept;  // ramp.at(c / 2.0), from the table
     double weight(std::uint8_t c) const noexcept;   // 1 / allowed(c), from the table
-    std::array<std::size_t, raster::kSteepnessClasses> histogram() const;  // for the record
+    std::array<std::size_t, 256> histogram() const;  // for the tests; entry 255 counts NoData
     double near() const noexcept;
     double far() const noexcept;
 private:
     raster::RasterGeometry geometry_;
     SlopeRamp ramp_;
     std::vector<std::uint8_t> classes_;
-    std::array<double, raster::kSteepnessClasses> allowed_, weight_;
+    std::array<double, 256> allowed_, weight_;  // entry 255 (NoData): F
 };
 
 // A per-triangle policy (33's TolerancePolicy) with the per-node slope beside it.
@@ -531,7 +536,18 @@ the canvas around it) whose class gives `t < F`, out of all valid nodes inside
 the mesh. C++ counts it once, after the loop, over the final triangles: each
 node in a triangle's closed scan set counted by one triangle only (a node on
 an edge by the triangle of lower index of the two across it, or by the only
-one), and each vertex that is a node once, from the vertex list. It is
+one), and each vertex that is a node once, from the vertex list. *Per node:*
+a node strictly inside a triangle is visited once, a node on an edge twice
+(by both triangles, counted by one), so at most two byte reads per node,
+plus one exact on-edge test for the nodes at the ends of a row span. *In
+parallel:* over fixed blocks of triangle slots, one pair of integer counts
+per block, summed at the end; integer sums do not depend on the order, so
+the result is the same at any thread count (G7). *NoData:* class 0 does not
+tell NoData from flat ground, so the classes reserve the value 255
+(`kNoDataClass`) for a NoData node: the count skips it, `cell_class` takes the
+largest of a cell's valid corners (0 when none is), and the two tables have
+256 entries, entry 255 set to `F`, so a lookup of it is harmless (the scan
+never ranks a NoData node: its error is set to 0 before, as today). It is
 `RefineOutcome::slope_nodes` (two counts); on the resampled path the final
 check computes it over the target grid's nodes, from the same classes.
 `histogram()` stays, for the tests. On the DEM path
@@ -657,9 +673,9 @@ The tests use synthetic DEMs (section 9), not this data.
 
 - A flat DEM (every class 0): `t = F` everywhere, unless `END = 0` (then
   `START = 0` too), which holds every node to `N` (G6).
-- A NoData node: class 0, never measured; its neighbours fill it as section
-  3 says (by reflection, exact on a plane). A void triangle (a NoData corner) is carved as today; no
-  `SlopeScan`.
+- A NoData node: class 255, never measured, never counted; its neighbours
+  fill it as section 3 says (by reflection, exact on a plane). A void
+  triangle (a NoData corner) is carved as today; no `SlopeScan`.
 - A one-row or one-column grid, or a one-node-wide strip of data between
   NoData: no neighbour along one axis on either side, so that axis's part of
   the slope is lost (`gy = 0` or `gx = 0`) and the slope reads low: section
@@ -696,9 +712,10 @@ Fixtures (`34-probes/fixture_figures.py`; figures in `34-probes/README.md`, item
   `eps(10)` there, each would be offered to the foot search as it went in,
   which the correct run does not do, and a foot taken changes the mesh.
 - **The check points of test 6**, 4 per cell of V1 at dyadic offsets, z the
-  bilinear surface plus noise of up to 4 m, seed 7: 129 cells have corners on
-  both sides of 30 degrees; 246 points in them are nearest a corner below
-  30 degrees, which M3 would hold to 10 m instead of 2, and 136 of those
+  bilinear surface plus noise of up to 4 m, drawn as
+  `scattered(65, 4, 7)` draws them (`tests/python/test_core_refine_points.py@4d4cd740:109-120`):
+  129 cells have corners on both sides of 30 degrees; 253 points in them are
+  nearest a corner below 30 degrees, which M3 would hold to 10 m instead of 2, and 136 of those
   carry noise above 2 m (item 4b). Whether one of them ends between 2 and
   10 m under M3 depends on the mesh; hence M3's escape in the mutant list.
 - **V1's line** (tests 5 and 7, with lines): a segment from (100, -50) to
@@ -722,7 +739,7 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
    centre: every valid node is class 75, the border nodes, the four corners
    and the eight nodes around the NoData one included (item 1b measures
    37.300 degrees at every valid node; round 1's rule gave 12.9 degrees at a
-   corner of a 40-degree plane facing 30 degrees); a NoData node (class 0); a one-row grid,
+   corner of a 40-degree plane facing 30 degrees); a NoData node (class 255); a one-row grid,
    the named departure (36.0 degrees for a 40-degree plane facing 30
    degrees, item 1b);
    `dx != dy` (V2: a mutant using `dx` for both axes, M4, changes classes on
@@ -730,9 +747,10 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
 3. **The ramp**: `t` at 0, START, the middle, END, 89.5; the step; never
    increasing with slope over all 181 classes.
 4. **Equalities, bit for bit, on all three entry points, on V1c (V1 cut by
-   the diagonal edge, above; constraints and feet on)**: (a) `Sloped<UniformTolerance{F}>` with
-   `N = F` equals `UniformTolerance{F}`; (b) `START = END = 0` with `N` below
-   `F` equals `UniformTolerance{N}` (the slope must reach the feet's epsilon
+   the diagonal edge, above; constraints and feet on)**: (a)
+   `Sloped<UniformTolerance{10}>` with `N = F = 10` equals
+   `UniformTolerance{10}`; (b) `START = END = 0` with `N = 2`, `F = 10`
+   equals `UniformTolerance{2}` (the slope must reach the feet's epsilon
    and `refine_points`' comparison, M6, M7); (c) `Sloped<LineTolerance>` with
    `N = F` equals `LineTolerance` alone.
 5. **The guarantee, oracle independent of the code**: after refine on V1 and
@@ -743,7 +761,8 @@ C++ (`tests/cpp/unit`, `tests/cpp/property`):
 6. **Check points and the strip**: on 33's resampled-path setup (a check-point
    store over V1's geometry, 4 points per cell at dyadic offsets, z the
    bilinear surface plus noise of up to 4 m, as
-   `tests/python/test_core_refine_points.py`'s `scattered`) every point's
+   `tests/python/test_core_refine_points.py`'s `scattered(65, 4, 7)`), with
+   `N = 2`, `F = 10` and a step at 30 degrees, every point's
    error is at most `t` of the largest class of its cell's four corners,
    computed in the test (M3); and the edge strip along the diagonal edge:
    every strip point within its cell's `t`, on V1c.
@@ -805,7 +824,7 @@ record must cover:
 | `tolerance_field.py`: `ToleranceSlope` | 8-12 | |
 | `cli.py`: one flag, the refusals, building and timing, the record | 50-70 | 33's three flags and the field: 105; one flag and no file here |
 | `edge_strip.py`, `final_check.py`, `run_record.py` (with the summary sentence) | 18-26 | 33: 14 |
-| **total** | **380-545** | |
+| **total** | **376-533** | |
 
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ headers, the entry points, the binding and stub (nothing a
@@ -820,7 +839,7 @@ nothing, G1):
 | classes (`steepness`) | none: not built | one pass over the grid: at most 24 ns per node on one thread, twice NumPy's float64 plain Horn on the tile (12.2 ns, item 5), which is the arithmetic of every interior node; the fill of section 3 runs only on the outer ring and beside NoData (NumPy applies it to every node: 40.4 ns, item 5); tile `6901_3` at most 0.61 s of CPU, Numedalslagen's canvas at most 6.7 s of CPU, Lagan's target grid at most 0.42 s; about a tenth of that in wall time on 10 threads | estimate, not measured (no C++ built) |
 | the scan | none: compiled as today | per node one byte read, two table reads, a multiply, two comparisons; the scan is 24 % of refine at uniform 2 m on the tile (0.891 of 3.744 s); if the scan slows by 30 to 60 %, refine per output triangle slows by 7 to 15 % | estimate, not measured |
 | the resampled path (`--out-crs`) | none | the classes of the target grid (Lagan's 1.74e7 nodes: the steepness row above), and per check point one `cell_class` (four byte reads beside the 16-byte point); the final check's scan was 0.34 s of Lagan's 21.56 s (item 3), so even doubled it adds about 1.6 % | estimate, not measured |
-| the count of tightened nodes | none | one pass over the final triangles' node sets, bytes only, after the loop: at most about one scan's worth (0.89 s at uniform 2 m on the tile, item 3, on 10 threads; the count reads one byte per node where the scan reads four and computes a plane) | estimate |
+| the count of tightened nodes | none | one parallel pass over the final triangles' node sets, after the loop: at most two byte reads per node (4.5), against the scan's four-byte height and plane per node; so at most one scan's worth (0.89 s at uniform 2 m on the tile, item 3, on 10 threads) | estimate |
 | the triangle part's query | none | none with the slope alone (`UniformTolerance`); with lines fewer than 33's, since `over` skips them | section 4.3 |
 | memory | none | one byte per node, about 32 bytes per triangle slot (4.6) | |
 
@@ -830,7 +849,12 @@ benchmark and thread sweep at default flags show no change beyond the bench's
 band, with the mesh's SHA-256 unchanged (G1). The quick check gains the case
 `romsdal-slope`: `mesh --dem $RASPUTIN_DATA/DTM10_UTM33_20260925/6901_3_10m_z33.tif
 --tolerance 10 --tolerance-slope 2 25 35` (threads `[0]`, runs 3, warmup 1),
-no baseline at first. Adding it breaks the pin on the shipped cases,
+no baseline at first. Its `inputs` entry is the directory,
+`["$RASPUTIN_DATA/DTM10_UTM33_20260925"]`, the key `numedalslagen` and
+`geilo-al-ramp` already use, not the tile file: `_mismatch` in
+`tools/bench_quick.py@4d4cd740:106-117` refuses a baseline whose input keys
+differ, so a new key would make every case's baseline stop matching. The
+tile lies in that directory, so the directory's entry covers it. Adding it breaks the pin on the shipped cases,
 `test_the_shipped_cases_are_sections_3_table`
 (`tests/python/test_bench_quick.py@1a754deb:399-411`), which lists every
 case's name, threads, warm-up, runs and `--tolerance`: `@tester` adds

@@ -72,6 +72,15 @@ def main():
         f"one-row grid, plane 40 deg towards 30 deg: {horn(strip, 10.0)[0, 5]:.3f} deg "
         "(the north-south part is lost)"
     )
+    # NoData above and below a node, its four corner neighbours valid: the edge
+    # neighbours fall back to z(node), so only the corners carry that axis.
+    z = plane(21, 21, 10.0, 10.0, 40.0, 90.0)
+    valid = np.ones(z.shape, bool)
+    valid[9, 10] = valid[11, 10] = False
+    print(
+        f"NoData above and below, corners valid, plane 40 deg facing north: "
+        f"{horn(z, 10.0, 10.0, valid)[10, 10]:.3f} deg (the north-south part at half weight)"
+    )
     z = window(*CASES["romsdalen"])
     a, b = classes(horn_edge(z)), classes(horn(z))
     ring = np.zeros(z.shape, bool)

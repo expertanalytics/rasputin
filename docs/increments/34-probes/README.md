@@ -81,6 +81,7 @@ section of Hallingdal).
      corner next to NoData  round 1  37.980  section 3  37.300  class 75
      section 3, every valid node: 37.300000000 .. 37.300000000 deg, classes [75]
    one-row grid, plane 40 deg towards 30 deg: 36.005 deg (the north-south part is lost)
+   NoData above and below, corners valid, plane 40 deg facing north: 22.760 deg (the north-south part at half weight)
    romsdalen: classes differ at 3565 nodes, all on the outer ring: True; ring 4000 nodes; at 30 deg or more on the ring: round 1 probe (numpy edge padding) 27.0%, section 3 41.0%, interior 38.2%
    ```
 
@@ -195,7 +196,7 @@ section of Hallingdal).
 
    ```
    M6: --tolerance 2 on V1 cut by the edge (640.0, -300.0) to (150.0, -640.0): 339 vertices, 10 feet; DEM-node vertices on the wall within 5 m of the edge: 3, of them between eps(2) and eps(10) from it (footed under M6): 3
-   M3: V1 cells whose corners straddle 30 deg: 129; check points (4 per cell, seed 7) in them nearest a corner below 30 deg: 246; of those with noise above N = 2 m: 136
+   M3: V1 cells whose corners straddle 30 deg: 129; check points (scattered(65, 4, 7)) in them nearest a corner below 30 deg: 253; of those with noise above N = 2 m: 136
    line: V1 nodes within 200 m of it 2871 of 4225; held tighter by the line than by the slope 1752, by the slope than by the line 1341
    ```
 
