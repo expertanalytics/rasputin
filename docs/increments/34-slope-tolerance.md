@@ -4,9 +4,15 @@
 for changes (five blockers, ten suggestions), round 2 for two one-line fixes
 and five suggestions, round 3 for two holes around the NoData class; all are
 answered in this file and its probes; round 4 found one figure, fixed;
-round 5 approved. Next: `@tester`'s red step. Questions
-for Ola in section 12; the design is written on their defaults, taken while
-Ola was out.
+round 5 approved. Built on branch `worktree-slope-tol`: red `3ce92a7e`,
+green `952bd1ee` (512 counted lines against 376-533), red-step scaffolding
+removed `f68a9440`, mutation round `7d661ae9` (M1-M9 all killed); the
+as-built record is sections 9.1-9.3 and 10's *As built* table. Next: code
+review, then `@perf`'s acceptance run, which adds the `romsdal-slope` case to
+`docs/benchmarks/quick/cases.toml` and so turns the quick-check pin
+(`test_the_shipped_cases_are_sections_3_table`) green. Questions for Ola in
+section 12; the design is written on their defaults, taken while Ola was
+out.
 
 ## 1. What Ola asked
 
@@ -834,6 +840,169 @@ record must cover:
   an efficiency mutant, killed only by counting `at()` calls; `@tester` adds a
   counting test policy, or reports it as equivalent in output).
 
+### 9.1 Pins after the red step
+
+`@tester`'s red commit `3ce92a7e` settled what this design left open. Listed
+from that commit's message and from the tests at `7d661ae9`; recorded, not
+ruled.
+
+1. *`RefineOutcome::slope_nodes`* has two members, `valid` and `tightened`
+   (`tests/cpp/property/prop_refinement_slope_tolerance.cpp`, header,
+   "CHOSEN HERE"); test 6 (c) also pins that only nodes inside the mesh are
+   counted (V1c's pentagon).
+2. *Python types:* `SlopeTolerance.histogram()` returns 256 ints, and
+   `RefineOutcome.max_slope_share` is a float property
+   (`tests/python/test_core_slope_tolerance.py`, header).
+3. *`slope=`* is keyword-only and last, after 33's `field=`, on `refine`,
+   `refine_strip` and `refine_points`: the stub's keyword pins in
+   `tests/python/test_core_refine_points.py`, `test_core_edge_strip.py` and
+   `test_cli_tolerance_near.py` gain it.
+4. *A class boundary:* z = x on a 10 m grid (45 degrees, between classes 90
+   and 91) is class 91 at every node, the border included
+   (`tests/cpp/unit/test_raster_steepness.cpp`, the case "a slope exactly on a
+   class boundary takes the higher class (pinned)").
+5. *Section 3's two departures as test values:* the one-row grid gives class
+   73 (36.005 degrees); NoData above and below a node gives 46 (22.760
+   degrees).
+6. *`cell_class`:* V1n's cell (31, 30) is 86, not 255; a cell with no valid
+   corner is 0; a position past the last cell clamps to it
+   (`tests/cpp/unit/test_refinement_slope_tolerance.cpp`).
+7. *`make`'s refusals (test 9):* each sentence contains the name of the value
+   broken ("near", "far", "start" or "end"); the rest of the words are not
+   pinned. The edges of the bounds are accepted with `why` empty.
+8. *Test 8's fixture:* an error one unit in the last place above
+   `allowed(class)`, chosen so that `error * (1 / N)` is exactly 1.
+9. *M8:* a counting policy, `CountingAsks`, counts the triangle part's `at()`
+   calls for triangles whose nodes' slope already splits them.
+10. *Test 6 in Python* runs on `scattered(65, 4, 7)`'s own draw, with a guard
+    that the draw gives 129 mixed cells, 253 points and 136 with noise above
+    2 m.
+11. *Test 11's order:* for four triples that break two bounds, the first in
+    section 5's order is named and the later one is not said.
+12. *Test 12's record and output:* `tolerance_slope_m` is a JSON float;
+    `tolerance_slope_deg` reads "30 to 30" for a step and "25 to 35" for a
+    ramp; `slope_nodes_tightened` is matched as "661 of 1353 DEM nodes (<p>
+    %)", with p read as a number within 0.05 of the count's share ("CHOSEN
+    HERE"); the share is a float above 0 and at most `1 + 1e-12`; the summary
+    contains "Nodes on steep ground are within the tolerance their slope
+    allows (largest error"; N = F builds no slope and prints
+    "--tolerance-slope: N equals --tolerance, so slope changes nothing";
+    `--help` contains "--tolerance-slope" and "steep".
+13. *Test 13:* the record's share equals the final check's last
+    `max_slope_share`, and the `--stats` report has a `slope` phase.
+14. *The quick-check pin:* `test_the_shipped_cases_are_sections_3_table` in
+    `tests/python/test_bench_quick.py` gains `("romsdal-slope", [0], 1, 3)`,
+    `--tolerance 10`, `--tolerance-slope 2 25 35`, the tile, and the input
+    key `$RASPUTIN_DATA/DTM10_UTM33_20260925`. Departure from section 10,
+    which put the case in `docs/benchmarks/quick/cases.toml` in the same
+    commit: that file was outside `@tester`'s write limit, so the pin stays
+    red until `@perf`'s acceptance commit adds the case. At `7d661ae9` it
+    fails (`pytest tests/python/test_bench_quick.py -k shipped_cases`).
+
+### 9.2 Kill record
+
+Summary (not part of the record): `@tester`'s mutation round, commit
+`7d661ae9`, planted M1-M9 in a scratch copy of `f68a9440` and killed all
+nine; M2 is killed by a fixture new in that commit, two adjacent-double
+errors with one product, where only the second key picks today's node. The
+table below is the record, pasted as `@tester` gave it. The commit message of
+`7d661ae9` lists test 3 among M5's kills; this table does not, and the table
+is the record. The commit is left as it is (a default taken while Ola was
+away).
+
+| mutant | planted in | change | killed by |
+|---|---|---|---|
+| M1 | refinement/scan.hpp, SlopeRank::rank | `over` from `!(err * weight <= 1)` instead of `err > allowed` | test 8 |
+| M2 | refinement/scan.hpp, SlopeRank::rank | rank by `q > ratio` alone, no second key | test 4 (a), the M2 fixture (new here) |
+| M3 | refinement/refine_points.hpp, scan_points | a stored point's class from its nearest node's row() instead of cell_class | test 6 (a) check points; test 6 (b) V1n |
+| M4 | raster/steepness.hpp | dy8 = 8 dx | test 2: V1 and V2 classes, P1, the M4 case |
+| M5 | raster/steepness.hpp | class = count of bounds, no +1 (rounded down) | test 2 (8 cases); test 6 (b) cell_class unit cases (2) and the histogram case; tests 5, 6 (a), 6 (b), 6 (c) |
+| M6 | refinement/refine.hpp, the foot's tol | min with the triangle part's highest() instead of allowed(node's class) | test 4 (b) |
+| M7 | refinement/refine_points.hpp, point_loop | `over` forced false: points compared with the triangle part only | test 4 (b); test 6 (a) points and strip; test 6 (b) |
+| M8 | refinement/refine.hpp, the scan's slot | allowed_at (asks the triangle part) evaluated even when `over`; output unchanged | the M8 counting policy |
+| M9 | refinement/slope_tolerance.hpp, cell_class | the plain largest corner, 255 included | test 6 (b) cell_class unit cases; test 6 (b) V1n's 16 points |
+
+### 9.3 Pins after the green step
+
+`@developer`'s green commit `952bd1ee` settled the rest. Listed from that
+commit's message and from the code at `7d661ae9`; recorded, not ruled.
+
+1. *The classes, from a table with a relative lowering.*
+   `raster::steepness_bounds()` holds tan² of 0.5 to 89.5 degrees, each
+   multiplied by `1 - 1e-12` (about 1e-11 degrees); a node's class is 1 plus
+   the number of bounds at or below gx² + gy², and 0 when that sum is 0; no
+   atan per node. So a slope on a boundary, to a relative 1e-12, takes the
+   higher class (pin 4 above). The constant is relative, so it holds at any
+   grid spacing. A NaN height counts as missing, as the NoData value does
+   (`include/terrain/raster/steepness.hpp`).
+2. *`make`'s checks and words, in this order:* each value finite (near, far,
+   start, end: "<name> must be finite"), then "near must be above 0", "near
+   must be at most far", "start must be >= 0", "start must be at most end",
+   "end must be below 90 degrees". The binding raises
+   `ValueError("SlopeTolerance: " + that sentence)`.
+3. *The tables:* 256 entries each; 0-180 from the ramp at `c / 2` degrees,
+   181-255 equal to F, weight `1 / allowed`.
+4. *`SlopeRank`, shared by two scans.* `{over, ratio, error}` and its
+   `rank()` are the base of the scan's `SlopeScan` (`scan.hpp`) and of
+   `PointScan` (`strip_scan.hpp`). The design's `SlopeScan` had no `error`;
+   the second key needs it. `PointScan`'s own `error` moved into the base, so
+   `PointScan` grows by `over` and `ratio`: 104 to 120 bytes, by `sizeof` at
+   `da3d1d63` and `7d661ae9` (Apple clang 21, arm64). That is on the default
+   path too: `refine_points` and `refine_strip` keep one `PointScan` per
+   triangle slot with or without a slope. `ScanResult`, which section 4.3
+   kept as it was, is unchanged.
+5. *Compile-time switches:* `detail::varies<P>` judges
+   `SlopeParts<P>::Triangle`; `slope_of(policy)` gives the slope or a null
+   `const NoSlope*`; `NoSlope` is the default slope type of `scan`,
+   `scan_points` and `scan_strip`, so without a slope each compiles as
+   before.
+6. *`refine`:* when `over`, the slot takes the slope's node and its location,
+   and `-inf` in `allowed`; the foot's epsilon takes the smaller of the
+   triangle part's tolerance and `allowed` of the inserted node's class.
+7. *`refine_points` and `refine_strip`:* a second `PointScan` per slot,
+   `steep`. Stored and strip points are ranked at `cell_class` of their
+   position, rescanned DEM nodes at their own class; `offer_steep` ORs `over`
+   and keeps the strictly larger `(ratio, error)`, ties to the earlier set. A
+   void triangle ignores the slope's `over` (`over = sloped &&
+   !results[t].is_void && s->over`); when `over`, `results[t].take(*s)`
+   inserts the slope's point and keeps the triangle's own `max_error`,
+   `uncovered`, `on_frozen` and `frozen_error`.
+8. *The count of tightened nodes* lives in `slope_tolerance.hpp`
+   (`count_slope_nodes`, blocks of 4096 slots), not in `refine.hpp`. It runs
+   at the end of `refine` and of `point_loop`, so the edge strip and the
+   final check each count again over their final mesh. The record takes
+   `refine`'s count on the DEM path (`inside, tight = out.slope_nodes`) and
+   the final check's on the resampled path.
+9. *The binding:* `Sloped<const LineTolerance&>` (`P` may be a const
+   reference, so the field is not copied) and `Sloped<UniformTolerance>`,
+   dispatched four ways; `RefineOutcome.slope_nodes` is a Python tuple
+   `(valid, tightened)`; `SlopeTolerance(view, near, far, start, end,
+   threads=0)` releases the GIL while it computes the classes; the stub's
+   `histogram()` returns `list[int]`.
+10. *The CLI:* `_tolerance_slope` runs right after `_tolerance_lines`, before
+    the other refusals of `mesh`; refusal values are printed with `:g`. The
+    flag sits in its own `--help` panel, "Tolerance on steep ground"; the
+    green commit's reason: in the main table its wider metavar truncated
+    `--tolerance-near-crs` at 80 columns (not re-run for this record). The
+    slope is built in `_dem_mesh` in the `--stats` phase `slope`, with F =
+    `--tolerance` and the default `threads` (0, all cores).
+11. *The run record:* `tolerance_slope_deg` is `f"{start:g} to {end:g}"`;
+    `slope_nodes_tightened` is `"<k> of <n> DEM nodes (<p> %)"`, p to one
+    decimal, `n` floored at 1 in the division. `run_record._entry` now records
+    any float as a number (before: only names ending `_m` or `_deg`), so the
+    share is a JSON number; the rule reaches every float-valued entry,
+    whatever its name. The summary: with the share at most 1, the sentence
+    "Nodes on steep ground are within the tolerance their slope allows
+    (largest error <s> % of it)." with s to 4 significant digits; above 1,
+    no such sentence, and a separate line "Warning: the largest error on
+    steep ground is <s> % of what its slope allows."
+12. *N = F:* `_tolerance_slope` returns nothing after the stderr line, so no
+    slope is built, no `slope` phase is timed, and the record has none of
+    the four slope fields.
+13. *TSan:* `test_raster_steepness` and `prop_refinement_slope_tolerance`
+    added to both lists of the TSan job (`.github/workflows/main.yaml`), as
+    the red commit asked.
+
 ## 10. Size, split point, speed
 
 | part | counted lines (estimate) | basis |
@@ -848,6 +1017,25 @@ record must cover:
 | `cli.py`: one flag, the refusals, building and timing, the record | 50-70 | 33's three flags and the field: 105; one flag and no file here |
 | `edge_strip.py`, `final_check.py`, `run_record.py` (with the summary sentence) | 18-26 | 33: 14 |
 | **total** | **376-533** | |
+
+**As built**, `python3 tools/count_loc.py da3d1d63 7d661ae9` (the design's
+last commit to the mutation round; `9ba38490`, the branch's base, gives the
+same 512, since the design commits are prose only). The green commit alone,
+`python3 tools/count_loc.py 3ce92a7e 952bd1ee`, also gives 512: the red
+step, the scaffolding removal and the mutation round touch no counted file.
+
+| part | estimate | built | why it differs |
+|---|---|---|---|
+| `raster/steepness.hpp` | 55-75 | 78 | 3 over |
+| `refinement/slope_tolerance.hpp` | 70-95 | 160 | holds the count of tightened nodes (`SlopeNodes` and `count_slope_nodes`, 45 lines), which the estimate put in `refine.hpp`'s row; without it 115, 20 over (`make` alone, with its checks and words, is 24) |
+| `scan.hpp` | 40-60 | 30 | under |
+| `refine.hpp` | 45-65 | 37 | under: the count moved to `slope_tolerance.hpp`; with it, 82 |
+| `refine_points.hpp`, `strip_scan.hpp` | 40-60 | 38 + 18 = 56 | within |
+| `bindings/core.cpp` and `_core.pyi` | 50-70 | 38 + 19 = 57 | within |
+| `tolerance_field.py` | 8-12 | 4 | under |
+| `cli.py` | 50-70 | 63 | within |
+| `edge_strip.py`, `final_check.py`, `run_record.py` | 18-26 | 3 + 3 + 21 = 27 | 1 over: the summary sentence and its warning line, and the `_entry` change (9.3, pin 11) |
+| **total** | **376-533** | **512** | within; under 700, one PR |
 
 Under 700 in one PR. **Split point** if the red suite pushes the estimate past
 600: PR A the C++ headers, the entry points, the binding and stub (nothing a
@@ -941,7 +1129,7 @@ Each with the default this design is written on.
 
 ## 13. ROADMAP
 
-Row 34, added with this design: "designed, not reviewed".
+Row 34, added with this design; it carries the Status line's state.
 
 ## Review
 
