@@ -43,8 +43,15 @@
 // within `radius` of a frozen edge, its projection strictly inside: those
 // nodes are the seam pass's. Only a triangle with a frozen edge tests this.
 //
-// Pure: reads the DEM and the mesh, writes nothing but its return value, so
-// any number of threads may scan one mesh at once.
+// A slope (docs/increments/34-slope-tolerance.md, 4.3). Given one, the walk
+// also fills a SlopeScan: whether some node's error is above allowed(its
+// class), compared exactly, and the node with the largest (error *
+// weight(class), error), strictly larger replacing in the same row-major
+// walk; with one weight everywhere that is the node above. The void branch
+// fills none. Without one (NoSlope) the walk is compiled as before.
+//
+// Pure: reads the DEM and the mesh, writes nothing but its return value (and
+// the SlopeScan it is given), so any number of threads may scan one mesh at once.
 
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
@@ -59,6 +66,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <type_traits>
 
 namespace terrain::refinement {
 
@@ -71,6 +79,32 @@ struct ScanResult {
     bool is_void = false;
     std::size_t uncovered = 0;  // void only: valid nodes in the set
 };
+
+// The slope's ranking of candidates (34, 4.3): `over` rests on the exact
+// comparison alone, never on ratio > 1 (M1); `ratio` only chooses.
+struct SlopeRank {
+    bool over = false;   // some error > allowed(class)
+    double ratio = 0.0;  // the largest error * weight(class)
+    double error = 0.0;  // the error there, the second key
+    // True when (err * weight(c), err) is strictly larger than the best so far.
+    template <class S>
+    bool rank(double err, std::uint8_t c, const S& s) noexcept {
+        over = over || err > s.allowed(c);
+        const double q = err * s.weight(c);
+        if (!(q > ratio || (q == ratio && err > error)))
+            return false;
+        ratio = q;
+        error = err;
+        return true;
+    }
+};
+
+struct SlopeScan : SlopeRank {
+    std::optional<mesh::LatticeVertex> node;  // the best by (ratio, error)
+    NodeLocation where = NodeLocation::Inside;
+};
+
+struct NoSlope {};  // a scan without a slope
 
 // A vertex's height: value_at for a node; otherwise bilinear in the
 // fractional frame over the cell holding it (the last cell on the border), and
@@ -118,9 +152,9 @@ template <raster::RasterSource R>
     return std::nullopt;
 }
 
-template <raster::RasterSource R>
+template <raster::RasterSource R, class S = NoSlope>
 [[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t,
-                              double radius = 0.0) {
+                              double radius = 0.0, const S* slope = nullptr, SlopeScan* ss = nullptr) {
     using mesh::LatticeVertex;
     using mesh::MeshVertex;
     using T = typename R::value_type;
@@ -199,6 +233,9 @@ template <raster::RasterSource R>
             r.max_error = err;
             r.node = p;
         }
+        if constexpr (!std::is_same_v<S, NoSlope>)
+            if (ss->rank(err, slope->row(p.row)[p.col], *slope))
+                ss->node = p;
     };
 
     mesh::for_each_row_span(v, [&](mesh::RowSpan span) {
@@ -257,11 +294,17 @@ template <raster::RasterSource R>
     });
     // Where the recorded node lies, by today's exact zero-tests in today's
     // order; once per triangle rather than per candidate.
+    const auto locate = [&](LatticeVertex p) {
+        return sign(0, p) == 0   ? NodeLocation::Edge0
+               : sign(1, p) == 0 ? NodeLocation::Edge1
+               : sign(2, p) == 0 ? NodeLocation::Edge2
+                                 : NodeLocation::Inside;
+    };
     if (r.node)
-        r.where = sign(0, *r.node) == 0   ? NodeLocation::Edge0
-                  : sign(1, *r.node) == 0 ? NodeLocation::Edge1
-                  : sign(2, *r.node) == 0 ? NodeLocation::Edge2
-                                          : NodeLocation::Inside;
+        r.where = locate(*r.node);
+    if constexpr (!std::is_same_v<S, NoSlope>)
+        if (ss->node)
+            ss->where = locate(*ss->node);
     return r;
 }
 
