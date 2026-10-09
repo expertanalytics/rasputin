@@ -588,13 +588,24 @@ gets today.
   raster) goes in with whichever of 23c-2 and 34 lands second, as 33's seam
   distance does (33, §4.6); nothing on master calls `refine_seam` yet.
 - **Memory**: one byte per node of the grid refine runs on, plus one
-  `SlopeScan` (about 32 bytes) per triangle slot with the flag. Numedalslagen's
+  `SlopeScan` per triangle slot with the flag (sizes below). Numedalslagen's
   canvas (2.80e8 nodes) needs 0.28 GB beside a run that peaks at 2.60 GB
   today (+11 %); the whole Romsdalen tile 25.5 MB; the São Francisco basin
   at 30 m about 0.71 GB in one piece (637 000 km² over 900 m²), less per
-  piece. *Constant:* about 32 bytes per slot (a flag, a `double`, an
-  optional node and its location), independent of scale; at 3.5 million
-  triangles (section 6's high estimate) about 0.11 GB.
+  piece. *Per triangle slot, as built* (`sizeof`, Apple clang 21, arm64,
+  at `7d661ae9`; independent of scale; the slot vectors are as long as the
+  mesh's triangle count):
+  - `refine` with the flag: one `SlopeScan`, 40 bytes (`SlopeRank`'s flag,
+    two `double`s, an optional node and its location); at 3.5 million
+    triangles (section 6's high estimate) about 0.14 GB. `ScanResult`
+    stays 32 bytes.
+  - `refine_points` (the final check) and `refine_strip` (the edge strip)
+    with the flag: a second `PointScan` per slot (`steep`), 120 bytes; at
+    3.5 million triangles about 0.42 GB.
+  - Every run, flag or not: `PointScan` grew from 104 to 120 bytes
+    (`SlopeRank` is its base, 9.3 pin 4), so the final check and the edge
+    strip use 16 bytes more per slot than before 34; at 3.5 million
+    triangles about 0.056 GB.
 
 ### 4.7 Against the four criteria
 
@@ -1052,7 +1063,7 @@ nothing, G1):
 | the resampled path (`--out-crs`) | none | the classes of the target grid (Lagan's 1.74e7 nodes: the steepness row above), and per check point one `cell_class` (four byte reads beside the 16-byte point); the final check's scan was 0.34 s of Lagan's 21.56 s (item 3), so even doubled it adds about 1.6 % | estimate, not measured |
 | the count of tightened nodes | none | one parallel pass over the final triangles' node sets, after the loop: at most two byte reads per node (4.5), against the scan's four-byte height and plane per node; so at most one scan's worth (0.89 s at uniform 2 m on the tile, item 3, on 10 threads) | estimate |
 | the triangle part's query | none | none with the slope alone (`UniformTolerance`); with lines fewer than 33's, since `over` skips them | section 4.3 |
-| memory | none | one byte per node, about 32 bytes per triangle slot (4.6) | |
+| memory | 16 bytes more per triangle slot in the final check and the edge strip (`PointScan` 104 to 120 bytes) | one byte per node; per triangle slot 40 bytes in `refine` and a second 120-byte `PointScan` in the final check and the edge strip (4.6) | `sizeof` at `7d661ae9` |
 
 **Speed judgment.** This touches refine and scan code, so `@perf`'s
 acceptance applies (`docs/increments/README.md`): `tools/bench.py`'s 1 m
@@ -1130,6 +1141,16 @@ Each with the default this design is written on.
 ## 13. ROADMAP
 
 Row 34, added with this design; it carries the Status line's state.
+
+Follow-up options from code review round 1's suggestions, not in this PR:
+
+- *S2:* `@perf`'s acceptance times both point-scan paths (the final check and
+  the edge strip) at default flags, since `PointScan` grew by 16 bytes on
+  every run (4.6). If that shows a cost, the slope's winner (`steep`) gets a
+  type of its own, so the default `PointScan` returns to 104 bytes.
+- *S3:* the binding does not check that the slope's F equals the `tolerance`
+  passed beside it; the CLI builds both from `--tolerance`. A check in
+  `with_policy` would refuse a mismatch from Python callers.
 
 ## Review
 
