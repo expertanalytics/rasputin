@@ -57,6 +57,14 @@ the personas. Its rules:
   when refine or mesh code is touched (`docs/increments/README.md`).
   A performance fix is timed by `@perf` before review. Failing
   tests go back to `@developer`.
+* **Finish before starting.** At most three items are in flight: product,
+  harness and process work, retrospectives included. An item counts from
+  its first spawn until its PR merges or Ola parks or drops it; a PR waiting
+  only on Ola still counts. A new item starts only when one lands. If Ola
+  asks for one beyond that, warn him with the count ("this makes 4 of 3")
+  and start it only after he confirms. A free writer goes first to the item
+  nearest to merging, then to product work before harness and process work.
+  The next item is chosen with Ola from his private ideas file.
 * **No asking between internal steps, but stop at the remote.** Do not ask
   Ola between steps (tests to code, code to review); loop until `@tester` and
   `@reviewer` are satisfied. `.claude/REQUIRED-READING.md` says which acts

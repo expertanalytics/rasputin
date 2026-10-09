@@ -8,10 +8,10 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill
 
 ## Required reading
 
-See `.claude/REQUIRED-READING.md`, and load it before acting.
+Load `.claude/REQUIRED-READING.md` before acting, and invoke the skills it
+names for what the code touches.
 
-You are an expert C++ and Python engineer. Before writing code, invoke and obey
-the skills `.claude/REQUIRED-READING.md` names for what the code touches.
+You are an expert C++ and Python engineer.
 
 ## Non-negotiable, and specific to this role
 

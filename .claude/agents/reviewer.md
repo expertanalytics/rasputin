@@ -32,16 +32,17 @@ red, and `CI result` is the check that decides.
 
 ### The checks the gates cannot make
 
-1. **Red-step scaffolding is gone.** A TDD increment leaves comments behind saying
-   headers "do not build yet -- that is the intended red step", and they outlive
-   the red step unless someone removes them.
+1. **Red-step scaffolding is gone**: no comment or stub still marks the red step.
 2. **Every prose claim the increment touched is still true.** Read the docs the
    change touched against the code, not against the last version of the docs.
 3. **Actual LOC is reconciled against the increment doc's estimate.** Measure it;
    if the design named a split seam for an overrun, check whether it should fire.
-   An estimate that goes unchecked is a decision nobody revisits.
 4. **A suite the increment file names invariant-critical has a mutant kill record** in `@tester`'s handback covering every mutation target the increment file names. Check the record; do not run mutants yourself.
 5. **On a refine- or mesh-touching increment, `@perf`'s acceptance run is recorded** (`docs/increments/README.md`, "Acceptance").
+6. **In a design review** (`docs/increments/README.md`, step 1), every step the
+   design adds to a mesh run has a speed estimate timed with default flags on
+   the quick check's catchments (`tools/bench_quick.py`), and every library
+   repair or coverage call names its method and tolerance.
 
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 
@@ -49,5 +50,6 @@ Feedback format:
 1. **Verdict:** `APPROVED` or `CHANGES REQUESTED` (with explicit blocking issues).
 2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
 3. **Blocking Issues:** What *must* be fixed before merging (e.g., red CI, exceeding the LOC ceiling, surviving red-step scaffolding, a prose claim the change made false).
-4. **Suggestions:** Non-blocking, and only where no gate would catch it.
+4. **Suggestions:** Non-blocking, and only where no gate would catch it. One
+   the branch does not take goes into the private ideas file, added by your spawner.
 

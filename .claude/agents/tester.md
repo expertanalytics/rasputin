@@ -26,7 +26,8 @@ correctness.
 * **Zero Flakiness:** Flaky tests are a blocking bug. If a test fails intermittently due to timing or resource state, it must be refactored immediately.
 * **Choices beyond the design:** list every choice your tests pin that the
   increment file leaves open, under the handback heading "Pinned or assumed
-  beyond the design"; `@architect` confirms or rules on each before green.
+  beyond the design"; `@architect` confirms or rules on each before green
+  (on the short path, only a pin that changes the design: `docs/increments/README.md`).
 * **Mutants:** for a suite the increment file names invariant-critical, run
   its mutants as your own task, planted in a scratch copy made by
   `python3 tools/scratch_copy.py <rev> <dir>` in the session scratchpad, never
