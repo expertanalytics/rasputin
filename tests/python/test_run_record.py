@@ -653,12 +653,24 @@ class TestSlopeFields:
         assert first.endswith("of it)."), first
         assert "Warning" not in text
 
-    def test_a_share_above_one_is_a_warning(self, rr: ModuleType) -> None:
+    @pytest.mark.parametrize("share", [1.25, 1.001, 1.0 + 1e-9])
+    def test_a_share_clearly_above_one_is_a_warning(self, rr: ModuleType, share: float) -> None:
         warnings = [
-            ln for ln in rr.summary(self.steep(rr, 1.25)).splitlines() if ln.startswith("Warning:")
+            ln for ln in rr.summary(self.steep(rr, share)).splitlines() if ln.startswith("Warning:")
         ]
         assert len(warnings) == 1, warnings
         assert "slope" in warnings[0], warnings
+
+    @pytest.mark.parametrize("share", [1.0, 1.0 + 2.0**-52, 1.0 + 5e-13, 1.0 + 1e-12])
+    def test_a_share_above_one_only_by_rounding_is_within(
+        self, rr: ModuleType, share: float
+    ) -> None:
+        """Code review round 1, S1: the weight 1 / t is rounded, so a share of at
+        most 1 + 1e-12 (section 4.3's test bound) is within the tolerance: no
+        warning, and the sentence says so."""
+        text = rr.summary(self.steep(rr, share))
+        assert not [ln for ln in text.splitlines() if ln.startswith("Warning:")], text
+        assert self.SENTENCE in text.splitlines()[0], text
 
     def test_nothing_about_steep_ground_without_the_flag(self, rr: ModuleType) -> None:
         assert "steep" not in rr.summary(projected(rr))

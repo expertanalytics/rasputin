@@ -27,7 +27,6 @@ property.
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -46,14 +45,7 @@ NODATA = -9999.0
 #: V1n's NoData node: row 32, column 30 (x = 300 m), on the wall.
 HOLE = (32, 30)
 
-Factory = Callable[..., Any]
 F64 = npt.NDArray[np.float64]
-
-
-@pytest.fixture
-def slope_tolerance() -> Factory:
-    cls: Factory = _core.SlopeTolerance  # type: ignore[attr-defined]
-    return cls
 
 
 # ---------------------------------------------------------------- fixtures
@@ -118,7 +110,8 @@ def classes(z: npt.NDArray[np.float32]) -> npt.NDArray[np.int64]:
 def near_boundary(z: npt.NDArray[np.float32]) -> npt.NDArray[np.bool_]:
     """Within 1e-9 degrees of a class boundary (test 2's window); 0 excluded."""
     s = np.nan_to_num(horn(z))
-    return (s != 0.0) & (np.abs(2.0 * s - np.round(2.0 * s)) <= 2e-9)
+    near: npt.NDArray[np.bool_] = (s != 0.0) & (np.abs(2.0 * s - np.round(2.0 * s)) <= 2e-9)
+    return near
 
 
 def ramp(cls: npt.NDArray[np.int64], near: float, far: float, start: float, end: float) -> F64:
@@ -134,10 +127,11 @@ def ramp(cls: npt.NDArray[np.int64], near: float, far: float, start: float, end:
 def cell_classes(cls: npt.NDArray[np.int64]) -> npt.NDArray[np.int64]:
     """Each cell's largest valid corner class, 0 when none is valid."""
     v = np.where(cls == 255, 0, cls)
-    return np.maximum.reduce([v[:-1, :-1], v[:-1, 1:], v[1:, :-1], v[1:, 1:]])
+    top: npt.NDArray[np.int64] = np.maximum.reduce([v[:-1, :-1], v[:-1, 1:], v[1:, :-1], v[1:, 1:]])
+    return top
 
 
-def outline_start(view: Any) -> tuple[Any, F64, F64]:
+def outline_start(view: Any) -> tuple[Any, npt.NDArray[np.uint32], npt.NDArray[np.uint32]]:
     """The node rectangle's outline as the start mesh, with its constraint arrays."""
     x1, y1 = X0 + (N - 1) * D, Y0 - (N - 1) * D
     xy = np.array([(X0, y1), (x1, y1), (x1, Y0), (X0, Y0)])
@@ -163,12 +157,13 @@ def bilinear(z: npt.NDArray[np.float32], col: F64, row: F64) -> F64:
     c0 = np.minimum(np.floor(col).astype(int), N - 2)
     r0 = np.minimum(np.floor(row).astype(int), N - 2)
     tx, ty = col - c0, row - r0
-    return (
+    out: F64 = (
         zz[r0, c0] * (1 - tx) * (1 - ty)
         + zz[r0, c0 + 1] * tx * (1 - ty)
         + zz[r0 + 1, c0] * (1 - tx) * ty
         + zz[r0 + 1, c0 + 1] * tx * ty
     )
+    return out
 
 
 def check_points() -> tuple[F64, npt.NDArray[np.float32], F64, F64]:
@@ -223,11 +218,9 @@ def same_mesh(a: Any, b: Any) -> None:
 
 
 class TestHistogram:
-    def test_it_sums_to_the_node_count_and_matches_the_classes_here(
-        self, slope_tolerance: Factory
-    ) -> None:
+    def test_it_sums_to_the_node_count_and_matches_the_classes_here(self) -> None:
         z = valley()
-        s = slope_tolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
         h = np.asarray(s.histogram(), dtype=np.int64)
         assert h.shape == (256,)
         assert int(h.sum()) == N * N
@@ -241,17 +234,17 @@ class TestHistogram:
         assert (below_want - below_got <= np.cumsum(loose)).all()
         assert int(h[60:181].sum()) == 1496  # section 9: held to 2 m by the step at 30
 
-    def test_nodata_is_counted_in_entry_255(self, slope_tolerance: Factory) -> None:
-        s = slope_tolerance(view_of(v1n()), 2.0, 10.0, 30.0, 30.0, 1)
+    def test_nodata_is_counted_in_entry_255(self) -> None:
+        s = _core.SlopeTolerance(view_of(v1n()), 2.0, 10.0, 30.0, 30.0, 1)
         h = np.asarray(s.histogram(), dtype=np.int64)
         assert int(h[255]) == 1
         assert int(h.sum()) == N * N
         assert int(h[60:181].sum()) == 1495
 
-    def test_one_and_eight_threads_agree(self, slope_tolerance: Factory) -> None:
+    def test_one_and_eight_threads_agree(self) -> None:
         view = view_of(valley())
-        one = slope_tolerance(view, 2.0, 10.0, 25.0, 35.0, 1)
-        eight = slope_tolerance(view, 2.0, 10.0, 25.0, 35.0, 8)
+        one = _core.SlopeTolerance(view, 2.0, 10.0, 25.0, 35.0, 1)
+        eight = _core.SlopeTolerance(view, 2.0, 10.0, 25.0, 35.0, 8)
         assert list(one.histogram()) == list(eight.histogram())
 
 
@@ -263,11 +256,11 @@ class TestCalls:
         plain = _core.refine(view, mesh, edges, masks, tolerance=10.0)
         same_mesh(plain, _core.refine(view, mesh, edges, masks, tolerance=10.0, slope=None))
 
-    def test_refine_takes_a_slope_and_reports_its_share(self, slope_tolerance: Factory) -> None:
+    def test_refine_takes_a_slope_and_reports_its_share(self) -> None:
         z = valley()
         view = view_of(z)
         mesh, edges, masks = outline_start(view)
-        s = slope_tolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
         out = _core.refine(view, mesh, edges, masks, tolerance=10.0, slope=s)
         assert out.ok(), out.message
         assert isinstance(out.max_slope_share, float)
@@ -288,10 +281,10 @@ class TestCalls:
         ],
     )
     def test_a_bad_ramp_is_a_value_error_naming_the_bound(
-        self, slope_tolerance: Factory, ramp_args: tuple[float, ...], word: str
+        self, ramp_args: tuple[float, float, float, float], word: str
     ) -> None:
         with pytest.raises(ValueError, match=word):
-            slope_tolerance(view_of(valley()), *ramp_args, 1)
+            _core.SlopeTolerance(view_of(valley()), *ramp_args, 1)
 
 
 class TestOtherGeometry:
@@ -300,22 +293,22 @@ class TestOtherGeometry:
 
     WORDS = "the slope tolerance was built on another raster geometry"
 
-    def test_refine_on_another_view(self, slope_tolerance: Factory) -> None:
+    def test_refine_on_another_view(self) -> None:
         z = valley()
         view = view_of(z)
         mesh, edges, masks = outline_start(view)
-        s = slope_tolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
         wider = np.ascontiguousarray(np.hstack([z[:, :1], z]))
         other = _core.raster_view(wider, x_min=X0 - D, y_max=Y0, delta_x=D, delta_y=D)
         with pytest.raises(ValueError, match=self.WORDS):
             _core.refine(other, mesh, edges, masks, tolerance=10.0, slope=s)
 
-    def test_refine_points_with_a_store_on_another_geometry(self, slope_tolerance: Factory) -> None:
+    def test_refine_points_with_a_store_on_another_geometry(self) -> None:
         z = valley()
         view = view_of(z)
         mesh, edges, masks = outline_start(view)
         phase1 = _core.refine(view, mesh, edges, masks, tolerance=10.0)
-        s = slope_tolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view, 2.0, 10.0, 30.0, 30.0, 1)
         xy, zp, _, _ = check_points()
         cp = _core.CheckPoints(x_min=X0 - D, y_max=Y0, spacing=D, rows=N, cols=N + 1)
         cp.add(xy, zp)
@@ -362,9 +355,9 @@ class TestCheckPoints:
         assert int(exposed.sum()) == 253
         assert int((exposed & (np.abs(noise) > 2.0)).sum()) == 136
 
-    def test_every_point_within_its_cells_t(self, slope_tolerance: Factory) -> None:
+    def test_every_point_within_its_cells_t(self) -> None:
         z = valley()
-        s = slope_tolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
         out, xy = self.run(z, s)
         _, zp, col, row = check_points()
         cell = cell_classes(classes(z))
@@ -379,15 +372,13 @@ class TestCheckPoints:
         plain, _ = self.run(z, s, slope=False)
         assert excess(plain, xy, zp, allowed)[0] > 0.0
 
-    def test_v1n_the_points_around_the_nodata_node_end_within_n(
-        self, slope_tolerance: Factory
-    ) -> None:
+    def test_v1n_the_points_around_the_nodata_node_end_within_n(self) -> None:
         """README item 4b: four cells with the NoData node as a corner, largest
         valid corner classes 83, 86, 83, 81; 4 points each, 8 of the 16 with
         noise above 2 m. z is V1's bilinear surface there (the NoData node's
         V1 value standing in) plus the noise."""
         z = v1n()
-        s = slope_tolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
+        s = _core.SlopeTolerance(view_of(z), 2.0, 10.0, 30.0, 30.0, 1)
         out, xy = self.run(z, s)
         _, zp, col, row = check_points()
         r0, c0 = np.floor(row).astype(int), np.floor(col).astype(int)

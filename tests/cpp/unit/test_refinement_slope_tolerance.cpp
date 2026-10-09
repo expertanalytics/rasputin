@@ -16,7 +16,8 @@
 // end_deg}.at(s); SlopeTolerance::make(dem, ramp, threads, why) ->
 // std::optional; geometry(), row(r), cell_class(mesh::MeshVertex{col, row}),
 // allowed(c), weight(c), histogram(), near(), far(). Starts threads only in
-// make (one thread here). Tests 3, 6 and 9 are invariant-critical (section 9).
+// make (one thread here). Of section 9's invariant-critical suite (tests 2,
+// 4, 5, 6 and 8), this file holds test 6 (b)'s cell_class case.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
