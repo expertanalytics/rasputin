@@ -5,8 +5,10 @@ estimate of 310-425 (reconciled there); not pushed. Design review round 3
 approved; red step `6c64b120`, its pins ruled in 9.1; kill record in 9.2;
 green-step pins in 9.3. Code review round 1 asked for changes; the code fixes
 are in (`c2ddd679` tests, `7101f514` code) and its prose fixes in this file;
-round 2's multi-block test is `2a2d5f05`; code review round 3 approved.
-`@perf`'s acceptance run accepted (`21853bf1`). Next: the push on Ola's yes.
+round 2's multi-block test is `2a2d5f05`; code review round 3 approved, and
+its suggestion built in `0b1235a7`; round 4's two prose fixes made.
+`@perf`'s acceptance run accepted (`21853bf1`). Next: a short code review
+round 5, then the push on Ola's yes.
 Questions for Ola in section 12; the design is written on their defaults, and
 section 8's refusal of a non-finite coordinate on a default taken while Ola
 was away.
@@ -447,12 +449,14 @@ rasputin mesh --dem DTM10 --domain corridor.geojson \
   number; a file with no lines ("bergen_line.geojson has no lines; polygons
   and points are not used here"). Lines wholly beyond END of the window are
   not an error: stderr says "no tolerance lines within 3000 m of the domain;
-  every triangle is held to 20 m". For a GeoPackage, whose R-tree is queried
-  with the reachable box and so returns no rows when every line is out of
-  reach, `line_segments` then reads the layer again with an unbounded box:
-  a file with lines, all out of reach, gives zero segments and this stderr
-  line; only a file with no lines at all is refused (code review round 1,
-  fix 1).
+  every triangle is held to 20 m". A GeoPackage's R-tree is queried with the
+  reachable box; when that query returns no line (no row at all, or only
+  polygons and points in reach), `line_segments` reads the layer again with
+  an unbounded box. A file whose lines are all out of reach then gives zero
+  segments and this stderr line; a file with lines and other shapes is
+  refused as mixed ("holds lines and other shapes"), even when only a polygon
+  was in reach; only a file with no lines at all is refused as having none
+  (code review round 1, fix 1, and round 3's suggestion, `0b1235a7`).
 - **The lines do not become constraint lines** (default, Q3). A railway's
   centre line is not a break line of the terrain at 10 m (the track bed is an
   embankment or a cut about that wide), forcing mesh edges along it adds
@@ -877,9 +881,11 @@ changes a guarantee of section 7.
    is read as a measured number only when its value is not text, so
    `tolerance_ramp_m`'s "0 to 3000" stays text.
 9. *The fallback re-read* (`line_segments`): when a GeoPackage's R-tree query
-   returns no row, the layer is read again with an unbounded box (section 5),
-   so a file whose lines are all out of reach gives zero segments, not "has
-   no lines". It reads the whole layer once more, only in that case.
+   returns no line (no row, or only polygons and points), the layer is read
+   again with an unbounded box (section 5), so a file whose lines are all out
+   of reach gives zero segments, not "has no lines", and a polygon in reach
+   beside lines out of reach is refused as a mixed file (`0b1235a7`). It
+   reads the whole layer once more, only in that case.
 
 ## 10. Size, split point, speed
 
