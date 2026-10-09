@@ -44,6 +44,9 @@ WORDING = {
         "by at least this many degrees (negative = always added)"
     ),
     "snap_to_lines": "Points very close to a line were moved onto it",
+    "tolerance_near_m": "Tolerance on the tolerance lines",
+    "tolerance_ramp_m": "Distance from the lines over which the tolerance rises to its far value",
+    "tolerance_lines": "The tolerance lines file, and its segments after simplifying",
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
     "max_error_m": "Largest height error",
@@ -60,6 +63,7 @@ WORDING = {
         "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
     ),
     "resampled_grid_max_error_m": "Largest error against the resampled grid",
+    "max_error_near_lines_m": "Largest height error where the tolerance is the lines' own",
     "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
     "dem_check_points_inserted": "Points that comparison added",
     "dem_check_rounds": "Passes of that comparison",
@@ -143,10 +147,10 @@ def ordinal(n: int) -> str:
 
 
 def _entry(name: str, value: str | int | float) -> Entry:
-    """One entry: a ``_m`` or ``_deg`` name is a measured float, an int a
+    """One entry: a ``_m`` or ``_deg`` number is a measured float, an int a
     count, anything else text. D3 rule 3: a zero count is not in the file."""
     number: float | int | None = None
-    if name.endswith(("_m", "_deg")):
+    if name.endswith(("_m", "_deg")) and not isinstance(value, str):
         number = float(value)
         text = _exact(number)
     elif isinstance(value, int):

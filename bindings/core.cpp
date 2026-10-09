@@ -22,6 +22,7 @@
 #include <terrain/raster/view.hpp>
 #include <terrain/refinement/check_points.hpp>
 #include <terrain/refinement/constraint_points.hpp>
+#include <terrain/refinement/line_tolerance.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
@@ -65,6 +66,7 @@ using terrain::noding::NodeOutcome;
 using terrain::noding::NodeStatus;
 using terrain::refinement::CheckPoints;
 using terrain::refinement::ConstraintCheckPoints;
+using terrain::refinement::LineTolerance;
 using terrain::refinement::PointRefineOutcome;
 using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
@@ -375,6 +377,22 @@ struct StartMesh {
     s.edges = {reinterpret_cast<const std::array<std::uint32_t, 2>*>(s.e.data()), ne};
     s.masks = {s.k.data(), ne};
     return s;
+}
+
+// Increment 33: run `f` with the field as the policy, or with today's single
+// tolerance when there is none. A field built on another raster geometry is
+// refused (9.1, B), before the caller releases the GIL.
+template <class F>
+[[nodiscard]] auto with_policy(const LineTolerance* field, const terrain::raster::RasterGeometry& g,
+                               double tolerance, F&& f) {
+    if (field && !(field->geometry() == g))
+        throw py::value_error("the tolerance field was built on another raster geometry");
+    const py::gil_scoped_release unlocked;
+    return field ? f(*field) : f(terrain::refinement::UniformTolerance{tolerance});
+}
+
+[[nodiscard]] terrain::raster::RasterGeometry geometry_of(const BoundRasterView& raster) {
+    return std::visit([](const auto& v) { return v.geometry(); }, raster.view);
 }
 
 }  // namespace
@@ -928,6 +946,8 @@ unless ok().
         .def_readonly("flips", &RefineOutcome::flips, "Lawson flips, the start mesh's included.")
         .def_readonly("max_error", &RefineOutcome::max_error,
                       "Largest |z - plane| over triangles with three valid vertices.")
+        .def_readonly("max_error_near", &RefineOutcome::max_error_near,
+                      "max_error over the triangles a field holds to its near value; max_error without one.")
         .def_readonly("uncovered", &RefineOutcome::uncovered,
                       "Valid DEM nodes left inside triangles with a NoData vertex.")
         .def_readonly("carved", &RefineOutcome::carved,
@@ -955,11 +975,36 @@ unless ok().
         .def_readonly("quality_line_splits", &RefineOutcome::quality_line_splits,
                       "Constraint lines the start-quality pass split, in no other count.");
 
+    py::class_<LineTolerance>(m, "LineTolerance", R"doc(
+A tolerance that varies with distance to lines (increment 33): near on them,
+far from end metres out, linear from start to end; distances less margin.
+Built on a view's geometry, with its own copy of the segments.
+)doc")
+        .def(py::init([](const BoundRasterView& raster, const py::object& segments, double near, double far,
+                         double start, double end, double margin) {
+                 const auto a = F64::ensure(segments);
+                 if (!a || a.ndim() != 2 || a.shape(1) != 4)
+                     throw py::value_error("LineTolerance: segments must be float64 (K, 4)");
+                 const std::span<const std::array<double, 4>> rows{
+                     reinterpret_cast<const std::array<double, 4>*>(a.data()), static_cast<std::size_t>(a.shape(0))};
+                 std::string why;
+                 auto f = LineTolerance::make(geometry_of(raster), rows, {near, far, start, end, margin}, why);
+                 if (!f)
+                     throw py::value_error("LineTolerance: " + why);
+                 return std::move(*f);
+             }),
+             py::arg("view"), py::arg("segments"), py::arg("near"), py::arg("far"), py::arg("start"),
+             py::arg("end"), py::arg("margin"), R"doc(
+segments (K, 4) float64, x0 y0 x1 y1 in the view's CRS; K may be 0. A ramp
+value out of its bound, or a coordinate that is not finite, is a ValueError
+naming it.
+)doc");
+
     m.def(
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
-           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg) {
+           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg, const LineTolerance* field) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -972,19 +1017,20 @@ unless ok().
             const std::span<const std::uint32_t> bits{k.data(), n};
             const terrain::refinement::RefineOptions options{tolerance, threads, min_angle_deg,
                                                              constraint_feet, frozen_mask, min_gain_deg};
-            // Every buffer read below is held by a local or by `raster`, and
-            // the outcome is converted after the lock returns.
-            const py::gil_scoped_release unlocked;
-            return std::visit(
-                [&](const auto& v) {
-                    return terrain::refinement::refine(v, mesh, pairs, bits, options);
-                },
-                raster.view);
+            // Every buffer read below is held by a local, `raster` or `field`,
+            // and the outcome is converted after the lock returns.
+            return with_policy(field, geometry_of(raster), tolerance, [&](const auto& policy) {
+                return std::visit(
+                    [&](const auto& v) {
+                        return terrain::refinement::refine(v, mesh, pairs, bits, options, policy);
+                    },
+                    raster.view);
+            });
         },
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
         py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
         py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, py::arg("min_gain_deg") = -1.0,
-        R"doc(
+        py::arg("field") = py::none(), R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -1000,6 +1046,8 @@ frozen_mask: no vertex goes on an edge whose mask meets it (a seam); 0 is off.
 min_gain_deg >= 0: the start-quality pass adds a point only if the smallest
 angle around it rises by at least this many degrees, and, with
 constraint_feet, splits a line a point lies beyond; negative is off.
+field, a LineTolerance built on this view's geometry, sets each triangle's
+tolerance in place of `tolerance`; another geometry is a ValueError.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");
@@ -1100,20 +1148,21 @@ A refused input is a ValueError. Releases the GIL.
         [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
            const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
            double tolerance, unsigned threads, const ConstraintCheckPoints* strip,
-           std::uint32_t frozen_mask, bool constraint_feet) {
+           std::uint32_t frozen_mask, bool constraint_feet, const LineTolerance* field) {
             const auto s = start_mesh("refine_points", vertices, triangles, z, valid, edges, masks);
             const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
                                                                   constraint_feet};
-            // Every buffer read below is held by `s`, `points` or `strip`, and
-            // the outcome is converted after the lock returns.
-            const py::gil_scoped_release unlocked;
-            return terrain::refinement::refine_points(points, s.mesh, s.z, s.valid, s.edges, s.masks, options,
-                                                      strip);
+            // Every buffer read below is held by `s`, `points`, `strip` or
+            // `field`, and the outcome is converted after the lock returns.
+            return with_policy(field, points.geometry(), tolerance, [&](const auto& policy) {
+                return terrain::refinement::refine_points(points, s.mesh, s.z, s.valid, s.edges, s.masks, options,
+                                                          policy, strip);
+            });
         },
         py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
         py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0,
         py::arg("strip") = py::none(), py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
-        R"doc(
+        py::arg("field") = py::none(), R"doc(
 Refine phase 1's mesh against a frozen CheckPoints store until every check
 point is within tolerance of the plane of each triangle holding it.
 
@@ -1127,6 +1176,7 @@ A check point on an edge whose mask meets frozen_mask is not inserted; it
 is counted in on_frozen with its error.
 constraint_feet puts a check point close to a constraint segment onto it
 first, at its foot; off by default.
+field as refine's, built on the store's geometry.
 Releases the GIL.
 )doc");
 
@@ -1186,29 +1236,31 @@ Releases the GIL.
         [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
            const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask,
-           bool constraint_feet) {
+           bool constraint_feet, const LineTolerance* field) {
             const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
             const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
                                                                   constraint_feet};
-            // Every buffer read below is held by `s`, `raster` or `strip`.
-            const py::gil_scoped_release unlocked;
-            return std::visit(
-                [&](const auto& g) {
-                    return terrain::refinement::refine_strip(g, strip, s.mesh, s.z, s.valid, s.edges, s.masks,
-                                                             options);
-                },
-                raster.view);
+            // Every buffer read below is held by `s`, `raster`, `strip` or `field`.
+            return with_policy(field, geometry_of(raster), tolerance, [&](const auto& policy) {
+                return std::visit(
+                    [&](const auto& g) {
+                        return terrain::refinement::refine_strip(g, strip, s.mesh, s.z, s.valid, s.edges, s.masks,
+                                                                 options, policy);
+                    },
+                    raster.view);
+            });
         },
         py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
         py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
-        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false, R"doc(
+        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
+        py::arg("field") = py::none(), R"doc(
 The edge strip on the projected path (15f, D4): refine's output, refined until
 every strip point is within tolerance, with the DEM's nodes rescanned in every
 triangle the run writes. Arrays as refine_points'. A refused input comes back
 as a status; a mis-shaped array is a ValueError, a strip that does not fit a
 RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
 strip point on such an edge is a RuntimeError (filter the strip's edges).
-constraint_feet as refine_points'.
+constraint_feet and field as refine_points'.
 Releases the GIL.
 )doc");
 

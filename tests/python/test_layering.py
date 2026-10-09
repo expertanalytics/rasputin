@@ -83,6 +83,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
+        "tolerance_field": "crs feature_input",
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
@@ -90,7 +91,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.mesh_checks io.models io.ply io.repository io.rivers io.station_set"
                " io.vtk_legacy landcover mosaic palettes raster run_record sources stats"
-               " target_grid tin_engine viz.fixtures viz.protocols viz.scene viz.style viz.svg",
+               " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
+               " viz.style viz.svg",
     },
 )
 # fmt: on
