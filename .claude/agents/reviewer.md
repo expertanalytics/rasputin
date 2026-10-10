@@ -26,11 +26,14 @@ gh pr checks <pr>              # or: gh run list --branch <branch> --limit 1
 ```
 **Red CI is an automatic `CHANGES REQUESTED`**, and so is a workflow that does
 not exercise the current build: read `.github/` when the change touches the
-build. Local green is not green. On a prose-only PR (`CLAUDE.md` §4) the
+build. On a prose-only PR (`CLAUDE.md` §4) the
 C++, sanitizer and Python checks show as skipped; that is the design, not a
 red, and `CI result` is the check that decides.
 
 ### The checks the gates cannot make
+
+Verify recorded evidence by reading and diffing; rebuild `_core` or re-run a
+probe only for a figure the design marks unmeasured.
 
 1. **Red-step scaffolding is gone**: no comment or stub still marks the red step.
 2. **Every prose claim the increment touched is still true.** Read the docs the

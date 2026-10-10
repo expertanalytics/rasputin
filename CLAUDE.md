@@ -53,6 +53,8 @@ the personas. Its rules:
   when refine or mesh code is touched (`docs/increments/README.md`).
   A performance fix is timed by `@perf` before review. Failing
   tests go back to `@developer`.
+* **Resume while small.** Resume a persona only while its transcript is under
+  about 150 k tokens; past that, spawn fresh on the increment file.
 * **Finish before starting.** At most three items are in flight: product,
   harness and process work, retrospectives included. An item counts from
   its first spawn until its PR merges or Ola parks or drops it; a PR waiting
