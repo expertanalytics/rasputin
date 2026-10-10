@@ -63,3 +63,16 @@ args = ["mesh", "--dem", "$RASPUTIN_DATA/DTM10_UTM33_20260925",
 inputs = ["$RASPUTIN_DATA/DTM10_UTM33_20260925",
           "$RASPUTIN_DATA/banenor_banenettverk/section_domain.geojson",
           "$RASPUTIN_DATA/banenor_banenettverk/bergensbanen.geojson"]
+
+# Increment 34's Romsdalen tile (6901_3: Romsdalen, Isfjorden, Trollveggen) with the
+# slope's ramp: 2 m on ground at 35 degrees or steeper, 10 m at 25 or gentler. The input
+# key is the DTM10 directory, the key numedalslagen and geilo-al-ramp use, so every
+# case's baseline keeps matching (docs/increments/34-slope-tolerance.md, section 10).
+[[case]]
+name = "romsdal-slope"
+threads = [0]
+runs = 3
+warmup = 1
+args = ["mesh", "--dem", "$RASPUTIN_DATA/DTM10_UTM33_20260925/6901_3_10m_z33.tif",
+        "--tolerance", "10", "--tolerance-slope", "2", "25", "35"]
+inputs = ["$RASPUTIN_DATA/DTM10_UTM33_20260925"]

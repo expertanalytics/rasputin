@@ -1,0 +1,4 @@
+uniform-2m refine median s 3.7465 min 3.7425 max 3.7491 total median s 7.558 triangles 5916344 us per triangle 0.633
+slope refine median s 2.0365 min 2.0359 max 2.0427 total median s 4.233 triangles 3096202 us per triangle 0.658
+slope phase median s 0.1065 min 0.1051 max 0.1066
+ratio slope / uniform-2m, refine per output triangle 1.039
