@@ -46,7 +46,8 @@ replaces ``--features-tolerance``" and section 9, tests 14 to 16):
 ``--features-tolerance`` is now the band, default 50 (``BAND_DEFAULT``), its
 help and record sentence as section 6 words them; the start angle is 15 when
 the land-cover stage ran with the band above 0 and no ``--start-min-angle``
-was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``).
+was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
+digest per platform, and the simplifier never called).
 PINNED for increment 32: "the land-cover stage ran" is a ``--features`` file
 with coded polygons under a class map with codes (``corine``); features with
 no class codes (``gallery``) keep 25 at any band.
@@ -70,7 +71,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import re
+import sys
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -81,6 +84,7 @@ import shapely
 import typer
 
 import tin_engine.cli as cli
+import tin_engine.feature_input as feature_input
 import tin_engine.run_record as rr
 from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
@@ -95,9 +99,22 @@ BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accurac
 #: Increment 32, test 14: SHA-256 of the points (float64, little-endian, (N, 3))
 #: then the triangles (int64, little-endian, (T, 3)) read back from the .vtk of
 #: ``run`` with ``--features corine --features-map corine --features-tolerance
-#: 0``; computed by @tester with that command at b39426c0 (325 points, 586
-#: triangles, start angle 25), three runs alike.
-BAND_0_TODAY = "29963a44f6fb48f8c1d2bd64671bd007a15e3031c1d33a564ae41371dc2efca3"
+#: 0``, one per (``sys.platform``, ``platform.machine()``). A recorded digest
+#: pins a platform as well as a behaviour (``test_cli_mesh_domain_crs.py``'s
+#: preamble): the same shapely 2.2.0 (GEOS 3.14.1) and numpy 2.5.3 give this
+#: mesh different last bits on the two architectures, and each architecture
+#: is consistent with itself.
+#: - darwin/arm64: computed by @tester with that command at b39426c0, before any
+#:   increment 32 change (325 points, 586 triangles, start angle 25), three runs
+#:   alike. This is the digest the increment file's test 14 names.
+#: - linux/x86_64: read from CI run 37914928683 (ubuntu-latest, PR #222 at
+#:   d5b2ba4c), the same on Python 3.12, 3.13 and 3.14. No Linux run of
+#:   b39426c0 exists, so on Linux the pin guards the band-0 mesh against change
+#:   from d5b2ba4c on, not against the mesh before increment 32.
+BAND_0_TODAY = {
+    ("darwin", "arm64"): "29963a44f6fb48f8c1d2bd64671bd007a15e3031c1d33a564ae41371dc2efca3",
+    ("linux", "x86_64"): "9cd16850288f77e6ef8aa32bfa3456f2638d3c97554ffd9b90030959ea10a635",
+}
 #: Section 15.4's wording (the fix moved the band after the outline rule; the
 #: section 6 wording this replaced said "repaired, clipped border").
 BAND_HELP = (
@@ -360,10 +377,50 @@ class TestTheBand:
     """Increment 32, tests 14 and 15: the band's default, band 0 as today, and
     the start angle it picks."""
 
+    def test_14_band_0_never_enters_the_simplifier(
+        self,
+        tmp_path: Path,
+        bumpy: Path,
+        square: Path,
+        corine: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The platform-independent half of test 14: at band 0 the land-cover
+        stage is today's steps alone (repair, merge, outline rule), so the
+        band's step, ``feature_input.simplify_borders``, is never called, and
+        the record and ``--stats`` say band 0 and start angle 25. The control
+        at band 2 shows the spy sees a call when there is one."""
+        calls: list[float] = []
+        real = feature_input.simplify_borders
+
+        def spy(polygons: Any, band: float, *args: Any, **kwargs: Any) -> Any:
+            calls.append(band)
+            return real(polygons, band, *args, **kwargs)
+
+        monkeypatch.setattr(feature_input, "simplify_borders", spy)
+        corine_flags = ("--features", str(corine), "--features-map", "corine")
+        report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--features-tolerance", "0")
+        assert calls == []
+        assert record["features_tolerance_m"] == 0.0
+        assert record["start_min_angle_deg"] == 25.0
+        assert stats_row(report, "start_min_angle_deg") == "25"
+        run(tmp_path, bumpy, square, *corine_flags, "--features-tolerance", "2")
+        assert calls == [2.0]
+
     def test_14_band_0_is_todays_mesh_bit_for_bit(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        report, record, _ = run(
+        """The mesh at band 0 (points and triangles read back from the .vtk)
+        is the one recorded for this platform in ``BAND_0_TODAY``. On macOS
+        arm64 that is b39426c0's mesh, before increment 32, so any change to
+        the repair, merge, outline or refinement steps as band 0 runs them is
+        caught here; on Linux x86_64 the pin holds the band-0 mesh fixed from
+        PR #222 on. A platform with no recorded digest is skipped, naming the
+        key to record."""
+        key = (sys.platform, platform.machine())
+        if key not in BAND_0_TODAY:
+            pytest.skip(f"no band-0 digest recorded for {key}; record one with mesh_digest")
+        run(
             tmp_path,
             bumpy,
             square,
@@ -374,10 +431,7 @@ class TestTheBand:
             "--features-tolerance",
             "0",
         )
-        assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY
-        assert record["features_tolerance_m"] == 0.0
-        assert record["start_min_angle_deg"] == 25.0
-        assert stats_row(report, "start_min_angle_deg") == "25"
+        assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY[key]
 
     @pytest.mark.parametrize(
         ("features", "extra", "angle"),
