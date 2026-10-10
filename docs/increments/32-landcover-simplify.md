@@ -721,6 +721,13 @@ land-cover CLI suites:**
     record text), computed by `@tester` with the same command at
     `b39426c0` and written into the test as a constant, with that commit
     named beside it; and the record's `start_min_angle_deg` is 25.
+    **As built (`8269e0a8`, after CI):** the digest is architecture-bound
+    (arm64 Mac `29963a44…`, x86_64 Linux `9cd16850…`, same shapely and
+    numpy), so the constant is one value per platform, with its provenance;
+    the Linux value was taken at `d5b2ba4c`, since no Linux run of
+    `b39426c0` exists, so there it guards against change from `d5b2ba4c` on.
+    A second, platform-independent test shows the simplifier is never
+    called at band 0 (a spy on `simplify_borders`; band 2 is the control).
 15. With land cover, band above 0 and no `--start-min-angle`:
     `start_min_angle_deg` 15; with land cover and `--features-tolerance 0`:
     25; without features: 25; `--start-min-angle 25` with land cover: 25.
