@@ -1,0 +1,29 @@
+cProfile, one run each, Numedalslagen case, Mac on AC; seconds under the profiler (it inflates them).
+== base b39426c0: _clean cumulative 5.76 s; callees:
+    2.76 s  snap_to_outline (feature_input.py:628) calls=1
+    1.16 s  coverage_clean (_coverage.py:198) calls=1
+    1.01 s  _add (feature_input.py:381) calls=25
+    0.75 s  wrapper (decorators.py:182) calls=7957
+    0.06 s  _polygonal (feature_input.py:452) calls=7932
+    0.01 s  <built-in method builtins.sum> (~:0) calls=2
+== base b39426c0: snap_to_outline cumulative 2.76 s; callees:
+    0.87 s  ring (feature_input.py:741) calls=4532
+    0.86 s  wrapper (decorators.py:182) calls=12982
+    0.28 s  make_valid (constructive.py:667) calls=3
+    0.21 s  _chains (feature_input.py:702) calls=373
+    0.21 s  is_valid (base.py:798) calls=295
+    0.21 s  _loops (feature_input.py:679) calls=373
+== branch d6f04b9e: _clean cumulative 16.09 s; callees:
+   12.18 s  snap_to_outline (feature_input.py:632) calls=1
+    2.48 s  wrapper (decorators.py:182) calls=7954
+    0.66 s  simplify_borders (border_simplify.py:38) calls=1
+    0.50 s  coverage_clean (_coverage.py:198) calls=1
+    0.19 s  _add (feature_input.py:383) calls=22
+    0.06 s  _polygonal (feature_input.py:456) calls=7932
+== branch d6f04b9e: snap_to_outline cumulative 12.18 s; callees:
+    5.24 s  wrapper (decorators.py:182) calls=7383
+    4.96 s  ring (feature_input.py:745) calls=2260
+    1.62 s  _loops (feature_input.py:683) calls=503
+    0.10 s  _chains (feature_input.py:706) calls=503
+    0.09 s  make_valid (constructive.py:667) calls=245
+    0.06 s  is_valid (base.py:798) calls=517

@@ -1,0 +1,12 @@
+read + move: 0.793 s, 1881 polygons
+clip to region: 0.165 s
+vertices after clip: 185747
+coverage_clean 1 m: 0.325 s
+merge same class: 0.030 s
+vertices after merge: 185488
+coverage_simplify 10 m: 0.067 s
+  vertices 154248; largest class move 33.1 m; median class move 7.2 m; class area change -0.02 % to +0.05 %
+coverage_simplify 30 m: 0.082 s
+  vertices 91958; largest class move 147.4 m; median class move 41.3 m; class area change -0.31 % to +0.20 %
+coverage_simplify 100 m: 0.096 s
+  vertices 34966; largest class move 325.3 m; median class move 227.3 m; class area change -1.89 % to +0.52 %

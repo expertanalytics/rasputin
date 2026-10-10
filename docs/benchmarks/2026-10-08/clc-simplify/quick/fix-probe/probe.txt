@@ -1,0 +1,79 @@
+Increment 32, quick-check follow-up probe (@architect, 2026-10-08), Numedalslagen only, Mac on AC.
+Code: the clc-simplify worktree at 35f220b9 (its .venv's _core, production code as 633808b9).
+Run from a scratch folder holding these scripts, with the worktree's .venv python. Order and output:
+
+1. capture.py band50.pkl                      -> the outline rule's input, default flags (band 50 m)
+   capture.py band0.pkl --features-tolerance 0 -> its input with the band off (= base b39426c0's input)
+   capture2.py                                  -> clip_nosimp.pkl: band on, the simplifier replaced by "return the input"
+2. measure.py band0.pkl clip_nosimp.pkl band50.pkl
+band0.pkl: polys 25 edges 588949 on-outline 0 near-not-on 1900 snap 2.27s area_changed 13238 m2
+clip_nosimp.pkl: polys 22 edges 282844 on-outline 14844 near-not-on 1788 snap 14.03s area_changed 94709 m2
+band50.pkl: polys 22 edges 87066 on-outline 14844 near-not-on 1702 snap 10.28s area_changed 1097391 m2
+
+3. loops.py band50.pkl ; loops.py clip_nosimp.pkl   (each loop the rule measures, largest first)
+band50.pkl loops with area 804 sum (not unioned) 1110965
+      119080 m2 poly 10 part 1 ring 0 ring-verts 16 kept-input 1 part-area 119080 at 219256,6559616
+       57062 m2 poly 6 part 22 ring 0 ring-verts 7 kept-input 1 part-area 57062 at 225755,6584284
+       48276 m2 poly 10 part 113 ring 0 ring-verts 10 kept-input 1 part-area 48276 at 181006,6676300
+  (... 9 more, every one with kept-input 1 and loop area = part area but one, poly 14 part 196, kept-input 4)
+  share of top 12: 0.501  loops > 1000 m2: 76 their sum 1083899
+clip_nosimp.pkl loops with area 821 sum (not unioned) 107721
+  (top 12 all kept-input 1, loop area = part area; largest 10052 m2)
+  share of top 12: 0.601  loops > 1000 m2: 22 their sum 80347
+
+4. truearea.py band50.pkl clip_nosimp.pkl band0.pkl   (area each polygon really lost or gained inside the outline)
+band50.pkl: reported 1097391 m2; lost by its polygon 13573 m2, gained 14073 m2; class totals inside: old 5548248345 new 5548248844
+   poly10 part1 area 119080 still covered by poly10 after: 119043
+clip_nosimp.pkl: reported 94709 m2; lost by its polygon 13012 m2, gained 13511 m2; class totals inside: old 5548248345 new 5548248844
+   poly10 part1 area 119080 still covered by poly10 after: 119060
+band0.pkl: reported 13238 m2; lost by its polygon 13238 m2, gained 13238 m2; class totals inside: old 5548248844 new 5548248844
+   poly10 part1 area 716966 still covered by poly10 after: 716966
+
+5. Worst angles. Mesh first:
+   rasputin mesh --dem $D/DTM10_UTM33_20260925 --domain $D/numedalslagen_outline_nve.geojson
+     --features $D/corine2018_dtm10_utm33.gpkg --features-layer corine2018 --features-map corine
+     --tolerance 10 --ascii --out b50.vtk          (654920 triangles, as in the quick check)
+   angle2.py: under 1 deg: 86  under 0.1: 7
+   angle3.py (the eight worst triangles and their vertices; abridged: the distance columns kept only where not 0):
+0.0157: (152157.759,6714968.626) lineVertex=True d_line=0.0000 | (152349.940,6714990.524) lineVertex=True d_line=0.0000 | (152264.007,6714980.762) lineVertex=True d_line=0.0000
+0.0185: (145340.000,6720510.000) lineVertex=False d_line=6.9529 | (145339.077,6720531.471) lineVertex=True | (145339.070,6720531.472) lineVertex=True
+0.0219: (145341.519,6720549.797) lineVertex=True | (145339.070,6720531.472) lineVertex=True | (145339.077,6720531.471) lineVertex=True
+0.0266: (167407.861,6667375.519) lineVertex=True | (167389.452,6667384.316) lineVertex=True | (167389.451,6667384.306) lineVertex=True
+0.0279: (146260.000,6713050.000) lineVertex=False | (146262.292,6713029.953) lineVertex=True | (146262.302,6713029.952) lineVertex=True
+0.0279: (167370.000,6667390.000) lineVertex=False | (167389.451,6667384.306) lineVertex=True | (167389.452,6667384.316) lineVertex=True
+0.0479: (146256.350,6713026.718) lineVertex=True | (146262.302,6713029.952) lineVertex=True | (146262.292,6713029.953) lineVertex=True
+0.1011: (226620.000,6578890.000) lineVertex=False | (226633.872,6578900.800) lineVertex=True | (226633.860,6578900.830) lineVertex=True
+   All eight are 0.8 to 11.9 km from the outline.
+   near.py (cover vertices within 2 m of four of the close pairs, simplified and source; abridged into one line each):
+near (145339.07,6720531.47): simplified (145339.0702,6720531.4720) polys 9, 11, 10 [a junction]; simplified (145339.0766,6720531.4714) poly 10 [not in the source];
+                             source: only the junction (145339.0702,6720531.4720), polys 9, 10, 11
+near (167389.45,6667384.31): junction (167389.4512,6667384.3061) polys 12, 11, 10; simplified (167389.4521,6667384.3161) poly 10 [not in the source]
+near (146262.3,6713029.95):  junction (146262.3024,6713029.9519) polys 17, 15, 9; simplified (146262.2923,6713029.9528) poly 15 [not in the source]
+near (226633.86,6578900.82): junction (226633.8601,6578900.8299) polys 10, 8, 6; simplified (226633.8717,6578900.8002) poly 8 [not in the source]
+   clear.py (a vertex's distance to the nearest edge it is not an end of; distances under 1e-6 m taken as rounding):
+source (clipped, repaired): 147429 vertices; vertex-to-other-edge clearance under 1 cm: 0, under 10 cm: 0, under 1 m: 0; smallest inf mm
+simplified: 49540 vertices; vertex-to-other-edge clearance under 1 cm: 3, under 10 cm: 9, under 1 m: 12; smallest 5.59 mm
+
+6. fixprobe.py band50.pkl band0.pkl   (F1: the rule does not cut an edge lying on one outline segment;
+                                       F2: a ring with one kept input vertex measured like one with none)
+band50.pkl: today 10.20s area 1097391 | F1 1.55s lines bit-identical False, polygons equal False (largest area diff 9.70e+05 m2) | F1+F2 1.82s area 69516 (real change: 1010001)
+band0.pkl: today 2.21s area 13238 | F1 2.60s lines bit-identical True, polygons equal True (largest area diff 0.00e+00 m2) | F1+F2 2.61s area 13238 (real change: 13238)
+   rebuild_diff.py (where F1 differs): polygon 15 loses 961767 m2 under F1 (input 163541609, today 163542874, F1 162572666),
+     every ring's own area equal to 1e-5 m2; invalid rebuilt shells today / F1: [245, 180]
+   invalid_shells.py (why the rule's rebuilt shells are invalid):
+band50.pkl invalid input polygons 0 {'Ring Self-intersection': 202, 'Self-intersection': 41, 'Too few points in geometry component': 2}
+clip_nosimp.pkl invalid input polygons 0 {'Ring Self-intersection': 188, 'Self-intersection': 36, 'Too few points in geometry component': 2}
+band0.pkl invalid input polygons 0 {'Self-intersection': 1, 'Ring Self-intersection': 2}
+
+7. orderprobe.py   (the rule on base's input, then the domain clip, the simplifier, the linework less the outline)
+valid after rule+clip: True  coverage valid: True
+   (second run, 2026-10-08, after the fix-design review, with the counts printed; times differ by up to 0.12 s:)
+simplifier counts: {'junctions': 2828, 'borders': 4590, 'fixed_borders': 813, 'collinear': 0, 'collapses': 98583, 'rejected_crossing': 64, 'rejected_side': 3}
+rule 2.37s (area 13238 m2), domain clip 0.83s, simplify 0.75s, linework 0.23s; 91132 polygon vertices after; 88876 ring edges, 16700 on the outline, 2570 lines
+   (first run:)
+rule 2.24s (area 13238 m2), domain clip 0.80s, simplify 0.63s, linework 0.21s; 91132 polygon vertices after; 88876 ring edges, 16700 on the outline, 2570 lines
+   clearR.py:
+after rule and clip, before simplifying: 149932 vertices; clearance to a non-incident edge under 1 m: 310, under 5 m: 8780, smallest 0.0026 m; vertices off the outline but within 5 m of it: 0
+option R, simplified: 51349 vertices; clearance to a non-incident edge under 1 m: 325, under 5 m: 2459, smallest 0.0026 m; vertices off the outline but within 5 m of it: 7
+
+Times are single runs, not under bench.py, on a machine running another agent; read them as sizes, not as a benchmark.

@@ -5,7 +5,8 @@
 feature's attribute goes through a :class:`ClassMap` to vocabulary names and so
 to a mask; its rings and lines are pre-clipped to a region around the domain
 (R5), moved into the DEM's CRS vertex by vertex, and clipped to the domain as
-linework, never as areas (R6). What comes out is frozen data in the DEM's CRS.
+linework (R6); land cover with the band on (32) is cut by the domain as areas.
+What comes out is frozen data in the DEM's CRS.
 
 **The pre-clip keeps whole edges** (R5, Ola 2026-09-28): an edge is kept when
 it lies within its widening ``w(e)`` of the region, and dropped whole
@@ -17,7 +18,7 @@ DEM; any other pair is moved first and pre-clipped in the DEM's CRS with
 ``w = 0``, which is exact.
 
 Blocking (sqlite3, GEOS): an async caller runs :func:`open_features` in
-``asyncio.to_thread``. No ``_core``.
+``asyncio.to_thread``. ``_core`` only through :func:`simplify_borders` (32).
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
+from tin_engine.border_simplify import simplify_borders
 from tin_engine.crs import parse_crs, reprojector, same_crs, transform_definition
 from tin_engine.domain import DomainPolygon
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary, TerrainFeature
@@ -131,7 +133,7 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 0, 5):
+    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 50, 5):
     #: the repair's tolerance, the same-class merge, the simplification and D.
     repair_m: float = 0.0
     merge_same_class: bool = False
@@ -409,8 +411,11 @@ class _Tally:
         self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
     ) -> None:
         """20c-3: one source's land cover clipped to the read region, then
-        repaired, merged by class, simplified and put to the outline, as asked;
-        its lines and label polygons then go the usual way."""
+        repaired, merged by class and put to the outline, as asked; with the
+        band on (32, section 15.2) then clipped to the domain, simplified
+        within the band at the repair distance's clearance, and its lines cut
+        where they lie on the outline. Its lines and label polygons then go
+        the usual way."""
         t0 = time.perf_counter()
         clipped = [_polygonal(shapely.intersection(g, region)) for *_, g in cover]
         self.outside += sum(g is None for g in clipped)
@@ -430,17 +435,24 @@ class _Tally:
             merged = [shapely.coverage_union_all(polys[groups[items[i][2]]]) for i in first]
             polys = np.array(merged, dtype=object)
             items = [items[i] for i in first]
-        if ask.tolerance_m > 0:
-            polys = shapely.coverage_simplify(polys, ask.tolerance_m, simplify_boundary=False)
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
-        after = sum(int(shapely.get_num_coordinates(line)) for ls in snapped.lines for line in ls)
+        lines_of, polygons = snapped.lines, snapped.polygons
+        if ask.tolerance_m > 0:  # 32: area kept inside the domain
+            dom = self.domain.polygon
+            inside = [
+                Polygon() if (c := _polygonal(shapely.intersection(g, dom))) is None else c
+                for g in polygons
+            ]
+            polygons = simplify_borders(inside, ask.tolerance_m, ask.repair_m).polygons
+            lines_of = tuple(_outline_lines(g, dom) for g in polygons)
+        after = sum(int(shapely.get_num_coordinates(line)) for ls in lines_of for line in ls)
         old = self.cover_vertices or (0, 0)
         self.cover_vertices = (old[0] + before, old[1] + after)
-        for (fid, mask, code), lines, polygon in zip(
-            items, snapped.lines, snapped.polygons, strict=True
+        for (fid, mask, code), lines, polygon, ruled in zip(
+            items, lines_of, polygons, snapped.polygons, strict=True
         ):
-            if polygon.is_empty:  # the repair gave all of it to its neighbours
+            if ruled.is_empty:  # the repair gave all of it to its neighbours
                 self.empty += 1
             else:
                 self._add(fid, mask, list(lines), code, polygon)
@@ -697,6 +709,29 @@ def _loops(
             )
             out.append(shapely.make_valid(Polygon(xy)))
     return out
+
+
+def _outline_lines(polygon: BaseGeometry, outline: Polygon) -> tuple[LineString, ...]:
+    """32, section 15.2: every ring of ``polygon`` cut where an edge lies on
+    ``outline`` (one outline segment within ``IN_LINE`` of both its ends),
+    those edges dropped, as :func:`snap_to_outline`'s lines."""
+    rims = [shapely.get_coordinates(r) for r in shapely.get_rings(outline)]
+    segments = shapely.linestrings(
+        np.concatenate([np.stack([r[:-1], r[1:]], axis=1) for r in rims])
+    )
+    tree = shapely.STRtree(segments)
+    out: list[LineString] = []
+    for ring in shapely.get_rings(shapely.get_parts(polygon)):
+        xy = shapely.get_coordinates(ring)
+        edges = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
+        ei, si = tree.query(edges, predicate="dwithin", distance=IN_LINE)
+        near = [
+            shapely.distance(shapely.points(xy[ei + k]), segments[si]) <= IN_LINE for k in (0, 1)
+        ]
+        on = np.zeros(len(xy) - 1, dtype=bool)
+        on[ei[near[0] & near[1]]] = True
+        out += _chains(xy[:-1], on.tolist())
+    return tuple(out)
 
 
 def _chains(xy: npt.NDArray[np.float64], on: list[bool]) -> list[LineString]:

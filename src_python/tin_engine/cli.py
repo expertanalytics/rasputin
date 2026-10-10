@@ -215,6 +215,8 @@ DEFAULT_LABEL_LIMIT = 500
 DEFAULT_SNAP_SPACING = 1e-3
 # Increment 20, C2 (a): the start mesh's minimum angle, degrees.
 DEFAULT_START_MIN_ANGLE = 25.0
+# Increment 32, section 5.4 (Ola's ruling): with land cover simplified.
+LANDCOVER_START_MIN_ANGLE = 15.0
 # Increment 20c, R7 (Ola's ruling, question 2): the gain a start-quality point
 # must bring, degrees; negative is increment 20's hard rule.
 DEFAULT_START_QUALITY_GAIN = 0.0
@@ -717,7 +719,8 @@ def mesh(
             "--start-min-angle",
             help="With --tolerance, add DEM nodes to the start mesh until its triangles "
             "have no angle under this many degrees, or a stated reason prevents it; "
-            "0 is off, at most 35. Default: 25.",
+            "0 is off, at most 35. Default: 25, or 15 with land cover simplified "
+            "(--features-tolerance above 0).",
         ),
     ] = None,
     start_quality_gain: Annotated[
@@ -788,9 +791,12 @@ def mesh(
             "--features-tolerance",
             rich_help_panel=CLEAN_UP,
             show_default=False,
-            help="Metres: simplify land-cover borders by this much; 0 is off. Default: 0.",
+            help="Metres: simplify land-cover borders, each moved at most this far from its "
+            "border after the repair and the outline rule, each class keeping its area; the "
+            "simplification can bring a border back within the outline-snap distance of the "
+            "outline, but not closer than the repair distance. 0 is off. Default: 50.",
         ),
-    ] = 0.0,
+    ] = 50.0,
     features_outline_snap: Annotated[
         float,
         typer.Option(
@@ -1004,6 +1010,12 @@ def mesh(
         if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
             found = _open_features(sources, dem_domain, dem_crs, clock, cleanup)
+        # 32: 15 degrees with land cover simplified, unless given.
+        simplified = (
+            found is not None and found.cover_vertices is not None and features_tolerance > 0
+        )
+        angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
+        angle = angle if start_min_angle is None else start_min_angle
         dem_run = _dem_mesh(
             held,
             ", ".join(map(str, dem)),
@@ -1014,7 +1026,7 @@ def mesh(
             clock,
             dem_domain,
             domain.name if domain is not None else "",
-            DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
+            angle,
             not no_constraint_feet,
             found,
             grid,
