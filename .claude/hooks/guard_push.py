@@ -27,7 +27,13 @@ docs/increments/h16-harness-fixes.md §2 adds: a fetch into a named ref and a
 as an alias, asks, since it cannot see what runs (G2); and gh's group and verb
 are read past its `-R`/`--repo` option (G6), and glued or clustered `gh api`
 and `curl` options are read as the flags they are (G6, round 7). A git or gh
-command run by another program is judged too (G7, `runs`).
+command run by another program is judged too (G7, `runs`), by every rule
+but one: a git or gh word in the argv of a program that tools/shell_scan.py
+does not strip as a wrapper (`caffeinate git myalias`) skips G2's
+unknown-command ask, except under `parallel`. `env`, `timeout`, `xargs` and
+the other wrappers are stripped, so G2 applies to them. A quoted command
+string (`sh -c '…'`) is judged as its own line by the same rules, so
+`sh -c 'git myalias'` asks and `sh -c 'caffeinate git myalias'` passes.
 """
 
 import functools
