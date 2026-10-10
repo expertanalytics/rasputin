@@ -42,7 +42,9 @@ red, and `CI result` is the check that decides.
 6. **In a design review** (`docs/increments/README.md`, step 1), every step the
    design adds to a mesh run has a speed estimate timed with default flags on
    the quick check's catchments (`tools/bench_quick.py`), and every library
-   repair or coverage call names its method and tolerance.
+   repair or coverage call names its method and tolerance, and every claimed
+   mutant kill holds against the fixtures' figures, all holes reported in one
+   pass.
 
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 

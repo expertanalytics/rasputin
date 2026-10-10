@@ -45,10 +45,6 @@ Every code alteration must execute this strict pipeline, dispatched by the main 
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
 
-Step 4 is not conditional on the branch containing code, and the push that
-would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
-rules on both — the approval boundary and when the assessment fires.
-
 ### The main session dispatches
 The main session, started with no agent name, is the dispatcher: it spawns
 the personas. Its rules:
