@@ -26,6 +26,7 @@
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
+#include <terrain/refinement/slope_tolerance.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <array>
@@ -72,6 +73,7 @@ using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
 using terrain::refinement::SeamOutcome;
 using terrain::refinement::SeamPoint;
+using terrain::refinement::SlopeTolerance;
 
 namespace {
 
@@ -379,16 +381,24 @@ struct StartMesh {
     return s;
 }
 
-// Increment 33: run `f` with the field as the policy, or with today's single
-// tolerance when there is none. A field built on another raster geometry is
-// refused (9.1, B), before the caller releases the GIL.
+// Increments 33 and 34: run `f` with the field as the policy, or with today's
+// single tolerance when there is none, and with the slope beside it when there
+// is one. A field or slope built on another raster geometry is refused (33,
+// 9.1, B; 34, 4.5), before the caller releases the GIL.
 template <class F>
-[[nodiscard]] auto with_policy(const LineTolerance* field, const terrain::raster::RasterGeometry& g,
-                               double tolerance, F&& f) {
+[[nodiscard]] auto with_policy(const LineTolerance* field, const SlopeTolerance* slope,
+                               const terrain::raster::RasterGeometry& g, double tolerance, F&& f) {
+    using terrain::refinement::Sloped;
+    using terrain::refinement::UniformTolerance;
     if (field && !(field->geometry() == g))
         throw py::value_error("the tolerance field was built on another raster geometry");
+    if (slope && !(slope->geometry() == g))
+        throw py::value_error("the slope tolerance was built on another raster geometry");
     const py::gil_scoped_release unlocked;
-    return field ? f(*field) : f(terrain::refinement::UniformTolerance{tolerance});
+    const UniformTolerance uniform{tolerance};
+    if (slope)
+        return field ? f(Sloped<const LineTolerance&>{*field, slope}) : f(Sloped<UniformTolerance>{uniform, slope});
+    return field ? f(*field) : f(uniform);
 }
 
 [[nodiscard]] terrain::raster::RasterGeometry geometry_of(const BoundRasterView& raster) {
@@ -948,6 +958,13 @@ unless ok().
                       "Largest |z - plane| over triangles with three valid vertices.")
         .def_readonly("max_error_near", &RefineOutcome::max_error_near,
                       "max_error over the triangles a field holds to its near value; max_error without one.")
+        .def_readonly("max_slope_share", &RefineOutcome::max_slope_share,
+                      "The largest error as a share of the tolerance its slope allows; 0.0 without a slope.")
+        .def_property_readonly(
+            "slope_nodes",
+            [](const RefineOutcome& o) { return py::make_tuple(o.slope_nodes.valid, o.slope_nodes.tightened); },
+            "(valid DEM nodes inside the mesh, those held below the general tolerance by their slope); "
+            "(0, 0) without a slope.")
         .def_readonly("uncovered", &RefineOutcome::uncovered,
                       "Valid DEM nodes left inside triangles with a NoData vertex.")
         .def_readonly("carved", &RefineOutcome::carved,
@@ -1000,11 +1017,39 @@ value out of its bound, or a coordinate that is not finite, is a ValueError
 naming it.
 )doc");
 
+    py::class_<SlopeTolerance>(m, "SlopeTolerance", R"doc(
+A tolerance that follows the slope (increment 34): every DEM node of the view
+held to near from end degrees of Horn's slope up, to far up to start degrees,
+linear between. Computes the slope of every node once, on the view's geometry.
+)doc")
+        .def(py::init([](const BoundRasterView& raster, double near, double far, double start, double end,
+                         unsigned threads) {
+                 std::string why;
+                 std::optional<SlopeTolerance> s;
+                 {
+                     const py::gil_scoped_release unlocked;  // `raster` holds the buffer
+                     s = std::visit([&](const auto& v) { return SlopeTolerance::make(v, {near, far, start, end}, threads, why); },
+                                    raster.view);
+                 }
+                 if (!s)
+                     throw py::value_error("SlopeTolerance: " + why);
+                 return std::move(*s);
+             }),
+             py::arg("view"), py::arg("near"), py::arg("far"), py::arg("start"), py::arg("end"), py::arg("threads") = 0,
+             R"doc(
+near and far in metres, start and end in degrees; 0 < near <= far and
+0 <= start <= end < 90, all finite, else a ValueError naming the bound.
+threads only splits the work (0: all cores). Releases the GIL.
+)doc")
+        .def("histogram", &SlopeTolerance::histogram,
+             "256 counts of nodes per class (half degrees, rounded up); entry 255 counts NoData.");
+
     m.def(
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
-           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg, const LineTolerance* field) {
+           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg, const LineTolerance* field,
+           const SlopeTolerance* slope) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -1019,7 +1064,7 @@ naming it.
                                                              constraint_feet, frozen_mask, min_gain_deg};
             // Every buffer read below is held by a local, `raster` or `field`,
             // and the outcome is converted after the lock returns.
-            return with_policy(field, geometry_of(raster), tolerance, [&](const auto& policy) {
+            return with_policy(field, slope, geometry_of(raster), tolerance, [&](const auto& policy) {
                 return std::visit(
                     [&](const auto& v) {
                         return terrain::refinement::refine(v, mesh, pairs, bits, options, policy);
@@ -1030,7 +1075,7 @@ naming it.
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
         py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
         py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, py::arg("min_gain_deg") = -1.0,
-        py::arg("field") = py::none(), R"doc(
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -1048,6 +1093,8 @@ angle around it rises by at least this many degrees, and, with
 constraint_feet, splits a line a point lies beyond; negative is off.
 field, a LineTolerance built on this view's geometry, sets each triangle's
 tolerance in place of `tolerance`; another geometry is a ValueError.
+slope, a SlopeTolerance built on this view's geometry, holds every DEM node
+to the tolerance of its own slope as well; another geometry is a ValueError.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");
@@ -1148,13 +1195,14 @@ A refused input is a ValueError. Releases the GIL.
         [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
            const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
            double tolerance, unsigned threads, const ConstraintCheckPoints* strip,
-           std::uint32_t frozen_mask, bool constraint_feet, const LineTolerance* field) {
+           std::uint32_t frozen_mask, bool constraint_feet, const LineTolerance* field,
+           const SlopeTolerance* slope) {
             const auto s = start_mesh("refine_points", vertices, triangles, z, valid, edges, masks);
             const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
                                                                   constraint_feet};
             // Every buffer read below is held by `s`, `points`, `strip` or
             // `field`, and the outcome is converted after the lock returns.
-            return with_policy(field, points.geometry(), tolerance, [&](const auto& policy) {
+            return with_policy(field, slope, points.geometry(), tolerance, [&](const auto& policy) {
                 return terrain::refinement::refine_points(points, s.mesh, s.z, s.valid, s.edges, s.masks, options,
                                                           policy, strip);
             });
@@ -1162,7 +1210,7 @@ A refused input is a ValueError. Releases the GIL.
         py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
         py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0,
         py::arg("strip") = py::none(), py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
-        py::arg("field") = py::none(), R"doc(
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
 Refine phase 1's mesh against a frozen CheckPoints store until every check
 point is within tolerance of the plane of each triangle holding it.
 
@@ -1176,7 +1224,8 @@ A check point on an edge whose mask meets frozen_mask is not inserted; it
 is counted in on_frozen with its error.
 constraint_feet puts a check point close to a constraint segment onto it
 first, at its foot; off by default.
-field as refine's, built on the store's geometry.
+field and slope as refine's, built on the store's geometry; a check point is
+held to the slope of the steepest valid corner of its cell.
 Releases the GIL.
 )doc");
 
@@ -1236,12 +1285,12 @@ Releases the GIL.
         [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
            const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask,
-           bool constraint_feet, const LineTolerance* field) {
+           bool constraint_feet, const LineTolerance* field, const SlopeTolerance* slope) {
             const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
             const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
                                                                   constraint_feet};
             // Every buffer read below is held by `s`, `raster`, `strip` or `field`.
-            return with_policy(field, geometry_of(raster), tolerance, [&](const auto& policy) {
+            return with_policy(field, slope, geometry_of(raster), tolerance, [&](const auto& policy) {
                 return std::visit(
                     [&](const auto& g) {
                         return terrain::refinement::refine_strip(g, strip, s.mesh, s.z, s.valid, s.edges, s.masks,
@@ -1253,14 +1302,14 @@ Releases the GIL.
         py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
         py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
         py::arg("threads") = 0, py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
-        py::arg("field") = py::none(), R"doc(
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
 The edge strip on the projected path (15f, D4): refine's output, refined until
 every strip point is within tolerance, with the DEM's nodes rescanned in every
 triangle the run writes. Arrays as refine_points'. A refused input comes back
 as a status; a mis-shaped array is a ValueError, a strip that does not fit a
 RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
 strip point on such an edge is a RuntimeError (filter the strip's edges).
-constraint_feet and field as refine_points'.
+constraint_feet, field and slope as refine_points'.
 Releases the GIL.
 )doc");
 

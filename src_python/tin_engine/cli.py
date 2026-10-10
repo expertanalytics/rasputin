@@ -66,6 +66,7 @@ from tin_engine._core import (
     LineTolerance,
     NodedPslg,
     RefineOutcome,
+    SlopeTolerance,
     build_pslg,
     describe,
     hardening,
@@ -140,7 +141,7 @@ from tin_engine.run_record import (
 from tin_engine.sources import SOURCES, STATION_SOURCES
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
-from tin_engine.tolerance_field import ToleranceLines, line_segments
+from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -687,6 +688,17 @@ def mesh(
             "--tolerance starts.",
         ),
     ] = None,
+    tolerance_slope: Annotated[
+        tuple[float, float, float] | None,
+        typer.Option(
+            "--tolerance-slope",
+            metavar="N START END",
+            help="Hold DEM nodes on steep ground to N metres: the general --tolerance up to "
+            "START degrees of slope, N from END degrees, linear between (START = END: a step). "
+            "The slope is the DEM's own, at each node.",
+            rich_help_panel="Tolerance on steep ground",
+        ),
+    ] = None,
     domain: Annotated[
         Path | None,
         typer.Option(
@@ -916,6 +928,7 @@ def mesh(
     lines = _tolerance_lines(
         bool(dem), tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp
     )
+    steep = _tolerance_slope(bool(dem), tolerance, tolerance_slope)
     if domain is not None and bbox is not None:
         raise typer.BadParameter("--bbox and --domain exclude each other", param_hint="--bbox")
     if name is not None and name not in GALLERY:
@@ -1021,6 +1034,7 @@ def mesh(
             checks,
             DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
             lines,
+            steep,
         )
         surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
@@ -1636,6 +1650,37 @@ def _tolerance_lines(
     return ToleranceLines(path=path, crs=crs, near_m=n, start_m=start, end_m=end)
 
 
+def _tolerance_slope(
+    dem: bool, far: float | None, given: tuple[float, float, float] | None
+) -> ToleranceSlope | None:
+    """Increment 34, section 5: the flag checked in its order, as one spec;
+    None without it, and when N equals --tolerance (then stderr says so)."""
+    if given is None:
+        return None
+    hint = "--tolerance-slope"
+    if not dem:
+        raise typer.BadParameter("applies only with --dem", param_hint=hint)
+    if far is None:
+        raise typer.BadParameter("--tolerance-slope needs --tolerance", param_hint=hint)
+    n, start, end = given
+    if not all(math.isfinite(v) for v in given):
+        got = " ".join(f"{v:g}" for v in given)
+        raise typer.BadParameter(f"must be finite, got {got}", param_hint=hint)
+    for broken, words in (
+        (n <= 0, f"N must be above 0, got {n:g}"),
+        (n > far, f"N {n:g} is above --tolerance {far:g}"),
+        (start < 0, f"START {start:g} is below 0"),
+        (start > end, f"START {start:g} is above END {end:g}"),
+        (end >= 90, f"END {end:g} must be below 90"),
+    ):
+        if broken:
+            raise typer.BadParameter(words, param_hint=hint)
+    if n == far:
+        typer.echo(f"{hint}: N equals --tolerance, so slope changes nothing", err=True)
+        return None
+    return ToleranceSlope(near_m=n, start_deg=start, end_deg=end)
+
+
 def _line_field(
     lines: ToleranceLines, tile: DemTile, far: float
 ) -> tuple[LineTolerance | None, dict[str, Value]]:
@@ -1725,6 +1770,7 @@ def _dem_mesh(
     checks: Iterator[Block] | None = None,
     gain: float = -1.0,
     lines: ToleranceLines | None = None,
+    steep: ToleranceSlope | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -1738,7 +1784,8 @@ def _dem_mesh(
     constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
     the refined mesh is checked against the source's nodes (D5), after the
     tile is dropped (15e, fix 3). ``lines`` (increment 33) builds a tolerance
-    field on the tile's grid and passes it to all three refinement calls.
+    field on the tile's grid and passes it to all three refinement calls;
+    ``steep`` (increment 34) builds the slope tolerance there and passes it too.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets R5's phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -1799,6 +1846,11 @@ def _dem_mesh(
         if lines is not None:
             field, line_values = _line_field(lines, tile, tolerance)
             values |= line_values
+        slope = None
+        if steep is not None:
+            with clock.phase("slope"):
+                ramp = (steep.near_m, tolerance, steep.start_deg, steep.end_deg)
+                slope = SlopeTolerance(to_core(tile), *ramp)
         t0 = time.perf_counter_ns()
         out = refine(
             to_core(tile),
@@ -1810,22 +1862,29 @@ def _dem_mesh(
             constraint_feet=feet,
             min_gain_deg=gain,
             field=field,
+            slope=slope,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
         strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
         if grid is None or checks is None:
-            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet, field)
+            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet, field, slope)
             del tile
             # 15f, D7: refine's maximum and the strip run's make an upper bound.
             max_error = max(out.max_error, final.max_error)
             near_error = max(out.max_error_near, final.max_error_near)
+            share = max(out.max_slope_share, final.max_slope_share)
+            inside, tight = out.slope_nodes
             values["line_check_dem_nodes_inserted"] = final.nodes_inserted
         else:
             del tile  # 15e fix 3: phase 2 runs without the target tile
-            final, n = final_check.run(out, grid, checks, tolerance, clock, strip, feet, field)
+            final, n = final_check.run(
+                out, grid, checks, tolerance, clock, strip, feet, field, slope
+            )
             max_error, near_error = final.max_error, final.max_error_near
+            share = final.max_slope_share
+            inside, tight = final.slope_nodes
             values |= {
                 "resampled_grid_max_error_m": out.max_error,
                 "dem_nodes_checked": n,
@@ -1877,6 +1936,15 @@ def _dem_mesh(
             "final_check_snapped_points_added_anyway": final.feet_fallback,
             "start_vertices_between_dem_nodes": _off_node(np.asarray(run.mesh.vertices), meta),
         }
+        if steep is not None:
+            values |= {
+                "tolerance_slope_m": steep.near_m,
+                "tolerance_slope_deg": f"{steep.start_deg:g} to {steep.end_deg:g}",
+                "slope_nodes_tightened": (
+                    f"{tight} of {inside} DEM nodes ({100 * tight / max(inside, 1):.1f} %)"
+                ),
+                "max_error_slope_share_of_tolerance": share,
+            }
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
             f"{dem} has no data under any triangle; nothing to write", param_hint="--dem"

@@ -39,6 +39,15 @@ class ToleranceLines(BaseModel, frozen=True):
     margin_m: float = 1.0
 
 
+class ToleranceSlope(BaseModel, frozen=True):
+    """``--tolerance-slope N START END`` (increment 34): N in metres, the angles
+    in degrees. The CLI checks the bounds."""
+
+    near_m: float
+    start_deg: float
+    end_deg: float
+
+
 def line_segments(
     spec: ToleranceLines, window: Box, mesh_crs: str
 ) -> tuple[npt.NDArray[np.float64], float]:

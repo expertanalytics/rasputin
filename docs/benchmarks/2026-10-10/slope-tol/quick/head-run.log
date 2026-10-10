@@ -1,0 +1,12 @@
+NOT JUDGED: romsdal-slope is not in the baseline
+HOTSPOT: tile refine 44 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip 53 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 52 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 43 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/slope-tol/docs/benchmarks/quick/baseline-ac.json
+NO CHANGE
+exit 0

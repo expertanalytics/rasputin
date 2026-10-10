@@ -65,6 +65,13 @@
 // triangle's error is compared with the policy's allowed error, asked only
 // between lowest() and highest(), as refine does; options.tolerance is not
 // read by the overloads that take one.
+//
+// A slope (docs/increments/34-slope-tolerance.md, 4.3): with Sloped<P> a
+// stored point or strip point is held to allowed(cell_class(its position)),
+// a rescanned DEM node to its own class's. Each triangle keeps a second
+// winner, the largest (error * weight, error) across the sets; when some
+// point is above its allowed error, the triangle splits there, and the
+// triangle part is not asked.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -123,9 +130,10 @@ struct PointRefineOutcome : RefineOutcome {
 
 namespace detail {
 
-template <class Store>
-[[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m,
-                                    std::span<const double> zt, std::uint32_t t, double radius = 0.0) {
+template <class Store, class S = NoSlope>
+[[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m, std::span<const double> zt,
+                                    std::uint32_t t, double radius = 0.0, const S* slope = nullptr,
+                                    PointScan* steep = nullptr) {
     using mesh::MeshVertex;
     const raster::RasterGeometry& g = points.geometry();
     const auto& tri = m.triangles()[t];
@@ -181,6 +189,9 @@ template <class Store>
             r.point = p;
             r.z = z;
         }
+        if constexpr (!std::is_same_v<S, NoSlope>)
+            if (steep->rank(err, slope->cell_class(p), *slope))
+                std::tie(steep->point, steep->z) = std::pair{p, z};
     };
 
     // Per cell row, the triangle's column range in the band [b, b + 1]: its
@@ -210,11 +221,17 @@ template <class Store>
         const auto c1 = std::min(static_cast<std::size_t>(std::floor(hi) + 1.0), last_col);
         points.for_each_in(b, c0, c1, visit);
     }
+    const auto locate = [&](MeshVertex p) {
+        return mesh::orient_sign(v[0], v[1], p) == 0   ? NodeLocation::Edge0
+               : mesh::orient_sign(v[1], v[2], p) == 0 ? NodeLocation::Edge1
+               : mesh::orient_sign(v[2], v[0], p) == 0 ? NodeLocation::Edge2
+                                                       : NodeLocation::Inside;
+    };
     if (r.point)
-        r.where = mesh::orient_sign(v[0], v[1], *r.point) == 0   ? NodeLocation::Edge0
-                  : mesh::orient_sign(v[1], v[2], *r.point) == 0 ? NodeLocation::Edge1
-                  : mesh::orient_sign(v[2], v[0], *r.point) == 0 ? NodeLocation::Edge2
-                                                                 : NodeLocation::Inside;
+        r.where = locate(*r.point);
+    if constexpr (!std::is_same_v<S, NoSlope>)
+        if (steep->point)
+            steep->where = locate(*steep->point);
     return r;
 }
 
@@ -280,6 +297,9 @@ template <class Store, class R, TolerancePolicy P>
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [&](std::uint32_t s) { written[s] = 1; });
     std::vector<PointScan> results;
     [[maybe_unused]] Allowed<P> allowed;
+    constexpr bool sloped = is_sloped<P>;
+    const auto* slope = slope_of(policy);
+    std::vector<PointScan> steep;  // the slope's winners, per slot; empty without one
     mesh::FlipStack flip_stack;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -320,17 +340,28 @@ template <class Store, class R, TolerancePolicy P>
     };
 
     // Source, strip, DEM, in that order (D4, "Combining").
-    const auto scan_one = [&](std::uint32_t t) {
+    const auto scan_one = [&](std::uint32_t t, PointScan* s) {
         PointScan r;
         if constexpr (has_store) {
-            r = scan_points(*points, m, zt, t, radius);
+            r = scan_points(*points, m, zt, t, radius, slope, s);
             r.error = r.max_error;
         }
         if (strip)
-            scan_strip(*strip, offset, refused, subs, m, zt, t, r);
+            scan_strip(*strip, offset, refused, subs, m, zt, t, r, slope, s);
         if constexpr (has_dem)
             if (written[t] != 0) {
-                const ScanResult d = scan(*dem, m, t, radius);
+                SlopeScan ss;
+                const ScanResult d = scan(*dem, m, t, radius, slope, &ss);
+                if constexpr (sloped)
+                    if (ss.node) {
+                        PointScan c;
+                        static_cast<SlopeRank&>(c) = ss;
+                        c.point = mesh::MeshVertex{*ss.node};
+                        c.z = vertex_z(*dem, *c.point).value_or(std::numeric_limits<double>::quiet_NaN());
+                        c.where = ss.where;
+                        c.set = PointSet::Dem;
+                        s->offer_steep(c);
+                    }
                 r.max_error = d.max_error;
                 r.uncovered += d.uncovered;
                 if (d.node) {
@@ -356,14 +387,23 @@ template <class Store, class R, TolerancePolicy P>
         results.resize(m.triangle_count());
         if constexpr (varies<P>)
             allowed.resize(m.triangle_count());
+        if constexpr (sloped)
+            steep.resize(m.triangle_count());
         auto t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
                                           for (std::size_t i = begin; i < end; ++i) {
-                                              results[active[i]] = scan_one(active[i]);
+                                              const std::uint32_t t = active[i];
+                                              PointScan* s = nullptr;
+                                              if constexpr (sloped)
+                                                  *(s = &steep[t]) = PointScan{};
+                                              results[t] = scan_one(t, s);
+                                              const bool over = sloped && !results[t].is_void && s->over;
                                               if constexpr (varies<P>)
-                                                  allowed[active[i]] =
-                                                      allowed_at(policy, m, active[i], results[active[i]].error);
+                                                  allowed[t] = over ? -std::numeric_limits<double>::infinity()
+                                                                    : allowed_at(policy, m, t, results[t].error);
+                                              if (over)  // the point inserted is the slope's; take keeps `over`
+                                                  results[t].take(*s);
                                           }
                                       });
         out.scan_seconds += since(t0);
@@ -376,7 +416,7 @@ template <class Store, class R, TolerancePolicy P>
             double limit = policy.lowest();
             if constexpr (varies<P>)
                 limit = allowed[t];
-            if (!r.point || !(r.is_void || r.error > limit))
+            if (!r.point || !(r.is_void || r.over || r.error > limit))
                 continue;
             any = true;
             if (touched[t] != 0)
@@ -480,6 +520,11 @@ template <class Store, class R, TolerancePolicy P>
     if constexpr (varies<P>)
         out.max_error_near = max_error_near(policy, m, allowed, options.threads,
                                             [&](std::uint32_t t) { return results[t].max_error; });
+    if constexpr (sloped) {
+        for (const PointScan& s : steep)
+            out.max_slope_share = std::max(out.max_slope_share, s.ratio);
+        out.slope_nodes = count_slope_nodes(m, *slope, options.threads);
+    }
     // Step 6: every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
         if (std::isnan(zt[se.a]) || std::isnan(zt[se.b]))

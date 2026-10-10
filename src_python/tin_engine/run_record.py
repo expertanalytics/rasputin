@@ -50,6 +50,16 @@ WORDING = {
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
     "max_error_m": "Largest height error",
+    "tolerance_slope_m": "Tolerance on steep ground",
+    "tolerance_slope_deg": (
+        "Slope where the tolerance starts to tighten, and where it reaches the steep value"
+    ),
+    "slope_nodes_tightened": (
+        "DEM nodes held to less than the general tolerance because of their slope"
+    ),
+    "max_error_slope_share_of_tolerance": (
+        "Largest error as a share of the tolerance its slope allows"
+    ),
     "dem_source": "DEM",
     "dem_credit": "Credit",
     "licence_note": "Licence",
@@ -147,10 +157,11 @@ def ordinal(n: int) -> str:
 
 
 def _entry(name: str, value: str | int | float) -> Entry:
-    """One entry: a ``_m`` or ``_deg`` number is a measured float, an int a
-    count, anything else text. D3 rule 3: a zero count is not in the file."""
+    """One entry: a float, or a ``_m`` or ``_deg`` number, is a measured float,
+    an int a count, anything else text. D3 rule 3: a zero count is not in the
+    file."""
     number: float | int | None = None
-    if name.endswith(("_m", "_deg")) and not isinstance(value, str):
+    if isinstance(value, float) or (name.endswith(("_m", "_deg")) and not isinstance(value, str)):
         number = float(value)
         text = _exact(number)
     elif isinstance(value, int):
@@ -227,7 +238,20 @@ def summary(record: RunRecord) -> str:
         )
     if "heights" in by:
         said.append("The heights are not real: every z is 0 (--flat).")
+    share = by.get("max_error_slope_share_of_tolerance")
+    steep = f"{100 * float(share.value):.4g} % of" if share is not None else ""
+    # 34, 4.3: the weight 1 / t is rounded, so up to 1 + 1e-12 is within.
+    within = share is not None and float(share.value) <= 1.0 + 1e-12
+    if within:
+        said.append(
+            "Nodes on steep ground are within the tolerance their slope allows "
+            f"(largest error {steep} it)."
+        )
     lines = [" ".join(said)]
+    if share is not None and not within:
+        lines.append(
+            f"Warning: the largest error on steep ground is {steep} what its slope allows."
+        )
     at, count = by.get("dem_nodes_at_vertices_max_error_m"), by.get("dem_nodes_at_vertices")
     if (
         at is not None
