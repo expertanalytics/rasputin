@@ -489,3 +489,18 @@ target_link_libraries(test_constraint_foot_final PRIVATE Threads::Threads)
 add_terrain_backend_test(test_quality_gain unit/test_quality_gain.cpp)
 add_terrain_backend_test(test_quality_gain_refine property/prop_quality_gain_refine.cpp)
 target_link_libraries(test_quality_gain_refine PRIVATE Threads::Threads)
+
+# A vertical tolerance that varies with distance to named lines, increment 33
+# (docs/increments/33-feature-tolerance.md, sections 3, 4 and 9). Two targets:
+#   test_refinement_line_tolerance   the field alone: the ramp (test 4), the
+#                                    triangle-to-segment distance and its
+#                                    search (test 6), make's refusals (test 10);
+#                                    starts no threads;
+#   prop_refinement_line_tolerance   the field in refine, refine_points and
+#                                    refine_strip: tests 1, 2, 3, 5, 7, 8 and 9,
+#                                    with the QA rules' section D oracles. It
+#                                    starts threads; test 9 is the TSan job's.
+# Tests 1 to 8 are the design's invariant-critical suite.
+add_terrain_backend_test(test_refinement_line_tolerance unit/test_refinement_line_tolerance.cpp)
+add_terrain_backend_test(prop_refinement_line_tolerance property/prop_refinement_line_tolerance.cpp)
+target_link_libraries(prop_refinement_line_tolerance PRIVATE Threads::Threads)

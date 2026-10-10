@@ -1,0 +1,21 @@
+DEM: 24 files, 28376 columns x 13211 rows
+1587426 triangles. Every DEM node inside the mesh is within 20 m of it (largest difference 19.999 m).
+BENCH {"refine_s": 4.367160458001308, "app_s": 6.6755563750630245, "max_error": 19.998650429774443, "rounds": 44, "inserted": 792285, "flips": 1891802, "hardening": "libc++ fast", "total_s": 6.6652215, "phases": {"domain read": 0.001947917, "decode": 1.36110725, "start mesh: build": 0.000150458, "start mesh: node": 0.001062792, "start mesh: triangulate": 0.000605958, "start mesh: constraint edges": 0.001381917, "refine": 4.367173583, "refine: legalise start": 3.3375e-05, "refine: start quality": 0.00344525, "refine: scan (parallel)": 3.7225019610000003, "refine: split + flip (serial)": 0.5496745419999999, "refine: setup + output": 0.09151845499999922, "edge strip: generate": 0.008337042, "edge strip: scan (parallel)": 0.00477896, "edge strip: split + flip (serial)": 0.008275291, "trim": 0.056075041, "write: encode": 0.024393666, "write: disk": 0.007956959}}
+        6.94 real        42.72 user         0.76 sys
+          2930655232  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              187309  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 157  voluntary context switches
+               14843  involuntary context switches
+        502828682219  instructions retired
+        125424666438  cycles elapsed
+          2907867752  peak memory footprint
