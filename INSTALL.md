@@ -209,11 +209,14 @@ Kartverket's 10 m terrain model of mainland Norway is open data under
 
 - **The current model, from [hoydedata.no](https://hoydedata.no/LaserInnsyn2/).**
   Open the "Nedlasting" (download) tab, then "Landsdekkende" (nationwide),
-  "UTM sone 33", and the "DTM10" entry: one zip of about 19.6 GB named
-  `DTM10_UTM33_<date>.zip`, re-exported every few weeks, holding the 254
-  tiles of the national 50 km grid as GeoTIFF (`7908_3_10m_z33.tif` and so
-  on: 5051 × 5051 float32 cells, LZW, EPSG:25833, NoData −32767; about 20 GB
-  unpacked). The committed tile and the project's own runs come from here.
+  "UTM sone 33", and the "DTM10" entry (the click path is Ola's, from his
+  2026-09-25 download; only the site's download endpoints were checked by
+  script): one zip of about 19.6 GB named `DTM10_UTM33_<date>.zip`,
+  re-exported every few weeks. The 2026-09-25 export unpacked to 254 tiles of
+  the national 50 km grid as GeoTIFF (`7908_3_10m_z33.tif` and so on:
+  5051 × 5051 float32 cells, LZW, EPSG:25833, NoData −32767; about 20 GB);
+  a later export's tile list was not checked. The committed tile and the
+  project's own runs come from here.
 - **The 2013-based model, from Geonorge**, one zip per tile:
   `https://nedlasting.geonorge.no/geonorge/Basisdata/DTM10UTM33/TIFF/Basisdata_<cell>_Celle_25833_DTM10UTM33_TIFF.zip`,
   `<cell>` from `6400-1` to `7910-3`; all 254 are listed in the Atom feed
