@@ -17,3 +17,4 @@ Write in **plain words**: say what any internal label means.
 Hand back under: **Result; Pinned or assumed beyond the design; Questions
 for Ola; Lessons; Ideas; ASK OLA and GUARD FALSE POSITIVE lines** ("none" under an
 empty one). Each question for Ola is in plain words, with a default.
+The handback is **at most 300 words**; details go in the commit message.

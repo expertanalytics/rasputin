@@ -45,10 +45,6 @@ Every code alteration must execute this strict pipeline, dispatched by the main 
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
 
-Step 4 is not conditional on the branch containing code, and the push that
-would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
-rules on both — the approval boundary and when the assessment fires.
-
 ### The main session dispatches
 The main session, started with no agent name, is the dispatcher: it spawns
 the personas. Its rules:
@@ -57,6 +53,8 @@ the personas. Its rules:
   when refine or mesh code is touched (`docs/increments/README.md`).
   A performance fix is timed by `@perf` before review. Failing
   tests go back to `@developer`.
+* **Resume while small.** Resume a persona only while its transcript is under
+  about 150 k tokens; past that, spawn fresh on the increment file.
 * **Finish before starting.** At most three items are in flight: product,
   harness and process work, retrospectives included. An item counts from
   its first spawn until its PR merges or Ola parks or drops it, except while

@@ -53,6 +53,11 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    `docs/increments/NN-name.md` (one entry per review round), and commits it
    before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
 
+The main session writes the as-built record (pins, kill record, counts) into
+the increment file from `@tester`'s and `@developer`'s handbacks or the
+commits they name; no separate
+`@architect` step.
+
 Steps 2 and 3 are not strictly once each. A ruling can land after the red
 commit, and the suite that encodes it is still `@tester`'s to write; so can a
 retuned constant, when implementation shows it depends on the platform. Such

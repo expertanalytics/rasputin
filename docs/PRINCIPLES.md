@@ -206,11 +206,6 @@ instruction's momentum. `git push`, `gh pr create`, `gh pr merge`
 **Apply.** One named act, one occurrence. Ask again if the tree has changed.
 **Status.** In force. Last exercised: 5c.
 
-### E2 — `@reviewer` runs before a branch's first push, and again before a push that follows findings
-
-**Rule.** Not conditional on the branch containing code.
-**Status.** In force. Last exercised: 5c.
-
 ### E3 — The I/O boundary
 
 **Rule.** The C++ core never opens a file, sees a path or links a codec, and CRS

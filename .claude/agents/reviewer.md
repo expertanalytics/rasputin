@@ -26,23 +26,28 @@ gh pr checks <pr>              # or: gh run list --branch <branch> --limit 1
 ```
 **Red CI is an automatic `CHANGES REQUESTED`**, and so is a workflow that does
 not exercise the current build: read `.github/` when the change touches the
-build. Local green is not green. On a prose-only PR (`CLAUDE.md` §4) the
+build. On a prose-only PR (`CLAUDE.md` §4) the
 C++, sanitizer and Python checks show as skipped; that is the design, not a
 red, and `CI result` is the check that decides.
 
 ### The checks the gates cannot make
+
+Verify recorded evidence by reading and diffing; rebuild `_core` or re-run a
+probe only for a figure the design marks unmeasured.
 
 1. **Red-step scaffolding is gone**: no comment or stub still marks the red step.
 2. **Every prose claim the increment touched is still true.** Read the docs the
    change touched against the code, not against the last version of the docs.
 3. **Actual LOC is reconciled against the increment doc's estimate.** Measure it;
    if the design named a split seam for an overrun, check whether it should fire.
-4. **A suite the increment file names invariant-critical has a mutant kill record** in `@tester`'s handback covering every mutation target the increment file names. Check the record; do not run mutants yourself.
+4. **A suite the increment file names invariant-critical has a mutant kill record** in `@tester`'s handback or the commit it names, covering every mutation target the increment file names. Check the record; do not run mutants yourself.
 5. **On a refine- or mesh-touching increment, `@perf`'s acceptance run is recorded** (`docs/increments/README.md`, "Acceptance").
 6. **In a design review** (`docs/increments/README.md`, step 1), every step the
    design adds to a mesh run has a speed estimate timed with default flags on
    the quick check's catchments (`tools/bench_quick.py`), and every library
-   repair or coverage call names its method and tolerance.
+   repair or coverage call names its method and tolerance, and every claimed
+   mutant kill holds against the fixtures' figures, all holes reported in one
+   pass.
 
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 

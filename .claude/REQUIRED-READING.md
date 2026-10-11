@@ -184,10 +184,8 @@ least one fallback that needs no ruling and writes no governed path, and one
 such item stays queued for the window's last hour; idle is accepted only when
 no such item exists.
 
-`SessionStart` runs `tools/session_state.py` on every source; if the recap
-is missing, run it by hand (step 1). Its output is capped at 10,000
-characters (`python3 tools/session_state.py | wc -m`), so keep
-`session.md` and the note files short.
+The recap is capped at 10,000 characters (`python3 tools/session_state.py |
+wc -m`), so keep `session.md` and the note files short.
 
 Propose any further hook for Ola's approval; never add one to
 `.claude/settings.json` on your own initiative.
