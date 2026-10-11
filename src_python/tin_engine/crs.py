@@ -14,7 +14,10 @@ Pure: pyproj and numpy. No paths, no `_core`; CRS never crosses into the core.
 from __future__ import annotations
 
 import math
+import os
+import threading
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
@@ -27,6 +30,11 @@ from pyproj.exceptions import CRSError, ProjError
 from tin_engine.run_record import escaped_ascii
 
 Xy = npt.NDArray[np.float64]
+#: Increment 35, 3.1 (b): an array of `2 * CHUNK_POINTS` points or more is
+#: split into chunks of at least `CHUNK_POINTS` (about 60 ms of PROJ work
+#: each) and mapped on up to `WORKERS` threads, each with its own `Transformer`.
+CHUNK_POINTS = 250_000
+WORKERS = min(8, os.cpu_count() or 1)
 
 
 def parse_crs(text: str | CRS) -> CRS:
@@ -42,13 +50,26 @@ def parse_crs(text: str | CRS) -> CRS:
 def reprojector(src: str | CRS, dst: str | CRS) -> Callable[[Any], Xy]:
     """A map from an `(N, 2)` array-like of `(x, y)` in `src` to an `(N, 2)`
     float64 array in `dst`: pyproj's `always_xy` transform, bit for bit.
-    A point with no image comes back as `inf`; the caller decides."""
-    transformer = _transformer(src, dst)
+    A point with no image comes back as `inf`; the caller decides. A large
+    array is mapped in chunks on threads (`CHUNK_POINTS`), one `Transformer`
+    per thread since pyproj's are not thread-safe; a projection is applied
+    point by point, so the bits are those of one call."""
+    local = threading.local()
+    local.transformer = _transformer(src, dst)
+
+    def one(points: Xy) -> Xy:
+        if not hasattr(local, "transformer"):
+            local.transformer = _transformer(src, dst)
+        x, y = local.transformer.transform(points[:, 0], points[:, 1])
+        return np.column_stack([np.asarray(x, np.float64), np.asarray(y, np.float64)])
 
     def apply(xy: Any) -> Xy:
         points = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
-        x, y = transformer.transform(points[:, 0], points[:, 1])
-        return np.column_stack([np.asarray(x, np.float64), np.asarray(y, np.float64)])
+        if len(points) < 2 * CHUNK_POINTS:
+            return one(points)
+        chunks = np.array_split(points, min(WORKERS, len(points) // CHUNK_POINTS))
+        with ThreadPoolExecutor(len(chunks)) as pool:
+            return np.concatenate(list(pool.map(one, chunks)))
 
     return apply
 

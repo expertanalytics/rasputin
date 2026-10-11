@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import os
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -180,6 +181,67 @@ class TestReprojector:
                 n,
                 2,
             )
+
+
+# --------------------------------------------- increment 35: chunks on threads
+
+#: Increment 35, section 5, test 1: points drawn uniformly in EPSG:3035 over
+#: southern Sweden (x 4.3-4.9e6, y 3.5-4.1e6), mapped to SWEREF99 TM.
+LAEA, SWEREF = "EPSG:3035", "EPSG:3006"
+
+
+def southern_sweden(n: int) -> np.ndarray:
+    rng = np.random.default_rng(35)
+    return np.column_stack([rng.uniform(4.3e6, 4.9e6, n), rng.uniform(3.5e6, 4.1e6, n)])
+
+
+class TestChunkedReprojector:
+    """Increment 35, section 3.1 (b): `apply` splits an array of
+    `2 * CHUNK_POINTS` points or more into chunks mapped on threads, each with
+    its own `Transformer`; smaller arrays take the one-call route. Either way
+    the bits are pyproj's one-call `always_xy` transform, point for point: a
+    map projection is applied per point, so chunking cannot change a bit, and
+    this is what lets the clean-up's cover polygons be moved in one batch
+    (3.1 (a)) without changing a mesh byte. Scale: the oracle is checked at
+    1.2 million points here and was measured at 15.9 million (Lagan's CORINE
+    cover, 2, 4 and 8 threads) in the design."""
+
+    def test_the_constants_are_the_designs(self, crs: ModuleType) -> None:
+        """Section 3.1 (b): a 250 000-point chunk is about 60 ms of PROJ
+        work; at most 8 threads, fewer on a smaller machine."""
+        assert crs.CHUNK_POINTS == 250_000
+        assert min(8, os.cpu_count() or 1) == crs.WORKERS
+
+    @pytest.mark.parametrize(
+        "n",
+        [
+            pytest.param(10, id="ten-points-one-call"),
+            pytest.param(500_000, id="exactly-two-chunks"),
+            pytest.param(1_200_000, id="1.2-million-points"),
+        ],
+    )
+    def test_chunked_equals_one_call_bit_for_bit(self, crs: ModuleType, n: int) -> None:
+        """The oracle is one `Transformer.transform` over the whole array.
+        `np.array_equal` compares shape as well as values, so a chunk
+        boundary off by one (a point dropped or doubled, mutant M4) fails
+        here, and so does any difference in the last bit."""
+        if n == 500_000:
+            assert n == 2 * crs.CHUNK_POINTS  # the smallest array the threads take
+        xy = southern_sweden(n)
+        out = crs.reprojector(LAEA, SWEREF)(xy)
+        x, y = Transformer.from_crs(LAEA, SWEREF, always_xy=True).transform(xy[:, 0], xy[:, 1])
+        assert out.shape == (n, 2) and out.dtype == np.float64
+        assert np.array_equal(out[:, 0], np.asarray(x, np.float64))
+        assert np.array_equal(out[:, 1], np.asarray(y, np.float64))
+
+    def test_one_point_above_the_threshold_still_equals_one_call(self, crs: ModuleType) -> None:
+        """Uneven chunks: `np.array_split` gives the first chunks one point
+        more, and the oracle must still hold at every index."""
+        n = 2 * crs.CHUNK_POINTS + 1
+        xy = southern_sweden(n)
+        out = crs.reprojector(LAEA, SWEREF)(xy)
+        x, y = Transformer.from_crs(LAEA, SWEREF, always_xy=True).transform(xy[:, 0], xy[:, 1])
+        assert np.array_equal(out, np.column_stack([x, y]))
 
 
 # ---------------------------------------------------------------- PR B: one CRS rule

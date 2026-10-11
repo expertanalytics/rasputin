@@ -1,0 +1,785 @@
+{
+ "commit": "357808b1d23462b1ff5c71760a0a9943fff76dd4",
+ "machine": {
+  "cpu_brand": "Apple M1 Max",
+  "p_cores": 8,
+  "e_cores": 2,
+  "memory_bytes": 34359738368,
+  "macos": "27.0",
+  "python": "3.14.7",
+  "numpy": "2.5.4",
+  "shapely": "2.2.0",
+  "geos": "3.14.1",
+  "pyproj": "3.8.0",
+  "proj": "9.8.1"
+ },
+ "power": "ac",
+ "inputs": {
+  "$TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif": "file:4426661:aabd0cbc28471ce8593e4c278381811bec3fbf4e1194058b3b4888d00c3af575",
+  "$TREE/docs/benchmarks/2026-09-26/quarter.geojson": "file:16426:b7f7bbe96848383c77863ce29ee28c45bce087601a1738ee82ddb4ffb8279d1e",
+  "$RASPUTIN_DATA/DTM10_UTM33_20260925": "dir:3eef3cfed8b6d7db435791da65386cc1dcbbbadc2a9b145567765eb67b1a3dac",
+  "$RASPUTIN_DATA/numedalslagen_outline_nve.geojson": "file:554438:3069b1dbd2c22c87401fd57c3189f5a67d319f9aea0a95e90cc29886fa0dabca",
+  "$RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg": "file:440332288:1790574665364371436",
+  "$RASPUTIN_DATA/sweden_glo30_cache": "dir:3deaa80f96e39f4ae4b4d3df54646b17e47c70847fe450d9c3e377fe7d758e0f",
+  "$RASPUTIN_DATA/sweden_smhi_svar/lagan_mouth_svar2022_3006.geojson": "file:1294446:a93a524fc198bd3e516ea36db55734c3e5de3994be05e19c807ce5546454123e",
+  "$RASPUTIN_DATA/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg": "file:8855322624:1587553228000000000",
+  "$RASPUTIN_DATA/banenor_banenettverk/section_domain.geojson": "file:2337:d3af5872ac6da011cc95eaade2328cfff965116a5756f68786cd1b1907d5e571",
+  "$RASPUTIN_DATA/banenor_banenettverk/bergensbanen.geojson": "file:2195883:75e725295b777190f1a1be72fc99eeb2689bff59c1e23e99eaa3339bbcfea2af"
+ },
+ "cases": {
+  "tile": {
+   "tolerance": 1.0,
+   "max_error": 0.9999759197235107,
+   "mesh_sha256": "746bf5c68bb9464fbb0746a9de6e0a5dbc7a15d1bfa1006cd9000f95d870ee0e",
+   "measures": {
+    "total": {
+     "median": 0.42339925,
+     "min": 0.413926875,
+     "max": 0.437449292
+    },
+    "decode": {
+     "median": 0.062127417,
+     "min": 0.06003075,
+     "max": 0.066547458
+    },
+    "start mesh: build": {
+     "median": 0.000171875,
+     "min": 0.000167458,
+     "max": 0.000205542
+    },
+    "start mesh: node": {
+     "median": 0.002651709,
+     "min": 0.002633541,
+     "max": 0.002692833
+    },
+    "start mesh: triangulate": {
+     "median": 0.02929925,
+     "min": 0.029228125,
+     "max": 0.0293375
+    },
+    "start mesh: constraint edges": {
+     "median": 0.006646667,
+     "min": 0.006592291,
+     "max": 0.006729084
+    },
+    "refine": {
+     "median": 0.191070292,
+     "min": 0.185169667,
+     "max": 0.19501975
+    },
+    "refine: legalise start": {
+     "median": 0.000453666,
+     "min": 0.000451959,
+     "max": 0.000462833
+    },
+    "refine: start quality": {
+     "median": 0.00078,
+     "min": 0.000757959,
+     "max": 0.000804625
+    },
+    "refine: scan (parallel)": {
+     "median": 0.056834628,
+     "min": 0.056153622,
+     "max": 0.05791029299999999
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.106970544,
+     "min": 0.10239928800000005,
+     "max": 0.109527
+    },
+    "refine: setup + output": {
+     "median": 0.02546058800000006,
+     "min": 0.025131659,
+     "max": 0.02637083200000001
+    },
+    "edge strip: generate": {
+     "median": 0.0007665,
+     "min": 0.000728791,
+     "max": 0.0007825
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.001025666,
+     "min": 0.000974125,
+     "max": 0.001093791
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.001061167,
+     "min": 0.000966792,
+     "max": 0.001124542
+    },
+    "trim": {
+     "median": 0.017590167,
+     "min": 0.017132542,
+     "max": 0.018228167
+    },
+    "write: encode": {
+     "median": 0.009508875,
+     "min": 0.009429917,
+     "max": 0.01155
+    },
+    "write: disk": {
+     "median": 0.0036545,
+     "min": 0.002643708,
+     "max": 0.009645083
+    }
+   }
+  },
+  "tile t=1": {
+   "tolerance": 1.0,
+   "max_error": 0.9999759197235107,
+   "mesh_sha256": "746bf5c68bb9464fbb0746a9de6e0a5dbc7a15d1bfa1006cd9000f95d870ee0e",
+   "measures": {
+    "total": {
+     "median": 0.735118917,
+     "min": 0.708561709,
+     "max": 0.74939975
+    },
+    "decode": {
+     "median": 0.06353575,
+     "min": 0.062347333,
+     "max": 0.065007583
+    },
+    "start mesh: build": {
+     "median": 0.0001815,
+     "min": 0.000167416,
+     "max": 0.000202625
+    },
+    "start mesh: node": {
+     "median": 0.002688042,
+     "min": 0.002623583,
+     "max": 0.00281875
+    },
+    "start mesh: triangulate": {
+     "median": 0.03032725,
+     "min": 0.029246292,
+     "max": 0.031505833
+    },
+    "start mesh: constraint edges": {
+     "median": 0.006831375,
+     "min": 0.006598417,
+     "max": 0.007007666
+    },
+    "refine": {
+     "median": 0.497235209,
+     "min": 0.476408167,
+     "max": 0.500675333
+    },
+    "refine: legalise start": {
+     "median": 0.000464708,
+     "min": 0.000453459,
+     "max": 0.000471166
+    },
+    "refine: start quality": {
+     "median": 0.00080975,
+     "min": 0.000764084,
+     "max": 0.0008545
+    },
+    "refine: scan (parallel)": {
+     "median": 0.371632838,
+     "min": 0.3549833799999997,
+     "max": 0.3739663340000001
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.09857029100000003,
+     "min": 0.095703957,
+     "max": 0.10057237799999996
+    },
+    "refine: setup + output": {
+     "median": 0.02547091500000015,
+     "min": 0.024503287000000318,
+     "max": 0.025706413999999955
+    },
+    "edge strip: generate": {
+     "median": 0.000722209,
+     "min": 0.000704584,
+     "max": 0.000930958
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.001030875,
+     "min": 0.00097725,
+     "max": 0.001105958
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.001118625,
+     "min": 0.001056167,
+     "max": 0.001134083
+    },
+    "trim": {
+     "median": 0.017733542,
+     "min": 0.017147042,
+     "max": 0.018551166
+    },
+    "write: encode": {
+     "median": 0.009625834,
+     "min": 0.009442291,
+     "max": 0.010109292
+    },
+    "write: disk": {
+     "median": 0.004054334,
+     "min": 0.003571458,
+     "max": 0.008782458
+    }
+   }
+  },
+  "quarter": {
+   "tolerance": 1.0,
+   "max_error": 0.9999796549479072,
+   "mesh_sha256": "35a2b7bfda09e5b2f2912d33709889b11bb65af2d8e644ecfb28d24191d57fa4",
+   "measures": {
+    "total": {
+     "median": 0.361638375,
+     "min": 0.353200416,
+     "max": 0.371795541
+    },
+    "domain read": {
+     "median": 0.001623083,
+     "min": 0.001595041,
+     "max": 0.001700666
+    },
+    "decode": {
+     "median": 0.047596459,
+     "min": 0.045863209,
+     "max": 0.052287625
+    },
+    "start mesh: build": {
+     "median": 0.000128208,
+     "min": 0.000120542,
+     "max": 0.000135625
+    },
+    "start mesh: node": {
+     "median": 0.000479084,
+     "min": 0.000472,
+     "max": 0.000490667
+    },
+    "start mesh: triangulate": {
+     "median": 0.000452708,
+     "min": 0.000444125,
+     "max": 0.000493791
+    },
+    "start mesh: constraint edges": {
+     "median": 0.000597625,
+     "min": 0.000577708,
+     "max": 0.000613625
+    },
+    "refine": {
+     "median": 0.171512708,
+     "min": 0.165824333,
+     "max": 0.177109084
+    },
+    "refine: legalise start": {
+     "median": 0.00001425,
+     "min": 0.000013667,
+     "max": 0.000016
+    },
+    "refine: start quality": {
+     "median": 0.001624166,
+     "min": 0.001605791,
+     "max": 0.001719542
+    },
+    "refine: scan (parallel)": {
+     "median": 0.046105502,
+     "min": 0.04571691699999999,
+     "max": 0.05019675200000001
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.10718445499999997,
+     "min": 0.10105479099999996,
+     "max": 0.10759146100000001
+    },
+    "refine: setup + output": {
+     "median": 0.017061629999999994,
+     "min": 0.016980627000000054,
+     "max": 0.017585328999999983
+    },
+    "edge strip: generate": {
+     "median": 0.000796084,
+     "min": 0.000777166,
+     "max": 0.000812208
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.001075208,
+     "min": 0.0010341670000000001,
+     "max": 0.001103709
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.0025949999999999997,
+     "min": 0.002444792,
+     "max": 0.00279875
+    },
+    "trim": {
+     "median": 0.016006542,
+     "min": 0.015936959,
+     "max": 0.016792291
+    },
+    "write: encode": {
+     "median": 0.009709625,
+     "min": 0.009466708,
+     "max": 0.010339416
+    },
+    "write: disk": {
+     "median": 0.003676916,
+     "min": 0.003552792,
+     "max": 0.003812208
+    }
+   }
+  },
+  "numedalslagen": {
+   "tolerance": 10.0,
+   "max_error": 10.0,
+   "mesh_sha256": "7101ea0017bbf046b83d0a3a68bc2414207e1f82fd2f5dc785dae570451fc5f7",
+   "measures": {
+    "total": {
+     "median": 8.774607167,
+     "min": 8.733854375,
+     "max": 8.799225333
+    },
+    "domain read": {
+     "median": 0.01361075,
+     "min": 0.013546583,
+     "max": 0.013665416
+    },
+    "decode": {
+     "median": 0.894994458,
+     "min": 0.891627416,
+     "max": 0.901174708
+    },
+    "features read": {
+     "median": 0.19873073161579669,
+     "min": 0.19664118718355894,
+     "max": 0.2017659607809037
+    },
+    "features clip": {
+     "median": 5.992856789147481,
+     "min": 5.972807895857841,
+     "max": 5.99304285144899
+    },
+    "features clip: clean-up": {
+     "median": 5.927694457932375,
+     "min": 5.909179333015345,
+     "max": 5.928591749980114
+    },
+    "start mesh: build": {
+     "median": 0.001756834,
+     "min": 0.00175225,
+     "max": 0.001780709
+    },
+    "start mesh: node": {
+     "median": 0.146017583,
+     "min": 0.145737292,
+     "max": 0.146877166
+    },
+    "start mesh: triangulate": {
+     "median": 0.03962925,
+     "min": 0.039557042,
+     "max": 0.039691625
+    },
+    "start mesh: constraint edges": {
+     "median": 0.092048291,
+     "min": 0.0920355,
+     "max": 0.093044708
+    },
+    "refine": {
+     "median": 0.656926,
+     "min": 0.655081542,
+     "max": 0.659122166
+    },
+    "refine: legalise start": {
+     "median": 0.002126041,
+     "min": 0.00211575,
+     "max": 0.002128666
+    },
+    "refine: start quality": {
+     "median": 0.035217084,
+     "min": 0.03491225,
+     "max": 0.035329833
+    },
+    "refine: scan (parallel)": {
+     "median": 0.394163874,
+     "min": 0.39362921000000006,
+     "max": 0.3951199199999999
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.17300129299999997,
+     "min": 0.17152316700000003,
+     "max": 0.17529670600000005
+    },
+    "refine: setup + output": {
+     "median": 0.05241770800000001,
+     "min": 0.05141045500000008,
+     "max": 0.05273775099999989
+    },
+    "edge strip: generate": {
+     "median": 0.101639875,
+     "min": 0.101512541,
+     "max": 0.103150167
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.008152793,
+     "min": 0.007921998,
+     "max": 0.008277122999999999
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.0072172519999999995,
+     "min": 0.007005874,
+     "max": 0.007679584
+    },
+    "trim": {
+     "median": 0.025965958,
+     "min": 0.025846417,
+     "max": 0.026465458
+    },
+    "land cover": {
+     "median": 0.295426458,
+     "min": 0.294558584,
+     "max": 0.2957275
+    },
+    "write: encode": {
+     "median": 0.00981025,
+     "min": 0.009735125,
+     "max": 0.010049292
+    },
+    "write: disk": {
+     "median": 0.010935833,
+     "min": 0.005898834,
+     "max": 0.011893667
+    }
+   }
+  },
+  "lagan": {
+   "tolerance": 10.0,
+   "max_error": 9.999904677002576,
+   "mesh_sha256": "c0f3b555ddaffac4d38332b7f11a149e11e2039a66db6ff98695bf297a043d28",
+   "measures": {
+    "total": {
+     "median": 14.5704465,
+     "min": 14.550370541,
+     "max": 14.603239583
+    },
+    "domain read": {
+     "median": 0.042214959,
+     "min": 0.042204542,
+     "max": 0.042489583
+    },
+    "decode": {
+     "median": 4.574430708,
+     "min": 4.548851417,
+     "max": 4.583665292
+    },
+    "features read": {
+     "median": 0.9235788702499121,
+     "min": 0.919380187173374,
+     "max": 0.9304241846548393
+    },
+    "features clip": {
+     "median": 6.345130812842399,
+     "min": 6.341399857425131,
+     "max": 6.377296296763234
+    },
+    "features clip: clean-up": {
+     "median": 5.412520959042013,
+     "min": 5.399474125006236,
+     "max": 5.416772083961405
+    },
+    "start mesh: build": {
+     "median": 0.003137,
+     "min": 0.003065,
+     "max": 0.003210083
+    },
+    "start mesh: node": {
+     "median": 0.306944084,
+     "min": 0.30588075,
+     "max": 0.320354667
+    },
+    "start mesh: triangulate": {
+     "median": 0.087828958,
+     "min": 0.087417916,
+     "max": 0.093995084
+    },
+    "start mesh: constraint edges": {
+     "median": 0.190738,
+     "min": 0.189782042,
+     "max": 0.203890417
+    },
+    "refine": {
+     "median": 0.236227625,
+     "min": 0.235776166,
+     "max": 0.240962625
+    },
+    "refine: legalise start": {
+     "median": 0.004376833,
+     "min": 0.004312334,
+     "max": 0.004424583
+    },
+    "refine: start quality": {
+     "median": 0.061337209,
+     "min": 0.060681584,
+     "max": 0.061980583
+    },
+    "refine: scan (parallel)": {
+     "median": 0.059524288999999994,
+     "min": 0.058879373000000006,
+     "max": 0.059842541999999985
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.054933501,
+     "min": 0.054786874000000006,
+     "max": 0.05615237300000001
+    },
+    "refine: setup + output": {
+     "median": 0.056904874999999994,
+     "min": 0.056266919,
+     "max": 0.05856254400000002
+    },
+    "edge strip: generate": {
+     "median": 0.043357416,
+     "min": 0.041675125,
+     "max": 0.04345075
+    },
+    "check points: project": {
+     "median": 0.6854094990994781,
+     "min": 0.6400196658214554,
+     "max": 0.6960670797852799
+    },
+    "check points: store": {
+     "median": 0.27477400115540623,
+     "min": 0.273060171258886,
+     "max": 0.2779335419033797
+    },
+    "final check: scan (parallel)": {
+     "median": 0.26568200000000003,
+     "min": 0.26175283200000005,
+     "max": 0.277527749
+    },
+    "final check: split + flip (serial)": {
+     "median": 0.03827854299999999,
+     "min": 0.037228375999999994,
+     "max": 0.038428834
+    },
+    "trim": {
+     "median": 0.019054208,
+     "min": 0.019000417,
+     "max": 0.019281917
+    },
+    "land cover": {
+     "median": 0.211100625,
+     "min": 0.210972625,
+     "max": 0.212825041
+    },
+    "write: encode": {
+     "median": 0.008049417,
+     "min": 0.00800825,
+     "max": 0.008246958
+    },
+    "write: disk": {
+     "median": 0.004450542,
+     "min": 0.004422625,
+     "max": 0.00700125
+    }
+   }
+  },
+  "geilo-al-ramp": {
+   "tolerance": 20.0,
+   "max_error": 19.984358261826856,
+   "mesh_sha256": "9f01b9ac27e2d2d5d1970e69a174995ebf99e6582adc17e05b257c8bd3f4348e",
+   "measures": {
+    "total": {
+     "median": 0.329631375,
+     "min": 0.329267583,
+     "max": 0.330189125
+    },
+    "domain read": {
+     "median": 0.001212083,
+     "min": 0.001208375,
+     "max": 0.0012135
+    },
+    "decode": {
+     "median": 0.139414875,
+     "min": 0.138493375,
+     "max": 0.140124167
+    },
+    "start mesh: build": {
+     "median": 0.000123583,
+     "min": 0.00012,
+     "max": 0.000125041
+    },
+    "start mesh: node": {
+     "median": 0.000067459,
+     "min": 0.000067167,
+     "max": 0.000071875
+    },
+    "start mesh: triangulate": {
+     "median": 0.000031167,
+     "min": 0.000029667,
+     "max": 0.000031792
+    },
+    "start mesh: constraint edges": {
+     "median": 0.000090541,
+     "min": 0.000089333,
+     "max": 0.000094292
+    },
+    "refine": {
+     "median": 0.099970542,
+     "min": 0.099081125,
+     "max": 0.100594167
+    },
+    "refine: legalise start": {
+     "median": 3.167e-6,
+     "min": 3.125e-6,
+     "max": 4.083e-6
+    },
+    "refine: start quality": {
+     "median": 0.000160875,
+     "min": 0.000155333,
+     "max": 0.000161417
+    },
+    "refine: scan (parallel)": {
+     "median": 0.08305558199999999,
+     "min": 0.082612959,
+     "max": 0.08316245800000002
+    },
+    "refine: split + flip (serial)": {
+     "median": 0.013926962000000001,
+     "min": 0.013642793999999998,
+     "max": 0.014617251999999997
+    },
+    "refine: setup + output": {
+     "median": 0.0027165799999999685,
+     "min": 0.0026613300000000034,
+     "max": 0.0027619170000000165
+    },
+    "edge strip: generate": {
+     "median": 0.00054675,
+     "min": 0.000512042,
+     "max": 0.000604917
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.000642793,
+     "min": 0.0006362080000000001,
+     "max": 0.000643667
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.000302333,
+     "min": 0.000295667,
+     "max": 0.000306667
+    },
+    "trim": {
+     "median": 0.002242875,
+     "min": 0.002225375,
+     "max": 0.002358791
+    },
+    "write: encode": {
+     "median": 0.004129542,
+     "min": 0.004097875,
+     "max": 0.004139792
+    },
+    "write: disk": {
+     "median": 0.000522667,
+     "min": 0.000522583,
+     "max": 0.000539125
+    }
+   }
+  },
+  "romsdal-slope": {
+   "tolerance": 10.0,
+   "max_error": 9.999908093780277,
+   "mesh_sha256": "992e49cbcbe4a781ff03783a820946b163869b2b4a1f02bb70927d94224c4197",
+   "measures": {
+    "total": {
+     "median": 3.564308375,
+     "min": 3.557501042,
+     "max": 3.572416708
+    },
+    "decode": {
+     "median": 0.066202125,
+     "min": 0.065570292,
+     "max": 0.0697505
+    },
+    "start mesh: build": {
+     "median": 0.000166833,
+     "min": 0.000163542,
+     "max": 0.000173958
+    },
+    "start mesh: node": {
+     "median": 0.002641666,
+     "min": 0.002639209,
+     "max": 0.002649833
+    },
+    "start mesh: triangulate": {
+     "median": 0.029217041,
+     "min": 0.029200667,
+     "max": 0.029272708
+    },
+    "start mesh: constraint edges": {
+     "median": 0.006577,
+     "min": 0.006555666,
+     "max": 0.006632333
+    },
+    "slope": {
+     "median": 0.105007084,
+     "min": 0.104476458,
+     "max": 0.105186167
+    },
+    "refine": {
+     "median": 2.005187084,
+     "min": 2.00390275,
+     "max": 2.011527834
+    },
+    "refine: legalise start": {
+     "median": 0.000461958,
+     "min": 0.000459625,
+     "max": 0.000471
+    },
+    "refine: start quality": {
+     "median": 0.000754041,
+     "min": 0.000741834,
+     "max": 0.000765083
+    },
+    "refine: scan (parallel)": {
+     "median": 0.5636349569999999,
+     "min": 0.561995082,
+     "max": 0.5637142480000001
+    },
+    "refine: split + flip (serial)": {
+     "median": 1.184047584,
+     "min": 1.181975794,
+     "max": 1.188794626
+    },
+    "refine: setup + output": {
+     "median": 0.25780296099999966,
+     "min": 0.2562917090000003,
+     "max": 0.258707166
+    },
+    "edge strip: generate": {
+     "median": 0.00115375,
+     "min": 0.001073,
+     "max": 0.001155458
+    },
+    "edge strip: scan (parallel)": {
+     "median": 0.009559292,
+     "min": 0.009482541,
+     "max": 0.009596666999999998
+    },
+    "edge strip: split + flip (serial)": {
+     "median": 0.01298829,
+     "min": 0.012829873,
+     "max": 0.012993831999999999
+    },
+    "trim": {
+     "median": 0.117458333,
+     "min": 0.117403916,
+     "max": 0.118128334
+    },
+    "write: encode": {
+     "median": 0.044489417,
+     "min": 0.044342333,
+     "max": 0.044504125
+    },
+    "write: disk": {
+     "median": 0.020490458,
+     "min": 0.020237083,
+     "max": 0.021177083
+    }
+   }
+  }
+ }
+}

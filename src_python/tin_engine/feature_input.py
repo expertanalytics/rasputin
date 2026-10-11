@@ -243,13 +243,16 @@ def _linework(geometry: BaseGeometry) -> BaseGeometry:
 
 def _untouched(line: BaseGeometry, domain: Polygon) -> bool:
     """True when ``intersection(line, domain)`` gives ``line`` back unchanged:
-    two or more vertices, no repeated one, in the domain's interior, and simple
-    (30b, section 3.4). ``domain`` first, so its prepared form is used."""
+    two or more vertices, no repeated one, simple, its interior in the
+    domain's interior and its ends in the closure (30b, section 3.4, widened
+    by 35, section 3.2: the DE-9IM pattern is ``covers`` plus "the outline
+    meets no interior point of the line", so the overlay adds no node).
+    ``domain`` first, so its prepared form is used."""
     xy = shapely.get_coordinates(line)
     return (
         len(xy) >= 2
         and not (xy[1:] == xy[:-1]).all(axis=1).any()
-        and bool(shapely.contains_properly(domain, line))
+        and bool(shapely.relate_pattern(domain, line, "T**F**FF*"))
         and bool(shapely.is_simple(line))
     )
 
@@ -354,12 +357,7 @@ class _Tally:
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
             if polygonal and code is not None and self.cleanup is not None:  # 20c-3: whole
-                moved = shapely.transform(geometry, move) if move is not None else geometry
-                if not _finite(moved):
-                    raise FeatureError(
-                        f"{name}: feature {fid} has a vertex with no image in the DEM"
-                    )
-                cover.append((fid, mask, code, moved))
+                cover.append((fid, mask, code, geometry))  # moved after the loop (35)
                 self.seconds += time.perf_counter() - t0
                 continue
             if move is not None and bound is not None and bound[1](geometry):
@@ -378,6 +376,16 @@ class _Tally:
             self._add(fid, mask, kept, code, polygon)
             self.seconds += time.perf_counter() - t0
         if cover and self.cleanup is not None:
+            t0 = time.perf_counter()
+            if move is not None:  # 35, 3.1 (a): every cover polygon in one transform call
+                moved_all = shapely.transform(np.array([g for *_, g in cover], dtype=object), move)
+                cover = [(*c[:3], g) for c, g in zip(cover, moved_all, strict=True)]
+            for fid, *_, g in cover:
+                if not _finite(g):
+                    raise FeatureError(
+                        f"{name}: feature {fid} has a vertex with no image in the DEM"
+                    )
+            self.seconds += time.perf_counter() - t0
             self._clean(cover, region, self.cleanup)
 
     def _add(
@@ -386,20 +394,20 @@ class _Tally:
         """One feature's linework clipped to the domain, kept, or counted outside."""
         coded: dict[str, Any] = {"code": code, "polygon": polygon}
         dom = self.domain.polygon
+        whole = [_untouched(line, dom) for line in kept]
         lines = tuple(
             piece
-            for line in kept
+            for line, untouched in zip(kept, whole, strict=True)
             for piece in (
-                (line,)
-                if _untouched(line, dom)
-                else shapely.get_parts(shapely.intersection(line, dom))
+                (line,) if untouched else shapely.get_parts(shapely.intersection(line, dom))
             )
             if isinstance(piece, LineString) and piece.length > 0
         )
         if lines:
             self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
-            # A dropped edge lies outside, so a pre-clipped chain is not covered.
-            self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
+            # A dropped edge lies outside, so a pre-clipped chain is not covered;
+            # an untouched chain lies in the closure, so it is (35, 3.3).
+            self.clipped += not all(u or dom.covers(g) for u, g in zip(whole, kept, strict=True))
         elif polygon is not None and polygon.intersects(self.inner):
             # No boundary crosses the domain, and a point of it is inside: it
             # covers the domain, and labels it (R5). Kept, not clipped.
@@ -445,7 +453,8 @@ class _Tally:
                 for g in polygons
             ]
             polygons = simplify_borders(inside, ask.tolerance_m, ask.repair_m).polygons
-            lines_of = tuple(_outline_lines(g, dom) for g in polygons)
+            tree = _outline_tree(dom)  # once per clean-up, not once per polygon (35, 3.4)
+            lines_of = tuple(_outline_lines(g, tree) for g in polygons)
         after = sum(int(shapely.get_num_coordinates(line)) for ls in lines_of for line in ls)
         old = self.cover_vertices or (0, 0)
         self.cover_vertices = (old[0] + before, old[1] + after)
@@ -711,15 +720,23 @@ def _loops(
     return out
 
 
-def _outline_lines(polygon: BaseGeometry, outline: Polygon) -> tuple[LineString, ...]:
-    """32, section 15.2: every ring of ``polygon`` cut where an edge lies on
-    ``outline`` (one outline segment within ``IN_LINE`` of both its ends),
-    those edges dropped, as :func:`snap_to_outline`'s lines."""
+def _outline_tree(outline: Polygon) -> tuple[npt.NDArray[Any], shapely.STRtree]:
+    """``outline``'s segments as lines, and an ``STRtree`` over them."""
     rims = [shapely.get_coordinates(r) for r in shapely.get_rings(outline)]
     segments = shapely.linestrings(
         np.concatenate([np.stack([r[:-1], r[1:]], axis=1) for r in rims])
     )
-    tree = shapely.STRtree(segments)
+    return segments, shapely.STRtree(segments)
+
+
+def _outline_lines(
+    polygon: BaseGeometry, outline: tuple[npt.NDArray[Any], shapely.STRtree]
+) -> tuple[LineString, ...]:
+    """32, section 15.2: every ring of ``polygon`` cut where an edge lies on
+    the outline (one outline segment within ``IN_LINE`` of both its ends),
+    those edges dropped, as :func:`snap_to_outline`'s lines. ``outline`` is
+    :func:`_outline_tree`'s pair, built once per clean-up (35, 3.4)."""
+    segments, tree = outline
     out: list[LineString] = []
     for ring in shapely.get_rings(shapely.get_parts(polygon)):
         xy = shapely.get_coordinates(ring)

@@ -1,0 +1,111 @@
+Sun Oct 11 10:32:28 2026    /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/benchmarks/2026-10-11/cleanup-profile/numedalslagen.prof
+
+         5531789 function calls (5516027 primitive calls) in 10.230 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1429 to 30 due to restriction <'cli\\.py:592\\(mesh\\)|_open_features|_take\\)|_clean\\)|_dem_mesh|open_dem\\)|set_operations\\.py.*\\((intersection|union_all|coverage_union_all|symmetric_difference)\\)|coverage_clean|make_valid|is_valid\\)|is_simple|contains_properly|covers\\)|_geometry\\.py.*\\(transform\\)|strtree\\.py:75|query\\)|query_nearest|linestring\\.py:45|creation\\.py.*linestrings|measurement\\.py.*distance\\)|_core\\.simplify_borders|get_rings|get_coordinates\\)|get_parts\\)|intersects\\)|_untouched|_finite'>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.001    0.001   10.212   10.212 cli.py:592(mesh)
+        1    0.000    0.000    7.220    7.220 cli.py:1597(_open_features)
+        1    0.018    0.018    6.996    6.996 feature_input.py:329(_take)
+        1    0.012    0.012    6.864    6.864 feature_input.py:410(_clean)
+     8584    1.668    0.000    1.668    0.000 set_operations.py:110(intersection)
+        1    0.003    0.003    1.489    1.489 cli.py:1768(_dem_mesh)
+        1    1.221    1.221    1.221    1.221 _coverage.py:198(coverage_clean)
+        1    0.000    0.000    1.146    1.146 cli.py:1517(_open_dem)
+        1    0.000    0.000    1.146    1.146 dem_input.py:131(open_dem)
+       17    0.675    0.040    0.676    0.040 set_operations.py:456(union_all)
+        1    0.634    0.634    0.634    0.634 {built-in method tin_engine._core.simplify_borders}
+     1599    0.421    0.000    0.423    0.000 constructive.py:667(make_valid)
+     7776    0.048    0.000    0.285    0.000 linestring.py:45(__new__)
+     6789    0.008    0.000    0.219    0.000 strtree.py:108(query)
+      296    0.000    0.000    0.208    0.001 base.py:798(is_valid)
+    14590    0.138    0.000    0.141    0.000 creation.py:143(linestrings)
+       25    0.125    0.005    0.125    0.005 set_operations.py:598(coverage_union_all)
+     9049    0.054    0.000    0.089    0.000 _geometry.py:699(get_rings)
+      373    0.001    0.000    0.082    0.000 strtree.py:350(query_nearest)
+      373    0.081    0.000    0.081    0.000 {method 'query_nearest' of 'shapely.lib.STRtree' objects}
+     8709    0.030    0.000    0.057    0.000 _geometry.py:628(get_parts)
+    27585    0.011    0.000    0.046    0.000 coordinates.py:333(get_coordinates)
+     7932    0.008    0.000    0.036    0.000 feature_input.py:562(_finite)
+     2570    0.004    0.000    0.034    0.000 feature_input.py:244(_untouched)
+       27    0.028    0.001    0.029    0.001 strtree.py:75(__init__)
+     4512    0.011    0.000    0.011    0.000 measurement.py:51(distance)
+     1944    0.011    0.000    0.011    0.000 predicates.py:382(is_simple)
+     2570    0.009    0.000    0.009    0.000 predicates.py:605(contains_properly)
+     1442    0.000    0.000    0.003    0.000 base.py:815(covers)
+        3    0.000    0.000    0.000    0.000 base.py:882(intersects)
+
+
+### callees of _take\)
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_take\\)'>
+
+Function                     called...
+                                 ncalls  tottime  cumtime
+feature_input.py:329(_take)  ->       1    0.000    0.000  __init__.py:398(name)
+                                   7932    0.033    0.033  _geometry.py:933(force_2d)
+                                  15864    0.003    0.005  base.py:333(geom_type)
+                                   7932    0.001    0.003  base.py:770(is_empty)
+                                      1    0.000    0.000  creation.py:751(prepare)
+                                      1    0.000    0.000  crs.py:32(parse_crs)
+                                      1    0.000    0.009  crs.py:75(same_crs)
+                                      1    0.000    0.010  feature_input.py:172(source_region)
+                                      1    0.012    6.864  feature_input.py:410(_clean)
+                                   7932    0.008    0.036  feature_input.py:562(_finite)
+                                   7932    0.003    0.003  feature_input.py:566(_code)
+                                   7932    0.006    0.013  feature_input.py:578(_mask)
+                                  15864    0.001    0.001  {built-in method time.perf_counter}
+                                   7932    0.001    0.001  {method 'append' of 'list' objects}
+
+
+### callees of feature_input\.py:389
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'feature_input\\.py:389'>
+
+Function                         called...
+                                     ncalls  tottime  cumtime
+feature_input.py:389(<genexpr>)  ->    2650    0.001    0.001  base.py:358(length)
+                                       1252    0.001    0.148  decorators.py:182(wrapper)
+                                       2570    0.004    0.034  feature_input.py:244(_untouched)
+                                       2650    0.000    0.000  {built-in method builtins.isinstance}
+
+
+### callees of feature_input\.py:402
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'feature_input\\.py:402'>
+
+Function                         called...
+                                     ncalls  tottime  cumtime
+feature_input.py:402(<genexpr>)  ->    1442    0.000    0.003  base.py:815(covers)
+
+
+### callees of feature_input\.py:448
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'feature_input\\.py:448'>
+
+Function                         called...
+                                     ncalls  tottime  cumtime
+feature_input.py:448(<genexpr>)  ->      25    0.033    0.303  feature_input.py:714(_outline_lines)
+
+
+### callees of _Outline|feature_input\.py:761
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_Outline|feature_input\\.py:761'>
+
+Function                        called...
+                                    ncalls  tottime  cumtime
+feature_input.py:761(__init__)  ->       1    0.000    0.000  _function_base_impl.py:1410(_diff_dispatcher)
+                                         1    0.000    0.000  _function_base_impl.py:1414(diff)
+                                         3    0.000    0.001  decorators.py:182(wrapper)
+                                         1    0.000    0.000  fromnumeric.py:2872(_cumsum_dispatcher)
+                                         1    0.000    0.000  fromnumeric.py:2876(cumsum)
+                                         3    0.000    0.000  multiarray.py:197(concatenate)
+                                         1    0.000    0.000  shape_base.py:368(_stack_dispatcher)
+                                         1    0.000    0.000  shape_base.py:378(stack)
+                                         1    0.001    0.001  strtree.py:75(__init__)
+                                         1    0.000    0.000  {built-in method builtins.len}
+                                         2    0.000    0.000  {method 'append' of 'list' objects}
+
+
