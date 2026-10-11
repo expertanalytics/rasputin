@@ -54,7 +54,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
 
 The main session writes the as-built record (pins, kill record, counts) into
-the increment file from `@tester`'s and `@developer`'s handbacks; no separate
+the increment file from `@tester`'s and `@developer`'s handbacks or the
+commits they name; no separate
 `@architect` step.
 
 Steps 2 and 3 are not strictly once each. A ruling can land after the red

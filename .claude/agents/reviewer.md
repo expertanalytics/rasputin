@@ -40,7 +40,7 @@ probe only for a figure the design marks unmeasured.
    change touched against the code, not against the last version of the docs.
 3. **Actual LOC is reconciled against the increment doc's estimate.** Measure it;
    if the design named a split seam for an overrun, check whether it should fire.
-4. **A suite the increment file names invariant-critical has a mutant kill record** in `@tester`'s handback covering every mutation target the increment file names. Check the record; do not run mutants yourself.
+4. **A suite the increment file names invariant-critical has a mutant kill record** in `@tester`'s handback or the commit it names, covering every mutation target the increment file names. Check the record; do not run mutants yourself.
 5. **On a refine- or mesh-touching increment, `@perf`'s acceptance run is recorded** (`docs/increments/README.md`, "Acceptance").
 6. **In a design review** (`docs/increments/README.md`, step 1), every step the
    design adds to a mesh run has a speed estimate timed with default flags on
