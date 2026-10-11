@@ -1,0 +1,5 @@
+numedalslagen gpkg: real 13.53 s, write 3.932 s, peak RSS 2.77 GB, writer window 2.75 -> 2.77 GB (share 32 MB), file 203.3 MB
+numedalslagen vtk: real 9.58 s, write 0.014 s, peak RSS 2.73 GB, writer window 0.00 -> 0.00 GB (share 0 MB), file 29.2 MB
+romsdal-slope gpkg: real 24.15 s, write 19.368 s, peak RSS 2.91 GB, writer window 2.72 -> 2.91 GB (share 188 MB), file 810.0 MB
+romsdal-slope vtk: real 4.82 s, write 0.058 s, peak RSS 2.78 GB, writer window 2.78 -> 2.78 GB (share 0 MB), file 111.5 MB
+exit 0
