@@ -71,11 +71,13 @@ LAYERS: tuple[dict[str, str], ...] = (
         "edge_strip": "_core stats",
         "final_check": "_core stats target_grid",
         "catchment_core": "_core io.models raster",
+        "border_simplify": "_core",  # 32: land-cover borders within a band
         "_core": "",
     },
     {  # L4: pipelines
         "dem_input": "crs domain grow io.models io.repository mosaic target_grid",
-        "feature_input": "crs domain features io.geojson io.geopackage io.gml io.repository",
+        "feature_input": "border_simplify crs domain features io.geojson io.geopackage io.gml"
+                         " io.repository",
         "catchment": "burn catchment_core crs gauge io.models io.repository mosaic outline"
                      " sensitivity",
         "catchment_batch": "catchment crs gauge hydrography io.repository reference",

@@ -331,6 +331,14 @@ add_terrain_test(test_hydrology_accumulate unit/test_hydrology_accumulate.cpp)
 # invariant-critical; it starts no threads.
 add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
 
+# Land-cover borders simplified within a band, each class's area kept,
+# increment 32 (docs/increments/32-landcover-simplify.md, sections 6 to 9).
+# INVARIANT-CRITICAL: mutation targets M1 to M6 of section 9. A backend test
+# because it names DefaultKernel; its own target, so a compile failure in it
+# leaves every other suite built and run. Its purity test starts threads.
+add_terrain_backend_test(test_border_collapse unit/test_border_collapse.cpp)
+target_link_libraries(test_border_collapse PRIVATE Threads::Threads)
+
 # The final check, increment 15c-1 (docs/increments/15c-geographic-dem.md, D4,
 # D5 and "Tests for @tester"): the check-point store (CP1), refine_points on
 # placed points (RP1, RP2, RP5 to RP8, the scan's tie-break, the unfrozen-store

@@ -688,14 +688,35 @@ class TestCommittedExtract:
         assert code == 0, output
         assert target.read_bytes() == first.read_bytes()
 
+    @pytest.fixture(scope="class")
+    def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
+        """The same run with ``--features-tolerance 0`` (increment 32, test 16:
+        the default band moves borders up to 50 m from the extract's, so I2's
+        oracle, which labels by the extract's polygons, needs the band off)."""
+        tmp = tmp_path_factory.mktemp("extract_band_0")
+        domain = geojson(tmp / "quarter.geojson", quarter_circle())
+        code, output, target = mesh(
+            tmp,
+            KARTVERKET,
+            domain,
+            "--features",
+            str(EXTRACT),
+            "--features-map",
+            "corine",
+            "--features-tolerance",
+            "0",
+            tolerance="10",
+        )
+        assert code == 0, output
+        return read_vtk(target.read_bytes())
+
     @needs_codecs
-    def test_16c_i1_i2_i3_land_cover_codes(self, run: Any) -> None:
+    def test_16c_i1_i2_i3_land_cover_codes(self, run_band_0: VtkFile) -> None:
         """Increment 16c on the real mesh: every cell carries a code, 0 on the
         lines (I3); the spread (I1); the centroid oracle against the extract's
         polygons moved to EPSG:25833 (I2). The extract covers the quarter
-        circle, so no triangle is 0."""
-        vtk, _, _ = run
-        _, _, codes = vtk_labels(vtk, _extract_polygons())
+        circle, so no triangle is 0. On the band-0 run (increment 32)."""
+        _, _, codes = vtk_labels(run_band_0, _extract_polygons())
         assert 0 not in set(codes.tolist())
 
     @needs_codecs

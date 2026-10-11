@@ -1,0 +1,38 @@
+cProfile, one run each, Numedalslagen case, Mac on AC; seconds under the profiler (it inflates them).
+== base b39426c0: _clean cumulative 5.90 s; callees:
+    2.83 s  snap_to_outline (feature_input.py:628) calls=1
+    1.18 s  coverage_clean (_coverage.py:198) calls=1
+    1.03 s  _add (feature_input.py:381) calls=25
+    0.77 s  wrapper (decorators.py:182) calls=7957
+    0.07 s  _polygonal (feature_input.py:452) calls=7932
+    0.01 s  <built-in method builtins.sum> (~:0) calls=2
+    0.00 s  <method 'setdefault' of 'dict' objects> (~:0) calls=3297
+== base b39426c0: snap_to_outline cumulative 2.83 s; callees:
+    0.89 s  ring (feature_input.py:741) calls=4532
+    0.88 s  wrapper (decorators.py:182) calls=12982
+    0.29 s  make_valid (constructive.py:667) calls=3
+    0.21 s  _loops (feature_input.py:679) calls=373
+    0.21 s  _chains (feature_input.py:702) calls=373
+    0.21 s  is_valid (base.py:798) calls=295
+    0.04 s  __new__ (linestring.py:45) calls=4159
+   [base] total _loops (feature_input.py): 0.21 s calls=373
+   [base] total make_valid (constructive.py): 0.42 s calls=1599
+== branch 8605f607: _clean cumulative 6.74 s; callees:
+    2.77 s  snap_to_outline (feature_input.py:640) calls=1
+    1.55 s  wrapper (decorators.py:182) calls=7982
+    1.15 s  coverage_clean (_coverage.py:198) calls=1
+    0.68 s  simplify_borders (border_simplify.py:40) calls=1
+    0.33 s  <genexpr> (feature_input.py:448) calls=26
+    0.18 s  _add (feature_input.py:383) calls=25
+    0.07 s  _polygonal (feature_input.py:464) calls=7957
+== branch 8605f607: snap_to_outline cumulative 2.77 s; callees:
+    0.87 s  ring (feature_input.py:776) calls=4532
+    0.87 s  wrapper (decorators.py:182) calls=12982
+    0.28 s  make_valid (constructive.py:667) calls=3
+    0.21 s  _loops (feature_input.py:691) calls=373
+    0.21 s  _chains (feature_input.py:737) calls=373
+    0.21 s  is_valid (base.py:798) calls=295
+    0.04 s  __new__ (linestring.py:45) calls=4159
+   [branch] total make_valid (constructive.py): 0.41 s calls=1599
+   [branch] total _loops (feature_input.py): 0.21 s calls=373
+   [branch] total simplify_borders (border_simplify.py): 0.68 s calls=1

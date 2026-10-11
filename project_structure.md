@@ -80,6 +80,9 @@ include/terrain/           # public C++ headers, header-only where possible
     area_collapse.hpp      # reduce_ring: area-preserving segment collapse
                            #   (Kronenfeld et al. 2020) to a horizontal
                            #   tolerance, exact crossing tests, keep-points (22)
+    border_collapse.hpp    # simplify_borders: a coverage cut into borders at
+                           #   its junctions, each border collapsed as above
+                           #   within a band, every face's area kept (32)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
@@ -167,10 +170,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   as linework -> FeatureSet (16b); opens .gml
                            #   itself, reads GeoJSON through io/repository's
                            #   read_json and io/geojson's read_collection;
-                           #   never imports _core. read_source: one file's raw
+                           #   reaches _core only through border_simplify
+                           #   (32). read_source: one file's raw
                            #   rows (16b's reader, shared); read_lake_polygons:
                            #   the polygons of `catchment --lakes` near the
                            #   seed point, in the file's CRS (22)
+  border_simplify.py       # simplify_borders: land-cover polygons to flat
+                           #   rings for _core.simplify_borders and back, same
+                           #   polygons, parts and holes in order; no I/O (32)
   outline.py               # trace(mask): marching-squares rings between in-
                            #   and out-nodes, (8, 4) saddle rule; numpy only,
                            #   never imports _core (22)
@@ -515,6 +522,8 @@ Header-only. One helper in `chunks.hpp`, over `std::jthread` created per call an
 ### `vector_simplify`
 
 Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stanislawski, Buttenfield and Brockmeyer's area-preserving segment collapse (APSC, 2020): each collapse replaces two vertices by one on the line that keeps the area, so the area is kept up to rounding; collapses are taken least deviation first while the fine ring's vertices stay within a horizontal tolerance; each new edge is tested for crossings with `noding::classify<K>` over a uniform grid, and keep-points (the seed) must stay inside. Serial and deterministic. Visvalingam-Whyatt and Douglas-Peucker are not used: neither keeps area. See `docs/increments/22-auto-catchment.md`.
+
+`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--features-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--features-tolerance` above 0. See `docs/increments/32-landcover-simplify.md`.
 
 ### `hydrology`
 
