@@ -5,7 +5,7 @@ round 1 approved `7218dfb7`; red `c4130194` (`@tester`), green `e805d37f`
 (`@developer`, 23 net production lines by `python3 tools/count_loc.py c7dba32e
 HEAD`: `crs.py` +14, `feature_input.py` +9), mutation round `7621a99e` (M1-M4
 all killed, one count-based test added for M3); section 11 is the as-built
-record). Next: `@perf`'s quick check (section 7), then code review. Master
+record; `@perf`'s quick check `2cf224a6` ACCEPTED, section 11). Next: code review. Master
 `c7dba32e` is `@perf`'s profile commit
 (`docs/benchmarks/2026-10-11/cleanup-profile/README.md`). Every `file:line`
 below is pinned to `c7dba32e`. Every figure was measured on this worktree's
@@ -352,6 +352,24 @@ spy-only kill hides a count mutant; check which assertion fails.
 **Decided on defaults while Ola was away** (section 9): Q1 reprojection
 threads `min(8, cpu_count)` independent of `--threads`, yes; Q2 ship with
 Numedalslagen's step near 6 s, the cached-repair idea staying an idea, yes.
+
+
+**Acceptance** `2cf224a6` (`@perf`, ACCEPTED against section 7;
+`docs/benchmarks/2026-10-11/cleanup-speed/README.md`): head `357808b1` against
+the branch's base `3e6f87eb` measured back to back with `--tree`, AC power
+before and after every run, medians of 3. Mesh SHA-256 equal on all 7 quick
+cases. Lagan features clip 11.156 -> 6.342 s (ratio 0.569, limit 0.65), Lagan
+total 19.296 -> 14.542 s (0.754); Numedalslagen features clip 6.092 -> 6.000 s
+(0.985; clean-up 5.94 s, near 6 s as Q2 expected); other totals -0.7 % to
++0.8 %. Tool verdict `FASTER`. `docs/benchmarks/quick/baseline-ac.json`
+refreshed to the head record (the stored one predated increment 32, and the
+venv's numpy 2.5.4 differed from its 2.5.3). Hotspots: Lagan features clip
+43.6 % of the run (ruled 40.7 %; 57.8 % on master after increment 32);
+Numedalslagen features clip 68 %, unruled, GEOS overlay time (section 4).
+Decided on defaults while Ola was away: the 68 % is recorded as expected here;
+the `hotspots.toml` entry and the Lagan 40.7 % ruling wait for Ola's word.
+Lesson: a stored quick-check baseline goes stale when a merge changes outputs
+without a refresh (32 merged without one).
 
 ## Review
 
