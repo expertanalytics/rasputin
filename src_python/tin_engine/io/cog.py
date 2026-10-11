@@ -11,6 +11,10 @@ thread count cannot change a value (decided 7, W2). A block a source lacks is
 refused before any block is decoded (decided 6), and a sparse block (byte
 count 0, which tifffile would fill with 0, a valid elevation) is refused
 (decided 5): a DEM's NoData must be stored, not implied.
+
+Increment 26a adds `decode_class_window` for a raster of class numbers
+(`uint8`, `PixelIsArea`): the same blocks, but an empty block is a run of 0,
+no data by MapBiomas's convention, and the window's corner is the cell's.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import numpy as np
 import tifffile
 
 from .geotiff import _stage
-from .models import DemTile, GeoTiffError, IndexWindow, RasterMeta
+from .models import ClassWindow, DemTile, GeoTiffError, IndexWindow, RasterMeta
 
 
 class BlockSource(Protocol):
@@ -134,12 +138,61 @@ def decode_window(
                 "a DEM's NoData must be stored, not implied"
             )
     out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
+    _decode_into(source, w, indices, out, threads)
+    # The public constructor's copy, not the canvas's no-copy route: M15
+    # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
+    # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
+    return DemTile(meta=meta.windowed(w), array=out)
+
+
+def decode_class_window(
+    source: BlockSource, meta: RasterMeta, window: IndexWindow, *, threads: int | None = None
+) -> ClassWindow:
+    """`window` of the class raster `source` holds, as `uint8` (26a).
+
+    `meta` is the page's, as `read_page` gives it, with the upper-left node
+    half a cell inside the raster; the window's corner is moved back out to
+    the cell's. A block `source` lacks is `NotCached` before any block is
+    read; an empty block (byte count 0) is cells of 0, no data.
+    """
+    w, page = window, source.page
+    ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
+    if min(w.row0, w.col0, *ends) < 0 or min(w.rows, w.cols) < 1:
+        raise ValueError(f"{w} is not a non-empty window of {meta.rows} x {meta.cols} cells")
+    if page.dtype != np.uint8:
+        raise GeoTiffError(f"{source.where}: classes must be uint8, the file holds {page.dtype}")
+    indices = blocks_meeting(page, w)
+    if absent := source.missing(indices):
+        raise NotCached(len(absent), len(indices), source.where)
+    out = np.zeros((w.rows, w.cols), dtype=np.uint8)
+    stored = [i for i in indices if page.databytecounts[i] > 0]
+    _decode_into(source, w, stored, out, threads)
+    x, y = meta.node_xy(w.row0, w.col0)
+    return ClassWindow(
+        x_min=x - meta.delta_x / 2,
+        y_max=y + meta.delta_y / 2,
+        delta_x=meta.delta_x,
+        delta_y=meta.delta_y,
+        array=out,
+    )
+
+
+def _decode_into(
+    source: BlockSource,
+    w: IndexWindow,
+    indices: Sequence[int],
+    out: np.ndarray[Any, np.dtype[Any]],
+    threads: int | None,
+) -> None:
+    """Decode each of `indices` into its own slice of `out`, `w`'s canvas, on
+    `threads` workers (the machine's cores when None); none is sparse."""
+    page = source.page
 
     def put(index: int) -> None:
         data = source.block(index)
         with _stage(f"{source.where}, block {index}"):
             segment, (_, _, r0, c0, _), _ = page.decode(data, index)
-        assert segment is not None  # a sparse block was refused above
+        assert segment is not None  # a sparse block was refused or skipped by the caller
         rows = slice(max(r0, w.row0), min(r0 + segment.shape[1], w.row0 + w.rows))
         cols = slice(max(c0, w.col0), min(c0 + segment.shape[2], w.col0 + w.cols))
         block = segment[0, rows.start - r0 : rows.stop - r0, cols.start - c0 : cols.stop - c0, 0]
@@ -149,10 +202,6 @@ def decode_window(
 
     with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
         list(pool.map(put, indices))
-    # The public constructor's copy, not the canvas's no-copy route: M15
-    # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
-    # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
-    return DemTile(meta=meta.windowed(w), array=out)
 
 
 __all__ = [
@@ -162,5 +211,6 @@ __all__ = [
     "NotCached",
     "block_grid",
     "blocks_meeting",
+    "decode_class_window",
     "decode_window",
 ]

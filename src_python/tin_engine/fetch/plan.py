@@ -47,6 +47,8 @@ class FetchRequest(BaseModel):
     connections: int = 8
     dry_run: bool = False
     refresh: bool = False
+    #: The year of a one-cog-per-year source (26a); None is the source's last.
+    year: int | None = None
 
     @model_validator(mode="after")
     def _one_region(self) -> FetchRequest:
