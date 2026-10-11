@@ -6,8 +6,8 @@
 `4e7901ee`, mutation round `dddce8e8` (ten mutants, all killed, record in its
 commit message), fix-up `7085dddf` (the `.part` housekeeping moved to the
 CLI); 377 net production lines by `python3 tools/count_loc.py 3e6f87eb HEAD`
-against the design's about 305; section 11 is the as-built record). Next:
-`@perf`'s quick check (section 9), then code review.
+against the design's about 305; section 11 is the as-built record; `@perf`'s
+acceptance `57c25074` ACCEPTED). Next: code review.
 
 ## 1. What Ola asked
 
@@ -426,6 +426,23 @@ later step; the stored QGIS style kept.
 **Lessons for the retrospective:** a design naming where `sqlite3.connect`
 lives should check the existing boundary guards first; housekeeping (`unlink`,
 rename) belongs in the caller from the start, as the `.vtk`/`.ply` writers do.
+
+
+**Acceptance** `57c25074` (`@perf`, ACCEPTED against section 9;
+`docs/benchmarks/2026-10-11/gpkg-out/README.md`), AC power, head `e2470ae7`
+against base `81a551b3` back to back (the worktree's stored baseline was on
+numpy 2.5.3, so the base was measured with `--tree`), medians of 3: (a) all
+7 quick-check meshes' SHA-256 equal to base and to master's refreshed
+baseline; quick check `NO CHANGE`, -4.3 % to +1.6 %; (b) Numedalslagen
+`write: geopackage` 3.932 s (limit 5 s), the writer's memory share +32 MB on a
+2.77 GB command peak set by meshing (`.vtk` run 2.73 GB); Romsdalen write
+19.368 s (limit 25 s), 810 MB file, writer's share +188 MB on 2.91 GB (`.vtk`
+2.78 GB). Against master's refreshed baseline Lagan reads +37.7 %: the base has
+the same features clip (11.58 s), so that is increment 35 missing from this
+branch, not a regression. Pinned: the writer's share is RSS growth inside the
+`write: geopackage` phase from a 0.1 s `ps` trace; the production Romsdalen
+file is 810 MB where the design probe wrote 922 MB, not investigated. Lesson: a
+branch based before a baseline refresh needs the back-to-back base run anyway.
 
 ## Review
 
