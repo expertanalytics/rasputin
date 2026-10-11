@@ -85,8 +85,13 @@ def catalogue_with(
         id=KEY, kind="one-cog", url=url, crs=crs, nodata=-9999.0, credit=CREDIT,
         licence_note=LICENCE, cite=cite,
     )  # fmt: skip
+    return install(sources, monkeypatch, entry)
+
+
+def install(sources: ModuleType, monkeypatch: pytest.MonkeyPatch, entry: Any) -> Any:
+    """`SOURCES` plus `entry` under its id, wherever a module bound the name."""
     original = sources.SOURCES
-    patched = {**original, KEY: entry}
+    patched = {**original, entry.id: entry}
     for module in list(sys.modules.values()):
         name = getattr(module, "__name__", "") or ""
         if name.startswith("tin_engine") and getattr(module, "SOURCES", None) is original:
