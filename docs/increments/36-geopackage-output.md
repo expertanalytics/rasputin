@@ -1,11 +1,13 @@
 # Increment 36: GeoPackage output
 
-**Status:** designed by `@architect` on `81a551b3`, 2026-10-11; design review
-round 1's four fixes applied by `@architect` the same day (sections 3, 4 and
-8). Python only, one
-PR; no refine or mesh code, so no `@perf` acceptance run, but a quick check
-(section 9). Ola is away: the five questions of section 10 are answered with
-their defaults, reversible.
+**Status: **built** on branch `worktree-gpkg-out` (design `01118660`, fixes
+`0233d1e3`, design review rounds 1 and 2 recorded; red `87f41c3d` (`@tester`,
+42 tests), green `c59246e5` + `0943a7a5` (`@developer`), layering rows
+`4e7901ee`, mutation round `dddce8e8` (ten mutants, all killed, record in its
+commit message), fix-up `7085dddf` (the `.part` housekeeping moved to the
+CLI); 377 net production lines by `python3 tools/count_loc.py 3e6f87eb HEAD`
+against the design's about 305; section 11 is the as-built record). Next:
+`@perf`'s quick check (section 9), then code review.
 
 ## 1. What Ola asked
 
@@ -358,6 +360,72 @@ Not invariant-critical, no mutation round: T7 to T9.
    not folded in. *Default: its own step.*
 5. **Stored QGIS style** kept in 36 (about 30 logic lines plus the template).
    *Default: kept.*
+
+## 11. As built (recorded by the main session from the handbacks)
+
+**Red** `87f41c3d` (`@tester`): 42 tests, 0 passing, in
+`tests/python/test_io_geopackage_write.py` (24: T1 round trip and header
+bytes 0-40 and WKB bytes 40-53; T2 at batch=30_000 on F2's 69,571 triangles;
+T3 by hand; T5 `write_run`; T6 `write_lines`; T7 `srs_entry`) and
+`tests/python/test_cli_mesh_gpkg.py` (18: T3 figures against the `.vtk`
+arrays, `land_cover` layer and envelope order; T4 SHA-256 and 1970 stamps; T5
+`run` against `--record`/`--stats`; T6 lines via `feature_mask`; T7 EPSG and
+`--flat --crs "free text"` giving -1; T8 refusals, replace, fid-1 equals the
+`.vtk` index; T9 QML). Ten pins beyond the design, all in the tests:
+`write_triangles` registers and indexes its layer, `write_lines` registers;
+`palette` is the code table, not its name; `geometry_type_name` uppercase;
+`write_run(conn, rows)` takes `(name, wording, value, number)` tuples, `run`
+and `land_cover_classes` registered as `attributes`; `srs_entry` never raises
+and -1 adds no SRS row; refusal wording "layer of the GeoPackage" + "lines",
+"applies to .vtk and .ply"; an uncoded run's `gpkg_contents` is {triangles,
+lines, run}; the QML category and symbol shape; `run`'s CRS row named `crs`;
+WKB order 1, types 1003/1002.
+
+**Green** `c59246e5` + `0943a7a5` (`@developer`), fix-up `7085dddf`: new
+module `src_python/tin_engine/io/geopackage_write.py`; `.gpkg` dispatch and
+`_write_geopackage` in `cli.py` (writes `<target>.part`, `os.replace` to the
+target, the stale `.part` unlinked before `create_sqlite`); `create_sqlite` in
+`io/repository.py` is `sqlite3.connect(path)` alone, since
+`test_io_geopackage.py::TestBoundaries` allows only the repository to connect
+and `test_io_repository.py::TestQ3OneModuleOpensFiles` forbids it to delete
+(the design's section 5 had the CLI connecting; the tests won). `SrsEntry`,
+`UNDEFINED_SRS`, `CUSTOM_SRS_ID` live in `io/models.py`, since the layering
+table forbids `crs` importing an io codec and the red suite forbids the writer
+importing `crs`. `write_classes(conn)` derives the legend from `triangles` by
+GROUP BY. 377 net counted lines (the SQL and QML template bodies count:
+`count_loc.py`'s raw-literal rule is C++'s `R"..."`). Whole Python suite 7162
+passed, 17 skipped at `7085dddf`; mypy strict, ruff, the governance gates
+clean; `test_refine_golden.py` passes, so `.vtk` and `.ply` are untouched.
+One real write, Numedalslagen on AC: `write: geopackage` 3.98 s, 203.3 MB,
+653,039 triangles, 67,240 lines, 22 `land_cover` rows (design 4.0 s /
+203 MB). Peak RSS of the whole command 2.79 GB, meshing included; acceptance
+(b)'s 1 GB is the writer's own share, which `@perf` judges.
+
+**Layering** `4e7901ee` (`@tester`): `io.geopackage_write: features
+io.geopackage io.models` in L2; `crs` gains `io.models`; `cli` gains
+`io.geopackage_write`; each edge checked against the import lines.
+
+**Mutation round** `dddce8e8` (`@tester`), scratch copy of `0943a7a5`, green
+before, between and after: ten design-named mutants, all killed, each by the
+design's named oracle. The full record, one row per mutant with the planted
+line, the killing test and assertion, is the commit message of `dddce8e8`
+(the lean rule: the kill record may live in the commit the handback names).
+Short form: M1 flag 0 (reader: srs_id -379322368), M2 envelope swapped (header
+unpack), M3 type 3, M4 ring unclosed, M5 points 3 (reader `GeoPackageError`),
+M6 fid off by one, M7 partial batch dropped (69571 against 60000 at
+batch=30_000), M8 miny/maxx swapped, M9 area without the half, M10 a column
+for an unused property. Deviation: M3 dies by GEOS "ring not closed" and the
+WKB type assertion, not the design's predicted flat Polygon. Red scaffolding
+removed in the same commit: the `importlib.import_module` fixtures and the
+red notes in both test files.
+
+**Decided on defaults while Ola was away** (section 10): R-tree always on;
+all eight triangle attributes; fixed 1970 timestamps; the source-polygon ID a
+later step; the stored QGIS style kept.
+
+**Lessons for the retrospective:** a design naming where `sqlite3.connect`
+lives should check the existing boundary guards first; housekeeping (`unlink`,
+rename) belongs in the caller from the start, as the `.vtk`/`.ply` writers do.
 
 ## Review
 
