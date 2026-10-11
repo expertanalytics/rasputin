@@ -1,6 +1,8 @@
 # Increment 36: GeoPackage output
 
-**Status:** designed by `@architect` on `81a551b3`, 2026-10-11. Python only, one
+**Status:** designed by `@architect` on `81a551b3`, 2026-10-11; design review
+round 1's four fixes applied by `@architect` the same day (sections 3, 4 and
+8). Python only, one
 PR; no refine or mesh code, so no `@perf` acceptance run, but a quick check
 (section 9). Ola is away: the five questions of section 10 are answered with
 their defaults, reversible.
@@ -56,6 +58,28 @@ AC power, Python 3.14, SQLite 3.53.1, shapely 2.2.0; single runs. The probe
 reads a binary `.vtk` and writes the `triangles` and `lines` layers with
 section 4's attributes; `--stopgap` runs Ola's converter on the same mesh.
 
+Every "candidate" figure is one command, from the worktree root:
+
+    /usr/bin/time -l .venv/bin/python docs/increments/36-probes/gpkg_write_probe.py \
+        <mesh>.vtk out.gpkg --rtree executemany --cache-mb 256 --stream --per-batch --vtk-time
+
+`--rtree executemany` feeds the index rows straight into the virtual table,
+`--cache-mb 256` sets the page cache for that build, `--stream --per-batch`
+builds rows and blobs per batch of 100,000 (`--batch`'s default), `--vtk-time`
+re-times the binary `.vtk` write beside it, and `/usr/bin/time -l`'s
+`maximum resident set size` is the peak RSS. The stopgap column adds
+`--stopgap ../rasputin_data/lands/scripts/vtk_to_gpkg.py`; the "same bytes"
+claim below is `--twice`. **The probe's own defaults (`--rtree select`, no
+`--cache-mb`, no `--stream`) are the rejected variants**, so a bare run does
+not reproduce the table. The meshes, all binary `.vtk` from `rasputin mesh`:
+row 1 `rasputin mesh --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif
+--tolerance 10 --out <mesh>.vtk --binary`; row 2 the `numedalslagen` case of
+`docs/benchmarks/quick/cases.toml` with `--out <mesh>.vtk --binary` appended;
+row 3 `../rasputin_scratch/norway/romsdalen/romsdalen_slope_2m_25_35.vtk`
+(the `romsdal-slope` case, kept outside git). Row 1 re-run with that line
+when the fix was written, 2026-10-11: total 0.40 s, R-tree 0.24 s, 20.0 MB,
+160 MB peak RSS.
+
 | mesh | triangles | `.vtk` | `.vtk` write (`--stats`) | GeoPackage, candidate | of which R-tree | size | peak RSS | stopgap |
 |---|---|---|---|---|---|---|---|---|
 | test tile `7908_3_10m_z33.tif`, `--tolerance 10` | 69,571 | 2.6 MB | 0.005 s | 0.40 s | 0.23 s | 20.0 MB | — | — |
@@ -72,16 +96,19 @@ What the writer must do, each measured as the difference it made:
 
 - **One transaction, `executemany` in batches of 100,000 rows** (`BEGIN` once,
   `COMMIT` once; `journal_mode=OFF`, `synchronous=OFF`, as the stopgap). The
-  batch size is not sensitive: 10,000 gave the same time on Numedalslagen.
+  batch size is not sensitive: `--batch 10000` gave the same time on
+  Numedalslagen.
 - **The R-tree after the rows, into the virtual table directly** (14.2 s on
-  Romsdalen) — not through a temporary table (16.6 s). Feeding it in Morton
-  order was slower (4.5 s against 3.8 s on Numedalslagen): the kernel's
-  triangle order is already local. `PRAGMA cache_size` of 256 MB during the
-  index build: 3.8 s to 2.9 s on Numedalslagen (the default cache is 2 MB).
+  Romsdalen) — not through a temporary table (`--rtree select`, 16.6 s).
+  Feeding it in Morton order (`--rtree-order morton`) was slower (4.5 s
+  against 3.8 s on Numedalslagen): the kernel's triangle order is already
+  local. `PRAGMA cache_size` of 256 MB during the index build: 3.8 s to 2.9 s
+  on Numedalslagen (without `--cache-mb`, the default cache is 2 MB).
 - **Blobs and rows built per batch from array slices**, no whole-mesh list of
   tuples and no whole-mesh blob array: peak RSS on Romsdalen 5.8 GB with a
-  list of all rows, 3.2 GB streaming rows only, 2.1 GB streaming blobs too
-  (0.3 GB of that is the probe's own VTK read). Checked at 3.1 million
+  list of all rows (neither flag), 3.2 GB streaming rows only (`--stream`),
+  2.1 GB streaming blobs too (`--stream --per-batch`; 0.3 GB of that is the
+  probe's own VTK read). Checked at 3.1 million
   triangles; at the São Francisco scale (about 10⁸ triangles) the rows would
   take about 4 minutes and the index 8, for a 30 GB file (section 7).
 - **Same run, same bytes**: the second write of each mesh was SHA-256
@@ -124,13 +151,15 @@ features after the clip and the clean-up (`FeatureSet.features` with a
 layer). Constraint lines from non-coded sources are already in `lines`.
 
 **`land_cover_classes`** (an attributes table), one row per code present in
-`triangles`: `code`, `land_cover`, `colour`, `triangles INTEGER`,
-`area_m2 REAL`. The legend, and the class shares an agent reads with one
+`triangles`: `fid INTEGER PRIMARY KEY` (OGC 12-128 Requirement 119: every
+attributes table has an integer primary key, the rowid alias), `code`,
+`land_cover`, `colour`, `triangles INTEGER`, `area_m2 REAL`. The legend, and the class shares an agent reads with one
 query. Written only with coded land cover.
 
 **`run`** (an attributes table), the run record (increment 25) as rows:
-`name TEXT PRIMARY KEY`, `wording TEXT`, `value TEXT`, `number REAL` (NULL
-for text entries), in record order, straight from `RunRecord.entries`
+`fid INTEGER PRIMARY KEY` (Requirement 119 again), `name TEXT UNIQUE`,
+`wording TEXT`, `value TEXT`, `number REAL` (NULL for text entries), in
+record order, straight from `RunRecord.entries`
 (`name`, `wording`, `value`, `number`); first `rasputin_version` and
 `command` as `--record` writes them, then every entry `as_json` writes. So the tolerance
 (`tolerance_m`), the largest error (`max_error_m`), the DEM source
@@ -164,7 +193,10 @@ reader's `layer_info` turns each back into its `crs` text.
   codes, palette, srs_id, batch=100_000)`; `write_lines(conn, vertices,
   edges, edge_masks, vocabulary, srs_id)`; `write_land_cover(conn,
   polygons, palette, srs_id)` (shapely WKB via `shapely.to_wkb(...,
-  flavor="iso")`); `write_classes`, `write_run(conn, rows)`,
+  flavor="iso")`; its header envelope is `minx, maxx, miny, maxy`, the order
+  flag `0b0011` declares in 12-128 section 2.1.3 — not the stopgap's
+  `poly_layer`, which reorders the bounds twice (its lines 229 and 118) and
+  stores `minx, miny, maxx, maxy`); `write_classes`, `write_run(conn, rows)`,
   `write_styles(conn, palette, layers)`; one `register_layer(conn, name,
   kind, srs_id, bounds, z)` for the `gpkg_contents`/`gpkg_geometry_columns`
   rows, and `build_rtree(conn, table, boxes)` with the 256 MB cache set and
@@ -231,9 +263,10 @@ section 9 says.
 Fixtures with measured figures: **F1**, a hand-made mesh of 4 vertices and
 2 triangles on the unit square, vertices (0,0,0), (1,0,1), (1,1,2), (0,1,3),
 triangles (0,1,2) and (0,2,3), one constraint edge (the diagonal 0-2) with one
-property bit, codes 312 and 0: plan areas 0.5 and 0.5, z_mean 1.0 and 5/3,
-slopes 54.7356° (`atan(√2)`) and 72.4516° (`atan(√10)`), computed with the
-probe's formulas on this worktree; **F2**, the DEM tile
+property bit, codes 312 and 0, written with `srs_id` 25833 (F2's EPSG:25833;
+not 0 or -1, which read the same in either byte order): plan areas 0.5 and
+0.5, z_mean 1.0 and 5/3, slopes 54.7356° (`atan(√2)`) and 72.4516°
+(`atan(√10)`), computed with the probe's formulas on this worktree; **F2**, the DEM tile
 `tests/fixtures/dem_archive/7908_3_10m_z33.tif` with `--tolerance 10`:
 69,571 triangles, 383 constraint edges, 38,921 points, 0.48 s to mesh, the
 GeoPackage 20.0 MB and 0.40 s (section 3); **F3**, the land-cover case
@@ -244,13 +277,25 @@ Invariant-critical suite (mutation round required), with its targets:
 
 - **T1 round trip** (F1, `:memory:`): `layer_info` + `query_features` from
   `io/geopackage.py` read back each triangle as a PolygonZ equal to the
-  corner coordinates, `fid` in triangle order, `srs_id` as given. Mutants:
-  byte-order flag 0, envelope order (`minx, maxx, miny, maxy` swapped),
-  type 3 for 1003, ring not closed, point count 3.
-- **T2 index matches rows** (F2): for every `fid`, the R-tree box equals the
-  triangle's bounds to float32 rounding, and the table and the index have the
-  same row count. Mutants: `fid` off by one in the index, batch boundary
-  dropping the last partial batch, `miny`/`maxx` swapped.
+  corner coordinates, `fid` in triangle order, `srs_id` 25833; and, because
+  `decode_geometry` skips the envelope (it reads from byte 8 + 32), T1 also
+  unpacks each blob's header itself: bytes 0-4 `GP`, 0, `0b0011`; bytes 4-8
+  `<i` = 25833; bytes 8-40 `<4d` = the triangle's own `minx, maxx, miny,
+  maxy`. Oracle per mutant: byte-order flag 0 — the reader (`>i` on the
+  little-endian bytes gives -379322368, not 25833); envelope order swapped
+  (`minx, miny, maxx, maxy`) — the header unpack, since the reader never
+  sees it; type 3 for 1003 — the reader (Polygon, `has_z` false, where
+  PolygonZ is asserted); ring not closed, and point count 3 (the first three
+  corners do not close) — the reader raises `GeoPackageError` (GEOS: "Points
+  of LinearRing do not form a closed linestring").
+- **T2 index matches rows** (F2, written with `batch=30_000`, so the 69,571
+  triangles cross two batch boundaries and leave a partial batch of 9,571;
+  under the default 100,000 no boundary is crossed and the batch mutant
+  is never reached): for every `fid`, the R-tree box equals the triangle's
+  bounds to float32 rounding, and the table and the index have the same row
+  count. Mutants and their oracles: `fid` off by one in the index — the
+  per-`fid` box comparison; the last partial batch dropped — the row count
+  (60,000 against 69,571); `miny`/`maxx` swapped — the box comparison.
 - **T3 attributes** (F1 and F3): `code`, `land_cover`, `colour`, `z_*`,
   `area_m2`, `slope_deg` equal the figures computed from the arrays; a code
   the palette lacks gives NULL name and `#ff00ff`; a run with no coded land
