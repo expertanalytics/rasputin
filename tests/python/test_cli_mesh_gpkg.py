@@ -463,6 +463,32 @@ class TestLandCover:
         assert not tables(opened) & {"land_cover", "land_cover_classes", "layer_styles"}
         assert column(opened, "triangles", "code").tolist() == [None] * 69_571
 
+    def test_a_coded_run_with_no_polygon_in_the_domain_writes_without_a_land_cover_layer(
+        self, tmp_path: Path, bumpy: Path
+    ) -> None:
+        """A coded source whose only feature is a line leaves no polygon to
+        write: the run succeeds as the `.vtk` run does, `land_cover` is absent
+        (nothing to draw), while `land_cover_classes` and the codes on
+        `triangles` are still written, every triangle in no polygon (code 0)."""
+        road = shapely.LineString([(TIE_X + 30.1, TIE_Y - 40.3), (TIE_X + 170.2, TIE_Y - 40.3)])
+        corine = write_geojson(tmp_path / "road.geojson", [Feat("r", road, {"Code_18": "122"})])
+        domain = geojson(tmp_path / "square.geojson", SQUARE)
+        args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
+        args += ("--features", str(corine), "--features-map", "corine")
+        written = mesh_pair(tmp_path, "road", *args)
+        with closing(sqlite3.connect(written.gpkg)) as con:
+            assert "land_cover" not in tables(con)
+            assert "land_cover" not in registered(con)
+            codes = column(con, "triangles", "code")
+            assert codes.tolist() == [0] * len(written.triangles)
+            assert_array_equal(
+                codes, written.vtk.cell_array("land_cover_code").values[len(written.edges) :]
+            )
+            classes = con.execute(
+                "SELECT code, land_cover, colour, triangles FROM land_cover_classes"
+            ).fetchall()
+            assert classes == [(0, *CORINE_NATURAL[0], len(written.triangles))]
+
 
 # --------------------------------------------------------------- T6: lines (F3)
 
