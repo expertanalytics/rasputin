@@ -1260,6 +1260,7 @@ def _write_geopackage(
     a failed run leaves nothing under the asked name."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
+    part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
     conn = create_sqlite(part)
     try:
         create_geopackage(conn, srs)

@@ -359,10 +359,11 @@ def open_geopackage(path: Path) -> sqlite3.Connection:
 
 
 def create_sqlite(path: Path) -> sqlite3.Connection:
-    """A fresh, writable SQLite file at ``path`` (increment 36): an existing
-    file is removed first, so nothing is appended to. The caller closes it, in
-    the thread that opened it (SQLite connections are thread-bound)."""
-    Path(path).unlink(missing_ok=True)
+    """A writable SQLite connection to ``path`` (increment 36), created if
+    missing. Removing a stale file first, and renaming the finished one, are
+    the caller's: this module deletes and writes nothing outside the
+    connection it hands back. The caller closes it, in the thread that opened
+    it (SQLite connections are thread-bound)."""
     return sqlite3.connect(path)
 
 
