@@ -1,6 +1,6 @@
 # Increment 26: land cover for the São Francisco basin — water bodies as constraints, class fractions per triangle
 
-Status: **26a built** on branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; next `@perf`'s quick check, then code review). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
+Status: **26a built** on branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; `@perf`'s quick check `38f86930` ACCEPTED; next code review). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
 Ola, 2026-10-04** (all eleven questions; "Ruled by Ola, 2026-10-04", below,
 and each question marked). Q8 was ruled against the recommendation:
 triangles inside a lake carry the raster's own mix, nothing is forced to
@@ -1528,6 +1528,16 @@ block-decoding loop of `decode_window` moved into a shared `_decode_into`,
 behaviour unchanged, which is why `@perf`'s quick check runs before review.
 Lesson: running only the increment's suites missed an import-boundary test
 elsewhere; the full suite caught it.
+
+**Quick check** `38f86930` (`@perf`, ACCEPTED;
+`docs/benchmarks/2026-10-11/mapbiomas-26a/README.md`): `tools/bench_quick.py
+run` at `f51f0a18` against the stored baseline (`357808b1`, AC, numpy 2.5.4),
+AC power, nothing else running: `NO CHANGE`, exit 0; every mesh SHA-256 equal,
+every total and every `decode` phase within its band, the same eight hotspot
+lines as the baseline run (geilo-al-ramp decode 42 % on both). The run's own
+per-case medians are not on disk: `bench_quick.py` writes a record only with
+`--save-baseline`, so a passing quick check leaves the tool's silence as the
+evidence. Idea for the tooling: `bench_quick.py run --record <path>`.
 
 ## Review
 
