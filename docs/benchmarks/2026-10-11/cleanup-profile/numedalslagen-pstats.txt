@@ -1,0 +1,374 @@
+### top 45 by cumulative time
+Sun Oct 11 10:32:28 2026    /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/benchmarks/2026-10-11/cleanup-profile/numedalslagen.prof
+
+         5531789 function calls (5516027 primitive calls) in 10.230 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1429 to 45 due to restriction <45>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   10.234   10.234 main.py:1133(__call__)
+        1    0.000    0.000   10.215   10.215 core.py:800(__call__)
+        1    0.000    0.000   10.215   10.215 core.py:1188(main)
+        1    0.000    0.000   10.215   10.215 core.py:158(_main)
+        1    0.000    0.000   10.214   10.214 core.py:1088(invoke)
+        2    0.000    0.000   10.213    5.107 core.py:729(invoke)
+        2    0.000    0.000   10.213    5.107 core.py:468(invoke)
+        2    0.001    0.000   10.213    5.107 main.py:1515(wrapper)
+        1    0.001    0.001   10.212   10.212 cli.py:592(mesh)
+        1    0.000    0.000    7.220    7.220 cli.py:1597(_open_features)
+        1    0.004    0.004    7.220    7.220 feature_input.py:257(open_features)
+        1    0.006    0.006    7.216    7.216 feature_input.py:310(source)
+        1    0.018    0.018    6.996    6.996 feature_input.py:329(_take)
+        1    0.012    0.012    6.864    6.864 feature_input.py:410(_clean)
+82347/82342    0.035    0.000    2.909    0.000 decorators.py:182(wrapper)
+        1    0.070    0.070    2.795    2.795 feature_input.py:640(snap_to_outline)
+     1168    0.001    0.000    2.324    0.002 _base.py:632(result_iterator)
+     1152    0.002    0.000    2.251    0.002 _base.py:309(_result_or_cancel)
+     1152    0.002    0.000    1.932    0.002 _base.py:424(result)
+     8584    1.668    0.000    1.668    0.000 set_operations.py:110(intersection)
+        1    0.003    0.003    1.489    1.489 cli.py:1768(_dem_mesh)
+        1    1.221    1.221    1.221    1.221 _coverage.py:198(coverage_clean)
+     1912    0.003    0.000    1.173    0.001 threading.py:337(wait)
+        1    0.000    0.000    1.146    1.146 cli.py:1517(_open_dem)
+        1    0.000    0.000    1.146    1.146 dem_input.py:131(open_dem)
+     4532    0.247    0.000    0.863    0.000 feature_input.py:776(ring)
+      160    0.000    0.000    0.745    0.005 threading.py:1097(join)
+      160    0.001    0.000    0.744    0.005 {method 'join' of '_thread._ThreadHandle' objects}
+        1    0.065    0.065    0.738    0.738 mosaic.py:207(assemble)
+        1    0.005    0.005    0.691    0.691 border_simplify.py:40(simplify_borders)
+      270    0.001    0.000    0.689    0.003 repository.py:132(_read)
+        1    0.683    0.683    0.683    0.683 {built-in method tin_engine._core.refine}
+       17    0.675    0.040    0.676    0.040 set_operations.py:456(union_all)
+        1    0.634    0.634    0.634    0.634 {built-in method tin_engine._core.simplify_borders}
+       16    0.000    0.000    0.441    0.028 mosaic.py:447(_loaded)
+       16    0.000    0.000    0.440    0.028 repository.py:120(load_window)
+       16    0.000    0.000    0.438    0.027 repository.py:123(read)
+     1599    0.421    0.000    0.423    0.000 constructive.py:667(make_valid)
+       16    0.000    0.000    0.421    0.026 cog.py:105(decode_window)
+       16    0.000    0.000    0.376    0.023 _base.py:672(__exit__)
+       16    0.000    0.000    0.375    0.023 thread.py:254(shutdown)
+   160/16    0.000    0.000    0.373    0.023 threading.py:1030(_bootstrap)
+   160/16    0.000    0.000    0.373    0.023 threading.py:1065(_bootstrap_inner)
+   160/16    0.001    0.000    0.373    0.023 {method 'run' of '_contextvars.Context' objects}
+   160/16    0.001    0.000    0.373    0.023 threading.py:1013(run)
+
+
+### top 30 by own (tottime)
+Sun Oct 11 10:32:28 2026    /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/benchmarks/2026-10-11/cleanup-profile/numedalslagen.prof
+
+         5531789 function calls (5516027 primitive calls) in 10.230 seconds
+
+   Ordered by: internal time
+   List reduced from 1429 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     8584    1.668    0.000    1.668    0.000 set_operations.py:110(intersection)
+        1    1.221    1.221    1.221    1.221 _coverage.py:198(coverage_clean)
+        1    0.683    0.683    0.683    0.683 {built-in method tin_engine._core.refine}
+       17    0.675    0.040    0.676    0.040 set_operations.py:456(union_all)
+        1    0.634    0.634    0.634    0.634 {built-in method tin_engine._core.simplify_borders}
+     1599    0.421    0.000    0.423    0.000 constructive.py:667(make_valid)
+        1    0.296    0.296    0.296    0.296 {built-in method tin_engine._core.refine_strip}
+     4532    0.247    0.000    0.863    0.000 feature_input.py:776(ring)
+      296    0.208    0.001    0.208    0.001 {is_valid_scalar}
+     6788    0.170    0.000    0.170    0.000 {method 'dwithin' of 'shapely.lib.STRtree' objects}
+        1    0.147    0.147    0.147    0.147 {built-in method tin_engine._core.node}
+   242086    0.144    0.000    0.159    0.000 linestring.py:68(_coords)
+    14590    0.138    0.000    0.141    0.000 creation.py:143(linestrings)
+        2    0.127    0.064    0.127    0.064 {method 'argsort' of 'numpy.ndarray' objects}
+       25    0.125    0.005    0.125    0.005 set_operations.py:598(coverage_union_all)
+  1152/17    0.110    0.000    0.004    0.000 tifffile.py:7446(decode_other)
+    10608    0.103    0.000    0.176    0.000 {method 'read' of '_io.BufferedReader' objects}
+        1    0.100    0.100    0.100    0.100 {built-in method tin_engine._core.constraint_check_points}
+     8131    0.094    0.000    0.094    0.000 {built-in method numpy.array}
+       89    0.092    0.001    0.093    0.001 numeric.py:323(full)
+      373    0.081    0.000    0.081    0.000 {method 'query_nearest' of 'shapely.lib.STRtree' objects}
+  1057429    0.079    0.000    0.079    0.000 {method 'append' of 'list' objects}
+     7932    0.070    0.000    0.079    0.000 io.py:313(from_wkb)
+        1    0.070    0.070    2.795    2.795 feature_input.py:640(snap_to_outline)
+  1152/16    0.068    0.000    0.021    0.001 cog.py:138(put)
+        1    0.065    0.065    0.738    0.738 mosaic.py:207(assemble)
+     7933    0.064    0.000    0.202    0.000 geopackage.py:127(query_features)
+        1    0.064    0.064    0.069    0.069 cli.py:525(_masked_pairs)
+        1    0.057    0.057    0.248    0.248 landcover.py:42(regions)
+836522/836514    0.057    0.000    0.058    0.000 {built-in method builtins.len}
+
+
+### callees of _take
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_take'>
+
+Function                     called...
+                                 ncalls  tottime  cumtime
+feature_input.py:329(_take)  ->       1    0.000    0.000  __init__.py:398(name)
+                                   7932    0.033    0.033  _geometry.py:933(force_2d)
+                                  15864    0.003    0.005  base.py:333(geom_type)
+                                   7932    0.001    0.003  base.py:770(is_empty)
+                                      1    0.000    0.000  creation.py:751(prepare)
+                                      1    0.000    0.000  crs.py:32(parse_crs)
+                                      1    0.000    0.009  crs.py:75(same_crs)
+                                      1    0.000    0.010  feature_input.py:172(source_region)
+                                      1    0.012    6.864  feature_input.py:410(_clean)
+                                   7932    0.008    0.036  feature_input.py:562(_finite)
+                                   7932    0.003    0.003  feature_input.py:566(_code)
+                                   7932    0.006    0.013  feature_input.py:578(_mask)
+                                  15864    0.001    0.001  {built-in method time.perf_counter}
+                                   7932    0.001    0.001  {method 'append' of 'list' objects}
+
+
+### callees of _clean
+   Ordered by: cumulative time
+   List reduced from 1429 to 2 due to restriction <'_clean'>
+
+Function                          called...
+                                      ncalls  tottime  cumtime
+feature_input.py:410(_clean)      ->       1    1.221    1.221  _coverage.py:198(coverage_clean)
+                                           1    0.000    0.000  _geometry.py:168(get_num_coordinates)
+                                          25    0.000    0.000  base.py:770(is_empty)
+                                           1    0.005    0.691  border_simplify.py:40(simplify_borders)
+                                           1    0.000    0.000  border_simplify.py:58(<genexpr>)
+                                        7982    0.003    1.553  decorators.py:182(wrapper)
+                                          25    0.001    0.189  feature_input.py:383(_add)
+                                          10    0.000    0.000  feature_input.py:422(<genexpr>)
+                                          26    0.025    0.328  feature_input.py:448(<genexpr>)
+                                        7957    0.010    0.071  feature_input.py:464(_polygonal)
+                                           1    0.070    2.795  feature_input.py:640(snap_to_outline)
+                                           3    0.000    0.000  polygon.py:238(__new__)
+                                           1    0.000    0.000  {built-in method builtins.sorted}
+                                           2    0.001    0.003  {built-in method builtins.sum}
+                                           2    0.000    0.000  {built-in method numpy.array}
+                                           2    0.000    0.000  {built-in method time.perf_counter}
+                                        3297    0.000    0.000  {method 'append' of 'list' objects}
+                                        3297    0.000    0.000  {method 'setdefault' of 'dict' objects}
+                                           1    0.000    0.000  {method 'sum' of 'numpy.ndarray' objects}
+                                           1    0.000    0.000  {method 'values' of 'dict' objects}
+_coverage.py:198(coverage_clean)  ->       1    0.000    0.000  _enum.py:12(get_value)
+                                           1    0.000    0.000  _enum.py:25(has_value)
+                                           1    0.000    0.000  numeric.py:1911(isscalar)
+                                           2    0.000    0.000  {built-in method builtins.isinstance}
+                                           1    0.000    0.000  {built-in method numpy.asarray}
+                                           1    0.000    0.000  {method 'ravel' of 'numpy.ndarray' objects}
+
+
+### callees of snap_to_outline
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'snap_to_outline'>
+
+Function                               called...
+                                           ncalls  tottime  cumtime
+feature_input.py:640(snap_to_outline)  ->       1    0.000    0.000  base.py:341(area)
+                                             3440    0.000    0.001  base.py:770(is_empty)
+                                              295    0.000    0.207  base.py:798(is_valid)
+                                                3    0.291    0.291  constructive.py:667(make_valid)
+                                            12982    0.006    0.870  decorators.py:182(wrapper)
+                                               17    0.001    0.010  feature_input.py:464(_polygonal)
+                                             7052    0.001    0.001  feature_input.py:666(<genexpr>)
+                                              373    0.045    0.211  feature_input.py:691(_loops)
+                                              373    0.040    0.221  feature_input.py:737(_chains)
+                                                1    0.001    0.004  feature_input.py:761(__init__)
+                                             4532    0.247    0.863  feature_input.py:776(ring)
+                                             4159    0.004    0.037  linestring.py:45(__new__)
+                                              278    0.001    0.011  polygon.py:238(__new__)
+                                             1265    0.000    0.000  {built-in method builtins.len}
+                                                1    0.000    0.000  {built-in method math.isfinite}
+                                             3490    0.000    0.000  {method 'append' of 'list' objects}
+
+
+### callees of \bring\b
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'\\bring\\b'>
+
+Function                    called...
+                                ncalls  tottime  cumtime
+feature_input.py:776(ring)  ->    4532    0.002    0.051  decorators.py:182(wrapper)
+                                 44327    0.003    0.003  feature_input.py:793(<genexpr>)
+                                  1900    0.017    0.019  feature_input.py:831(_cut)
+                                   373    0.037    0.188  feature_input.py:846(_place)
+                                  2692    0.011    0.016  feature_input.py:880(_join)
+                                168717    0.009    0.009  feature_input.py:914(_xy)
+                                169889    0.009    0.009  feature_input.py:918(_same)
+                                  3098    0.015    0.020  feature_input.py:922(_off_line)
+                                  4532    0.001    0.003  shape_base.py:368(_stack_dispatcher)
+                                  4532    0.017    0.019  shape_base.py:378(stack)
+                                  4532    0.005    0.150  strtree.py:108(query)
+                                343085    0.023    0.023  {built-in method builtins.len}
+                                   746    0.039    0.039  {built-in method numpy.array}
+                                  4532    0.001    0.001  {built-in method numpy.zeros}
+                                  4532    0.001    0.005  {method 'any' of 'numpy.ndarray' objects}
+                                836711    0.063    0.063  {method 'append' of 'list' objects}
+
+
+### callees of simplify_borders
+   Ordered by: cumulative time
+   List reduced from 1429 to 2 due to restriction <'simplify_borders'>
+
+Function                                             called...
+                                                         ncalls  tottime  cumtime
+border_simplify.py:40(simplify_borders)              ->    1843    0.000    0.000  base.py:770(is_empty)
+                                                           4121    0.002    0.021  decorators.py:182(wrapper)
+                                                              1    0.000    0.000  fromnumeric.py:2872(_cumsum_dispatcher)
+                                                              1    0.000    0.000  fromnumeric.py:2876(cumsum)
+                                                              1    0.000    0.000  multiarray.py:197(concatenate)
+                                                             18    0.001    0.003  multipolygon.py:53(__new__)
+                                                           1840    0.000    0.001  polygon.py:154(__iter__)
+                                                           2256    0.000    0.001  polygon.py:159(__next__)
+                                                           1840    0.002    0.023  polygon.py:238(__new__)
+                                                           1840    0.001    0.002  polygon.py:267(interiors)
+                                                             22    0.000    0.000  {built-in method builtins.isinstance}
+                                                              1    0.000    0.000  {built-in method builtins.iter}
+                                                              1    0.000    0.000  {built-in method builtins.len}
+                                                           2256    0.000    0.001  {built-in method builtins.next}
+                                                              2    0.000    0.000  {built-in method numpy.asarray}
+                                                              1    0.634    0.634  {built-in method tin_engine._core.simplify_borders}
+                                                             25    0.000    0.000  {method 'append' of 'list' objects}
+                                                              1    0.000    0.000  {method 'tolist' of 'numpy.ndarray' objects}
+{built-in method tin_engine._core.simplify_borders}  ->       1    0.000    0.000  _version.py:53(__init__)
+
+
+### callees of _outline_lines
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_outline_lines'>
+
+Function                              called...
+                                          ncalls  tottime  cumtime
+feature_input.py:714(_outline_lines)  ->    9149    0.004    0.059  decorators.py:182(wrapper)
+                                            2256    0.016    0.098  feature_input.py:737(_chains)
+                                            4512    0.011    0.011  measurement.py:51(distance)
+                                              25    0.000    0.000  multiarray.py:197(concatenate)
+                                            2281    0.001    0.001  shape_base.py:368(_stack_dispatcher)
+                                            2281    0.009    0.010  shape_base.py:378(stack)
+                                              25    0.027    0.028  strtree.py:75(__init__)
+                                            2256    0.002    0.061  strtree.py:108(query)
+                                            2256    0.000    0.000  {built-in method builtins.len}
+                                            2256    0.001    0.001  {built-in method numpy.zeros}
+                                            2256    0.001    0.001  {method 'tolist' of 'numpy.ndarray' objects}
+
+
+### callees of _add
+   Ordered by: cumulative time
+   List reduced from 1429 to 5 due to restriction <'_add'>
+
+Function                                   called...
+                                               ncalls  tottime  cumtime
+feature_input.py:383(_add)                 ->       3    0.000    0.000  base.py:882(intersects)
+                                                 2675    0.002    0.185  feature_input.py:389(<genexpr>)
+                                                 1464    0.000    0.004  feature_input.py:402(<genexpr>)
+                                                   22    0.000    0.000  main.py:270(__init__)
+                                                   22    0.000    0.000  {method 'append' of 'list' objects}
+enum.py:1042(_add_member_)                 ->    2018    0.000    0.002  {built-in method builtins.setattr}
+                                                10115    0.001    0.001  {method 'get' of 'mappingproxy' objects}
+dataclasses.py:1338(_add_slots)            ->       1    0.000    0.000  annotationlib.py:928(get_annotations)
+                                                    7    0.000    0.000  dataclasses.py:1284(_update_func_cell_for__class__)
+                                                    1    0.000    0.000  dataclasses.py:1313(_create_slots)
+                                                   14    0.000    0.000  dataclasses.py:1353(<genexpr>)
+                                                    1    0.000    0.000  dataclasses.py:1454(fields)
+                                                   11    0.000    0.000  inspect.py:668(unwrap)
+                                                    4    0.000    0.000  {built-in method builtins.getattr}
+                                                   16    0.000    0.000  {built-in method builtins.isinstance}
+                                                    1    0.000    0.000  {built-in method from_iterable}
+                                                    1    0.000    0.000  {built-in method sys._clear_type_descriptors}
+                                                   13    0.000    0.000  {method 'pop' of 'dict' objects}
+                                                    1    0.000    0.000  {method 'values' of 'dict' objects}
+                                                    1    0.000    0.000  {method 'values' of 'mappingproxy' objects}
+dataclasses.py:943(_hash_add)              ->       1    0.000    0.000  dataclasses.py:424(_tuple_str)
+                                                    1    0.000    0.000  dataclasses.py:446(add_fn)
+typing.py:2458(_add_type_params_to_scope)  -> 
+
+
+### callees of _loops
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_loops'>
+
+Function                      called...
+                                  ncalls  tottime  cumtime
+feature_input.py:691(_loops)  ->    1596    0.131    0.132  constructive.py:667(make_valid)
+                                    1596    0.000    0.000  multiarray.py:197(concatenate)
+                                    1596    0.002    0.021  polygon.py:238(__new__)
+                                  162027    0.010    0.010  {built-in method builtins.len}
+                                    3192    0.002    0.002  {built-in method numpy.arange}
+                                    1596    0.000    0.000  {method 'append' of 'list' objects}
+
+
+### callees of _place
+   Ordered by: cumulative time
+   List reduced from 1429 to 4 due to restriction <'_place'>
+
+Function                      called...
+                                  ncalls  tottime  cumtime
+feature_input.py:846(_place)  ->     373    0.000    0.014  decorators.py:182(wrapper)
+                                   10646    0.012    0.028  feature_input.py:865(_vertex)
+                                    5070    0.012    0.020  feature_input.py:874(_at)
+                                   11020    0.001    0.001  multiarray.py:751(dot)
+                                     373    0.001    0.082  strtree.py:350(query_nearest)
+                                     373    0.000    0.000  {built-in method builtins.len}
+                                   11020    0.001    0.001  {built-in method builtins.max}
+                                   11056    0.001    0.001  {built-in method builtins.min}
+                                    5510    0.004    0.004  {built-in method builtins.round}
+                                    5546    0.001    0.001  {method 'get' of 'dict' objects}
+                                     373    0.000    0.000  {method 'items' of 'dict' objects}
+mosaic.py:295(_placed)        ->       4    0.000    0.000  {built-in method builtins.max}
+                                       4    0.000    0.000  {built-in method builtins.min}
+                                    1016    0.000    0.000  {built-in method builtins.round}
+geotiff.py:305(_placement)    ->     270    0.000    0.000  {method 'get' of 'dict' objects}
+mosaic.py:408(_placement)     ->      96    0.000    0.000  main.py:270(__init__)
+                                      64    0.000    0.000  {built-in method builtins.max}
+                                      64    0.000    0.000  {built-in method builtins.min}
+
+
+### callees of _join
+   Ordered by: cumulative time
+   List reduced from 1429 to 3 due to restriction <'_join'>
+
+Function                                                called...
+                                                            ncalls  tottime  cumtime
+feature_input.py:880(_join)                             ->    2778    0.000    0.000  feature_input.py:899(<genexpr>)
+                                                              2692    0.000    0.000  fromnumeric.py:1455(_searchsorted_dispatcher)
+                                                              2692    0.001    0.004  fromnumeric.py:1459(searchsorted)
+                                                              2692    0.000    0.000  {built-in method builtins.len}
+                                                              2692    0.000    0.000  {built-in method builtins.min}
+{built-in method _thread.start_joinable_thread}         -> 
+<frozen importlib._bootstrap_external>:131(_path_join)  ->      37    0.000    0.000  {method 'join' of 'str' objects}
+                                                                84    0.000    0.000  {method 'rstrip' of 'str' objects}
+
+
+### callees of _cut
+   Ordered by: cumulative time
+   List reduced from 1429 to 1 due to restriction <'_cut'>
+
+Function                    called...
+                                ncalls  tottime  cumtime
+feature_input.py:831(_cut)  ->    3800    0.000    0.000  multiarray.py:751(dot)
+                                  1900    0.000    0.000  {built-in method math.ceil}
+                                  1900    0.000    0.000  {built-in method math.floor}
+                                  1900    0.000    0.000  {built-in method math.hypot}
+                                  1900    0.001    0.001  {built-in method numpy.arange}
+
+
+### callees of pre_clip
+### callees of _runs
+### callees of _chains
+   Ordered by: cumulative time
+   List reduced from 1429 to 2 due to restriction <'_chains'>
+
+Function                       called...
+                                   ncalls  tottime  cumtime
+feature_input.py:737(_chains)  ->    3617    0.044    0.248  linestring.py:45(__new__)
+                                     2629    0.001    0.001  {built-in method builtins.any}
+                                    22932    0.002    0.002  {built-in method builtins.len}
+                                   181812    0.013    0.013  {method 'append' of 'list' objects}
+                                      825    0.001    0.001  {method 'index' of 'list' objects}
+chains.py:36(start_chains)     ->    2651    0.003    0.004  chains.py:45(add)
+                                     2651    0.001    0.004  decorators.py:182(wrapper)
+                                       22    0.000    0.000  features.py:125(names)
+                                        1    0.000    0.000  multiarray.py:197(concatenate)
+                                        1    0.000    0.000  polygon.py:154(__iter__)
+                                        1    0.000    0.000  polygon.py:159(__next__)
+                                        1    0.000    0.000  polygon.py:167(__len__)
+                                        1    0.000    0.000  polygon.py:262(exterior)
+                                        1    0.000    0.000  polygon.py:267(interiors)
+                                     2650    0.000    0.000  {built-in method builtins.len}
+                                     2573    0.001    0.002  {method 'all' of 'numpy.ndarray' objects}
+                                        1    0.000    0.000  {method 'astype' of 'numpy.ndarray' objects}
+
+
