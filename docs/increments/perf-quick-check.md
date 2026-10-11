@@ -74,6 +74,8 @@ that judgment misses.
 | `quarter` | same DEM, `docs/benchmarks/2026-09-26/quarter.geojson` | default | 5 | 0.80 s |
 | `numedalslagen` | DTM10, NVE outline, `corine2018_dtm10_utm33.gpkg`, `--tolerance 10` | default | 1 warm-up + 3 | 6.97 s |
 | `lagan` | GLO-30 cache, SMHI outline, the European CORINE GeoPackage (`U2018_CLC2018_V2020_20u1.gpkg`, 8.9 GB), `--out-crs EPSG:3006`, `--tolerance 10` | default | 1 warm-up + 3 | 16.97 s after 30d |
+| `geilo-al-ramp` | DTM10, increment 33's Geilo-Ål section and the Bergen Line, `--tolerance 20 --tolerance-near ... 1 --tolerance-ramp 0 3000` (`docs/increments/33-feature-tolerance.md`) | default | 1 warm-up + 3 | 0.33 s (median of `total`, `docs/benchmarks/quick/baseline-ac.json`, 2026-10-09) |
+| `romsdal-slope` | DTM10 tile `6901_3`, `--tolerance 10 --tolerance-slope 2 25 35`; its input key the DTM10 directory (`docs/increments/34-slope-tolerance.md`, section 10) | default | 1 warm-up + 3 | not built yet: about 4 to 5 s estimated (increment 34, section 6) |
 
 The catchments are two of 30d's cases, one per feature path that a real run
 takes: a pre-cut national GeoPackage in the DEM's CRS, and the continental

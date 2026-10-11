@@ -145,7 +145,7 @@ the same `node(round) == p` test (`lattice_position`, `include/terrain/refinemen
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
 2. **On the tolerance path the two samplers must agree.** refine measures and
-   carves with `vertex_z` (`include/terrain/refinement/scan.hpp:75-99`) and
+   carves with `vertex_z` (`include/terrain/refinement/scan.hpp@da3d1d63:75-99`) and
    writes the output z of an off-node start vertex with `raster::bilinear`
    (`include/terrain/refinement/refine.hpp@ed125121:425-426`). If only `bilinear` skipped cell-side corners, a domain
    vertex on a lattice line next to NoData would be void to the scan but valid
@@ -169,7 +169,7 @@ measured run shows ragged seams along NoData.
 | no `--tolerance`, stride grid (12's R6) | **yes** | every vertex is a node; a valid node next to NoData keeps its height and its triangles |
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
 | `--tolerance`, start-boundary / domain output z (`include/terrain/refinement/refine.hpp@ed125121:425-426`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
-| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:86-87`) |
+| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`include/terrain/refinement/scan.hpp@da3d1d63:86-87`) |
 | `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`src_python/tin_engine/target_grid.py@44fa7f5:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
 | a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`src_python/tin_engine/target_grid.py@44fa7f5:48`), so they are exact |
 

@@ -1,14 +1,14 @@
 # Increment 33: a vertical tolerance that varies with distance to named lines
 
-**Status:** built (`@developer`), 469 counted lines against section 10's
-estimate of 310-425 (reconciled there); not pushed. Design review round 3
+**Status:** merged as #220, 469 counted lines against section 10's
+estimate of 310-425 (reconciled there). Design review round 3
 approved; red step `6c64b120`, its pins ruled in 9.1; kill record in 9.2;
 green-step pins in 9.3. Code review round 1 asked for changes; the code fixes
 are in (`c2ddd679` tests, `7101f514` code) and its prose fixes in this file;
 round 2's multi-block test is `2a2d5f05`; code review round 3 approved, and
 its suggestion built in `0b1235a7`; round 4's two prose fixes made.
 `@perf`'s acceptance run accepted (`21853bf1`); code review round 5
-approved. Next: the push on Ola's yes.
+approved.
 Questions for Ola in section 12; the design is written on their defaults, and
 section 8's refusal of a non-finite coordinate on a default taken while Ola
 was away.

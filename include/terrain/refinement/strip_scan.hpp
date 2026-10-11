@@ -26,6 +26,7 @@
 #include <optional>
 #include <span>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 
 namespace terrain::refinement::detail {
@@ -34,11 +35,12 @@ enum class PointSet : std::uint8_t { Source, Strip, Dem };
 
 // One triangle's scan: the winner across sets (for the split), and the
 // non-strip set's own largest error and every set's uncovered count (L4).
-struct PointScan {
+// With a slope (34, 4.3) a second one is the slope's winner; SlopeRank holds
+// the winner's error.
+struct PointScan : SlopeRank {
     double max_error = 0.0;                  // the non-strip set's own; 0 when void
     std::optional<mesh::MeshVertex> point;  // the winner, or a void carve point
     double z = 0.0;                          // its z
-    double error = 0.0;                      // its error
     NodeLocation where = NodeLocation::Inside;
     bool is_void = false;       // the winner is a carve point (source: the triangle is void)
     std::size_t uncovered = 0;  // points of every set in void triangles or on void sub-edges
@@ -52,9 +54,21 @@ struct PointScan {
     void offer(const PointScan& c) {
         if ((point && is_void) || !(c.is_void || !point || c.error > error))
             return;
+        take(c);
+    }
+    // c's winner, keeping this triangle's own figures.
+    void take(const PointScan& c) {
         const auto own = std::tuple{max_error, uncovered, on_frozen, frozen_error};
         *this = c;
         std::tie(max_error, uncovered, on_frozen, frozen_error) = own;
+    }
+    // The slope's winner across sets: `over` is the OR, and the strictly
+    // larger (ratio, error) wins, so ties go to the earlier set.
+    void offer_steep(const PointScan& c) {
+        const bool o = over || c.over;
+        if (c.ratio > ratio || (c.ratio == ratio && c.error > error))
+            *this = c;
+        over = o;
     }
 };
 
@@ -82,10 +96,13 @@ using SubEdges = std::unordered_map<std::uint64_t, SubEdge>;
 // The strip's candidate in t, offered to r: over the sub-edges t owns, the
 // unrefused points strictly inside, the worst by strictly larger error (lower
 // edge index, then lower s, on ties); on a void sub-edge the point nearest an
-// invalid end, its points counted in `uncovered` (D4 step 2).
-inline void scan_strip(const ConstraintCheckPoints& strip, std::span<const std::size_t> offset,
-                       std::span<const char> refused, const SubEdges& subs, const mesh::LatticeMesh& m,
-                       std::span<const double> zt, std::uint32_t t, PointScan& r) {
+// invalid end, its points counted in `uncovered` (D4 step 2). With a slope,
+// every valid point is also offered to `steep`, held to its cell's class.
+template <class S = NoSlope>
+void scan_strip(const ConstraintCheckPoints& strip, std::span<const std::size_t> offset,
+                std::span<const char> refused, const SubEdges& subs, const mesh::LatticeMesh& m,
+                std::span<const double> zt, std::uint32_t t, PointScan& r, const S* slope = nullptr,
+                PointScan* steep = nullptr) {
     const auto& tri = m.triangles()[t];
     PointScan best;
     double nearest = std::numeric_limits<double>::infinity();
@@ -122,8 +139,15 @@ inline void scan_strip(const ConstraintCheckPoints& strip, std::span<const std::
                     nearest = d;
                     best = c;
                 }
-            } else if (c.error = std::abs(p.z - along(se, zt, p.s)); !best.is_void && c.error > best.error) {
-                best = c;
+            } else {
+                c.error = std::abs(p.z - along(se, zt, p.s));
+                if (!best.is_void && c.error > best.error)
+                    best = c;
+                if constexpr (!std::is_same_v<S, NoSlope>) {
+                    const std::uint8_t k = slope->cell_class(p.at);
+                    std::tie(c.over, c.ratio) = std::pair{c.error > slope->allowed(k), c.error * slope->weight(k)};
+                    steep->offer_steep(c);
+                }
             }
         }
     }

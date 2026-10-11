@@ -325,6 +325,24 @@ class LineTolerance:
         margin: float,
     ) -> None: ...
 
+@final
+class SlopeTolerance:
+    """A tolerance that follows the slope (increment 34): every DEM node of
+    ``view`` held to ``near`` from ``end`` degrees of its slope up, to ``far``
+    up to ``start`` degrees, linear between. A bad bound is a ``ValueError``."""
+
+    def __init__(
+        self,
+        view: RasterView,
+        near: float,
+        far: float,
+        start: float,
+        end: float,
+        threads: int = ...,
+    ) -> None: ...
+    def histogram(self) -> list[int]:
+        """Nodes per class (half degrees, rounded up); entry 255 counts NoData."""
+
 def raster_view(
     array: npt.NDArray[np.float32] | npt.NDArray[np.float64],
     *,
@@ -388,6 +406,14 @@ class RefineOutcome:
         """``max_error`` over the triangles a field holds to its near value;
         ``max_error`` without a field."""
     @property
+    def max_slope_share(self) -> float:
+        """The largest error as a share of the tolerance its slope allows; 0.0
+        without a slope."""
+    @property
+    def slope_nodes(self) -> tuple[int, int]:
+        """(valid DEM nodes inside the mesh, those held below the general
+        tolerance by their slope); (0, 0) without a slope."""
+    @property
     def uncovered(self) -> int: ...
     @property
     def carved(self) -> int: ...
@@ -427,6 +453,7 @@ def refine(
     frozen_mask: int = ...,
     min_gain_deg: float = ...,
     field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
@@ -439,7 +466,9 @@ def refine(
     smallest angle around it by that much, and with ``constraint_feet``
     splits a line the point lies beyond; negative is off. ``field``, built on
     this view's geometry, sets each triangle's tolerance instead of
-    ``tolerance``; another geometry is a ``ValueError``."""
+    ``tolerance``; another geometry is a ``ValueError``. ``slope``, built
+    on this view's geometry too, holds every DEM node to its own slope's
+    tolerance as well."""
 
 @final
 class CheckPoints:
@@ -534,6 +563,7 @@ def refine_strip(
     frozen_mask: int = ...,
     constraint_feet: bool = ...,
     field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
 ) -> PointRefineOutcome:
     """The edge strip on the projected path: refine's output refined until every
     strip point is within ``tolerance``, the DEM's nodes rescanned in every
@@ -556,6 +586,7 @@ def refine_points(
     frozen_mask: int = ...,
     constraint_feet: bool = ...,
     field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
 ) -> PointRefineOutcome:
     """Refine phase 1's mesh until every check point in a frozen store, and
     every point of ``strip``, is within ``tolerance``. Releases the GIL; the

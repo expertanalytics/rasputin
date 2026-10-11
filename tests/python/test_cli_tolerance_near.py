@@ -229,10 +229,11 @@ class TestStub:
     def test_line_tolerance_is_declared(self) -> None:
         assert isinstance(self.declared().get("LineTolerance"), ast.ClassDef)
 
-    def test_refine_takes_the_field_last_by_keyword(self) -> None:
+    def test_refine_takes_the_field_by_keyword_before_increment_34s_slope(self) -> None:
+        """The field went last; increment 34 adds ``slope`` after it."""
         fn = self.declared().get("refine")
         assert isinstance(fn, ast.FunctionDef)
-        assert [a.arg for a in fn.args.kwonlyargs][-1] == "field"
+        assert [a.arg for a in fn.args.kwonlyargs][-2:] == ["field", "slope"]
 
     def test_the_outcome_carries_max_error_near(self) -> None:
         cls = self.declared().get("RefineOutcome")

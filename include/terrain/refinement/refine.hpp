@@ -52,6 +52,13 @@
 // scan asks at() only for an error between lowest() and highest(), and the
 // serial phase for a foot where the scan did not. UniformTolerance never asks
 // and keeps no per-slot vector, so the plain overload is today's run.
+//
+// A slope (docs/increments/34-slope-tolerance.md, 4.3): with Sloped<P> a
+// triangle also splits when a node's error is above allowed(its class), the
+// SlopeScan's `over`, and then the node inserted is the slope's; the triangle
+// part is not asked about it (its slot holds -inf). The foot's epsilon takes
+// the smaller of the triangle part's allowed error and that of the node's
+// class. max_slope_share and slope_nodes report the final triangles.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -65,6 +72,7 @@
 #include <terrain/raster/sample.hpp>
 #include <terrain/refinement/line_tolerance.hpp>
 #include <terrain/refinement/scan.hpp>
+#include <terrain/refinement/slope_tolerance.hpp>
 
 #include <algorithm>
 #include <array>
@@ -122,6 +130,8 @@ struct RefineOutcome {
     std::size_t quality_line_splits = 0;  // 20c R8's splits, in no count above
     std::size_t feet = 0;              // feet inserted, a subset of `inserted`
     std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
+    double max_slope_share = 0.0;      // 34: the largest error * weight(class); 0 without a slope
+    SlopeNodes slope_nodes;            // 34: 4.5's count; zero without a slope
 
     // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
     // for_each_block joins its workers before returning, so no worker reads a
@@ -267,9 +277,16 @@ template <raster::RasterSource R>
 }
 
 // A policy that may allow different triangles different errors keeps one
-// allowed error per slot; UniformTolerance keeps none (4.4).
+// allowed error per slot; UniformTolerance keeps none (4.4), Sloped or not.
 template <class P>
-inline constexpr bool varies = !std::is_same_v<P, UniformTolerance>;
+inline constexpr bool varies = !std::is_same_v<typename SlopeParts<P>::Triangle, UniformTolerance>;
+template <class P>
+[[nodiscard]] auto slope_of(const P& p) noexcept {
+    if constexpr (is_sloped<P>)
+        return p.slope;
+    else
+        return static_cast<const NoSlope*>(nullptr);
+}
 struct NoVector {};
 template <class P>
 using Allowed = std::conditional_t<varies<P>, std::vector<double>, NoVector>;
@@ -353,6 +370,14 @@ template <raster::RasterSource R, TolerancePolicy P>
     }
     std::vector<ScanResult> results;
     [[maybe_unused]] detail::Allowed<P> allowed;
+    constexpr bool sloped = is_sloped<P>;
+    [[maybe_unused]] std::conditional_t<sloped, std::vector<SlopeScan>, detail::NoVector> slopes;
+    const auto over = [&](std::uint32_t t) {
+        if constexpr (sloped)
+            return slopes[t].over;
+        else
+            return false;
+    };
     const auto limit = [&](std::uint32_t t) {
         if constexpr (detail::varies<P>)
             return allowed[t];
@@ -371,14 +396,26 @@ template <raster::RasterSource R, TolerancePolicy P>
         results.resize(m.triangle_count());
         if constexpr (detail::varies<P>)
             allowed.resize(m.triangle_count());
+        if constexpr (sloped)
+            slopes.resize(m.triangle_count());
         t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
                                           for (std::size_t i = begin; i < end; ++i) {
-                                              results[active[i]] = scan(dem, m, active[i]);
+                                              const std::uint32_t t = active[i];
+                                              if constexpr (sloped) {
+                                                  slopes[t] = SlopeScan{};
+                                                  results[t] = scan(dem, m, t, 0.0, policy.slope, &slopes[t]);
+                                                  if (slopes[t].over)  // the node inserted is the slope's
+                                                      std::tie(results[t].node, results[t].where) =
+                                                          std::pair{slopes[t].node, slopes[t].where};
+                                              } else {
+                                                  results[t] = scan(dem, m, t);
+                                              }
                                               if constexpr (detail::varies<P>)
-                                                  allowed[active[i]] = detail::allowed_at(
-                                                      policy, m, active[i], results[active[i]].max_error);
+                                                  allowed[t] = over(t) ? -std::numeric_limits<double>::infinity()
+                                                                       : detail::allowed_at(policy, m, t,
+                                                                                            results[t].max_error);
                                           }
                                       });
         out.scan_seconds += since(t0);
@@ -392,7 +429,7 @@ template <raster::RasterSource R, TolerancePolicy P>
         bool any = false;
         for (const std::uint32_t t : active) {
             const ScanResult& r = results[t];
-            if (!detail::needs_split(r, limit(t)))
+            if (!over(t) && !detail::needs_split(r, limit(t)))
                 continue;
             any = true;
             if (touched[t] != 0)
@@ -414,7 +451,9 @@ template <raster::RasterSource R, TolerancePolicy P>
                          ? mesh::constraint_foot(m, t, p, foot_cap, frame)
                          : mesh::FootSearch{};
             if (s.status != mesh::FootStatus::None && !footed.contains({r.node->row, r.node->col})) {
-                const double tol = limit(t) >= 0.0 ? limit(t) : policy.at(m, t);  // 4.4: t is unchanged here
+                double tol = limit(t) >= 0.0 ? limit(t) : policy.at(m, t);  // 4.4: t is unchanged here
+                if constexpr (sloped)
+                    tol = std::min(tol, policy.slope->allowed(policy.slope->row(r.node->row)[r.node->col]));
                 if (const double eps = detail::foot_epsilon(dem, *r.node, tol); eps < foot_cap)
                     s = mesh::constraint_foot(m, t, p, eps, frame);
                 foot = detail::usable(s, s.status == mesh::FootStatus::Hit && vertex_z(dem, s.at), refused);
@@ -471,6 +510,11 @@ template <raster::RasterSource R, TolerancePolicy P>
         out.max_error_near = detail::max_error_near(policy, m, allowed, options.threads, [&](std::uint32_t t) {
             return results[t].is_void ? 0.0 : results[t].max_error;
         });
+    if constexpr (sloped) {
+        for (const SlopeScan& s : slopes)
+            out.max_slope_share = std::max(out.max_slope_share, s.ratio);
+        out.slope_nodes = count_slope_nodes(m, *policy.slope, options.threads);
+    }
     for (std::size_t i = 0; i < m.vertices().size(); ++i) {
         const mesh::MeshVertex v = m.vertices()[i];
         const bool node = v.is_node();
