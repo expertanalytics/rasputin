@@ -1,0 +1,15 @@
+SLOWER: lagan total 14.57 -> 19.30 s (+32.4 %, band 5.0 %)
+SLOWER: lagan features clip 6.35 -> 11.16 s (+75.8 %, band 5.0 %)
+SLOWER: lagan features clip: clean-up 5.41 -> 7.08 s (+30.8 %, band 5.0 %)
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 48 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip 69 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 68 % of the run (not in hotspots.toml)
+HOTSPOT: lagan features clip 58 % of the run (ruled at 41 %, grown 10 points or more)
+HOTSPOT: geilo-al-ramp decode 42 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/benchmarks/quick/baseline-ac.json
+SLOWER
+exit 1
