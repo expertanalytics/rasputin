@@ -1270,10 +1270,13 @@ def _write_geopackage(
                 conn, mesh.vertices, mesh.edges, mesh.edge_masks, DEFAULT_VOCABULARY, srs.srs_id
             )
         if codes is not None:
-            write_land_cover(conn, cover, palette, srs.srs_id)
+            # A coded source may leave no polygon inside the domain: then there
+            # is no land_cover layer to draw, and no style row for it either.
+            if cover:
+                write_land_cover(conn, cover, palette, srs.srs_id)
             write_classes(conn)
             if palette is not None:
-                write_styles(conn, palette, ["triangles", "land_cover"])
+                write_styles(conn, palette, ["triangles", *(["land_cover"] if cover else [])])
         rows = [("rasputin_version", "rasputin version", installed_version(), None)]
         rows.append(("command", "command", _command(), None))
         write_run(conn, [*rows, *((e.name, e.wording, e.value, e.number) for e in record.entries)])
