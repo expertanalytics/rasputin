@@ -7,7 +7,7 @@
 commit message), fix-up `7085dddf` (the `.part` housekeeping moved to the
 CLI); 377 net production lines by `python3 tools/count_loc.py 81a551b3 HEAD` (the merge base; `3e6f87eb` gives the same count)
 against the design's about 305; section 11 is the as-built record; `@perf`'s
-acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section). Next: @tester's red test for the empty land-cover case, @developer's guard, review round 2.
+acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section), fixed: red test `55cc3c3e` (`@tester`), guard `18442b27` (`@developer`), 378 net lines. Next: code review round 2.
 
 ## 1. What Ola asked
 
@@ -148,7 +148,9 @@ No R-tree (67,240 rows on Numedalslagen draw in one scan).
 **`land_cover`** (MultiPolygon, 2D), one row per coded polygon of the
 features after the clip and the clean-up (`FeatureSet.features` with a
 `polygon` and a `code`, the polygons `_land_cover` labels from): `code`,
-`land_cover`, `colour`, `area_m2`. Written only when a coded source ran.
+`land_cover`, `colour`, `area_m2`. Written only when a coded source ran and
+at least one polygon lies in the domain; otherwise absent (as built, review
+round 1).
 22 rows on Numedalslagen; cheap, so kept (the ROADMAP's constraint-polygons
 layer). Constraint lines from non-coded sources are already in `lines`.
 
@@ -168,7 +170,8 @@ record order, straight from `RunRecord.entries`
 (`dem_source`) and the CRS are in the file. `--record` and `--stats` are
 unchanged and still work beside a `.gpkg`.
 
-**`layer_styles`** (QGIS), one row each for `triangles` and `land_cover`,
+**`layer_styles`** (QGIS), one row each for `triangles` and, when that layer
+exists, `land_cover`,
 `useAsDefault = 1`: a categorised style on `code` with the palette's colours
 and labels, the stopgap's QML with its three `<prop>`/`<Option>` pairs, as
 a raw-string template. Written only when the class map names a palette.
@@ -418,6 +421,17 @@ for an unused property. Deviation: M3 dies by GEOS "ring not closed" and the
 WKB type assertion, not the design's predicted flat Polygon. Red scaffolding
 removed in the same commit: the `importlib.import_module` fixtures and the
 red notes in both test files.
+
+**Review-round-1 fix** `55cc3c3e` (`@tester`) + `18442b27` (`@developer`):
+`TestLandCover::test_a_coded_run_with_no_polygon_in_the_domain_writes_without_a_land_cover_layer`
+(a corine-mapped GeoJSON holding one LineString across the domain, so the clip
+leaves no polygon): the `.gpkg` run exits 0, `land_cover` is absent as a table
+and from `gpkg_contents`, `triangles.code` is 0 everywhere and equals the
+`.vtk`'s, `land_cover_classes` has exactly the code-0 row. Guard in `cli.py`
+only: `write_land_cover` runs `if cover:`, and `write_styles` gets
+`"land_cover"` only then, so no `layer_styles` row names an absent layer (the
+default taken; the test pins neither way). Whole suite 7163 passed, 17
+skipped; gates clean; 378 net counted lines (+1).
 
 **Decided on defaults while Ola was away** (section 10): R-tree always on;
 all eight triangle attributes; fixed 1970 timestamps; the source-polygon ID a
