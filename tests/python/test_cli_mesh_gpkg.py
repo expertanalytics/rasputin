@@ -1,4 +1,4 @@
-"""`rasputin mesh --out X.gpkg`: a GeoPackage of the mesh (increment 36, red).
+"""`rasputin mesh --out X.gpkg`: a GeoPackage of the mesh (increment 36).
 
 `docs/increments/36-geopackage-output.md`, sections 4, 5 and 8: the CLI half
 of T3 to T9. Two fixtures carry it:
@@ -16,7 +16,7 @@ section 4 says `fid - 1` is the triangle's or edge's index in it, and the mesh
 is deterministic. Every figure is recomputed from the arrays here, never read
 from the file under test.
 
-Pinned beyond the design's text (listed in the red handback):
+Pinned beyond the design's text:
 
 - The refusal sentences are matched as "layer of the GeoPackage" with
   "lines" (for `--out-edges`) and "applies to .vtk and .ply" (for `--ascii`),

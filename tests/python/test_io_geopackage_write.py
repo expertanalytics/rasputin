@@ -1,4 +1,4 @@
-"""`tin_engine.io.geopackage_write` and `crs.srs_entry` (increment 36, red).
+"""`tin_engine.io.geopackage_write` and `crs.srs_entry` (increment 36).
 
 `docs/increments/36-geopackage-output.md`, section 8: the unit half of T1 to
 T7 on F1, a hand-made mesh in a `:memory:` GeoPackage, and T2 on F2's arrays.
@@ -11,7 +11,7 @@ F1: four vertices (0,0,0), (1,0,1), (1,1,2), (0,1,3); triangles (0,1,2) and
 `atan(sqrt 2)` = 54.7356 deg and `atan(sqrt 10)` = 72.4516 deg (the triangle
 plane's normal (-1,-1,1) and (1,-3,1)).
 
-Pinned beyond the design's text (listed in the red handback):
+Pinned beyond the design's text:
 
 - `write_triangles` leaves the layer registered (`gpkg_contents`,
   `gpkg_geometry_columns`) and indexed; `write_lines` leaves it registered.
@@ -22,22 +22,16 @@ Pinned beyond the design's text (listed in the red handback):
 - `geometry_type_name` is the OGC name in capitals: `POLYGON`, `LINESTRING`.
 - `write_run(conn, rows)` takes `(name, wording, value, number)` tuples.
 - `srs_entry` never raises: text pyproj refuses gives the `-1` entry.
-
-The modules under test are imported inside fixtures, so collection succeeds
-and each test fails on its own with `ModuleNotFoundError` (the writer) or
-`AttributeError` (`crs.srs_entry`).
 """
 
 from __future__ import annotations
 
 import ast
-import importlib
 import math
 import sqlite3
 import struct
 from collections.abc import Iterator
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -49,8 +43,11 @@ from pyproj.enums import WktVersion
 from cli_driver import invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from gpkg_fixtures import needs_rtree
+from tin_engine.crs import srs_entry
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.io import geopackage_write
 from tin_engine.io.geopackage import GpkgLayer, layer_info, query_features
+from tin_engine.io.models import SrsEntry
 from tin_engine.palettes import CORINE_NATURAL
 from vtkread import polygons_as_array, read_vtk
 
@@ -68,19 +65,9 @@ SLOPES_DEG = (math.degrees(math.atan(math.sqrt(2))), math.degrees(math.atan(math
 
 
 @pytest.fixture(scope="module")
-def gw() -> ModuleType:
-    return importlib.import_module("tin_engine.io.geopackage_write")
-
-
-@pytest.fixture(scope="module")
-def srs_entry() -> Any:
-    return importlib.import_module("tin_engine.crs").srs_entry
-
-
-@pytest.fixture(scope="module")
-def utm33(gw: ModuleType) -> Any:
+def utm33() -> SrsEntry:
     definition = CRS.from_epsg(UTM33).to_wkt(version=WktVersion.WKT1_GDAL)
-    return gw.SrsEntry(
+    return SrsEntry(
         srs_id=UTM33,
         organization="EPSG",
         code=UTM33,
@@ -90,18 +77,18 @@ def utm33(gw: ModuleType) -> Any:
 
 
 @pytest.fixture
-def conn(gw: ModuleType, utm33: Any) -> Iterator[sqlite3.Connection]:
+def conn(utm33: SrsEntry) -> Iterator[sqlite3.Connection]:
     """An in-memory GeoPackage with the `gpkg_*` tables and F1's SRS."""
     con = sqlite3.connect(":memory:")
-    gw.create_geopackage(con, utm33)
+    geopackage_write.create_geopackage(con, utm33)
     yield con
     con.close()
 
 
 @pytest.fixture
-def f1(gw: ModuleType, conn: sqlite3.Connection) -> sqlite3.Connection:
+def f1(conn: sqlite3.Connection) -> sqlite3.Connection:
     """F1's `triangles` layer, the CORINE palette naming its codes."""
-    gw.write_triangles(conn, VERTICES, TRIANGLES, CODES, CORINE_NATURAL, UTM33)
+    geopackage_write.write_triangles(conn, VERTICES, TRIANGLES, CODES, CORINE_NATURAL, UTM33)
     return conn
 
 
@@ -241,11 +228,11 @@ class TestIndexMatchesRows:
     and leave a partial batch of 9,571."""
 
     def test_every_fid_has_its_own_box_and_the_counts_agree(
-        self, gw: ModuleType, conn: sqlite3.Connection, f2_arrays: tuple[np.ndarray, np.ndarray]
+        self, conn: sqlite3.Connection, f2_arrays: tuple[np.ndarray, np.ndarray]
     ) -> None:
         vertices, triangles = f2_arrays
         assert len(triangles) == 69_571, "F2's figure in the design; a changed mesh changes T2"
-        gw.write_triangles(conn, vertices, triangles, None, None, UTM33, batch=30_000)
+        geopackage_write.write_triangles(conn, vertices, triangles, None, None, UTM33, batch=30_000)
         layer = layer_info(conn, "triangles")
         assert layer.rtree is not None
         (rows,) = conn.execute("SELECT count(*) FROM triangles").fetchone()
@@ -289,17 +276,17 @@ class TestAttributes:
         assert_allclose([r[7] for r in rows], SLOPES_DEG, atol=1e-9)
 
     def test_a_code_the_palette_lacks_is_unnamed_and_magenta(
-        self, gw: ModuleType, conn: sqlite3.Connection
+        self, conn: sqlite3.Connection
     ) -> None:
         codes = np.array([312, 999], dtype=np.int32)
-        gw.write_triangles(conn, VERTICES, TRIANGLES, codes, CORINE_NATURAL, UTM33)
+        geopackage_write.write_triangles(conn, VERTICES, TRIANGLES, codes, CORINE_NATURAL, UTM33)
         rows = conn.execute("SELECT code, land_cover, colour FROM triangles ORDER BY fid")
         assert rows.fetchall() == [(312, "Coniferous forest", "#1f5a2e"), (999, None, "#ff00ff")]
 
     def test_no_coded_land_cover_gives_null_code_on_every_row(
-        self, gw: ModuleType, conn: sqlite3.Connection
+        self, conn: sqlite3.Connection
     ) -> None:
-        gw.write_triangles(conn, VERTICES, TRIANGLES, None, None, UTM33)
+        geopackage_write.write_triangles(conn, VERTICES, TRIANGLES, None, None, UTM33)
         rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert rows == [(None, None, None)] * 2
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
@@ -324,17 +311,17 @@ class TestRunTable:
     """T5's unit half: the record as rows, keyed by `fid`, `name` unique."""
 
     def test_every_entry_is_a_row_in_record_order_with_its_number(
-        self, gw: ModuleType, conn: sqlite3.Connection
+        self, conn: sqlite3.Connection
     ) -> None:
-        gw.write_run(conn, RUN_ROWS)
+        geopackage_write.write_run(conn, RUN_ROWS)
         rows = conn.execute("SELECT fid, name, wording, value, number FROM run ORDER BY fid")
         assert rows.fetchall() == [(i, *row) for i, row in enumerate(RUN_ROWS, 1)]
         assert contents(conn, "run")[:2] == ("attributes", FIXED_TIME)
 
     def test_fid_is_the_integer_primary_key_and_name_is_unique(
-        self, gw: ModuleType, conn: sqlite3.Connection
+        self, conn: sqlite3.Connection
     ) -> None:
-        gw.write_run(conn, RUN_ROWS)
+        geopackage_write.write_run(conn, RUN_ROWS)
         assert columns(conn, "run")["fid"] == ("INTEGER", 1), "Requirement 119: a rowid alias"
         with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
             conn.execute(
@@ -351,9 +338,9 @@ class TestLines:
     on at least one edge, named as `write_vtk` names its cell arrays."""
 
     def test_the_diagonal_reads_back_with_its_length_and_its_river_bit(
-        self, gw: ModuleType, f1: sqlite3.Connection
+        self, f1: sqlite3.Connection
     ) -> None:
-        gw.write_lines(f1, VERTICES, EDGES, EDGE_MASKS, DEFAULT_VOCABULARY, UTM33)
+        geopackage_write.write_lines(f1, VERTICES, EDGES, EDGE_MASKS, DEFAULT_VOCABULARY, UTM33)
         layer = layer_info(f1, "lines")
         assert layer.srs_id == UTM33
         assert layer.rtree is None, "no R-tree on lines"
@@ -369,22 +356,18 @@ class TestLines:
         assert geometry_column(f1, "lines") == ("LINESTRING", UTM33, 1, 0)
         assert contents(f1, "lines") == ("features", FIXED_TIME, 0.0, 0.0, 1.0, 1.0, UTM33)
 
-    def test_a_property_set_on_no_edge_gets_no_column(
-        self, gw: ModuleType, f1: sqlite3.Connection
-    ) -> None:
+    def test_a_property_set_on_no_edge_gets_no_column(self, f1: sqlite3.Connection) -> None:
         edges = np.array([[0, 2], [1, 3]], dtype=np.int64)
         masks = np.array([RIVER, RIVER | ROAD], dtype=np.uint32)
-        gw.write_lines(f1, VERTICES, edges, masks, DEFAULT_VOCABULARY, UTM33)
+        geopackage_write.write_lines(f1, VERTICES, edges, masks, DEFAULT_VOCABULARY, UTM33)
         layer = layer_info(f1, "lines")
         attributes = set(columns(f1, "lines")) - {layer.pk, layer.column}
         assert attributes == {"length_m", "river", "road"}
         rows = f1.execute("SELECT river, road FROM lines ORDER BY fid").fetchall()
         assert rows == [(1, 0), (1, 1)]
 
-    def test_the_line_header_envelope_is_minx_maxx_miny_maxy(
-        self, gw: ModuleType, f1: sqlite3.Connection
-    ) -> None:
-        gw.write_lines(f1, VERTICES, EDGES, EDGE_MASKS, DEFAULT_VOCABULARY, UTM33)
+    def test_the_line_header_envelope_is_minx_maxx_miny_maxy(self, f1: sqlite3.Connection) -> None:
+        geopackage_write.write_lines(f1, VERTICES, EDGES, EDGE_MASKS, DEFAULT_VOCABULARY, UTM33)
         (blob,) = blobs(f1, layer_info(f1, "lines"))
         assert blob[3] == 0b0011
         assert struct.unpack_from("<4d", blob, 8) == bounds(VERTICES[[0, 2]])
@@ -402,22 +385,20 @@ TMERC_NO_CODE = (
 class TestSrsEntry:
     """T7's unit half: `crs.srs_entry` and the SRS rows `create_geopackage` writes."""
 
-    def test_an_epsg_code_is_its_own_srs_id_with_wkt1(self, srs_entry: Any) -> None:
+    def test_an_epsg_code_is_its_own_srs_id_with_wkt1(self) -> None:
         entry = srs_entry("EPSG:25833")
         assert (entry.srs_id, entry.organization, entry.code) == (UTM33, "EPSG", UTM33)
         assert entry.definition.startswith("PROJCS["), "WKT1_GDAL, what QGIS and GDAL read"
         assert "UTM zone 33N" in entry.name
 
-    def test_a_crs_without_a_code_gets_100000_and_wkt2(self, srs_entry: Any) -> None:
+    def test_a_crs_without_a_code_gets_100000_and_wkt2(self) -> None:
         entry = srs_entry(TMERC_NO_CODE)
         assert (entry.srs_id, entry.organization) == (100000, "rasputin")
         assert entry.definition.startswith("PROJCRS[")
         assert CRS(entry.definition).equals(CRS(TMERC_NO_CODE))
 
     @pytest.mark.parametrize("text", [None, "free text", "not-a-crs"])
-    def test_no_crs_or_text_pyproj_refuses_is_the_undefined_row(
-        self, srs_entry: Any, text: str | None
-    ) -> None:
+    def test_no_crs_or_text_pyproj_refuses_is_the_undefined_row(self, text: str | None) -> None:
         assert srs_entry(text).srs_id == -1
 
     def test_the_file_holds_the_reserved_rows_wgs84_and_the_run_crs(
@@ -430,12 +411,12 @@ class TestSrsEntry:
         assert (UTM33, "EPSG", UTM33) in rows
         assert (4326, "EPSG", 4326) in rows
 
-    def test_the_undefined_entry_adds_no_second_row(self, gw: ModuleType, srs_entry: Any) -> None:
+    def test_the_undefined_entry_adds_no_second_row(self) -> None:
         con = sqlite3.connect(":memory:")
-        gw.create_geopackage(con, srs_entry(None))
+        geopackage_write.create_geopackage(con, srs_entry(None))
         ids = [r[0] for r in con.execute("SELECT srs_id FROM gpkg_spatial_ref_sys ORDER BY 1")]
         assert ids == [-1, 0, 4326]
-        gw.write_triangles(con, VERTICES, TRIANGLES, None, None, -1)
+        geopackage_write.write_triangles(con, VERTICES, TRIANGLES, None, None, -1)
         assert layer_info(con, "triangles").srs_id == -1
         con.close()
 
