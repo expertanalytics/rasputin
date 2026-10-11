@@ -1,6 +1,6 @@
 # Increment 26: land cover for the São Francisco basin — water bodies as constraints, class fractions per triangle
 
-Status: **designed by `@architect`, 2026-10-03, at Ola's request; ruled by
+Status: **26a built** on branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; next `@perf`'s quick check, then code review). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
 Ola, 2026-10-04** (all eleven questions; "Ruled by Ola, 2026-10-04", below,
 and each question marked). Q8 was ruled against the recommendation:
 triangles inside a lake carry the raster's own mix, nothing is forced to
@@ -1478,6 +1478,56 @@ Each with the recommendation, which is the default if Ola does not rule.
 - Several years in one mesh file.
 - A cap on classes per triangle (measured harmful).
 
+
+## 13. As built: 26a (recorded by the main session from the handbacks)
+
+Ola picked 26a for the night of 2026-10-11 ("note down that we should finish
+the MapBiomas as well"; "go ahead on 2 and 3"). `@tester` checked the design
+of 2026-10-03 against today's code first and found no staleness.
+
+**Red** `cb5f254b` (`@tester`): 48 tests, all red, no network and no real
+MapBiomas bytes (a synthetic uint8 class raster in
+`tests/python/class_fixtures.py`, so no fixture licence line):
+`test_sources_mapbiomas.py` (16: the catalogue entry, the URL for 2025 and
+1985, the year range, the credit with date, refusals by `values`),
+`test_io_class_window.py` (20: `ClassWindow`, empty tiles as zeros, the
+PixelIsArea corner, LZW plus predictor via `needs_codecs`, strips over a
+box), `test_fetch_per_year.py` (9: one object per year, empty tiles, the fetch
+date, the NOTICE credit), `test_cli_mapbiomas.py` (5: `fetch --year`,
+`mesh --dem mapbiomas-c11` refused). Red command: `.venv/bin/python -m pytest
+tests/python/test_sources_mapbiomas.py tests/python/test_io_class_window.py
+tests/python/test_fetch_per_year.py tests/python/test_cli_mapbiomas.py -o
+addopts="" --no-cov`, 35 failed and 13 errors. Pins beyond the design, in
+`class_fixtures.py`'s docstring: `RemoteSource.years: tuple[int, ...]`,
+`values: Literal["heights", "classes"]`, `url_for(year=None)`,
+`credit_for(*, url, date)`, `check_values(source, wanted, option)`;
+`FetchRequest.year`, year refusals as `FetchError` before any request,
+`--year` on a source without years a usage error; `CachedObject.fetched: date
+| None` kept on later runs, NOTICE.txt carrying each object's rendered credit;
+`ClassWindow(x_min, y_max, delta_x, delta_y, array)` with `rows`, `cols`,
+`corner(row, col)`; `io.cog.decode_class_window(source, meta, window, *,
+threads)`; `CacheRepository.load_class_window(name, window)` and
+`class_strips(name, box, *, rows)` (cells whose interior meets the box,
+clipped to the raster; none is a plain `ValueError`); `mesh --dem <class
+source>` refused before any cache read. A `STEP` of 1/128 degree keeps the
+on-the-cell-edge cases exact.
+
+**Green** `8eec354b` (`@developer`): `sources.py` 49, `io/cog.py` 33,
+`io/repository.py` 32, `io/models.py` 23, `cli.py` 15, `fetch/run.py` 10,
+`fetch/plan.py` 1; 163 net counted lines. Whole Python suite 7192 passed, 17
+skipped; mypy strict, ruff, the governance gates green; `test_refine_golden.py`
+passes (`.vtk` untouched); `test_layering.py` passes, no new rows. Pins beyond
+the design: `sources.py` imports Pydantic alone (`test_cli_mesh_cache` pins
+it), so `credit_for`'s date is a `Dated` protocol with `isoformat()`;
+`notice(source, credits=())` lists each object's rendered credit,
+deduplicated, and leaves NOTICE.txt unchanged with no credits;
+`decode_class_window` refuses a page whose dtype is not uint8
+(`GeoTiffError`); strip cells are floor of the lower index and ceil of the
+upper, so a box edge on a cell edge takes neither neighbour; the
+block-decoding loop of `decode_window` moved into a shared `_decode_into`,
+behaviour unchanged, which is why `@perf`'s quick check runs before review.
+Lesson: running only the increment's suites missed an import-boundary test
+elsewhere; the full suite caught it.
 
 ## Review
 
