@@ -1,12 +1,18 @@
 # Increment 35 — the land-cover clean-up step, made faster
 
-Status: **designed** by `@architect`, 2026-10-11, on branch
-`worktree-cleanup-speed` at master `c7dba32e` (`@perf`'s profile commit,
-`docs/benchmarks/2026-10-11/cleanup-profile/README.md`). Every `file:line`
+Status: **built** on branch `worktree-cleanup-speed` (design `7da1d663`, review
+round 1 approved `7218dfb7`; red `c4130194` (`@tester`), green `e805d37f`
+(`@developer`, 23 net production lines by `python3 tools/count_loc.py c7dba32e
+HEAD`: `crs.py` +14, `feature_input.py` +9), mutation round `7621a99e` (M1-M4
+all killed, one count-based test added for M3); section 11 is the as-built
+record). Next: `@perf`'s quick check (section 7), then code review. Master
+`c7dba32e` is `@perf`'s profile commit
+(`docs/benchmarks/2026-10-11/cleanup-profile/README.md`). Every `file:line`
 below is pinned to `c7dba32e`. Every figure was measured on this worktree's
 `.venv` with the scripts in `docs/increments/35-probes/` (its README has the
 raw output). Ola picked this row on 2026-10-11 ("land-cover clean-up speed-up,
-then GeoPackage"). Two questions for Ola, with defaults (section 9).
+then GeoPackage"). Two questions for Ola, decided on their defaults while he
+was away (section 9).
 
 **What this is.** `rasputin mesh --features` with a class map runs 20c-3's
 land-cover clean-up: clip to the read region, repair (`coverage_clean`), merge
@@ -291,6 +297,61 @@ there the check is identity, not speed). Numbers here are one AC run each;
 ## 10. ROADMAP
 
 Row 35 in `ROADMAP.md`.
+
+## 11. As built (recorded by the main session from the handbacks)
+
+**Red** `c4130194` (`@tester`): 15 failing tests in `tests/python/test_crs.py`
+and `tests/python/test_feature_input.py`, 275 passing; `TestChunkedReprojector`
+(test 1: `crs.CHUNK_POINTS`, `crs.WORKERS` missing; also `2 * CHUNK_POINTS + 1`
+points and `WORKERS == min(8, os.cpu_count() or 1)`), `TestUntouched` (test 3:
+four new True rows red under `contains_properly`, each in `test_r1` and the
+per-row GEOS oracle `test_r2`; table adds `end-on-a-domain-vertex` True and
+`ends-on-the-outline-through-a-domain-vertex` False, measured on GEOS 3.14.1),
+`TestOneTransformPerSource` (test 2: apply calls `[5, 5, 5]`, expected `[15]`),
+`TestClippedCount` (test 4: `covers` called 2 times, expected 1 and 0; calls
+`_Tally(BOX, CRS, V)._add(...)` directly, spy on both `BaseGeometry.covers` and
+`shapely.covers`), `TestOneOutlineTreePerCleanup` (test 5: 8 trees under
+`_clean`, expected 1; quarter-circle domain), `TestTheSetIsUnchanged` (test 6,
+the guard for green). No red-step scaffolding. No real-catchment test in CI;
+byte-identity is `@perf`'s (section 7).
+
+**Green** `e805d37f` (`@developer`): `src_python/tin_engine/crs.py` (+14) and
+`src_python/tin_engine/feature_input.py` (+9) only; 23 net counted lines
+against the estimate of about 20. Whole Python suite 7143 passed, 17 skipped;
+mypy strict, ruff, the governance gates clean. Output identity at `e805d37f`,
+the quick check's two catchment cases (`--out X.vtk --binary`, whole-file
+sha256): numedalslagen
+`349d0b5632a28af6024210556a0bd0b6f35e5ba99378c18c742d4b666acfdcfe`, lagan
+`6c110f9eb1fb6a741bd4a19a954a91b7a7424d43f7ba04c354d25f9a42495fa0`, both equal
+to the design's digests (`35-probes/README.md`, item 4); both `features:`
+stderr lines identical. Pinned beyond the design: `_outline_lines(polygon,
+tree)` drops the unused `outline` argument (the `(segments, STRtree)` pair
+carries its segments; `_clean` is the sole caller); the calling thread's
+`Transformer` is still built eagerly in `reprojector`, so a bad CRS refuses at
+construction as before, worker threads build theirs lazily in a
+`threading.local`; `_finite` is checked per cover polygon after the batch, as
+the old per-polygon branch did.
+
+**Mutation round** `7621a99e` (`@tester`), mutants planted in a
+`tools/scratch_copy.py` copy of `e805d37f`, unmutated run green after each.
+The record, verbatim from the handback (the commit message carries it too):
+
+| mutant | planted in | killed by | result |
+|---|---|---|---|
+| M1 `T*****FF*` | `_untouched` | `test_r1` rows along-then-inside, domain-vertex-on-the-line, touching-a-hole, ends-on-the-outline-through-a-domain-vertex, both closed-ring-touching rows; `test_r2` seeded. along-the-outline does not kill it (as the review said) | killed, 7/36 |
+| M2 `is_simple` dropped | `_untouched` | self-touching-at-a-vertex, self-crossing, doubling-back; `test_r2` seeded | killed, 4/36 |
+| M3 flags-alone count | `_Tally._add` | test 4 first case, but only by the `covers` spy: the count stays 1 there | killed by spy; new test added (below), re-planted: killed by the count |
+| M4 dropped / doubled boundary point | `crs.reprojector.apply` | `test_one_point_above_the_threshold`; plus exactly-two-chunks and 1.2-million rows for the doubled variant | killed, 1/36 and 3/36 |
+
+M4 is local evidence (10 cores; one chunk on a one-core runner). New test for
+M3: `TestClippedCount::test_a_covered_chain_the_rule_refused_is_not_clipped`
+(a chain along BOX's east side kept whole, `clipped` 0, `covers` asked once);
+the design's test 4 cases could not tell M3 apart by the count. Lesson: a
+spy-only kill hides a count mutant; check which assertion fails.
+
+**Decided on defaults while Ola was away** (section 9): Q1 reprojection
+threads `min(8, cpu_count)` independent of `--threads`, yes; Q2 ship with
+Numedalslagen's step near 6 s, the cached-repair idea staying an idea, yes.
 
 ## Review
 
