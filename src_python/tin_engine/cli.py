@@ -58,6 +58,7 @@ import numpy as np
 import numpy.typing as npt
 import typer
 from pydantic import ValidationError
+from shapely.geometry.base import BaseGeometry
 
 from tin_engine import edge_strip, final_check, installed_version
 from tin_engine._core import (
@@ -85,7 +86,14 @@ from tin_engine.catchment import (
 )
 from tin_engine.catchment_batch import BatchRequest, NoRiverLine, StationResult, run_batch, seed_for
 from tin_engine.chains import start_chains
-from tin_engine.crs import crs_label, reprojector, same_crs, transform_description, transform_label
+from tin_engine.crs import (
+    crs_label,
+    reprojector,
+    same_crs,
+    srs_entry,
+    transform_description,
+    transform_label,
+)
 from tin_engine.dem_input import (
     CachedSource,
     DemInput,
@@ -113,10 +121,20 @@ from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
 from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geojson import catchment_geojson
+from tin_engine.io.geopackage_write import (
+    Palette,
+    create_geopackage,
+    write_classes,
+    write_land_cover,
+    write_lines,
+    write_run,
+    write_styles,
+    write_triangles,
+)
 from tin_engine.io.mesh_checks import checked_ascii
 from tin_engine.io.models import Bounds, DemTile, RasterMeta
 from tin_engine.io.ply import field_comments, write_ply
-from tin_engine.io.repository import DemRepository
+from tin_engine.io.repository import DemRepository, create_sqlite
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
@@ -513,8 +531,8 @@ def draw(
     typer.echo(f"{target}")
 
 
-#: What the suffix of ``--out`` selects (increment 13, ruling 8).
-MESH_SUFFIXES = (".vtk", ".ply")
+#: What the suffix of ``--out`` selects (increment 13, ruling 8; 36 for .gpkg).
+MESH_SUFFIXES = (".vtk", ".ply", ".gpkg")
 
 
 def _undirected(a: int, b: int) -> tuple[int, int]:
@@ -592,7 +610,8 @@ def _constraint_arrays(
 @app.command()
 def mesh(
     out: Annotated[
-        Path, typer.Option("--out", help="Where to write: .vtk for ParaView, .ply for QGIS.")
+        Path,
+        typer.Option("--out", help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS."),
     ],
     name: Annotated[
         str | None, typer.Argument(help="Gallery fixture to write; or give --dem instead.")
@@ -885,6 +904,8 @@ def mesh(
     dem_run: _DemMesh | None = None
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
+    palette: Palette | None = None
+    cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
     if (name is None) == (not dem):
         raise typer.BadParameter(
@@ -946,6 +967,14 @@ def mesh(
     if out.suffix == ".vtk" and out_edges is not None:
         raise typer.BadParameter(
             "a .vtk file already carries the constraint edges", param_hint="--out-edges"
+        )
+    if out.suffix == ".gpkg" and out_edges is not None:
+        raise typer.BadParameter(
+            "the edges are the lines layer of the GeoPackage", param_hint="--out-edges"
+        )
+    if out.suffix == ".gpkg" and not binary:
+        raise typer.BadParameter(
+            "applies to .vtk and .ply; a GeoPackage is an SQLite file", param_hint="--ascii"
         )
 
     if dem:
@@ -1113,6 +1142,8 @@ def mesh(
             if coded is not None:
                 codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
                 values["land_cover_codes"] = codes_text
+                palette = PALETTES[coded.palette][0] if coded.palette else None
+                cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
         build = stride_record if tolerance is None else refined_record
         record = build(triangles=len(surface_mesh.triangles), **values)
     else:
@@ -1166,8 +1197,12 @@ def mesh(
     typer.echo(summary(record), err=True)
 
     fields, comments = file_fields(record), field_comments(file_fields(record))
-    encoders: list[Callable[[], bytes]]
-    if out.suffix == ".vtk":
+    encoders: list[Callable[[], bytes]] = []
+    if out.suffix == ".gpkg":
+        with clock.phase("write: geopackage"):
+            _write_geopackage(surface, surface_mesh, codes, palette, cover, record)
+        typer.echo(f"{surface}")
+    elif out.suffix == ".vtk":
         encoders = [
             lambda: write_vtk(
                 vertices,
@@ -1199,7 +1234,7 @@ def mesh(
                 vocabulary=DEFAULT_VOCABULARY,
             ),
         ][: len(targets)]
-    for target, encode in zip(targets, encoders, strict=True):
+    for target, encode in zip(targets[: len(encoders)], encoders, strict=True):
         with clock.phase("write: encode"):
             data = encode()
         with clock.phase("write: disk"):
@@ -1210,6 +1245,44 @@ def mesh(
     if record_target is not None:  # D5: after the mesh and the report
         record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
         typer.echo(f"{record_target}")
+
+
+def _write_geopackage(
+    target: Path,
+    mesh: Trimmed,
+    codes: npt.NDArray[np.int32] | None,
+    palette: Palette | None,
+    cover: list[tuple[int, BaseGeometry]],
+    record: RunRecord,
+) -> None:
+    """``target`` as a GeoPackage (increment 36), written as ``<target>.part``
+    and renamed onto it: an existing file is replaced, never appended to, and
+    a failed run leaves nothing under the asked name."""
+    srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
+    part = target.with_name(target.name + ".part")
+    conn = create_sqlite(part)
+    try:
+        create_geopackage(conn, srs)
+        write_triangles(conn, mesh.vertices, mesh.triangles, codes, palette, srs.srs_id)
+        if len(mesh.edges):
+            write_lines(
+                conn, mesh.vertices, mesh.edges, mesh.edge_masks, DEFAULT_VOCABULARY, srs.srs_id
+            )
+        if codes is not None:
+            write_land_cover(conn, cover, palette, srs.srs_id)
+            write_classes(conn)
+            if palette is not None:
+                write_styles(conn, palette, ["triangles", "land_cover"])
+        rows = [("rasputin_version", "rasputin version", installed_version(), None)]
+        rows.append(("command", "command", _command(), None))
+        write_run(conn, [*rows, *((e.name, e.wording, e.value, e.number) for e in record.entries)])
+        conn.commit()
+    except BaseException:
+        conn.close()
+        part.unlink(missing_ok=True)
+        raise
+    conn.close()
+    os.replace(part, target)
 
 
 def _land_cover(

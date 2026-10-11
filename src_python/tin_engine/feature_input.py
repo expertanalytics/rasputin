@@ -76,7 +76,8 @@ class ClassMap(BaseModel):
     """An attribute's values to vocabulary names (R4). ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
     ``codes``, when not empty, names the code system the values are integer
-    codes of; such a map labels triangles (16c, R5)."""
+    codes of; such a map labels triangles (16c, R5). ``palette`` names the
+    entry of ``palettes.PALETTES`` that colours and names those codes (36)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -86,6 +87,7 @@ class ClassMap(BaseModel):
     otherwise: Literal["refuse", "drop"] | tuple[str, ...] = "refuse"
     notice: str = ""
     codes: str = ""
+    palette: str | None = None
 
 
 def _corine(name: str, attribute: str) -> ClassMap:
@@ -97,6 +99,7 @@ def _corine(name: str, attribute: str) -> ClassMap:
         otherwise=("land_cover",),
         notice=CORINE_NOTICE,
         codes=CORINE_CODES,
+        palette="corine",
     )
 
 
@@ -114,6 +117,7 @@ CLASS_MAPS: dict[str, ClassMap] = {
         otherwise="drop",
         notice=CORINE_NOTICE,
         codes=CORINE_CODES,
+        palette="corine",
     ),
     "clc18_kode": _corine("clc18_kode", "clc18_kode"),
 }
