@@ -155,7 +155,7 @@ closure is covered, so the count is unchanged by logic, not by measurement.
 ### 3.4 One outline tree per clean-up (`:714-735`)
 
 `_outline_lines(polygon, outline, tree)` takes the `(segments, STRtree)`
-pair; `_clean` builds it once before the comprehension at `:450`. Same tree,
+pair; `_clean` builds it once before the comprehension at `:448`. Same tree,
 same queries, same output.
 
 ### 3.5 Against the assessment framework
@@ -231,8 +231,10 @@ table) and `tests/python/test_crs.py`. No real catchment in CI.
    `cover_vertices` equal.
 
 **Invariant-critical** (mutation round): tests 1, 3 and 4. Mutation
-targets: M1 the pattern `T*****FF*` (plain `covers`: `along-the-outline`
-must fail it), M2 `is_simple` dropped (`self-touching-at-a-vertex`), M3
+targets: M1 the pattern `T*****FF*` (plain `covers`; killed by
+`along-then-inside`, `domain-vertex-on-the-line` and `touching-a-hole`, mutant
+True where False is expected; `along-the-outline` does not kill it, both
+patterns return False there), M2 `is_simple` dropped (`self-touching-at-a-vertex`), M3
 `clipped` counted from the flags alone (test 4, first case), M4 a chunk
 boundary off by one in `apply` (test 1: a point dropped or doubled).
 
@@ -289,3 +291,7 @@ there the check is identity, not speed). Numbers here are one AC run each;
 ## 10. ROADMAP
 
 Row 35 in `ROADMAP.md`.
+
+## Review
+
+Design review round 1, 2026-10-11, @reviewer (7da1d663, prose only, 0 counted lines): APPROVED. Every figure in sections 2, 4 and 7 matches /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/increments/35-probes/README.md@7da1d663 and the profile README; every feature_input.py and crs.py citation quotes the pinned code; both mesh digests recorded; check_citations clean. The relate pattern `T**F**FF*` read in words: the line's interior meets the domain's interior and neither its boundary nor its exterior, and no end lies outside; a line touching the outline only at an interior vertex is excluded, which is necessary since GEOS nodes it there. One correction applied in this recording commit: /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/increments/35-cleanup-speed.md@7da1d663:234 claimed `along-the-outline` kills M1; it does not (measured, GEOS 3.14.1), M1 is killed by `along-then-inside`, `domain-vertex-on-the-line` and `touching-a-hole`. Nit applied: the comprehension cited at `:450` is at `:448`. Ideas for @tester: add `end-on-a-hole` to test 3 (new rule True, GEOS returns the line unchanged, measured); M4 cannot be killed on a one-core runner, so the mutation round stays local. Lesson: a claimed mutant kill is checked by running the fixture table against the mutant.
