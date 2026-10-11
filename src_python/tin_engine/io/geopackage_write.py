@@ -59,7 +59,7 @@ _RESERVED = (
     ),
 )
 
-_SCHEMA = """
+_SCHEMA = r"""
 CREATE TABLE gpkg_spatial_ref_sys (srs_name TEXT NOT NULL, srs_id INTEGER PRIMARY KEY,
   organization TEXT NOT NULL, organization_coordsys_id INTEGER NOT NULL,
   definition TEXT NOT NULL, description TEXT);
@@ -75,7 +75,7 @@ CREATE TABLE gpkg_extensions (table_name TEXT, column_name TEXT, extension_name 
   CONSTRAINT ge_tce UNIQUE (table_name, column_name, extension_name));
 """
 
-_STYLES = """
+_STYLES = r"""
 CREATE TABLE layer_styles (id INTEGER PRIMARY KEY, f_table_catalog TEXT(256),
   f_table_schema TEXT(256), f_table_name TEXT(256), f_geometry_column TEXT(256),
   styleName TEXT(30), styleQML TEXT, styleSLD TEXT, useAsDefault BOOLEAN, description TEXT,
@@ -84,7 +84,7 @@ CREATE TABLE layer_styles (id INTEGER PRIMARY KEY, f_table_catalog TEXT(256),
 
 # QGIS's categorised style on `code` (QGIS 3.28+), with the `<prop>` pairs
 # older QGIS reads beside the `<Option>` ones.
-_QML = """<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+_QML = r"""<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
 <qgis version="3.28.0" styleCategories="Symbology">
 <renderer-v2 type="categorizedSymbol" attr="code" symbollevels="0" enableorderby="0"
   forceraster="0">
@@ -94,7 +94,7 @@ _QML = """<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
 </qgis>
 """
 _CATEGORY = '<category value="{code}" label="{code} {name}" symbol="{i}" render="true"/>\n'
-_SYMBOL = """<symbol type="fill" name="{i}" alpha="1" clip_to_extent="1" force_rhr="0">
+_SYMBOL = r"""<symbol type="fill" name="{i}" alpha="1" clip_to_extent="1" force_rhr="0">
 <layer class="SimpleFill" pass="0" enabled="1" locked="0">
 <Option type="Map">
 <Option name="color" value="{rgb},255" type="QString"/>
