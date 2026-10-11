@@ -16,21 +16,34 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
 
 - **DEM in, mesh out.** One GeoTIFF, several, or a directory of tiles
   (Kartverket's DTM10, for example), stitched into one grid.
+- **DEMs from the network.** `rasputin fetch glo30 --domain X` copies the
+  Copernicus GLO-30 tiles a mesh of that domain reads into a tile cache, so
+  `rasputin mesh --dem glo30` then runs offline; `anadem-v1` (South America)
+  likewise.
 - **A domain.** Mesh only the inside of a polygon, such as a catchment
   (GeoJSON or WKT, in any CRS that pyproj reads).
 - **Features as constraints.** Lakes, land-cover borders, roads and rivers
   (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
   crosses them.
-- **Land-cover labels.** With a CORINE class map, every triangle gets the class
-  of the polygon it lies in.
+- **Land-cover labels, cleaned up.** With a CORINE class map, every triangle
+  gets the class of the polygon it lies in. First the borders are repaired
+  (`--features-repair`), merged between neighbours of one class, snapped onto
+  the domain outline where they nearly touch it, and simplified to
+  `--features-tolerance` metres with each class keeping its area.
 - **Refinement to a tolerance.** Triangles are split at the worst DEM point
   until every triangle is within `--tolerance` metres of the DEM, then kept
   Delaunay, with a minimum-angle start so there are no slivers along the
   boundary.
-- **Auto-catchment.** `rasputin catchment` computes the catchment of a lake
-  from the DEM (a `--seed` point in the lake) and writes it as a GeoJSON
-  polygon, reduced to `--outline-tolerance` with its area kept, ready for
-  `--domain`.
+- **A tolerance that varies.** `--tolerance-near FILE N` with
+  `--tolerance-ramp START END` holds the mesh to N metres along named lines
+  (a railway, a river) and ramps to the general tolerance with distance;
+  `--tolerance-slope N START END` does the same on steep ground.
+- **Catchments.** `rasputin catchment` computes the catchment of a lake
+  (a `--seed` point in it) or of a gauge on a mapped river (`--rivers`) from
+  the DEM, and writes a GeoJSON polygon ready for `--domain`.
+  `rasputin fetch-stations nve-hrd` fetches NVE's reference gauging stations
+  with their catchments and rivers; `rasputin station-catchments` runs them
+  all and compares.
 
 ## Quick example
 
@@ -63,7 +76,8 @@ rasputin palette corine --out corine.json
 ```
 
 The first command writes about 430,000 triangles in under two seconds on a
-laptop (Apple M1 Max). Add `--stats -` to print sizes, mesh quality and timings.
+laptop (Apple M1 Max). Add `--stats -` to print sizes, mesh quality and
+timings, and `--record run.json` to write the run's record, for reproducing it.
 
 `rasputin --help` lists the commands, and `rasputin mesh --help` explains
 every option.
@@ -80,7 +94,8 @@ every option.
   `--out-edges`.
 
 Both formats are binary by default; `--ascii` writes text you can read with
-`head`.
+`head`. Every mesh file records what it was made from, and stderr gets a
+one-line summary of the run.
 
 ## How it is built
 
@@ -90,8 +105,9 @@ Both formats are binary by default; `--ascii` writes text you can read with
   nothing about coordinate systems. The only third-party C++ code is
   [detria](https://github.com/Kimbatt/detria), vendored in `lib/detria/`.
 - **A Python layer** (`src_python/tin_engine/`): reading GeoTIFFs (tifffile),
-  vector files and CRS (shapely, pyproj), configuration (Pydantic) and the CLI
-  (Typer). The two meet through a pybind11 module, `tin_engine._core`.
+  vector files and CRS (shapely, pyproj), fetching remote data,
+  configuration (Pydantic) and the CLI (Typer). The two meet through a
+  pybind11 module, `tin_engine._core`.
 
 `project_structure.md` describes the layout and the rules between the layers.
 
