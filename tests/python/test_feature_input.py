@@ -1650,6 +1650,7 @@ class TestClippedCount:
     INSIDE = LineString([at(50, 50), at(100, 80)])
     ALSO_INSIDE = LineString([at(10, 10), at(20, 20)])
     CROSSING = LineString([at(150, 150), at(400, 150)])  # `BOX` ends at x = 300
+    ALONG = LineString([at(300, 50), at(300, 250)])  # on `BOX`'s east side, no vertex between
 
     @pytest.fixture
     def covers_calls(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
@@ -1697,6 +1698,23 @@ class TestClippedCount:
         tally._add("f", V.mask("road"), [self.INSIDE, self.ALSO_INSIDE], None, None)
         assert tally.clipped == 0 and len(tally.features) == 1
         assert covers_calls == []
+
+    def test_a_covered_chain_the_rule_refused_is_not_clipped(
+        self, fi: ModuleType, covers_calls: list[tuple[Any, Any]]
+    ) -> None:
+        """A chain along the outline: `_untouched` is False (its interior
+        touches the boundary), yet the domain covers it and GEOS gives it
+        back whole, so it is kept and not clipped. This pins that `clipped`
+        is still decided by `covers` where the rule did not pass, not by the
+        rule's flag alone (mutant M3), which the two tests above cannot tell
+        apart by the count."""
+        tally = self.tally(fi)
+        assert not fi._untouched(self.ALONG, BOX.polygon)
+        tally._add("f", V.mask("road"), [self.ALONG], None, None)
+        assert tally.clipped == 0 and len(tally.features) == 1
+        (feature,) = tally.features
+        assert [list(line.coords) for line in feature.lines] == [list(self.ALONG.coords)]
+        assert len(covers_calls) == 1 and shapely.equals(covers_calls[0][1], self.ALONG)
 
 
 def outline_segments(outline: Polygon) -> np.ndarray:
