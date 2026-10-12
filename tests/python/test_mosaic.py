@@ -1800,4 +1800,5 @@ def test_the_plan_never_loads(mz: ModuleType, footprint: Any) -> None:
     """I6 as a type fact: `plan_mosaic` takes footprints, and no `load`."""
     import inspect
 
-    assert list(inspect.signature(mz.plan_mosaic).parameters) == ["footprints", "bounds", "needed"]
+    parameters = ["footprints", "bounds", "needed", "memory_budget"]  # 38: the cap
+    assert list(inspect.signature(mz.plan_mosaic).parameters) == parameters

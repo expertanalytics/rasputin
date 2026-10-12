@@ -319,8 +319,10 @@ class TestTheRealApp:
 
     def test_t9_threads_and_memory_budget_derive_from_the_cli(self) -> None:
         """Increment 38, T9: the two options reach the `mesh`, `catchment` and
-        `station_catchments` tools through the derived schema, with no change
-        to `mcp/`; `argv` puts them on the command line as the CLI's words."""
+        `station_catchments` tools through the derived schema; `argv` puts
+        them on the command line as the CLI's words. The `minimum: 0` bound
+        is kept: a bound of zero is a bound (`schema.py` dropped every falsy
+        bound before 38, the one `mcp/` line the increment changes)."""
         tools = derived(app)
         for name in ("mesh", "catchment", "station_catchments"):
             properties = tools[name].tool().input_schema["properties"]
