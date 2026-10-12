@@ -1,6 +1,6 @@
 # Increment 37: an MCP server over the rasputin commands
 
-**Status: built** on branch `worktree-mcp-server` (red `ee5b5d52`, `@tester`, 62 tests; green `851592ba`, `@developer`, 322 net production lines by `python3 tools/count_loc.py b4a81c0d HEAD` against the estimate of 260 and the worst case of 360; no mutation round and no `@perf` run, section 10; section 12 is the as-built record; code review round 1 CHANGES REQUESTED, four blockers, all fixed: T5 case and prose `783c3368` (`@tester`), the `error` field `730162fe` (`@developer`, 323 net lines), the README section `19652b88` (`@architect`), two citations pinned `dbc77f3b`; round 2 CHANGES REQUESTED, two prose blockers: the README wording fixed in the recording commit, the help-text escape with `@developer`'s master merge; next round 3). Designed by
+**Status: built** on branch `worktree-mcp-server` (red `ee5b5d52`, `@tester`, 62 tests; green `851592ba`, `@developer`, 322 net production lines by `python3 tools/count_loc.py b4a81c0d HEAD` against the estimate of 260 and the worst case of 360; no mutation round and no `@perf` run, section 10; section 12 is the as-built record; code review round 1 CHANGES REQUESTED, four blockers, all fixed: T5 case and prose `783c3368` (`@tester`), the `error` field `730162fe` (`@developer`, 323 net lines), the README section `19652b88` (`@architect`), two citations pinned `dbc77f3b`; round 2 CHANGES REQUESTED, two prose blockers, fixed: the README wording `2a871c50`, the help-text escape `01025786`; master `c317c7e4` merged in as `030fd32b` (328 net lines by `count_loc.py origin/master HEAD`), the one test it broke fixed `d8a1729d`; next round 3). Designed by
 `@architect`, 2026-10-12, on `b4a81c0d` (branch `worktree-mcp-server`); the
 nine defaults of section 6 were taken while Ola was away. Probe and its
 output: `docs/increments/37-probes/`. Design review round 1 (Review section)
@@ -29,7 +29,7 @@ The commands today (`src_python/tin_engine/cli.py@b4a81c0d:169`, listed by
 `typer.main.get_command(app).commands` as `tests/python/cli_driver.py:42`
 does): `version`, `draw`, `mesh`, `palette`, `fetch`, `fetch-stations`,
 `catchment`, `station-catchments`. Their parameter counts, from the probe:
-mesh 34, draw 10, fetch 10, catchment 11, station-catchments 11,
+mesh 34 (36 after increment 26b merged, section 12), draw 10, fetch 10, catchment 11, station-catchments 11,
 fetch-stations 3, palette 2, version 0.
 
 ## 2. Prior art: legacy and literature
@@ -153,7 +153,7 @@ process.
 | what | measured |
 |---|---|
 | schemas derived from all 8 commands | 16,575 bytes of JSON; `mesh` 34 properties, `required: ["out"]`, 8,269 bytes |
-| parameters needing a note | 2 of 81: `snap_spacing` on `draw` and on `mesh` has a validating callback (`_snap_spacing`, `src_python/tin_engine/cli.py@b4a81c0d:478`, `:676`), which stays in the child and still refuses there |
+| parameters needing a note | 2 of 81 (at `b4a81c0d`; 83 after increment 26b, section 12): `snap_spacing` on `draw` and on `mesh` has a validating callback (`_snap_spacing`, `src_python/tin_engine/cli.py@b4a81c0d:478`, `:676`), which stays in the child and still refuses there |
 | tuple options | `bbox` -> `prefixItems` of four numbers, `minItems`/`maxItems` 4; `tolerance_near` -> `[string, number]` |
 | flag pairs (`--binary/--ascii`, `--delaunay/--no-delaunay`, `--[no-]features-merge-same-class`) | one boolean each, default from the CLI (`binary: true`) |
 | `fetch --connections` (an integer range) | `{"type": "integer", "minimum": 1, "default": 8}` |
@@ -242,7 +242,7 @@ Per tool:
 - `input_schema`: the derived model's JSON Schema with `title` removed and
   `additionalProperties: false`. Each property carries the option's help
   text as `description`, its default, and its type by this table, which the
-  probe exercised on all 81 parameters: click `str`/`path` -> string;
+  probe exercised on all 81 parameters at `b4a81c0d`: click `str`/`path` -> string;
   `int` -> integer (`IntRange` adds `minimum`/`maximum`); `float` -> number;
   `bool` flags -> boolean (a `--x/--no-x` pair is one boolean; `true` emits
   the first name, `false` the second); a tuple type -> fixed-length array
@@ -326,7 +326,7 @@ in particular. Nothing here forecloses it.
 
 Measured against the alternative. The click parameters of all eight commands
 give name, type, default, required, help, repetition and tuple arity for 81
-of 81 parameters; the one note is a validating callback, whose refusal still
+of 81 parameters (at `b4a81c0d`; the count moves with the CLI, section 12); the one note is a validating callback, whose refusal still
 comes back from the child in words. A Pydantic model per command would be
 a second statement of the same 81 parameters (about 34 fields x 3 lines for
 `mesh` alone) that drifts the first time someone adds an option to one and
@@ -579,7 +579,9 @@ the point. Fixtures and their figures as measured in section 3.
   the second name; a tuple expands; a list repeats the option; an argument
   is positional.
 - **T3 the real app**: `derive(app)` yields the eight commands with their
-  parameter counts (34, 10, 10, 11, 11, 3, 2, 0) and `mesh`'s `bbox`,
+  parameter counts (34, 10, 10, 11, 11, 3, 2, 0; as built the suite pins the
+  tool names and the equality with the click parameters instead, section 12)
+  and `mesh`'s `bbox`,
   `tolerance_near`, `binary`, `features`, `snap_spacing` schemas as section
   3 shows; the whole set under 20,000 bytes (16,575 measured) so an agent's
   tool list stays small.
@@ -760,11 +762,32 @@ and the two clients' own configuration pages.
 (section 10); the `dev` extra pulls `mcp` so the `python` CI job runs the
 suite; the `_destination` hint kept pending Ola's word.
 
+**After the master merge** (`030fd32b`, @developer): master `c317c7e4`
+brought increment 26b and the ruling record; `ROADMAP.md` (row 36 against
+row 37) and `tests/python/test_layering.py` (26b's rows against this
+branch's, one shared `cli` row importing both `land_cover_fractions` and
+`mcp.server`) were resolved by hand; `_core` rebuilt in `build-wt/`; all
+gates green, ctest 1031/1031, 328 net lines (the five are `01025786`'s
+help-text escape, round 2). One test broke: `test_mcp_schema.py` pinned
+`mesh` at 34 parameters, now 36 with `--land-cover` and
+`--land-cover-year` (83 across the eight tools; the design's 81 held at
+`b4a81c0d`). `@tester` (`d8a1729d`) dropped the per-tool counts rather than
+update them: the same test's equality check, schema properties against the
+command's click parameters, implies the count, and the pin only detected
+options added elsewhere; the eight tool names stay pinned. This changes the
+design's T3 wording (section 9) from counts to names plus equality; a probe
+dropping `land_cover` from the derived `mesh` schema turns the surviving
+check red. The help-text escape (`01025786`): one constant `INSTALL_MCP`,
+escaped to `\[mcp]` only when `app.rich_markup_mode` is set, so both
+renderings read `pip install "rasputin[mcp]"`.
+
 **Lessons for the next retrospective:** a design claim about existing CLI
 wording is checked by running the command before a test pins it (T6's
 "naming `--out`"); no worktree had a current `_core` build, so `@tester`
 copied one from a merged worktree with identical C++ rather than build
-beside `@perf`.
+beside `@perf`. A pinned snapshot of another module's shape (a CLI's option
+count) in a derivation suite is a resolved value where a rule belongs; pin
+the rule and the identity set, never the count.
 
 ## Review
 
