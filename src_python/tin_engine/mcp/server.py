@@ -145,7 +145,8 @@ def _refusal(code: int, stderr: list[str]) -> str:
     if code < 0:
         return f"killed by signal {-code} ({signal.Signals(-code).name})"
     words = [line for line in stderr if line and not line.startswith(("Usage:", "Try '"))]
-    return f"exit {code}: {' '.join(words).removeprefix('Error: ')}"
+    errors = [line.removeprefix("Error: ") for line in words if line.startswith("Error: ")]
+    return f"exit {code}: {' '.join(errors or words)}"
 
 
 async def _read(path: Path | None) -> str | None:
