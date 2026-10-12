@@ -266,6 +266,26 @@ def version() -> None:
     typer.echo(f"bounds checks: {bounds_checks()}")
 
 
+@app.command()
+def mcp(
+    jobs: Annotated[
+        int, typer.Option("--jobs", min=1, help="Tool calls run at once; one beyond this waits.")
+    ] = 1,
+) -> None:
+    """Serve the commands to an agent over the Model Context Protocol, on stdin and stdout.
+
+    One tool per command, each call run as ``python -m tin_engine`` (increment
+    37). Needs the ``mcp`` extra: ``pip install "rasputin[mcp]"``.
+    """
+    try:
+        from tin_engine.mcp import server
+    except ImportError:
+        words = 'the mcp extra is not installed; run pip install "rasputin[mcp]"'
+        typer.echo(f"Error: {words}", err=True)
+        raise typer.Exit(2) from None
+    asyncio.run(server.serve(app, jobs))
+
+
 @dataclass(frozen=True, slots=True)
 class Attempt:
     """What the engine made of a fixture, and what to draw it from.
@@ -417,8 +437,9 @@ def _snap_spacing(value: float) -> float:
     return value
 
 
-def _destination(out: Path | None, out_parent: Path | None, name: str) -> Path:
-    """Where to write, having refused every path this process should not touch.
+def _destination(out: Path | None, out_parent: Path | None, name: str, hint: str = "--out") -> Path:
+    """Where to write, having refused every path this process should not touch; a
+    refusal names the option, ``hint``.
 
     A hostile boundary, per the python skill. ``resolve()`` first, so that
     ``..`` cannot smuggle a write out of an explicitly permitted parent; refuse
@@ -436,14 +457,16 @@ def _destination(out: Path | None, out_parent: Path | None, name: str) -> Path:
         # so a second run cannot overwrite the picture still open in a browser.
         return Path(tempfile.mkdtemp(prefix="rasputin-")) / f"{name}.svg"
     if out.is_symlink():
-        raise typer.BadParameter(f"{out} is a symlink; refusing to follow it")
+        raise typer.BadParameter(f"{out} is a symlink; refusing to follow it", param_hint=hint)
     target = out.resolve()
     if out_parent is not None:
         permitted = out_parent.resolve()
         if not target.is_relative_to(permitted):
-            raise typer.BadParameter(f"{target} is outside the permitted parent {permitted}")
+            raise typer.BadParameter(
+                f"{target} is outside the permitted parent {permitted}", param_hint=hint
+            )
     if not target.parent.is_dir():
-        raise typer.BadParameter(f"{target.parent} is not an existing directory")
+        raise typer.BadParameter(f"{target.parent} is not an existing directory", param_hint=hint)
     return target
 
 
@@ -1184,7 +1207,7 @@ def mesh(
         # writes succeed, the second overwrites the first, the command echoes
         # two paths and exits 0 -- the caller has lost the surface they asked
         # for and nothing said so.
-        constraints = _destination(out_edges, out_parent, label)
+        constraints = _destination(out_edges, out_parent, label, "--out-edges")
         if constraints == surface:
             raise typer.BadParameter(
                 f"--out and --out-edges both resolve to {surface}; "
@@ -1339,7 +1362,7 @@ def _report_target(
     checked before any mesh file is written."""
     if stats is None or stats == "-":
         return None
-    target = _destination(Path(stats), out_parent, label)
+    target = _destination(Path(stats), out_parent, label, "--stats")
     if target in meshes:
         raise typer.BadParameter(
             f"resolves to {target}; the report would overwrite the mesh", param_hint="--stats"
@@ -1356,7 +1379,7 @@ def _record_target(
         return None
     if record == "-":
         raise typer.BadParameter("standard output is --stats -'s", param_hint="--record")
-    target = _destination(Path(record), out_parent, label)
+    target = _destination(Path(record), out_parent, label, "--record")
     if target in taken:
         raise typer.BadParameter(
             f"resolves to {target}, which this run also writes", param_hint="--record"
@@ -2499,7 +2522,7 @@ def station_catchments(
         math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
     ):
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
-    target = _destination(out_dir, out_parent, out_dir.name)
+    target = _destination(out_dir, out_parent, out_dir.name, "--out-dir")
     try:
         station_list, stations_crs = read_stations(stations)
     except (OSError, ValueError) as exc:
