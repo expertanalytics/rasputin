@@ -1,16 +1,21 @@
 src_python/tin_engine/__main__.py:1	increment	increment 37	``python -m tin_engine``: the CLI, as the MCP server's child runs it (increment 37, section 6.4).
 src_python/tin_engine/border_simplify.py:2	increment	increment 32	(increment 32, ``docs/increments/32-landcover-simplify.md``, section 6).
+src_python/tin_engine/border_simplify.py:2	pointer	docs/increments/32-landcover-simplify.md	(increment 32, ``docs/increments/32-landcover-simplify.md``, section 6).
 src_python/tin_engine/burn.py:1	increment	increment 29	The mapped reach moved onto the DEM's valley floor and burnt in (increment 29, PR 2).
 src_python/tin_engine/burn.py:1	review	PR 2	The mapped reach moved onto the DEM's valley floor and burnt in (increment 29, PR 2).
+src_python/tin_engine/burn.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "Following the river in the
 src_python/tin_engine/catchment.py:99	increment	increment 29	#: The gauge's mapped reach (increment 29), in `seed_crs`, which must then
 src_python/tin_engine/catchment.py:1	increment	increment 22	The catchment of a lake, from the DEM, as a reduced outline (increment 22).
 src_python/tin_engine/catchment.py:5	label	15a	lake into the DEM's CRS, plans and assembles a window round them (15a), floods
 src_python/tin_engine/catchment.py:11	increment	increment 29	With a river reach (increment 29, "The window loop and the catchment"), the
 src_python/tin_engine/catchment.py:208	ruling-id	D15	D15 b: when the DEM's CRS is exactly an EPSG code and `given` is none,
+src_python/tin_engine/catchment.py:3	pointer	docs/increments/22-auto-catchment.md	`docs/increments/22-auto-catchment.md`, "Data flow", "The seed", "The
 src_python/tin_engine/catchment_batch.py:79	review	PR 2	# The seed: the river (PR 2's path) or the lake ("Lake gauges").
 src_python/tin_engine/catchment_batch.py:1	increment	increment 29	A catchment per station, one at a time, each compared with its reference (increment 29, PR 4).
 src_python/tin_engine/catchment_batch.py:1	review	PR 4	A catchment per station, one at a time, each compared with its reference (increment 29, PR 4).
 src_python/tin_engine/catchment_batch.py:3	review	PR 4	`docs/increments/29-nve-reference-catchments.md`, "The batch" and "PR 4's
+src_python/tin_engine/catchment_batch.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "The batch" and "PR 4's
+src_python/tin_engine/catchment_core.py:1	pointer	python-audit.md	The catchment's calls into ``_core`` (python-audit.md, section 11).
 src_python/tin_engine/chains.py:1	label	16b	The start mesh's chains: the domain's rings, then the features' lines (16b R2, R7).
 src_python/tin_engine/chains.py:1	ruling-id	R2	The start mesh's chains: the domain's rings, then the features' lines (16b R2, R7).
 src_python/tin_engine/chains.py:1	ruling-id	R7	The start mesh's chains: the domain's rings, then the features' lines (16b R2, R7).
@@ -119,6 +124,11 @@ src_python/tin_engine/cli.py:2417	increment	increment 22	DEM's CRS that ``mesh -
 src_python/tin_engine/cli.py:2421	increment	increment 29	seed is a gauge on a mapped river (increment 29).
 src_python/tin_engine/cli.py:2521	increment	Increment 22	Increment 22's properties of a catchment file: the counts, the areas,
 src_python/tin_engine/cli.py:2674	increment	increment 29	classed (match, close, miss, uncertain or refused; increment 29).
+src_python/tin_engine/cli.py:280	increment	increment 37	Serve the commands to an agent over the Model Context Protocol, on stdin and stdout. One tool per command, each call run
+src_python/tin_engine/cli.py:2395	increment	increment 29	River lines (GeoJSON, in the DEM's CRS): the seed is a gauge, placed on the nearest line and on the DEM's flow path alon
+src_python/tin_engine/cli.py:7	pointer	project_structure.md	build the one core raster, per ``project_structure.md``): ``viz/`` is written
+src_python/tin_engine/cli.py:10	pointer	project_structure.md	that has to know both sides lives here. (``project_structure.md``'s rule that
+src_python/tin_engine/cli.py:923	pointer	13-bundled-mesh.md	(``13-bundled-mesh.md``). There is no ``--format``, because it could
 src_python/tin_engine/crs.py:35	increment	Increment 35	#: Increment 35, 3.1 (b): an array of `2 * CHUNK_POINTS` points or more is
 src_python/tin_engine/crs.py:1	increment	increment 15b	CRS text and the one reprojection site (increment 15b).
 src_python/tin_engine/crs.py:1	label	15b	CRS text and the one reprojection site (increment 15b).
@@ -131,6 +141,9 @@ src_python/tin_engine/crs.py:165	increment	increment 36	The `gpkg_spatial_ref_sy
 src_python/tin_engine/crs.py:190	label	15c	A conformal CRS for a box (15c, D8): WKT2 on the DEM's datum, its family's name,
 src_python/tin_engine/crs.py:190	ruling-id	D8	A conformal CRS for a box (15c, D8): WKT2 on the DEM's datum, its family's name,
 src_python/tin_engine/crs.py:203	ruling-id	D8	D8: the family by the box's `(W, E, S, N)` latitude and shape, on the
+src_python/tin_engine/crs.py:3	pointer	docs/increments/15-dem-mosaic.md	`docs/increments/15-dem-mosaic.md` R2, R9 and I8. `_transformer` holds the only
+src_python/tin_engine/crs.py:101	pointer	docs/increments/python-audit.md	builds between them is its `noop` (`docs/increments/python-audit.md`,
+src_python/tin_engine/crs.py:111	pointer	docs/increments/geotiff-crs-by-parameters.md	first. Empty when there are none (`docs/increments/geotiff-crs-by-parameters.md`,
 src_python/tin_engine/decompose.py:19	ruling-id	B14	#: `--memory-budget`'s default, 16 GiB in bytes (B14 as ruled).
 src_python/tin_engine/decompose.py:19	person	ruled	#: `--memory-budget`'s default, 16 GiB in bytes (B14 as ruled).
 src_python/tin_engine/decompose.py:1	increment	increment 23c	The partition of a run's window into cells, one piece job per cell (increment 23c).
@@ -140,6 +153,8 @@ src_python/tin_engine/decompose.py:4	ruling-id	B2	`docs/increments/23-basin-scal
 src_python/tin_engine/decompose.py:4	ruling-id	B3	`docs/increments/23-basin-scale.md`, "The partition (23c; B2, B3 and B14 as
 src_python/tin_engine/decompose.py:4	ruling-id	B14	`docs/increments/23-basin-scale.md`, "The partition (23c; B2, B3 and B14 as
 src_python/tin_engine/decompose.py:5	person	ruled	ruled)", and the memory estimate is "The memory estimate and the defaults";
+src_python/tin_engine/decompose.py:23	pointer	docs/benchmarks/2026-10-01/basin-piece/README.md	#: sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`).
+src_python/tin_engine/decompose.py:4	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "The partition (23c; B2, B3 and B14 as
 src_python/tin_engine/dem_input.py:143	person	Ola	# (Ola, 2026-09-28); which value a node takes does not depend on it.
 src_python/tin_engine/dem_input.py:243	label	15b	# The cell is the chosen lattice's, not a listed tile's (15b review, B1):
 src_python/tin_engine/dem_input.py:243	ruling-id	B1	# The cell is the chosen lattice's, not a listed tile's (15b review, B1):
@@ -171,6 +186,7 @@ src_python/tin_engine/dem_input.py:198	ruling-id	D1	D1's reprojected path: the t
 src_python/tin_engine/dem_input.py:199	label	15a	the target CRS, the source region planned and assembled as 15a does,
 src_python/tin_engine/dem_input.py:235	ruling-id	R4	grown by one cell needed (R4 point 5), and that grown polygon, the needed
 src_python/tin_engine/dem_input.py:262	label	15a	or None when none is. 15a's window snaps an edge within `ALIGN_TOLERANCE`
+src_python/tin_engine/dem_input.py:3	pointer	docs/increments/15-dem-mosaic.md	`docs/increments/15-dem-mosaic.md` R1 and R11. A `DemRequest` names the
 src_python/tin_engine/domain.py:4	review	audit PR	``tin_engine.io.domain_file``'s (audit PR C, ``docs/increments/python-audit.md``
 src_python/tin_engine/domain.py:6	increment	increment 15b	moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
 src_python/tin_engine/domain.py:6	label	15b	moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
@@ -179,6 +195,8 @@ src_python/tin_engine/domain.py:9	ruling-id	U4	Every vertex must lie in the DEM'
 src_python/tin_engine/domain.py:10	ruling-id	R0	outside it there is no bilinear z (R0). That is :func:`check_extent`, run after
 src_python/tin_engine/domain.py:65	ruling-id	U4	U4 (a): every vertex in ``meta``'s node rectangle, as the core's
 src_python/tin_engine/domain.py:43	ruling-id	R9	transform, once, and re-oriented; rings stay straight (R9). The same CRS,
+src_python/tin_engine/domain.py:4	pointer	docs/increments/python-audit.md	``tin_engine.io.domain_file``'s (audit PR C, ``docs/increments/python-audit.md``
+src_python/tin_engine/domain.py:6	pointer	15-dem-mosaic.md	moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
 src_python/tin_engine/edge_strip.py:1	increment	increment 15f	The edge strip (increment 15f, D5 and D6): check points where constraints
 src_python/tin_engine/edge_strip.py:1	label	15f	The edge strip (increment 15f, D5 and D6): check points where constraints
 src_python/tin_engine/edge_strip.py:1	ruling-id	D5	The edge strip (increment 15f, D5 and D6): check points where constraints
@@ -233,6 +251,7 @@ src_python/tin_engine/feature_input.py:710	person	ruling	and the new polygon (ru
 src_python/tin_engine/feature_input.py:425	label	20c-3	20c-3: one source's land cover clipped to the read region, then
 src_python/tin_engine/feature_input.py:858	ruling-id	T1	(ruling T1), so no piece is shorter than D/2.
 src_python/tin_engine/feature_input.py:858	person	ruling	(ruling T1), so no piece is shorter than D/2.
+src_python/tin_engine/feature_input.py:3	pointer	docs/increments/16b-terrain-polygons.md	`docs/increments/16b-terrain-polygons.md` R1, R4-R7. A source is a GeoJSON
 src_python/tin_engine/features.py:185	increment	Increment 16b	# Increment 16b (Q3, Ola 2026-09-28): a land-cover boundary, and water.
 src_python/tin_engine/features.py:185	label	16b	# Increment 16b (Q3, Ola 2026-09-28): a land-cover boundary, and water.
 src_python/tin_engine/features.py:185	ruling-id	Q3	# Increment 16b (Q3, Ola 2026-09-28): a land-cover boundary, and water.
@@ -245,25 +264,31 @@ src_python/tin_engine/features.py:18	increment	increment 7	feature", as this doc
 src_python/tin_engine/features.py:18	review	review round	feature", as this docstring said until increment 7's review round:
 src_python/tin_engine/features.py:203	label	16c	map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
 src_python/tin_engine/features.py:203	ruling-id	R5	map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
+src_python/tin_engine/features.py:53	pointer	docs/increments/07-edge-properties.md	See ``docs/increments/07-edge-properties.md``.
 src_python/tin_engine/fetch/__init__.py:2	increment	increment 23a	cache (increment 23a-2, `docs/increments/23-basin-scale.md`, "The fetch step
 src_python/tin_engine/fetch/__init__.py:2	label	23a-2	cache (increment 23a-2, `docs/increments/23-basin-scale.md`, "The fetch step
+src_python/tin_engine/fetch/__init__.py:2	pointer	docs/increments/23-basin-scale.md	cache (increment 23a-2, `docs/increments/23-basin-scale.md`, "The fetch step
 src_python/tin_engine/fetch/http.py:1	increment	increment 23a	Byte ranges over HTTP, stdlib only (increment 23a-2).
 src_python/tin_engine/fetch/http.py:1	label	23a-2	Byte ranges over HTTP, stdlib only (increment 23a-2).
 src_python/tin_engine/fetch/http.py:4	ruling-id	F11	`tin_engine` that imports `urllib.request` or `http.client` (F11), so network
 src_python/tin_engine/fetch/http.py:14	increment	increment 29	urllib's default (increment 29, "Data use"). `query_url` builds the query
+src_python/tin_engine/fetch/http.py:3	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "Downloading". The one module in
 src_python/tin_engine/fetch/nve.py:1	review	PR 3	`rasputin fetch-stations nve-hrd`: NVE's HRD stations, catchments and rivers (29, PR 3).
 src_python/tin_engine/fetch/nve.py:6	review	PR 4	38), the river lines round each (`Elvenett1` layer 2) and, for PR 4's lake
+src_python/tin_engine/fetch/nve.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "The station set" and
 src_python/tin_engine/fetch/plan.py:50	label	26a	#: The year of a one-cog-per-year source (26a); None is the source's last.
 src_python/tin_engine/fetch/plan.py:1	increment	increment 23a	What a fetch takes, decided from headers alone (increment 23a-2). Pure.
 src_python/tin_engine/fetch/plan.py:1	label	23a-2	What a fetch takes, decided from headers alone (increment 23a-2). Pure.
 src_python/tin_engine/fetch/plan.py:7	label	15c-2	metres, moved into the source CRS, then grown by two source cells as 15c-2's
 src_python/tin_engine/fetch/plan.py:74	ruling-id	F7	A header prefix that raises on any read past its end (F7). It claims to
 src_python/tin_engine/fetch/plan.py:147	label	23a-1	snapped outward to the lattice, as 23a-1's windows are), and the ranges of
+src_python/tin_engine/fetch/plan.py:3	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "Planning (`fetch/plan.py`, pure)". The
 src_python/tin_engine/fetch/run.py:1	increment	increment 23a	The fetch: headers, identity, plan, bounded async download (increment 23a-2).
 src_python/tin_engine/fetch/run.py:1	label	23a-2	The fetch: headers, identity, plan, bounded async download (increment 23a-2).
 src_python/tin_engine/fetch/run.py:7	label	23a-1	Order of writes (a crash at any point leaves a cache 23a-1 reads): headers and
 src_python/tin_engine/fetch/run.py:13	increment	Increment 26a	Increment 26a: a `one-cog-per-year` source is fetched as `one-cog`, the file
 src_python/tin_engine/fetch/run.py:13	label	26a	Increment 26a: a `one-cog-per-year` source is fetched as `one-cog`, the file
+src_python/tin_engine/fetch/run.py:3	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "The cache" and "Downloading". `client`
 src_python/tin_engine/final_check.py:1	increment	increment 15c	The final check against the source DEM (increment 15c-2, D5 and D6).
 src_python/tin_engine/final_check.py:1	label	15c-2	The final check against the source DEM (increment 15c-2, D5 and D6).
 src_python/tin_engine/final_check.py:1	ruling-id	D5	The final check against the source DEM (increment 15c-2, D5 and D6).
@@ -280,6 +305,7 @@ src_python/tin_engine/gauge.py:1	increment	increment 29	The gauge on NVE's mappe
 src_python/tin_engine/gauge.py:1	review	PR 2	The gauge on NVE's mapped river line (increment 29, PR 2).
 src_python/tin_engine/gauge.py:9	review	PR 4	where the river ends. `lake_seed` (PR 4, "Lake gauges: the lake is the
 src_python/tin_engine/gauge.py:196	review	PR 2	The lake seed of `gauge`, or None for PR 2's river path: `inside` when
+src_python/tin_engine/gauge.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "Placing the gauge". A
 src_python/tin_engine/grid_domain.py:33	increment	increment 14b	#: longer side (increment 14b, C1). With Delaunay insertion the start vertices
 src_python/tin_engine/grid_domain.py:33	label	14b	#: longer side (increment 14b, C1). With Delaunay insertion the start vertices
 src_python/tin_engine/grid_domain.py:33	ruling-id	C1	#: longer side (increment 14b, C1). With Delaunay insertion the start vertices
@@ -287,7 +313,10 @@ src_python/tin_engine/grid_domain.py:3	increment	Increment 12	Increment 12, R1. 
 src_python/tin_engine/grid_domain.py:3	ruling-id	R1	Increment 12, R1. Every ``stride``-th node of the DEM in both directions,
 src_python/tin_engine/grid_domain.py:57	increment	increment 27	spacing (increment 27, "A limit of the exact rule").
 src_python/tin_engine/grow.py:2	label	30d	30d, `docs/increments/30d-outline-buffer-speed.md` section 3.3).
+src_python/tin_engine/grow.py:2	pointer	docs/increments/30d-outline-buffer-speed.md	30d, `docs/increments/30d-outline-buffer-speed.md` section 3.3).
 src_python/tin_engine/hydrography.py:52	review	PR 4	One lake polygon part, in its file's CRS (PR 4, "Lake gauges").
+src_python/tin_engine/hydrography.py:3	pointer	python-audit.md	Layer 0, no first-party import (python-audit.md, section 11): `gauge` places
+src_python/tin_engine/hydrography.py:6	pointer	docs/increments/29-nve-reference-catchments.md	29 defines (`docs/increments/29-nve-reference-catchments.md`, "Placing the
 src_python/tin_engine/io/__init__.py:4	increment	increment 10	increment 10 makes it the first *encoding* module too, and widens that line.
 src_python/tin_engine/io/__init__.py:10	increment	increment 15a	(increment 15a, Ola's Q3 ruling): a DEM in many tiles has to be listed and
 src_python/tin_engine/io/__init__.py:10	label	15a	(increment 15a, Ola's Q3 ruling): a DEM in many tiles has to be listed and
@@ -297,6 +326,8 @@ src_python/tin_engine/io/__init__.py:10	person	ruling	(increment 15a, Ola's Q3 r
 src_python/tin_engine/io/__init__.py:12	increment	increment 16b	(increment 16b R2): SQLite cannot read a Python stream, so the open connection
 src_python/tin_engine/io/__init__.py:12	label	16b	(increment 16b R2): SQLite cannot read a Python stream, so the open connection
 src_python/tin_engine/io/__init__.py:12	ruling-id	R2	(increment 16b R2): SQLite cannot read a Python stream, so the open connection
+src_python/tin_engine/io/__init__.py:3	pointer	project_structure.md	`project_structure.md` marked this package as the home of "all file decoding";
+src_python/tin_engine/io/__init__.py:15	pointer	06-cdt-viewer.md	writes a file (`06-cdt-viewer.md`, "no file is written below `cli.py`").
 src_python/tin_engine/io/cog.py:142	ruling-id	M15	# The public constructor's copy, not the canvas's no-copy route: M15
 src_python/tin_engine/io/cog.py:1	increment	increment 23a	Decode only the blocks a window needs (increment 23a-1).
 src_python/tin_engine/io/cog.py:1	label	23a-1	Decode only the blocks a window needs (increment 23a-1).
@@ -304,12 +335,17 @@ src_python/tin_engine/io/cog.py:3	label	23a-1	`docs/increments/23-basin-scale.md
 src_python/tin_engine/io/cog.py:15	increment	Increment 26a	Increment 26a adds `decode_class_window` for a raster of class numbers
 src_python/tin_engine/io/cog.py:15	label	26a	Increment 26a adds `decode_class_window` for a raster of class numbers
 src_python/tin_engine/io/cog.py:151	label	26a	`window` of the class raster `source` holds, as `uint8` (26a).
+src_python/tin_engine/io/cog.py:144	pointer	docs/research/basin-memory-options.md	# Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
+src_python/tin_engine/io/cog.py:3	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "Windowed source reads (23a-1)". A
 src_python/tin_engine/io/domain_file.py:1	increment	increment 16	The domain file: what ``--domain`` reads (increment 16, R1; audit PR C).
 src_python/tin_engine/io/domain_file.py:1	ruling-id	R1	The domain file: what ``--domain`` reads (increment 16, R1; audit PR C).
 src_python/tin_engine/io/domain_file.py:1	review	audit PR	The domain file: what ``--domain`` reads (increment 16, R1; audit PR C).
 src_python/tin_engine/io/domain_file.py:6	increment	increment 3	counter-clockwise and holes clockwise (increment 3's winding contract).
+src_python/tin_engine/io/domain_file.py:15	pointer	docs/increments/python-audit.md	``tin_engine.domain`` (``docs/increments/python-audit.md``, section 12), which
 src_python/tin_engine/io/geojson.py:3	review	PR C	Audit PR C (`docs/increments/python-audit.md`, section 12, "The one reading
 src_python/tin_engine/io/geojson.py:75	increment	increment 22	polygon's exterior ring and `properties`, as increment 22 wrote it.
+src_python/tin_engine/io/geojson.py:3	pointer	docs/increments/python-audit.md	Audit PR C (`docs/increments/python-audit.md`, section 12, "The one reading
+src_python/tin_engine/io/geojson.py:12	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "The batch" ("The GeoJSON
 src_python/tin_engine/io/geopackage.py:26	ruling-id	R3	#: Envelope code -> bytes after the 8-byte header (R3); 5-7 are refused.
 src_python/tin_engine/io/geopackage.py:1	increment	increment 16b	GeoPackage features, read without GDAL (increment 16b R2, R3).
 src_python/tin_engine/io/geopackage.py:1	label	16b	GeoPackage features, read without GDAL (increment 16b R2, R3).
@@ -318,7 +354,9 @@ src_python/tin_engine/io/geopackage.py:1	ruling-id	R3	GeoPackage features, read 
 src_python/tin_engine/io/geopackage.py:3	ruling-id	R3	`docs/increments/16b-terrain-polygons.md` R3; the blob header is OGC 12-128r18
 src_python/tin_engine/io/geopackage.py:10	ruling-id	R7	them in, because the mesh depends on input order (R7).
 src_python/tin_engine/io/geopackage.py:135	ruling-id	R5	``s`` its width plus height (R5, "Long edges"), meets the closed ``box``
+src_python/tin_engine/io/geopackage.py:3	pointer	docs/increments/16b-terrain-polygons.md	`docs/increments/16b-terrain-polygons.md` R3; the blob header is OGC 12-128r18
 src_python/tin_engine/io/geopackage_write.py:1	increment	increment 36	A mesh as a GeoPackage, written without GDAL (increment 36).
+src_python/tin_engine/io/geopackage_write.py:3	pointer	docs/increments/36-geopackage-output.md	`docs/increments/36-geopackage-output.md`, sections 4 and 5: the mirror of
 src_python/tin_engine/io/geotiff.py:166	label	15c-2	# 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
 src_python/tin_engine/io/geotiff.py:166	ruling-id	D6	# 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
 src_python/tin_engine/io/geotiff.py:224	review	round 3	# A TiffFrame has no subfiletype to consult (round 3).
@@ -341,17 +379,21 @@ src_python/tin_engine/io/geotiff.py:152	ruling-id	R3	Everything before the pixel
 src_python/tin_engine/io/geotiff.py:270	review	round 3	Tie point and scale from `page.tags` alone (§5 refusals 1-5, round 3).
 src_python/tin_engine/io/geotiff.py:494	label	15c-2	3072 is absent: a geographic 2D CRS in degrees from 2048 (15c-2, D6), or
 src_python/tin_engine/io/geotiff.py:494	ruling-id	D6	3072 is absent: a geographic 2D CRS in degrees from 2048 (15c-2, D6), or
+src_python/tin_engine/io/geotiff.py:3	pointer	docs/increments/11-raster-ingestion.md	Increment 11, `docs/increments/11-raster-ingestion.md`. The reader's job is
+src_python/tin_engine/io/geotiff.py:13	pointer	docs/increments/geotiff-crs-by-parameters.md	EPSG code it matches (`docs/increments/geotiff-crs-by-parameters.md`).
 src_python/tin_engine/io/gml.py:1	increment	increment 16b	OGR-written GML2 features, read with the standard library (increment 16b, Q6).
 src_python/tin_engine/io/gml.py:1	label	16b	OGR-written GML2 features, read with the standard library (increment 16b, Q6).
 src_python/tin_engine/io/gml.py:1	ruling-id	Q6	OGR-written GML2 features, read with the standard library (increment 16b, Q6).
 src_python/tin_engine/io/gml.py:3	ruling-id	R1	`docs/increments/16b-terrain-polygons.md` R1 and R2. The reader is strict (Ola,
 src_python/tin_engine/io/gml.py:3	ruling-id	R2	`docs/increments/16b-terrain-polygons.md` R1 and R2. The reader is strict (Ola,
 src_python/tin_engine/io/gml.py:3	person	Ola	`docs/increments/16b-terrain-polygons.md` R1 and R2. The reader is strict (Ola,
+src_python/tin_engine/io/gml.py:3	pointer	docs/increments/16b-terrain-polygons.md	`docs/increments/16b-terrain-polygons.md` R1 and R2. The reader is strict (Ola,
 src_python/tin_engine/io/mesh_checks.py:8	person	ruling	`--crs` is free text by ruling 5, so both are a documented `ValueError` a
 src_python/tin_engine/io/mesh_index.py:3	increment	Increment 23c	Increment 23c, `docs/increments/23-basin-scale.md`, "Output" and "Settled
 src_python/tin_engine/io/mesh_index.py:3	label	23c	Increment 23c, `docs/increments/23-basin-scale.md`, "Output" and "Settled
 src_python/tin_engine/io/mesh_index.py:4	label	23c	after 23c's red step" (items 3, 5, 6 and 11, question B). `MeshIndex` is
 src_python/tin_engine/io/mesh_index.py:5	label	23d	frozen and refuses an unknown key: it is read by other programs (23d's
+src_python/tin_engine/io/mesh_index.py:3	pointer	docs/increments/23-basin-scale.md	Increment 23c, `docs/increments/23-basin-scale.md`, "Output" and "Settled
 src_python/tin_engine/io/models.py:119	review	round 2	# Finite or None (§6, round 2): a NaN sentinel matches no cell under
 src_python/tin_engine/io/models.py:281	review	round 3	# base is read-only too (§7, the concurrency rule, round 3).
 src_python/tin_engine/io/models.py:3	increment	Increment 11	Increment 11, `docs/increments/11-raster-ingestion.md` §7. Both models are
@@ -372,6 +414,7 @@ src_python/tin_engine/io/models.py:288	label	15a	Take `array` as the tile's own,
 src_python/tin_engine/io/models.py:288	ruling-id	R7	Take `array` as the tile's own, without the copy (increment 15a, R7).
 src_python/tin_engine/io/models.py:291	increment	increment 15e	`target_grid.resample` (increment 15e), each on a canvas it allocated
 src_python/tin_engine/io/models.py:291	label	15e	`target_grid.resample` (increment 15e), each on a canvas it allocated
+src_python/tin_engine/io/models.py:3	pointer	docs/increments/11-raster-ingestion.md	Increment 11, `docs/increments/11-raster-ingestion.md` §7. Both models are
 src_python/tin_engine/io/ply.py:118	increment	Increment 7	# Increment 7's mechanism 3: a bit nobody names is refused, not written.
 src_python/tin_engine/io/ply.py:128	person	ruling	# readers), and --crs is free text (ruling 5): io/mesh_checks.py's gate.
 src_python/tin_engine/io/ply.py:3	increment	Increment 10	Increment 10, ruling 6. This module is pure. It takes no path, opens no file,
@@ -429,10 +472,13 @@ src_python/tin_engine/io/repository.py:144	label	23a-1	`window` of tile `name`, 
 src_python/tin_engine/io/repository.py:271	label	26a	The day object `name`'s header was first fetched (26a), if recorded.
 src_python/tin_engine/io/repository.py:284	label	26a	`window` of the class raster `name` (26a), empty blocks as 0.
 src_python/tin_engine/io/repository.py:289	label	26a	raster, top to bottom in strips of at most `rows` rows (26a). A box
+src_python/tin_engine/io/repository.py:3	pointer	docs/increments/15-dem-mosaic.md	`docs/increments/15-dem-mosaic.md` R1-R3 and Ola's Q3 ruling: this is the one
 src_python/tin_engine/io/rivers.py:1	increment	increment 29	River segments (NVE's ELVIS network or a user's own), read back (increment 29, PR 3).
 src_python/tin_engine/io/rivers.py:1	review	PR 3	River segments (NVE's ELVIS network or a user's own), read back (increment 29, PR 3).
+src_python/tin_engine/io/rivers.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "Placing the gauge" (the
 src_python/tin_engine/io/station_set.py:1	increment	increment 29	Gauging stations and their reference catchments, read back (increment 29, PR 3).
 src_python/tin_engine/io/station_set.py:1	review	PR 3	Gauging stations and their reference catchments, read back (increment 29, PR 3).
+src_python/tin_engine/io/station_set.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "The station set". Reads
 src_python/tin_engine/io/vtk_legacy.py:47	increment	increment 12	#: ``elevation`` is the point array of heights (increment 12), so no dataset
 src_python/tin_engine/io/vtk_legacy.py:50	increment	increment 16c	#: ``land_cover_code`` (increment 16c, R3); the three ``land_cover_*`` arrays
 src_python/tin_engine/io/vtk_legacy.py:50	label	16c	#: ``land_cover_code`` (increment 16c, R3); the three ``land_cover_*`` arrays
@@ -448,20 +494,25 @@ src_python/tin_engine/io/vtk_legacy.py:92	label	16c	triangle_codes: `(T,)` land-
 src_python/tin_engine/io/vtk_legacy.py:92	ruling-id	R3	triangle_codes: `(T,)` land-cover codes (increment 16c, R3), written
 src_python/tin_engine/io/vtk_legacy.py:97	increment	increment 26b	(increment 26b), written as the dataset arrays `land_cover_offsets`
 src_python/tin_engine/io/vtk_legacy.py:97	label	26b	(increment 26b), written as the dataset arrays `land_cover_offsets`
+src_python/tin_engine/io/vtk_legacy.py:3	pointer	docs/increments/13-bundled-mesh.md	Increment 13 (`docs/increments/13-bundled-mesh.md`). One file carries the
 src_python/tin_engine/land_cover_fractions.py:1	increment	increment 26b	Exact land-cover class fractions per triangle (increment 26b).
 src_python/tin_engine/land_cover_fractions.py:1	label	26b	Exact land-cover class fractions per triangle (increment 26b).
 src_python/tin_engine/land_cover_fractions.py:9	increment	increment 26c	exact areas become fractions. The cutoff and the ledger are increment 26c's;
 src_python/tin_engine/land_cover_fractions.py:9	label	26c	exact areas become fractions. The cutoff and the ledger are increment 26c's;
 src_python/tin_engine/land_cover_fractions.py:12	label	16c	Not `land_cover.py`: 16c's `landcover.py` labels triangles from polygons and is
+src_python/tin_engine/land_cover_fractions.py:3	pointer	docs/increments/26-land-cover.md	`docs/increments/26-land-cover.md`, 1.1 "What is computed, and in which
 src_python/tin_engine/landcover.py:3	increment	Increment 16c	Increment 16c (`docs/increments/16c-landcover-labels.md`, R1). Pure: numpy and
 src_python/tin_engine/landcover.py:3	label	16c	Increment 16c (`docs/increments/16c-landcover-labels.md`, R1). Pure: numpy and
 src_python/tin_engine/landcover.py:3	ruling-id	R1	Increment 16c (`docs/increments/16c-landcover-labels.md`, R1). Pure: numpy and
 src_python/tin_engine/landcover.py:16	ruling-id	D2	Overlaps (Default D2): the polygon of smallest area wins, ties to the smaller
 src_python/tin_engine/landcover.py:33	ruling-id	R3	The codes, and the counts of R3's stderr line.
 src_python/tin_engine/landcover.py:140	ruling-id	D2	Each point's code by D2, and how many polygons it lies in.
+src_python/tin_engine/landcover.py:3	pointer	docs/increments/16c-landcover-labels.md	Increment 16c (`docs/increments/16c-landcover-labels.md`, R1). Pure: numpy and
 src_python/tin_engine/mcp/__init__.py:1	increment	increment 37	The rasputin commands served over the Model Context Protocol (increment 37).
 src_python/tin_engine/mcp/schema.py:3	increment	Increment 37	Increment 37 (`docs/increments/37-mcp-server.md`, sections 5 and 6.3). Pure:
+src_python/tin_engine/mcp/schema.py:3	pointer	docs/increments/37-mcp-server.md	Increment 37 (`docs/increments/37-mcp-server.md`, sections 5 and 6.3). Pure:
 src_python/tin_engine/mcp/server.py:3	increment	Increment 37	Increment 37 (`docs/increments/37-mcp-server.md`, sections 4 to 7). The
+src_python/tin_engine/mcp/server.py:3	pointer	docs/increments/37-mcp-server.md	Increment 37 (`docs/increments/37-mcp-server.md`, sections 4 to 7). The
 src_python/tin_engine/mosaic.py:33	person	Ola	#: tiles differ by at least this (Ola, 2026-09-28: "Ignore below 1mm").
 src_python/tin_engine/mosaic.py:37	ruling-id	B3	#: within this. Measured noise is at most 2.2e-11 cells (B3), and 0 for DTM10.
 src_python/tin_engine/mosaic.py:1	increment	increment 15a	Many DEM tiles as one node grid: planning from headers, then assembly (increment 15a).
@@ -500,21 +551,26 @@ src_python/tin_engine/mosaic.py:534	label	30c	the nodes the cheap tests keep (30
 src_python/tin_engine/mosaic.py:550	ruling-id	R4	Why `b` is not on `a`'s lattice (R4.3, Q5), in the terms that differ.
 src_python/tin_engine/mosaic.py:550	ruling-id	Q5	Why `b` is not on `a`'s lattice (R4.3, Q5), in the terms that differ.
 src_python/tin_engine/mosaic.py:98	increment	increment 25	The `dem_seams` entry, unescaped (increment 25's wording).
+src_python/tin_engine/mosaic.py:3	pointer	docs/increments/15-dem-mosaic.md	`docs/increments/15-dem-mosaic.md` R1, R4, R5 and R7, with the two
 src_python/tin_engine/outline.py:1	increment	increment 22	The fine outline of a node mask: marching squares (increment 22, PR 1).
 src_python/tin_engine/outline.py:1	review	PR 1	The fine outline of a node mask: marching squares (increment 22, PR 1).
+src_python/tin_engine/outline.py:3	pointer	docs/increments/22-auto-catchment.md	`docs/increments/22-auto-catchment.md`, "The fine outline". Every vertex is
 src_python/tin_engine/palettes.py:3	increment	Increment 16c	Increment 16c (`docs/increments/16c-landcover-labels.md`, R4). Data plus one
 src_python/tin_engine/palettes.py:3	label	16c	Increment 16c (`docs/increments/16c-landcover-labels.md`, R4). Data plus one
 src_python/tin_engine/palettes.py:3	ruling-id	R4	Increment 16c (`docs/increments/16c-landcover-labels.md`, R4). Data plus one
 src_python/tin_engine/palettes.py:7	ruling-id	D6	the sea almost white). They are taste, and Ola's to change (Default D6).
 src_python/tin_engine/palettes.py:7	person	Ola	the sea almost white). They are taste, and Ola's to change (Default D6).
+src_python/tin_engine/palettes.py:3	pointer	docs/increments/16c-landcover-labels.md	Increment 16c (`docs/increments/16c-landcover-labels.md`, R4). Data plus one
 src_python/tin_engine/raster.py:26	label	15c	# 15c, J4: no degrees in _core
 src_python/tin_engine/raster.py:26	ruling-id	J4	# 15c, J4: no degrees in _core
 src_python/tin_engine/raster.py:3	increment	Increment 12	Increment 12, R5, and ``project_structure.md``'s ``raster`` section: this is the
 src_python/tin_engine/raster.py:3	ruling-id	R5	Increment 12, R5, and ``project_structure.md``'s ``raster`` section: this is the
+src_python/tin_engine/raster.py:3	pointer	project_structure.md	Increment 12, R5, and ``project_structure.md``'s ``raster`` section: this is the
 src_python/tin_engine/reference.py:48	review	PR 4	# a row's `seeded_by` (PR 4, "Lake gauges")
 src_python/tin_engine/reference.py:1	increment	increment 29	Our catchment against NVE's polygon: agreement, class, summary (increment 29, PR 4).
 src_python/tin_engine/reference.py:1	review	PR 4	Our catchment against NVE's polygon: agreement, class, summary (increment 29, PR 4).
 src_python/tin_engine/reference.py:4	review	PR 4	and "PR 4's red step". Both outlines are counted on the DEM's node lattice
+src_python/tin_engine/reference.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "Agreement and classes"
 src_python/tin_engine/run_record.py:20	person	Ola	#: for Ola"). The Inputs entries come first (``INPUTS``), then the mesh-file
 src_python/tin_engine/run_record.py:21	ruling-id	D2	#: fields in D2's order, then the counts and checks.
 src_python/tin_engine/run_record.py:119	ruling-id	D2	#: D2's mesh-file fields, and the CORINE notice kept by Ola's ruling.
@@ -527,10 +583,12 @@ src_python/tin_engine/run_record.py:168	ruling-id	D3	an int a count, anything el
 src_python/tin_engine/run_record.py:191	ruling-id	D2	A run with ``--tolerance``. ``max_error_m`` is the measured figure; D2
 src_python/tin_engine/run_record.py:222	ruling-id	D7	D7: one line for a person, then one ``Warning:`` line per broken promise.
 src_python/tin_engine/run_record.py:293	ruling-id	D5	D5: ``--record``'s text. The record's order, ASCII, one trailing newline.
+src_python/tin_engine/run_record.py:3	pointer	docs/increments/25-plain-output.md	``docs/increments/25-plain-output.md`` D1 to D7. Pure: no numpy, no ``_core``,
 src_python/tin_engine/sensitivity.py:21	person	Ola	#: class's own 5 % bar (Ola's ruling, 2026-10-04).
 src_python/tin_engine/sensitivity.py:21	person	ruling	#: class's own 5 % bar (Ola's ruling, 2026-10-04).
 src_python/tin_engine/sensitivity.py:1	increment	increment 29	Is the catchment area well defined at this gauge? (increment 29, PR 2).
 src_python/tin_engine/sensitivity.py:1	review	PR 2	Is the catchment area well defined at this gauge? (increment 29, PR 2).
+src_python/tin_engine/sensitivity.py:3	pointer	docs/increments/29-nve-reference-catchments.md	`docs/increments/29-nve-reference-catchments.md`, "Sensitivity". The area is
 src_python/tin_engine/sources.py:56	label	23a-2	#: The works the distributor asks to cite (23a-2); `notice` and the mesh file carry them.
 src_python/tin_engine/sources.py:1	increment	increments 23a	The catalogue of remote DEM sources `rasputin fetch` copies (increments 23a-1, 23a-2).
 src_python/tin_engine/sources.py:1	label	23a-1	The catalogue of remote DEM sources `rasputin fetch` copies (increments 23a-1, 23a-2).
@@ -543,6 +601,8 @@ src_python/tin_engine/sources.py:12	label	26a	Increment 26a adds a source of lan
 src_python/tin_engine/sources.py:30	label	23a-1	only Pydantic (23a-1, decided 2; `test_sources_imports_pydantic_only`).
 src_python/tin_engine/sources.py:191	label	23a-2	`<cache>/<source>/NOTICE.txt` (23a-2, decided 8): a rendering of the
 src_python/tin_engine/sources.py:193	label	26a	are the rendered credits of the objects fetched (26a), else the entry's.
+src_python/tin_engine/sources.py:3	pointer	docs/increments/23-basin-scale.md	`docs/increments/23-basin-scale.md`, "The fetch step and the tile cache" and
+src_python/tin_engine/sources.py:13	pointer	docs/increments/26-land-cover.md	year (`one-cog-per-year`, `years`, `values`; `docs/increments/26-land-cover.md`,
 src_python/tin_engine/stats.py:124	increment	increment 25	#: The DEM was resampled onto another grid (increment 25, D4): its nodes
 src_python/tin_engine/stats.py:124	ruling-id	D4	#: The DEM was resampled onto another grid (increment 25, D4): its nodes
 src_python/tin_engine/stats.py:138	increment	increment 24	#: build made the mesh (increment 24). Filled by the CLI from ``_core``.
@@ -558,6 +618,7 @@ src_python/tin_engine/stats.py:59	ruling-id	R3	R3. Angles in degrees, shares as 
 src_python/tin_engine/stats.py:74	ruling-id	R3	vertex degree as incident triangles (R3).
 src_python/tin_engine/stats.py:110	ruling-id	R4	R4's Sizes rows; a None row does not apply and is omitted.
 src_python/tin_engine/stats.py:250	ruling-id	R4	The Markdown report (R4). Pure: no clock, no I/O.
+src_python/tin_engine/stats.py:3	pointer	docs/increments/17-mesh-stats.md	``docs/increments/17-mesh-stats.md`` R1, R3 to R5. Pure: numpy only, no
 src_python/tin_engine/target_grid.py:31	ruling-id	D4	#: Source nodes per check-point block side (D4).
 src_python/tin_engine/target_grid.py:34	increment	increment 15e	#: Target nodes per resample block (increment 15e, fix 1): bounds one block's
 src_python/tin_engine/target_grid.py:34	label	15e	#: Target nodes per resample block (increment 15e, fix 1): bounds one block's
@@ -578,8 +639,10 @@ src_python/tin_engine/target_grid.py:124	ruling-id	D2	reaching a pole, is refuse
 src_python/tin_engine/target_grid.py:169	ruling-id	D3	The grid's nodes bilinear from the source in its own index space (D3).
 src_python/tin_engine/target_grid.py:172	ruling-id	J3	coordinates alone, so block size and thread count change no value (J3).
 src_python/tin_engine/target_grid.py:227	ruling-id	D4	source nodes, in row-major block order (D4). A block whose outline's image
+src_python/tin_engine/target_grid.py:2	pointer	docs/increments/15c-geographic-dem.md	(increment 15c-2, `docs/increments/15c-geographic-dem.md` D2-D4).
 src_python/tin_engine/tolerance_field.py:3	increment	Increment 33	Increment 33 (``docs/increments/33-feature-tolerance.md``, sections 3, 4.5
 src_python/tin_engine/tolerance_field.py:43	increment	increment 34	``--tolerance-slope N START END`` (increment 34): N in metres, the angles
+src_python/tin_engine/tolerance_field.py:3	pointer	docs/increments/33-feature-tolerance.md	Increment 33 (``docs/increments/33-feature-tolerance.md``, sections 3, 4.5
 src_python/tin_engine/viz/__init__.py:3	increment	Increment 6a	Increment 6a shipped ``protocols`` and 6b-i the scene builder; the SVG writer,
 src_python/tin_engine/viz/__init__.py:3	label	6a	Increment 6a shipped ``protocols`` and 6b-i the scene builder; the SVG writer,
 src_python/tin_engine/viz/__init__.py:3	label	6b-i	Increment 6a shipped ``protocols`` and 6b-i the scene builder; the SVG writer,
@@ -595,7 +658,11 @@ src_python/tin_engine/viz/scene.py:3	label	6b-i	This module is increment 6b-i in
 src_python/tin_engine/viz/scene.py:43	label	6b-ii	What the picture is of, which decides how 6b-ii presents it.
 src_python/tin_engine/viz/scene.py:101	label	6b-ii	Everything 6b-ii needs, and nothing it does not.
 src_python/tin_engine/viz/style.py:17	label	6b-ii	6b-ii rather than with the scene builder.
+src_python/tin_engine/viz/style.py:6	pointer	06-cdt-viewer.md	token resolves to is taste, and ``06-cdt-viewer.md`` rules that the stylesheet
+src_python/tin_engine/viz/style.py:16	pointer	06-cdt-viewer.md	and knows nothing about a scene, which is why ``06-cdt-viewer.md`` pairs it with
 src_python/tin_engine/viz/svg.py:3	person	ruling	Hand-written SVG, per ``06-cdt-viewer.md``'s dependency ruling -- no plotting
 src_python/tin_engine/viz/svg.py:157	person	ruling	stylesheet's ruling and a bit position is a vocabulary's numbering.
 src_python/tin_engine/viz/svg.py:212	label	6b-i	One ``<line>`` per scene edge -- one, because 6b-i deduplicated them.
 src_python/tin_engine/viz/svg.py:258	increment	increment 4	``Ok BUT EMPTY`` is a successful call that produced nothing -- increment 4's
+src_python/tin_engine/viz/svg.py:47	pointer	06-cdt-viewer.md	#: Untested by design (`06-cdt-viewer.md`: a golden-file comparison is rejected
+src_python/tin_engine/viz/svg.py:3	pointer	06-cdt-viewer.md	Hand-written SVG, per ``06-cdt-viewer.md``'s dependency ruling -- no plotting

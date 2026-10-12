@@ -1,9 +1,9 @@
 # Increment 42 — Readable Python docstrings and comments
 
-Status: **designed** (`@architect`, 2026-10-13, off master `dd33a9ce`), not yet
-reviewed. Six PRs (section 8). Every PR but the checker's changes no code: its
-docstrings and comments are rewritten, and an AST comparison (section 6) shows
-that no code token moved.
+Status: **designed, review round 1 fixes in; next round 2** (`@architect`,
+2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
+checker's changes no code: its docstrings and comments are rewritten, and an
+AST comparison (section 6) shows that no code token moved.
 
 ## 1. Ola's ask
 
@@ -74,27 +74,32 @@ function docstrings and comments. These are counted by `ast` (docstring spans)
 and `tokenize` (comment tokens). A bare string after an assignment is not a
 docstring to `ast` and is not counted.
 
-**History labels.** These are found by the probe's six patterns (section 6),
-which run over docstrings and comments only:
+**History labels.** These are found by the probe's seven rules (section 6),
+which run over docstrings, comments and the CLI's `help=` strings only:
 
 ```
 $ python3 docs/increments/42-probes/history_probe.py scan src_python/tin_engine \
     > docs/increments/42-probes/scan_output.txt
-TOTAL 601 {'increment': 147, 'review': 28, 'label': 156, 'ruling-id': 216, 'person': 54}
+TOTAL 668 {'increment': 149, 'pointer': 65, 'review': 28, 'label': 156, 'ruling-id': 216, 'person': 54}
 ```
 
-That is 601 matches on 404 lines in 62 of the 65 files. There are no commit
-hashes (`hash`: 0). The only hex runs in the package are the WGS 84 constants
-in `io/geopackage_write.py`. The matches per file:
+That is 668 matches on 441 lines in 63 of the 65 files. Without the `pointer`
+rule and the `help=` strings it is 601 matches on 404 lines in 62 files: the
+`pointer` rule adds 35 lines no other rule flags, and the two `help=` strings
+add 2 `increment` matches. There are no commit hashes (`hash`: 0). The only hex
+runs in the package are the WGS 84 constants in `io/geopackage_write.py`. The
+matches per file:
 
 ```
-cli.py 99, feature_input.py 43, mosaic.py 38, io/repository.py 36, dem_input.py 31,
-io/geotiff.py 22, io/ply.py 21, target_grid.py 20, io/models.py 20, stats.py 15,
-io/vtk_legacy.py 15, sources.py 12, run_record.py 12, final_check.py 12,
-features.py 12, crs.py 12, io/__init__.py 9, decompose.py 9, chains.py 9,
-io/geopackage.py 8, edge_strip.py 8, domain.py 8, io/cog.py 7, viz/fixtures.py 6,
-landcover.py 6, io/gml.py 6, grid_domain.py 6, fetch/plan.py 6, palettes.py 5,
-land_cover_fractions.py 5, fetch/run.py 5, catchment.py 5, and 30 files with 1 to 4
+cli.py 104, feature_input.py 44, mosaic.py 39, io/repository.py 37, dem_input.py 32,
+io/geotiff.py 24, io/models.py 21, io/ply.py 21, target_grid.py 21, io/vtk_legacy.py 16,
+stats.py 16, crs.py 15, sources.py 14, features.py 13, run_record.py 13, final_check.py 12,
+decompose.py 11, io/__init__.py 11, domain.py 10, chains.py 9, io/cog.py 9,
+io/geopackage.py 9, edge_strip.py 8, fetch/plan.py 7, io/gml.py 7, landcover.py 7,
+catchment.py 6, fetch/run.py 6, grid_domain.py 6, land_cover_fractions.py 6, palettes.py 6,
+viz/fixtures.py 6, viz/svg.py 6, catchment_batch.py 5, fetch/http.py 5, gauge.py 5,
+io/domain_file.py 5, io/mesh_index.py 5, raster.py 5, reference.py 5, sensitivity.py 5,
+and 22 files with 1 to 4
 ```
 
 (Paths under `src_python/tin_engine/`; `cut -f1 docs/increments/42-probes/scan_output.txt`
@@ -112,7 +117,8 @@ marker was read (100 lines). All of them are design-file IDs (`R5`, `D2`, `Q11`,
 `J6`, `B14`). The draft's two false positives, `1e-6` and `1e-4`, are now
 excluded as scientific notation, and so are labels inside a
 `docs/increments/` path (`15c-geographic-dem.md`). No false positive is left
-among the 601 matches that a full read of `scan_output.txt` found.
+among the 601 label matches that a full read of `scan_output.txt` found. The
+65 `pointer` matches and the 2 `help=` matches were read too: all true.
 
 **A sample of 30, classified.** Every twelfth line of the broader scan (352
 lines, including the was/now/since words) was taken and judged by hand:
@@ -125,10 +131,11 @@ lines, including the was/now/since words) was taken and judged by hand:
 | Not history (ordinary "was", a number) | 3 | Untouched |
 | Text a test or tool reads | 0 in the sample | See below |
 
-The checker's patterns flag 26 of the 27 history lines in the sample. The one
-they miss is `src_python/tin_engine/catchment_core.py@dd33a9ce:1`, "(python-audit.md, section 11)": a bare
-file name with no label. Other misses seen while browsing are of the same
-kind: a bare increment number in parentheses, `(32)`
+The checker's rules flag all 27 history lines in the sample. The one the label
+rules miss, `src_python/tin_engine/catchment_core.py@dd33a9ce:1`, "(python-audit.md, section 11)", a
+bare file name with no label, is flagged by the `pointer` rule (a `.md` name in
+a function's or class's docstring, or in a comment). The misses seen while
+browsing are bare increment numbers: in parentheses, `(32)`
 (`src_python/tin_engine/feature_input.py@dd33a9ce:8`), or followed by a section, `35, section 3.2`
 (`src_python/tin_engine/feature_input.py@dd33a9ce:252`), `# 34, 4.3:` (`src_python/tin_engine/run_record.py@dd33a9ce:250`). The reviewer
 catches these. A pattern for a bare number would flag every parenthesised
@@ -152,7 +159,9 @@ count.
   `17`, `16c`, `26b`, `25`), and `palette`, `fetch`, `fetch-stations`,
   `catchment` and `station-catchments` have 1 or 2 each. Two help texts that
   are code, not docstrings, print one each: `src_python/tin_engine/cli.py@dd33a9ce:280` (`mcp`, "(increment
-  37)") and `src_python/tin_engine/cli.py@dd33a9ce:2395` (`--river`, "increment 29").
+  37)") and `src_python/tin_engine/cli.py@dd33a9ce:2395` (`--rivers`, "increment 29"). The checker
+  therefore reads `help=` strings too (section 6), so labels cannot come back
+  into `--help` through them.
 - *Tools.* `tools/check_citations.py` scans comments and docstrings in
   `src_python/` for citations and checks that they resolve. No other tool reads
   this text (`grep -n "src_python\|__doc__\|get_docstring" tools/*.py`: the
@@ -191,12 +200,16 @@ applies it as written here.
 > - A pointer to a design file is kept only where the derivation or
 >   measurement behind a value is too long to repeat. It names the file and a
 >   heading, in the form `tools/check_citations.py` verifies:
->   `` `docs/increments/32-landcover-simplify.md`, *5.3 The band in plan, not over the DEM* ``. At most one
->   per module docstring. None in functions.
-> - Tool directives (`# type: ignore[...]`, `# noqa: ...`, `# fmt: skip`) are
->   code: they are kept exactly as they are.
+>   `` `docs/increments/32-landcover-simplify.md`, *5.3 The band in plan, not over the DEM* ``, on one
+>   line. At most one per module docstring. None in classes, functions,
+>   comments or help text.
+> - The same holds for the help text the CLI prints (`help=` strings).
+> - Tool directives (`# type: ignore[...]`, `# noqa: ...`, `# ruff: noqa`,
+>   `# mypy: ...`, `# fmt: skip`) are code: they are kept exactly as they are.
 >
-> Checked by `tools/check_code_history.py`.
+> Checked by `tools/check_code_history.py`, except two things the reviewer
+> judges: whether a sentence still describes the code, and history written
+> without a label ("used to", a bare increment number).
 
 ## 5. Three before-and-after examples
 
@@ -314,21 +327,34 @@ back: the measured count grew with every increment. So: **a checker, as a CI
 gate** (default D1).
 
 *What it does.* For each Python file in its scope it reads the comments
-(`tokenize`) and the module, class and function docstrings (`ast`), never
-string literals, and reports `path:line: rule: matched text` for each match of:
+(`tokenize`), the module, class and function docstrings (`ast`), and the string
+value of every `help=`, `short_help=` or `epilog=` keyword argument (`ast`; the
+constant parts of an f-string, reported at the line where the value starts).
+It reads no other string literal. It reports `path:line: rule: matched text`
+for each match of:
 
 | Rule | Pattern (the probe's) | Today |
 |---|---|---|
-| `increment` | `increment` + a number and optional letter | 147 |
+| `increment` | `increment` + a number and optional letter | 149 (2 in `help=` strings) |
 | `label` | a number and a letter `a`-`f`, optional `-2` or `-ii` (`16c`, `23a-2`, `6b-ii`); not inside a path, not scientific notation (`1e-6`), not a format spec | 156 |
 | `ruling-id` | a design ID: one of `R D Q B C S U J M F T` and a number (`R5`, `Q11`, `R4.3`); `D8` excepted, because D8 is also the hydrology flow-direction scheme (the probe does not except it: 3 of its 216 are `D8`, all design IDs today) | 216 |
 | `review` | `audit PR`, `PR 4`, `PR C`, `review round`, `round 3` | 28 |
 | `person` | `Ola`, `ruled`, `ruling` | 54 |
 | `hash` | a backticked hex run of 7-12 characters | 0 |
+| `pointer` | a `.md` file name (`check_citations.py`'s `MD_PATH`) anywhere but the one allowed place: the first one in the module docstring, in the heading form `` `<path>.md`, *<heading>* `` on one line (`check_citations.py`'s `HEADING_CITATION`, which also checks the heading exists) | 65, on 65 lines in 51 files; 35 of those lines no other rule flags |
 
 Exit 1 when anything is reported, 0 otherwise. There is no inline escape: on a
-measured 0 false positives in 601, a false positive is reworded, not
-silenced.
+measured 0 false positives in 668, a false positive is reworded, not
+silenced. (Every `pointer` hit today is a true one: none of the 65 is in the
+heading form, so each breaks the rule as written.)
+
+*Why a `pointer` rule rather than the reviewer.* The rule of section 4 sets
+three limits on pointers, and 35 of the 65 lines holding one carry no label
+another rule would flag (`src_python/tin_engine/crs.py@dd33a9ce:101-102` is a pointer in a function
+docstring). Left to the reviewer, a limit the checker does not see would return
+the way the labels did. The rule costs about 10 lines and has a measured 0
+false positives. It copies `check_citations.py`'s two patterns rather than
+importing them, so neither gate depends on the other.
 
 *Scope.* The scope is a list of paths in `pyproject.toml`, under
 `[tool.check_code_history] paths`, read with `tomllib`. It is kept outside the
@@ -342,25 +368,37 @@ between `BASE` and the working tree, that the code is unchanged. The base
 version is read with `git show BASE:path`. Two things are compared:
 
 1. `ast.dump` of each version, after removing every statement that is a bare
-   string constant (docstrings included). `ast.dump` leaves out line and column
-   numbers by default, so reflowed text and moved lines do not count. Comments
-   are not in the AST at all.
-2. The tool directives in comments (`type: ignore[...]`, `noqa: <codes>`,
-   `fmt: ...`, `pragma ...`), in order. The text after a `noqa` code is prose
-   and is not compared.
+   string constant (docstrings included) from every statement list: `body`,
+   `orelse` and `finalbody`, so a bare string under `else`, `except`, `finally`
+   or a loop's `else` is removed like one under `def`. `ast.dump` leaves out
+   line and column numbers by default, so reflowed text and moved lines do not
+   count. Comments are not in the AST at all.
+2. The tool directives in comments, in order. A directive is matched anywhere
+   in a comment, not only right after `#`: `noqa` with its codes,
+   `type: ignore[...]`, `fmt: ...`, `pragma ...`, and a comment's text from a
+   `ruff:`, `mypy:`, `pyright:` or `isort:` prefix to its end (so
+   `# ruff: noqa: RUF001`, as in `src_python/tin_engine/stats.py@dd33a9ce:12`, is compared whole). The
+   text after a `noqa` code list is prose and is not compared. A prose comment
+   that merely contains the word `noqa` counts as a directive too; that errs
+   towards "differs", the safe side.
 
 `ast.dump` alone is **not** enough, because a dropped `# noqa` or
 `# type: ignore` changes what a gate does without changing the AST. Part 2
-closes that gap. Probes, run with the prototype on `io/repository.py` and
-`catchment_batch.py`:
+closes that gap. Probes, run with the prototype on `io/repository.py`,
+`catchment_batch.py`, `stats.py` and a 12-line `try`/`for` module:
 
 | Change | Result |
 |---|---|
-| a docstring rewritten | same code |
-| a comment rewritten | same code |
+| a docstring rewritten (`io/repository.py` line 1) | same code |
+| two comments rewritten (`io/repository.py` lines 187 and 352) | same code |
 | one string literal changed (`"rb"` to `"r+b"`) | CODE DIFFERS |
 | `# noqa: N818` dropped | CODE DIFFERS |
 | only the reason after `# noqa: N818` reworded | same code |
+| `# ruff: noqa` added at the top of `io/repository.py` | CODE DIFFERS (the round-1 prototype said "same code") |
+| `# mypy: ignore-errors`, `# pyright: basic` or `# isort: skip_file` added | CODE DIFFERS, each |
+| `# ruff: noqa: RUF001` dropped from `stats.py`, or a code added to it | CODE DIFFERS, each |
+| a bare string added under `except`, `else`, `finally` and a `for`'s `else` | same code (the round-1 prototype said "differs") |
+| a function's only docstring replaced by `...` | CODE DIFFERS |
 | every package file against itself | 0 differ |
 
 What same-code mode does not show, and how each is covered:
@@ -369,15 +407,19 @@ What same-code mode does not show, and how each is covered:
   and the MCP tool descriptions. PR 5 commits the nine `--help` outputs before
   and after into the review, and the suite's help tests run.
 - Line numbers move: section 7.
+- A changed `help=` string is a changed string literal, so same-code mode
+  reports it: PR 5's two are made in a commit of their own, and the sweep is
+  compared against that commit.
 - A bare string removed from a function whose body is only that string leaves
   an empty body. Python refuses that, so the writer must add `...`, and
   same-code mode reports it. Such a docstring is shortened, never deleted.
 
-*Size.* About 90 counted lines: the scan about 35, same-code mode about 30, the
-scope, arguments and output about 25. These are production lines under
+*Size.* About 105 counted lines: the scan about 35, the `help=` strings and the
+`pointer` rule about 15, same-code mode about 30, the scope, arguments and
+output about 25. These are production lines under
 `CLAUDE.md` §2 (a Python file under `tools/`).
 
-## 7. Citations into the package: PR 0
+## 7. Citations into the package: pinned in PR 1
 
 Each of the 134 unpinned line citations into `src_python/` is pinned to the
 commit that last changed the citing line (`git blame --porcelain -L n,n`). That
@@ -390,6 +432,20 @@ in 27 files and 134 lines, and it is mechanical. A citation that
 was already stale stays as stale as it was: pinning neither fixes nor hides
 it.
 
+*Where.* The pins are the first commit of PR 1, by `@tester` (the files are
+docs and tests), ahead of the red commit. The pinning script is committed as
+`docs/increments/42-probes/pin_citations.py`, so the reviewer can rerun it and
+see no further change. The round-1 design had them as a PR 0 of their own.
+Folding them in saves one PR, one CI run and one review round, at no cost: PR
+1 touches `tests/` and runs the full CI anyway, and it merges before every
+sweep PR, which is the one order the pins need. Pinning per sweep PR was the
+other choice; it was not taken because it spreads the same 134 mechanical
+lines over five reviews instead of one.
+
+A citation into the package added by another PR after PR 1 merges shows up in
+the sweep PR's `check_citations.py` run, as at risk or broken; that sweep PR
+pins it the same way.
+
 ## 8. The PR split
 
 Under `CLAUDE.md` §2, only lines that are not comments or docstrings count. So
@@ -400,13 +456,15 @@ neighbours), plus whole module docstrings in the changelog style of example 1.
 
 | PR | Scope | Files | Flagged lines | Lines changed (est.) | Counted lines |
 |---|---|---|---|---|---|
-| 0 | Pin the 134 citations into the package (section 7) | 27 docs, tests and benchmark files | — | about 134 | 0 |
-| 1 | `tools/check_code_history.py`, its tests, scope empty, CI step | 2 + workflow + pyproject | — | — | about 90 |
-| 2 | The catchment family (`catchment*.py`, `gauge`, `burn`, `outline`, `grow`, `hydrography`, `reference`, `sensitivity`), `fetch/`, `mcp/`, `viz/`, `sources.py`, `__init__.py`, `__main__.py` | 27 | 61 | about 130 | 0 |
-| 3 | `io/` | 16 | 103 | about 250 | 0 |
-| 4 | DEM input and checks: `dem_input`, `mosaic`, `crs`, `target_grid`, `domain`, `grid_domain`, `raster`, `elevation`, `final_check`, `edge_strip`, `tolerance_field`, `decompose` | 12 | 100 | about 220 | 0 |
-| 5 | `cli.py`, and its two help strings (`src_python/tin_engine/cli.py@dd33a9ce:280`, `src_python/tin_engine/cli.py@dd33a9ce:2395`) | 1 | 69 | about 160 | 2 |
-| 6 | Features and reports: `chains`, `features`, `feature_input`, `landcover`, `palettes`, `land_cover_fractions`, `border_simplify`, `run_record`, `stats`; the scope becomes the whole package | 9 | 71 | about 160 | 0 |
+| 1 | The 134 citations into the package pinned (section 7, first commit); `tools/check_code_history.py`, its tests, scope empty, CI step | 27 docs, tests and benchmark files; 2 + workflow + pyproject | — | about 134 pins | about 105 |
+| 2 | The catchment family (`catchment*.py`, `gauge`, `burn`, `outline`, `grow`, `hydrography`, `reference`, `sensitivity`), `fetch/`, `mcp/`, `viz/`, `sources.py`, `__init__.py`, `__main__.py` | 27 | 79 | about 160 | 0 |
+| 3 | `io/` | 16 | 112 | about 270 | 0 |
+| 4 | DEM input and checks: `dem_input`, `mosaic`, `crs`, `target_grid`, `domain`, `grid_domain`, `raster`, `elevation`, `final_check`, `edge_strip`, `tolerance_field`, `decompose` | 12 | 103 | about 230 | 0 |
+| 5 | `cli.py`, and its two help strings (`src_python/tin_engine/cli.py@dd33a9ce:280`, `src_python/tin_engine/cli.py@dd33a9ce:2395`) | 1 | 74 | about 170 | 2 |
+| 6 | Features and reports: `chains`, `features`, `feature_input`, `landcover`, `palettes`, `land_cover_fractions`, `border_simplify`, `run_record`, `stats`; the scope becomes the whole package | 9 | 73 | about 165 | 0 |
+
+Flagged lines are the lines of `scan_output.txt` in each PR's files; they sum
+to 441.
 
 *Order.* PR 2 goes first because it is small, so Ola sees the rule applied
 before the large PRs. `cli.py` comes late because the in-flight code PRs
@@ -441,19 +499,25 @@ No mutation round: the checker is not an invariant-critical suite.
 Every fixture is a module text written inline in the test. The figures below
 are the counts each fixture must produce.
 
-1. *Each rule fires, in both places.* One module of 14 lines carries one
-   instance of each of the six rules in a docstring and again in a comment: 12
-   reports, each naming its rule and line.
-2. *Code is not prose.* `help="increment 12"` in a call, `X = "R5 16c"`, and
-   an f-string holding `Ola`: 0 reports.
+1. *Each rule fires, in both places.* One module carries one instance of each
+   of the seven rules in a function docstring (seven lines) and again in seven
+   comments: 14 reports, each naming its rule and line.
+2. *Code is not prose; help text is.* `X = "R5 16c"`, `print("increment 12")`
+   and an f-string holding `Ola`: 0 reports. `typer.Option(help="increment
+   12")`, and `@app.command(help="Serve." f"{x}" " (increment 37)")` written
+   over two lines: 2 reports, each at the line where the `help=` value starts.
 3. *The exclusions.* `1e-6`, `1e-4`, `f"{x:.0f}"` inside a comment,
    `` `docs/increments/15c-geographic-dem.md` ``, `D8 flow directions`: 0
    reports.
-4. *The pointer form passes.*
-   `` `docs/increments/32-landcover-simplify.md`, *5.3 The band in plan, not over the DEM* `` in a module
-   docstring: 0 reports.
+4. *Pointers.* `` `docs/increments/32-landcover-simplify.md`, *5.3 The band in plan, not over the DEM* `` on
+   one line of a module docstring: 0 reports. Add, in the same module, a
+   second pointer in the heading form in the module docstring, one there not
+   in the heading form (`` See `x.md` section 3. ``), one in a function
+   docstring, one in a comment and one in a `help=` string: 5 `pointer`
+   reports, at those five lines. (The prototype gives 4 on the first four; it
+   has no `help=` case in that fixture.)
 5. *Exit status and output.* A clean file gives exit 0 and no output; the file
-   from test 1 gives exit 1 and 12 lines of the form `path:line: rule: text`.
+   from test 1 gives exit 1 and 14 lines of the form `path:line: rule: text`.
 6. *Scope.* With `[tool.check_code_history] paths = []`, the dirty file is not
    checked (exit 0). With its directory listed, it is (exit 1). A listed path
    that does not exist is an error naming it.
@@ -462,9 +526,15 @@ are the counts each fixture must produce.
    same; a string literal changed gives "differs", naming the file; a dropped
    `# noqa: N818` gives "differs"; the reason after the `noqa` code reworded
    gives same; a new file gives "differs" (there is nothing to compare it
-   with).
+   with). Directives anywhere in a comment, each its own case: `# ruff: noqa`
+   added as the first line gives "differs"; the module's
+   `# ruff: noqa: RUF001` dropped gives "differs"; `# mypy: ignore-errors`,
+   `# pyright: basic` and `# isort: skip_file` added give "differs" each.
+   Bare strings beyond `body`: a module holding `try`/`except`/`else`/
+   `finally` and a `for` loop with an `else`, with a bare string added at the
+   top of each of those four blocks, gives same.
 
-## 10. Defaults taken while Ola was away, and the question
+## 10. Defaults taken while Ola was away, and the questions
 
 - **D1.** A checker, gated in CI (section 6), rather than the rule alone.
 - **D2.** The scope is `src_python/tin_engine/`. Out of scope: `tests/` (717
@@ -472,8 +542,8 @@ are the counts each fixture must produce.
   ..." names the requirement it checks), `tools/`, and the C++ headers
   (`include/`, 84 matches by the same count). The C++ headers are handed back
   as an idea.
-- **D3.** The 134 citations are pinned in PR 0, each to the commit that last
-  changed its citing line.
+- **D3.** The 134 citations are pinned in PR 1's first commit, each to the
+  commit that last changed its citing line (section 7).
 - **D4.** Design IDs are deleted and the rule they name is written out. No ID
   becomes a pointer, except where section 4 keeps one.
 - **D5.** Sweep PRs take the short path, with "package added to the scope" as
@@ -482,8 +552,10 @@ are the counts each fixture must produce.
 - **D7.** False docstrings found during the sweep are fixed in that PR and
   listed (`docs/increments/README.md`, *Cost constraints*: a documentation
   defect is fixed in the increment's PR).
+- **D8.** The pointer limits are checked by the checker's `pointer` rule, not
+  left to the reviewer (section 6), and the checker reads `help=` strings.
 
-**The question for Ola: where does the rule live?** Each place is a rule file,
+**Question 1 for Ola: where does the rule live?** Each place is a rule file,
 so writing it needs Ola's go. The choices:
 
 - (a) **the Python skill file, `.claude/skills/python-development/SKILL.md`**
@@ -493,6 +565,12 @@ so writing it needs Ola's go. The choices:
   the agent that writes the code;
 - (c) a new `CONTRIBUTING.md` at the root, for human contributors as well, with
   a one-line pointer from the skill.
+
+**Question 2 for Ola: should PR 1 also add the new checker to the list of
+gates in `CLAUDE.md`, section 4?** That list is what agents run before they
+commit, so a gate missing from it is found only by CI. `CLAUDE.md` is a rule
+file, so this needs Ola's go. Default: yes, one line under *Governance gates*,
+`python3 tools/check_code_history.py`.
 
 ## 11. Left out
 
@@ -514,9 +592,9 @@ rewritten in general terms by the sweep.
 
 ## Estimate
 
-PR 1: about 90 counted lines. The other PRs: 0, except PR 5's 2. About 920
-changed lines of docstrings and comments over five sweep PRs, and 134
-pinned citations in PR 0.
+PR 1: about 105 counted lines, and 134 pinned citations. The other PRs: 0,
+except PR 5's 2. About 995 changed lines of docstrings and comments over five
+sweep PRs.
 
 ## Review
 
