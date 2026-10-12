@@ -43,11 +43,18 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   range, `--land-cover-year` without `--land-cover`, a heights source, a run
   without `--dem`, and a coded `--features-map` beside it are usage errors
   (exit 2) naming the option; an object not in the cache is refused naming
-  the key and `fetch`, with no traceback. The file's strings:
-  `land_cover_codes` with `0 =` and `constraint line`, `land_cover_source`
-  with the year, `land_cover_credit` the source's credit rendered with the
-  fetch date and the URL, `land_cover_licence_note`, `land_cover_cite`; each
-  is also a `--stats` row and a `--record` entry.
+  the key and `fetch`, with no traceback; an unknown key and a run with
+  neither `--cache` nor `RASPUTIN_DATA` are usage errors too. The file's
+  strings: `land_cover_codes` is `<source id> class number; 0 = no data, and
+  every constraint line` and `land_cover_source` is `<source id>, <year>`
+  (1.6 spells both with a display name `RemoteSource` does not have; the id
+  is the name `--land-cover` and `fetch` take), `land_cover_credit` the
+  source's credit rendered with the fetch date and the URL,
+  `land_cover_licence_note`, `land_cover_cite`; each is also a `--stats` row
+  and a `--record` entry.
+- `tin_engine.land_cover_fractions.assign(vertices, triangles, *, mesh_crs,
+  repository, name, chunk=..., threads=0)`: the table and the codes do not
+  depend on `chunk`; the default's value is not pinned.
 """
 
 from __future__ import annotations

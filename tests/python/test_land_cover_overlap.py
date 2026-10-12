@@ -6,19 +6,13 @@
 (GEOS's clip is the oracle, never ours), the per-cell sums, and threads. The
 pinned spellings are in `fraction_fixtures`' docstring.
 
-HOW THIS FILE GOES RED: `_core.class_areas`, `io.models.ClassFractions` and
-`land_cover_fractions.row_areas` are reached through `getattr` or an import at
-call time (`AttributeError`, `ModuleNotFoundError`), so each test fails on its
-own and the rest of `tests/python` collects. `TestWindowCorner` runs on 26a's
-code and is green: it pins what 26b's corner arithmetic depends on.
+`TestWindowCorner` pins what 26b's corner arithmetic depends on in 26a's code.
 """
 
 from __future__ import annotations
 
-import importlib
 import io
 from itertools import pairwise
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -42,7 +36,11 @@ from fraction_fixtures import (
     unique_grid,
 )
 from geographic_fixtures import ANADEM_STEP, geographic_keys, tiff
-from tin_engine.io.models import ClassWindow, IndexWindow
+from tin_engine import _core
+from tin_engine.io.cog import decode_class_window
+from tin_engine.io.geotiff import read_page
+from tin_engine.io.models import ClassFractions, ClassWindow, IndexWindow
+from tin_engine.land_cover_fractions import dominant, fractions_of, row_areas
 
 EXTENT = 20
 SEEDS = (26, 27, 28)
@@ -52,13 +50,8 @@ WINDOW = ClassWindow(
 )
 
 
-@pytest.fixture(scope="module")
-def core() -> ModuleType:
-    return importlib.import_module("tin_engine._core")
-
-
-def class_areas(core: ModuleType, corners: Any, grid: Any, row_area: Any, **kw: Any) -> Any:
-    return core.class_areas(
+def class_areas(corners: Any, grid: Any, row_area: Any, **kw: Any) -> Any:
+    return _core.class_areas(
         np.asarray(corners, dtype=np.float64), grid, np.asarray(row_area, dtype=np.float64), **kw
     )
 
@@ -82,12 +75,10 @@ def well_formed(
 
 class TestF2AgainstGeos:
     @pytest.mark.parametrize("seed", SEEDS)
-    def test_every_triangles_class_areas_are_geoss_in_cell_units(
-        self, core: ModuleType, seed: int
-    ) -> None:
+    def test_every_triangles_class_areas_are_geoss_in_cell_units(self, seed: int) -> None:
         grid = mixed_grid(EXTENT, EXTENT)
         corners = square_triangulation(seed, EXTENT)
-        offsets, classes, areas = class_areas(core, corners, grid, np.ones(EXTENT))
+        offsets, classes, areas = class_areas(corners, grid, np.ones(EXTENT))
         well_formed(offsets, classes, areas, len(corners))
         want = geos_class_areas(corners, grid, np.ones(EXTENT))
         for t, (got, oracle) in enumerate(zip(rows_of(offsets, classes, areas), want, strict=True)):
@@ -96,14 +87,12 @@ class TestF2AgainstGeos:
                 assert got[k] == pytest.approx(area, abs=CLIP), f"triangle {t}, class {k}"
 
     @pytest.mark.parametrize("seed", SEEDS)
-    def test_with_a_cell_area_per_row_each_piece_is_weighted_by_its_rows(
-        self, core: ModuleType, seed: int
-    ) -> None:
+    def test_with_a_cell_area_per_row_each_piece_is_weighted_by_its_rows(self, seed: int) -> None:
         grid = mixed_grid(EXTENT, EXTENT)
         corners = square_triangulation(seed, EXTENT)
         weights = geod_row_areas(LAT0, STEP, EXTENT)
         assert weights.min() > 7e5 and np.ptp(weights) > 1.0, "rows must differ"
-        offsets, classes, areas = class_areas(core, corners, grid, weights)
+        offsets, classes, areas = class_areas(corners, grid, weights)
         want = geos_class_areas(corners, grid, weights)
         for t, (got, oracle) in enumerate(zip(rows_of(offsets, classes, areas), want, strict=True)):
             assert set(got) == set(oracle), f"triangle {t}"
@@ -112,7 +101,7 @@ class TestF2AgainstGeos:
 
     @pytest.mark.parametrize("seed", SEEDS)
     def test_class_totals_over_the_mesh_are_the_classes_areas_inside_the_square(
-        self, core: ModuleType, seed: int
+        self, seed: int
     ) -> None:
         """F2: summed over the triangles, each class's area equals its area
         inside the mesh's footprint, to 1e-9 relative. The footprint is the
@@ -120,7 +109,7 @@ class TestF2AgainstGeos:
         grid = mixed_grid(EXTENT, EXTENT)
         corners = square_triangulation(seed, EXTENT)
         weights = geod_row_areas(LAT0, STEP, EXTENT)
-        _, classes, areas = class_areas(core, corners, grid, weights)
+        _, classes, areas = class_areas(corners, grid, weights)
         cover = square_cover(EXTENT, EXTENT, EXTENT) * weights[:, None]
         want = {int(k): float(cover[grid == k].sum()) for k in np.unique(grid)}
         want = {k: v for k, v in want.items() if v > 0}
@@ -145,7 +134,7 @@ class TestF2AgainstGeos:
 class TestPerCellSums:
     @pytest.mark.parametrize("seed", SEEDS)
     def test_the_pieces_of_a_cell_over_all_triangles_sum_to_its_covered_area(
-        self, core: ModuleType, seed: int
+        self, seed: int
     ) -> None:
         """F2, per cell, to 1e-12 of a cell: with one class per cell the pieces
         of a cell are the entries of its class. Each shared edge's crossings
@@ -153,7 +142,7 @@ class TestPerCellSums:
         side = 15  # 225 cells, each its own class
         grid = unique_grid(side, side)
         corners = square_triangulation(seed, side)
-        offsets, classes, areas = class_areas(core, corners, grid, np.ones(side))
+        offsets, classes, areas = class_areas(corners, grid, np.ones(side))
         well_formed(offsets, classes, areas, len(corners))
         summed = np.zeros(side * side + 1)
         np.add.at(summed, classes.astype(np.int64), areas)
@@ -161,10 +150,10 @@ class TestPerCellSums:
         assert np.abs(summed[1:].reshape(side, side) - cover).max() <= CELL
         assert summed[0] == 0.0
 
-    def test_each_triangles_pieces_sum_to_its_area(self, core: ModuleType) -> None:
+    def test_each_triangles_pieces_sum_to_its_area(self) -> None:
         grid = mixed_grid(EXTENT, EXTENT)
         corners = square_triangulation(SEEDS[1], EXTENT)
-        offsets, _, areas = class_areas(core, corners, grid, np.ones(EXTENT))
+        offsets, _, areas = class_areas(corners, grid, np.ones(EXTENT))
         per_triangle = np.add.reduceat(areas, offsets[:-1].astype(np.int64))
         assert np.abs(per_triangle - shoelace(corners)).max() <= CELL
 
@@ -173,16 +162,14 @@ class TestPerCellSums:
 
 
 class TestThreads:
-    def test_one_thread_four_threads_and_all_cores_give_the_same_bits(
-        self, core: ModuleType
-    ) -> None:
+    def test_one_thread_four_threads_and_all_cores_give_the_same_bits(self) -> None:
         grid = mixed_grid(EXTENT, EXTENT)
         corners = np.concatenate([square_triangulation(s, EXTENT, points=400) for s in SEEDS])
         assert len(corners) > 1000
         weights = geod_row_areas(LAT0, STEP, EXTENT)
-        serial = class_areas(core, corners, grid, weights, threads=1)
+        serial = class_areas(corners, grid, weights, threads=1)
         for threads in (4, 0):
-            parallel = class_areas(core, corners, grid, weights, threads=threads)
+            parallel = class_areas(corners, grid, weights, threads=threads)
             for ours, theirs in zip(serial, parallel, strict=True):
                 assert ours.dtype == theirs.dtype
                 assert_array_equal(ours, theirs)
@@ -195,45 +182,43 @@ class TestRefusals:
     GRID = mixed_grid(4, 4)
     INSIDE = (((0.5, 0.5), (1.5, 0.5), (1.0, 1.5)),)
 
-    def test_a_triangle_past_the_window_is_refused_naming_outside(self, core: ModuleType) -> None:
+    def test_a_triangle_past_the_window_is_refused_naming_outside(self) -> None:
         with pytest.raises(ValueError, match="outside"):
-            class_areas(core, [[[3.5, 0.5], [4.5, 0.5], [4.0, 1.5]]], self.GRID, np.ones(4))
+            class_areas([[[3.5, 0.5], [4.5, 0.5], [4.0, 1.5]]], self.GRID, np.ones(4))
         with pytest.raises(ValueError, match="outside"):
-            class_areas(core, [[[0.5, -0.1], [1.5, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
+            class_areas([[[0.5, -0.1], [1.5, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
 
-    def test_the_window_edge_is_inside(self, core: ModuleType) -> None:
-        _, _, areas = class_areas(
-            core, [[[3.0, 0.5], [4.0, 0.5], [3.5, 1.5]]], self.GRID, np.ones(4)
-        )
+    def test_the_window_edge_is_inside(self) -> None:
+        _, _, areas = class_areas([[[3.0, 0.5], [4.0, 0.5], [3.5, 1.5]]], self.GRID, np.ones(4))
         assert areas.sum() == pytest.approx(0.5, abs=CELL)
 
-    def test_a_zero_area_triangle_is_refused(self, core: ModuleType) -> None:
+    def test_a_zero_area_triangle_is_refused(self) -> None:
         with pytest.raises(ValueError):
-            class_areas(core, [[[0.5, 0.5], [1.5, 1.5], [2.5, 2.5]]], self.GRID, np.ones(4))
+            class_areas([[[0.5, 0.5], [1.5, 1.5], [2.5, 2.5]]], self.GRID, np.ones(4))
 
-    def test_a_non_finite_corner_is_refused(self, core: ModuleType) -> None:
+    def test_a_non_finite_corner_is_refused(self) -> None:
         with pytest.raises(ValueError):
-            class_areas(core, [[[0.5, np.nan], [1.5, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
+            class_areas([[[0.5, np.nan], [1.5, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
         with pytest.raises(ValueError):
-            class_areas(core, [[[0.5, 0.5], [np.inf, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
+            class_areas([[[0.5, 0.5], [np.inf, 0.5], [1.0, 1.5]]], self.GRID, np.ones(4))
 
-    def test_another_dtype_or_a_strided_grid_is_a_type_error(self, core: ModuleType) -> None:
+    def test_another_dtype_or_a_strided_grid_is_a_type_error(self) -> None:
         with pytest.raises(TypeError):
-            class_areas(core, self.INSIDE, self.GRID.astype(np.uint16), np.ones(4))
+            class_areas(self.INSIDE, self.GRID.astype(np.uint16), np.ones(4))
         wide = mixed_grid(4, 8)
         with pytest.raises(TypeError):
-            class_areas(core, self.INSIDE, wide[:, ::2], np.ones(4))
+            class_areas(self.INSIDE, wide[:, ::2], np.ones(4))
 
-    def test_wrong_shapes_are_value_errors(self, core: ModuleType) -> None:
+    def test_wrong_shapes_are_value_errors(self) -> None:
         with pytest.raises(ValueError):
-            class_areas(core, [[[0.5, 0.5], [1.5, 0.5]]], self.GRID, np.ones(4))
+            class_areas([[[0.5, 0.5], [1.5, 0.5]]], self.GRID, np.ones(4))
         with pytest.raises(ValueError):
-            class_areas(core, self.INSIDE, self.GRID, np.ones(3))
+            class_areas(self.INSIDE, self.GRID, np.ones(3))
         with pytest.raises(ValueError):
-            class_areas(core, self.INSIDE, self.GRID.ravel(), np.ones(4))
+            class_areas(self.INSIDE, self.GRID.ravel(), np.ones(4))
 
-    def test_no_triangles_is_one_offset(self, core: ModuleType) -> None:
-        offsets, classes, areas = class_areas(core, np.zeros((0, 3, 2)), self.GRID, np.ones(4))
+    def test_no_triangles_is_one_offset(self) -> None:
+        offsets, classes, areas = class_areas(np.zeros((0, 3, 2)), self.GRID, np.ones(4))
         assert offsets.tolist() == [0] and len(classes) == 0 and len(areas) == 0
 
 
@@ -241,29 +226,25 @@ class TestRefusals:
 
 
 class TestRowAreas:
-    @pytest.fixture(scope="class")
-    def fractions(self) -> ModuleType:
-        return importlib.import_module("tin_engine.land_cover_fractions")
-
-    def test_each_rows_cell_area_is_the_ellipsoids(self, fractions: ModuleType) -> None:
-        got = fractions.row_areas(WINDOW)
+    def test_each_rows_cell_area_is_the_ellipsoids(self) -> None:
+        got = row_areas(WINDOW)
         assert got.dtype == np.float64 and got.shape == (EXTENT,)
         want = geod_row_areas(LAT0, STEP, EXTENT)
         assert got == pytest.approx(want, rel=1e-9)
 
-    def test_the_designs_figures_at_thirty_metres(self, fractions: ModuleType) -> None:
+    def test_the_designs_figures_at_thirty_metres(self) -> None:
         """1.1: 887.5 m2 at 7 S and 836.0 m2 at 21 S for a MapBiomas cell."""
         for lat, want in ((-7.0, 887.5), (-21.0, 836.0)):
             window = ClassWindow(
                 x_min=-45.0, y_max=lat, delta_x=ANADEM_STEP, delta_y=ANADEM_STEP,
                 array=np.zeros((1, 1), dtype=np.uint8),
             )  # fmt: skip
-            assert fractions.row_areas(window)[0] == pytest.approx(want, abs=0.5)
+            assert row_areas(window)[0] == pytest.approx(want, abs=0.5)
             assert geod_cell_area(lat, ANADEM_STEP) == pytest.approx(want, abs=0.5)
 
-    def test_the_longitude_does_not_matter(self, fractions: ModuleType) -> None:
+    def test_the_longitude_does_not_matter(self) -> None:
         east = WINDOW.model_copy(update={"x_min": LON0 + 3.0})
-        assert_array_equal(fractions.row_areas(east), fractions.row_areas(WINDOW))
+        assert_array_equal(row_areas(east), row_areas(WINDOW))
 
 
 # ------------------------------------------------------------ the table
@@ -275,8 +256,6 @@ class TestClassFractions:
     FRACTIONS = np.array([0.25, 0.75, 1.0, 0.4, 0.6], dtype=np.float32)
 
     def make(self, **changes: Any) -> Any:
-        from tin_engine.io.models import ClassFractions
-
         fields: dict[str, Any] = {
             "offsets": self.OFFSETS, "classes": self.CLASSES, "fractions": self.FRACTIONS,
         }  # fmt: skip
@@ -329,6 +308,48 @@ class TestClassFractions:
         assert table.triangles == 0
 
 
+# ------------------------------------------------------------ from areas to the file's columns
+
+
+class TestFractionsAndDominant:
+    OFFSETS = np.array([0, 2, 3], dtype=np.uint32)
+    CLASSES = np.array([3, 15, 33], dtype=np.uint8)
+    AREAS = np.array([1.0, 3.0, 2.5])
+
+    def test_fractions_are_areas_over_the_rows_total_as_float32(self) -> None:
+        table = fractions_of(self.OFFSETS, self.CLASSES, self.AREAS)
+        assert table.fractions.dtype == np.float32
+        assert_array_equal(table.fractions, np.array([0.25, 0.75, 1.0], dtype=np.float32))
+        assert_array_equal(table.classes, self.CLASSES)
+
+    def test_a_row_without_entries_is_refused_naming_the_resolution(self) -> None:
+        """F1 cannot hold for a triangle with no class area; `class_areas`
+        never produces one (a nanometre triangle keeps its area), so this
+        guards the seam, not a path the C++ takes."""
+        with pytest.raises(ValueError, match="no class area"):
+            fractions_of(np.array([0, 2, 2], dtype=np.uint32), self.CLASSES[:2], self.AREAS[:2])
+
+    def test_the_dominant_class_is_the_largest_area_ties_to_the_smaller_class(self) -> None:
+        """1.4 step 7."""
+        offsets = np.array([0, 2, 3, 5], dtype=np.uint32)
+        classes = np.array([3, 15, 33, 11, 24], dtype=np.uint8)
+        areas = np.array([1.0, 3.0, 2.5, 2.0, 2.0])
+        assert_array_equal(
+            dominant(offsets, classes, areas), np.array([15, 33, 11], dtype=np.int32)
+        )
+        assert dominant(offsets, classes, areas).dtype == np.int32
+
+    def test_no_triangles_give_no_codes(self) -> None:
+        got = dominant(np.array([0], dtype=np.uint32), np.zeros(0, np.uint8), np.zeros(0))
+        assert got.dtype == np.int32 and got.shape == (0,)
+        assert (
+            fractions_of(
+                np.array([0], dtype=np.uint32), np.zeros(0, np.uint8), np.zeros(0)
+            ).triangles
+            == 0
+        )
+
+
 # ------------------------------------------------------------ the window's corner
 
 
@@ -342,9 +363,6 @@ class TestWindowCorner:
 
     @pytest.mark.parametrize("area", [True, False], ids=["PixelIsArea", "PixelIsPoint"])
     def test_the_windows_corner_is_half_a_cell_outside_the_first_node(self, area: bool) -> None:
-        from tin_engine.io.cog import decode_class_window
-        from tin_engine.io.geotiff import read_page
-
         grid = class_grid()[:16, :16]
         data = tiff(
             grid, x0=LON0, y0=LAT0, step_x=STEP, shorts=geographic_keys(area=area), nodata=None,

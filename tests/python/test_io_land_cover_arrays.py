@@ -6,10 +6,6 @@ section 10's "26b": the arrays are read back through `vtkread` and `plyread`,
 which take every count and type from the file's own declarations and share
 nothing with the writers. The pinned spellings are in `fraction_fixtures`'
 docstring.
-
-HOW THIS FILE GOES RED: `ClassFractions` is imported at call time
-(`ImportError`), and the writers refuse the new keyword (`TypeError:
-unexpected keyword argument`), so each test fails on its own.
 """
 
 from __future__ import annotations
@@ -24,6 +20,7 @@ from numpy.testing import assert_array_equal
 from plyread import parse_header, read_ply
 from test_io_vtk_legacy import EDGES, FIELDS, MASKS, TRIANGLES, VERTICES
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.io.models import ClassFractions
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
 from vtkread import VtkFile, read_vtk
@@ -39,8 +36,6 @@ NAMES = ("land_cover_offsets", "land_cover_classes", "land_cover_fractions")
 
 
 def table(**changes: Any) -> Any:
-    from tin_engine.io.models import ClassFractions
-
     fields: dict[str, Any] = {"offsets": OFFSETS, "classes": CLASSES, "fractions": FRACTIONS}
     return ClassFractions(**(fields | changes))
 
@@ -167,3 +162,14 @@ class TestPlyFaceLists:
     def test_a_table_for_another_face_count_is_refused(self) -> None:
         with pytest.raises(ValueError):
             self.surface(True, faces=TRIANGLES[:3], face_codes=CODES[:3])
+
+    def test_a_face_of_256_classes_is_refused_as_the_lists_count_is_a_uchar(self) -> None:
+        """`list uchar ...` counts to 255; a row of every uint8 class (the
+        only way past it) is refused rather than written short."""
+        crowded = table(
+            offsets=np.array([0, 256, 257, 258, 259], dtype=np.uint32),
+            classes=np.concatenate([np.arange(256), [0, 0, 0]]).astype(np.uint8),
+            fractions=np.concatenate([np.full(256, 1 / 256), [1.0, 1.0, 1.0]]).astype(np.float32),
+        )
+        with pytest.raises(ValueError, match="255"):
+            self.surface(True, face_fractions=crowded)

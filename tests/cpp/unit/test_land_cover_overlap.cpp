@@ -36,10 +36,6 @@
 // whole triangle, and bitwise comparison between runs. The bound is 1e-12 in
 // cell units (coordinates below 32 here; a piece's shoelace sum is taken in
 // coordinates local to its cell, so its rounding is near 1e-16).
-//
-// RED at the commit that added this file: the header does not exist, so the
-// target test_land_cover_overlap does not compile ("'terrain/land_cover/
-// overlap.hpp' file not found"); every other target builds and passes.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -289,7 +285,13 @@ TEST_CASE("6. a triangle a nanometre across keeps its positive area",
     const std::vector<Point2> t{{0.5, 0.5}, {0.5 + 1e-9, 0.5}, {0.5, 0.5 + 1e-9}};
     const auto out = areas_of(g, t);
     require_well_formed(out, 1);
-    REQUIRE_THAT(row_of(out, 0).at(3), WithinRel(0.5e-18, 1e-9));
+    // The intended area is 0.5e-18, but 0.5 + 1e-9 rounds to a double whose
+    // legs are 1e-9 - 2.8e-17 (relative 2.8e-8), so the triangle as rounded
+    // has area 4.9999997e-19, relative 5.7e-8 below the intended one. Compare
+    // against the shoelace area of the corners as rounded, which the clip must
+    // reproduce to the rounding of its own sums (relative 1e-9 is generous).
+    REQUIRE_THAT(row_of(out, 0).at(3), WithinRel(shoelace(t[0], t[1], t[2]), 1e-9));
+    REQUIRE(row_of(out, 0).at(3) > 0.4e-18);
 }
 
 TEST_CASE("7. rows weigh differently: each piece is multiplied by its row's cell area",

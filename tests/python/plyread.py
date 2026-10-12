@@ -21,6 +21,7 @@ that it is PLY, which is the thing under test.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -216,7 +217,21 @@ def _read_binary_lists(
                 (value,) = np.frombuffer(blob, dtype=prop.dtype, count=1, offset=offset)
                 offset += prop.dtype.itemsize
                 rows[prop.name].append(np.array(value))
-    return {name: np.array(values) for name, values in rows.items()}, offset
+    return {
+        p.name: _stacked(rows[p.name], p.dtype, ragged=p.is_list) for p in element.properties
+    }, offset
+
+
+def _stacked(rows: list[Any], dtype: np.dtype[Any], *, ragged: bool) -> np.ndarray:
+    """One array per property: a 2-D array when every list has the same length
+    (the fixed `vertex_indices` triples), otherwise one object per record, so a
+    sparse list such as `land_cover_classes` (26b) reads back row by row."""
+    if ragged and len({len(row) for row in rows}) > 1:
+        out = np.empty(len(rows), dtype=object)
+        for i, row in enumerate(rows):
+            out[i] = np.asarray(row, dtype=dtype)
+        return out
+    return np.array(rows, dtype=dtype)
 
 
 def _read_ascii(header: Header, blob: bytes) -> tuple[dict[str, dict[str, np.ndarray]], int]:
@@ -244,9 +259,8 @@ def _read_ascii(header: Header, blob: bytes) -> tuple[dict[str, dict[str, np.nda
             if at != len(tokens):
                 raise ValueError(f"element {element.name}: {len(tokens) - at} tokens left over")
         data[element.name] = {
-            p.name: np.array(rows[p.name], dtype=p.dtype) for p in element.properties
+            p.name: _stacked(rows[p.name], p.dtype, ragged=p.is_list) for p in element.properties
         }
-        cursor += 0
     if cursor != len(lines):
         raise ValueError(f"{len(lines) - cursor} lines left over after the declared elements")
     return data, len(blob)

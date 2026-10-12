@@ -18,19 +18,14 @@ clip and `Geod`'s cell areas, sharing nothing with the producer. Bound 1e-6
 on a fraction: float32 rounding is 6e-8, and the oracle takes the triangle's
 edges straight in index space as the producer does (1.1), so the bend between
 the two frames does not enter; it is the producer's claim, not this test's.
-
-HOW THIS FILE GOES RED: `mesh` has no `--land-cover` ("No such option",
-exit 2, asserted against), so every run and every refusal fails.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import socket
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -45,6 +40,7 @@ from class_fixtures import (
     LICENCE,
     PATH_TEMPLATE,
     class_grid,
+    object_id,
     per_year_entry,
 )
 from cli_driver import USAGE, invoke, plain, runner
@@ -67,7 +63,10 @@ from recordread import file_field, ply_fields, stats_row
 from test_cli_fetch import KEY as DEM_KEY
 from test_cli_fetch import catalogue_with, install
 from test_cli_mesh_cache import no_network
+from tin_engine import sources
 from tin_engine.cli import app
+from tin_engine.io.repository import CacheRepository
+from tin_engine.land_cover_fractions import assign
 from vtkread import VtkFile, read_vtk
 
 TOLERANCE = "3"
@@ -86,20 +85,15 @@ FRACTION = 1e-6
 ONE = 1e-6
 
 
-@pytest.fixture(scope="module")
-def sources() -> ModuleType:
-    return importlib.import_module("tin_engine.sources")
-
-
 @pytest.fixture
-def classes(sources: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Any:
+def classes(monkeypatch: pytest.MonkeyPatch) -> Any:
     """The class source in `SOURCES`; its URL is never opened (the cache serves)."""
     template = "https://example.invalid/" + PATH_TEMPLATE
     return install(sources, monkeypatch, per_year_entry(sources, template))
 
 
 @pytest.fixture
-def heights(sources: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Any:
+def heights(monkeypatch: pytest.MonkeyPatch) -> Any:
     return catalogue_with(sources, monkeypatch, "https://example.invalid/p.tif")
 
 
@@ -220,9 +214,13 @@ class TestTheFile:
     def test_the_strings_name_the_source_year_credit_licence_and_citation(
         self, run: Covered
     ) -> None:
-        codes = run.string("land_cover_codes")
-        assert "0 =" in codes and "constraint line" in codes, codes
-        assert "2025" in run.string("land_cover_source")
+        # 1.6 spells both with the source's display name ("MapBiomas Collection
+        # 11"); RemoteSource has none, so the catalogue key stands in: it is the
+        # name `--land-cover` and `fetch` take, so a reader can act on it.
+        assert run.string("land_cover_codes") == (
+            f"{KEY} class number; 0 = no data, and every constraint line"
+        )
+        assert run.string("land_cover_source") == f"{KEY}, 2025"
         credit = run.string("land_cover_credit")
         assert "Test classes" in credit and FETCHED in credit and "example.invalid" in credit
         assert run.string("land_cover_licence_note") == LICENCE
@@ -236,8 +234,9 @@ class TestTheYear:
     def test_a_year_is_honoured_and_the_last_year_is_the_default(
         self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path, cache: Path
     ) -> None:
-        latest = covered(tmp_path / "a", dem, domain, cache)
+        (tmp_path / "a").mkdir()
         (tmp_path / "b").mkdir()
+        latest = covered(tmp_path / "a", dem, domain, cache)
         early = covered(tmp_path / "b", dem, domain, cache, "--land-cover-year", "1985")
         assert "1985" in early.string("land_cover_source")
         assert "2025" in latest.string("land_cover_source")
@@ -290,6 +289,19 @@ class TestRefusals:
         assert KEY in output and "fetch" in output and "2000" in output, output
         assert not target.exists()
 
+    def test_a_cache_without_the_source_is_refused_naming_the_fetch(
+        self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """A cache root that never saw `fetch KEY`: no footprints at all, the
+        same refusal as a missing year."""
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        code, output, target = mesh(tmp_path, dem, domain, empty, "--land-cover", KEY)
+        assert code == USAGE, output
+        assert "Traceback" not in output and "No such option" not in output, output
+        assert KEY in output and "fetch" in output and "2025" in output, output
+        assert not target.exists()
+
     def test_a_coded_features_map_beside_it_is_refused(
         self, classes: Any, tmp_path: Path, dem: Path, domain: Path, cache: Path
     ) -> None:
@@ -319,9 +331,91 @@ class TestRefusals:
         assert "--dem" in output and "--land-cover" in output, output
         assert not target.exists()
 
+    def test_an_unknown_key_is_a_usage_error_naming_the_catalogue(
+        self, classes: Any, tmp_path: Path, dem: Path, domain: Path, cache: Path
+    ) -> None:
+        code, output, target = mesh(tmp_path, dem, domain, cache, "--land-cover", "no-such-source")
+        assert code == USAGE, output
+        assert "No such option" not in output, output
+        assert "no-such-source" in output and KEY in output and "--land-cover" in output, output
+        assert not target.exists()
+
+    def test_without_a_cache_root_it_is_refused_naming_the_option(
+        self, classes: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """No `--cache` and no `RASPUTIN_DATA`: there is nowhere to read the
+        classes from, and the refusal says where they would come from."""
+        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        target = tmp_path / "x.vtk"
+        code, output = invoke(
+            "mesh", "--dem", str(dem), "--domain", str(domain), "--tolerance", TOLERANCE,
+            "--out", str(target), "--land-cover", KEY,
+        )  # fmt: skip
+        assert code == USAGE, output
+        assert "No such option" not in output, output
+        assert "--cache" in output and "RASPUTIN_DATA" in output, output
+        assert not target.exists()
+
     def test_the_help_names_both_options(self) -> None:
         text = plain(runner.invoke(app, ["mesh", "--help"]).output)
         assert "--land-cover-year" in text and "--land-cover " in text, text
+
+
+# ------------------------------------------------------------ chunks
+
+
+class TestChunks:
+    def test_small_chunks_give_one_calls_table_bit_for_bit(
+        self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path, cache: Path
+    ) -> None:
+        """1.2: the rows are concatenated in triangle order, so the table does
+        not depend on how the triangles are cut into calls. The CLI's scene is
+        far below one chunk, so the stitching of several (each with its own
+        window and row areas) is exercised here through `assign` directly; the
+        chunk size itself (2^18 in file order, the Hilbert order being 26c's)
+        is not pinned."""
+        run = covered(tmp_path, dem, domain, cache)
+        repository = CacheRepository(cache, KEY, nodata=0.0)
+        name = object_id(2025)
+        whole = assign(
+            run.vtk.points, run.triangles, mesh_crs=MESH_CRS, repository=repository, name=name
+        )
+        assert len(run.triangles) > 3 * 5, "several chunks, the last one partial"
+        pieces = assign(
+            run.vtk.points, run.triangles, mesh_crs=MESH_CRS, repository=repository, name=name,
+            chunk=5,
+        )  # fmt: skip
+        for ours, theirs in (
+            (whole.table.offsets, pieces.table.offsets),
+            (whole.table.classes, pieces.table.classes),
+            (whole.table.fractions, pieces.table.fractions),
+            (whole.codes, pieces.codes),
+        ):
+            assert ours.dtype == theirs.dtype
+            assert_array_equal(ours, theirs)
+        # And one call is what the CLI wrote.
+        assert_array_equal(whole.table.offsets, run.offsets)
+        assert_array_equal(whole.table.classes, run.classes)
+        assert_array_equal(whole.table.fractions, run.fractions)
+
+    def test_a_mesh_past_the_raster_and_an_object_not_cached_are_refused(
+        self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path, cache: Path
+    ) -> None:
+        """1.2: a triangle outside the window is a refusal, never a clamp; the
+        Python side refuses before the C++ sees it. An object the cache lacks
+        is refused by name (the CLI checks first; the API stands on its own)."""
+        run = covered(tmp_path, dem, domain, cache)
+        repository = CacheRepository(cache, KEY, nodata=0.0)
+        east = np.asarray(run.vtk.points, dtype=np.float64) + np.array([5e5, 0.0, 0.0])
+        with pytest.raises(ValueError, match="outside"):
+            assign(
+                east, run.triangles, mesh_crs=MESH_CRS, repository=repository, name=object_id(2025)
+            )
+        with pytest.raises(ValueError, match="not in the cache"):
+            assign(
+                run.vtk.points, run.triangles, mesh_crs=MESH_CRS, repository=repository,
+                name=object_id(2000),
+            )  # fmt: skip
 
 
 # ------------------------------------------------------------ the control
