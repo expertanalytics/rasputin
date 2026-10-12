@@ -1,6 +1,6 @@
 # Increment 41: land-cover class maps and palettes as data files
 
-**Status: designed and review-approved after two rounds; next `@tester`'s red suite when a slot frees.** By `@architect`,
+**Status: built** (red `19b9b62a` `@tester`, 119 tests; green `59779b35` `@developer`, 114 net production lines by `python3 tools/count_loc.py f09b9863 HEAD` against about 100 and the worst case 180; layering rows `34cfe2bc`; section 10 is the as-built record; next the real-data byte check and code review). By `@architect`,
 2026-10-12, on `f09b9863` (branch `worktree-class-maps`), while Ola was away;
 the defaults taken are listed in section 9. After round 2, `@tester`'s red
 suite (section 7). Python only, one PR.
@@ -494,6 +494,44 @@ About **90 net lines**; with the +39 % worst case on what is added (202 x
   empty (its notice already carries the terms), so CORINE files are unchanged.
 - **D9** MapBiomas's code 0 (no class; constraint lines) is CORINE's grey,
   `#3c3c3c`; the legend has no colour for "no polygon".
+
+
+## 10. As built (recorded by the main session from the handbacks)
+
+Built overnight 2026-10-12/13 while Ola was away ("Take both, have fun").
+**Red** `19b9b62a` (`@tester`): 119 tests in `tests/python/test_class_maps.py`
+and `tests/python/test_cli_class_maps.py`; master's CORINE maps, palette and
+the exact `rasputin palette corine` output saved under `tests/python/data/`
+as the byte-identity reference; the MapBiomas Collection 11 legend CSV as
+T10's reference. Every failure a missing piece; 158 existing tests also
+failed because `feature_fixtures` loads maps through the new loader, as
+section 8 says. Pins beyond the design: `class_maps.load(value)` covers
+shipped names, `property` and paths, every refusal a `ValueError` naming the
+file; `derived_cleanup` returns `repair_m`, `tolerance_m`, `outline_snap_m`;
+`ClassMap` gains `extra_names` (tuple), `licence` (`""` when absent),
+`accuracy_m`; the run record's `features_licence` (left out when empty); the
+three help texts end "Default: from the class map's positional accuracy and
+the DEM cell (CORINE: N)."; more than 22 extras is a usage error naming 22.
+
+**Green** `59779b35` (`@developer`): `src_python/tin_engine/class_maps.py`,
+the four shipped maps in `src_python/tin_engine/data/class_maps/` (the CORINE
+ones generated from master's Python objects before those were deleted, so the
+snapshot tests compare against the real old tables), `feature_input.py` and
+`palettes.py` reading from them, the derivation and the overrides, maps
+loaded early at the `--land-cover` check, `RemoteSource.class_map` for
+MapBiomas. `pyproject.toml` unchanged: the wheel ships the whole package
+directory. 114 net lines (257 added, 143 removed). Full suite 7,499 passed
+with 2 layering failures, fixed test-side in `34cfe2bc` (`@tester`: a row
+`class_maps: feature_input features`, layer L4, and `cli` gaining
+`class_maps`, both checked with the import scan). mypy, ruff, prohibited
+deps and citations clean; coverage 98.45 %. Pins beyond the design:
+`features_licence` in the run record only, not the mesh file; the
+`property` map over the default edge names only; a coded map must have
+`[edges]`. `project_structure.md` updated by the main session.
+
+**Lessons for the next retrospective:** a red suite that adds a module adds
+its layering row in the same commit; agents sharing the session scratchpad
+use their own log names (one full-run log mixed two worktrees' results).
 
 ## Review
 
