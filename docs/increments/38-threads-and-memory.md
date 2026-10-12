@@ -1,6 +1,6 @@
 # Increment 38: threads and memory as settings
 
-**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); next `@developer`'s green step;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
+**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); green `b252a70d` (`@developer`, 96 net production lines by `python3 tools/count_loc.py 5d2e706d HEAD` against the estimate of 60, under the worst case of 120); test-side fixes `9de3212c` (`@tester`); section 12 is the as-built record; next the quick check (bit-identical meshes) once the machine is idle, then code review;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
 `worktree-threads`). The first fix from the generality audit
 (`docs/increments/generality-audit.md`, section 6 item 1; rows D1, D2, D3, D5,
 D6, D7). Ola's yes, 2026-10-12: "1, 2: yes" to a single pull request that adds
@@ -672,6 +672,84 @@ agent now sets `threads` per call through the derived schema, and
 `mcp/` changes). Every other entry is untouched. New idea from this design,
 for the handback: `tools/bench.py`'s child could pass `--threads` to the CLI
 and drop its monkeypatch of `refine` (tooling, not counted).
+
+## 12. As built (recorded by the main session from the handbacks)
+
+Ola picked this as the audit's first fix on 2026-10-12 ("1, 2: yes") and
+ruled the four design questions the same day ("Yes to all, but thousands of
+sub-catchments is quite extensive", section 10). The design took two review
+rounds; round 1's five blockers were figures and call sites, settled by
+probing the fixture through a whole `delineate` run rather than its first
+window.
+
+**Red** `4b9c0dfe` (`@tester`): 110 tests, 85 in the new
+`tests/python/test_resources.py` and `tests/python/test_cli_threads.py`
+(the option and its environment default, the model reaching every call site
+through one spy per site, the cgroup reads on synthetic files with the
+malformed cases, the memory budget with the probed figures, the stats row),
+25 in nine edited files; `test_decompose_partition.py` deleted. Every red
+reason a missing thing: the module `tin_engine.resources`, the two options,
+a `plan_mosaic` keyword, a `reprojector` keyword, the old wording, the 8- and
+10-worker defaults, the layering row. Pins beyond the design, asserted:
+`RASPUTIN_THREADS` "1.5" and "0x10" refused as not whole numbers; a negative
+`cpu.max` quota means no quota; `parse_bytes` refuses "G" and "1.5G", reads
+"2k" as 2048; the three commands' help names `RASPUTIN_THREADS`; `threads` is
+a record entry and an Inputs row, not a mesh-file field; the flood and
+mosaic refusals name `--memory-budget` and the figure. T11's assertion on
+`project_structure.md` left out: a prose file, forbidden to tests by
+`conftest.py`; the reviewer reads the rows. One citation into the deleted
+test file (`docs/increments/23-basin-scale.md`, a 23c-1 review record) was
+pinned at `5d2e706d` by the main session (`3b709b6f`).
+
+**Green** `b252a70d` (`@developer`): `src_python/tin_engine/resources.py`
+new (the `Resources` model: threads from `--threads`, 0 meaning all cores,
+`RASPUTIN_THREADS` as the default when the option is absent, the machine's
+cores otherwise with a well-formed `cpu.max` quota counted; the memory
+budget from `--memory-budget` with `memory.max` read when present);
+`--threads` and `--memory-budget` on `mesh`, `catchment` and
+`station-catchments`; the count reaching all five `_core` entry points and
+the three Python pools, the reprojector's cap of 8 gone and the pools'
+library defaults set to one worker so only `resources.py` reads the machine;
+both memory caps overridable by the budget; the stats row "Threads used: N."
+and the `threads` record entry; `decompose.py` deleted; README, INSTALL and
+`project_structure.md` updated. 96 net production lines (237 added, 141
+removed; the overrun over 60 is `cli.py`'s option aliases and `_resources`
+helper and the two repositories' `threads`). Gates clean: mypy, ruff,
+prohibited deps, detria boundary, check_citations. Two fixes after the first
+full run: the `--threads` metavar `N`, since `<int range>` made Rich truncate
+long option names in `--help`; `_domain_plan`'s budget defaulting to None.
+Pins beyond the design: `mcp/schema.py` changed by one line (`minimum: 0` no
+longer dropped by `if v`), required by T9 although section 4.5 said no `mcp/`
+change (a latent bug for any option with a zero bound; `@architect`'s
+one-line correction of 4.5 is due); the `_core` wrappers `edge_strip.run` and
+`final_check.run` default `threads=0` with the C++ meaning while the Python
+pools default 1, not pinned by a test (`@tester` recommends 1, matching
+section 4.2; default kept at 0, documented in the two docstrings; for the
+code review to judge).
+
+**Test-side fixes** `9de3212c` (`@tester`, seven files): the five layering
+rows gain `resources` (each module grew by exactly `tin_engine.resources`,
+checked with `importscan`); `as_16_opened_it` passes `resources` through;
+the plain-output bit-identity test runs `--threads 1` and `--threads 2` to
+the same paths (equal mesh bytes, records differing only in `threads` and
+the echoed command); `plan_mosaic`'s parameter list gains `memory_budget`;
+the feature-input fakes and the spied reprojector accept `threads=`; T9's
+docstring no longer claims no `mcp/` change; no scaffolding left. Full
+`pytest tests/python/` with the coverage gate: 7,422 passed, 18 skipped,
+coverage 98.44 %, one failure beside the night's detached mesh batch
+(`test_core_cdt.py`'s GIL ticker, 7 ticks against a bound of 3, load-bound;
+5 of 5 alone, untouched by this increment). `ruff` clean on `tests/`.
+
+**Speed:** no refine or mesh code touched; the quick check for bit-identical
+meshes runs once the machine is idle (the Swedish batch holds three cores
+tonight); its verdict goes here.
+
+**Lessons for the next retrospective:** a design that deletes a file lists
+the unpinned citations into it first (`check_citations` would have shown the
+23c-1 record); a red step that adds a keyword to a shared function widens
+the suite's existing fakes of it in the same commit; the editable install's
+loader keeps a deleted module's `find_spec` until reinstall; the GIL ticker
+test's bound of 3 ticks is load-sensitive.
 
 ## Review
 
