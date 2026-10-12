@@ -1,6 +1,6 @@
 # Increment 37: an MCP server over the rasputin commands
 
-**Status: designed, review round 1 fixes in; next round 2.** Designed by
+**Status: designed, review rounds 1 and 2 fixes in; next round 3, scoped to round 2's one fix.** Designed by
 `@architect`, 2026-10-12, on `b4a81c0d` (branch `worktree-mcp-server`); the
 nine defaults of section 6 were taken while Ola was away. Probe and its
 output: `docs/increments/37-probes/`. Design review round 1 (Review section)
@@ -368,6 +368,9 @@ interpreter and the same installed `tin_engine` as the server, found without
 second way to run the CLI. The child's environment is the server's plus
 `TYPER_USE_RICH=0`, `NO_COLOR=1`, `TERM=dumb`; `RASPUTIN_DATA` and the cache
 default pass through unchanged.
+The child is started without `cwd=`, so it inherits the server's working
+directory: a relative `out` and its sidecar beside it resolve to the same
+place in the child and in the server's read-back and `unlink`.
 
 *The sidecar files.* For `mesh` without `record_path`, the server appends
 `--record <sidecar>` and reads it back; with `stats: "-"` it appends
@@ -603,7 +606,11 @@ the point. Fixtures and their figures as measured in section 3.
   directory succeeds the same way (the case review round 1 found: a sidecar
   in the system temp directory would exit 2 here with "is outside the
   permitted parent"), and with `out_parent` set to a sibling directory it is
-  `is_error` naming `--out`, not `--record`; with `stats: "-"` the result's
+  `is_error` naming `--out`, not `--record`; with a relative `out` under
+  `monkeypatch.chdir` the mesh and the sidecar's removal land in that
+  directory (the child inherits the server's cwd); `outputs` is exactly the
+  `.vtk`, so the echoed sidecar path (`cli.py@b4a81c0d:1247`) is excluded;
+  with `stats: "-"` the result's
   `stats` starts with the report's heading and stdout carries no Markdown;
   and once on the Kartverket fixture under `needs_codecs` with
   `--tolerance 1`: 464,290 triangles in the record, 0.7 s on the probe's
@@ -683,3 +690,5 @@ a jobs cap by memory estimate rather than count.
 ## Review
 
 Design review round 1, 2026-10-12, @reviewer (`b4a81c0d..b990e38c`, 0 production lines, estimate 250 with worst case 350): CHANGES REQUESTED, three blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:382-386 and :450 say every output goes through `.part` and a rename; that holds for the GeoPackage only, `.vtk` and `.ply` are written with `target.write_bytes` (`src_python/tin_engine/cli.py@b4a81c0d:1241`) and `_writing` (:2121) wraps OSError, it does not rename; restate that a killed `.vtk`/`.ply` run can leave a truncated file under the asked name. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:354-357 and :255: with `out_parent` set, the server's temporary `--record`/`--stats` path is refused by `_destination` (`src_python/tin_engine/cli.py@b4a81c0d:442-445` via :1360), so every such `mesh` call exits 2; say where the temporary file goes (inside `out_parent`, or beside `out`) and add the case to T4-T6. (3) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:364-367 and :396-398: the heartbeat and "waiting" notifications carry no `progress` value, which the specification says MUST increase per notification; define it (elapsed seconds) and have T9 assert the increase across lines and heartbeats. Prose fixes for the same pass: :148 "1 of 81" is 2 (`draw` and `mesh` both have `snap_spacing`); :54 the timeout-reset quote is on the specification's Cancellation page, not Progress; :296 the `python` CI job (`.github/workflows/main.yaml:261`) also installs `.[dev]`; :97 the server list now says 100. Suggestions: state that the server process writes nothing but JSON-RPC to its own stdout; T11 also drops `tin_engine.mcp.server` from `sys.modules`. Verified: every probe figure against the saved output; SDK 2.3.0 facts in a fresh venv (low-level `Server`, `jsonschema` only in the client session, no progress token on the direct dispatcher, no server-side Tasks, 13 non-Windows dependencies); the specification quotes, the legacy grep, check_citations, and the prohibited-deps scan of extras. Ideas for Ola's file: write every mesh output through `.part` plus rename in `cli.py`; `destructive_hint=False` while `--out` overwrites an existing mesh deserves a second look.
+
+Design review round 2, 2026-10-12, @reviewer (`b9a692de..cb534b36`, 0 production lines): CHANGES REQUESTED, one blocker, applied in this recording commit as the reviewer specified: /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@cb534b36:363-370 started the child without saying it inherits the server's working directory (no `cwd=`), which the read-back and `unlink` of a relative `out`'s sidecar depend on, and no test pinned a relative `out`; one sentence added there, and T6 gains a relative-`out` case under `monkeypatch.chdir`. The reviewer's idea applied with it: T6 says `outputs` is exactly the `.vtk`, so the echoed sidecar path (`src_python/tin_engine/cli.py@b4a81c0d:1247`) is excluded. Verified: round 1's fixes against `cli.py@b4a81c0d` (`write_bytes` :1241, `_write_geopackage` :1250-1289 with `os.replace` :1289, `_destination` :438-445, the sidecar accepted exactly when `out` is, absolute, relative or through a symlinked parent); the specification quotes on the 2026-07-28 Progress and Cancellation pages; `main.yaml` installs `.[dev]` in four jobs; check_citations exit 0. Lesson: an assumption named only in a handback is not in the design; the file must carry it.
