@@ -1,6 +1,6 @@
 # Increment 38: threads and memory as settings
 
-**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); green `b252a70d` (`@developer`, 96 net production lines by `python3 tools/count_loc.py 5d2e706d HEAD` against the estimate of 60, under the worst case of 120); test-side fixes `9de3212c` (`@tester`); section 12 is the as-built record; `@perf`'s quick check NO CHANGE, ACCEPTED; next code review;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
+**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); green `b252a70d` (`@developer`, 96 net production lines by `python3 tools/count_loc.py 5d2e706d HEAD` against the estimate of 60, under the worst case of 120); test-side fixes `9de3212c` (`@tester`); section 12 is the as-built record; `@perf`'s quick check NO CHANGE, ACCEPTED; code review round 1 two prose blockers, fixed in the recording commit; next round 2;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
 `worktree-threads`). The first fix from the generality audit
 (`docs/increments/generality-audit.md`, section 6 item 1; rows D1, D2, D3, D5,
 D6, D7). Ola's yes, 2026-10-12: "1, 2: yes" to a single pull request that adds
@@ -371,7 +371,7 @@ stride records; the gallery's flat record has no DEM and no row.
 - **The MCP server (increment 37)**: its schemas are derived from the Typer
   parameters (`src_python/tin_engine/mcp/schema.py@5d2e706d:61-77`), so `threads` and
   `memory_budget` appear in the `mesh`, `catchment` and `station_catchments`
-  tools with no server change, and an agent sets them per call; the child
+  tools with no server change (one line in `mcp/schema.py` keeps a zero lower bound, section 12), and an agent sets them per call; the child
   inherits the server's environment (`src_python/tin_engine/mcp/server.py@5d2e706d:111`,
   `env={**os.environ, **CHILD_ENV}`), so `RASPUTIN_THREADS` set where the
   server starts is the default for every call. One test pins the first (T9).
@@ -549,7 +549,7 @@ from a literal.
   `tests/python/test_crs.py@5d2e706d:207-213`'s `WORKERS` assertion goes.
 - **T9 the MCP schema carries the options**: the `mesh` entry of `derive(app)` has a model with
   fields `threads` (int or None, default None) and `memory_budget` (str or
-  None), with no change to `mcp/`; `DerivedCommand.argv(model)`
+  None), with one line changed in `mcp/schema.py` (a zero lower bound kept; section 12); `DerivedCommand.argv(model)`
   (`src_python/tin_engine/mcp/schema.py@5d2e706d:108`) with the entry's model
   built from `{"threads": 3}` plus the required arguments ends with
   `--threads 3`, and with `{"memory_budget": "8G"}` ends with
@@ -668,8 +668,8 @@ Four questions were put to Ola with defaults; he ruled "Yes to all" on
 Entries this design takes up or overlaps: *Product review (b), generality
 audit* (this is its first fix); *MCP server over the rasputin commands* (an
 agent now sets `threads` per call through the derived schema, and
-`RASPUTIN_THREADS` in the server's environment is the default; nothing in
-`mcp/` changes). Every other entry is untouched. New idea from this design,
+`RASPUTIN_THREADS` in the server's environment is the default; `mcp/schema.py`
+changes by one line, section 12). Every other entry is untouched. New idea from this design,
 for the handback: `tools/bench.py`'s child could pass `--threads` to the CLI
 and drop its monkeypatch of `refine` (tooling, not counted).
 
@@ -759,3 +759,5 @@ test's bound of 3 ticks is load-sensitive.
 **Design review, round 1, 2026-10-12.** Range `5d2e706d..9e0d60c2`, 0 production lines, estimate 60 net with worst case 120, @reviewer: CHANGES REQUESTED, five blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/threads/docs/increments/38-threads-and-memory.md@9e0d60c2:476-481: T10's figures are wrong; probed on the fixture, the first window is 49 x 49, the mosaic cap 9,604 bytes and the flood 14,406, so a budget of 8,192 is refused by the mosaic cap (`/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/catchment.py@5d2e706d:394`) naming 9,604, not the flood, and 13,824 also refuses; fix: a budget in 9,604 to 14,405 for the flood case, 14,406 for "exactly at", the `8K` CLI case restated. (2) @9e0d60c2:485-488: T11 misses `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/tests/python/test_layering.py@5d2e706d:44` (the `decompose` row), whose line 152 fails on a gone module; the red commit drops that row and adds `resources`. (3) @9e0d60c2:457-470: T8 spies no reprojector at `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/feature_input.py@5d2e706d:339` or `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`, two of the three large sites; with the library default of one worker a dropped `threads` serialises them unseen; one spy per site. (4) @9e0d60c2:133-141: 15 reprojector callers, not 14 (`target_grid.py:136`, `tolerance_field.py:83`, `feature_input.py:183` missing; "other ten" is twelve); `target_grid.py:239`'s blocks are 512 x 512 = 262,144 points, under the 500,000 threshold, so only line 181 nests a pool. (5) @9e0d60c2:177-181: `cpu.max` with a non-numeric first word or a zero period is unspecified; apply the memory rule (no quota). Suggestions: the refusal text "half the machine's memory" (:254-256) is false when a budget was given; section 4.5 should say `bench.py` children's stats row still shows the CLI's count; T9's `argv` is `DerivedCommand.argv(model)` (`src_python/tin_engine/mcp/schema.py@5d2e706d:108`). Verified: all 37 pinned cites; the legacy greps; the I/O boundary, the pinned assumptions and the MCP claims; `check_citations` 46 at-risk lines, all `ROADMAP.md` rows 27 and 29, unmoved. Lesson: T10's figures came from a test comment, not a run; one probe script settled it.
 
 **Design review, round 2, 2026-10-12.** Range `3ff48435..3018192a`, 0 production lines, estimate 60 net, @reviewer: APPROVED. Verified by running: T10's figures with the main venv (8,192 refused by the mosaic cap at 9,604; 9,604 to 14,405 by the flood cap at 14,406; 14,406 refused on the probe window 73 x 55 at 16,060; 235,199 refused naming 224 x 175; 235,200 floods three windows), every figure in the table matching; the `decompose` layering row and its two assertions; the three T8 spy sites and the EPSG:4326-over-25833 case; the caller grep reproducing 15 lines, `target_grid.py` under the 500,000 threshold; the `cpu.max` rule in 4.1 with its cases; section 10's four rulings stated as rulings with date and quote; check_citations exit 0. Idea, non-blocking: T3 omits section 6's unreadable-file case (chmod 000 in `tmp_path`, skipped as root).
+
+**Code review, round 1, 2026-10-12.** Range `5d2e706d..f13d1370`, 96 net production lines (237 added, 141 removed; under 700), @reviewer: CHANGES REQUESTED, two prose blockers, the code sound; applied in this recording commit. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/threads/INSTALL.md@f13d1370:191-196: the new paragraph sat between a sentence ending in a colon and the code block it introduces, and said "Two more environment variables" naming one; moved below the block, "One more environment variable". (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/threads/docs/increments/38-threads-and-memory.md@f13d1370:374, :552 and :671-672 said no `mcp/` change; the branch changes `mcp/schema.py` by one line; corrected. Pins accepted: the `mcp/schema.py` zero-bound fix; `edge_strip.run` and `final_check.run` defaulting to `threads=0` (section 4.2 keeps 0 for direct callers; the CLI always passes 1 or more). Verified: no scaffolding; the machine read only in `resources.py`; the model's rules, the cgroup reads and `parse_bytes` as sections 4.1 to 4.3 and 6; the count reaching all five C++ calls and three pools, the cap of 8 gone; stats row and record entry; both refusals naming `--memory-budget` and the figure; `decompose.py` gone; the C++ still takes a plain integer; check_citations exit 0; the four new suites 181 passed. Lesson: a paragraph inserted into a document breaks a "sentence, colon, code block" pattern unless the lines around it are read.
