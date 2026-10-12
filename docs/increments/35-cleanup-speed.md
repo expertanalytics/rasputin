@@ -368,6 +368,10 @@ venv's numpy 2.5.4 differed from its 2.5.3). Hotspots: Lagan features clip
 Numedalslagen features clip 68 %, unruled, GEOS overlay time (section 4).
 Decided on defaults while Ola was away: the 68 % is recorded as expected here;
 the `hotspots.toml` entry and the Lagan 40.7 % ruling wait for Ola's word.
+Ruled by Ola 2026-10-12 ("Rule it expected at 6 s, cached extract is the fix"):
+the entry is in `docs/benchmarks/quick/hotspots.toml` at 68.0 %; the fix is the
+cached repaired extract per area of interest, when picked. Lagan's 43.6 % is
+within 10 points of its 40.7 % ruling, so the tool is quiet; no new entry.
 Lesson: a stored quick-check baseline goes stale when a merge changes outputs
 without a refresh (32 merged without one).
 

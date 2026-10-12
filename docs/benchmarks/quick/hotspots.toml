@@ -10,3 +10,16 @@ phase = "features clip"
 share = 40.7
 date = "2026-10-07"
 ruling = """Asked: "The clip hotspot: features clip is now 41 % of Lagan's run. Record it as expected for now." Ola: "4: yes\""""
+
+# Measured by @perf: features clip 6.000 s of 8.829 s (head, medians of 3, AC),
+# docs/benchmarks/2026-10-11/cleanup-speed/README.md; the profile behind it is
+# docs/benchmarks/2026-10-11/cleanup-profile/README.md (about 85 % GEOS calls:
+# the outline rule's union_all and make_valid, the two clips, coverage_clean).
+# The fix Ola named is the cached repaired extract per area of interest (his
+# private ideas file, "Repair CORINE once per area of interest").
+[[hotspot]]
+case = "numedalslagen"
+phase = "features clip"
+share = 68.0
+date = "2026-10-12"
+ruling = """Asked: "For the hotspots file, my proposal is to rule it expected at the current 6 s and let the cached-extract idea be the fix when you pick it." Ola: "Rule it expected at 6 s, cached extract is the fix\""""
