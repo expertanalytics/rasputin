@@ -188,6 +188,13 @@ The static checks CI runs are listed in `CLAUDE.md`, section 4.
 Two DEMs rasputin fetches itself, into a tile cache (`$RASPUTIN_DATA/cache`
 by default, or `--cache DIR`):
 
+Two more environment variables: `RASPUTIN_THREADS` is the default thread
+count for `mesh`, `catchment` and `station-catchments` (0 or unset means every
+core; `--threads N` overrides it), and inside a container the core count and
+the memory follow the container's own limits (`cpu.max`, `memory.max`).
+`--memory-budget 8G` caps the DEM window one run assembles; the default is
+half the machine's memory.
+
 ```sh
 rasputin fetch glo30 --domain catchment.geojson   # --dry-run prints the plan
 rasputin mesh --dem glo30 --domain catchment.geojson --out-crs EPSG:32723 \

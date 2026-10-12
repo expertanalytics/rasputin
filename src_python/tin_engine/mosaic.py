@@ -17,7 +17,6 @@ steps (I1, R12's global node identity).
 from __future__ import annotations
 
 import math
-import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +27,7 @@ import shapely
 from pydantic import BaseModel, ConfigDict
 
 from tin_engine.io.models import Bounds, DemTile, IndexWindow, RasterMeta, TileFootprint, valid_mask
+from tin_engine.resources import Resources
 
 #: DEM units (metres for DTM10). A seam counts a node only where the two
 #: tiles differ by at least this (Ola, 2026-09-28: "Ignore below 1mm").
@@ -50,11 +50,6 @@ class MixedGridError(MosaicError):
     def __init__(self, message: str, tiles: tuple[str, ...] = ()) -> None:
         super().__init__(message)
         self.tiles = tiles
-
-
-def physical_memory() -> int:
-    """Bytes of physical memory, looked up at call time (macOS and Linux)."""
-    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
 
 
 class TilePlacement(BaseModel):
@@ -145,13 +140,19 @@ class _Placed:
 
 
 def plan_mosaic(
-    footprints: Sequence[TileFootprint], bounds: Bounds | None = None, needed: Any = None
+    footprints: Sequence[TileFootprint],
+    bounds: Bounds | None = None,
+    needed: Any = None,
+    *,
+    memory_budget: int | None = None,
 ) -> MosaicPlan:
     """Select the tiles the request needs, on one lattice, or refuse (R4).
 
     `bounds` is the box in the DEM's CRS; without it, the lattice's union.
     `needed` is a shapely geometry in the DEM's CRS, closed: a node on its
     boundary is needed. Without it, every node of the window is.
+    `memory_budget` caps the canvas in bytes (38); None is half the
+    machine's memory (`Resources.fallback()`).
 
     When the request selects tiles on several lattices, the plan is on the one
     whose own tiles cover every needed node (Ola's Q5 reading, `_covering`).
@@ -176,7 +177,8 @@ def plan_mosaic(
     if not chosen:
         raise MosaicError(f"the box {bounds} meets no tile")
     if len(chosen) > 1:
-        return plan_mosaic(_covering(chosen, bounds, needed), bounds, needed)
+        covering = _covering(chosen, bounds, needed)
+        return plan_mosaic(covering, bounds, needed, memory_budget=memory_budget)
 
     lattice = chosen[0]
     (x_ref, y_ref), (r0, c0, r1, c1), selected = lattice.reference, lattice.window, lattice.selected
@@ -184,11 +186,13 @@ def plan_mosaic(
     if rows < 2 or cols < 2:
         raise MosaicError(f"the request is {rows} x {cols} nodes; a mesh needs at least 2 x 2")
     dtype = np.result_type(*(p.footprint.dtype for p in selected))
-    cap, size = physical_memory() // 2, rows * cols * dtype.itemsize
+    cap = Resources.fallback().memory_budget if memory_budget is None else memory_budget
+    size = rows * cols * dtype.itemsize
     if size > cap:
         raise MosaicError(
-            f"the request is {rows} x {cols} nodes, {size} bytes at {dtype}, over the cap "
-            f"of half the physical memory ({cap} bytes); narrow it with --bbox"
+            f"the request is {rows} x {cols} nodes, {size} bytes at {dtype}, over the memory "
+            f"budget of {cap} bytes (set with --memory-budget; half the machine's memory when "
+            "it is not set); narrow it with --bbox"
         )
     vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
     meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)

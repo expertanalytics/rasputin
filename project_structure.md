@@ -157,6 +157,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   summary and --record JSON; escaped_ascii, the
                            #   one non-ASCII escape (\xe9) for file fields and
                            #   crs_label; imports json and dataclasses only
+  resources.py             # the one module that reads the machine: cores,
+                           #   memory, cgroup limits; Resources (threads, a
+                           #   memory budget), resolved once per command (38);
+                           #   Pydantic and os only
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core.
@@ -167,9 +171,6 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (bit 9), for a cut run's piece files (23c).
                            #   TerrainFeature: one feature's mask and lines
                            #   (moved from feature_input, audit PR C)
-  decompose.py             # partition: the window cut into cells under
-                           #   --pieces and --memory-budget, b(T); pure, reads
-                           #   no machine (23c)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain

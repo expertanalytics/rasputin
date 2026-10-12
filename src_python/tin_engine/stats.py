@@ -239,7 +239,7 @@ def _timings(report: Report) -> list[str]:
     rows.append(("**total**", f"**{total:.3f}**", "**100 %**"))
     intro = _TIMINGS
     if report.threads is not None:
-        intro += f" Threads: {report.threads} (hardware concurrency)."
+        intro += f" Threads used: {report.threads}."
     lines = ["## Timings", "", intro, "", *_table(("phase", "seconds", "share"), rows), ""]
     if subs:
         lines += ["Sub-rows sum to their parent and are not added to the total.", ""]
