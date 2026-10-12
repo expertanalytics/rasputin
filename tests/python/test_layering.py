@@ -35,7 +35,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "palettes": "", "hydrography": "", "tin_engine": "",
     },
     {  # L1: pure algorithms
-        "crs": "run_record",
+        "crs": "io.models run_record",
         "mosaic": "io.models",
         "target_grid": "crs domain grow io.models",
         "grid_domain": "io.models",
@@ -57,6 +57,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.domain_file": "crs domain io.geojson io.repository",
         "io.geojson": "crs",
         "io.geopackage": "", "io.gml": "", "io.mesh_checks": "",
+        "io.geopackage_write": "features io.geopackage io.models",  # 36: the writer
         "io.geotiff": "crs io.models",
         "io.mesh_index": "io.models",
         "io.ply": "features io.mesh_checks",
@@ -91,7 +92,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
-               " io.mesh_checks io.models io.ply io.repository io.rivers io.station_set"
+               " io.geopackage_write io.mesh_checks io.models io.ply io.repository io.rivers"
+               " io.station_set"
                " io.vtk_legacy landcover mosaic palettes raster run_record sources stats"
                " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
                " viz.style viz.svg",

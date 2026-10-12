@@ -25,8 +25,10 @@ import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS, Proj, Transformer, get_ellps_map
 from pyproj.crs import ProjectedCRS
+from pyproj.enums import WktVersion
 from pyproj.exceptions import CRSError, ProjError
 
+from tin_engine.io.models import CUSTOM_SRS_ID, UNDEFINED_SRS, SrsEntry
 from tin_engine.run_record import escaped_ascii
 
 Xy = npt.NDArray[np.float64]
@@ -157,6 +159,31 @@ def crs_label(crs: str | CRS) -> str:
     if code is not None:
         return f"EPSG:{code}"
     return escaped_ascii(parsed.to_string())
+
+
+def srs_entry(crs: str | None) -> SrsEntry:
+    """The `gpkg_spatial_ref_sys` row for `crs` (increment 36): an EPSG code is
+    its own `srs_id` with WKT1_GDAL (what QGIS and GDAL read); a CRS pyproj
+    parses but cannot code is 100000 with its WKT2; no CRS, or text pyproj
+    refuses, is the reserved undefined cartesian row -1. Never raises."""
+    try:
+        parsed = parse_crs(crs) if crs else None
+    except ValueError:
+        parsed = None
+    if parsed is None:
+        return UNDEFINED_SRS
+    code = parsed.to_epsg()
+    if code is None:
+        wkt2 = parsed.to_wkt()
+        return SrsEntry(
+            srs_id=CUSTOM_SRS_ID,
+            organization="rasputin",
+            code=CUSTOM_SRS_ID,
+            name=parsed.name,
+            definition=wkt2,
+        )
+    wkt1 = parsed.to_wkt(version=WktVersion.WKT1_GDAL)
+    return SrsEntry(srs_id=code, organization="EPSG", code=code, name=parsed.name, definition=wkt1)
 
 
 class CrsSuggestion(BaseModel):

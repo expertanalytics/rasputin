@@ -1,0 +1,202 @@
+{
+ "numedalslagen/gpkg": {
+  "runs": [
+   {
+    "real_s": 13.56,
+    "peak_rss_bytes": 2783264768,
+    "write_s": 3.892,
+    "size_bytes": 203296768,
+    "writer_rss_start_bytes": 2749612032,
+    "writer_rss_peak_bytes": 2781282304,
+    "samples": 119,
+    "writer_share_bytes": 31670272,
+    "write: geopackage": 3.892
+   },
+   {
+    "real_s": 13.53,
+    "peak_rss_bytes": 2765635584,
+    "write_s": 3.932,
+    "size_bytes": 203296768,
+    "writer_rss_start_bytes": 2747170816,
+    "writer_rss_peak_bytes": 2765406208,
+    "samples": 119,
+    "writer_share_bytes": 18235392,
+    "write: geopackage": 3.932
+   },
+   {
+    "real_s": 13.53,
+    "peak_rss_bytes": 2726019072,
+    "write_s": 3.988,
+    "size_bytes": 203296768,
+    "writer_rss_start_bytes": 1180631040,
+    "writer_rss_peak_bytes": 1215856640,
+    "samples": 118,
+    "writer_share_bytes": 35225600,
+    "write: geopackage": 3.988
+   }
+  ],
+  "median": {
+   "real_s": 13.53,
+   "peak_rss_bytes": 2765635584,
+   "write_s": 3.932,
+   "size_bytes": 203296768,
+   "writer_rss_start_bytes": 2747170816,
+   "writer_rss_peak_bytes": 2765406208,
+   "samples": 119,
+   "writer_share_bytes": 31670272,
+   "write: geopackage": 3.932
+  }
+ },
+ "numedalslagen/vtk": {
+  "runs": [
+   {
+    "real_s": 9.58,
+    "peak_rss_bytes": 2729295872,
+    "write_s": 0.014,
+    "size_bytes": 29153879,
+    "writer_rss_start_bytes": 935133184,
+    "writer_rss_peak_bytes": 935133184,
+    "samples": 84,
+    "writer_share_bytes": 0,
+    "write: encode": 0.01,
+    "write: disk": 0.004
+   },
+   {
+    "real_s": 9.56,
+    "peak_rss_bytes": 2717728768,
+    "write_s": 0.014,
+    "size_bytes": 29153879,
+    "writer_rss_start_bytes": 0,
+    "writer_rss_peak_bytes": 0,
+    "samples": 84,
+    "writer_share_bytes": 0,
+    "write: encode": 0.01,
+    "write: disk": 0.004
+   },
+   {
+    "real_s": 9.68,
+    "peak_rss_bytes": 2731622400,
+    "write_s": 0.014,
+    "size_bytes": 29153879,
+    "writer_rss_start_bytes": 0,
+    "writer_rss_peak_bytes": 0,
+    "samples": 84,
+    "writer_share_bytes": 0,
+    "write: encode": 0.01,
+    "write: disk": 0.004
+   }
+  ],
+  "median": {
+   "real_s": 9.58,
+   "peak_rss_bytes": 2729295872,
+   "write_s": 0.014,
+   "size_bytes": 29153879,
+   "writer_rss_start_bytes": 0,
+   "writer_rss_peak_bytes": 0,
+   "samples": 84,
+   "writer_share_bytes": 0,
+   "write: encode": 0.01,
+   "write: disk": 0.004
+  }
+ },
+ "romsdal-slope/gpkg": {
+  "runs": [
+   {
+    "real_s": 23.72,
+    "peak_rss_bytes": 2948382720,
+    "write_s": 19.051,
+    "size_bytes": 810037248,
+    "writer_rss_start_bytes": 2721251328,
+    "writer_rss_peak_bytes": 2947907584,
+    "samples": 206,
+    "writer_share_bytes": 226656256,
+    "write: geopackage": 19.051
+   },
+   {
+    "real_s": 25.0,
+    "peak_rss_bytes": 2903326720,
+    "write_s": 20.154,
+    "size_bytes": 810037248,
+    "writer_rss_start_bytes": 2721103872,
+    "writer_rss_peak_bytes": 2901950464,
+    "samples": 219,
+    "writer_share_bytes": 180846592,
+    "write: geopackage": 20.154
+   },
+   {
+    "real_s": 24.15,
+    "peak_rss_bytes": 2912583680,
+    "write_s": 19.368,
+    "size_bytes": 810037248,
+    "writer_rss_start_bytes": 2723053568,
+    "writer_rss_peak_bytes": 2911420416,
+    "samples": 211,
+    "writer_share_bytes": 188366848,
+    "write: geopackage": 19.368
+   }
+  ],
+  "median": {
+   "real_s": 24.15,
+   "peak_rss_bytes": 2912583680,
+   "write_s": 19.368,
+   "size_bytes": 810037248,
+   "writer_rss_start_bytes": 2721251328,
+   "writer_rss_peak_bytes": 2911420416,
+   "samples": 211,
+   "writer_share_bytes": 188366848,
+   "write: geopackage": 19.368
+  }
+ },
+ "romsdal-slope/vtk": {
+  "runs": [
+   {
+    "real_s": 4.67,
+    "peak_rss_bytes": 2777055232,
+    "write_s": 0.055,
+    "size_bytes": 111542331,
+    "writer_rss_start_bytes": 2776989696,
+    "writer_rss_peak_bytes": 2776989696,
+    "samples": 40,
+    "writer_share_bytes": 0,
+    "write: encode": 0.039,
+    "write: disk": 0.016
+   },
+   {
+    "real_s": 4.82,
+    "peak_rss_bytes": 2775777280,
+    "write_s": 0.058,
+    "size_bytes": 111542331,
+    "writer_rss_start_bytes": 2775613440,
+    "writer_rss_peak_bytes": 2775613440,
+    "samples": 41,
+    "writer_share_bytes": 0,
+    "write: encode": 0.042,
+    "write: disk": 0.016
+   },
+   {
+    "real_s": 4.84,
+    "peak_rss_bytes": 2785820672,
+    "write_s": 0.062,
+    "size_bytes": 111542331,
+    "writer_rss_start_bytes": 2785787904,
+    "writer_rss_peak_bytes": 2785787904,
+    "samples": 42,
+    "writer_share_bytes": 0,
+    "write: encode": 0.04,
+    "write: disk": 0.022
+   }
+  ],
+  "median": {
+   "real_s": 4.82,
+   "peak_rss_bytes": 2777055232,
+   "write_s": 0.058,
+   "size_bytes": 111542331,
+   "writer_rss_start_bytes": 2776989696,
+   "writer_rss_peak_bytes": 2776989696,
+   "samples": 41,
+   "writer_share_bytes": 0,
+   "write: encode": 0.04,
+   "write: disk": 0.016
+  }
+ }
+}
