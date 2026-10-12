@@ -74,6 +74,7 @@ WORDING = {
     "land_cover_licence_note": "Licence of the land-cover classes",
     "land_cover_cite": "Please cite for the land-cover classes",
     "features_notice": "Credit for the features data",
+    "features_licence": "Licence of the features data",
     "land_cover_codes": "What land_cover_code holds",
     "land_cover_vertices": "Land-cover vertices before and after clean-up",
     "land_cover_area_moved_m2": (

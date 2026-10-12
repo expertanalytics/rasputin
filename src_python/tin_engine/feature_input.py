@@ -56,15 +56,6 @@ ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"
 MARGIN, DENSIFY = 100.0, 1_000.0
 #: WGS 84's smallest and largest radii of curvature, metres (R5, "Long edges").
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
-WATER_CODES = ("511", "512", "521", "522", "523")
-#: A map whose values are integer class codes names its code system (16c, R5).
-CORINE_CODES = "CORINE Land Cover level-3 code"
-CORINE_NOTICE = (
-    "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, "
-    "Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and "
-    "re-encoded, produced with funding by the European Union, not endorsed by the EU"
-)
-
 Widening = Callable[[tuple[float, float], tuple[float, float]], float]
 
 
@@ -76,51 +67,24 @@ class ClassMap(BaseModel):
     """An attribute's values to vocabulary names (R4). ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
     ``codes``, when not empty, names the code system the values are integer
-    codes of; such a map labels triangles (16c, R5). ``palette`` names the
-    entry of ``palettes.PALETTES`` that colours and names those codes (36)."""
+    codes of; such a map labels triangles (16c, R5). ``palette`` colours and
+    names those codes (36). A class mapped to None is dropped; the rest come
+    from a class-map file (41, `tin_engine.class_maps`)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     attribute: str
-    classes: Mapping[str, tuple[str, ...]]
+    classes: Mapping[str, tuple[str, ...] | None]
     otherwise: Literal["refuse", "drop"] | tuple[str, ...] = "refuse"
     notice: str = ""
     codes: str = ""
-    palette: str | None = None
-
-
-def _corine(name: str, attribute: str) -> ClassMap:
-    water = dict.fromkeys(WATER_CODES, ("land_cover", "water"))
-    return ClassMap(
-        name=name,
-        attribute=attribute,
-        classes=water,
-        otherwise=("land_cover",),
-        notice=CORINE_NOTICE,
-        codes=CORINE_CODES,
-        palette="corine",
-    )
-
-
-CLASS_MAPS: dict[str, ClassMap] = {
-    "property": ClassMap(
-        name="property",
-        attribute="property",
-        classes={p.name: (p.name,) for p in DEFAULT_VOCABULARY.properties},
-    ),
-    "corine": _corine("corine", "Code_18"),
-    "corine-water": ClassMap(
-        name="corine-water",
-        attribute="Code_18",
-        classes=dict.fromkeys(WATER_CODES, ("water",)),
-        otherwise="drop",
-        notice=CORINE_NOTICE,
-        codes=CORINE_CODES,
-        palette="corine",
-    ),
-    "clc18_kode": _corine("clc18_kode", "clc18_kode"),
-}
+    palette: Mapping[int, tuple[str, str]] | None = None
+    preset: str = ""
+    licence: str = ""
+    accuracy_m: float = 0.0
+    string_codes: Mapping[str, int] = {}
+    extra_names: tuple[str, ...] = ()
 
 
 class FeatureSource(BaseModel):
@@ -267,7 +231,7 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
     vocabulary = request.vocabulary
     for source in request.sources:
         cmap = source.class_map
-        named = [n for names in cmap.classes.values() for n in names]
+        named = [n for names in cmap.classes.values() for n in names or ()]
         try:
             vocabulary.mask(*named, *(() if isinstance(cmap.otherwise, str) else cmap.otherwise))
         except ValueError as exc:
@@ -357,7 +321,7 @@ class _Tally:
             mask = _mask(cmap, self.vocabulary, value, f"{name}: feature {fid}")
             if mask is None:
                 continue
-            code = _code(value, f"{name}: feature {fid}") if cmap.codes else None
+            code = _code(cmap, value, f"{name}: feature {fid}") if cmap.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
             if polygonal and code is not None and self.cleanup is not None:  # 20c-3: whole
@@ -576,10 +540,12 @@ def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 
 
-def _code(value: Any, what: str) -> int:
-    """R5: a class code is an integer in 1 .. 2**31 - 1; anything else is refused."""
+def _code(cmap: ClassMap, value: Any, what: str) -> int:
+    """R5: a class code is an integer in 1 .. 2**31 - 1, or a text the map's
+    ``string_codes`` turn into one (41); anything else is refused."""
     try:
-        code = int(str(value)) if not isinstance(value, list) else 0
+        text = "0" if isinstance(value, list) else str(value)
+        code = cmap.string_codes.get(text) or int(text)
     except ValueError:
         code = 0
     if not 1 <= code < 2**31:
@@ -594,7 +560,10 @@ def _mask(cmap: ClassMap, vocabulary: EdgeVocabulary, value: Any, what: str) -> 
     for item in value if isinstance(value, list) else [value]:
         key = None if item is None else str(item)
         if key is not None and key in cmap.classes:
-            names += cmap.classes[key]
+            listed = cmap.classes[key]
+            if listed is None:
+                return None
+            names += listed
         elif cmap.otherwise == "drop":
             return None
         elif cmap.otherwise == "refuse":
