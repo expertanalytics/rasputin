@@ -7,7 +7,7 @@
 commit message), fix-up `7085dddf` (the `.part` housekeeping moved to the
 CLI); 377 net production lines by `python3 tools/count_loc.py 81a551b3 HEAD` (the merge base; `3e6f87eb` gives the same count)
 against the design's about 305; section 11 is the as-built record; `@perf`'s
-acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section), fixed: red test `55cc3c3e` (`@tester`), guard `18442b27` (`@developer`), 378 net lines; code review round 2 APPROVED. Merged by the queue on top of #229 and #230, 2026-10-12.
+acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section), fixed: red test `55cc3c3e` (`@tester`), guard `18442b27` (`@developer`), 378 net lines; code review round 2 APPROVED. Merged by the queue on top of #229, ahead of #230, 2026-10-12.
 
 ## 1. What Ola asked
 
