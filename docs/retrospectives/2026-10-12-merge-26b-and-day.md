@@ -1,12 +1,14 @@
-# 2026-10-12: increment 26b merged, the ruling record and the morning retrospective merged, increment 37 and the generality audit waiting on a push; the day's lessons
+# 2026-10-12: increment 26b merged, the ruling record and the morning retrospective merged, increment 37 pushed and the generality audit waiting on a push as of 14:43Z; the day's lessons
 
 `@orchestrator`, one post-merge check for #235 (increment 26b, exact
 land-cover class fractions per triangle, `docs/increments/26-land-cover.md`
 section 14, merge commit `c317c7e4` created 11:30:05Z, merged 11:39:51Z),
 with one line each for #233 (the hotspot ruling record, `ac9ee6a4`) and #234
-(the morning retrospective, `28a96ddb`), and a check of two finished,
-unmerged items: increment 37 (the MCP server, `worktree-mcp-server` at
-`33061c0f`, review-approved) and the generality audit
+(the morning retrospective, `28a96ddb`), and a check of two finished items,
+unmerged at this file's first commit (`f4ebb3e5`, 14:43Z; the tree moved
+while it was written, see the Review section): increment 37 (the MCP
+server, `worktree-mcp-server` at `33061c0f`, review-approved, pushed as
+#236 at 14:38:03Z, queued 14:47:09Z) and the generality audit
 (`worktree-generality-audit` at `1c405ade`, review-complete; Ola's product
 review, not re-reviewed here). Sources: `git log`, the increment files, the
 GitHub timeline of each PR (`gh api repos/.../issues/<n>/timeline`),
@@ -23,7 +25,7 @@ labelled UTC**, see D4.
 | 26b (#235) | 26's design of 2026-10-03, two rounds then; no freshness pass (section 14 says why) | `1820c1d4` 07:57Z (`@tester`, 92 cases, 68 red) | `5b8bb3e0` 08:23Z (`@developer`), test-side fixes `f165282b` 09:01Z (`@tester`) | none (section 9 names none in 26b) | 2 rounds, APPROVED `68d4b75b` 09:54Z | `98eea44f` ACCEPTED, `docs/benchmarks/2026-10-12/26b-fractions/` | **621 net** (estimate 420) | D1, D4, D5, D6 |
 | ruling record (#233) | prose, `50f19dae` 04:53Z (main session) | - | - | - | 2 rounds, `7bba17f8` 07:57Z | - | 0 | D1 |
 | retrospective (#234) | prose, `a749eab7` 07:38Z (`@orchestrator`) | - | - | - | 2 rounds, `2e35f70e` 08:03Z | - | 0 | D1 |
-| 37 (unmerged) | `b990e38c` 08:34Z (`@architect`), 3 rounds, APPROVED `ba81cde1` 09:07Z | `ee5b5d52` 10:13Z (62 tests, all red) | `851592ba` 10:54Z | none (section 10) | 3 rounds, APPROVED `33061c0f` 12:15Z | not needed (no refine or mesh code) | **328 net** (`count_loc.py c317c7e4 33061c0f`; estimate 260, worst case 360) | D1, D2, D7 |
+| 37 (#236, unmerged at 14:43Z) | `b990e38c` 08:34Z (`@architect`), 3 rounds, APPROVED `ba81cde1` 09:07Z | `ee5b5d52` 10:13Z (62 tests, all red) | `851592ba` 10:54Z | none (section 9) | 3 rounds, APPROVED `33061c0f` 12:15Z | not needed (no refine or mesh code) | **328 net** (`count_loc.py c317c7e4 33061c0f`; estimate 260, worst case 360) | D1, D2, D7 |
 | audit (unmerged) | `6d468ba6` 12:23Z (`@architect`) | - | - | - | 1 round, `1c405ade` 12:44Z | - | 0 | D1 |
 
 **26b in detail.** Order held: red before green, the red commit touches
@@ -71,11 +73,12 @@ merged from the queue 10:46:35Z, 8 min 51 after enqueue.
 the second closed on the reviewer's wording (D1); enqueued 10:30:09Z,
 merged 10:31:30Z (prose-only, governance gates only).
 
-**37, finished and unmerged.** Three design rounds, three code rounds,
+**37, finished and pushed.** Three design rounds, three code rounds,
 master merged in (`030fd32b`) with the one broken test fixed by `@tester`
 (`d8a1729d`, the parameter count dropped for the identity set); every
-gate green per the round-3 record; 328 net lines. Waiting on Ola's push
-since 12:15Z. Section 3 has its lead time.
+gate green per the round-3 record; 328 net lines. Approved 12:15Z, pushed
+as #236 at 14:38:03Z (2 h 23 on the push), queued 14:47:09Z. Section 3
+has its lead time.
 
 **The audit exists**: `docs/increments/generality-audit.md` on
 `worktree-generality-audit`, one review round, three wordings and four
@@ -100,9 +103,10 @@ Ola's to read.
   file, verbatim from the reviewer. The sentence states an assumption the
   code depends on, which is design content; `@tester` then wrote the test
   itself in the red step (`ee5b5d52`), so no test was written out of role.
-  Low risk, disclosed, and cheaper than a spawn; P1's clause says "text the
-  reviewer gives verbatim" and leaves a decision, a type or a new invariant
-  to the owner.
+  Low risk, disclosed, and cheaper than a spawn. The morning's P1
+  (`docs/retrospectives/2026-10-12-merges-35-36-docs.md@c317c7e4:250-253`)
+  says "wording fixes"; P1 below rewords it to "text the reviewer gives
+  verbatim" and leaves a decision, a type or a new invariant to the owner.
 - **D2, one `@orchestrator` check for 26b and 37 together.** `CLAUDE.md`
   §3 spawns the check after each merge; 37 is unmerged, so this check reads
   it as finished work and the merge itself (queue, CI, merge commit) is not
@@ -117,7 +121,7 @@ Ola's to read.
   `@tester` spawn was 07:22Z), 37's design at 07:58 UTC (git: 08:34Z; the
   `@architect` spawn 08:04Z) and its approval at 14:25 UTC (git:
   12:15Z), and `session.md`'s `NOW:` says "~15:50 UTC" on a file written
-  before this check's 14:23Z spawn. A lead-time table built from those
+  before this check's 14:24:39Z spawn (transcript). A lead-time table built from those
   figures would be wrong by up to two hours. The mechanism: the session
   reads a wall clock in local time and writes "UTC". Proposal P7.
 - **D5, an unpushed prose branch merged into the product branch.**
@@ -132,8 +136,8 @@ Ola's to read.
   harmless today; recorded so the next such merge says who made it and why
   in its subject.
 - **D6, the dequeue, and the account of it.** The GitHub timeline of #235:
-  `gh pr merge 235` at 10:29:51Z enabled auto-merge; the queue added #235 at
-  10:37:50Z, six seconds after #233 (10:37:44Z), and **removed it at
+  `gh pr merge 235` ran at 10:29:51Z (transcript); GitHub enabled auto-merge
+  at 10:36:10Z; the queue added #235 at 10:37:50Z, six seconds after #233 (10:37:44Z), and **removed it at
   10:38:01Z**, eleven seconds later and 8 min 34 before #233 merged
   (10:46:35Z). The main session noticed at 11:27Z, asked ("the queue
   dropped it after #233 merged ahead of it"), Ola said "yes, re-enqueue" at
@@ -148,10 +152,11 @@ Ola's to read.
   last night (the main session's transcript at 06:00Z today: "dropped out
   of the queue with a conflict against #231"). Proposal P8.
 - **D7, 37's four review fixes ran in series** (`@tester` 11:11Z,
-  `@developer` 11:25Z, `@architect` 11:32Z; 48 min from the round-1 record
-  to the round-2 record). `tools/brief.py` refuses two writers in one
+  `@developer` 11:25Z, `@architect` 11:32Z; 38 min from the round-1 record
+  `dbc77f3b` 11:04:32Z to the round-2 record `2a871c50` 11:42:48Z).
+  `tools/brief.py` refuses two writers in one
   worktree by design; the parallel route is two branches and a merge, with
-  a second build. On a 48-minute chain the merge would eat the saving.
+  a second build. On a 38-minute chain the merge would eat the saving.
   Judged right; no change.
 - **Checked, no finding.** Ola's one word "push" at 10:26:12Z answered the
   main session's question that named the three branches, each as its own
@@ -188,16 +193,16 @@ report. The ideas file was checked this morning; not repeated.
 
 | Item | First spawn | First commit | Approved | Pushed | Merged | Design or red to merge | Waiting |
 |---|---|---|---|---|---|---|---|
-| 26b (#235) | 07:22Z (`@tester`) | red 07:57Z | 09:54Z | 10:29Z | 11:39:51Z | **3 h 42** from red (4 h 17 from the spawn) | 35 min on Ola (away until 10:25Z); 70 min in and out of the queue, 52 of them out |
+| 26b (#235) | 07:22Z (`@tester`) | red 07:57Z | 09:54Z | 10:29Z | 11:39:51Z | **3 h 42** from red (4 h 17 from the spawn) | 35 min on Ola (away until 10:25Z); 64 min from auto-merge enabled (10:36:10Z) to merged, 52 of them out of the queue |
 | ruling (#233) | - | 04:53Z | 07:57Z | 10:28Z | 10:46:35Z | 5 h 53 | 2 h 31 on the push, 9 min queue |
 | retrospective (#234) | 07:38Z | 07:38Z | 08:03Z | 10:29Z | 10:31:30Z | 2 h 53 | 2 h 26 on the push, 1 min queue |
-| 37 (unmerged) | 08:04Z (`@architect`) | design 08:34Z | 12:15Z | - | - | 3 h 41 design to approval, as of 12:15Z | on the push since 12:15Z: 2 h 15 at 14:30Z |
+| 37 (#236) | 08:04Z (`@architect`) | design 08:34Z | 12:15Z | 14:38:03Z | unmerged at 14:43Z (queued 14:47:09Z; the Review section has the rest) | 3 h 41 design to approval | 2 h 23 on the push |
 
 26b is the second item in two days with the shape to keep (35 was the
 first): built, measured and reviewed inside Ola's away window, pushed four
 minutes after his return. Its waiting was the queue, not Ola. 37 moved from
-design to approval in 3 h 41 with no wait on Ola at all, then stopped at
-the push; the mechanism is the one the morning named (the away-mode push
+design to approval in 3 h 41 with no wait on Ola at all, then waited 2 h 23
+for the push (14:38Z); the mechanism is the one the morning named (the away-mode push
 grant, P2 of the morning, not built), only by day this time: Ola was
 present and the session asked once, in a list of ten `ASK OLA:` lines.
 
@@ -231,12 +236,15 @@ Disposition: *rule* (a line in a rule file, proposed below), *checklist*
 7. A cite written without its directory path breaks the citation gate, and a
    review record quoting it becomes an at-risk entry; four times today, each
    caught by a reviewer; the main session now runs the worktree's own
-   `check_citations.py` after each recording commit. The hook that should
-   do this, `gates_after_commit.py`, judges the main checkout's tree: that
-   is P2 of `2026-10-11-merges-32-33-34.md`, approved, unbuilt. **Carried
-   proposal**, nothing new. This file did it once itself (an unpinned
-   `PRINCIPLES.md` cite in section 6), caught by the hook after its first
-   commit and fixed in a second commit, not an amend.
+   `check_citations.py` after each recording commit. The hook,
+   `gates_after_commit.py`, gates the worktree the commit line's `cd` or
+   `git -C` names (`.claude/hooks/gates_after_commit.py@c317c7e4:77-87` and
+   `:111-131`), and it did its job on this file: the unpinned
+   `PRINCIPLES.md` cite in section 6 was caught after the first commit
+   `f4ebb3e5` and fixed in `1d3fb3b6`, not an amend. What is still open is
+   narrower: P2 of `2026-10-11-merges-32-33-34.md` (approved, unbuilt) has
+   `step()` check that a joined relative path is a directory before the
+   hook gates it. **Carried proposal**, nothing new.
 8. The citation gate's at-risk tally moves with every file master later
    touches; a tally names its command and tree. Done in #234. **Lesson.**
 9. An assumption named only in a handback is not in the design (37 design
@@ -276,6 +284,13 @@ Disposition: *rule* (a line in a rule file, proposed below), *checklist*
 22. The queue dropped #235 and the re-enqueue needed a fresh yes (D6).
     **Rule or tool** (P8): the yes is right (one yes, one enqueue); the 49
     unnoticed minutes are the defect.
+23. A claim about an unmerged item carries the time it was true: this file
+    said 37 was "waiting on a push" while #236 had been pushed five minutes
+    before its first commit (14:38:03Z against `f4ebb3e5` at 14:43Z), and
+    both #236 and #237 merged before its review. The tree moves while a
+    retrospective is written. The reviewer's lesson; the claims rule's
+    "write the rule and the command, not the resolved value" covers it,
+    with a date where a resolved value is unavoidable. **Lesson.**
 
 ## 5. The morning's proposals: which took effect today
 
@@ -313,9 +328,12 @@ seven review rounds that each restated a permission the rules do not hold.
   case of it and belongs with the tool (`CLAUDE.md` §4 already names it),
   or nowhere. About -30 words.
 - *Restatement outside the rules, counted for P1:* "as the recording-commit
-  practice allows" (`grep -rl "recording-commit practice" docs/`) now
-  stands in four files: the morning retrospective, increment 37's file,
-  the audit, and increment 35's file from yesterday. Each is 20 words a
+  practice allows" (`git grep -l "recording-commit practice" <tree> -- docs/`)
+  stands in two files on `c317c7e4` (increment 35's file from yesterday
+  and the morning retrospective), plus increment 37's file on
+  `worktree-mcp-server` at `33061c0f` and the audit on
+  `worktree-generality-audit` at `1c405ade`: four in all, and all four on
+  master once #236 and #237 merge. Each is 20 words a
   one-clause rule would make unnecessary.
 - *Checked, not an anecdote:* `docs/PRINCIPLES.md@c317c7e4:71` and `:118` name
   retrospective files as pointers to reasoning, which is what a pointer is
@@ -351,3 +369,59 @@ seven review rounds that each restated a permission the rules do not hold.
    `perf.md`: `uptime`'s 1-minute load average is recorded with `pmset`,
    and a run under a load above the baseline's is judged back to back or
    not at all. +25 words, `@perf`. Lesson 4.
+
+## Review
+
+Round 1, 2026-10-12, `@reviewer` (`c317c7e4..1d3fb3b6`): CHANGES REQUESTED,
+six wordings, applied in this round's recording commit (the one after
+`1d3fb3b6` on `post-merge-1012b`). The reviewer verified every timestamp,
+LOC figure, rule size, disposition and citation in the file; the six are
+pinned at `1d3fb3b6`, and each was re-checked here before it was applied
+(`gh api repos/expertanalytics/rasputin/issues/235/timeline`, `gh pr view
+236`, `git log -1 --format=%ci`, `git show` of the hook and the two cited
+files).
+
+1. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:135`
+   said `gh pr merge` enabled auto-merge at 10:29:51Z; the timeline has
+   `auto_merge_enabled` at 10:36:10Z, so D6 now gives both times, and the
+   lead-time row at `:191` reads 64 min from auto-merge enabled, not 70.
+2. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:151`
+   and `:154`: `dbc77f3b` 11:04:32Z to `2a871c50` 11:42:48Z is 38 minutes,
+   not 48.
+3. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:1`,
+   `:8`, `:77-78`, `:194`, `:199`: 37 was pushed as #236 at 14:38:03Z
+   (queued 14:47:09Z), before this file's first commit; "waiting on a push"
+   dropped for 37, "pushed 14:38Z, 2 h 23 on the push" written, the claims
+   dated (lesson 23).
+4. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:234-236`
+   said the hook judges the main checkout's tree; it gates the worktree the
+   commit line's `cd` names and caught this file's own cite, and the open
+   2026-10-11 P2 is about `step()` checking a joined relative path.
+   Reworded.
+5. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:26`:
+   "section 10" is section 9 of increment 37's file.
+6. `/Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@1d3fb3b6:103-105`:
+   the "verbatim text, type, invariant" phrasing is this file's P1, not the
+   morning's, which says "wording fixes"; now "P1 below", with the
+   morning's cite.
+
+Two suggestions taken: the spawn time at `:120` (14:24:39Z, transcript) and
+the grep at `:316`, which the reviewer counted at three files on master;
+re-run here it is two on `c317c7e4` and four on `origin/master` at
+`5d2e706d`, after #236 (merged 14:56:10Z) and #237 (the audit, pushed
+14:53:40Z, merged 14:57:17Z) landed, so the file now names the trees. Those
+two merges also date this file: its title and sections 1 and 3 are as of
+14:43Z, and the next check covers both merges (D2).
+
+One finding from running the gate on this record. `python3
+tools/check_citations.py` was green before and after the six cites above
+were planted wrong (`@1d3fb3b6:9135` in a 410-line file): its `PATH`
+pattern starts with `(?!/)` and its comment says a token starting with `/`
+is "never a citation" (`tools/check_citations.py@c317c7e4:62-64`). A
+relative cite planted wrong the same way was caught at once
+(`gates_after_commit.py@c317c7e4:9077`, "has 227 lines"). So the full-path
+pinned citations the review records are asked to carry are not checked by
+the gate at all; "every cite resolves" is true only of the relative ones.
+On `c317c7e4`, 251 such cites in 20 files under `docs/` (`git grep -o
+'/Users/skavhaug/projects/rasputin/[^ \`]*@[0-9a-f]\{7,\}:[0-9][0-9-]*'
+c317c7e4 -- docs/`) have never been checked. Proposal P11 in the handback.
