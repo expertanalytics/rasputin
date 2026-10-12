@@ -13,8 +13,9 @@ ruling = """Asked: "The clip hotspot: features clip is now 41 % of Lagan's run. 
 
 # Measured by @perf: features clip 6.000 s of 8.829 s (head, medians of 3, AC),
 # docs/benchmarks/2026-10-11/cleanup-speed/README.md; the profile behind it is
-# docs/benchmarks/2026-10-11/cleanup-profile/README.md (about 85 % GEOS calls:
-# the outline rule's union_all and make_valid, the two clips, coverage_clean).
+# docs/benchmarks/2026-10-11/cleanup-profile/README.md (its three largest
+# sub-steps are 80 % of the step: the outline rule 41 %, mostly GEOS union_all
+# and make_valid; the two clips 21 %; coverage_clean 18 %).
 # The fix Ola named is the cached repaired extract per area of interest (his
 # private ideas file, "Repair CORINE once per area of interest").
 [[hotspot]]

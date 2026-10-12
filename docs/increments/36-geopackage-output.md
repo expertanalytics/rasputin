@@ -1,13 +1,13 @@
 # Increment 36: GeoPackage output
 
-**Status: **built** on branch `worktree-gpkg-out` (design `01118660`, fixes
+**Status: **merged (#231, 2026-10-12)** from branch `worktree-gpkg-out` (design `01118660`, fixes
 `0233d1e3`, design review rounds 1 and 2 recorded; red `87f41c3d` (`@tester`,
 42 tests), green `c59246e5` + `0943a7a5` (`@developer`), layering rows
 `4e7901ee`, mutation round `dddce8e8` (ten mutants, all killed, record in its
 commit message), fix-up `7085dddf` (the `.part` housekeeping moved to the
 CLI); 377 net production lines by `python3 tools/count_loc.py 81a551b3 HEAD` (the merge base; `3e6f87eb` gives the same count)
 against the design's about 305; section 11 is the as-built record; `@perf`'s
-acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section), fixed: red test `55cc3c3e` (`@tester`), guard `18442b27` (`@developer`), 378 net lines; code review round 2 APPROVED. Next: the push on Ola's yes, then a merge of master (#229, increment 35) before the queue.
+acceptance `57c25074` ACCEPTED). Code review round 1 CHANGES REQUESTED (one blocker, Review section), fixed: red test `55cc3c3e` (`@tester`), guard `18442b27` (`@developer`), 378 net lines; code review round 2 APPROVED. Merged by the queue on top of #229 and #230, 2026-10-12.
 
 ## 1. What Ola asked
 
