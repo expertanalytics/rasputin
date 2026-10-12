@@ -156,7 +156,7 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.sources import SOURCES, STATION_SOURCES
+from tin_engine.sources import SOURCES, STATION_SOURCES, check_values
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
@@ -1468,6 +1468,12 @@ def fetch(
         bool, typer.Option("--refresh", help="Discard the source's cache and fetch anew.")
     ] = False,
     connections: Annotated[int, typer.Option("--connections", min=1)] = 8,
+    year: Annotated[
+        int | None,
+        typer.Option(
+            "--year", help="For a source with one file per year: which. Default: the last."
+        ),
+    ] = None,
 ) -> None:
     """Copy what a mesh of the domain reads from a remote source into the tile
     cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline."""
@@ -1480,6 +1486,11 @@ def fetch(
 
     if source not in SOURCES:
         raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(SOURCES)})")
+    if year is not None:  # 26a: refused here, before any request
+        try:
+            SOURCES[source].url_for(year)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--year") from exc
     if (domain is None) == (bbox is None):
         raise typer.BadParameter("give exactly one of --domain and --bbox", param_hint="--bbox")
     root = cache_root(cache, os.environ)
@@ -1495,7 +1506,7 @@ def fetch(
         box = None if bbox is None else Bounds(**dict(zip(corners, bbox, strict=True)))
         request = FetchRequest(
             source=source, domain=given, box=box, out_crs=out_crs, connections=connections,
-            dry_run=dry_run, refresh=refresh,
+            dry_run=dry_run, refresh=refresh, year=year,
         )  # fmt: skip
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
@@ -1582,6 +1593,10 @@ def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], C
             f"{keys[0]} is a catalogue source; give it alone, not with other --dem",
             param_hint="--dem",
         )
+    try:
+        check_values(SOURCES[keys[0]], "heights", "--dem")  # 26a: a class source is not a DEM
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     if root is None:
         raise typer.BadParameter(
             "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "

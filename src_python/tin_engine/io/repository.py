@@ -21,6 +21,10 @@ Increment 29 adds :func:`read_json`, for the station and river readers
 Audit PR C adds :func:`read_text`, for `io/domain_file.py`'s WKT domain.
 Increment 36 adds :func:`create_sqlite`, the one writable connection: the
 GeoPackage writer's file, which `io/geopackage_write.py` fills through it.
+
+Increment 26a adds the class raster's reads from the cache
+(`CacheRepository.load_class_window`, `class_strips`: the cells a box meets,
+in strips) and the day each object was first fetched (`CachedObject.fetched`).
 """
 
 from __future__ import annotations
@@ -30,19 +34,36 @@ import fcntl
 import hashlib
 import io
 import json
+import math
 import os
 import shutil
 import sqlite3
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
-from .cog import CacheError, LocalTiffBlocks, NotCached, block_grid, blocks_meeting, decode_window
+from .cog import (
+    CacheError,
+    LocalTiffBlocks,
+    NotCached,
+    block_grid,
+    blocks_meeting,
+    decode_class_window,
+    decode_window,
+)
 from .geotiff import decode_dem, read_header, read_page
-from .models import DemTile, GeoTiffError, IndexWindow, RasterMeta, TileFootprint
+from .models import (
+    Bounds,
+    ClassWindow,
+    DemTile,
+    GeoTiffError,
+    IndexWindow,
+    RasterMeta,
+    TileFootprint,
+)
 
 if TYPE_CHECKING:
     import tifffile
@@ -163,6 +184,8 @@ class CachedObject(BaseModel):
     header_sha256: str
     header_bytes: int
     block_shape: tuple[int, int]
+    #: The day the header was first fetched (26a); kept over later runs.
+    fetched: datetime.date | None = None
 
 
 class CacheManifest(BaseModel):
@@ -249,6 +272,26 @@ class CacheRepository:
     def load_window(self, name: str, window: IndexWindow) -> DemTile:
         meta, dtype, _ = self._page(name)
         return decode_window(self._blocks(name), meta, dtype, window)
+
+    def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow:
+        """`window` of the class raster `name` (26a), empty blocks as 0."""
+        return decode_class_window(self._blocks(name), self._page(name)[0], window)
+
+    def class_strips(self, name: str, box: Bounds, *, rows: int) -> Iterator[ClassWindow]:
+        """The cells of `name` whose interior meets `box`, clipped to the
+        raster, top to bottom in strips of at most `rows` rows (26a). A box
+        meeting no cell is a `ValueError`."""
+        meta = self._page(name)[0]
+        x0, y0 = meta.x_min - meta.delta_x / 2, meta.y_max + meta.delta_y / 2  # the raster's corner
+        c0 = max(math.floor((box.x_min - x0) / meta.delta_x), 0)
+        c1 = min(math.ceil((box.x_max - x0) / meta.delta_x), meta.cols)
+        r0 = max(math.floor((y0 - box.y_max) / meta.delta_y), 0)
+        r1 = min(math.ceil((y0 - box.y_min) / meta.delta_y), meta.rows)
+        if c0 >= c1 or r0 >= r1:
+            raise ValueError(f"{self._source}/{name}: the box {box} meets none of its cells")
+        for start in range(r0, r1, rows):
+            window = IndexWindow(row0=start, col0=c0, rows=min(rows, r1 - start), cols=c1 - c0)
+            yield self.load_class_window(name, window)
 
     def check(self, plan: MosaicPlan) -> None:
         """One `NotCached` for every block the plan needs and the cache lacks,

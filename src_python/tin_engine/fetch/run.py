@@ -9,6 +9,10 @@ the manifest first, so a new object is listed before any of its blocks; then
 blocks, each request's only after its whole body arrived and every length
 matched (decided 4); then the request appended to the manifest. A dry run
 reads headers and the cache, and writes nothing.
+
+Increment 26a: a `one-cog-per-year` source is fetched as `one-cog`, the file
+being the requested year's (`url_for`); each object records the day its header
+was first fetched, and `NOTICE.txt` carries every object's credit with it.
 """
 
 from __future__ import annotations
@@ -95,12 +99,17 @@ async def _run(
             return await asyncio.to_thread(_header, client, source, object_id, url, entries)
 
     no_tile: tuple[str, ...] = ()
-    if source.kind == "one-cog":
-        assert source.url is not None
-        object_id = source.url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
-        headers = {object_id: (source.url, await header(object_id, source.url))}
+    if source.kind != "cog-tiles":
+        try:
+            url = source.url_for(request.year)
+        except ValueError as exc:
+            raise FetchError(str(exc)) from exc
+        object_id = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
+        headers = {object_id: (url, await header(object_id, url))}
         box = source_box(request, headers[object_id][1][3])
     else:
+        if request.year is not None:
+            raise FetchError(f"{source.id} has no years; --year does not apply to it")
         box, listed, unlisted = await _tiles(request, source, client)
         no_tile = tuple(unlisted)
         assert source.url_template is not None
@@ -145,6 +154,7 @@ async def _run(
             header_sha256=hashlib.sha256(prefix).hexdigest(),
             header_bytes=len(prefix),
             block_shape=tuple(int(n) for n in page.chunks[:2]),
+            fetched=datetime.date.today(),
         )
     manifest = CacheManifest(
         source=source.id,
@@ -155,7 +165,11 @@ async def _run(
     )
     if new or known is None:
         writer.put_manifest(manifest)
-    writer.put_notice(notice(source))
+    credits = dict.fromkeys(
+        source.credit_for(url=e.url, date=e.fetched or datetime.date.today())
+        for e in entries.values()
+    )
+    writer.put_notice(notice(source, tuple(credits)))
     for object_id, page, index in empty:
         writer.put_block(object_id, page, index, b"")
 
