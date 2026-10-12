@@ -266,22 +266,29 @@ def version() -> None:
     typer.echo(f"bounds checks: {bounds_checks()}")
 
 
-@app.command()
+#: The install line for the ``mcp`` extra. Rich help reads ``[mcp]`` as a markup
+#: tag and drops it, so the help text escapes the bracket exactly when the app
+#: renders help through Rich (``rich_markup_mode`` is None without Rich, where
+#: Click's plain help would print the backslash).
+INSTALL_MCP = 'pip install "rasputin[mcp]"'
+_INSTALL_MCP_HELP = INSTALL_MCP.replace("[", r"\[") if app.rich_markup_mode else INSTALL_MCP
+
+
+@app.command(
+    help="Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
+    "\n\nOne tool per command, each call run as ``python -m tin_engine`` (increment 37). "
+    f"Needs the ``mcp`` extra: ``{_INSTALL_MCP_HELP}``."
+)
 def mcp(
     jobs: Annotated[
         int, typer.Option("--jobs", min=1, help="Tool calls run at once; one beyond this waits.")
     ] = 1,
 ) -> None:
-    """Serve the commands to an agent over the Model Context Protocol, on stdin and stdout.
-
-    One tool per command, each call run as ``python -m tin_engine`` (increment
-    37). Needs the ``mcp`` extra: ``pip install "rasputin[mcp]"``.
-    """
+    """Serve the commands to an agent over the Model Context Protocol (``--help`` says how)."""
     try:
         from tin_engine.mcp import server
     except ImportError:
-        words = 'the mcp extra is not installed; run pip install "rasputin[mcp]"'
-        typer.echo(f"Error: {words}", err=True)
+        typer.echo(f"Error: the mcp extra is not installed; run {INSTALL_MCP}", err=True)
         raise typer.Exit(2) from None
     asyncio.run(server.serve(app, jobs))
 
