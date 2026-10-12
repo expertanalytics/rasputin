@@ -337,6 +337,15 @@ add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
 # because it names DefaultKernel; its own target, so a compile failure in it
 # leaves every other suite built and run. Its purity test starts threads.
 add_terrain_backend_test(test_border_collapse unit/test_border_collapse.cpp)
+
+# The exact land-cover overlap, increment 26b (docs/increments/26-land-cover.md,
+# 1.2 "The exact overlap" and section 10's "26b"). Not named invariant-critical
+# (section 9: 26b has no mutation round). The plain helper, deliberately:
+# overlap.hpp clips by horizontal and vertical lines and names no kernel, so a
+# version that reached for a predicate would fail to link here. Its thread
+# test starts threads.
+add_terrain_test(test_land_cover_overlap unit/test_land_cover_overlap.cpp)
+target_link_libraries(test_land_cover_overlap PRIVATE Threads::Threads)
 target_link_libraries(test_border_collapse PRIVATE Threads::Threads)
 
 # The final check, increment 15c-1 (docs/increments/15c-geographic-dem.md, D4,
