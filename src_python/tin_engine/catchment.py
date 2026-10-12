@@ -52,10 +52,10 @@ from tin_engine.mosaic import (
     MosaicError,
     MosaicPlan,
     assemble,
-    physical_memory,
     plan_mosaic,
 )
 from tin_engine.outline import trace
+from tin_engine.resources import Resources
 from tin_engine.sensitivity import Sensitivity, assess
 
 #: Metres round the seed's bounds, and round the catchment's when the window
@@ -213,10 +213,14 @@ def _code_hint(given: str, dem_crs: str) -> str:
     return f"; if you mean EPSG:{code}, write EPSG:{code}"
 
 
-def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
+def delineate(
+    request: CatchmentRequest, repository: DemRepository, resources: Resources | None = None
+) -> Catchment:
     """The catchment of the request's seed over the repository's DEM, or a
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
-    or two under the point, over the memory cap)."""
+    or two under the point, over the memory budget). `resources` (38) gives
+    the budget one window may take; None is `Resources.fallback()`."""
+    budget = (Resources.fallback() if resources is None else resources).memory_budget
     footprints = repository.footprints()
     dem_crs = single_crs((f.meta.crs for f in footprints), CatchmentError)
     ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
@@ -226,7 +230,7 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
         if not same_crs(request.seed_crs, dem_crs):
             hint = _code_hint(request.seed_crs, dem_crs)
             raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}{hint}")
-        return _gauged(request, repository, footprints, dem_crs)
+        return _gauged(request, repository, footprints, dem_crs, budget)
     lake = _lake(request, dem_crs)
     x0, y0, x1, y1 = lake.bounds if lake is not None else (x, y, x, y)
     margin = float(WINDOW_MARGIN_M)
@@ -237,7 +241,7 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
         return upstream(tile, seed), seed
 
     bounds = Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin)
-    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False)
+    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False, budget)
     fine = _outline(dem_crs, lake, point, out, m, seed, tuple(windows))
     return _reduced(fine, _tolerance(request, m))
 
@@ -248,23 +252,28 @@ def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
 
 
 def _grow[T](
-    footprints: Footprints, repository: DemRepository, bounds: Bounds, flood: Flood[T], burnt: bool
+    footprints: Footprints,
+    repository: DemRepository,
+    bounds: Bounds,
+    flood: Flood[T],
+    burnt: bool,
+    budget: int,
 ) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
     """22's window loop: flood, grow until the catchment is clear of the
-    window's edge, or refuse (NoData, the data's edge, the memory cap, whose
-    per-node figure grows by a burnt copy and `accumulate`'s 10 bytes when
-    `burnt`)."""
-    plan, margin = _plan(footprints, bounds), float(WINDOW_MARGIN_M)
+    window's edge, or refuse (NoData, the data's edge, the memory budget,
+    whose per-node figure grows by a burnt copy and `accumulate`'s 10 bytes
+    when `burnt`)."""
+    plan, margin = _plan(footprints, bounds, budget), float(WINDOW_MARGIN_M)
     windows: list[Window] = []
     while True:
         m = plan.meta
         itemsize = np.result_type(*(t.dtype for t in plan.tiles)).itemsize
         need = m.rows * m.cols * (itemsize * (1 + burnt) + 2 + 10 * burnt)
-        cap = physical_memory() // 2
-        if need > cap:
+        if need > budget:
             raise CatchmentError(
-                f"the window is {m.rows} x {m.cols} nodes, {need} bytes to flood, over the cap "
-                f"of half the physical memory ({cap} bytes)"
+                f"the window is {m.rows} x {m.cols} nodes, {need} bytes to flood, over the "
+                f"memory budget of {budget} bytes (set with --memory-budget; half the "
+                "machine's memory when it is not set)"
             )
         tile = assemble(plan, repository.load).tile
         t0 = time.perf_counter()
@@ -276,12 +285,13 @@ def _grow[T](
             raise CatchmentError("no seed node has data: the seed lies on NoData")
         # Grow while the in-nodes' bounds plus the base margin reach past the
         # window; the step itself takes the margin doubled at each growth.
-        grown = _grown(plan, _plan(footprints, _joined(m, out, float(WINDOW_MARGIN_M))))
+        probe = _plan(footprints, _joined(m, out, float(WINDOW_MARGIN_M)), budget)
+        grown = _grown(plan, probe)
         windows.append(Window(Bounds.of(m.node_box()), m.rows, m.cols, seconds, grown))
         if not grown:
             break
         margin *= 2
-        plan = _plan(footprints, _joined(m, out, margin))
+        plan = _plan(footprints, _joined(m, out, margin), budget)
     if out.touches_edge:
         sides = _edge_sides(m, out)
         raise CatchmentError(f"the catchment is cut by the data's {' and '.join(sides)} edge")
@@ -309,7 +319,11 @@ def _burnt_flood(
 
 
 def _gauged(
-    request: CatchmentRequest, repository: DemRepository, footprints: Footprints, dem_crs: str
+    request: CatchmentRequest,
+    repository: DemRepository,
+    footprints: Footprints,
+    dem_crs: str,
+    budget: int,
 ) -> Catchment:
     """Stage A floods from the placed node and decides the catchment and every
     refusal; stage B grows on from it until `D` (the first chain node at or
@@ -330,10 +344,11 @@ def _gauged(
         return int(past[0])
 
     m, out, (burnt, path, seed), windows = _grow(
-        footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True
+        footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True, budget
     )
     try:
-        b = _grow(footprints, repository, Bounds.of(m.node_box()), _burnt_flood(reach, at_u), True)
+        again = Bounds.of(m.node_box()), _burnt_flood(reach, at_u), True, budget
+        b = _grow(footprints, repository, *again)
     except CatchmentError:
         pass  # stage B never refuses a catchment: read what stage A's window holds
     else:
@@ -386,9 +401,9 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     return lake
 
 
-def _plan(footprints: Footprints, bounds: Bounds) -> MosaicPlan:
+def _plan(footprints: Footprints, bounds: Bounds, budget: int) -> MosaicPlan:
     try:
-        return plan_mosaic(footprints, bounds)
+        return plan_mosaic(footprints, bounds, memory_budget=budget)
     except MixedGridError as exc:
         raise MixedGridRefusal(str(exc), exc.tiles) from exc
     except MosaicError as exc:

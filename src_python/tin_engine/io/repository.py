@@ -103,7 +103,9 @@ class TiffDemRepository:
     refused. `nodata` is the caller's sentinel for every tile (`decode_dem`).
     """
 
-    def __init__(self, paths: Iterable[Path], *, nodata: float | None = None) -> None:
+    def __init__(
+        self, paths: Iterable[Path], *, nodata: float | None = None, threads: int = 1
+    ) -> None:
         self._paths: dict[str, Path] = {}
         for path in sorted({Path(p).resolve() for p in paths}, key=str):
             if path.name in self._paths:
@@ -111,11 +113,13 @@ class TiffDemRepository:
                     f"two tiles named {path.name}: {self._paths[path.name]} and {path}"
                 )
             self._paths[path.name] = path
-        self._nodata = nodata
+        self._nodata, self._threads = nodata, threads
         self._footprints: tuple[TileFootprint, ...] | None = None
 
     @classmethod
-    def from_directory(cls, directory: Path, *, nodata: float | None = None) -> TiffDemRepository:
+    def from_directory(
+        cls, directory: Path, *, nodata: float | None = None, threads: int = 1
+    ) -> TiffDemRepository:
         """The `*.tif` and `*.tiff` files directly in `directory`, not recursively.
 
         Side files (`.tfw`, `.aux.xml`) carry nothing the GeoTIFF tags do not.
@@ -125,7 +129,7 @@ class TiffDemRepository:
         ]
         if not paths:
             raise ValueError(f"no .tif or .tiff file in the directory {directory}")
-        return cls(paths, nodata=nodata)
+        return cls(paths, nodata=nodata, threads=threads)
 
     def footprints(self) -> tuple[TileFootprint, ...]:
         """Read every header once, on the first call, and keep them (R2)."""
@@ -145,7 +149,8 @@ class TiffDemRepository:
 
         def read(stream: Any, *, nodata: float | None) -> DemTile:
             meta, dtype, page = read_page(stream, nodata=nodata)
-            return decode_window(LocalTiffBlocks(page, stream, name), meta, dtype, window)
+            blocks = LocalTiffBlocks(page, stream, name)
+            return decode_window(blocks, meta, dtype, window, threads=self._threads)
 
         return self._read(name, read)
 
@@ -232,8 +237,11 @@ class CacheRepository:
     manifest and each object's `header.bin`, and refuses a cache that is not
     the copy it claims to be (`CacheError`) or is absent (`NotCached`)."""
 
-    def __init__(self, root: Path, source: str, *, nodata: float | None = None) -> None:
+    def __init__(
+        self, root: Path, source: str, *, nodata: float | None = None, threads: int = 1
+    ) -> None:
         self._directory, self._source, self._nodata = Path(root) / source, source, nodata
+        self._threads = threads
         self._pages: dict[str, tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]] = {}
         self._fetched: dict[str, datetime.date | None] = {}
 
@@ -278,11 +286,12 @@ class CacheRepository:
 
     def load_window(self, name: str, window: IndexWindow) -> DemTile:
         meta, dtype, _ = self._page(name)
-        return decode_window(self._blocks(name), meta, dtype, window)
+        return decode_window(self._blocks(name), meta, dtype, window, threads=self._threads)
 
     def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow:
         """`window` of the class raster `name` (26a), empty blocks as 0."""
-        return decode_class_window(self._blocks(name), self._page(name)[0], window)
+        meta = self._page(name)[0]
+        return decode_class_window(self._blocks(name), meta, window, threads=self._threads)
 
     def class_strips(self, name: str, box: Bounds, *, rows: int) -> Iterator[ClassWindow]:
         """The cells of `name` whose interior meets `box`, clipped to the

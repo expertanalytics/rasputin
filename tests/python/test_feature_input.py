@@ -550,8 +550,8 @@ class TestCrs:
         laea = moved(Polygon([at(100, 100), at(200, 100), at(150, 150), at(100, 200)]), UTM33, LAEA)
         marker = laea.exterior.coords[2]  # in the source CRS
 
-        def fake(src: Any, dst: Any) -> Any:
-            move = real(src, dst)
+        def fake(src: Any, dst: Any, *, threads: int = 1) -> Any:
+            move = real(src, dst, threads=threads)
             if CRS.from_user_input(dst) != CRS.from_user_input(UTM33):
                 return move
 
@@ -1591,8 +1591,8 @@ def counting_reprojector(fi: ModuleType, monkeypatch: pytest.MonkeyPatch) -> lis
     calls: list[int] = []
     real = crs_module.reprojector
 
-    def fake(src: Any, dst: Any) -> Any:
-        move = real(src, dst)
+    def fake(src: Any, dst: Any, *, threads: int = 1) -> Any:
+        move = real(src, dst, threads=threads)
 
         def apply(xy: Any) -> np.ndarray:
             calls.append(len(np.asarray(xy, dtype=np.float64).reshape(-1, 2)))
@@ -1809,8 +1809,10 @@ def untouched_30b(line: Any, domain: Polygon) -> bool:
     )
 
 
-def single_call_reprojector(src: Any, dst: Any) -> Any:
-    """`crs.reprojector` before 35, verbatim: one `transform` call."""
+def single_call_reprojector(src: Any, dst: Any, *, threads: int = 1) -> Any:
+    """`crs.reprojector` before 35, verbatim: one `transform` call. `threads`
+    is accepted as the call sites pass it (38) and unused: one call, no pool."""
+    del threads
     import tin_engine.crs as crs_module
 
     transformer = Transformer.from_crs(

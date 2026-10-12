@@ -293,16 +293,51 @@ def test_a_catchment_cut_by_the_sentinel_is_refused(api: Any) -> None:
         api.delineate(request(api), repository_of(z, nodata=-32767.0))
 
 
-def test_the_memory_cap_refuses_before_the_flood(api: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The first window is the lake's box (7 cells) plus 2 x 20 cells: about 48
-    # x 48 nodes. With physical memory 10 x that, 15a's cap (4 bytes a node
-    # against half of it) passes and the flood's (4 + 2 bytes a node) refuses.
-    first = 48 * 48
-    fake = 10 * first
-    monkeypatch.setattr(mosaic, "physical_memory", lambda: fake)
-    monkeypatch.setattr(api, "physical_memory", lambda: fake, raising=False)
-    with pytest.raises(api.CatchmentError, match=r"(?i)memory"):
-        api.delineate(request(api), repository_of(bowl()))
+def budget(bytes_: int) -> Any:
+    """Increment 38's `Resources`, one thread and this budget; imported here
+    so its absence fails these tests alone."""
+    from tin_engine.resources import Resources
+
+    return Resources(threads=1, memory_budget=bytes_)
+
+
+class TestTheMemoryBudget:
+    """Increment 38, T10: `delineate(..., resources=)` caps both windows by the
+    budget, the mosaic canvas (4 bytes a node) and the flood (4 + 2). The
+    figures are this fixture's, measured on `5d2e706d` with the cap faked to
+    twice each budget (the design's table, checked in review round 2): the run
+    floods 49 x 49, 113 x 95 and 224 x 175 nodes, and after each flood plans
+    a probe window at the base margin, 73 x 55 after the first, which the
+    mosaic cap judges too. A budget of 12 000 passes the first mosaic cap
+    (9 604) and fails the first flood (14 406); exactly 14 406 floods the first
+    window and fails on the probe window; 235 199 fails the last flood
+    (235 200), which 235 200 passes: exactly at the budget is accepted."""
+
+    @pytest.mark.parametrize(
+        ("bytes_", "names"),
+        [
+            pytest.param(12_000, ("49 x 49", "14406 bytes to flood", "12000"), id="first flood"),
+            pytest.param(14_406, ("73 x 55", "16060", "14406"), id="probe window after it"),
+            pytest.param(235_199, ("224 x 175", "235200", "235199"), id="last flood"),
+        ],
+    )
+    def test_a_window_over_the_budget_is_refused_naming_it(
+        self, api: Any, bytes_: int, names: tuple[str, ...]
+    ) -> None:
+        with pytest.raises(api.CatchmentError) as info:
+            api.delineate(request(api), repository_of(bowl()), resources=budget(bytes_))
+        message = str(info.value)
+        for name in (*names, "--memory-budget"):
+            assert name in message, f"{name!r} not in {message!r}"
+
+    def test_a_window_exactly_at_the_budget_floods(self, api: Any) -> None:
+        result = api.delineate(request(api), repository_of(bowl()), resources=budget(235_200))
+        assert [(w.rows, w.cols) for w in result.windows] == [(49, 49), (113, 95), (224, 175)]
+
+    def test_without_resources_the_fallback_reads_no_core_count(self, api: Any) -> None:
+        """`resources=None` is `Resources.fallback()`: half the machine's
+        memory, so the fixture floods as before."""
+        assert len(api.delineate(request(api), repository_of(bowl())).windows) == 3
 
 
 def test_the_loop_stops_early_far_from_the_data_edge(api: Any) -> None:

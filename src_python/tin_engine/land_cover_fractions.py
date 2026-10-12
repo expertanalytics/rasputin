@@ -58,13 +58,13 @@ def row_areas(window: ClassWindow) -> npt.NDArray[np.float64]:
 
 
 def index_space(
-    vertices: npt.ArrayLike, mesh_crs: str, meta: RasterMeta
+    vertices: npt.ArrayLike, mesh_crs: str, meta: RasterMeta, threads: int = 1
 ) -> npt.NDArray[np.float64]:
     """Every vertex's `(col, row)` in the class raster `meta` describes: moved
     once to the raster's CRS, then `col = (lon - lon0) / s`, `row = (lat0 - lat) / s`
     with `(lon0, lat0)` the raster's upper-left cell corner (1.1)."""
     xy = np.asarray(vertices, dtype=np.float64)[:, :2]
-    lonlat = reprojector(mesh_crs, meta.crs)(xy)
+    lonlat = reprojector(mesh_crs, meta.crs, threads=threads)(xy)
     corner_x, corner_y = meta.x_min - meta.delta_x / 2, meta.y_max + meta.delta_y / 2
     cols = (lonlat[:, 0] - corner_x) / meta.delta_x
     rows = (corner_y - lonlat[:, 1]) / meta.delta_y
@@ -91,7 +91,7 @@ def assign(
     repository: CacheRepository,
     name: str,
     chunk: int = CHUNK,
-    threads: int = 0,
+    threads: int = 1,
 ) -> Assigned:
     """The exact class fractions of every triangle from the cached class raster
     `name` of `repository`, in chunks of `chunk` triangles in row order."""
@@ -100,7 +100,7 @@ def assign(
         raise ValueError(f"{name} is not in the cache")
     meta = metas[name]
     tri = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
-    corners = index_space(vertices, mesh_crs, meta)[tri]
+    corners = index_space(vertices, mesh_crs, meta, threads)[tri]
     parts: list[tuple[npt.NDArray[np.uint32], npt.NDArray[np.uint8], npt.NDArray[np.float64]]] = []
     for start in range(0, len(tri), chunk):
         piece = corners[start : start + chunk]

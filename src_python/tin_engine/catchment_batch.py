@@ -35,6 +35,7 @@ from tin_engine.gauge import Gauge, LakeSeed, Placement, lake_seed, place
 from tin_engine.hydrography import Lake, RiverSegment, Station
 from tin_engine.io.repository import DemRepository
 from tin_engine.reference import Class, Summary, agreement, classify, nodes_inside, summarise
+from tin_engine.resources import Resources
 
 
 class BatchRequest(BaseModel):
@@ -169,10 +170,12 @@ async def run_batch(
     references: Mapping[str, BaseGeometry] | None,
     sink: BatchSink,
     lakes: Sequence[Lake] | None = None,
+    resources: Resources | None = None,
 ) -> Summary:
     """Run each station in `stations` (or those in `request.only`, in file
     order); `references` and `lakes` are in the river file's CRS. A station
-    `gauge.lake_seed` picks is seeded with its lake. Returns the summary."""
+    `gauge.lake_seed` picks is seeded with its lake; `resources` (38) goes to
+    each `delineate`. Returns the summary."""
     unknown = set(request.only) - {s.station for s in stations}
     if unknown:
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")
@@ -206,7 +209,7 @@ async def run_batch(
                 fields |= {"lake_name": first.name, "lake_distance_m": seed.distance_m}
             else:
                 fields["seeded_by"] = "river"
-            result = await asyncio.to_thread(delineate, catchment_request, repository)
+            result = await asyncio.to_thread(delineate, catchment_request, repository, resources)
         except NoRiverLine as exc:
             fields |= {"refusal_cause": "no_river", "refusal_message": str(exc)}
         except MixedGridRefusal as exc:

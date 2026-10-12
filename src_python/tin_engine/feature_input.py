@@ -143,6 +143,8 @@ class FeatureRequest(BaseModel):
     merge_same_class: bool = False
     tolerance_m: float = 0.0
     outline_snap_m: float = 0.0
+    #: 38: threads for moving a source's vertices into the DEM's CRS.
+    threads: int = 1
 
 
 class FeatureSet(BaseModel):
@@ -272,7 +274,7 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
             vocabulary.mask(*named, *(() if isinstance(cmap.otherwise, str) else cmap.otherwise))
         except ValueError as exc:
             raise FeatureError(f"class map {cmap.name}: {exc}") from exc
-    tally = _Tally(domain, parse_crs(dem_crs), vocabulary)
+    tally = _Tally(domain, parse_crs(dem_crs), vocabulary, request.threads)
     switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
     tally.cleanup = request if any(switches) or request.outline_snap_m else None
     crss: list[str] = []
@@ -303,8 +305,11 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
 class _Tally:
     """What :func:`open_features` accumulates over its sources."""
 
-    def __init__(self, domain: DomainPolygon, dem: CRS, vocabulary: EdgeVocabulary) -> None:
+    def __init__(
+        self, domain: DomainPolygon, dem: CRS, vocabulary: EdgeVocabulary, threads: int = 1
+    ) -> None:
         self.domain, self.dem, self.vocabulary = domain, dem, vocabulary
+        self.threads = threads
         self.features: list[TerrainFeature] = []
         self.outside = self.clipped = self.empty = 0
         self.scanned: list[str] = []
@@ -336,7 +341,7 @@ class _Tally:
     def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
         name, cmap = source.path.name, source.class_map
         src = parse_crs(own)
-        move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
+        move = None if same_crs(src, self.dem) else reprojector(src, self.dem, threads=self.threads)
         bound, region = None, source_region(self.domain, self.dem, self.dem)
         shapely.prepare(region)
         if move is not None and src.is_geographic:

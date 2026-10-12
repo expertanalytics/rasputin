@@ -50,6 +50,7 @@ WORDING = {
     "tolerance_near_m": "Tolerance on the tolerance lines",
     "tolerance_ramp_m": "Distance from the lines over which the tolerance rises to its far value",
     "tolerance_lines": "The tolerance lines file, and its segments after simplifying",
+    "threads": "Threads used",
     "crs": "Coordinate system",
     "tolerance_m": "Tolerance",
     "max_error_m": "Largest height error",

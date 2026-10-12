@@ -144,6 +144,7 @@ from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
 from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
+from tin_engine.resources import VARIABLE, Resources, resources
 from tin_engine.run_record import (
     SEAMS_AGREE,
     RunRecord,
@@ -173,6 +174,29 @@ app = typer.Typer(
     help="Parallel TIN engine for terrain meshing.",
     no_args_is_help=True,
 )
+
+#: Increment 38: the two options `mesh`, `catchment` and `station-catchments` share.
+THREADS = Annotated[
+    int | None,
+    typer.Option(
+        "--threads",
+        min=0,
+        metavar="N",
+        help="Threads for every parallel step (refinement, decoding, resampling, "
+        "reprojection); 0 means every core, a container's CPU quota counted. Default: "
+        "$RASPUTIN_THREADS, else every core.",
+    ),
+]
+MEMORY_BUDGET = Annotated[
+    str | None,
+    typer.Option(
+        "--memory-budget",
+        metavar="BYTES",
+        help="The most one DEM window may take: a number of bytes, or with K, M, G or T "
+        "(8G). Default: half the machine's memory, a container's limit counting as the "
+        "machine's.",
+    ),
+]
 
 #: The fixtures' vocabulary, mapped onto the enum. A role outside it is a
 #: ``KeyError`` here rather than a silently unconstrained chain downstream.
@@ -887,6 +911,8 @@ def mesh(
             help="With --land-cover, the year of the classes. Default: the source's last year.",
         ),
     ] = None,
+    threads: THREADS = None,
+    memory_budget: MEMORY_BUDGET = None,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -957,6 +983,7 @@ def mesh(
     ``--record`` all of it, and stderr one summary.
     """
     clock = PhaseClock()
+    res = _resources(threads, memory_budget)
     dem_run: _DemMesh | None = None
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
@@ -1097,7 +1124,7 @@ def mesh(
                 except DomainError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--domain") from exc
         try:
-            opened = _open_dem(paths, bbox, clock, given, cached, out_crs)
+            opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res)
         except NotCached as exc:
             area = f"--domain {domain}" if domain is not None else ""
             if bbox is not None:
@@ -1116,7 +1143,7 @@ def mesh(
         sources: tuple[FeatureSource, ...] = ()
         if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
-            found = _open_features(sources, dem_domain, dem_crs, clock, cleanup)
+            found = _open_features(sources, dem_domain, dem_crs, clock, cleanup, res.threads)
         # 32: 15 degrees with land cover simplified, unless given.
         simplified = (
             found is not None and found.cover_vertices is not None and features_tolerance > 0
@@ -1141,6 +1168,7 @@ def mesh(
             DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
             lines,
             steep,
+            res.threads,
         )
         surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
@@ -1211,12 +1239,12 @@ def mesh(
                 cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
         if classes is not None:
             table, codes, more = _class_fractions(
-                classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache
+                classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
             )
             codes_text = str(more["land_cover_codes"])
             values |= more
         build = stride_record if tolerance is None else refined_record
-        record = build(triangles=len(surface_mesh.triangles), **values)
+        record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
     else:
         assert name is not None
         if stride is not None:
@@ -1314,7 +1342,8 @@ def mesh(
             target.write_bytes(data)
         typer.echo(f"{target}")
     if stats is not None:
-        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams, record)
+        used = res.threads if dem_run is not None else None
+        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams, record, used)
     if record_target is not None:  # D5: after the mesh and the report
         record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
         typer.echo(f"{record_target}")
@@ -1418,12 +1447,13 @@ def _class_fractions(
     domain: Path | None,
     out_crs: str | None,
     cache: Path | None,
+    threads: int = 1,
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
     """26b: the exact class fractions from the cached year, timed as the phase
     ``land cover fractions``; the table, the codes and the record entries. An
     object the cache lacks is refused naming the ``fetch`` that gets it."""
     source, year = classes.source, classes.year
-    repository = CacheRepository(classes.root, source.id, nodata=source.nodata)
+    repository = CacheRepository(classes.root, source.id, nodata=source.nodata, threads=threads)
     url = source.url_for(year)
     name = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
     try:
@@ -1450,6 +1480,7 @@ def _class_fractions(
                 mesh_crs=dem_crs,
                 repository=repository,
                 name=name,
+                threads=threads,
             )
         except (ValueError, NotCached) as exc:
             raise typer.BadParameter(_words(exc), param_hint="--land-cover") from exc
@@ -1557,9 +1588,11 @@ def _write_report(
     files: list[Path],
     seams: tuple[Seam, ...],
     record: RunRecord,
+    threads: int | None = None,
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
-    The total stops here; the quality pass is timed on its own line (R4)."""
+    The total stops here; the quality pass is timed on its own line (R4).
+    ``threads`` is the count the run used (38), None on a fixture run."""
     total = clock.elapsed()
     t0 = time.perf_counter_ns()
     meta = dem_run.meta if dem_run else None
@@ -1587,7 +1620,7 @@ def _write_report(
             total=total,
             stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
             bounds_checks=bounds_checks(),
-            threads=os.cpu_count() if sizes.start_vertices is not None else None,
+            threads=threads,
             seams=[s.cells() for s in seams],
             inputs=[row for row, inputs in rows if inputs],
             result=[row for row, inputs in rows if not inputs],
@@ -1753,6 +1786,17 @@ def fetch_stations(
     typer.echo(f"{source}: {len(files)} files written to {out_dir}", err=True)
 
 
+def _resources(threads: int | None, memory_budget: str | None) -> Resources:
+    """``--threads`` and ``--memory-budget`` resolved against the environment
+    (38, built once per command); a refusal is a usage error naming the
+    option or the variable."""
+    try:
+        return resources(threads, memory_budget, os.environ)
+    except ValueError as exc:
+        hint = VARIABLE if str(exc).startswith(VARIABLE) else "--memory-budget"
+        raise typer.BadParameter(str(exc), param_hint=hint) from exc
+
+
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
     """The tile cache (B7): ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
     else None. The one reader of the variable; ``mesh`` passes ``os.environ``."""
@@ -1793,6 +1837,7 @@ def _open_dem(
     domain: DomainPolygon | None = None,
     cached: CachedSource | None = None,
     target_crs: str | None = None,
+    res: Resources | None = None,
 ) -> DemInput:
     """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
     15a and 15b, R11); every refusal, the reader's, the mosaic's or the
@@ -1810,7 +1855,7 @@ def _open_dem(
             request = DemRequest(
                 sources=dem, cached=cached, bounds=bounds, domain=domain, target_crs=target_crs
             )
-            return open_dem(request)
+            return open_dem(request, res)
     except NotCached:
         raise
     except OutCrsRequiredError as exc:  # Q11: one unwrapped line, outside the panel, to paste
@@ -1872,13 +1917,15 @@ def _open_features(
     dem_crs: str,
     clock: PhaseClock,
     cleanup: dict[str, float],
+    threads: int = 1,
 ) -> FeatureSet:
     """R5-R6 and R10: read and clip every source into one set, timed as
     ``features read`` and ``features clip``; a refusal is a usage error naming
     the feature."""
     t0 = time.perf_counter()
     try:
-        found = open_features(FeatureRequest(sources=sources, **cleanup), domain, dem_crs)
+        request = FeatureRequest(sources=sources, threads=threads, **cleanup)
+        found = open_features(request, domain, dem_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
@@ -2055,6 +2102,7 @@ def _dem_mesh(
     gain: float = -1.0,
     lines: ToleranceLines | None = None,
     steep: ToleranceSlope | None = None,
+    threads: int = 0,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -2134,7 +2182,7 @@ def _dem_mesh(
         if steep is not None:
             with clock.phase("slope"):
                 ramp = (steep.near_m, tolerance, steep.start_deg, steep.end_deg)
-                slope = SlopeTolerance(to_core(tile), *ramp)
+                slope = SlopeTolerance(to_core(tile), *ramp, threads=threads)
         t0 = time.perf_counter_ns()
         out = refine(
             to_core(tile),
@@ -2147,13 +2195,16 @@ def _dem_mesh(
             min_gain_deg=gain,
             field=field,
             slope=slope,
+            threads=threads,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
         strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
         if grid is None or checks is None:
-            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock, feet, field, slope)
+            final = edge_strip.run(
+                to_core(tile), strip, out, tolerance, clock, feet, field, slope, threads
+            )
             del tile
             # 15f, D7: refine's maximum and the strip run's make an upper bound.
             max_error = max(out.max_error, final.max_error)
@@ -2164,7 +2215,7 @@ def _dem_mesh(
         else:
             del tile  # 15e fix 3: phase 2 runs without the target tile
             final, n = final_check.run(
-                out, grid, checks, tolerance, clock, strip, feet, field, slope
+                out, grid, checks, tolerance, clock, strip, feet, field, slope, threads
             )
             max_error, near_error = final.max_error, final.max_error_near
             share = final.max_slope_share
@@ -2412,6 +2463,8 @@ def catchment(
             help="How much river above the gauge is burnt into the DEM. Default 1000.",
         ),
     ] = None,
+    threads: THREADS = None,
+    memory_budget: MEMORY_BUDGET = None,
 ) -> None:
     """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
     DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
@@ -2441,8 +2494,9 @@ def catchment(
         found = None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
+    res = _resources(threads, memory_budget)
     try:
-        repository, _ = repository_for(tuple(dem))
+        repository, _ = repository_for(tuple(dem), threads=res.threads)
         placement: tuple[Placement, str | None] | None = None
         if rivers is not None:
             batch = BatchRequest(
@@ -2459,7 +2513,7 @@ def catchment(
                 lakes_crs=None if found is None else found[1],
                 outline_tolerance=outline_tolerance,
             )
-        result = delineate(request, repository)
+        result = delineate(request, repository, res)
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:
@@ -2667,6 +2721,8 @@ def station_catchments(
         Path | None,
         typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
     ] = None,
+    threads: THREADS = None,
+    memory_budget: MEMORY_BUDGET = None,
 ) -> None:
     """Write a catchment per station into --out-dir, as ``catchment --rivers``
     does for one, with results.csv (a row per station) and summary.json; with
@@ -2696,8 +2752,9 @@ def station_catchments(
     lake_list = None
     if lakes is not None:
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
+    res = _resources(threads, memory_budget)
     try:
-        repository, _ = repository_for(tuple(dem))
+        repository, _ = repository_for(tuple(dem), threads=res.threads)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
@@ -2729,6 +2786,7 @@ def station_catchments(
                     references,
                     sink,
                     lakes=lake_list,
+                    resources=res,
                 )
             )
         except OSError as exc:

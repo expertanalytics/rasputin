@@ -50,8 +50,9 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
 Install first ([INSTALL.md](INSTALL.md)); the example needs the `codecs`
 extra, because the committed DEM tile is LZW-compressed. The install is
 bounds-checked by default; INSTALL.md's "Bounds checks" section says how to
-build an unchecked copy for heavy runs. From the repository
-root:
+build an unchecked copy for heavy runs. Every run uses every core unless
+`--threads N` or the environment variable `RASPUTIN_THREADS` says otherwise
+(0 means every core). From the repository root:
 
 ```sh
 # A 50 km DTM10 tile, meshed inside a quarter disc of radius 30 km,
