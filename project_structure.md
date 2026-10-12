@@ -76,6 +76,12 @@ include/terrain/           # public C++ headers, header-only where possible
     flood.hpp              # detail::flood: the one Priority-Flood of both (29)
     upstream.hpp           # upstream(z, seed): the seed set's catchment (22)
     accumulate.hpp         # accumulate(z): count, reach, flow_to per node (29)
+  land_cover/
+    overlap.hpp            # class_areas: exact triangle-against-cell overlap
+                           #   areas on an index-space raster, strips, full-cell
+                           #   spans, canonical crossings so shared edges give
+                           #   complementary areas, chunks in parallel (26b);
+                           #   sees arrays only, no file, path or CRS
   vector_simplify/
     area_collapse.hpp      # reduce_ring: area-preserving segment collapse
                            #   (Kronenfeld et al. 2020) to a horizontal
@@ -216,6 +222,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   with catchment --rivers); run_batch: delineate
                            #   in a thread, compare, StationResult rows to a
                            #   BatchSink; no paths (29, PR 4)
+  land_cover_fractions.py  # exact class fractions per triangle from a class
+                           #   raster in the cache: index-space corners, row
+                           #   areas, chunks through _core.class_areas, the
+                           #   ClassFractions table and dominant class (26b);
+                           #   imports _core, crs, io.models, io.repository
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -284,12 +295,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   face_codes= adds the face property
                            #   land_cover_code (16c); field_comments: a file's
                            #   (name, value) fields as header comments;
-                           #   imports features and mesh_checks
+                           #   face_fractions= adds the per-face class lists
+                           #   (26b); imports features, mesh_checks and models
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
                            #   ParaView; takes no path and opens nothing;
                            #   triangle_codes=, land_cover_codes= add the cell
                            #   array land_cover_code and its field (16c);
-                           #   imports features and mesh_checks
+                           #   class_fractions= adds the FieldData arrays (26b);
+                           #   imports features, mesh_checks and models
     mesh_checks.py         # the mesh writers' shared checks, one copy each:
                            #   checked_ascii (no control character, ASCII
                            #   only, one wording) and check_int32; imports

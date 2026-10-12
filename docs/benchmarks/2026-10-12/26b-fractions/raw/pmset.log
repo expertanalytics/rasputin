@@ -1,0 +1,30 @@
+start 2026-10-12T09:16:43Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+== velhas_t10_lcon_r1 2026-10-12T09:16:43Z
+exit 0 velhas_t10_lcon_r1
+== velhas_t10_lcon_r2 2026-10-12T09:16:45Z
+exit 0 velhas_t10_lcon_r2
+== velhas_t10_lcon_r3 2026-10-12T09:16:47Z
+exit 0 velhas_t10_lcon_r3
+== velhas_t10_lcoff_r1 2026-10-12T09:16:49Z
+exit 0 velhas_t10_lcoff_r1
+== velhas_t10_lcoff_r2 2026-10-12T09:16:51Z
+exit 0 velhas_t10_lcoff_r2
+== velhas_t10_lcoff_r3 2026-10-12T09:16:52Z
+exit 0 velhas_t10_lcoff_r3
+== velhas_t5_lcon_r1 2026-10-12T09:16:54Z
+exit 0 velhas_t5_lcon_r1
+== velhas_t5_lcon_r2 2026-10-12T09:16:57Z
+exit 0 velhas_t5_lcon_r2
+== velhas_t5_lcon_r3 2026-10-12T09:17:01Z
+exit 0 velhas_t5_lcon_r3
+== velhas_t5_lcoff_r1 2026-10-12T09:17:05Z
+exit 0 velhas_t5_lcoff_r1
+== velhas_t5_lcoff_r2 2026-10-12T09:17:08Z
+exit 0 velhas_t5_lcoff_r2
+== velhas_t5_lcoff_r3 2026-10-12T09:17:11Z
+exit 0 velhas_t5_lcoff_r3
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+end 2026-10-12T09:17:14Z

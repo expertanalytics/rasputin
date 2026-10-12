@@ -18,7 +18,15 @@ from typing import Any, Literal, Self
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 
 class GeoTiffError(ValueError):
@@ -194,6 +202,47 @@ class ClassWindow(BaseModel):
     def corner(self, row: int, col: int) -> tuple[float, float]:
         """The upper-left corner of cell `(row, col)`."""
         return self.x_min + col * self.delta_x, self.y_max - row * self.delta_y
+
+
+class ClassFractions(BaseModel):
+    """The sparse table of land-cover fractions per triangle (increment 26b,
+    1.6): triangle `t`'s entries are `[offsets[t], offsets[t + 1])`, classes
+    ascending within a row, fractions `float32` as the file holds them. Frozen;
+    the arrays are kept as given, and another dtype is refused, not converted."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    offsets: npt.NDArray[np.uint32]
+    classes: npt.NDArray[np.uint8]
+    fractions: npt.NDArray[np.float32]
+
+    @field_validator("offsets", "classes", "fractions")
+    @classmethod
+    def _one_dimensional(cls, value: npt.NDArray[Any], info: ValidationInfo) -> npt.NDArray[Any]:
+        want = {"offsets": np.uint32, "classes": np.uint8, "fractions": np.float32}[
+            str(info.field_name)
+        ]
+        if value.ndim != 1 or value.dtype != want:
+            raise ValueError(
+                f"{info.field_name} must be 1-D {np.dtype(want)}, got {value.dtype} {value.shape}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _rows_index_the_entries(self) -> Self:
+        steps = np.diff(self.offsets.astype(np.int64))
+        if len(self.offsets) == 0 or self.offsets[0] != 0 or (steps < 0).any():
+            raise ValueError("offsets must start at 0 and never decrease")
+        if not (self.offsets[-1] == len(self.classes) == len(self.fractions)):
+            raise ValueError(
+                f"offsets end at {self.offsets[-1]} for {len(self.classes)} classes and "
+                f"{len(self.fractions)} fractions"
+            )
+        return self
+
+    @property
+    def triangles(self) -> int:
+        return len(self.offsets) - 1
 
 
 class TileFootprint(BaseModel):

@@ -235,6 +235,7 @@ class CacheRepository:
     def __init__(self, root: Path, source: str, *, nodata: float | None = None) -> None:
         self._directory, self._source, self._nodata = Path(root) / source, source, nodata
         self._pages: dict[str, tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]] = {}
+        self._fetched: dict[str, datetime.date | None] = {}
 
     def footprints(self) -> tuple[TileFootprint, ...]:
         if not self._pages:
@@ -245,6 +246,7 @@ class CacheRepository:
             if manifest.source != self._source:
                 raise CacheError(f"{path} is the manifest of {manifest.source}, not {self._source}")
             for name, entry in sorted(manifest.objects.items()):
+                self._fetched[name] = entry.fetched
                 try:
                     header = (self._directory / name / "header.bin").read_bytes()
                 except OSError as exc:
@@ -264,6 +266,11 @@ class CacheRepository:
             TileFootprint(name=name, meta=meta, dtype=dtype)
             for name, (meta, dtype, _) in self._pages.items()
         )
+
+    def fetched(self, name: str) -> datetime.date | None:
+        """The day object `name`'s header was first fetched (26a), if recorded."""
+        self.footprints()
+        return self._fetched[name]
 
     def load(self, name: str) -> DemTile:
         meta = self._page(name)[0]

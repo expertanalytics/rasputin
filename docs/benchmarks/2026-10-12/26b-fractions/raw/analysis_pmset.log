@@ -1,0 +1,16 @@
+== analysis start 2026-10-12T09:30:55Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+11:30  up 13 days, 37 mins, 4 users, load averages: 6.77 6.98 7.05
+ %CPU COMM
+ 40.4 /Applications/Microsoft Teams.app/Contents/Helpers/Microsoft Teams ModuleHost.app/Contents/MacOS/Microsoft Teams ModuleHost
+ 29.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 16.3 claude
+== analysis end 2026-10-12T09:32:04Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+11:32  up 13 days, 38 mins, 4 users, load averages: 6.74 6.91 7.02
+ %CPU COMM
+ 50.0 /Applications/Microsoft Teams.app/Contents/Helpers/Microsoft Teams ModuleHost.app/Contents/MacOS/Microsoft Teams ModuleHost
+ 27.5 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 13.2 /usr/sbin/coreaudiod
