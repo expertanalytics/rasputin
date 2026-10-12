@@ -1,6 +1,6 @@
 # Increment 41: land-cover class maps and palettes as data files
 
-**Status: built** (red `19b9b62a` `@tester`, 119 tests; green `59779b35` `@developer`, 114 net production lines by `python3 tools/count_loc.py f09b9863 HEAD` against about 100 and the worst case 180; layering rows `34cfe2bc`; section 10 is the as-built record; next the real-data byte check and code review). By `@architect`,
+**Status: built** (red `19b9b62a` `@tester`, 119 tests; green `59779b35` `@developer`, 114 net production lines by `python3 tools/count_loc.py f09b9863 HEAD` against about 100 and the worst case 180; layering rows `34cfe2bc`; section 10 is the as-built record; real-data byte check: meshes unchanged; next code review). By `@architect`,
 2026-10-12, on `f09b9863` (branch `worktree-class-maps`), while Ola was away;
 the defaults taken are listed in section 9. After round 2, `@tester`'s red
 suite (section 7). Python only, one PR.
@@ -528,6 +528,8 @@ deps and citations clean; coverage 98.45 %. Pins beyond the design:
 `features_licence` in the run record only, not the mesh file; the
 `property` map over the default edge names only; a coded map must have
 `[edges]`. `project_structure.md` updated by the main session.
+
+**Real-data byte check** (main session, 2026-10-13 ~00:20 UTC, `tools/bench_quick.py run --tree` this branch against the baseline refreshed 2026-10-12 on master): no mesh changed on any of the seven cases (Numedalslågen and Lagan with CORINE included), so CORINE runs are byte-identical by default. The verdict line read SLOWER on six timing rows (+6 to +18 %), measured while increment 40's full test suite ran on the same machine; the largest is the C++ `tile t=1 refine`, which this increment does not touch, so the timings are the load, not the change. Not a timing acceptance; none is due (no refine or mesh code).
 
 **Lessons for the next retrospective:** a red suite that adds a module adds
 its layering row in the same commit; agents sharing the session scratchpad
