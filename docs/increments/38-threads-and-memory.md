@@ -1,6 +1,6 @@
 # Increment 38: threads and memory as settings
 
-**Status: designed and review-approved after two rounds; next `@tester`'s red suite (section 8);** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
+**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); next `@developer`'s green step;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
 `worktree-threads`). The first fix from the generality audit
 (`docs/increments/generality-audit.md`, section 6 item 1; rows D1, D2, D3, D5,
 D6, D7). Ola's yes, 2026-10-12: "1, 2: yes" to a single pull request that adds
