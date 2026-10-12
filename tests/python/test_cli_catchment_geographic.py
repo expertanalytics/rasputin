@@ -41,11 +41,11 @@ from shapely.geometry import shape
 import batch_fixtures as bf
 import gauge_fixtures as gf
 from cli_driver import USAGE, invoke, mesh_to_vtk, plain, ran
-from geodesy_fixtures import TWIN_DX, TWIN_DY, TWIN_LAT0, TWIN_LON0
+from geodesy_fixtures import TWIN_DX, TWIN_DY, TWIN_LAT0, TWIN_LON0, metres_per_degree, to_4326
 from geographic_fixtures import geographic_keys, tiff
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from mosaic_fixtures import quadrants
-from test_cli_catchment import gauge_station, rivers_file
+from test_cli_catchment import STATION, gauge_station, rivers_file
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.io.domain_file import read_domain
 
@@ -245,8 +245,16 @@ def twin_tif(root: Path) -> Path:
 def test_r8_a_river_file_in_metres_over_a_dem_in_degrees(tmp_path: Path) -> None:
     """The station and the river file in EPSG:25833, the DEM the valley's
     twin in degrees: the gauge is placed in metres with `U`'s floor three of
-    the DEM's 10 m cells, and the catchment is the projected valley's, node
-    for node."""
+    the DEM's cells, and the catchment is the projected valley's, node for
+    node.
+
+    The cell is measured at the station (5.5), not at the grid's centre: the
+    twin's cells are exactly 10 m only at row 120, and the station is at row
+    150, 300 m south, where a cell is 10.0008 m east-west. The expected floor
+    is three of that cell, from `metres_per_degree` at the station's latitude,
+    to 1e-6 m on 30 m: a cell measured at row 120 gives 30.0000 m, and one
+    measured a row (10 m) north or south of the station moves the floor by
+    8e-5 m, so either fails."""
     rivers = rivers_file(tmp_path / "rivers.geojson")
     projected, twin = tmp_path / "p.geojson", tmp_path / "t.geojson"
     ran(
@@ -265,4 +273,7 @@ def test_r8_a_river_file_in_metres_over_a_dem_in_degrees(tmp_path: Path) -> None
     assert t["properties"]["fine_area_m2"] == pytest.approx(
         p["properties"]["fine_area_m2"], rel=1e-3
     )
-    assert t["properties"]["uncertainty_m"] == pytest.approx(30.0, abs=1e-6)
+    kx, ky = metres_per_degree(to_4326(*STATION)[1])
+    cell_m = max(TWIN_DX * kx, TWIN_DY * ky)
+    assert cell_m == pytest.approx(10.0008, abs=1e-4)
+    assert t["properties"]["uncertainty_m"] == pytest.approx(3 * cell_m, abs=1e-6)

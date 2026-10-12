@@ -31,6 +31,7 @@ latitude and UTM's scale is 0.9996).
 from __future__ import annotations
 
 import math
+import re
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
@@ -539,10 +540,13 @@ def test_seed_for_places_a_river_file_in_degrees_in_metres() -> None:
 
 
 def test_seed_for_with_lakes_and_a_river_file_in_degrees_is_refused() -> None:
+    """5.5: only the batch passes lakes, and it needs a DEM in metres; the
+    refusal names the reason."""
     geo = segments_in("EPSG:4326")
     lon, lat_ = geo[2].line[0]
     vatn = lake(lon - 0.01, lat_ - 0.01, lon + 0.01, lat_ + 0.01)
-    with pytest.raises(ValueError, match=r"(?i)lake"):
+    reason = re.escape("lakes need a river file in metres (a projected CRS)")
+    with pytest.raises(ValueError, match=reason):
         seed_for(Gauge(x=lon, y=lat_), geo, "EPSG:4326", BatchRequest(), [vatn], cell_m=10.0)
 
 
