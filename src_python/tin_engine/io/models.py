@@ -5,6 +5,10 @@ frozen Pydantic V2. `RasterMeta` is a superset of the `_core` boundary
 contract: `epsg`, `nodata_source`, `pixel_is_area` and `vertical_unit_assumed`
 are provenance and must not be forwarded to `_core` (increment 12's adapter
 owns that). This module imports nothing first-party and never `_core`.
+
+Increment 26a adds `ClassWindow`: a window of land-cover class numbers
+(`uint8`) with the corner of its upper-left *cell*, not a node: a class raster
+is `PixelIsArea`, and what matters is which cell a point falls in.
 """
 
 from __future__ import annotations
@@ -155,6 +159,41 @@ def valid_mask(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np
     core's `Raster::is_nodata`."""
     valid: npt.NDArray[np.bool_] = ~np.isnan(values)
     return valid if nodata is None else valid & (values != nodata)
+
+
+class ClassWindow(BaseModel):
+    """A window of class numbers: `array[r, c]` is the class of the cell whose
+    upper-left corner is `corner(r, c)`; the window's own is `(x_min, y_max)`.
+    Frozen; `array` is a read-only `uint8` copy of what was given."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    x_min: float
+    y_max: float
+    delta_x: float
+    delta_y: float
+    array: npt.NDArray[np.uint8]
+
+    @field_validator("array")
+    @classmethod
+    def _read_only_uint8(cls, value: npt.NDArray[Any]) -> npt.NDArray[np.uint8]:
+        if value.ndim != 2 or value.dtype != np.uint8:
+            raise ValueError(f"need a 2-D uint8 array, got {value.dtype} {value.shape}")
+        copy = np.array(value, order="C", copy=True)
+        copy.flags.writeable = False
+        return copy.view()
+
+    @property
+    def rows(self) -> int:
+        return int(self.array.shape[0])
+
+    @property
+    def cols(self) -> int:
+        return int(self.array.shape[1])
+
+    def corner(self, row: int, col: int) -> tuple[float, float]:
+        """The upper-left corner of cell `(row, col)`."""
+        return self.x_min + col * self.delta_x, self.y_max - row * self.delta_y
 
 
 class TileFootprint(BaseModel):

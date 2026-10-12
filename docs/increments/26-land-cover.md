@@ -1,12 +1,12 @@
 # Increment 26: land cover for the São Francisco basin — water bodies as constraints, class fractions per triangle
 
-Status: **designed by `@architect`, 2026-10-03, at Ola's request; ruled by
+Status: **26a built** on branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; `@perf`'s quick check `38f86930` ACCEPTED; code review rounds 1 and 2, APPROVED; next the push on Ola's yes). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
 Ola, 2026-10-04** (all eleven questions; "Ruled by Ola, 2026-10-04", below,
 and each question marked). Q8 was ruled against the recommendation:
 triangles inside a lake carry the raster's own mix, nothing is forced to
 water, and the design is changed to match. Written before `@tester` per
-`docs/increments/README.md` step 1. Nothing is built. **26a is ready for
-`@tester`.** Six pull requests, listed under "The PR split".
+`docs/increments/README.md` step 1. 26a is built (section 13); 26b onward
+are not. Six pull requests, listed under "The PR split".
 
 **Why "26".** 25 is plain output (`docs/increments/25-plain-output.md`, on
 its own branch); 26 is the first free number on every branch
@@ -1479,8 +1479,72 @@ Each with the recommendation, which is the default if Ola does not rule.
 - A cap on classes per triangle (measured harmful).
 
 
+## 13. As built: 26a (recorded by the main session from the handbacks)
+
+Ola picked 26a for the night of 2026-10-11 ("note down that we should finish
+the MapBiomas as well"; "go ahead on 2 and 3"). `@tester` checked the design
+of 2026-10-03 against today's code first and found no staleness.
+
+**Red** `cb5f254b` (`@tester`): 48 tests, all red, no network and no real
+MapBiomas bytes (a synthetic uint8 class raster in
+`tests/python/class_fixtures.py`, so no fixture licence line):
+`test_sources_mapbiomas.py` (16: the catalogue entry, the URL for 2025 and
+1985, the year range, the credit with date, refusals by `values`),
+`test_io_class_window.py` (20: `ClassWindow`, empty tiles as zeros, the
+PixelIsArea corner, LZW plus predictor via `needs_codecs`, strips over a
+box), `test_fetch_per_year.py` (9: one object per year, empty tiles, the fetch
+date, the NOTICE credit), `test_cli_mapbiomas.py` (5: `fetch --year`,
+`mesh --dem mapbiomas-c11` refused). Red command: `.venv/bin/python -m pytest
+tests/python/test_sources_mapbiomas.py tests/python/test_io_class_window.py
+tests/python/test_fetch_per_year.py tests/python/test_cli_mapbiomas.py -o
+addopts="" --no-cov`, 35 failed and 13 errors. Pins beyond the design, in
+`class_fixtures.py`'s docstring: `RemoteSource.years: tuple[int, ...]`,
+`values: Literal["heights", "classes"]`, `url_for(year=None)`,
+`credit_for(*, url, date)`, `check_values(source, wanted, option)`;
+`FetchRequest.year`, year refusals as `FetchError` before any request,
+`--year` on a source without years a usage error; `CachedObject.fetched: date
+| None` kept on later runs, NOTICE.txt carrying each object's rendered credit;
+`ClassWindow(x_min, y_max, delta_x, delta_y, array)` with `rows`, `cols`,
+`corner(row, col)`; `io.cog.decode_class_window(source, meta, window, *,
+threads)`; `CacheRepository.load_class_window(name, window)` and
+`class_strips(name, box, *, rows)` (cells whose interior meets the box,
+clipped to the raster; none is a plain `ValueError`); `mesh --dem <class
+source>` refused before any cache read. A `STEP` of 1/128 degree keeps the
+on-the-cell-edge cases exact.
+
+**Green** `8eec354b` (`@developer`): `sources.py` 49, `io/cog.py` 33,
+`io/repository.py` 32, `io/models.py` 23, `cli.py` 15, `fetch/run.py` 10,
+`fetch/plan.py` 1; 163 net counted lines. Whole Python suite 7192 passed, 17
+skipped; mypy strict, ruff, the governance gates green; `test_refine_golden.py`
+passes (`.vtk` untouched); `test_layering.py` passes, no new rows. Pins beyond
+the design: `sources.py` imports Pydantic alone (`test_cli_mesh_cache` pins
+it), so `credit_for`'s date is a `Dated` protocol with `isoformat()`;
+`notice(source, credits=())` lists each object's rendered credit,
+deduplicated, and leaves NOTICE.txt unchanged with no credits;
+`decode_class_window` refuses a page whose dtype is not uint8
+(`GeoTiffError`); strip cells are floor of the lower index and ceil of the
+upper, so a box edge on a cell edge takes neither neighbour; the
+block-decoding loop of `decode_window` moved into a shared `_decode_into`,
+behaviour unchanged, which is why `@perf`'s quick check runs before review.
+Lesson: running only the increment's suites missed an import-boundary test
+elsewhere; the full suite caught it.
+
+**Quick check** `38f86930` (`@perf`, ACCEPTED;
+`docs/benchmarks/2026-10-11/mapbiomas-26a/README.md`): `tools/bench_quick.py
+run` at `f51f0a18` against the stored baseline (`357808b1`, AC, numpy 2.5.4),
+AC power, nothing else running: `NO CHANGE`, exit 0; every mesh SHA-256 equal,
+every total and every `decode` phase within its band, the same eight hotspot
+lines as the baseline run (geilo-al-ramp decode 42 % on both). The run's own
+per-case medians are not on disk: `bench_quick.py` writes a record only with
+`--save-baseline`, so a passing quick check leaves the tool's silence as the
+evidence. Idea for the tooling: `bench_quick.py run --record <path>`.
+
 ## Review
 
 **Design review, round 1, 2026-10-03.** Range `origin/master...` 77f35b4, 9df3822. Verdict: CHANGES REQUESTED. LOC: 0 production lines (design and throwaway probes). The rulings of 2026-10-01 are kept; the fractions-and-ledger figures, the fetch sizes, the CRS figures, the sources and the licence conflict (terms of use CC BY-SA 4.0, factsheet CC BY) all re-checked and hold. Blocking, doc fixes only: (1) unit 769's water row omits its largest body (Três Marias joins the channel, and the probe assigns a body to a unit by its first cell, which lies outside the outline), so the basin-wide lake counts are low; (2) the "Sobradinho" ring is the main São Francisco river across unit 761 (670 × 442 km, 3,159 holes), and "346 km" is half the extent, not a length; on the whole basin the channel likely joins the reservoirs into one body; (3) the ledger measurement excludes lakes forced to 100 % water, which @perf's acceptance must cover; (4) the licence question must also name the water polygons and meshes constrained by them. Not pushed; no CI.
 
 **Design review, round 2, 2026-10-03.** Range `3fd0237..097b26b`. Verdict: APPROVED. LOC: 0 production lines. All four round-1 blockers fixed, checked against the corrected probe's saved outputs (769: 2,836 bodies of at least 1.44 ha holding 94.8 %, Três Marias with the upper channel 1,290 km²; basin estimate about 11,600 bodies and 130,000 vertices at 60 m). Nit: 769's largest body is 455 × 279 km, not 270. Not pushed; no CI.
+
+**Code review, round 1, 2026-10-11 (26a).** Range `de9b6c03..15a51ed6`, 163 net production lines, @reviewer: CHANGES REQUESTED, doc only, the code clean. Two stale phrases this branch made false: /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/docs/increments/26-land-cover.md@15a51ed6:8-9 ("Nothing is built. 26a is ready for @tester") and /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/ROADMAP.md@15a51ed6:53 ("26a ready for @tester"); both fixed in this recording commit. Sound: `_decode_into` (/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/src_python/tin_engine/io/cog.py@15a51ed6:185-203) is the original `put` closure verbatim, sparse-block refusal and edge clipping unchanged, so partial blocks and NoData behave as before (the quick check's byte-identical meshes agree); `decode_class_window` undoes the half-cell PixelIsArea shift correctly; `class_strips` floor/ceil gives cells whose interior meets the box; `credit_for` leaves ANADEM and GLO-30 unchanged; `fetched` kept on later runs; credit wording and CC BY-SA match the terms page and Ola's Q2 ruling; no prohibited dependency; 48 tests pass; no red scaffolding; check_citations at-risk lines drifted at base. Lesson: a Status paragraph with two statements of readiness drifts; keep one. Idea for 26b: `decode_class_window` does not check `meta.pixel_is_area`; a PixelIsPoint class raster would shift half a cell silently.
+
+**Code review, round 2, 2026-10-11 (26a).** Range `15a51ed6..7053d795`, 0 production lines, @reviewer: APPROVED. Both stale phrases gone; the replacement at /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/docs/increments/26-land-cover.md@7053d795:8-9 agrees with the Status line and section 13 (@7053d795:1482); ROADMAP row 26 (/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/ROADMAP.md@7053d795:53) reads consistently; the round-1 record matches; check_citations exit 0. Not pushed, no CI yet: CI must be green after the push.
