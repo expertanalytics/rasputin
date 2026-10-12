@@ -1,0 +1,22 @@
+land cover: 2690575 class shares over 1571955 triangles, 19 classes
+1571955 triangles. Every DEM node inside the mesh is within 5 m of it (largest difference 5 m).
+/Users/skavhaug/projects/rasputin_scratch/sao_francisco_piece_meshes/26b-fractions/velhas_t5_lcon.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26b/docs/benchmarks/2026-10-12/26b-fractions/raw/velhas_t5_lcon_r1.stats.md
+        3.73 real         8.33 user         0.70 sys
+          1425145856  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               93860  page reclaims
+                  44  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  25  voluntary context switches
+               49549  involuntary context switches
+         64830489576  instructions retired
+         27212452288  cycles elapsed
+          1399195184  peak memory footprint

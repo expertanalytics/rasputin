@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import datetime
 import json
 import math
 import os
@@ -132,12 +133,13 @@ from tin_engine.io.geopackage_write import (
     write_triangles,
 )
 from tin_engine.io.mesh_checks import checked_ascii
-from tin_engine.io.models import Bounds, DemTile, RasterMeta
+from tin_engine.io.models import Bounds, ClassFractions, DemTile, RasterMeta
 from tin_engine.io.ply import field_comments, write_ply
-from tin_engine.io.repository import DemRepository, create_sqlite
+from tin_engine.io.repository import CacheRepository, DemRepository, create_sqlite
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
 from tin_engine.palettes import PALETTES, paraview_preset
@@ -156,7 +158,7 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.sources import SOURCES, STATION_SOURCES, check_values
+from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, check_values
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
@@ -838,6 +840,23 @@ def mesh(
             "outline onto it; 0 is off. Default: 5.",
         ),
     ] = 5.0,
+    land_cover: Annotated[
+        str | None,
+        typer.Option(
+            "--land-cover",
+            help="With --dem, the exact share of each land-cover class in every triangle, "
+            "from a cached catalogue source of classes "
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}), "
+            "in the mesh file.",
+        ),
+    ] = None,
+    land_cover_year: Annotated[
+        int | None,
+        typer.Option(
+            "--land-cover-year",
+            help="With --land-cover, the year of the classes. Default: the source's last year.",
+        ),
+    ] = None,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -896,6 +915,13 @@ def mesh(
     array ``land_cover_code`` of a ``.vtk`` or the face property of a ``.ply``
     (increment 16c); ``rasputin palette corine`` writes natural colours for it.
 
+    ``--land-cover KEY`` (increment 26b) gives every triangle the exact share
+    of each land-cover class of a cached catalogue source of classes, read
+    from ``--cache`` for ``--land-cover-year`` (the last year by default): a
+    sparse table in the file (``land_cover_offsets``, ``land_cover_classes``,
+    ``land_cover_fractions``), the largest class as ``land_cover_code``, and
+    the source's credit, licence note and citation as fields.
+
     What the run did is one record (increment 25, ``tin_engine.run_record``):
     the file carries the fields a user of the mesh needs, ``--stats`` and
     ``--record`` all of it, and stderr one summary.
@@ -904,6 +930,7 @@ def mesh(
     dem_run: _DemMesh | None = None
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
+    table: ClassFractions | None = None
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
@@ -932,6 +959,14 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
+    classes = _class_source(land_cover, land_cover_year, bool(dem), cache_root(cache, os.environ))
+    if classes is not None:
+        for coded_map in (m for m in feature_maps if m in CLASS_MAPS and CLASS_MAPS[m].codes):
+            raise typer.BadParameter(
+                f"one mesh has one land_cover_code system, and --features-map {coded_map} "
+                "already gives every triangle a code",
+                param_hint="--land-cover",
+            )
     for flag, metres, top in (
         ("--features-repair", features_repair, math.inf),
         ("--features-tolerance", features_tolerance, math.inf),
@@ -1144,6 +1179,12 @@ def mesh(
                 values["land_cover_codes"] = codes_text
                 palette = PALETTES[coded.palette][0] if coded.palette else None
                 cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
+        if classes is not None:
+            table, codes, more = _class_fractions(
+                classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache
+            )
+            codes_text = str(more["land_cover_codes"])
+            values |= more
         build = stride_record if tolerance is None else refined_record
         record = build(triangles=len(surface_mesh.triangles), **values)
     else:
@@ -1214,6 +1255,7 @@ def mesh(
                 binary=binary,
                 triangle_codes=codes,
                 land_cover_codes=codes_text,
+                class_fractions=table,
             )
         ]
     else:
@@ -1224,6 +1266,7 @@ def mesh(
                 ascii=not binary,
                 comments=[*comments, *([f"land_cover_codes {codes_text}"] if codes_text else [])],
                 face_codes=codes,
+                face_fractions=table,
             ),
             lambda: write_ply(
                 vertices,
@@ -1287,6 +1330,113 @@ def _write_geopackage(
         raise
     conn.close()
     os.replace(part, target)
+
+
+@dataclass(frozen=True, slots=True)
+class _ClassSource:
+    """``--land-cover`` as checked: the catalogue entry, the year (None for a
+    source without years) and the cache root."""
+
+    source: RemoteSource
+    year: int | None
+    root: Path
+
+
+def _class_source(
+    key: str | None, year: int | None, has_dem: bool, root: Path | None
+) -> _ClassSource | None:
+    """26b: ``--land-cover`` and ``--land-cover-year`` checked before any work;
+    every refusal is a usage error naming the option."""
+    if key is None:
+        if year is not None:
+            raise typer.BadParameter("needs --land-cover", param_hint="--land-cover-year")
+        return None
+    if not has_dem:
+        raise typer.BadParameter(
+            "needs --dem: the shares are cut in the DEM's coordinate system",
+            param_hint="--land-cover",
+        )
+    if key not in SOURCES:
+        raise typer.BadParameter(
+            f"unknown source {key}; the catalogue has {', '.join(SOURCES)}",
+            param_hint="--land-cover",
+        )
+    source = SOURCES[key]
+    try:
+        check_values(source, "classes", "--land-cover")
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
+    chosen = year if year is not None else (source.years[-1] if source.years else None)
+    try:
+        source.url_for(chosen)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
+    if root is None:
+        raise typer.BadParameter(
+            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
+            "or pass --cache",
+            param_hint="--land-cover",
+        )
+    return _ClassSource(source, chosen, root)
+
+
+def _class_fractions(
+    classes: _ClassSource,
+    trimmed: Trimmed,
+    dem_crs: str,
+    clock: PhaseClock,
+    domain: Path | None,
+    out_crs: str | None,
+    cache: Path | None,
+) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
+    """26b: the exact class fractions from the cached year, timed as the phase
+    ``land cover fractions``; the table, the codes and the record entries. An
+    object the cache lacks is refused naming the ``fetch`` that gets it."""
+    source, year = classes.source, classes.year
+    repository = CacheRepository(classes.root, source.id, nodata=source.nodata)
+    url = source.url_for(year)
+    name = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
+    try:
+        cached = {f.name for f in repository.footprints()}
+    except NotCached:
+        cached = set()
+    if name not in cached:
+        words = [
+            f"rasputin fetch {source.id}",
+            f"--year {year}" if year is not None else "",
+            f"--domain {domain}" if domain is not None else "",
+            f"--out-crs {shlex.quote(out_crs)}" if out_crs else "",
+            f"--cache {cache}" if cache else "",
+        ]
+        run = " ".join(filter(None, words))
+        raise typer.BadParameter(
+            f"{source.id}/{name} is not in the cache; run: {run}", param_hint="--land-cover"
+        )
+    with clock.phase("land cover fractions"):
+        try:
+            assigned = assign_fractions(
+                trimmed.vertices,
+                trimmed.triangles,
+                mesh_crs=dem_crs,
+                repository=repository,
+                name=name,
+            )
+        except (ValueError, NotCached) as exc:
+            raise typer.BadParameter(_words(exc), param_hint="--land-cover") from exc
+    typer.echo(
+        f"land cover: {len(assigned.table.classes)} class shares over "
+        f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
+        err=True,
+    )
+    fetched = repository.fetched(name) or datetime.date.today()
+    values: dict[str, Value] = {
+        "land_cover_codes": f"{source.id} class number; 0 = no data, and every constraint line",
+        "land_cover_source": source.id if year is None else f"{source.id}, {year}",
+        "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
+        "land_cover_licence_note": escaped_ascii(source.licence_note),
+        "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
+    }
+    return assigned.table, assigned.codes, values
 
 
 def _land_cover(
