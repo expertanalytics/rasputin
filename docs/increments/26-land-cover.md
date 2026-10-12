@@ -1,6 +1,6 @@
 # Increment 26: land cover for the São Francisco basin — water bodies as constraints, class fractions per triangle
 
-Status: **26a built** on branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; `@perf`'s quick check `38f86930` ACCEPTED; code review rounds 1 and 2, APPROVED; next the push on Ola's yes). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
+Status: **26a merged (#232, 2026-10-12)** from branch `worktree-mapbiomas-26a` (red `cb5f254b`, `@tester`, 48 tests; green `8eec354b`, `@developer`, 163 net production lines by `python3 tools/count_loc.py de9b6c03 HEAD` against the estimate of 170; no mutation round, section 9; section 13 is the as-built record; `@perf`'s quick check `38f86930` ACCEPTED; code review rounds 1 and 2, APPROVED; master merged in as `5f28292c` for a docstring conflict with #231; 26b red in progress on `worktree-mapbiomas-26b`). 26b onward not built. The design: **by `@architect`, 2026-10-03, at Ola's request; ruled by
 Ola, 2026-10-04** (all eleven questions; "Ruled by Ola, 2026-10-04", below,
 and each question marked). Q8 was ruled against the recommendation:
 triangles inside a lake carry the raster's own mix, nothing is forced to
