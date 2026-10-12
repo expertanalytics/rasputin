@@ -1,8 +1,11 @@
 # Increment 37: an MCP server over the rasputin commands
 
-**Status: designed** by `@architect`, 2026-10-12, on `b4a81c0d` (branch
-`worktree-mcp-server`). Probe and its output: `docs/increments/37-probes/`.
-Design review round 1 CHANGES REQUESTED (three blockers, Review section); next `@architect`'s fixes and round 2, then `@tester`'s red suite (section 9).
+**Status: designed, review round 1 fixes in; next round 2.** Designed by
+`@architect`, 2026-10-12, on `b4a81c0d` (branch `worktree-mcp-server`); the
+nine defaults of section 6 were taken while Ola was away. Probe and its
+output: `docs/increments/37-probes/`. Design review round 1 (Review section)
+asked for three fixes, in sections 6.4, 6.5 and 7 and tests T4 to T6, T9 and
+T11; after round 2, `@tester`'s red suite (section 9).
 
 ## 1. What Ola asked
 
@@ -50,13 +53,17 @@ transport. What this design uses, by the specification's own sections:
   links to Resources" as `resource_link` content.
 - *Utilities, Progress*: a client that wants progress sends a
   `progressToken` in `_meta`; the server MAY send `notifications/progress`
-  with `progress` (must increase), optional `total` and `message`;
-  "implementations MAY reset the timeout clock when receiving a progress
-  notification".
+  with `progress`, optional `total` and `message`; "the `progress` value
+  MUST increase with each notification, even if the total is unknown", and
+  it "MAY be floating point"; both sides "SHOULD implement rate limiting".
 - *Utilities, Cancellation*: over stdio a client cancels with
   `notifications/cancelled` naming the request id; the server SHOULD stop
   processing, free resources and send no response; both sides handle the
-  race where the work finished first.
+  race where the work finished first. Its *Timeouts* section: a sender
+  SHOULD time out a request and cancel it; "implementations MAY choose to
+  reset the timeout clock when receiving a progress notification
+  corresponding to the request", but "SHOULD always enforce a maximum
+  timeout, regardless of progress notifications".
 - *Extensions, Tasks* (`io.modelcontextprotocol/tasks`): durable handles for
   long operations, `tasks/get`, `tasks/cancel`, status `working`,
   `completed`, `failed`, `cancelled`. An opt-in extension both sides must
@@ -94,7 +101,8 @@ probe run 1), and **the in-process transport carries no progress token**
 `mcp.server.lowlevel` and `mcp.client` costs 0.40 s (probe E).
 
 Other geospatial tools over MCP, as found (sparkgeo's tracked list,
-`github.com/willcadell/geo-mcp-servers`, counts 82 servers): `gdal-mcp`
+`github.com/willcadell/geo-mcp-servers`, "100 servers tracked" on
+2026-10-12): `gdal-mcp`
 (`github.com/JordanGunn/gdal-mcp`): one tool per operation (`raster_info`,
 `raster_reproject`, `vector_clip`, ...), FastMCP 2.0 over stdio, built on
 Rasterio, GeoPandas and pyogrio, which this project may not use; the QGIS
@@ -145,7 +153,7 @@ process.
 | what | measured |
 |---|---|
 | schemas derived from all 8 commands | 16,575 bytes of JSON; `mesh` 34 properties, `required: ["out"]`, 8,269 bytes |
-| parameters needing a note | 1 of 81: `snap_spacing` has a validating callback (`_snap_spacing`), which stays in the child and still refuses there |
+| parameters needing a note | 2 of 81: `snap_spacing` on `draw` and on `mesh` has a validating callback (`_snap_spacing`, `src_python/tin_engine/cli.py@b4a81c0d:478`, `:676`), which stays in the child and still refuses there |
 | tuple options | `bbox` -> `prefixItems` of four numbers, `minItems`/`maxItems` 4; `tolerance_near` -> `[string, number]` |
 | flag pairs (`--binary/--ascii`, `--delaunay/--no-delaunay`, `--[no-]features-merge-same-class`) | one boolean each, default from the CLI (`binary: true`) |
 | `fetch --connections` (an integer range) | `{"type": "integer", "minimum": 1, "default": 8}` |
@@ -183,7 +191,8 @@ agent (Codex, Claude Desktop, ...)        stdio: JSON-RPC 2.0 lines
    |                                                 |  argv, env TYPER_USE_RICH=0
    |                                                 v
    |                                     python -m tin_engine <command> ...   (a child process:
-   |                                       cli.py as today; --record to a temp file)   the only
+   |                                       cli.py as today; --record to a sidecar          the only
+   |                                       file beside --out, read back and removed)
    |                                                 |                                 place _core
    |  <--- result: exit_code, outputs, record, ------+   stdout lines, stderr lines,   runs
           stats, stderr; or is_error + words             exit code, the record JSON
@@ -205,8 +214,14 @@ Boundaries:
   from the CLI at start.
 - **Data, not execution.** `tin_engine.mcp.schema` is pure: Typer command in,
   Pydantic model and `Tool` out, and arguments in, argv out. No I/O, no
-  async. `tin_engine.mcp.server` holds the only I/O (the child, the temp
+  async. `tin_engine.mcp.server` holds the only I/O (the child, the sidecar
   record) and the only async code.
+- **The server's stdout is the wire.** Over stdio the server process writes
+  nothing but JSON-RPC to its own stdout: the child's stdout and stderr are
+  pipes the server reads, and anything the server has to say for itself
+  (an unexpected exception's traceback) goes to its stderr. A stray
+  `print` in the server would corrupt the protocol stream, so `server.py`
+  has none, and T7 (a real stdio round trip) is where one would show.
 - **Async-ready.** The server is `anyio`/`asyncio` throughout: the child is
   `asyncio.create_subprocess_exec`, its streams are read as tasks, a second
   call does not wait for the first unless the jobs cap says so, and the same
@@ -252,8 +267,8 @@ Per tool:
 | `outputs` | the stdout lines that are paths of files that exist after the run (mesh: the mesh, `--out-edges`, `--stats` file, `--record` file; catchment: the polygon; fetch_stations, station_catchments: directories) |
 | `stdout` | every stdout line (fetch's report, palette's preset text, version's two lines) |
 | `stderr` | every stderr line (the mesh summary, feature counts, warnings) |
-| `record` | for `mesh`: the `--record` JSON as an object (38 keys on the fixture), whether or not the caller asked for a record file |
-| `stats` | for `mesh` with `stats` given: the Markdown report text; `stats: "-"` is redirected to a temp file and returned here rather than mixed into stdout |
+| `record` | for `mesh`: the `--record` JSON as an object (38 keys on the fixture), whether or not the caller asked for a record file; when the caller did not, it is read from a sidecar file beside `out` (section 6.4) and the sidecar is removed |
+| `stats` | for `mesh` with `stats` given: the Markdown report text; `stats: "-"` is redirected to a sidecar file beside `out` and returned here rather than mixed into stdout |
 
 The `content` of a successful result is one text block with the same JSON
 (the spec's backward-compatible form) plus one `resource_link` per output
@@ -292,9 +307,10 @@ scans every extra's entries (`tools/check_prohibited_deps.py@b4a81c0d:204-216`,
 new extra is checked and passes: none of the 14 names is on the list.
 `@developer` runs the checker after the edit, and plants `rasterio` in the
 new extra once to see it fail (the required-reading rule on verifying a
-gate). CI's Python jobs install `.[dev]` today
-(`.github/workflows/main.yaml:316,337,351`); they install `.[dev,mcp]` so the
-suite runs there; locally the suite `pytest.importorskip("mcp")`s.
+gate). CI's Python jobs install `.[dev]` today, the `python` matrix job at
+`.github/workflows/main.yaml:261` and the extras job at `:316`, `:337`,
+`:351`; all four lines add `mcp` to the extras so the suite runs there;
+locally the suite `pytest.importorskip("mcp")`s.
 mypy: both `mcp` and `mcp_types` ship `py.typed`, so no override.
 
 ### 6.2 Transport: stdio now; HTTP is one later flag, not designed here
@@ -351,25 +367,68 @@ interpreter and the same installed `tin_engine` as the server, found without
 `rasputin mesh ...`, then `app()`); `python -m tin_engine version` becomes a
 second way to run the CLI. The child's environment is the server's plus
 `TYPER_USE_RICH=0`, `NO_COLOR=1`, `TERM=dumb`; `RASPUTIN_DATA` and the cache
-default pass through unchanged. For `mesh` without `record_path`, the server
-appends `--record <tempfile>` and reads it back; with `stats: "-"` it appends
-`--stats <tempfile>` instead and returns the text; both temp files are
-removed after the read. The runner is injected (`Child` protocol: argv prefix
-in, a `(returncode, stdout lines, stderr lines)` out), so tests substitute a
-fake child (section 9).
+default pass through unchanged.
+
+*The sidecar files.* For `mesh` without `record_path`, the server appends
+`--record <sidecar>` and reads it back; with `stats: "-"` it appends
+`--stats <sidecar>` instead and returns the text; both sidecars are removed
+after the read (`unlink(missing_ok=True)`, in the handler's `finally`, so a
+refused or killed run leaves none). The sidecar is **beside `out`**, not in
+the system temp directory: `Path(out).parent / f".{Path(out).name}.record-
+{token}.json"` and `...stats-{token}.md`, `token` eight hex digits from
+`secrets.token_hex(4)`, the name chosen by the server and the file created
+by the child. Checked against `_destination`
+(`src_python/tin_engine/cli.py@b4a81c0d:420-447`), which every `--record`
+and `--stats` path passes through (`_report_target` at `:1335-1347`,
+`_record_target` at `:1350-1364`, both called at `:1195-1196` after `--out`
+at `:1180`):
+
+- `out.is_symlink()` (`:438`): a fresh random name is not a symlink.
+- containment in `out_parent` (`:441-444`): `Path(record).resolve()` is
+  inside `out_parent.resolve()` exactly when `Path(out).resolve()` is, since
+  the two share a directory and `out` is not a symlink (refused at `:438`
+  before this); so a system temp path (`/var/folders/...`) would be refused
+  whenever `out_parent` is set, and the sidecar beside `out` never is.
+- `target.parent.is_dir()` (`:445`): the sidecar's directory is `out`'s,
+  which `_destination(out, ...)` at `:1180` has already accepted, or refused
+  first naming `--out`; the server never creates the directory or the file.
+- `target in taken` (`:1343`, `:1360`): the random name collides with no
+  mesh, edges or report path.
+
+The sidecar is created by the child with the child's permissions in a
+directory the caller already chose to write a mesh into, so it widens no
+boundary. A caller who wants the record kept passes `record_path`, which
+is then the caller's path and not removed. The runner is injected (`Child`
+protocol: argv prefix in, a `(returncode, stdout lines, stderr lines)`
+out), so tests substitute a fake child (section 9).
 
 ### 6.5 Long runs: one blocking call with progress; cancellation kills the child; no Tasks
 
 A basin mesh takes minutes and the call stays open for them. Over stdio the
 server sends `notifications/progress` when the client gave a token: one per
-stderr line the child prints (message: the line, progress: the running count),
-and a heartbeat every 5 s with message `"running, N s"` when no line came,
-so a client that resets its timeout on progress (the spec allows it) does
-not give up on a silent run. Measured: `mesh` prints nothing until its
-summary line (probe E: one stderr line in 0.72 s), so on today's CLI the
-heartbeat is the only progress a long mesh shows; feature and tolerance runs
-print a few lines as phases pass (`src_python/tin_engine/cli.py@b4a81c0d:1084`,
+stderr line the child prints (message: the line), and a heartbeat every 5 s
+with message `"running, N s"` when no line came, so a client that resets
+its timeout on progress (the spec's Cancellation page allows it) does not
+give up on a silent run. Measured: `mesh` prints nothing until its summary
+line (probe E: one stderr line in 0.72 s), so on today's CLI the heartbeat
+is the only progress a long mesh shows; feature and tolerance runs print a
+few lines as phases pass (`src_python/tin_engine/cli.py@b4a81c0d:1084`,
 `:1708`, `:1783`, `:1810`, `:1916`).
+
+*The `progress` value.* The spec says it MUST increase with each
+notification; a line count would not, since a heartbeat has no line. So
+every notification of a call, line or heartbeat or waiting (section 6.6),
+carries `progress` = seconds elapsed since the handler began, from
+`time.monotonic()`, rounded to milliseconds, and `total` omitted (the run's
+length is unknown). One sender per call holds the last value sent and sends
+`max(elapsed, last + 0.001)`, so two lines read in the same millisecond
+still increase; the 0.001 is the rounding step, and the sender is one
+`asyncio` task per call (the stderr reader and the heartbeat timer feed the
+same sender), so the values are never sent out of order. The probe's
+version (`docs/increments/37-probes/mcp_probe.py:186-188`) sent the line
+count; its measured output, the count and text of the ticks, is unchanged
+by this choice, so the probe was not rerun.
+
 The constant 5 s assumes runs from seconds to an hour (12 to 720
 notifications) and was checked at the fixture's 0.72 s run (zero
 heartbeats) and the probe's 1 s cancellation; it is a module constant, not an
@@ -378,11 +437,29 @@ none.
 
 Cancellation: the SDK cancels the handler's `await` on `notifications/cancelled`
 (stdio) or on a dropped stream; the handler's `finally` kills the child and
-waits for it, then returns nothing (the spec says no response). The CLI
-writes meshes as `<target>.part` and renames at the end
-(`src_python/tin_engine/cli.py@b4a81c0d:1258-1263`, `_writing` at
-`src_python/tin_engine/cli.py@b4a81c0d:2121`), so a
-killed run leaves at most a `.part` file, which the next run replaces.
+waits for it, then returns nothing (the spec says no response).
+
+*What a killed run leaves on disk.* The CLI writes a GeoPackage as
+`<target>.part` and renames it at the end
+(`_write_geopackage`, `src_python/tin_engine/cli.py@b4a81c0d:1250-1289`,
+the `os.replace` at `:1289`),
+so a killed `.gpkg` run leaves at most a `.part` file, which the next run
+replaces. `.vtk` and `.ply` are not written that way: the file is encoded in
+memory and written with one `target.write_bytes(data)`
+(`src_python/tin_engine/cli.py@b4a81c0d:1241`), and `_writing` (`:2121`)
+only turns an `OSError` into a refusal, it does not rename. So **a `mesh`
+call cancelled during that write can leave a truncated `.vtk` or `.ply`
+under the asked name**; cancelled before it, the old file (if any) is
+untouched, and cancelled after it, the mesh is complete and only the report
+or record is missing. The server does not guard against this: it cannot
+tell a truncated file from a complete one or from the caller's older file
+under that name, and deleting on cancel would destroy the last two. It
+accepts and documents it instead: a cancelled call returns no result, so
+the agent holds no path it was told to trust, and the next run overwrites
+the file. The remedy is in `cli.py`, every output through `.part` and a
+rename; it is in Ola's ideas file and is not this increment's. The server's
+`instructions` (section 6.8) gain one line: "a cancelled `mesh` may leave an
+unreadable `.vtk`/`.ply` at `out`; rerun before reading it".
 
 The Tasks extension is the right shape for hour-long runs with
 reconnects, and is out: the SDK's v2 client removed its experimental task
@@ -394,8 +471,10 @@ When the SDK ships it, a task is a wrapper round the same child runner.
 Two calls run as two children (probe D), and two basin runs are two to six
 GB of memory (`docs/increments/23-basin-scale.md`'s limits). `rasputin mcp
 --jobs N` (default 1) is an `anyio.Semaphore`; a call beyond the cap waits,
-with heartbeats saying `"waiting for a running job"`, and is still
-cancellable while waiting. `version` and `palette` also wait: a special
+with heartbeats every 5 s saying `"waiting for a running job, N s"` and the
+same elapsed-seconds `progress` as section 6.5 (the clock starts when the
+handler begins, before the wait, so the first running notification is above
+the last waiting one), and is still cancellable while waiting. `version` and `palette` also wait: a special
 case for cheap commands is a second rule to explain for a 0.3 s gain. The
 default was checked at two `version` calls; an agent wanting parallel
 fetches raises it.
@@ -431,9 +510,10 @@ the tool list. A client configuration, which README gains in a short
 ```
 
 The server's `instructions` (the initialize result's field, shown to the
-model) are five lines: paths are on this machine; `mesh` writes a file and
+model) are six lines: paths are on this machine; `mesh` writes a file and
 returns its record; write `.gpkg` to inspect a mesh; `fetch` first for a
-catalogue source; a refusal's words say what to change.
+catalogue source; a refusal's words say what to change; a cancelled `mesh`
+may leave an unreadable `.vtk`/`.ply` at `out` (section 6.5).
 
 ### 6.9 Tool names: underscores
 
@@ -447,7 +527,8 @@ the hyphenated name, is spec-legal but some clients reject it.
 | malformed arguments (missing required, wrong type, unknown key, wrong arity for `bbox`) | refused by the derived model before any child runs; `is_error` with Pydantic's words per field (measured, section 3) |
 | a missing data folder (`--cache` default with `RASPUTIN_DATA` unset, a `--dem` directory that is not there) | the child refuses with its words and exit 2; the server passes them through; it never guesses a path |
 | a refused command (any `BadParameter`, any `typer.Exit(1)`) | `is_error: true`, exit code and words; stderr in full |
-| a killed run (client cancel, client gone, server stopped) | the child is killed and waited for within the cancel; no response; at most a `.part` file remains |
+| a killed run (client cancel, client gone, server stopped) | the child is killed and waited for within the cancel; no response; the sidecar is removed; a `.gpkg` run leaves at most a `.part` file, a `.vtk`/`.ply` run killed during its one `write_bytes` leaves a truncated file under the asked name (section 6.5) |
+| `mesh` with `out_parent` set | the sidecar record or report is beside `out`, so `_destination` accepts it exactly when it accepts `out`; the call succeeds, or is refused naming `--out`, never naming `--record` or `--stats` |
 | a child that prints a non-UTF-8 byte | decoded with `errors="replace"`; never a server fault |
 | a child whose stdout path line is not a file (fetch's report lines) | kept in `stdout`, not in `outputs` |
 | two concurrent calls | both accepted; the second waits for the semaphore (jobs 1) with heartbeats, or runs beside the first (jobs 2+) |
@@ -501,18 +582,32 @@ the point. Fixtures and their figures as measured in section 3.
   tool list stays small.
 - **T4 validation before the child**: missing `out`, `tolerance: "ten"`, an
   unknown key, `bbox` of three numbers: `is_error`, the field named, and the
-  fake child never called.
+  fake child never called. And the argv the fake child receives for `mesh`
+  with `out: <dir>/a.vtk` and `out_parent: <dir>`: `--out-parent <dir>` is
+  passed through, `--record` names a file in `<dir>` whose name starts with
+  `.a.vtk.record-` and ends `.json`; with `stats: "-"` the `--stats` value
+  is `<dir>/.a.vtk.stats-<8 hex>.md` and no `--record` is added when
+  `record_path` is given.
 - **T5 refusal mapping**: a fake child returning exit 2 with
   `Usage:`/`Try`/`Error: Invalid value for --dem: ...` lines gives
   `{"exit_code": 2, "error": "exit 2: Invalid value for --dem: ..."}`; exit
-  1 likewise; a signal exit gives `killed by signal`.
+  1 likewise; a signal exit gives `killed by signal`. After a fake child that
+  exits 2 without creating the sidecar, and after one that creates it and
+  exits 2, no `.a.vtk.record-*` file remains in `<dir>`.
 - **T6 a real `mesh`** through the tool on the micro tile
   (`tests/python/geotiff_fixtures.py:97-105`, 3 x 4 cells at 10 m x 5 m,
   no codec needed): exit 0, `outputs` is the `.vtk`, `record` is a dict with
-  the record's keys (`run_record.WORDING`'s order), the temp record file is
-  gone, the `.vtk` parses with `vtkread`; and once on the Kartverket fixture
-  under `needs_codecs` with `--tolerance 1`: 464,290 triangles in the
-  record, 0.7 s on the probe's machine.
+  the record's keys (`run_record.WORDING`'s order), the sidecar record file
+  is gone (the directory holds the `.vtk` and nothing else), the `.vtk`
+  parses with `vtkread`; the same call with `out_parent` set to the `.vtk`'s
+  directory succeeds the same way (the case review round 1 found: a sidecar
+  in the system temp directory would exit 2 here with "is outside the
+  permitted parent"), and with `out_parent` set to a sibling directory it is
+  `is_error` naming `--out`, not `--record`; with `stats: "-"` the result's
+  `stats` starts with the report's heading and stdout carries no Markdown;
+  and once on the Kartverket fixture under `needs_codecs` with
+  `--tolerance 1`: 464,290 triangles in the record, 0.7 s on the probe's
+  machine.
 - **T7 stdio round trip**: `Client(StdioServerParameters(sys.executable,
   ["-m", "tin_engine", "mcp"]))` lists the eight tools and calls `version`;
   the result's `stdout` has two lines and `exit_code` 0. Connect and
@@ -523,17 +618,27 @@ the point. Fixtures and their figures as measured in section 3.
   after a 1.0 s timeout, both transports); over stdio as well, since that is
   the transport the cancel notification travels on.
 - **T9 progress over stdio**: a fake child printing three stderr lines 0.2 s
-  apart gives three progress notifications with increasing `progress` and
-  the lines as messages; the heartbeat constant monkeypatched to 0.1 s on a
-  silent 0.5 s child gives at least three heartbeats; in process no token
-  arrives (the SDK's gap, measured) so the in-process case asserts only
-  that the run completes.
+  apart gives three progress notifications with the lines as messages; the
+  heartbeat constant monkeypatched to 0.1 s on a child that prints one line
+  at 0.25 s and exits at 0.6 s gives at least three `"running, N s"`
+  heartbeats around that line; over the whole sequence, lines and heartbeats
+  together in the order received, every `progress` is strictly greater than
+  the one before, each is within 0.05 s of the wall time since the call
+  began (so the value is elapsed seconds, not a count), and `total` is
+  absent. With jobs 1 and a first call holding the semaphore, the second
+  call's `"waiting for a running job, N s"` heartbeats and its later running
+  notifications form one strictly increasing sequence. In process no token
+  arrives (the SDK's gap, measured) so the in-process case asserts only that
+  the run completes.
 - **T10 jobs cap**: with jobs 1, two calls on a 0.5 s fake child complete
   in about 1 s with non-overlapping child intervals; with jobs 2 in about
   0.5 s.
 - **T11 `rasputin mcp` without the extra**: the import made to fail
-  (`monkeypatch.setitem(sys.modules, "mcp", None)`), exit 2 and the install
-  line; `rasputin --help` still lists `mcp`.
+  (`monkeypatch.setitem(sys.modules, "mcp", None)`, and
+  `monkeypatch.delitem(sys.modules, "tin_engine.mcp.server", raising=False)`
+  so an earlier test's import of the server does not satisfy the lazy
+  import), exit 2 and the install line; `rasputin --help` still lists
+  `mcp`.
 - **T12 layering**: the new rows (section 6.8) pass `test_layering.py`
   unchanged in rule; `test_the_table_names_every_module` sees `__main__`,
   `mcp`, `mcp.schema`, `mcp.server`.
@@ -547,11 +652,11 @@ README's sense (no topology); the one place a typo hides, the type table of
 | file | net lines (counted: Python, not tests or docs) |
 |---|---|
 | `src_python/tin_engine/mcp/schema.py` (type table, `DerivedCommand`, model, argv, `Tool`) | about 85 |
-| `src_python/tin_engine/mcp/server.py` (`RunResult`, child runner with progress, heartbeat and kill, result shaping, errors, semaphore, `serve()`) | about 140 |
+| `src_python/tin_engine/mcp/server.py` (`RunResult`, child runner with progress, heartbeat and kill, the sidecar names and their removal, the increasing-progress sender, result shaping, errors, semaphore, `serve()`) | about 150 |
 | `src_python/tin_engine/mcp/__init__.py`, `src_python/tin_engine/__main__.py` | 3 |
 | `src_python/tin_engine/cli.py`: the `mcp` command with `--jobs`, the lazy import and its refusal | about 20 |
 | `pyproject.toml`, `.github/workflows/main.yaml`, `README.md`, `test_layering.py` rows | 0 (not counted) |
-| total | about 250; with the +39 % worst case of increment 33, about 350: one PR, under 700 |
+| total | about 260 (250 before review round 1; the sidecar naming and the progress sender add about 10); with the +39 % worst case of increment 33, about 360: one PR, under 700 |
 
 Speed of existing commands: expected unchanged. The increment adds a
 command to the Typer app (registration at import, microseconds), a
@@ -577,4 +682,4 @@ a jobs cap by memory estimate rather than count.
 
 ## Review
 
-Design review round 1, 2026-10-12, @reviewer (`b4a81c0d..b990e38c`, 0 production lines, estimate 250 with worst case 350): CHANGES REQUESTED, three blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:382-386 and :450 say every output goes through `.part` and a rename; that holds for the GeoPackage only, `.vtk` and `.ply` are written with `target.write_bytes` (`src_python/tin_engine/cli.py@b4a81c0d:1241`) and `_writing` (:2121) wraps OSError, it does not rename; restate that a killed `.vtk`/`.ply` run can leave a truncated file under the asked name. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:354-357 and :255: with `out_parent` set, the server's temporary `--record`/`--stats` path is refused by `_destination` (`cli.py@b4a81c0d:442-445` via :1360), so every such `mesh` call exits 2; say where the temporary file goes (inside `out_parent`, or beside `out`) and add the case to T4-T6. (3) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:364-367 and :396-398: the heartbeat and "waiting" notifications carry no `progress` value, which the specification says MUST increase per notification; define it (elapsed seconds) and have T9 assert the increase across lines and heartbeats. Prose fixes for the same pass: :148 "1 of 81" is 2 (`draw` and `mesh` both have `snap_spacing`); :54 the timeout-reset quote is on the specification's Cancellation page, not Progress; :296 the `python` CI job (`main.yaml:261`) also installs `.[dev]`; :97 the server list now says 100. Suggestions: state that the server process writes nothing but JSON-RPC to its own stdout; T11 also drops `tin_engine.mcp.server` from `sys.modules`. Verified: every probe figure against the saved output; SDK 2.3.0 facts in a fresh venv (low-level `Server`, `jsonschema` only in the client session, no progress token on the direct dispatcher, no server-side Tasks, 13 non-Windows dependencies); the specification quotes, the legacy grep, check_citations, and the prohibited-deps scan of extras. Ideas for Ola's file: write every mesh output through `.part` plus rename in `cli.py`; `destructive_hint=False` while `--out` overwrites an existing mesh deserves a second look.
+Design review round 1, 2026-10-12, @reviewer (`b4a81c0d..b990e38c`, 0 production lines, estimate 250 with worst case 350): CHANGES REQUESTED, three blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:382-386 and :450 say every output goes through `.part` and a rename; that holds for the GeoPackage only, `.vtk` and `.ply` are written with `target.write_bytes` (`src_python/tin_engine/cli.py@b4a81c0d:1241`) and `_writing` (:2121) wraps OSError, it does not rename; restate that a killed `.vtk`/`.ply` run can leave a truncated file under the asked name. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:354-357 and :255: with `out_parent` set, the server's temporary `--record`/`--stats` path is refused by `_destination` (`src_python/tin_engine/cli.py@b4a81c0d:442-445` via :1360), so every such `mesh` call exits 2; say where the temporary file goes (inside `out_parent`, or beside `out`) and add the case to T4-T6. (3) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:364-367 and :396-398: the heartbeat and "waiting" notifications carry no `progress` value, which the specification says MUST increase per notification; define it (elapsed seconds) and have T9 assert the increase across lines and heartbeats. Prose fixes for the same pass: :148 "1 of 81" is 2 (`draw` and `mesh` both have `snap_spacing`); :54 the timeout-reset quote is on the specification's Cancellation page, not Progress; :296 the `python` CI job (`.github/workflows/main.yaml:261`) also installs `.[dev]`; :97 the server list now says 100. Suggestions: state that the server process writes nothing but JSON-RPC to its own stdout; T11 also drops `tin_engine.mcp.server` from `sys.modules`. Verified: every probe figure against the saved output; SDK 2.3.0 facts in a fresh venv (low-level `Server`, `jsonschema` only in the client session, no progress token on the direct dispatcher, no server-side Tasks, 13 non-Windows dependencies); the specification quotes, the legacy grep, check_citations, and the prohibited-deps scan of extras. Ideas for Ola's file: write every mesh output through `.part` plus rename in `cli.py`; `destructive_hint=False` while `--out` overwrites an existing mesh deserves a second look.
