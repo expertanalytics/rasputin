@@ -30,7 +30,7 @@ committed. Regenerate: `prepare`, then `run --level baro` and
 
 ## Method
 
-- **Code**: branch `worktree-se2-catchments` at `0355e898` (master `f09b9863`
+- **Code**: branch `worktree-se2-catchments` at `0355e898` (code-identical to master `f09b9863`
   plus the design commit; `src_python`, `bindings`, `include` and
   `CMakeLists.txt` unchanged from master). `rasputin version` 0.2.0.dev0;
   `_core` built from this tree by `tools/new_worktree.py --existing` on
@@ -141,7 +141,7 @@ Launched detached at 2026-10-12 16:37:16 UTC (18:37 CEST) by
    stop).
 
 At 16:37:57 UTC, 41 s in: 25 units landed, all `ok`, 25 `.gpkg` on disk,
-the largest units (190 to 500 km²) at 3.7 to 5.4 s each with three at once
+the largest units (190 to 500 km²) at 3.0 to 7.6 s each with three at once (23 of the first 25 within 3.7 to 5.4 s)
 (the design's probe: 4.2 s for a 250 km² unit alone), 1.6 s per unit of wall
 clock at the top of the size range. **Projection** (not a measurement): the
 median unit is 12 km² and 3.1 s alone in the probe, so about 1.1 s per unit

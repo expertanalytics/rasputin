@@ -1,6 +1,6 @@
 # Increment 39 — Six Swedish river systems: every SMHI sub-catchment meshed in one night
 
-Status: **designed** (`@architect`, 2026-10-12), branch `worktree-se2-catchments`
+Status: **built and running** (design `@architect` 2026-10-12; runner `d06a601a` by `@perf`; the 31 BARO areas meshed, 98,095 km², 6,149,260 triangles, 694 s, 0 refusals; the 5,338 finest units running detached from 16:37 UTC; review round 1 wordings applied; next the morning report and round 2), branch `worktree-se2-catchments`
 off master `5d2e706d`. No production code: a batch of `rasputin mesh` runs over
 SMHI's sub-catchment polygons, driven by a script under `docs/benchmarks/`, with
 a table and a map per river system by the morning of 2026-10-13.
@@ -209,7 +209,8 @@ increment borrows that shape for its script but adds nothing to the package.
 ### What is built
 
 No production line. Three files under `docs/benchmarks/2026-10-13/se2-catchments/`
-(the `docs/` exclusion of `CLAUDE.md` §2; not counted), written by `@developer`:
+(the `docs/` exclusion of `CLAUDE.md` §2; not counted), written by `@perf`, whose
+role owns `docs/benchmarks/<date>/`:
 
 1. `fetch_svar.py` — the SVAR download above (already run; committed with the
    design so the data's origin is in git).
@@ -322,7 +323,7 @@ quick check does not cover (its smallest case is a 10 m tile).
 0 counted lines. About 150 lines of script and 40 of fetch script under
 `docs/`, one README, four SVGs, two CSVs.
 
-## Questions for Ola, with defaults
+## Questions for Ola, with defaults (all ruled: Ola, 2026-10-12, "Yes to all, but thousands of sub-catchments is quite extensive"; every default below stands)
 
 1. **Vertical tolerance.** Default: 10 m, the Lagan quick-check case's value
    (ruled "yes to all" through the main session; recorded here so the number
@@ -345,3 +346,7 @@ quick check does not cover (its smallest case is a 10 m tile).
 recipe (`$RASPUTIN_DATA/lands/sweden/RECIPE.md`, sections 3 and 4) and
 `docs/benchmarks/quick/cases.toml` (the Lagan case). `@reviewer`: "Tests" and
 the README's claims, run. No `@tester` step: there is no red suite to write.
+
+## Review
+
+Round 1, 2026-10-12, @reviewer (`5d2e706d..d06a601a`, 0 counted lines; the runner 335 lines under `docs/` against about 190 estimated): CHANGES REQUESTED, four wordings, applied in this recording commit: /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/benchmarks/2026-10-13/se2-catchments/README.md@d06a601a:33 (the branch is master plus the design, "code-identical to master `f09b9863`"); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/increments/39-se2-catchments.md@0355e898:212 (the files are `@perf`'s, not `@developer`'s, rightly); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/increments/39-se2-catchments.md@0355e898:325-341 and /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/ROADMAP.md@d06a601a:61 (the five questions ruled "Yes to all" by Ola, 2026-10-12, and the BARO result recorded); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/benchmarks/2026-10-13/se2-catchments/README.md@d06a601a:144 (the first 25 units ran 3.0 to 7.6 s, 23 within 3.7 to 5.4). Verified by running: the SVAR counts, areas and sizes; 36 GLO-30 tiles from the whole-system polygons, 4 cached before today, none missing; the BARO README table equal to the CSV; three outputs opened; both ledgers pass the design's checks (fine: 663 rows, all ok); the runner's command equal to the Lagan case's; the licence quote verbatim; no name, company, person or deadline from the private document; prohibited deps and ruff clean; check_citations 46 at-risk lines, all ROADMAP rows 27 and 29. Suggestion for the morning: the README lists files that land only then; `report` runs on the BARO level now. Lesson: a runner's line estimate doubled uncounted; harmless under `docs/`.
