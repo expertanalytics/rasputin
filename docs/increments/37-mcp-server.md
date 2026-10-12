@@ -746,6 +746,16 @@ those strings; `dev` pulls `mcp>=2.3` instead (the main session's default).
 HEAD`): schema 98, server 204, cli 15, `__main__` 5; the design estimated
 260 with a worst case of 360. Under 700.
 
+**README** (`@architect`, code review round 1, blocker 1): section 6.8's
+"Connect an agent" section landed in `README.md` between "Output and
+viewing" and "How it is built" (`git log --oneline -1 -- README.md` names
+the commit), human reader first as Ola ruled on 2026-10-11, about 240 words
+of prose plus the Claude Desktop and Codex configuration blocks; every claim
+in it was checked against `server.py`, `schema.py`, the `mcp` subcommand and
+`pyproject.toml` at `730162fe`, the derived tool list in the worktree venv
+(eight tools, `fetch_stations` and `station_catchments` with underscores),
+and the two clients' own configuration pages.
+
 **Decided while Ola was away (defaults):** the nine design questions
 (section 10); the `dev` extra pulls `mcp` so the `python` CI job runs the
 suite; the `_destination` hint kept pending Ola's word.

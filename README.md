@@ -97,6 +97,48 @@ Both formats are binary by default; `--ascii` writes text you can read with
 `head`. Every mesh file records what it was made from, and stderr gets a
 one-line summary of the run.
 
+## Connect an agent
+
+An AI agent (Claude Desktop, Codex, or any other client of the Model
+Context Protocol, MCP) can drive rasputin through a small server built in.
+Install the `mcp` extra (the `dev` extra includes it):
+
+```sh
+pip install "rasputin[mcp]"
+```
+
+`rasputin mcp` then serves the commands over stdin and stdout. Point the
+client at the `rasputin` of the environment you installed into, or at
+`python -m tin_engine mcp` with that environment's `python`. Claude Desktop
+takes this in `claude_desktop_config.json` (on macOS under
+`~/Library/Application Support/Claude/`):
+
+```json
+{"mcpServers": {"rasputin": {"command": "/path/to/venv/bin/rasputin", "args": ["mcp"]}}}
+```
+
+Codex takes the same two fields in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.rasputin]
+command = "/path/to/venv/bin/rasputin"
+args = ["mcp"]
+```
+
+The agent sees one tool per rasputin command (`mesh`, `catchment`, `fetch`,
+`fetch_stations`, ...; the names use underscores), each with the command's
+options as its input schema, help text included, so an option added to the
+CLI is a new tool argument with no further work. A call returns the exit code,
+stdout and stderr, each output file as a `file://` link and, for `mesh`, the
+run record and the `--stats` report as data; the mesh itself never travels
+through the agent. A refused command comes back as an error carrying the
+CLI's own `Error:` words. During a long run the server reports every line the
+command prints and a heartbeat every 5 s while it is silent; cancelling the
+call kills the run. One call runs at a time unless `--jobs N` says more. One
+caveat: a `mesh` cancelled while writing a `.vtk` or `.ply` can leave a
+truncated file under the asked name, so rerun before reading it; a `.gpkg`
+goes through a `.part` file and a rename, so it cannot.
+
 ## How it is built
 
 - **A C++20 core** (`include/terrain/`, `src/`): exact geometric predicates,
