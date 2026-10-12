@@ -715,9 +715,11 @@ table once, compressed-row style:
   `land_cover_classes` (`unsigned_char`) and `land_cover_fractions`
   (`float`, a type the writer gains). A mesh with more than 2³² − 1 entries
   is refused (the basin at 1 m has about 0.3 G).
-- FieldData strings: `land_cover_codes` (16c's field; here "MapBiomas
-  Collection 11 class number; 0 = no data, and every constraint line"),
-  `land_cover_source` ("MapBiomas Collection 11, 2025"), and the licence
+- FieldData strings: `land_cover_codes` (16c's field; here "<source id>
+  class number; 0 = no data, and every constraint line", the source id being
+  `mapbiomas-c11`; as built, section 14), `land_cover_source` ("<source id>,
+  <year>", so "mapbiomas-c11, 2025"; the credit string still names
+  MapBiomas Collection 11), and the licence
   fields the data's owner requires, `land_cover_credit`,
   `land_cover_licence_note` and `land_cover_cite`, as 23a-2 wrote them for a
   downloaded DEM.
@@ -1624,9 +1626,11 @@ are the 2^32-entry refusal and `cli`'s `except` around `assign` for a mesh
 past the raster, both by design.
 
 **Size:** 621 net production lines against section 9's 420 and `@tester`'s
-450: `overlap.hpp` 231 against 150 (57 comment lines that the count keeps
-because they share a line with code, and the full-column shortcut, checked
-against GEOS) and `cli.py` 129 against 55 (the seven refusals). Under 700.
+450: `overlap.hpp` 231 against 150 (the file is 318 lines: 22 blank, 65
+comment-only, 2 with a trailing comment; the 231 counted are code, the
+refusal block, the sparse-table assembly and the full-column shortcut,
+checked against GEOS; `@reviewer`'s count) and `cli.py` 129 against 55 (the
+seven refusals). Under 700.
 
 **Decided while Ola was away (defaults):** no `@architect` freshness pass
 (none needed); the display-name question left to the code review; today's
@@ -1674,3 +1678,5 @@ the record goes into the as-built section; check `ps` for foreign load before an
 **Code review, round 1, 2026-10-11 (26a).** Range `de9b6c03..15a51ed6`, 163 net production lines, @reviewer: CHANGES REQUESTED, doc only, the code clean. Two stale phrases this branch made false: /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/docs/increments/26-land-cover.md@15a51ed6:8-9 ("Nothing is built. 26a is ready for @tester") and /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/ROADMAP.md@15a51ed6:53 ("26a ready for @tester"); both fixed in this recording commit. Sound: `_decode_into` (/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/src_python/tin_engine/io/cog.py@15a51ed6:185-203) is the original `put` closure verbatim, sparse-block refusal and edge clipping unchanged, so partial blocks and NoData behave as before (the quick check's byte-identical meshes agree); `decode_class_window` undoes the half-cell PixelIsArea shift correctly; `class_strips` floor/ceil gives cells whose interior meets the box; `credit_for` leaves ANADEM and GLO-30 unchanged; `fetched` kept on later runs; credit wording and CC BY-SA match the terms page and Ola's Q2 ruling; no prohibited dependency; 48 tests pass; no red scaffolding; check_citations at-risk lines drifted at base. Lesson: a Status paragraph with two statements of readiness drifts; keep one. Idea for 26b: `decode_class_window` does not check `meta.pixel_is_area`; a PixelIsPoint class raster would shift half a cell silently.
 
 **Code review, round 2, 2026-10-11 (26a).** Range `15a51ed6..7053d795`, 0 production lines, @reviewer: APPROVED. Both stale phrases gone; the replacement at /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/docs/increments/26-land-cover.md@7053d795:8-9 agrees with the Status line and section 13 (@7053d795:1482); ROADMAP row 26 (/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26a/ROADMAP.md@7053d795:53) reads consistently; the round-1 record matches; check_citations exit 0. Not pushed, no CI yet: CI must be green after the push.
+
+**Code review, round 1, 2026-10-12 (26b).** Range `5f28292c..99441a97`, 621 net production lines (under 700), @reviewer: CHANGES REQUESTED, doc only, the code clean; the three fixes applied in this recording commit. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26b/docs/increments/26-land-cover.md@99441a97:1626-1629 said the `overlap.hpp` overrun was 57 comment lines the count keeps; false (318 lines: 22 blank, 65 comment-only, 2 trailing comments; the 231 are code), restated. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26b/project_structure.md@99441a97:283-292 said `ply.py` and `vtk_legacy.py` import features and mesh_checks (now models too) and had no row for `include/terrain/land_cover/overlap.hpp` or `land_cover_fractions.py`; rows and import lists added. (3) /Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26b/docs/increments/26-land-cover.md@99441a97:718-720 wrote "MapBiomas Collection 11" in the two FieldData strings; amended to the source id, pointing to section 14. Verified: red scaffolding gone; green touches no test; `_core` sees arrays only; `overlap.hpp`'s canonical crossings, full-column shortcut and per-block assembly match 1.2; writers, `_core.pyi`, CLI refusals and section 8 rows match; `@perf`'s README figures agree with `raw/`; the at-risk citations are review records pinned to their own ranges or still true. Pins accepted: the source id in the two strings; the `threads` keyword, the closed window, either orientation. Ideas (for Ola's file): `cli.py` line 1398 duplicates `fetch/run.py` line 107's object-id derivation; `class_areas` does not refuse `row_area <= 0`. Lesson: a size explanation in an as-built record needs the grep that supports it. Guard false positive: a read-only heredoc running `tools/check_citations.py` was refused as a write to it.
