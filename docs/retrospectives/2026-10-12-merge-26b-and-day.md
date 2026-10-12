@@ -415,7 +415,7 @@ two merges also date this file: its title and sections 1 and 3 are as of
 
 One finding from running the gate on this record. `python3
 tools/check_citations.py` was green before and after the six cites above
-were planted wrong (`@1d3fb3b6:9135` in a 410-line file): its `PATH`
+were planted wrong (`@1d3fb3b6:9135` in a 353-line revision): its `PATH`
 pattern starts with `(?!/)` and its comment says a token starting with `/`
 is "never a citation" (`tools/check_citations.py@c317c7e4:62-64`). A
 relative cite planted wrong the same way (the hook cite in lesson 7 with
@@ -425,3 +425,5 @@ the gate at all; "every cite resolves" is true only of the relative ones.
 On `c317c7e4`, 251 such cites in 20 files under `docs/` (`git grep -o
 '/Users/skavhaug/projects/rasputin/[^ \`]*@[0-9a-f]\{7,\}:[0-9][0-9-]*'
 c317c7e4 -- docs/`) have never been checked. Proposal P11 in the handback.
+
+Round 2, 2026-10-12, @reviewer (`1d3fb3b6..49dc4ddd`): CHANGES REQUESTED, one line, applied in this recording commit as specified: /Users/skavhaug/projects/rasputin/.claude/worktrees/post-merge-1012b/docs/retrospectives/2026-10-12-merge-26b-and-day.md@49dc4ddd:418 said "a 410-line file"; the file at `1d3fb3b6` has 353 lines, so "a 353-line revision". The six round-1 wordings verified against their sources; the grep counts hold; the 251 absolute cites in 20 files confirmed, and planting a broken absolute and a broken relative cite in a scratch copy reproduced the skip (absolute silent, relative caught). Ideas for the owner at the next touch: cite `tools/check_citations.py@c317c7e4:62-65` (the pattern is line 65); "2 h 23" is 2 h 22 to the second; the pipefail lesson belongs in the lesson list; the fix should strip the worktree prefix, since the review records require full paths, and expect the 251 newly checked cites to yield a tally. Pushed on the reviewer's wording without a third round (the recording-commit practice, asked of Ola 2026-10-12, default yes).
