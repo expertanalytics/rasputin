@@ -59,7 +59,14 @@ codecs = ["imagecodecs>=2024.1"]
 # the wheels are 100-140 MB. It carries no GDAL reader (13-bundled-mesh.md,
 # "Dependency facts"). CI installs it in its own step.
 viewer = ["vtk>=9.3"]
+# `rasputin mcp` (increment 37): the official Model Context Protocol SDK, MIT,
+# 13 pure-Python dependencies, none on CLAUDE.md section 2's list. Without it
+# the command refuses with an install line; every other command is unchanged.
+# `dev` pulls it so the suite's MCP tests run wherever the suite does (CI
+# installs `.[dev]`); without it they skip.
+mcp = ["mcp>=2.3"]
 dev = [
+    "mcp>=2.3",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.1",

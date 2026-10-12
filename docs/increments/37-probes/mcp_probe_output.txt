@@ -1,0 +1,66 @@
+probe /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-probes/mcp_probe.py
+python 3.14.7, mcp 2.3.0, typer 0.27.3, pydantic 2.14.1
+Now drawing from 'AC Power'
+A tools listed: ['catchment', 'draw', 'fetch', 'fetch_stations', 'mesh', 'palette', 'slow', 'station_catchments', 'version']; protocol 2026-07-28
+A palette input_schema:
+{
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "name": {
+   "description": "The palette: corine.",
+   "title": "Name",
+   "type": "string"
+  },
+  "out": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "description": "Write the preset here, not to stdout.",
+   "title": "Out"
+  }
+ },
+ "required": [
+  "name"
+ ]
+}
+A mesh: 34 properties, required ['out'], additionalProperties False, 8269 bytes
+A mesh.bbox: {"anyOf": [{"maxItems": 4, "minItems": 4, "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}, {"type": "number"}], "type": "array"}, {"type": "null"}], "default": null, "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, snapped outward to its nodes.", "title": "Bbox"}
+A mesh.tolerance_near: {"anyOf": [{"maxItems": 2, "minItems": 2, "prefixItems": [{"type": "string"}, {"type": "number"}], "type": "array"}, {"type": "null"}], "default": null, "description": "Hold the mesh to N metres on these lines (.geojson, .gpkg or .gml). Needs --tolerance-ramp.", "title": "Tolerance Near"}
+A mesh.binary: {"default": true, "description": "Binary files, small and fast; --ascii writes text you can read.", "title": "Binary", "type": "boolean"}
+A mesh.features: {"anyOf": [{"items": {"type": "string"}, "type": "array"}, {"type": "null"}], "default": null, "description": "With --domain, polygons and lines as constraints (.geojson, .json, .gpkg or .gml), clipped to the domain, each edge carrying its class map's bits. Repeatable: each --features is one source, paired by position with the Nth of --features-crs, --features-layer and --features-map.", "title": "Features"}
+A mesh.snap_spacing: {"default": 0.001, "description": "Snap grid spacing for the noder, in the input's units.", "title": "Snap Spacing", "type": "number"}
+A fetch.connections: {"default": 8, "description": "", "minimum": 1, "title": "Connections", "type": "integer"}
+A all schemas: 16575 bytes
+A note draw: snap_spacing: callback _snap_spacing stays in the child
+A note mesh: snap_spacing: callback _snap_spacing stays in the child
+B refused (no out): is_error=True structured={'exit_code': None, 'error': 'out: Field required'}
+B refused (bad dem): is_error=True structured={'exit_code': 2, 'error': 'exit 2: Invalid value for --dem: cannot read /nonexistent.tif: No such file or directory'}
+B wrong type: is_error=True text='name: Input should be a valid string'
+B unknown argument: is_error=True text='bogus: Extra inputs are not permitted'
+B wrong type nested: is_error=True text='tolerance: Input should be a valid number, unable to parse string as a number'
+B unknown tool: client raised MCPError: Unknown tool: nosuch
+B palette corine: is_error=False, exit 0, 239 stdout lines, 0.26 s, error None
+C in-process: client raised MCPError after 1.00 s
+C in-process: child sleep pid 41644 dead
+D two concurrent version calls: 0.29 s, exits 0, 0
+E in-process round trip, version tool: median 0.261 s max 0.265
+E mesh through the tool: is_error=False, child 0.715 s, outputs ['/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp063_dw0p/tool.vtk'], record keys 38, stderr lines 1, progress ticks 0, text block 1958 chars
+E mesh stderr lines: ['464290 triangles. Every DEM node inside the mesh is within 1 m of it (largest difference 0.99998 m). 199 vertices on NoData cells were removed with their triangles.']
+E mesh record sample: {"rasputin_version": "unknown (rasputin is not installed)", "command": "-c mesh --out /var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp063_dw0p/tool.vtk --dem /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/tests/fixtures/dem_archive/7908_3_10m_z33.tif --tolerance 1.0 --record /var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmpyypcqotq.json", "dem_grid": "5051 columns x 5051 rows, 10 m apart", "dem_vertical_unit": "metres", "start_mesh": "every 40th DEM node", "start_min_angle_deg": 25.0}
+E stdio: connect+initialize 0.465 s, 9 tools, version round trip median 0.264 s max 0.277
+C stdio: client raised MCPError after 1.00 s
+C stdio: child sleep pid 41935 dead
+E stdio mesh through the tool: is_error=False, child 0.719 s, progress ticks 1 ['464290 triangles. Every DEM node inside the mesh is within 1 m of it (largest difference 0.99998 m). 199 vertices on NoData cells were removed with their triangles.'], outputs 1, record keys 38
+E python -c pass: median 0.019 s max 0.020
+E import tin_engine.cli: median 0.247 s max 0.249
+E import mcp (server+client): median 0.399 s max 0.401
+E rasputin version (subprocess): median 0.262 s max 0.266
+E rasputin version (in-process CliRunner): median 0.0107 s max 0.0120
+E rasputin mesh 7908_3 --tolerance 1 (subprocess): median 0.72 s of [0.72, 0.72, 0.72]; stdout ['/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp063_dw0p/m.vtk', '/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp063_dw0p/r.json']; stderr 1 lines; record 1583 bytes, 38 keys; mesh 16.9 MB

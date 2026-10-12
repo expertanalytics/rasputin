@@ -95,10 +95,12 @@ LAYERS: tuple[dict[str, str], ...] = (
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_checks io.models io.ply io.repository io.rivers"
                " io.station_set"
-               " io.vtk_legacy land_cover_fractions landcover mosaic palettes raster run_record"
-               " sources stats"
-               " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
-               " viz.style viz.svg",
+               " io.vtk_legacy land_cover_fractions landcover mcp.server mosaic palettes raster"
+               " run_record sources stats target_grid tin_engine tolerance_field viz.fixtures"
+               " viz.protocols viz.scene viz.style viz.svg",
+        "__main__": "cli",  # 37: `python -m tin_engine`, the server's child
+        "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
+        "mcp.server": "mcp.schema tin_engine",
     },
 )
 # fmt: on
