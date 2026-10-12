@@ -41,8 +41,9 @@ LAYERS: tuple[dict[str, str], ...] = (
         "grid_domain": "io.models",
         "domain": "crs io.models",
         "chains": "domain features",
-        "elevation": "", "outline": "", "sensitivity": "", "landcover": "", "decompose": "",
+        "elevation": "", "outline": "", "sensitivity": "", "landcover": "",
         "grow": "",  # 30d: the outline grown, shapely and NumPy only
+        "resources": "",  # 38: the one module that reads the machine; os and Pydantic only
         "burn": "gauge io.models",
         "gauge": "hydrography",
         "reference": "io.models",

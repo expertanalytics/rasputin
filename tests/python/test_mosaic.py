@@ -88,13 +88,18 @@ def footprint() -> Any:
 
 @pytest.fixture
 def plan(mz: ModuleType, footprint: Any) -> Any:
-    """`plan(tiles, box=None, needed=None)`: plan a dict of tiles; `box` is a 4-tuple."""
+    """`plan(tiles, box=None, needed=None, memory_budget=None)`: plan a dict of
+    tiles; `box` is a 4-tuple; the budget is passed only when given (38)."""
 
     def run(
-        tiles: dict[str, DemTile], box: tuple[float, ...] | None = None, needed: Any = None
+        tiles: dict[str, DemTile],
+        box: tuple[float, ...] | None = None,
+        needed: Any = None,
+        memory_budget: int | None = None,
     ) -> Any:
         bounds = None if box is None else bounds_of(mz, box)
-        return mz.plan_mosaic(footprints(footprint, tiles), bounds, needed)
+        extra = {} if memory_budget is None else {"memory_budget": memory_budget}
+        return mz.plan_mosaic(footprints(footprint, tiles), bounds, needed, **extra)
 
     return run
 
@@ -655,51 +660,43 @@ class TestM4Bounds:
 
 
 class TestM5MemoryCap:
-    """M5, changed for 15a (R7): the cap is half of physical memory, from a function."""
+    """M5, changed for 15a (R7) and again for increment 38 (section 4.3): the
+    cap is the memory budget, `plan_mosaic(..., memory_budget=)`, None being
+    half the machine's memory (`Resources.fallback()`; the machine read is
+    `test_resources.py`'s). The refusal names `--memory-budget` and `--bbox`."""
 
     NODES = 9 * 13
 
-    def test_physical_memory_is_the_machines(self, mz: ModuleType) -> None:
-        import os
-
-        pages = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-        assert mz.physical_memory() == pages
-
-    @pytest.mark.parametrize(
-        ("memory", "accepted"), [(2 * NODES * 4, True), (2 * NODES * 4 - 1, False)]
-    )
+    @pytest.mark.parametrize(("budget", "accepted"), [(NODES * 4, True), (NODES * 4 - 1, False)])
     def test_the_boundary_at_four_bytes_a_node(
-        self,
-        mz: ModuleType,
-        plan: Any,
-        refused: Any,
-        monkeypatch: pytest.MonkeyPatch,
-        memory: int,
-        accepted: bool,
+        self, mz: ModuleType, plan: Any, refused: Any, budget: int, accepted: bool
     ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         if accepted:
-            assert plan(tiles).meta.rows == 9
+            assert plan(tiles, memory_budget=budget).meta.rows == 9
         else:
-            refused(lambda: plan(tiles), "--bbox")
+            refused(lambda: plan(tiles, memory_budget=budget), "--bbox", "--memory-budget")
 
-    @pytest.mark.parametrize(
-        ("memory", "accepted"), [(2 * NODES * 8, True), (2 * NODES * 8 - 1, False)]
-    )
+    def test_one_byte_refuses_the_lattice_naming_the_option_and_the_figures(
+        self, plan: Any, refused: Any
+    ) -> None:
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        message = refused(lambda: plan(tiles, memory_budget=1), "--memory-budget", "9 x 13")
+        names_number(message, self.NODES * 4)
+        names_number(message, 1)
+
+    def test_without_a_budget_the_lattice_is_planned(self, plan: Any) -> None:
+        """None is the fallback, half the machine's memory: 468 bytes pass."""
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        assert plan(tiles).meta.rows == 9
+
+    @pytest.mark.parametrize(("budget", "accepted"), [(NODES * 8, True), (NODES * 8 - 1, False)])
     def test_the_boundary_at_eight_bytes_a_node_when_a_selected_tile_decodes_to_float64(
-        self,
-        mz: ModuleType,
-        footprint: Any,
-        refused: Any,
-        monkeypatch: pytest.MonkeyPatch,
-        memory: int,
-        accepted: bool,
+        self, mz: ModuleType, footprint: Any, refused: Any, budget: int, accepted: bool
     ) -> None:
         """S2: the cap counts the planned decoded dtype, `np.result_type` of the
         selected footprints' `dtype`. One float64 tile makes the canvas float64
         (R5), so the window costs 8 bytes a node, not 4."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -707,17 +704,16 @@ class TestM5MemoryCap:
             else footprint(name=name, meta=tile.meta)
             for name, tile in tiles.items()
         ]
-        call = lambda: mz.plan_mosaic(prints, None, None)  # noqa: E731
+        call = lambda: mz.plan_mosaic(prints, None, None, memory_budget=budget)  # noqa: E731
         if accepted:
             assert call().meta.rows == 9
         else:
             refused(call, "--bbox", "float64")
 
     def test_a_float64_tile_outside_the_window_does_not_count(
-        self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch
+        self, mz: ModuleType, footprint: Any
     ) -> None:
         """Only the selected tiles decode, so only their dtypes size the canvas."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -726,7 +722,8 @@ class TestM5MemoryCap:
             for name, tile in tiles.items()
         ]
         box = bounds_of(mz, (500012.0, 6599987.0, 500033.0, 6599996.0))  # 4 x 4, nw alone
-        assert [p.name for p in mz.plan_mosaic(prints, box, None).tiles] == ["nw.tif"]
+        planned = mz.plan_mosaic(prints, box, None, memory_budget=16 * 4)
+        assert [p.name for p in planned.tiles] == ["nw.tif"]
 
     def test_a_footprints_dtype_defaults_to_float32(self, footprint: Any) -> None:
         """S2: `TileFootprint` gains an optional decoded `dtype`, float32 unless given."""
@@ -735,12 +732,10 @@ class TestM5MemoryCap:
         given = footprint(name="a.tif", meta=tile.meta, dtype=np.dtype(np.float64))
         assert np.dtype(given.dtype) == np.float64
 
-    def test_the_cap_is_on_the_window_not_the_union(
-        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4)
+    def test_the_cap_is_on_the_window_not_the_union(self, plan: Any) -> None:
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
-        assert plan(tiles, (500012.0, 6599987.0, 500033.0, 6599996.0)).meta.cols == 4
+        box = (500012.0, 6599987.0, 500033.0, 6599996.0)
+        assert plan(tiles, box, memory_budget=16 * 4).meta.cols == 4
 
 
 class TestM6PlanOrderIndependence:

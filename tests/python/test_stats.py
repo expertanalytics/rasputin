@@ -34,9 +34,11 @@ Names the design leaves open, chosen here (the tests are their statement):
   is omitted (R4). Spacing prints once when dx == dy, else ``dx × dy``. File
   sizes are decimal: B, kB, MB, GB, one decimal above bytes.
 - ``Report(command, sizes, quality, phases, total, stats_seconds,
-  bounds_checks, threads=None, seams=())``. ``threads`` is the design's "Threads: 10 (hardware
-  concurrency)" sentence, which R1's list of Report fields does not carry;
-  printed only when not None. ``bounds_checks`` (increment 24, required) is the
+  bounds_checks, threads=None, seams=())``. ``threads`` is the count the run
+  used, printed as "Threads used: 10." (increment 38, Ola's ruling 4; it was
+  "Threads: 10 (hardware concurrency)", which named the machine, not the
+  run), which R1's list of Report fields does not carry; printed only when
+  not None. ``bounds_checks`` (increment 24, required) is the
   text after ``bounds checks: `` -- ``off`` or ``on (<mode>)`` -- and prints as
   its own paragraph between the command line and ``## Sizes``. A phase named ``"<parent>: ..."`` where
   ``<parent>`` is an earlier phase is a sub-row: listed, not added to the
@@ -243,7 +245,7 @@ bounds checks: on (libc++ fast)
 Wall clock, `time.perf_counter_ns` (Python) and `std::chrono::steady_clock`
 (inside `refine`), one run, no warm-up. Total is the `mesh` command body, from
 argument checks to the last file written; interpreter start-up and imports are
-not in it. Threads: 10 (hardware concurrency).
+not in it. Threads used: 10.
 
 | phase | seconds | share |
 |---|---|---|
@@ -367,7 +369,7 @@ class TestRender:
             "domain vertices",
             "start vertices",
             "without data dropped",
-            "Threads:",
+            "Threads",
             "Sub-rows",
         ):
             assert absent not in text, absent
@@ -375,6 +377,14 @@ class TestRender:
         assert sections == ["## Sizes", "## Quality (plan view, x/y)", "## Timings"]
         assert "| c.ply | 2.0 kB |" in text
         assert "| c-edges.ply | 999 B |" in text
+
+    def test_t12_the_threads_row_is_the_count_used(self, stats: ModuleType, quarter: Any) -> None:
+        """Increment 38, T12: "Threads used: N." and never the machine's figure."""
+        import dataclasses
+
+        text = stats.render(dataclasses.replace(quarter, threads=3))
+        assert "Threads used: 3." in text
+        assert "hardware concurrency" not in text and "Threads: " not in text
 
     def test_other_is_total_minus_the_top_level_rows(
         self, stats: ModuleType, fixture_report: Any

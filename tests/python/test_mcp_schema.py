@@ -317,6 +317,26 @@ class TestTheRealApp:
             "type": "integer", "minimum": 1, "default": 8,
         }  # fmt: skip
 
+    def test_t9_threads_and_memory_budget_derive_from_the_cli(self) -> None:
+        """Increment 38, T9: the two options reach the `mesh`, `catchment` and
+        `station_catchments` tools through the derived schema, with no change
+        to `mcp/`; `argv` puts them on the command line as the CLI's words."""
+        tools = derived(app)
+        for name in ("mesh", "catchment", "station_catchments"):
+            properties = tools[name].tool().input_schema["properties"]
+            threads, budget = properties["threads"], properties["memory_budget"]
+            assert threads["default"] is None, name
+            assert {"type": "integer", "minimum": 0} in threads["anyOf"], name
+            assert {"type": "null"} in threads["anyOf"], name
+            assert budget["default"] is None and {"type": "string"} in budget["anyOf"], name
+        mesh = tools["mesh"]
+        with_threads = mesh.model.model_validate({"out": "x.vtk", "threads": 3})
+        assert mesh.argv(with_threads)[-2:] == ["--threads", "3"]
+        with_budget = mesh.model.model_validate({"out": "x.vtk", "memory_budget": "8G"})
+        assert mesh.argv(with_budget)[-2:] == ["--memory-budget", "8G"]
+        with pytest.raises(ValidationError):
+            mesh.model.model_validate({"out": "x.vtk", "threads": -1})
+
     def test_the_whole_tool_list_stays_small(self) -> None:
         # 16,575 bytes measured (section 3); the bound leaves room for help text to grow.
         size = sum(len(json.dumps(d.tool().input_schema)) for d in mcp_schema.derive(app))
