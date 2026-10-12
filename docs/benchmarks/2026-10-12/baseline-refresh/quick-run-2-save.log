@@ -1,0 +1,37 @@
+# run 2 (--save-baseline), 2026-10-12 15:30:37 +0200
+## pmset before
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime
+15:30  up 13 days,  4:36, 4 users, load averages: 3.02 3.43 4.32
+SLOWER: tile t=1 total 0.70 -> 0.79 s (+12.8 %, band 5.0 %)
+SLOWER: tile t=1 refine 0.47 -> 0.54 s (+15.5 %, band 5.0 %)
+SLOWER: tile t=1 refine: scan (parallel) 0.35 -> 0.40 s (+14.3 %, band 5.0 %)
+SLOWER: numedalslagen total 8.83 -> 9.34 s (+5.8 %, band 5.0 %)
+SLOWER: numedalslagen decode 0.92 -> 0.99 s (+7.1 %, band 5.0 %)
+SLOWER: numedalslagen features clip 6.00 -> 6.34 s (+5.7 %, band 5.0 %)
+SLOWER: numedalslagen features clip: clean-up 5.94 -> 6.28 s (+5.7 %, band 5.0 %)
+SLOWER: numedalslagen refine 0.66 -> 0.72 s (+9.1 %, band 5.0 %)
+SLOWER: lagan total 14.54 -> 15.48 s (+6.5 %, band 5.0 %)
+SLOWER: lagan features read 0.92 -> 1.09 s (+18.7 %, band 5.5 %)
+SLOWER: lagan features clip 6.34 -> 6.74 s (+6.2 %, band 5.0 %)
+SLOWER: lagan features clip: clean-up 5.39 -> 5.73 s (+6.2 %, band 5.0 %)
+SLOWER: romsdal-slope total 3.58 -> 3.88 s (+8.3 %, band 5.0 %)
+SLOWER: romsdal-slope refine 2.01 -> 2.24 s (+11.4 %, band 5.0 %)
+SLOWER: romsdal-slope refine: scan (parallel) 0.56 -> 0.63 s (+10.9 %, band 5.0 %)
+SLOWER: romsdal-slope refine: split + flip (serial) 1.18 -> 1.34 s (+12.9 %, band 5.0 %)
+HOTSPOT: tile refine 44 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 69 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 51 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 44 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 58 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/baseline-1012/docs/benchmarks/quick/baseline-ac.json
+SLOWER
+exit 1
+## pmset after
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime after
+15:32  up 13 days,  4:39, 4 users, load averages: 4.51 3.69 4.27
