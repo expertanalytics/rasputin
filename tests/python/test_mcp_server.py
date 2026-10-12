@@ -40,12 +40,12 @@ from mcp_driver import (
     option_value,
     overlap,
     resource_links,
-    server_module,
     structured,
     text_block,
     wait_until_dead,
 )
 from tin_engine.cli import app
+from tin_engine.mcp import server as mcp_server
 from tin_engine.run_record import WORDING
 from vtkread import read_vtk
 
@@ -57,7 +57,7 @@ def build() -> Build:
     """`build_server` on the real app; ``child`` and ``jobs`` as the test says."""
 
     def _build(**options: Any) -> Any:
-        return server_module().build_server(app, **options)
+        return mcp_server.build_server(app, **options)
 
     return _build
 
@@ -198,6 +198,38 @@ class TestRefusalMapping:
         assert result.is_error
         body = structured(result)
         assert (body["exit_code"], body["error"]) == (1, "exit 1: the catalogue is unreachable")
+
+    async def test_progress_lines_before_the_error_line_stay_out_of_error(
+        self, tmp_path: Path, build: Build
+    ) -> None:
+        """A `fetch` failing mid-run prints its progress first (`cli.py`, the ``bytes`` lines,
+        then the ``Error:`` line); `error` carries the ``Error:`` line's words, `stderr` all."""
+        lines = ["1,000 of 2,000 bytes", "2,000 of 2,000 bytes", "Error: no route to the catalogue"]
+        server = build(child=fake_child(tmp_path, stderr=[[0, line] for line in lines], exit=1))
+        result = await call(server, "fetch", {"source": "glo30"})
+        assert result.is_error
+        body = structured(result)
+        assert (body["exit_code"], body["error"]) == (1, "exit 1: no route to the catalogue")
+        assert body["stderr"] == lines
+
+    async def test_without_an_error_line_every_line_but_the_usage_reminder_is_kept(
+        self, tmp_path: Path, build: Build
+    ) -> None:
+        """The fallback: a child that dies without an ``Error:`` line (a traceback, an
+        ``Aborted!``) still has its words in `error`, less ``Usage:`` and ``Try ...``."""
+        lines = [
+            "Usage: rasputin fetch [OPTIONS] {source}",
+            "Try 'rasputin fetch --help' for help.",
+            "",
+            "1,000 of 2,000 bytes",
+            "Aborted!",
+        ]
+        server = build(child=fake_child(tmp_path, stderr=[[0, line] for line in lines], exit=1))
+        result = await call(server, "fetch", {"source": "glo30"})
+        assert result.is_error
+        body = structured(result)
+        assert (body["exit_code"], body["error"]) == (1, "exit 1: 1,000 of 2,000 bytes Aborted!")
+        assert body["stderr"] == lines
 
     async def test_a_signal_is_named(self, tmp_path: Path, build: Build) -> None:
         server = build(child=fake_child(tmp_path, signal=15))

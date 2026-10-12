@@ -26,8 +26,9 @@ pytest.importorskip("mcp")
 import typer
 from pydantic import ValidationError
 
-from mcp_driver import schema_module, tool_names
+from mcp_driver import tool_names
 from tin_engine.cli import app
+from tin_engine.mcp import schema as mcp_schema
 
 # ---------------------------------------------------------------- the toy app
 
@@ -122,7 +123,7 @@ def without_titles(properties: dict[str, dict[str, Any]]) -> dict[str, dict[str,
 
 def derived(application: typer.Typer) -> dict[str, Any]:
     """`derive(app)` by tool name."""
-    return {d.tool_name: d for d in schema_module().derive(application)}
+    return {d.tool_name: d for d in mcp_schema.derive(application)}
 
 
 def click_command(application: typer.Typer, tool_name: str) -> Any:
@@ -315,7 +316,7 @@ class TestTheRealApp:
 
     def test_the_whole_tool_list_stays_small(self) -> None:
         # 16,575 bytes measured (section 3); the bound leaves room for help text to grow.
-        size = sum(len(json.dumps(d.tool().input_schema)) for d in schema_module().derive(app))
+        size = sum(len(json.dumps(d.tool().input_schema)) for d in mcp_schema.derive(app))
         assert size < 20_000, size
 
     def test_descriptions_and_annotations(self) -> None:
@@ -333,7 +334,7 @@ class TestTheRealApp:
             assert tool.annotations is not None and tool.annotations.destructive_hint is False, name
 
     def test_every_tool_declares_the_run_result_as_its_output(self) -> None:
-        for d in schema_module().derive(app):
+        for d in mcp_schema.derive(app):
             output = d.tool().output_schema
             assert output is not None, d.tool_name
             assert set(output["properties"]) >= RUN_RESULT_FIELDS, d.tool_name

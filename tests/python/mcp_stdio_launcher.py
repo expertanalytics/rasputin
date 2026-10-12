@@ -28,14 +28,11 @@ from pathlib import Path
 import anyio
 from mcp.server.stdio import stdio_server
 
+from tin_engine.cli import app
+from tin_engine.mcp import server as server_module
+
 
 async def main(config: dict[str, object]) -> None:
-    # Imported here, not at the top: `tin_engine.mcp` does not exist until the
-    # increment is built, and the import sorter would class it differently before and after.
-    from tin_engine.mcp import server as server_module
-
-    from tin_engine.cli import app
-
     if "heartbeat" in config:
         server_module.HEARTBEAT_SECONDS = float(config["heartbeat"])
     options: dict[str, object] = {"jobs": config.get("jobs", 1)}

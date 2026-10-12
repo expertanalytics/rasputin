@@ -6,10 +6,7 @@ other, so no test module is a helper library for another.
 
 The server under test is `tin_engine.mcp.server.build_server(app, *, jobs,
 child)`, where ``child`` is the argv prefix the server runs a command with
-(production: ``[sys.executable, "-m", "tin_engine"]``). The two modules are
-imported inside the fixtures, not at the top, so that before the increment is
-built every test fails by itself on the missing module rather than the file
-failing to collect.
+(production: ``[sys.executable, "-m", "tin_engine"]``).
 
 In process, the SDK's `Client(server)` connects without a transport; it
 carries no progress token (section 2, measured), so progress is asserted over
@@ -26,10 +23,8 @@ import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from importlib import import_module
 from itertools import pairwise
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import anyio
@@ -55,16 +50,6 @@ STATS_SIDECAR = re.compile(r"^\.(?P<out>.+)\.stats-[0-9a-f]{8}\.md$")
 #: (section 6.5); the heartbeat says so in words.
 RUNNING = re.compile(r"^running, [0-9.]+ s$")
 WAITING = re.compile(r"^waiting for a running job, [0-9.]+ s$")
-
-
-def schema_module() -> ModuleType:
-    """`tin_engine.mcp.schema`, imported when a test asks for it."""
-    return import_module("tin_engine.mcp.schema")
-
-
-def server_module() -> ModuleType:
-    """`tin_engine.mcp.server`, imported when a test asks for it."""
-    return import_module("tin_engine.mcp.server")
 
 
 def tool_names(app: Any) -> list[str]:
