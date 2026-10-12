@@ -1,6 +1,6 @@
 # Increment 39 — Six Swedish river systems: every SMHI sub-catchment meshed in one night
 
-Status: **built and running** (design `@architect` 2026-10-12; runner `d06a601a` by `@perf`; the 31 BARO areas meshed, 98,095 km², 6,149,260 triangles, 694 s, 0 refusals; the 5,338 finest units running detached from 16:37 UTC; review round 1 wordings applied; next the morning report and round 2), branch `worktree-se2-catchments`
+Status: **built, the batch done** (design `@architect` 2026-10-12; runner `d06a601a` by `@perf`; finished 2026-10-12 18:05:23 UTC: 5,338 finest units, 31 BARO areas and 4 whole systems, 0 refusals, every max error under 10 m; record `51303179`; review rounds 1 and 2 recorded; next the push on Ola's yes), branch `worktree-se2-catchments`
 off master `5d2e706d`. No production code: a batch of `rasputin mesh` runs over
 SMHI's sub-catchment polygons, driven by a script under `docs/benchmarks/`, with
 a table and a map per river system by the morning of 2026-10-13.
@@ -293,7 +293,7 @@ way the README records `rasputin version` and the commit.
 2. `run --level baro` (about 20 min): 31 meshes, `.gpkg` and `.vtk`.
 3. `run --level fine --jobs 3` (about 2 to 5 h): 5,338 meshes, `.gpkg` only.
 4. `report`, then the README by hand; the SVGs and the two CSVs are
-   committed with it (about 1 MB; the `.gpkg` files, about 5 GB in all, stay
+   committed with it (6.8 MB as built, twelve SVGs and three CSVs, within the size of other dated benchmark folders; the `.gpkg` files, about 5 GB in all, stay
    in scratch).
 5. If time remains: one mesh per whole system from the `huvud_*` polygons,
    `.vtk` and `.gpkg`, on Lagan's scaling (6,441 km² in 112 s) about 10 min
@@ -321,7 +321,7 @@ quick check does not cover (its smallest case is a 10 m tile).
 ### Estimate
 
 0 counted lines. About 150 lines of script and 40 of fetch script under
-`docs/`, one README, four SVGs, two CSVs.
+`docs/`, one README, twelve SVGs and three CSVs as built (the runner came to 335 lines).
 
 ## Questions for Ola, with defaults (all ruled: Ola, 2026-10-12, "Yes to all, but thousands of sub-catchments is quite extensive"; every default below stands)
 
@@ -350,3 +350,5 @@ the README's claims, run. No `@tester` step: there is no red suite to write.
 ## Review
 
 Round 1, 2026-10-12, @reviewer (`5d2e706d..d06a601a`, 0 counted lines; the runner 335 lines under `docs/` against about 190 estimated): CHANGES REQUESTED, four wordings, applied in this recording commit: /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/benchmarks/2026-10-13/se2-catchments/README.md@d06a601a:33 (the branch is master plus the design, "code-identical to master `f09b9863`"); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/increments/39-se2-catchments.md@0355e898:212 (the files are `@perf`'s, not `@developer`'s, rightly); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/increments/39-se2-catchments.md@0355e898:325-341 and /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/ROADMAP.md@d06a601a:61 (the five questions ruled "Yes to all" by Ola, 2026-10-12, and the BARO result recorded); /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/benchmarks/2026-10-13/se2-catchments/README.md@d06a601a:144 (the first 25 units ran 3.0 to 7.6 s, 23 within 3.7 to 5.4). Verified by running: the SVAR counts, areas and sizes; 36 GLO-30 tiles from the whole-system polygons, 4 cached before today, none missing; the BARO README table equal to the CSV; three outputs opened; both ledgers pass the design's checks (fine: 663 rows, all ok); the runner's command equal to the Lagan case's; the licence quote verbatim; no name, company, person or deadline from the private document; prohibited deps and ruff clean; check_citations 46 at-risk lines, all ROADMAP rows 27 and 29. Suggestion for the morning: the README lists files that land only then; `report` runs on the BARO level now. Lesson: a runner's line estimate doubled uncounted; harmless under `docs/`.
+
+Round 2, 2026-10-12, @reviewer (`d06a601a..51303179`, 0 counted lines): CHANGES REQUESTED, one blocker, applied in this recording commit as specified: /Users/skavhaug/projects/rasputin/.claude/worktrees/se2-catchments/docs/benchmarks/2026-10-13/se2-catchments/README.md@51303179:131 stopped at the launch record and its files table left out `summary_huvud.csv`; a Result section added (finest 5,338 of 5,338, 17,889,867 triangles, 4,865 s wall; BARO 31, 6,149,260, 694 s; whole systems 4, 4,914,027, 421 s) and the file listed. The design's size estimate (about 1 MB, four SVGs) reconciled with the 6.8 MB as built, within other dated folders' 4.6 to 13 MB. Verified: the ledger has 5,338 fine rows (a "5342" the main session read off `fine.log` was a line number, not a count); the committed CSVs and `report.md` byte-identical to scratch; every table row equals the ledger sums; no duplicate ids; 5,338 `.gpkg` files, largest error 9.999996 m; all 12 SVGs open with the titles and counts their names say; round 1's citations resolve; no private name in the diff; check_citations 46 at-risk lines, all ROADMAP rows not moved by this branch.

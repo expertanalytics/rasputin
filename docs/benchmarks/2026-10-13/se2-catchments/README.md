@@ -18,7 +18,7 @@ GLO-30's and CORINE's credits in their `run` layer (`dem_credit`,
 |---|---|
 | `fetch_svar.py` | the SVAR download (committed with the design; already run) |
 | `se2_batch.py` | the runner: `prepare`, `run --level baro|fine|huvud`, `report` |
-| `summary_baro.csv`, `summary_fine.csv` | the ledgers, one row per polygon (copied from scratch by `report --copy-to`) |
+| `summary_baro.csv`, `summary_fine.csv`, `summary_huvud.csv` | the ledgers, one row per polygon (copied from scratch by `report --copy-to`) |
 | `overview_<system>_<level>.svg` | one map per system and level, filled by status |
 | `report.md` | the runner's own tables, as written by `report` |
 
@@ -176,3 +176,19 @@ counts by status add up to 1,436 / 1,782 / 1,311 / 809 (`report`'s table);
 every `ok` row's `.gpkg` exists (`ls out/*/fine/*.gpkg | wc -l` equals
 `grep -c ,ok, summary_fine.csv`); the ledger has no duplicate id
 (`cut -d, -f3 summary_fine.csv | sort | uniq -d` is empty).
+
+## Result (the batch finished 2026-10-12 18:05:23 UTC)
+
+| level | polygons | ok | refused | triangles | wall time | largest max error |
+|---|---:|---:|---:|---:|---:|---:|
+| finest SVAR units | 5,338 | 5,338 | 0 | 17,889,867 | 4,865 s, three at once | under 10 m |
+| BARO areas | 31 | 31 | 0 | 6,149,260 | 694 s, one at a time | 9.999995 m |
+| whole systems | 4 | 4 | 0 | 4,914,027 | 421 s | under 10 m |
+
+Every finest unit's `.gpkg` is in `../rasputin_scratch/sweden/se2/` (5,338
+files, the largest error 9.999996 m); the BARO areas and the whole systems
+have a `.vtk` beside the `.gpkg`. The per-system tables are in `report.md`
+(its "mesh s" column adds the per-unit seconds, which ran three at a time,
+so it is process time, not wall time), the ledgers in the three
+`summary_*.csv`, and one overview map per system and level in the twelve
+`overview_<system>_<level>.svg`, each unit filled by its status.
