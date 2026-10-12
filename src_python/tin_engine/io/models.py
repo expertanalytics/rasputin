@@ -29,6 +29,27 @@ class GeoTiffError(ValueError):
     """
 
 
+class SrsEntry(BaseModel):
+    """One ``gpkg_spatial_ref_sys`` row of a GeoPackage (increment 36): what
+    `crs.srs_entry` makes of a CRS text and `io.geopackage_write` stores."""
+
+    model_config = ConfigDict(frozen=True)
+
+    srs_id: int
+    organization: str
+    code: int
+    name: str
+    definition: str
+
+
+#: The reserved undefined cartesian row: no CRS, or text pyproj refuses.
+UNDEFINED_SRS = SrsEntry(
+    srs_id=-1, organization="NONE", code=-1, name="Undefined cartesian SRS", definition="undefined"
+)
+#: ``srs_id`` of a CRS pyproj parses but cannot give an EPSG code.
+CUSTOM_SRS_ID = 100_000
+
+
 class Bounds(BaseModel):
     """A box in the DEM's CRS: finite, with `x_min < x_max` and `y_min < y_max`."""
 

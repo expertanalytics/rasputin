@@ -19,6 +19,8 @@ here, and `io/geopackage.py` decodes through it.
 Increment 29 adds :func:`read_json`, for the station and river readers
 (`io/station_set.py`, `io/rivers.py`), which take a path but open nothing.
 Audit PR C adds :func:`read_text`, for `io/domain_file.py`'s WKT domain.
+Increment 36 adds :func:`create_sqlite`, the one writable connection: the
+GeoPackage writer's file, which `io/geopackage_write.py` fills through it.
 
 Increment 26a adds the class raster's reads from the cache
 (`CacheRepository.load_class_window`, `class_strips`: the cells a box meets,
@@ -397,6 +399,15 @@ def open_geopackage(path: Path) -> sqlite3.Connection:
     ``#`` or space in the name, so they stay the file's.
     """
     return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+
+
+def create_sqlite(path: Path) -> sqlite3.Connection:
+    """A writable SQLite connection to ``path`` (increment 36), created if
+    missing. Removing a stale file first, and renaming the finished one, are
+    the caller's: this module deletes and writes nothing outside the
+    connection it hands back. The caller closes it, in the thread that opened
+    it (SQLite connections are thread-bound)."""
+    return sqlite3.connect(path)
 
 
 def read_json(path: Path) -> Any:
