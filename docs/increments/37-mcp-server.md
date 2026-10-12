@@ -2,7 +2,7 @@
 
 **Status: designed** by `@architect`, 2026-10-12, on `b4a81c0d` (branch
 `worktree-mcp-server`). Probe and its output: `docs/increments/37-probes/`.
-Next: design review, then `@tester`'s red suite (section 9).
+Design review round 1 CHANGES REQUESTED (three blockers, Review section); next `@architect`'s fixes and round 2, then `@tester`'s red suite (section 9).
 
 ## 1. What Ola asked
 
@@ -574,3 +574,7 @@ inherit the docstrings it will rewrite). Handed back under *Ideas* in the
 handback: phase progress lines from `mesh`, an OpenAPI export from
 `schema.py`, Streamable HTTP for hosted agents, Tasks when the SDK has them,
 a jobs cap by memory estimate rather than count.
+
+## Review
+
+Design review round 1, 2026-10-12, @reviewer (`b4a81c0d..b990e38c`, 0 production lines, estimate 250 with worst case 350): CHANGES REQUESTED, three blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:382-386 and :450 say every output goes through `.part` and a rename; that holds for the GeoPackage only, `.vtk` and `.ply` are written with `target.write_bytes` (`src_python/tin_engine/cli.py@b4a81c0d:1241`) and `_writing` (:2121) wraps OSError, it does not rename; restate that a killed `.vtk`/`.ply` run can leave a truncated file under the asked name. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:354-357 and :255: with `out_parent` set, the server's temporary `--record`/`--stats` path is refused by `_destination` (`cli.py@b4a81c0d:442-445` via :1360), so every such `mesh` call exits 2; say where the temporary file goes (inside `out_parent`, or beside `out`) and add the case to T4-T6. (3) /Users/skavhaug/projects/rasputin/.claude/worktrees/mcp-server/docs/increments/37-mcp-server.md@b990e38c:364-367 and :396-398: the heartbeat and "waiting" notifications carry no `progress` value, which the specification says MUST increase per notification; define it (elapsed seconds) and have T9 assert the increase across lines and heartbeats. Prose fixes for the same pass: :148 "1 of 81" is 2 (`draw` and `mesh` both have `snap_spacing`); :54 the timeout-reset quote is on the specification's Cancellation page, not Progress; :296 the `python` CI job (`main.yaml:261`) also installs `.[dev]`; :97 the server list now says 100. Suggestions: state that the server process writes nothing but JSON-RPC to its own stdout; T11 also drops `tin_engine.mcp.server` from `sys.modules`. Verified: every probe figure against the saved output; SDK 2.3.0 facts in a fresh venv (low-level `Server`, `jsonschema` only in the client session, no progress token on the direct dispatcher, no server-side Tasks, 13 non-Windows dependencies); the specification quotes, the legacy grep, check_citations, and the prohibited-deps scan of extras. Ideas for Ola's file: write every mesh output through `.part` plus rename in `cli.py`; `destructive_hint=False` while `--out` overwrites an existing mesh deserves a second look.
