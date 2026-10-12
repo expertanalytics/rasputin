@@ -37,12 +37,14 @@ wrong answer that looks like a right one.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from itertools import pairwise
 
 import numpy as np
 import numpy.typing as npt
 
 from tin_engine.features import EdgeVocabulary
 from tin_engine.io.mesh_checks import check_int32, checked_ascii
+from tin_engine.io.models import ClassFractions
 
 #: The edge element's third property: the feature mask of `_core.pyi`'s
 #: `NodedPslg.edge_properties`, one `uint32` per edge. PLY fixes no name for
@@ -65,6 +67,7 @@ def write_ply(
     comments: Sequence[str] = (),
     vocabulary: EdgeVocabulary | None = None,
     face_codes: npt.ArrayLike | None = None,
+    face_fractions: ClassFractions | None = None,
 ) -> bytes:
     """Encode one mesh as a PLY file.
 
@@ -82,6 +85,10 @@ def write_ply(
         face_codes: `(T,)` land-cover codes, written as the face property
             `int land_cover_code` after `vertex_indices` (increment 16c, R3).
             The comment naming the code system is the caller's, in `comments`.
+        face_fractions: the sparse table of class fractions per face (increment
+            26b, 1.6), written as the face lists `land_cover_classes` (`list
+            uchar uchar`) and `land_cover_fractions` (`list uchar float`)
+            between `vertex_indices` and `land_cover_code`.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `faces` and `edges` are
@@ -91,7 +98,9 @@ def write_ply(
             a line-oriented format; if a comment is not ASCII, which the
             header's encoding cannot carry; or if a mask carries a bit
             `vocabulary` does not name; if `face_codes` is given with `edges`,
-            has not one entry per face, or does not fit int32.
+            has not one entry per face, or does not fit int32; if
+            `face_fractions` is given with `edges`, has not one row per face,
+            or a row of more than 255 classes.
     """
     points = np.ascontiguousarray(vertices, dtype="<f8")
     if points.ndim != 2 or points.shape[1] != 3:
@@ -103,6 +112,8 @@ def write_ply(
         raise ValueError("edge_properties needs edges; it has no meaning beside faces")
     if face_codes is not None and faces is None:
         raise ValueError("face_codes needs faces; the edge file has none")
+    if face_fractions is not None and faces is None:
+        raise ValueError("face_fractions needs faces; the edge file has none")
     if vocabulary is not None:
         # Increment 7's mechanism 3: a bit nobody names is refused, not written.
         if edge_properties is not None:
@@ -120,7 +131,9 @@ def write_ply(
 
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:
-        blocks.append(_face_block(np.ascontiguousarray(faces, dtype="<u4"), face_codes, ascii))
+        blocks.append(
+            _face_block(np.ascontiguousarray(faces, dtype="<u4"), face_codes, face_fractions, ascii)
+        )
     if edges is not None:
         blocks.append(_edge_block(np.ascontiguousarray(edges, dtype="<u4"), edge_properties, ascii))
 
@@ -151,10 +164,14 @@ def _vertex_body(points: npt.NDArray[np.float64], ascii: bool) -> bytes:
 
 
 def _face_block(
-    faces: npt.NDArray[np.uint32], codes: npt.ArrayLike | None, ascii: bool
+    faces: npt.NDArray[np.uint32],
+    codes: npt.ArrayLike | None,
+    fractions: ClassFractions | None,
+    ascii: bool,
 ) -> tuple[list[str], bytes]:
-    """The 2D mesh's block: one variable-length index list per triangle, and
-    optionally each triangle's land-cover code after it (increment 16c, R3)."""
+    """The 2D mesh's block: one variable-length index list per triangle, then
+    optionally its class and fraction lists (increment 26b) and its land-cover
+    code (increment 16c, R3)."""
     faces = faces.reshape(-1, 3)
     declaration = [
         f"element face {len(faces)}",
@@ -162,6 +179,15 @@ def _face_block(
     ]
     columns = [np.full(len(faces), 3), faces]
     layout: list[tuple[str, str] | tuple[str, str, int]] = [("n", "u1"), ("v", "<u4", 3)]
+    if fractions is not None:
+        if fractions.triangles != len(faces):
+            raise ValueError(
+                f"face_fractions has {fractions.triangles} rows for {len(faces)} faces"
+            )
+        declaration += [
+            "property list uchar uchar land_cover_classes",
+            "property list uchar float land_cover_fractions",
+        ]
     if codes is not None:
         values = np.asarray(codes).reshape(-1)
         if len(values) != len(faces):
@@ -170,6 +196,8 @@ def _face_block(
         declaration.append("property int land_cover_code")
         columns.append(values)
         layout.append(("c", "<i4"))
+    if fractions is not None:
+        return declaration, _face_lists(faces, codes, fractions, ascii)
     if ascii:
         table = np.column_stack(columns).astype(np.int64)
         return declaration, _lines(" ".join(map(str, row)) for row in table.tolist())
@@ -177,6 +205,41 @@ def _face_block(
     for (name, *_), column in zip(layout, columns, strict=True):
         records[name] = column
     return declaration, records.tobytes()
+
+
+def _face_lists(
+    faces: npt.NDArray[np.uint32], codes: npt.ArrayLike | None, table: ClassFractions, ascii: bool
+) -> bytes:
+    """The face records with their class and fraction lists: variable length,
+    so the binary body is assembled by offset rather than as fixed records."""
+    offsets = table.offsets.astype(np.int64)
+    counts = np.diff(offsets)
+    if counts.max(initial=0) > 255:
+        raise ValueError("a face of more than 255 classes does not fit a uchar list count")
+    code = None if codes is None else np.asarray(codes).reshape(-1).astype(np.int64)
+    if ascii:
+        rows = []
+        for t, (a, b) in enumerate(pairwise(offsets)):
+            words = [3, *faces[t], counts[t], *table.classes[a:b], counts[t]]
+            words += [repr(float(f)) for f in table.fractions[a:b]]
+            rows.append(" ".join(map(str, words)) + ("" if code is None else f" {code[t]}"))
+        return _lines(rows)
+    tail = 0 if code is None else 4
+    length = 15 + 5 * counts + tail
+    start = np.concatenate([[0], np.cumsum(length)[:-1]])
+    out = np.zeros(int(length.sum()), dtype=np.uint8)
+    out[start] = 3
+    out[start[:, None] + 1 + np.arange(12)] = faces.astype("<u4").view(np.uint8).reshape(-1, 12)
+    out[start + 13] = counts
+    within = np.arange(len(table.classes)) - np.repeat(offsets[:-1], counts)
+    out[np.repeat(start + 14, counts) + within] = table.classes
+    out[start + 14 + counts] = counts
+    at = np.repeat(start + 15 + counts, counts) + 4 * within
+    out[at[:, None] + np.arange(4)] = table.fractions.astype("<f4").view(np.uint8).reshape(-1, 4)
+    if code is not None:
+        at = start + 15 + 5 * counts
+        out[at[:, None] + np.arange(4)] = code.astype("<i4").view(np.uint8).reshape(-1, 4)
+    return out.tobytes()
 
 
 def _edge_block(

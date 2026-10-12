@@ -14,6 +14,7 @@
 #include <terrain/core/pslg_builder.hpp>
 #include <terrain/hydrology/accumulate.hpp>
 #include <terrain/hydrology/upstream.hpp>
+#include <terrain/land_cover/overlap.hpp>
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
@@ -30,6 +31,7 @@
 #include <terrain/vector_simplify/area_collapse.hpp>
 #include <terrain/vector_simplify/border_collapse.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -1523,5 +1525,54 @@ points is (N, 2) float64-convertible and ring_starts (R + 1,) unsigned; any
 other shape is a ValueError. Band 0 returns the input. No new vertex or edge
 comes closer than clearance to a vertex or edge it does not share an end with.
 A refused input comes back as a status. Releases the GIL.
+)doc");
+
+    m.def(
+        "class_areas",
+        [](const py::object& corners, const py::object& classes, const py::object& row_area,
+           unsigned threads) {
+            using Exact = py::array_t<std::uint8_t, py::array::c_style>;
+            const auto xy = F64::ensure(corners);
+            if (!xy || xy.ndim() != 3 || xy.shape(1) != 3 || xy.shape(2) != 2)
+                throw py::value_error("class_areas: corners must be float64 of shape (T, 3, 2)");
+            if (!py::isinstance<Exact>(classes))
+                throw py::type_error("class_areas: classes must be a C-contiguous uint8 array; "
+                                     "convert it explicitly rather than have it copied");
+            const auto grid = classes.cast<Exact>();
+            if (grid.ndim() != 2)
+                throw py::value_error("class_areas: classes must be 2-D (rows, cols)");
+            const auto weights = F64::ensure(row_area);
+            if (!weights || weights.ndim() != 1)
+                throw py::value_error("class_areas: row_area must be float64 of shape (rows,)");
+            const terrain::raster::RasterGeometry geometry{
+                0.0, 0.0, 1.0, 1.0, static_cast<std::size_t>(grid.shape(1)), static_cast<std::size_t>(grid.shape(0))};
+            const terrain::raster::RasterView<std::uint8_t> view{geometry, grid.data(), std::nullopt};
+            const std::span<const Point2> pts{reinterpret_cast<const Point2*>(xy.data()), static_cast<std::size_t>(3 * xy.shape(0))};
+            const std::span<const double> rows{weights.data(), static_cast<std::size_t>(weights.shape(0))};
+            terrain::land_cover::ClassAreas out;
+            {
+                const py::gil_scoped_release unlocked;  // every buffer is held by a local
+                out = terrain::land_cover::class_areas(pts, view, rows, threads);
+            }
+            const auto copy = [](const auto& v) {
+                py::array_t<typename std::decay_t<decltype(v)>::value_type> a(static_cast<py::ssize_t>(v.size()));
+                std::copy(v.begin(), v.end(), a.mutable_data());
+                return a;
+            };
+            return py::make_tuple(copy(out.offsets), copy(out.classes), copy(out.areas));
+        },
+        py::arg("corners"), py::arg("classes"), py::arg("row_area"), py::kw_only(), py::arg("threads") = 0, R"doc(
+The exact area of each land-cover class inside each triangle (increment 26b),
+as (offsets, classes, areas): uint32 (T + 1,), uint8 and float64 of one
+length. Triangle t's entries are [offsets[t], offsets[t + 1]), classes
+ascending, areas in the unit of row_area and positive.
+
+corners is (T, 3, 2) in the grid's index space: x the column, y the row (y
+grows downward), cell (r, c) the square [c, c + 1] x [r, r + 1]. classes is a
+C-contiguous 2-D uint8 array viewed without a copy (another dtype or layout is
+a TypeError); row_area the area of one cell of each row. A corner past the
+closed window [0, cols] x [0, rows] is a ValueError saying outside; so is a
+zero-area triangle, a non-finite corner or a wrong shape. threads only splits
+the work (0: all cores); the result does not depend on it. Releases the GIL.
 )doc");
 }

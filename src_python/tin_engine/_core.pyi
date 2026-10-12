@@ -755,3 +755,21 @@ def simplify_borders(
     """Simplify a coverage's borders within ``band``, keeping every ring's area,
     the junctions and the outer boundary, no new vertex or edge closer than
     ``clearance`` to what it does not share an end with. Releases the GIL."""
+
+def class_areas(
+    corners: npt.ArrayLike,
+    classes: npt.NDArray[np.uint8],
+    row_area: npt.ArrayLike,
+    *,
+    threads: int = 0,
+) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+    """The exact area of each class inside each triangle (increment 26b), as
+    ``(offsets, classes, areas)``: triangle ``t``'s entries are
+    ``[offsets[t], offsets[t + 1])``, classes ascending, areas positive in the
+    unit of ``row_area``. ``corners`` is ``(T, 3, 2)`` in the grid's index
+    space (x the column, y the row growing downward); ``classes`` a
+    C-contiguous 2-D uint8 array viewed without a copy (else a TypeError);
+    ``row_area`` one cell area per row. A corner past the closed window, a
+    zero-area triangle, a non-finite corner or a wrong shape is a ValueError.
+    ``threads`` 0 is all cores; the result does not depend on it. Releases
+    the GIL."""

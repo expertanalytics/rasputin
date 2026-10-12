@@ -41,14 +41,18 @@ import numpy.typing as npt
 
 from tin_engine.features import EdgeVocabulary
 from tin_engine.io.mesh_checks import check_int32, checked_ascii
+from tin_engine.io.models import ClassFractions
 
 #: The names this module writes into `FieldData` itself.
 #: ``elevation`` is the point array of heights (increment 12), so no dataset
 #: string may take the name: ParaView's Color By would offer both.
 #: ``land_cover_codes`` names the code system of the cell array
-#: ``land_cover_code`` (increment 16c, R3).
+#: ``land_cover_code`` (increment 16c, R3); the three ``land_cover_*`` arrays
+#: are the sparse table of class fractions (increment 26b, 1.6).
+FRACTION_ARRAYS = ("land_cover_offsets", "land_cover_classes", "land_cover_fractions")
 RESERVED = frozenset(
     {"feature_bits", "feature_names", "feature_vocabulary", "elevation", "land_cover_codes"}
+    | set(FRACTION_ARRAYS)
 )
 
 #: The cell array of land-cover codes. Not ``land_cover``: that is 16b's bit 7.
@@ -57,7 +61,9 @@ LAND_COVER_CODE = "land_cover_code"
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 #: Legacy type names onto big-endian numpy dtypes.
-_DTYPE = {"double": ">f8", "int": ">i4", "unsigned_int": ">u4", "unsigned_char": "u1"}
+_DTYPE = {
+    "double": ">f8", "float": ">f4", "int": ">i4", "unsigned_int": ">u4", "unsigned_char": "u1",
+}  # fmt: skip
 
 
 def write_vtk(
@@ -71,6 +77,7 @@ def write_vtk(
     binary: bool = False,
     triangle_codes: npt.ArrayLike | None = None,
     land_cover_codes: str = "",
+    class_fractions: ClassFractions | None = None,
 ) -> bytes:
     """Encode one mesh and its constraint edges as legacy VTK 4.2 PolyData.
 
@@ -86,6 +93,10 @@ def write_vtk(
             as the `int` cell array `land_cover_code`, 0 on every line.
         land_cover_codes: what the codes are, written as the dataset string
             `land_cover_codes` when non-empty and `triangle_codes` is given.
+        class_fractions: the sparse table of class fractions per triangle
+            (increment 26b), written as the dataset arrays `land_cover_offsets`
+            (`unsigned_int`), `land_cover_classes` (`unsigned_char`) and
+            `land_cover_fractions` (`float`).
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `edge_masks` does not
@@ -93,7 +104,8 @@ def write_vtk(
             does not name; if a field name is outside `^[a-z][a-z0-9_]*$` or
             reserved; if a string is not ASCII or has a control character; or
             if `triangle_codes` has not one entry per triangle, does not fit
-            int32, or comes with a vocabulary naming `land_cover_code`.
+            int32, or comes with a vocabulary naming `land_cover_code`; or if
+            `class_fractions` has not one row per triangle.
     """
     points = np.asarray(vertices, dtype=np.float64)
     if points.ndim != 2 or points.shape[1] != 3:
@@ -118,6 +130,10 @@ def write_vtk(
             raise ValueError(f"the vocabulary names {LAND_COVER_CODE!r}, the codes' array")
         if land_cover_codes:
             fields = (*fields, ("land_cover_codes", land_cover_codes))
+    if class_fractions is not None and class_fractions.triangles != len(polygons):
+        raise ValueError(
+            f"class_fractions has {class_fractions.triangles} rows, {len(polygons)} triangles"
+        )
     used = {name for mask in np.unique(masks) for name in vocabulary.names(int(mask))}
     cell_masks = np.concatenate([masks, np.zeros(len(polygons), dtype=np.uint32)])
 
@@ -127,6 +143,15 @@ def write_vtk(
         _strings("feature_vocabulary", [vocabulary.fingerprint()], binary),
         *(_strings(name, [value], binary) for name, value in fields),
     ]
+    if class_fractions is not None:
+        arrays: tuple[npt.NDArray[np.generic], ...] = (
+            class_fractions.offsets, class_fractions.classes, class_fractions.fractions,
+        )  # fmt: skip
+        types = ("unsigned_int", "unsigned_char", "float")
+        dataset += [
+            _numeric(name, values, type_name, binary)
+            for name, values, type_name in zip(FRACTION_ARRAYS, arrays, types, strict=True)
+        ]
     features = [
         _numeric(name, (cell_masks >> bit) & 1, "unsigned_char", binary)
         for bit, name in table
