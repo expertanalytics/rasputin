@@ -1539,6 +1539,108 @@ per-case medians are not on disk: `bench_quick.py` writes a record only with
 `--save-baseline`, so a passing quick check leaves the tool's silence as the
 evidence. Idea for the tooling: `bench_quick.py run --record <path>`.
 
+## 14. As built: 26b (recorded by the main session from the handbacks)
+
+**26b built** on branch `worktree-mapbiomas-26b` from 26a's merged head
+`5f28292c`: red `1820c1d4` (`@tester`, 92 cases), green `5b8bb3e0`
+(`@developer`), test-side fixes `f165282b` (`@tester`, 103 cases green);
+621 net production lines by `python3 tools/count_loc.py 5f28292c HEAD`
+against the estimate of 420; no mutation round (section 9); next `@perf`'s
+acceptance (section 11, item 1 scoped to 26b), then code review. The Status
+line at the top and ROADMAP row 26 are updated once the ruling-record branch
+of 2026-10-12, which rewrites the same lines, has merged.
+
+Ola picked 26b on 2026-10-12 ("Then 1 and 2."), the first of two items after
+the night's merges. No `@architect` freshness pass: `@tester` found the
+2026-10-03 design buildable as written, with two departures named below.
+
+**Red** `1820c1d4` (`@tester`): 92 cases, 68 red for the right reasons (the
+C++ suite fails to compile on `'terrain/land_cover/overlap.hpp' file not
+found`; the Python suites on `_core` lacking `class_areas`,
+`ClassFractions` missing, `No such option: --land-cover`), 6 green by
+design (controls, the oracle's self-check, the window-corner pin), 1
+skipped without `vtk`. Files: `tests/cpp/unit/test_land_cover_overlap.cpp`
+(17, registered in `tests/cpp/CMakeLists.txt`),
+`tests/python/test_land_cover_overlap.py` (36),
+`test_io_land_cover_arrays.py` (17), `test_cli_mesh_land_cover_fractions.py`
+(22), oracles in `tests/python/fraction_fixtures.py` (GEOS clipping through
+shapely, the producer's predicate, not its records). Departures from section
+10, both stated in the fixtures' docstring: the per-cell sums use a 15 x 15
+class grid, since a byte cannot hold 400 distinct classes; the 26a lesson
+about `pixel_is_area` needs no refusal, `read_page` already normalises
+PixelIsArea and PixelIsPoint to node = cell centre (pinned green). Pins
+beyond the design, asserted by the tests: a trailing `threads` parameter on
+`class_areas`; index space with y the row growing downward, the window
+closed `[0, cols] x [0, rows]`, the view geometry
+`RasterGeometry{0,0,1,1,cols,rows}`; either triangle orientation accepted;
+`OutsideWindow` and the zero-area refusal as `std::invalid_argument`
+(`ValueError` through the binding); the table as `io.models.ClassFractions`;
+`land_cover_fractions.row_areas(window)`; writer keywords `class_fractions`
+/ `face_fractions`, `.ply` property order classes, fractions, code.
+
+**Green** `5b8bb3e0` (`@developer`): ten production files, no test file:
+`include/terrain/land_cover/overlap.hpp` (strips, full-cell spans, canonical
+crossings, chunks in parallel), `bindings/core.cpp` and `_core.pyi`
+(`class_areas`, the `uint8` view), `land_cover_fractions.py` (index-space
+corners, row areas, chunks of 2^18 triangles in file order, the Hilbert
+order being 26c, dominant class), `io/models.py` (`ClassFractions`),
+`io/vtk_legacy.py` and `io/ply.py` (the arrays), `io/repository.py` (the
+fetch date), `run_record.py`, `cli.py` (`--land-cover`,
+`--land-cover-year`, the record entries). 64 of the 68 red cases green; the
+four left were test-side (below). Gates: C++ build warning-free; ctest
+1030/1031 (the one is case 6, test-side); asan/ubsan and `-ffp-contract=off`
+builds of the overlap suite clean; TSan on the threaded cases clean; full
+`pytest --no-cov` 7120 passed with the four test-side cases, `test_layering`
+and the environment-bound Austrian real-file test deselected; mypy, ruff,
+prohibited-deps and detria gates clean. `@developer`'s amend of this
+commit's provisional message was refused in away mode (a correct refusal);
+its verification record is this paragraph. Pins beyond the design:
+`land_cover_source` = "<source id>, <year>" and `land_cover_codes` =
+"<source id> class number; 0 = no data, and every constraint line", where
+section 1.6 spells both with "MapBiomas Collection 11", a display name
+`RemoteSource` does not carry (for the code review to judge; the main
+session's default is the source id as built); a cache object without a
+fetch date is credited with today's date (`@tester` declined to pin it;
+question for Ola below).
+
+**Test-side fixes** `f165282b` (`@tester`): C++ case 6 compared against
+0.5 + 1e-9 where the constructed triangle's area as doubles is
+4.9999997e-19, now against the shoelace area of the rounded corners;
+`tests/python/plyread.py` stacks ragged lists as object arrays;
+`tmp_path / "a"` created before use; four `test_layering.py` rows
+(`land_cover_fractions` at level 3 importing `_core crs io.models
+io.repository`; `cli` gains `land_cover_fractions`; `io.ply` and
+`io.vtk_legacy` gain `io.models`), each checked with `importscan`. Red
+scaffolding removed. Pins added: `assign`'s table independent of `chunk`
+(chunk 5 against the default, bit for bit); the seven CLI refusals each
+tested. Now 103 cases (17 C++, 86 Python), all green, one skip without
+`vtk`; cmake clean, ctest 1031/1031, `pytest tests/python/` 7192 passed,
+139 skipped, 1 failed (the Austrian real-file test, red on the untouched
+base too: its predictor needs `imagecodecs`), coverage 98.48 %; mypy clean,
+ruff clean. Coverage of the new Python: `cli.py` 97 %, `io/models.py` 99 %,
+`io/ply.py` 99 %, `io/repository.py` 97 %, `io/vtk_legacy.py` 99 %,
+`land_cover_fractions.py` 94 %, `run_record.py` 99 %; the unreached lines
+are the 2^32-entry refusal and `cli`'s `except` around `assign` for a mesh
+past the raster, both by design.
+
+**Size:** 621 net production lines against section 9's 420 and `@tester`'s
+450: `overlap.hpp` 231 against 150 (57 comment lines that the count keeps
+because they share a line with code, and the full-column shortcut, checked
+against GEOS) and `cli.py` 129 against 55 (the seven refusals). Under 700.
+
+**Decided while Ola was away (defaults):** no `@architect` freshness pass
+(none needed); the display-name question left to the code review; today's
+date for a cache without a fetch date kept (matches `fetch/run.py`'s
+NOTICE.txt wording). Question for Ola: keep that date, or omit it? Default
+keep.
+
+**Lessons for the next retrospective:** a red suite computes expected
+values from the inputs as rounded, not as intended (C++ case 6); the red
+step should carry the layering rows and the reader support for any new file
+structure it asserts (the `.ply` list reader); an amend of an unpushed
+commit is refused in away mode, so a provisional commit message stays and
+the record goes into the as-built section.
+
 ## Review
 
 **Design review, round 1, 2026-10-03.** Range `origin/master...` 77f35b4, 9df3822. Verdict: CHANGES REQUESTED. LOC: 0 production lines (design and throwaway probes). The rulings of 2026-10-01 are kept; the fractions-and-ledger figures, the fetch sizes, the CRS figures, the sources and the licence conflict (terms of use CC BY-SA 4.0, factsheet CC BY) all re-checked and hold. Blocking, doc fixes only: (1) unit 769's water row omits its largest body (Três Marias joins the channel, and the probe assigns a body to a unit by its first cell, which lies outside the outline), so the basin-wide lake counts are low; (2) the "Sobradinho" ring is the main São Francisco river across unit 761 (670 × 442 km, 3,159 holes), and "346 km" is half the extent, not a length; on the whole basin the channel likely joins the reservoirs into one body; (3) the ledger measurement excludes lakes forced to 100 % water, which @perf's acceptance must cover; (4) the licence question must also name the water polygons and meshes constrained by them. Not pushed; no CI.
