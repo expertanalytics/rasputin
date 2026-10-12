@@ -48,13 +48,14 @@ from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
 import feature_fixtures as ff
+from class_map_snapshot import CORINE_NATURAL
 from cli_driver import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
 from feature_fixtures import Feat, domain_of, write_geojson
 from geotiff_fixtures import TIE_X, TIE_Y
 from landcover_fixtures import MARGIN, landcover_oracle, spread_violations, vtk_labels
 from plyread import read_ply
 from tin_engine.cli import app
-from tin_engine.palettes import CORINE_NATURAL, paraview_preset
+from tin_engine.palettes import paraview_preset
 from vtkread import VtkFile, read_vtk
 
 LAND_COVER_LINE = re.compile(
@@ -515,7 +516,7 @@ class TestWhatFeatureInputKeeps:
         ],
     )
     def test_the_maps_name_their_code_system(self, name: str, codes: str) -> None:
-        assert ff.feature_input().CLASS_MAPS[name].codes == codes
+        assert ff.class_map(name).codes == codes
 
     def test_a_coded_polygon_keeps_its_code_and_polygon(self, tmp_path: Path) -> None:
         fs = self.open(tmp_path, [coded(1, WEST, "311")], "corine")

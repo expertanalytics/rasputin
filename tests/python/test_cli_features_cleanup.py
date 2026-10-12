@@ -61,6 +61,10 @@ Test 14's band-0 digest is unchanged. RED at the commit that added them
 (``2fba4349``): the rule ran after the domain clip and the
 simplifier, and the help and record said "repaired, clipped border".
 
+Increment 41 (``docs/increments/41-class-maps-as-data.md``, section 5.3):
+the three distances' help ends "Default: from the class map's positional
+accuracy and the DEM cell (CORINE: N)."; ``BAND_HELP`` follows it.
+
 RED at the commit that added increment 32's tests (``44f25968``): the default
 was 0, the start angle was always 25, the help and record text were the old
 ones, and ``cli.LANDCOVER_START_MIN_ANGLE`` did not exist. Band 0's digest and
@@ -121,7 +125,8 @@ BAND_HELP = (
     "Metres: simplify land-cover borders, each moved at most this far from its border after "
     "the repair and the outline rule, each class keeping its area; the simplification can "
     "bring a border back within the outline-snap distance of the outline, but not closer "
-    "than the repair distance. 0 is off. Default: 50."
+    "than the repair distance. 0 is off. "
+    "Default: from the class map's positional accuracy and the DEM cell (CORINE: 50)."
 )
 BAND_WORDING = (
     "Land-cover borders simplified, each at most this far from its border after the repair "

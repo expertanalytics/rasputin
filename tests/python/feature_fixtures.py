@@ -6,8 +6,10 @@ input features and the class map, never from the producer's records (05b,
 of the masks of every feature whose boundary, as given in the source and
 moved by pyproj directly, lies along that edge, within the noder's snap.
 
-`tin_engine.feature_input` and `tin_engine.chains` are imported lazily, so a
-suite importing this module still collects before they exist.
+`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.class_maps`
+are imported lazily, so a suite importing this module still collects before
+they exist. Increment 41: a class map is loaded by name (or path) through
+`class_maps.load`, no longer read from `feature_input.CLASS_MAPS`.
 """
 
 from __future__ import annotations
@@ -48,6 +50,11 @@ def feature_input() -> ModuleType:
 
 def chains_module() -> ModuleType:
     return importlib.import_module("tin_engine.chains")
+
+
+def class_map(name: str) -> Any:
+    """Increment 41: the class map a `--features-map` value names."""
+    return importlib.import_module("tin_engine.class_maps").load(name)
 
 
 def at(x: float, y: float) -> tuple[float, float]:
@@ -94,8 +101,7 @@ def write_geojson(path: Path, features: Iterable[Feat], crs: str | None = UTM33)
 
 
 def source(path: Path, map_name: str = "property", **kwargs: Any) -> Any:
-    fi = feature_input()
-    return fi.FeatureSource(path=path, class_map=fi.CLASS_MAPS[map_name], **kwargs)
+    return feature_input().FeatureSource(path=path, class_map=class_map(map_name), **kwargs)
 
 
 def open_one(
