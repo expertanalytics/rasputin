@@ -234,7 +234,9 @@ Disposition: *rule* (a line in a rule file, proposed below), *checklist*
    `check_citations.py` after each recording commit. The hook that should
    do this, `gates_after_commit.py`, judges the main checkout's tree: that
    is P2 of `2026-10-11-merges-32-33-34.md`, approved, unbuilt. **Carried
-   proposal**, nothing new.
+   proposal**, nothing new. This file did it once itself (an unpinned
+   `PRINCIPLES.md` cite in section 6), caught by the hook after its first
+   commit and fixed in a second commit, not an amend.
 8. The citation gate's at-risk tally moves with every file master later
    touches; a tally names its command and tree. Done in #234. **Lesson.**
 9. An assumption named only in a handback is not in the design (37 design
@@ -315,7 +317,7 @@ seven review rounds that each restated a permission the rules do not hold.
   stands in four files: the morning retrospective, increment 37's file,
   the audit, and increment 35's file from yesterday. Each is 20 words a
   one-clause rule would make unnecessary.
-- *Checked, not an anecdote:* `docs/PRINCIPLES.md:71` and `:118` name
+- *Checked, not an anecdote:* `docs/PRINCIPLES.md@c317c7e4:71` and `:118` name
   retrospective files as pointers to reasoning, which is what a pointer is
   for.
 
