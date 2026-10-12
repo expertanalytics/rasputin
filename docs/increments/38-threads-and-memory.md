@@ -1,6 +1,6 @@
 # Increment 38: threads and memory as settings
 
-**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); green `b252a70d` (`@developer`, 96 net production lines by `python3 tools/count_loc.py 5d2e706d HEAD` against the estimate of 60, under the worst case of 120); test-side fixes `9de3212c` (`@tester`); section 12 is the as-built record; next the quick check (bit-identical meshes) once the machine is idle, then code review;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
+**Status: designed and review-approved after two rounds; red `4b9c0dfe` (`@tester`, 110 tests); green `b252a70d` (`@developer`, 96 net production lines by `python3 tools/count_loc.py 5d2e706d HEAD` against the estimate of 60, under the worst case of 120); test-side fixes `9de3212c` (`@tester`); section 12 is the as-built record; `@perf`'s quick check NO CHANGE, ACCEPTED; next code review;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
 `worktree-threads`). The first fix from the generality audit
 (`docs/increments/generality-audit.md`, section 6 item 1; rows D1, D2, D3, D5,
 D6, D7). Ola's yes, 2026-10-12: "1, 2: yes" to a single pull request that adds
@@ -740,9 +740,12 @@ coverage 98.44 %, one failure beside the night's detached mesh batch
 (`test_core_cdt.py`'s GIL ticker, 7 ticks against a bound of 3, load-bound;
 5 of 5 alone, untouched by this increment). `ruff` clean on `tests/`.
 
-**Speed:** no refine or mesh code touched; the quick check for bit-identical
-meshes runs once the machine is idle (the Swedish batch holds three cores
-tonight); its verdict goes here.
+**Speed:** no refine or mesh code touched. `@perf`'s quick check of this
+branch at `8f9289c4` (2026-10-12 18:31 UTC, idle, AC, against the baseline
+refreshed minutes before on master `f09b9863`; evidence in
+`docs/benchmarks/2026-10-12/baseline-refresh/README.md`, evening section, on
+`worktree-baseline-1012`): **NO CHANGE**, meshes identical on every case, no
+phase outside its band; ACCEPTED.
 
 **Lessons for the next retrospective:** a design that deletes a file lists
 the unpinned citations into it first (`check_citations` would have shown the
