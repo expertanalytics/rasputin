@@ -1,6 +1,6 @@
 # Increment 38: threads and memory as settings
 
-**Status: designed, review round 1 CHANGES REQUESTED (five blockers, Review section), fixes next;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
+**Status: designed, review round 1 fixes in; next round 2;** by `@architect`, 2026-10-12, on master `5d2e706d` (branch
 `worktree-threads`). The first fix from the generality audit
 (`docs/increments/generality-audit.md`, section 6 item 1; rows D1, D2, D3, D5,
 D6, D7). Ola's yes, 2026-10-12: "1, 2: yes" to a single pull request that adds
@@ -99,14 +99,20 @@ src_python/tin_engine/io/cog.py:124:    `threads` decoding workers, the machine'
 src_python/tin_engine/io/cog.py:203:    with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
 ```
 
-Three pools: the reprojector (`crs.py:73`, up to `WORKERS` = min(8, cores)),
-the target grid's `_pool` (`target_grid.py:156`, serving `resample` at :200
-and `check_point_blocks` at :258, with the count from `dem_input.py:218`), and
-the block decoder (`io/cog.py:203`, serving `decode_window` :141 and
-`decode_class_window` :169, called without a count from
+Three pools: the reprojector (`src_python/tin_engine/crs.py@5d2e706d:73`, up
+to `WORKERS` = min(8, cores)), the target grid's `_pool`
+(`src_python/tin_engine/target_grid.py@5d2e706d:156`, serving `resample` at
+:200 and `check_point_blocks` at :258, with the count from
+`src_python/tin_engine/dem_input.py@5d2e706d:218`), and the block decoder
+(`src_python/tin_engine/io/cog.py@5d2e706d:203`, serving `decode_window` :141
+and `decode_class_window` :169, called without a count from
 `src_python/tin_engine/io/repository.py@5d2e706d:148`, `:281` and `:285`). Four core-count reads
-(`crs.py:39`, `dem_input.py:218`, `cog.py:203`, `cli.py:1590`) and one memory
-read (`mosaic.py:57`), used as a cap at `src_python/tin_engine/mosaic.py@5d2e706d:187` and
+(`src_python/tin_engine/crs.py@5d2e706d:39`,
+`src_python/tin_engine/dem_input.py@5d2e706d:218`,
+`src_python/tin_engine/io/cog.py@5d2e706d:203`,
+`src_python/tin_engine/cli.py@5d2e706d:1590`) and one memory read
+(`src_python/tin_engine/mosaic.py@5d2e706d:57`), used as a cap at
+`src_python/tin_engine/mosaic.py@5d2e706d:187` and
 `src_python/tin_engine/catchment.py@5d2e706d:263`.
 
 **`_core` entry points that take `threads`.** `grep -n 'threads' src_python/tin_engine/_core.pyi`
@@ -131,14 +137,50 @@ fifth passes `assign`'s `threads=0` default
 benchmark's monkeypatch of `refine` (`tools/bench.py@5d2e706d:788-790`).
 
 **Reprojector call sites.** `grep -rn 'reprojector(' src_python/tin_engine`
-less the definition: 14. Three move arrays that can reach the pool's threshold
-of 500 000 points in a real run: every feature vertex
-(`src_python/tin_engine/feature_input.py@5d2e706d:339`, inside `_Tally._take`), every mesh vertex
-for the class fractions (`src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`), and the
-target grid's blocks (`src_python/tin_engine/target_grid.py@5d2e706d:181` and `:239`, called from
-inside `_pool`'s workers, so a block over the threshold today opens a second
-pool of up to 8 threads inside each of the first pool's workers). The other
-ten move a point, a domain outline, a lake, a seed or a station list.
+less the definition: 15, the grep as run on `5d2e706d`:
+
+```
+src_python/tin_engine/land_cover_fractions.py:67:    lonlat = reprojector(mesh_crs, meta.crs)(xy)
+src_python/tin_engine/catchment_batch.py:180:    move = reprojector(stations_crs, segments_crs)
+src_python/tin_engine/domain.py:49:        move = reprojector(source, target)
+src_python/tin_engine/target_grid.py:136:    back = reprojector(grid.crs, meta.crs)
+src_python/tin_engine/target_grid.py:181:        lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
+src_python/tin_engine/target_grid.py:239:        move = reprojector(m.crs, grid.crs)
+src_python/tin_engine/dem_input.py:212:    ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
+src_python/tin_engine/catchment.py:222:    ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
+src_python/tin_engine/catchment.py:373:    ((px, py),) = reprojector(request.seed_crs, request.lakes_crs)([request.seed])
+src_python/tin_engine/catchment.py:381:    move = reprojector(request.lakes_crs, dem_crs)
+src_python/tin_engine/tolerance_field.py:83:    to_mesh = reprojector(found.crs, mesh_crs)
+src_python/tin_engine/feature_input.py:183:        xy = reprojector(dem_crs, source_crs)(xy)
+src_python/tin_engine/feature_input.py:339:        move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
+src_python/tin_engine/feature_input.py:563:        ((x, y),) = reprojector(point_crs, own)([point])
+src_python/tin_engine/cli.py:2282:    ((x, y),) = reprojector(seed_crs, crs)([seed])
+```
+
+The pool opens at 500 000 points (`2 * CHUNK_POINTS`,
+`src_python/tin_engine/crs.py@5d2e706d:70-73`). Three sites move arrays that
+reach it in a real run: every feature vertex
+(`src_python/tin_engine/feature_input.py@5d2e706d:339`, inside `_Tally._take`,
+built only when the source's CRS differs from the DEM's), every mesh vertex
+for the class fractions (`src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`),
+and the target grid's resample blocks
+(`src_python/tin_engine/target_grid.py@5d2e706d:181`, up to `BLOCK_NODES` =
+1 048 576 nodes a block, `src_python/tin_engine/target_grid.py@5d2e706d:36`
+and `:163`, called inside `_pool`'s workers, so a block over the threshold
+today opens a second pool of up to 8 threads inside each of the first pool's
+workers). A fourth site runs inside `_pool`'s workers too,
+`src_python/tin_engine/target_grid.py@5d2e706d:239` (`check_point_blocks`),
+but moves a block's rim and then its valid nodes, at most `BLOCK` x `BLOCK` =
+512 x 512 = 262 144 points (`:32`, `:238`, `:252`), under the threshold, so it
+never nests a pool; it takes `threads=1` all the same (4.4). The other eleven
+move a point (`dem_input.py:212`, `catchment.py:222`, `:373`,
+`feature_input.py:563`, `cli.py:2282`), a station list
+(`catchment_batch.py:180`), a domain outline (`domain.py:49`), the target
+grid's rim (`target_grid.py:136`), the lakes (`catchment.py:381`), the
+feature hull ring densified to 1 km (`feature_input.py:183`) or one tolerance
+line's vertices at a time (`tolerance_field.py:83`, one `shapely.get_parts`
+part per call): none reaches 500 000 points in a run, and all become serial by
+the library default of 4.2 with no change in behaviour.
 
 **This machine**, for the fixture figures below: 10 cores (`sysctl hw.ncpu`;
 8 performance, 2 efficiency), 32 GiB (`hw.memsize` 34359738368), no cgroup;
@@ -177,8 +219,11 @@ def resources(threads: int | None, memory_budget: str | None, environ: Mapping[s
 - `machine_cores()`: `os.process_cpu_count()` where Python has it (3.13+;
   affinity and `PYTHON_CPU_COUNT` honoured), else `os.cpu_count()`, else 1;
   then the smaller of that and the cgroup v2 CPU quota, `ceil(MAX / PERIOD)`
-  from `<cgroup>/cpu.max` when the file exists and its first word is not
-  `max`. Never under 1.
+  from `<cgroup>/cpu.max`. The memory rule applies to the file: a quota
+  counts only when the file is readable and holds two words, the first a
+  positive whole number (`max` is no quota) and the second a positive whole
+  number (a zero or missing period is no quota, never a division); anything
+  else is no quota. Never under 1.
 - `machine_memory()`: `os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")`
   (what `mosaic.physical_memory` does today, which moves here), then the
   smaller of that and the cgroup limit: `<cgroup>/memory.max` (v2), else
@@ -211,7 +256,7 @@ def resources(threads: int | None, memory_budget: str | None, environ: Mapping[s
 | `--threads -1` | refused by Typer (`min=0`) |
 | `RASPUTIN_THREADS=abc` or `-1` | usage error: "RASPUTIN_THREADS=abc is not a whole number of threads (0 means every core)" |
 
-Settled:
+Settled (the first two ruled by Ola, 2026-10-12, section 10):
 
 - **A count above the core count is honoured, not clamped.** Reasons: OpenMP
   and Rayon honour it; the C++ honours it today
@@ -252,14 +297,19 @@ The budget caps both DEM windows a run assembles: the mosaic canvas
 window (`src_python/tin_engine/catchment.py@5d2e706d:263`, the same words). `plan_mosaic` gains a
 keyword `memory_budget: int | None = None` (None: `Resources.fallback()`'s);
 the refusal reads "the window is R x C nodes, N bytes to flood, over the
-memory budget of B bytes (half the machine's memory; --memory-budget changes
-it)". `mosaic.physical_memory` is deleted; its one test (M5,
-`tests/python/test_mosaic.py@5d2e706d:658-666`) moves to `resources`.
+memory budget of B bytes (set with --memory-budget; half the machine's memory
+when it is not set)", and the mosaic's "the request is R x C nodes, N bytes
+at float32, over the memory budget of B bytes (set with --memory-budget; half
+the machine's memory when it is not set); narrow it with --bbox". Both
+sentences are true whether or not a budget was given, which the earlier
+wording ("half the machine's memory") was not. `mosaic.physical_memory` is
+deleted; its one test (M5, `tests/python/test_mosaic.py@5d2e706d:658-666`)
+moves to `resources`.
 
-Settled: **`--memory-budget` goes on `mesh` as well as `catchment` and
-`station-catchments`**, because `mesh`'s mosaic cap reads the host's memory in
-a container too (the same D6 defect, cited in the audit's D6 row), and the
-model is built once per command. Default yes; question 1 in section 10.
+Ruled by Ola, 2026-10-12 (section 10): **`--memory-budget` goes on `mesh` as
+well as `catchment` and `station-catchments`**, because `mesh`'s mosaic cap
+reads the host's memory in a container too (the same D6 defect, cited in the
+audit's D6 row), and the model is built once per command.
 
 ### 4.4 Where the value travels
 
@@ -326,9 +376,14 @@ stride records; the gallery's flat record has no DEM and no row.
   `env={**os.environ, **CHILD_ENV}`), so `RASPUTIN_THREADS` set where the
   server starts is the default for every call. One test pins the first (T9).
 - **`tools/bench.py`**: its child still monkeypatches `refine`'s `threads`
-  keyword (`tools/bench.py@5d2e706d:788-790`), which overrides the CLI's value,
-  so the benchmark is unchanged; switching it to `--threads` is a tooling idea
-  for later (section 11).
+  keyword (`tools/bench.py@5d2e706d:788-790`), which overrides the CLI's value
+  for `refine` only, so the benchmark's timings are unchanged. Two things
+  follow and are stated so nobody reads them as defects: the child's stats
+  row reads "Threads used: 10." (the CLI's resolved count, every core on this
+  machine) whatever the sweep's count, because the row reports what the CLI
+  resolved, not what the monkeypatch passed; and the child's other `_core`
+  calls and pools run on the CLI's count. Switching the child to `--threads`
+  is a tooling idea for later (section 11).
 
 ### 4.6 `decompose.py` goes
 
@@ -373,7 +428,10 @@ where `RASPUTIN_DATA` is introduced) names `RASPUTIN_THREADS` beside it and
 - `--threads 0` on a machine whose count cannot be read (`os.cpu_count()`
   None): 1.
 - `cpu.max` reading `max 100000`: no quota. `cpu.max` reading `50000 100000`:
-  a quota of 0.5 CPU, `ceil` gives 1. `150000 100000`: 2.
+  a quota of 0.5 CPU, `ceil` gives 1. `150000 100000`: 2. Malformed, by the
+  memory rule, all no quota: `abc 100000` (first word not a number),
+  `200000 0` (zero period), `200000` (one word), `200000 abc`, an empty file,
+  an unreadable file.
 - `memory.max` reading `max`: no limit; reading `0` or `-1` or text: ignored
   (no limit), never a budget of 0.
 - `--memory-budget 1` (one byte): accepted by the parser; every window is then
@@ -395,7 +453,7 @@ where `RASPUTIN_DATA` is introduced) names `RASPUTIN_THREADS` beside it and
 - `--threads` on `fetch` (4.5) and on the C++ default (the C++ is untouched).
 - Reporting the machine's core count beside the count used ("3 of 10"): one
   more `Report` field for a figure the user can get from `nproc`; left out to
-  keep the row plain.
+  keep the row plain (Ola's ruling, section 10).
 - The quick check's `cases.toml` `threads` lists and `bench.py`'s child keep
   their own `--threads` plumbing (4.5).
 
@@ -419,8 +477,11 @@ from a literal.
   `grep`-equivalent in Python over `src_python/tin_engine/**/*.py`: the
   tokens `cpu_count`, `process_cpu_count`, `sched_getaffinity`, `sysconf`
   and `/sys/fs/cgroup` occur in `resources.py` only. Red today on
-  `crs.py:39`, `dem_input.py:218`, `cog.py:203`, `cli.py:1590`,
-  `mosaic.py:57`.
+  `src_python/tin_engine/crs.py@5d2e706d:39`,
+  `src_python/tin_engine/dem_input.py@5d2e706d:218`,
+  `src_python/tin_engine/io/cog.py@5d2e706d:203`,
+  `src_python/tin_engine/cli.py@5d2e706d:1590` and
+  `src_python/tin_engine/mosaic.py@5d2e706d:57`.
 - **T2 the threads rule** (section 4.2's table, one case each): `resources(None,
   None, {})` is `machine_cores()`; `(0, None, {})` likewise; `(3, None,
   {"RASPUTIN_THREADS": "7"})` is 3; `(None, None, {"RASPUTIN_THREADS": "7"})`
@@ -429,7 +490,10 @@ from a literal.
   a 10-core machine is 64.
 - **T3 `machine_cores` with a synthetic `cpu.max`**: `tmp_path/cpu.max` =
   `"200000 100000\n"` gives `min(2, count)` (2 here); `"max 100000"` and an
-  absent file give the plain count (10 here); `"50000 100000"` gives 1.
+  absent file give the plain count (10 here); `"50000 100000"` gives 1; the
+  malformed files of section 6 (`"abc 100000"`, `"200000 0"`, `"200000"`,
+  `"200000 abc"`, an empty file) each give the plain count, never an
+  exception.
 - **T4 `machine_memory` with synthetic files**: `tmp_path/memory.max` =
   `"1073741824\n"` gives 1 GiB on this 32 GiB machine; `"max"` and an absent
   file give `os.sysconf` physical memory (34359738368 here); v1
@@ -454,12 +518,27 @@ from a literal.
   `SlopeTolerance` on a `--tolerance-slope` run; `class_areas` on the
   land-cover fractions fixture. Each test asserts the mesh is still written
   (the spy calls through).
-- **T8 every pool receives the value** (three tests plus two defaults): the
+- **T8 every pool receives the value** (five tests plus two defaults, one
+  spy per large reprojector site of section 3): the
   block decoder's pool has `max_workers=3` on a `--threads 3` cached-source
   run (`test_cli_mesh_cache.py`'s fixture) and on a tile run; the target
   grid's `_pool` has `max_workers=3` on the Velhas `--out-crs` run, and the
   reprojector called inside its workers has `threads=1` (spy on
-  `target_grid.reprojector`); the reprojector's pool has `max_workers=9` for
+  `target_grid.reprojector`, which sees both the `:181` and the `:239`
+  call); the feature reprojector built in `_Tally._take`
+  (`src_python/tin_engine/feature_input.py@5d2e706d:339`) is called with
+  `threads=3` on a `--threads 3` run of the reprojected-source case
+  (`tests/python/test_cli_mesh_features.py@5d2e706d:328-338`, a GeoJSON in
+  EPSG:4326 over the EPSG:25833 DEM, the one feature fixture whose CRS
+  differs from the DEM's; spy on `feature_input.reprojector`, which also sees
+  the hull call at `:183`, so the assertion picks the call whose source CRS
+  is the feature file's); the class-fraction reprojector
+  (`src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`) is called
+  with `threads=3` on a `--threads 3` run of the land-cover fractions fixture
+  (spy on `land_cover_fractions.reprojector`; it is built on every fractions
+  run, the class raster being EPSG:4326). These two are the sites a dropped
+  `threads` would serialise unseen under the library default of one worker,
+  which is why each has its own spy. The reprojector's pool has `max_workers=9` for
   `reprojector(a, b, threads=9)` over 2 250 000 points (36 MB of float64
   pairs; 9 chunks of `CHUNK_POINTS`), where today's `WORKERS` gives 8, and
   `max_workers=2` with `threads=9` over 500 000 points (two chunks).
@@ -470,22 +549,59 @@ from a literal.
   `tests/python/test_crs.py@5d2e706d:207-213`'s `WORKERS` assertion goes.
 - **T9 the MCP schema carries the options**: the `mesh` entry of `derive(app)` has a model with
   fields `threads` (int or None, default None) and `memory_budget` (str or
-  None), with no change to `mcp/`; `argv({"threads": 3})` ends with
-  `--threads 3`.
-- **T10 the memory budget refuses a window above it**: `delineate(request,
-  repository, resources=Resources(threads=1, memory_budget=8192))` on
-  `tests/python/test_catchment.py@5d2e706d:296`'s 48 x 48 fixture (48 x 48 x 6 bytes =
-  13 824 bytes to flood, over 8192) raises `CatchmentError` naming the window,
-  the bytes and the budget; with `memory_budget=13824` it floods (exactly at
-  the budget is accepted). The CLI: `catchment ... --memory-budget 8K` is the
-  same refusal as a usage error, `--memory-budget 8KB` names the text. The
-  mosaic cap: `plan_mosaic(footprints, memory_budget=1)` on `test_mosaic.py`'s
-  2 x 2 lattice refuses naming `--memory-budget`; `tests/python/test_mosaic.py@5d2e706d:658-666`
-  (M5, `physical_memory`) becomes T4's physical case in `test_resources.py`.
+  None), with no change to `mcp/`; `DerivedCommand.argv(model)`
+  (`src_python/tin_engine/mcp/schema.py@5d2e706d:108`) with the entry's model
+  built from `{"threads": 3}` plus the required arguments ends with
+  `--threads 3`, and with `{"memory_budget": "8G"}` ends with
+  `--memory-budget 8G`.
+- **T10 the memory budget refuses a window above it**, on
+  `tests/python/test_catchment.py@5d2e706d:296-304`'s fixture (`bowl()`
+  through `repository_of`, `request(api)`). Its figures, measured by running
+  `delineate` on this tree with `physical_memory` faked to twice each budget
+  (so the cap is the budget), not read from the test's comment, which says
+  48 x 48: the run floods three windows, 49 x 49, 113 x 95 and 224 x 175
+  nodes (float32, 4 bytes a node for the mosaic, 6 to flood); after each
+  flood the growth check plans a probe window at the base margin
+  (`src_python/tin_engine/catchment.py@5d2e706d:279`), which `plan_mosaic`'s
+  cap judges too. Measured:
+
+  ```
+  budget   8192  refused by the mosaic cap:  "the request is 49 x 49 nodes, 9604 bytes at float32, ..."
+  budget   9604  refused by the flood cap:   "the window is 49 x 49 nodes, 14406 bytes to flood, ..."
+  budget  13824  refused by the flood cap:   the same 14406
+  budget  14405  refused by the flood cap:   the same 14406
+  budget  14406  first window floods; refused by the mosaic cap on the probe window: "73 x 55 nodes, 16060 bytes"
+  budget 235199  refused by the flood cap:   "the window is 224 x 175 nodes, 235200 bytes to flood, ..."
+  budget 235200  floods, three windows
+  ```
+
+  The tests: `delineate(request, repository, resources=Resources(threads=1,
+  memory_budget=12000))` raises `CatchmentError` whose text names
+  "49 x 49", "14406 bytes to flood" and "12000" (the flood cap, not the
+  mosaic cap, which 12 000 passes); `memory_budget=14406` raises naming
+  "73 x 55" (so the first window was accepted at exactly its flood figure);
+  `memory_budget=235199` raises naming "224 x 175" and "235200";
+  `memory_budget=235200` floods and returns three windows (exactly at the
+  budget is accepted). The test keeps the budgets as literals with the
+  measured figures beside them, since they are the fixture's, not the
+  machine's. The CLI: `catchment ... --memory-budget 8K` (8 192 bytes) is the
+  mosaic refusal naming "49 x 49", "9604" and "8192" as a usage error;
+  `--memory-budget 8KB` names the text. The mosaic cap on its own:
+  `plan_mosaic(footprints, memory_budget=1)` on `test_mosaic.py`'s 2 x 2
+  lattice refuses naming `--memory-budget`;
+  `tests/python/test_mosaic.py@5d2e706d:658-666` (M5, `physical_memory`)
+  becomes T4's physical case in `test_resources.py`.
 - **T11 `decompose` is gone**: `importlib.util.find_spec("tin_engine.decompose")`
   is None; `project_structure.md` has no line containing `decompose.py` and
   one containing `resources.py`; `tests/python/test_decompose_partition.py`
-  is deleted in the red commit.
+  is deleted in the red commit. The layering table
+  (`tests/python/test_layering.py@5d2e706d:44`) has a `"decompose": ""` row
+  in L1, and its `test_the_table_names_every_module` (`:152-153`) fails on a
+  row for a gone module (`:153`, "rows for modules that are gone"); the red
+  commit drops that row and adds `"resources": ""` to L1 (`os` and Pydantic
+  only, no first-party import), so the table test is red on `resources`
+  being absent (`:152`, "modules with no row") and green once the module
+  exists.
 - **T12 wording**: `stats.render` with `threads=3` prints "Threads used: 3."
   and never "hardware concurrency" (`tests/python/test_stats.py@5d2e706d:246` and `:370`
   updated).
@@ -512,7 +628,10 @@ revision, removed in the old):
 
 Net about **60**; the audit said about 130 (210 added, 80 removed) before the
 call sites were counted. Worst case at +39 % on the additions: 195 added, net
-about 120. Both far under 700. One PR.
+about 120. Both far under 700. One PR. Unmoved by review round 1: the
+`cpu.max` rule (4.1) is one more condition in a reader already counted in
+`resources.py`'s 55, the wording of two refusals changes no line count, and
+the rest of the round's fixes are tests and prose.
 
 **Speed, one line:** the refine path is touched only by passing a value it
 already takes (today's implicit 0 resolves to the same `hardware_concurrency`
@@ -528,19 +647,21 @@ quick check's `decode`/`resample` rows are where it would show.
 `include/terrain/mesh/` or `bindings/` changes, so no `@perf` acceptance run;
 the quick check is the gate.
 
-## 10. Questions for Ola, with defaults
+## 10. Ola's rulings
 
-1. Should `mesh` get `--memory-budget` too (its mosaic cap reads the host's
-   memory in a container as `catchment`'s does), or only `catchment` and
-   `station-catchments` as the audit worded it? Default: `mesh` too.
-2. A thread count above the machine's cores: honour it (the benchmark's sweep
-   to 20 on 10 cores, OpenMP's and Rayon's practice) or clamp it to the cores?
-   Default: honour.
-3. The container's CPU quota (`cpu.max`) counting toward "every core", as its
-   memory limit counts toward the memory default? Default: yes (three lines,
-   one synthetic-file test).
-4. The stats row reads "Threads used: 3." Fine, or add the machine's count
-   ("3 of 10 cores")? Default: the short row.
+Four questions were put to Ola with defaults; he ruled "Yes to all" on
+2026-10-12, taking each default. No question is open.
+
+1. **`mesh` gets `--memory-budget` too**, beside `catchment` and
+   `station-catchments` (its mosaic cap reads the host's memory in a
+   container as `catchment`'s does). Section 4.3.
+2. **A thread count above the machine's cores is honoured, not clamped**
+   (the benchmark's sweep to 20 on 10 cores, OpenMP's and Rayon's practice).
+   Section 4.2.
+3. **A container's CPU quota (`cpu.max`) counts toward "every core"**, as its
+   memory limit counts toward the memory default. Section 4.1.
+4. **The stats row reads "Threads used: 3."**, without the machine's count.
+   Section 4.4; the longer row stays left out (section 7).
 
 ## 11. The ideas file
 
