@@ -1663,6 +1663,18 @@ machine before the push (`@perf`'s question, default yes). `mesh` has no
 bit against the file. Idea for 26c: `row_areas` is a Python Geod loop per
 row per chunk; vectorise or cache it.
 
+**Idle quick-check re-run** (main session, 2026-10-12 ~12:10 UTC, AC, no
+video call, two runs of `tools/bench_quick.py run` on this tree and one on
+the untouched master `b4a81c0d` with `--tree`): every mesh unchanged on all
+three runs; one line outside its band on every run, Lagan `features read`
+0.92 -> 1.04, 1.08 and, on master, 1.05 s (+12 to +17 %, band 5.5 %). The
+untouched master shows the same figure, so the drift belongs to master
+since the baseline of 2026-10-11 (#230 to #232 merged after it), not to
+26b; every other phase within its band. For `@perf` at the next baseline
+refresh: one look at Lagan's `features read` (the CORINE GeoPackage read)
+against `3e6f87eb`, and the refresh itself (the stored baseline predates
+three merges again; retrospective 2026-10-12, P4).
+
 **Lessons for the next retrospective:** a red suite computes expected
 values from the inputs as rounded, not as intended (C++ case 6); the red
 step should carry the layering rows and the reader support for any new file
