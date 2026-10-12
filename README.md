@@ -133,7 +133,7 @@ stdout and stderr, each output file as a `file://` link and, for `mesh`, the
 run record and the `--stats` report as data; the mesh itself never travels
 through the agent. A refused command comes back as an error carrying the
 CLI's own `Error:` words. During a long run the server reports every line the
-command prints and a heartbeat every 5 s while it is silent; cancelling the
+command prints to stderr and a heartbeat every 5 s while it is silent; cancelling the
 call kills the run. One call runs at a time unless `--jobs N` says more. One
 caveat: a `mesh` cancelled while writing a `.vtk` or `.ply` can leave a
 truncated file under the asked name, so rerun before reading it; a `.gpkg`
