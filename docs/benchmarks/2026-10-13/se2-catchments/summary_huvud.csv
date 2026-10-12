@@ -1,0 +1,5 @@
+system,level,id,name,area_km2,triangles,vertices,max_error_m,seconds,peak_gb,status,message,vtk_seconds
+angermanalven,huvud,38000,Ångermanälven,31843.1700,1571742,842316,9.999966974927247,64.99,5.85,ok,,55.86
+umealven,huvud,28000,Umeälven,26771.6000,1227445,681618,9.999948507162685,63.78,5.62,ok,,55.20
+indalsalven,huvud,40000,Indalsälven,26641.8500,1328316,725347,9.99998656998548,59.22,5.12,ok,,50.57
+ljungan,huvud,42000,Ljungan,12838.6400,786524,449716,9.999995179339805,38.97,3.69,ok,,32.52
