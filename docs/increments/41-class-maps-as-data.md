@@ -1,9 +1,9 @@
 # Increment 41: land-cover class maps and palettes as data files
 
-**Status: designed** by `@architect`, 2026-10-12, on `f09b9863` (branch
-`worktree-class-maps`), while Ola was away; the defaults taken are listed in
-section 9. Next: `@reviewer` on the design, then `@tester`'s red suite
-(section 7). Python only, one PR.
+**Status: designed, review round 1 fixes in; next round 2.** By `@architect`,
+2026-10-12, on `f09b9863` (branch `worktree-class-maps`), while Ola was away;
+the defaults taken are listed in section 9. After round 2, `@tester`'s red
+suite (section 7). Python only, one PR.
 
 ## 1. What Ola asked, and what this fixes
 
@@ -91,7 +91,9 @@ literature. Only "simplify by half the stated accuracy" has the backing of
 point 3; the repair ratio (1/100) and the snap ratio (1/20) are 20c-3's
 tuning on CORINE (`docs/increments/20c-soft-quality.md`, M8, for the repair;
 `docs/increments/32-landcover-simplify.md` for the simplification), restated as
-fractions of CORINE's accuracy so that a CORINE run is unchanged. They are
+fractions of CORINE's accuracy so that a CORINE run is unchanged. The 5 m
+snap is Ola's ruling 6 on 20c
+(`docs/increments/20c-soft-quality.md@f09b9863:3385-3388`). They are
 a scaling rule, not a derived optimum.
 
 ## 3. The ideas file
@@ -185,7 +187,7 @@ unlisted in both. Same masks, same codes, for every value.
 | `corine` | `Code_18` | water: land_cover + water; land: land_cover | today's `corine` |
 | `corine-water` | `Code_18` | water: water; land: drop; unlisted drop | today's `corine-water` |
 | `clc18_kode` | `clc18_kode` | as `corine` | today's `clc18_kode` |
-| `mapbiomas-c11` | `class` | water (classes 26, 33, 31): land_cover + water; land: land_cover | new; the legend CSV's codes, labels and colours; accuracy 30 m |
+| `mapbiomas-c11` | `class` | water (classes 33 River, Lake and Ocean `#2532e4`, and 31 Aquaculture `#091077`): land_cover + water; land: land_cover | new; the legend CSV's codes, labels and colours; accuracy 30 m; its own `[no_class]` and notice (below) |
 
 The three CORINE files repeat the 44-class table (TOML data is not counted
 production code, `CLAUDE.md` §2); a test pins that the three tables are equal,
@@ -208,6 +210,17 @@ mapbiomas-c11` gives the ParaView preset. Colours: MapBiomas's own legend
 colours, not natural colours (default D5). The `.vtk` and `.ply` of a
 `--land-cover` run do not carry a palette, so they are unchanged.
 
+The file's water classes are the two the Collection 11 legend CSV has: 33
+(River, Lake and Ocean) and 31 (Aquaculture). Its `[no_class]` is label
+`"No class; constraint lines"`, colour `#3c3c3c`, the same grey as CORINE's
+code 0 (default D9). Its `notice` is the catalogue's credit without the fetch
+date and URL, which a class-map file cannot know: `"Contains data from the
+MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land
+Cover Maps of Brazil (CC BY-SA 4.0)"`. A `--features-map mapbiomas-c11` run
+writes that notice, as a CORINE run writes CORINE's; a `--land-cover` run
+takes only the palette from the map, because the catalogue's credit, with its
+date and URL, is already in its record.
+
 **The option.** `--features-map` keeps its name (the audit's, and the one
 users have). Its value is a shipped name or a path: a value ending in `.toml`
 or containing a path separator is a path; anything else is a shipped name or
@@ -217,6 +230,18 @@ or unreadable path is refused naming it; a TOML syntax error is refused with
 name or a path, and refuses an uncoded map ("has no classes to colour").
 The help texts list the shipped names from the package directory, not from a
 literal.
+
+**Maps load once, early.** A path map's code system is known only after the
+file is read, so the early check that `--land-cover` and a coded
+`--features-map` do not meet (`src_python/tin_engine/cli.py@f09b9863:994`)
+loads every `--features-map` value (name or path) at that point, before the
+DEM is opened, and keeps the loaded `ClassMap`s; `_feature_sources` takes
+them instead of names, so each file is read once and every file error comes
+before any reading of the DEM. The comment above the code-system refusal
+(`src_python/tin_engine/cli.py@f09b9863:1858`) says every coded map is
+CORINE, so the refusal never fires; that is false once a user can point at
+any file, and it is replaced by one saying the refusal catches two maps of
+different code systems.
 
 ## 5. Clean-up distances derived from the source's accuracy
 
@@ -265,9 +290,15 @@ CORINE on any DEM in use (above).
 
 ### 5.2 What `h` is
 
-The larger of the two node spacings of the tile the features meet,
-`max(meta.delta_x, |meta.delta_y|)` of `opened.tile`
-(`src_python/tin_engine/cli.py@f09b9863:1113`), in the mesh CRS. That tile is
+"The DEM cell" is the larger of the two node spacings of the tile the
+features meet, `max(meta.delta_x, |meta.delta_y|)` of `opened.tile`
+(`src_python/tin_engine/cli.py@f09b9863:1113`), in the mesh CRS. Why the
+larger: the floor says a border cannot be placed more finely than the mesh
+resolves it, and on a grid of 10 m by 5 m a border running north-south is
+resolved only to 10 m across it. The smaller spacing would claim a precision
+the grid has in one direction only. On the square grids in use the two are
+equal, so the choice matters only for a grid like the test DEM's, which T7
+pins. That tile is
 always projected: a geographic DEM needs `--out-crs`
 (`src_python/tin_engine/cli.py@f09b9863:770-778`), and then the tile is the
 resampled target grid. Units are the CRS's; the clean-up distances are in the
@@ -283,7 +314,8 @@ same units already (a CRS in feet is the audit's row H1, not this increment).
   only, `src_python/tin_engine/feature_input.py@f09b9863:363`), but the record
   writes the three values for every features run
   (`src_python/tin_engine/cli.py@f09b9863:1197`). `a = 100` there, so those
-  runs record today's values.
+  runs record today's values on cells up to 100 m; on a coarser DEM they
+  record the values of `s = h`, as a CORINE run would.
 - **Overrides**: `--features-repair`, `--features-tolerance` and
   `--features-outline-snap` default to `None` (given: used as is, with
   today's checks; not given: derived). Each replaces only its own distance.
@@ -365,7 +397,10 @@ an uncoded map.
 `(30, 30)` gives `(0.3, 15, 1.5)`; `(100, 1500)` gives a snap of 50.
 **T7 overrides and record.** On `rough_dem` with a coded map: no clean-up
 option gives record values 1, 50, 5; `--features-tolerance 20` alone gives
-1, 20, 5; a user map with `positional_accuracy_m = 40` gives 0.4, 20, 2; two
+1, 20, 5; a user map with `positional_accuracy_m = 40` gives 0.4, 20, 2; a
+user map with `positional_accuracy_m = 4` gives 0.1, 5, 0.5 (the cell floor
+through the command line: `h = 10`, the larger spacing; the smaller, 5 m,
+would give 0.05, 2.5, 0.25); two
 coded sources at 40 and 100 give 1, 50, 5; an uncoded-only run records 1, 50,
 5.
 **T8 text codes.** A GeoJSON with attribute `cover` in `"Forest"`, `"Lake"`
@@ -379,7 +414,10 @@ the levee lines carry it; without extras the vocabulary fingerprint equals
 refused.
 **T10 MapBiomas.** The shipped map's anchor entries match the Collection 11
 legend CSV (3 Forest Formation `#1f8d49`, 4 Savanna Formation `#7dc975`,
-5 Mangrove `#04381d`; `@tester` reads the rest of the anchors from the CSV);
+5 Mangrove `#04381d`, 33 River, Lake and Ocean `#2532e4`, 31 Aquaculture
+`#091077`; `@tester` reads the rest of the anchors from the CSV); the water
+classes are exactly 33 and 31, and code 26 is not listed; code 0 is
+`#3c3c3c`; the notice is the one of section 4;
 the catalogue's `mapbiomas-c11` names it; a `--land-cover` run's `.gpkg`
 triangles carry class names and colours, and its `.vtk` carries no new field.
 **T11 licence.** A map with `licence` writes it to the record; the CORINE
@@ -427,6 +465,12 @@ byte-identity check above uses its cases, not its clock.
 | `sources.py` (`class_map`) | 2 | 0 |
 | **total** | **202** | **112** |
 
+Also touched, not counted: `tests/python/feature_fixtures.py` (it builds a
+`FeatureSource` from `fi.CLASS_MAPS[map_name]`,
+`tests/python/feature_fixtures.py@f09b9863:98`; it loads the map by name
+instead), and `project_structure.md` (the `palettes.py` entry loses
+`CORINE_NATURAL`; `class_maps.py` and `data/class_maps/` are added).
+
 About **90 net lines**; with the +39 % worst case on what is added (202 x
 1.39 = 281 added), about **170 net**. One PR, well under 700.
 
@@ -448,6 +492,8 @@ About **90 net lines**; with the +39 % worst case on what is added (202 x
   equal.
 - **D8** `licence` written to the record only when not empty; CORINE's is
   empty (its notice already carries the terms), so CORINE files are unchanged.
+- **D9** MapBiomas's code 0 (no class; constraint lines) is CORINE's grey,
+  `#3c3c3c`; the legend has no colour for "no polygon".
 
 ## Review
 
