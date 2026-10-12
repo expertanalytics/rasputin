@@ -1,6 +1,6 @@
 # Increment 40: `catchment` on a DEM in degrees, flooding its own grid
 
-**Status: designed and review-approved after two rounds; build stacked on `worktree-threads` (increment 38); next `@tester`'s red suite** (`@architect`,
+**Status: built on `worktree-geo-catchment`, stacked on `worktree-threads` (increment 38): red `c3b0deae` (`@tester`), green `997911c4` (`@developer`, 176 net production lines by `python3 tools/count_loc.py worktree-threads HEAD` against about 185, worst 260; no C++), test fix `56f8bff6`; section 11 is the as-built record; next code review.** (`@architect`,
 2026-10-12, branch `worktree-geo-catchment`, from master `f09b9863`). Ola was
 away when it was written; every open point is decided on a stated default,
 listed in section 10 for the morning. Every line citation below is pinned to
@@ -615,6 +615,60 @@ sup-norm*.
   Default: yes (the safe side for a floor).
 - **Q5** `catchment --rivers` accepts a river file in any CRS, while
   `station-catchments` keeps the same-CRS rule? Default: yes.
+
+
+## 11. As built (recorded by the main session from the handbacks)
+
+Built overnight 2026-10-12/13 while Ola was away ("Take both, have fun"),
+stacked on increment 38's branch (merged in as `fb73c96f`, rows 38 and 40
+both kept) because both change `catchment.py`.
+
+**Red** `c3b0deae` (`@tester`): 70 tests net, 132 failing, each on a
+missing piece: `tin_engine.geodesy`; the refusal of degrees still raised;
+missing keywords and fields (`to_core_lattice`, `nodes_area`,
+`_grow(base=)`, the margin pair in `_joined`, `place(cell_m=)` with 59
+existing calls now passing `cell_m=10.0`, `seed_for(cell_m=)`,
+`burn_reach(frame=)`); the river-reach-in-another-CRS refusal; R10
+(`station-catchments` still refusing degrees); the start line's
+`np.float64`. Full suite otherwise 5,227 passed. Pins: R11's SHA-256
+checksums measured on this Mac and skipped elsewhere (C++ ring reduction
+and GEOS may round differently); R11's DTM10 seed 824310 7908340 (10,448
+nodes, two windows); the wordings of the window line and the gap refusal;
+the default tolerance 59.6648 m ± 0.002; the reduced area within 1e-4 of the
+fine area in degrees.
+
+**Green** `997911c4` (`@developer`): `src_python/tin_engine/geodesy.py`
+(87 lines: the local metres frame, geodesic cell areas by row with a cell
+centred on its node, geodesic area over outlines), the refusal lifted for
+`catchment`, the constants in cells where section 5 says, the margin a pair,
+`--rivers` and gauge points moved into the DEM's CRS, the outline written in
+the DEM's CRS; no C++ change. 176 net lines. Full suite 7,492 passed, one
+failure test-side (below); mypy, ruff, prohibited deps, detria boundary and
+citations clean; both R11 byte-identity tests pass. Pins: the cell lookup in
+`catchment_batch.cell_at(repository, point, crs)`, used by `catchment
+--rivers` and the batch; `Catchment.seed` stays `np.float64` because
+increment 22's digest pins its printed form, the start line printing plain
+floats; lakes with a river file in degrees refused, "lakes need a river file
+in metres (a projected CRS)".
+
+**Test fix** `56f8bff6` (`@tester`): R8 expected exactly 30 m of position
+uncertainty, but the design measures the cell at the station, where the
+fixture's cell is 10.000798 m, so 30.002393 m; the test now computes that
+from the station's latitude and compares within 1e-6 (measuring at the
+centre row or one row off fails it). The lakes refusal is pinned to its
+whole message. Full suite 7,493 passed, 18 skipped, coverage 98.47 %.
+`@tester`'s judgement: `cell_at`'s behaviour is pinned by R8 (no layering
+rule forced its siting: `geodesy` is layer 1 and the CLI may import it);
+`Catchment.seed`'s type is internal and stays unpinned, its printed form
+pinned by R11 and the start-line checks.
+
+**Speed:** hydrology only, no refine or mesh code; R11 shows projected runs
+byte-identical.
+
+**Lessons for the next retrospective:** a fixture exact at one point (10 m
+cells only at the centre row) needs its test to compute the value where the
+design measures it; a red suite that changes 59 existing call sites is a
+signal the signature change wants its own line in the design's size table.
 
 ## Review
 
