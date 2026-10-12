@@ -1545,8 +1545,8 @@ evidence. Idea for the tooling: `bench_quick.py run --record <path>`.
 `5f28292c`: red `1820c1d4` (`@tester`, 92 cases), green `5b8bb3e0`
 (`@developer`), test-side fixes `f165282b` (`@tester`, 103 cases green);
 621 net production lines by `python3 tools/count_loc.py 5f28292c HEAD`
-against the estimate of 420; no mutation round (section 9); next `@perf`'s
-acceptance (section 11, item 1 scoped to 26b), then code review. The Status
+against the estimate of 420; no mutation round (section 9); `@perf`'s
+acceptance `98eea44f` ACCEPTED (below); next code review. The Status
 line at the top and ROADMAP row 26 are updated once the ruling-record branch
 of 2026-10-12, which rewrites the same lines, has merged.
 
@@ -1634,12 +1634,36 @@ date for a cache without a fetch date kept (matches `fetch/run.py`'s
 NOTICE.txt wording). Question for Ola: keep that date, or omit it? Default
 keep.
 
+**`@perf`'s acceptance** `98eea44f` (`docs/benchmarks/2026-10-12/26b-fractions/`,
+AC power, section 11 item 1 scoped to 26b): **ACCEPTED**. The Velhas piece
+on the derived ANADEM 30 m UTM grid the earlier runs used, MapBiomas 2025
+(the design's default year): 649,504 triangles at 10 m and 1,571,955 at
+5 m. All 19 classes inside the reference band (the cells wholly inside the
+outline, up to those plus the 33,945 cells the outline crosses), identical
+for both meshes; worst class 15 at +4.49 ha (+0.0011 %) from the centre
+count inside a 777 ha band. Fractions pass 0.77 s per million triangles at
+10 m and 0.64 s at 5 m on 8 threads (gate 2 s); `_core.class_areas` scales
+7.4x from 1 to 8 threads, the whole pass 2.6x (the serial Python around it:
+window reads per chunk, row areas, fractions). Per-cell sums on a 1 km
+square against GEOS: 2.7e-16 relative (gate 1e-6). Peak RSS +146 MB at
+10 m (225 B per triangle) and +42 MB at 5 m, against the design's 25 B
+estimate; not a gate, noted for 26c. Quick check: every mesh SHA-256 equal
+over three runs; the timing verdict `SLOWER` (+7 to +33 %) on every case,
+and the untouched base `5f28292c` back to back slower by the same amounts
+(a video call loaded the machine, load average 7); branch against base
+within 1 % on six cases and 1.11 on `quarter`, so no change attributable
+to 26b; the main session re-runs `tools/bench_quick.py run` on an idle
+machine before the push (`@perf`'s question, default yes). `mesh` has no
+`--threads`, so the thread sweep called `assign` directly, checked bit for
+bit against the file. Idea for 26c: `row_areas` is a Python Geod loop per
+row per chunk; vectorise or cache it.
+
 **Lessons for the next retrospective:** a red suite computes expected
 values from the inputs as rounded, not as intended (C++ case 6); the red
 step should carry the layering rows and the reader support for any new file
 structure it asserts (the `.ply` list reader); an amend of an unpushed
 commit is refused in away mode, so a provisional commit message stays and
-the record goes into the as-built section.
+the record goes into the as-built section; check `ps` for foreign load before any timing run (a video call shifted every phase 10 to 30 %).
 
 ## Review
 
