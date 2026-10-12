@@ -1,6 +1,6 @@
 # Increment 37: an MCP server over the rasputin commands
 
-**Status: built** on branch `worktree-mcp-server` (red `ee5b5d52`, `@tester`, 62 tests; green `851592ba`, `@developer`, 322 net production lines by `python3 tools/count_loc.py b4a81c0d HEAD` against the estimate of 260 and the worst case of 360; no mutation round and no `@perf` run, section 10; section 12 is the as-built record; code review round 1 CHANGES REQUESTED, four blockers, Review section; next the fixes and round 2). Designed by
+**Status: built** on branch `worktree-mcp-server` (red `ee5b5d52`, `@tester`, 62 tests; green `851592ba`, `@developer`, 322 net production lines by `python3 tools/count_loc.py b4a81c0d HEAD` against the estimate of 260 and the worst case of 360; no mutation round and no `@perf` run, section 10; section 12 is the as-built record; code review round 1 CHANGES REQUESTED, four blockers, all fixed: T5 case and prose `783c3368` (`@tester`), the `error` field `730162fe` (`@developer`, 323 net lines), the README section `19652b88` (`@architect`), two citations pinned `dbc77f3b`; next round 2). Designed by
 `@architect`, 2026-10-12, on `b4a81c0d` (branch `worktree-mcp-server`); the
 nine defaults of section 6 were taken while Ola was away. Probe and its
 output: `docs/increments/37-probes/`. Design review round 1 (Review section)
