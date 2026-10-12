@@ -24,7 +24,10 @@ regression of that size until the next refresh. Lagan `features read` is
 **not a code change**: the baseline's own commit and `.so`, run back to back
 with master, reads 1.107 s against master's 1.103 s (medians of 3), both
 against 0.922 s stored; the profile shows the same call counts and times on
-both trees. See *Lagan `features read`* below. The idle refresh: see *Run 3*.
+both trees. See *Lagan `features read`* below. The idle refresh: *Run 3* found no idle minute in
+the afternoon; **the evening's *Run 4* did it** (20:29 local, idle, AC) and
+installed the new baseline, and *Run 5* is increment 38's quick check against
+it: `NO CHANGE`, every mesh identical.
 
 ## Method
 
@@ -175,12 +178,105 @@ then show the refine phases within band; if they again read +6 to +15 % on an
 idle machine, that is a finding about the machine since 2026-10-11, not about
 master, and needs a look at the machine, not the code.
 
+## Evening: run 4, the idle refresh, and run 5, increment 38's quick check
+
+### Method
+
+- The Swedish catchment batch finished at 18:05 UTC; Ola away. `origin/master`
+  `f09b9863` merged into this branch as `969c49e2` (what master gained since
+  the afternoon's `c317c7e4`: #236, increment 37, the MCP server, Python
+  only; #237 the generality audit and #238 a retrospective, both prose).
+  `_core` rebuilt Release into this tree's `build-bench`: SHA-256
+  `55bb3993…`, byte-identical to the afternoon's and to the main session's
+  11:15 build, so master's C++ is unchanged since `c317c7e4`.
+- Same venv, machine record, command and data as the afternoon (above);
+  script version `tools/bench_quick.py` and `tools/bench.py` at `969c49e2`
+  (unchanged since `c317c7e4`). The waiter
+  `raw/evening_idle_save_then_38.sh` sampled the 1-minute load every 30 s and
+  started run 4 once it read under 2.0 twice in a row, then run 5 straight
+  after; nothing of ours beside either. The 30 samples are in
+  `quick-run-4-idle-save.log`: 28 at 2.03 to 3.37 from 20:15 to 20:28, then
+  the two that fired, 1.96 and 1.76 at 20:29. `ps` before each run: no video call, no
+  batch; iTerm2's `pidinfo` helper at 75 % of one core (it polls the agent
+  panel), WindowServer no longer in the top six. Power: AC, battery 100 %,
+  `pmset -g batt` before and after each run in the logs.
+- Increment 38's tree: `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads`,
+  branch `worktree-threads` at `8f9289c4` (`--threads` and `--memory-budget`
+  as settings; Python only). Its merge base with master is `5d2e706d`, master
+  before #238 (prose), and `git diff --name-only 5d2e706d 8f9289c4` lists no
+  C++ or CMake file; its `build-bench/_core…so`, built by the tool, is the
+  same `55bb3993…`. Run through this tree's venv and `tools/bench_quick.py
+  run --tree <threads>`, so it was judged against the baseline run 4 saved.
+
+### Run 4 (20:29, `--save-baseline`, idle, AC): baseline installed
+
+`quick-run-4-idle-save.log`, exit 2: `baseline saved`, then **`NO BASELINE:
+input $RASPUTIN_DATA/sweden_glo30_cache changed`** — the Lagan case's GLO-30
+cache directory gained tiles when the Swedish batch's fetch filled it, so its
+fingerprint moved from `dir:3deaa80f…` to `dir:f00da080…`; the tool refuses
+to judge across an input change, and the new baseline carries the new
+fingerprint. The other nine inputs and the machine record are unchanged. The
+installed record is `docs/benchmarks/quick/baseline-ac.json` (commit
+`969c49e2`, power `ac`), copied here as `baseline-ac-new-969c49e2.json`.
+
+Judged against the stored `357808b1` record as the tool would have, had the
+fingerprint matched (`verdict` over the two records with the old inputs
+substituted; the full table is `raw/delta-old-357808b1-vs-new-969c49e2.md`):
+**one line beyond its band, no `MESH CHANGED`, no `BROKEN`**; every case's
+mesh SHA-256 and `max_error` equal the stored ones.
+
+| line | stored | run 4 | change | band |
+|---|---:|---:|---:|---:|
+| lagan features read | 0.92 | 1.03 | +12.1 % | 5.5 % |
+
+The totals and the C++ phases:
+
+| case | stored s | run 4 s | change | refine (change) | mesh |
+|---|---:|---:|---:|---|---|
+| tile | 0.416 | 0.430 | +3.3 % | +1.2 % | same |
+| tile t=1 | 0.699 | 0.711 | +1.7 % | +0.2 % | same |
+| quarter | 0.355 | 0.366 | +3.1 % | -0.4 % | same |
+| numedalslagen | 8.829 | 8.894 | +0.7 % | +0.4 % | same |
+| lagan | 14.542 | 14.736 | +1.3 % | (under 5 % of the run) | same |
+| geilo-al-ramp | 0.329 | 0.344 | +4.7 % | +1.5 % | same |
+| romsdal-slope | 3.578 | 3.624 | +1.3 % | +0.1 % | same |
+
+So the afternoon's +6 to +15 % on every phase was the machine, as the
+afternoon section says: idle, the same `.so` reads within 1.5 % of the stored
+baseline on every refine phase. No merge since `357808b1` moved a phase.
+`lagan features read` stays +12 % on an idle machine (1.030 to 1.071 s over
+the three timed runs, so not a cache warming within the run); it is not code
+(the baseline's own commit read the same 1.10 s back to back with master this
+afternoon, *Lagan `features read`* above), and what in the machine's state
+since 2026-10-11 makes the CORINE GeoPackage query slower by 0.11 s was not
+measured. The small `decode` phases (+7 to +16 %, 0.007 to 0.010 s each) are
+under the tool's 0.05 s floor. The seven `HOTSPOT` lines are the ones printed
+on every quick check since 2026-10-10; nothing new.
+
+### Run 5 (20:31, increment 38 `8f9289c4` against the refreshed baseline): `NO CHANGE`
+
+`quick-run-5-increment-38.log`, exit 0. The tool's judge lines are the
+seven standing `HOTSPOT` lines and `NO CHANGE`: no `SLOWER`, no `FASTER`,
+no `MESH CHANGED`, no `BROKEN`, no `NOT JUDGED`. So every case's mesh
+SHA-256 equals the baseline's (the tool prints `MESH CHANGED` for any case
+whose hash differs), every `max_error` is within its tolerance, and no phase
+at 5 % or more of its case's total moved beyond its band (5 %, or the
+baseline's spread) and 0.05 s. The tool keeps no record without
+`--save-baseline`, so run 5's per-phase figures are not stored; its verdict
+is the evidence. Consistent with the design's claim of bit-identical meshes
+and no timing change.
+
 ## Verdict
 
-- Refresh: **not done**; the two runs measured a loaded machine (every phase,
-  C++ included, +6 to +15 % on unchanged code and `.so`), and the idle wait
-  found no idle minute in 45. No regression attributable to any merge since
-  the baseline; no `MESH CHANGED`; `max_error` within tolerance on every case.
+- Refresh: **done in the evening (run 4)**: `docs/benchmarks/quick/baseline-ac.json`
+  is now master `f09b9863`'s code on `969c49e2`, idle, AC, with the Lagan
+  GLO-30 cache's new fingerprint. Against the old `357808b1` baseline: no
+  mesh changed, `max_error` within tolerance on every case, refine phases
+  within 1.5 %; one line beyond its band, `lagan features read` +12.1 %
+  (0.11 s), machine-side (see above), cause within the machine not measured.
+  The afternoon's runs 1 and 2 measured a loaded machine, not a merge.
+- Increment 38 (`8f9289c4`): **NO CHANGE** against the refreshed baseline;
+  meshes identical on every case; no phase outside its band.
 - Lagan `features read`: **machine, not code**; 7 % of the run, not a hotspot.
 
 ## Files
@@ -193,5 +289,11 @@ master, and needs a look at the machine, not the code.
   or more of its case.
 - `raw/lagan-plain-runs.jsonl`, `raw/lagan-profile-read-path.txt`,
   `raw/prof_mesh.py`: the features-read look.
+- Evening: `quick-run-4-idle-save.log` (the load samples, then the refresh)
+  and `quick-run-5-increment-38.log`; `baseline-ac-new-969c49e2.json`, the
+  record installed as `docs/benchmarks/quick/baseline-ac.json`;
+  `raw/delta-old-357808b1-vs-new-969c49e2.md`, old vs new, every phase at
+  5 % or more of its case; `raw/evening_idle_save_then_38.sh`, the waiter
+  that ran both.
 - Meshes: each run's mesh went to a `rasputin-quick-*` temporary folder and
   the session scratchpad; regenerate with the `cases.toml` arguments.
