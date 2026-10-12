@@ -1,4 +1,4 @@
-# Quick-check baseline refresh on master `c317c7e4`, and one look at Lagan `features read` (@perf, 2026-10-12)
+# Quick-check baseline refresh on master `c317c7e4` and `969c49e2`, and one look at Lagan `features read` (@perf, 2026-10-12)
 
 Asked by the main session: refresh `docs/benchmarks/quick/baseline-ac.json`
 (stored on increment 35's head `357808b1`, 2026-10-11, master `3e6f87eb` plus
@@ -169,7 +169,8 @@ a row, within 45 minutes. See `quick-run-3-idle-save.log`.
 **It never ran.** From 15:34 to 16:19 the 1-minute load average stayed between
 1.50 and 5.11 (46 samples, in the log), never under 1.5 on two samples in a
 row; the waiter gave up at the cap, exit 4. **The stored baseline
-(`357808b1`, 2026-10-11) stays installed; this branch changes no baseline.**
+(`357808b1`, 2026-10-11) stayed installed this afternoon; the evening's run 4
+replaced it (below).**
 The refresh is one command on an idle machine (about 4 minutes, nothing else
 timed): from a checkout whose venv matches the stored machine record (numpy
 2.5.4), `RASPUTIN_DATA=<data> .venv/bin/python tools/bench_quick.py run
@@ -297,3 +298,7 @@ and no timing change.
   that ran both.
 - Meshes: each run's mesh went to a `rasputin-quick-*` temporary folder and
   the session scratchpad; regenerate with the `cases.toml` arguments.
+
+## Review
+
+Round 1, 2026-10-12, @reviewer (`c31e55e7..fe06568c`, 0 production lines): CHANGES REQUESTED, one wording, applied in this recording commit: /Users/skavhaug/projects/rasputin/.claude/worktrees/baseline-1012/docs/benchmarks/2026-10-12/baseline-refresh/README.md@fe06568c:171-172 said the old baseline stays installed; run 4 replaced it. Suggestion applied: the title names `969c49e2`. Times before the evening section are local (CEST, UTC+2). Verified: the refresh rule is section 3 (b); runs 1 and 2 match their logs; both `_core` hashes `55bb3993`; the waiter's 30 samples (14-minute wait); run 4 saved, then NO BASELINE for the GLO-30 cache; installed baseline equal to the new copy, machine record equal, all seven meshes and max errors equal; run 5 (increment 38) NO CHANGE; shipped tests pass; check_citations exit 0; merges clean onto master.
