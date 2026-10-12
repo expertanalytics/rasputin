@@ -418,8 +418,8 @@ tools/check_citations.py` was green before and after the six cites above
 were planted wrong (`@1d3fb3b6:9135` in a 410-line file): its `PATH`
 pattern starts with `(?!/)` and its comment says a token starting with `/`
 is "never a citation" (`tools/check_citations.py@c317c7e4:62-64`). A
-relative cite planted wrong the same way was caught at once
-(`gates_after_commit.py@c317c7e4:9077`, "has 227 lines"). So the full-path
+relative cite planted wrong the same way (the hook cite in lesson 7 with
+its line changed to 9077) was caught at once ("has 227 lines"). So the full-path
 pinned citations the review records are asked to carry are not checked by
 the gate at all; "every cite resolves" is true only of the relative ones.
 On `c317c7e4`, 251 such cites in 20 files under `docs/` (`git grep -o
