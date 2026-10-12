@@ -32,7 +32,7 @@ import numpy as np
 import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
-from shapely.geometry import Point, Polygon
+from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from tin_engine.burn import BurnRefusal, GaugePath, burn_reach
@@ -45,6 +45,7 @@ from tin_engine.catchment_core import (
 )
 from tin_engine.crs import crs_label, parse_crs, reprojector, same_crs, single_crs
 from tin_engine.gauge import Reach
+from tin_engine.geodesy import LocalFrame, area_m2, mean_cell_area
 from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
 from tin_engine.io.repository import DemRepository
 from tin_engine.mosaic import (
@@ -96,8 +97,8 @@ class CatchmentRequest(BaseModel):
     #: Metres the reduced outline may stray from the fine one; None is twice
     #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
     outline_tolerance: float | None = None
-    #: The gauge's mapped reach (increment 29), in `seed_crs`, which must then
-    #: be the DEM's: the pour point is the burnt chain's placed node.
+    #: The gauge's mapped reach (increment 29), in `seed_crs`, moved into the
+    #: DEM's (increment 40): the pour point is the burnt chain's placed node.
     reach: Reach | None = None
 
     @model_validator(mode="after")
@@ -173,6 +174,7 @@ class Catchment:
     nodes: int
     seed_nodes: int
     fine_area: float
+    nodes_area: float
     rings_dropped: int
     dropped_nodes: int
     holes_filled: int
@@ -182,6 +184,7 @@ class Catchment:
     meta: RasterMeta
     trace_seconds: float
     reduced: Polygon
+    reduced_area: float
     tolerance: float
     reduce_seconds: float
     gauge: GaugeResult | None = None
@@ -227,28 +230,20 @@ def delineate(
     if not (math.isfinite(x) and math.isfinite(y)):
         raise CatchmentError(f"the seed {request.seed} has no image in {dem_crs}")
     if request.reach is not None:
-        if not same_crs(request.seed_crs, dem_crs):
-            hint = _code_hint(request.seed_crs, dem_crs)
-            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}{hint}")
         return _gauged(request, repository, footprints, dem_crs, budget)
     lake = _lake(request, dem_crs)
     x0, y0, x1, y1 = lake.bounds if lake is not None else (x, y, x, y)
-    margin = float(WINDOW_MARGIN_M)
+    mx, my = base = LocalFrame.at(dem_crs, (x, y)).units(WINDOW_MARGIN_M)
     point = (float(x), float(y))
 
     def flood(tile: DemTile) -> tuple[UpstreamOutcome, Mask]:
         seed = _seed_mask(tile.meta, lake, point)
         return upstream(tile, seed), seed
 
-    bounds = Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin)
-    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False, budget)
+    bounds = Bounds(x_min=x0 - mx, y_min=y0 - my, x_max=x1 + mx, y_max=y1 + my)
+    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False, budget, base=base)
     fine = _outline(dem_crs, lake, point, out, m, seed, tuple(windows))
-    return _reduced(fine, _tolerance(request, m))
-
-
-def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
-    t = request.outline_tolerance
-    return 2.0 * max(m.delta_x, m.delta_y) if t is None else t
+    return _reduced(fine, dem_crs, request.outline_tolerance)
 
 
 def _grow[T](
@@ -258,12 +253,14 @@ def _grow[T](
     flood: Flood[T],
     burnt: bool,
     budget: int,
+    *,
+    base: tuple[float, float],
 ) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
     """22's window loop: flood, grow until the catchment is clear of the
-    window's edge, or refuse (NoData, the data's edge, the memory budget,
-    whose per-node figure grows by a burnt copy and `accumulate`'s 10 bytes
-    when `burnt`)."""
-    plan, margin = _plan(footprints, bounds, budget), float(WINDOW_MARGIN_M)
+    window's edge by `base` (the margin in the DEM's units, x and y), or
+    refuse (NoData, the data's edge, the memory budget, whose per-node figure
+    grows by a burnt copy and `accumulate`'s 10 bytes when `burnt`)."""
+    plan, margin = _plan(footprints, bounds, budget), base
     windows: list[Window] = []
     while True:
         m = plan.meta
@@ -285,12 +282,12 @@ def _grow[T](
             raise CatchmentError("no seed node has data: the seed lies on NoData")
         # Grow while the in-nodes' bounds plus the base margin reach past the
         # window; the step itself takes the margin doubled at each growth.
-        probe = _plan(footprints, _joined(m, out, float(WINDOW_MARGIN_M)), budget)
+        probe = _plan(footprints, _joined(m, out, base), budget)
         grown = _grown(plan, probe)
         windows.append(Window(Bounds.of(m.node_box()), m.rows, m.cols, seconds, grown))
         if not grown:
             break
-        margin *= 2
+        margin = (2 * margin[0], 2 * margin[1])
         plan = _plan(footprints, _joined(m, out, margin), budget)
     if out.touches_edge:
         sides = _edge_sides(m, out)
@@ -299,14 +296,14 @@ def _grow[T](
 
 
 def _burnt_flood(
-    reach: Reach, pick: Callable[[GaugePath], int]
+    reach: Reach, pick: Callable[[GaugePath], int], frame: LocalFrame
 ) -> Flood[tuple[DemTile, GaugePath, Mask]]:
     """Burn the reach into the window, and flood from the chain node `pick`
     chooses; keeps the burnt window, the path and the placed node's seed."""
 
     def flood(tile: DemTile) -> tuple[UpstreamOutcome, tuple[DemTile, GaugePath, Mask]]:
         try:
-            burnt, path = burn_reach(tile, reach)
+            burnt, path = burn_reach(tile, reach, frame)
         except BurnRefusal as exc:
             raise CatchmentError(str(exc)) from exc
         seed = np.zeros(burnt.array.shape, dtype=np.uint8)
@@ -331,8 +328,15 @@ def _gauged(
     sensitivity is read in stage A's window."""
     reach = request.reach
     assert reach is not None
-    line = np.asarray(reach.line, dtype=np.float64)
-    pad = reach.corridor + WINDOW_MARGIN_M
+    line = reprojector(request.seed_crs, dem_crs)(reach.line)
+    if not np.isfinite(line).all():
+        raise CatchmentError(f"the river reach has a vertex with no image in {dem_crs}")
+    frame = LocalFrame.at(dem_crs, tuple((line.min(axis=0) + line.max(axis=0)) / 2))
+    if not (frame.is_identity and same_crs(request.seed_crs, dem_crs)):
+        reach = reach.model_copy(update={"line": tuple(map(tuple, line.tolist()))})
+        reach = reach.model_copy(update={"at": _at_again(request, dem_crs, frame)})
+    pad = np.asarray(frame.units(reach.corridor + WINDOW_MARGIN_M))
+    base = frame.units(WINDOW_MARGIN_M)
     (x0, y0), (x1, y1) = line.min(axis=0) - pad, line.max(axis=0) + pad
     bounds = Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
     u = reach.uncertainty
@@ -343,12 +347,13 @@ def _gauged(
             raise CatchmentError("the burnt chain ends before the uncertainty")
         return int(past[0])
 
+    placed = _burnt_flood(reach, lambda p: int(p.placed), frame)
     m, out, (burnt, path, seed), windows = _grow(
-        footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True, budget
+        footprints, repository, bounds, placed, True, budget, base=base
     )
     try:
-        again = Bounds.of(m.node_box()), _burnt_flood(reach, at_u), True, budget
-        b = _grow(footprints, repository, *again)
+        again = Bounds.of(m.node_box()), _burnt_flood(reach, at_u, frame), True, budget
+        b = _grow(footprints, repository, *again, base=base)
     except CatchmentError:
         pass  # stage B never refuses a catchment: read what stage A's window holds
     else:
@@ -357,8 +362,9 @@ def _gauged(
         m, (burnt, path, seed), windows = b[0], b[2], [*windows, *b[3][same:]]
         out = upstream(burnt, seed)
     acc = accumulate(burnt)
-    down = float(np.hypot(*np.diff(line, axis=0).T).sum()) - reach.at
-    s = assess(acc.count, acc.reach, acc.flow_to, path, m.delta_x * m.delta_y / 1e6, u, down)
+    down = float(np.hypot(*np.diff(frame.forward(line), axis=0).T).sum()) - reach.at
+    cell_km2 = mean_cell_area(np.asarray(out.mask), m) / 1e6
+    s = assess(acc.count, acc.reach, acc.flow_to, path, cell_km2, u, down)
     checked: Literal["whole", "partly", "none"] = "whole"
     if "downstream_unread" in s.causes:
         checked = "partly" if s.checked_down_m > 0 else "none"
@@ -378,7 +384,20 @@ def _gauged(
         causes=(*s.causes, *(() if path.direction_ok else ("direction",))),
     )
     fine = _outline(dem_crs, None, xy[path.placed], out, m, seed, tuple(windows))
-    return replace(_reduced(fine, _tolerance(request, m)), gauge=gauge)
+    return replace(_reduced(fine, dem_crs, request.outline_tolerance), gauge=gauge)
+
+
+def _at_again(request: CatchmentRequest, dem_crs: str, frame: LocalFrame) -> float:
+    """The reach's `at` measured again in the burn `frame` (5.5): the
+    mapped position `P`, `at` metres along the line in the request's CRS (in
+    its frame there when in degrees), moved and projected onto the moved line."""
+    assert request.reach is not None
+    given = np.asarray(request.reach.line, dtype=np.float64)
+    near = LocalFrame.at(request.seed_crs, tuple((given.min(axis=0) + given.max(axis=0)) / 2))
+    p = LineString(near.forward(given)).interpolate(request.reach.at)
+    move = reprojector(request.seed_crs, dem_crs)
+    there = frame.forward(move(near.inverse([(p.x, p.y)])))
+    return float(LineString(frame.forward(move(given))).project(Point(there[0])))
 
 
 def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
@@ -432,18 +451,19 @@ def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) 
     return seed
 
 
-def _joined(m: RasterMeta, out: UpstreamOutcome, margin: float) -> Bounds:
-    """The window joined with the in-nodes' bounds grown by `margin`."""
+def _joined(m: RasterMeta, out: UpstreamOutcome, margin: tuple[float, float]) -> Bounds:
+    """The window joined with the in-nodes' bounds grown by `margin`, x and y."""
+    mx, my = margin
     x0, y0, x1, y1 = m.node_box()
     (lo_x, lo_y), (hi_x, hi_y) = (
         m.node_xy(out.row_max, out.col_min),
         m.node_xy(out.row_min, out.col_max),
     )
     return Bounds(
-        x_min=min(lo_x - margin, x0),
-        y_min=min(lo_y - margin, y0),
-        x_max=max(hi_x + margin, x1),
-        y_max=max(hi_y + margin, y1),
+        x_min=min(lo_x - mx, x0),
+        y_min=min(lo_y - my, y0),
+        x_max=max(hi_x + mx, x1),
+        y_max=max(hi_y + my, y1),
     )
 
 
@@ -503,36 +523,47 @@ def _outline(
         fine=fine,
         crs=crs_label(dem_crs),
         seed=point,
-        lake_area=None if lake is None else lake.area,
+        lake_area=None if lake is None else area_m2(lake, dem_crs),
         nodes=int(out.nodes_in),
         seed_nodes=int(np.count_nonzero(seed)),
-        fine_area=fine.area,
+        fine_area=area_m2(fine, dem_crs),
+        nodes_area=int(out.nodes_in) * mean_cell_area(mask, m),
         rings_dropped=len(dropped),
         dropped_nodes=_nodes_in(mask, [lattice[k] for k in dropped]),
         holes_filled=len(holes),
-        holes_area=-sum(areas[k] for k in holes),
+        holes_area=sum(area_m2(Polygon(rings[k]), dem_crs) for k in holes),
         windows=windows,
         mask=mask,
         meta=m,
         trace_seconds=time.perf_counter() - t0,
         reduced=fine,
+        reduced_area=0.0,
         tolerance=0.0,
         reduce_seconds=0.0,
     )
 
 
-def _reduced(fine: Catchment, tolerance: float) -> Catchment:
-    """The fine outline reduced to `tolerance` by `_core.reduce_ring`, in
-    metres from its lower-left corner, the seed point kept inside."""
-    origin = np.array(fine.fine.bounds[:2])
-    ring = np.asarray(fine.fine.exterior.coords)[:-1] - origin
+def _reduced(fine: Catchment, dem_crs: str, tolerance: float | None) -> Catchment:
+    """The fine outline reduced to `tolerance` metres (None: twice the cell)
+    by `_core.reduce_ring`, in metres from its lower-left corner (in a
+    `LocalFrame` at its centre when the DEM is in degrees, 5.6), the seed
+    point kept inside."""
+    x0, y0, x1, y1 = fine.fine.bounds
+    frame = LocalFrame.at(dem_crs, ((x0 + x1) / 2, (y0 + y1) / 2))
+    tolerance = 2.0 * frame.cell_m(fine.meta) if tolerance is None else tolerance
+    ring = frame.forward(np.asarray(fine.fine.exterior.coords)[:-1])
+    origin = ring.min(axis=0)
     t0 = time.perf_counter()
-    out = reduce_ring(ring, tolerance, np.array([fine.seed]) - origin)
+    out = reduce_ring(ring - origin, tolerance, frame.forward([fine.seed]) - origin)
     if out.status != ReduceStatus.Ok:
         raise CatchmentError(f"the outline could not be reduced: {out.status.name}")
-    reduced = Polygon(np.asarray(out.ring) + origin)
+    reduced = Polygon(frame.inverse(np.asarray(out.ring) + origin))
     return replace(
-        fine, reduced=reduced, tolerance=tolerance, reduce_seconds=time.perf_counter() - t0
+        fine,
+        reduced=reduced,
+        reduced_area=area_m2(reduced, dem_crs),
+        tolerance=tolerance,
+        reduce_seconds=time.perf_counter() - t0,
     )
 
 
