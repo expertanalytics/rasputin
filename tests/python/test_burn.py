@@ -677,3 +677,89 @@ def test_each_refusal_is_a_burn_refusal(
         r = reach(gauge, column_line(20, 5, 40), at=100.0)
     with pytest.raises(burn.BurnRefusal, match=rf"(?i){words}"):
         burn.burn_reach(tile, r)
+
+
+# ---------------------------------------------------------------------------
+# Increment 40: the burn in a metre frame (section 5.5, R7 and R9)
+#
+# `docs/increments/40-geographic-catchment.md`: `burn_reach(window, reach,
+# frame=None)`; with a `geodesy.LocalFrame` the burn runs on
+# `frame.meta(window.meta)` and `frame.forward(reach.line)`, so every metre
+# in `burn.py` is a metre, and the returned tile keeps `window.meta`. The
+# terrains are `jog` and the valley on grids in EPSG:4326 whose cells are
+# 10 m at the frame's latitude (`dx = 10 / kx`, `dy = 10 / ky`), the frame at
+# the centre of the line's box, so the burn sees the 10 m lattice it sees in
+# EPSG:25833 to rounding (1e-12 m on a few hundred metres).
+# ---------------------------------------------------------------------------
+
+
+def geo_window(
+    z: npt.NDArray[np.floating],
+    centre: tuple[float, float],
+    row: float,
+    col: float,
+    nodata: float | None = None,
+) -> DemTile:
+    """`z` in EPSG:4326 with node (row, col) at `centre` and 10 m cells there."""
+    from geodesy_fixtures import geo_tile, metres_per_degree
+
+    kx, ky = metres_per_degree(centre[1])
+    dx, dy = 10.0 / kx, 10.0 / ky
+    lon0, lat0 = centre[0] - col * dx, centre[1] + row * dy
+    return geo_tile(z, lon0=lon0, lat0=lat0, dx=dx, dy=dy, nodata=nodata)
+
+
+def frame_at(line: Any) -> Any:
+    from tin_engine.geodesy import LocalFrame
+
+    xs, ys = zip(*line, strict=True)
+    return LocalFrame.at("EPSG:4326", ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2))
+
+
+@pytest.mark.parametrize(("gap", "nodata"), GAPS, ids=GAP_IDS)
+def test_r9_the_gap_refusal_in_degrees_names_the_node_with_five_decimals(
+    burn: ModuleType, gauge: ModuleType, gap: float, nodata: float | None
+) -> None:
+    """`jog` at 60° N: the same gap node (20, 21) is refused, named by its
+    longitude and latitude to five decimals (5.5), not rounded to whole
+    degrees as a metre figure is."""
+    tile = geo_window(jog(gap), (10.0, 60.0), row=20.0, col=20.0, nodata=nodata)
+    m = tile.meta
+    line = (m.node_xy(0.0, 20.0), m.node_xy(40.0, 20.0))
+    r = reach(gauge, line, at=200.0, corridor=30.0)
+    with pytest.raises(burn.BurnRefusal, match=r"(?i)gap \(NoData\) in the DEM") as raised:
+        burn.burn_reach(tile, r, frame=frame_at(line))
+    gx, gy = m.node_xy(float(GAP[0]), float(GAP[1]))
+    message = str(raised.value)
+    assert f"({gx:.5f}, {gy:.5f})" in message, message
+
+
+def test_a_frame_of_none_is_todays_burn(burn: ModuleType, gauge: ModuleType) -> None:
+    z = valley(dam=True)
+    r = reach(gauge, column_line(CC, 40, 200), at=1100.0)
+    today, path = burn.burn_reach(tile_of(z), r)
+    again, same = burn.burn_reach(tile_of(z), r, frame=None)
+    assert np.array_equal(np.asarray(again.array), np.asarray(today.array))
+    assert nodes(same) == nodes(path)
+    assert np.array_equal(np.asarray(same.arc), np.asarray(path.arc))
+
+
+def test_the_burn_in_a_frame_on_a_grid_in_degrees_is_the_metre_burn(
+    burn: ModuleType, gauge: ModuleType
+) -> None:
+    """The valley at 59.5° N: the chain, the placed node, the burnt array bit
+    for bit and the arc in metres are the projected valley's; the tile keeps
+    the window's meta in degrees."""
+    z = valley(dam=True)
+    projected, path = run(burn, z, reach(gauge, column_line(CC, 40, 200), at=1100.0))
+    tile = geo_window(z, (15.0, 59.5), row=120.0, col=float(CC))
+    m = tile.meta
+    line = (m.node_xy(40.0, float(CC)), m.node_xy(200.0, float(CC)))
+    out, geo = burn.burn_reach(tile, reach(gauge, line, at=1100.0), frame=frame_at(line))
+    assert out.meta == m and out.meta.geographic
+    assert nodes(geo) == nodes(path)
+    assert geo.placed == path.placed
+    assert np.array_equal(np.asarray(out.array), projected)
+    assert np.allclose(np.asarray(geo.arc), np.asarray(path.arc), rtol=0.0, atol=1e-6)
+    assert geo.node_offset_m == pytest.approx(path.node_offset_m, abs=1e-6)
+    assert geo.lowered_nodes == path.lowered_nodes == len(DAM_ROWS)
