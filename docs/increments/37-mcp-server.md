@@ -1,6 +1,6 @@
 # Increment 37: an MCP server over the rasputin commands
 
-**Status: designed and review-approved after three rounds; next `@tester`'s red suite (section 9).** Designed by
+**Status: built** on branch `worktree-mcp-server` (red `ee5b5d52`, `@tester`, 62 tests; green `851592ba`, `@developer`, 322 net production lines by `python3 tools/count_loc.py b4a81c0d HEAD` against the estimate of 260 and the worst case of 360; no mutation round and no `@perf` run, section 10; section 12 is the as-built record; next code review). Designed by
 `@architect`, 2026-10-12, on `b4a81c0d` (branch `worktree-mcp-server`); the
 nine defaults of section 6 were taken while Ola was away. Probe and its
 output: `docs/increments/37-probes/`. Design review round 1 (Review section)
@@ -686,6 +686,75 @@ inherit the docstrings it will rewrite). Handed back under *Ideas* in the
 handback: phase progress lines from `mesh`, an OpenAPI export from
 `schema.py`, Streamable HTTP for hosted agents, Tasks when the SDK has them,
 a jobs cap by memory estimate rather than count.
+
+## 12. As built (recorded by the main session from the handbacks)
+
+Ola picked the MCP server on 2026-10-11 ("Add an MCP server to the ideas
+file after GeoPackage") and ruled the dependency on 2026-10-12 ("Rule the
+mcp SDK: yes, use it"); the design's nine questions were decided on their
+defaults while he was away (section 10). Design `b990e38c`, three review
+rounds (Review section), the last two closed on the reviewer's exact
+wording in the recording commit.
+
+**Red** `ee5b5d52` (`@tester`): 62 tests, every one red on the missing
+module `tin_engine.mcp`, the missing `tin_engine.__main__`, the stdio
+server dying at import, or `rasputin mcp` not being a subcommand; the
+existing 7,233 tests pass (full suite 9 min 56 s, coverage 98.6 %).
+Files: `tests/python/test_mcp_schema.py` (T1-T3, 26),
+`test_mcp_server.py` (T4-T6, T8, T10 in process, 22), `test_mcp_stdio.py`
+(T7-T9, 5), `test_mcp_cli.py` (T11, 2, run without the SDK too),
+`test_layering.py` rows (T12, 7), helpers `mcp_driver.py`,
+`mcp_fake_child.py`, `mcp_stdio_launcher.py`. The three SDK suites skip
+when `mcp` is absent. Pins beyond the design, asserted: `derive(app)` drops
+the command named `mcp`; `DerivedCommand.tool_name`, `.model`, `.argv()`,
+`.tool()`; `argv[0]` is the hyphenated CLI name and argv follows the
+command's parameter order; an Enum default is its value, a Path default its
+string; `build_server(app, *, jobs=1, child=<argv prefix>)`; the
+`HEARTBEAT_SECONDS` module constant; error results carry `stderr` in
+`structured_content`; the success text block is the structured JSON
+verbatim. Departures from the design: `__main__.py` carries an
+`if __name__ == "__main__"` guard (the layering test imports it); the
+Kartverket triangle count is a window (410k to 520k) with the tolerance read
+from the record, since the count is not a record field; "within 0.05 s" on
+progress became exact two-sided bounds.
+
+**Green** `851592ba` (`@developer`): `src_python/tin_engine/mcp/`
+(`__init__.py`, `schema.py` 98 lines, `server.py` 204), `__main__.py` (5),
+`cli.py` (15: the `mcp` subcommand and the `_destination` hint),
+`pyproject.toml` (the `mcp` extra, `mcp>=2.3`, pulled by `dev`). No test
+file touched. All 62 red tests green; full `pytest tests/python/` 7,292
+passed, 17 skipped, coverage 98.43 % (`mcp/schema.py` 100 %,
+`mcp/server.py` 91 %); Kartverket through the tool 464,290 triangles in
+0.77 s; `ruff check`, `ruff format --check`, `mypy` (strict, 72 files),
+`check_prohibited_deps.py` (fails naming rasterio when planted in the `mcp`
+extra, restored) and `check_detria_boundary.py` clean. No C++ touched.
+Departures, for the code review to judge: (1) `cli.py`'s `_destination`
+gains a `hint` (default `--out`) used as `param_hint` on its three
+refusals, and the `--out-edges`, `--stats`, `--record` and `--out-dir`
+callers pass theirs: section 6.4 and T6 say an `out` outside `out_parent`
+is "refused naming `--out`", but at `b4a81c0d` the CLI said
+`Invalid value: X is outside the permitted parent Y`, naming no option;
+refusals now read `Invalid value for --out: ...` (Ola's question: keep?
+default keep, it is what the design and the plain-output rule ask). (2)
+`RunResult` lives in `schema.py`, not `server.py` as section 5 sites it:
+`tool()` needs it and the layering rows forbid `schema` importing
+`server`; `server` re-exports it. (3) Section 6.1's four `main.yaml`
+install-line edits are not made: `tests/python/test_ci_changes.py` pins
+those strings; `dev` pulls `mcp>=2.3` instead (the main session's default).
+
+**Size:** 322 net production lines (`python3 tools/count_loc.py b4a81c0d
+HEAD`): schema 98, server 204, cli 15, `__main__` 5; the design estimated
+260 with a worst case of 360. Under 700.
+
+**Decided while Ola was away (defaults):** the nine design questions
+(section 10); the `dev` extra pulls `mcp` so the `python` CI job runs the
+suite; the `_destination` hint kept pending Ola's word.
+
+**Lessons for the next retrospective:** a design claim about existing CLI
+wording is checked by running the command before a test pins it (T6's
+"naming `--out`"); no worktree had a current `_core` build, so `@tester`
+copied one from a merged worktree with identical C++ rather than build
+beside `@perf`.
 
 ## Review
 
