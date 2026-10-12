@@ -229,10 +229,15 @@ class TestArgvRoundTrip:
 
 # ---------------------------------------------------------------- T3
 
-#: Section 1's counts, from the probe.
-PARAMETER_COUNTS = {
-    "mesh": 34, "draw": 10, "fetch": 10, "catchment": 11, "station_catchments": 11,
-    "fetch_stations": 3, "palette": 2, "version": 0,
+#: Section 1's eight commands as tool names. Their parameter counts are not
+#: pinned: the test below holds each schema's properties equal to the command's
+#: own click parameters, which implies the count, and a pinned count would turn
+#: red on every master merge that adds a CLI option (as `mesh` 34 -> 36 did when
+#: `--land-cover` and `--land-cover-year` landed) without saying anything about
+#: the schema.
+TOOL_NAMES = {
+    "mesh", "draw", "fetch", "catchment", "station_catchments",
+    "fetch_stations", "palette", "version",
 }  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -291,12 +296,10 @@ class TestTheRealApp:
     def test_the_eight_commands_in_the_clis_order(self) -> None:
         tools = derived(app)
         assert list(tools) == tool_names(app)
-        assert set(tools) == set(PARAMETER_COUNTS)
+        assert set(tools) == TOOL_NAMES
 
-    def test_parameter_counts_and_no_drift_from_the_click_parameters(self) -> None:
+    def test_no_drift_from_the_click_parameters(self) -> None:
         tools = derived(app)
-        counts = {name: len(d.tool().input_schema["properties"]) for name, d in tools.items()}
-        assert counts == PARAMETER_COUNTS
         for name, d in tools.items():
             params = {p.name for p in click_command(app, name).params}
             assert set(d.tool().input_schema["properties"]) == params, name
