@@ -1,11 +1,11 @@
 # Increment 35 — the land-cover clean-up step, made faster
 
-Status: **built** on branch `worktree-cleanup-speed` (design `7da1d663`, review
+Status: **merged (#229, 2026-10-11)** from branch `worktree-cleanup-speed` (design `7da1d663`, review
 round 1 approved `7218dfb7`; red `c4130194` (`@tester`), green `e805d37f`
 (`@developer`, 23 net production lines by `python3 tools/count_loc.py c7dba32e
 HEAD`: `crs.py` +14, `feature_input.py` +9), mutation round `7621a99e` (M1-M4
 all killed, one count-based test added for M3); section 11 is the as-built
-record; `@perf`'s quick check `2cf224a6` ACCEPTED, section 11; code review round 1 APPROVED, Review section). Next: the push on Ola's yes. Master
+record; `@perf`'s quick check `2cf224a6` ACCEPTED, section 11; code review round 1 APPROVED, Review section; Numedalslagen's 68 % hotspot ruled expected by Ola 2026-10-12, `docs/benchmarks/quick/hotspots.toml`). Master
 `c7dba32e` is `@perf`'s profile commit
 (`docs/benchmarks/2026-10-11/cleanup-profile/README.md`). Every `file:line`
 below is pinned to `c7dba32e`. Every figure was measured on this worktree's
