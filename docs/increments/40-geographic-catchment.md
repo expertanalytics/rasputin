@@ -1,13 +1,14 @@
 # Increment 40: `catchment` on a DEM in degrees, flooding its own grid
 
-**Status: designed** (`@architect`, 2026-10-12, branch `worktree-geo-catchment`,
-from master `f09b9863`). Ola was away when it was written; every open point
-is decided on a stated default, listed in section 10 for the morning. Every
-line citation below is pinned to `f09b9863`. Increment 38 (threads and memory
-as settings, branch `worktree-threads`, approved, not yet merged) changes
-`delineate` and `_grow` in `src_python/tin_engine/catchment.py` (a `budget`
-argument); the red and green steps start from master after 38 merges, and the
-shapes named here survive it.
+**Status: designed, review round 1 fixes in; next round 2** (`@architect`,
+2026-10-12, branch `worktree-geo-catchment`, from master `f09b9863`). Ola was
+away when it was written; every open point is decided on a stated default,
+listed in section 10 for the morning. Every line citation below is pinned to
+`f09b9863`. Increment 38 (threads and memory as settings, branch
+`worktree-threads`, approved, not yet merged) changes the signatures of
+`_grow` and `_gauged` in `src_python/tin_engine/catchment.py` (a `budget`
+argument); the build is stacked on 38's branch (section 8), and the shapes
+named here survive it.
 
 ## 1. What Ola asked
 
@@ -61,12 +62,19 @@ How other tools treat a grid in degrees, read 2026-10-12:
   no latitude handling; the diagonal is `sqrt(cell_size_x^2 + cell_size_y^2)`
   in the raster's own units. Its release notes say other tools compute a
   z-factor per row on geographic rasters.
-- **GRASS `r.watershed`**: `raster/r.watershed/ram/init_vars.c` (main of
-  `github.com/OSGeo/grass`) forms the diagonal from the region's `ew_res` and
-  `ns_res` as stored, which in a latitude-longitude location are degrees; the
-  manual says nothing on latitude-longitude locations.
+- **GRASS `r.watershed`**: `get_dist` in `raster/r.watershed/ram/do_cum.c`
+  (lines 6-91 at `github.com/OSGeo/grass` commit `be428461`; `seg/do_cum.c`
+  has the same function) converts the spacing to metres when the location is
+  latitude-longitude (`G_projection() == PROJECTION_LL`): `ew_res` is the mean
+  of three `G_distance` east-west spans of the region (its north edge, its
+  middle and its south edge) divided by the column count, `ns_res` likewise
+  from three north-south spans over the row count. That is one pair of metre
+  spacings for the whole region, not one per row; it sets the neighbour
+  distances, the contour lengths and the cell area `ew_res * ns_res` that
+  scales the specific catchment area.
 
-So per-row metres for areas is established practice (TauDEM); flooding the
+So metres for areas on a grid in degrees is established practice, per row
+(TauDEM) or as one average over the region (GRASS); flooding the
 native grid without distances is what Priority-Flood does anywhere. No novelty
 is claimed, so no novelty search was needed.
 
@@ -156,8 +164,15 @@ and `dem_input.py`), not the catchment's.
 
 **Other places that assume metres:** the default outline tolerance, twice
 the cell (`src_python/tin_engine/catchment.py@f09b9863:247`); the window margin
-added to coordinates (`src_python/tin_engine/catchment.py@f09b9863:232`,
-`src_python/tin_engine/catchment.py@f09b9863:321`); the reach's downstream
+added to coordinates, at five sites: the first window of `delineate`
+(`src_python/tin_engine/catchment.py@f09b9863:232`,
+`src_python/tin_engine/catchment.py@f09b9863:239`), the base margin of
+`_grow`'s loop (`src_python/tin_engine/catchment.py@f09b9863:257`), its
+growth test (`src_python/tin_engine/catchment.py@f09b9863:279`), its doubling
+and the next window (`src_python/tin_engine/catchment.py@f09b9863:283-284`),
+and the pad of `_gauged` (`src_python/tin_engine/catchment.py@f09b9863:321`),
+all reaching `_joined`'s one float
+(`src_python/tin_engine/catchment.py@f09b9863:420-432`); the reach's downstream
 length (`src_python/tin_engine/catchment.py@f09b9863:345`); the cell area
 handed to the sensitivity (`src_python/tin_engine/catchment.py@f09b9863:346`);
 the lake, outline and hole areas (`src_python/tin_engine/catchment.py@f09b9863:491-498`);
@@ -307,6 +322,33 @@ All metre figures are applied in metres: in the river file's CRS when it is
 projected, in a `LocalFrame` when it is in degrees (5.5), and converted to the
 DEM's units with `LocalFrame.units` where they bound a window.
 
+**The window margin's shape.** The margin becomes a pair `(mx, my)` in the
+DEM's units, east-west and north-south, the pair `LocalFrame.units` returns.
+At each site of section 3:
+
+- `_joined(m, out, margin: tuple[float, float])` subtracts and adds `mx` on x
+  and `my` on y. `_plan` is unchanged: it takes `Bounds`, so the pair never
+  reaches it; it reaches the plan only through the `Bounds` `_joined` returns.
+- `_grow` gains a keyword `base: tuple[float, float]`, the margin in the DEM's
+  units (beside 38's `budget`). Line 257 starts the loop with
+  `margin = base`; the growth test (line 279) calls `_joined(m, out, base)`;
+  the doubling (line 283) is `margin = (2 * margin[0], 2 * margin[1])`, and
+  line 284 passes that pair to `_joined`.
+- `delineate` takes the frame at the seed after the seed is moved into the
+  DEM's CRS (line 222): `base = LocalFrame.at(dem_crs, (x, y)).units(WINDOW_MARGIN_M)`;
+  the first window (lines 232, 239) is the seed's or lake's box grown by
+  `base`, and `base` goes to `_grow`.
+- `_gauged` uses the burn frame of 5.5 (taken after the line is moved into
+  the DEM's CRS): the pad (line 321) is
+  `frame.units(reach.corridor + WINDOW_MARGIN_M)`, and both stages pass
+  `base = frame.units(WINDOW_MARGIN_M)` to `_grow`.
+
+The frame stays the one taken at the seed (or the reach) while the window
+grows; far from it the east-west margin is off by `cos(lat)/cos(lat0)`, which
+a margin that is a guess absorbs. On a projected DEM `units(2000.0)` is
+`(2000.0, 2000.0)` and `units(30.0 + 2000.0)` is `(2030.0, 2030.0)`, so every
+`Bounds` is the float it is today (test R11).
+
 Scale each assumes: the metre constants were set on NVE's 1:50,000 rivers
 over DTM10 (increment 29, NVE's 140 reference stations); the
 cell constants were checked here at 10 m (DTM10 equality) and on the 28-30 m
@@ -321,7 +363,8 @@ New in `geodesy.py`:
 def cell_areas_by_row(meta: RasterMeta) -> npt.NDArray[np.float64]:
     """m² of one cell in each row: geodesic (the DEM CRS's ellipsoid, one
     Geod polygon per row, as increment 26b's row_areas) when the grid is in
-    degrees; dx * dy in every row otherwise."""
+    degrees; dx * dy in every row otherwise. A row's cell is centred on its
+    nodes: latitude y_r - dy/2 to y_r + dy/2, dx wide."""
 
 def mean_cell_area(mask: npt.NDArray[np.uint8], meta: RasterMeta) -> float:
     """m² per in-node of `mask`: dx * dy exactly on a projected grid; on a grid
@@ -362,7 +405,9 @@ Where each is used:
   keeps the same-CRS rule (`check_reach_crs`), since it compares with
   reference polygons in the river file's CRS.
 - **Placement** (`gauge.place`) gains a keyword `cell_m: float`, required: the
-  DEM's cell at the station (`LocalFrame.at(dem_crs, station).cell_m(meta)`,
+  DEM's cell at the station (`LocalFrame.at(dem_crs, station_dem).cell_m(meta)`,
+  `station_dem` the station moved from the river file's CRS into the DEM's
+  with `reprojector` first, since `at` reads a point in the CRS it is given;
   `meta` the first tile's). `U = min(max(d, U_FLOOR_CELLS * cell_m), map_radius)`
   and `corridor = U_FLOOR_CELLS * cell_m`. `seed_for` (in
   `catchment_batch.py`) takes `cell_m` and passes it on, and when the river
@@ -478,8 +523,14 @@ calls of `gauge.place` gain `cell_m=10.0`, which keeps their pinned figures
 4. **R4 Geodesic area against a hand figure.** On a 1" grid in EPSG:4326, a
    catchment of known rows: `nodes_area` equals the sum over rows of the
    count times the band area from the closed form by authalic latitude,
-   written out in the test (not `Geod`), to 1e-6 relative. Hand figures: one
-   1" cell is 949.7741 m² at the equator and 479.6898 m² at 60° N.
+   written out in the test (not `Geod`), to 1e-6 relative. The band is the
+   node's cell as `cell_areas_by_row` defines it (5.4): from half a spacing
+   south of the node's latitude to half a spacing north, one spacing wide.
+   Hand figures, WGS 84, a 1" cell centred on its node: 949.7741 m² at the
+   equator (-0.5" to 0.5") and 479.6918 m² at 60° N (59°59'59.5" to
+   60°00'00.5"); `Geod` over the same cell agrees to the four decimals. (The
+   band 60°00'00" to 60°00'01" is 479.6898 m², 4e-6 off: the wrong edges fail
+   this test.)
 5. **R5 LocalFrame at two latitudes.** `units(2000.0)` on EPSG:4326 is
    (0.01796631°, 0.01808739°) at 0° and (0.03584229°, 0.01795134°) at 60°;
    `cell_m` on a 1" grid is 30.9221 m at 0° and 30.9479 m at 60° (the
@@ -518,9 +569,17 @@ No suite is invariant-critical in the sense of `docs/increments/README.md`
 ## 8. Estimate, speed
 
 Net production lines (`CLAUDE.md` §2), by file: `geodesy.py` about 80;
-`raster.py` 8; `catchment_core.py` 1; `catchment.py` about 45; `burn.py` 8;
-`gauge.py` 5; `catchment_batch.py` about 20; `cli.py` about 13. **About 180;
-250 at the +39 % worst case. One PR, well under 700.** It touches no C++ file.
+`raster.py` 8; `catchment_core.py` 1; `catchment.py` about 50 (the margin
+pair of 5.3 included); `burn.py` 8; `gauge.py` 5; `catchment_batch.py` about
+20; `cli.py` about 13. **About 185; 260 at the +39 % worst case. One PR, well
+under 700.** It touches no C++ file.
+
+**Build.** Increment 40's red and green steps are stacked on increment 38's
+branch, `worktree-threads`, not on master: both change
+`src_python/tin_engine/catchment.py`, and the overlap is the signatures of
+`_grow` and `_gauged` only (38 adds `budget`, 40 adds `base` to `_grow`). The
+PR's base is master once 38 has merged; until then `count_loc.py` is run
+against 38's head, so the count is 40's lines alone.
 
 **Speed.** Hydrology only; no refine or mesh code, so no `@perf` acceptance
 by the rule. The flood is the same core call as today (section 3: 12 ms at
