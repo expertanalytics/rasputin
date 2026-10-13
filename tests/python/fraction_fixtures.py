@@ -25,9 +25,10 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   `len(classes)`; `classes` uint8 and `fractions` float32 of one length; the
   arrays are kept as given (another dtype is refused, not converted);
   `triangles` is T. Anything else is a `ValueError` (pydantic's).
-- `tin_engine.land_cover_fractions.row_areas(window: ClassWindow) ->
-  float64 (rows,)`: the WGS 84 ellipsoidal area in m2 of one cell of each
-  row (1.1: "computed once per row by pyproj.Geod").
+- `tin_engine.land_cover_fractions.row_areas(window: ClassWindow, crs: str)
+  -> float64 (rows,)`: the area in m2 of one cell of each row, on the
+  raster's own ellipsoid (`crs` geographic; 1.1: "computed once per row by
+  pyproj.Geod"), or on its grid plane for a projected raster.
 - `io.vtk_legacy.write_vtk(..., class_fractions: ClassFractions | None = None)`:
   FieldData `land_cover_offsets` (`unsigned_int`), `land_cover_classes`
   (`unsigned_char`), `land_cover_fractions` (`float`); the three names are
