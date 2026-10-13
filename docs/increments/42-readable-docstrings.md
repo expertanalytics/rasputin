@@ -179,8 +179,8 @@ count.
 
 ## 4. The rule
 
-Proposed text. Where it lives is Ola's call (section 10). Until then the sweep
-applies it as written here.
+The text, with Ola's rulings of 2026-10-13 (section 10): it lives in the
+Python skill file, and outside bug-report links are allowed as below.
 
 > **Docstrings and comments describe the code as it is, for a reader who has
 > never seen the project's history.**
@@ -204,6 +204,9 @@ applies it as written here.
 >   line. At most one per module docstring. None in classes, functions,
 >   comments or help text.
 > - The same holds for the help text the CLI prints (`help=` strings).
+> - A link to an outside bug report (an issue in NumPy, PROJ, GitHub) is
+>   allowed where the code works around that bug, and only with the reason
+>   written beside it, so the comment still reads if the link dies.
 > - Tool directives (`# type: ignore[...]`, `# noqa: ...`, `# ruff: noqa`,
 >   `# mypy: ...`, `# fmt: skip`) are code: they are kept exactly as they are.
 >
@@ -571,6 +574,13 @@ gates in `CLAUDE.md`, section 4?** That list is what agents run before they
 commit, so a gate missing from it is found only by CI. `CLAUDE.md` is a rule
 file, so this needs Ola's go. Default: yes, one line under *Governance gates*,
 `python3 tools/check_code_history.py`.
+
+**Ola's rulings, 2026-10-13.** Question 1: (a), the Python skill file, with one
+exception added to the rule, a link to an outside bug report where the code
+works around that bug, with the reason beside it (section 4). Ola, on being
+asked: "Good topic to discuss further, in human generated code, what is
+considered state-of-the-art here?"; then, to the default with that exception:
+"yes to 1 - 3". Question 2: yes, the checker joins `CLAUDE.md`'s gates in PR 1.
 
 ## 11. Left out
 
