@@ -379,7 +379,7 @@ written only for a feet file.
 | foot, US survey foot | 0.3048, 1200/3937 m | exact definitions | n/a |
 | unit factor match | `rel_tol=1e-12` | factors of order 0.3 to 1 | pyproj's 957 feet CRSs |
 | pole test for 3075 = 15 | abs(lat) == 90 exactly | GDAL writes the EPSG value | 32661, 5041, 32761, 5042 |
-| sub-metre spacing floor | 2^-3 m (section 9.5) | the 1 mm snap; coordinates below 2^42 m | 0.5 m (the A4 probe); 2^-1 to 2^-3 at origins to 7.7e6 m; multiples of 2^-3 m below 2^43 m (section 9.5) |
+| sub-metre spacing floor | 2^-3 m (section 9.5) | the 1 mm snap; coordinates below 2^42 m | 0.5 m (the A4 probe); 2^-1 to 2^-3 at origins to 7.7e6 m; multiples of 2^-3 m below 2^42 m (section 9.5) |
 | feature margin | max(100 m, 2 cells) | DEM cells 1 m to 1 km | 10 m and 31 m unchanged |
 | EPSG name for a feet twin | PROJ's equivalence, 1e-10 relative | false origins up to 1e7 m, so 1 mm at most | 2229, 2240, 6420 (0.10 mm), 2263 (6e-11 m) |
 
@@ -613,8 +613,8 @@ not exact in float64. `@reviewer` measured it through `rasputin mesh` at
 points with the first node at x = 5440353.066 and 9 of 16 at x = 3275842.3.
 The emulation agrees: of 200 000 random whole-millimetre values below
 10^7 m, 13.5 % move; of 200 000 random whole metres below 2^30 m, none; of
-200 000 random multiples of 2^-3 m in each binade from 2^20 to 2^43 m, none,
-and from 2^43 m on, some do (97 113 in the binade from 2^43 m).
+200 000 random multiples of 2^-3 m in each binade from 2^20 to 2^42 m, none,
+and from 2^42 m on, some do (97 113 in the binade from 2^42 m).
 
 Which inputs that reaches in practice, measured over every GeoTIFF under
 `../rasputin_data` (each file's node rows and columns as `read_meta` gives
@@ -624,8 +624,8 @@ tiles; the Austrian 1 m and 10 m files; the projected GLO30 and São Francisco
 moves. The geographic files' degree nodes do move, but a geographic DEM is
 always resampled (`--out-crs` is required), and the resampled canvas of
 increment 15c has its origin at `col0 * h` and `-row0 * h` with `h` a whole
-number of metres or 2^-1 to 2^-3 m, so its nodes are multiples of 2^-3 m and
-do not move below 2^43 m. So today the reach is: feet grids, and projected
+number of metres or 2^-1 to 2^-3 m (once this addendum's floor of 2^-3 m is built; the code at `0f67a567` still accepts 2^-10 m), so its nodes are multiples of 2^-3 m and
+do not move below 2^42 m. So today the reach is: feet grids, and projected
 DEMs with an origin or spacing that is not a multiple of 2^-3 m (decimetres,
 centimetres, millimetres), none of which is in the data on disk. The real fix decides how the noder's lattice and a DEM's
 lattice meet (keeping DEM nodes unsnapped, a spacing that divides the cell, or
@@ -665,7 +665,7 @@ in the red-to-green run, with its output, before `@developer` is spawned.
 The same emulation over A4's resampled grids (300 x 300 nodes, origin a
 multiple of the spacing, at x = 500000, 4000000 and -1234567 plus a few
 cells): spacings 2^-1, 2^-2 and 2^-3 m move no node, and multiples of
-2^-3 m stay fixed below 2^43 m (section 9.3's sampling), so section 4.6 states
+2^-3 m stay fixed below 2^42 m (section 9.3's sampling), so section 4.6 states
 the bound as 2^42 m. From 2^-4 m (62.5 mm, not a whole millimetre) down,
 67500 to 89996 of 90000 nodes move and, at these origins, 300 to 599 leave the
 raster (how many leave depends on the origin); at 2^-10 m (0.98 mm, under the snap spacing) 4151 nodes
@@ -693,3 +693,5 @@ enqueue; a yes recorded on disk is asked again after a context loss).
 **Design review, round 2, 2026-10-13.** Range `3406a453..93423d2d`, 0 counted lines, @reviewer: APPROVED. All six round-1 blockers and all five suggestions resolved; figures and probes re-run (pyproj 3.8.0, PROJ 9.8.1). Suggestions: pin whether the outline snap limit, which shares `MARGIN` (`src_python/tin_engine/feature_input.py@3406a453:634`), stays at 100 m when `MARGIN` follows the cell size; the 2263 to 32118 offset is -1.7e-10 m in easting by the probe, not 5.8e-11 m (section 4.4) or 6e-11 m (constants table).
 
 **Design review, round 3, 2026-10-13.** Range `0f67a567..92e0c3c5`, 0 counted lines, @reviewer: CHANGES REQUESTED. Section 9.3's "no node moves" is false for metre DEMs with whole-millimetre origins (first node at x = 5440353.066 keeps 12 of 16 points, at x = 3275842.3 keeps 9 of 16, 10 m cells, through `rasputin mesh`), so the follow-up covers any DEM whose nodes are not exactly whole 0.001 m steps in float64; sections 4.6 and 9.5's 2^50 m bound becomes 2^42 m. Fingerprints, the 1200 m grid, 599 and 4151, and the narrowed pattern confirmed. Suggestions: give the 1 ftUS row's origin ((300000, 200000) ftUS reproduces 300); "300 to 599 leave" depends on the origin; add `\bconstraint-feet\b` to the narrowed pattern.
+
+**Design review, round 4, 2026-10-13.** Range `7f524956..d1028d1a`, 0 counted lines, @reviewer: CHANGES REQUESTED. Round 3's blockers fixed; the new "no multiple of 2^-3 m moves below 2^43 m" is false (4552287362515.375 m moves; 97,742 of 200,000 from 2^42 to 2^43 m move), so 2^43 becomes 2^42 at the constants row and section 9's three statements. 13.6 %, whole metres, the 977 projected files and the pattern confirmed. Suggestion: the resampled-canvas spacings of 2^-1 to 2^-3 m hold once the floor change is built. Both applied as wording fixes by the main session.
