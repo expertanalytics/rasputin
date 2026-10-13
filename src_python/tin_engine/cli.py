@@ -1,14 +1,12 @@
 """Command-line interface for the rasputin terrain engine.
 
 This module is the **single composition root**: joining the file system to the
-engine is its whole job. Paths from the command line also reach
-``tin_engine.domain``, ``tin_engine.dem_input`` and ``io/repository.py``, which
-read the files they name (``tin_engine.raster`` also imports ``_core``, to
-build the one core raster, per ``project_structure.md``): ``viz/`` is written
-against protocols and never
-names a core type, while the core never sees a file, a path or a CRS. Everything
-that has to know both sides lives here. (``project_structure.md``'s rule that
-exactly one module constructs a core *raster* is about ``tin_engine.raster``.)
+engine is its whole job. The paths it is given are read by
+``tin_engine.dem_input``, ``tin_engine.feature_input`` and the readers in
+``io/``. ``viz/`` is written against protocols and never names a core type,
+while the core never sees a file, a path or a CRS. Everything that has to know
+both sides lives here. The core raster is the exception: it is built in
+``tin_engine.raster``, the one module that constructs it.
 
 The `draw` command in particular:
 
@@ -193,7 +191,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-#: Increment 38: the two options `mesh`, `catchment` and `station-catchments` share.
+#: The options `mesh`, `catchment` and `station-catchments` share.
 THREADS = Annotated[
     int | None,
     typer.Option(
@@ -259,12 +257,11 @@ CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
 #: draws identically to the row above it, so declaring all nine features would
 #: put six legend rows on every picture that a reader cannot tell apart --
 #: measured by drawing the gallery. It grows when the stylesheet does.
-#: Grown once, at increment 8: `bridge-over-lake`'s shoreline is an area feature
-#: the vocabulary can name, and without an entry here its token is never emitted
-#: -- the shoreline would draw as a plain breakline and the bridge picture would
-#: lose the thing it exists to show. `coastline` sits between the two tokens
-#: above, water still over infrastructure, and `svg.py` gained its CSS rule in
-#: the same commit: an entry with no rule draws identically to the row above it.
+#: `coastline` is here because `bridge-over-lake`'s shoreline is an area feature
+#: the vocabulary can name: without an entry its token is never emitted, the
+#: shoreline draws as a plain breakline, and the bridge picture loses the thing
+#: it exists to show. It sits between the other two, water still over
+#: infrastructure, and `svg.py` has a CSS rule for each of the three.
 _PRECEDENCE = ("river", "coastline", "road")
 
 _BIT_OF = {prop.name: prop.bit for prop in DEFAULT_VOCABULARY.properties}
@@ -276,7 +273,7 @@ DEFAULT_LABEL_LIMIT = 500
 #: Metres. The gallery's coordinates are UTM-shaped (``viz.fixtures.ORIGIN``), so
 #: this is a millimetre on the ground.
 #:
-#: A policy choice made here on the record, because there is no default spacing
+#: A chosen value, set here because there is no default spacing
 #: anywhere in C++ and three of the nine noder statuses point at this number --
 #: two of them in opposite directions. Coarser merges features that are genuinely
 #: distinct (a road four millimetres from a river becomes one edge carrying both
@@ -285,17 +282,23 @@ DEFAULT_LABEL_LIMIT = 500
 #: easting overflows well before ``1e-12``. A millimetre sits four orders of
 #: magnitude clear of that and shows the gallery what its input said.
 DEFAULT_SNAP_SPACING = 1e-3
-# Increment 20, C2 (a): the start mesh's minimum angle, degrees.
+# The start mesh's minimum angle, degrees: a chosen cost. Ruppert's 20.7 degrees
+# does not bound this pass (the lattice does); measured, 25 removes the fans of
+# thin triangles for about 5 % more triangles, and 30 costs about twice the nodes
+# for one fewer sliver.
 DEFAULT_START_MIN_ANGLE = 25.0
-# Increment 32, section 5.4 (Ola's ruling): with land cover simplified.
+# With land cover simplified, a chosen 15 degrees: the start pass's added
+# triangles are then all at the class borders, and 15 keeps most of 25's cut in
+# slivers for about a third of the cost.
 LANDCOVER_START_MIN_ANGLE = 15.0
-# Increment 20c, R7 (Ola's ruling, question 2): the gain a start-quality point
-# must bring, degrees; negative is increment 20's hard rule.
+# The gain a start-quality point must bring, degrees. 0 refuses only a point
+# that would leave its neighbourhood's worst angle lower than before; negative
+# turns the test off and adds every point.
 DEFAULT_START_QUALITY_GAIN = 0.0
-#: 20c-3's four land-cover flags have their own help panel, so the long
+#: The four land-cover clean-up flags have their own help panel, so the long
 #: --[no-]features-merge-same-class does not narrow the main one's names.
 CLEAN_UP = "Land-cover clean-up"
-#: 41: the three clean-up distances default to values derived from the map.
+#: The three clean-up distances default to values derived from the map.
 DERIVED = "Default: from the class map's positional accuracy and the DEM cell (CORINE: {})."
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
@@ -510,7 +513,7 @@ def _destination(out: Path | None, out_parent: Path | None, name: str, hint: str
     """Where to write, having refused every path this process should not touch; a
     refusal names the option, ``hint``.
 
-    A hostile boundary, per the python skill. ``resolve()`` first, so that
+    A hostile boundary. ``resolve()`` first, so that
     ``..`` cannot smuggle a write out of an explicitly permitted parent; refuse
     a symlinked ``--out`` rather than following it, because a link pointing back
     *inside* the permitted parent passes containment and still overwrites a file
@@ -522,8 +525,8 @@ def _destination(out: Path | None, out_parent: Path | None, name: str, hint: str
     is the right answer for ``--out-parent`` and is all this boundary claims.
     """
     if out is None:
-        # "The common case is show me this now": a fresh directory of its own,
-        # so a second run cannot overwrite the picture still open in a browser.
+        # With no --out the picture is wanted at once: a fresh directory of its
+        # own, so a second run cannot overwrite the picture still open in a browser.
         return Path(tempfile.mkdtemp(prefix="rasputin-")) / f"{name}.svg"
     if out.is_symlink():
         raise typer.BadParameter(f"{out} is a symlink; refusing to follow it", param_hint=hint)
@@ -623,7 +626,7 @@ def draw(
     typer.echo(f"{target}")
 
 
-#: What the suffix of ``--out`` selects (increment 13, ruling 8; 36 for .gpkg).
+#: The output formats, chosen by the suffix of ``--out``.
 MESH_SUFFIXES = (".vtk", ".ply", ".gpkg")
 
 
@@ -686,7 +689,7 @@ def _constraint_arrays(
     Computed from ``constrained_edges`` and the noded graph alone, never from
     ``viz.scene``: that module is the renderer, and a mesh writer reaching into
     it for a topology join would make ``viz/`` load-bearing for a path that
-    draws nothing (ruling 6).
+    draws nothing.
 
     A constrained mesh edge with no entry in the noded graph gets 0, which
     ``_core.pyi`` defines as *unclassified* rather than *wrong*.
@@ -967,26 +970,26 @@ def mesh(
         ),
     ] = None,
 ) -> None:
-    """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
+    """Write a mesh as legacy VTK, PLY or a GeoPackage, by the suffix of ``--out``.
 
-    The mesh is a gallery fixture's, or, with ``--dem PATH``, a GeoTIFF's
-    (increment 12): every ``--stride``-th DEM node inside the grid's outer ring,
-    triangulated, with z sampled bilinearly from the DEM. With ``--tolerance``
-    (increment 14) that grid is only the start: it is refined at DEM nodes until
-    every triangle's max error is within the tolerance, and z is read at the
-    nodes. With ``--domain`` (increment 16) the start is the polygon's rings
-    alone, their vertices where the file puts them with bilinear z, and only
-    the inside is meshed. Vertices where the DEM has no data are dropped with
-    their triangles, and the count is reported.
+    The mesh is a gallery fixture's, or, with ``--dem PATH``, a GeoTIFF's:
+    every ``--stride``-th DEM node inside the grid's outer ring, triangulated,
+    with z sampled bilinearly from the DEM. With ``--tolerance`` that grid is
+    only the start: it is refined at DEM nodes until every triangle's max
+    error is within the tolerance, and z is read at the nodes. With
+    ``--domain`` the start is the polygon's rings alone, their vertices where
+    the file puts them with bilinear z, and only the inside is meshed.
+    Vertices where the DEM has no data are dropped with their triangles, and
+    the count is reported.
     The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
     ``--dem DIR`` or several ``--dem`` files are stitched into one grid first,
-    cut to ``--bbox`` if given (increment 15a, ``tin_engine.mosaic``).
+    cut to ``--bbox`` if given (``tin_engine.mosaic``).
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
-    feature masks, one 0/1 array per feature that occurs, and the vocabulary
-    (``13-bundled-mesh.md``). There is no ``--format``, because it could
-    contradict the suffix. Both formats are binary by default; ``--ascii``
-    writes text you can read.
+    feature masks, one 0/1 array per feature that occurs, and the vocabulary.
+    There is no ``--format``, because it could contradict the suffix.
+    ``.vtk`` and ``.ply`` are binary by default; ``--ascii`` writes text you
+    can read.
 
     ``.ply`` is for QGIS. Two files, never one holding both element types:
     MDAL's own caveat is that a host application expects either a 1D mesh or a
@@ -996,29 +999,37 @@ def mesh(
     Both repeat the identical vertex block, which is what makes the two layers
     register on each other when a person loads them side by side.
 
+    ``.gpkg`` is one GeoPackage for QGIS: a layer of triangles, one of the
+    constraint lines, one of the land-cover polygons when class codes give
+    any, and the run's record as a table. It is an SQLite file, so ``--ascii``
+    and ``--out-edges`` are refused.
+
     Unlike ``draw``, a failed engine run is a non-zero exit and no file. A
     picture of a failure is still a picture and worth producing; there is no
     such thing as a picture of a failed file, so the refusal is reported in the
     engine's own words instead.
 
-    ``--stats`` (increment 17) adds a report and changes nothing else: the
-    clock always runs, the quality pass and the report only with the flag.
+    ``--stats`` adds a report and changes nothing else: the clock always
+    runs, the quality pass and the report only with the flag.
 
     A ``--features-map`` with class codes (``corine``, ``corine-water``,
-    ``clc18_kode``) also gives every triangle its polygon's code, in the cell
-    array ``land_cover_code`` of a ``.vtk`` or the face property of a ``.ply``
-    (increment 16c); ``rasputin palette corine`` writes natural colours for it.
+    ``clc18_kode``, ``mapbiomas-c11``, or a class-map file that names codes)
+    also gives every triangle its polygon's code, in the cell array
+    ``land_cover_code`` of a ``.vtk``, the face property of a ``.ply`` or the
+    ``code`` column of a ``.gpkg``'s triangles; ``rasputin palette corine``
+    writes natural colours for it.
 
-    ``--land-cover KEY`` (increment 26b) gives every triangle the exact share
-    of each land-cover class of a cached catalogue source of classes, read
-    from ``--cache`` for ``--land-cover-year`` (the last year by default): a
-    sparse table in the file (``land_cover_offsets``, ``land_cover_classes``,
-    ``land_cover_fractions``), the largest class as ``land_cover_code``, and
+    ``--land-cover KEY`` gives every triangle the exact share of each
+    land-cover class of a cached catalogue source of classes, read from
+    ``--cache`` for ``--land-cover-year`` (the last year by default): a
+    sparse table in a ``.vtk`` or ``.ply`` (``land_cover_offsets``,
+    ``land_cover_classes``, ``land_cover_fractions``; a ``.gpkg`` has no such
+    table), the largest class as ``land_cover_code``, and
     the source's credit, licence note and citation as fields.
 
-    What the run did is one record (increment 25, ``tin_engine.run_record``):
-    the file carries the fields a user of the mesh needs, ``--stats`` and
-    ``--record`` all of it, and stderr one summary.
+    What the run did is one record (``tin_engine.run_record``): the file
+    carries the fields a user of the mesh needs, ``--stats`` and ``--record``
+    all of it, and stderr one summary.
     """
     clock = PhaseClock()
     res = _resources(threads, memory_budget)
@@ -1038,9 +1049,9 @@ def mesh(
     feature_crss = features_crs or []
     feature_layers = features_layer or []
     feature_maps = features_map or []
-    # R3: one length rule per paired option. A list longer than --features is
-    # refused naming the offending flag and the counts (M = 0 subsumes the old
-    # "applies only with --features"); a shorter list takes per-source defaults.
+    # One length rule per paired option. A list longer than --features is
+    # refused naming the offending flag and the counts (with no --features,
+    # any of them is refused); a shorter list takes per-source defaults.
     for flag, value in (
         ("--features-crs", feature_crss),
         ("--features-layer", feature_layers),
@@ -1054,7 +1065,7 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
-    # 41: every map is read here, before the DEM, so every file error comes first.
+    # Every map is read here, before the DEM, so every file error comes first.
     maps: list[ClassMap] = []
     where = "--features"
     try:
@@ -1178,12 +1189,13 @@ def mesh(
             flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
             run = f"rasputin fetch {dem[0]} {flags}".rstrip()
             raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
-        # 15e fix 3: what is read later comes out of `opened`, which then goes,
-        # so the tile's one reference is the holder `_dem_mesh` empties.
+        # What is read later comes out of `opened`, which then goes, so the
+        # tile's one reference is the holder `_dem_mesh` empties, and the tile
+        # can be freed before the mesh is checked against the source's nodes.
         label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
         dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
         held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
-        # 41, section 5: the clean-up scale is the coarsest coded map's
+        # The clean-up scale is the coarsest coded map's
         # accuracy (CORINE's 100 m without one), never finer than a DEM cell.
         cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
         del opened
@@ -1198,7 +1210,7 @@ def mesh(
             found = _open_features(
                 sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
             )
-        # 32: 15 degrees with land cover simplified, unless given.
+        # 15 degrees with land cover simplified, unless given.
         simplified = (
             found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
         )
@@ -1247,16 +1259,16 @@ def mesh(
             dx, dy = meta.delta_x, meta.delta_y
             apart = f"{dx:g} m" if dx == dy else f"{dx:g} m x {dy:g} m"
             values["dem_grid"] = f"{size}, {apart} apart"
-        else:  # 15c-2, D7
+        else:  # resampled onto a grid in --out-crs
             how = transform_description(source_crs, dem_crs)
             values |= {"dem_crs": source_crs, "dem_transform": how}
             values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
-        if cached is not None:  # B16 (a): the notes the source asks to travel with it
+        if cached is not None:  # the notes the source asks to travel with it
             remote = SOURCES[cached.source]
             values["dem_credit"] = escaped_ascii(remote.credit)
             values["licence_note"] = escaped_ascii(remote.licence_note)
             values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
-        if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
+        if cached is not None or len(paths) > 1 or paths[0].is_dir():  # the files used
             seams = opened_seams
             values["dem_tiles"] = escaped_ascii("; ".join(names))
             values["dem_seams"] = escaped_ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
@@ -1264,8 +1276,8 @@ def mesh(
             how = transform_label(given.crs, dem_crs)
             values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
         if found is not None and sources and dem_run.feature_counts is not None:
-            # R6: one entry per source, joined. Lines and their vertices are
-            # whole-run (D5, a property of the merged PSLG, not a source), so
+            # One entry per source, joined. Lines and their vertices are
+            # whole-run (a property of the merged PSLG, not of a source), so
             # every entry carries the run totals; the per-source part is the
             # name, layer, map and feature count (found.counts[i]).
             chains, feature_vertices = dem_run.feature_counts
@@ -1295,8 +1307,8 @@ def mesh(
                 before, after = found.cover_vertices
                 values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
                 values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
-            # R5: labelling runs iff a source carries codes (D1's single-system
-            # invariant is enforced in _feature_sources). Every coded source's
+            # Labelling runs iff a source carries codes (_feature_sources
+            # refuses two code systems in one run). Every coded source's
             # polygons are labelled together over the merged FeatureSet.
             coded = next((s.class_map for s in sources if s.class_map.codes), None)
             if coded is not None:
@@ -1309,7 +1321,7 @@ def mesh(
                 classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
             )
             codes_text = str(more["land_cover_codes"])
-            if classes.source.class_map:  # 41: names and colours for the .gpkg
+            if classes.source.class_map:  # names and colours for the .gpkg
                 palette = load_class_map(classes.source.class_map).palette
             values |= more
         build = stride_record if tolerance is None else refined_record
@@ -1334,7 +1346,7 @@ def mesh(
         label = name
         surface_mesh = _fixture_mesh(name, delaunay, snap_spacing, clock)
         record = flat_record(triangles=len(surface_mesh.triangles), crs=crs)
-        # --crs is unvalidated free text by ruling 5, so the gate's refusals
+        # --crs is free text, deliberately unvalidated, so the gate's refusals
         # are refusals a person meets by typing, not internal invariants. Turn
         # the gate's ValueError into the usage error it is, in the one place
         # that knows the text came from the command line.
@@ -1419,7 +1431,7 @@ def mesh(
     if stats is not None:
         used = res.threads if dem_run is not None else None
         _write_report(clock, report_target, surface_mesh, dem_run, targets, seams, record, used)
-    if record_target is not None:  # D5: after the mesh and the report
+    if record_target is not None:  # last, after the mesh and the report
         record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
         typer.echo(f"{record_target}")
 
@@ -1433,7 +1445,7 @@ def _write_geopackage(
     record: RunRecord,
     vocabulary: EdgeVocabulary,
 ) -> None:
-    """``target`` as a GeoPackage (increment 36), written as ``<target>.part``
+    """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
     a failed run leaves nothing under the asked name."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
@@ -1478,7 +1490,7 @@ class _ClassSource:
 def _class_source(
     key: str | None, year: int | None, has_dem: bool, root: Path | None
 ) -> _ClassSource | None:
-    """26b: ``--land-cover`` and ``--land-cover-year`` checked before any work;
+    """``--land-cover`` and ``--land-cover-year`` checked before any work;
     every refusal is a usage error naming the option."""
     if key is None:
         if year is not None:
@@ -1523,7 +1535,7 @@ def _class_fractions(
     cache: Path | None,
     threads: int = 1,
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
-    """26b: the exact class fractions from the cached year, timed as the phase
+    """The exact class fractions from the cached year, timed as the phase
     ``land cover fractions``; the table, the codes and the record entries. An
     object the cache lacks is refused naming the ``fetch`` that gets it."""
     source, year = classes.source, classes.year
@@ -1577,7 +1589,7 @@ def _class_fractions(
 def _land_cover(
     trimmed: Trimmed, found: FeatureSet, cmap: ClassMap, spacing: float, clock: PhaseClock
 ) -> tuple[npt.NDArray[np.int32], str]:
-    """16c, R1-R3: a code per triangle from the coded polygons, timed as the
+    """A code per triangle from the coded polygons, timed as the
     phase ``land cover``, with its stderr line; the codes and their text."""
     polygons = [(f.polygon, f.code) for f in found.features if f.polygon is not None and f.code]
     with clock.phase("land cover"):
@@ -1603,7 +1615,7 @@ def palette(
         Path | None, typer.Option("--out", help="Write the preset here, not to stdout.")
     ] = None,
 ) -> None:
-    """Write a ParaView colour preset for ``land_cover_code`` (increment 16c).
+    """Write a ParaView colour preset for ``land_cover_code``.
 
     Import it in ParaView's Colour Map Editor (Choose Preset, Import), then
     colour by ``land_cover_code``; tick Interpret Values As Categories if the
@@ -1626,7 +1638,7 @@ def palette(
 def _report_target(
     stats: str | None, out_parent: Path | None, label: str, meshes: list[Path]
 ) -> Path | None:
-    """R2: where ``--stats`` writes, None for stdout (``-``) or no report,
+    """Where ``--stats`` writes, None for stdout (``-``) or no report,
     checked before any mesh file is written."""
     if stats is None or stats == "-":
         return None
@@ -1641,7 +1653,7 @@ def _report_target(
 def _record_target(
     record: str | None, out_parent: Path | None, label: str, taken: list[Path | None]
 ) -> Path | None:
-    """D5: where ``--record`` writes, checked before any file is written; never
+    """Where ``--record`` writes, checked before any file is written; never
     standard output (``--stats -``'s) nor a file this run also writes."""
     if record is None:
         return None
@@ -1671,8 +1683,8 @@ def _write_report(
     threads: int | None = None,
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
-    The total stops here; the quality pass is timed on its own line (R4).
-    ``threads`` is the count the run used (38), None on a fixture run."""
+    The total stops here; the quality pass is timed on its own line.
+    ``threads`` is the count the run used, None on a fixture run."""
     total = clock.elapsed()
     t0 = time.perf_counter_ns()
     meta = dem_run.meta if dem_run else None
@@ -1769,7 +1781,7 @@ def fetch(
     ] = None,
 ) -> None:
     """Copy what a mesh of the domain reads from a remote source into the tile
-    cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline."""
+    cache, so ``rasputin mesh --dem SOURCE`` runs offline."""
     import asyncio
 
     from tin_engine.fetch.http import FetchError, RangeClient
@@ -1779,7 +1791,7 @@ def fetch(
 
     if source not in SOURCES:
         raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(SOURCES)})")
-    if year is not None:  # 26a: refused here, before any request
+    if year is not None:  # refused here, before any request
         try:
             SOURCES[source].url_for(year)
         except ValueError as exc:
@@ -1839,7 +1851,7 @@ def fetch_stations(
     ] = False,
 ) -> None:
     """Fetch a list's stations, their catchment polygons and the river lines
-    round them into --out-dir, with NOTICE.txt and a manifest (increment 29).
+    round them into --out-dir, with NOTICE.txt and a manifest.
     Files already there are kept, and nothing is requested, unless --refresh."""
     from tin_engine.fetch.http import FetchError, RangeClient
     from tin_engine.fetch.nve import FILES, fetch_station_set
@@ -1868,7 +1880,7 @@ def fetch_stations(
 
 def _resources(threads: int | None, memory_budget: str | None) -> Resources:
     """``--threads`` and ``--memory-budget`` resolved against the environment
-    (38, built once per command); a refusal is a usage error naming the
+    (built once per command); a refusal is a usage error naming the
     option or the variable."""
     try:
         return resources(threads, memory_budget, os.environ)
@@ -1878,7 +1890,7 @@ def _resources(threads: int | None, memory_budget: str | None) -> Resources:
 
 
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
-    """The tile cache (B7): ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
+    """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
     else None. The one reader of the variable; ``mesh`` passes ``os.environ``."""
     if option is not None:
         return option
@@ -1887,8 +1899,8 @@ def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
 
 
 def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], CachedSource | None]:
-    """``--dem`` as given: one catalogue key alone is that cached source
-    (23a-1); anything else is a path, so ``./glo30`` is a file."""
+    """``--dem`` as given: one catalogue key alone is that cached source;
+    anything else is a path, so ``./glo30`` is a file."""
     keys = [d for d in dem if d in SOURCES]
     if not keys:
         return tuple(Path(d) for d in dem), None
@@ -1898,7 +1910,7 @@ def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], C
             param_hint="--dem",
         )
     try:
-        check_values(SOURCES[keys[0]], "heights", "--dem")  # 26a: a class source is not a DEM
+        check_values(SOURCES[keys[0]], "heights", "--dem")  # a class source is not a DEM
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     if root is None:
@@ -1920,9 +1932,9 @@ def _open_dem(
     res: Resources | None = None,
     z_unit: ZUnit | None = None,
 ) -> DemInput:
-    """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
-    15a and 15b, R11); every refusal, the reader's, the mosaic's or the
-    domain's extent, is a usage error in its own words."""
+    """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile; every
+    refusal, the reader's, the mosaic's or the domain's extent, is a usage
+    error in its own words."""
     try:
         bounds = (
             None
@@ -1944,7 +1956,7 @@ def _open_dem(
             return open_dem(request, res)
     except NotCached:
         raise
-    except OutCrsRequiredError as exc:  # Q11: one unwrapped line, outside the panel, to paste
+    except OutCrsRequiredError as exc:  # one unwrapped line, outside the panel, to paste
         typer.echo(f"--out-crs {shlex.quote(exc.suggestion.proj)}", err=True)
         raise typer.BadParameter(
             f"{exc.head}; the suggested --out-crs is the line above", param_hint="--dem"
@@ -1978,10 +1990,10 @@ def _z_words(meta: RasterMeta, option: str | None, caller: ZUnit | None) -> str:
 def _feature_sources(
     paths: list[Path], crss: list[str], layers: list[str], maps: list[ClassMap]
 ) -> tuple[FeatureSource, ...]:
-    """R1-R3: the repeatable ``--features`` flags as one source per path, paired
+    """The repeatable ``--features`` flags as one source per path, paired
     by position; a shorter paired list defaults its missing entries. A flag that
     cannot apply is a usage error naming the 1-based index and path, because with
-    several sources the flag alone no longer identifies which one."""
+    several sources the flag alone does not identify which one."""
     built: list[FeatureSource] = []
     for i, path in enumerate(paths):
         layer = layers[i] if i < len(layers) else None
@@ -1992,8 +2004,8 @@ def _feature_sources(
             )
         crs = crss[i] if i < len(crss) else None
         built.append(FeatureSource(path=path, class_map=maps[i], layer=layer, crs=crs))
-    # R5/D1: one mesh has one land_cover_code system. Two sources whose maps
-    # name different code systems (any file can name its own, 41) are refused
+    # One mesh has one land_cover_code system. Two sources whose maps name
+    # different code systems (a class-map file can name its own) are refused
     # before any meshing.
     systems = {s.class_map.codes for s in built if s.class_map.codes}
     if len(systems) > 1:
@@ -2015,7 +2027,7 @@ def _open_features(
     threads: int = 1,
     cell: float = 0.0,
 ) -> FeatureSet:
-    """R5-R6 and R10: read and clip every source into one set, timed as
+    """Read and clip every source into one set, timed as
     ``features read`` and ``features clip``; a refusal is a usage error naming
     the feature."""
     t0 = time.perf_counter()
@@ -2045,7 +2057,7 @@ def _tolerance_lines(
     crs: str | None,
     ramp: tuple[float, float] | None,
 ) -> ToleranceLines | None:
-    """Increment 33, section 5: the three flags checked, as one spec or None."""
+    """The three ``--tolerance-near`` flags checked, as one spec or None."""
     if near is None:
         if crs is not None:
             raise typer.BadParameter(
@@ -2080,7 +2092,7 @@ def _tolerance_lines(
 def _tolerance_slope(
     dem: bool, far: float | None, given: tuple[float, float, float] | None
 ) -> ToleranceSlope | None:
-    """Increment 34, section 5: the flag checked in its order, as one spec;
+    """``--tolerance-slope`` checked, its refusals in a fixed order, as one spec;
     None without it, and when N equals --tolerance (then stderr says so)."""
     if given is None:
         return None
@@ -2111,7 +2123,7 @@ def _tolerance_slope(
 def _line_field(
     lines: ToleranceLines, tile: DemTile, far: float
 ) -> tuple[LineTolerance | None, dict[str, Value]]:
-    """Increment 33: the field on ``tile``'s grid, None when no line is in
+    """The line tolerance field on ``tile``'s grid, None when no line is in
     reach (then stderr says so), and the record's three input entries."""
     m = tile.meta
     window = (
@@ -2154,7 +2166,7 @@ def _words(exc: ValueError) -> str:
 class _DemMesh:
     """What ``_dem_mesh`` made: the mesh, then what ``--stats`` reports about
     the run (None where a row does not apply), and the record entries it knows
-    (``run_record``'s builder arguments, increment 25)."""
+    (``run_record``'s builder arguments)."""
 
     trimmed: Trimmed
     meta: RasterMeta
@@ -2167,8 +2179,9 @@ class _DemMesh:
 
 
 class _Once[T]:
-    """A value handed on once (15e, fix 3): `take` returns it and forgets it,
-    so the holder keeps nothing alive after; a second `take` is a bug."""
+    """A value handed on once: `take` returns it and forgets it, so the holder
+    keeps nothing alive after and the value can be freed when its taker drops
+    it; a second `take` is a bug."""
 
     def __init__(self, value: T) -> None:
         self._value: T | None = value
@@ -2203,20 +2216,21 @@ def _dem_mesh(
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
-    Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
-    the stride grid. With it, increment 14's R9: the stride grid is the start
-    mesh, refined against the DEM's nodes; with ``domain`` (already in the
-    DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
-    polygon's rings are, and ``features``' lines (16b). ``min_angle`` > 0
-    improves the start's angles first (increment 20), ``gain`` >= 0 with
-    20c's soft criterion; ``feet`` inserts
-    constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
-    the refined mesh is checked against the source's nodes (D5), after the
-    tile is dropped (15e, fix 3). ``lines`` (increment 33) builds a tolerance
-    field on the tile's grid and passes it to all three refinement calls;
-    ``steep`` (increment 34) builds the slope tolerance there and passes it too.
+    Without ``tolerance``, z is sampled bilinearly at the stride grid. With
+    it, the stride grid is the start mesh, refined against the DEM's nodes;
+    with ``domain`` (already in the DEM's CRS; ``domain_name`` is its file's
+    name), the start is the polygon's rings and ``features``' lines instead.
+    ``min_angle`` > 0 improves the start's angles first, and with ``gain``
+    >= 0 a start point goes in only if it raises its neighbourhood's worst
+    angle by ``gain`` degrees; ``feet`` inserts a node close to a constraint
+    at its foot on the constraint. With ``grid`` and its ``checks`` (a DEM
+    resampled onto ``grid``), the refined mesh is checked against the
+    source's own nodes after the tile is dropped, so that check runs without
+    the resampled tile in memory. ``lines`` builds a tolerance field on the
+    tile's grid and passes it to all three refinement calls; ``steep`` builds
+    the slope tolerance there and passes it too.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
-    ``clock`` gets R5's phases.
+    ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
     engine's own words, and no file is written.
     """
@@ -2297,20 +2311,20 @@ def _dem_mesh(
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
-        strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
+        strip = edge_strip.generate(to_core(tile), out, clock)  # while the tile is held
         if grid is None or checks is None:
             final = edge_strip.run(
                 to_core(tile), strip, out, tolerance, clock, feet, field, slope, threads
             )
             del tile
-            # 15f, D7: refine's maximum and the strip run's make an upper bound.
+            # refine's maximum and the strip run's together make an upper bound.
             max_error = max(out.max_error, final.max_error)
             near_error = max(out.max_error_near, final.max_error_near)
             share = max(out.max_slope_share, final.max_slope_share)
             inside, tight = out.slope_nodes
             values["line_check_dem_nodes_inserted"] = final.nodes_inserted
         else:
-            del tile  # 15e fix 3: phase 2 runs without the target tile
+            del tile  # the check against the source runs without the resampled tile
             final, n = final_check.run(
                 out, grid, checks, tolerance, clock, strip, feet, field, slope, threads
             )
@@ -2395,7 +2409,7 @@ def _dem_mesh(
 
 
 def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> None:
-    """R5 and R6: ``refine`` and its sub-rows; setup + output is the remainder."""
+    """``refine``'s time and its sub-rows on ``clock``; setup + output is the remainder."""
     inner = (
         ("refine: legalise start", out.legalise_seconds),
         ("refine: start quality", out.quality_seconds),
@@ -2424,8 +2438,9 @@ def _placed(
 ) -> tuple[tuple[Placement, str | None], CatchmentRequest]:
     """The gauge placed on the river file's nearest line (no watercourse
     number), with its line's river name, and the catchment request seeded by
-    its reach in the file's CRS, which `delineate` moves into the DEM's; `U`'s
-    floor is three of the DEM's cells at the station (increment 40)."""
+    its reach in the file's CRS, which `delineate` moves into the DEM's; the
+    gauge's uncertainty `U` is at least three of the DEM's cells at the
+    station."""
     segments, crs, _ = _segments(rivers)
     ((x, y),) = reprojector(seed_crs, crs)([seed])
     cell = cell_at(repository, seed, seed_crs)
@@ -2566,11 +2581,11 @@ def catchment(
     z_unit: Z_UNIT = None,
 ) -> None:
     """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
-    DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
+    DEM's CRS that ``mesh --domain`` reads. The fine outline is
     drawn between DEM nodes, holes filled, then reduced to ``--outline-tolerance``
     keeping its area, with the seed inside. A catchment cut by the data's edge
     or by NoData is refused, and nothing is written. With ``--rivers`` the
-    seed is a gauge on a mapped river (increment 29)."""
+    seed is a gauge on a mapped river."""
     if lakes is None and lakes_layer is not None:
         raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
     for name, value in (("--map-radius", map_radius), ("--reach-up", reach_up)):
@@ -2675,7 +2690,7 @@ def catchment(
 
 
 def _outline_properties(result: Catchment) -> dict[str, object]:
-    """Increment 22's properties of a catchment file: the counts, the areas,
+    """The properties of a catchment file: the counts, the areas,
     the tolerance and the windows."""
     return {
         "nodes": result.nodes,
@@ -2831,7 +2846,7 @@ def station_catchments(
     """Write a catchment per station into --out-dir, as ``catchment --rivers``
     does for one, with results.csv (a row per station) and summary.json; with
     --reference each catchment is compared with its reference polygon and
-    classed (match, close, miss, uncertain or refused; increment 29)."""
+    classed (match, close, miss, uncertain or refused)."""
     for name, value in (("--map-radius", map_radius), ("--reach-up", reach_up)):
         if not (math.isfinite(value) and value > 0.0):
             raise typer.BadParameter("must be a finite number above 0", param_hint=name)
@@ -2863,7 +2878,8 @@ def station_catchments(
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
-    if repository.footprints()[0].meta.geographic:  # increment 40, 5.7
+    # The reference comparison and the fine-area column assume metres.
+    if repository.footprints()[0].meta.geographic:
         raise typer.BadParameter(
             "station-catchments needs a DEM in metres (a projected CRS); for a DEM in "
             "degrees, run catchment for each station",
