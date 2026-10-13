@@ -1,8 +1,9 @@
 # Increment 46: HBV snow on the triangles, melt corrected for the sun, and a melt animation
 
-**Status: designed; design review round 1 answered** (2026-10-13,
-`@architect`, branch `worktree-snow-melt`). Design only: no code, no tests.
-Three PRs (section 8). Ola was away when it was written; every default taken
+**Status: designed; design review round 2 approved; addendum for cast
+shadows (section 10) written 2026-10-13, not yet reviewed** (`@architect`,
+branch `worktree-snow-melt`). PR 1's kernel is built. Six PRs (section 10.7,
+which supersedes section 8's table). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
 `docs/increments/46-probes/probe_spring.py`, whose output is
@@ -93,7 +94,7 @@ Written before the design.
      the comparison Ola asked for is between slopes only. Algebraically this
      is Hock's model with a base factor MF(t) = cx − a·I_h(t) that varies with
      the season; Hock's MF is constant. Named, not hidden.
-  2. **No cast shadows.** Self-shading only (a slope facing away from the sun
+  2. **No cast shadows** (withdrawn from PR 6 on, section 10.2). Self-shading only (a slope facing away from the sun
      gets nothing); shadows cast by other terrain need horizons, which the
      terrain radiation design computes (its TR3). The synthetic mountain is a
      single massif with slopes up to 51°, so cast shadows matter only at low
@@ -208,6 +209,7 @@ Read `../rasputin_scratch/ideas/ideas.md` before the design.
  C++ (include/terrain/snow/, header-only; no file, no path, no CRS, no time)
      hbv_snow.hpp         parameters, distribution, state, step
      radiation_index.hpp  ΔI per triangle from normals, sun directions, beam
+                          (dropped: the combiner is NumPy, section 10.5)
  bindings/snow.cpp        bind_snow(py::module_&), called from bindings/core.cpp
 ```
 
@@ -339,6 +341,10 @@ a sunny slope is not slower for it. Named as a choice (section 9, Q4).
 - I5, the step is independent of `threads` (bit-identical states for 1 and 8).
 
 ### 4.3 The sun correction (`include/terrain/snow/radiation_index.hpp`)
+
+*Amended by section 10.5: the formula below is computed in NumPy, not in a C++
+kernel; from PR 6 the factor max(0, n_i·u_s) comes from the radiation
+evaluator, with cast shadows.*
 
 ```cpp
 // out_i = (1/S) Σ_s beam_s · (max(0, n_i·u_s) − max(0, u_s.up))
@@ -546,8 +552,8 @@ plain single-point HBV.
 
 ### 4.10 Not in this increment
 
-Wind-distributed snowfall (part 2); cast shadows, sky view and reflected
-radiation (the radiation design's TR3-TR7); diffuse radiation; canopy;
+Wind-distributed snowfall (part 2); sky view and reflected
+radiation (the radiation design's TR4-TR7; cast shadows are in, section 10); diffuse radiation; canopy;
 glaciers; per-triangle pressure in the beam; a CV that grows with triangle
 area; real forcing (station or gridded weather); outflow routing; Shyft
 adapters; a GeoPackage melt-out layer.
@@ -731,6 +737,8 @@ elevation maximum.
   30° S, N, E, W within 0.5 W/m² (TR1 and NOAA's calculator differ by about
   0.01°; probe line `R2`).
 - R3 γ: normals turned by +0.0984° at (506000, 6800000) EPSG:25833 (pyproj).
+  *Retired in PR 6 with the single-γ turn it tests (section 10.5); TR2's
+  per-triangle frame and PR 4's J tests replace it.*
 - R4 `read_mesh(write_vtk(...))` returns the same vertices, triangles and crs
   bit for bit; ASCII, foreign and crs-less files refused in plain words.
 - R5 `encode_geotiff` → `io/geotiff.py` round trip: shape 1201 × 1201, step
@@ -753,6 +761,9 @@ elevation maximum.
   against `46-probes/probe_spring.py` run on the same mesh.
 
 ## 8. Size, acceptance and order
+
+*Superseded for the PR split and sizes by section 10.7; the acceptance and
+mutation rules below still hold for PRs 1-3.*
 
 | PR | what | C++ | bind | Python | net |
 |---|---|---:|---:|---:|---:|
@@ -797,10 +808,458 @@ files and can be built at the same time by two writers; PR 3 needs both.
    whatever its size?** Default: yes; a size-dependent CV is an idea for
    later.
 
+## 10. Addendum: cast shadows in the melt season (2026-10-13)
+
+Written by `@architect` on the snow branch at `85aec66f`, after PR 1's kernel
+was built. Sections 1-9 stand except where this section names a change; each
+change is marked in place with a pointer here. Every figure in this section
+comes from `46-probes/probe_shadow.py`, whose output is
+`46-probes/probe_shadow.out` (run 2026-10-13 on an M1 Max on AC power, NumPy
+and the main checkout's `tin_engine` for `open_dem`), except the lines named
+`W`, `F`, `M` and `S`, which come from `46-probes/probe_review3.py` and its
+`.out` (design review round 3, same day and machine, no DEM read).
+
+### 10.1 What Ola ruled
+
+Ola, 2026-10-13, verbatim: "I need shades for the melting season." "I never
+asked for a synthetic mountain. I asked for synthetic weather." "Let's do
+Bygdin. On q2, I don't want to do a lot of extra work." "So - real alg, synth
+data is ok." "Go for it."
+
+Read with the main session's questions he answered:
+
+- **Cast shadows are in this increment.** A triangle in the shadow of other
+  terrain gets no direct sun, as the radiation design defines it: its horizon
+  search (that design's TR3) and its lit test (its TR5), not a shortcut that
+  a later radiation increment would throw away.
+- **Synthetic data is fine where it saves work.** The weather is synthetic.
+  The synthetic terrain (section 4.5) stays for the tests and the first
+  animation.
+- **Bygdin is the real terrain**: the Bygdin catchment on DTM10, meshed
+  before (ROADMAP rows 22 and 16c), is the run that shows shadows on real
+  relief. No data handling beyond what `rasputin mesh --dem` already does.
+
+**A correction to this design's record.** The earlier version of this design
+invented a synthetic mountain (section 4.5) where Ola had asked only for
+synthetic weather. The mountain stays, because it is cheap, already probed,
+and the tests need a terrain of known shape; Bygdin is the demonstration.
+
+### 10.2 Prior art
+
+- **Literature.** The horizon search, the receiver frame and the lit test
+  are the radiation design's (branch `design-terrain-radiation`,
+  `docs/increments/terrain-radiation.md`, its *Prior art* section: Dozier and
+  Frew 1990, Stewart 1998, Corripio 2003, Marsh et al. 2012 and 2020); this
+  addendum adds nothing to it. Hock 1999's I (section 2.1) already includes
+  topographic shading, so **departure 2 of section 2.1 is withdrawn from PR 6
+  on**: with shadows on, the correction is Hock's I with cast shadows, and
+  departures 1 (the anomaly against an open horizontal plane) and 3 (one
+  pressure) remain. No novelty is claimed.
+- **Legacy.** Section 2.2's grep covers it: the legacy shaded a face by a CGAL
+  ray from its centroid (`legacy/rasputin/triangulate_dem.h:600-672`). The
+  idea is carried as the radiation design carries it (horizon tables, no
+  CGAL); no legacy code is carried.
+
+### 10.3 The ideas file
+
+Read again for this addendum. Taken up: "Snowpack on the TIN" part 3 (melt
+corrected for the sun), now with shadows; the terrain radiation design, which
+it overlaps, is reused and not duplicated (10.4). Left out, as before:
+"Snow follow-ups" (size-dependent variation, melt-out-day map, outflow per
+frame).
+
+### 10.4 Which radiation steps, and how much of each
+
+The smallest set that gives a correct lit or shadowed answer per triangle at
+each sun sample, each built as the radiation design states it:
+
+| radiation step | what the snow needs from it | built here |
+|---|---|---|
+| TR1, the sun | the sun at each sample time | all of it: this increment's PR 2 (unchanged) |
+| TR2, the receiver frame | per triangle: latitude and longitude, the normal in true east-north-up, the map from grid to true directions (its J), the exclusion radius, the observer height | all of it: PR 4 |
+| TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 |
+| TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 |
+| TR4, sky factors and the geometry file | nothing: the lit test needs no sky view, and the horizons are computed in the run, not stored | none |
+| TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6; not its CLI |
+| TR6, TR7 | nothing (exact lit intervals and the `mean` mode; adapters) | none |
+
+**What is left out of TR3b, and why that is safe in the melt season.** TR3b
+also builds a **far raster** (the DEM to 200 km, as 100 m block means), a CLI
+`rasputin radiation geometry`, and the run that sets N by latitude. The snow
+needs none of them:
+
+- The far field changes almost nothing between April and August. Probe
+  `B3`, on 2000 random DTM10 nodes inside the Bygdin catchment, horizons
+  searched to 20 km on the 10 m DEM and from 20 to 60 km on 100 m block
+  means: terrain beyond 20 km stands above the near horizon in 4.36 % of the
+  (node, direction) pairs, and nowhere higher than 2.87° above the
+  horizontal. On 2027-04-15, 05-15 and 06-21 it changes the lit state of 11,
+  18 and 10 (node, 15-minute) samples, all with the sun at or below 2.97°,
+  where the direct beam before the cosine is at most 5.1 W/m² on 21 June
+  (5.3 W/m² at 1 AU; 0.00 and 0.23 W/m² at the highest flips on 04-15 and
+  05-15, 1.02° and 1.90°: probe `W`, `46-probes/probe_review3.out`); the beam
+  energy it removes rounds to 0.0000 % of the lit beam on each day. It
+  matters in winter, at low sun, which is the radiation work's, not the melt
+  season's.
+- **Beyond 60 km**, where probe `B3` did not search, a bound replaces a
+  measurement: terrain at ground distance d gives at most
+  tan h = (z_max − z_obs)/d − c·d, which falls with d, so d = 60 km bounds all of
+  it. With z_max = 2469 m (Galdhøpiggen, Norway's highest summit; B0's
+  near raster tops out at 2468 m) and the lowest receiver of probe `B1`
+  (1054 m), the horizon from beyond 60 km is at most 1.116°; at 1500 m,
+  0.691°; at 2240 m, below the horizontal (probe `F`). The direct beam at
+  1.116° is 0.001 W/m² (probe `W`). The bound assumes DTM10's coverage, as
+  `reach` does (the radiation design's Q4); terrain outside it is no
+  obstacle.
+- So `RadiationRequest` keeps the radiation design's fields, and PR 6 runs
+  with the search reach `D_far` equal to `D_near` (20 km), with no far raster.
+  TR3a's kernel takes the far raster as optional (`None` from Python) for
+  exactly this; `reach` records where each direction's search stopped, as its
+  R4 rules.
+- N = 64, the radiation design's default until its acceptance run (its Q1).
+
+**The near raster comes from the existing mesh path.** `radiation/search.py`
+calls `open_dem(DemRequest(sources=..., bounds=<mesh box grown by D_near>))`,
+the call `rasputin mesh --dem` makes, and `raster.to_core` for the view.
+Probe `B0`: for Bygdin that is 7314 × 6195 nodes (181 MB as float32),
+assembled in 0.9 s from `DTM10_UTM33_20260925`, no NaN, heights 15 to
+2468 m. No new reader, no new data. A synthetic DEM works the same way; its
+rays leave the raster at its edge, and `reach` says so.
+
+**What TR5 is built without.** The radiation design has TR5 read a stored
+geometry (TR4's file). Here its C++ evaluator takes the receiver set (TR2)
+and the horizon table (TR3a) as arrays, and PR 6 adds
+`radiation/geometry.py`'s `RadiationGeometry` with the fields TR2 and TR3
+produce (latitude, longitude, normal, horizon, reach, N, the request). TR4
+later adds the sky-view and terrain factors and the `.npz` save and load to
+the same class, and TR5's CLI lands with it. The evaluator is not written
+twice.
+
+### 10.5 How the lit factor enters the sun correction
+
+The HBV kernel (PR 1) does not change: it takes ΔI per triangle and per step,
+as before.
+
+**ΔI from the evaluator's beam factor.** With S sample times in a step (S = 4
+for an hourly step), beam_s the clear-sky direct normal irradiance at sample
+s (section 4.3's forcing, unchanged), and b_is and sin e_is the evaluator's
+beam factor and the sine of the apparent sun elevation for triangle i at
+sample s:
+
+  ΔI_i = (1/S) Σ_s beam_s · (b_is − max(0, sin e_is))
+
+- The reference stays an **open horizontal plane** (section 2.1, departure
+  1), so a flat triangle in the open melts as plain HBV, and a flat triangle
+  on a shaded valley floor gets ΔI = −beam·sin e while it is shaded: it melts
+  less than plain HBV, which is the effect asked for.
+- **This is the radiation design's combiner** (its R9, the beam term) minus
+  the horizontal reference; forcing stays in Python, as R9 rules.
+- The combiner is NumPy, elementwise over (S, n). Section 4.3's C++ kernel
+  `radiation_index.hpp` and its binding are therefore **dropped from PR 3**
+  (amendment): PR 3 computes the same formula in NumPy with the
+  self-shading-only factor b_is = max(0, n_i·u_s) and sin e_s from the
+  domain's one sun (section 6's 58.7 ms per step in NumPy included this).
+  PR 6 replaces that source of b by the evaluator, and drops PR 3's single-γ
+  normal turn (section 4.3) for TR2's per-triangle frame. After PR 6, b always
+  comes from the evaluator: with `--shadows off` the evaluator gets a horizon
+  of −90° in every direction (no terrain), which leaves only self-shading.
+  One source of b, one source of normals. E1 (section 7) then runs with
+  `--shadows off`; if it misses its tolerances, the cause to check first is
+  the evaluator's refraction and per-triangle sun, and the fixture is
+  re-measured in an amendment commit (`docs/increments/README.md`).
+- `--shadows on|off`: default `on` when `--dem` is given, `off` without it;
+  `--shadows on` without `--dem` is refused ("shadows need the DEM the mesh
+  was made from: give --dem"). `SnowJob` gains `shadows: RadiationRequest |
+  None`, the radiation design's frozen request, not a copy of its fields.
+- **The sign of γ, pinned for PR 3.** Section 4.3's single-γ turn, while it
+  lives: true azimuth = grid azimuth + γ, since pyproj's
+  `meridian_convergence` is the true azimuth of grid north (the radiation
+  design's P4); a grid-north vector (0, 1) becomes (sin γ, cos γ). Test R3
+  means this. (`probe_spring.py` turns the other way; at its γ = 0 that
+  changes nothing.) **Test R3 is retired in PR 6**, which deletes the turn;
+  PR 4's J tests (10.8) pin the same sign through TR2.
+
+**Async and threads.** The evaluator runs in the same `asyncio.to_thread`
+batch as the HBV step; its binding releases the GIL (TR5 as designed) and
+takes the run's `--threads`. The horizon search runs once per run, before the
+first step, in its own `to_thread` call.
+
+**Cost, estimated, for `@perf` to measure in PR 6's acceptance.** From the
+radiation design's unmeasured estimates (its R4 and R5): about 3 ns per
+sample and 4000 samples per 20 km ray at 5 m, so about 0.8 ms per triangle at
+N = 64 before pruning; Bygdin's 10 m mesh (52 198 triangles) is then about
+40 s on one thread before the pyramid prunes it. The evaluator: about 29 ns
+per triangle and sample; the synthetic 2 m mesh (294 770 triangles) over 91
+days at S = 4 is 2.6·10⁹ evaluations, about 75 s on one thread. For scale
+only: the probe's NumPy search of 2000 Bygdin nodes to 20 km took 26.6 s.
+
+### 10.6 What the shadows change, measured
+
+Probes `S1` and `B2`: 3000 random nodes of the synthetic DEM and 2000 random
+DTM10 nodes inside the Bygdin catchment, each node a receiver with the DEM's
+normal (central differences, turned to true north by Bygdin's γ = −5.724°),
+exclusion radius 10 m, N = 64, NOAA's sun, the beam of section 4.3, 96
+samples of 15 minutes a day, no refraction. "Removed" is the share of the
+day's direct beam on the slopes (self-shading already applied) that cast
+shadows take away.
+
+| site | 2027-04-15 | 2027-05-15 | 2027-06-21 |
+|---|---|---|---|
+| synthetic massif: beam removed / mean ΔI change / 5th percentile | 0.7 % / −1.1 / −5.6 W/m² | 0.5 % / −1.2 / −5.8 W/m² | 0.5 % / −1.3 / −6.1 W/m² |
+| Bygdin: beam removed / mean ΔI change / 5th percentile | 1.6 % / −2.7 / −14.3 W/m² | 1.3 % / −3.0 / −14.9 W/m² | 1.2 % / −3.3 / −16.5 W/m² |
+| Bygdin: nodes losing more than 20 W/m² of daily-mean ΔI | 3.1 % | 2.9 % | 3.5 % |
+
+What this says. **In the melt season the shadows are a local effect, not a
+domain-wide one**: 1-2 % of the beam over the catchment, but about 3 % of
+Bygdin's points lose more than 20 W/m² of daily-mean beam, about 30 % of the
+gain a 30° south slope has in mid-April (section 4.5's 68.9 W/m²). The
+synthetic massif, a single dome, shades itself little; Bygdin's valleys and
+cirques shade more (median of the mean horizon 9.45° against the massif's
+6.87°). The figures are on DEM nodes, not triangles; PR 6's acceptance
+measures them on the mesh. The probe places node (0, 0) at the mosaic's
+(x_min, y_max), which `io/geotiff.py`'s `_placement` already moves to the
+first cell's centre for an area-registered tile such as DTM10's.
+
+### 10.7 The PRs
+
+| PR | what | depends on | C++ | bind | Python | net |
+|---|---|---|---:|---:|---:|---:|
+| 1 | the HBV kernel (built on this branch) | — | 120 | 70 | 80 | ≈ 270 |
+| 2 | TR1 and `sun_positions` (unchanged) | — | — | — | — | ≈ 560 |
+| 3 | the correction in NumPy (10.5), the synthetic case, the animation; no `radiation_index.hpp` | 1, 2 | 0 | 0 | 495 | ≈ 495 |
+| 4 | TR2, as the radiation design states it | 2 | 80 | 40 | 230 | ≈ 350 |
+| 5 | TR3a, as the radiation design states it, the far raster optional | 4 | 300 | 55 | 0 | ≈ 355 |
+| 6 | TR5's evaluator (`instant`, no CLI), TR3b's near raster (`radiation/search.py`), `RadiationGeometry`'s fields, the snow wiring (`--dem`, `--shadows`, b from the evaluator, normals from TR2) | 3, 5 | 220 | 50 | 220 | ≈ 490 |
+
+PR 3's 495 is section 8's 545 less the radiation kernel and its binding (65)
+plus the NumPy combiner (15). If PR 3's count passes 650 at its green step, the EnSight writer
+and its test R6 split off as PR 3b. PR 6's Python: the evaluator's synchronous call
+50, `search.py` 60, `RadiationGeometry` 30, the snow wiring 80 (job and CLI
+fields, the run's evaluator call, the geometry from TR2). PR 5's binding is
+55 lines against the radiation design's 50 for TR3a: the 5 are the far
+raster taken as optional (an `std::optional` view, `None` from Python, and
+the check that sets D_far to D_near when it is absent, 10.8's pin 4). Each
+under 700 (`python3 tools/count_loc.py`).
+
+**The record in the radiation design's file.** PR 2 brings
+`docs/increments/terrain-radiation.md` to `master` (question 2's default) and,
+in the same commit as TR1's status, adds under its *Increments and LOC* table
+a paragraph "Built by increment 46", which says exactly this:
+
+- TR2: all of it, in increment 46's PR 4.
+- TR3a: all of it, in PR 5, with the far raster optional (absent means
+  D_far = D_near) and the pins of `46-hbv-snow.md` section 10.8 (reach found
+  from coverage before the march, floored to whole km; the early stop over
+  both rasters; far samples from D_near + Δ_far; int16 rounded half away
+  from zero).
+- TR3b: only the near raster's call in `radiation/search.py`, in PR 6; no
+  far raster, no `rasputin radiation geometry` CLI, no N-by-latitude run.
+- TR5: the C++ `instant` evaluator, its binding and a synchronous Python
+  call, in PR 6, reading the receiver set and horizon table as arrays
+  before TR4 exists; no CLI, no async call, no `mean` mode.
+  `RadiationGeometry` gets only TR2's and TR3a's fields; TR4 adds the sky
+  factors, the `.npz` file, TR5's CLI and its async call to the same class
+  and module.
+
+PRs 4, 5 and 6 each mark their line done in that file when they land, so the
+file never calls a built step unbuilt and no second version is written. If
+Ola says no to question 2, PR 2 makes the same edit as a commit on
+`design-terrain-radiation` instead.
+
+**Order.** PR 1 and PR 2 at the same time (as section 8). Then PR 3 and PR 4
+at the same time: PR 3 no longer touches C++ or `_core.pyi`, so they share
+only `project_structure.md`. PR 5 after PR 4, PR 6 last. The first animation
+(PR 3) has self-shading only; PR 6 adds the shadows and the Bygdin run.
+
+**Not built here, and still the radiation design's**: TR3b's far raster, its
+CLI and the N-by-latitude run; TR4; TR5's CLI; TR6; TR7. They follow in that
+design's order.
+
+**Mutation testing.** PR 1's kernel (section 7) and **PR 5**, which the
+radiation design names invariant-critical (pruned equals exhaustive, its I4,
+plus the closed forms); its targets and the fixture that kills each are in
+10.8. PR 6: none.
+
+**`@perf`.** No refine or mesh code is touched. PR 3's acceptance as section
+8 says. PR 6's acceptance is the Bygdin run (10.9) and the synthetic 2 m run
+with shadows: horizon-search time, evaluator time per step, peak memory, at 1
+and 8 threads, recorded in this file, and one screenshot of Bygdin for Ola.
+
+### 10.8 Red suites for `@tester`
+
+**PR 4, TR2.** The radiation design's verification 2 (J against a
+finite-difference transform at Solund, Oslo, the central meridian and Vardø;
+a synthetic plane off the central meridian gives its true aspect; Solund
+−8.906° and Vardø +15.218° through J), plus Bygdin: γ = −5.724° at
+61.3694° N, 8.4852° E in EPSG:25833, through J, within 0.001° (probe `B0`;
+−5.994° at the catchment's west edge, −5.454° at its east edge).
+
+**PR 5, TR3a.** The radiation design's verification 3 and its I4 suite,
+except the flat plane's sunrise, which needs the evaluator and moves to PR 6
+(test S); the flat plane's horizon, −atan(c·r_i), stays here (−0.0000391° at
+r_i = 10 m, probe `S`). I4 is run at 1 and 8 threads. The
+V-valley, measured on the reference definition (probe `V1`): side slopes 30°,
+ridges at half-width 1000 m, 10 m grid with the axis on a grid line, receiver
+on the axis floor, exclusion radius 5 m, N = 64. With c = 0, tan h equals
+|sin A|·tan 30° to 4.7·10⁻¹⁴ in every direction (h(45°) = 22.2077°,
+h(90°) = 30.0000°, h(0°) = h(180°) = 0); with c = 6.828·10⁻⁸ m⁻¹
+(k = 0.13, R = 6371 km), tan h equals |sin A|·tan 30° − 5c to 5.1·10⁻¹⁴
+(h(0°) = −0.000020°). Also: a far raster of `None` gives the same table, bit
+for bit, as a far raster that is never reached (D_far = D_near).
+
+*Pinned for PR 5, where the radiation design leaves a choice open* (each
+pin is what the mutation fixtures below assume):
+
+1. `reach` is found from coverage alone before the height march: the first
+   sample off the raster or reading a NaN node; its distance floored to
+   whole km; 255 when no sample is missing. The march ends there. So the
+   pruned and the exhaustive search agree on `reach` bit for bit too, and I4
+   covers both arrays.
+2. The ray's early stop bounds the rest of the ray with the largest maximum
+   of the rasters still ahead on it: both while on the near raster, the far
+   raster's alone after D_near.
+3. Far samples are at D_near + j·Δ_far, j ≥ 1.
+4. An absent far raster sets D_far to D_near.
+5. The int16 is 100·h rounded half away from zero.
+
+*Mutation targets, each with the fixture that kills it.* Checked on a
+one-dimensional model of the pruned search as R4 describes it
+(`46-probes/probe_review3.py`, lines `M` of its `.out`): a ray due east
+along a grid row, a max-pyramid over 2^L-node blocks, the bounds and pins
+above; the exhaustive loop is the reference, and both agree on every
+fixture. In the C++ test each fixture is a raster whose heights depend on x
+only, the receiver on a node, J the identity, and the check is direction
+k = 16 (east) plus I4 in all 64. "h" is the int16 table entry.
+
+| fixture | terrain and receiver | reference h, reach |
+|---|---|---|
+| F1, above all terrain | near 10 m, flat at 0 with a 2000 m ridge node at 10 km, to 21 km; far 100 m, flat at 1000 m, to 200 km; z_obs 3000 m, r_i 10 m, D_near 20 km, D_far 200 km, c = 6.828·10⁻⁸ | −134 (−1.3388°), 255 |
+| F2, far peak at 25 km | near 10 m, flat at 0; far 100 m, flat at 0 with a 100 m node at 25 km; z_obs 0, r_i 10 m, D_near 20 km, D_far 200 km, same c | 13 (0.1314°), 255 |
+| F4, spike at r_i | near 10 m, flat at 0 with a 100 m node at 10 m; no far raster; z_obs 20 m, r_i 7.5 m, D_near 2 km, c = 0 | 8223 (82.2348°), 255 |
+| F5, near and far disagree | near 10 m, flat with a 1000 m node at 3 km (past D_near); far 100 m, flat with a 1000 m node at 1.5 km (inside D_near) and a 400 m node at 4 km; z_obs 0, r_i 10 m, D_near 2 km, D_far 5 km, c = 0 | 571 (5.7106°), 255 |
+| F6, coverage gap | near 10 m, flat at 0 with a NaN node at 3.7 km and a 1000 m node at 5 km; no far raster; z_obs 0, r_i 10 m, D_near 20 km, c = 0 | 0, 3 |
+| F7, far raster `None` | near 10 m, flat at 0; far `None`, D_far asked 60 km; z_obs 100 m, r_i 10 m, D_near 20 km, c = 6.828·10⁻⁸ | −36 (−0.3647°), 255 |
+
+| target (the mutant) | killed by | mutant's h, reach |
+|---|---|---|
+| the pruning bound's a < 0 branch: a/d_lo for a/d_hi | F1 | −575, 255 |
+| the a ≥ 0 branch: a/d_hi for a/d_lo | F2 | 0, 255 |
+| the curvature term at d_lo: c·d_hi for c·d_lo | F1, F2 | −136; 0 |
+| the early stop with the current raster's maximum only (pin 2) | F2 | 0, 255 |
+| the search starting at r_i + Δ_near instead of r_i | F4 | 7720, 255 |
+| the search starting at 0 (d_j = j·Δ_near) | F4 | 8287, 255 |
+| the switch: the near raster read past D_near | F5 (also F1, F2) | 1843, 4 |
+| the switch: the far raster read from r_i | F5 (also F2, F4, F6, F7) | 3080, 255 |
+| recording `reach`: the march not ended at the first missing sample | F6 | 1131, 3 |
+| recording `reach`: rounded, not floored (pin 1) | F6 | 0, 4 |
+| recording `reach`: not recorded (255) | F6 | 0, 255 |
+| the empty far raster: `None` read as zeros to the asked D_far (pin 4) | F7 | −30, 255 |
+| the int16: truncated, or floored (pin 5) | V-valley h(45°); F7 | 2220 for 2221; −37 for −36 |
+
+**PR 6, the evaluator, the near raster and the snow wiring.**
+
+- L1, the lit test (the evaluator's per-sample function, on a hand-made
+  horizon row): the V-valley's row stored as the radiation design stores it,
+  int16 in 0.01°, round(100·atan(|sin A_k|·tan 30°)), so k = 16 (90°) is
+  3000, k = 21 (118.125°) 2698 and k = 22 (123.75°) 2564; floor normal up.
+  - Sun at azimuth 90°: apparent elevation 29.99° → unlit; 30.01° → lit;
+    exactly 30.00° → unlit (lit is strict, the radiation design's degeneracy
+    policy).
+  - Sun at azimuth 120°: the horizon interpolated between k = 21 and 22 is
+    26.5333° (the closed form is 26.5651°; probe `V2` gives 26.5372° before
+    quantisation): 26.52° → unlit, 26.55° → lit.
+  - Self-shading: a 30° slope facing north, horizon −90° all round, sun at
+    azimuth 180° and 20° → unlit, b = 0.
+- L2, the combiner (probe `V3`): the V-valley floor, sun at azimuth 90°,
+  beam 800 W/m², one sample: at 20° elevation b = 0, reference 0.3420,
+  ΔI = −273.6 W/m²; at 40°, b = reference = 0.6428 and ΔI = 0 within
+  10⁻⁹ W/m². With a horizon of −90° all round (`--shadows off`), a flat
+  triangle's ΔI is 0 within 10⁻⁹ W/m² at every sample.
+- L3, shadows only take away: on the synthetic 2 m mesh, 2027-04-15, for
+  every triangle and sample, b with the searched horizon ≤ b with −90°, and
+  no triangle's daily-mean ΔI is higher with shadows than without.
+- L4, the near raster: `search.py` on `synth.tif` asks `open_dem` for the
+  mesh box grown by 20 km and gets the whole 1201 × 1201 grid (coverage ends
+  there); a receiver at (497200, 6800000) has the raster's west edge 3.2 km
+  away, and its `reach` toward 270° is 3 km.
+- L5, refusals: `--shadows on` without `--dem`; a DEM in another CRS than the
+  mesh; a DEM that does not cover the mesh. Each in plain words, before any
+  step runs.
+- I7, the evaluator against the reference sun (the radiation design's I7):
+  receivers at Bygdin's centre (61.3694° N, 8.4852° E, 1500 m), Solund and
+  Vardø, every 15 minutes of 2027-04-15, 05-15 and 06-21 with the sun above
+  −1°: the evaluator's apparent elevation and true azimuth within 0.003° of
+  TR1's `solar_position` (the parallax it drops is at most 0.0024°, that
+  design's R5). On L1's V-valley horizon row, the evaluator's lit agrees
+  with lit formed from the reference sun and the same row, except where the
+  apparent sun is within 0.003° of the interpolated horizon.
+- I8, thread count (the radiation design's I8): the synthetic 2 m mesh
+  (294 770 triangles) on 2027-04-15, 96 samples of 15 minutes, horizons
+  searched and evaluated at 1 and at 8 threads: horizon, `reach`, lit,
+  cos i, b and sin e equal bit for bit, and so the day's ΔI.
+- S, the flat plane's sunrise (moved from PR 5; the radiation design's
+  verification 3): a flat DEM, a vertical receiver facing east at Bygdin's
+  centre (so self-shading does not decide), r_i = 10 m; its horizon is
+  −atan(c·r_i) = −0.0000391°, stored as 0 in every direction. With `limb`
+  the upper limb, the test bisects TR1's reference path for the time the
+  apparent upper limb meets the stored horizon, and the evaluator is unlit
+  4 s before it and lit 4 s after it. NOAA's formula, standing in for TR1
+  (probe `S`): 04:06:00 UTC at azimuth 67.84° on 2027-04-15, the sun rising
+  0.111°/min, so 0.003° is 1.6 s; 01:44:30 UTC at 31.04° on 2027-06-21,
+  0.062°/min, 2.9 s. Both days are tested.
+- E2 (marked slow): `synthetic-terrain`, `mesh --tolerance 2`, `snow --dem
+  synth.tif --shadows on`: the domain-mean change in daily-mean ΔI on
+  2027-04-15 between −0.5 and −2.5 W/m² (probe `S1`, on 3000 DEM nodes:
+  −1.1); the figure on the triangles is recorded at the PR's acceptance, and
+  the band then narrowed to it in an amendment commit.
+
+### 10.9 The Bygdin run (PR 6's acceptance, not CI)
+
+```sh
+rasputin mesh --dem $DTM10 --domain docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson \
+    --tolerance 10 --out bygdin.vtk                      # 52 198 triangles (ROADMAP row 22)
+rasputin snow --mesh bygdin.vtk --dem $DTM10 --shadows on --days 122 --out bygdin_snow/
+```
+
+`$DTM10` is `../rasputin_data/DTM10_UTM33_20260925`. The weather is section
+4.5's synthetic spring run to 1 August (122 days), because Bygdin lies from
+1054 to 2240 m (probe `B1`'s nodes) and at the spring's lapse rate much of it
+would still be white on 1 July. `@perf` records the times and memory (10.7),
+the beam removed by shadows on the three dates against 10.6's node figures,
+and one screenshot. A second run with `--shadows off` beside it shows the
+difference in ParaView.
+
+### 10.10 The radiation design's open questions
+
+Its Q1-Q10 were all ruled by Ola on 2026-09-28 ("go with c, and yes to the
+rest"). None blocks this work. Those that touch it, with the ruling it takes:
+Q1, N = 64; Q3, refraction coefficient k = 0.13, constant; Q4, terrain
+outside the DEM's coverage is no obstacle and `reach` records it (Bygdin's
+near raster has no NaN, probe `B0`); Q10, the sun's centre and a lit test
+that is true or false. Q2 (pvlib in TR1's tests) is PR 2's, as before. Q5-Q9
+do not touch it. Its *Facts to verify* hold nothing this work depends on.
+
+### 10.11 Questions for Ola (defaults taken)
+
+8. **Mountains more than 20 km away are left out of the shadow search for
+   now.** On Bygdin they only matter with the sun below 3°, where the direct
+   sun is too weak to melt anything; they matter in winter. Default: leave
+   them for the radiation work.
+9. **The first animation (on the synthetic mountain) comes without cast
+   shadows, and the shadows come three PRs later with the Bygdin run.** The
+   alternative holds the first animation back until the shadows are built.
+   Default: the first animation first.
+10. **The Bygdin run uses the same synthetic weather, run to 1 August instead
+    of 1 July,** because Bygdin lies above 1050 m. Default: yes.
+
 ## Review
 
 **Design review, round 1, 2026-10-13.** Range `b1353075..0e3247f7`, 0 production lines, @reviewer: CHANGES REQUESTED. Blocking: (1) placeholders left in the file: section 6 says `[RESULTS]` and section 4.7 `[single-bin figures in section 6]`; the melt-out and snow-cover figures the architect's handback gave (about a week earlier on 30° south slopes at 1000 m; cover 0.62 against 0.88 at day 60) are not in the file, and test E1 checks against them; (2) test R1's south case: with the sun at 30° and the slope at 30°, the angle from the slope's normal is 30°, so 800·0.866 − 400 = +292.8, not +400 (north −400 and east −53.6 are right); (3) test V1 asks the C++ to refuse negative cx, lw or cfr and bad bin factors, but `StepStatus` has no status for bad parameters, and the `SnowDistribution` constructor's refusal (exception or factory) is not said; (4) listed mutants not all killed: `<=` for `<` in the rain/snow test needs a fixture at T = tx with P > 0; dropping the min on refreeze needs a refreeze larger than sw; refreezing when T < θ instead of T < ts needs H8 to start with sw > 0; add the m ≥ 0 clamp and the refreeze condition as targets; (5) the mass-balance tolerance 1e-9·max(1, swe) is tighter than the error bin factors with a mean checked only to 1e-9 can give (P·1e-9): renormalise in the constructor, or scale the tolerance with P; (6) section 9 has seven questions, the ROADMAP row says eight. Wordings: `parallel_util::parallel_for` does not exist, the function is `for_each_block`; R9 of the radiation design does not state the beam formula; 465 MB is MiB (488 MB decimal, the unit of the 2.6 GB). Verified: the D1 factors, tests H1-H9 except R1, section 6's ΔI values (NOAA formula within 0.5 W/m²), latitude and γ, the EnSight byte sizes, TR1's estimate and split, the literature citations, the I/O boundary, std::chrono only; the full sun-position PR over the 40-line formula justified as the default. Idea: pass the step length as `std::chrono::duration<double>`.
 
 **Design review, round 2, 2026-10-13.** Range `df70bc3b..27fab48d`, 0 production lines, @reviewer: APPROVED. All six blockers and three wordings fixed; the four probes re-run, every figure reproduced except wall times (the five-run table, melt-out medians 83, 75.5 and 75.0, north −1, 226 against 204 mm, the 6.935e-12 residual, section 4.7's 0.630/0.888, R1 +292.8/−400/−53.6, the EnSight bytes, pvpython's 92 steps); five new fixtures (H5b, H8b, H10, H11, H12) hand-checked as killing; the one undetectable mutant (`T < ts` to `T <= ts`) equivalent, since the refreeze is 0 there; renormalised bin factors make 1e-9·max(1, swe+P) sound. New assumptions sound: NOAA's longer sun calculator (the short one is 0.31° low on 04-15), the temperature peak at 14:00 solar time, case-file times one per line. Suggestion: H11 should state ts = 0.
+
+**Design review, round 3 (the addendum, section 10), 2026-10-13.** Range `85aec66f..91d65f3c`, 0 production lines, @reviewer: CHANGES REQUESTED. Blocking: (1) PR 5, the horizon kernel, is invariant-critical but names no mutation targets or killing fixtures; name at least the pruning bound's a < 0 branch (a receiver above all terrain), the curvature term at d_lo, the early stop, the search starting at r_i, the switch from near to far raster, recording `reach`, the empty far raster; (2) PR 6 builds the radiation design's evaluator but leaves out that design's checks for it, I7 (within 0.003° of the reference sun, lit agreeing) and I8 (same result at any thread count); verification 3's flat-plane sunrise needs the evaluator, so it moves from PR 5 to PR 6; (3) say which PR records in `terrain-radiation.md` what is built here and how (TR2; TR3a with the far raster optional; TR3b's near raster only; TR5 without its CLI), since question 2's default would leave that file calling them unbuilt and risk a second version. Wordings: the beam at 2.97° is 5.1-5.3 W/m², not 5.6; the far-field probe covers 20-60 km only, so add the bound beyond 60 km (at most 1.1° from the lowest receiver); say test R3 (the single-γ turn) is retired in PR 6; PR 5's binding is 55 lines against the radiation design's 50 with no reason given. Held: `probe_shadow.py` re-run on DTM10, every figure reproduced (timings within 3 %); γ's direction as pinned; the lit-test figures, V-valley closed forms and combiner values; PR sizes and PR 3's 495; Bygdin's 52,198 triangles; questions 8-10.
+
+**Design review, round 4 (the addendum), 2026-10-13.** Range `52a3bddf..9793bc83`, 0 production lines, @reviewer: APPROVED WITH WORDINGS (pin 2 says the maxima of the rasters still ahead; a PR 3b split point at 650), applied by the main session. All three blockers and four wordings of round 3 fixed; `probe_review3.py` re-run, output identical; section 10.8's 13 targets on six fixtures, pruned equal to exhaustive on every fixture, every mutant killed in the one-dimensional model; I7, I8 and test S in PR 6, the vertical east-facing receiver right for test S; pins 1, 3, 4, 5 hold, and coastal DTM10 tiles (`67m1_1`, `67m1_2`, `6700_1`, `66m1_1`) hold no NoData, the sea stored as 0, so pin 1's stop at the first missing sample bites only at the mosaic's edge. PR 3 at 495 against a 37 % overrun is about 678, under 700, so the split point is a margin, not a requirement.
 
 **Code review, round 1 (PR 1, the HBV kernel), 2026-10-13.** Range `origin/master..ced40c13`, 369 net production lines (about 270 estimated: C++ 168 against 120, mostly the full validation; binding 125 against 70, mostly five repeated property lambdas; no split seam named, far under 700), @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 7's kill-table row for "`none` applying ΔI" names V1, not H8; `project_structure.md`'s `snow.cpp` entry says the ValueError names the status, and the triangle for a non-finite value. The kernel follows section 4.2 step by step and checks every refusal before it writes a slot; `step()` checks parameters, sizes, step length, non-finite values, negative precipitation in that order, the size check before any array is indexed; the binding passes arrays only and releases the GIL; "triangle i" is the 0-based index; the kill record in `ced40c13` covers all 11 targets; no red-step markers. Not pushed, no CI yet. Suggestions: a refusal case with NaN at triangles 1 and 2 expecting "triangle 1"; one helper for the five array views (about 15 lines); `inline` on `step`'s forward declaration. Idea: PR 3 should name a split point before it starts, since the same 37 % overrun would take its 545 to about 745.
