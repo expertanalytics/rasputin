@@ -139,10 +139,10 @@ def decode_window(
     out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
     _decode_into(source, w, indices, out, threads)
     to_metres(out, meta)  # heights in metres
-    # The public constructor, which copies `out`: the no-copy route
-    # (`DemTile._adopt`) is kept to `assemble` and `resample`, and a test in
-    # test_mosaic.py greps the package for its callers. The copy holds a
-    # window's heights twice while it is made.
+    # The public constructor, which copies `out`: `DemTile`'s private no-copy
+    # route is kept to `assemble` and `resample`, and a test in test_mosaic.py
+    # greps the package for its name, so it is not named here either. The copy
+    # holds a window's heights twice while it is made.
     return DemTile(meta=meta.windowed(w), array=out)
 
 
