@@ -1,8 +1,8 @@
 """The one adapter from a decoded tile into the core raster view.
 
-Increment 12, R5, and ``project_structure.md``'s ``raster`` section: this is the
-only module that builds a core raster. Exactly the array, the four affine
-scalars and the optional sentinel cross. Rows and columns come from the array's
+This is the only module that builds a core raster, so what crosses into C++ is
+decided in one place. Exactly the array, the four affine scalars and the
+optional sentinel cross. Rows and columns come from the array's
 shape on the C++ side; the CRS, ``nodata_source``, ``pixel_is_area`` and
 ``vertical_unit_assumed`` stay in Python, because nothing in C++ reads them.
 """
@@ -23,7 +23,7 @@ def to_core(tile: DemTile) -> RasterView:
     if tile.array.flags.writeable:
         raise ValueError("to_core needs a read-only array; build the tile through DemTile")
     meta = tile.meta
-    if meta.geographic:  # 15c, J4: no degrees in _core
+    if meta.geographic:  # the core measures in metres; a degree is not one
         raise ValueError(f"a geographic DEM ({meta.crs}, degrees) cannot enter the core")
     return raster_view(
         tile.array,
@@ -37,8 +37,8 @@ def to_core(tile: DemTile) -> RasterView:
 
 def to_core_lattice(tile: DemTile) -> RasterView:
     """The tile's array on a unit lattice (x = column, y = -row, both spacings
-    1), for the hydrology, which reads only the shape, the values and NoData
-    (increment 40, 5.1). A tile in degrees is accepted: no coordinate crosses."""
+    1), for the hydrology, which reads only the shape, the values and NoData.
+    A tile in degrees is accepted: no coordinate crosses."""
     if tile.array.flags.writeable:
         raise ValueError("to_core_lattice needs a read-only array; build the tile through DemTile")
     nodata = tile.meta.nodata
