@@ -1,12 +1,12 @@
 """What a decoded GeoTIFF becomes: `RasterMeta`, `DemTile`, and the one error.
 
-Increment 11, `docs/increments/11-raster-ingestion.md` §7. Both models are
-frozen Pydantic V2. `RasterMeta` is a superset of the `_core` boundary
-contract: `epsg`, `nodata_source`, `pixel_is_area` and `vertical_unit_assumed`
-are provenance and must not be forwarded to `_core` (increment 12's adapter
-owns that). This module imports nothing first-party and never `_core`.
+Both models are frozen Pydantic V2. `RasterMeta` is a superset of the `_core`
+boundary contract: `epsg`, `nodata_source`, `pixel_is_area` and
+`vertical_unit_assumed` are provenance and must not be forwarded to `_core`
+(`tin_engine.raster`, the one adapter, keeps them out). This module imports
+nothing first-party and never `_core`.
 
-Increment 26a adds `ClassWindow`: a window of land-cover class numbers
+`ClassWindow` is a window of land-cover class numbers
 (`uint8`) with the corner of its upper-left *cell*, not a node: a class raster
 is `PixelIsArea`, and what matters is which cell a point falls in.
 """
@@ -41,7 +41,7 @@ BY_NAME = {row[0]: row for row in UNITS.values()}
 
 
 class GeoTiffError(ValueError):
-    """A file the reader refuses (§5).
+    """A file the reader refuses.
 
     The message names the tag or GeoKey by number and by name, and the file's
     value. One type on purpose: no caller branches on which refusal fired.
@@ -49,7 +49,7 @@ class GeoTiffError(ValueError):
 
 
 class SrsEntry(BaseModel):
-    """One ``gpkg_spatial_ref_sys`` row of a GeoPackage (increment 36): what
+    """One ``gpkg_spatial_ref_sys`` row of a GeoPackage: what
     `crs.srs_entry` makes of a CRS text and `io.geopackage_write` stores."""
 
     model_config = ConfigDict(frozen=True)
@@ -95,8 +95,9 @@ class Bounds(BaseModel):
 
 
 class IndexWindow(BaseModel):
-    """`rows x cols` nodes starting at `(row0, col0)` (moved from `mosaic.py` by
-    23a-1, because `io/` imports nothing first-party but this module)."""
+    """`rows x cols` nodes starting at `(row0, col0)`. It lives here, not in
+    `mosaic.py`, so the readers in `io/` can take one without importing
+    `mosaic.py`, which itself imports this module."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -108,12 +109,12 @@ class IndexWindow(BaseModel):
 
 class RasterMeta(BaseModel):
     """The node grid of one tile, in metres of a projected CRS, or in degrees
-    when `geographic` (15c-2, D6). `crs` is `EPSG:n` when `epsg` is
+    when `geographic`. `crs` is `EPSG:n` when `epsg` is
     given; a CRS without an EPSG code has `epsg` None and its text in `crs`.
 
     `x_min`/`y_max` are the upper-left *node*, already shifted inward half a
-    cell for an area-registered file (§4). `rows`/`cols` are `StrictInt`
-    (B1, §14), so the legacy's `(12.0, 16.0)` is refused at the type.
+    cell for an area-registered file. `rows`/`cols` are `StrictInt`, so a
+    float such as `12.0` is refused at the type.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -127,7 +128,7 @@ class RasterMeta(BaseModel):
     epsg: int | None
     crs: str = ""
     geographic: bool = False
-    # Finite or None (§6, round 2): a NaN sentinel matches no cell under
+    # Finite or None: a NaN sentinel matches no cell under
     # `==`, and a NaN field would also break model equality.
     nodata: float | None = Field(allow_inf_nan=False)
     nodata_source: Literal["tag", "caller", "absent"]
@@ -220,8 +221,8 @@ class ClassWindow(BaseModel):
 
 
 class ClassFractions(BaseModel):
-    """The sparse table of land-cover fractions per triangle (increment 26b,
-    1.6): triangle `t`'s entries are `[offsets[t], offsets[t + 1])`, classes
+    """The sparse table of land-cover fractions per triangle: triangle `t`'s
+    entries are `[offsets[t], offsets[t + 1])`, classes
     ascending within a row, fractions `float32` as the file holds them. Frozen;
     the arrays are kept as given, and another dtype is refused, not converted."""
 
@@ -262,7 +263,7 @@ class ClassFractions(BaseModel):
 
 class TileFootprint(BaseModel):
     """One tile as its header describes it: the file's name, its node grid, and
-    the dtype it decodes to (float32 unless given; S2)."""
+    the dtype it decodes to (float32 unless given)."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -276,7 +277,7 @@ class DemTile(BaseModel):
 
     A disagreement between `meta` and `array.shape` is Pydantic's
     `ValidationError`, not `GeoTiffError`: it is a programming error in
-    whoever built the model, not a fact about a file (§7, B1).
+    whoever built the model, not a fact about a file.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -293,21 +294,22 @@ class DemTile(BaseModel):
             )
         # An owned read-only copy, stored as a view of it: the caller's buffer
         # is never shared, and the view's flag cannot be set back because its
-        # base is read-only too (§7, the concurrency rule, round 3).
+        # base is read-only too. Every refinement thread samples the same
+        # raster, so no one may hold a writable handle to it.
         copy = np.array(value, order="C", copy=True)
         copy.flags.writeable = False
         return copy.view()
 
     @classmethod
     def _adopt(cls, meta: RasterMeta, array: npt.NDArray[Any]) -> DemTile:
-        """Take `array` as the tile's own, without the copy (increment 15a, R7).
+        """Take `array` as the tile's own, without the copy.
 
         Private: its two callers are `mosaic.assemble` and
-        `target_grid.resample` (increment 15e), each on a canvas it allocated
+        `target_grid.resample`, each on a canvas it allocated
         and never hands out writable, so each peaks at one canvas, not two.
         The same checks as the public constructor, plus C-contiguity, which
         the constructor gets from its copy. The **passed** buffer is set
-        read-only, so the concurrency rule (§7) holds: nobody keeps a writable
+        read-only, so threads may share it as above: nobody keeps a writable
         reference.
         """
         if array.ndim != 2 or array.dtype not in (np.float32, np.float64):

@@ -1,5 +1,7 @@
-"""The edge strip (increment 15f, D5 and D6): check points where constraints
-cross grid lines, and between them, after ``refine``.
+"""The edge strip: check points where constraints cross grid lines, and
+between them, checked after ``refine``, since a thin triangle along a
+constraint can hold no DEM node, and ``refine`` checks a triangle only at the
+DEM nodes inside it.
 
 Two calls into ``_core`` and their ``--stats`` rows; no geometry. ``generate``
 runs on both paths while the tile is held; ``run`` is the projected path's
@@ -42,10 +44,10 @@ def run(
     threads: int = 0,
 ) -> PointRefineOutcome:
     """``refine_strip`` from ``start``; ``clock`` gets the run's own two times.
-    ``feet`` puts points near a line onto it first (20c, R4); ``field``, if
-    any, sets each triangle's tolerance (increment 33); ``slope``, if any,
-    holds each point to its slope's tolerance too (increment 34); ``threads``
-    goes to the C++ as given (38; its 0 is every core)."""
+    ``feet`` puts points near a line onto it first; ``field``, if any, sets
+    each triangle's tolerance; ``slope``, if any, holds each point to its
+    slope's tolerance too; ``threads`` goes to the C++ as given (0 is every
+    core)."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
     out = refine_strip(
         view,

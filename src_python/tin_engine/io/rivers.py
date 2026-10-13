@@ -1,12 +1,11 @@
-"""River segments (NVE's ELVIS network or a user's own), read back (increment 29, PR 3).
+"""River segments (NVE's ELVIS network or a user's own), read back.
 
-`docs/increments/29-nve-reference-catchments.md`, "Placing the gauge" (the
-model, the `kind` rule and step 4, exact copies) and "The station set". One
-LineString per segment: any other geometry, a MultiLineString included, is
+One LineString per segment: any other geometry, a MultiLineString included, is
 refused naming the segment's `objectid`, and so is an `objectid` that appears
-twice. Exact copies within one `elvid` are dropped by :func:`drop_copies`,
-so a user's file is cleaned as a fetched one is, and the count dropped is
-returned for the commands to print.
+twice. Exact copies within one `elvid` (vertex lists equal within
+`COPY_TOLERANCE`) are dropped by :func:`drop_copies`, so a user's file is
+cleaned as a fetched one is, and the count dropped is returned for the
+commands to print.
 """
 
 from __future__ import annotations
@@ -20,7 +19,8 @@ from tin_engine.hydrography import RiverSegment
 
 from .station_set import _geometry_type, _unique, features_of, required
 
-#: Two vertices closer than this, in metres, are the same vertex (step 4).
+#: Two vertices closer than this, in metres, are the same vertex when exact
+#: copies are dropped: a chosen threshold, 1 cm.
 COPY_TOLERANCE = 0.01
 
 

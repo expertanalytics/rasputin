@@ -1,17 +1,15 @@
 """A GeoTIFF stream to a `DemTile`, or a `GeoTiffError` that says why not.
 
-Increment 11, `docs/increments/11-raster-ingestion.md`. The reader's job is
-refusal (ruling 3): every refusal in §5 raises `GeoTiffError` naming the tag or
-GeoKey by number and name and the file's value. None is a bare `assert`,
-because `python -O` strips those (prior art §5.9).
+The reader's job is refusal: every refusal raises `GeoTiffError` naming the
+tag or GeoKey by number and name and the file's value. None is a bare
+`assert`, because `python -O` strips those.
 
-The module takes a binary stream and never a path (§2), and imports neither
-`_core` nor anything first-party except `io.models` and `crs` (ruling 1).
-GeoKeys come from tifffile's own `geotiff_metadata` (ruling 5); the CRS is
-resolved through `pyproj.CRS.from_epsg` and tested on the constructed CRS
-(rulings 6, 7), or, for 3072 = 32767, built from its GeoKeys and named by the
-EPSG code it matches (`docs/increments/geotiff-crs-by-parameters.md`).
-No transform happens here, so there is no `Transformer` (ruling 8).
+The module takes a binary stream and never a path, and imports neither
+`_core` nor anything first-party except `io.models` and `crs`. GeoKeys come
+from tifffile's own `geotiff_metadata`; the CRS is resolved through
+`pyproj.CRS.from_epsg` and tested on the constructed CRS, or, for 3072 = 32767
+(user-defined), built from its GeoKeys and named by the EPSG code it matches.
+No transform happens here, so there is no `Transformer`.
 """
 
 from __future__ import annotations
@@ -37,7 +35,7 @@ DEGREE = 9102
 PIXEL_IS_AREA = 1
 PIXEL_IS_POINT = 2
 
-#: §7: file dtype to array dtype. Every row is exact; anything else is refused.
+#: File dtype to array dtype. Every row is exact; anything else is refused.
 PROMOTION: dict[np.dtype[Any], np.dtype[Any]] = {
     np.dtype(src): np.dtype(dst)
     for dst, sources in {
@@ -123,7 +121,7 @@ DATUM_KEYS = ("GeogGeodeticDatumGeoKey", "GeogPrimeMeridianGeoKey", "GeogEllipso
 def read_meta(
     source: BinaryIO, *, nodata: float | None = None, z_unit: ZUnit | None = None
 ) -> RasterMeta:
-    """The header phase of `decode_dem` alone (increment 15a, R3): no pixel is read.
+    """The header phase of `decode_dem` alone: no pixel is read.
 
     Every refusal `decode_dem` makes from the header fires here with the same
     message, because both run the same `_header`. A file whose pixels are
@@ -137,7 +135,7 @@ def read_header(
     source: BinaryIO, *, nodata: float | None = None, z_unit: ZUnit | None = None
 ) -> tuple[RasterMeta, np.dtype[Any]]:
     """`read_meta`, and the dtype `decode_dem` will return: the file's through
-    `PROMOTION` (15a S2, so a mosaic's cap can count the canvas it will build)."""
+    `PROMOTION`, so a mosaic's memory cap can count the canvas it will build."""
     with _tiff(source, nodata) as tif:
         meta, dtype = _header(tif, nodata, z_unit)
     return meta, PROMOTION[dtype]
@@ -151,11 +149,11 @@ def read_page(
     z_unit: ZUnit | None = None,
 ) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]:
     """`read_header`, and the full-resolution page itself, for `io.cog` to
-    decode block by block (23a-1). The same `_header`, so every refusal is the
+    decode block by block. The same `_header`, so every refusal is the
     same. A prefix of the file that ends before its first block is enough;
     the page decodes blocks from their bytes alone after the file is closed.
-    `geographic` is 23a-2's flag, kept for its callers: since 15c-2 every
-    entry point reads a geographic 2D CRS (D6), so it changes nothing."""
+    `geographic` changes nothing: every entry point reads a geographic 2D
+    CRS. The flag is kept so that its callers need not change."""
     with _tiff(source, nodata) as tif:
         meta, dtype = _header(tif, nodata, z_unit)
         page = tif.pages.first
@@ -167,13 +165,13 @@ def decode_dem(
 ) -> DemTile:
     """Decode page 0 of the GeoTIFF in `source` into a `DemTile`.
 
-    `nodata` is the caller asserting a sentinel (§6). It must be representable
+    `nodata` is the caller asserting a sentinel. It must be representable
     in the file's dtype, and must agree with tag 42113 when that is present. A
     `bool` is refused with `TypeError`: it is a caller's mistake, not a file's.
     `z_unit` is the caller's height unit for a file that does not state one;
     the array is in metres.
 
-    Raises `GeoTiffError` for every §5 refusal, and (§14, choice C) when
+    Raises `GeoTiffError` for every refusal of the file, and when
     tifffile or a codec fails on the file; that message names the stage, the
     original type and text, and chains the original. Only the calls into
     tifffile are wrapped: `MemoryError` passes through, and the reader's own
@@ -181,7 +179,7 @@ def decode_dem(
     surface as themselves.
 
     The whole page is decoded, so memory is O(rows x cols), briefly doubled
-    while `DemTile` takes its read-only copy (§7). `source` is read but not
+    while `DemTile` takes its read-only copy. `source` is read but not
     closed; closing it is the caller's.
     """
     with _tiff(source, nodata) as tif:
@@ -223,7 +221,7 @@ def _tiff(source: BinaryIO, nodata: float | None) -> Iterator[tifffile.TiffFile]
 def _header(
     tif: tifffile.TiffFile, nodata: float | None, z_unit: ZUnit | None = None
 ) -> tuple[RasterMeta, np.dtype[Any]]:
-    """Everything before the pixels (R3): the §5 header refusals, then the meta.
+    """Everything before the pixels: the header refusals, then the meta.
 
     Returns the file dtype too, which `decode_dem` promotes by. `rows` and
     `cols` come from ImageLength and ImageWidth, which `_check_page` has
@@ -237,7 +235,7 @@ def _header(
     with _stage("GeoKey directory"):
         geokeys: dict[str, Any] = tif.geotiff_metadata or {}
     x_min, y_max, delta_x, delta_y, area = _placement(tie, scale, geokeys)
-    # 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
+    # With 3072 absent, a geographic 2D CRS in degrees, from 2048.
     projected = geokeys.get("ProjectedCSTypeGeoKey")
     geographic = projected is None
     # a CRS in feet is read as its metre twin, every coordinate times f.
@@ -270,7 +268,7 @@ def _header(
 
 @contextmanager
 def _stage(stage: str) -> Iterator[None]:
-    """§14, choice C: a failure inside tifffile or a codec becomes `GeoTiffError`.
+    """A failure inside tifffile or a codec becomes `GeoTiffError`.
 
     Wraps call sites, not types, so the reader's own code stays outside and its
     bugs surface as bugs. No refusal runs inside a stage. The type is named
@@ -290,18 +288,18 @@ def _stage(stage: str) -> Iterator[None]:
 
 
 def _single_page(pages: tuple[tifffile.TiffPage | tifffile.TiffFrame, ...]) -> None:
-    """Refuse a second full-resolution page (§5 refusal 8, 0-based)."""
+    """Refuse a second full-resolution page (pages are numbered from 0)."""
     for index, extra in enumerate(pages[1:], start=1):
         where = f"on page {index} of {len(pages)}: only page 0 may be full resolution"
         if not isinstance(extra, tifffile.TiffPage):
-            # A TiffFrame has no subfiletype to consult (round 3).
+            # A TiffFrame has no subfiletype to consult.
             raise GeoTiffError(f"NewSubfileType (254) could not be read (a frame) {where}")
         if not extra.is_reduced:
             raise GeoTiffError(f"NewSubfileType (254) = {int(extra.subfiletype)} {where}")
 
 
 def _check_page(page: tifffile.TiffPage) -> np.dtype[Any]:
-    """Samples, shape, dtype and codec (§5 refusals 7, 9, 10, 11). Returns the file dtype."""
+    """Samples, shape, dtype and codec. Returns the file dtype."""
     if page.samplesperpixel != 1:
         raise GeoTiffError(f"SamplesPerPixel (277) = {page.samplesperpixel}; a DEM has one band")
     short = [
@@ -320,8 +318,9 @@ def _check_page(page: tifffile.TiffPage) -> np.dtype[Any]:
             f"SampleFormat (339) = {int(page.sampleformat)}, BitsPerSample (258) = "
             f"{page.bitspersample} (numpy {dtype}): not in the promotion table"
         )
-    # §8, problem 1: ask tifffile, never a list of scheme names. Membership
-    # resolves the codec and answers False instead of raising.
+    # Ask tifffile, never a list of scheme names: what it can decode depends on
+    # whether `imagecodecs` is installed. Membership resolves the codec and
+    # answers False instead of raising.
     tiff = tifffile.TIFF
     for name, code, value, known, enum in (
         ("Compression", 259, int(page.compression), tiff.DECOMPRESSORS, tifffile.COMPRESSION),
@@ -340,7 +339,7 @@ def _check_page(page: tifffile.TiffPage) -> np.dtype[Any]:
 
 
 def _georeferencing(page: tifffile.TiffPage) -> tuple[list[float], list[float]]:
-    """Tie point and scale from `page.tags` alone (§5 refusals 1-5, round 3).
+    """Tie point and scale from `page.tags` alone.
 
     Runs before `geotiff_metadata`, whose reshape of a wrong-length 33922 or
     34264 would otherwise raise first.
@@ -378,7 +377,8 @@ def _count(values: list[float]) -> str:
 def _placement(
     tie: list[float], scale: list[float], geokeys: dict[str, Any]
 ) -> tuple[float, float, float, float, bool]:
-    """The node grid's origin and spacing (§4, §5 refusal 6)."""
+    """The node grid's origin and spacing. An area-registered file's corner is
+    moved half a cell in, onto its first cell centre, which is its first node."""
     raster_type = geokeys.get("GTRasterTypeGeoKey")
     if raster_type is None or int(raster_type) not in (PIXEL_IS_AREA, PIXEL_IS_POINT):
         shown = "absent" if raster_type is None else f"= {int(raster_type)}"
@@ -393,7 +393,7 @@ Horizontal = tuple[int | None, str, str | None, float]
 
 
 def _projected_epsg(geokeys: dict[str, Any]) -> Horizontal:
-    """Rulings 6 and 7, §5 refusals 12-14: a projected CRS from 3072 alone, in
+    """A projected CRS from 3072 alone, in
     metres or a foot of `UNITS`; 3076, when present, must agree."""
     code = int(geokeys["ProjectedCSTypeGeoKey"])
     crs = _resolve(code)
@@ -403,7 +403,7 @@ def _projected_epsg(geokeys: dict[str, Any]) -> Horizontal:
         raise GeoTiffError(
             f"ProjectedCSTypeGeoKey (3072) = {code} is a {crs.type_name}, not a projected CRS"
         )
-    if crs.is_compound or len(crs.axis_info) != 2:  # §5 refusal 13a
+    if crs.is_compound or len(crs.axis_info) != 2:  # a compound or 3D CRS
         subs = crs.sub_crs_list
         horizontal_code = subs[0].to_epsg() if subs else None
         part = "" if horizontal_code is None else f"; horizontal part EPSG {horizontal_code}"
@@ -544,7 +544,7 @@ def _method(transform: int, geokeys: dict[str, Any]) -> str:
 
 def _parametric_epsg(geokeys: dict[str, Any]) -> Horizontal:
     """3072 = 32767: the CRS built from the GeoKeys on the datum 2048 names, read
-    as the EPSG code it matches, or the refusal of section 4's row that fires.
+    as the EPSG code it matches, or the refusal of the first check that fails.
     Linear parameters in feet (3076) are converted to metres first."""
     projection = geokeys.get("ProjectionGeoKey")
     if projection is not None and int(projection) != USER_DEFINED:
@@ -688,7 +688,7 @@ def _projected_crs(
 
 
 def _geographic_epsg(geokeys: dict[str, Any]) -> int:
-    """3072 is absent: a geographic 2D CRS in degrees from 2048 (15c-2, D6), or
+    """3072 is absent: a geographic 2D CRS in degrees from 2048, or
     the refusal that is true of what 2048 holds."""
     geographic = geokeys.get("GeographicTypeGeoKey")
     if geographic is None:
@@ -723,7 +723,7 @@ def _resolve(code: int) -> pyproj.CRS | None:
 def _nodata(
     page: tifffile.TiffPage, dtype: np.dtype[Any], caller: float | None
 ) -> tuple[float | None, NodataSource]:
-    """§6: parse tag 42113's text, check both sentinels, then compare them."""
+    """Parse tag 42113's text, check both sentinels, then compare them."""
     tag: float | None = None
     if 42113 in page.tags:
         text = str(page.tags[42113].value)
@@ -747,7 +747,7 @@ def _nodata(
 
 
 def _representable(value: float, dtype: np.dtype[Any], where: str) -> None:
-    """Refuse a sentinel no cell of the *file* dtype can equal (§6, problem 5)."""
+    """Refuse a sentinel no cell of the *file* dtype can equal."""
     if dtype.kind in "iu":
         info = np.iinfo(dtype)
         ok = math.isfinite(value) and value.is_integer() and info.min <= value <= info.max

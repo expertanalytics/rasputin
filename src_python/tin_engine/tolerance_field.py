@@ -1,8 +1,7 @@
 """The lines a vertical tolerance follows, ready for ``_core.LineTolerance``.
 
-Increment 33 (``docs/increments/33-feature-tolerance.md``, sections 3, 4.5
-and 9.1). Pure: a file in, a float64 ``(k, 4)`` array of segments in the
-mesh's CRS out, with the margin they were simplified by. The C++ side
+Pure: a file in, a float64 ``(k, 4)`` array of segments in the mesh's CRS
+out, with the margin they were simplified by. The C++ side
 subtracts that margin from every distance, so simplifying never raises the
 tolerance anywhere.
 """
@@ -40,8 +39,8 @@ class ToleranceLines(BaseModel, frozen=True):
 
 
 class ToleranceSlope(BaseModel, frozen=True):
-    """``--tolerance-slope N START END`` (increment 34): N in metres, the angles
-    in degrees. The CLI checks the bounds."""
+    """``--tolerance-slope N START END``: N in metres, the angles in degrees.
+    The CLI checks the bounds."""
 
     near_m: float
     start_deg: float
@@ -71,8 +70,9 @@ def line_segments(
 
     found, shapes, lines = shapes_in(box_for)
     if not lines and found.layer is not None:
-        # The R-tree found no line in reach: read every row, to tell zero
-        # segments (section 5) from a file with no lines, or a mixed one.
+        # The R-tree found no line in reach: read every row, to tell a file
+        # whose lines all lie out of reach (zero segments, no error) from a
+        # file with no lines, or a mixed one.
         found, shapes, lines = shapes_in(lambda _: EVERYWHERE)
     if not lines:
         raise FeatureError(f"{name} has no lines; polygons and points are not used here")
