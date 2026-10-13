@@ -31,6 +31,12 @@
         "hooks": [
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_spawn.py" }
         ]
+      },
+      {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/record_review.py" }
+        ]
       }
     ],
     "PermissionRequest": [
@@ -53,6 +59,14 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/gates_after_commit.py" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "reviewer",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/record_review.py" }
         ]
       }
     ]

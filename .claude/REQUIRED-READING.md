@@ -118,7 +118,8 @@ spawning personas, builds, tests, gates, `.claude/current-task/`, and
 `@reviewer`" authorises acting on what the reviewer finds.
 
 **A fresh yes, every time:** `git push` — including a branch's first —
-`gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue),
+`gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue,
+except a branch Ola granted for an away window (*Unattended mode*)),
 any force-push or history rewrite, and any edit
 to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 `.claude/**` or `docs/` is ordinary tree work.
@@ -131,7 +132,8 @@ handback) is asked again after a context loss.
 
 **`@reviewer` runs once on any branch before its first push, whether or not
 the branch contains production code, and again before a push that follows a
-round of findings.** On a prose or tooling branch its scope is:
+round of findings (a verdict other than `APPROVED`,
+`docs/increments/README.md` step 4).** On a prose or tooling branch its scope is:
 
 - every claim the branch asserts, checked by running the thing it asserts about;
 - `python3 tools/check_citations.py`, with its at-risk list **re-read as
@@ -176,7 +178,12 @@ work around it, except a refusal whose named files are all ordinary (no rule
 file, no harness state, no push): that is a guard false positive. Redo the
 write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
 files to the handback. A refused write to a rule file, or a refused push, is
-never redone by any route. Otherwise record it as an `ASK OLA:` line (main session: in
+never redone by any route. While away, a branch Ola named with
+`away.py --grant <branch>` may be pushed (as `git push origin
+<sha>:refs/heads/<branch>`), opened as a pull request and enqueued (once per
+head) without a fresh yes, provided `@reviewer`'s last verdict on the branch,
+recorded by a hook from its handback, approved its head; the guard checks
+this, and the grant ends with the window. Otherwise record it as an `ASK OLA:` line (main session: in
 `session.md`; subagent: in its handback) and continue with other work.
 When Ola says he is leaving, ask him how long, and ask him to run
 `away.py` with that duration. Before he leaves, the `QUEUE:` line names at
