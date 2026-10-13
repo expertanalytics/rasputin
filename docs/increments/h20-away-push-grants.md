@@ -1,6 +1,6 @@
 # Harness h20: away-mode push grants, and wording fixes without a second review
 
-Status: **design, review round 1 applied**, 2026-10-13, by @architect, on `worktree-night-push` off
+Status: **design, review round 2 applied**, 2026-10-13, by @architect, on `worktree-night-push` off
 master `97c10c4d`. One PR, by day: every production file it changes is
 governed. Implements two proposals Ola approved on 2026-10-13 from the morning
 retrospective `docs/retrospectives/2026-10-13-night-40-41-42.md` (branch
@@ -122,7 +122,10 @@ act, and it is refused as today.
   than `origin`: none is in the forms, so each is refused.
 - **No word the shell could expand.** Every word of the argv matches
   `[A-Za-z0-9._/:@-]+` (with `=` allowed only inside a `--opt=value` word)
-  and none starts with `~` or `=`; the one exception is the `--title` value,
+  and none starts with `~` or `=`; in a `--opt=value` word the value does
+  not start with `~` or `=` either, because zsh's `magic_equal_subst`
+  expands after the `=` (`--body-file==ls` becomes `--body-file=/bin/ls`,
+  @reviewer, design review round 2); the one exception is the `--title` value,
   which must stand in single quotes in the command text and contain no single
   quote. The one-command test alone lets these through, because
   `shlex.split` does not expand: `git -C ~/other push …` and `git -C =other
@@ -358,7 +361,7 @@ docs/increments/NN-name.md` on the branch.":
 > commit counts as reviewed: no second round. A wording in a code file, or
 > any other finding, is `CHANGES REQUESTED`.
 
-`.claude/agents/reviewer.md`, check list item 1 (line 55), replacing
+`.claude/agents/reviewer.md`, item 1 of its "Feedback format" list (line 55), replacing
 "`APPROVED` or `CHANGES REQUESTED` (with explicit blocking issues)." by:
 
 > `APPROVED`, `APPROVED WITH WORDINGS` (only prose wordings, each named line
@@ -444,6 +447,7 @@ trailer); `<state>/reviews.jsonl` with 1 record, `APPROVED` at `X`. Flag on,
    sha (39 hex), a missing `--match-head-commit`, `gh pr merge 241` (a
    number, not the branch); and the expansions: `-C ~/other`, `-C =other`,
    `-C rel/dir`, `-C '$HOME/x'`, `--head 'fea*'`, `--body-file ~/f`,
+   `--body-file==ls`, `--body-file=~/f`,
    `--title t` (not in single quotes), `--title "t"`.
 
 ### 4.3 The guard end to end (test_guard_push.py, through the hook copy)
@@ -491,8 +495,13 @@ reason.
 28. A master merge with a `tools/x.py` conflict resolved by hand: refused.
 29. A clean merge whose second parent is not on `origin/master` (another
     branch): refused.
-30. A record whose sha is a commit reachable from `H` but not on its first
-    parent chain (the second parent of a merge): not counted.
+30. A branch `other` off master has a code commit `S` (`tools/s.py`, 1
+    line); `feat` merges `other` before `X`, so `S` is reachable from `H`
+    but not on its first-parent chain. `reviews.jsonl`: `APPROVED` at `X`,
+    then a newer `APPROVED` at `S`. Expected: **pass** (the first-parent
+    walk does not see `S`, picks `X`'s record, and only the prose recording
+    commit follows `X`). A full `origin/master..H` walk picks `S` and
+    refuses on `X` ("commit X changes tools/x.py after the review of S").
 31. Master gains commit `M` (code), recorded `APPROVED` at `M`, and `feat`
     merges master; no record on `feat`'s own chain: "no review recorded for
     this branch" (the first-parent walk).
@@ -518,13 +527,13 @@ is the lines of `reviews.jsonl`. Every case prints nothing and exits 0.
     printed.
 
 **Mutation targets** (the kill record must cover each): the first-parent
-walk replaced by a full `origin/master..H` walk (kills 30 or 31); "newest
+walk replaced by a full `origin/master..H` walk (kills 30); "newest
 record" replaced by "first record" (21); `is_prose` replaced by "any `.md`"
 (25); the second-parent ancestry check dropped (29); the merge-tree diff
 replaced by "the merge is clean" (27 or 28, one of them); the verdict test
 accepting any verdict (21); the `agent_type` test dropped, or passing when
 absent (33); "exactly one line" replaced by "the first line" (35); the
-expansion test dropped (17); the push's source-sha test dropped (16); the
+expansion test dropped (9, `--body-file ~/f`; test 17's cases fall to the absolute-path rule); the push's source-sha test dropped (16); the
 one-command test dropped (14); the per-head enqueue count dropped (15).
 
 ## 5. Size
