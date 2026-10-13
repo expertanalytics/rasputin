@@ -1,11 +1,8 @@
 # Increment 43: height units, feet coordinates and more projection methods
 
-**Status: built; code review round 1 asked for changes** (2026-10-13, on
-`3fc5b60f`, branch `worktree-units`): the history labels in the new docstrings
-and comments go, and `tools/scratch_copy.py`'s citation follows its moved
-line, by `@developer`; this section and section 4.8 by the main session. Then
-code review round 2, push and enqueue on Ola's yes. Python only, one PR.
-Not refine or mesh code, so no `@perf` acceptance run (section 7).
+**Status: built; code review round 2 approved** (2026-10-13, on `dff49c49`,
+branch `worktree-units`). Next: push and enqueue on Ola's yes (section 9.6).
+Python only, one PR.
 
 ## 1. What Ola asked, and what this fixes
 
@@ -702,3 +699,5 @@ enqueue; a yes recorded on disk is asked again after a context loss).
 **Design review, round 4, 2026-10-13.** Range `7f524956..d1028d1a`, 0 counted lines, @reviewer: CHANGES REQUESTED. Round 3's blockers fixed; the new "no multiple of 2^-3 m moves below 2^43 m" is false (4552287362515.375 m moves; 97,742 of 200,000 from 2^42 to 2^43 m move), so 2^43 becomes 2^42 at the constants row and section 9's three statements. 13.6 %, whole metres, the 977 projected files and the pattern confirmed. Suggestion: the resampled-canvas spacings of 2^-1 to 2^-3 m hold once the floor change is built. Both applied as wording fixes by the main session.
 
 **Code review, round 1, 2026-10-13.** Range `origin/master..3fc5b60f`, 300 counted lines, @reviewer: CHANGES REQUESTED. (1) 26 new history labels such as "(43, 4.3)" and "increment 43, 4.5" in docstrings and comments across 12 production files break the docstring rule merged with increment 42 (#246); the checker misses them because its scope is empty. (2) Section 4.8's "geographic and metre DEMs, mesh files byte for byte" is false for resampled sources finer than about 0.71 m (projected ones too) and for cells over 50 m when features are given. (3) The Status line is stale. (4) `tools/scratch_copy.py:19` cites `tests/python/test_io_geotiff.py:1271`, which this branch moved to 1275. Verified: the six quick-check meshes are unchanged, the kill record covers every target and the equivalent mutant holds, no leftover red-step code, check_citations exits 0. Suggestion: `CODES` one entry per line.
+
+**Code review, round 2, 2026-10-13.** Range `3fc5b60f..dff49c49`, 305 counted lines, @reviewer: APPROVED WITH WORDINGS. Round 1's four items resolved: no label added by this increment remains in the branch's added lines, section 4.8's exceptions match `_rounded` and `max(MARGIN, 2 * cell)`, the citation is at 1275, and `--same-code e3d0007e` and check_citations exit 0. The labels and the older pointer left in target_grid.py and feature_input.py are master's, left to increment 42's sweep. Status line updated. CI is pending until the push.
