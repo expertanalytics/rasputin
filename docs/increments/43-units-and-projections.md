@@ -1,10 +1,10 @@
 # Increment 43: height units, feet coordinates and more projection methods
 
-**Status: green step done, 7 tests left red; settled by the addendum
-(section 9)** by `@architect`, 2026-10-13, on `0f67a567` (branch
-`worktree-units`); design review round 3 applied (section 9.3's scope: any DEM
-whose nodes the 1 mm snap moves, metre DEMs included). Next: `@tester` applies section 9's test changes, then
-`@developer` the one production change (the A4 floor). Python only, one PR.
+**Status: built; code review round 1 asked for changes** (2026-10-13, on
+`3fc5b60f`, branch `worktree-units`): the history labels in the new docstrings
+and comments go, and `tools/scratch_copy.py`'s citation follows its moved
+line, by `@developer`; this section and section 4.8 by the main session. Then
+code review round 2, push and enqueue on Ola's yes. Python only, one PR.
 Not refine or mesh code, so no `@perf` acceptance run (section 7).
 
 ## 1. What Ola asked, and what this fixes
@@ -364,7 +364,12 @@ bounds the chord of a curved edge after the move, not the margin.
 
 `_core`, its bindings and every C++ file. The mosaic's seam threshold (1 mm)
 is now in metres for every DEM (audit F4 follows). For geographic and metre
-DEMs, the decoded arrays and the mesh files, byte for byte.
+DEMs, the decoded arrays, byte for byte. The mesh files too, with two
+exceptions, both intended: a resampled source (geographic or projected) whose
+spacing falls below about 0.71 m now gets a power-of-two spacing (section
+4.6), and 0.125 m below 2^-3 m (section 9.5); and with features given, a DEM
+whose cells are over 50 m gets a feature read margin of two cells instead of
+100 m (section 4.7). The quick check's six meshes are unchanged.
 
 The run record does change in two places. A cached source (`glo30`,
 `anadem-v1`) now states metres in its catalogue entry, so its
@@ -695,3 +700,5 @@ enqueue; a yes recorded on disk is asked again after a context loss).
 **Design review, round 3, 2026-10-13.** Range `0f67a567..92e0c3c5`, 0 counted lines, @reviewer: CHANGES REQUESTED. Section 9.3's "no node moves" is false for metre DEMs with whole-millimetre origins (first node at x = 5440353.066 keeps 12 of 16 points, at x = 3275842.3 keeps 9 of 16, 10 m cells, through `rasputin mesh`), so the follow-up covers any DEM whose nodes are not exactly whole 0.001 m steps in float64; sections 4.6 and 9.5's 2^50 m bound becomes 2^42 m. Fingerprints, the 1200 m grid, 599 and 4151, and the narrowed pattern confirmed. Suggestions: give the 1 ftUS row's origin ((300000, 200000) ftUS reproduces 300); "300 to 599 leave" depends on the origin; add `\bconstraint-feet\b` to the narrowed pattern.
 
 **Design review, round 4, 2026-10-13.** Range `7f524956..d1028d1a`, 0 counted lines, @reviewer: CHANGES REQUESTED. Round 3's blockers fixed; the new "no multiple of 2^-3 m moves below 2^43 m" is false (4552287362515.375 m moves; 97,742 of 200,000 from 2^42 to 2^43 m move), so 2^43 becomes 2^42 at the constants row and section 9's three statements. 13.6 %, whole metres, the 977 projected files and the pattern confirmed. Suggestion: the resampled-canvas spacings of 2^-1 to 2^-3 m hold once the floor change is built. Both applied as wording fixes by the main session.
+
+**Code review, round 1, 2026-10-13.** Range `origin/master..3fc5b60f`, 300 counted lines, @reviewer: CHANGES REQUESTED. (1) 26 new history labels such as "(43, 4.3)" and "increment 43, 4.5" in docstrings and comments across 12 production files break the docstring rule merged with increment 42 (#246); the checker misses them because its scope is empty. (2) Section 4.8's "geographic and metre DEMs, mesh files byte for byte" is false for resampled sources finer than about 0.71 m (projected ones too) and for cells over 50 m when features are given. (3) The Status line is stale. (4) `tools/scratch_copy.py:19` cites `tests/python/test_io_geotiff.py:1271`, which this branch moved to 1275. Verified: the six quick-check meshes are unchanged, the kill record covers every target and the equivalent mutant holds, no leftover red-step code, check_citations exits 0. Suggestion: `CODES` one entry per line.
