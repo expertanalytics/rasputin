@@ -1,8 +1,9 @@
 # Increment 45: a cache without setup, general result names, the benchmark on Linux
 
-Status: **design review round 1 applied** (`@architect`, 2026-10-13): the
-skipped case's inputs (4.4), the five values the Linux power reader reads
-(4.3), the rule-file claim (4.5); awaiting round 2. Written against master
+Status: **design review round 2 applied** (`@architect`, 2026-10-13): the
+quick check compares inputs per case, each case's input list stored in the
+record (4.4, T9), and the save with skipped cases is question Q7 (section 10);
+awaiting round 3. Written against master
 `b1353075`, to be built after increment 44 merges (section 3).
 Defaults taken while Ola was away are section 10's questions.
 
@@ -257,27 +258,52 @@ today; `bench_quick` keeps its own `make_host = bench.make_host`, as it keeps
   `SKIPPED: <case>: no input <path>` for each and judges the rest. Only the
   present cases' inputs are fingerprinted. A run with every case skipped cannot
   happen while the in-tree cases exist; it is not special-cased.
-- **The inputs compared are those of the cases that ran.** `_mismatch` keeps
-  its power and machine checks and changes its input loop from the union of
-  both records' keys to the new record's keys: an input the baseline also holds
-  must match; an input only the baseline holds (a skipped case's, or a case
-  since removed from `cases.toml`) is not compared; an input only the new run
-  holds belongs to a case the baseline lacks, which `verdict` already reports
-  as `NOT JUDGED: <case> is not in the baseline`. Why this and not "any skip
-  makes the run uncomparable": a case's timings depend on its own inputs only,
-  so a skipped case hides nothing about the judged ones, and the uncomparable
-  rule would leave every run with a skip at `NO BASELINE`, exit 2, which is the
-  fact E1 is about. Measured against the stored baseline (`probe45_r1.out`):
-  with only the two in-tree cases run, today's `_mismatch` gives `input
-  $RASPUTIN_DATA/DTM10_UTM33_20260925 changed`; the new rule gives none and the
-  verdict `NO CHANGE`, exit 0; one in-tree input changed still gives `NO
-  BASELINE`, exit 2, under both.
+- **Inputs are compared per case, for each case that ran and is in the
+  baseline.** Each `CaseResult` gains `inputs: list[str]`, its case's
+  `inputs` as written in `cases.toml` (a run name such as `tile t=1` gets its
+  case's list); `QuickRecord.inputs` still maps each name to its fingerprint,
+  over the cases that ran. `_mismatch` keeps its power and machine checks and
+  its signature, and replaces its input loop: for each case in both records,
+  in name order, every name in either record's list for that case must be in
+  both lists and have the same fingerprint in both records; the first that
+  does not gives `input <name> of <case> changed`. So a case that keeps its
+  name but reads another file, or one file more or fewer, is not judged
+  against its old timings. A case only the baseline holds (skipped, or since
+  removed from `cases.toml`) is not compared; a case only the new run holds
+  is `NOT JUDGED: <case> is not in the baseline`, as `verdict` reports today.
+  Why the lists are stored in the record and not taken from `cases.toml`
+  and passed to `_mismatch`: the baseline then says which files each case
+  read when it was timed, so a case that drops an input in `cases.toml` is
+  caught (today's rule catches it, and the `cases.toml` map would not: it
+  sees only today's list, and the inputs left all match); and `_mismatch`
+  stays a function of two records, so its tests need no `cases.toml`. A
+  record without the lists (`docs/benchmarks/quick/baseline-ac.json`, which
+  this increment replaces) loads with empty lists, and a new run against it
+  gives `NO BASELINE`, since an empty list never matches a case's real one.
+  Why not "any skip makes the run uncomparable": a case's timings depend on
+  its own inputs only, so a skipped case hides nothing about the judged ones,
+  and that rule would leave every run with a skip at `NO BASELINE`, exit 2,
+  which is the fact E1 is about. Measured against the stored baseline with
+  each case's `cases.toml` list added, as a save under this rule writes it
+  (`docs/increments/45-probes/probe45_r2.py`, output `probe45_r2.out`):
+
+  | run | today | round 1 rule (new record's names only) | this rule |
+  |---|---|---|---|
+  | only the two in-tree cases (the skip) | `NO BASELINE`, exit 2 | `NO CHANGE`, exit 0 | `NO CHANGE`, exit 0 |
+  | all cases, the DEM tile's content changed | `NO BASELINE`, exit 2 | `NO BASELINE`, exit 2 | `NO BASELINE`, exit 2 |
+  | all cases, quarter's `.geojson` replaced in `cases.toml` by another file | `NO BASELINE`, exit 2 | `NO CHANGE`, exit 0 | `NO BASELINE: input …/quarter.geojson of quarter changed`, exit 2 |
+  | the same, only the two in-tree cases run | `NO BASELINE`, exit 2 | `NO CHANGE`, exit 0 | `NO BASELINE`, exit 2 |
+  | all cases, quarter's `.geojson` dropped from its list | `NO BASELINE`, exit 2 | `NO CHANGE`, exit 0 | `NO BASELINE`, exit 2 |
+
+  Today's `NO BASELINE` in the skip row names `$RASPUTIN_DATA/DTM10_UTM33_20260925`,
+  an input of a case that did not run. In the last row the `cases.toml` map
+  (the alternative not taken, also in the probe) gives no mismatch.
 - **`--save-baseline` with a skip saves what ran.** Another machine without
   Ola's data must be able to save a baseline. On Ola's machine a save while
   the data folder is unmounted drops those cases from his baseline; every
   later run then prints `NOT JUDGED: <case> is not in the baseline` for each,
   and the `SKIPPED:` lines print above `baseline saved:`, so the loss is in
-  plain sight.
+  plain sight (question Q7).
 - **One baseline file per machine and power state**:
   `docs/benchmarks/quick/baseline-<cpu>-<power>.json`, where `<cpu>` is the
   CPU name lower-cased with every run of other characters than `a-z0-9` made one
@@ -379,6 +405,12 @@ def make_host(runner: Runner, system: str = sys.platform) -> Host: ...  # BenchE
 ```python
 make_host = bench.make_host
 def baseline_path(machine: Machine, power: str) -> Path: ...  # QUICK / f"baseline-{slug}-{power}.json"
+
+class CaseResult(BaseModel):
+    ...                      # tolerance, max_error, mesh_sha256, measures, as today
+    inputs: list[str] = []   # its case's cases.toml inputs; [] in a record saved before 45
+
+def _mismatch(new: QuickRecord, base: QuickRecord) -> str | None: ...  # signature unchanged; 4.4
 ```
 
 ## 6. Tests `@tester` writes first
@@ -386,7 +418,8 @@ def baseline_path(machine: Machine, power: str) -> Path: ...  # QUICK / f"baseli
 Figures come from `docs/increments/45-probes/probe45.py`, run as
 `.venv/bin/python -I probe45.py <tree>` (output `probe45.out`), and, for T5
 and T9 after design review round 1, from `probe45_r1.py` the same way (output
-`probe45_r1.out`); their sketches of the rules are the probes, not the
+`probe45_r1.out`), and for T9's per-case input rule after round 2, from
+`probe45_r2.py` (output `probe45_r2.out`); their sketches of the rules are the probes, not the
 product.
 
 **Isolation first.** With a default in the home directory, a test that clears
@@ -506,11 +539,33 @@ Ubuntu legs, never on the Mac): `LinuxHost().machine()` has `p_cores >= 1`,
   child, alpha runs and is judged, and the last line is `NO CHANGE`, exit 0
   (today's `_mismatch` gives `NO BASELINE: input <beta's path> changed`, exit
   2, so the test can fail). A record saved from that run holds alpha's input
-  only.
-- `_mismatch` units on two records alike in power and machine: the new record
-  holding `{a: x}` against a baseline holding `{a: x, b: y}` gives None;
-  `{a: x2}` against `{a: x}` gives `input a changed`; `{a: x, c: z}` against
-  `{a: x}` gives None.
+  only, and its `cases.alpha.inputs` is alpha's `cases.toml` list.
+- **A case keeps its name but reads another file** (the review's case): the
+  same fixture, a baseline saved from a full run, then `cases.toml` rewritten
+  so beta's `--dem` and `inputs` name a new file `beta2.tif` (content
+  `beta2`). The last line is `NO BASELINE: input <beta.tif's path> of beta
+  changed` (the old name sorts first), exit 2, and no `SLOWER` or `NO CHANGE` line; under the round 1
+  rule it was `NO CHANGE`, exit 0 (`probe45_r2.out`, the quarter rows), so
+  the test can fail. The same test with alpha's input also deleted (beta
+  runs, alpha is skipped) still ends `NO BASELINE`, exit 2.
+- `_mismatch` units on two records alike in power and machine; a record is
+  written as its cases' lists and its fingerprints:
+  - new `{p: [a]}`, `{a: x}` against base `{p: [a], q: [b]}`, `{a: x, b: y}`:
+    None (q skipped);
+  - new `{p: [a]}`, `{a: x2}` against base `{p: [a]}`, `{a: x}`: `input a of
+    p changed` (content edited);
+  - new `{p: [c]}`, `{c: z}` against base `{p: [a]}`, `{a: x}`: `input a of
+    p changed` (another file; the first name of the two in order);
+  - new `{p: [a]}`, `{a: x}` against base `{p: [a, b]}`, `{a: x, b: y}`:
+    `input b of p changed` (an input dropped);
+  - new `{p: [a], r: [c]}`, `{a: x, c: z}` against base `{p: [a]}`, `{a: x}`:
+    None (r is new, and `verdict` says `NOT JUDGED`);
+  - new `{p: [a]}`, `{a: x}` against base `{p: []}`, `{a: x}` (a record saved
+    before 45): `input a of p changed`.
+  The existing input-mismatch test
+  (`tests/python/test_bench_quick.py@b1353075:284-286`) gains the lists: its
+  `lagan()` helper's case holds `inputs: ["lagan dem", "lagan features"]`, or
+  under this rule the changed fingerprint is never looked at.
 - `--save-baseline` with beta's input absent writes a baseline whose cases
   are alpha's only; a following full run prints `NOT JUDGED: beta is not in
   the baseline` and judges alpha.
@@ -562,8 +617,9 @@ TOML, Markdown and tests not counted):
 | `LinuxHost.machine` | +20 |
 | `LinuxHost.power` (five values, missing-value rule) | +28 |
 | `bench.run` and README line | +2 |
-| `bench_quick`: skip, `baseline_path`, host, order; `_mismatch`'s loop (changed lines) | +12 |
-| **total** | **about 86** (worst case 130) |
+| `bench_quick`: skip, `baseline_path`, host, order | +12 |
+| `bench_quick`: `CaseResult.inputs`, set where a result is made; `_mismatch`'s per-case loop (four lines for three) | +3 |
+| **total** | **about 89** (worst case 135) |
 
 One PR, far under 700. The audit estimated about 120.
 
@@ -593,6 +649,14 @@ Each is a question for Ola, with the default the design takes.
   breaks those files.
 - **Q6** Should the quick check keep one stored baseline per machine, named
   after its processor, so another machine never overwrites yours? Default: yes.
+- **Q7** When some quick-check cases are skipped because their input files
+  are missing (on your Mac, the data folder not mounted; on another machine,
+  your data not there at all), should `--save-baseline` still save? Default:
+  yes; it saves the cases that ran, prints a `SKIPPED:` line for each case
+  left out, and every later run lists each dropped case as not judged until a
+  full run is saved again. The alternative is to refuse to save while any
+  case is skipped, which leaves another machine without your data no way to
+  save a baseline.
 
 ## Review
 
