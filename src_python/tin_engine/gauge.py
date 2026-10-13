@@ -1,14 +1,17 @@
-"""The gauge on NVE's mapped river line (increment 29, PR 2).
+"""The gauge on NVE's mapped river line.
 
-`docs/increments/29-nve-reference-catchments.md`, "Placing the gauge". A
-station is placed where it physically is: on the nearest line of the best
+A station is placed where it physically is: on the nearest line of the best
 tier (its own watercourse number, a prefix of it, its river's name, any),
 at the foot `P` of the station on that line. No rule here looks at an area
-or a flow count. The reach is the chain of that line's `elvid` round `P`,
-`reach_up` metres upstream and `U + 100` m downstream, stopped at a fork or
-where the river ends. `lake_seed` (PR 4, "Lake gauges: the lake is the
-seed") says which gauges are seeded with their lake instead: by containment
-and one distance, never an area. Pure shapely: no DEM, no file.
+or a flow count, so a catchment's area is never what decides where its gauge
+sits. The uncertainty `U` is the station's distance to that line, at least
+`U_FLOOR_CELLS` cells and at most the search radius `map_radius`. The reach is the chain
+of that line's `elvid` (NVE's river id) round `P`, `reach_up` metres upstream
+and `U + 100` m downstream, stopped at a fork or where the river ends.
+`lake_seed` says which gauges are seeded with their lake instead: by
+containment and one distance, never an area. Pure shapely: no DEM, no file.
+
+`docs/increments/29-nve-reference-catchments.md`, *Placing the gauge*
 """
 
 from __future__ import annotations
@@ -27,8 +30,10 @@ from tin_engine.hydrography import Lake, RiverSegment
 
 #: Metres: an end within this of the next segment's start continues the chain.
 JOIN_M = 1.0
-#: Cells (the DEM's longer side in metres, `cell_m`): `U` is never below
-#: three, and the burn's half-width is three (increment 40, 5.3).
+#: Cells (a cell's longer side in metres, `cell_m`): `U` is never below
+#: three cells, the floor the DEM's resolution gives, and the burn's
+#: half-width is three cells, so its cross-section is at least seven nodes
+#: wide.
 U_FLOOR_CELLS = 3
 #: Metres: the chain runs `U + DOWN_EXTRA_M` below `P`.
 DOWN_EXTRA_M = 100.0
@@ -63,7 +68,9 @@ class Reach(BaseModel):
 
 
 class Placement(BaseModel):
-    """Where the gauge went, and why there (step 5's flags, for the report)."""
+    """Where the gauge went, and why there: the tier it was placed on, its
+    distance, and the flags the report shows (on a lake line, another river
+    near, the reach cut short at a fork)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -104,8 +111,10 @@ def _tier(segment: RiverSegment, gauge: Gauge) -> int:
     if number is not None and station is not None:
         if number == station:
             return 0
-        # A leading part with its own dot shares the main number; a bare main
-        # number ("002") is never a prefix (step 2, pinned 2026-10-05).
+        # A segment number that holds a dot and is a leading part of the
+        # station's names a river the station's river drains into ("002.A"
+        # for "002.AB"). A bare main number ("002") is never a prefix, a
+        # chosen limit.
         if "." in number and station.startswith(number):
             return 1
     if gauge.river is not None and segment.name == gauge.river:
@@ -196,8 +205,8 @@ def place(
 def lake_seed(
     gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake], *, gap: float
 ) -> LakeSeed | None:
-    """The lake seed of `gauge`, or None for PR 2's river path: `inside` when
-    the station lies strictly inside a lake; else `lake_line` when it was
+    """The lake seed of `gauge`, or None when the river reach seeds it:
+    `inside` when the station lies strictly inside a lake; else `lake_line` when it was
     placed on a lake line whose `P` lies in a lake at most `gap` from it."""
     if not (math.isfinite(gauge.x) and math.isfinite(gauge.y)):
         return None
@@ -212,7 +221,7 @@ def lake_seed(
     if not holding:
         return None
     distance = min(lk.polygon.distance(station) for lk in holding)
-    if distance > gap + 1e-6:  # the corridor's slack
+    if distance > gap + 1e-6:  # a micrometre of slack for rounding
         return None
     return LakeSeed(rule="lake_line", point=placement.position, lakes=holding, distance_m=distance)
 

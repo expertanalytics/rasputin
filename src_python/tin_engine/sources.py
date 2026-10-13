@@ -1,19 +1,15 @@
-"""The catalogue of remote DEM sources `rasputin fetch` copies (increments 23a-1, 23a-2).
+"""The catalogue of remote sources `rasputin fetch` and `rasputin fetch-stations` copy.
 
-`docs/increments/23-basin-scale.md`, "The fetch step and the tile cache" and
-B8 as ruled: ANADEM and GLO-30. Data only, importing Pydantic alone, so the
-mesh path can name a catalogue key without importing `tin_engine.fetch`
-(decided 2): meshing is offline by rule.
+`SOURCES` holds the rasters `rasputin fetch` copies into the tile cache: two
+DEMs (ANADEM and GLO-30) and one land-cover raster (MapBiomas, one COG per
+year). Data only, importing Pydantic alone, so the mesh path can name a
+catalogue key without importing `tin_engine.fetch`: meshing runs offline.
+`url_for` picks a file (a year's, for MapBiomas), `credit_for` fills the
+fetch date and URL into the credit, and `check_values` keeps classes out of
+`--dem` and heights out of `--land-cover`.
 
-Increment 29 adds the catalogue of station lists `rasputin fetch-stations`
-copies (`STATION_SOURCES`): NVE's HRD stations, their catchment polygons and
-the river lines near them.
-
-Increment 26a adds a source of land-cover classes, MapBiomas, as one COG per
-year (`one-cog-per-year`, `years`, `values`; `docs/increments/26-land-cover.md`,
-section 3.1): `url_for` picks the year's file, `credit_for` fills the fetch
-date and URL into the credit, and `check_values` keeps classes out of `--dem`
-and heights out of `--land-cover`.
+`STATION_SOURCES` holds the station lists `rasputin fetch-stations` copies:
+NVE's HRD stations, their catchment polygons and the river lines near them.
 """
 
 from __future__ import annotations
@@ -27,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 class Dated(Protocol):
     """A `datetime.date`, by its one method used here: this module imports
-    only Pydantic (23a-1, decided 2; `test_sources_imports_pydantic_only`)."""
+    only Pydantic (`test_sources_imports_pydantic_only`)."""
 
     def isoformat(self) -> str: ...
 
@@ -53,9 +49,9 @@ class RemoteSource(BaseModel):
     nodata: float | None
     credit: str
     licence_note: str
-    #: The works the distributor asks to cite (23a-2); `notice` and the mesh file carry them.
+    #: The works the distributor asks to cite; `notice` and the mesh file carry them.
     cite: tuple[str, ...] = ()
-    #: The class map (`tin_engine.class_maps`) that names and colours its classes (41).
+    #: The class map (`tin_engine.class_maps`) that names and colours its classes.
     class_map: str = ""
     #: The height unit the catalogue states for files that do not.
     z_unit: Literal["metre", "foot", "US survey foot"] | None = None
@@ -163,7 +159,7 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
 class StationSource(BaseModel):
     """One list of gauging stations: the packaged list `list_file` (in
     `tin_engine/data/`) says which stations; `service_url` serves their points,
-    polygons and rivers (29, "The station set")."""
+    polygons and rivers."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -195,9 +191,10 @@ STATION_SOURCES: Mapping[str, StationSource] = MappingProxyType(
 
 
 def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) -> str:
-    """`<cache>/<source>/NOTICE.txt` (23a-2, decided 8): a rendering of the
-    catalogue entry, which stays the one place these words are kept. `credits`
-    are the rendered credits of the objects fetched (26a), else the entry's."""
+    """The text of a fetch's `NOTICE.txt`: a rendering of the catalogue
+    entry, which stays the one place these words are kept. `credits` are the
+    rendered credits of the objects fetched (each with its own fetch date),
+    else the entry's."""
     credit = list(credits) or [source.credit]
     lines = [f"{source.id}", "", "Credit:", *credit, "", "Licence:", source.licence_note]
     if source.cite:

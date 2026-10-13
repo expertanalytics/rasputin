@@ -1,18 +1,18 @@
-"""The fetch: headers, identity, plan, bounded async download (increment 23a-2).
+"""The fetch: headers, identity, plan, bounded async download.
 
-`docs/increments/23-basin-scale.md`, "The cache" and "Downloading". `client`
-and `writer` are parameters, so the run is tested against a local server and
-a cache in `tmp_path`, and an API worker awaits it in its own loop.
+`client` and `writer` are parameters, so the run is tested against a local
+server and a cache in `tmp_path`, and an API worker awaits it in its own loop.
 
-Order of writes (a crash at any point leaves a cache 23a-1 reads): headers and
-the manifest first, so a new object is listed before any of its blocks; then
-blocks, each request's only after its whole body arrived and every length
-matched (decided 4); then the request appended to the manifest. A dry run
-reads headers and the cache, and writes nothing.
+Order of writes (a crash at any point leaves a cache the mesh can read):
+headers and the manifest first, so a new object is listed before any of its
+blocks; then blocks, each request's only after its whole body arrived and
+every length matched, so a failed request writes nothing and a rerun resumes
+it whole; then the request appended to the manifest. A dry run reads headers
+and the cache, and writes nothing.
 
-Increment 26a: a `one-cog-per-year` source is fetched as `one-cog`, the file
-being the requested year's (`url_for`); each object records the day its header
-was first fetched, and `NOTICE.txt` carries every object's credit with it.
+A `one-cog-per-year` source is fetched as `one-cog`, the file being the
+requested year's (`url_for`); each object records the day its header was
+first fetched, and `NOTICE.txt` carries every object's credit with that date.
 """
 
 from __future__ import annotations
@@ -277,7 +277,8 @@ def _tile_name(lat: int, lon: int) -> str:
 
 def _region(request: FetchRequest, source: RemoteSource) -> str:
     """The sha256 of the region as given: the domain's WKB and CRS, or the
-    box's four numbers and its CRS (decided 9)."""
+    box's four numbers and its CRS, so equal requests on one day are logged
+    once in the manifest."""
     if request.domain is not None:
         data: Any = request.domain.polygon.wkb + request.domain.crs.encode()
     else:

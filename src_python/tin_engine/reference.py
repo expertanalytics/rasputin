@@ -1,11 +1,12 @@
-"""Our catchment against NVE's polygon: agreement, class, summary (increment 29, PR 4).
+"""Our catchment against NVE's polygon: agreement, class, summary.
 
-`docs/increments/29-nve-reference-catchments.md`, "Agreement and classes"
-and "PR 4's red step". Both outlines are counted on the DEM's node lattice
+Both outlines are counted on the DEM's node lattice
 (the final window's origin and spacing, run on as far as either polygon
 reaches; no DEM is read), a station is classed from those counts and its
 gauge's causes, and a batch's rows are summarised in a deterministic model.
 Pure: shapely and numpy, no file.
+
+`docs/increments/29-nve-reference-catchments.md`, *Agreement and classes*
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ UNCERTAIN_CAUSES = (
 REFUSAL_CAUSES = ("mixed_grid", "no_river", "other")
 BANDS = ("under 10", "10-100", "100-1000", "over 1000")  # km2
 TILE_GROUPS = ("1", "2", "3-4", "5+")
-SEEDS = ("river", "lake")  # a row's `seeded_by` (PR 4, "Lake gauges")
+SEEDS = ("river", "lake")  # a row's `seeded_by`: the burnt reach or the lake
 _MEASURES = ("area_ratio", "nve_in_ours", "ours_in_nve")
 _PERCENTILES = {"min": 0, "p10": 10, "p25": 25, "p50": 50, "p75": 75, "p90": 90, "max": 100}
 

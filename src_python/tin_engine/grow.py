@@ -1,10 +1,13 @@
-"""The catchment outline grown by a distance with mitred corners (increment
-30d, `docs/increments/30d-outline-buffer-speed.md` section 3.3).
+"""The catchment outline grown by a distance with mitred corners.
 
 GEOS's buffer is slow on a long raster-traced outline (a staircase) once the
 distance spans two or more steps. There the region is built as the polygon
 united with its boundary grown in overlapping pieces, P + B = P u (dP + B);
-everywhere else it is GEOS's own buffer, bit for bit.
+everywhere else it is GEOS's own buffer, bit for bit. The gate keeps smooth
+outlines on GEOS: there the pieced region can differ from GEOS's at sharp
+turns (it still covers every point within the distance) and gains no time.
+The measurements are in
+`docs/increments/30d-outline-buffer-speed.md`, *3.3 The outline grown in pieces, behind a gate*
 """
 
 from __future__ import annotations
@@ -13,9 +16,12 @@ import numpy as np
 import shapely
 from shapely.geometry import Polygon
 
-#: Edges per piece of the ring; each piece overlaps the next by one edge.
+#: Edges per piece of the ring; each piece overlaps the next by one edge. A
+#: chosen size: at 1000 the region equalled GEOS's on the largest outline
+#: measured, and smaller pieces differed from it by up to 1e-6 m.
 PIECE_EDGES = 1000
 #: The fewest exterior vertices (closing vertex not counted) grown in pieces.
+#: A chosen bound: below it there are at most five pieces and GEOS is fast.
 PIECES_FROM = 5000
 
 

@@ -1,7 +1,7 @@
 """``(Scene, SvgStyle) -> str``: the picture, as text.
 
-Hand-written SVG, per ``06-cdt-viewer.md``'s dependency ruling -- no plotting
-library, nothing beyond the standard library and NumPy. The module is a pure
+Hand-written SVG -- no plotting library, nothing beyond the standard library
+and NumPy, so drawing adds no dependency. The module is a pure
 function of its arguments: it opens no file, resolves no path and returns a
 ``str``, which is what lets a future GUI wrap it in ``asyncio.to_thread``
 unchanged and what keeps every path in this project on ``cli.py``'s side.
@@ -44,8 +44,8 @@ from .style import PropertyStroke, SvgStyle
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
-#: Untested by design (`06-cdt-viewer.md`: a golden-file comparison is rejected
-#: outright and no assertion is made on any style string). The page is a light
+#: Untested by design: no golden-file comparison and no assertion on any style
+#: string, since colours are taste and a test of them would only pin it. The page is a light
 #: neutral that is *not* white, which is load-bearing for comprehension rather
 #: than taste: a hole in the mesh is the absence of triangles, so it reads as a
 #: hole only if the page reads as a page.
@@ -154,7 +154,7 @@ def _property_token(properties: int, strokes: tuple[PropertyStroke, ...]) -> str
     carries a SET and a polyline carries one stroke, because two overlaid
     strokes on one line read as a rendering defect rather than as two features.
     First match rather than the lowest set bit, because priority is the
-    stylesheet's ruling and a bit position is a vocabulary's numbering.
+    stylesheet's choice and a bit position is a vocabulary's numbering.
 
     A property with no stroke contributes nothing and the edge is still drawn as
     the constraint it is. That is the deliberate asymmetry: the DATA path may not
@@ -209,7 +209,7 @@ def _triangles(scene: Scene, view: Viewport) -> str:
 
 
 def _edges(scene: Scene, view: Viewport, style: SvgStyle) -> str:
-    """One ``<line>`` per scene edge -- one, because 6b-i deduplicated them.
+    """One ``<line>`` per scene edge -- one, because the scene deduplicated them.
 
     An interior edge emitted twice is drawn at double weight and the picture
     lies about the mesh's density, which is precisely the kind of wrong picture
@@ -253,10 +253,10 @@ def _labels(scene: Scene, view: Viewport, labels: bool) -> str:
 
 
 def _status_line(scene: Scene, status: str) -> str:
-    """What the band says happened, in the design's own words.
+    """What the band says happened, in the status's own words.
 
-    ``Ok BUT EMPTY`` is a successful call that produced nothing -- increment 4's
-    risk 5, the silent mode -- and it must read neither like a failure nor like
+    ``Ok BUT EMPTY`` is a successful call that produced nothing -- the silent
+    failure, the one no status reports -- and it must read neither like a failure nor like
     a success, which is why it gets a wording of its own rather than a status
     name alone.
     """

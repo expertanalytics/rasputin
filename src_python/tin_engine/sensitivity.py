@@ -1,12 +1,15 @@
-"""Is the catchment area well defined at this gauge? (increment 29, PR 2).
+"""Is the catchment area well defined at this gauge?
 
-`docs/increments/29-nve-reference-catchments.md`, "Sensitivity". The area is
-read along the burnt chain within `U` of the placed node, from one
-accumulation: a count is trusted only when its flag bits are clear, each side
-is read outward up to the first untrusted count, and the downstream side must
-reach `U`. The chain must drain along itself node by node (`flow_to`), and
-the area may swing by at most `SWING_MAX` within the read stretch. Arrays in,
-a frozen :class:`Sensitivity` out: no DEM, no shapely, no reference polygon.
+A gauge's position is known only to within `U` metres (the reach's
+uncertainty), so its area is trusted only if it changes little within `U`
+up and down the river. The area is read along the burnt chain within `U` of
+the placed node, from one flow accumulation: a node's count is trusted only
+when its flag bits are clear (its catchment touches neither the window's edge
+nor NoData), each side is read outward up to the first untrusted count, and
+the downstream side must reach `U`. The chain must drain along itself node
+by node (`flow_to`), and the area may swing by at most `SWING_MAX` within the
+read stretch. Arrays in, a frozen :class:`Sensitivity` out: no DEM, no
+shapely, no reference polygon.
 """
 
 from __future__ import annotations
@@ -17,8 +20,9 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-#: The largest one-sided relative change of the area within `U`: the `match`
-#: class's own 5 % bar (Ola's ruling, 2026-10-04).
+#: The largest one-sided relative change of the area within `U`: the same
+#: 5 % bar the `match` class sets on overlap (`reference.MATCH_OVERLAP`), so
+#: a gauge whose area can move by more is not judged against it.
 SWING_MAX = 0.05
 #: Metres of slack when comparing arc lengths with `U`.
 _SLACK_M = 1e-6
@@ -70,7 +74,8 @@ def assess(
             hi += 1
     # Read to U: every sample in (0, U] trusted, a chain node at or past U
     # (that node is D: exactly at U it is a sample and must be trusted; past U
-    # its flags do not matter), the mapped river too.
+    # its flags do not matter), and the mapped river at least U long below the
+    # placed node.
     read = bool(
         trusted[p]
         and (hi + 1 == n or arc[hi + 1] > u + _SLACK_M)

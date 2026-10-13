@@ -3,10 +3,10 @@
 Declarative data. Nothing here is generated, because a fixture whose
 coordinates are computed is a fixture nobody can check by reading -- every
 number below was typed, and the only arithmetic is :data:`ORIGIN`, a constant
-translation that puts the whole gallery at UTM 33N magnitudes. That translation
-is the ordering ruling's one mitigation: the robustness behaviour a person is
-being asked to judge is magnitude-sensitive, and a picture drawn in the unit
-square silently exercises the easy case. Coordinates are written as local
+translation that puts the whole gallery at UTM 33N magnitudes. The translation
+matters: the robustness behaviour a person is being asked to judge is
+magnitude-sensitive, and a picture drawn in the unit square silently exercises
+the easy case. Coordinates are written as local
 metres so the shapes stay legible on the page.
 
 Roles are the **strings** ``"outer"``, ``"hole"`` and ``"breakline"``. That is
@@ -27,13 +27,11 @@ backend refusal of a valid PSLG (``InvalidTopology``). Both are here because a
 failure presentation nobody has looked at is a failure presentation that is
 wrong.
 
-``road-crosses-river`` was a third until increment 5c and is now the showcase:
-the noder resolves its crossing, so it draws a mesh. Its value is being a
-regression fixture with two states, and the picture changing between two commits
-is the thing worth having. It was called ``not-noded`` until increment 8, a name
-that encoded a resolved state of the tree -- false before 5b, true after -- so
-it had already expired once; the new name states the geometry, which no commit
-can change.
+``road-crosses-river`` is the showcase: its two constraints cross at a point
+neither names, the noder resolves the crossing, and it draws a mesh. If the
+noder breaks, this picture is the one that changes. Its name states the
+geometry rather than whether the input is noded, so no change to the noder
+can make the name false.
 """
 
 from __future__ import annotations
@@ -263,7 +261,7 @@ ROAD_CROSSES_RIVER = _fixture(
         # rather than a grey crossing.
         ([4, 5], "breakline", 2),
         # Crosses the chain above at (350, 350), a point neither chain names:
-        # the input is not noded, and the noder (5b) is what resolves it.
+        # the input is not noded, and the noder is what resolves it.
         ([6, 7], "breakline", 1),
     ],
 )

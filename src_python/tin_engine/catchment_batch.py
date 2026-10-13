@@ -1,13 +1,14 @@
-"""A catchment per station, one at a time, each compared with its reference (increment 29, PR 4).
+"""A catchment per station, one at a time, each compared with its reference.
 
-`docs/increments/29-nve-reference-catchments.md`, "The batch" and "PR 4's
-red step". Each station is placed on the river lines (`gauge.place`), its
+Each station is placed on the river lines (`gauge.place`), its
 catchment delineated in a worker thread (`asyncio.to_thread`: a large
 flood takes gigabytes, so never two at once), compared with its reference
 polygon when there is one (`reference.py`), and handed to the sink as a
 `StationResult` row, in the file's order. Only a `CatchmentError` is a
 refusal: it becomes a `refused` row and the batch goes on; any other
 exception is a bug and stops it. No paths: the sink writes.
+
+`docs/increments/29-nve-reference-catchments.md`, *The batch*
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ class BatchRequest(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class StationResult:
-    """One station's row ("The batch"; the CSV's columns, in this order). A
+    """One station's row (the CSV's columns, in this order). A
     refused row has None in every field it could not have: a refusal by
     `delineate` keeps its placement, one by `place` has none. Areas in km2;
     `tiles` counts the repository's tiles whose node box meets our fine
@@ -78,7 +79,7 @@ class StationResult:
     reach_up_m: float | None = None
     reach_down_m: float | None = None
     reach_fork: bool | None = None
-    # The seed: the river (PR 2's path) or the lake ("Lake gauges").
+    # The seed: the burnt river reach, or the lake the gauge is in or at.
     seeded_by: Literal["river", "lake"] | None = None
     lake_rule: str | None = None
     lake_number: int | None = None
@@ -181,7 +182,7 @@ def seed_for(
 
 
 def cell_at(repository: DemRepository, point: tuple[float, float], crs: str) -> float:
-    """The DEM's cell (its longer side in metres, increment 40) at `point`,
+    """The DEM's cell (its longer side in metres, also for a DEM in degrees) at `point`,
     given in `crs`; the grid is the repository's first tile's."""
     meta = repository.footprints()[0].meta
     ((x, y),) = reprojector(crs, meta.crs)([point]).tolist()
@@ -202,8 +203,8 @@ async def run_batch(
 ) -> Summary:
     """Run each station in `stations` (or those in `request.only`, in file
     order); `references` and `lakes` are in the river file's CRS. A station
-    `gauge.lake_seed` picks is seeded with its lake; `resources` (38) goes to
-    each `delineate`. Returns the summary."""
+    `gauge.lake_seed` picks is seeded with its lake; `resources` (threads and
+    memory) goes to each `delineate`. Returns the summary."""
     unknown = set(request.only) - {s.station for s in stations}
     if unknown:
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")

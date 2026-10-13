@@ -1,6 +1,6 @@
-"""The fine outline of a node mask: marching squares (increment 22, PR 1).
+"""The fine outline of a node mask: marching squares.
 
-`docs/increments/22-auto-catchment.md`, "The fine outline". Every vertex is
+Every vertex is
 the midpoint of a lattice edge between an in-node and an out-node; in each
 square of four nodes a segment joins two such midpoints with the in-nodes on
 its left in the world frame (x = col east, y = -row north). The one ambiguous

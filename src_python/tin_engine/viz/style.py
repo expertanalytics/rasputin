@@ -3,9 +3,9 @@
 ``SvgStyle`` is deliberately thin. Colours, stroke widths and dash arrays live
 in ``svg.py``'s stylesheet as CSS, because a class token on an element is
 structure -- which edge belongs to which stroke class -- while the colour that
-token resolves to is taste, and ``06-cdt-viewer.md`` rules that the stylesheet
-is untested. What is modelled here is the arithmetic the viewport divides by,
-which is the part a wrong value silently corrupts.
+token resolves to is taste, and the stylesheet is deliberately untested. What
+is modelled here is the arithmetic the viewport divides by, which is the part a
+wrong value silently corrupts.
 
 Frozen and ``extra="forbid"``: a style is passed down a call chain and shared,
 so mutating one would change a picture already described, and a typo in an
@@ -13,8 +13,7 @@ override is a silent no-op otherwise -- the symptom being a picture that looks
 almost right.
 
 This module imports nothing first-party. ``SvgStyle`` is the renderer's input
-and knows nothing about a scene, which is why ``06-cdt-viewer.md`` pairs it with
-6b-ii rather than with the scene builder.
+and knows nothing about a scene.
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ class SvgStyle(BaseModel):
     than as two features.
 
     The order is the priority, and the model does not sort -- sorting by bit
-    would silently replace this ruling with however a vocabulary chose to number
+    would silently replace this order with however a vocabulary chose to number
     its features. Empty by default: a default naming ``river`` would be policy
     in the module whose own docstring says the vocabulary is somebody else's, so
     the list is ``cli.py``'s to supply, exactly as ``closed_roles`` is."""
