@@ -39,17 +39,20 @@ def run(
     feet: bool = False,
     field: LineTolerance | None = None,
     slope: SlopeTolerance | None = None,
+    threads: int = 0,
 ) -> PointRefineOutcome:
     """``refine_strip`` from ``start``; ``clock`` gets the run's own two times.
     ``feet`` puts points near a line onto it first (20c, R4); ``field``, if
     any, sets each triangle's tolerance (increment 33); ``slope``, if any,
-    holds each point to its slope's tolerance too (increment 34)."""
+    holds each point to its slope's tolerance too (increment 34); ``threads``
+    goes to the C++ as given (38; its 0 is every core)."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
     out = refine_strip(
         view,
         strip,
         *(np.asarray(a) for a in arrays),
         tolerance=tolerance,
+        threads=threads,
         constraint_feet=feet,
         field=field,
         slope=slope,

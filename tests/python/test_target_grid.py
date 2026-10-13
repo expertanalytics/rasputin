@@ -492,13 +492,13 @@ class _SpiedReprojector:
     number of points it is given. One transformer per block (J5), so the
     record is one entry per block."""
 
-    def __init__(self, real: Callable[[str, str], Callable[[Any], Any]]) -> None:
+    def __init__(self, real: Callable[..., Callable[[Any], Any]]) -> None:
         self._real = real
         self._lock = threading.Lock()
         self.lengths: list[int] = []
 
-    def __call__(self, source: str, target: str) -> Callable[[Any], Any]:
-        transform = self._real(source, target)
+    def __call__(self, source: str, target: str, *, threads: int = 1) -> Callable[[Any], Any]:
+        transform = self._real(source, target, threads=threads)
 
         def recording(points: Any) -> Any:
             with self._lock:

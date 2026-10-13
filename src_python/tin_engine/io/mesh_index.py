@@ -34,7 +34,7 @@ class _Record(BaseModel):
 
 
 class PartitionRecord(_Record):
-    """The rule's inputs and its cells, as `decompose.partition` gave them."""
+    """The rule's inputs and its cells, as the partition rule of increment 23c gave them."""
 
     pieces: int = Field(ge=1)
     memory_budget: int = Field(ge=1)

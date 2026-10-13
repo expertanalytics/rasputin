@@ -49,7 +49,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import os
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -190,6 +189,19 @@ class TestReprojector:
 LAEA, SWEREF = "EPSG:3035", "EPSG:3006"
 
 
+def pool_spy(crs: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[int | None]:
+    """The worker count of every pool `crs` builds; the real pool is built."""
+    built: list[int | None] = []
+    real = crs.ThreadPoolExecutor
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        built.append(kwargs.get("max_workers", args[0] if args else None))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(crs, "ThreadPoolExecutor", spy)
+    return built
+
+
 def southern_sweden(n: int) -> np.ndarray:
     rng = np.random.default_rng(35)
     return np.column_stack([rng.uniform(4.3e6, 4.9e6, n), rng.uniform(3.5e6, 4.1e6, n)])
@@ -207,10 +219,44 @@ class TestChunkedReprojector:
     cover, 2, 4 and 8 threads) in the design."""
 
     def test_the_constants_are_the_designs(self, crs: ModuleType) -> None:
-        """Section 3.1 (b): a 250 000-point chunk is about 60 ms of PROJ
-        work; at most 8 threads, fewer on a smaller machine."""
+        """Section 3.1 (b): a 250 000-point chunk is a chunk of work (about
+        60 ms of PROJ on one machine). Increment 38 (section 4.2) drops the
+        cap of 8 workers: `reprojector` takes `threads` from its caller, and
+        no module but `resources.py` reads the core count."""
         assert crs.CHUNK_POINTS == 250_000
-        assert min(8, os.cpu_count() or 1) == crs.WORKERS
+        assert not hasattr(crs, "WORKERS")
+
+    @pytest.mark.parametrize(
+        ("n", "threads", "workers"),
+        [
+            pytest.param(2_250_000, 9, 9, id="nine-chunks-nine-workers-where-8-was-the-cap"),
+            pytest.param(500_000, 9, 2, id="two-chunks-two-workers"),
+        ],
+    )
+    def test_the_pool_takes_the_count_given_up_to_one_worker_a_chunk(
+        self, crs: ModuleType, monkeypatch: pytest.MonkeyPatch, n: int, threads: int, workers: int
+    ) -> None:
+        """Increment 38, T8: `min(threads, len(points) // CHUNK_POINTS)`
+        workers, no clamp to the machine. 2 250 000 points are 36 MB of
+        float64 pairs, 9 chunks."""
+        built = pool_spy(crs, monkeypatch)
+        xy = southern_sweden(n)
+        out = crs.reprojector(LAEA, SWEREF, threads=threads)(xy)
+        assert built == [workers]
+        x, y = Transformer.from_crs(LAEA, SWEREF, always_xy=True).transform(xy[:, 0], xy[:, 1])
+        assert np.array_equal(out, np.column_stack([x, y]))
+
+    def test_without_a_count_no_pool_opens(
+        self, crs: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The library default is one worker: a 2 250 000-point array is
+        mapped in one call, bit for bit the same."""
+        built = pool_spy(crs, monkeypatch)
+        xy = southern_sweden(2_250_000)
+        out = crs.reprojector(LAEA, SWEREF)(xy)
+        assert built == []
+        x, y = Transformer.from_crs(LAEA, SWEREF, always_xy=True).transform(xy[:, 0], xy[:, 1])
+        assert np.array_equal(out, np.column_stack([x, y]))
 
     @pytest.mark.parametrize(
         "n",

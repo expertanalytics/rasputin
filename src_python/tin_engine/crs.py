@@ -14,7 +14,6 @@ Pure: pyproj and numpy. No paths, no `_core`; CRS never crosses into the core.
 from __future__ import annotations
 
 import math
-import os
 import threading
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -33,10 +32,10 @@ from tin_engine.run_record import escaped_ascii
 
 Xy = npt.NDArray[np.float64]
 #: Increment 35, 3.1 (b): an array of `2 * CHUNK_POINTS` points or more is
-#: split into chunks of at least `CHUNK_POINTS` (about 60 ms of PROJ work
-#: each) and mapped on up to `WORKERS` threads, each with its own `Transformer`.
+#: split into chunks of at least `CHUNK_POINTS` (a chunk of work, about 60 ms
+#: of PROJ on one machine) and mapped on up to `threads` threads, each with its
+#: own `Transformer` (38: the count is the caller's; one worker by default).
 CHUNK_POINTS = 250_000
-WORKERS = min(8, os.cpu_count() or 1)
 
 
 def parse_crs(text: str | CRS) -> CRS:
@@ -49,13 +48,14 @@ def parse_crs(text: str | CRS) -> CRS:
         raise ValueError(f"cannot read the CRS {text!r}: {exc}") from exc
 
 
-def reprojector(src: str | CRS, dst: str | CRS) -> Callable[[Any], Xy]:
+def reprojector(src: str | CRS, dst: str | CRS, *, threads: int = 1) -> Callable[[Any], Xy]:
     """A map from an `(N, 2)` array-like of `(x, y)` in `src` to an `(N, 2)`
     float64 array in `dst`: pyproj's `always_xy` transform, bit for bit.
-    A point with no image comes back as `inf`; the caller decides. A large
-    array is mapped in chunks on threads (`CHUNK_POINTS`), one `Transformer`
-    per thread since pyproj's are not thread-safe; a projection is applied
-    point by point, so the bits are those of one call."""
+    A point with no image comes back as `inf`; the caller decides. With
+    `threads` above 1, a large array is mapped in chunks on up to that many
+    threads (`CHUNK_POINTS`), one `Transformer` per thread since pyproj's are
+    not thread-safe; a projection is applied point by point, so the bits are
+    those of one call."""
     local = threading.local()
     local.transformer = _transformer(src, dst)
 
@@ -67,9 +67,9 @@ def reprojector(src: str | CRS, dst: str | CRS) -> Callable[[Any], Xy]:
 
     def apply(xy: Any) -> Xy:
         points = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
-        if len(points) < 2 * CHUNK_POINTS:
+        if threads < 2 or len(points) < 2 * CHUNK_POINTS:
             return one(points)
-        chunks = np.array_split(points, min(WORKERS, len(points) // CHUNK_POINTS))
+        chunks = np.array_split(points, min(threads, len(points) // CHUNK_POINTS))
         with ThreadPoolExecutor(len(chunks)) as pool:
             return np.concatenate(list(pool.map(one, chunks)))
 
