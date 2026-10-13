@@ -855,7 +855,7 @@ def mesh(
             "--start-quality-gain",
             help="With --tolerance, add such a node only if it raises the smallest angle "
             "around it by at least this many degrees and, unless --no-constraint-feet, "
-            "split a line it lies beyond; negative adds every node and splits no line. "
+            "split a line it lies beyond; negative turns the test off and adds every node. "
             "At most 10. Default: 0.",
         ),
     ] = None,
