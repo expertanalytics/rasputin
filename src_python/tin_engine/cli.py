@@ -852,7 +852,7 @@ def mesh(
             "--start-quality-gain",
             help="With --tolerance, add such a node only if it raises the smallest angle "
             "around it by at least this many degrees and, unless --no-constraint-feet, "
-            "split a line it lies beyond; negative adds every node, as before. "
+            "split a line it lies beyond; negative adds every node and splits no line. "
             "At most 10. Default: 0.",
         ),
     ] = None,
@@ -860,8 +860,8 @@ def mesh(
         bool,
         typer.Option(
             "--no-constraint-feet",
-            help="With --tolerance, insert a DEM node close to a constraint segment as "
-            "before, instead of its foot on the segment.",
+            help="With --tolerance, insert a DEM node close to a constraint segment where it "
+            "lies, instead of at its foot on the segment.",
         ),
     ] = False,
     features: Annotated[
