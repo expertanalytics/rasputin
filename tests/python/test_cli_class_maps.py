@@ -50,7 +50,7 @@ import tin_engine.cli as cli
 from class_fixtures import PATH_TEMPLATE, per_year_entry
 from class_map_fixtures import basenames, coded_map, corine_like, uncoded_map, write
 from class_map_snapshot import PRESET_BYTES
-from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem, runner
+from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem, runner
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import write_class_cache, write_dem, write_domain
 from recordread import file_field

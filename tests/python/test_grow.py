@@ -54,7 +54,7 @@ import shapely
 from pyproj import CRS
 from shapely.geometry import Polygon
 
-from cli_driver import Ring, geojson, invoke
+from cli_helpers import Ring, geojson, invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from gpkg_fixtures import EXTRACT
 from tin_engine.dem_input import DemRequest, open_dem

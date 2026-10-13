@@ -40,7 +40,7 @@ import tin_engine.final_check as final_check
 import tin_engine.io.cog as cog
 import tin_engine.land_cover_fractions as land_cover_fractions
 import tin_engine.target_grid as target_grid
-from cli_driver import USAGE, UTM33, invoke, plain, polygon_file, ran, refused, rough_dem, runner
+from cli_helpers import USAGE, UTM33, invoke, plain, polygon_file, ran, refused, rough_dem, runner
 from cog_fixtures import write_cache
 from feature_fixtures import Feat, moved, write_geojson
 from fraction_fixtures import write_class_cache, write_dem, write_domain

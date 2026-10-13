@@ -1,10 +1,11 @@
-"""The final check against the source DEM (increment 15c-2, D5 and D6).
+"""The final check against the source DEM, for a reprojected DEM.
 
-Phase 1 (`refine` on the resampled grid) is the caller's, unchanged. Phase 2
-is here: the source's nodes, already in the target CRS, filed in a
-`CheckPoints` on the target grid's frame, then `refine_points` from phase 1's
-mesh until every one is within the tolerance (J2). Numbers only cross into
-`_core`: the grid's frame in metres, the points, the mesh.
+Phase 1 (`refine` on the resampled grid) is the caller's. Phase 2 is here: the
+source's nodes, already in the target CRS, filed in a `CheckPoints` on the
+target grid's frame, then `refine_points` from phase 1's mesh until every one
+is within the tolerance, so the mesh answers to the measured heights and not
+only to the resampled ones. Numbers only cross into `_core`: the grid's frame
+in metres, the points, the mesh.
 """
 
 from __future__ import annotations
@@ -40,12 +41,12 @@ def run(
     threads: int = 0,
 ) -> tuple[PointRefineOutcome, int]:
     """Phase 2 from phase 1's outcome `start`; the outcome and the number of
-    check points stored. `clock` gets D7's rows. `strip`, the edge strip on
-    the target grid (15f, D6), joins the same loop. `feet` puts points near
-    a line onto it first (20c, R4). `field`, if any, sets each triangle's
-    tolerance (increment 33); `slope`, if any, holds each check point to the
-    tolerance of its cell's slope too (increment 34). `threads` goes to the
-    C++ as given (38; its 0 is every core)."""
+    check points stored. `clock` gets the check points' and the final
+    check's rows. `strip`, the edge strip on the target grid, joins the same
+    loop. `feet` puts points near a line onto it first. `field`, if any, sets
+    each triangle's tolerance; `slope`, if any, holds each check point to the
+    tolerance of its cell's slope too. `threads` goes to the C++ as given (0
+    is every core)."""
     h = float(grid.spacing)
     store = CheckPoints(
         x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h, rows=grid.rows, cols=grid.cols

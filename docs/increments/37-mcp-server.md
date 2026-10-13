@@ -26,7 +26,7 @@ in the server reaches the C++ core or widens the I/O boundary: the server
 runs the CLI, and the CLI keeps every rule it has.
 
 The commands today (`src_python/tin_engine/cli.py@b4a81c0d:169`, listed by
-`typer.main.get_command(app).commands` as `tests/python/cli_driver.py:42`
+`typer.main.get_command(app).commands` as `tests/python/cli_driver.py@3fe711f1:42`
 does): `version`, `draw`, `mesh`, `palette`, `fetch`, `fetch-stations`,
 `catchment`, `station-catchments`. Their parameter counts, from the probe:
 mesh 34 (36 after increment 26b merged, section 12), draw 10, fetch 10, catchment 11, station-catchments 11,
@@ -128,7 +128,7 @@ Its only servers are a three.js web viewer (`legacy/rasputin/web_visualize.py`,
 `git grep -l -i -E "server|rpc" legacy-archive -- legacy` also lists
 `solar_position.h`, a false hit on "observer"); neither carries across.
 
-*In this tree.* `tests/python/cli_driver.py:42-56` already derives the
+*In this tree.* `tests/python/cli_driver.py@3fe711f1:42-56` already derives the
 command set from the Typer app and strips Rich's boxes from refusals; the
 server does the first the same way and avoids the second with
 `TYPER_USE_RICH=0`. `tools/bench.py:45-90` runs the CLI as a child through a
