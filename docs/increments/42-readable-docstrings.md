@@ -1,9 +1,10 @@
 # Increment 42 — Readable Python docstrings and comments
 
-Status: **PR 1 built, code review round 1 fixes in: red (`769ae82a`, 38
+Status: **PR 1 built, code review rounds 1 to 3 done, round 3's one wording
+fix (this Status line) applied: red (`769ae82a`, 38
 tests), green (`539cf514`, the checker, 128 counted lines), the rule, the gate
 line and the citation pins, and the label rule's full stop (red `1719aae5`,
-green `8c47988f`, 44 tests); next code review round 2** (`@architect`, 2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
+green `8c47988f`, 44 tests); next the push and CI** (`@architect`, 2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
 checker's changes no code: its docstrings and comments are rewritten, and an
 AST comparison (section 6) shows that no code token moved.
 
@@ -669,3 +670,5 @@ sweep PRs.
 **Code review, round 1, 2026-10-13.** Range `origin/master..8c47988f`, 128 counted lines, @reviewer: CHANGES REQUESTED, two blockers. (1) The new CI step moves `.github/workflows/main.yaml` down 6 lines, so 6 unpinned citations into it now land on the wrong line. (2) The increment file's Status and section 13 are stale. Checked and holding: the SKILL.md rule matches section 4 with the bug-report bullet and no history, the CLAUDE.md gate line, all 176 pins against `git blame`, the empty scope green in a clean environment. Ideas: the `hash` rule misses `path@hash:line` pins (three in `features.py`, for PR 6 to remove); test 94's message "does not exist yet" reads like the red step.
 
 **Code review, round 2, 2026-10-13.** Range `origin/master..7acac12a`, 128 counted lines, @reviewer: CHANGES REQUESTED: h11:451, h16:1444/:1505 and cpp-audit:552 pinned to ce8c364f, where line 306 is not `CI result`; pin h11 and h16 to 95b68da, cpp-audit to 1035690; fix section 13's "written against" claim. Idea not taken: the reviewer's seventh mention, in cpp-audit.md's list of citations left unpinned, stays as written, since pinning it would contradict that list.
+
+**Code review, round 3, 2026-10-13.** Range `origin/master..c148ed63`, 128 counted lines, @reviewer: CHANGES REQUESTED. The pins at h11:451, h16:1444 and :1505 (`95b68da`, lines 306-307 are `CI result`) and cpp-audit:552 (`1035690`) hold, and section 13 is right; agreed on leaving cpp-audit:664 unpinned. Blocker: the Status line still says "next code review round 2". check_citations exits 0 both ways; CI has not run (no PR yet). The blocker is a one-line wording fix the reviewer named, applied by the main session with the suggestion ("(unpinned then)" at h16:1444); by Ola's ruling of 2026-10-13 on such fixes, the branch counts as reviewed.
