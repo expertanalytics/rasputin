@@ -50,6 +50,7 @@
 namespace py = pybind11;
 
 void bind_snow(py::module_& m);  // bindings/snow.cpp
+void bind_radiation(py::module_& m);  // bindings/radiation.cpp
 
 using terrain::Chain;
 using terrain::ChainRole;
@@ -1579,4 +1580,5 @@ the work (0: all cores); the result does not depend on it. Releases the GIL.
 )doc");
 
     bind_snow(m);
+    bind_radiation(m);
 }

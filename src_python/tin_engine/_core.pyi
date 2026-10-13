@@ -832,3 +832,50 @@ class SnowState:
         """One HBV step for every triangle. A refused input is a ValueError
         naming the status (and the first non-finite triangle) and leaves the
         state as it was. Releases the GIL."""
+
+# The sun's position: UTC milliseconds since the Unix epoch, degrees.
+
+def delta_t_seconds(time_utc_ms: int) -> float:
+    """The default delta T (TT - UT) in seconds."""
+
+@final
+class SolarPosition:
+    """``e0_deg`` without refraction, ``e_deg`` with it, ``azimuth_deg`` from
+    true north, clockwise."""
+
+    @property
+    def e0_deg(self) -> float: ...
+    @property
+    def e_deg(self) -> float: ...
+    @property
+    def azimuth_deg(self) -> float: ...
+
+def solar_position(
+    time_utc_ms: int,
+    lat_deg: float,
+    lon_deg: float,
+    height_m: float,
+    delta_t_s: float,
+    pressure_hpa: float,
+    temperature_c: float,
+) -> SolarPosition:
+    """NREL's SPA at one time and place; the refraction is held at its -1.8
+    degree value below that."""
+
+@final
+class SunPositions:
+    """``elevation`` and ``azimuth`` in degrees, ``distance`` in AU."""
+
+    @property
+    def elevation(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def azimuth(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def distance(self) -> npt.NDArray[np.float64]: ...
+
+def sun_positions(
+    times_utc_ms: npt.NDArray[np.int64], lat: float, lon: float, height_m: float
+) -> SunPositions:
+    """The sun at one place for many UTC times at the default delta T: the
+    elevation without refraction and the azimuth from true north. Releases the
+    GIL."""
