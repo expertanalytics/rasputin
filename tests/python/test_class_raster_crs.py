@@ -203,7 +203,9 @@ class TestT8ProjectedInFeet:
         parsed = parse_prefix(feet_classes(), nodata=None, z_unit=entry.read_unit)
         assert parsed is not None
         meta, dtype, _ = parsed
-        assert (meta.crs, dtype) == ("EPSG:26945", np.dtype(np.uint8))
+        # parse_prefix returns the dtype the readers decode to (geotiff.PROMOTION):
+        # a uint8 file decodes to float32, as on master.
+        assert (meta.crs, dtype) == ("EPSG:26945", np.dtype(np.float32))
 
 
 # ------------------------------------------------------------ T9
