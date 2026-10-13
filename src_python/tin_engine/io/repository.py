@@ -328,8 +328,8 @@ class CacheRepository:
 
     def check(self, plan: MosaicPlan) -> None:
         """One `NotCached` for every block the plan needs and the cache lacks,
-        before any is decoded, so a run stops at once with the whole count
-        rather than partway through a window."""
+        so a run stops before any decode, with the whole count, rather than at
+        the first window that lacks a block."""
         missing = needed = 0
         for placement in plan.tiles:
             blocks = self._blocks(placement.name)
