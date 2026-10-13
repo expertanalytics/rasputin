@@ -166,6 +166,7 @@ paths = [
     "src_python/tin_engine/gauge.py",
     "src_python/tin_engine/grow.py",
     "src_python/tin_engine/hydrography.py",
+    "src_python/tin_engine/io",
     "src_python/tin_engine/mcp",
     "src_python/tin_engine/outline.py",
     "src_python/tin_engine/reference.py",
