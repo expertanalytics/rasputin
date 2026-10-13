@@ -1,16 +1,15 @@
-"""The target grid a reprojected DEM is resampled onto, and its check points
-(increment 15c-2, `docs/increments/15c-geographic-dem.md` D2-D4).
+"""The target grid a reprojected DEM is resampled onto, and its check points.
 
 A `TargetGrid` is a sub-rectangle of one global lattice in the target CRS:
-node `(R, K)` sits at `(K h, -R h)` bit for bit (J6), `h` whole metres or a
+node `(R, K)` sits at `(K h, -R h)` bit for bit, `h` whole metres or a
 power of two from 2^-1 to 2^-3 m: below 2^-3 m the start mesh's 1 mm snap
 moves nodes off the lattice, measured in
 `docs/increments/43-units-and-projections.md`, *9.5 Found here*.
 `resample` fills it bilinearly from a `SourceWindows`; `check_point_blocks`
 yields the source's own nodes, moved into the target CRS, for the final
-check against the source (D5). Every transform goes through
-`crs.reprojector` (J5), one transformer per block, so a thread never shares
-one. CRS stays here: what reaches `_core` is metres on the grid.
+check against the source. Every transform goes through `crs.reprojector`,
+one transformer per block, so a thread never shares one. CRS stays here:
+what reaches `_core` is metres on the grid.
 """
 
 from __future__ import annotations
@@ -31,11 +30,11 @@ from tin_engine.domain import DomainPolygon
 from tin_engine.grow import grow_mitred
 from tin_engine.io.models import Bounds, DemTile, RasterMeta, valid_mask
 
-#: Source nodes per check-point block side (D4).
+#: Source nodes per check-point block side, a chosen value.
 BLOCK = 512
 
-#: Target nodes per resample block (increment 15e, fix 1): bounds one block's
-#: transient, ~135 B per node, whatever the grid's width.
+#: Target nodes per resample block: bounds one block's transient memory,
+#: ~135 B per node, whatever the grid's width.
 BLOCK_NODES = 1 << 20
 
 Block = tuple[npt.NDArray[np.float64], npt.NDArray[np.float32]]
@@ -50,7 +49,7 @@ def _lattice_step(h: float) -> float:
 
 class TargetGrid(BaseModel):
     """`rows x cols` nodes of the global lattice of spacing `spacing` in `crs`,
-    the upper-left one global node `(row0, col0)` (D2)."""
+    the upper-left one global node `(row0, col0)`."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -76,7 +75,8 @@ class TargetGrid(BaseModel):
 
 
 class SourceWindows(Protocol):
-    """The source DEM, read by window, never as a whole (D1)."""
+    """The source DEM, read by window, never as a whole, so a source larger
+    than memory can be resampled."""
 
     @property
     def meta(self) -> RasterMeta: ...
@@ -100,7 +100,7 @@ class TileWindows:
 
 def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
     """The source's north-south node spacing in metres at `at` (in the DEM's
-    CRS), rounded to whole metres (Q16 (a)), or below a metre to the nearest
+    CRS), rounded to whole metres, or below a metre to the nearest
     power of two, at least 2^-3; a projected source's own."""
     if not meta.geographic:
         return _rounded(meta.delta_y)
@@ -120,8 +120,8 @@ def target_grid_for(
     domain: DomainPolygon, target: str, spacing: float
 ) -> tuple[TargetGrid, shapely.Polygon]:
     """The domain (in `target`) grown by the cell diagonal with mitred
-    corners, its bounds snapped outward to the lattice (D2); and that grown
-    domain, so the caller does not grow it again (30d)."""
+    corners, its bounds snapped outward to the lattice; and that grown
+    domain, so the caller does not grow it again."""
     h = spacing
     grown = grow_mitred(domain.polygon, math.sqrt(2) * h)
     x0, y0, x1, y1 = grown.bounds
@@ -136,7 +136,7 @@ def source_region(grid: TargetGrid, meta: RasterMeta, grown: Any) -> tuple[Bound
     """The box the grid's nodes read in the DEM's CRS, grown by two source
     cells, and the needed region: `grown` (in the target CRS) moved there and
     grown by a source cell's diagonal. A box across +-180 degrees longitude, or
-    reaching a pole, is refused (D2)."""
+    reaching a pole, is refused."""
     n = max(grid.rows, grid.cols)
     x0, y0, x1, y1 = grid.node_box()
     edge = np.linspace(0.0, 1.0, n + 1)
@@ -181,10 +181,10 @@ def rows_per_block(cols: int) -> int:
 def resample(
     grid: TargetGrid, source: SourceWindows, threads: int, *, block_rows: int | None = None
 ) -> DemTile:
-    """The grid's nodes bilinear from the source in its own index space (D3).
+    """The grid's nodes bilinear from the source in its own index space.
     A node whose 2 x 2 stencil touches NoData or leaves the source is NoData:
     the source's sentinel, or NaN without one. Each node from its own
-    coordinates alone, so block size and thread count change no value (J3).
+    coordinates alone, so block size and thread count change no value.
     `block_rows` defaults to `rows_per_block(grid.cols)`."""
     rows_per = rows_per_block(grid.cols) if block_rows is None else block_rows
     m = source.meta
@@ -232,8 +232,9 @@ def resample(
         z_unit=m.z_unit,
         file_crs=m.file_crs,
     )
-    # The canvas is adopted, not copied (15e, fix 2): it is C-contiguous of
-    # the meta's shape and never handed out writable (R7's condition).
+    # The canvas is adopted, not copied, to save a second grid-sized buffer:
+    # it is C-contiguous of the meta's shape and never handed out writable,
+    # the two conditions for adopting.
     return DemTile._adopt(meta, canvas)
 
 
@@ -241,19 +242,20 @@ def check_point_blocks(
     grid: TargetGrid, source: SourceWindows, domain: DomainPolygon, threads: int
 ) -> Iterator[Block]:
     """The source's valid nodes in the target CRS, one block per 512 x 512
-    source nodes, in row-major block order (D4). A block whose outline's image
+    source nodes, in row-major block order. A block whose outline's image
     misses the domain is skipped whole; non-finite images and points outside
     the grid's node rectangle are dropped. `domain` is in the target CRS."""
     m, h = source.meta, float(grid.spacing)
     # GEOS prepared geometries are not thread-safe, and `prep` prepares its
-    # argument in place: each block prepares its own copy (@perf's crash).
+    # argument in place: each block prepares its own copy, as a shared one
+    # crashes under threads.
     wkb = shapely.to_wkb(domain.polygon)
     x0, y0, x1, y1 = grid.node_box()
 
     def block(origin: tuple[int, int]) -> Block | None:
         r0, c0 = origin
         r1, c1 = min(r0 + BLOCK, m.rows), min(c0 + BLOCK, m.cols)
-        move = reprojector(m.crs, grid.crs, threads=1)  # 38: no pool inside a pool
+        move = reprojector(m.crs, grid.crs, threads=1)  # already on a worker: no pool in a pool
         rows, cols = np.arange(r0, r1, dtype=np.float64), np.arange(c0, c1, dtype=np.float64)
         top, bottom = np.full(cols.size, rows[0]), np.full(cols.size, rows[-1])
         left, right = np.full(rows.size, cols[0]), np.full(rows.size, cols[-1])

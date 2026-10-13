@@ -1,7 +1,7 @@
 """The record of one ``rasputin mesh`` run, and every word it is printed in.
 
-``docs/increments/25-plain-output.md`` D1 to D7. Pure: no numpy, no ``_core``,
-no typer, so the wording is tested without the extension. ``cli.py`` copies
+Pure: no numpy, no ``_core``, no typer, so the wording is tested without the
+extension. ``cli.py`` copies
 numbers and strings out of what ran into a builder, and prints the one
 :class:`RunRecord` four ways: the mesh file's fields (:func:`file_fields`),
 the ``--stats`` rows (:func:`stats_rows`), one stderr summary
@@ -16,9 +16,9 @@ from dataclasses import dataclass
 #: A builder argument: a value, or None for "not produced on this path".
 Value = str | int | float | None
 
-#: Every entry, in record order, with its ``--stats`` wording ("The fields,
-#: for Ola"). The Inputs entries come first (``INPUTS``), then the mesh-file
-#: fields in D2's order, then the counts and checks.
+#: Every entry, in record order, with its ``--stats`` wording. The Inputs
+#: entries come first (``INPUTS``), then the mesh-file fields in the order the
+#: file lists them, then the counts and checks.
 WORDING = {
     "dem_grid": "DEM grid size and spacing",
     "dem_tiles": "The tiles or downloaded blocks used",
@@ -119,7 +119,10 @@ WORDING = {
 }
 _NAMES = list(WORDING)
 INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])
-#: D2's mesh-file fields, and the CORINE notice kept by Ola's ruling.
+#: The mesh-file fields. They end with ``features_notice``, the credit each
+#: class map's licence asks for (CORINE's under the Copernicus data policy,
+#: MapBiomas's under CC BY-SA), so it travels with the mesh as ``dem_credit``
+#: does.
 #: ``land_cover_codes`` is in the file too, but the writers put it there.
 IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("features_notice") + 1])
 FLAT_HEIGHTS = "none: every z is 0 (--flat)"
@@ -132,7 +135,7 @@ class Entry:
     wording: str  # the label --stats prints
     value: str  # ASCII, already formatted
     number: float | int | None  # the bare number, for --record's JSON; None for text
-    in_file: bool  # True only for the mesh-file fields of D2
+    in_file: bool  # True only for the mesh-file fields (IN_FILE)
     in_inputs: bool = False  # --stats "Inputs", else "Result"
 
 
@@ -168,8 +171,8 @@ def ordinal(n: int) -> str:
 
 def _entry(name: str, value: str | int | float) -> Entry:
     """One entry: a float, or a ``_m`` or ``_deg`` number, is a measured float,
-    an int a count, anything else text. D3 rule 3: a zero count is not in the
-    file."""
+    an int a count, anything else text. ``nodata_vertices_removed`` of 0 is
+    left out of the file, though not out of ``--stats``."""
     number: float | int | None = None
     if isinstance(value, float) or (name.endswith(("_m", "_deg")) and not isinstance(value, str)):
         number = float(value)
@@ -191,8 +194,8 @@ def _record(triangles: int, values: dict[str, Value]) -> RunRecord:
 
 
 def refined_record(*, triangles: int, **values: Value) -> RunRecord:
-    """A run with ``--tolerance``. ``max_error_m`` is the measured figure; D2
-    raises it to the difference at DEM nodes on a vertex where that is larger,
+    """A run with ``--tolerance``. ``max_error_m`` is the measured figure,
+    raised to the difference at DEM nodes on a vertex where that is larger,
     so no DEM node inside the mesh is further from it than ``max_error_m``."""
     at = values.get("dem_nodes_at_vertices_max_error_m")
     measured = values["max_error_m"]
@@ -222,7 +225,7 @@ def stats_rows(record: RunRecord) -> list[tuple[str, str, str]]:
 
 
 def summary(record: RunRecord) -> str:
-    """D7: one line for a person, then one ``Warning:`` line per broken promise."""
+    """The stderr summary: one line for a person, then one ``Warning:`` line per broken promise."""
     by = {e.name: e for e in record.entries}
     said = [f"{record.triangles} triangles."]
     tolerance, top = by.get("tolerance_m"), by.get("max_error_m")
@@ -250,7 +253,7 @@ def summary(record: RunRecord) -> str:
         said.append("The heights are not real: every z is 0 (--flat).")
     share = by.get("max_error_slope_share_of_tolerance")
     steep = f"{100 * float(share.value):.4g} % of" if share is not None else ""
-    # 34, 4.3: the weight 1 / t is rounded, so up to 1 + 1e-12 is within.
+    # The weight 1 / t is rounded, so up to 1 + 1e-12 is within.
     within = share is not None and float(share.value) <= 1.0 + 1e-12
     if within:
         said.append(
@@ -293,7 +296,7 @@ def summary(record: RunRecord) -> str:
 
 
 def as_json(record: RunRecord, version: str, command: str) -> str:
-    """D5: ``--record``'s text. The record's order, ASCII, one trailing newline."""
+    """``--record``'s text. The record's order, ASCII, one trailing newline."""
     obj: dict[str, str | float | int] = {"rasputin_version": version, "command": command}
     for e in record.entries:
         obj[e.name] = e.value if e.number is None else e.number

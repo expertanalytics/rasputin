@@ -1,10 +1,10 @@
 """The mesh domain for a DEM before refinement exists: a stride subsample.
 
-Increment 12, R1. Every ``stride``-th node of the DEM in both directions,
-starting at node ``(0, 0)`` and always including the last row and column, so the
-mesh covers the whole tile. The perimeter of that subsample is the outer ring;
-every other node is a free vertex. A stand-in: refinement (ROADMAP gap 2)
-chooses vertices by error budget instead.
+Every ``stride``-th node of the DEM in both directions, starting at node
+``(0, 0)`` and always including the last row and column, so the mesh covers the
+whole tile. The perimeter of that subsample is the outer ring; every other node
+is a free vertex. Without ``--tolerance`` this subsample is the mesh; with it,
+it is the start that refinement adds vertices to until the tolerance holds.
 
 Pure numpy. It imports neither ``_core`` nor the reader: a ``RasterMeta`` is all
 it needs.
@@ -30,7 +30,7 @@ def default_stride(meta: RasterMeta) -> int:
 
 
 #: With ``--tolerance``, the start grid has at most this many nodes on its
-#: longer side (increment 14b, C1). With Delaunay insertion the start vertices
+#: longer side, a chosen value. With Delaunay insertion the start vertices
 #: are the only ones in unrefined flat ground, so they set its grading.
 REFINE_NODES_PER_SIDE = 129
 
@@ -54,7 +54,7 @@ def subsample(meta: RasterMeta, stride: int) -> tuple[npt.NDArray[np.float64], l
     ``RasterGeometry::node``'s expression, ``x_min + col * delta_x`` and ``y_max - row * delta_y``:
     another spelling can land an ulp off the node. The bits equal ``node``'s unless the C++
     compiler fuses it into a multiply-add, which needs a non-integer, non-dyadic origin or
-    spacing (increment 27, "A limit of the exact rule").
+    spacing.
 
     The ring is counter-clockwise and implicitly closed (no repeated first index): along
     the bottom row, up the right column, back along the top row, and down the left column.
