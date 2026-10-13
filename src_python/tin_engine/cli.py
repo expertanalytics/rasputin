@@ -53,7 +53,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, TextIO, cast
+from typing import Annotated, Final, TextIO, cast
 
 import click
 import numpy as np
@@ -198,6 +198,15 @@ app = typer.Typer(
     name="rasputin",
     help="Parallel TIN engine for terrain meshing.",
     no_args_is_help=True,
+)
+
+#: The one refusal when no cache directory can be found.
+NO_CACHE: Final = (
+    "no cache directory: pass --cache, or set RASPUTIN_DATA (the cache is then "
+    "$RASPUTIN_DATA/cache) or XDG_CACHE_HOME (then $XDG_CACHE_HOME/rasputin)"
+)
+CACHE_DEFAULT: Final = (
+    "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
 )
 
 #: Increment 38: the two options `mesh`, `catchment` and `station-catchments` share.
@@ -727,7 +736,7 @@ def mesh(
         Path | None,
         typer.Option(
             "--cache",
-            help="The tile cache a catalogue --dem is read from. Default: $RASPUTIN_DATA/cache.",
+            help=f"The tile cache a catalogue --dem is read from. {CACHE_DEFAULT}",
         ),
     ] = None,
     bbox: Annotated[
@@ -1533,8 +1542,7 @@ def _class_source(
             raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
         if root is None:
             raise typer.BadParameter(
-                "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
-                "or pass --cache",
+                NO_CACHE,
                 param_hint="--land-cover",
             )
     else:
@@ -1818,7 +1826,7 @@ def fetch(
         str | None, typer.Option("--out-crs", help="The frame the mesh's box is in.")
     ] = None,
     cache: Annotated[
-        Path | None, typer.Option("--cache", help="The tile cache. Default: $RASPUTIN_DATA/cache.")
+        Path | None, typer.Option("--cache", help=f"The tile cache. {CACHE_DEFAULT}")
     ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Read the headers, print the plan, write nothing.")
@@ -1857,8 +1865,7 @@ def fetch(
     root = cache_root(cache, os.environ)
     if root is None:
         raise typer.BadParameter(
-            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
-            "or pass --cache",
+            NO_CACHE,
             param_hint="--cache",
         )
     try:
@@ -1892,7 +1899,8 @@ def fetch(
     typer.echo(
         f"{source}: {report.objects} objects, {report.needed:,} blocks needed, "
         f"{report.present:,} present, {head} {report.fetched:,} ({report.empty} empty) in "
-        f"{report.requests:,} requests, {report.bytes:,} bytes, {report.seconds:.1f} s"
+        f"{report.requests:,} requests, {report.bytes:,} bytes, {report.seconds:.1f} s "
+        f"into {writer.directory}"
     )
     if report.no_tile:
         typer.echo(f"no tile (sea): {', '.join(report.no_tile)}")
@@ -1954,12 +1962,18 @@ def data_root(environ: Mapping[str, str]) -> Path | None:
 
 
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
-    """The tile cache (B7): ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
-    else None; ``mesh`` passes ``os.environ``."""
+    """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
+    ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
+    The XDG Base Directory rule: an empty or relative variable is ignored.
+    Pure in its two arguments (no ``Path.home()``); ``mesh`` passes ``os.environ``."""
     if option is not None:
         return option
-    root = data_root(environ)
-    return root / "cache" if root else None
+    if (root := data_root(environ)) is not None:
+        return root / "cache"
+    for name, under in (("XDG_CACHE_HOME", "rasputin"), ("HOME", ".cache/rasputin")):
+        if (value := Path(environ.get(name) or ".")).is_absolute():
+            return value / under
+    return None
 
 
 def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
@@ -1991,8 +2005,7 @@ def _dem_sources(
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     if root is None:
         raise typer.BadParameter(
-            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
-            "or pass --cache",
+            NO_CACHE,
             param_hint="--dem",
         )
     return (), CachedSource(source=keys[0], cache=root)
@@ -2821,10 +2834,10 @@ class _DirectorySink:
             word += f": {row.refusal_message}"
         elif row.causes:
             word += f" ({', '.join(row.causes)})"
-        if row.nve_in_ours is not None and row.ours_in_nve is not None:
+        if row.reference_in_ours is not None and row.ours_in_reference is not None:
             word += (
-                f"; NVE's in ours {100 * row.nve_in_ours:.1f} %, ours in NVE's "
-                f"{100 * row.ours_in_nve:.1f} %, area ratio {row.area_ratio:.3f}"
+                f"; reference in ours {100 * row.reference_in_ours:.1f} %, ours in reference "
+                f"{100 * row.ours_in_reference:.1f} %, area ratio {row.area_ratio:.3f}"
             )
         typer.echo(
             f"{row.station} {row.name}: {word}" if row.name else f"{row.station}: {word}", err=True
