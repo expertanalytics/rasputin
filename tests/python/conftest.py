@@ -116,3 +116,19 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
         terminalreporter.section("prose files read by the suite (h11 T5)", red=True)
         for line in _verdict:
             terminalreporter.write_line(line, red=True)
+
+
+@pytest.fixture(autouse=True)
+def _own_xdg_cache(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every test gets its own empty ``XDG_CACHE_HOME``.
+
+    The tile cache defaults to ``$XDG_CACHE_HOME/rasputin``, else
+    ``~/.cache/rasputin``: without this, a test that clears ``RASPUTIN_DATA``
+    would read or write the real cache in the home directory. The directory
+    is made outside the test's own ``tmp_path``, so a test that lists its
+    ``tmp_path`` sees nothing of it. A test that needs no cache at all deletes
+    the variable (and ``HOME``) itself.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("xdg-cache")))

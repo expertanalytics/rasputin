@@ -95,6 +95,26 @@ def refused(
     return output
 
 
+#: The one refusal of `fetch`, `mesh --dem SOURCE` and `mesh --land-cover
+#: SOURCE` when no cache directory can be found, as the design words it.
+NO_CACHE = (
+    "no cache directory: pass --cache, or set RASPUTIN_DATA (the cache is then "
+    "$RASPUTIN_DATA/cache) or XDG_CACHE_HOME (then $XDG_CACHE_HOME/rasputin)"
+)
+
+
+def no_cache_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No `RASPUTIN_DATA`, no `XDG_CACHE_HOME` and no `HOME`: the environment
+    names no cache directory, so only `--cache` can."""
+    for name in ("RASPUTIN_DATA", "XDG_CACHE_HOME", "HOME"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def says_no_cache(output: str) -> None:
+    """The output holds the whole no-cache refusal, wherever Rich broke it."""
+    assert squashed(NO_CACHE) in squashed(output), output
+
+
 def mesh_to_vtk(tmp_path: Path, *args: str, out: str = "x.vtk") -> VtkFile:
     """Mesh with ``--stats`` beside the file (``x.md``); the mesh read back."""
     target = tmp_path / out

@@ -43,7 +43,7 @@ from class_fixtures import (
     object_id,
     per_year_entry,
 )
-from cli_driver import USAGE, invoke, plain, runner
+from cli_driver import USAGE, invoke, no_cache_anywhere, plain, runner, says_no_cache
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import (
     FETCHED,
@@ -343,9 +343,10 @@ class TestRefusals:
     def test_without_a_cache_root_it_is_refused_naming_the_option(
         self, classes: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dem: Path, domain: Path
     ) -> None:
-        """No `--cache` and no `RASPUTIN_DATA`: there is nowhere to read the
-        classes from, and the refusal says where they would come from."""
-        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        """No `--cache`, `RASPUTIN_DATA`, `XDG_CACHE_HOME` or `HOME`: there is
+        nowhere to read the classes from, and the refusal says where they
+        would come from."""
+        no_cache_anywhere(monkeypatch)
         target = tmp_path / "x.vtk"
         code, output = invoke(
             "mesh", "--dem", str(dem), "--domain", str(domain), "--tolerance", TOLERANCE,
@@ -353,7 +354,7 @@ class TestRefusals:
         )  # fmt: skip
         assert code == USAGE, output
         assert "No such option" not in output, output
-        assert "--cache" in output and "RASPUTIN_DATA" in output, output
+        says_no_cache(output)
         assert not target.exists()
 
     def test_the_help_names_both_options(self) -> None:
