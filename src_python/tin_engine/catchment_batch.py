@@ -31,7 +31,8 @@ from tin_engine.catchment import (
     delineate,
 )
 from tin_engine.crs import reprojector
-from tin_engine.gauge import Gauge, LakeSeed, Placement, lake_seed, place
+from tin_engine.gauge import U_FLOOR_CELLS, Gauge, LakeSeed, Placement, lake_seed, place
+from tin_engine.geodesy import LocalFrame
 from tin_engine.hydrography import Lake, RiverSegment, Station
 from tin_engine.io.repository import DemRepository
 from tin_engine.reference import Class, Summary, agreement, classify, nodes_inside, summarise
@@ -138,13 +139,32 @@ def seed_for(
     crs: str,
     request: BatchRequest,
     lakes: Sequence[Lake] | None = None,
+    *,
+    cell_m: float,
 ) -> tuple[Placement | None, LakeSeed | None, CatchmentRequest]:
-    """`gauge` placed on `segments` (both in `crs`, the river file's), its
+    """`gauge` placed on `segments` (both in `crs`, the river file's; in
+    metres in a `LocalFrame` at the station when `crs` is in degrees), its
     lake seed when `lakes` are given, and the catchment request: seeded by
-    the lake when there is a lake seed, else by the reach. Raises
-    :class:`NoRiverLine` with neither. Reads no file and checks no CRS."""
-    placement = place(gauge, segments, map_radius=request.map_radius, reach_up=request.reach_up)
-    seed = None if lakes is None else lake_seed(gauge, placement, lakes)
+    the lake when there is a lake seed, else by the reach. `cell_m` is the
+    DEM's cell at the station. Raises :class:`NoRiverLine` with neither.
+    Reads no file and checks no CRS."""
+    frame, here = LocalFrame.at(crs, (gauge.x, gauge.y)), gauge
+    if not frame.is_identity:
+        if lakes is not None:
+            raise ValueError("lakes need a river file in metres (a projected CRS)")
+        ((gx, gy),) = frame.forward([(gauge.x, gauge.y)]).tolist()
+        here = gauge.model_copy(update={"x": gx, "y": gy})
+        lines = [tuple(map(tuple, frame.forward(s.line).tolist())) for s in segments]
+        segments = [s.model_copy(update={"line": v}) for s, v in zip(segments, lines, strict=True)]
+    kw = {"map_radius": request.map_radius, "reach_up": request.reach_up}
+    placement = place(here, segments, **kw, cell_m=cell_m)
+    if placement is not None and not frame.is_identity:
+        line = tuple(map(tuple, frame.inverse(placement.reach.line).tolist()))
+        ((px, py),) = frame.inverse([placement.position]).tolist()
+        reach = placement.reach.model_copy(update={"line": line})
+        placement = placement.model_copy(update={"reach": reach, "position": (px, py)})
+    gap = U_FLOOR_CELLS * cell_m
+    seed = None if lakes is None else lake_seed(gauge, placement, lakes, gap=gap)
     tol = request.outline_tolerance
     if seed is not None:
         polygons = tuple(lk.polygon for lk in seed.lakes)
@@ -158,6 +178,14 @@ def seed_for(
         seed=(gauge.x, gauge.y), seed_crs=crs, reach=placement.reach, outline_tolerance=tol
     )
     return placement, None, made
+
+
+def cell_at(repository: DemRepository, point: tuple[float, float], crs: str) -> float:
+    """The DEM's cell (its longer side in metres, increment 40) at `point`,
+    given in `crs`; the grid is the repository's first tile's."""
+    meta = repository.footprints()[0].meta
+    ((x, y),) = reprojector(crs, meta.crs)([point]).tolist()
+    return LocalFrame.at(meta.crs, (x, y)).cell_m(meta)
 
 
 async def run_batch(
@@ -195,11 +223,12 @@ async def run_batch(
             "reference_area_km2": None if ref is None else ref.area / 1e6,
         }
         ((x, y),) = move([(station.x, station.y)])
+        cell = cell_at(repository, (x, y), segments_crs)
         gauge = Gauge(x=x, y=y, watercourse=station.watercourse, river=station.river)
         result: Catchment | None = None
         try:
             placement, seed, catchment_request = seed_for(
-                gauge, segments, segments_crs, request, lakes
+                gauge, segments, segments_crs, request, lakes, cell_m=cell
             )
             if placement is not None:
                 fields |= placement.report_fields()
@@ -248,4 +277,12 @@ async def run_batch(
     return summarise(rows)
 
 
-__all__ = ["BatchRequest", "BatchSink", "NoRiverLine", "StationResult", "run_batch", "seed_for"]
+__all__ = [
+    "BatchRequest",
+    "BatchSink",
+    "NoRiverLine",
+    "StationResult",
+    "cell_at",
+    "run_batch",
+    "seed_for",
+]

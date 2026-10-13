@@ -42,7 +42,8 @@ the store's size (was `checked against <N> source nodes`). The file's
 HOW THIS FILE GOES RED: `--out-crs` is not an option of `mesh`, so every run
 exits 2 with "No such option" (the `refused` helper rejects that reason), and
 `DemRequest` ignores `target_crs`, so the Python-API control is refused by the
-reader. G7's comparison and the catchment refusal are guards. The ANADEM
+reader. G7's comparison is a guard. G2's catchment refusal is gone:
+increment 40 floods a DEM in degrees (`test_cli_catchment_geographic.py`, R1). The ANADEM
 realism case runs on the fixture committed with the green work (Q17).
 
 AMENDED after `@reviewer`'s round 1 on 15c-2 ("Round 1 findings", below):
@@ -455,26 +456,6 @@ class TestRefusalsBeforePixels:
             says=("no image",),
             squash=True,
         )
-
-
-# ------------------------------------------------------------------ G2
-
-
-def test_catchment_on_a_geographic_tile_is_a_usage_error(
-    tmp_path: Path, geographic_dem: Path
-) -> None:
-    """The `to_core` gate keeps a geographic DEM out of `rasputin catchment`
-    (increment 22), which 15c does not extend."""
-    lon, lat = LON0 + 30 * ANADEM_STEP, LAT0 - 30 * ANADEM_STEP
-    code, output = invoke(
-        "catchment",
-        *("--dem", str(geographic_dem), "--seed", repr(lon), repr(lat), "--seed-crs", "EPSG:4326"),
-        *("--out", str(tmp_path / "c.geojson")),
-    )
-    assert code == USAGE, output
-    assert "Traceback" not in output
-    assert re.search(r"(?i)geographic", output), output
-    assert not (tmp_path / "c.geojson").exists()
 
 
 # ------------------------------------------------------------------ 23a's cached sources

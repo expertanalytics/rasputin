@@ -44,7 +44,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "elevation": "", "outline": "", "sensitivity": "", "landcover": "",
         "grow": "",  # 30d: the outline grown, shapely and NumPy only
         "resources": "",  # 38: the one module that reads the machine; os and Pydantic only
-        "burn": "gauge io.models",
+        "burn": "gauge geodesy io.models",  # 40: the burn in a metre frame
+        "geodesy": "crs io.models",  # 40: metres near a point, geodesic areas
         "gauge": "hydrography",
         "reference": "io.models",
         "viz": "viz.scene viz.style viz.svg",
@@ -81,9 +82,10 @@ LAYERS: tuple[dict[str, str], ...] = (
         "dem_input": "crs domain grow io.models io.repository mosaic resources target_grid",
         "feature_input": "border_simplify crs domain features io.geojson io.geopackage io.gml"
                          " io.repository",
-        "catchment": "burn catchment_core crs gauge io.models io.repository mosaic outline"
-                     " resources sensitivity",
-        "catchment_batch": "catchment crs gauge hydrography io.repository reference resources",
+        "catchment": "burn catchment_core crs gauge geodesy io.models io.repository mosaic"
+                     " outline resources sensitivity",
+        "catchment_batch": "catchment crs gauge geodesy hydrography io.repository reference"
+                           " resources",
         "fetch": "",
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",

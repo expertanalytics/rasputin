@@ -19,6 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from tin_engine.gauge import Reach
+from tin_engine.geodesy import LocalFrame
 from tin_engine.io.models import DemTile, RasterMeta, valid_mask
 
 #: Metres each chain node falls below the one before it, at least (step 4).
@@ -29,6 +30,8 @@ END_CAP_M = 500.0
 SLACK_M = 1e-6
 #: Metres the chain's last tenth may lie above its first (step 3).
 DIRECTION_M = 2.0
+#: Metres of chain under which its direction is not judged (step 3).
+DIRECTION_MIN_M = 100.0
 _NEIGHBOURS = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (dr, dc) != (0, 0)]
 
 
@@ -131,15 +134,21 @@ def _steps(chain: list[tuple[int, int]], m: RasterMeta) -> list[float]:
     ]
 
 
-def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
+def burn_reach(
+    window: DemTile, reach: Reach, frame: LocalFrame | None = None
+) -> tuple[DemTile, GaugePath]:
     """The window with the reach burnt in (a copy, same `meta`), and its path.
-    A placed position outside the window, a chain node without data, or no
-    node with data near the reach is a `BurnRefusal`."""
+    With a `frame` (increment 40, 5.5) the burn runs in its metres: on
+    `frame.meta(window.meta)` and `frame.forward(reach.line)`. A placed
+    position outside the window, a chain node without data, or no node with
+    data near the reach is a `BurnRefusal`."""
     m, raw = window.meta, np.asarray(window.array)
+    line = np.asarray(reach.line, dtype=np.float64)
+    if frame is not None:
+        m, line = frame.meta(m), frame.forward(line)
     # A NaN cell is NoData whatever the sentinel, as in the core's `is_nodata`.
     ok = valid_mask(raw, m.nodata)
     step = min(m.delta_x, m.delta_y)
-    line = np.asarray(reach.line, dtype=np.float64)
     line = line[np.r_[True, np.any(np.diff(line, axis=0) != 0.0, axis=1)]]
     seg = np.diff(line, axis=0)
     lengths = np.hypot(seg[:, 0], seg[:, 1])
@@ -166,16 +175,17 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     # The join does not look at the nodes it steps through: one may be NoData.
     gap = next((n for n in chain if not ok[n]), None)
     if gap is not None:
-        gx, gy = m.node_xy(*gap)
+        gx, gy = window.meta.node_xy(*gap)
+        d = 5 if window.meta.geographic else 0
         raise BurnRefusal(
-            f"the river line crosses a gap (NoData) in the DEM at ({gx:.0f}, {gy:.0f}): "
+            f"the river line crosses a gap (NoData) in the DEM at ({gx:.{d}f}, {gy:.{d}f}): "
             "the station is refused"
         )
     placed = to[where[int(np.searchsorted(keep, at))]]
     z = [raw[n] for n in chain]
     tenth = max(1, math.ceil(len(chain) / 10))
     direction_ok = (
-        sum(_steps(chain, m)) < 100.0
+        sum(_steps(chain, m)) < DIRECTION_MIN_M
         or float(np.mean(z[-tenth:]) - np.mean(z[:tenth])) <= DIRECTION_M
     )
     burnt = np.array(raw, copy=True)
@@ -223,7 +233,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
         node_offset_m=math.hypot(nx - px, ny - py),
         dropped_m=float(np.count_nonzero(~inside)) * step,
     )
-    return DemTile(meta=m, array=burnt), path
+    return DemTile(meta=window.meta, array=burnt), path
 
 
 __all__ = ["DROP_M", "END_CAP_M", "BurnRefusal", "GaugePath", "burn_reach"]

@@ -132,6 +132,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   site, always_xy (15b); pyproj and numpy;
                            #   crs_label escapes through run_record's
                            #   escaped_ascii, its one first-party import
+  geodesy.py               # LocalFrame (a local metres frame around one point),
+                           #   cell areas by row (a cell centred on its node),
+                           #   geodesic area over outlines (40); pyproj and numpy;
+                           #   layer 1, never imports _core
   target_grid.py           # TargetGrid (its node_box) on one global lattice,
                            #   source_region, SourceWindows / TileWindows,
                            #   resample (bilinear, threads), check_point_blocks;
@@ -196,7 +200,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   river reach, the pour point is the gauge's node
                            #   on the burnt reach (29)
   catchment_core.py        # upstream, accumulate: the core call on
-                           #   raster.to_core's view of a DemTile; reduce_ring
+                           #   raster.to_core_lattice's view of a DemTile (a
+                           #   unit lattice, any DEM, projected or in degrees); reduce_ring
                            #   re-exported; the catchment's _core calls, as
                            #   edge_strip.py is the edge strip's (python-
                            #   audit.md, section 11)
@@ -492,6 +497,11 @@ optional NoData sentinel — nothing else.
   is reprojected in Python too (`crs.py`, the one `from_crs` site); see
   `docs/increments/15c-geographic-dem.md` D6 and
   `docs/increments/11-raster-ingestion.md` §9, §10.
+  One exception since increment 40: on the catchment path a tile in degrees
+  crosses into the hydrology only as values and NoData on a unit lattice
+  (spacing 1, `raster.to_core_lattice`); no coordinate crosses, and the flood,
+  `upstream` and `accumulate` read none. Every metre figure on that path
+  (cell sizes, areas, distances) is computed in Python by `geodesy.py`.
   Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
   east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy

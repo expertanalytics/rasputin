@@ -27,15 +27,13 @@ from tin_engine.hydrography import Lake, RiverSegment
 
 #: Metres: an end within this of the next segment's start continues the chain.
 JOIN_M = 1.0
-#: Metres: `U` is never below three DTM10 cells.
-U_FLOOR_M = 30.0
+#: Cells (the DEM's longer side in metres, `cell_m`): `U` is never below
+#: three, and the burn's half-width is three (increment 40, 5.3).
+U_FLOOR_CELLS = 3
 #: Metres: the chain runs `U + DOWN_EXTRA_M` below `P`.
 DOWN_EXTRA_M = 100.0
 #: Metres from `P` within which another river's line flags `confluence_near`.
 CONFLUENCE_M = 100.0
-#: Metres (the river file's CRS) from a station to the lake its `P` lies in,
-#: within which a gauge placed on a lake line is seeded with the lake: `U`'s floor.
-LAKE_GAP_M = 30.0
 
 Tier = Literal["number", "prefix", "name", "any"]
 _TIERS: tuple[Tier, ...] = ("number", "prefix", "name", "any")
@@ -149,9 +147,11 @@ def place(
     *,
     map_radius: float = 500.0,
     reach_up: float = 1000.0,
+    cell_m: float,
 ) -> Placement | None:
-    """The placement of `gauge` on `segments` (same CRS), or None when no
-    segment lies within `map_radius` of it."""
+    """The placement of `gauge` on `segments` (same CRS, in metres), or None
+    when no segment lies within `map_radius` of it; `cell_m` is the DEM's cell
+    at the station."""
     station = Point(gauge.x, gauge.y)
     near = [(LineString(s.line).distance(station), s) for s in segments]
     near = [(d, s) for d, s in near if d <= map_radius]
@@ -161,7 +161,8 @@ def place(
     line = LineString(chosen.line)
     along = line.project(station)
     p = line.interpolate(along)
-    u = min(max(d, U_FLOOR_M), map_radius)
+    floor = U_FLOOR_CELLS * cell_m
+    u = min(max(d, floor), map_radius)
     same = [s for s in segments if s.elvid == chosen.elvid]
     ups, fork_up = _walk(chosen, same, reach_up - along, down=False)
     downs, fork_down = _walk(chosen, same, u + DOWN_EXTRA_M - (line.length - along), down=True)
@@ -176,7 +177,9 @@ def place(
     cut = substring(full, start, end)
     other = [s for s in segments if s.elvid != chosen.elvid]
     return Placement(
-        reach=Reach(line=tuple((x, y) for x, y in cut.coords), at=s_p - start, uncertainty=u),
+        reach=Reach(
+            line=tuple((x, y) for x, y in cut.coords), at=s_p - start, uncertainty=u, corridor=floor
+        ),
         placed_on=_TIERS[tier],
         distance_m=d,
         position=(p.x, p.y),
@@ -191,7 +194,7 @@ def place(
 
 
 def lake_seed(
-    gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake], *, gap: float = LAKE_GAP_M
+    gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake], *, gap: float
 ) -> LakeSeed | None:
     """The lake seed of `gauge`, or None for PR 2's river path: `inside` when
     the station lies strictly inside a lake; else `lake_line` when it was
@@ -214,4 +217,4 @@ def lake_seed(
     return LakeSeed(rule="lake_line", point=placement.position, lakes=holding, distance_m=distance)
 
 
-__all__ = ["LAKE_GAP_M", "Gauge", "LakeSeed", "Placement", "Reach", "lake_seed", "place"]
+__all__ = ["U_FLOOR_CELLS", "Gauge", "LakeSeed", "Placement", "Reach", "lake_seed", "place"]

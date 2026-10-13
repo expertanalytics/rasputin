@@ -7,7 +7,9 @@ or read through PR 3's `read_segments` where the reader's dropping of exact
 copies is the point.
 
 Interface pinned here (the design names `Gauge`, `Placement`, `Reach` and
-`place(gauge, segments, *, map_radius=500.0, reach_up=1000.0)`; the field
+`place(gauge, segments, *, map_radius=500.0, reach_up=1000.0, cell_m)`,
+`cell_m` added by increment 40 and 10.0 (DTM10's cell) in every call below
+unless stated; the field
 names below that it leaves open are chosen here and listed in the handback):
 
 - `Gauge(x=, y=, watercourse=None, river=None)`, frozen.
@@ -142,6 +144,52 @@ def test_the_defaults_are_500_m_and_1000_m(gauge: ModuleType) -> None:
     assert params["reach_up"].default == 1000.0
     assert params["map_radius"].kind is inspect.Parameter.KEYWORD_ONLY
     assert params["reach_up"].kind is inspect.Parameter.KEYWORD_ONLY
+    # Increment 40 (section 5.5): the DEM's cell at the station, required.
+    assert params["cell_m"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["cell_m"].default is inspect.Parameter.empty
+
+
+# ---------------------------------------------------------------------------
+# Increment 40, R6: `U`'s floor and the burn corridor are three cells
+#
+# `docs/increments/40-geographic-catchment.md`, sections 5.3 and 5.5:
+# `U = min(max(d, 3 cell_m), map_radius)` and `corridor = 3 cell_m`, at
+# DTM10's 10 m and ANADEM's 29.8324 m (19.4436 S, north-south). The station is
+# `d` east of a straight river south at x = X, so `P` is (X, Y).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("cell", [10.0, 29.8324])
+def test_u_is_three_cells_when_the_station_is_nearer(gauge: ModuleType, cell: float) -> None:
+    placement = gauge.place(at_station(gauge, X + 5.0, Y), river_down(), cell_m=cell)
+    assert placement.distance_m == pytest.approx(5.0, abs=TOL)
+    assert placement.reach.uncertainty == pytest.approx(3 * cell, abs=TOL)
+    assert placement.reach.corridor == pytest.approx(3 * cell, abs=TOL)
+    assert placement.reach_down_m == pytest.approx(3 * cell + 100.0, abs=TOL)
+    assert_consistent(placement)
+
+
+@pytest.mark.parametrize("cell", [10.0, 29.8324])
+def test_u_is_the_distance_beyond_three_cells(gauge: ModuleType, cell: float) -> None:
+    placement = gauge.place(at_station(gauge, X + 120.0, Y), river_down(), cell_m=cell)
+    assert placement.reach.uncertainty == pytest.approx(120.0, abs=TOL)
+    assert placement.reach.corridor == pytest.approx(3 * cell, abs=TOL)
+
+
+def test_three_cells_are_still_capped_by_the_map_radius(gauge: ModuleType) -> None:
+    placement = gauge.place(
+        at_station(gauge, X + 5.0, Y), river_down(), map_radius=50.0, cell_m=29.8324
+    )
+    assert placement.reach.uncertainty == pytest.approx(50.0, abs=TOL)
+    assert placement.reach.corridor == pytest.approx(3 * 29.8324, abs=TOL)
+
+
+def test_the_metre_floor_and_gap_constants_are_gone(gauge: ModuleType) -> None:
+    """`U_FLOOR_M` becomes `U_FLOOR_CELLS = 3`; `LAKE_GAP_M` is removed, the
+    gap passed by the caller (5.3's table)."""
+    assert gauge.U_FLOOR_CELLS == 3
+    assert not hasattr(gauge, "U_FLOOR_M")
+    assert not hasattr(gauge, "LAKE_GAP_M")
 
 
 # ---------------------------------------------------------------------------
@@ -151,20 +199,20 @@ def test_the_defaults_are_500_m_and_1000_m(gauge: ModuleType) -> None:
 
 def test_no_line_within_the_radius_gives_none(gauge: ModuleType) -> None:
     segments = river_down(x=X + 501.0)
-    assert gauge.place(at_station(gauge, X, Y), segments) is None
+    assert gauge.place(at_station(gauge, X, Y), segments, cell_m=10.0) is None
 
 
 def test_a_line_inside_the_radius_is_found(gauge: ModuleType) -> None:
     segments = river_down(x=X + 499.0)
-    placement = gauge.place(at_station(gauge, X, Y), segments)
+    placement = gauge.place(at_station(gauge, X, Y), segments, cell_m=10.0)
     assert placement is not None
     assert placement.distance_m == pytest.approx(499.0, abs=TOL)
 
 
 def test_the_radius_is_the_argument(gauge: ModuleType) -> None:
     segments = river_down(x=X + 120.0)
-    assert gauge.place(at_station(gauge, X, Y), segments, map_radius=100.0) is None
-    assert gauge.place(at_station(gauge, X, Y), segments, map_radius=150.0) is not None
+    assert gauge.place(at_station(gauge, X, Y), segments, map_radius=100.0, cell_m=10.0) is None
+    assert gauge.place(at_station(gauge, X, Y), segments, map_radius=150.0, cell_m=10.0) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +234,7 @@ def test_its_own_watercourse_number_beats_a_nearer_line(gauge: ModuleType) -> No
         far={"vassdragsnr": "002.DCB2", "name": "Gaula"},
     )
     g = at_station(gauge, X, Y, watercourse="002.DCB2", river="Nea")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 2
     assert placement.elvid == "far"
     assert placement.placed_on == "number"
@@ -199,7 +247,7 @@ def test_the_prefix_tier_beats_a_nearer_line_of_another_number(gauge: ModuleType
         far={"vassdragsnr": "002.DC", "name": "Gaula"},
     )
     g = at_station(gauge, X, Y, watercourse="002.DCB2", river="Nea")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 2
     assert placement.placed_on == "prefix"
 
@@ -222,7 +270,9 @@ def test_what_is_a_prefix(gauge: ModuleType, segment: str, station: str, tier: s
         near={"vassdragsnr": "123.A", "name": "Gaula"},
         far={"vassdragsnr": segment, "name": "Gaula"},
     )
-    placement = gauge.place(at_station(gauge, X, Y, watercourse=station, river="Nea"), segments)
+    placement = gauge.place(
+        at_station(gauge, X, Y, watercourse=station, river="Nea"), segments, cell_m=10.0
+    )
     assert placement.placed_on == tier
     assert placement.objectid == (2 if tier == "prefix" else 1)
 
@@ -235,7 +285,7 @@ def test_the_prefix_tier_comes_before_the_name_tier(gauge: ModuleType) -> None:
         far={"vassdragsnr": "002.A", "name": "Gaula"},
     )
     g = at_station(gauge, X, Y, watercourse="002.AB", river="Nea")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 2
     assert placement.placed_on == "prefix"
 
@@ -246,7 +296,7 @@ def test_the_name_tier_beats_a_nearer_line_of_another_name(gauge: ModuleType) ->
         far={"vassdragsnr": "456.B", "name": "Nea"},
     )
     g = at_station(gauge, X, Y, watercourse="002.DCB2", river="Nea")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 2
     assert placement.placed_on == "name"
 
@@ -257,7 +307,7 @@ def test_no_tier_matches_the_nearest_line_wins_as_any(gauge: ModuleType) -> None
         far={"vassdragsnr": "456.B", "name": "Orkla"},
     )
     g = at_station(gauge, X, Y, watercourse="002.DCB2", river="Nea")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 1
     assert placement.placed_on == "any"
 
@@ -268,7 +318,7 @@ def test_a_gauge_without_number_or_name_takes_the_nearest_line(gauge: ModuleType
         near={"vassdragsnr": "123.A", "name": "Gaula"},
         far={"vassdragsnr": "002.DCB2", "name": "Nea"},
     )
-    placement = gauge.place(at_station(gauge, X, Y), segments)
+    placement = gauge.place(at_station(gauge, X, Y), segments, cell_m=10.0)
     assert placement.objectid == 1
     assert placement.placed_on == "any"
 
@@ -280,7 +330,7 @@ def test_the_nearest_of_the_best_tier_wins(gauge: ModuleType) -> None:
         seg(3, south(X - 40.0, Y + 1500.0, Y - 1500.0), elvid="c", vassdragsnr="002.DCB2"),
     ]
     g = at_station(gauge, X, Y, watercourse="002.DCB2")
-    placement = gauge.place(g, segments)
+    placement = gauge.place(g, segments, cell_m=10.0)
     assert placement.objectid == 3
     assert placement.placed_on == "number"
     assert placement.distance_m == pytest.approx(40.0, abs=TOL)
@@ -292,7 +342,7 @@ def test_the_nearest_of_the_best_tier_wins(gauge: ModuleType) -> None:
 
 
 def test_p_is_the_foot_of_the_perpendicular(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 20.0, Y + 250.0), river_down())
+    placement = gauge.place(at_station(gauge, X + 20.0, Y + 250.0), river_down(), cell_m=10.0)
     assert placement.position == pytest.approx((X, Y + 250.0), abs=TOL)
     assert placement.distance_m == pytest.approx(20.0, abs=TOL)
     assert_consistent(placement)
@@ -302,7 +352,7 @@ def test_p_is_an_end_vertex_past_the_line(gauge: ModuleType) -> None:
     """South of the river's last vertex: P is that vertex, and no river is
     left downstream of it."""
     segments = river_down(bottom=Y)
-    placement = gauge.place(at_station(gauge, X + 30.0, Y - 40.0), segments)
+    placement = gauge.place(at_station(gauge, X + 30.0, Y - 40.0), segments, cell_m=10.0)
     assert placement.position == pytest.approx((X, Y), abs=TOL)
     assert placement.distance_m == pytest.approx(50.0, abs=TOL)
     assert placement.reach_down_m == pytest.approx(0.0, abs=TOL)
@@ -320,7 +370,9 @@ def test_p_is_an_end_vertex_past_the_line(gauge: ModuleType) -> None:
 def test_u_is_d_floored_at_30_m_and_capped_at_the_radius(
     gauge: ModuleType, d: float, radius: float, expected: float
 ) -> None:
-    placement = gauge.place(at_station(gauge, X + d, Y), river_down(), map_radius=radius)
+    placement = gauge.place(
+        at_station(gauge, X + d, Y), river_down(), map_radius=radius, cell_m=10.0
+    )
     assert placement.reach.uncertainty == pytest.approx(expected, abs=TOL)
 
 
@@ -330,7 +382,7 @@ def test_u_is_d_floored_at_30_m_and_capped_at_the_radius(
 
 
 def test_the_reach_runs_reach_up_above_p_and_u_plus_100_below(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down())
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(), cell_m=10.0)
     assert placement.reach_up_m == pytest.approx(1000.0, abs=TOL)
     assert placement.reach_down_m == pytest.approx(30.0 + 100.0, abs=TOL)
     reach = placement.reach
@@ -341,14 +393,16 @@ def test_the_reach_runs_reach_up_above_p_and_u_plus_100_below(gauge: ModuleType)
 
 @pytest.mark.parametrize("reach_up", [250.0, 1000.0, 1234.5])
 def test_reach_up_cuts_at_the_metre(gauge: ModuleType, reach_up: float) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(), reach_up=reach_up)
+    placement = gauge.place(
+        at_station(gauge, X + 10.0, Y), river_down(), reach_up=reach_up, cell_m=10.0
+    )
     assert placement.reach_up_m == pytest.approx(reach_up, abs=TOL)
     assert placement.reach.at == pytest.approx(reach_up, abs=TOL)
     assert placement.reach.line[0] == pytest.approx((X, Y + reach_up), abs=TOL)
 
 
 def test_a_river_that_starts_sooner_gives_a_shorter_reach(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(top=Y + 300.0))
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(top=Y + 300.0), cell_m=10.0)
     assert placement.reach_up_m == pytest.approx(300.0, abs=TOL)
     assert placement.reach.at == pytest.approx(300.0, abs=TOL)
     assert not placement.reach_fork
@@ -356,7 +410,9 @@ def test_a_river_that_starts_sooner_gives_a_shorter_reach(gauge: ModuleType) -> 
 
 
 def test_a_river_that_ends_sooner_gives_a_shorter_reach(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(bottom=Y - 70.0))
+    placement = gauge.place(
+        at_station(gauge, X + 10.0, Y), river_down(bottom=Y - 70.0), cell_m=10.0
+    )
     assert placement.reach_down_m == pytest.approx(70.0, abs=TOL)
     assert not placement.reach_fork
     assert_consistent(placement)
@@ -368,7 +424,7 @@ def test_the_chain_joins_ends_within_1_m(gauge: ModuleType) -> None:
         seg(1, south(X, Y + 1500.0, Y - 50.0)),
         seg(2, ((X + 0.8, Y - 50.0), (X + 0.8, Y - 1500.0))),
     ]
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.reach_down_m == pytest.approx(130.0, abs=1.0)
     assert placement.reach_down_m > 50.0 + 1.0
 
@@ -378,7 +434,7 @@ def test_the_chain_stops_at_a_gap_of_2_m(gauge: ModuleType) -> None:
         seg(1, south(X, Y + 1500.0, Y - 50.0)),
         seg(2, south(X, Y - 52.0, Y - 1500.0)),
     ]
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.reach_down_m == pytest.approx(50.0, abs=TOL)
     assert not placement.reach_fork
 
@@ -390,7 +446,7 @@ def test_the_chain_follows_its_own_elvid_only(gauge: ModuleType) -> None:
         seg(1, south(X, Y + 1500.0, Y - 50.0), elvid="main"),
         seg(2, south(X, Y - 50.0, Y - 1500.0), elvid="other"),
     ]
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.reach_down_m == pytest.approx(50.0, abs=TOL)
 
 
@@ -403,7 +459,7 @@ def test_a_fork_downstream_stops_the_chain_and_is_flagged(gauge: ModuleType) -> 
         seg(2, (q, (X - 300.0, Y - 1000.0))),
         seg(3, (q, (X + 300.0, Y - 1000.0))),
     ]  # fmt: skip
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.reach_fork
     assert placement.reach_down_m == pytest.approx(60.0, abs=TOL)
     assert placement.reach_up_m == pytest.approx(1000.0, abs=TOL)
@@ -417,7 +473,7 @@ def test_a_fork_upstream_stops_the_chain_and_is_flagged(gauge: ModuleType) -> No
         seg(2, ((X + 300.0, Y + 1500.0), q)),
         seg(3, (q, (X, Y - 1500.0))),
     ]
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.reach_fork
     assert placement.reach_up_m == pytest.approx(400.0, abs=TOL)
     assert placement.reach_down_m == pytest.approx(130.0, abs=TOL)
@@ -436,7 +492,7 @@ def test_exact_copies_read_from_a_file_do_not_make_a_fork(
     ]
     segments, _, dropped = read_segments(write(tmp_path / "r.geojson", collection(features)))
     assert dropped == 1
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert not placement.reach_fork
     assert placement.reach_down_m == pytest.approx(130.0, abs=TOL)
 
@@ -449,7 +505,7 @@ def test_the_reach_is_in_the_segments_coordinates_and_downstream_order(
         seg(1, ((X - 2000.0, Y + 500.0), (X - 500.0, Y + 500.0), (X, Y))),
         seg(2, ((X, Y), (X, Y - 2000.0))),
     ]
-    placement = gauge.place(at_station(gauge, X + 15.0, Y - 300.0), segments)
+    placement = gauge.place(at_station(gauge, X + 15.0, Y - 300.0), segments, cell_m=10.0)
     reach = placement.reach
     assert placement.position == pytest.approx((X, Y - 300.0), abs=TOL)
     assert placement.reach_up_m == pytest.approx(1000.0, abs=TOL)
@@ -470,12 +526,12 @@ def test_the_reach_is_in_the_segments_coordinates_and_downstream_order(
 
 
 def test_a_lake_centreline_flags_lake(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(kind="lake"))
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(kind="lake"), cell_m=10.0)
     assert placement.lake
 
 
 def test_a_river_line_does_not_flag_lake(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down())
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), river_down(), cell_m=10.0)
     assert not placement.lake
 
 
@@ -485,7 +541,7 @@ def test_kind_read_from_the_file_reaches_the_lake_flag(gauge: ModuleType, tmp_pa
         river(21, [(X, Y + 1500.0), (X, Y - 1500.0)], objekttype=None, vatnlnr=495),
     ]
     segments, _, _ = read_segments(write(tmp_path / "r.geojson", collection(features)))
-    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments)
+    placement = gauge.place(at_station(gauge, X + 10.0, Y), segments, cell_m=10.0)
     assert placement.lake
 
 
@@ -506,14 +562,16 @@ def branch(x: float) -> RiverSegment:
 def test_confluence_near_is_measured_from_p_at_100_m(
     gauge: ModuleType, branch_x: float, expected: bool
 ) -> None:
-    placement = gauge.place(at_station(gauge, X + 20.0, Y), [*river_down(), branch(branch_x)])
+    placement = gauge.place(
+        at_station(gauge, X + 20.0, Y), [*river_down(), branch(branch_x)], cell_m=10.0
+    )
     assert placement.objectid != 99
     assert placement.position == pytest.approx((X, Y), abs=TOL)
     assert placement.confluence_near is expected
 
 
 def test_its_own_river_is_not_a_confluence(gauge: ModuleType) -> None:
-    placement = gauge.place(at_station(gauge, X + 20.0, Y), river_down())
+    placement = gauge.place(at_station(gauge, X + 20.0, Y), river_down(), cell_m=10.0)
     assert placement.confluence_near is False
 
 
@@ -521,15 +579,15 @@ def test_its_own_river_is_not_a_confluence(gauge: ModuleType) -> None:
 # PR 4, lake gauges: `lake_seed` ("Lake gauges: the lake is the seed")
 # ---------------------------------------------------------------------------
 #
-# Interface pinned here, from the design's own signatures: `gauge.LAKE_GAP_M`
-# (30.0), `gauge.LakeSeed` (frozen; `rule`, `point`, `lakes`, `distance_m`)
-# and `gauge.lake_seed(gauge, placement, lakes, *, gap=LAKE_GAP_M)`; `Lake`
+# Interface pinned here, from the design's own signatures: `gauge.LakeSeed`
+# (frozen; `rule`, `point`, `lakes`, `distance_m`) and
+# `gauge.lake_seed(gauge, placement, lakes, *, gap)`, every call here passing
+# the gap, 30 m unless stated (increment 40 removes `LAKE_GAP_M`); `Lake`
 # is `io/station_set.py`'s frozen dataclass (`number`, `name`, `polygon`).
 # Placements come from `place` on a straight line down x = X, so `P` is
 # (X, Y) for a station at (X + d, Y); lakes are axis-aligned boxes, so every
 # station-to-lake distance below is a difference of two whole or half
-# metres at x 5e5 and exact in float64. Before the change, `lake_seed`,
-# `LakeSeed`, `LAKE_GAP_M` and `Lake` do not exist.
+# metres at x 5e5 and exact in float64.
 
 
 def lake(
@@ -544,13 +602,13 @@ def lake(
 
 def on_lake_line(gauge: ModuleType, station_x: float) -> Any:
     """The placement of a station at (station_x, Y) on a lake centreline down x = X."""
-    placement = gauge.place(at_station(gauge, station_x, Y), river_down(kind="lake"))
+    placement = gauge.place(at_station(gauge, station_x, Y), river_down(kind="lake"), cell_m=10.0)
     assert placement.lake and placement.position == pytest.approx((X, Y), abs=TOL)
     return placement
 
 
 def on_river_line(gauge: ModuleType, station_x: float) -> Any:
-    placement = gauge.place(at_station(gauge, station_x, Y), river_down())
+    placement = gauge.place(at_station(gauge, station_x, Y), river_down(), cell_m=10.0)
     assert not placement.lake and placement.position == pytest.approx((X, Y), abs=TOL)
     return placement
 
@@ -558,11 +616,8 @@ def on_river_line(gauge: ModuleType, station_x: float) -> Any:
 def seed_of(
     gauge: ModuleType, station_x: float, placement: Any, lakes: Sequence[Any], **kw: Any
 ) -> Any:
+    kw.setdefault("gap", 30.0)
     return gauge.lake_seed(at_station(gauge, station_x, Y), placement, lakes, **kw)
-
-
-def test_the_gap_is_30_m(gauge: ModuleType) -> None:
-    assert gauge.LAKE_GAP_M == 30.0
 
 
 def test_a_station_inside_a_lake_on_a_river_line_is_inside(gauge: ModuleType) -> None:
@@ -704,7 +759,7 @@ def test_a_millimetre_at_utm_magnitudes(gauge: ModuleType, offset: float, inside
 @pytest.mark.parametrize("bad", [math.nan, math.inf], ids=["nan", "inf"])
 def test_a_non_finite_station_is_not_seeded(gauge: ModuleType, bad: float) -> None:
     vatn = lake(X - 500.0, Y - 500.0, X + 20.0, Y + 500.0)
-    assert gauge.lake_seed(gauge.Gauge(x=bad, y=Y), None, [vatn]) is None
+    assert gauge.lake_seed(gauge.Gauge(x=bad, y=Y), None, [vatn], gap=30.0) is None
 
 
 def test_no_lakes_is_no_seed(gauge: ModuleType) -> None:

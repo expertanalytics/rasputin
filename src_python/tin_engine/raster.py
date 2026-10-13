@@ -33,3 +33,13 @@ def to_core(tile: DemTile) -> RasterView:
         delta_y=meta.delta_y,
         nodata=meta.nodata,
     )
+
+
+def to_core_lattice(tile: DemTile) -> RasterView:
+    """The tile's array on a unit lattice (x = column, y = -row, both spacings
+    1), for the hydrology, which reads only the shape, the values and NoData
+    (increment 40, 5.1). A tile in degrees is accepted: no coordinate crosses."""
+    if tile.array.flags.writeable:
+        raise ValueError("to_core_lattice needs a read-only array; build the tile through DemTile")
+    nodata = tile.meta.nodata
+    return raster_view(tile.array, x_min=0.0, y_max=0.0, delta_x=1.0, delta_y=1.0, nodata=nodata)
