@@ -1,8 +1,9 @@
 # Increment 44: the source catalogue as data, class rasters by path
 
-**Status: designed, not yet reviewed.** By `@architect`, 2026-10-13, on
-`b1353075` (branch `worktree-catalogue-data`), while Ola was away; the defaults
-taken are section 9's questions. Python only, one PR.
+**Status: designed; design review round 1 applied, not yet re-reviewed.** By
+`@architect`, 2026-10-13, on `b1353075` (branch `worktree-catalogue-data`),
+while Ola was away; the defaults taken are section 9's questions. Python only,
+one PR.
 
 ## 1. What Ola asked, and what this fixes
 
@@ -104,8 +105,8 @@ $RASPUTIN_DATA/sources.toml ──┴─> sources.catalogue(user_file) -> Catalo
                                      │ (pure: text in, frozen models out; refusals name the file)
 cli: data_root(environ) ─────────────┤
                                      ├─> fetch / fetch-stations / mesh --dem KEY / mesh --land-cover KEY
-mesh --land-cover VALUE ─> key in catalogue? ── yes: CacheRepository(root, id, nodata=entry.nodata)
-                                             └─ no:  TiffDemRepository([path])  (a file; refused if absent)
+mesh --land-cover VALUE ─> key in catalogue? ── yes: CacheRepository(root, id, nodata=entry.nodata, z_unit="metre")
+                                             └─ no:  TiffDemRepository([path], z_unit="metre")  (a file; refused if absent)
                        both satisfy land_cover_fractions.ClassRaster
                        ─> assign(): index_space (unchanged), row_areas(window, crs) (B4),
                           repository.load_class_window -> decode_class_window (B7)
@@ -153,6 +154,11 @@ Model changes, all in `sources.py`:
   `{url[0]}`) is refused. This keeps a user file from reaching object
   attributes through `str.format`, and catches a template typo at load rather
   than at fetch.
+- A `z_unit` on a `values = "classes"` entry is refused: class numbers are
+  not heights. `RemoteSource.read_unit` is the unit every reader of the
+  source's files is given: `"metre"` for classes, `z_unit` for heights
+  (4.7). `fetch/run.py`'s `parse_prefix` call and the cached land-cover route
+  pass it in place of `source.z_unit`.
 
 ### 4.3 Loading, and the user's entries
 
@@ -166,6 +172,8 @@ file's:
   `cache_root` and the user file (`<data root>/sources.toml`) both derive from
   it. No new option or variable.
 - No `RASPUTIN_DATA`, or no file there: the shipped entries alone, no message.
+  `--cache` alone, without `RASPUTIN_DATA`, loads no user entries: the cache
+  directory says where tiles are, not where the user file is.
 - The user file holds `[source.<id>]` tables only. A `[station.<id>]` table is
   refused: fetching a station list follows NVE's map-service layout, which is
   code (`fetch/nve.py`), so a second station service is a pull request anyway.
@@ -218,7 +226,7 @@ so `./mapbiomas-c11` is a file. For a path:
   each refusal names the file. A missing file: "neither a catalogue source
   (anadem-v1, glo30, mapbiomas-c11, ...) nor a file". `--land-cover-year` with
   a file is refused ("a file has no years"). No cache is needed.
-- The repository is `TiffDemRepository([path])`, which gains
+- The repository is `TiffDemRepository([path], z_unit="metre")` (4.7), which gains
   `load_class_window(name, window)`: its `load_window` with
   `decode_class_window` in place of `decode_window`. The tile name is the file
   name.
@@ -254,7 +262,10 @@ the two methods it calls (`footprints`, `load_class_window`), in place of
   naming the file, the value 0 and `n` ("class 0 means no data in rasputin's
   output; this raster's no-data is 255 and it holds class 0"). Merging a real
   class 0 into no data silently would be a wrong answer without a word
-  (section 9, Q5).
+  (section 9, Q5). The check sees only the window read for the chunk at
+  hand, not the whole file: a raster whose stored 0 lies outside every
+  window the mesh needs is read without a word, which is right, since that 0
+  reaches no triangle.
 - A raster with no tag whose scheme uses a class value for no data (GlobCover's
   230) keeps that value as a class; the class map names it.
 
@@ -264,9 +275,31 @@ the two methods it calls (`footprints`, `load_class_window`), in place of
 feet, its metre twin, whose `delta_x` and `delta_y` are already in metres):
 
 - Projected (`parse_crs(crs).is_geographic` false): every row
-  `delta_x * delta_y` m². P3: on the EPSG:3035
-  fixture the one triangle gets class 10 at 0.75 and 20 at 0.25, areas
-  240,000 and 80,000 m².
+  `delta_x * delta_y` m². These are areas on the projection's grid plane,
+  not on the ellipsoid (they differ by the projection's area scale, which
+  for a conformal projection is the square of the point scale). The scale
+  cancels in a triangle's fractions, up to its change across the triangle's
+  few cells, and rasputin writes fractions, not the m². P3: on the
+  EPSG:3035 fixture the one triangle gets class 10 at 0.75 and 20 at 0.25,
+  areas 240,000 and 80,000 m².
+- A class raster reads no heights. Increment 43's height-unit check refuses a
+  file whose coordinates are in feet and which states no height unit (P9:
+  "the DEM's coordinates are in US survey feet (EPSG:2229) and the file does
+  not say what unit its heights are in; give --z-unit us-ft, ft or m"), and
+  `--z-unit` does not apply to `--land-cover`. So both land-cover routes
+  build their repository with `z_unit="metre"` (4.1), and the fetcher reads a
+  classes entry with `read_unit` (4.2): a stated unit for values that are not
+  heights, which changes nothing else the header gives (P9: crs EPSG:26945,
+  cell 30.480060960121918 m, the same as a DEM in that CRS). For a file in
+  degrees or metres that states no height unit, giving `"metre"` returns the
+  same meta as giving nothing (P9b: the cached MapBiomas header, which states
+  no vertical GeoKey), so MapBiomas keeps its bytes. Left as it is: a class
+  raster whose GeoKeys state a height unit other than metres
+  (VerticalUnitsGeoKey 4099 = 9003) is refused, naming the file ("the file
+  says its heights are in US survey feet; --z-unit says metres", P9). Letting
+  it through would need a "no heights" switch threaded through the reader's
+  three entry points and both repositories, for a key a class raster has no
+  reason to carry.
 - Geographic: today's per-row polygon, with a `Geod` built from the CRS's
   ellipsoid as `Geod(a=semi_major_metre, rf=inverse_flattening)`, or `f=0`
   for a sphere (`inverse_flattening` 0). Not `CRS.get_geod()`: for EPSG:4326
@@ -280,7 +313,7 @@ feet, its metre twin, whose `delta_x` and `delta_y` are already in metres):
 
 ### 4.8 Shared TOML reading
 
-41's reader (`src_python/tin_engine/class_maps.py@b1353075:191-199`) moves into
+41's reader (`src_python/tin_engine/class_maps.py@b1353075:191-200`) moves into
 a new module, `tin_engine/toml_data.py`, `parse(text, model, label) -> model`:
 `tomllib.loads`, `model.model_validate`, and the same error text
 (`"<label>: <key path>: <message>"`, the TOML error with its line). Class maps
@@ -310,6 +343,10 @@ class RemoteSource(BaseModel):            # extra="forbid", frozen
     tile_name: str | None = None          # cog-tiles only
     tile_spacing: tuple[PositiveFloat, PositiveFloat] | None = None  # cog-tiles only, (lon, lat) degrees
     def tile_for(self, lat: int, lon: int) -> str: ...
+    @property
+    def read_unit(self) -> Literal["metre", "foot", "US survey foot"] | None: ...
+                                          # "metre" for classes, else z_unit; the Literal
+                                          # as written today, since io.models imports NumPy (T4)
 class StationSource(BaseModel): ...       # extra="forbid", frozen; fields as today
 @dataclass(frozen=True, slots=True)
 class Catalogue:
@@ -371,7 +408,9 @@ the three; `one-cog-per-year` without `years` or without `{year}`;
 `cog-tiles` without `tile_list_url`, `tile_name`, `tile_spacing` or `{name}`;
 `tile_name` or `tile_spacing` on a `one-cog` entry; a `tile_spacing` of 0 or
 negative; `credit` with `{when}`, with `{date.year}`, with `{url[0]}`;
-`tile_name` with `{x}`; a TOML syntax error (the message carries the line).
+`tile_name` with `{x}`; `z_unit` on a `values = "classes"` entry; a TOML
+syntax error (the message carries the line). `read_unit` is `"metre"` for
+`mapbiomas-c11` and `z_unit` (`"metre"`) for the two others.
 **T3 user entries.** With `RASPUTIN_DATA` unset, or set to a directory with
 no `sources.toml`, the catalogue is the shipped one. A file with
 `[source.my-dem]` (`one-cog`, the URL of `fetch_fixtures`' served projected
@@ -406,6 +445,22 @@ EPSG:3035, upper-left corner (4,000,000, 3,000,000), `PixelIsArea`, columns
 (4,000,800, 3,000,000) in EPSG:3035, repository `TiffDemRepository([file])`,
 gives classes `[10, 20]`, fractions `[0.75, 0.25]` exactly, code 10. Today:
 NaN rows and an `IndexError`.
+*In feet* (P9's fixture, 656 bytes): 8 × 8 `uint8` cells of 100 US survey
+feet in EPSG:2229, `PixelIsArea`, tie (0, 0) at (6,500,000, 2,100,000) ftUS,
+columns 0-3 class 10 and 4-7 class 20, no vertical GeoKey. Today
+`TiffDemRepository([file]).footprints()` refuses it with the "give --z-unit"
+message; with `z_unit="metre"` its meta has `crs` EPSG:26945, `file_crs`
+EPSG:2229 and `delta_x` 30.480060960121918. `row_areas(window, meta.crs)`
+gives 929.0341161327483 m² for all 8 rows; `assign` on the triangle whose
+corners are the index-space points (col, row) (2, 0), (6, 0), (2, 4) in EPSG:26945 metres
+(x from `meta.x_min - delta_x / 2`, y from `meta.y_max + delta_y / 2`) gives
+classes `[10, 20]`, float32 fractions `[0.75, 0.25]` (the float64 ratio is
+0.7499999999995 after the round trip through the CRS), code 10. The same
+file through the CLI, `mesh --land-cover <feet>.tif`, is not refused at the
+option check. With VerticalUnitsGeoKey 4099 = 9003 added, the land-cover
+route refuses it with a `GeoTiffError` naming the file (4.7). At the
+fetcher, `parse_prefix(<feet bytes>, nodata=None, z_unit=entry.read_unit)`
+for a `values = "classes"` entry reads it.
 **T9 ellipsoid.** On `class_fixtures`' EPSG:4326 raster, `row_areas` equals
 `Geod(ellps="WGS84")` row by row, bit for bit, for all 40 rows; on a window
 with the MapBiomas header's spacing (0.00026949458523585647°, top
@@ -435,9 +490,12 @@ names and colours, as the cached route's do.
 **T12 byte identity.** The existing land-cover suites
 (`test_land_cover_overlap.py`, `test_io_class_window.py`,
 `test_cli_mesh_land_cover_fractions.py`, `test_cli_mapbiomas.py`) pass with
-no edit except T7's entry, T4's import test, and the three `row_areas(window)`
-calls of `test_land_cover_overlap.py`, which gain `"EPSG:4326"` (no default:
-a default of WGS 84 is what hid B4).
+no edit except T7's entry, T4's import test, and the four `row_areas(window)`
+calls of `test_land_cover_overlap.py` (on its lines 230, 242 and 247, two on
+the last), which gain `"EPSG:4326"` (no default: a default of WGS 84 is what
+hid B4). The signature quoted in `tests/python/fraction_fixtures.py:28-30`
+follows: `row_areas(window: ClassWindow, crs: str)`, the area on the
+raster's own ellipsoid, or on its grid plane for a projected raster.
 
 The MCP schema test that quotes `mesh`'s help (`tests/python/test_mcp_schema.py`)
 follows the new `--land-cover` help and the new option. No mutation round: no
@@ -448,22 +506,38 @@ against master's snapshot) and the no-data branch (T10).
 
 | Where | Added | Removed |
 |---|---|---|
-| `sources.py`: loader, `catalogue`, two fields, format checks, `tile_for` | 55 | 80 (the entries) |
+| `sources.py`: loader, `catalogue`, two fields, format checks, `tile_for`, `read_unit` and its refusal | 60 | 80 (the entries) |
 | `toml_data.py` new; `class_maps.py` calls it | 15 | 12 |
-| `fetch/run.py`: `tile_for`, `tile_spacing` | 4 | 9 |
-| `cli.py`: `data_root`, the catalogue threaded through every site that reads `SOURCES`, `--land-cover` by path, `--land-cover-map`, the record | 85 | 30 |
+| `fetch/run.py`: `tile_for`, `tile_spacing`, `read_unit` | 5 | 10 |
+| `cli.py`: `data_root`, the catalogue threaded through every site that reads `SOURCES`, `--land-cover` by path, `--land-cover-map`, the record, `z_unit="metre"` on both land-cover routes | 86 | 31 |
 | `land_cover_fractions.py`: `ClassRaster`, `row_areas` | 15 | 6 |
 | `io/repository.py`, `io/cog.py` | 15 | 2 |
-| **Total** | **about 190** | **about 140** |
+| **Total** | **about 195** | **about 145** |
 
 About **50 net lines**; the data moves to a TOML file, which does not count
 (`CLAUDE.md` §2). With 41's worst case, +39 % on what is added
-(190 × 1.39 = 264), about **125 net**. The audit's 160 counted the data as
+(195 × 1.39 = 271), about **125 net**. Design review round 1 added about
+6 lines and 2 removed (the height-unit route of 4.7); the estimate does not
+move. The audit's 160 counted the data as
 staying. One PR, well under 700. Not the short path: over 50 lines in the
 worst case.
 
 **Refine or mesh code: none**, so no `@perf` acceptance run.
 `land_cover_fractions.py` runs after the mesh is made.
+
+**Speed (P8, measured on an Apple M1 Max on AC power, Python 3.14.7,
+median of 15 fresh interpreters).** Every run of any command that imports
+`tin_engine.cli` gains the catalogue load: reading the shipped file through
+`importlib.resources` (0.71 ms for a 4.8 kB file of the same package) and
+parsing and validating the four entries (0.31 ms for a 3,036-byte draft in
+4.2's shape), about **1 ms against 189 ms** for importing `tin_engine.cli`
+today. Part of the 0.31 ms is validation the Python entries already pay at
+import. `tomllib` adds nothing: `tin_engine.cli` already imports it, through
+`class_maps`. A user file adds one more read and parse of its size. A mesh
+with `--land-cover` gains one CRS read and one `Geod` per chunk of 2^18
+triangles in `row_areas`: 0.70 ms (EPSG:4326) or 1.0 ms (EPSG:3035) on the
+first call in a fresh process, 0.032 ms on later ones; today's per-row loop
+on a 1,000-row MapBiomas window takes 2.2 ms. Neither is worth caching.
 
 Order: red (`@tester`, T1-T12 and the layering rows), green (`@developer`),
 code review. The master snapshot for T1 is taken in the red commit, from
@@ -508,6 +582,13 @@ tree, asserted by each script):
   `probe_tiles.out`;
 - `probe_geod.py` (P7: a `Geod` from the CRS against `ellps="WGS84"`),
   output `probe_geod.out`.
+- `probe_speed.py <tree>` (P8: the catalogue load and the CRS read in
+  `row_areas`, timed), output `probe_speed.out`; run on `10170928`, which
+  holds the same code as `b1353075`;
+- `probe_feet.py <tree> <scratch dir> /Users/skavhaug/projects/rasputin_data`
+  (P9: a class raster in a feet CRS through increment 43's height-unit check,
+  as merged; P9b: the cached MapBiomas header), output `probe_feet.out`; run
+  on `10170928`.
 
 The figures quoted above, abridged (`...` and the box growths in brackets are
 in the saved files):
@@ -529,6 +610,13 @@ P6  S87, east edge 0.0063 deg west of 166 E (10" band): today 1 tiles; own spaci
 P6  N60, every edge 0.003 deg inside 10..11 E, 60..61 N: today 9 tiles; own spacing 1 tiles; design 3 tiles
 P7  CRS(EPSG:4326).get_geod(): MapBiomas rows sampled 20929, differing 8862
 P7  Geod(a=, rf=) from CRS(EPSG:4326).ellipsoid: MapBiomas rows sampled 20929, differing 0
+P8  parse and validate the catalogue 0.314 ms | read a 4.8 kB shipped file 0.712 ms | import tin_engine.cli 188.6 ms | tomllib already imported: True
+P8  CRS read and Geod: EPSG:4326 first 0.702 ms, EPSG:3035 first 1.005 ms, later 0.032 ms | row_areas, 1,000 rows today 2.150 ms
+P9  read_page, no z_unit: GeoTiffError the DEM's coordinates are in US survey feet (EPSG:2229) and ... give --z-unit us-ft, ft or m
+P9  z_unit='metre': crs EPSG:26945 file_crs EPSG:2229 delta 30.480060960121918
+P9  4099 = 9003, z_unit='metre': GeoTiffError the file says its heights are in US survey feet; --z-unit says metres
+P9  rows of delta_x * delta_y m2: 929.0341161327483 | classes [10, 20] fractions [0.7499999999995035, 0.25000000000049644]
+P9b vertical GeoKeys: none | meta with z_unit='metre' equals meta with none: True
 ```
 
 ## Review
