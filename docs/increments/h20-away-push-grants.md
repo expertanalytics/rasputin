@@ -411,3 +411,11 @@ recording commit with its own `Review:` trailer. The guard's edit and the new
    2026-10-12), a merge of master, a push and one more enqueue can happen
    before morning; the same head is never enqueued twice. Default: one per
    head, as designed. The alternative is one enqueue per grant per night.
+
+## Ola's rulings
+
+Ola, 2026-10-13, on section 7's two questions: "We use the safer option on 1, yes to 2." Question 1: the guard reads a verdict a hook copies from `@reviewer`'s handback into harness state, not a commit line. Question 2: one enqueue per reviewed head.
+
+## Review
+
+**Design review, round 1, 2026-10-13.** Range `97c10c4d..fa6fdaa6`, 0 counted lines, @reviewer: CHANGES REQUESTED. Swap the Review commit line for a hook-recorded verdict (Ola's ruling 1: hook event and persona field named and checked on this Claude Code version, fail closed; one `Review: <verdict> <40-hex sha>` line in the handback; `reviews.jsonl` in every mode; `reviewed(H)` the newest record on H's first-parent chain within origin/master..H; tests 20, 21, 31 replaced and four added; size about 250), correct the auto-merge race claim in section 3.2 (gh turns on auto-merge when checks are pending and GitHub keeps it after a push by anyone with write access), refuse shell-expanded words (`-C ~/x`, `-C =x`; grant names `[A-Za-z0-9._/-]+`), list everything the guard trusts in section 3.4 (including `refs/remotes/origin/master` and the harness state), and fix line 36's pointer to section 3.4.
