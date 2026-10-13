@@ -41,7 +41,7 @@ from pyproj import CRS
 from pyproj.enums import WktVersion
 
 from class_map_snapshot import CORINE_NATURAL
-from cli_driver import invoke
+from cli_helpers import invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from gpkg_fixtures import needs_rtree
 from tin_engine.crs import srs_entry

@@ -40,7 +40,7 @@ from shapely.geometry import shape
 
 import batch_fixtures as bf
 import gauge_fixtures as gf
-from cli_driver import USAGE, invoke, mesh_to_vtk, plain, ran
+from cli_helpers import USAGE, invoke, mesh_to_vtk, plain, ran
 from geodesy_fixtures import TWIN_DX, TWIN_DY, TWIN_LAT0, TWIN_LON0, metres_per_degree, to_4326
 from geographic_fixtures import geographic_keys, tiff
 from geotiff_fixtures import KARTVERKET, needs_codecs

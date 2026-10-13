@@ -36,7 +36,7 @@ from numpy.testing import assert_array_equal
 import tin_engine.cli as cli
 import tin_engine.edge_strip as edge_strip
 import tin_engine.final_check as final_check
-from cli_driver import UTM33, geojson, invoke, refused, write_tiff
+from cli_helpers import UTM33, geojson, invoke, refused, write_tiff
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
 from test_cli_constraint_feet_all_paths import Spy
 from test_cli_mesh_geographic import TARGET, domain_4674, geographic_dem
