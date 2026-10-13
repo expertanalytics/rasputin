@@ -162,6 +162,7 @@ paths = [
     "src_python/tin_engine/catchment.py",
     "src_python/tin_engine/catchment_batch.py",
     "src_python/tin_engine/catchment_core.py",
+    "src_python/tin_engine/cli.py",
     "src_python/tin_engine/crs.py",
     "src_python/tin_engine/dem_input.py",
     "src_python/tin_engine/domain.py",
