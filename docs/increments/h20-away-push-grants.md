@@ -1,6 +1,6 @@
 # Harness h20: away-mode push grants, and wording fixes without a second review
 
-Status: **design, review round 2 applied**, 2026-10-13, by @architect, on `worktree-night-push` off
+Status: **green, code review round 1 recorded**, 2026-10-13, on `worktree-night-push` off
 master `97c10c4d`. One PR, by day: every production file it changes is
 governed. Implements two proposals Ola approved on 2026-10-13 from the morning
 retrospective `docs/retrospectives/2026-10-13-night-40-41-42.md` (branch
@@ -296,7 +296,7 @@ words. Internals, each testable alone: `granted_act(command) -> Act | None`
 tuple[str, ...]` (pure), `parse_review(text) -> tuple[str, str] | None`
 (pure, shared with `record_review.py`: the verdict and sha of the one
 `Review:` line, or None), `reviewed(repo, head, records) -> str | None`
-(None or the reason, §3.3), `log_use`.
+(None or the reason, §3.3), `jsonl(path)`; `review_of` also returns the record relied on.
 
 `judge` returns `None` unless the mode is `on` and `reasons` is `[PUSH]` or
 `[PR]` (guard_push's reason strings: no force, no `--no-verify`, no history
@@ -304,11 +304,11 @@ rewrite, no unknown command).
 
 In `guard_push.main`, after `reasons` is computed and before `emit`:
 
-- `Grant(passed=True)`: append one line to `<state>/grants-used.jsonl`
+- `judge`, before returning `Grant(passed=True)`, appends one line to `<state>/grants-used.jsonl`
   (`{"at", "window": flag since, "branch", "act", "head", "review": [V's sha,
   V's at]}`, one
   write, as `harness_mode.append_queue`), then print nothing and return: the
-  act passes. If the line cannot be written, the act is refused (an enqueue
+  act passes. If the line cannot be written, `judge` returns `Grant(passed=False)` instead (an enqueue
   that cannot be counted is not granted).
 - `Grant(passed=False)`: `why` gains "; granted branch <b>, but <reason>", so
   the refusal and its queue line say why the grant did not apply.
@@ -582,3 +582,5 @@ Ola, 2026-10-13, on section 7's two questions: "We use the safer option on 1, ye
 **Design review, round 3, 2026-10-13.** Range `fb2d71e6..8b403eff`, 0 counted lines, @reviewer: APPROVED. Round 2's three items and its suggestion are applied: test 9's `--body-file ~/f` is the expansion mutant's kill, test 30 is rebuilt so the full-walk mutant is caught, `--opt==x` and `--opt=~x` are refused, and section 3.7 points to reviewer.md's "Feedback format" item 1. Suggestion: test 30's quoted reason should say "refuses" without naming X, since the full-walk mutant may refuse the merge of `other` first.
 
 **Ruling, 2026-10-13 (Ola, "1, always between the two parts").** In the report `away.py --back` prints, the push-grants section always sits between the queued acts and the ASK OLA lines, "Push grants: (none)" included. The green step `4ad42e45` put "(none)" after the ASK OLA lines to keep `test_back_prints_the_queue_by_branch_and_archives_it` unchanged; @tester changes that test's expected lines to include "Push grants: (none)" before the ASK OLA heading, and @developer moves the line.
+
+**Code review, round 1, 2026-10-13.** Range `97c10c4d..a5df3a0b`, 320 counted lines, @reviewer: APPROVED WITH WORDINGS. Three design-text wordings (status line, `log_use`, where grants-used is written), applied by the main session; kill record complete (12 targets, the one-command mutant equivalent through `unexpandable()`); the shell-written governed files read in full and match the design. Merge waits on the §3.8 settings entries, the live check and the §3.7 rule text, which need Ola. Suggestions: unpack away.py's `done = [...]` and push_grant `changes()`'s merge test; wrap `grant_lines` in `--back` so a git failure cannot stop the queue being archived.
