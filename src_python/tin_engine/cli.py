@@ -337,7 +337,8 @@ _INSTALL_MCP_HELP = INSTALL_MCP.replace("[", r"\[") if app.rich_markup_mode else
 
 @app.command(
     help="Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
-    "\n\nOne tool per command, each call run as ``python -m tin_engine`` (increment 37). "
+    "\n\nOne tool per command, each call run in a process of its own (``python -m tin_engine``), "
+    "so a cancelled call can be stopped and a crash ends only that call. "
     f"Needs the ``mcp`` extra: ``{_INSTALL_MCP_HELP}``."
 )
 def mcp(
@@ -2541,7 +2542,7 @@ def catchment(
         typer.Option(
             "--rivers",
             help="River lines (GeoJSON, in any CRS): the seed is a gauge, placed on the "
-            "nearest line and on the DEM's flow path along it (increment 29).",
+            "nearest line and on the DEM's flow path along it.",
         ),
     ] = None,
     map_radius: Annotated[
