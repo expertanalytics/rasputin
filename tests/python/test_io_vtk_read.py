@@ -8,7 +8,7 @@ POINTS and POLYGONS, skipping LINES. It refuses ASCII ("write the mesh without
 `read_mesh(write_vtk(...))` gives the same vertices, triangles and crs bit for
 bit; the three refusals are in plain words.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 `MeshArrays` has `vertices` (float64, `(n, 3)`), `triangles` (int64,
 `(T, 3)`) and `crs` (str); a refusal is a `ValueError`.
 """

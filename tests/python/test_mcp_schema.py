@@ -229,7 +229,7 @@ class TestArgvRoundTrip:
 
 # ---------------------------------------------------------------- T3
 
-#: Section 1's eight commands as tool names. Their parameter counts are not
+#: Section 1's eight commands as tool names, and the snow run's two. Their parameter counts are not
 #: pinned: the test below holds each schema's properties equal to the command's
 #: own click parameters, which implies the count, and a pinned count would turn
 #: red on every master merge that adds a CLI option (as `mesh` 34 -> 36 did when
@@ -237,7 +237,7 @@ class TestArgvRoundTrip:
 #: the schema.
 TOOL_NAMES = {
     "mesh", "draw", "fetch", "catchment", "station_catchments",
-    "fetch_stations", "palette", "version",
+    "fetch_stations", "palette", "version", "synthetic_terrain", "snow",
 }  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -293,7 +293,7 @@ RUN_RESULT_FIELDS = {
 
 
 class TestTheRealApp:
-    def test_the_eight_commands_in_the_clis_order(self) -> None:
+    def test_the_ten_commands_in_the_clis_order(self) -> None:
         tools = derived(app)
         assert list(tools) == tool_names(app)
         assert set(tools) == TOOL_NAMES
@@ -340,9 +340,11 @@ class TestTheRealApp:
             mesh.model.model_validate({"out": "x.vtk", "threads": -1})
 
     def test_the_whole_tool_list_stays_small(self) -> None:
-        # 16,575 bytes measured (section 3); the bound leaves room for help text to grow.
+        # 22,434 bytes measured with `synthetic-terrain` and `snow` (16,575 for the
+        # first eight, section 3). The bound is about 20 % above the measure, rounded
+        # up to a thousand, as 20,000 was above 16,575: room for help text to grow.
         size = sum(len(json.dumps(d.tool().input_schema)) for d in mcp_schema.derive(app))
-        assert size < 20_000, size
+        assert size < 27_000, size
 
     def test_descriptions_and_annotations(self) -> None:
         tools = {name: d.tool() for name, d in derived(app).items()}

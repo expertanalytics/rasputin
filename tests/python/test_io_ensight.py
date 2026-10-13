@@ -14,7 +14,7 @@ takes every count from the bytes. Its layout is the probe writer's
 steps; `TestReader` checks the reader on bytes laid out as that probe lays
 them out, so the reader is known to accept what ParaView accepted.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `geometry_bytes(vertices, triangles, *, origin) -> bytes`: vertices
   `(n, 3)` float64, triangles `(T, 3)` 0-based; `origin` the `(x0, y0)`

@@ -9,10 +9,7 @@ section 7's R7: a 2-triangle mesh, one 30-degree south facet and one
 30-degree north, through ten April days: the south facet's SWE falls faster
 under both corrections and equally under `none`; mass (I1) holds over the run.
 
-The run needs the sun (`_core.sun_positions`, PR 2), so every test here also
-fails until PR 2 is built.
-
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `run.run(job, geometry, *, lat_deg, lon_deg, height_m)`: the site of the
   sun, passed by the caller (the CLI takes it from the mesh's centre).
@@ -177,7 +174,9 @@ class TestWiring:
         for a, b, c in zip(out["none"], out["melt_factor"], out["threshold"], strict=True):
             assert_array_equal(a.swe, b.swe)
             assert_array_equal(a.swe, c.swe)
-            assert a.swe[0] < 600.0 or a.time_hours == 0.0
+        # Not equal by doing nothing: melt is held as liquid water until it passes
+        # a tenth of the ice, so SWE first falls after about four days, then does.
+        assert out["none"][-1].swe[0] < 600.0
 
     def test_the_frames_do_not_depend_on_the_thread_count(
         self, mods: dict[str, ModuleType], facets: Any, runs: dict[str, list[Any]]

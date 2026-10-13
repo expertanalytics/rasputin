@@ -17,7 +17,7 @@ each of the last two skips when absent.
 
 Every run here needs the sun (`_core.sun_positions`, PR 2).
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - The output folder holds exactly `snow.case`, `snow.geo`, `snow.json`,
   `swe<NNNN>.var` and `sca<NNNN>.var` for frames 0.., and `slope_deg.var`,
@@ -46,7 +46,7 @@ import numpy.typing as npt
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from cli_driver import USAGE, invoke, ran
+from cli_helpers import USAGE, invoke, ran, squashed
 from ensightread import Animation
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.io.vtk_legacy import write_vtk
@@ -106,12 +106,17 @@ def snow(mesh: Path, out: Path, *args: str) -> str:
     return ran("snow", "--mesh", str(mesh), "--out", str(out), *args)
 
 
+BINS = "bins must be between 1 and 64, not 65"
+SIDEWAYS = "'sideways' is not one of 'none', 'melt-factor', 'threshold'"
+
+
 def refused(mesh: Path, out: Path, *args: str, says: str) -> None:
     before = sorted(out.iterdir()) if out.is_dir() else None
     code, output = invoke("snow", "--mesh", str(mesh), "--out", str(out), *args)
     assert code == USAGE, output
     assert "Traceback" not in output and "No such option" not in output, output
-    assert says in output, f"{says!r} not in {output!r}"
+    # Squashed: Rich wraps a long path or a hyphenated word anywhere in its panel.
+    assert squashed(says) in squashed(output), f"{says!r} not in {output!r}"
     if before is None:
         assert not out.exists() or not any(out.iterdir())
     else:
@@ -278,7 +283,7 @@ class TestRefusals:
         out = tmp_path / "used"
         out.mkdir()
         (out / "keep.txt").write_text("x", encoding="ascii")
-        refused(mesh, out, "--sun-correction", "none", says="new or empty directory")
+        refused(mesh, out, "--sun-correction", "none", says="used must be a new or empty directory")
 
     def test_a_mesh_in_degrees(self, tmp_path: Path) -> None:
         mesh = mesh_file(tmp_path / "geo.vtk", crs="EPSG:4326")
@@ -308,14 +313,14 @@ class TestRefusals:
             "none",
             "--start",
             "2027-04-10T00:00:00",
-            says="time zone",
+            says="2027-04-10T00:00:00 has no time zone; give it an offset or Z",
         )
 
     def test_65_bins(self, mesh: Path, tmp_path: Path) -> None:
-        refused(mesh, tmp_path / "out", "--sun-correction", "none", "--bins", "65", says="bins")
+        refused(mesh, tmp_path / "out", "--sun-correction", "none", "--bins", "65", says=BINS)
 
     def test_an_unknown_correction(self, mesh: Path, tmp_path: Path) -> None:
-        refused(mesh, tmp_path / "out", "--sun-correction", "sideways", says="sideways")
+        refused(mesh, tmp_path / "out", "--sun-correction", "sideways", says=SIDEWAYS)
 
     def test_frames_between_steps(self, mesh: Path, tmp_path: Path) -> None:
         refused(
@@ -327,7 +332,7 @@ class TestRefusals:
             "90",
             "--frame-hours",
             "2",
-            says="frame",
+            says="a frame every 2 h is not a whole number of 90-minute steps",
         )
 
 

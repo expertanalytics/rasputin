@@ -9,7 +9,7 @@ gamma). A zero-area triangle gets the vertical normal and is counted, never a
 NaN; a normal pointing down is turned up. Section 7's R3: normals turned by
 +0.0984 degrees at (506000, 6800000) in EPSG:25833.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `snow.geometry.triangle_geometry(vertices, triangles, convergence_deg) ->
   TriangleGeometry` with `normals` (`(T, 3)` float64, unit, up >= 0),

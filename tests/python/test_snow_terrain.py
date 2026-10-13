@@ -10,7 +10,7 @@ under `docs/`). Section 7's R5: `encode_geotiff` read back by `io/geotiff.py`
 gives shape 1201 x 1201, step 10, EPSG:25833 and z from 234.0 to 1924.4 within
 0.1 m.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `snow.terrain.TerrainSpec`, frozen, defaults `size` 1201, `step` 10.0,
   `x0` 494000.0, `y0` 6806000.0 (node (0, 0), the north-west corner), `epsg`
@@ -34,7 +34,7 @@ import numpy.typing as npt
 import pytest
 from numpy.testing import assert_array_equal
 
-from cli_driver import ran
+from cli_helpers import ran
 from tin_engine.io.geotiff import decode_dem
 
 

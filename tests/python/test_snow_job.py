@@ -8,7 +8,7 @@ every 24 hours, 600 mm initial SWE) and *4.8 The Python surface* (times are
 timezone-aware UTC; a naive one is refused). `snow.json` records the job as
 the model dumped, so the dump must load back to an equal job.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `SyntheticSpring(start, days, step_minutes, samples_per_step)`; `days`,
   `step_minutes` and `samples_per_step` at least 1.
@@ -96,8 +96,16 @@ class TestSnowJob:
         assert params.SnowJob.model_validate_json(job.model_dump_json()) == job
 
     def test_a_frame_interval_between_steps_is_refused(self, params: ModuleType) -> None:
+        # 2 h is 120 minutes, 1 1/3 steps of 90; the default 24 h is exactly 16.
         spring = params.SyntheticSpring(step_minutes=90)
-        refused_on(("frames",), lambda: self.job(params, spring=spring))
+        frames = params.FrameSpec(every_hours=2)
+        caught = refused_on(("frames",), lambda: self.job(params, spring=spring, frames=frames))
+        assert "a frame every 2 h is not a whole number of 90-minute steps" in str(caught)
+
+    def test_the_default_daily_frame_on_90_minute_steps_is_accepted(
+        self, params: ModuleType
+    ) -> None:
+        self.job(params, spring=params.SyntheticSpring(step_minutes=90))
 
     def test_a_frame_interval_of_whole_steps_is_accepted(self, params: ModuleType) -> None:
         spring = params.SyntheticSpring(step_minutes=90)

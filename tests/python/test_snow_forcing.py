@@ -18,7 +18,7 @@ R1 (hand planes, one sample, sun at 30 degrees due south, beam 800): +292.8,
 15 E, 96 samples of 15 minutes): +68.9, -113.5, -12.6, -12.1 W/m^2 within
 0.5. Only R2 and `TestSunAndBeam` need the sun binding (PR 2).
 
-Interface assumed (names chosen here and listed in the handback):
+Interface:
 
 - `forcing.radiation_anomaly(normals (n, 3), sun (S, 3), beam (S,)) -> (n,)`.
 - `forcing.beam(elevation_deg, distance_au) -> array`, elementwise.
