@@ -63,6 +63,7 @@ from .models import (
     IndexWindow,
     RasterMeta,
     TileFootprint,
+    ZUnit,
 )
 
 if TYPE_CHECKING:
@@ -100,11 +101,17 @@ class TiffDemRepository:
 
     Paths are resolved and deduplicated, so two spellings of one file are one
     tile. A footprint's name is the file name, so two files sharing one are
-    refused. `nodata` is the caller's sentinel for every tile (`decode_dem`).
+    refused. `nodata` is the caller's sentinel and `z_unit` its height unit
+    for every tile (`decode_dem`).
     """
 
     def __init__(
-        self, paths: Iterable[Path], *, nodata: float | None = None, threads: int = 1
+        self,
+        paths: Iterable[Path],
+        *,
+        nodata: float | None = None,
+        threads: int = 1,
+        z_unit: ZUnit | None = None,
     ) -> None:
         self._paths: dict[str, Path] = {}
         for path in sorted({Path(p).resolve() for p in paths}, key=str):
@@ -113,12 +120,17 @@ class TiffDemRepository:
                     f"two tiles named {path.name}: {self._paths[path.name]} and {path}"
                 )
             self._paths[path.name] = path
-        self._nodata, self._threads = nodata, threads
+        self._nodata, self._threads, self._z_unit = nodata, threads, z_unit
         self._footprints: tuple[TileFootprint, ...] | None = None
 
     @classmethod
     def from_directory(
-        cls, directory: Path, *, nodata: float | None = None, threads: int = 1
+        cls,
+        directory: Path,
+        *,
+        nodata: float | None = None,
+        threads: int = 1,
+        z_unit: ZUnit | None = None,
     ) -> TiffDemRepository:
         """The `*.tif` and `*.tiff` files directly in `directory`, not recursively.
 
@@ -129,7 +141,7 @@ class TiffDemRepository:
         ]
         if not paths:
             raise ValueError(f"no .tif or .tiff file in the directory {directory}")
-        return cls(paths, nodata=nodata, threads=threads)
+        return cls(paths, nodata=nodata, threads=threads, z_unit=z_unit)
 
     def footprints(self) -> tuple[TileFootprint, ...]:
         """Read every header once, on the first call, and keep them (R2)."""
@@ -147,8 +159,8 @@ class TiffDemRepository:
     def load_window(self, name: str, window: IndexWindow) -> DemTile:
         """`window` of tile `name`, decoding only the blocks it meets (23a-1)."""
 
-        def read(stream: Any, *, nodata: float | None) -> DemTile:
-            meta, dtype, page = read_page(stream, nodata=nodata)
+        def read(stream: Any, **keys: Any) -> DemTile:
+            meta, dtype, page = read_page(stream, **keys)
             blocks = LocalTiffBlocks(page, stream, name)
             return decode_window(blocks, meta, dtype, window, threads=self._threads)
 
@@ -162,7 +174,7 @@ class TiffDemRepository:
         path = self._paths[name]
         with path.open("rb") as stream:
             try:
-                return reader(stream, nodata=self._nodata)
+                return reader(stream, nodata=self._nodata, z_unit=self._z_unit)
             except GeoTiffError as exc:
                 raise GeoTiffError(f"{path.name}: {exc}") from exc
 
@@ -238,10 +250,16 @@ class CacheRepository:
     the copy it claims to be (`CacheError`) or is absent (`NotCached`)."""
 
     def __init__(
-        self, root: Path, source: str, *, nodata: float | None = None, threads: int = 1
+        self,
+        root: Path,
+        source: str,
+        *,
+        nodata: float | None = None,
+        threads: int = 1,
+        z_unit: ZUnit | None = None,
     ) -> None:
         self._directory, self._source, self._nodata = Path(root) / source, source, nodata
-        self._threads = threads
+        self._threads, self._z_unit = threads, z_unit
         self._pages: dict[str, tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]] = {}
         self._fetched: dict[str, datetime.date | None] = {}
 
@@ -267,7 +285,9 @@ class CacheRepository:
                         "lists; re-fetch with --refresh"
                     )
                 try:
-                    self._pages[name] = read_page(io.BytesIO(header), nodata=self._nodata)
+                    self._pages[name] = read_page(
+                        io.BytesIO(header), nodata=self._nodata, z_unit=self._z_unit
+                    )
                 except GeoTiffError as exc:
                     raise GeoTiffError(f"{self._source}/{name}: {exc}") from exc
         return tuple(

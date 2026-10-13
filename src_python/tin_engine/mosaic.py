@@ -194,6 +194,10 @@ def plan_mosaic(
             f"budget of {cap} bytes (set with --memory-budget; half the machine's memory when "
             "it is not set); narrow it with --bbox"
         )
+    units = {p.footprint.meta.z_unit: p.footprint.name for p in selected}
+    if len(units) > 1:  # the record names one unit
+        found = ", ".join(f"{name} in {unit}" for unit, name in sorted(units.items()))
+        raise MosaicError(f"tiles give heights in different units: {found}")
     vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
     meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)
     tiles = tuple(_placement(p, r0, c0, r1, c1) for p in selected)
@@ -399,6 +403,8 @@ def _grid(
         nodata_source=first.nodata_source,
         pixel_is_area=first.pixel_is_area,
         vertical_unit_assumed=vertical_unit_assumed,
+        z_unit=first.z_unit,
+        file_crs=first.file_crs,
     )
 
 

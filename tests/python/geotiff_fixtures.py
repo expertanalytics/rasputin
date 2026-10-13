@@ -71,6 +71,8 @@ PIXEL_IS_POINT = 2
 USER_DEFINED = 32767
 METRE = 9001
 FOOT = 9002
+#: Clarke's foot: an EPSG length unit the reader does not read (increment 43, 4.2).
+CLARKE_FOOT = 9005
 
 #: ETRS89 / UTM 33N, the real fixture's projected CRS.
 EPSG_UTM33 = 25833
@@ -481,10 +483,11 @@ REFUSALS: tuple[Refusal, ...] = (
         ("3076", "ProjLinearUnitsGeoKey", "9002"),
     ),
     Refusal(
+        # Increment 43 reads 9002 and 9003; a unit outside its table is still refused.
         "refuses_non_metre_vertical_unit",
-        lambda: micro_tiff(geokeys=with_keys({VERTICAL_UNITS: FOOT})),
-        lambda t: _geo(t).get("VerticalUnitsGeoKey") == FOOT,
-        ("4099", "VerticalUnitsGeoKey", "9002"),
+        lambda: micro_tiff(geokeys=with_keys({VERTICAL_UNITS: CLARKE_FOOT})),
+        lambda t: _geo(t).get("VerticalUnitsGeoKey") == CLARKE_FOOT,
+        ("4099", "VerticalUnitsGeoKey", "9005"),
     ),
     Refusal(
         "refuses_unparseable_nodata",
@@ -542,7 +545,8 @@ PROJ_SCALE_AT_NAT_ORIGIN = 3092
 #: ProjCoordTransGeoKey (3075) codes.
 CT_TRANSVERSE_MERCATOR = 1
 CT_LAMBERT_CONF_CONIC_2SP = 8
-CT_ALBERS_EQUAL_AREA = 11
+#: Not read even after increment 43, which reads ten methods.
+CT_AZIMUTHAL_EQUIDISTANT = 12
 
 DEGREE = 9102
 GRAD = 9105
@@ -684,8 +688,9 @@ PARAMETRIC_DEFECTS: tuple[ParametricDefect, ...] = (
         _lacks("ProjCoordTransGeoKey"), ("3075", "ProjCoordTransGeoKey"),
     ),
     ParametricDefect(
-        "method_albers", 3, {PROJ_COORD_TRANS: CT_ALBERS_EQUAL_AREA},
-        _is("ProjCoordTransGeoKey", CT_ALBERS_EQUAL_AREA), ("3075", "ProjCoordTransGeoKey", "11"),
+        "method_azimuthal_equidistant", 3, {PROJ_COORD_TRANS: CT_AZIMUTHAL_EQUIDISTANT},
+        _is("ProjCoordTransGeoKey", CT_AZIMUTHAL_EQUIDISTANT),
+        ("3075", "ProjCoordTransGeoKey", "12"),
     ),
     ParametricDefect(
         "datum_absent", 4, {GEOGRAPHIC_TYPE: None},
@@ -738,8 +743,8 @@ PARAMETRIC_DEFECTS: tuple[ParametricDefect, ...] = (
         _lacks("ProjLinearUnitsGeoKey"), ("3076", "ProjLinearUnitsGeoKey", "absent"),
     ),
     ParametricDefect(
-        "linear_unit_foot", 10, {PROJ_LINEAR_UNITS: FOOT},
-        _is("ProjLinearUnitsGeoKey", FOOT), ("3076", "ProjLinearUnitsGeoKey", "9002"),
+        "linear_unit_clarke_foot", 10, {PROJ_LINEAR_UNITS: CLARKE_FOOT},
+        _is("ProjLinearUnitsGeoKey", CLARKE_FOOT), ("3076", "ProjLinearUnitsGeoKey", "9005"),
     ),
     ParametricDefect(
         "parameter_absent", 11, {PROJ_FALSE_ORIGIN_LONG: None},

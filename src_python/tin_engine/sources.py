@@ -57,6 +57,8 @@ class RemoteSource(BaseModel):
     cite: tuple[str, ...] = ()
     #: The class map (`tin_engine.class_maps`) that names and colours its classes (41).
     class_map: str = ""
+    #: The height unit the catalogue states for files that do not.
+    z_unit: Literal["metre", "foot", "US survey foot"] | None = None
 
     @model_validator(mode="after")
     def _per_year_has_years(self) -> Self:
@@ -106,6 +108,7 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
             "anadem_v1_compressed_COG.tif",
             crs="EPSG:4674",
             nodata=-9999.0,
+            z_unit="metre",
             credit="Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital "
             "Terrain Model for South America. Distributed by OpenTopography. "
             "https://doi.org/10.5069/G9736P4G.",
@@ -123,6 +126,7 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
             tile_list_url=f"{_GLO30}/tileList.txt",
             crs="EPSG:4326",
             nodata=None,
+            z_unit="metre",
             # The licence's Art. 6(b) notice for adapted data, verbatim but "(c)" for the sign.
             credit="produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus "
             "Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union "

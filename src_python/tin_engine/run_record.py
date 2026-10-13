@@ -24,6 +24,7 @@ WORDING = {
     "dem_tiles": "The tiles or downloaded blocks used",
     "dem_seams": "Overlapping tiles that disagree, and by how much",
     "dem_vertical_unit": "Unit of z",
+    "dem_file_crs": "The DEM file's own coordinate system, when it is in feet",
     "dem_crs": "The DEM's own coordinate system",
     "dem_transform": "Conversion from the DEM's coordinate system",
     "resampled_grid": "The grid the DEM was interpolated onto",

@@ -1005,15 +1005,19 @@ def test_a_realistically_encoded_geographic_file_is_read(decode: Decode) -> None
     ("projected", "linear", "names"),
     [
         (EPSG_UTM33, FOOT, ("3076", "ProjLinearUnitsGeoKey", "9002")),
-        (EPSG_FEET, None, (str(EPSG_FEET),)),
-        (EPSG_FEET, METRE, (str(EPSG_FEET),)),
+        (EPSG_FEET, METRE, ("3076", str(EPSG_FEET))),
     ],
-    ids=["key_says_feet", "crs_axes_in_feet", "key_and_crs_disagree"],
+    ids=["key_says_feet", "key_and_crs_disagree"],
 )
-def test_refuses_non_metre_linear_unit(
+def test_refuses_a_linear_unit_disagreeing_with_the_crs(
     refused: Callable[..., str], projected: int, linear: int | None, names: tuple[str, ...]
 ) -> None:
-    keys = with_keys({PROJECTED_CS_TYPE: projected, PROJ_LINEAR_UNITS: linear})
+    """3076 must agree with the code's axes. Increment 43 reads a CRS in feet
+    (its own suite, `test_io_units.py`), so the heights are stated here: the
+    disagreement is the file's one defect."""
+    keys = with_keys(
+        {PROJECTED_CS_TYPE: projected, PROJ_LINEAR_UNITS: linear, VERTICAL_UNITS: METRE}
+    )
     refused(micro_tiff(geokeys=keys), *names)
 
 

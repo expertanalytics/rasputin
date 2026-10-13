@@ -53,8 +53,9 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, TextIO
+from typing import Annotated, TextIO, cast
 
+import click
 import numpy as np
 import numpy.typing as npt
 import typer
@@ -98,6 +99,7 @@ from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
 from tin_engine.class_maps import load as load_class_map
 from tin_engine.crs import (
     crs_label,
+    parse_crs,
     reprojector,
     same_crs,
     srs_entry,
@@ -141,7 +143,15 @@ from tin_engine.io.geopackage_write import (
     write_triangles,
 )
 from tin_engine.io.mesh_checks import checked_ascii
-from tin_engine.io.models import Bounds, ClassFractions, DemTile, RasterMeta
+from tin_engine.io.models import (
+    BY_NAME,
+    UNITS,
+    Bounds,
+    ClassFractions,
+    DemTile,
+    RasterMeta,
+    ZUnit,
+)
 from tin_engine.io.ply import field_comments, write_ply
 from tin_engine.io.repository import CacheRepository, DemRepository, create_sqlite
 from tin_engine.io.rivers import read_segments
@@ -203,6 +213,15 @@ MEMORY_BUDGET = Annotated[
         help="The most one DEM window may take: a number of bytes, or with K, M, G or T "
         "(8G). Default: half the machine's memory, a container's limit counting as the "
         "machine's.",
+    ),
+]
+Z_UNIT = Annotated[
+    str | None,
+    typer.Option(
+        "--z-unit",
+        click_type=click.Choice([row[2] for row in UNITS.values()]),
+        help="The DEM's height unit when the file does not say: m, ft or us-ft (US survey "
+        "foot). Heights are converted to metres. Default: the file's, else metres.",
     ),
 ]
 
@@ -930,6 +949,7 @@ def mesh(
     ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
+    z_unit: Z_UNIT = None,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -1091,6 +1111,7 @@ def mesh(
             "applies to .vtk and .ply; a GeoPackage is an SQLite file", param_hint="--ascii"
         )
 
+    unstated = False  # heights read as metres without a word from anyone
     if dem:
         if flat:
             raise typer.BadParameter("--dem samples z from the DEM", param_hint="--flat")
@@ -1138,6 +1159,7 @@ def mesh(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
         paths, cached = _dem_sources(dem, cache_root(cache, os.environ))
+        caller = _z_unit(z_unit) or (SOURCES[cached.source].z_unit if cached else None)
         given = None
         if domain is not None:
             with clock.phase("domain read"):
@@ -1146,7 +1168,7 @@ def mesh(
                 except DomainError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--domain") from exc
         try:
-            opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res)
+            opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
         except NotCached as exc:
             area = f"--domain {domain}" if domain is not None else ""
             if bbox is not None:
@@ -1173,7 +1195,7 @@ def mesh(
         if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
             found = _open_features(
-                sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads
+                sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
             )
         # 32: 15 degrees with land cover simplified, unless given.
         simplified = (
@@ -1207,9 +1229,19 @@ def mesh(
         size = f"{meta.cols} columns x {meta.rows} rows"
         if len(names) > 1:
             typer.echo(f"DEM: {len(names)} files, {size}", err=True)
-        assumed = " (assumed: the DEM file does not say)" if meta.vertical_unit_assumed else ""
+        unstated = meta.vertical_unit_assumed and caller is None
         source = cached.source if cached is not None else escaped_ascii("; ".join(names))
-        values |= {"crs": dem_crs, "dem_source": source, "dem_vertical_unit": "metres" + assumed}
+        values |= {
+            "crs": dem_crs,
+            "dem_source": source,
+            "dem_vertical_unit": _z_words(meta, z_unit, caller),
+        }
+        if meta.file_crs is not None:  # a DEM in feet, read as its metre twin
+            feet = BY_NAME[cast(ZUnit, parse_crs(meta.file_crs).axis_info[0].unit_name)][3]
+            values["dem_file_crs"] = (
+                f"{meta.file_crs}, in {feet}; read as {source_crs or dem_crs}, the same "
+                "projection in metres"
+            )
         if grid is None:
             dx, dy = meta.delta_x, meta.delta_y
             apart = f"{dx:g} m" if dx == dy else f"{dx:g} m x {dy:g} m"
@@ -1217,7 +1249,7 @@ def mesh(
         else:  # 15c-2, D7
             how = transform_description(source_crs, dem_crs)
             values |= {"dem_crs": source_crs, "dem_transform": how}
-            values["resampled_grid"] = f"{grid.spacing} m square grid in {dem_crs}, {size}"
+            values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
             remote = SOURCES[cached.source]
             values["dem_credit"] = escaped_ascii(remote.credit)
@@ -1330,6 +1362,12 @@ def mesh(
     report_target = _report_target(stats, out_parent, label, targets)
     record_target = _record_target(record_path, out_parent, label, [*targets, report_target])
     typer.echo(summary(record), err=True)
+    if unstated:
+        typer.echo(
+            "DEM heights read as metres; the file does not say. If they are feet, give "
+            "--z-unit ft or us-ft.",
+            err=True,
+        )
 
     fields, comments = file_fields(record), field_comments(file_fields(record))
     encoders: list[Callable[[], bytes]] = []
@@ -1879,6 +1917,7 @@ def _open_dem(
     cached: CachedSource | None = None,
     target_crs: str | None = None,
     res: Resources | None = None,
+    z_unit: ZUnit | None = None,
 ) -> DemInput:
     """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
     15a and 15b, R11); every refusal, the reader's, the mosaic's or the
@@ -1894,7 +1933,12 @@ def _open_dem(
     try:
         with clock.phase("decode"):
             request = DemRequest(
-                sources=dem, cached=cached, bounds=bounds, domain=domain, target_crs=target_crs
+                sources=dem,
+                cached=cached,
+                bounds=bounds,
+                domain=domain,
+                target_crs=target_crs,
+                z_unit=z_unit,
             )
             return open_dem(request, res)
     except NotCached:
@@ -1913,6 +1957,21 @@ def _open_dem(
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+
+
+def _z_unit(option: str | None) -> ZUnit | None:
+    """``--z-unit``'s spelling to the unit's name."""
+    return next((row[0] for row in UNITS.values() if row[2] == option), None)
+
+
+def _z_words(meta: RasterMeta, option: str | None, caller: ZUnit | None) -> str:
+    """The record's ``dem_vertical_unit``: metres, converted from what, and who
+    said so: the file or the catalogue entry (no words), --z-unit, or nobody."""
+    unit = BY_NAME[meta.z_unit][3]
+    words = "metres" if meta.z_unit == "metre" else f"metres, converted from {unit}"
+    if not meta.vertical_unit_assumed or (caller is not None and option is None):
+        return words
+    return words + (" (given with --z-unit)" if option else " (assumed: the DEM file does not say)")
 
 
 def _feature_sources(
@@ -1953,6 +2012,7 @@ def _open_features(
     cleanup: dict[str, float],
     vocabulary: EdgeVocabulary,
     threads: int = 1,
+    cell: float = 0.0,
 ) -> FeatureSet:
     """R5-R6 and R10: read and clip every source into one set, timed as
     ``features read`` and ``features clip``; a refusal is a usage error naming
@@ -1960,7 +2020,7 @@ def _open_features(
     t0 = time.perf_counter()
     try:
         request = FeatureRequest(sources=sources, vocabulary=vocabulary, threads=threads, **cleanup)
-        found = open_features(request, domain, dem_crs)
+        found = open_features(request, domain, dem_crs, cell=cell)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
@@ -2502,6 +2562,7 @@ def catchment(
     ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
+    z_unit: Z_UNIT = None,
 ) -> None:
     """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
     DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
@@ -2533,7 +2594,7 @@ def catchment(
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
     res = _resources(threads, memory_budget)
     try:
-        repository, _ = repository_for(tuple(dem), threads=res.threads)
+        repository, _ = repository_for(tuple(dem), threads=res.threads, z_unit=_z_unit(z_unit))
         placement: tuple[Placement, str | None] | None = None
         if rivers is not None:
             batch = BatchRequest(
@@ -2764,6 +2825,7 @@ def station_catchments(
     ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
+    z_unit: Z_UNIT = None,
 ) -> None:
     """Write a catchment per station into --out-dir, as ``catchment --rivers``
     does for one, with results.csv (a row per station) and summary.json; with
@@ -2795,7 +2857,7 @@ def station_catchments(
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
     res = _resources(threads, memory_budget)
     try:
-        repository, _ = repository_for(tuple(dem), threads=res.threads)
+        repository, _ = repository_for(tuple(dem), threads=res.threads, z_unit=_z_unit(z_unit))
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"

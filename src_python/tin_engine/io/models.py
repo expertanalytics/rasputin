@@ -28,6 +28,17 @@ from pydantic import (
     model_validator,
 )
 
+#: A DEM's height unit, by the name pyproj gives it.
+ZUnit = Literal["metre", "foot", "US survey foot"]
+
+#: EPSG unit code to (name pyproj uses, metres per unit, option spelling, plural).
+UNITS: dict[int, tuple[ZUnit, float, str, str]] = {
+    9001: ("metre", 1.0, "m", "metres"),
+    9002: ("foot", 0.3048, "ft", "feet"),
+    9003: ("US survey foot", 1200 / 3937, "us-ft", "US survey feet"),
+}
+BY_NAME = {row[0]: row for row in UNITS.values()}
+
 
 class GeoTiffError(ValueError):
     """A file the reader refuses (§5).
@@ -122,6 +133,10 @@ class RasterMeta(BaseModel):
     nodata_source: Literal["tag", "caller", "absent"]
     pixel_is_area: bool
     vertical_unit_assumed: bool
+    #: The file's height unit; the array is in metres whatever it is.
+    z_unit: ZUnit = "metre"
+    #: The file's own CRS, when the grid is read as its metre twin.
+    file_crs: str | None = None
 
     @model_validator(mode="before")
     @classmethod

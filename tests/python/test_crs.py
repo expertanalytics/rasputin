@@ -485,3 +485,32 @@ def test_the_site_finder_finds_planted_sites(tmp_path: Path) -> None:
     )
     (tmp_path / "b.py").write_text("x = 1\n", encoding="utf-8")
     assert from_crs_sites(tmp_path) == ["a.py:2", "a.py:3"]
+
+
+# ------------------------------------------------- increment 43, test 10b: polar axes
+
+#: The Antarctic polar stereographic of EPSG:3031 with east and north axes.
+#: EPSG:3031 labels its axes by meridian ("north along 90 E"), so today's
+#: equivalence test in `epsg_matches` rejects it (it gives `()` at the design's
+#: base), though the operation between the two is `noop`.
+POLAR_EN = (
+    "+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
+)
+
+
+class TestEpsgMatchesThePolarNoopRule:
+    """`docs/increments/43-units-and-projections.md`, section 4.5 and test 10b:
+    a candidate on the same base whose axes carry a meridian is accepted when
+    the operation to it is `noop`; moved 1 m it is a two-step pipeline, and no
+    match."""
+
+    def test_the_premise(self) -> None:
+        operation = Transformer.from_crs(CRS.from_proj4(POLAR_EN), 3031, always_xy=True)
+        assert "noop" in operation.definition, operation.definition
+
+    def test_east_north_axes_match_3031(self, crs: ModuleType) -> None:
+        assert crs.epsg_matches(CRS.from_proj4(POLAR_EN)) == (3031,)
+
+    def test_moved_one_metre_matches_nothing(self, crs: ModuleType) -> None:
+        moved = CRS.from_proj4(POLAR_EN.replace("+x_0=0", "+x_0=1"))
+        assert crs.epsg_matches(moved) == ()

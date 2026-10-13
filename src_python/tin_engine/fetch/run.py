@@ -225,7 +225,7 @@ def _header(
             entry.last_modified,
         ):
             raise FetchError(_changed(url, entry, got.total, got.last_modified))
-        parsed = parse_prefix(got.data, nodata=source.nodata)
+        parsed = parse_prefix(got.data, nodata=source.nodata, z_unit=source.z_unit)
         if parsed is not None:
             break
         if entry is not None or size >= MAX_HEADER or len(got.data) < size:
