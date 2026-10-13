@@ -1,0 +1,3 @@
+S87, east edge 0.0063 deg west of 166 E (10" band): today 1 tiles (x 0.006000, y 0.006000); own spacing 2 tiles (x 0.006667, y 0.001667); design 2 tiles (x 0.006667, y 0.001667)
+N82, east edge 0.0063 deg west of 21 E (5" band): today 1 tiles (x 0.006000, y 0.006000); own spacing 1 tiles (x 0.003889, y 0.001667); design 2 tiles (x 0.006667, y 0.001667)
+N60, every edge 0.003 deg inside 10..11 E, 60..61 N: today 9 tiles (x 0.006000, y 0.006000); own spacing 1 tiles (x 0.002222, y 0.001667); design 3 tiles (x 0.006667, y 0.001667)

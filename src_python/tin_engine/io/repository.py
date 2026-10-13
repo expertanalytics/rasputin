@@ -166,6 +166,16 @@ class TiffDemRepository:
 
         return self._read(name, read)
 
+    def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow:
+        """`window` of the class raster `name`, as `decode_class_window` gives it."""
+
+        def read(stream: Any, **keys: Any) -> ClassWindow:
+            meta, _, page = read_page(stream, **keys)
+            blocks = LocalTiffBlocks(page, stream, name)
+            return decode_class_window(blocks, meta, window, threads=self._threads)
+
+        return self._read(name, read)
+
     def check(self, plan: MosaicPlan) -> None:
         """A file has every block; nothing to check."""
 
@@ -309,7 +319,7 @@ class CacheRepository:
         return decode_window(self._blocks(name), meta, dtype, window, threads=self._threads)
 
     def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow:
-        """`window` of the class raster `name` (26a), empty blocks as 0."""
+        """`window` of the class raster `name`, as `decode_class_window` gives it."""
         meta = self._page(name)[0]
         return decode_class_window(self._blocks(name), meta, window, threads=self._threads)
 
