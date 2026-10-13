@@ -148,7 +148,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   only): the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy;
                            #   crs_label escapes through run_record's
-                           #   escaped_ascii, its one first-party import
+                           #   escaped_ascii, with io.models' SRS constants, its
+                           #   first-party imports
   geodesy.py               # LocalFrame (a local metres frame around one point),
                            #   cell areas by row (a cell centred on its node),
                            #   geodesic area over outlines (40); pyproj and numpy;
