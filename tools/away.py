@@ -31,9 +31,64 @@ from typing import Any, NamedTuple, TextIO
 
 sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
 import harness_mode as hm
+import push_grant
 
 DURATION = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
-USAGE = "usage: python3 tools/away.py <duration: 8h, 90m, 1h30m; at most 72h> | --back"
+USAGE = (
+    "usage: python3 tools/away.py <duration: 8h, 90m, 1h30m; at most 72h> "
+    "[--grant <branch>]... | --back"
+)
+
+
+def grant_error(root: Path, name: str) -> str | None:
+    """Why `name` cannot be granted (h20 §3.1), or None."""
+    if not push_grant.branch_name(name):
+        return "not a plain branch name, or master, main or HEAD"
+    checked = subprocess.run(["git", "-C", str(root), "check-ref-format", "--branch", name],
+                             capture_output=True, check=False)  # fmt: skip
+    return None if checked.returncode == 0 else "git check-ref-format refuses it"
+
+
+def branch_head(root: Path, name: str) -> str | None:
+    found = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    return found.stdout.strip() if found.returncode == 0 else None
+
+
+def hhmm(value: object) -> str:
+    moment = _moment(value)
+    return f"{moment.astimezone(UTC):%H:%M} UTC" if moment else "?"
+
+
+def grant_lines(root: Path, state: Path, flag: dict[str, Any] | None) -> list[str]:
+    """`--back`'s report of each grant (h20 §3.6)."""
+    granted = push_grant.grants(flag or {})
+    if not granted:
+        return ["Push grants: (none)"]
+    used = [u for u in push_grant.jsonl(state / "grants-used.jsonl")
+            if isinstance(u, dict) and u.get("window") == (flag or {}).get("since")]  # fmt: skip
+    records = push_grant.jsonl(state / "reviews.jsonl")
+    lines = [f"Push grants ({len(granted)}):"]
+    for name in granted:
+        acts = [u for u in used if u.get("branch") == name]
+        if acts:
+            done = [{"push": f"pushed {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}",
+                     "enqueue": f"enqueued {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}"}
+                    .get(str(u.get("act")), "PR opened") for u in acts]  # fmt: skip
+            review = acts[-1].get("review") or ["", ""]
+            lines.append(f"  {name}: {'; '.join(done)} (review of {str(review[0])[:7]}, "
+                         f"recorded {hhmm(review[-1])})")  # fmt: skip
+            continue
+        head = branch_head(root, name)
+        if head is None:
+            lines.append(f"  {name}: not used; the branch does not exist")
+            continue
+        reason = push_grant.reviewed(root, head, records)
+        lines.append(f"  {name}: not used; head {head[:7]} reviewed: "
+                     + ("yes" if reason is None else f"no ({reason})"))  # fmt: skip
+    return lines
 
 
 def stop_keep_awake(pid: object) -> None:
@@ -162,6 +217,8 @@ def enter(
     open_tty: Callable[[], TextIO],
     spawn: Callable[..., Any],
     stop: Callable[[object], None],
+    grants: list[str],
+    existing: set[str],
 ) -> int:
     try:
         tty = open_tty()
@@ -189,6 +246,10 @@ def enter(
         previous = hm.read_mode(state, now)
         if previous.state == "on":
             tty.write(f"This replaces the window ending {previous.until}.\n")
+        if grants:
+            named = [g if g in existing else f"{g} (does not exist yet)" for g in grants]
+            tty.write("Granted while away: push, pull request and one enqueue per reviewed "
+                      f"head of: {', '.join(named)}.\n")  # fmt: skip
         tty.write("Type y to confirm: ")
         tty.flush()
         if tty.readline().strip().lower() not in ("y", "yes"):
@@ -217,7 +278,8 @@ def enter(
     except OSError as error:
         pid, awake = None, f"not started ({error})"
     since_iso, until_iso = now.isoformat(timespec="seconds"), until.isoformat(timespec="seconds")
-    flag = {"since": since_iso, "until": until_iso, "set_by": "away", "keep_awake_pid": pid}
+    flag = {"since": since_iso, "until": until_iso, "set_by": "away", "keep_awake_pid": pid,
+            "grants": grants}  # fmt: skip
     temporary = None
     try:  # one unit: on failure, undo step 5 and write nothing (§3.3 step 6)
         state.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -237,7 +299,8 @@ def enter(
             file=sys.stderr,
         )
         return 1
-    append(state / "windows.jsonl", {"event": "enter", "since": since_iso, "until": until_iso})
+    entry = {"event": "enter", "since": since_iso, "until": until_iso, "grants": grants}
+    append(state / "windows.jsonl", entry)
     print(
         f"UNATTENDED until {when(until)}. Keep-awake: {awake}. Guarded acts are refused and "
         "queued. End early: python3 tools/away.py --back"
@@ -284,6 +347,9 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
             )
     if not entries:
         print("  (none)")
+    granted = grant_lines(root, state, flag)
+    if len(granted) > 1:
+        print("\n".join(granted))
     try:  # the recap module is optional to --back; the flag and the queue are not (§3.3)
         from session_state import all_decisions
 
@@ -293,6 +359,8 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
     print("ASK OLA lines, every worktree's .claude/current-task/:")
     for line in decisions or ["(none)"]:
         print(f"  {line}")
+    if len(granted) == 1:  # "(none)" goes last: the queue's own tests read on to the ASK lines
+        print(granted[0])
     if queue.exists():
         archive = state / f"queue-{now.astimezone(UTC):%Y-%m-%d}.jsonl"
         if archive.exists():
@@ -316,15 +384,20 @@ def main(
     parser = argparse.ArgumentParser(usage=USAGE)
     parser.add_argument("duration", nargs="?")
     parser.add_argument("--back", action="store_true")
+    parser.add_argument("--grant", action="append", default=[])
     args = parser.parse_args(argv)
     root = root or Path(__file__).resolve().parents[1]
     now = now or datetime.now(UTC)
     stop = stop or stop_keep_awake
     state = hm.state_dir(root)
     minutes = minutes_of(args.duration)
-    if not args.back and minutes is None:
+    if (not args.back and minutes is None) or (args.back and args.grant):
         print(USAGE, file=sys.stderr)
         return 2
+    for name in args.grant:
+        if (error := grant_error(root, name)) is not None:
+            print(f"away.py: cannot grant {name!r}: {error}.", file=sys.stderr)
+            return 2
     if state is None:
         print("away.py: git common dir not found.", file=sys.stderr)
         return 1
@@ -347,6 +420,8 @@ def main(
         ),
         spawn or subprocess.Popen,
         stop,
+        args.grant,
+        {name for name in args.grant if branch_head(root, name) is not None},
     )
 
 
