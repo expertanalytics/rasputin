@@ -155,4 +155,21 @@ ignore_missing_imports = true
 # tools/check_code_history.py's scope: the paths whose docstrings, comments and
 # help strings must carry no project history.
 [tool.check_code_history]
-paths = []
+paths = [
+    "src_python/tin_engine/__init__.py",
+    "src_python/tin_engine/__main__.py",
+    "src_python/tin_engine/burn.py",
+    "src_python/tin_engine/catchment.py",
+    "src_python/tin_engine/catchment_batch.py",
+    "src_python/tin_engine/catchment_core.py",
+    "src_python/tin_engine/fetch",
+    "src_python/tin_engine/gauge.py",
+    "src_python/tin_engine/grow.py",
+    "src_python/tin_engine/hydrography.py",
+    "src_python/tin_engine/mcp",
+    "src_python/tin_engine/outline.py",
+    "src_python/tin_engine/reference.py",
+    "src_python/tin_engine/sensitivity.py",
+    "src_python/tin_engine/sources.py",
+    "src_python/tin_engine/viz",
+]
