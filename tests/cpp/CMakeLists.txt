@@ -560,3 +560,13 @@ add_terrain_test(test_radiation_sun unit/test_radiation_sun.cpp)
 # the east-north-up basis, the ground step through J, the receiver checks.
 # Header-only (include/terrain/radiation/).
 add_terrain_test(test_radiation_receivers unit/test_radiation_receivers.cpp)
+
+# The horizon kernel, increment 46 PR 5 = the terrain-radiation design's TR3a
+# (docs/increments/46-hbv-snow.md section 10.8; terrain-radiation.md R4, I4,
+# I5 and its verification 3): the int16 entry, the max-pyramid, section
+# 10.8's mutation fixtures F1-F7, the switch between rasters, the analytic
+# terrains, the degeneracies and refusals, pruned equal to exhaustive.
+# Header-only (include/terrain/radiation/). Invariant-critical. Starts threads
+# (1 and 8 must agree bit for bit).
+add_terrain_test(test_radiation_horizon unit/test_radiation_horizon.cpp)
+target_link_libraries(test_radiation_horizon PRIVATE Threads::Threads)
