@@ -1,6 +1,6 @@
 # Audit: where `rasputin mesh` is slow, and why — a whole-pipeline look
 
-Status: **audit, not a design.** Nothing here is built. Written by
+Status: **audit, not a design.** Since built: F1a, F1b and F1c by pieces as 30d (#215; Ola chose pieces, 2026-10-07), and F6 as increment 31 (#212: binary `.vtk` by default, against this audit's default for question 3). The text below is the audit as written. Written by
 `@architect` on 2026-10-07, against master `91262c73`; every `file:line`
 below is pinned to that commit. It answers Ola's question of 2026-10-07:
 are there design patterns in the pipeline that are known to be slow, and is
@@ -260,3 +260,7 @@ plain GEOS buffers, with nothing about cost to carry across.
 
 No finding needs the I/O boundary changed: F3 and F5 move pure computation
 into the core, and F7 changes only which file is read.
+
+## Review
+
+**Review, round 1, 2026-10-13.** Range `91262c73..1da4a144`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS. The Status line names what was built later (30d #215, 31 #212); quotations checked at 91262c73; gates green with the PR merged onto origin/master. Wording applied by the main session.
