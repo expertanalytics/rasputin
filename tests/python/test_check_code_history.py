@@ -280,6 +280,49 @@ def test_scientific_notation_format_specs_paths_and_d8_are_not_history(repo: Pat
     assert run.reports == []
 
 
+@pytest.mark.parametrize(
+    "comment",
+    ["# Kept as in 16c.", "# Kept as before 15c-2.", "# Kept as in 16c. Then more."],
+)
+def test_a_label_that_ends_a_sentence_is_a_label(repo: Path, comment: str) -> None:
+    # A full stop after a label ends the sentence; it does not hide the label.
+    path = _write(repo, "full_stop.py", f"X = 1\n{comment}\n")
+
+    run = _check(repo, path)
+
+    assert run.code == 1, run.out + run.err
+    assert run.located == {(2, "label")}, run.out + run.err
+
+
+def test_a_label_that_ends_a_docstring_sentence_is_a_label(repo: Path) -> None:
+    path = _write(
+        repo,
+        "full_stop_doc.py",
+        '''
+        def f() -> None:
+            """Do nothing.
+
+            Kept as in 16c.
+            """
+        ''',
+    )
+
+    run = _check(repo, path)
+
+    assert run.located == {(_line(repo, path, "16c."), "label")}, run.out + run.err
+
+
+@pytest.mark.parametrize("comment", ["# Read 16c.txt first.", "# Scaled by 3f.5 here."])
+def test_a_full_stop_before_a_word_character_still_hides_a_label(repo: Path, comment: str) -> None:
+    # A file suffix (`16c.txt`) or a decimal (`3f.5`) is not a sentence end.
+    path = _write(repo, "suffix.py", f"X = 1\n{comment}\n")
+
+    run = _check(repo, path)
+
+    assert run.code == 0, run.out + run.err
+    assert run.reports == []
+
+
 def test_a_label_inside_a_path_is_not_a_label_but_the_path_is_a_pointer(repo: Path) -> None:
     path = _write(
         repo,
