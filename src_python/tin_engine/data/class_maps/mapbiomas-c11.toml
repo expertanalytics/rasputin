@@ -1,0 +1,185 @@
+# MapBiomas Brazil, Collection 11: the official legend's codes, English labels
+# and colours (legend_code_mapbiomas_brazil_collection_11.csv). Positional
+# accuracy: its Landsat cell, 30 m (MapBiomas states none of its own).
+name = "mapbiomas-c11"
+attribute = "class"
+code_system = "MapBiomas Collection 11 class"
+positional_accuracy_m = 30
+notice = "Contains data from the MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil (CC BY-SA 4.0)"
+preset = "rasputin MapBiomas Collection 11"
+unlisted = "land"
+
+[edges]
+water = ["land_cover", "water"]
+land = ["land_cover"]
+
+[no_class]
+label = "No class; constraint lines"
+colour = "#3c3c3c"
+
+[[class]]
+code = 3
+label = "Forest Formation"
+colour = "#1f8d49"
+
+[[class]]
+code = 6
+label = "Floodable Forest"
+colour = "#007785"
+
+[[class]]
+code = 4
+label = "Savanna Formation"
+colour = "#7dc975"
+
+[[class]]
+code = 7
+label = "Flooded Savanna (beta)"
+colour = "#228c70"
+
+[[class]]
+code = 5
+label = "Mangrove"
+colour = "#04381d"
+
+[[class]]
+code = 49
+label = "Wooded Sandbank Vegetation"
+colour = "#02d659"
+
+[[class]]
+code = 12
+label = "Grassland Formation"
+colour = "#d6bc74"
+
+[[class]]
+code = 77
+label = "Herbaceous and Shrub Formation"
+colour = "#86b074"
+
+[[class]]
+code = 11
+label = "Wetland"
+colour = "#519799"
+
+[[class]]
+code = 84
+label = "Salt Marsh (beta)"
+colour = "#81dbbf"
+
+[[class]]
+code = 50
+label = "Herbaceous Sandbank Vegetation"
+colour = "#ffaa5f"
+
+[[class]]
+code = 32
+label = "Hypersaline Tidal Flat"
+colour = "#fc8114"
+
+[[class]]
+code = 29
+label = "Rocky Outrcrop"
+colour = "#ad5100"
+
+[[class]]
+code = 15
+label = "Pasture"
+colour = "#edde8e"
+
+[[class]]
+code = 39
+label = "Soybean"
+colour = "#f5b3c8"
+
+[[class]]
+code = 20
+label = "Sugar cane"
+colour = "#db7093"
+
+[[class]]
+code = 40
+label = "Rice"
+colour = "#c71585"
+
+[[class]]
+code = 62
+label = "Cotton (beta)"
+colour = "#ff69b4"
+
+[[class]]
+code = 41
+label = "Other Temporary Crops"
+colour = "#f54ca9"
+
+[[class]]
+code = 46
+label = "Coffe"
+colour = "#d68fe2"
+
+[[class]]
+code = 47
+label = "Citrus"
+colour = "#9932cc"
+
+[[class]]
+code = 35
+label = "Palm Oil"
+colour = "#9065d0"
+
+[[class]]
+code = 48
+label = "Other Perennial Crops"
+colour = "#e6ccff"
+
+[[class]]
+code = 9
+label = "Forest Plantation"
+colour = "#7a5900"
+
+[[class]]
+code = 21
+label = "Mosaic of Uses"
+colour = "#ffefc3"
+
+[[class]]
+code = 23
+label = "Beach, Dune and Sand Spot"
+colour = "#ffa07a"
+
+[[class]]
+code = 24
+label = "Urban Area"
+colour = "#d4271e"
+
+[[class]]
+code = 30
+label = "Mining"
+colour = "#9c0027"
+
+[[class]]
+code = 75
+label = "Photovoltaic Power Plant"
+colour = "#757272"
+
+[[class]]
+code = 91
+label = "Wind farm (beta)"
+colour = "#403d3e"
+
+[[class]]
+code = 25
+label = "Other non Vegetated Areas"
+colour = "#db4d4f"
+
+[[class]]
+code = 33
+label = "River, Lake and Ocean"
+colour = "#2532e4"
+water = true
+
+[[class]]
+code = 31
+label = "Aquaculture"
+colour = "#091077"
+water = true

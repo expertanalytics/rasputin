@@ -55,6 +55,8 @@ class RemoteSource(BaseModel):
     licence_note: str
     #: The works the distributor asks to cite (23a-2); `notice` and the mesh file carry them.
     cite: tuple[str, ...] = ()
+    #: The class map (`tin_engine.class_maps`) that names and colours its classes (41).
+    class_map: str = ""
 
     @model_validator(mode="after")
     def _per_year_has_years(self) -> Self:
@@ -148,6 +150,7 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
                 "Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. "
                 "Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
             ),
+            class_map="mapbiomas-c11",
         ),
     }
 )

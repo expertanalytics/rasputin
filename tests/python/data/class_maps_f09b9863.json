@@ -1,0 +1,797 @@
+{
+ "source": "tin_engine at f09b9863 (feature_input.CLASS_MAPS, palettes.CORINE_NATURAL)",
+ "palette": [
+  [
+   0,
+   "No polygon; constraint lines",
+   "#3c3c3c"
+  ],
+  [
+   111,
+   "Continuous urban fabric",
+   "#8c5f5a"
+  ],
+  [
+   112,
+   "Discontinuous urban fabric",
+   "#a88d86"
+  ],
+  [
+   121,
+   "Industrial or commercial units",
+   "#8e8a96"
+  ],
+  [
+   122,
+   "Road and rail networks and associated land",
+   "#6e6e6e"
+  ],
+  [
+   123,
+   "Port areas",
+   "#7d8796"
+  ],
+  [
+   124,
+   "Airports",
+   "#a8a8a8"
+  ],
+  [
+   131,
+   "Mineral extraction sites",
+   "#b49b78"
+  ],
+  [
+   132,
+   "Dump sites",
+   "#8a7d64"
+  ],
+  [
+   133,
+   "Construction sites",
+   "#bcae98"
+  ],
+  [
+   141,
+   "Green urban areas",
+   "#86b86e"
+  ],
+  [
+   142,
+   "Sport and leisure facilities",
+   "#a3cf7e"
+  ],
+  [
+   211,
+   "Non-irrigated arable land",
+   "#e6d58c"
+  ],
+  [
+   212,
+   "Permanently irrigated land",
+   "#d9cc6e"
+  ],
+  [
+   213,
+   "Rice fields",
+   "#cdd89a"
+  ],
+  [
+   221,
+   "Vineyards",
+   "#9c7a44"
+  ],
+  [
+   222,
+   "Fruit trees and berry plantations",
+   "#a9ad5e"
+  ],
+  [
+   223,
+   "Olive groves",
+   "#8f9a52"
+  ],
+  [
+   231,
+   "Pastures",
+   "#b4d47a"
+  ],
+  [
+   241,
+   "Annual crops associated with permanent crops",
+   "#dccf94"
+  ],
+  [
+   242,
+   "Complex cultivation patterns",
+   "#d2c47c"
+  ],
+  [
+   243,
+   "Land principally occupied by agriculture, with significant areas of natural vegetation",
+   "#bcc47e"
+  ],
+  [
+   244,
+   "Agro-forestry areas",
+   "#a9b574"
+  ],
+  [
+   311,
+   "Broad-leaved forest",
+   "#4f8f3f"
+  ],
+  [
+   312,
+   "Coniferous forest",
+   "#1f5a2e"
+  ],
+  [
+   313,
+   "Mixed forest",
+   "#357438"
+  ],
+  [
+   321,
+   "Natural grasslands",
+   "#c2d68a"
+  ],
+  [
+   322,
+   "Moors and heathland",
+   "#a7c47f"
+  ],
+  [
+   323,
+   "Sclerophyllous vegetation",
+   "#8a9658"
+  ],
+  [
+   324,
+   "Transitional woodland-shrub",
+   "#7ea65a"
+  ],
+  [
+   331,
+   "Beaches, dunes, sands",
+   "#e9ddb2"
+  ],
+  [
+   332,
+   "Bare rocks",
+   "#8f8f8f"
+  ],
+  [
+   333,
+   "Sparsely vegetated areas",
+   "#b9b8a0"
+  ],
+  [
+   334,
+   "Burnt areas",
+   "#4b3f3a"
+  ],
+  [
+   335,
+   "Glaciers and perpetual snow",
+   "#eef6fb"
+  ],
+  [
+   411,
+   "Inland marshes",
+   "#6e9470"
+  ],
+  [
+   412,
+   "Peat bogs",
+   "#8a6642"
+  ],
+  [
+   421,
+   "Salt marshes",
+   "#7f9f8c"
+  ],
+  [
+   422,
+   "Salines",
+   "#d8d6cc"
+  ],
+  [
+   423,
+   "Intertidal flats",
+   "#b3bdb3"
+  ],
+  [
+   511,
+   "Water courses",
+   "#4c8ec4"
+  ],
+  [
+   512,
+   "Water bodies",
+   "#3e7bb6"
+  ],
+  [
+   521,
+   "Coastal lagoons",
+   "#5b93b3"
+  ],
+  [
+   522,
+   "Estuaries",
+   "#5188b4"
+  ],
+  [
+   523,
+   "Sea and ocean",
+   "#2b5d8e"
+  ]
+ ],
+ "preset_title": "rasputin CORINE natural",
+ "maps": {
+  "corine": {
+   "name": "corine",
+   "attribute": "Code_18",
+   "codes": "CORINE Land Cover level-3 code",
+   "notice": "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU",
+   "masks": [
+    [
+     "111",
+     128
+    ],
+    [
+     "511",
+     384
+    ],
+    [
+     "523",
+     384
+    ],
+    [
+     "999",
+     128
+    ],
+    [
+     "0511",
+     128
+    ],
+    [
+     511,
+     384
+    ],
+    [
+     null,
+     128
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     384
+    ]
+   ],
+   "every_class": {
+    "111": 128,
+    "112": 128,
+    "121": 128,
+    "122": 128,
+    "123": 128,
+    "124": 128,
+    "131": 128,
+    "132": 128,
+    "133": 128,
+    "141": 128,
+    "142": 128,
+    "211": 128,
+    "212": 128,
+    "213": 128,
+    "221": 128,
+    "222": 128,
+    "223": 128,
+    "231": 128,
+    "241": 128,
+    "242": 128,
+    "243": 128,
+    "244": 128,
+    "311": 128,
+    "312": 128,
+    "313": 128,
+    "321": 128,
+    "322": 128,
+    "323": 128,
+    "324": 128,
+    "331": 128,
+    "332": 128,
+    "333": 128,
+    "334": 128,
+    "335": 128,
+    "411": 128,
+    "412": 128,
+    "421": 128,
+    "422": 128,
+    "423": 128,
+    "511": 384,
+    "512": 384,
+    "521": 384,
+    "522": 384,
+    "523": 384
+   },
+   "class_codes": [
+    [
+     "111",
+     111
+    ],
+    [
+     "511",
+     511
+    ],
+    [
+     "523",
+     523
+    ],
+    [
+     "999",
+     999
+    ],
+    [
+     "0511",
+     511
+    ],
+    [
+     511,
+     511
+    ],
+    [
+     null,
+     "refused"
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     "refused"
+    ]
+   ],
+   "opened": [
+    [
+     "111",
+     [
+      [
+       111,
+       128
+      ]
+     ]
+    ],
+    [
+     "511",
+     [
+      [
+       511,
+       384
+      ]
+     ]
+    ],
+    [
+     "523",
+     [
+      [
+       523,
+       384
+      ]
+     ]
+    ],
+    [
+     "999",
+     [
+      [
+       999,
+       128
+      ]
+     ]
+    ],
+    [
+     "0511",
+     [
+      [
+       511,
+       128
+      ]
+     ]
+    ],
+    [
+     511,
+     [
+      [
+       511,
+       384
+      ]
+     ]
+    ],
+    [
+     null,
+     "refused"
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     "refused"
+    ]
+   ]
+  },
+  "corine-water": {
+   "name": "corine-water",
+   "attribute": "Code_18",
+   "codes": "CORINE Land Cover level-3 code",
+   "notice": "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU",
+   "masks": [
+    [
+     "111",
+     null
+    ],
+    [
+     "511",
+     256
+    ],
+    [
+     "523",
+     256
+    ],
+    [
+     "999",
+     null
+    ],
+    [
+     "0511",
+     null
+    ],
+    [
+     511,
+     256
+    ],
+    [
+     null,
+     null
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     null
+    ]
+   ],
+   "every_class": {
+    "111": null,
+    "112": null,
+    "121": null,
+    "122": null,
+    "123": null,
+    "124": null,
+    "131": null,
+    "132": null,
+    "133": null,
+    "141": null,
+    "142": null,
+    "211": null,
+    "212": null,
+    "213": null,
+    "221": null,
+    "222": null,
+    "223": null,
+    "231": null,
+    "241": null,
+    "242": null,
+    "243": null,
+    "244": null,
+    "311": null,
+    "312": null,
+    "313": null,
+    "321": null,
+    "322": null,
+    "323": null,
+    "324": null,
+    "331": null,
+    "332": null,
+    "333": null,
+    "334": null,
+    "335": null,
+    "411": null,
+    "412": null,
+    "421": null,
+    "422": null,
+    "423": null,
+    "511": 256,
+    "512": 256,
+    "521": 256,
+    "522": 256,
+    "523": 256
+   },
+   "class_codes": [
+    [
+     "111",
+     111
+    ],
+    [
+     "511",
+     511
+    ],
+    [
+     "523",
+     523
+    ],
+    [
+     "999",
+     999
+    ],
+    [
+     "0511",
+     511
+    ],
+    [
+     511,
+     511
+    ],
+    [
+     null,
+     "refused"
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     "refused"
+    ]
+   ],
+   "opened": [
+    [
+     "111",
+     []
+    ],
+    [
+     "511",
+     [
+      [
+       511,
+       256
+      ]
+     ]
+    ],
+    [
+     "523",
+     [
+      [
+       523,
+       256
+      ]
+     ]
+    ],
+    [
+     "999",
+     []
+    ],
+    [
+     "0511",
+     []
+    ],
+    [
+     511,
+     [
+      [
+       511,
+       256
+      ]
+     ]
+    ],
+    [
+     null,
+     []
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     []
+    ]
+   ]
+  },
+  "clc18_kode": {
+   "name": "clc18_kode",
+   "attribute": "clc18_kode",
+   "codes": "CORINE Land Cover level-3 code",
+   "notice": "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU",
+   "masks": [
+    [
+     "111",
+     128
+    ],
+    [
+     "511",
+     384
+    ],
+    [
+     "523",
+     384
+    ],
+    [
+     "999",
+     128
+    ],
+    [
+     "0511",
+     128
+    ],
+    [
+     511,
+     384
+    ],
+    [
+     null,
+     128
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     384
+    ]
+   ],
+   "every_class": {
+    "111": 128,
+    "112": 128,
+    "121": 128,
+    "122": 128,
+    "123": 128,
+    "124": 128,
+    "131": 128,
+    "132": 128,
+    "133": 128,
+    "141": 128,
+    "142": 128,
+    "211": 128,
+    "212": 128,
+    "213": 128,
+    "221": 128,
+    "222": 128,
+    "223": 128,
+    "231": 128,
+    "241": 128,
+    "242": 128,
+    "243": 128,
+    "244": 128,
+    "311": 128,
+    "312": 128,
+    "313": 128,
+    "321": 128,
+    "322": 128,
+    "323": 128,
+    "324": 128,
+    "331": 128,
+    "332": 128,
+    "333": 128,
+    "334": 128,
+    "335": 128,
+    "411": 128,
+    "412": 128,
+    "421": 128,
+    "422": 128,
+    "423": 128,
+    "511": 384,
+    "512": 384,
+    "521": 384,
+    "522": 384,
+    "523": 384
+   },
+   "class_codes": [
+    [
+     "111",
+     111
+    ],
+    [
+     "511",
+     511
+    ],
+    [
+     "523",
+     523
+    ],
+    [
+     "999",
+     999
+    ],
+    [
+     "0511",
+     511
+    ],
+    [
+     511,
+     511
+    ],
+    [
+     null,
+     "refused"
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     "refused"
+    ]
+   ],
+   "opened": [
+    [
+     "111",
+     [
+      [
+       111,
+       128
+      ]
+     ]
+    ],
+    [
+     "511",
+     [
+      [
+       511,
+       384
+      ]
+     ]
+    ],
+    [
+     "523",
+     [
+      [
+       523,
+       384
+      ]
+     ]
+    ],
+    [
+     "999",
+     [
+      [
+       999,
+       128
+      ]
+     ]
+    ],
+    [
+     "0511",
+     [
+      [
+       511,
+       128
+      ]
+     ]
+    ],
+    [
+     511,
+     [
+      [
+       511,
+       384
+      ]
+     ]
+    ],
+    [
+     null,
+     "refused"
+    ],
+    [
+     [
+      "311",
+      "512"
+     ],
+     "refused"
+    ]
+   ]
+  }
+ }
+}
