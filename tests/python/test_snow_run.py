@@ -15,9 +15,10 @@ Interface:
   site of the sun's beam, passed by the caller (the CLI takes it from the
   mesh's centre), and `radiation`, a `RadiationGeometry` (one receiver per
   triangle, in the triangles' order) whose evaluator gives b and sin e per
-  triangle and sample (`docs/increments/46-hbv-snow.md`, *10.5*): dI = the
-  mean over the step's samples of beam (b - max(0, sin e)). With
-  `geometry_cls.open_sky` (no terrain) only self-shading is left.
+  triangle and sample (`docs/increments/46-hbv-snow.md`, *10.5 How the lit
+  factor enters the sun correction*): dI = the mean over the step's samples
+  of beam (b - max(0, sin e)). With `RadiationGeometry.open_sky` (no
+  terrain) only self-shading is left.
 - `Frame` has `time_hours` (float, hours since the start), `swe`, `sca`,
   `outflow` (cumulative since the start, mm) and `radiation_anomaly_mean`
   (the mean dI over the steps so far, W/m^2, 0 at the start), each float32

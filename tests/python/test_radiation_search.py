@@ -1,9 +1,10 @@
 """The near raster and the horizon search over it: `radiation/search.py`.
 
-`docs/increments/46-hbv-snow.md`, *10.4* (TR3b's near raster only: `open_dem`
-over the mesh box grown by D_near, `raster.to_core` for the view, the search
-reach D_far equal to D_near with no far raster) and *10.8* (L4; and, marked
-slow, L3 and I8 on the synthetic 2 m mesh). Every test here calls
+`docs/increments/46-hbv-snow.md`, *10.4 Which radiation steps, and how much of
+each* (TR3b's near raster only: `open_dem` over the mesh box grown by D_near,
+`raster.to_core` for the view, the search reach D_far equal to D_near with no
+far raster) and *10.8 Red suites for `@tester`* (L4; and, marked slow, L3 and
+I8 on the synthetic 2 m mesh). Every test here calls
 `_core.horizon_search` (TR3a), so each also fails while that kernel is absent.
 
 Interface assumed (names chosen here and listed in the handback):

@@ -1,12 +1,14 @@
 """The instant evaluator through the binding and its synchronous Python call.
 
-`docs/increments/46-hbv-snow.md`, *10.4* (TR5's `instant` mode, its binding
-and a synchronous call, reading the receiver set and horizon table as arrays;
-`RadiationGeometry` with TR2's and TR3a's fields), *10.5* (the combiner:
-dI = mean over samples of beam (b - max(0, sin e))) and *10.8* (L2, and I7 and
-I8 as they cross); `docs/increments/terrain-radiation.md`, R5 and R10. The C++
-suite (`tests/cpp/unit/test_radiation_evaluate.cpp`) holds the lit test, I7 in
-full and the sunrise; this file checks what crosses and the Python surface.
+`docs/increments/46-hbv-snow.md`, *10.4 Which radiation steps, and how much of
+each* (TR5's `instant` mode, its binding and a synchronous call, reading the
+receiver set and horizon table as arrays; `RadiationGeometry` with TR2's and
+TR3a's fields), *10.5 How the lit factor enters the sun correction* (the
+combiner: dI = mean over samples of beam (b - max(0, sin e))) and *10.8 Red
+suites for `@tester`* (L2, and I7 and I8 as they cross);
+`docs/increments/terrain-radiation.md`, R5 and R10. The C++ suite
+(`tests/cpp/unit/test_radiation_evaluate.cpp`) holds the lit test, I7 in full
+and the sunrise; this file checks what crosses and the Python surface.
 
 Interface assumed (names chosen here and listed in the handback):
 
@@ -20,7 +22,7 @@ Interface assumed (names chosen here and listed in the handback):
 - `radiation.geometry.RadiationGeometry`, frozen: `lat`, `lon` (n,),
   `normal` (n, 3), `horizon` (n, N) int16, `reach` (n, N) uint8,
   `n_directions`, `request` (a `RadiationRequest`).
-  `geometry_cls.open_sky(frame, request)`: the frame's lat, lon and
+  `RadiationGeometry.open_sky(frame, request)`: the frame's lat, lon and
   normal with a horizon of -9000 (-90 degrees, no terrain) and reach 0 in every
   direction.
 - `radiation.evaluate.evaluate_instant(geometry, times_utc_ms, *,
