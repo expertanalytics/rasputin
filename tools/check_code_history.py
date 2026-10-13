@@ -41,7 +41,7 @@ RULES = {
     "increment": re.compile(r"\b[Ii]ncrements?\s+\d{1,2}[a-f]?\b"),
     # Not inside a path or a format spec (`.0f`); scientific notation is
     # dropped below.
-    "label": re.compile(r"(?<![\w.$/-])(?:[1-9]|[1-4]\d)[a-f](?:-(?:\d|i{1,3}))?(?![\w.]|-\d)"),
+    "label": re.compile(r"(?<![\w.$/-])(?:[1-9]|[1-4]\d)[a-f](?:-(?:\d|i{1,3}))?(?!\w|\.\w|-\d)"),
     # D8 is also the hydrology flow-direction scheme, so it is not a design ID.
     "ruling-id": re.compile(r"(?<![\w-])(?!D8(?!\w))(?:[RDQBCSUJMFT]\d{1,2}|[RD]\d\.\d)(?!\w)"),
     "review": re.compile(r"\baudit PR\b|\bPR\s?(?:\d|[A-D])\b|\breview round\b|\bround \d\b"),
