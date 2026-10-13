@@ -18,6 +18,12 @@ Interface:
   models' defaults, `distribution` to `SnowDistribution.lognormal(0.4, 10)`;
   `correction` and `resources` are required. A frame interval that is not a
   whole number of steps is refused, located on `frames`.
+- Also refused on `frames` (code review round 1 of PR 3): a spring that is
+  not a whole number of frames, and a run whose last frame is numbered past
+  9999. Frames are numbered from 0, one at the start and one every
+  `every_hours` to the end, so a run has days * 24 / every_hours + 1 of them;
+  the case file's `swe****.var` pattern has four digits, so at most 10,000
+  (numbers 0000 to 9999).
 """
 
 from __future__ import annotations
@@ -110,6 +116,48 @@ class TestSnowJob:
     def test_a_frame_interval_of_whole_steps_is_accepted(self, params: ModuleType) -> None:
         spring = params.SyntheticSpring(step_minutes=90)
         self.job(params, spring=spring, frames=params.FrameSpec(every_hours=3))
+
+    def test_a_spring_that_is_not_whole_frames_is_refused(self, params: ModuleType) -> None:
+        # 91 days is 2184 h, 45 1/2 frames of 48 h: the last half frame was dropped.
+        spring = params.SyntheticSpring(days=91)
+        frames = params.FrameSpec(every_hours=48)
+        caught = refused_on(("frames",), lambda: self.job(params, spring=spring, frames=frames))
+        assert "91 days is not a whole number of 48-hour frames" in str(caught)
+
+    def test_a_day_that_is_not_whole_frames_is_refused(self, params: ModuleType) -> None:
+        # 24 h is 4 4/5 frames of 5 h; 5 h is 5 whole hourly steps, so only the
+        # new rule refuses it.
+        spring = params.SyntheticSpring(days=1)
+        frames = params.FrameSpec(every_hours=5)
+        refused_on(("frames",), lambda: self.job(params, spring=spring, frames=frames))
+
+    def test_a_spring_of_whole_frames_longer_than_a_day_is_accepted(
+        self, params: ModuleType
+    ) -> None:
+        self.job(
+            params, spring=params.SyntheticSpring(days=90), frames=params.FrameSpec(every_hours=48)
+        )
+
+    def test_more_frames_than_four_digits_can_number_are_refused(self, params: ModuleType) -> None:
+        # 417 days of hourly frames: frames 0 to 10,008, 10,009 in all.
+        spring = params.SyntheticSpring(days=417)
+        frames = params.FrameSpec(every_hours=1)
+        caught = refused_on(("frames",), lambda: self.job(params, spring=spring, frames=frames))
+        assert (
+            "417 days with a frame every 1 h is 10,009 frames, "
+            "more than the 10,000 the animation can number" in str(caught)
+        )
+
+    def test_a_last_frame_numbered_10000_is_refused(self, params: ModuleType) -> None:
+        # 5000 days of 12-hour frames: frames 0 to 10,000, one past the pattern.
+        spring = params.SyntheticSpring(days=5000)
+        frames = params.FrameSpec(every_hours=12)
+        refused_on(("frames",), lambda: self.job(params, spring=spring, frames=frames))
+
+    def test_a_last_frame_numbered_9999_is_accepted(self, params: ModuleType) -> None:
+        # 3333 days of 8-hour frames: frames 0 to 9999, exactly 10,000.
+        spring = params.SyntheticSpring(days=3333)
+        self.job(params, spring=spring, frames=params.FrameSpec(every_hours=8))
 
     @pytest.mark.parametrize("swe", [-1.0, float("nan"), float("inf")])
     def test_a_bad_initial_swe_is_refused(self, params: ModuleType, swe: float) -> None:

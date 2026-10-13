@@ -110,7 +110,7 @@ BINS = "bins must be between 1 and 64, not 65"
 SIDEWAYS = "'sideways' is not one of 'none', 'melt-factor', 'threshold'"
 
 
-def refused(mesh: Path, out: Path, *args: str, says: str) -> None:
+def refused(mesh: Path, out: Path, *args: str, says: str) -> str:
     before = sorted(out.iterdir()) if out.is_dir() else None
     code, output = invoke("snow", "--mesh", str(mesh), "--out", str(out), *args)
     assert code == USAGE, output
@@ -121,6 +121,7 @@ def refused(mesh: Path, out: Path, *args: str, says: str) -> None:
         assert not out.exists() or not any(out.iterdir())
     else:
         assert sorted(out.iterdir()) == before
+    return output
 
 
 @pytest.fixture
@@ -295,6 +296,22 @@ class TestRefusals:
             says="snow needs a mesh in a projected CRS in metres; this one is in degrees",
         )
 
+    @pytest.mark.parametrize(
+        ("crs", "unit"), [("EPSG:2263", "US survey foot"), ("EPSG:3359", "foot")]
+    )
+    def test_a_mesh_in_feet(self, tmp_path: Path, crs: str, unit: str) -> None:
+        mesh = mesh_file(tmp_path / "feet.vtk", crs=crs)
+        output = refused(
+            mesh,
+            tmp_path / "out",
+            "--sun-correction",
+            "none",
+            "--days",
+            "1",
+            says="snow needs a mesh in a projected CRS in metres",
+        )
+        assert squashed(unit) in squashed(output), output
+
     def test_an_ascii_mesh(self, tmp_path: Path) -> None:
         mesh = mesh_file(tmp_path / "ascii.vtk", binary=False)
         refused(
@@ -333,6 +350,33 @@ class TestRefusals:
             "--frame-hours",
             "2",
             says="a frame every 2 h is not a whole number of 90-minute steps",
+        )
+
+    def test_a_spring_that_is_not_whole_frames(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh,
+            tmp_path / "out",
+            "--sun-correction",
+            "none",
+            "--days",
+            "91",
+            "--frame-hours",
+            "48",
+            says="91 days is not a whole number of 48-hour frames",
+        )
+
+    def test_more_frames_than_four_digits_can_number(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh,
+            tmp_path / "out",
+            "--sun-correction",
+            "none",
+            "--days",
+            "417",
+            "--frame-hours",
+            "1",
+            says="417 days with a frame every 1 h is 10,009 frames, "
+            "more than the 10,000 the animation can number",
         )
 
 

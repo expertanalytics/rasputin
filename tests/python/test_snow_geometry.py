@@ -178,6 +178,15 @@ class TestConvergence:
         with pytest.raises(ValueError, match="degrees"):
             importlib.import_module("tin_engine.crs").site_of("EPSG:4326", 15.0, 61.0)
 
+    @pytest.mark.parametrize(
+        ("crs", "unit"), [("EPSG:2263", "US survey foot"), ("EPSG:3359", "foot")]
+    )
+    def test_a_projected_crs_in_feet_is_refused_naming_its_unit(self, crs: str, unit: str) -> None:
+        # Code review round 1 of PR 3: slopes need metres on all three axes.
+        with pytest.raises(ValueError, match="metres") as caught:
+            importlib.import_module("tin_engine.crs").site_of(crs, 1_000_000.0, 200_000.0)
+        assert unit in str(caught.value)
+
     def test_a_grid_north_facet_faces_true_azimuth_gamma(self, geometry: ModuleType) -> None:
         g = geometry.triangle_geometry(*facet(30.0, 0.0), GAMMA_EAST_EDGE)
         gamma = math.radians(GAMMA_EAST_EDGE)
