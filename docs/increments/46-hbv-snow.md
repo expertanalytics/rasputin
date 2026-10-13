@@ -1,9 +1,10 @@
 # Increment 46: HBV snow on the triangles, melt corrected for the sun, and a melt animation
 
-**Status: designed; design review round 2 approved; addendum for cast
-shadows (section 10) written 2026-10-13, not yet reviewed** (`@architect`,
-branch `worktree-snow-melt`). PR 1's kernel is built. Six PRs (section 10.7,
-which supersedes section 8's table). Ola was away when it was written; every default taken
+**Status: design and its cast-shadow addendum approved (rounds 1-4); PR 1,
+the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
+and animation, built, code review round 1 fixes in, acceptance run next; PR 4,
+the receiver frame, approved; PR 5, the horizon kernel, in its red step**
+(2026-10-14). Six PRs (section 10.7, which supersedes section 8's table). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
 `docs/increments/46-probes/probe_spring.py`, whose output is
