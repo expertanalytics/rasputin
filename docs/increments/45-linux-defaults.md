@@ -408,7 +408,8 @@ def baseline_path(machine: Machine, power: str) -> Path: ...  # QUICK / f"baseli
 
 class CaseResult(BaseModel):
     ...                      # tolerance, max_error, mesh_sha256, measures, as today
-    inputs: list[str] = []   # its case's cases.toml inputs; [] in a record saved before 45
+    inputs: list[str] = Field(default_factory=list)  # its case's cases.toml inputs;
+                             # [] in a record saved before 45 (a bare [] trips ruff's RUF012)
 
 def _mismatch(new: QuickRecord, base: QuickRecord) -> str | None: ...  # signature unchanged; 4.4
 ```

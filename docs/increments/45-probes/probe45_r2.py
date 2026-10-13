@@ -17,10 +17,11 @@ from pathlib import Path
 
 sys.path.insert(0, sys.argv[1] + "/tools")
 import bench_quick as q
+from pydantic import Field
 
 
 class CaseResult2(q.CaseResult):
-    inputs: list[str] = []
+    inputs: list[str] = Field(default_factory=list)
 
 
 class QuickRecord2(q.QuickRecord):
@@ -129,7 +130,12 @@ for label, keep, lists, changed in [
         {"quarter": [TIF, OTHER]},
         None,
     ),
-    ("quarter's .geojson dropped from its inputs in cases.toml", list(by_case), {"quarter": [TIF]}, None),
+    (
+        "quarter's .geojson dropped from its inputs in cases.toml",
+        list(by_case),
+        {"quarter": [TIF]},
+        None,
+    ),
 ]:
     new, lists = run_of(keep, lists, changed)
     print(f"  {label}: ran {keep}")
