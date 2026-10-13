@@ -1,10 +1,10 @@
-"""Metres near a point, cell sizes and geodesic areas (increment 40).
+"""Metres near a point, cell sizes and geodesic areas.
 
-`docs/increments/40-geographic-catchment.md`, sections 5.2 to 5.4. A DEM in
-degrees is flooded on its own grid; what is a distance is measured in a
-:class:`LocalFrame`, an affine map to metres at one point, and what is an
-area is geodesic, on the ellipsoid of the CRS. On a projected CRS every
-function returns what the metre code computed before, bit for bit.
+A DEM in degrees is flooded on its own grid; what is a distance is measured in
+a :class:`LocalFrame`, an affine map to metres at one point, and what is an
+area is geodesic, on the ellipsoid of the CRS. On a projected CRS the frame is
+the identity and an area is the planar one, so every function gives the plain
+metre arithmetic, bit for bit.
 
 Layer 1: pyproj through `crs.parse_crs`, NumPy and shapely. No `_core`.
 """
@@ -81,7 +81,8 @@ class LocalFrame:
         return metres / self.kx, metres / self.ky
 
     def cell_m(self, meta: RasterMeta) -> float:
-        """A cell of `meta`: its longer side in metres (section 5.3)."""
+        """A cell of `meta`: its longer side in metres, the chosen size of a
+        cell that is not square in metres."""
         return max(meta.delta_x * self.kx, meta.delta_y * self.ky)
 
     def meta(self, meta: RasterMeta) -> RasterMeta:

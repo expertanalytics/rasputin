@@ -1,8 +1,7 @@
 """A land-cover class per triangle: components first, one point per component.
 
-Increment 16c (`docs/increments/16c-landcover-labels.md`, R1). Pure: numpy and
-shapely in, arrays and counts out; nothing first-party, never `_core`, never a
-path.
+Pure: numpy and shapely in, arrays and counts out; nothing first-party, never
+`_core`, never a path.
 
 The triangles are split into connected components across every edge that is
 not a constraint edge (the spread of Shewchuk's Triangle `-A`, blocked by
@@ -13,7 +12,7 @@ moved an input boundary) it lies strictly on one side of every input
 boundary. A component whose largest `r` is at most `margin` is still labelled
 by its point, and counted `thin`.
 
-Overlaps (Default D2): the polygon of smallest area wins, ties to the smaller
+Overlaps: the polygon of smallest area wins, ties to the smaller
 code, so the result does not depend on the polygons' order.
 """
 
@@ -30,7 +29,7 @@ from shapely.geometry.base import BaseGeometry
 
 @dataclass(frozen=True)
 class CoverLabels:
-    """The codes, and the counts of R3's stderr line."""
+    """The codes, and the counts the mesh command reports on stderr."""
 
     codes: npt.NDArray[np.int32]
     regions: int
@@ -137,7 +136,8 @@ def _best(ids: npt.NDArray[np.int64], r: npt.NDArray[np.float64]) -> npt.NDArray
 def _lookup(
     points: npt.NDArray[np.float64], polygons: Sequence[tuple[BaseGeometry, int]]
 ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
-    """Each point's code by D2, and how many polygons it lies in."""
+    """Each point's code (the smallest polygon holding it, ties to the smaller
+    code), and how many polygons it lies in."""
     codes = np.zeros(len(points), dtype=np.int64)
     hits = np.zeros(len(points), dtype=np.int64)
     if not polygons or not len(points):

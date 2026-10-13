@@ -1,9 +1,8 @@
-"""What a run may use of the machine (increment 38): the one module that reads it.
+"""What a run may use of the machine: the one module that reads it.
 
-`docs/increments/38-threads-and-memory.md`, sections 4.1 to 4.3. The core
-count, the physical memory and a container's cgroup limits are read here and
-nowhere else; `Resources` carries the resolved figures, never 0, never None,
-and every pool and `_core` call takes the one integer it uses.
+The core count, the physical memory and a container's cgroup limits are read
+here and nowhere else; `Resources` carries the resolved figures, never 0,
+never None, and every pool and `_core` call takes the one integer it uses.
 
 The cgroup root is `/sys/fs/cgroup`, as a container runtime mounts the
 container's own cgroup. A limit set on an ancestor cgroup of a process on a
@@ -93,7 +92,7 @@ def parse_bytes(text: str) -> int:
 def resources(
     threads: int | None, memory_budget: str | None, environ: Mapping[str, str]
 ) -> Resources:
-    """Sections 4.2 and 4.3: `--threads` (0 = every core), else `RASPUTIN_THREADS`
+    """The run's resources: `--threads` (0 = every core), else `RASPUTIN_THREADS`
     by the same rule (stripped; empty is unset), else every core; and
     `--memory-budget`, else half the machine's memory. A `ValueError` names
     the text it refuses."""

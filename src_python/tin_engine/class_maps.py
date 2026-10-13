@@ -1,10 +1,12 @@
-"""Land-cover class maps as TOML data files, and the clean-up distances they imply (41).
+"""Land-cover class maps as TOML data files, and the clean-up distances they imply.
 
-`docs/increments/41-class-maps-as-data.md`. A class-map file is read with
-`tomllib`, checked by a strict Pydantic model, and turned into the frozen
-:class:`~tin_engine.feature_input.ClassMap` the feature reader takes. The
-shipped maps live in ``tin_engine/data/class_maps/``; ``property``, the
-identity map over the vocabulary's names, is built here, not shipped.
+`docs/increments/41-class-maps-as-data.md`, *5.1 The formulas*
+
+A class-map file is read with `tomllib`, checked by a strict Pydantic model,
+and turned into the frozen :class:`~tin_engine.feature_input.ClassMap` the
+feature reader takes. The shipped maps live in ``tin_engine/data/class_maps/``;
+``property``, the identity map over the vocabulary's names, is built here, not
+shipped.
 """
 
 from __future__ import annotations
@@ -154,8 +156,11 @@ class CleanUpDistances(_Strict):
 
 
 def derived_cleanup(accuracy_m: float, cell: float) -> CleanUpDistances:
-    """Section 5.1: s = max(accuracy, cell); repair s/100, simplify s/2,
-    snap min(s/20, 50), half the read region's 100 m margin."""
+    """The clean-up distances from one length scale, s = max(accuracy, cell):
+    a source more accurate than the DEM cannot place a border more finely than
+    one cell. Repair s/100, simplify s/2, snap min(s/20, 50): the snap is
+    capped at half the read region's 100 m margin, which it must stay under.
+    Division rather than multiplication keeps CORINE's 1, 50 and 5 m exact."""
     s = max(accuracy_m, cell)
     return CleanUpDistances(repair_m=s / 100, tolerance_m=s / 2, outline_snap_m=min(s / 20, 50.0))
 
@@ -201,8 +206,9 @@ def load(value: str) -> ClassMap:
 
 
 def run_vocabulary(maps: Iterable[ClassMap]) -> EdgeVocabulary:
-    """Section 6: the default vocabulary plus every map's extras, in order of
-    first appearance, on bits 10 upward; the default itself with none."""
+    """The run's edge vocabulary: the default plus every map's extra names, in
+    order of first appearance, on bits 10 upward; the default itself when no
+    map has extras. More extras than bits 10 to 31 hold is a ``ValueError``."""
     extras = list(dict.fromkeys(n for m in maps for n in m.extra_names))
     if not extras:
         return DEFAULT_VOCABULARY

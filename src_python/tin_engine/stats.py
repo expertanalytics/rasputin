@@ -1,8 +1,8 @@
 """Mesh statistics for ``rasputin mesh --stats``: sizes, quality and timings.
 
-``docs/increments/17-mesh-stats.md`` R1, R3 to R5. Pure: numpy only, no
-``_core`` and no typer, so it is testable without the extension. ``cli.py``
-builds a :class:`Report` from what it ran and writes :func:`render`'s text.
+Pure: numpy only, no ``_core`` and no typer, so it is testable without the
+extension. ``cli.py`` builds a :class:`Report` from what it ran and writes
+:func:`render`'s text.
 
 Results, not configuration, so frozen dataclasses rather than Pydantic, as
 ``elevation.Trimmed`` does.
@@ -26,7 +26,7 @@ Phases = Sequence[tuple[str, float]]
 
 class PhaseClock:
     """Append-only phase times. A repeated name accumulates; ``phases()`` is in
-    first-seen order. ``now`` returns integer nanoseconds (R5)."""
+    first-seen order. ``now`` returns integer nanoseconds."""
 
     def __init__(self, now: Callable[[], int] = time.perf_counter_ns) -> None:
         self._now = now
@@ -56,7 +56,8 @@ class PhaseClock:
 
 @dataclass(frozen=True, slots=True)
 class Quality:
-    """R3. Angles in degrees, shares as fractions in [0, 1]; degrees as ints."""
+    """The report's quality figures. Angles in degrees, shares as fractions in
+    [0, 1]; vertex degrees as ints."""
 
     angle_median: float
     angle_under_1: float
@@ -71,7 +72,7 @@ class Quality:
 
 def quality(vertices: npt.ArrayLike, triangles: npt.ArrayLike) -> Quality:
     """Minimum angle per triangle in plan view (columns 0 and 1 only), and the
-    vertex degree as incident triangles (R3).
+    vertex degree as incident triangles.
 
     Each angle is ``atan2(|e x f|, e . f)``, exact where ``acos`` of a
     normalised dot loses everything below about 1e-4 rad; a zero-area triangle
@@ -107,7 +108,8 @@ def quality(vertices: npt.ArrayLike, triangles: npt.ArrayLike) -> Quality:
 
 @dataclass(frozen=True, slots=True)
 class Sizes:
-    """R4's Sizes rows; a None row does not apply and is omitted.
+    """The rows of the report's Sizes table; a None row does not apply and is
+    omitted.
     ``dem_nodes`` is (rows, cols), ``dem_spacing`` (dx, dy), ``files``
     (name, bytes)."""
 
@@ -121,8 +123,8 @@ class Sizes:
     domain_holes: int | None = None
     start_vertices: int | None = None
     start_triangles: int | None = None
-    #: The DEM was resampled onto another grid (increment 25, D4): its nodes
-    #: are not the DEM's, and the row says so.
+    #: The DEM was resampled onto another grid: its nodes are not the DEM's,
+    #: and the row says so.
     resampled: bool = False
 
 
@@ -135,13 +137,13 @@ class Report:
     total: float
     stats_seconds: float
     #: The text after ``bounds checks: ``, ``off`` or ``on (<mode>)``: which
-    #: build made the mesh (increment 24). Filled by the CLI from ``_core``.
+    #: build made the mesh. Filled by the CLI from ``_core``.
     bounds_checks: str
     threads: int | None = None
     #: One row per disagreeing pair of DEM tiles: two names, nodes, max and
-    #: median, already formatted (`mosaic.Seam.cells`; Ola's Q1 revised).
+    #: median, already formatted (`mosaic.Seam.cells`).
     seams: Sequence[Sequence[str]] = ()
-    #: The run record's rows (increment 25, D4), ``(wording, value, name)``:
+    #: The run record's rows, ``(wording, value, name)``:
     #: what the run read and how it was set, and what it made.
     inputs: Sequence[tuple[str, str, str]] = ()
     result: Sequence[tuple[str, str, str]] = ()
@@ -247,7 +249,7 @@ def _timings(report: Report) -> list[str]:
 
 
 def render(report: Report) -> str:
-    """The Markdown report (R4). Pure: no clock, no I/O."""
+    """The Markdown report. Pure: no clock, no I/O."""
     lines = ["# rasputin mesh — statistics", "", f"`{report.command}`", ""]
     lines += [f"bounds checks: {report.bounds_checks}", ""]
     lines += ["## Sizes", "", *_sizes(report.sizes), ""]

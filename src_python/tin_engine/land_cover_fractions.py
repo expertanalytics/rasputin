@@ -1,17 +1,16 @@
-"""Exact land-cover class fractions per triangle (increment 26b).
+"""Exact land-cover class fractions per triangle.
 
-`docs/increments/26-land-cover.md`, 1.1 "What is computed, and in which
-coordinates", 1.2 and section 6. Every mesh vertex is moved once to the class
-raster's longitude and latitude (`crs.reprojector`, the one place a transformer
-is built) and then to the raster's index space, where every cell is a unit
-square; the triangles are cut into chunks, each chunk's class window read from
-the cache and handed with the triangle corners to `_core.class_areas`, whose
-exact areas become fractions. The cutoff and the ledger are increment 26c's;
-this module writes the exact fractions.
+`docs/increments/26-land-cover.md`, *1.1 What is computed, and in which coordinates*
 
-Not `land_cover.py`: 16c's `landcover.py` labels triangles from polygons and is
-not replaced. Blocking; the C++ call releases the GIL, so an API worker runs
-`assign` in `asyncio.to_thread`.
+Every mesh vertex is moved once to the class raster's longitude and latitude
+(`crs.reprojector`, the one place a transformer is built) and then to the
+raster's index space, where every cell is a unit square; the triangles are cut
+into chunks, each chunk's class window read from the cache and handed with the
+triangle corners to `_core.class_areas`, whose exact areas become fractions.
+
+Not to be confused with `landcover.py`, which labels triangles from polygons.
+Blocking; the C++ call releases the GIL, so an API worker runs `assign` in
+`asyncio.to_thread`.
 """
 
 from __future__ import annotations
@@ -27,7 +26,8 @@ from tin_engine.crs import reprojector
 from tin_engine.io.models import ClassFractions, ClassWindow, IndexWindow, RasterMeta
 from tin_engine.io.repository import CacheRepository
 
-#: Triangles per chunk, each chunk with its own class window (1.3).
+#: Triangles per chunk, each chunk with its own class window, so only the cells
+#: near those triangles are held at once.
 CHUNK = 2**18
 
 _GEOD = Geod(ellps="WGS84")
@@ -44,7 +44,7 @@ class Assigned:
 
 def row_areas(window: ClassWindow) -> npt.NDArray[np.float64]:
     """The WGS 84 ellipsoidal area in m2 of one cell of each row of `window`
-    (1.1: computed once per row by `pyproj.Geod`). A cell's area does not
+    (computed once per row by `pyproj.Geod`). A cell's area does not
     depend on its longitude, so every row is measured at longitude 0."""
     lons = [0.0, window.delta_x, window.delta_x, 0.0]
     out = np.empty(window.rows, dtype=np.float64)
@@ -62,7 +62,7 @@ def index_space(
 ) -> npt.NDArray[np.float64]:
     """Every vertex's `(col, row)` in the class raster `meta` describes: moved
     once to the raster's CRS, then `col = (lon - lon0) / s`, `row = (lat0 - lat) / s`
-    with `(lon0, lat0)` the raster's upper-left cell corner (1.1)."""
+    with `(lon0, lat0)` the raster's upper-left cell corner."""
     xy = np.asarray(vertices, dtype=np.float64)[:, :2]
     lonlat = reprojector(mesh_crs, meta.crs, threads=threads)(xy)
     corner_x, corner_y = meta.x_min - meta.delta_x / 2, meta.y_max + meta.delta_y / 2
@@ -127,7 +127,8 @@ def assign(
 def fractions_of(
     offsets: npt.NDArray[np.uint32], classes: npt.NDArray[np.uint8], areas: npt.NDArray[np.float64]
 ) -> ClassFractions:
-    """`f[t, k] = a[t, k] / sum_k a[t, k]` (1.1), as the file's float32."""
+    """`f[t, k] = a[t, k] / sum_k a[t, k]`, as the file's float32. A triangle
+    with no class area at all is a `ValueError`."""
     counts = offsets[1:].astype(np.int64) - offsets[:-1].astype(np.int64)
     if (counts == 0).any():
         raise ValueError("a triangle has no class area; it is below the arithmetic's resolution")
@@ -140,7 +141,8 @@ def dominant(
     offsets: npt.NDArray[np.uint32], classes: npt.NDArray[np.uint8], areas: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.int32]:
     """Per triangle, the class of the largest area, ties to the smaller class
-    (1.4, step 7); classes are ascending within a row, so the first maximum."""
+    number; classes are ascending within a triangle's entries, so the first
+    maximum."""
     starts = offsets[:-1].astype(np.int64)
     if len(areas) == 0:
         return np.zeros(len(starts), dtype=np.int32)
