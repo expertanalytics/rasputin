@@ -31,8 +31,9 @@ from tin_engine.hydrography import Lake, RiverSegment
 #: Metres: an end within this of the next segment's start continues the chain.
 JOIN_M = 1.0
 #: Cells (a cell's longer side in metres, `cell_m`): `U` is never below
-#: three cells, and the burn's half-width is three cells, so the burn always
-#: has a cross-section a few nodes wide to find the valley floor in.
+#: three cells, the floor the DEM's resolution gives, and the burn's
+#: half-width is three cells, so its cross-section is at least seven nodes
+#: wide.
 U_FLOOR_CELLS = 3
 #: Metres: the chain runs `U + DOWN_EXTRA_M` below `P`.
 DOWN_EXTRA_M = 100.0
@@ -110,10 +111,10 @@ def _tier(segment: RiverSegment, gauge: Gauge) -> int:
     if number is not None and station is not None:
         if number == station:
             return 0
-        # A segment number that is a leading part of the station's names a
-        # river the station's river drains into ("002.A" for "002.AB"). It
-        # must hold a dot, so it shares the main number: a bare main number
-        # ("002") is never a prefix, a chosen limit.
+        # A segment number that holds a dot and is a leading part of the
+        # station's names a river the station's river drains into ("002.A"
+        # for "002.AB"). A bare main number ("002") is never a prefix, a
+        # chosen limit.
         if "." in number and station.startswith(number):
             return 1
     if gauge.river is not None and segment.name == gauge.river:

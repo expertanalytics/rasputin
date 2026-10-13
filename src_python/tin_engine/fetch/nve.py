@@ -58,7 +58,7 @@ CHUNK = 40
 #: above the gauge (500 m and 1000 m), plus 500 m.
 ENVELOPE_HALF = 2000.0
 #: Each way round the station point: any lake within the lake gap (three
-#: cells, 30 m on a 10 m DEM) of the station meets it.
+#: cells) of the station meets it, for DEM cells up to 33 m.
 LAKE_ENVELOPE_HALF = 100.0
 FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "lakes.geojson", "NOTICE.txt")
 

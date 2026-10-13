@@ -13,9 +13,10 @@ With a river reach, the pour point is the gauge's placed node on the burnt
 reach (`burn.py`). Stage A floods from it in each window, burnt afresh, and
 decides every refusal. Stage B grows on until the catchment of `D` is clear
 of the window's edge too, `D` being the first chain node at least `U` metres
-(the reach's uncertainty) below the placed node. The sensitivity
-(`sensitivity.py`) is then read from one `_core.accumulate` of the final
-window, which holds the whole catchment of every chain node it reads. When
+(the reach's uncertainty) downstream of the placed node along the chain. The
+sensitivity (`sensitivity.py`) is then read from one `_core.accumulate` of
+the final window, which holds the whole catchment of every chain node it
+reads. When
 stage B is refused, stage A's window is read instead, and the sensitivity
 reports how far downstream it could read.
 
