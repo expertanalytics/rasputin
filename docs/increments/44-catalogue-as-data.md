@@ -530,3 +530,7 @@ P6  N60, every edge 0.003 deg inside 10..11 E, 60..61 N: today 9 tiles; own spac
 P7  CRS(EPSG:4326).get_geod(): MapBiomas rows sampled 20929, differing 8862
 P7  Geod(a=, rf=) from CRS(EPSG:4326).ellipsoid: MapBiomas rows sampled 20929, differing 0
 ```
+
+## Review
+
+**Design review, round 1, 2026-10-13.** Range `b1353075..ae71ea85`, 0 production lines, @reviewer: CHANGES REQUESTED. Blocking: (1) a land-cover file in a feet CRS is refused by increment 43's height-unit check (`read_page`: a uint8 class raster in EPSG:2229 fails with "the DEM's coordinates are in US survey feet … give --z-unit"; `--z-unit` does not apply to `--land-cover`), contrary to section 4.7: say how class rasters skip the height-unit check (for example the land-cover path passes `z_unit="metre"`) and add a test to T8; (2) no speed figure for what every mesh run gains (the TOML catalogue parsed at import, the CRS parse in `row_areas`); the reviewer measured about 4 ms to import `tomllib` and 0.3 ms to parse a 3 kB file. Probes re-run and reproduced (NaN and IndexError; `Geod(a, rf)` 0 of 20,929 rows changed against 8,862; the 85°-90° band). Suggestions: T12 has four `row_areas` calls on three lines, not three; `tests/python/fraction_fixtures.py:28` quotes the old one-argument signature; the `class_maps.py:191-199` citation leaves out line 200; 4.6 should say the "stored 0" refusal sees only the window read; 4.3 should say `--cache` alone (without `RASPUTIN_DATA`) loads no user entries; 4.7 should say the m² from projected rows are grid-plane areas (fractions unaffected).
