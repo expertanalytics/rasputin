@@ -2,7 +2,8 @@
 (increment 15c-2, `docs/increments/15c-geographic-dem.md` D2-D4).
 
 A `TargetGrid` is a sub-rectangle of one global lattice in the target CRS:
-node `(R, K)` sits at `(K h, -R h)` bit for bit (J6), `h` whole metres.
+node `(R, K)` sits at `(K h, -R h)` bit for bit (J6), `h` whole metres or a
+power of two below one (increment 43, 4.6).
 `resample` fills it bilinearly from a `SourceWindows`; `check_point_blocks`
 yields the source's own nodes, moved into the target CRS, for the final
 check against the source (D5). Every transform goes through
@@ -20,7 +21,7 @@ from typing import Annotated, Any, Protocol
 import numpy as np
 import numpy.typing as npt
 import shapely
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from shapely.prepared import prep
 
 from tin_engine.crs import parse_crs, reprojector
@@ -38,6 +39,13 @@ BLOCK_NODES = 1 << 20
 Block = tuple[npt.NDArray[np.float64], npt.NDArray[np.float32]]
 
 
+def _lattice_step(h: float) -> float:
+    """A whole number of metres from 1 to 1000, or 2^-k m for k from 1 to 10."""
+    if not ((h.is_integer() and 1 <= h <= 1000) or h in (2.0**-k for k in range(1, 11))):
+        raise ValueError(f"need 1 to 1000 whole metres, or 2^-k m for k 1 to 10; got {h}")
+    return h
+
+
 class TargetGrid(BaseModel):
     """`rows x cols` nodes of the global lattice of spacing `spacing` in `crs`,
     the upper-left one global node `(row0, col0)` (D2)."""
@@ -45,7 +53,7 @@ class TargetGrid(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     crs: str
-    spacing: Annotated[StrictInt, Field(ge=1, le=1000)]
+    spacing: Annotated[float, AfterValidator(_lattice_step)]
     row0: int
     col0: int
     rows: int
@@ -88,21 +96,26 @@ class TileWindows:
         return self._tile.array[r0:r1, c0:c1]
 
 
-def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> int:
+def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
     """The source's north-south node spacing in metres at `at` (in the DEM's
-    CRS), rounded to whole metres (Q16 (a)); a projected source's own."""
+    CRS), rounded to whole metres (Q16 (a)), or below a metre to the nearest
+    power of two, at least 2^-10 (43, 4.6); a projected source's own."""
     if not meta.geographic:
-        return max(1, round(meta.delta_y))
+        return _rounded(meta.delta_y)
     lon, lat = at
     half = meta.delta_y / 2
     geod = parse_crs(meta.crs).get_geod()
     assert geod is not None  # a geographic CRS has an ellipsoid
     _, _, metres = geod.inv(lon, lat - half, lon, lat + half)
-    return max(1, round(float(metres)))
+    return _rounded(float(metres))
+
+
+def _rounded(s: float) -> float:
+    return max(1, round(s)) if s >= 1 else max(2.0**-10, 2.0 ** round(math.log2(s)))
 
 
 def target_grid_for(
-    domain: DomainPolygon, target: str, spacing: int
+    domain: DomainPolygon, target: str, spacing: float
 ) -> tuple[TargetGrid, shapely.Polygon]:
     """The domain (in `target`) grown by the cell diagonal with mitred
     corners, its bounds snapped outward to the lattice (D2); and that grown
@@ -214,6 +227,8 @@ def resample(
         nodata_source=m.nodata_source,
         pixel_is_area=False,
         vertical_unit_assumed=m.vertical_unit_assumed,
+        z_unit=m.z_unit,
+        file_crs=m.file_crs,
     )
     # The canvas is adopted, not copied (15e, fix 2): it is C-contiguous of
     # the meta's shape and never handed out writable (R7's condition).

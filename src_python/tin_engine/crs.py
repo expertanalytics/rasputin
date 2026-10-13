@@ -109,14 +109,53 @@ def epsg_matches(crs: CRS) -> tuple[int, ...]:
     `crs`'s own base geographic CRS and that PROJ calls equivalent to `crs`
     once both are in x-then-y order (the first leg of `same_crs`), lowest
     first. Empty when there are none (`docs/increments/geotiff-crs-by-parameters.md`,
-    section 4)."""
+    section 4). A candidate whose axes carry a meridian (EPSG's polar CRSs)
+    is also taken when the operation to it is PROJ's `noop` (increment 43, 4.5)."""
     base = _base_code(crs)
     offered = {int(m.code) for m in crs.list_authority(auth_name="EPSG", min_confidence=0)}
     return tuple(
         code
         for code in sorted(offered)
-        if _base_code(CRS.from_epsg(code)) == base and _equivalent_xy(crs, f"EPSG:{code}")
+        if (_base_code(candidate := CRS.from_epsg(code)) == base and _equivalent_xy(crs, candidate))
+        or _polar_noop(crs, candidate)
     )
+
+
+def _polar_noop(crs: CRS, candidate: CRS) -> bool:
+    """`candidate`'s axes carry a meridian, its base is `crs`'s in any axis
+    order, and the operation from `crs` to it is `noop`."""
+    axes = candidate.to_json_dict().get("coordinate_system", {}).get("axis", [])
+    a, b = crs.geodetic_crs, candidate.geodetic_crs
+    if not any("meridian" in axis for axis in axes) or a is None or b is None:
+        return False
+    if not a.equals(b, ignore_axis_order=True):
+        return False
+    try:
+        return str(_transformer(crs, candidate).definition).startswith("proj=noop")
+    except ProjError:
+        return False
+
+
+def metre_twin(crs: CRS) -> tuple[CRS, float]:
+    """`crs` with its axes in metres and its linear conversion parameters
+    (false easting and northing, easting and northing at an origin) converted
+    to metres, named "<name>, in metres"; and the metres per unit of its axes.
+    `crs` itself and 1.0 when its axes are already in metres (increment 43, 4.4)."""
+    factor = float(crs.axis_info[0].unit_conversion_factor)
+    if factor == 1.0:
+        return crs, 1.0
+    data = crs.to_json_dict()
+    data.pop("id", None)
+    data["name"] = f"{crs.name}, in metres"
+    data["conversion"].pop("id", None)
+    for parameter in data["conversion"]["parameters"]:
+        unit = parameter.get("unit")
+        if isinstance(unit, dict) and unit.get("type") == "LinearUnit":
+            parameter["value"] *= unit["conversion_factor"]
+            parameter["unit"] = "metre"
+    for axis in data["coordinate_system"]["axis"]:
+        axis["unit"] = "metre"
+    return CRS.from_json_dict(data), factor
 
 
 def _base_code(crs: CRS) -> int | None:

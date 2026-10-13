@@ -39,7 +39,7 @@ from tin_engine.crs import (
 )
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
 from tin_engine.grow import grow_mitred
-from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
+from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint, ZUnit
 from tin_engine.io.repository import CacheRepository, DemRepository, TiffDemRepository
 from tin_engine.mosaic import MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
 from tin_engine.resources import Resources
@@ -75,6 +75,8 @@ class DemRequest(BaseModel):
     cached: CachedSource | None = None
     bounds: Bounds | None = None
     nodata: float | None = None
+    #: The caller's height unit for files that do not state one (43, 4.3).
+    z_unit: ZUnit | None = None
     domain: DomainPolygon | None = None
     target_crs: str | None = None
 
@@ -119,18 +121,19 @@ def repository_for(
     nodata: float | None = None,
     cached: CachedSource | None = None,
     threads: int = 1,
+    z_unit: ZUnit | None = None,
 ) -> tuple[TiffDemRepository | CacheRepository, str]:
     """The repository over one directory of tiles, over the files given, or
     over a cached source, and the run's name: the directory's name, the first
-    file's stem, or the source's key; `threads` decode its blocks (38)."""
+    file's stem, or the source's key; `threads` decode its blocks (38).
+    `z_unit` is the caller's height unit (43, 4.3)."""
+    keys: dict[str, Any] = {"nodata": nodata, "threads": threads, "z_unit": z_unit}
     if cached is not None:
-        repository = CacheRepository(cached.cache, cached.source, nodata=nodata, threads=threads)
-        return repository, cached.source
+        return CacheRepository(cached.cache, cached.source, **keys), cached.source
     first = sources[0]
     if first.is_dir():
-        directory = TiffDemRepository.from_directory(first, nodata=nodata, threads=threads)
-        return directory, first.resolve().name
-    return TiffDemRepository(sources, nodata=nodata, threads=threads), first.stem
+        return TiffDemRepository.from_directory(first, **keys), first.resolve().name
+    return TiffDemRepository(sources, **keys), first.stem
 
 
 def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInput:
@@ -139,7 +142,9 @@ def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInpu
     `resources` (38) is the thread count for the decoders and the pools and
     the memory budget for the canvas; None is `Resources.fallback()`."""
     res = Resources.fallback() if resources is None else resources
-    repository, label = repository_for(request.sources, request.nodata, request.cached, res.threads)
+    repository, label = repository_for(
+        request.sources, request.nodata, request.cached, res.threads, request.z_unit
+    )
     footprints = repository.footprints()
     if footprints and _reprojected(request, [f.meta for f in footprints]):
         return _open_reprojected(request, repository, footprints, label, res)

@@ -25,7 +25,7 @@ from tin_engine.domain import DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.io.cog import block_grid, blocks_meeting
 from tin_engine.io.geotiff import read_page
-from tin_engine.io.models import Bounds, GeoTiffError, IndexWindow, RasterMeta
+from tin_engine.io.models import Bounds, GeoTiffError, IndexWindow, RasterMeta, ZUnit
 
 GAP = 64 * 1024
 MAX_RANGE = 8 * 1024 * 1024
@@ -85,14 +85,14 @@ class _Prefix(io.BytesIO):
 
 
 def parse_prefix(
-    prefix: bytes, *, nodata: float | None
+    prefix: bytes, *, nodata: float | None, z_unit: ZUnit | None = None
 ) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage] | None:
     """The header from a prefix of the file, or None while the prefix lacks
     any of it: a read past its end, or an offset or byte count of a block of
     the full-resolution page (tifffile logs a short offset array and goes on,
     so the count is the check). Geographic CRSs are read (decided 6)."""
     try:
-        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata)
+        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata, z_unit=z_unit)
         rows, _, across = block_grid(page)
         count = -(-int(page.imagelength) // rows) * across
         if len(page.dataoffsets) != count or len(page.databytecounts) != count:

@@ -51,8 +51,9 @@ from tin_engine.io.repository import open_geopackage, read_json
 
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
-#: R5: the region is the domain plus this many metres in the DEM's CRS, its
-#: boundary densified to this spacing before it is moved.
+#: R5: the region is the domain plus this many metres in the DEM's CRS, or two
+#: DEM cells when that is more (43, 4.7), its boundary densified to this
+#: spacing before it is moved.
 MARGIN, DENSIFY = 100.0, 1_000.0
 #: WGS 84's smallest and largest radii of curvature, metres (R5, "Long edges").
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
@@ -139,11 +140,15 @@ class FeatureSet(BaseModel):
     area_changed: float = 0.0
 
 
-def source_region(domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | CRS) -> Polygon:
-    """R5: the domain's convex hull, in the DEM's CRS, buffered by 100 m (the
-    hull of the domain buffered, to the arc's chord; 30d), densified to 1 km,
-    moved into ``source_crs``; the convex hull of those points."""
-    ring = shapely.segmentize(shapely.convex_hull(domain.polygon).buffer(MARGIN).exterior, DENSIFY)
+def source_region(
+    domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | CRS, *, cell: float = 0.0
+) -> Polygon:
+    """R5: the domain's convex hull, in the DEM's CRS, buffered by 100 m or two
+    DEM cells of side `cell`, whichever is more (the hull of the domain
+    buffered, to the arc's chord; 30d), densified to 1 km, moved into
+    ``source_crs``; the convex hull of those points."""
+    margin = max(MARGIN, 2 * cell)
+    ring = shapely.segmentize(shapely.convex_hull(domain.polygon).buffer(margin).exterior, DENSIFY)
     xy = shapely.get_coordinates(ring)
     if not same_crs(source_crs, dem_crs):
         xy = reprojector(dem_crs, source_crs)(xy)
@@ -227,9 +232,12 @@ def _untouched(line: BaseGeometry, domain: Polygon) -> bool:
     )
 
 
-def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str | CRS) -> FeatureSet:
+def open_features(
+    request: FeatureRequest, domain: DomainPolygon, dem_crs: str | CRS, *, cell: float = 0.0
+) -> FeatureSet:
     """Every source's features, in the DEM's CRS, clipped to ``domain`` (in the
-    DEM's CRS already). Raises :class:`FeatureError` on any refusal."""
+    DEM's CRS already), read from the domain plus `source_region`'s margin
+    for a DEM cell of `cell`. Raises :class:`FeatureError` on any refusal."""
     vocabulary = request.vocabulary
     for source in request.sources:
         cmap = source.class_map
@@ -239,6 +247,7 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
         except ValueError as exc:
             raise FeatureError(f"class map {cmap.name}: {exc}") from exc
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary, request.threads)
+    tally.cell = cell
     switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
     tally.cleanup = request if any(switches) or request.outline_snap_m else None
     crss: list[str] = []
@@ -282,6 +291,12 @@ class _Tally:
         self.cover_vertices: tuple[int, int] | None = None
         shapely.prepare(domain.polygon)
         self.inner = domain.polygon.point_on_surface()
+        self.cell = 0.0
+
+    def region(self, crs: str | CRS) -> Polygon:
+        """`source_region` in `crs`, the cell passed only where it widens the margin."""
+        wide = {"cell": self.cell} if 2 * self.cell > MARGIN else {}
+        return source_region(self.domain, self.dem, crs, **wide)
 
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
@@ -289,7 +304,7 @@ class _Tally:
             source.path,
             source.layer,
             source.class_map.attribute,
-            lambda own: source_region(self.domain, self.dem, own).bounds,
+            lambda own: self.region(own).bounds,
             source.crs,
         )
         if read.scanned:
@@ -306,12 +321,12 @@ class _Tally:
         name, cmap = source.path.name, source.class_map
         src = parse_crs(own)
         move = None if same_crs(src, self.dem) else reprojector(src, self.dem, threads=self.threads)
-        bound, region = None, source_region(self.domain, self.dem, self.dem)
+        bound, region = None, self.region(self.dem)
         shapely.prepare(region)
         if move is not None and src.is_geographic:
             steps = transform_definition(src, self.dem)
             if "gridshift" not in steps and "deformation" not in steps:
-                bound = _bound(self.dem, source_region(self.domain, self.dem, src))
+                bound = _bound(self.dem, self.region(src))
         cover: list[tuple[Any, int, int, BaseGeometry]] = []
         for fid, geometry, value in rows:
             t0 = time.perf_counter()
