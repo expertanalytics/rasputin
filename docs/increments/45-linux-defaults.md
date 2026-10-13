@@ -1,9 +1,14 @@
 # Increment 45: a cache without setup, general result names, the benchmark on Linux
 
-Status: **design review round 2 applied** (`@architect`, 2026-10-13): the
-quick check compares inputs per case, each case's input list stored in the
-record (4.4, T9), and the save with skipped cases is question Q7 (section 10);
-awaiting round 3. Written against master
+Status: **green** (`@developer`, `7974b15f`, 2026-10-13); the prose of
+sections 4.1 and 4.5 applied by `@architect` (`INSTALL.md`,
+`docs/benchmarks/bench-py.md`, `docs/increments/perf-quick-check.md`), except
+`docs/increments/README.md`'s power line, which the away-mode guard held for
+Ola. Held back: the `--bbox` help reword of 4.4, because
+`tests/python/test_mcp_schema.py` keeps a stored copy of that help text the
+red step did not update; `@tester` updates the copy, then the reword goes in.
+Still to do: `@perf` re-saves the quick-check baseline (4.4's last paragraph).
+Written against master
 `b1353075`, to be built after increment 44 merges (section 3).
 Defaults taken while Ola was away are section 10's questions.
 
