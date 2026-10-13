@@ -1,7 +1,9 @@
 # Increment 45: a cache without setup, general result names, the benchmark on Linux
 
-Status: **designed** (`@architect`, 2026-10-13), not yet reviewed. Written
-against master `b1353075`, to be built after increment 44 merges (section 3).
+Status: **design review round 1 applied** (`@architect`, 2026-10-13): the
+skipped case's inputs (4.4), the five values the Linux power reader reads
+(4.3), the rule-file claim (4.5); awaiting round 2. Written against master
+`b1353075`, to be built after increment 44 merges (section 3).
 Defaults taken while Ola was away are section 10's questions.
 
 ## 1. What Ola asked
@@ -211,22 +213,38 @@ difference. The evidence README's method line says `{system} {os_version}`
 where it says `macOS {macos}`, and "read before and after (raw text in
 run.json)" where it names `pmset -g batt`.
 
-**Power on Linux**, over the supplies in `<root>/sys/class/power_supply/`
-whose `scope` is not `Device` (a missing `scope` counts as `System`):
+**Power on Linux.** A supply is each directory (or link to one) in
+`<root>/sys/class/power_supply/`, in name order. Of each, `LinuxHost` reads
+exactly five files: `type`, `scope`, `online`, `status`, `capacity`. A value
+is the file's first line, stripped. It is **missing** when the file is
+absent, cannot be read (any `OSError`: a directory, no permission, a driver's
+`ENODATA`), is not UTF-8, or is empty; a missing value never decides
+anything. Nothing else in the directory is read: not `uevent` (the same
+values as `POWER_SUPPLY_*=` lines, a second source that could disagree), not
+`device`, `power/` or the vendor files. A supply whose `scope` is `Device` is
+dropped (a missing `scope` counts as `System`). A *mains-type* supply has
+`type` `Mains`, `USB` or `Wireless`; a *battery* has `type` `Battery`.
 
-1. any `Mains`, `USB` or `Wireless` supply with `online` not `0`: `ac`;
-2. else any `Battery` with `status` `Discharging`: `battery`;
-3. else no mains-type supply and no battery at all: `ac` (a server, a
-   desktop, a CI runner or a virtual machine runs on mains; Q3);
-4. else every battery `Charging`, `Full` or `Not charging`: `ac` (external
-   power, on a laptop that lists no adapter);
+1. any mains-type supply with `online` `1` or `2`: `ac`;
+2. else any battery with `status` `Discharging`: `battery`;
+3. else no mains-type supply, no battery, and no supply whose `type` is
+   missing: `ac` (a server, a desktop, a CI runner or a virtual machine runs
+   on mains; Q3). An absent `/sys/class/power_supply` counts as no supply;
+   a supply of unreadable type does not, since it may be either;
+4. else at least one battery, and every battery's `status` `Charging`,
+   `Full` or `Not charging`: `ac` (external power, on a laptop that lists no
+   adapter);
 5. else `unknown`.
 
-`percent` is the first battery's `capacity` (supplies in name order), else
-`None`. `raw` is one line per supply read, `name: key=value, ...` with the
-attributes sorted, or `no power supply under /sys/class/power_supply`, so
-`run.json` keeps the evidence as it keeps `pmset`'s text today. `UPS` entries
-are read into `raw` and decide nothing. `combine_power` is unchanged.
+A `/sys/class/power_supply` that exists but cannot be listed gives `unknown`,
+`raw` `cannot list /sys/class/power_supply: <reason>`. `percent` is the first
+battery's `capacity` when it is a whole number, else `None`. `raw` is one line
+per supply kept, `name: key=value, ...` over its present values, sorted (or
+`name: nothing readable`), or `no power supply under /sys/class/power_supply`,
+so `run.json` keeps the evidence as it keeps `pmset`'s text today. `UPS`
+entries are in `raw` and decide nothing. `combine_power` is unchanged. Rules
+and figures: `docs/increments/45-probes/probe45_r1.py`, output
+`probe45_r1.out`.
 
 `bench.run` and `bench_quick.run` call `make_host(runner)` once and use
 `host.machine()` and `host.power()` where they call `_machine` and `PMSET`
@@ -239,6 +257,27 @@ today; `bench_quick` keeps its own `make_host = bench.make_host`, as it keeps
   `SKIPPED: <case>: no input <path>` for each and judges the rest. Only the
   present cases' inputs are fingerprinted. A run with every case skipped cannot
   happen while the in-tree cases exist; it is not special-cased.
+- **The inputs compared are those of the cases that ran.** `_mismatch` keeps
+  its power and machine checks and changes its input loop from the union of
+  both records' keys to the new record's keys: an input the baseline also holds
+  must match; an input only the baseline holds (a skipped case's, or a case
+  since removed from `cases.toml`) is not compared; an input only the new run
+  holds belongs to a case the baseline lacks, which `verdict` already reports
+  as `NOT JUDGED: <case> is not in the baseline`. Why this and not "any skip
+  makes the run uncomparable": a case's timings depend on its own inputs only,
+  so a skipped case hides nothing about the judged ones, and the uncomparable
+  rule would leave every run with a skip at `NO BASELINE`, exit 2, which is the
+  fact E1 is about. Measured against the stored baseline (`probe45_r1.out`):
+  with only the two in-tree cases run, today's `_mismatch` gives `input
+  $RASPUTIN_DATA/DTM10_UTM33_20260925 changed`; the new rule gives none and the
+  verdict `NO CHANGE`, exit 0; one in-tree input changed still gives `NO
+  BASELINE`, exit 2, under both.
+- **`--save-baseline` with a skip saves what ran.** Another machine without
+  Ola's data must be able to save a baseline. On Ola's machine a save while
+  the data folder is unmounted drops those cases from his baseline; every
+  later run then prints `NOT JUDGED: <case> is not in the baseline` for each,
+  and the `SKIPPED:` lines print above `baseline saved:`, so the loss is in
+  plain sight.
 - **One baseline file per machine and power state**:
   `docs/benchmarks/quick/baseline-<cpu>-<power>.json`, where `<cpu>` is the
   CPU name lower-cased with every run of other characters than `a-z0-9` made one
@@ -246,8 +285,7 @@ today; `bench_quick` keeps its own `make_host = bench.make_host`, as it keeps
   Xeon(R) Platinum 8370C CPU @ 2.80GHz" gives
   `intel-r-xeon-r-platinum-8370c-cpu-2-80ghz`. So a second machine's
   `--save-baseline` cannot overwrite Ola's file. The machine is read before the
-  stored baseline is looked up (today it is read after the build). `_mismatch`
-  is unchanged and still compares the machine and every input.
+  stored baseline is looked up (today it is read after the build).
 - **A public case on another continent**, `velhas`: the committed ANADEM
   extract of the upper Rio das Velhas (`tests/fixtures/velhas/anadem_velhas.tif`,
   EPSG:4674, degrees, southern hemisphere), resampled onto a 30 m grid in
@@ -285,9 +323,11 @@ commit. This is not `@perf`'s acceptance (no refine or mesh code is touched).
 
 ### 4.5 Rule text
 
-Two rule files name `pmset -g batt` as how the power state is read:
-`docs/increments/README.md` line 101 and `.claude/agents/perf.md`. Each gains
-"on macOS; `/sys/class/power_supply` on Linux". `docs/benchmarks/bench-py.md`
+One rule file names `pmset -g batt` as how the power state is read:
+`docs/increments/README.md` (line 101 at `b1353075`), which gains "on macOS;
+`/sys/class/power_supply` on Linux". `.claude/agents/perf.md` says to record
+the power state but names no command (`git grep -n pmset .claude` is empty),
+so it is not changed. `docs/benchmarks/bench-py.md`
 (the tool's design) and `docs/increments/perf-quick-check.md` (the baseline's
 name, the cases table with the `velhas` row, the skip) are updated to match.
 
@@ -327,6 +367,8 @@ class MacHost:
 class LinuxHost:
     def __init__(self, root: Path = Path("/")) -> None: ...
 
+POWER_VALUES: Final = ("type", "scope", "online", "status", "capacity")  # the only files read
+
 def make_host(runner: Runner, system: str = sys.platform) -> Host: ...  # BenchError otherwise
 ```
 
@@ -342,8 +384,10 @@ def baseline_path(machine: Machine, power: str) -> Path: ...  # QUICK / f"baseli
 ## 6. Tests `@tester` writes first
 
 Figures come from `docs/increments/45-probes/probe45.py`, run as
-`.venv/bin/python -I probe45.py <tree>` (output `probe45.out`); its sketches
-of the rules are the probe, not the product.
+`.venv/bin/python -I probe45.py <tree>` (output `probe45.out`), and, for T5
+and T9 after design review round 1, from `probe45_r1.py` the same way (output
+`probe45_r1.out`); their sketches of the rules are the probes, not the
+product.
 
 **Isolation first.** With a default in the home directory, a test that clears
 `RASPUTIN_DATA` would reach the real `~/.cache/rasputin`. An autouse fixture
@@ -401,21 +445,36 @@ builds them):
 - No `/etc/os-release`: `os_version` "Linux".
 - No subprocess is started: the test's runner raises on any call.
 
-**T5, Linux power** (fixture trees; the probe's six rows, plus the raw text):
+**T5, Linux power** (fixture trees; the eleven power rows of `probe45_r1.out`, plus the
+raw text). A fixture writes each value as its text and a newline, as sysfs
+does; "unreadable" is a directory in the value's place, which raises
+`IsADirectoryError` even for root (CI's runner user and a root container
+alike); "not UTF-8" is the bytes `ff fe 0a`.
 
 | supplies | state | percent |
 |---|---|---|
-| none | `ac` | None |
+| no `/sys/class/power_supply` directory at all | `ac` | None |
+| an empty `/sys/class/power_supply` | `ac` | None |
 | `AC` Mains online 1; `BAT0` Charging 81; `hidpp_battery_0` scope Device, Discharging 40 | `ac` | 81 |
 | `AC` Mains online 0; `BAT0` Discharging 64 | `battery` | 64 |
 | `BAT0` Full 100, no mains entry | `ac` | 100 |
 | `AC` Mains online 0; `BAT0` Unknown 50 | `unknown` | 50 |
 | `ups0` UPS Discharging only | `ac` | None |
+| `BAT0` files Full 100, plus a four-line `uevent` saying `POWER_SUPPLY_STATUS=Discharging` and `POWER_SUPPLY_CAPACITY=64`, plus `manufacturer` and `voltage_now` | `ac` | 100 |
+| `AC` Mains, `online` unreadable; `BAT0` Battery, `status` not UTF-8, `capacity` unreadable | `unknown` | None |
+| `ACAD` with `type` unreadable and `online` 1; nothing else | `unknown` | None |
 
-In the second row `raw` is `AC: online=1, type=Mains` and `BAT0:
+In the third row `raw` is `AC: online=1, type=Mains` and `BAT0:
 capacity=81, status=Charging, type=Battery`, one per line, and holds no
-`hidpp_battery_0`. With none, `raw` is `no power supply under
-/sys/class/power_supply`.
+`hidpp_battery_0`. In the `uevent` row it is `BAT0: capacity=100,
+status=Full, type=Battery` (no `POWER_SUPPLY_`, no `manufacturer`); a reader
+of `uevent` would give `battery`, 64, so the row can fail. In the unreadable
+row it is `AC: type=Mains` and `BAT0: type=Battery`; in the `ACAD` row,
+`ACAD: online=1`. With no supply, both first rows, `raw` is `no power supply
+under /sys/class/power_supply`. A last case makes the directory unlistable
+(a file in its place, so listing raises `NotADirectoryError`, root or not):
+`unknown`, None, `raw` `cannot list /sys/class/power_supply: Not a
+directory`.
 
 **T6, the factory.** `make_host(runner, "darwin")` is a `MacHost`,
 `make_host(runner, "linux")` a `LinuxHost` rooted at `/`, and
@@ -440,11 +499,21 @@ Ubuntu legs, never on the Mac): `LinuxHost().machine()` has `p_cores >= 1`,
 
 **T9, the quick check.**
 
-- With one case's input absent (the existing two-case fixture,
-  `tests/python/test_bench_quick.py@b1353075:640`, its second input deleted):
-  the output holds `SKIPPED: beta: no input <path>`, alpha runs and is
-  judged, the exit code is the verdict's and not 3, and `inputs` holds alpha's
+- With one case's input absent: the existing two-case fixture
+  (`tests/python/test_bench_quick.py@b1353075:640`, `FakeRunner` totals 1.0),
+  a baseline saved from a full run, then beta's input deleted. The output
+  holds `SKIPPED: beta: no input <path>`, beta's input is never passed to a
+  child, alpha runs and is judged, and the last line is `NO CHANGE`, exit 0
+  (today's `_mismatch` gives `NO BASELINE: input <beta's path> changed`, exit
+  2, so the test can fail). A record saved from that run holds alpha's input
   only.
+- `_mismatch` units on two records alike in power and machine: the new record
+  holding `{a: x}` against a baseline holding `{a: x, b: y}` gives None;
+  `{a: x2}` against `{a: x}` gives `input a changed`; `{a: x, c: z}` against
+  `{a: x}` gives None.
+- `--save-baseline` with beta's input absent writes a baseline whose cases
+  are alpha's only; a following full run prints `NOT JUDGED: beta is not in
+  the baseline` and judges alpha.
 - `baseline_path` for "Apple M1 Max" and `ac` is
   `QUICK/baseline-apple-m1-max-ac.json`; for the Xeon name above,
   `baseline-intel-r-xeon-r-platinum-8370c-cpu-2-80ghz-ac.json`;
@@ -491,10 +560,10 @@ TOML, Markdown and tests not counted):
 | C5 renames (changed lines, not added) | 0 |
 | `Machine` fields, `Host`, `MacHost` (moved), `make_host` | +18 |
 | `LinuxHost.machine` | +20 |
-| `LinuxHost.power` | +22 |
+| `LinuxHost.power` (five values, missing-value rule) | +28 |
 | `bench.run` and README line | +2 |
-| `bench_quick`: skip, `baseline_path`, host, order | +12 |
-| **total** | **about 80** (worst case 120) |
+| `bench_quick`: skip, `baseline_path`, host, order; `_mismatch`'s loop (changed lines) | +12 |
+| **total** | **about 86** (worst case 130) |
 
 One PR, far under 700. The audit estimated about 120.
 
