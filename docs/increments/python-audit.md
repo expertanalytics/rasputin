@@ -1449,6 +1449,8 @@ lines.
 
 ### The module: `tests/python/cli_driver.py`
 
+Renamed `tests/python/cli_helpers.py` on 2026-10-13 (Ola, 2026-10-05: the old name was cryptic); this section keeps the name it was written with.
+
 Named `cli_driver`, not X1's `cli_harness`: since h17 (on branch
 `worktree-ci-speed`), "harness test" means a test of `tools/` or the hooks,
 selected by a `harness` marker, and this module serves the product suites.
