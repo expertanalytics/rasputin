@@ -1,0 +1,445 @@
+# Increment 43: height units, feet coordinates and more projection methods
+
+**Status: designed** by `@architect`, 2026-10-13, on `97c10c4d` (branch
+`worktree-units`). Next: `@reviewer` on the design, then `@tester`'s red
+suite (section 6). Python only, one PR. Not refine or mesh code, so no
+`@perf` acceptance run (section 7).
+
+## 1. What Ola asked, and what this fixes
+
+Ola, 2026-10-13: "On the audit, go ahead with 1 and 5." In the main session's
+list, 1 was the generality audit's row H1 and 5 its rows A6 and A8
+(`docs/increments/generality-audit.md`, section 2). The audit's fix 5 also
+names A4 and F6; they fit the same PR and are in it (section 7).
+
+- **H1, heights in feet.** A `VerticalUnitsGeoKey` (4099) other than metre is
+  refused, and an absent one is taken as metres
+  (`src_python/tin_engine/io/geotiff.py@97c10c4d:175-179`). A DEM in feet whose
+  file does not say so (US county and state lidar) is read as metres, so its
+  heights and `--tolerance` are 3.28 times off. The record says "metres
+  (assumed: the DEM file does not say)"
+  (`src_python/tin_engine/cli.py@97c10c4d:1173-1175`), but nothing is printed.
+  It is the one audit finding that gives a wrong answer without a word.
+- **A8, coordinates in feet.** A projected CRS whose axes are in feet (US State
+  Plane, EPSG:2229 and the other 956 EPSG feet CRSs) is refused
+  (`src_python/tin_engine/io/geotiff.py@97c10c4d:338-345`).
+- **A6, projection methods.** A projected CRS given by parameters (3072 =
+  32767) is read for transverse Mercator and Lambert conic conformal 2SP only
+  (`src_python/tin_engine/io/geotiff.py@97c10c4d:55-74`): polar stereographic,
+  Lambert azimuthal equal area, Mercator, Albers and oblique Mercator files
+  without an EPSG code are refused.
+- **A4, sub-metre resampling.** The resampled grid's spacing is a whole number
+  of metres, at least 1 (`src_python/tin_engine/target_grid.py@97c10c4d:91-101`):
+  a 0.5 m DEM in degrees is resampled to 1 m.
+- **F6, the feature read margin.** Features are read from the domain plus
+  100 m (`src_python/tin_engine/feature_input.py@97c10c4d:54-56`); on a 1 km
+  DEM that is a tenth of a cell, so a feature just outside the domain is
+  dropped before the DEM's own one-cell grow.
+
+## 2. Prior art: legacy and literature
+
+*Literature.* Nothing new is claimed; every rule below is the GeoTIFF
+standard's or its reference readers'.
+
+- **OGC GeoTIFF 1.1** (OGC 19-008r4, <https://docs.ogc.org/is/19-008r4/19-008r4.html>):
+  `VerticalGeoKey` (4096, `VerticalCSTypeGeoKey` in 1.0) names the vertical
+  CRS by EPSG code, `VerticalUnitsGeoKey` (4099) its unit;
+  `ProjLinearUnitsGeoKey` (3076) is the unit of the projected axes and of the
+  false easting and northing; units are EPSG unit codes (9001 metre, 9002
+  foot, 9003 US survey foot).
+- **The EPSG Geodetic Parameter Dataset** and IOGP Guidance Note 7-2 (IOGP
+  publication 373-7-2): each method's parameters, codes and order, which the
+  table in section 4.5 copies (polar stereographic variants A 9810 and B 9829,
+  Lambert azimuthal equal area 9820, Mercator variants A 9804 and B 9805,
+  Albers 9822, Hotine oblique Mercator variants A 9812 and B 9815). The US
+  survey foot is 1200/3937 m and the foot 0.3048 m (EPSG units 9003, 9002;
+  pyproj gives `0.30480060960121924` for the first).
+- **GDAL's writer**, `GTIFSetFromOGISDefnEx` in `frmts/gtiff/gt_wkt_srs.cpp`
+  (<https://github.com/OSGeo/gdal>, commit `b0844ad1`, lines 2309-2343 Albers,
+  2447-2483 Mercator, 2547-2576 polar stereographic, 2578-2654 Hotine,
+  2892-2918 Lambert azimuthal): which GeoKey each parameter is written to.
+  That is the convention this design reads, as the earlier design did for
+  transverse Mercator and Lambert 2SP
+  (`docs/increments/geotiff-crs-by-parameters.md`, section 2).
+- **libgeotiff's reader**, `GTIFGetDefn` in `libgeotiff/geo_normalize.c`
+  (<https://github.com/OSGeo/libgeotiff>, commit `75cfca53`, lines 1717-1772
+  Mercator, 2064-2104 polar stereographic): falls back between alternative
+  keys and defaults an absent one (scale 1, origin 0); GDAL then calls
+  `SetPS(lat, long, scale)`, which is variant A at a latitude of plus or minus
+  90 and variant B otherwise.
+
+What differs, and why:
+
+- **No fallbacks or defaults between keys** (libgeotiff has them). The
+  earlier design ruled that a missing parameter is refused, naming its key;
+  that holds for the new methods.
+- **Feet coordinates are rescaled, not resampled.** The audit's fix shape for
+  A8 was to require `--out-crs` in metres, as for a DEM in degrees. A
+  projected CRS in feet is the same projection as its twin in metres with
+  every coordinate times the unit factor (probe in section 4.4: the two agree
+  to 1.2e-9 m on EPSG:2229, 2263, 6539 and 2240). So the grid is relabelled
+  exactly, with no interpolation and no option needed.
+
+*Legacy.* Nothing is carried across.
+`git grep -n -i -E 'feet|foot|ftUS|VerticalUnits|LinearUnits|9002|9003|PolarStereo|AlbersEqual|LambertAzim|ObliqueMercator|CT_Mercator' legacy-archive -- legacy`
+returned:
+
+```
+legacy/rasputin/reader.py:44, 61, 62, 86, 265
+```
+
+Lines 44-86 are an enum of GeoKey names; `_ProjLinearUnitsGeoKey`
+(`legacy/rasputin/reader.py@legacy-archive:264-268`) maps 9001 to "m" and
+raises `KeyError` for any other unit. The legacy read metres only.
+
+## 3. The ideas file
+
+Taken up: *Product review: readable code docs, and general applicability
+beyond Ola's machine and data* (rows H1, A6, A8, A4, F6 of its audit).
+Overlaps: *Catchments on a geographic DEM (GLO-30)*, which shares the
+resampled grid that A4 changes; nothing in it is built here.
+
+## 4. The design
+
+### 4.1 Data flow
+
+```
+GeoTIFF header (GeoKeys)                                 io/geotiff.py
+  │ horizontal: 3072 code, or 3072 = 32767 + METHODS row (4.5)
+  │   axes in feet? ──> metre twin (crs.metre_twin, 4.4), factor f_xy
+  │ vertical: 4096 / 4099 / caller's z_unit / assumption (4.3), factor f_z
+  ▼
+RasterMeta: x_min, y_max, delta_* already times f_xy; crs = the twin;
+            file_crs = the file's own CRS when they differ;
+            z_unit = the file's height unit; vertical_unit_assumed
+  │
+  ▼ pixels: decode_dem, cog.decode_window
+array: valid cells times f_z, in place (NoData untouched)  ─> metres from here on
+  │
+  ▼ mosaic, resample, check points, _core: unchanged, all in metres
+```
+
+The conversion happens once, where the file is decoded. Nothing below `io/`
+learns that a file was in feet; nothing crosses into C++ but metres
+(`CLAUDE.md` section 2, I/O boundary). The caller's choice reaches `io/` as
+a value next to `nodata`, the same way the NoData sentinel does today.
+
+### 4.2 Units
+
+One table in `io/geotiff.py`, data rather than code:
+
+```python
+#: EPSG unit code to (name pyproj uses, metres per unit, option spelling).
+UNITS = {9001: ("metre", 1.0, "m"), 9002: ("foot", 0.3048, "ft"),
+         9003: ("US survey foot", 1200 / 3937, "us-ft")}
+ZUnit = Literal["metre", "foot", "US survey foot"]       # in io/models.py
+```
+
+A unit code outside the table is refused, naming the key and listing the
+three. A unit read from a CRS's axes (pyproj's `unit_conversion_factor`) is
+matched to a row by its factor, compared with `math.isclose(rel_tol=1e-12)`;
+a factor outside the table (Clarke's foot, Indian yard, German legal metre:
+32 non-deprecated EPSG projected CRSs) is refused.
+
+### 4.3 Heights (H1)
+
+**The file's unit**, read in `_header`:
+
+| 4096 (vertical CRS) | 4099 (unit) | Result |
+|---|---|---|
+| absent or 32767 | absent | silent, see below |
+| absent or 32767 | in `UNITS` | that unit |
+| absent or 32767 | other | refused, naming 4099 and the three accepted codes |
+| an EPSG vertical CRS, axis up | absent | the axis unit, if in `UNITS`; else refused |
+| an EPSG vertical CRS, axis up | in `UNITS` | refused unless the two agree |
+| not an EPSG code, not a vertical CRS, or axis down (a depth) | any | refused, naming 4096 and what it holds |
+
+Probe (pyproj 3.8.0, PROJ 9.8.1): 5703 NAVD88 height is metre, 6360
+NAVD88 height (ftUS) is US survey foot, 8228 NAVD88 height (ft) is foot,
+5941 NN2000 height and 3855 EGM2008 height are metre, 6358 NAVD88 depth
+(ftUS) points down.
+
+**The caller's unit**, `z_unit: ZUnit | None`, from `--z-unit {m,ft,us-ft}`
+on `mesh`, `catchment` and `station-catchments` (every command with `--dem`),
+or from the catalogue entry of a cached source (`RemoteSource.z_unit`, new,
+`"metre"` for `anadem-v1` and `glo30`, `None` for class sources). It travels
+as `nodata` does: `DemRequest.z_unit`, `repository_for`, `TiffDemRepository`,
+`CacheRepository`, `read_header`, `read_page`, `decode_dem`, `read_meta`.
+
+| file says | caller says | horizontal unit | Result | `vertical_unit_assumed` |
+|---|---|---|---|---|
+| a unit | nothing or the same | any | the file's | False |
+| a unit | another | any | refused: "the file says its heights are in X; --z-unit says Y" | |
+| silent | a unit | any | the caller's | True |
+| silent | nothing | metre or degree | metre | True |
+| silent | nothing | foot or US survey foot | refused (below) | |
+
+The refusal: "the DEM's coordinates are in US survey feet (EPSG:2229) and the
+file does not say what unit its heights are in; give --z-unit us-ft, ft or m".
+A feet DEM whose height unit is unstated is the case H1 names, so it is never
+guessed. A metre or degree DEM with silent heights stays metres, as today,
+because every DEM on Ola's disk is one (all 254 DTM10 tiles, the Austrian
+openDEM and BEV files, ANADEM and GLO-30 carry neither 4096 nor 4099; probe
+with tifffile 2026.9.20 over `../rasputin_data`).
+
+**Scaling.** After the pixels are decoded and promoted, in `decode_dem` and
+in `io.cog.decode_window` (the two places a DEM array is made from file
+bytes), one helper:
+
+```python
+def to_metres(array: npt.NDArray[Any], meta: RasterMeta) -> None:
+    """Valid cells of `array` times the height unit's metres, in place; NoData
+    cells keep the sentinel. Nothing when the unit is the metre. A converted
+    height that equals the sentinel is refused (GeoTiffError)."""
+```
+
+The metre case returns before touching the array, so every metre DEM decodes
+to the same bytes as today. `RasterMeta.nodata` keeps the file's sentinel.
+
+**Mosaic.** `plan_mosaic` refuses selected tiles whose `z_unit` differ
+("tiles give heights in different units: A in feet, B in metres"); their
+arrays would be right, but the record names one unit. `_grid` and `resample`
+copy `z_unit` and `file_crs` into the meta they build, so the single-tile path
+of `assemble` still matches (`plan.tiles[0].meta == plan.meta`).
+
+**What the user sees.** The record's `dem_vertical_unit` becomes one of
+"metres", "metres (assumed: the DEM file does not say)", "metres, converted
+from US survey feet" or "metres, converted from feet (given with --z-unit)".
+When the unit is assumed, `mesh` prints one line to stderr:
+"DEM heights read as metres; the file does not say. If they are feet, give
+--z-unit ft or us-ft." (question 1, section 8).
+
+### 4.4 Coordinates in feet (A8)
+
+A new function in `crs.py`, the one module that builds CRSs:
+
+```python
+def metre_twin(crs: CRS) -> tuple[CRS, float]:
+    """`crs` with its axes in metres and its linear conversion parameters
+    (false easting and northing, easting and northing at an origin) converted
+    to metres, named "<name>, in metres"; and the metres per unit of its axes.
+    `crs` itself and 1.0 when its axes are already in metres."""
+```
+
+`_projected_epsg` (an EPSG code in 3072) and `_parametric_epsg` (3072 =
+32767) both end the same way: when the axes are in a `UNITS` foot, the meta
+gets the twin, named by `crs.epsg_matches(twin)` when that gives one CRS
+(`EPSG:n`), else carried as its own text (`crs_label(twin)`, PROJJSON) with
+`epsg` None. `x_min`, `y_max`, `delta_x` and `delta_y` are each multiplied by
+the factor once, after `_placement`. `file_crs` keeps the file's own label
+(`EPSG:2229`).
+
+On the parametric path, 3076 = 9002 or 9003 is now read: the linear
+parameters are converted to metres before the CRS is built, and the axes are
+metres, so `epsg_matches` sees a metre CRS. 3076 present on the EPSG-code path
+must agree with the code's axes, else refused.
+
+Probe (`allfeet.py`, run from the scratchpad over every non-deprecated EPSG
+projected CRS): 957 CRSs have axes in foot or US survey foot; for 458 the
+twin is named by `epsg_matches` (2229 to 26945, 2263 to 32118, 2240 to
+26967, 6420 to 6419), and 499 have no EPSG twin (2881, NAD83(HARN) / Florida
+East (ftUS), is one: its false easting, 656166.667 ftUS, is 200000.0001 m,
+5e-10 relative from EPSG:2777's 200000 m, past PROJ's 1e-10). The unnamed
+twin is carried as PROJJSON: `same_crs` of it with itself is True, a point
+moved through it lands on the same longitude and latitude as through the feet
+CRS to 0.0 degrees, and `srs_entry` gives the GeoPackage row 100000 named
+"NAD83(HARN) / Florida East (ftUS), in metres". Downstream it is the path a
+CRS without an EPSG code already takes (the suggested `--out-crs`).
+
+The record gains `dem_file_crs`: "EPSG:2229, in US survey feet; read as
+EPSG:26945, the same projection in metres". `--out-crs` and `--tolerance`
+stay metres; feet `--out-crs` is still refused (H2).
+
+### 4.5 Projection methods given by parameters (A6)
+
+`METHODS` gains rows; the key becomes the method's own name, and a small
+function picks the row from 3075 and, for two codes, the keys present:
+
+| 3075 | Chosen when | EPSG method | Parameters, in EPSG order, from GeoKey |
+|---|---|---|---|
+| 1 | always | Transverse Mercator 9807 | (unchanged) |
+| 8 | always | Lambert Conic Conformal (2SP) 9802 | (unchanged) |
+| 3 | always | Hotine Oblique Mercator (variant A) 9812 | 8811 from 3089 `ProjCenterLat`, 8812 from 3088 `ProjCenterLong`, 8813 from 3094 `ProjAzimuthAngle`, 8814 from 3096 `ProjRectifiedGridAngle`, 8815 from 3093 `ProjScaleAtCenter`, 8806 from 3082, 8807 from 3083 |
+| 9815 | always | Hotine Oblique Mercator (variant B) 9815 | as variant A, but 8816 from 3082 and 8817 from 3083 (GDAL writes the projection-centre easting and northing to the false easting keys) |
+| 7 | 3092 `ProjScaleAtNatOrigin` present, 3078 absent | Mercator (variant A) 9804 | 8801 from 3081 `ProjNatOriginLat`, 8802 from 3080 `ProjNatOriginLong`, 8805 from 3092, 8806, 8807 |
+| 7 | 3078 `ProjStdParallel1` present, 3092 absent | Mercator (variant B) 9805 | 8823 from 3078, 8802 from 3080, 8806, 8807 |
+| 10 | always | Lambert Azimuthal Equal Area 9820 | 8801 from 3089, 8802 from 3088, 8806, 8807 |
+| 11 | always | Albers Equal Area 9822 | 8821 from 3081, 8822 from 3080, 8823 from 3078, 8824 from 3079, 8826 from 3082, 8827 from 3083 |
+| 15 | 3081 is plus or minus 90 | Polar Stereographic (variant A) 9810 | 8801 from 3081, 8802 from 3095 `ProjStraightVertPoleLong`, 8805 from 3092, 8806, 8807 |
+| 15 | 3081 is not plus or minus 90 | Polar Stereographic (variant B) 9829 | 8832 from 3081, 8833 from 3095, 8806, 8807; 3092, if present, must be 1 |
+
+Refused, each naming the keys: 3075 = 7 with both or neither of 3078 and
+3092; 3075 = 15 not at a pole with 3092 other than 1; any listed key absent;
+any other 3075 (the message lists the ten readable methods).
+
+**Matching widened for polar axes.** EPSG's polar CRSs label their axes by
+meridian ("north along 90°E"), so PROJ never calls a CRS built with east and
+north axes equivalent to them, though the operation between the two is
+`proj=noop`. `crs.epsg_matches` therefore accepts a candidate on the same
+base CRS **whose axes carry a meridian** when the operation between the two
+is `noop`, as well as on today's equivalence. Candidates without meridian
+axes are judged exactly as today, so the Austrian file and every existing
+match are unchanged.
+
+Probe (`rule.py` in the scratchpad: parameters taken from the EPSG entry,
+written to the GeoKeys above, built as the reader will, matched): every one
+of 24 CRSs reads as its own code: 3031, 3413, 3995, 3996 (polar B); 32661
+and 5041 both read as 5041, 32761 and 5042 as 5042 (polar A: each pair is one
+CRS with two axis orders, `same_crs` True, the lowest code taken as the
+earlier design rules); 3035, 6931, 6932, 3571, 3574 (Lambert azimuthal); 3395,
+3832 (Mercator A); 3994 (Mercator B); 3338, 5070, 3577 (Albers); 3375, 3079
+(Hotine A); 2056, 21781, 29873 (Hotine B). With the longitude parameter moved
+by 1 degree, all 24 are refused (no match).
+
+### 4.6 Resampled spacing below a metre (A4)
+
+`default_spacing` keeps `max(1, round(s))` for a source spacing `s` of at
+least 1 m and returns `2 ** round(log2(s))` below it, at least 2^-10 m.
+`TargetGrid.spacing` becomes a float that must be a whole number from 1 to
+1000 or 2^-k for k from 1 to 10. Powers of two keep the lattice exact: node
+`(R, K)` at `(K h, -R h)` is still exact in float64 for any coordinate below
+2^43 m at h = 2^-10. The record prints the spacing with `:g`, so a whole
+spacing prints as today ("10 m").
+
+| source spacing | today | after |
+|---|---|---|
+| 0.0000045 degrees at 50° N (0.500531 m) | 1 m | 0.5 m |
+| 1/9 arc-second at 50° N (3.432996 m) | 3 m | 3 m |
+| 1 arc-second at 50° N (30.896962 m) | 31 m | 31 m |
+
+### 4.7 Feature read margin (F6)
+
+`MARGIN` becomes `max(100 m, 2 cells)`, with the cell the larger of the
+DEM's `delta_x` and `delta_y` in its CRS (the target grid's on the
+reprojected path). `open_features` and `source_region` take `cell: float`.
+At 10 m (DTM10) and 30 m (GLO-30 resampled at 31 m) the margin stays 100 m,
+so those meshes do not change; at 1 km it is 2 km. `DENSIFY` (1 km) stays: it
+bounds the chord of a curved edge after the move, not the margin.
+
+### 4.8 What does not change
+
+`_core`, its bindings and every C++ file. The mosaic's seam threshold (1 mm)
+is now in metres for every DEM (audit F4 follows). Geographic DEMs, metre
+DEMs and their outputs, byte for byte.
+
+## 5. Constants
+
+| Constant | Value | Scale assumed | Checked at |
+|---|---|---|---|
+| foot, US survey foot | 0.3048, 1200/3937 m | exact definitions | n/a |
+| unit factor match | `rel_tol=1e-12` | factors of order 0.3 to 1 | pyproj's 957 feet CRSs |
+| pole test for 3075 = 15 | abs(lat) == 90 exactly | GDAL writes the EPSG value | 32661, 5041, 32761, 5042 |
+| sub-metre spacing floor | 2^-10 m | coordinates below 2^43 m | 0.5 m (the A4 probe) |
+| feature margin | max(100 m, 2 cells) | DEM cells 1 m to 1 km | 10 m and 31 m unchanged |
+
+## 6. Red suite for `@tester`
+
+Fixtures are micro-GeoTIFFs written with tifffile (no GDAL, no rasterio),
+each 3 x 3 nodes unless said; the figures below were computed with numpy
+2 and pyproj 3.8.0 / PROJ 9.8.1.
+
+**The invariant-critical suite** (mutation testing required) is
+`tests/python/test_io_units.py`, tests 1 to 8. Mutation targets: each
+factor in `UNITS`; the precedence of file over caller; the contradiction
+refusal; the NoData mask in `to_metres`; the factor applied to `delta_*` and
+not only to the corner; the metre case returning without a write.
+
+1. **Heights in US survey feet.** int16 `[[100,200,300],[400,500,600],[700,800,-9999]]`,
+   GDAL_NODATA `-9999`, EPSG:25833, 4099 = 9003: `decode_dem` gives float32
+   `[[30.480060577392578, 60.960121154785156, 91.44017791748047], [121.92024230957031, 152.40029907226562, 182.88035583496094], [213.36041259765625, 243.84048461914062, -9999.0]]`,
+   `z_unit == "US survey foot"`, `vertical_unit_assumed` False. The same
+   through `read_page` plus `cog.decode_window`.
+2. **Heights in feet**, 4099 = 9002: `[[30.479999542236328, 60.959999084472656, 91.44000244140625], [121.91999816894531, 152.40000915527344, 182.8800048828125], [213.36000061035156, 243.83999633789062, -9999.0]]`.
+3. **4096 alone**: 6360 gives test 1's array; 8228 test 2's; 5703 the
+   input unchanged. **Refused**: 4096 = 6360 with 4099 = 9001; 4096 = 6358
+   (a depth); 4096 = 4326 (not vertical); 4096 = 1 (no such code); 4099 =
+   9005; each message names the key by number.
+4. **Caller's unit**: silent file plus `z_unit="US survey foot"` gives test
+   1's array with `vertical_unit_assumed` True; 4099 = 9001 plus
+   `z_unit="foot"` is refused naming both.
+5. **Silent metre file**: bytes identical to today's decode, `z_unit ==
+   "metre"`, `vertical_unit_assumed` True; the array is not written to (pass a
+   read-only array to `to_metres`).
+6. **Feet coordinates, named twin.** EPSG:2229 in 3072, 4099 = 9003, tie
+   (0, 0) at (6 500 000, 2 100 000) ftUS, scale 3 x 3 ftUS, pixel is area:
+   `crs == "EPSG:26945"`, `file_crs == "EPSG:2229"`, `x_min ==
+   1981204.419608839`, `y_max == 640080.8229616459`, `delta_x == delta_y ==
+   0.9144018288036575` (each `(file value) * 1200/3937`, corner shifted half a
+   cell first).
+7. **Feet coordinates, unnamed twin.** EPSG:2881: `epsg is None`, the crs
+   text parses to a CRS named "NAD83(HARN) / Florida East (ftUS), in metres",
+   and the point (700 000, 600 000) ftUS and its metre image map to the same
+   longitude and latitude (difference 0.0).
+8. **Feet coordinates, silent heights**: test 6's file without 4099 is
+   refused, the message naming `--z-unit`; with `z_unit="US survey foot"` it
+   reads.
+9. **Parametric in feet.** 2229's parameters by GeoKeys (3075 = 8, 2048 =
+   4269, 3076 = 9003, false origin 33.5, -118, parallels 35.4666666666667 and
+   34.0333333333333, 6561666.667 and 1640416.667 ftUS): reads as
+   `EPSG:26945`.
+10. **Methods** (`tests/python/test_io_geotiff_methods.py`), one file per
+    row, parameters copied from the EPSG entry into the keys of section 4.5:
+    3031, 5041, 3035, 6931, 3395, 3994, 3338, 3375, 2056 each read as their
+    own code; 32661's keys read as 5041. Each with its longitude parameter
+    moved 1 degree is refused as "cannot be named". Refused by shape: 3075 =
+    7 with both 3078 and 3092, and with neither; 3075 = 15 at -71 with 3092 =
+    0.97; 3075 = 12 (azimuthal equidistant), its message listing the ten.
+11. **`epsg_matches` unchanged off the poles**: the Austrian keys of
+    `docs/increments/geotiff-crs-by-parameters.md` still read as 31287, and
+    UTM 35N by parameters on 4258 still reads as 25835 alone.
+12. **Mosaic**: two aligned tiles, one with 4099 = 9001 and one 9002, are
+    refused naming both files. A single feet tile through `assemble` returns
+    the loaded tile (no canvas), as a metre one does.
+13. **A4**: `default_spacing` of a geographic meta with `delta_y =
+    0.0000045` at (10, 50) is 0.5; with 1/9 arc-second 3, with 1 arc-second
+    31; a projected 10 m meta 10. `TargetGrid(spacing=0.75)` and `spacing=0`
+    are refused; `0.5` and `2**-10` accepted.
+14. **F6**: `source_region` with `cell=1000` reaches 2 km beyond the domain
+    (a point 1.5 km out is inside the region), with `cell=10` 100 m (the same
+    point is outside).
+15. **CLI** (`tests/python/test_cli_units.py`, on a 4 x 4 fixture): `mesh`
+    on test 8's file exits 2 with the `--z-unit` sentence; with `--z-unit
+    us-ft` it writes a mesh whose z values are the metre heights and whose
+    record says "metres, converted from US survey feet (given with --z-unit)";
+    on a silent metre file stderr carries the one assumption line once;
+    `--z-unit ft` on a 4099 = 9001 file exits 2. `catchment --help` and
+    `station-catchments --help` list `--z-unit`.
+16. **Catalogue**: `SOURCES["glo30"].z_unit == "metre"`; a cached-source
+    run's record says "metres" with no "assumed".
+
+## 7. Size, acceptance, order
+
+About 250 net production lines (`python3 tools/count_loc.py`), well under
+700: `io/geotiff.py` about 135 (units, heights, twin wiring, six method rows
+packed one parameter per line under `# fmt: off` as the existing table is,
+the selector), `crs.py` 20, `cli.py` 45 (the option on three commands, the
+stderr line, two record entries), `io/repository.py` 10, `mosaic.py` 8,
+`target_grid.py` 14, `feature_input.py` 8, `sources.py` 4, `io/models.py` 5,
+`dem_input.py` 4, `io/cog.py` 2. Worst case 330.
+
+No `@perf` acceptance: nothing under `include/terrain/refinement/` or
+`include/terrain/mesh/` changes, and a metre DEM decodes to the same bytes.
+The review checks that `tools/bench_quick.py`'s four cases give unchanged
+meshes, as increment 41's did.
+
+Order: increment 41 (`worktree-class-maps`, built, not merged) also edits
+`feature_input.py` and `cli.py`; this branch merges master after 41 lands,
+before its red step if 41 has landed by then.
+
+## 8. Pinned beyond the audit, and questions for Ola
+
+Pinned: the option is `--z-unit {m,ft,us-ft}` (the audit wrote
+`--vertical-unit`); a feet DEM with silent heights is refused rather than
+guessed; feet coordinates are rescaled to the metre twin rather than resampled
+behind a required `--out-crs`; Hotine oblique Mercator is in (the audit listed
+it as broken but left it out of the fix); a mosaic of tiles in two height
+units is refused.
+
+**Question 1.** Every DEM on your disk (DTM10, the Austrian files, ANADEM)
+leaves its height unit unstated, so `rasputin mesh` would print one extra
+stderr line on each of those runs: "DEM heights read as metres; the file does
+not say. If they are feet, give --z-unit ft or us-ft." Print it, or keep it
+in the mesh record only? Default: print it. GLO-30 and ANADEM through the
+cache do not print it, because their catalogue entries state metres.
+
+## Review
