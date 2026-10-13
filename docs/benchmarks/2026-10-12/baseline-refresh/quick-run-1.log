@@ -1,0 +1,32 @@
+# run 1 (judge against stored baseline), 2026-10-12 15:19:24 +0200
+## pmset before
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime
+15:19  up 13 days,  4:25, 4 users, load averages: 2.74 4.29 5.58
+SLOWER: tile t=1 total 0.70 -> 0.78 s (+10.9 %, band 5.0 %)
+SLOWER: tile t=1 refine 0.47 -> 0.52 s (+11.2 %, band 5.0 %)
+SLOWER: numedalslagen total 8.83 -> 9.48 s (+7.3 %, band 5.0 %)
+SLOWER: numedalslagen decode 0.92 -> 1.00 s (+8.5 %, band 5.0 %)
+SLOWER: numedalslagen features clip 6.00 -> 6.38 s (+6.3 %, band 5.0 %)
+SLOWER: numedalslagen features clip: clean-up 5.94 -> 6.31 s (+6.3 %, band 5.0 %)
+SLOWER: lagan total 14.54 -> 15.49 s (+6.5 %, band 5.0 %)
+SLOWER: lagan features read 0.92 -> 1.10 s (+19.8 %, band 5.5 %)
+SLOWER: lagan features clip 6.34 -> 6.69 s (+5.5 %, band 5.0 %)
+SLOWER: lagan features clip: clean-up 5.39 -> 5.68 s (+5.4 %, band 5.0 %)
+SLOWER: romsdal-slope total 3.58 -> 3.92 s (+9.5 %, band 5.0 %)
+SLOWER: romsdal-slope refine 2.01 -> 2.24 s (+11.3 %, band 5.0 %)
+SLOWER: romsdal-slope refine: scan (parallel) 0.56 -> 0.63 s (+11.5 %, band 5.0 %)
+SLOWER: romsdal-slope refine: split + flip (serial) 1.18 -> 1.33 s (+12.5 %, band 5.0 %)
+HOTSPOT: tile refine 44 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 68 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 46 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 43 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 57 % of the run (not in hotspots.toml)
+SLOWER
+exit 1
+## pmset after
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
