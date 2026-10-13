@@ -1032,7 +1032,8 @@ first cell's centre for an area-registered tile such as DTM10's.
 | 6 | TR5's evaluator (`instant`, no CLI), TR3b's near raster (`radiation/search.py`), `RadiationGeometry`'s fields, the snow wiring (`--dem`, `--shadows`, b from the evaluator, normals from TR2) | 3, 5 | 220 | 50 | 220 | ≈ 490 |
 
 PR 3's 495 is section 8's 545 less the radiation kernel and its binding (65)
-plus the NumPy combiner (15). PR 6's Python: the evaluator's synchronous call
+plus the NumPy combiner (15). If PR 3's count passes 650 at its green step, the EnSight writer
+and its test R6 split off as PR 3b. PR 6's Python: the evaluator's synchronous call
 50, `search.py` 60, `RadiationGeometry` 30, the snow wiring 80 (job and CLI
 fields, the run's evaluator call, the geometry from TR2). PR 5's binding is
 55 lines against the radiation design's 50 for TR3a: the 5 are the far
@@ -1114,8 +1115,9 @@ pin is what the mutation fixtures below assume):
    whole km; 255 when no sample is missing. The march ends there. So the
    pruned and the exhaustive search agree on `reach` bit for bit too, and I4
    covers both arrays.
-2. The ray's early stop bounds the rest of the ray with the larger of both
-   rasters' maxima, not the current raster's.
+2. The ray's early stop bounds the rest of the ray with the largest maximum
+   of the rasters still ahead on it: both while on the near raster, the far
+   raster's alone after D_near.
 3. Far samples are at D_near + j·Δ_far, j ≥ 1.
 4. An absent far raster sets D_far to D_near.
 5. The int16 is 100·h rounded half away from zero.
@@ -1257,3 +1259,5 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
 **Design review, round 2, 2026-10-13.** Range `df70bc3b..27fab48d`, 0 production lines, @reviewer: APPROVED. All six blockers and three wordings fixed; the four probes re-run, every figure reproduced except wall times (the five-run table, melt-out medians 83, 75.5 and 75.0, north −1, 226 against 204 mm, the 6.935e-12 residual, section 4.7's 0.630/0.888, R1 +292.8/−400/−53.6, the EnSight bytes, pvpython's 92 steps); five new fixtures (H5b, H8b, H10, H11, H12) hand-checked as killing; the one undetectable mutant (`T < ts` to `T <= ts`) equivalent, since the refreeze is 0 there; renormalised bin factors make 1e-9·max(1, swe+P) sound. New assumptions sound: NOAA's longer sun calculator (the short one is 0.31° low on 04-15), the temperature peak at 14:00 solar time, case-file times one per line. Suggestion: H11 should state ts = 0.
 
 **Design review, round 3 (the addendum, section 10), 2026-10-13.** Range `85aec66f..91d65f3c`, 0 production lines, @reviewer: CHANGES REQUESTED. Blocking: (1) PR 5, the horizon kernel, is invariant-critical but names no mutation targets or killing fixtures; name at least the pruning bound's a < 0 branch (a receiver above all terrain), the curvature term at d_lo, the early stop, the search starting at r_i, the switch from near to far raster, recording `reach`, the empty far raster; (2) PR 6 builds the radiation design's evaluator but leaves out that design's checks for it, I7 (within 0.003° of the reference sun, lit agreeing) and I8 (same result at any thread count); verification 3's flat-plane sunrise needs the evaluator, so it moves from PR 5 to PR 6; (3) say which PR records in `terrain-radiation.md` what is built here and how (TR2; TR3a with the far raster optional; TR3b's near raster only; TR5 without its CLI), since question 2's default would leave that file calling them unbuilt and risk a second version. Wordings: the beam at 2.97° is 5.1-5.3 W/m², not 5.6; the far-field probe covers 20-60 km only, so add the bound beyond 60 km (at most 1.1° from the lowest receiver); say test R3 (the single-γ turn) is retired in PR 6; PR 5's binding is 55 lines against the radiation design's 50 with no reason given. Held: `probe_shadow.py` re-run on DTM10, every figure reproduced (timings within 3 %); γ's direction as pinned; the lit-test figures, V-valley closed forms and combiner values; PR sizes and PR 3's 495; Bygdin's 52,198 triangles; questions 8-10.
+
+**Design review, round 4 (the addendum), 2026-10-13.** Range `52a3bddf..9793bc83`, 0 production lines, @reviewer: APPROVED WITH WORDINGS (pin 2 says the maxima of the rasters still ahead; a PR 3b split point at 650), applied by the main session. All three blockers and four wordings of round 3 fixed; `probe_review3.py` re-run, output identical; section 10.8's 13 targets on six fixtures, pruned equal to exhaustive on every fixture, every mutant killed in the one-dimensional model; I7, I8 and test S in PR 6, the vertical east-facing receiver right for test S; pins 1, 3, 4, 5 hold, and coastal DTM10 tiles (`67m1_1`, `67m1_2`, `6700_1`, `66m1_1`) hold no NoData, the sea stored as 0, so pin 1's stop at the first missing sample bites only at the mosaic's edge. PR 3 at 495 against a 37 % overrun is about 678, under 700, so the split point is a margin, not a requirement.
