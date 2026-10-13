@@ -35,13 +35,11 @@ import shlex
 import socket
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
 from typer.testing import Result
 
-import tin_engine.cli as cli
 from cli_driver import COLS, ROWS, SQUARE, USAGE, geojson, plain, runner, write_tiff
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
@@ -554,23 +552,20 @@ class TestRecord:
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Refinement is bit-identical for any thread count (increments 14 and
-        21), and the record holds no thread count: ``cli.refine`` wrapped to
-        pass ``threads=1`` (the binding's keyword; the CLI has none) changes
-        no byte."""
-        args = ("--dem", str(holed), "--tolerance", "1")
-        _, _, _, rec = record_run(monkeypatch, tmp_path, *args)
-        first = rec.read_bytes()
-        real = cli.refine
-        seen: list[int] = []
-
-        def one_thread(*a: Any, **k: Any) -> Any:
-            seen.append(1)
-            return real(*a, **k, threads=1)
-
-        monkeypatch.setattr(cli, "refine", one_thread)
-        record_run(monkeypatch, tmp_path, *args)
-        assert seen == [1], "the wrapper did not run"
-        assert rec.read_bytes() == first
+        21): ``--threads 1`` and ``--threads 2`` (38) write the same mesh
+        bytes to the same paths, and records that differ only where they must,
+        the ``threads`` entry reporting the count used (38, T6) and the echoed
+        command line carrying the option."""
+        args = ("--dem", str(holed), "--tolerance", "1", "--threads")
+        _, out, _, rec = record_run(monkeypatch, tmp_path, *args, "1")
+        one_mesh, one_record = out.read_bytes(), json.loads(rec.read_text(encoding="ascii"))
+        record_run(monkeypatch, tmp_path, *args, "2")
+        two_mesh, two_record = out.read_bytes(), json.loads(rec.read_text(encoding="ascii"))
+        assert two_mesh == one_mesh
+        assert (one_record.pop("threads"), two_record.pop("threads")) == (1, 2)
+        one_command, two_command = one_record.pop("command"), two_record.pop("command")
+        assert two_command == one_command.replace("--threads 1", "--threads 2") != one_command
+        assert two_record == one_record
 
     def test_no_time_date_host_or_seconds(
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
@@ -583,7 +578,7 @@ class TestRecord:
             assert "seconds" not in text.lower(), text
             assert not re.search(r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}:\d{2}(:\d{2})?\b", text), text
             assert not host or host not in text, text
-        for absent in ("threads", "total", "stats_seconds"):
+        for absent in ("total", "stats_seconds"):
             assert absent not in obj
 
     def test_the_path_is_echoed_after_the_others(

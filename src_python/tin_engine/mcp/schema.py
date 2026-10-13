@@ -48,7 +48,8 @@ def _annotation(param_type: Any) -> tuple[Any, dict[str, Any]]:
     if hasattr(param_type, "types"):  # a tuple type: fixed length, one type per place
         return tuple[tuple(_annotation(t)[0] for t in param_type.types)], {}  # type: ignore[misc]
     bounds = {"ge": getattr(param_type, "min", None), "le": getattr(param_type, "max", None)}
-    return SCALARS.get(param_type.name.split()[0], str), {k: v for k, v in bounds.items() if v}
+    limits = {k: v for k, v in bounds.items() if v is not None}
+    return SCALARS.get(param_type.name.split()[0], str), limits
 
 
 def _default(param: Any) -> Any:

@@ -19,7 +19,6 @@ no data by MapBiomas's convention, and the window's corner is the cell's.
 
 from __future__ import annotations
 
-import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -112,7 +111,7 @@ def decode_window(
     dtype: np.dtype[Any],
     window: IndexWindow,
     *,
-    threads: int | None = None,
+    threads: int = 1,
 ) -> DemTile:
     """`window` of the page `source` holds, decoded and cast to `dtype`.
 
@@ -121,8 +120,9 @@ def decode_window(
     `source` lacks is `NotCached`, before any block is read; a sparse or
     undecodable block is a `GeoTiffError` naming `source.where` and the block.
 
-    `threads` decoding workers, the machine's cores (`os.cpu_count() or 1`)
-    when None; the count changes no value (W2).
+    `threads` decoding workers, one by default (38: the count is the caller's,
+    and no module but `resources.py` reads the machine); the count changes no
+    value (W2).
     """
     w, page = window, source.page
     ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
@@ -146,7 +146,7 @@ def decode_window(
 
 
 def decode_class_window(
-    source: BlockSource, meta: RasterMeta, window: IndexWindow, *, threads: int | None = None
+    source: BlockSource, meta: RasterMeta, window: IndexWindow, *, threads: int = 1
 ) -> ClassWindow:
     """`window` of the class raster `source` holds, as `uint8` (26a).
 
@@ -182,10 +182,10 @@ def _decode_into(
     w: IndexWindow,
     indices: Sequence[int],
     out: np.ndarray[Any, np.dtype[Any]],
-    threads: int | None,
+    threads: int,
 ) -> None:
     """Decode each of `indices` into its own slice of `out`, `w`'s canvas, on
-    `threads` workers (the machine's cores when None); none is sparse."""
+    `threads` workers; none is sparse."""
     page = source.page
 
     def put(index: int) -> None:
@@ -200,7 +200,7 @@ def _decode_into(
             block
         )
 
-    with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
+    with ThreadPoolExecutor(threads) as pool:
         list(pool.map(put, indices))
 
 

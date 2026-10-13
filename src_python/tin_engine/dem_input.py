@@ -20,7 +20,6 @@ before any block is decoded, and every tile is decoded by window.
 from __future__ import annotations
 
 import math
-import os
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +42,7 @@ from tin_engine.grow import grow_mitred
 from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
 from tin_engine.io.repository import CacheRepository, DemRepository, TiffDemRepository
 from tin_engine.mosaic import MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
+from tin_engine.resources import Resources
 from tin_engine.target_grid import (
     Block,
     TargetGrid,
@@ -115,30 +115,39 @@ class DemInput:
 
 
 def repository_for(
-    sources: tuple[Path, ...], nodata: float | None = None, cached: CachedSource | None = None
+    sources: tuple[Path, ...],
+    nodata: float | None = None,
+    cached: CachedSource | None = None,
+    threads: int = 1,
 ) -> tuple[TiffDemRepository | CacheRepository, str]:
     """The repository over one directory of tiles, over the files given, or
     over a cached source, and the run's name: the directory's name, the first
-    file's stem, or the source's key."""
+    file's stem, or the source's key; `threads` decode its blocks (38)."""
     if cached is not None:
-        return CacheRepository(cached.cache, cached.source, nodata=nodata), cached.source
+        repository = CacheRepository(cached.cache, cached.source, nodata=nodata, threads=threads)
+        return repository, cached.source
     first = sources[0]
     if first.is_dir():
-        return TiffDemRepository.from_directory(first, nodata=nodata), first.resolve().name
-    return TiffDemRepository(sources, nodata=nodata), first.stem
+        directory = TiffDemRepository.from_directory(first, nodata=nodata, threads=threads)
+        return directory, first.resolve().name
+    return TiffDemRepository(sources, nodata=nodata, threads=threads), first.stem
 
 
-def open_dem(request: DemRequest) -> DemInput:
+def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInput:
     """List, plan and assemble. Every refusal is a `ValueError` (`GeoTiffError`,
-    `MosaicError`) or, for a file that cannot be opened, an `OSError`."""
-    repository, label = repository_for(request.sources, request.nodata, request.cached)
+    `MosaicError`) or, for a file that cannot be opened, an `OSError`.
+    `resources` (38) is the thread count for the decoders and the pools and
+    the memory budget for the canvas; None is `Resources.fallback()`."""
+    res = Resources.fallback() if resources is None else resources
+    repository, label = repository_for(request.sources, request.nodata, request.cached, res.threads)
     footprints = repository.footprints()
     if footprints and _reprojected(request, [f.meta for f in footprints]):
-        return _open_reprojected(request, repository, footprints, label)
+        return _open_reprojected(request, repository, footprints, label, res)
     if request.domain is None or not footprints:
-        plan, domain, grown = plan_mosaic(footprints, request.bounds, None), None, None
+        plan = plan_mosaic(footprints, request.bounds, None, memory_budget=res.memory_budget)
+        domain = grown = None
     else:
-        plan, domain, grown = _domain_plan(footprints, request.domain)
+        plan, domain, grown = _domain_plan(footprints, request.domain, res.memory_budget)
     # With a domain the seam report counts only the needed region's nodes
     # (Ola, 2026-09-28); which value a node takes does not depend on it.
     repository.check(plan)
@@ -194,6 +203,7 @@ def _open_reprojected(
     repository: DemRepository,
     footprints: Sequence[TileFootprint],
     label: str,
+    res: Resources,
 ) -> DemInput:
     """D1's reprojected path: the target grid around the domain (or box) in
     the target CRS, the source region planned and assembled as 15a does,
@@ -212,10 +222,10 @@ def _open_reprojected(
     ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
     grid, grown = target_grid_for(domain, target, default_spacing(meta, (ax, ay)))
     box, needed = source_region(grid, meta, grown)
-    plan = plan_mosaic(footprints, box, needed)
+    plan = plan_mosaic(footprints, box, needed, memory_budget=res.memory_budget)
     repository.check(plan)
     mosaic = assemble(plan, repository.load, needed, load_window=repository.load_window)
-    source, threads = TileWindows(mosaic.tile), os.cpu_count() or 1
+    source, threads = TileWindows(mosaic.tile), res.threads
     return DemInput(
         tile=resample(grid, source, threads),
         plan=plan,
@@ -229,7 +239,7 @@ def _open_reprojected(
 
 
 def _domain_plan(
-    footprints: Sequence[TileFootprint], given: DomainPolygon
+    footprints: Sequence[TileFootprint], given: DomainPolygon, budget: int | None = None
 ) -> tuple[MosaicPlan, DomainPolygon, Any]:
     """The domain in the DEM's CRS, the plan of its bounds with the polygon
     grown by one cell needed (R4 point 5), and that grown polygon, the needed
@@ -245,12 +255,13 @@ def _domain_plan(
         # re-plan while the lattice chosen has a larger one. The reach only
         # grows, so this ends, and the region needed is never short of the
         # chosen lattice's own cell.
-        plan, reach, grown = plan_mosaic(footprints, box, domain.polygon), 0.0, domain.polygon
+        plan = plan_mosaic(footprints, box, domain.polygon, memory_budget=budget)
+        reach, grown = 0.0, domain.polygon
         while (diagonal := math.hypot(plan.meta.delta_x, plan.meta.delta_y)) > reach:
             reach, grown = diagonal, grow_mitred(domain.polygon, diagonal)
-            plan = plan_mosaic(footprints, box, grown)
+            plan = plan_mosaic(footprints, box, grown, memory_budget=budget)
         if past := _past(box, plan.meta):  # a vertex within 1e-6 cell past a node line
-            plan = plan_mosaic(footprints, past, grown)
+            plan = plan_mosaic(footprints, past, grown, memory_budget=budget)
         check_extent(domain, plan.meta)
     except (DomainError, MosaicError) as exc:
         raise type(exc)(f"the domain, in {given.crs}, in the DEM's {crs}: {exc}") from exc

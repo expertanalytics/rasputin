@@ -155,15 +155,19 @@ class TestOpenDem:
         assert (opened.tile.meta.nodata, opened.tile.meta.nodata_source) == (-9999.0, "caller")
 
     def test_the_cap_refuses_before_any_pixel_is_read(
-        self, di: ModuleType, mz: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, di: ModuleType, mz: ModuleType, tmp_path: Path
     ) -> None:
         """M5 through a file: its strip is cut, so a load would raise
-        `GeoTiffError`; the refusal must be the cap's `MosaicError` instead."""
+        `GeoTiffError`; the refusal must be the cap's `MosaicError` instead.
+        The cap is increment 38's budget, through `open_dem(..., resources=)`:
+        8 bytes, which 3 x 4 float32 nodes exceed."""
+        from tin_engine.resources import Resources
+
         path = tmp_path / "cut.tif"
         path.write_bytes(truncated_strip().getvalue())
-        monkeypatch.setattr(mz, "physical_memory", lambda: 8)  # cap 4 bytes: 3 x 4 nodes exceed it
-        with pytest.raises(mz.MosaicError, match="--bbox"):
-            di.open_dem(request(di, path))
+        with pytest.raises(mz.MosaicError, match="--bbox") as info:
+            di.open_dem(request(di, path), resources=Resources(threads=1, memory_budget=8))
+        assert "--memory-budget" in str(info.value)
 
 
 class TestDemRequest:
