@@ -42,7 +42,7 @@ from typing import Any
 import pytest
 
 import tin_engine.cli as cli
-from cli_driver import USAGE, geojson, invoke, plain, runner, squashed
+from cli_helpers import USAGE, geojson, invoke, plain, runner, squashed
 from fetch_fixtures import PROJECTED_CRS, RangeServer, projected
 from test_cli_fetch import TRIANGLE, no_network
 from test_cli_mesh_mosaic import same_mesh

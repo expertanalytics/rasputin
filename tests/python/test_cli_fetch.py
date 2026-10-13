@@ -36,7 +36,7 @@ from shapely import affinity
 from shapely.geometry import Point, Polygon
 
 import tin_engine
-from cli_driver import geojson, invoke, no_cache_anywhere, runner, says_no_cache
+from cli_helpers import geojson, invoke, no_cache_anywhere, runner, says_no_cache
 from cog_fixtures import write_cache
 from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y

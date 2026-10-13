@@ -71,7 +71,7 @@ import shapely
 from pyproj import Geod, Transformer
 
 from class_fixtures import CLASSES, KEY, LAT0, LON0, STEP, class_tiff, object_id
-from cli_driver import geojson
+from cli_helpers import geojson
 from cog_fixtures import write_cache
 from geographic_fixtures import projected_tiff, rough
 
