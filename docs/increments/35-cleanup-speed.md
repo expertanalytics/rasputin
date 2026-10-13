@@ -115,7 +115,7 @@ feature_input._clean -> _outline_lines(polygon, outline, tree)  (3.4)
    the outline's segment STRtree built once per _clean, passed in
 ```
 
-### 3.1 The reprojection in one call, on threads (`feature_input.py:357`, `crs.py:42-52`)
+### 3.1 The reprojection in one call, on threads (`src_python/tin_engine/feature_input.py@7da1d663:357`, `src_python/tin_engine/crs.py@7da1d663:42-52`)
 
 (a) `_take`'s cover branch (`:355-363`) appends `(fid, mask, code,
 geometry)` unmoved. After the loop, when `move is not None`, one
@@ -126,7 +126,7 @@ polygon (shapely gathers all their coordinates and calls `move` once); then
 time goes to `self.seconds` as today. Measured: one call over all polygons
 gives the same bits as per-polygon calls (`C1 ... same bits: True`).
 
-(b) `reprojector`'s `apply` (`crs.py:48-51`): when `len(points) >= 2 *
+(b) `reprojector`'s `apply` (`src_python/tin_engine/crs.py@7da1d663:48-51`): when `len(points) >= 2 *
 CHUNK_POINTS`, split with `np.array_split` into `min(WORKERS, len(points) //
 CHUNK_POINTS)` chunks and map them over a `ThreadPoolExecutor`, each worker
 thread holding its own `Transformer` in a `threading.local`; concatenate.

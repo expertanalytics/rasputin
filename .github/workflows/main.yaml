@@ -233,6 +233,12 @@ jobs:
       - name: Citations resolve
         run: python tools/check_citations.py
 
+      # Docstrings, comments and help strings describe the code, not its
+      # history. The scope is `[tool.check_code_history] paths` in
+      # pyproject.toml; it grows as each package is rewritten.
+      - name: No history in code docs
+        run: python tools/check_code_history.py
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

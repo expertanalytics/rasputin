@@ -1803,7 +1803,8 @@ class TestOneOutlineTreePerCleanup:
 
 
 def untouched_30b(line: Any, domain: Polygon) -> bool:
-    """30b's `_untouched`, verbatim (`feature_input.py:244-254` at `c7dba32e`)."""
+    """30b's `_untouched`, verbatim
+    (`src_python/tin_engine/feature_input.py@c4130194:244-254` at `c7dba32e`)."""
     xy = shapely.get_coordinates(line)
     return (
         len(xy) >= 2

@@ -326,11 +326,11 @@ DEFAULT_VOCABULARY = EdgeVocabulary(properties=(
   `style.PropertyStroke.token`, never an `EdgeProperty.name`, because `viz/`
   may import no vocabulary at all. The one bridge is `cli.py`'s
   `PROPERTY_STROKES`, which builds a
-  `PropertyStroke` from a name and so re-validates through `style.py:51`'s
+  `PropertyStroke` from a name and so re-validates through `src_python/tin_engine/viz/style.py@e922b4ba:51`'s
   deliberately wider `^[a-z][a-z0-9_-]*$` — a CSS class may carry a hyphen, a
   feature name may not. A quote-carrying name dies there whatever this pattern
   says. Keep the pattern: it keeps a vocabulary name usable as a class token and
-  is defence in depth behind the one that is load-bearing. `viz/style.py:40-51`
+  is defence in depth behind the one that is load-bearing. `src_python/tin_engine/viz/style.py@e922b4ba:40-51`
   is where the boundary is documented, because that is where it is enforced.
 
 ### How a producer and a consumer come to agree which bit means "river"
@@ -491,7 +491,7 @@ gallery scale, two overlaid strokes on one polyline read as a rendering defect.
   precedent is exact and already in the tree: `scene.py`'s `closed_roles` is
   supplied by `cli.py` for precisely this reason — "``closed_roles`` is
   therefore supplied by ``cli.py``, the composition root that knows the enum"
-  (`src_python/tin_engine/viz/scene.py:149-151`; `:141-143` before this branch
+  (`src_python/tin_engine/viz/scene.py@e51ad75a:149-151`; `:141-143` before this branch
   moved it). `style.py`'s own docstring
   draws the same line: it models "the arithmetic the viewport divides by", and
   colours are "taste" that lives in `svg.py`'s CSS. A default naming `river`

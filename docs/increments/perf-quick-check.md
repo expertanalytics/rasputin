@@ -84,7 +84,7 @@ GeoPackage queried and reprojected. `lagan` replaces the earlier `ljungan`
 hotspot is gone once 30d merges; `lagan` carries the hotspot that remains
 (`features clip`, 40.7 % of 16.97 s,
 `docs/benchmarks/2026-10-07/30d-buffer/built.md` on 30d's branch). Neither
-case needs the network (meshing is offline, `sources.py:6`). Every run is
+case needs the network (meshing is offline, `src_python/tin_engine/sources.py@1b347732:6`). Every run is
 `--binary`. Paths start with `$TREE` (the tree measured) or `$RASPUTIN_DATA`
 (default `../rasputin_data` beside the checkout the tool runs from; set it when
 running from a worktree). The Numedalslågen outline was copied there from
