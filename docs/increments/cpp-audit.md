@@ -549,7 +549,7 @@ Deleted outright:
   (`tests/cpp/CMakeLists.txt@1035690:224` and `:227`, with the comment at
   `:216-223` rewritten), and its name in the TSan job's build and run lists
   (`.github/workflows/main.yaml@1035690:155` and `:169`, each edited **in
-  place** so `.github/workflows/main.yaml@ce8c364f:306`, cited unpinned, does not move).
+  place** so `.github/workflows/main.yaml@1035690:306`, cited unpinned, does not move).
   `tests/python/test_ci_changes.py`'s `test_h3_tsan_builds_exactly_the_suites_it_runs`
   fails if the workflow names a suite CMake no longer registers, so the
   CMake and workflow edits go in one commit. `for_each_block` keeps its

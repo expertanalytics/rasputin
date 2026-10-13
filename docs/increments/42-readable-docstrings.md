@@ -648,8 +648,11 @@ rewritten in general terms by the sweep.
 - *Code review round 1*: the CI step moves `.github/workflows/main.yaml` down
   six lines, so the six citations of its lines 261 and 306 in
   `37-mcp-server.md` (two), `cpp-audit.md`, `h11-ci-path-filter.md` and
-  `h16-harness-fixes.md` (two) are pinned to master `ce8c364f`, where they
-  were written against.
+  `h16-harness-fixes.md` (two) are pinned, each to a revision where the line
+  holds what it says: the two in `37-mcp-server.md` to master `ce8c364f`
+  (line 261, the `.[dev]` install); `h11-ci-path-filter.md` and both in
+  `h16-harness-fixes.md` to `95b68da` (lines 306-307, the job `CI result`);
+  `cpp-audit.md`'s line 552 to `1035690`.
 
 ## Estimate
 
@@ -664,3 +667,5 @@ sweep PRs.
 **Design review, round 2, 2026-10-13.** Range `423223aa..aa70c016`, 0 counted lines, @reviewer: APPROVED. Verified by rerunning the probe: 668 matches on 441 lines in 63 files, 65 pointer hits, identical to `scan_output.txt`; three pointer hits read, all real; a file-level ruff directive, a changed ruff code and a dropped `type: ignore`, `pragma` or `fmt: skip` all give "differs"; bare strings under `except`, `else`, `finally`, a loop's `else` and a `match` case give "same", a real change under them still "differs"; `--rivers` fixed; check_citations exit 0. Suggestion for the build: ruff also obeys an upper-case `NOQA`; make the directive match case-insensitive (/Users/skavhaug/projects/rasputin/.claude/worktrees/docstrings/docs/increments/42-readable-docstrings.md@aa70c016:376-383) and add a test 7 fixture.
 
 **Code review, round 1, 2026-10-13.** Range `origin/master..8c47988f`, 128 counted lines, @reviewer: CHANGES REQUESTED, two blockers. (1) The new CI step moves `.github/workflows/main.yaml` down 6 lines, so 6 unpinned citations into it now land on the wrong line. (2) The increment file's Status and section 13 are stale. Checked and holding: the SKILL.md rule matches section 4 with the bug-report bullet and no history, the CLAUDE.md gate line, all 176 pins against `git blame`, the empty scope green in a clean environment. Ideas: the `hash` rule misses `path@hash:line` pins (three in `features.py`, for PR 6 to remove); test 94's message "does not exist yet" reads like the red step.
+
+**Code review, round 2, 2026-10-13.** Range `origin/master..7acac12a`, 128 counted lines, @reviewer: CHANGES REQUESTED: h11:451, h16:1444/:1505 and cpp-audit:552 pinned to ce8c364f, where line 306 is not `CI result`; pin h11 and h16 to 95b68da, cpp-audit to 1035690; fix section 13's "written against" claim. Idea not taken: the reviewer's seventh mention, in cpp-audit.md's list of citations left unpinned, stays as written, since pinning it would contradict that list.
