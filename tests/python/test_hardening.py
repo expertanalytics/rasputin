@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 import tin_engine._core as core
-from cli_driver import runner
+from cli_helpers import runner
 from harness_fixtures import Tool
 from tin_engine import cli, installed_version
 from tin_engine.cli import app

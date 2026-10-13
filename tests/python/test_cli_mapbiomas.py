@@ -33,7 +33,7 @@ from class_fixtures import (
     per_year_entry,
     serve_years,
 )
-from cli_driver import USAGE, invoke
+from cli_helpers import USAGE, invoke
 from fetch_fixtures import RangeServer, projected
 from test_cli_fetch import KEY as DEM_KEY
 from test_cli_fetch import catalogue_with, install, no_network

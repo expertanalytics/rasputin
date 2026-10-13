@@ -71,7 +71,7 @@ import numpy as np
 import pytest
 
 import tin_engine.cli as cli
-from cli_driver import plain, runner
+from cli_helpers import plain, runner
 from tin_engine.cli import ROLES, app
 
 SVG_NS = "http://www.w3.org/2000/svg"

@@ -66,7 +66,7 @@ import pytest
 from shapely.geometry import Polygon
 
 import tin_engine.cli as cli
-from cli_driver import USAGE, geojson, plain, runner
+from cli_helpers import USAGE, geojson, plain, runner
 from feature_fixtures import Feat, write_geojson
 from geographic_fixtures import geographic_tile_tiff, project_ring
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff

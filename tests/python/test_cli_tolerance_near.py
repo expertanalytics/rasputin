@@ -34,7 +34,7 @@ from shapely.geometry.base import BaseGeometry
 import tin_engine.cli as cli
 import tin_engine.edge_strip as edge_strip
 import tin_engine.final_check as final_check
-from cli_driver import SQUARE, UTM33, geojson, invoke, refused, rough_dem
+from cli_helpers import SQUARE, UTM33, geojson, invoke, refused, rough_dem
 from geotiff_fixtures import TIE_X, TIE_Y
 from gpkg_fixtures import Layer, Row, write_gpkg
 from test_cli_constraint_feet_all_paths import Spy

@@ -106,7 +106,7 @@ explicitly.
 
 | Reader | Encoding | Effect |
 |---|---|---|
-| `tests/python/vtkread.py` `read_vtk` (used by `cli_driver.mesh_to_vtk`, `recordread`, `landcover_fixtures`, every CLI suite) | both (`tests/python/vtkread.py@2764ef71:207-209`) | none |
+| `tests/python/vtkread.py` `read_vtk` (used by `cli_helpers.mesh_to_vtk`, `recordread`, `landcover_fixtures`, every CLI suite) | both (`tests/python/vtkread.py@2764ef71:207-209`) | none |
 | `tests/python/plyread.py` | both (`tests/python/plyread.py@2764ef71:170-173`) | none |
 | `tests/python/test_io_vtk_readback.py` (CI's viewer step, real `vtk`) | passes `--binary` or `--ascii` explicitly | none |
 | `tools/bench.py` | timing runs pass `--binary`, the quality run passes `--ascii` and reads it with `read_vtk_ascii` (`tools/bench.py@2764ef71:342`, `:607`, `:616`) | none; stored baselines unchanged |
