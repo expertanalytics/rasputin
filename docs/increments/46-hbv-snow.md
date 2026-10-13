@@ -1,9 +1,12 @@
 # Increment 46: HBV snow on the triangles, melt corrected for the sun, and a melt animation
 
-**Status: designed** (2026-10-13, `@architect`, branch `worktree-snow-melt`).
-Design only: no code, no tests. Three PRs (section 8). Ola was away when it
-was written; every default taken without him is listed in section 9 as a
-question with its default.
+**Status: designed; design review round 1 answered** (2026-10-13,
+`@architect`, branch `worktree-snow-melt`). Design only: no code, no tests.
+Three PRs (section 8). Ola was away when it was written; every default taken
+without him is listed in section 9 as one of seven questions with its
+default. Every measured figure comes from the saved probe,
+`docs/increments/46-probes/probe_spring.py`, whose output is
+`46-probes/probe_spring.out`, except where a section names another source.
 
 ## 1. What Ola asked
 
@@ -213,7 +216,7 @@ Read `../rasputin_scratch/ideas/ideas.md` before the design.
   turns flags into a `SnowJob`.
 - **State.** The only mutable thing is the `SnowState` object Python holds;
   the C++ step writes only its own triangle's slots, so it runs in parallel
-  over triangles through `parallel_util::parallel_for` with the run's
+  over triangles through `parallel_util::for_each_block` with the run's
   `--threads` (increment 38's `Resources`). No global state, no time inside
   C++: the step sees a length in seconds, never a date.
 - **Swappable pieces.** The HBV kernel never sees the sun: it takes ΔI as an
@@ -247,11 +250,20 @@ struct SunCorrectionParameters {
     double r;    // melt_factor: mm per °C per day per W/m²
     double d;    // threshold: °C per W/m²
 };
-// N equal-area bins; factor f_k >= 0, ascending, mean 1 within 1e-9.
-class SnowDistribution { /* validated on construction, factors() span */ };
-class SnowState {  // owns n·N solid (sp) and liquid (sw) values, and per
-                   // triangle swe, sca, outflow of the last step
+// N equal-area bins, 1 <= N <= 64; factors finite, f_k >= 0, ascending,
+// mean within 1e-9 of 1. The constructor throws std::invalid_argument naming
+// the first rule broken; otherwise it divides the factors by their mean, so
+// they average to 1 to rounding (N·eps), not to 1e-9.
+class SnowDistribution {
   public:
+    explicit SnowDistribution(std::span<const double> factors);
+    std::span<const double> factors() const;
+};
+class SnowState {  // owns n·N solid (sp) and liquid (sw) values, a copy of
+                   // the factors, and per triangle swe, sca, outflow of the
+                   // last step
+  public:
+    // throws std::invalid_argument on a negative or non-finite initial swe
     static SnowState uniform(std::size_t triangles, const SnowDistribution&,
                              double initial_swe_mm);  // sp_k = f_k·swe, sw_k = 0
     std::span<const double> swe() const, sca() const, outflow() const;
@@ -263,15 +275,33 @@ struct StepForcing {
     double dt_seconds;                       // > 0
 };
 enum class StepStatus : std::uint8_t {
-    ok, size_mismatch, non_finite_forcing, negative_precipitation, bad_step_length };
+    ok, invalid_parameters, size_mismatch, non_finite_forcing,
+    negative_precipitation, bad_step_length };
 StepStatus step(const HbvSnowParameters&, const SunCorrectionParameters&,
                 SnowState&, const StepForcing&, unsigned threads);
 }
 ```
 
-A status other than `ok` leaves the state untouched (validation runs over the
-whole input before any slot is written); the binding raises `ValueError`
-naming the status and, for a non-finite value, the first triangle.
+**Where each refusal lives.** Two homes, by when the input is fixed:
+
+- **Construction throws.** `SnowDistribution`'s constructor (bad N, a
+  negative, non-finite or descending factor, a mean off by more than 1e-9) and
+  `SnowState::uniform` (a negative or non-finite initial SWE) throw
+  `std::invalid_argument`; pybind11 turns it into `ValueError` with the same
+  message. No object exists to be left half-made.
+- **`step` returns a status.** `invalid_parameters`: `cx`, `lw` or `cfr`
+  negative, or any of `tx`, `ts`, `cx`, `lw`, `cfr`, `r`, `d` non-finite, or a
+  mode outside the enum. `size_mismatch`: temperature or precipitation not of
+  length n, or the radiation anomaly not of length n under a correction or
+  not empty under `none`. `non_finite_forcing`, `negative_precipitation`,
+  `bad_step_length` (dt not finite and > 0) as named.
+  Any status other than `ok` leaves the state untouched (validation runs over
+  the whole input before any slot is written); the binding raises
+  `ValueError` naming the status and, for a non-finite value, the first
+  triangle.
+
+`params.py` refuses the same values earlier, in Pydantic; the C++ checks stay,
+because the binding can be called without `params.py`.
 
 **One step, per triangle i and bin k**, with Δt = dt_seconds / 86400 days:
 
@@ -296,8 +326,11 @@ a sunny slope is not slower for it. Named as a choice (section 9, Q4).
 
 **Invariants** (the suite tests each):
 - I1, mass: swe_after = swe_before + P − outflow, per triangle per step, to
-  1e-9 relative to max(1 mm, swe). Exact per bin because each bin's update
-  conserves sp + sw + out, and the factors average to 1.
+  1e-9 × max(1 mm, swe_before + P). Each bin's update conserves sp + sw + out
+  exactly up to rounding; the snowfall spread over the bins sums to
+  P·mean(f), and the constructor's renormalisation makes mean(f) = 1 to N·eps
+  (7e-15 at N = 64), so the error is rounding of order 1e-14 relative to
+  swe + P, not the 1e-9 the factors are first checked to.
 - I2, bounds: sp_k ≥ 0, 0 ≤ sw_k ≤ lw·sp_k (+1e-12), 0 ≤ sca ≤ 1,
   outflow ≥ 0.
 - I3, flat is plain: with ΔI_i = 0, all three modes give bit-identical
@@ -320,7 +353,9 @@ StepStatus radiation_anomaly(std::span<const double> normals,  // 3n, unit, ENU,
   beam_s the clear-sky direct normal irradiance then, 0 with the sun below the
   horizon.
 - The beam is forcing and is computed in Python (`snow/forcing.py`), as the
-  radiation design's R9 rules: beam = I0·(1/R)²·Ψa^(1/sin e) with
+  radiation design's R9 rules (forcing is the consumer's, never the core's).
+  The formula is this design's, Hock's form with P/P0 = 1 (R9 does not state
+  one): beam = I0·(1/R)²·Ψa^(1/sin e) with
   I0 = 1368 W/m², Ψa = 0.75, R the Earth-Sun distance in AU and e the sun's
   elevation, both from TR1, and P/P0 = 1 (departure 3).
 - The normals are per unit inclined area, as Hock's I is: ΔI is irradiance on
@@ -330,8 +365,9 @@ StepStatus radiation_anomaly(std::span<const double> normals,  // 3n, unit, ENU,
 - **Normals in true east-north-up.** `snow/geometry.py` takes the triangle
   normal in the mesh's grid axes and turns it by the grid convergence γ at the
   mesh's centre (pyproj's `meridian_convergence`): one γ per mesh. On the
-  synthetic domain (on UTM 33's central meridian) γ is 0.0000° at the centre
-  and ±0.0984° at the east and west edges (probe). For a 100 km catchment
+  synthetic domain (on UTM 33's central meridian) γ is 0.0000° at the centre,
+  −0.0984° at the west edge and +0.0984° at the east edge
+  (`46-probes/probe_sizes.out`). For a 100 km catchment
   away from a central meridian the spread is about 1°; the radiation design's
   per-receiver frame (TR2) replaces the single γ when it lands.
 
@@ -372,28 +408,33 @@ z = 300 + 1600·exp(−(r/2500)²)·(1 + 0.15·(1 − exp(−(r/1500)²))·cos 5
 - a massif to 1900 m with five ridges (so every aspect occurs at every
   height) and a second hill to the south-east;
 - noise: a random-phase surface with power spectrum k^−3, no wavelengths under
-  40 m, scaled to 25 m RMS, from `numpy.random.default_rng(46)`; it gives the
-  mesh the triangle density of real terrain (without it, 1 m tolerance gives
-  31 838 triangles; with it, 646 870);
-- measured: z from 234.0 to 1924.4 m; slope from the grid's central
-  differences mean 14.0°, max 51.2°.
+  40 m, scaled to 25 m RMS, from `numpy.random.default_rng(46)` (the exact
+  construction is `46-probes/probe_spring.py`'s, which PR 3's `terrain.py`
+  reproduces bit for bit); it gives the mesh the triangle density of real
+  terrain (without it, 1 m tolerance gives 31 838 triangles; with it,
+  646 870);
+- measured (`46-probes/probe_spring.out`): z from 234.0 to 1924.4 m; slope
+  from the grid's central differences mean 14.0°, max 51.2°.
 
-**Mesh:** `rasputin mesh --dem synth.tif --tolerance 1`, "quite fine": 646 870
-triangles, 324 265 vertices, mean triangle 223 m² (an equilateral of 23 m
-sides), 0.77 s wall. At 2 m: 294 770 triangles; at 0.5 m: 1 279 127 (1.28 s).
+**Mesh** (`46-probes/probe_sizes.out`; wall times include process start and
+the write): `rasputin mesh --dem synth.tif --tolerance 1`, "quite fine":
+646 870 triangles, 324 265 vertices, mean plan area 223 m² (an equilateral of
+23 m sides), 0.73 s. At 2 m: 294 770 triangles, 147 936 vertices, 0.49 s; at
+0.5 m: 1 279 127 triangles, 1.17 s.
 
 **Forcing** (`SyntheticSpring`, all defaults chosen, not derived):
 - 2027-04-01T00:00Z to 2027-07-01T00:00Z (91 days), hourly steps, S = 4;
 - temperature at 300 m: −3 °C rising linearly to +14 °C, plus a daily cycle of
-  ±4 °C peaking at 14:00 local solar time; lapse −0.6 °C per 100 m from the
-  triangle's centroid height;
+  ±4 °C (a cosine) peaking at 14:00 mean solar time at 15° E (13:00 UTC);
+  lapse −0.6 °C per 100 m from the triangle's centroid height; evaluated at
+  each step's midpoint;
 - no precipitation (the kernel handles it; the synthetic spring is dry);
 - initial snow: 600 mm SWE on every triangle, spread over N = 10 bins with
   CV = 0.4;
 - HBV parameters: tx = 0, ts = 0 °C, cx = 3 mm/°C/day, lw = 0.1, cfr = 0.05;
 - corrections: r = 0.015 mm/°C/day per W/m², d = 0.02 °C per W/m². Chosen so
-  that (a) mid-April at 61° N, a 30° south slope's daily-mean ΔI of +69 W/m²
-  raises the melt factor by about a third, and (b) the two forms give the same
+  that (a) mid-April at 61° N, a 30° south slope's daily-mean ΔI of +68.9 W/m²
+  (section 6) raises the melt factor by about a third (0.015 · 68.9 = 1.03), and (b) the two forms give the same
   extra melt at 4 °C above the threshold: r·ΔI·4 = cx·d·ΔI ⇔ d = 4r/cx.
 - Frames: every 24 hours (at 24:00 UTC); 91 frames plus the start.
 
@@ -405,14 +446,18 @@ of two per-triangle values (SWE and SCA):
 | format | how a frame is stored | size, 92 frames | needs |
 |---|---|---:|---|
 | legacy `.vtk` series (numbered files, or a `.vtk.series` list) | the whole mesh again in every frame | ≈ 2.6 GB (23.3 MB measured mesh file + 2 × 2.6 MB arrays, × 92) | the existing writer plus float cell arrays |
-| **EnSight Gold binary** (`.case` + `.geo` + one file per value per frame) | geometry once (11.7 MB), then 2 587 724 bytes per value per frame | **465 MB measured** | a new writer, ≈ 60 lines, no dependency |
+| **EnSight Gold binary** (`.case` + `.geo` + one file per value per frame) | geometry once (11.7 MB), then 2 587 724 bytes per value per frame | **488 MB (465 MiB) measured** | a new writer, ≈ 60 lines, no dependency |
 | VTKHDF with a static mesh | geometry once | about EnSight's | `h5py`, a new dependency |
 
-**EnSight Gold.** A probe writer (scratch only) wrote the 92 frames in 0.42 s;
-VTK 9.7.0's `vtkGenericEnSightReader` and ParaView 6.1.1's `OpenDataFile`
-read it back with 92 time steps (0, 24, ..., 2184 hours) and the planted value
-at step 50. ParaView opens `snow.case` and plays it; the time axis is in hours
-since the start. EnSight Gold coordinates are 32-bit floats, so the writer
+**EnSight Gold.** The probe writer (`46-probes/probe_sizes.py`, its output
+`probe_sizes.out`) wrote the 92 frames in 0.33 s: geometry 11 654 352 bytes,
+2 587 724 bytes per value per frame, 487 796 213 bytes in all. ParaView
+6.1.1's `pvpython` (`OpenDataFile`) read it back with 92 time steps (0, 24,
+..., 2184 hours), 646 870 cells and the planted value at step 50. ParaView
+opens `snow.case` and plays it; the time axis is in hours since the start.
+**The case file lists the time values one per line**: VTK's EnSight reader
+reads a case-file line of at most 256 characters, and with the 92 values on
+one line the probe's first run failed with "'time values' not found". EnSight Gold coordinates are 32-bit floats, so the writer
 stores x − x0 and y − y0 (x0, y0 the mesh's minimum corner, written in the
 geometry file's description line and in `snow.json`): at 12 km a float's step
 is 1 mm; at UTM northings it would have been 0.5 m.
@@ -441,9 +486,14 @@ reasons:
   triangles get large or are pooled into response units.
 - **The melt looks right.** With CV = 0 (one bin) a triangle goes from full
   to bare in one step, so the snow line is a sharp edge along triangle edges.
-  With CV = 0.4 it is a band. Probe (2 m mesh, plain HBV, numpy): at
-  900-1100 m, half of the area of 30° south and north slopes is bare at day
-  82.0 and 81.8 (CV 0.4) [single-bin figures in section 6].
+  With CV = 0.4 it is a band. Probe (section 6, 2 m mesh): on 30° south
+  slopes at 900-1100 m under the melt-factor correction, the median triangle
+  takes 30 days from its first bare bin to bare, against 0 days (one step)
+  with one bin. Over the domain under plain HBV, the snow-covered fraction at
+  day 60 is 0.630 with ten bins and 0.888 with one: with one bin the cover
+  only falls where a whole triangle has melted out, so the domain stays white
+  until late and then goes bare in a rush (0.888 at day 60, 0.080 at day
+  90).
 
 **The price.** SCA moves in steps of 1/N (0.1 at N = 10), not continuously.
 Shyft's interpolation between quantile points makes it continuous, at the
@@ -517,31 +567,63 @@ Each states the scale it assumes and the largest input it was checked at.
 | d | 0.02 °C per W/m² | = 4r/cx; chosen | probe |
 | I0, Ψa | 1368 W/m², 0.75 | Hock 1999's form; Ψa chosen | 0-90° sun |
 | S | 4 per hour | Hock's 15 minutes | probe |
-| distribution mean tolerance | 1e-9 | doubles, N ≤ 64 | N = 64 |
-| mass-balance tolerance | 1e-9 × max(1 mm, swe) | swe ≤ 10⁴ mm, 10⁴ steps | suite |
+| distribution mean tolerance | 1e-9 on input, then renormalised | doubles, N ≤ 64 | N = 64 |
+| mass-balance tolerance | 1e-9 × max(1 mm, swe_before + P) | swe ≤ 10⁴ mm, P ≤ 100 mm per step, 10⁴ steps; factors renormalised | suite (P1); the probe's dry spring at 294 770 triangles, section 6 |
 | float32 offset | x0, y0 = mesh minimum | meshes up to 10³ km (step 0.06 m) | 12 km |
 
 ## 6. What was measured
 
-All probes are scratch scripts under the session scratchpad (not committed),
-run 2026-10-13 on an M1 Max on AC power, with the worktree's built `_core` for
-`rasputin mesh` and NumPy 2 for the rest. The probe's sun formula is NOAA's
-low-precision one (0.01°), standing in for TR1; its noon elevations at
-61.334° N, 15° E were 28.5° (2027-03-20), 38.4° (04-15) and 52.1° (06-21;
-90 − 61.334 + 23.44 = 52.1).
+The probes are committed beside this file, in `docs/increments/46-probes/`,
+each with its output: `probe_spring.py` (terrain, the 2 m mesh, the spring in
+NumPy; `probe_spring.out`), `probe_sizes.py` (the other meshes, γ, the
+EnSight set; `probe_sizes.out`), `probe_sun.py` (`probe_sun.out`) and
+`noaa_sun.py`, the sun the other two share. Run 2026-10-13 on an M1 Max on AC
+power, with the worktree's built `_core` for `rasputin mesh` and NumPy 2.5 for
+the rest. The sun is NOAA's solar calculator (the spreadsheet's Meeus-based
+formulas, about 0.01°), standing in for TR1; its highest elevations at
+61.334° N, 15° E: 28.51° (2027-03-20), 38.44° (04-15) and 52.10° (06-21),
+azimuth there within 0.15° of 180°. (A first run used NOAA's shorter
+fractional-year formula, whose declination is about 0.3° low in April:
+38.13° on 04-15. Its outputs were discarded.)
 
 - **Mesh sizes and times:** section 4.5.
 - **Daily-mean direct beam on 30° planes, 2027-04-15, 61.334° N 15° E,
   96 samples of 15 min, Ψa = 0.75, I0 = 1368:** horizontal 166.5 W/m²; south
   235.4; north 53.0; east 153.9; west 154.4. So ΔI = +68.9 (S), −113.5 (N),
   −12.6 (E), −12.1 (W).
-- **Synthetic spring, 2 m mesh (294 770 triangles), N = 10, CV = 0.4, NumPy,
-  one thread, hourly over 91 days (2184 steps):** [RESULTS]
-- **Cost:** NumPy took 30.5 ms per step on 294 770 triangles × 10 bins,
-  correction included (66.5 s for the spring). The C++ is expected to be
-  several times faster per thread and to scale with threads; the 1 m mesh has
-  2.2 times the triangles. PR 3's acceptance run times the 1 m spring for
-  real (section 8); no C++ figure is quoted before it.
+- **Synthetic spring, 2 m mesh (294 770 triangles), hourly over 91 days
+  (2184 steps), dry, section 4.5's defaults.** "Domain" figures are weighted
+  by each triangle's inclined area; "class S" and "class N" are the triangles
+  with centroid at 900-1100 m, slope 25-35° and aspect within 22.5° of south
+  (782 triangles) or north (845); a triangle's melt-out day is the first
+  daily frame whose SCA is below 0.5, −1 if none.
+
+  | run | domain SCA, day 30 / 60 / 90 | domain SWE mm, day 30 / 60 / 90 | median melt-out day, class S / N | class S, days first bare bin to bare (median) |
+  |---|---|---|---|---|
+  | none, N = 10 | 1.0000 / 0.6298 / 0.0829 | 565.29 / 203.58 / 23.56 | 83.0 / 82.0 | not reached by day 91 |
+  | melt_factor, N = 10 | 1.0000 / 0.6559 / 0.1152 | 565.14 / 226.07 / 36.05 | 75.5 / −1 | 30 |
+  | threshold, N = 10 | 1.0000 / 0.6337 / 0.0932 | 558.13 / 206.93 / 28.22 | 75.0 / −1 | 35 |
+  | none, N = 1 | 1.0000 / 0.8884 / 0.0804 | 566.15 / 149.13 / 18.10 | 83.0 / 83.0 | 0 |
+  | melt_factor, N = 1 | 1.0000 / 0.7460 / 0.1102 | 566.36 / 186.88 / 29.31 | 76.0 / −1 | 0 |
+
+  What this says. **The sun moves melt-out on 30° south slopes at 1000 m
+  about a week earlier** (75 against 83 days), in both forms. **North
+  slopes at that height do not melt out by 1 July** under either correction
+  (their run-mean ΔI is −104.8 W/m², the south class's +43.7). **The domain
+  keeps more snow with the correction than without** (226 against 204 mm at
+  day 60 in the melt-factor form): the anomaly is relative to a horizontal
+  plane, and over a domain of slopes facing every way the shaded loss
+  outweighs the sunlit gain. Whether `cx` should then be recalibrated
+  against the corrected run is a calibration question, outside this
+  increment. **The threshold form melts earlier in the cold weeks** (558
+  against 565 mm at day 30): it lets sunny slopes melt below 0 °C, where the
+  melt-factor form, which keeps θ = ts, does not. **Mass:** the largest
+  per-triangle residual of 600 − SWE − outflow over a run was 6.9e-12 mm.
+- **Cost:** the five runs together, with ΔI computed once per step, took
+  130.2 s in NumPy, one thread, 58.7 ms median per step. The C++ is expected
+  to be several times faster per thread and to scale with threads; the 1 m
+  mesh has 2.2 times the triangles. PR 3's acceptance run times the 1 m
+  spring for real (section 8); no C++ figure is quoted before it.
 - **Animation size:** section 4.6.
 
 ## 7. Red suites for `@tester`
@@ -549,9 +631,25 @@ low-precision one (0.01°), standing in for TR1; its noon elevations at
 Figures come from section 6's probes or are computed by hand here.
 
 **PR 1, the HBV kernel** (Catch2 for the header; pytest for the binding and
-`params.py`). Invariant-critical, so mutation-tested: targets the rain/snow
-comparison (`<` vs `<=`), the min in melt and refreeze, the retention cap,
-the bare-bin rain path, the SCA count, the mode switch.
+`params.py`). Invariant-critical, so mutation-tested. Each target with the
+fixture that kills it:
+
+| mutant | killed by |
+|---|---|
+| rain/snow `T < tx` → `T <= tx` | H10 |
+| the min dropped in melt | H6 |
+| the min dropped in refreeze | H11 |
+| the retention cap dropped or `lw·sp` → `lw·(sp + sw)` | H1, H4 |
+| the bare-bin rain path (rain into an empty bin's sw) | H5b (in H5 the mutant is equivalent: the cap releases the rain anyway) |
+| the SCA count `sp_k > 0` → `sp_k >= 0` | H5, H6, H7 |
+| the mode switch: `none` applying ΔI | H8 (`none` melts 12, not 18) |
+| the mode switch: melt_factor and threshold swapped | H12 (H8 cannot: the two forms agree there by design) |
+| the clamp `m = max(0, …)` dropped | H8b |
+| the refreeze condition `T < ts` → `T < θ` | H8b |
+| the refreeze `else` dropped (refreeze also after melt) | H12 |
+
+`T < ts` → `T <= ts` in the refreeze condition is an equivalent mutant
+(refreeze is cfr·cx·Δt·0 = 0 there) and is not a target.
 
 - H1 melt: one bin, sp = 100, T = 5, cx = 3, ts = 0, Δt = 1 day, P = 0 →
   sp 85, sw 8.5, outflow 6.5, swe 93.5, sca 1.
@@ -562,38 +660,76 @@ the bare-bin rain path, the SCA count, the mode switch.
 - H4 rain on snow: sp = 100, T = 2, P = 10 → melt 6: sp 94, sw 9.4,
   outflow 6.6, swe 103.4.
 - H5 rain on bare ground: sp = 0, T = 2, P = 10 → outflow 10, swe 0, sca 0.
+- H5b rain on a bare bin below ts: one bin, sp = 0, sw = 0, tx = −1, ts = 0,
+  T = −0.5, P = 10, cx = 3, cfr = 0.05, Δt = 1 day → outflow 10, sp 0,
+  sca 0. Rain kept in the empty bin would refreeze 0.075 and give sca 1.
 - H6 melt-out within a step: sp = 10, T = 10 → sp 0, outflow 10, sca 0.
 - H7 bins: N = 4, factors (0.5, 0.8, 1.2, 1.5), initial 100 mm, T = 20,
   cx = 3, Δt = 1 day → sp (0, 20, 60, 90), sw (0, 2, 6, 9), sca 0.75,
   swe 46.75, outflow 53.25.
 - H8 the corrections at their break-even: T = 4, ts = 0, cx = 3, ΔI = +100:
   melt_factor with r = 0.015 → melt 18 mm/day; threshold with d = 0.02 →
-  θ = −2, melt 18 mm/day. ΔI = −300: melt_factor m = max(0, 3 − 4.5) = 0, no
-  melt; threshold θ = +6 > T, no melt and no refreeze (T > ts).
+  θ = −2, melt 18 mm/day; `none` → melt 12 mm/day (one bin, sp = 100,
+  Δt = 1 day each).
+- H8b a shaded slope with water in the pack: one bin, sp = 100, sw = 5,
+  T = 4, ts = 0, cx = 3, cfr = 0.05, Δt = 1 day, ΔI = −300. melt_factor
+  (r = 0.015): m = max(0, 3 − 4.5) = 0, no melt; threshold (d = 0.02):
+  θ = +6 > T, no melt, and no refreeze because T > ts. Both: sp 100, sw 5,
+  outflow 0 (cap 10), swe 105. Without the clamp, m = −1.5 gives melt −6 and
+  sp 106; refreezing on T < θ gives sp ≠ 100 (any sign of (θ − T) moves sp,
+  since sw = 5 > 0).
+- H10 rain at the threshold: one bin, sp = 100, sw = 0, T = tx = ts = 0,
+  P = 10, cx = 3, Δt = 1 day: rain (T < tx is false), no melt, no refreeze:
+  sp 100, sw 10, outflow 0 (cap 10), swe 110. `<=` would give sp 110, sw 0.
+- H11 refreeze capped by the water: one bin, sp = 100, sw = 1, T = −10,
+  cfr = 0.05, cx = 3, Δt = 1 day: the potential refreeze 1.5 > sw, so
+  refreeze 1: sp 101, sw 0, outflow 0, swe 101. Without the min: sp 101.5,
+  sw −0.5.
+- H12 melt below ts in the threshold form: one bin, sp = 100, sw = 0,
+  T = −1, ts = 0, cx = 3, cfr = 0.05, d = 0.02, ΔI = +100, Δt = 1 day:
+  θ = −2 < T, melt 3: sp 97, sw 3, outflow 0 (cap 9.7). With the refreeze
+  `else` dropped, a refreeze of 0.15 follows: sp 97.15, sw 2.85. The same
+  input in melt_factor form (r = 0.015) melts nothing (T < ts) and refreezes
+  min(0.15, 0) = 0: sp 100.
 - H9 sub-day step: H1 with dt = 3600 s → melt 0.625 mm.
 - P1-P5, properties over random forcing (Hypothesis in Python, Catch2
   generators in C++; 10⁴ steps, swe up to 10⁴ mm, T in [−30, 30],
   P in [0, 100], ΔI in [−600, 600]): I1-I5.
-- V1 refusals: factors negative, descending, mean off by 1e-6, N = 0 or 65;
-  cx, lw, cfr negative; spans of the wrong length; ΔI given with mode none or
-  missing with a correction; NaN or ±inf in any forcing; dt ≤ 0 → each its
-  status / `ValueError`, state unchanged (compare before and after).
+- V1 refusals, each in the home section 4.2 gives it:
+  - `SnowDistribution` throws `std::invalid_argument` (Python: `ValueError`):
+    a factor negative or NaN, factors descending, mean off by 1e-6, N = 0 or
+    65. `SnowState::uniform` throws on initial SWE −1 or NaN.
+  - `step` returns `invalid_parameters` for cx, lw or cfr = −0.1 and for NaN
+    in any of the seven parameters; `size_mismatch` for temperature or
+    precipitation of length n ± 1, ΔI of length n with mode `none`, ΔI empty
+    with a correction; `non_finite_forcing` for NaN or ±inf in temperature,
+    precipitation or ΔI; `negative_precipitation` for P = −1e-12;
+    `bad_step_length` for dt = 0, −3600 and NaN. Each: the state's sp, sw,
+    swe, sca and outflow compared before and after, bit for bit unchanged;
+    from Python, `ValueError` naming the status.
+- V2 renormalisation: factors (0.5, 0.8, 1.2, 1.5 + 4e-10) (mean off by
+  1e-10, accepted) come back with mean 1 to 1e-15; P1's mass check then holds
+  at the 1e-9 × max(1 mm, swe_before + P) tolerance with P up to 100 mm.
 - D1 `SnowDistribution.lognormal(0.4, 10)` factors, to 1e-4: 0.4974, 0.6287,
   0.7228, 0.8080, 0.8930, 0.9838, 1.0873, 1.2154, 1.3973, 1.7664 (probe);
   mean 1 within 1e-12; CV 0 → one factor 1.0.
 
 **PR 2, TR1:** the radiation design's own TR1 suite (its "Verification plan"),
-plus `sun_positions` against the NOAA figures above: noon elevation at
-61.334° N 15° E within 0.02° of 38.44° (2027-04-15) and 52.10° (2027-06-21),
-azimuth 180° within 0.2° at the elevation maximum.
+plus `sun_positions` against the NOAA figures above (`46-probes/probe_sun.out`):
+the day's highest elevation at 61.334° N 15° E within 0.02° of 38.44°
+(2027-04-15) and 52.10° (2027-06-21), azimuth 180° within 0.2° at the
+elevation maximum.
 
 **PR 3, correction, synthetic case, animation.**
 - R1 hand planes, one sample, sun at 30° elevation due south, beam 800:
-  horizontal 400; ΔI = +400 (south 30°), −400 (north 30°), −53.6 (east 30°:
-  800·(0.866·0.5 + 0) − 400 = −53.6); sun below horizon (beam 0) → 0.
+  horizontal 400; ΔI = +292.8 (south 30°: the sun is 30° from the slope's
+  normal, 800·0.866 − 400), −400 (north 30°: the sun grazes the slope),
+  −53.6 (east 30°: 800·(0.5·0 + 0.866·0.5) − 400); sun below horizon
+  (beam 0) → 0. Probe line `R1` in `46-probes/probe_spring.out`.
 - R2 day means (section 6): through `sun_positions` and `snow/forcing.py`,
   2027-04-15 at 61.334° N 15° E: ΔI = +68.9, −113.5, −12.6, −12.1 W/m² for
-  30° S, N, E, W within 0.5 W/m² (TR1 and NOAA differ by about 0.01°).
+  30° S, N, E, W within 0.5 W/m² (TR1 and NOAA's calculator differ by about
+  0.01°; probe line `R2`).
 - R3 γ: normals turned by +0.0984° at (506000, 6800000) EPSG:25833 (pyproj).
 - R4 `read_mesh(write_vtk(...))` returns the same vertices, triangles and crs
   bit for bit; ASCII, foreign and crs-less files refused in plain words.
@@ -607,10 +743,14 @@ azimuth 180° within 0.2° at the elevation maximum.
 - R7 the run on a 2-triangle mesh (one 30° south facet, one 30° north)
   through 10 April days: the south facet's SWE falls faster under both
   corrections and equally under `none`; I1 over the run.
-- E1 end to end (marked slow): `synthetic-terrain`, `mesh --tolerance 2`,
-  `snow` for each correction; domain area-weighted SCA and SWE at days 30, 60
-  and 90 within 2 % of section 6's figures, and the median melt-out day of
-  30° south and north slopes at 900-1100 m within 1 day.
+- E1 end to end (marked slow): `synthetic-terrain`, `mesh --tolerance 2`
+  (294 770 triangles), `snow` for each of the three corrections with
+  N = 10; against section 6's table, rows 1-3, with its definitions (inclined
+  area weights, classes S and N, melt-out on daily frames): domain SCA at
+  days 30, 60 and 90 within 0.01, domain SWE within 2 %, the median melt-out
+  day of classes S and N within 1 day (class N: −1 under both corrections).
+  The fixture's figures are measured, not derived; a miss is first checked
+  against `46-probes/probe_spring.py` run on the same mesh.
 
 ## 8. Size, acceptance and order
 

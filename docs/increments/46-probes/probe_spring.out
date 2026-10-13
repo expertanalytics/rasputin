@@ -1,0 +1,28 @@
+terrain z 234.0 .. 1924.4 m; grid slope mean 14.0 max 51.2 deg
+mesh --tolerance 2: 294770 triangles, 147936 vertices, 0.51 s incl. write
+gamma at centre 0.0000 deg; 900-1100 m, 25-35 deg: south 782, north 845 triangles
+R1 anomaly: {'S': np.float64(292.8), 'N': np.float64(-400.0), 'E': np.float64(-53.6)}
+R2 day-mean beam 2027-04-15: {'H': np.float64(166.5), 'S': np.float64(235.4), 'N': np.float64(53.0), 'E': np.float64(153.9), 'W': np.float64(154.4)} anomaly: {'S': np.float64(68.9), 'N': np.float64(-113.5), 'E': np.float64(-12.6), 'W': np.float64(-12.1)}
+D1 lognormal(0.4, 10): [0.4974, 0.6287, 0.7228, 0.808, 0.893, 0.9838, 1.0873, 1.2154, 1.3973, 1.7664]
+cost: 58.7 ms median per step, all five runs plus dI, 130.2 s total
+none: domain SCA d30 1.0000 d60 0.6298 d90 0.0829; SWE d30 565.29 d60 203.58 d90 23.56 mm; never below 0.5: 0.0671 of triangles
+   south 30deg 900-1100 m: median melt-out day 83.0, class SCA d60 1.000, class SCA < 0.5 first at day 82, median days first-bare-bin..bare nan
+   north 30deg 900-1100 m: median melt-out day 82.0, class SCA d60 1.000, class SCA < 0.5 first at day 81, median days first-bare-bin..bare nan
+   I1 over the run: max |600 - swe_end - outflow| = 4.889e-12 mm
+melt_factor: domain SCA d30 1.0000 d60 0.6559 d90 0.1152; SWE d30 565.14 d60 226.07 d90 36.05 mm; never below 0.5: 0.0933 of triangles
+   south 30deg 900-1100 m: median melt-out day 75.5, class SCA d60 0.964, class SCA < 0.5 first at day 74, median days first-bare-bin..bare 30.0
+   north 30deg 900-1100 m: median melt-out day -1.0, class SCA d60 1.000, class SCA < 0.5 first at day -1, median days first-bare-bin..bare nan
+   I1 over the run: max |600 - swe_end - outflow| = 4.661e-12 mm
+threshold: domain SCA d30 1.0000 d60 0.6337 d90 0.0932; SWE d30 558.13 d60 206.93 d90 28.22 mm; never below 0.5: 0.0769 of triangles
+   south 30deg 900-1100 m: median melt-out day 75.0, class SCA d60 0.912, class SCA < 0.5 first at day 74, median days first-bare-bin..bare 35.0
+   north 30deg 900-1100 m: median melt-out day -1.0, class SCA d60 1.000, class SCA < 0.5 first at day -1, median days first-bare-bin..bare nan
+   I1 over the run: max |600 - swe_end - outflow| = 4.093e-12 mm
+none_one_bin: domain SCA d30 1.0000 d60 0.8884 d90 0.0804; SWE d30 566.15 d60 149.13 d90 18.10 mm; never below 0.5: 0.0689 of triangles
+   south 30deg 900-1100 m: median melt-out day 83.0, class SCA d60 1.000, class SCA < 0.5 first at day 83, median days first-bare-bin..bare 0.0
+   north 30deg 900-1100 m: median melt-out day 83.0, class SCA d60 1.000, class SCA < 0.5 first at day 83, median days first-bare-bin..bare 0.0
+   I1 over the run: max |600 - swe_end - outflow| = 6.935e-12 mm
+melt_factor_one_bin: domain SCA d30 1.0000 d60 0.7460 d90 0.1102; SWE d30 566.36 d60 186.88 d90 29.31 mm; never below 0.5: 0.0954 of triangles
+   south 30deg 900-1100 m: median melt-out day 76.0, class SCA d60 1.000, class SCA < 0.5 first at day 76, median days first-bare-bin..bare 0.0
+   north 30deg 900-1100 m: median melt-out day -1.0, class SCA d60 1.000, class SCA < 0.5 first at day -1, median days first-bare-bin..bare nan
+   I1 over the run: max |600 - swe_end - outflow| = 5.514e-12 mm
+radiation_anomaly_mean: S class 43.7, N class -104.8 W/m2
