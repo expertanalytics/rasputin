@@ -182,8 +182,9 @@ def mitred(polygon: Polygon, distance: float) -> Polygon:
 
 
 def master_source_region(domain: DomainPolygon, dem_crs: Any, source_crs: Any) -> Polygon:
-    """`feature_input.source_region` as master has it (`feature_input.py:158-167`
-    at `f81b20b7`): the domain itself buffered by 100 m."""
+    """`feature_input.source_region` as master has it
+    (`src_python/tin_engine/feature_input.py@b414193c:158-167` at `f81b20b7`):
+    the domain itself buffered by 100 m."""
     from tin_engine.crs import reprojector, same_crs
     from tin_engine.feature_input import DENSIFY, MARGIN
 
