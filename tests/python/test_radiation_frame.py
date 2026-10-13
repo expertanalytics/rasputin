@@ -332,6 +332,25 @@ class TestPlacement:
         assert rf.normal.shape == (0, 3)
         for name in ("x", "y", "z_obs", "lat", "lon", "exclusion_radius"):
             assert getattr(rf, name).shape == (0,), name
+        assert math.isnan(rf.earth_radius_m)
+
+    def test_a_sub_millimetre_triangle_keeps_its_exclusion_radius(self, frame: ModuleType) -> None:
+        # A right triangle with legs of 2^-10 m (about 1 mm) at Vardo's 7.8e6 m
+        # northing, where one ulp is 2^-30 m (9.3e-10 m). Its vertices are
+        # exact; its centroid is not representable there, so a centroid
+        # rounded to absolute coordinates moves by up to half an ulp, a
+        # relative error near 1e-6 in the radius. Offsets taken from the
+        # first vertex keep it to rounding: the bound 1e-9 assumes legs of
+        # 1 mm at coordinates up to 1e7 m, and was checked at this case.
+        lon, lat, _ = SITES["vardo"]
+        x, y = (float(round(c)) for c in site_xy(lon, lat))
+        leg = 2.0**-10
+        pts = np.array([[x, y, 0.0], [x + leg, y, 0.0], [x, y + leg, 0.0]])
+        rf = frame.receivers_from_mesh(pts, np.array([[0, 1, 2]]), FRAME)
+        j = rot_j(*factors(float(rf.lon[0]), float(rf.lat[0])))
+        rel = np.array([[0.0, 0.0], [leg, 0.0], [0.0, leg]]) - leg / 3.0
+        expected = max(float(np.linalg.norm(j @ d)) for d in rel)
+        assert rf.exclusion_radius[0] == pytest.approx(expected, rel=1e-9)
 
 
 # --- refusals ----------------------------------------------------------------
@@ -351,6 +370,25 @@ class TestRefusals:
         tri[1] = [1, 3, 1]
         with pytest.raises(ValueError, match=r"triangle 1\b.*(zero|area)"):
             frame.receivers_from_mesh(pts, tri, FRAME)
+
+    @staticmethod
+    def sliver(height: float) -> tuple[F64, npt.NDArray[np.int64]]:
+        """A 1 km sliver at Bygdin, its apex `height` frame metres off the
+        base: the sine of its first-vertex angle is about height / 559."""
+        x, y = (float(round(c)) for c in site_xy(*SITES["bygdin"][:2]))
+        pts = np.array([[x, y, 0.0], [x + 1000.0, y, 0.0], [x + 500.0, y + height, 0.0]])
+        return pts, np.array([[0, 1, 2]], dtype=np.int64)
+
+    def test_a_sliver_above_the_zero_area_threshold_is_kept(self, frame: ModuleType) -> None:
+        # Sine about 9e-9, nine times the chosen threshold of 1e-9.
+        rf = frame.receivers_from_mesh(*self.sliver(5e-6), FRAME)
+        assert rf.normal[0, 2] == pytest.approx(1.0)
+
+    def test_a_sliver_below_the_zero_area_threshold_is_refused(self, frame: ModuleType) -> None:
+        # Sine about 9e-11, a ninth of the threshold; the apex offset of 5e-8 m
+        # is 50 ulps at Bygdin's 6.8e6 m northing, so the sliver is not flat.
+        with pytest.raises(ValueError, match=r"triangle 0\b.*zero area"):
+            frame.receivers_from_mesh(*self.sliver(5e-8), FRAME)
 
     def test_three_collinear_points_are_a_zero_area_triangle(self, frame: ModuleType) -> None:
         # Collinear in 3-D (so not a vertical triangle): (0,0,0), (10,10,0), (20,20,0).
@@ -466,6 +504,10 @@ class TestRadiationRequest:
         r = request_mod.RadiationRequest()
         with pytest.raises(pydantic.ValidationError):
             r.n_directions = 32
+
+    @pytest.mark.parametrize("n", [4, 128])
+    def test_a_power_of_two_is_kept(self, request_mod: ModuleType, n: int) -> None:
+        assert request_mod.RadiationRequest(n_directions=n).n_directions == n
 
     def test_the_far_reach_may_equal_the_near_one(self, request_mod: ModuleType) -> None:
         r = request_mod.RadiationRequest(d_near_m=20_000.0, d_far_m=20_000.0, limb="upper")

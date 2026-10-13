@@ -34,6 +34,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.models": "", "features": "", "sources": "", "run_record": "", "stats": "",
         "palettes": "", "hydrography": "", "tin_engine": "",
         "snow": "", "snow.params": "",  # 46: HBV snow parameters, Pydantic only
+        "radiation.request": "",  # 46: the radiation request, Pydantic only
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",
@@ -53,6 +54,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "viz.fixtures": "", "viz.protocols": "", "viz.style": "",
         "viz.scene": "viz.protocols",
         "radiation": "", "radiation.time": "",  # 46: UTC milliseconds, NumPy only
+        "radiation.frame": "crs",  # 46: the receiver frame, pyproj through crs
         "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection
