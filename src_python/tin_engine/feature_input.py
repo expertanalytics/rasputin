@@ -52,7 +52,7 @@ from tin_engine.io.repository import open_geopackage, read_json
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
 #: R5: the region is the domain plus this many metres in the DEM's CRS, or two
-#: DEM cells when that is more (43, 4.7), its boundary densified to this
+#: DEM cells when that is more, its boundary densified to this
 #: spacing before it is moved.
 MARGIN, DENSIFY = 100.0, 1_000.0
 #: WGS 84's smallest and largest radii of curvature, metres (R5, "Long edges").

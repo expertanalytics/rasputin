@@ -75,7 +75,7 @@ class DemRequest(BaseModel):
     cached: CachedSource | None = None
     bounds: Bounds | None = None
     nodata: float | None = None
-    #: The caller's height unit for files that do not state one (43, 4.3).
+    #: The caller's height unit for files that do not state one.
     z_unit: ZUnit | None = None
     domain: DomainPolygon | None = None
     target_crs: str | None = None
@@ -126,7 +126,7 @@ def repository_for(
     """The repository over one directory of tiles, over the files given, or
     over a cached source, and the run's name: the directory's name, the first
     file's stem, or the source's key; `threads` decode its blocks (38).
-    `z_unit` is the caller's height unit (43, 4.3)."""
+    `z_unit` is the caller's height unit."""
     keys: dict[str, Any] = {"nodata": nodata, "threads": threads, "z_unit": z_unit}
     if cached is not None:
         return CacheRepository(cached.cache, cached.source, **keys), cached.source

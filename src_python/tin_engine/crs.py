@@ -110,7 +110,7 @@ def epsg_matches(crs: CRS) -> tuple[int, ...]:
     once both are in x-then-y order (the first leg of `same_crs`), lowest
     first. Empty when there are none (`docs/increments/geotiff-crs-by-parameters.md`,
     section 4). A candidate whose axes carry a meridian (EPSG's polar CRSs)
-    is also taken when the operation to it is PROJ's `noop` (increment 43, 4.5)."""
+    is also taken when the operation to it is PROJ's `noop`."""
     base = _base_code(crs)
     offered = {int(m.code) for m in crs.list_authority(auth_name="EPSG", min_confidence=0)}
     return tuple(
@@ -140,7 +140,7 @@ def metre_twin(crs: CRS) -> tuple[CRS, float]:
     """`crs` with its axes in metres and its linear conversion parameters
     (false easting and northing, easting and northing at an origin) converted
     to metres, named "<name>, in metres"; and the metres per unit of its axes.
-    `crs` itself and 1.0 when its axes are already in metres (increment 43, 4.4)."""
+    `crs` itself and 1.0 when its axes are already in metres."""
     factor = float(crs.axis_info[0].unit_conversion_factor)
     if factor == 1.0:
         return crs, 1.0

@@ -1111,7 +1111,7 @@ def mesh(
             "applies to .vtk and .ply; a GeoPackage is an SQLite file", param_hint="--ascii"
         )
 
-    unstated = False  # 43, 4.3: heights read as metres without a word from anyone
+    unstated = False  # heights read as metres without a word from anyone
     if dem:
         if flat:
             raise typer.BadParameter("--dem samples z from the DEM", param_hint="--flat")
@@ -1236,7 +1236,7 @@ def mesh(
             "dem_source": source,
             "dem_vertical_unit": _z_words(meta, z_unit, caller),
         }
-        if meta.file_crs is not None:  # 43, 4.4: a DEM in feet, read as its metre twin
+        if meta.file_crs is not None:  # a DEM in feet, read as its metre twin
             feet = BY_NAME[cast(ZUnit, parse_crs(meta.file_crs).axis_info[0].unit_name)][3]
             values["dem_file_crs"] = (
                 f"{meta.file_crs}, in {feet}; read as {source_crs or dem_crs}, the same "
@@ -1960,7 +1960,7 @@ def _open_dem(
 
 
 def _z_unit(option: str | None) -> ZUnit | None:
-    """``--z-unit``'s spelling to the unit's name (43, 4.2)."""
+    """``--z-unit``'s spelling to the unit's name."""
     return next((row[0] for row in UNITS.values() if row[2] == option), None)
 
 

@@ -57,7 +57,7 @@ class RemoteSource(BaseModel):
     cite: tuple[str, ...] = ()
     #: The class map (`tin_engine.class_maps`) that names and colours its classes (41).
     class_map: str = ""
-    #: The height unit the catalogue states for files that do not (43, 4.3).
+    #: The height unit the catalogue states for files that do not.
     z_unit: Literal["metre", "foot", "US survey foot"] | None = None
 
     @model_validator(mode="after")

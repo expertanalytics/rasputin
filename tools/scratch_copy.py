@@ -16,7 +16,7 @@ editable finder at every interpreter start, after the `.pth` file installed
 it, so `tin_engine` is imported from the copy in pytest's process and in any
 Python process a test starts. It cannot reach a child whose environment
 replaces `PYTHONPATH`, such as one built from scratch
-(`tests/python/test_io_geotiff.py:1271`): that child imports the worktree's
+(`tests/python/test_io_geotiff.py:1275`): that child imports the worktree's
 code, and a mutant run there can report a false survivor.
 
 Spec: docs/increments/h16-harness-fixes.md §2, T2. A refusal or a git error

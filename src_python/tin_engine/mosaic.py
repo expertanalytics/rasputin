@@ -195,7 +195,7 @@ def plan_mosaic(
             "it is not set); narrow it with --bbox"
         )
     units = {p.footprint.meta.z_unit: p.footprint.name for p in selected}
-    if len(units) > 1:  # 43, 4.3: the record names one unit
+    if len(units) > 1:  # the record names one unit
         found = ", ".join(f"{name} in {unit}" for unit, name in sorted(units.items()))
         raise MosaicError(f"tiles give heights in different units: {found}")
     vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)

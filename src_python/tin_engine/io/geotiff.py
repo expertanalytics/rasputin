@@ -54,7 +54,7 @@ P = f"ProjectedCSTypeGeoKey (3072) = {USER_DEFINED} (a CRS given by parameters)"
 
 #: The EPSG method by name to its code and parameters, each (EPSG name, EPSG
 #: code, GeoKey, unit), in the EPSG method's own order: PROJ's candidate search
-#: compares parameters by position. `_method` picks the row from 3075 (43, 4.5).
+#: compares parameters by position. `_method` picks the row from 3075.
 #: One parameter per line, packed so the table reads as one.
 # fmt: off
 FE, FN = (("False easting", 8806, "ProjFalseEastingGeoKey", "metre"),
@@ -107,9 +107,14 @@ METHODS: dict[str, tuple[int, tuple[tuple[str, int, str, str], ...]]] = {
         ("Longitude of origin", 8833, "ProjStraightVertPoleLongGeoKey", "degree"), FE, FN)),
 }
 #: 3075 to the row; Mercator (7) and polar stereographic (15) are chosen by `_method`.
-CODES = {1: "Transverse Mercator", 8: "Lambert Conic Conformal (2SP)", 10:
-         "Lambert Azimuthal Equal Area", 11: "Albers Equal Area", 3:
-         "Hotine Oblique Mercator (variant A)", 9815: "Hotine Oblique Mercator (variant B)"}
+CODES = {
+    1: "Transverse Mercator",
+    8: "Lambert Conic Conformal (2SP)",
+    10: "Lambert Azimuthal Equal Area",
+    11: "Albers Equal Area",
+    3: "Hotine Oblique Mercator (variant A)",
+    9815: "Hotine Oblique Mercator (variant B)",
+}
 # fmt: on
 #: GeoKeys that would name the datum other than through 2048 (row 5).
 DATUM_KEYS = ("GeogGeodeticDatumGeoKey", "GeogPrimeMeridianGeoKey", "GeogEllipsoidGeoKey")
@@ -165,8 +170,8 @@ def decode_dem(
     `nodata` is the caller asserting a sentinel (§6). It must be representable
     in the file's dtype, and must agree with tag 42113 when that is present. A
     `bool` is refused with `TypeError`: it is a caller's mistake, not a file's.
-    `z_unit` is the caller's height unit for a file that does not state one
-    (increment 43, 4.3); the array is in metres.
+    `z_unit` is the caller's height unit for a file that does not state one;
+    the array is in metres.
 
     Raises `GeoTiffError` for every §5 refusal, and (§14, choice C) when
     tifffile or a codec fails on the file; that message names the stage, the
@@ -235,7 +240,7 @@ def _header(
     # 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
     projected = geokeys.get("ProjectedCSTypeGeoKey")
     geographic = projected is None
-    # 43, 4.4: a CRS in feet is read as its metre twin, every coordinate times f.
+    # a CRS in feet is read as its metre twin, every coordinate times f.
     epsg, crs, file_crs, f = (
         (_geographic_epsg(geokeys), "", None, 1.0) if projected is None
         else _parametric_epsg(geokeys) if int(projected) == USER_DEFINED
@@ -389,7 +394,7 @@ Horizontal = tuple[int | None, str, str | None, float]
 
 def _projected_epsg(geokeys: dict[str, Any]) -> Horizontal:
     """Rulings 6 and 7, §5 refusals 12-14: a projected CRS from 3072 alone, in
-    metres or a foot of `UNITS` (43, 4.4); 3076, when present, must agree."""
+    metres or a foot of `UNITS`; 3076, when present, must agree."""
     code = int(geokeys["ProjectedCSTypeGeoKey"])
     crs = _resolve(code)
     if crs is None:
@@ -426,7 +431,7 @@ def _projected_epsg(geokeys: dict[str, Any]) -> Horizontal:
 
 
 def _unit_of(factor: float) -> int | None:
-    """The `UNITS` code whose metres per unit is `factor` (43, 4.2), or None."""
+    """The `UNITS` code whose metres per unit is `factor`, or None."""
     return next(
         (c for c, row in UNITS.items() if math.isclose(row[1], factor, rel_tol=1e-12)), None
     )
@@ -442,7 +447,7 @@ def _unit(where: str, code: int) -> tuple[ZUnit, float, str, str]:
 
 def _named_twin(twin: pyproj.CRS) -> tuple[int | None, str]:
     """A metre twin named by the EPSG code PROJ calls equivalent, when that is
-    one CRS; else its own text (43, 4.4)."""
+    one CRS; else its own text."""
     matches = crs_rules.epsg_matches(twin)
     if matches and all(crs_rules.same_crs(f"EPSG:{matches[0]}", f"EPSG:{n}") for n in matches):
         return matches[0], ""
@@ -452,7 +457,7 @@ def _named_twin(twin: pyproj.CRS) -> tuple[int | None, str]:
 def _heights(
     geokeys: dict[str, Any], caller: ZUnit | None, f: float, file_crs: str | None
 ) -> tuple[ZUnit, bool]:
-    """43, 4.3: the height unit from 4096 and 4099, else the caller's, else the
+    """The height unit from 4096 and 4099, else the caller's, else the
     metre (assumed); never guessed for a DEM whose coordinates are in feet."""
     units = None if (key := geokeys.get("VerticalUnitsGeoKey")) is None else int(key)
     stated = None if units is None else _unit("VerticalUnitsGeoKey (4099)", units)[0]
@@ -497,7 +502,7 @@ def _heights(
 
 
 def _method(transform: int, geokeys: dict[str, Any]) -> str:
-    """43, 4.5: the `METHODS` row 3075 names, Mercator and polar stereographic
+    """The `METHODS` row 3075 names, Mercator and polar stereographic
     by the keys present, or the refusal of a shape the table does not read."""
 
     def given(key: str) -> float | None:
@@ -540,7 +545,7 @@ def _method(transform: int, geokeys: dict[str, Any]) -> str:
 def _parametric_epsg(geokeys: dict[str, Any]) -> Horizontal:
     """3072 = 32767: the CRS built from the GeoKeys on the datum 2048 names, read
     as the EPSG code it matches, or the refusal of section 4's row that fires.
-    Linear parameters in feet (3076) are converted to metres first (43, 4.4)."""
+    Linear parameters in feet (3076) are converted to metres first."""
     projection = geokeys.get("ProjectionGeoKey")
     if projection is not None and int(projection) != USER_DEFINED:
         raise GeoTiffError(

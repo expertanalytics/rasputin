@@ -3,7 +3,9 @@
 
 A `TargetGrid` is a sub-rectangle of one global lattice in the target CRS:
 node `(R, K)` sits at `(K h, -R h)` bit for bit (J6), `h` whole metres or a
-power of two below one (increment 43, 4.6).
+power of two from 2^-1 to 2^-3 m: below 2^-3 m the start mesh's 1 mm snap
+moves nodes off the lattice, measured in
+`docs/increments/43-units-and-projections.md`, *9.5 Found here*.
 `resample` fills it bilinearly from a `SourceWindows`; `check_point_blocks`
 yields the source's own nodes, moved into the target CRS, for the final
 check against the source (D5). Every transform goes through
@@ -40,7 +42,7 @@ Block = tuple[npt.NDArray[np.float64], npt.NDArray[np.float32]]
 
 
 def _lattice_step(h: float) -> float:
-    """A whole number of metres from 1 to 1000, or 2^-k m for k from 1 to 3 (43, 9.5)."""
+    """A whole number of metres from 1 to 1000, or 2^-k m for k from 1 to 3."""
     if not ((h.is_integer() and 1 <= h <= 1000) or h in (2.0**-k for k in range(1, 4))):
         raise ValueError(f"need 1 to 1000 whole metres, or 2^-k m for k 1 to 3; got {h}")
     return h
@@ -99,7 +101,7 @@ class TileWindows:
 def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
     """The source's north-south node spacing in metres at `at` (in the DEM's
     CRS), rounded to whole metres (Q16 (a)), or below a metre to the nearest
-    power of two, at least 2^-3 (43, 9.5); a projected source's own."""
+    power of two, at least 2^-3; a projected source's own."""
     if not meta.geographic:
         return _rounded(meta.delta_y)
     lon, lat = at

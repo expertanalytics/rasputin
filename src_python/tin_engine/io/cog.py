@@ -139,7 +139,7 @@ def decode_window(
             )
     out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
     _decode_into(source, w, indices, out, threads)
-    to_metres(out, meta)  # 43, 4.3: heights in metres
+    to_metres(out, meta)  # heights in metres
     # The public constructor's copy, not the canvas's no-copy route: M15
     # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
     # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
