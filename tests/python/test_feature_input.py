@@ -7,9 +7,10 @@ with Ola's Q6 (b) (the legacy GML, read with the `clc18_kode` map).
 Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 
 - `ClassMap(name, attribute, classes, otherwise, notice)`, frozen, extra
-  fields forbidden. `CLASS_MAPS` maps `property`, `corine`, `corine-water`
-  and `clc18_kode` to the built-in maps. `clc18_kode` is `corine` keyed on
-  the Norwegian GML's attribute. Every CORINE map's `notice` names the
+  fields forbidden. `property`, `corine`, `corine-water` and `clc18_kode` are
+  the built-in maps (increment 41: loaded by `class_maps.load`, through
+  `feature_fixtures.class_map`, no longer `CLASS_MAPS`). `clc18_kode` is
+  `corine` keyed on the Norwegian GML's attribute. Every CORINE map's `notice` names the
   Copernicus Land Monitoring Service and says the data were modified;
   `property`'s is empty.
 - `FeatureSource(path, class_map, layer=None, crs=None)` and
@@ -114,28 +115,31 @@ def lines_of(fs: Any) -> list[LineString]:
 # --------------------------------------------------------------- class maps
 
 
+BUILT_IN = ("property", "corine", "corine-water", "clc18_kode")
+
+
 class TestClassMaps:
-    def test_the_built_in_maps(self, fi: ModuleType) -> None:
-        assert set(fi.CLASS_MAPS) == {"property", "corine", "corine-water", "clc18_kode"}
-        assert {name: m.attribute for name, m in fi.CLASS_MAPS.items()} == {
+    def test_the_built_in_maps(self) -> None:
+        maps = {name: ff.class_map(name) for name in BUILT_IN}
+        assert {name: m.attribute for name, m in maps.items()} == {
             "property": "property",
             "corine": "Code_18",
             "corine-water": "Code_18",
             "clc18_kode": "clc18_kode",
         }
-        assert all(m.name == name for name, m in fi.CLASS_MAPS.items())
+        assert all(m.name == name for name, m in maps.items())
 
     def test_the_corine_maps_carry_the_attribution(self, fi: ModuleType) -> None:
         """R10 and "Test data": a mesh built from CORINE says so, and says the
         data were modified."""
         for name in ("corine", "corine-water", "clc18_kode"):
-            notice = fi.CLASS_MAPS[name].notice
+            notice = ff.class_map(name).notice
             assert "Copernicus Land Monitoring Service" in notice, name
             assert "modified" in notice.lower(), name
-        assert fi.CLASS_MAPS["property"].notice == ""
+        assert ff.class_map("property").notice == ""
 
     def test_a_class_map_is_frozen_and_strict(self, fi: ModuleType) -> None:
-        corine = fi.CLASS_MAPS["corine"]
+        corine = ff.class_map("corine")
         with pytest.raises((TypeError, ValueError)):
             corine.attribute = "other"
         with pytest.raises(ValueError):

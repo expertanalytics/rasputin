@@ -89,9 +89,10 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
+        "class_maps": "feature_input features",  # 41: class-map files to ClassMap
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
+        "cli": "_core catchment catchment_batch chains class_maps crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_checks io.models io.ply io.repository io.rivers"

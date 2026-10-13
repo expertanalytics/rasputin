@@ -2,7 +2,9 @@
 
 The design is `docs/increments/h2-citation-pinning.md`; its section 6 is the
 checklist this module follows, and each block below names the test numbers it
-covers. The existing `test_check_citations.py` keeps the `legacy/` behaviour.
+covers; the last block is the later short-path fix that reads absolute paths
+under the root or a worktree. The existing `test_check_citations.py` keeps the
+`legacy/` behaviour.
 
 Black-box, like the existing suite: the tool finds its repository from its own
 path, so each test copies it into a scratch repository, commits, runs it as a
@@ -852,3 +854,126 @@ def test_a_python_file_that_does_not_parse_is_a_warning_not_a_failure(repo: Scra
     assert run.code == 0, run.out
     assert "src/bad.py" in run.section("warnings")
     assert "Traceback" not in run.out
+
+
+# -- Absolute paths under the root or a worktree ------------------------------
+#
+# Review records cite by the full path of the checkout they were written in:
+# `<root>/.claude/worktrees/<name>/<path>@<sha>:<n>` or `<root>/<path>@<sha>:<n>`.
+# The tool read every path starting with `/` as a URL tail, never a citation,
+# so none of them was checked. Now the prefix of the main checkout (`<root>`,
+# the parent of `git rev-parse --git-common-dir`, which is the tool's own
+# repository when it runs there), alone or followed by `.claude/worktrees/<name>`,
+# is stripped before matching, and what remains is read exactly as the
+# relative form. The worktree need not exist: records outlive their worktrees.
+# Any other absolute path (another machine, a sibling directory, a URL) stays
+# what it was: not a citation.
+
+WORKTREE = ".claude/worktrees/w"
+
+
+@pytest.fixture
+def rooted(repo: Scratch) -> tuple[Scratch, str, Path]:
+    """`docs/x.md` has 5 lines at the returned sha; `testing.md` is a rule file.
+
+    The root is returned resolved, as the tool resolves its own path.
+    """
+    repo.write("docs/x.md", _lines(5))
+    repo.write("testing.md", TESTING_MD)
+    sha = repo.commit("targets")
+    return repo, sha, repo.root.resolve()
+
+
+PREFIXES = {"root": "{root}/", "worktree": "{root}/" + WORKTREE + "/"}
+
+
+@pytest.mark.parametrize("prefix", list(PREFIXES))
+def test_an_absolute_pin_under_the_root_or_a_worktree_resolves_like_the_relative_form(
+    rooted: tuple[Scratch, str, Path], prefix: str
+) -> None:
+    repo, sha, root = rooted
+    repo.cite(f"`{PREFIXES[prefix].format(root=root)}docs/x.md@{sha}:5`")
+
+    run = repo.check("docs")
+
+    assert run.code == 0, run.out
+    assert run.section("broken") == "", run.out
+
+
+@pytest.mark.parametrize("prefix", list(PREFIXES))
+def test_an_absolute_pin_past_the_end_at_its_rev_is_broken_like_the_relative_form(
+    rooted: tuple[Scratch, str, Path], prefix: str
+) -> None:
+    repo, sha, root = rooted
+    # The worktree directory does not exist: the prefix is read, not visited.
+    assert not (root / WORKTREE).exists()
+    repo.cite(f"`{PREFIXES[prefix].format(root=root)}docs/x.md@{sha}:9`")
+
+    run = repo.check("docs")
+
+    assert run.code == 1, run.out
+    broken = run.section("broken")
+    assert FIRST in broken
+    assert f"docs/x.md@{sha}:9" in broken
+
+
+@pytest.mark.parametrize(
+    ("citation", "section"),
+    [("testing.md:3", "unpinned"), (WORKTREE + "/docs/x.md:9", "broken")],
+    ids=["root-into-a-rule-file", "worktree-past-the-end"],
+)
+def test_an_absolute_unpinned_citation_under_the_root_is_the_relative_unpinned_form(
+    rooted: tuple[Scratch, str, Path], citation: str, section: str
+) -> None:
+    repo, _, root = rooted
+    repo.cite(f"`{root}/{citation}`")
+
+    run = repo.check("docs")
+
+    assert run.code == 1, run.out
+    reported = run.section(section)
+    assert FIRST in reported
+    assert citation.rsplit("/", 1)[-1] in reported
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    ["/opt/other/", "https://host/", "{root}-old/", "{parent}/"],
+    ids=["other-machine", "url", "sibling-sharing-the-root-as-a-string-prefix", "parent-dir"],
+)
+def test_an_absolute_path_outside_the_root_and_its_worktrees_is_not_a_citation(
+    rooted: tuple[Scratch, str, Path], prefix: str
+) -> None:
+    repo, sha, root = rooted
+    full = prefix.format(root=root, parent=root.parent)
+    # Both would be broken if read: the probe is that neither is reported.
+    repo.cite(f"`{full}docs/x.md@{sha}:9`", f"`{full}docs/x.md:9`")
+
+    run = repo.check("docs")
+
+    assert run.code == 0, run.out
+    assert "x.md" not in run.out
+
+
+def test_run_from_a_worktree_the_main_root_and_every_worktree_prefix_are_stripped(
+    rooted: tuple[Scratch, str, Path],
+) -> None:
+    repo, sha, root = rooted
+    # The record cites the main checkout, its own worktree and another one;
+    # the tool runs from its copy inside the worktree, whose own path is not
+    # the root. All three must be read, so all three must be broken.
+    repo.cite(
+        f"`{root}/docs/x.md@{sha}:9`",
+        f"`{root}/{WORKTREE}/docs/x.md@{sha}:9`",
+        f"`{root}/.claude/worktrees/other/docs/x.md@{sha}:9`",
+    )
+    repo.git("worktree", "add", "-q", "--detach", str(root / WORKTREE))
+    worktree = Scratch(root / WORKTREE)
+    assert (worktree.root / "tools" / "check_citations.py").is_file()
+
+    run = worktree.check("docs")
+
+    assert run.code == 1, run.out
+    assert run.count("broken") == 3, run.out
+    for line in (3, 4, 5):
+        assert f"docs/record.md:{line}" in run.section("broken")

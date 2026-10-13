@@ -87,6 +87,8 @@ from tin_engine.catchment import (
 )
 from tin_engine.catchment_batch import BatchRequest, NoRiverLine, StationResult, run_batch, seed_for
 from tin_engine.chains import start_chains
+from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
+from tin_engine.class_maps import load as load_class_map
 from tin_engine.crs import (
     crs_label,
     reprojector,
@@ -106,7 +108,6 @@ from tin_engine.dem_input import (
 from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
-    CLASS_MAPS,
     ClassMap,
     FeatureError,
     FeatureRequest,
@@ -115,7 +116,7 @@ from tin_engine.feature_input import (
     open_features,
     read_lake_polygons,
 )
-from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
@@ -142,7 +143,7 @@ from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
-from tin_engine.palettes import PALETTES, paraview_preset
+from tin_engine.palettes import paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.resources import VARIABLE, Resources, resources
 from tin_engine.run_record import (
@@ -268,6 +269,14 @@ DEFAULT_START_QUALITY_GAIN = 0.0
 #: 20c-3's four land-cover flags have their own help panel, so the long
 #: --[no-]features-merge-same-class does not narrow the main one's names.
 CLEAN_UP = "Land-cover clean-up"
+#: 41: the three clean-up distances default to values derived from the map.
+DERIVED = "Default: from the class map's positional accuracy and the DEM cell (CORINE: {})."
+#: Their flags and the bound each given value stays under.
+OPTION_TOPS = (
+    ("--features-repair", math.inf),
+    ("--features-tolerance", math.inf),
+    ("--features-outline-snap", 100.0),
+)
 
 
 @app.callback()
@@ -850,20 +859,21 @@ def mesh(
         list[str] | None,
         typer.Option(
             "--features-map",
-            help=f"The Nth --features' map from attributes to edge bits: {', '.join(CLASS_MAPS)}. "
+            help="The Nth --features' map from attributes to edge bits: "
+            f"{', '.join([*shipped_names(), 'property'])}, or a class-map file (.toml). "
             "Default: property.",
         ),
     ] = None,
     features_repair: Annotated[
-        float,
+        float | None,
         typer.Option(
             "--features-repair",
             rich_help_panel=CLEAN_UP,
             show_default=False,
             help="Metres: land-cover borders of one file closer than this become one "
-            "border, and gaps narrower than it are filled; 0 is off. Default: 1.",
+            "border, and gaps narrower than it are filled; 0 is off. " + DERIVED.format(1),
         ),
-    ] = 1.0,
+    ] = None,
     features_merge_same_class: Annotated[
         bool,
         typer.Option(
@@ -873,7 +883,7 @@ def mesh(
         ),
     ] = True,
     features_tolerance: Annotated[
-        float,
+        float | None,
         typer.Option(
             "--features-tolerance",
             rich_help_panel=CLEAN_UP,
@@ -881,19 +891,19 @@ def mesh(
             help="Metres: simplify land-cover borders, each moved at most this far from its "
             "border after the repair and the outline rule, each class keeping its area; the "
             "simplification can bring a border back within the outline-snap distance of the "
-            "outline, but not closer than the repair distance. 0 is off. Default: 50.",
+            "outline, but not closer than the repair distance. 0 is off. " + DERIVED.format(50),
         ),
-    ] = 50.0,
+    ] = None,
     features_outline_snap: Annotated[
-        float,
+        float | None,
         typer.Option(
             "--features-outline-snap",
             rich_help_panel=CLEAN_UP,
             show_default=False,
             help="Metres, under 100: move land-cover borders this close to the domain "
-            "outline onto it; 0 is off. Default: 5.",
+            "outline onto it; 0 is off. " + DERIVED.format(5),
         ),
-    ] = 5.0,
+    ] = None,
     land_cover: Annotated[
         str | None,
         typer.Option(
@@ -1016,28 +1026,33 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
+    # 41: every map is read here, before the DEM, so every file error comes first.
+    maps: list[ClassMap] = []
+    where = "--features"
+    try:
+        for i, path in enumerate(feature_paths):
+            where = f"--features {i + 1} ({path.name})"
+            maps.append(load_class_map(feature_maps[i] if i < len(feature_maps) else "property"))
+        vocabulary = run_vocabulary(maps)
+    except ValueError as exc:
+        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-map") from exc
     classes = _class_source(land_cover, land_cover_year, bool(dem), cache_root(cache, os.environ))
     if classes is not None:
-        for coded_map in (m for m in feature_maps if m in CLASS_MAPS and CLASS_MAPS[m].codes):
+        for coded_map in (m for m in maps if m.codes):
             raise typer.BadParameter(
-                f"one mesh has one land_cover_code system, and --features-map {coded_map} "
+                f"one mesh has one land_cover_code system, and --features-map {coded_map.name} "
                 "already gives every triangle a code",
                 param_hint="--land-cover",
             )
-    for flag, metres, top in (
-        ("--features-repair", features_repair, math.inf),
-        ("--features-tolerance", features_tolerance, math.inf),
-        ("--features-outline-snap", features_outline_snap, 100.0),
-    ):
-        if not (math.isfinite(metres) and 0 <= metres < top):
-            under = "" if top == math.inf else f" and under {top:g}"
-            raise typer.BadParameter(f"must be finite, >= 0{under}, got {metres}", param_hint=flag)
-    cleanup = {
+    overrides = {
         "repair_m": features_repair,
-        "merge_same_class": features_merge_same_class,
         "tolerance_m": features_tolerance,
         "outline_snap_m": features_outline_snap,
     }
+    for (flag, top), metres in zip(OPTION_TOPS, overrides.values(), strict=True):
+        if metres is not None and not (math.isfinite(metres) and 0 <= metres < top):
+            under = "" if top == math.inf else f" and under {top:g}"
+            raise typer.BadParameter(f"must be finite, >= 0{under}, got {metres}", param_hint=flag)
     if not dem and (domain is not None or domain_crs is not None):
         raise typer.BadParameter("applies only with --dem", param_hint="--domain")
     if not dem and bbox is not None:
@@ -1138,15 +1153,24 @@ def mesh(
         label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
         dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
         held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
+        # 41, section 5: the clean-up scale is the coarsest coded map's
+        # accuracy (CORINE's 100 m without one), never finer than a DEM cell.
+        cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
         del opened
+        accuracy = max((m.accuracy_m for m in maps if m.codes), default=100.0)
+        derived = derived_cleanup(accuracy, cell).model_dump()
+        cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
+        cleanup["merge_same_class"] = features_merge_same_class
         found = None
         sources: tuple[FeatureSource, ...] = ()
         if feature_paths and dem_domain is not None:
-            sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
-            found = _open_features(sources, dem_domain, dem_crs, clock, cleanup, res.threads)
+            sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
+            found = _open_features(
+                sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads
+            )
         # 32: 15 degrees with land cover simplified, unless given.
         simplified = (
-            found is not None and found.cover_vertices is not None and features_tolerance > 0
+            found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
         )
         angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
         angle = angle if start_min_angle is None else start_min_angle
@@ -1169,6 +1193,7 @@ def mesh(
             lines,
             steep,
             res.threads,
+            vocabulary,
         )
         surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
@@ -1222,6 +1247,8 @@ def mesh(
             values["features_crs"] = "; ".join(crs_texts)
             values["features_transform"] = "; ".join(transforms)
             values["features_notice"] = "; ".join(notices) or None
+            licences = dict.fromkeys(s.class_map.licence for s in sources if s.class_map.licence)
+            values["features_licence"] = escaped_ascii("; ".join(licences)) or None
             values |= {f"features_{k}": v for k, v in cleanup.items()}
             values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
             if found.cover_vertices is not None:
@@ -1235,13 +1262,15 @@ def mesh(
             if coded is not None:
                 codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
                 values["land_cover_codes"] = codes_text
-                palette = PALETTES[coded.palette][0] if coded.palette else None
+                palette = coded.palette
                 cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
         if classes is not None:
             table, codes, more = _class_fractions(
                 classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
             )
             codes_text = str(more["land_cover_codes"])
+            if classes.source.class_map:  # 41: names and colours for the .gpkg
+                palette = load_class_map(classes.source.class_map).palette
             values |= more
         build = stride_record if tolerance is None else refined_record
         record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
@@ -1299,7 +1328,7 @@ def mesh(
     encoders: list[Callable[[], bytes]] = []
     if out.suffix == ".gpkg":
         with clock.phase("write: geopackage"):
-            _write_geopackage(surface, surface_mesh, codes, palette, cover, record)
+            _write_geopackage(surface, surface_mesh, codes, palette, cover, record, vocabulary)
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
         encoders = [
@@ -1308,7 +1337,7 @@ def mesh(
                 triangles=surface_mesh.triangles,
                 edges=surface_mesh.edges,
                 edge_masks=surface_mesh.edge_masks,
-                vocabulary=DEFAULT_VOCABULARY,
+                vocabulary=vocabulary,
                 fields=fields,
                 binary=binary,
                 triangle_codes=codes,
@@ -1332,7 +1361,7 @@ def mesh(
                 edge_properties=surface_mesh.edge_masks,
                 ascii=not binary,
                 comments=comments,
-                vocabulary=DEFAULT_VOCABULARY,
+                vocabulary=vocabulary,
             ),
         ][: len(targets)]
     for target, encode in zip(targets[: len(encoders)], encoders, strict=True):
@@ -1356,6 +1385,7 @@ def _write_geopackage(
     palette: Palette | None,
     cover: list[tuple[int, BaseGeometry]],
     record: RunRecord,
+    vocabulary: EdgeVocabulary,
 ) -> None:
     """``target`` as a GeoPackage (increment 36), written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
@@ -1368,9 +1398,7 @@ def _write_geopackage(
         create_geopackage(conn, srs)
         write_triangles(conn, mesh.vertices, mesh.triangles, codes, palette, srs.srs_id)
         if len(mesh.edges):
-            write_lines(
-                conn, mesh.vertices, mesh.edges, mesh.edge_masks, DEFAULT_VOCABULARY, srs.srs_id
-            )
+            write_lines(conn, mesh.vertices, mesh.edges, mesh.edge_masks, vocabulary, srs.srs_id)
         if codes is not None:
             # A coded source may leave no polygon inside the domain: then there
             # is no land_cover layer to draw, and no style row for it either.
@@ -1521,7 +1549,10 @@ def _land_cover(
 
 @app.command()
 def palette(
-    name: Annotated[str, typer.Argument(help=f"The palette: {', '.join(PALETTES)}.")],
+    name: Annotated[
+        str,
+        typer.Argument(help=f"A class map: {', '.join(shipped_names())}, or a .toml file."),
+    ],
     out: Annotated[
         Path | None, typer.Option("--out", help="Write the preset here, not to stdout.")
     ] = None,
@@ -1532,10 +1563,13 @@ def palette(
     colour by ``land_cover_code``; tick Interpret Values As Categories if the
     preset does not.
     """
-    if name not in PALETTES:
-        raise typer.BadParameter(f"unknown palette {name}; use {', '.join(PALETTES)}")
-    table, title = PALETTES[name]
-    text = json.dumps(paraview_preset(table, title), indent=1) + "\n"
+    try:
+        cmap = load_class_map(name)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if cmap.palette is None:
+        raise typer.BadParameter(f"{name} has no classes to colour")
+    text = json.dumps(paraview_preset(cmap.palette, cmap.preset), indent=1) + "\n"
     if out is None:
         typer.echo(text, nl=False)
         return
@@ -1875,7 +1909,7 @@ def _open_dem(
 
 
 def _feature_sources(
-    paths: list[Path], crss: list[str], layers: list[str], maps: list[str]
+    paths: list[Path], crss: list[str], layers: list[str], maps: list[ClassMap]
 ) -> tuple[FeatureSource, ...]:
     """R1-R3: the repeatable ``--features`` flags as one source per path, paired
     by position; a shorter paired list defaults its missing entries. A flag that
@@ -1883,13 +1917,6 @@ def _feature_sources(
     several sources the flag alone no longer identifies which one."""
     built: list[FeatureSource] = []
     for i, path in enumerate(paths):
-        name = maps[i] if i < len(maps) else "property"
-        if name not in CLASS_MAPS:
-            raise typer.BadParameter(
-                f"unknown map {name} for --features {i + 1} ({path.name}); "
-                f"use {', '.join(CLASS_MAPS)}",
-                param_hint="--features-map",
-            )
         layer = layers[i] if i < len(layers) else None
         if layer is not None and path.suffix.lower() != ".gpkg":
             raise typer.BadParameter(
@@ -1897,10 +1924,10 @@ def _feature_sources(
                 param_hint="--features-layer",
             )
         crs = crss[i] if i < len(crss) else None
-        built.append(FeatureSource(path=path, class_map=CLASS_MAPS[name], layer=layer, crs=crs))
-    # R5/D1: one mesh has one land_cover_code system. Two sources with different
-    # non-empty code systems are refused before any meshing. Every coded map
-    # today is CORINE (same system), so this defensive refusal never fires now.
+        built.append(FeatureSource(path=path, class_map=maps[i], layer=layer, crs=crs))
+    # R5/D1: one mesh has one land_cover_code system. Two sources whose maps
+    # name different code systems (any file can name its own, 41) are refused
+    # before any meshing.
     systems = {s.class_map.codes for s in built if s.class_map.codes}
     if len(systems) > 1:
         raise typer.BadParameter(
@@ -1917,6 +1944,7 @@ def _open_features(
     dem_crs: str,
     clock: PhaseClock,
     cleanup: dict[str, float],
+    vocabulary: EdgeVocabulary,
     threads: int = 1,
 ) -> FeatureSet:
     """R5-R6 and R10: read and clip every source into one set, timed as
@@ -1924,7 +1952,7 @@ def _open_features(
     the feature."""
     t0 = time.perf_counter()
     try:
-        request = FeatureRequest(sources=sources, threads=threads, **cleanup)
+        request = FeatureRequest(sources=sources, vocabulary=vocabulary, threads=threads, **cleanup)
         found = open_features(request, domain, dem_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
@@ -2103,6 +2131,7 @@ def _dem_mesh(
     lines: ToleranceLines | None = None,
     steep: ToleranceSlope | None = None,
     threads: int = 0,
+    vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -2129,7 +2158,7 @@ def _dem_mesh(
     domain_vertices = domain_holes = None
     feature_counts = None
     if domain is not None:
-        started = start_chains(domain, features.features if features else (), DEFAULT_VOCABULARY)
+        started = start_chains(domain, features.features if features else (), vocabulary)
         chains = [(indices, ROLES[role], mask) for indices, role, mask in started.chains]
         rings = (domain.polygon.exterior, *domain.polygon.interiors)
         domain_vertices, domain_holes = sum(len(r.coords) - 1 for r in rings), len(rings) - 1

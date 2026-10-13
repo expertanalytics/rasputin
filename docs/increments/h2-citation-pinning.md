@@ -53,7 +53,12 @@ Common pieces:
 - `PATH` = `[\w./-]+\.(md|py|hpp|cpp|h|yaml|yml|toml|txt|cmake)`, preceded
   by start of text or a character outside `[\w/.-]`, as today. **A `PATH`
   that starts with `/` is not a citation** (absolute paths, and URLs, where
-  the match would begin at `//`).
+  the match would begin at `//`). Exception (2026-10-12): the gate first removes the main
+  checkout's path, or that path plus `.claude/worktrees/<name>/`, from the
+  front of a cite, so a review record's full-path cite is read as the
+  repository-relative path it names; anything else starting with `/` stays
+  ignored. CI checks such cites only when its checkout sits at that path,
+  which it does not, so they are checked locally, after each commit.
 - `LINES` = `<a>` or `<a>-<b>`, decimal. The last line is `max(a, b)`, as
   today. A line of `0` is broken for every form.
 
@@ -404,3 +409,5 @@ test 18 re-run in the real tree.
   - two design-doc citations quoted the pre-red C++ comments; they are now pinned at 7426b69.
 
 **Round 2, `@reviewer`, range `7426b69..5552702`: APPROVED.** All four blocking items are fixed and verified: the docstring count (b21ae61); the status and the measured +193; §2.3 matching `tools/check_citations.py`; the two pins, whose targets read at 7426b69. Both test files pass (147). `check_citations --base origin/master` exits 0 with nothing unpinned or broken, and its at-risk entries were re-read as quotations. ruff is clean. CI had not run (not pushed).
+
+**Absolute-path cites, 2026-10-12** (short path; Ola: "the citation gate skip question: yes"). Red `28fa976c` (@tester, 12 tests, 5 red), green `1e5dbaff` (@developer, `tools/check_citations.py`, 2 net lines), six h16 cites rewritten `14aed294`. Review round 1, @reviewer (`5d2e706d..14aed294`): CHANGES REQUESTED, one line, applied in this recording commit: /Users/skavhaug/projects/rasputin/.claude/worktrees/cite-gate/docs/increments/h2-citation-pinning.md@14aed294:53 still said a path starting with `/` is never a citation; the exception and the CI limit added. Verified: the 5 red tests failed for the right reason and all 149 pass; only the checkout and worktree prefixes are stripped (another machine's path, a URL, `<root>-old/` and the parent still ignored, each tested); the gate works from inside a worktree; the six rewritten cites resolve at `fa9f3e1` and `a0001d00` and say what h16 claims; the gate exits 0 and now checks 281 full-path cites; harness suite 2,145 passed; ruff clean. Suggestion for later: a test with the checkout path right after a URL host.
