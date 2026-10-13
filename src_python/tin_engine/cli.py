@@ -745,7 +745,7 @@ def mesh(
             "--bbox",
             metavar="BOX",
             help="With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, "
-            "snapped outward to its nodes.",
+            "or in --out-crs's when given, snapped outward to its nodes.",
         ),
     ] = None,
     stride: Annotated[
