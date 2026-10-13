@@ -110,7 +110,8 @@ src/                       # C++ implementation, one directory per module
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
   snow.cpp                 # the snow kernel's binding: arrays in and out,
-                           #   refusals as ValueError naming the triangle
+                           #   refusals as ValueError naming the status,
+                           #   and the triangle for a non-finite value
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # installed_version only; never imports _core
