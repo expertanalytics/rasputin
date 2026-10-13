@@ -1449,6 +1449,8 @@ lines.
 
 ### The module: `tests/python/cli_driver.py`
 
+Renamed `tests/python/cli_helpers.py` on 2026-10-13 (Ola, 2026-10-05: the old name was cryptic); this section keeps the name it was written with.
+
 Named `cli_driver`, not X1's `cli_harness`: since h17 (on branch
 `worktree-ci-speed`), "harness test" means a test of `tools/` or the hooks,
 selected by a `harness` marker, and this module serves the product suites.
@@ -2618,3 +2620,5 @@ PR F second master merge review (e4f7a42..8c2bc9a): APPROVED — resolution is o
 **PR C (`audit-geojson-io`), code review, round 8, 2026-10-06.** Merge `5c2b771a` (parents `f56952b5`, `c77eec32`). Verdict: CHANGES REQUESTED. Text merge clean; three citation pins re-read and correct; check_citations exit 0; +29 net production (`count_loc.py origin/master 5c2b771a`). Blocking: master's `_linework` (`src_python/tin_engine/feature_input.py@5c2b771a:226`) uses `MultiPolygon`, whose import C removed (`:39`), so 145 tests fail and 26 error. Restoring the import gives 5616 passed, 31 skipped.
 
 **PR C (`audit-geojson-io`), code review, round 9, 2026-10-06.** Range `5c2b771a..800c4adf`. Verdict: APPROVED. +29 net production (`count_loc.py origin/master 800c4adf`; this round 0). The diff is one line, restoring `MultiPolygon` at `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/src_python/tin_engine/feature_input.py@800c4adf:39`. `ruff check` passes, and F821 reproduces on the `5c2b771a` file. Full suite 5630 passed, 17 skipped. check_citations clean. Merges clean with origin/master `f7f6553f`. Not pushed, so no CI on this head.
+
+**cli-helpers rename, review round 1, 2026-10-13.** Range `3fe711f1..e602e779`, 0 net production lines, @reviewer: APPROVED. 100 % rename plus 42 import lines; no `cli_driver` outside dated records; merges cleanly onto origin/master `b1353075`; CI to be checked after the push.

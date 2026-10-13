@@ -42,7 +42,7 @@ import pytest
 import tin_engine.cli as cli
 import tin_engine.edge_strip as edge_strip
 import tin_engine.final_check as final_check
-from cli_driver import SQUARE, geojson, rough_dem
+from cli_helpers import SQUARE, geojson, rough_dem
 from recordread import stats_row
 from test_cli_mesh_geographic import TARGET, TOLERANCE, domain_4674, geographic_dem
 from test_cli_mesh_stats import mesh

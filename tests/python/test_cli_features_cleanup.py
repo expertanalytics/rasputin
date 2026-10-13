@@ -90,7 +90,7 @@ import typer
 import tin_engine.cli as cli
 import tin_engine.feature_input as feature_input
 import tin_engine.run_record as rr
-from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from recordread import stats_names, stats_row
 from test_cli_mesh_features import GALLERY
