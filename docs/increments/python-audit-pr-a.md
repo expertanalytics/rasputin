@@ -347,7 +347,7 @@ Lean: no mutation round.
    `tests/python/catchment_fixtures.py@618328b:33`,
    `tests/python/test_mosaic.py@618328b:81`); and the comment at
    `tests/cpp/unit/test_raster_node_at.cpp@618328b:78`, which cites
-   `grid_domain.py:68-69`: pin it to `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`.
+   `src_python/tin_engine/grid_domain.py@5e5bcfce:68-69`: pin it to `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`.
 
 On the prototype, the whole Python suite fails in exactly the `window_meta`
 users (38 failed and 10 errors, in `test_io_cog.py`, `test_io_cache.py` and
@@ -585,9 +585,9 @@ commit, each quotation re-read at its pin:
   `docs/increments/27-node-sampling.md` lines 114, 173, 174, 402 and 404;
 - three review records whose citation had already moved before A, to the
   revision they reviewed: `docs/increments/29-nve-reference-catchments.md`
-  lines 3088 and 3090 (`mosaic.py:385`, the `_mixed` refusal in
+  lines 3088 and 3090 (`src_python/tin_engine/mosaic.py@5e5bcfce:385`, the `_mixed` refusal in
   `_covering`, to `e7b5923`, the end of round 4's range; round 5 changed no
-  code) and line 3114 (`cli.py:1925-1928`, which the record itself reads "at
+  code) and line 3114 (`src_python/tin_engine/cli.py@5e5bcfce:1925-1928`, which the record itself reads "at
   `0588bfa`", to `0588bfa`).
 
 None of these lines is edited by C, D, F or T1 (`git diff -U0 618328b...<branch>`

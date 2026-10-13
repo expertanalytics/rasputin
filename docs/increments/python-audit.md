@@ -2005,16 +2005,16 @@ re-read there:
 
 - `docs/benchmarks/2026-10-05/nve-hrd/README.md:53` and
   `docs/increments/29-nve-reference-catchments.md`'s Sagafoss line
-  (`catchment.py:259`, the `_plan` call in `_grow`);
-- `docs/increments/15c-geographic-dem.md`'s `catchment.py:194-195`;
-- `docs/increments/15f-edge-strip.md`'s `cli.py:1612`;
-- `docs/increments/25-plain-output.md`'s `cli.py:1966-1969`, `:1040`,
+  (`src_python/tin_engine/catchment.py@80e53d71:259`, the `_plan` call in `_grow`);
+- `docs/increments/15c-geographic-dem.md`'s `src_python/tin_engine/catchment.py@80e53d71:194-195`;
+- `docs/increments/15f-edge-strip.md`'s `src_python/tin_engine/cli.py@80e53d71:1612`;
+- `docs/increments/25-plain-output.md`'s `src_python/tin_engine/cli.py@80e53d71:1966-1969`, `:1040`,
   `:961`, `:1113-1125`, `:1145-1147` and `:835`;
-- `docs/increments/27-node-sampling.md`'s `cli.py:845`.
+- `docs/increments/27-node-sampling.md`'s `src_python/tin_engine/cli.py@80e53d71:845`.
 
 All but `:835` and `:845` are the same edit, character for character, as PR B's
 (`worktree-audit-crs`), so the two branches merge them without a conflict.
-Left as written: `15f-edge-strip.md`'s `cli.py:1417` (it says it describes
+Left as written: `15f-edge-strip.md`'s `src_python/tin_engine/cli.py@80e53d71:1417` (it says it describes
 `17c2d14` and is left as history), and the dated review records that cite
 `cli.py` or `project_structure.md` lines; `check_citations.py` lists them as
 at risk once the code moves, and they record what was true then.

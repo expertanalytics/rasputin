@@ -33,3 +33,34 @@ Enforces cutting-edge, safe, and testable Python 3.12+ architecture for orchestr
 ## 5. Pragmatic Code Design
 * **Pragmatic Polymorphism:** Prefer composition over inheritance. Use structural subtyping (`typing.Protocol`) or simple functional abstractions instead of heavy object-oriented hierarchies.
 * **Change Limit:** see the ceiling in `CLAUDE.md` §2.
+
+## 6. Docstrings and Comments
+Docstrings and comments describe the code as it is, for a reader who has never
+seen the project's history.
+* A docstring says what the object does: what it takes, what it returns, what
+  it refuses, and the reason for anything a careful reader would otherwise
+  question. A comment says why a line is as it is, when the code cannot say it.
+* They never carry history: no increment numbers or labels (`increment 29`,
+  `16c`, `23a-2`), no IDs from a design file (`R5`, `D2`, `Q11`), no review or
+  PR names (`audit PR C`, `round 3`), no record of who decided, no commit
+  hashes, no account of what the code used to do. Git and `docs/increments/`
+  keep that.
+* A reason that came from a decision is written as the reason, never as the
+  decision's label. A value that was chosen rather than derived says so: "a
+  chosen threshold: below 1 mm two tiles are taken to agree".
+* A pointer to a design file is kept only where the derivation or measurement
+  behind a value is too long to repeat. It names the file and a heading, in
+  the form `tools/check_citations.py` verifies (`` `<path>.md`, *<heading>* ``),
+  on one line. At most one per module docstring; none in classes, functions,
+  comments or help text.
+* The same holds for the help text the CLI prints (`help=` strings).
+* A link to an outside bug report (an issue in NumPy, PROJ, GitHub) is allowed
+  where the code works around that bug, and only with the reason written
+  beside it, so the comment still reads if the link dies.
+* Tool directives (`# type: ignore[...]`, `# noqa: ...`, `# ruff: noqa`,
+  `# mypy: ...`, `# fmt: skip`) are code: keep them exactly as they are.
+
+Checked by `tools/check_code_history.py`, over the paths listed under
+`[tool.check_code_history]` in `pyproject.toml`. The reviewer judges the rest:
+whether a sentence still describes the code, and history written without a
+label ("used to", a bare increment number).

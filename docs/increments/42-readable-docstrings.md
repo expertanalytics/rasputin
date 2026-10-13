@@ -1,7 +1,9 @@
 # Increment 42 — Readable Python docstrings and comments
 
-Status: **designed and review-approved after two rounds; the build waits for Ola: PR 1 adds `tools/check_code_history.py`, a governed path that away mode refuses, and two questions are his** (`@architect`,
-2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
+Status: **PR 1 built, not yet reviewed: red (`769ae82a`, 38 tests), green
+(`539cf514`, the checker, 128 counted lines), and the rule, the gate line and
+the citation pins; a follow-up red and green for the label rule's full stop
+(section 6) are next** (`@architect`, 2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
 checker's changes no code: its docstrings and comments are rewritten, and an
 AST comparison (section 6) shows that no code token moved.
 
@@ -339,12 +341,24 @@ for each match of:
 | Rule | Pattern (the probe's) | Today |
 |---|---|---|
 | `increment` | `increment` + a number and optional letter | 149 (2 in `help=` strings) |
-| `label` | a number and a letter `a`-`f`, optional `-2` or `-ii` (`16c`, `23a-2`, `6b-ii`); not inside a path, not scientific notation (`1e-6`), not a format spec | 156 |
+| `label` | a number and a letter `a`-`f`, optional `-2` or `-ii` (`16c`, `23a-2`, `6b-ii`); not inside a path, not scientific notation (`1e-6`), not a format spec; a label that ends a sentence (`as in 16c.`) counts, a full stop followed by a word character (`16c.txt`) does not | 156 |
 | `ruling-id` | a design ID: one of `R D Q B C S U J M F T` and a number (`R5`, `Q11`, `R4.3`); `D8` excepted, because D8 is also the hydrology flow-direction scheme (the probe does not except it: 3 of its 216 are `D8`, all design IDs today) | 216 |
 | `review` | `audit PR`, `PR 4`, `PR C`, `review round`, `round 3` | 28 |
 | `person` | `Ola`, `ruled`, `ruling` | 54 |
 | `hash` | a backticked hex run of 7-12 characters | 0 |
 | `pointer` | a `.md` file name (`check_citations.py`'s `MD_PATH`) anywhere but the one allowed place: the first one in the module docstring, in the heading form `` `<path>.md`, *<heading>* `` on one line (`check_citations.py`'s `HEADING_CITATION`, which also checks the heading exists) | 65, on 65 lines in 51 files; 35 of those lines no other rule flags |
+
+*The label rule at a full stop* (decided after the green commit). As built,
+the `label` pattern ends in the lookahead `(?![\w.]|-\d)`, so a label followed
+by a full stop is missed: "as in 16c." gives no report. It is changed to
+`(?!\w|\.\w|-\d)`: a full stop that ends a sentence no longer hides a label,
+and one that begins a file suffix (`16c.txt`) or a decimal still does. Measured
+with the changed pattern against the checker's own `prose` on this branch: 0
+added matches in `src_python/tin_engine` and `tools/`, 9 in `tests/`, all
+true labels (7 of them after the word "increment", which the `increment` rule
+already flags; the 2 new ones are "Python after 5c." and "before 15c-2.").
+No false positive. The probe keeps its old pattern, as the record of the
+measurements above.
 
 Exit 1 when anything is reported, 0 otherwise. There is no inline escape: on a
 measured 0 false positives in 668, a false positive is reworded, not
@@ -435,8 +449,9 @@ in 27 files and 134 lines, and it is mechanical. A citation that
 was already stale stays as stale as it was: pinning neither fixes nor hides
 it.
 
-*Where.* The pins are the first commit of PR 1, by `@tester` (the files are
-docs and tests), ahead of the red commit. The pinning script is committed as
+*Where.* The pins are a commit of PR 1. The design had them first, by
+`@tester`, ahead of the red commit; as built they came after green, by
+`@architect` for the docs and benchmark files (section 13). The pinning script is committed as
 `docs/increments/42-probes/pin_citations.py`, so the reviewer can rerun it and
 see no further change. The round-1 design had them as a PR 0 of their own.
 Folding them in saves one PR, one CI run and one review round, at no cost: PR
@@ -511,7 +526,9 @@ are the counts each fixture must produce.
    over two lines: 2 reports, each at the line where the `help=` value starts.
 3. *The exclusions.* `1e-6`, `1e-4`, `f"{x:.0f}"` inside a comment,
    `` `docs/increments/15c-geographic-dem.md` ``, `D8 flow directions`: 0
-   reports.
+   reports. *Follow-up (section 6, the full stop):* a comment
+   `# as in 16c.` gives 1 `label` report; a comment `# read 16c.txt` and a
+   comment `# 3f.5` give 0.
 4. *Pointers.* `` `docs/increments/32-landcover-simplify.md`, *5.3 The band in plan, not over the DEM* `` on
    one line of a module docstring: 0 reports. Add, in the same module, a
    second pointer in the heading form in the module docstring, one there not
@@ -599,6 +616,33 @@ applicability beyond Ola's machine and data". Part (b), the generality audit,
 is a separate record. It overlaps this one in one place: comments that name a
 data set as if it were the only one (`src_python/tin_engine/mosaic.py@dd33a9ce:32`, "metres for DTM10") are
 rewritten in general terms by the sweep.
+
+## 13. As built (PR 1)
+
+- *Red*, `769ae82a` (`@tester`): 38 tests in
+  `tests/python/test_check_code_history.py`, section 9's seven cases plus the
+  upper-case `NOQA` case the round-2 review asked for.
+- *Green*, `539cf514` (`@developer`): `tools/check_code_history.py`, 128
+  counted lines against the estimate of about 105
+  (`python3 tools/count_loc.py 769ae82a 539cf514`); the scope
+  `[tool.check_code_history] paths = []` in `pyproject.toml`; a CI step. Two
+  choices beyond the design: `D8` is excepted from `ruling-id` (section 6 says
+  so, the probe does not), and same-code mode reads
+  `git diff --name-only BASE -- '*.py'`, so an untracked file is not compared.
+- *The rule and the gate*: section 4's text in
+  `.claude/skills/python-development/SKILL.md`, section 6; the checker under
+  *Governance gates* in `CLAUDE.md` section 4.
+- *The pins*: `docs/increments/42-probes/pin_citations.py` found 176 unpinned
+  citations into `src_python/` on this branch, not 134: the 42 more are in
+  `docs/increments/38-threads-and-memory.md`, which merged after `dd33a9ce`.
+  163 are pinned, in 22 docs and benchmark files. 13 are left, outside the
+  docs write limit: 10 in `tests/python/` (`test_edge_strip.py`,
+  `test_feature_input.py`, `test_features.py`, `test_grow.py`,
+  `test_viz_svg.py`), and 3 in `src_python/tin_engine/features.py` lines
+  42-45, which cite `viz/svg.py`. The script, run without `--write`, lists
+  them.
+- *Next*: the label rule's full stop (section 6), a red commit by `@tester`
+  (section 9, test 3's follow-up) and a green one by `@developer`.
 
 ## Estimate
 

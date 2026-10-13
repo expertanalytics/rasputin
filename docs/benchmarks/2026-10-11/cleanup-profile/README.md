@@ -88,7 +88,7 @@ names only if the row is read as the whole `features clip` phase.
 ## 2. Inside the step (cProfile, one run per case)
 
 Seconds are cumulative time under cProfile; "share of step" is against
-`_Tally._clean` (feature_input.py:410), 6.864 s on Numedalslagen and
+`_Tally._clean` (src_python/tin_engine/feature_input.py@c7dba32e:410), 6.864 s on Numedalslagen and
 7.753 s on Lagan; "share of run" is against the `mesh` command body under
 cProfile, 10.212 s and 20.591 s. Sub-rows (indented) are inside the row
 above them. Lines are in `src_python/tin_engine/feature_input.py` unless
@@ -112,18 +112,18 @@ named otherwise.
 | &nbsp;&nbsp;`_loops` (line 691; `make_valid` per changed stretch, 1 596 / 1 488 calls) | 0.21 | 3 % | 2 % | 0.20 | 3 % | 1 % |
 | &nbsp;&nbsp;`_chains` (line 737; Python loop, builds `LineString`s) | 0.22 | 3 % | 2 % | 0.11 | 1 % | 1 % |
 | &nbsp;&nbsp;rest of `snap_to_outline` (`get_rings`, `get_coordinates`, `LineString`, its own loop) | 0.33 | 5 % | 3 % | 0.09 | 1 % | 0.4 % |
-| simplifier, `simplify_borders` (border_simplify.py:40; the `_core.simplify_borders` C++ call is 0.63 / 0.61 of it) | 0.69 | 10 % | 7 % | 0.71 | 9 % | 3 % |
+| simplifier, `simplify_borders` (src_python/tin_engine/border_simplify.py@c7dba32e:40; the `_core.simplify_borders` C++ call is 0.63 / 0.61 of it) | 0.69 | 10 % | 7 % | 0.71 | 9 % | 3 % |
 | cut where on the outline, `_outline_lines` (line 714; 25 / 24 calls; on Lagan a new `STRtree` of the outline per call, 0.11 s, and 0.16 s of queries) | 0.30 | 4 % | 3 % | 0.74 | 10 % | 4 % |
 | per-line clip and cover test, `_Tally._add` (line 383): `shapely.intersection(line, dom)` (line 395) and `domain.polygon.covers(line)` (line 402) | 0.19 | 3 % | 2 % | 1.46 | 19 % | 7 % |
 | &nbsp;&nbsp;of which `covers` (4 255 calls on Lagan, 179 µs each; 1 442 calls on Numedalslagen, 2 µs each) | 0.00 | | | 0.76 | 10 % | 4 % |
 | &nbsp;&nbsp;of which `intersection(line, dom)` for the lines `_untouched` does not pass (626 / 1 750 calls) | 0.14 | | | 0.63 | 8 % | 3 % |
 | `_polygonal`, bookkeeping, the rest of `_clean` | 0.11 | 2 % | 1 % | 0.14 | 2 % | 1 % |
 | **the step, `_Tally._clean`** | **6.86** | 100 % | 67 % | **7.75** | 100 % | 38 % |
-| before the step, in the same phase: reprojection of the whole polygons, `shapely.transform` with pyproj (line 357; `crs.py:48`, one `Transformer`, 7 867 calls of `transformer.transform`, 4.15 s of own time in pyproj) | 0 (same CRS) | | | 4.08 | | 20 % |
+| before the step, in the same phase: reprojection of the whole polygons, `shapely.transform` with pyproj (line 357; `src_python/tin_engine/crs.py@c7dba32e:48`, one `Transformer`, 7 867 calls of `transformer.transform`, 4.15 s of own time in pyproj) | 0 (same CRS) | | | 4.08 | | 20 % |
 
 ## 3. The largest sub-steps
 
-1. **The outline rule, `snap_to_outline` (feature_input.py:640): 2.80 s and
+1. **The outline rule, `snap_to_outline` (src_python/tin_engine/feature_input.py@c7dba32e:640): 2.80 s and
    2.50 s, 41 % and 32 % of the step.** Most of it is GEOS, not the Python
    loop: `union_all` of the rebuilt parts and of the loops (lines 680, 684,
    687) plus `make_valid` and `is_valid` of the rebuilt shells (lines 676,
@@ -149,7 +149,7 @@ named otherwise.
 Outside the step but inside the `features clip` phase on Lagan: the
 reprojection of every CORINE polygon from EPSG:3035 to EPSG:3006 before the
 clean-up, 4.08 s (20 % of the run), all in pyproj's `Transformer.transform`
-(`crs.py:48`, called once per polygon with that polygon's vertices).
+(`src_python/tin_engine/crs.py@c7dba32e:48`, called once per polygon with that polygon's vertices).
 Numedalslagen has no reprojection.
 
 The simplifier (increment 32, C++) is 0.69 s and 0.71 s; `_outline_lines`

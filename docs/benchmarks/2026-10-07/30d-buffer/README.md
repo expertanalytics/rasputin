@@ -8,10 +8,10 @@ this file.
 
 **The one hotspot is GEOS `buffer` of the SMHI staircase outline.** On Lagan
 it is 98 % of `decode` and 95–97 % of `features read` (the traced runs). The worst call is
-`feature_input.py:161`, which grows the whole domain by 100 m with round
+`src_python/tin_engine/feature_input.py@d9f9c025:161`, which grows the whole domain by 100 m with round
 corners: 28 s on Lagan. The GeoPackage path calls it **twice** (once for the
-R-tree box, `feature_input.py:294`, and once for the clip region,
-`feature_input.py:311`). The GeoJSON path calls it once.
+R-tree box, `src_python/tin_engine/feature_input.py@d9f9c025:294`, and once for the clip region,
+`src_python/tin_engine/feature_input.py@d9f9c025:311`). The GeoJSON path calls it once.
 
 **The best single fix is to grow the features region from the convex hull**
 (candidate 2). With the shared buffer (candidate 1) in place, it takes Lagan
@@ -46,7 +46,7 @@ reaches up to 10.8 m beyond GEOS's at one place where the outline
 turns back on itself (near vertex 7541), and GEOS's pokes out of the pieced region by 6.9e-6 m, which
 fails a 1e-6 m check. Why GEOS's region is smaller there was not measured.
 The candidate as patched applies to any mitred polygon of 5,000 vertices or
-more, so it would reach Numedalslågen's `dem_input.py:250` buffer. That buffer
+more, so it would reach Numedalslågen's `src_python/tin_engine/dem_input.py@d9f9c025:250` buffer. That buffer
 takes 5 ms there. No patched mesh run was made on Numedalslågen.
 
 **What was not run.** Ola cut the run: "the question needed minutes, not an
@@ -113,46 +113,46 @@ control.
 
 | catchment | features | call site | calls | distance | join | vertices in | seconds |
 |---|---|---|---|---|---|---|---|
-| Lagan | GeoJSON window | `feature_input.py:161` | 1 | 100 | round | 56261 | 27.964 |
-| Lagan | GeoJSON window | `dem_input.py:213` | 1 | 43.84 | mitre | 56261 | 17.555 |
-| Lagan | GeoJSON window | `target_grid.py:107` | 1 | 43.84 | mitre | 56261 | 17.514 |
-| Lagan | GeoJSON window | `read_json` (`feature_input.py:419`) | 1 |  |  |  | 0.715 |
-| Lagan | GeoJSON window | `target_grid.py:145` | 1 | 0.0005008 | mitre | 40176 | 0.203 |
-| Lagan | GeoJSON window | `target_grid.py:243` | 90 | 31 | round | 715/760/980… | 0.035 |
+| Lagan | GeoJSON window | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 1 | 100 | round | 56261 | 27.964 |
+| Lagan | GeoJSON window | `src_python/tin_engine/dem_input.py@d9f9c025:213` | 1 | 43.84 | mitre | 56261 | 17.555 |
+| Lagan | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:107` | 1 | 43.84 | mitre | 56261 | 17.514 |
+| Lagan | GeoJSON window | `read_json` (`src_python/tin_engine/feature_input.py@d9f9c025:419`) | 1 |  |  |  | 0.715 |
+| Lagan | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:145` | 1 | 0.0005008 | mitre | 40176 | 0.203 |
+| Lagan | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:243` | 90 | 31 | round | 715/760/980… | 0.035 |
 | Lagan | GeoJSON window | *decode* in this run: 36.024 s, of which buffers 35.307 s | | | | | rest 0.717 |
 | Lagan | GeoJSON window | *features read* in this run: 29.498 s, of which buffers 27.964 s | | | | | rest 1.534 |
-| Lagan | European GeoPackage | `feature_input.py:161` | 2 | 100 | round | 56261 | 56.200 |
-| Lagan | European GeoPackage | `target_grid.py:107` | 1 | 43.84 | mitre | 56261 | 17.263 |
-| Lagan | European GeoPackage | `dem_input.py:213` | 1 | 43.84 | mitre | 56261 | 16.729 |
-| Lagan | European GeoPackage | `query_features` (`feature_input.py:407`) | 1 |  |  | 7866 rows | 1.779 |
-| Lagan | European GeoPackage | `target_grid.py:145` | 1 | 0.0005008 | mitre | 40176 | 0.202 |
-| Lagan | European GeoPackage | `target_grid.py:243` | 90 | 31 | round | 715/760/980… | 0.048 |
+| Lagan | European GeoPackage | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 2 | 100 | round | 56261 | 56.200 |
+| Lagan | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:107` | 1 | 43.84 | mitre | 56261 | 17.263 |
+| Lagan | European GeoPackage | `src_python/tin_engine/dem_input.py@d9f9c025:213` | 1 | 43.84 | mitre | 56261 | 16.729 |
+| Lagan | European GeoPackage | `query_features` (`src_python/tin_engine/feature_input.py@d9f9c025:407`) | 1 |  |  | 7866 rows | 1.779 |
+| Lagan | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:145` | 1 | 0.0005008 | mitre | 40176 | 0.202 |
+| Lagan | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:243` | 90 | 31 | round | 715/760/980… | 0.048 |
 | Lagan | European GeoPackage | *decode* in this run: 34.907 s, of which buffers 34.243 s | | | | | rest 0.664 |
 | Lagan | European GeoPackage | *features read* in this run: 58.079 s, of which buffers 56.200 s | | | | | rest 1.879 |
-| Ljungan above Flåsjö | GeoJSON window | `feature_input.py:161` | 1 | 100 | round | 23260 | 2.211 |
-| Ljungan above Flåsjö | GeoJSON window | `target_grid.py:107` | 1 | 43.84 | mitre | 23260 | 2.090 |
-| Ljungan above Flåsjö | GeoJSON window | `dem_input.py:213` | 1 | 43.84 | mitre | 23260 | 2.071 |
-| Ljungan above Flåsjö | GeoJSON window | `read_json` (`feature_input.py:419`) | 1 |  |  |  | 0.242 |
-| Ljungan above Flåsjö | GeoJSON window | `target_grid.py:145` | 1 | 0.0005008 | mitre | 18451 | 0.082 |
-| Ljungan above Flåsjö | GeoJSON window | `target_grid.py:243` | 15 | 31 | round | 710/812/923… | 0.007 |
+| Ljungan above Flåsjö | GeoJSON window | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 1 | 100 | round | 23260 | 2.211 |
+| Ljungan above Flåsjö | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:107` | 1 | 43.84 | mitre | 23260 | 2.090 |
+| Ljungan above Flåsjö | GeoJSON window | `src_python/tin_engine/dem_input.py@d9f9c025:213` | 1 | 43.84 | mitre | 23260 | 2.071 |
+| Ljungan above Flåsjö | GeoJSON window | `read_json` (`src_python/tin_engine/feature_input.py@d9f9c025:419`) | 1 |  |  |  | 0.242 |
+| Ljungan above Flåsjö | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:145` | 1 | 0.0005008 | mitre | 18451 | 0.082 |
+| Ljungan above Flåsjö | GeoJSON window | `src_python/tin_engine/target_grid.py@d9f9c025:243` | 15 | 31 | round | 710/812/923… | 0.007 |
 | Ljungan above Flåsjö | GeoJSON window | *decode* in this run: 4.569 s, of which buffers 4.250 s | | | | | rest 0.319 |
 | Ljungan above Flåsjö | GeoJSON window | *features read* in this run: 2.757 s, of which buffers 2.211 s | | | | | rest 0.546 |
-| Ljungan above Flåsjö | European GeoPackage | `feature_input.py:161` | 2 | 100 | round | 23260 | 4.372 |
-| Ljungan above Flåsjö | European GeoPackage | `target_grid.py:107` | 1 | 43.84 | mitre | 23260 | 2.103 |
-| Ljungan above Flåsjö | European GeoPackage | `dem_input.py:213` | 1 | 43.84 | mitre | 23260 | 2.095 |
-| Ljungan above Flåsjö | European GeoPackage | `query_features` (`feature_input.py:407`) | 1 |  |  | 1156 rows | 1.020 |
-| Ljungan above Flåsjö | European GeoPackage | `target_grid.py:145` | 1 | 0.0005008 | mitre | 18451 | 0.082 |
-| Ljungan above Flåsjö | European GeoPackage | `target_grid.py:243` | 15 | 31 | round | 710/812/923… | 0.006 |
+| Ljungan above Flåsjö | European GeoPackage | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 2 | 100 | round | 23260 | 4.372 |
+| Ljungan above Flåsjö | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:107` | 1 | 43.84 | mitre | 23260 | 2.103 |
+| Ljungan above Flåsjö | European GeoPackage | `src_python/tin_engine/dem_input.py@d9f9c025:213` | 1 | 43.84 | mitre | 23260 | 2.095 |
+| Ljungan above Flåsjö | European GeoPackage | `query_features` (`src_python/tin_engine/feature_input.py@d9f9c025:407`) | 1 |  |  | 1156 rows | 1.020 |
+| Ljungan above Flåsjö | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:145` | 1 | 0.0005008 | mitre | 18451 | 0.082 |
+| Ljungan above Flåsjö | European GeoPackage | `src_python/tin_engine/target_grid.py@d9f9c025:243` | 15 | 31 | round | 710/812/923… | 0.006 |
 | Ljungan above Flåsjö | European GeoPackage | *decode* in this run: 4.601 s, of which buffers 4.287 s | | | | | rest 0.314 |
 | Ljungan above Flåsjö | European GeoPackage | *features read* in this run: 5.465 s, of which buffers 4.372 s | | | | | rest 1.093 |
-| Numedalslågen | UTM33 GeoPackage | `query_features` (`feature_input.py:407`) | 1 |  |  | 7932 rows | 0.194 |
-| Numedalslågen | UTM33 GeoPackage | `feature_input.py:161` | 2 | 100 | round | 14093 | 0.036 |
-| Numedalslågen | UTM33 GeoPackage | `dem_input.py:250` | 1 | 14.14 | mitre | 14093 | 0.007 |
+| Numedalslågen | UTM33 GeoPackage | `query_features` (`src_python/tin_engine/feature_input.py@d9f9c025:407`) | 1 |  |  | 7932 rows | 0.194 |
+| Numedalslågen | UTM33 GeoPackage | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 2 | 100 | round | 14093 | 0.036 |
+| Numedalslågen | UTM33 GeoPackage | `src_python/tin_engine/dem_input.py@d9f9c025:250` | 1 | 14.14 | mitre | 14093 | 0.007 |
 | Numedalslågen | UTM33 GeoPackage | *decode* in this run: 1.137 s, of which buffers 0.007 s | | | | | rest 1.130 |
 | Numedalslågen | UTM33 GeoPackage | *features read* in this run: 0.291 s, of which buffers 0.036 s | | | | | rest 0.255 |
-| Numedalslågen | European GeoPackage | `query_features` (`feature_input.py:407`) | 1 |  |  | 8115 rows | 1.170 |
-| Numedalslågen | European GeoPackage | `feature_input.py:161` | 2 | 100 | round | 14093 | 0.036 |
-| Numedalslågen | European GeoPackage | `dem_input.py:250` | 1 | 14.14 | mitre | 14093 | 0.005 |
+| Numedalslågen | European GeoPackage | `query_features` (`src_python/tin_engine/feature_input.py@d9f9c025:407`) | 1 |  |  | 8115 rows | 1.170 |
+| Numedalslågen | European GeoPackage | `src_python/tin_engine/feature_input.py@d9f9c025:161` | 2 | 100 | round | 14093 | 0.036 |
+| Numedalslågen | European GeoPackage | `src_python/tin_engine/dem_input.py@d9f9c025:250` | 1 | 14.14 | mitre | 14093 | 0.005 |
 | Numedalslågen | European GeoPackage | *decode* in this run: 1.039 s, of which buffers 0.005 s | | | | | rest 1.034 |
 | Numedalslågen | European GeoPackage | *features read* in this run: 1.287 s, of which buffers 0.036 s | | | | | rest 1.251 |
 
@@ -162,15 +162,15 @@ control.
 |---|---|---|
 | Lagan | footprints (tile headers) | **0.000** (0.039, 0.000, 0.000) |
 | Lagan | domain.to_crs(target) | **0.000** (0.002, 0.000, 0.000) |
-| Lagan | target_grid_for (target_grid.py:107's buffer inside) | **17.341** (17.489, 17.341, 16.889) |
-| Lagan | buffer target_grid.py:107 = dem_input.py:213 (the same call) (d = 43.84, 56261 vertices) | **16.860** (16.860, 16.961, 16.858) |
-| Lagan | target_grid.source_region (target_grid.py:145's buffer inside) | **0.211** (0.212, 0.211, 0.210) |
-| Lagan | buffer target_grid.py:145 (d = 0.0005008, 40176 vertices) | **0.201** (0.201, 0.201, 0.201) |
+| Lagan | target_grid_for (src_python/tin_engine/target_grid.py@d9f9c025:107's buffer inside) | **17.341** (17.489, 17.341, 16.889) |
+| Lagan | buffer src_python/tin_engine/target_grid.py@d9f9c025:107 = src_python/tin_engine/dem_input.py@d9f9c025:213 (the same call) (d = 43.84, 56261 vertices) | **16.860** (16.860, 16.961, 16.858) |
+| Lagan | target_grid.source_region (src_python/tin_engine/target_grid.py@d9f9c025:145's buffer inside) | **0.211** (0.212, 0.211, 0.210) |
+| Lagan | buffer src_python/tin_engine/target_grid.py@d9f9c025:145 (d = 0.0005008, 40176 vertices) | **0.201** (0.201, 0.201, 0.201) |
 | Lagan | plan_mosaic | **0.002** (0.003, 0.002, 0.002) |
 | Lagan | repository.check | **0.000** (0.001, 0.000, 0.000) |
 | Lagan | assemble (decode + seams) | **0.136** (0.152, 0.136, 0.135) |
 | Lagan | resample | **0.498** (0.510, 0.494, 0.498) |
-| Lagan | buffer feature_input.py:161 (d = 100, 56261 vertices) | **28.152** (28.196, 28.152, 28.097) |
+| Lagan | buffer src_python/tin_engine/feature_input.py@d9f9c025:161 (d = 100, 56261 vertices) | **28.152** (28.196, 28.152, 28.097) |
 | Lagan | feature_input.source_region(domain, dem, dem) | **28.131** (28.131, 28.007, 28.187) |
 | Lagan | read_json (GeoJSON window) | **0.741** (0.693, 0.741, 0.742) |
 | Lagan | read_source (GeoJSON window: read_json + shape) | **1.569** (1.654, 1.569, 1.557) |
@@ -178,26 +178,26 @@ control.
 | Lagan | query_features (gpkg, 8.86 GB) | **1.024** (1.082, 1.024, 0.992) |
 | Ljungan above Flåsjö | footprints (tile headers) | **0.000** (0.040, 0.000, 0.000) |
 | Ljungan above Flåsjö | domain.to_crs(target) | **0.000** (0.002, 0.000, 0.000) |
-| Ljungan above Flåsjö | target_grid_for (target_grid.py:107's buffer inside) | **2.141** (2.196, 2.141, 2.115) |
-| Ljungan above Flåsjö | buffer target_grid.py:107 = dem_input.py:213 (the same call) (d = 43.84, 23260 vertices) | **2.087** (2.086, 2.087, 2.205) |
-| Ljungan above Flåsjö | target_grid.source_region (target_grid.py:145's buffer inside) | **0.090** (0.090, 0.090, 0.089) |
-| Ljungan above Flåsjö | buffer target_grid.py:145 (d = 0.0005008, 18451 vertices) | **0.084** (0.084, 0.084, 0.087) |
+| Ljungan above Flåsjö | target_grid_for (src_python/tin_engine/target_grid.py@d9f9c025:107's buffer inside) | **2.141** (2.196, 2.141, 2.115) |
+| Ljungan above Flåsjö | buffer src_python/tin_engine/target_grid.py@d9f9c025:107 = src_python/tin_engine/dem_input.py@d9f9c025:213 (the same call) (d = 43.84, 23260 vertices) | **2.087** (2.086, 2.087, 2.205) |
+| Ljungan above Flåsjö | target_grid.source_region (src_python/tin_engine/target_grid.py@d9f9c025:145's buffer inside) | **0.090** (0.090, 0.090, 0.089) |
+| Ljungan above Flåsjö | buffer src_python/tin_engine/target_grid.py@d9f9c025:145 (d = 0.0005008, 18451 vertices) | **0.084** (0.084, 0.084, 0.087) |
 | Ljungan above Flåsjö | plan_mosaic | **0.000** (0.001, 0.000, 0.000) |
 | Ljungan above Flåsjö | repository.check | **0.000** (0.000, 0.000, 0.000) |
 | Ljungan above Flåsjö | assemble (decode + seams) | **0.074** (0.079, 0.074, 0.074) |
 | Ljungan above Flåsjö | resample | **0.194** (0.211, 0.194, 0.193) |
-| Ljungan above Flåsjö | buffer feature_input.py:161 (d = 100, 23260 vertices) | **2.259** (2.313, 2.226, 2.259) |
+| Ljungan above Flåsjö | buffer src_python/tin_engine/feature_input.py@d9f9c025:161 (d = 100, 23260 vertices) | **2.259** (2.313, 2.226, 2.259) |
 | Ljungan above Flåsjö | feature_input.source_region(domain, dem, dem) | **2.262** (2.313, 2.262, 2.240) |
 | Ljungan above Flåsjö | read_json (GeoJSON window) | **0.256** (0.240, 0.258, 0.256) |
 | Ljungan above Flåsjö | read_source (GeoJSON window: read_json + shape) | **0.547** (0.582, 0.547, 0.547) |
 | Ljungan above Flåsjö | feature_input.source_region(domain, dem, EPSG:3035) [gpkg box] | **2.229** (2.229, 2.220, 2.272) |
 | Ljungan above Flåsjö | query_features (gpkg, 8.86 GB) | **1.009** (1.727, 1.009, 0.946) |
 | Numedalslågen | footprints (tile headers) | **0.000** (0.242, 0.000, 0.000) |
-| Numedalslågen | _domain_plan (dem_input.py:250's buffer inside) | **0.110** (0.129, 0.110, 0.106) |
-| Numedalslågen | buffer dem_input.py:250 (d = 14.14, 14093 vertices) | **0.005** (0.005, 0.005, 0.005) |
+| Numedalslågen | _domain_plan (src_python/tin_engine/dem_input.py@d9f9c025:250's buffer inside) | **0.110** (0.129, 0.110, 0.106) |
+| Numedalslågen | buffer src_python/tin_engine/dem_input.py@d9f9c025:250 (d = 14.14, 14093 vertices) | **0.005** (0.005, 0.005, 0.005) |
 | Numedalslågen | repository.check | **0.000** (0.000, 0.000, 0.000) |
 | Numedalslågen | assemble (decode + seams) | **0.888** (1.024, 0.888, 0.685) |
-| Numedalslågen | buffer feature_input.py:161 (d = 100, 14093 vertices) | **0.017** (0.018, 0.017, 0.017) |
+| Numedalslågen | buffer src_python/tin_engine/feature_input.py@d9f9c025:161 (d = 100, 14093 vertices) | **0.017** (0.018, 0.017, 0.017) |
 | Numedalslågen | feature_input.source_region(domain, dem, dem) | **0.035** (0.037, 0.035, 0.035) |
 | Numedalslågen | feature_input.source_region(domain, dem, EPSG:25833) [gpkg33 box] | **0.035** (0.035, 0.035, 0.035) |
 | Numedalslågen | query_features (gpkg33, 0.44 GB) | **0.235** (0.320, 0.235, 0.177) |
