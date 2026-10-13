@@ -96,8 +96,8 @@ class Bounds(BaseModel):
 
 class IndexWindow(BaseModel):
     """`rows x cols` nodes starting at `(row0, col0)`. It lives here, not in
-    `mosaic.py`, so the readers in `io/` can take one without importing the
-    mosaic, which imports them."""
+    `mosaic.py`, so the readers in `io/` can take one without importing
+    `mosaic.py`, which itself imports this module."""
 
     model_config = ConfigDict(frozen=True)
 

@@ -9,8 +9,9 @@ read-only, and it also opens a GeoPackage as a read-only SQLite connection,
 because SQLite cannot read a Python stream; that connection is
 `geopackage.py`'s stream. Its two writers are the tile cache's
 (`CacheWriter`) and the one writable SQLite connection the GeoPackage writer
-fills. Every other module here takes or returns streams, bytes or an open
-connection, so it is testable with no filesystem.
+fills. Every other module opens nothing: most take or return streams, bytes
+or an open connection and are testable with no filesystem; the domain, station
+and river readers take a path and read it through `repository.py`.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 """A cut run's index, `<out>.pieces/index.json`, and the seam check before it is written.
 
-`MeshIndex` is frozen and refuses an unknown key: it is read by programs other
-than this one (a step that joins the pieces, any consumer), so a key it does
-not know is drift, not data.
+`MeshIndex` is frozen and refuses an unknown key: it is written for other
+programs to read (the step that will join the pieces, any consumer), so a key
+it does not know is drift, not data.
 
 `check_conformity` is the seam check: the records two pieces wrote of one seam
 edge are equal bit for bit, or the run fails naming the seam and the two

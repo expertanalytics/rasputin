@@ -2,7 +2,7 @@
 
 One LineString per segment: any other geometry, a MultiLineString included, is
 refused naming the segment's `objectid`, and so is an `objectid` that appears
-twice. Exact copies within one `elvid` (vertex lists equal to
+twice. Exact copies within one `elvid` (vertex lists equal within
 `COPY_TOLERANCE`) are dropped by :func:`drop_copies`, so a user's file is
 cleaned as a fetched one is, and the count dropped is returned for the
 commands to print.
