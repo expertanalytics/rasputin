@@ -1,18 +1,17 @@
 """File formats. Decoding and encoding both live here.
 
-`project_structure.md` marked this package as the home of "all file decoding";
-increment 10 makes it the first *encoding* module too, and widens that line.
-The rule the package keeps either way is the one that matters: `io/` knows
-formats and knows nothing about `_core`, so no module in it needs a compiled
-extension in the process.
+`io/` knows formats and knows nothing about `_core`, so no module in it needs a
+compiled extension in the process.
 
-Files are opened in exactly one module, `repository.py`, and only for reading
-(increment 15a, Ola's Q3 ruling): a DEM in many tiles has to be listed and
-read tile by tile, below `cli.py`. It also opens a GeoPackage, read-only
-(increment 16b R2): SQLite cannot read a Python stream, so the open connection
-is `geopackage.py`'s stream. Every other module here takes or returns
-streams and bytes, so it is testable with no filesystem, and nothing in `io/`
-writes a file (`06-cdt-viewer.md`, "no file is written below `cli.py`").
+Files are opened in exactly one module, `repository.py`: a DEM in many tiles
+has to be listed and read tile by tile, below `cli.py`. It reads files
+read-only, and it also opens a GeoPackage as a read-only SQLite connection,
+because SQLite cannot read a Python stream; that connection is
+`geopackage.py`'s stream. Its two writers are the tile cache's
+(`CacheWriter`) and the one writable SQLite connection the GeoPackage writer
+fills. Every other module opens nothing: most take or return streams, bytes
+or an open connection and are testable with no filesystem; the domain, station
+and river readers take a path and read it through `repository.py`.
 """
 
 from __future__ import annotations

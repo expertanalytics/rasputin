@@ -1,33 +1,33 @@
 """A legacy VTK writer: arrays and a vocabulary in, bytes out.
 
-Increment 13 (`docs/increments/13-bundled-mesh.md`). One file carries the
-surface, the constraint edges and each edge's feature bits, for ParaView. Like
-`ply.py` this module is pure: no path, no file, no `_core`. Its first-party
-imports are `features` and `io/mesh_checks.py`, both pure.
+One file carries the surface, the constraint edges and each edge's feature
+bits, for ParaView. Like `ply.py` this module is pure: no path, no file, no
+`_core`. Its first-party imports are `features`, `io/models.py` and
+`io/mesh_checks.py`, all pure.
 
-THE RULINGS THE BYTES ENCODE.
+THE CHOICES THE BYTES ENCODE.
 
-*Ruling 2*: points are `double`, written with `repr` in text and `>f8` packed.
+*Points are `double`*, written with `repr` in text and `>f8` packed.
 
-*Ruling 3*: ASCII by default. Binary legacy VTK is big-endian by the format's
+*ASCII by default.* Binary legacy VTK is big-endian by the format's
 definition, so every packed dtype here is `>`-prefixed -- the PLY writer's
 opposite. Text is this writer's own default; `rasputin mesh` writes binary
-unless given `--ascii` (increment 31).
+unless given `--ascii`.
 
-*Rulings 4 and 5*: every `LINES` cell precedes every `POLYGONS` cell, in the
-file and in every cell array, and every cell array covers every cell, with 0
-on triangles. VTK orders cells lines-first whatever the file says and matches
-cell data by that index, so any other order gives values to the wrong cells in
-silence; an array short of the cell count empties the dataset. With no
-constraint edges the `LINES` block is left out (ruling 4 as revised on
-2026-09-28): vtk 9.7.1 rejects `LINES 0 0`, and a file without the block loads.
+*Lines first, every cell covered*: every `LINES` cell precedes every
+`POLYGONS` cell, in the file and in every cell array, and every cell array
+covers every cell, with 0 on triangles. VTK orders cells lines-first whatever
+the file says and matches cell data by that index, so any other order gives
+values to the wrong cells in silence; an array short of the cell count empties
+the dataset. With no constraint edges the `LINES` block is left out: vtk 9.7.1
+rejects `LINES 0 0`, and a file without the block loads.
 
-*Ruling 6*: the vocabulary travels as a `(bit, name)` table and a fingerprint
-in the dataset's `FieldData`, and each property set on at least one edge gets
+*The vocabulary* travels as a `(bit, name)` table and a fingerprint in the
+dataset's `FieldData`, and each property set on at least one edge gets
 a 0/1 cell array named after it. Every mask goes through `vocabulary.names()`,
 which refuses a bit the vocabulary does not name.
 
-*Ruling 7*: every string goes through one encoder, which refuses control
+*Strings*: every string goes through one encoder, which refuses control
 characters and non-ASCII, and in text escapes `%` then space as VTK does.
 """
 
@@ -44,18 +44,19 @@ from tin_engine.io.mesh_checks import check_int32, checked_ascii
 from tin_engine.io.models import ClassFractions
 
 #: The names this module writes into `FieldData` itself.
-#: ``elevation`` is the point array of heights (increment 12), so no dataset
+#: ``elevation`` is the point array of heights, so no dataset
 #: string may take the name: ParaView's Color By would offer both.
 #: ``land_cover_codes`` names the code system of the cell array
-#: ``land_cover_code`` (increment 16c, R3); the three ``land_cover_*`` arrays
-#: are the sparse table of class fractions (increment 26b, 1.6).
+#: ``land_cover_code``; the three ``land_cover_*`` arrays are the sparse
+#: table of class fractions.
 FRACTION_ARRAYS = ("land_cover_offsets", "land_cover_classes", "land_cover_fractions")
 RESERVED = frozenset(
     {"feature_bits", "feature_names", "feature_vocabulary", "elevation", "land_cover_codes"}
     | set(FRACTION_ARRAYS)
 )
 
-#: The cell array of land-cover codes. Not ``land_cover``: that is 16b's bit 7.
+#: The cell array of land-cover codes. Not ``land_cover``: that is the name of
+#: a feature bit.
 LAND_COVER_CODE = "land_cover_code"
 
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]*")
@@ -89,12 +90,12 @@ def write_vtk(
         vocabulary: what each bit of a mask means.
         fields: extra dataset strings, such as `("crs", "EPSG:25833")`.
         binary: write packed big-endian records instead of text.
-        triangle_codes: `(T,)` land-cover codes (increment 16c, R3), written
+        triangle_codes: `(T,)` land-cover codes, written
             as the `int` cell array `land_cover_code`, 0 on every line.
         land_cover_codes: what the codes are, written as the dataset string
             `land_cover_codes` when non-empty and `triangle_codes` is given.
-        class_fractions: the sparse table of class fractions per triangle
-            (increment 26b), written as the dataset arrays `land_cover_offsets`
+        class_fractions: the sparse table of class fractions per triangle,
+            written as the dataset arrays `land_cover_offsets`
             (`unsigned_int`), `land_cover_classes` (`unsigned_char`) and
             `land_cover_fractions` (`float`).
 
@@ -158,7 +159,7 @@ def write_vtk(
         if name in used
     ]
     if codes is not None:
-        # Ruling 5: every cell array covers every cell; the lines get 0.
+        # Every cell array covers every cell; the lines get 0.
         cell_codes = np.concatenate([np.zeros(len(lines), dtype=np.int64), codes])
         features.append(_numeric(LAND_COVER_CODE, cell_codes, "int", binary))
 
@@ -170,7 +171,7 @@ def write_vtk(
         *dataset,
         f"POINTS {len(points)} double\n".encode("ascii"),
         _body(points, "double", binary),
-        # Ruling 4 as revised: vtk 9.7.1 rejects `LINES 0 0`, so no edges, no block.
+        # vtk 9.7.1 rejects `LINES 0 0`, so no edges, no block.
         *([_cells("LINES", lines, binary)] if len(lines) else []),
         _cells("POLYGONS", polygons, binary),
         # z again, as a point array: Color By -> elevation then shows the heights.

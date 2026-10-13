@@ -1,17 +1,16 @@
 """GeoJSON: the one reading path and its `crs` rule, and the catchment file's bytes.
 
-Audit PR C (`docs/increments/python-audit.md`, section 12, "The one reading
-path"): :func:`read_collection` turns a parsed document into its features
-and the text of its CRS, for `--domain`, `--features`, `catchment --lakes`
-and the station, reference, river and NVE lake files. The `crs` member is
+One reading path for every GeoJSON input: :func:`read_collection` turns a
+parsed document into its features and the text of its CRS, for `--domain`,
+`--features`, `catchment --lakes` and the station, reference, river and NVE
+lake files. The `crs` member is
 GeoJSON 2008's named CRS; a file without one is RFC 7946's WGS 84 where the
 caller allows a default, and a null member is refused whatever the default.
 A `Feature` is one feature, a collection its features, and anything else a
 geometry wrapped as one feature with no properties.
 
-`docs/increments/29-nve-reference-catchments.md`, "The batch" ("The GeoJSON
-writer moves"). Both `rasputin catchment` and `rasputin station-catchments`
-write a catchment file, which `mesh --domain` reads back; this module builds
+Both `rasputin catchment` and `rasputin station-catchments` write a catchment
+file, which `mesh --domain` reads back; this module builds
 its bytes and opens nothing, as `io/ply.py` and `io/vtk_legacy.py` leave the
 writing to their caller.
 """
@@ -72,7 +71,7 @@ def feature_collection(crs: str, features: list[dict[str, Any]]) -> dict[str, An
 
 def catchment_geojson(polygon: Polygon, crs: str, properties: Mapping[str, object]) -> bytes:
     """UTF-8 JSON of a FeatureCollection naming `crs`, with one Feature: the
-    polygon's exterior ring and `properties`, as increment 22 wrote it."""
+    polygon's exterior ring (holes are not written) and `properties`."""
     ring = [[list(xy) for xy in polygon.exterior.coords]]
     feature = {
         "type": "Feature",

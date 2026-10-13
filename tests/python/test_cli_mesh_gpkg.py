@@ -49,7 +49,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 from shapely.geometry import Polygon, box
 
 from class_map_snapshot import CORINE_NATURAL
-from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import HAS_CODECS, KARTVERKET, TIE_X, TIE_Y, needs_codecs
 from recordread import stats_rows_named

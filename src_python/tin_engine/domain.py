@@ -1,14 +1,13 @@
 """The domain polygon's types: :class:`DomainPolygon`, its ``to_crs``, and :func:`check_extent`.
 
 What ``--domain`` reads, and the rules for reading it, are
-``tin_engine.io.domain_file``'s (audit PR C, ``docs/increments/python-audit.md``
-section 12). The domain keeps its own CRS, and :meth:`DomainPolygon.to_crs`
-moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
-16's must-match rule.
+``tin_engine.io.domain_file``'s. The domain keeps its own CRS, and
+:meth:`DomainPolygon.to_crs` moves it into the DEM's, so a domain need not be
+drawn in the DEM's CRS.
 
-Every vertex must lie in the DEM's node rectangle, border included (U4 a):
-outside it there is no bilinear z (R0). That is :func:`check_extent`, run after
-the transform, against the mosaic.
+Every vertex must lie in the DEM's node rectangle, border included: outside it
+there is no bilinear z. That is :func:`check_extent`, run after the transform,
+against the mosaic.
 
 Pure: numpy, shapely, pyproj, pydantic, ``tin_engine.crs`` and ``RasterMeta``.
 No ``_core``, no typer.
@@ -40,7 +39,8 @@ class DomainPolygon(BaseModel):
 
     def to_crs(self, dst: str | CRS) -> DomainPolygon:
         """The domain in ``dst``: each vertex through pyproj's ``always_xy``
-        transform, once, and re-oriented; rings stay straight (R9). The same CRS,
+        transform, once, and re-oriented; edges between vertices stay
+        straight lines in ``dst`` and are not densified. The same CRS,
         by ``same_crs``, returns the same polygon labelled ``target.to_string()``.
         """
         source, target = parse_crs(self.crs), parse_crs(dst)
@@ -62,8 +62,8 @@ class DomainPolygon(BaseModel):
 
 
 def check_extent(domain: DomainPolygon, meta: RasterMeta) -> None:
-    """U4 (a): every vertex in ``meta``'s node rectangle, as the core's
-    ``cell_of`` has it, with ``domain`` already in the DEM's CRS."""
+    """Refuses a domain with a vertex outside ``meta``'s node rectangle, as
+    the core's ``cell_of`` has it, with ``domain`` already in the DEM's CRS."""
     polygon = domain.polygon
     _, y_min, x_max, _ = meta.node_box()
     for ring in (polygon.exterior, *polygon.interiors):

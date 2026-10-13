@@ -1,11 +1,11 @@
 """Joining sampled z to a 2-D mesh, and removing what has none.
 
-Increment 12, R3 and the user's U1 (a). After sampling, every triangle with a
-vertex whose ``valid`` is false goes, every constraint edge with such an
-endpoint goes, and every vertex no remaining triangle uses goes; the rest is
-renumbered. The mesh then has a ragged edge or a hole where the DEM has no
-data, instead of NaN in its points (which breaks ParaView's bounds) or a refusal
-(which would refuse the project's only real DEM).
+After sampling, every triangle with a vertex whose ``valid`` is false goes,
+every vertex no remaining triangle uses goes, and every constraint edge with
+such a vertex as an endpoint goes; the rest is renumbered. The mesh then has a
+ragged edge or a hole where the DEM has no data, instead of NaN in its points
+(which breaks ParaView's bounds) or a refusal (real DEMs routinely have NoData
+cells, at their edges and over water).
 
 Pure numpy, no ``_core``.
 """
