@@ -1,4 +1,4 @@
-"""Triangle geometry for the snow run: `snow/geometry.py` and `crs.site_of`, test R3.
+"""Triangle geometry for the snow run: `snow/geometry.py` and `crs.site_of`.
 
 `docs/increments/46-hbv-snow.md`, *4.3 The sun correction* and *4.9
 Degeneracy and refusal policy*: unit normals per unit inclined area, in true
@@ -6,8 +6,10 @@ east-north-up, the grid normal turned by the grid convergence gamma at the
 mesh's centre (one gamma per mesh). Section 10.5 pins the sign: true azimuth =
 grid azimuth + gamma, so a grid-north vector (0, 1) becomes (sin gamma, cos
 gamma). A zero-area triangle gets the vertical normal and is counted, never a
-NaN; a normal pointing down is turned up. Section 7's R3: normals turned by
-+0.0984 degrees at (506000, 6800000) in EPSG:25833.
+NaN; a normal pointing down is turned up. Section 7's R3 (normals turned by
+one gamma per mesh) is retired with that turn (section 10.5): the sun now sees
+TR2's per-triangle normals, whose sign through J `test_radiation_frame.py`
+pins; `site_of`'s gamma at (506000, 6800000) in EPSG:25833 is still checked.
 
 Interface:
 
@@ -162,7 +164,7 @@ class TestMeasures:
 
 
 class TestConvergence:
-    """R3, and section 10.5's sign: true azimuth = grid azimuth + gamma."""
+    """`site_of`: section 10.5's sign, true azimuth = grid azimuth + gamma."""
 
     def test_site_of_gives_the_east_edges_convergence(self) -> None:
         site = importlib.import_module("tin_engine.crs").site_of("EPSG:25833", X0, Y0)
@@ -186,20 +188,3 @@ class TestConvergence:
         with pytest.raises(ValueError, match="metres") as caught:
             importlib.import_module("tin_engine.crs").site_of(crs, 1_000_000.0, 200_000.0)
         assert unit in str(caught.value)
-
-    def test_a_grid_north_facet_faces_true_azimuth_gamma(self, geometry: ModuleType) -> None:
-        g = geometry.triangle_geometry(*facet(30.0, 0.0), GAMMA_EAST_EDGE)
-        gamma = math.radians(GAMMA_EAST_EDGE)
-        sin30 = 0.5
-        assert_allclose(
-            g.normals[0],
-            [sin30 * math.sin(gamma), sin30 * math.cos(gamma), math.cos(math.radians(30.0))],
-            atol=1e-12,
-        )
-        assert g.aspect_deg[0] == pytest.approx(GAMMA_EAST_EDGE, abs=1e-9)
-
-    def test_the_turn_is_a_rotation_about_up(self, geometry: ModuleType) -> None:
-        for aspect in (90.0, 200.0, 359.0):
-            g = geometry.triangle_geometry(*facet(25.0, aspect), -1.5)
-            assert g.aspect_deg[0] == pytest.approx((aspect - 1.5) % 360.0, abs=1e-9)
-            assert g.slope_deg[0] == pytest.approx(25.0, abs=1e-9)

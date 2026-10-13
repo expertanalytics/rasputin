@@ -165,3 +165,37 @@ class TestSnowJob:
 
     def test_a_frame_interval_below_1_hour_is_refused(self, params: ModuleType) -> None:
         refused_on(("every_hours",), lambda: params.FrameSpec(every_hours=0))
+
+
+class TestShadows:
+    """`SnowJob.shadows` (section 10.5): the radiation design's frozen
+    `RadiationRequest`, not a copy of its fields; None (the default) runs the
+    sun correction under an open sky."""
+
+    def job(self, params: ModuleType, **kw: Any) -> Any:
+        return params.SnowJob(
+            correction=params.SunCorrection(mode="melt_factor"), resources=RESOURCES, **kw
+        )
+
+    def test_the_default_is_no_shadows(self, params: ModuleType) -> None:
+        assert self.job(params).shadows is None
+
+    def test_it_holds_the_radiation_request(self, params: ModuleType) -> None:
+        from tin_engine.radiation.request import RadiationRequest
+
+        request = RadiationRequest(limb="upper", d_near_m=5000.0, d_far_m=5000.0)
+        job = self.job(params, shadows=request)
+        assert job.shadows == request
+        assert isinstance(job.shadows, RadiationRequest)
+
+    def test_the_dump_loads_back_to_an_equal_job(self, params: ModuleType) -> None:
+        from tin_engine.radiation.request import RadiationRequest
+
+        job = self.job(params, shadows=RadiationRequest())
+        dumped = job.model_dump(mode="json")
+        assert dumped["shadows"]["n_directions"] == 64
+        assert params.SnowJob.model_validate(dumped) == job
+        assert self.job(params).model_dump(mode="json")["shadows"] is None
+
+    def test_a_bad_request_is_refused_on_shadows(self, params: ModuleType) -> None:
+        refused_on(("shadows",), lambda: self.job(params, shadows={"n_directions": 48}))

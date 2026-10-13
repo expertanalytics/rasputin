@@ -570,3 +570,11 @@ add_terrain_test(test_radiation_receivers unit/test_radiation_receivers.cpp)
 # (1 and 8 must agree bit for bit).
 add_terrain_test(test_radiation_horizon unit/test_radiation_horizon.cpp)
 target_link_libraries(test_radiation_horizon PRIVATE Threads::Threads)
+
+# The instant evaluator, increment 46 PR 6 = the terrain-radiation design's TR5
+# without its CLI (docs/increments/46-hbv-snow.md section 10.8 "PR 6";
+# terrain-radiation.md R5, I7, I8): the horizon at an azimuth, the lit test,
+# the beam factor, against the reference sun, thread-count independence, the
+# flat plane's sunrise. Header-only (include/terrain/radiation/). Starts threads.
+add_terrain_test(test_radiation_evaluate unit/test_radiation_evaluate.cpp)
+target_link_libraries(test_radiation_evaluate PRIVATE Threads::Threads)

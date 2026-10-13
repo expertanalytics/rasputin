@@ -30,6 +30,22 @@ Interface:
   ISO 8601 time with an offset. Refusals exit 2 and say why.
 - The degenerate count is reported as "1 degenerate triangle".
 - E1 runs only with `RASPUTIN_SLOW=1` (several minutes).
+
+Cast shadows (section 10.5, 10.8's L5 and E2, 10.9's Bygdin run):
+
+- `--dem PATH` (repeatable, as `mesh --dem`) and `--shadows on|off`, default
+  `on` with `--dem` and `off` without. `snow.json`'s job records `shadows`: the
+  default `RadiationRequest` dumped, or null.
+- Refused before any file is written, in plain words: `--shadows on` without
+  `--dem` ("shadows need the DEM the mesh was made from: give --dem"); a DEM in
+  another CRS than the mesh (naming both, as `EPSG:25832` and `EPSG:25833`); a
+  DEM that does not cover the mesh ("does not cover the mesh").
+- E2 (`RASPUTIN_SLOW=1`): on the 2 m mesh, 2027-04-15, the plan-area-weighted
+  domain mean of the day's dI falls by 0.5 to 2.5 W/m^2 with shadows on.
+- The Bygdin run (`RASPUTIN_SLOW=1`, and DTM10 present): looks for
+  `DTM10_UTM33_20260925` under `$RASPUTIN_DATA`, else under a `rasputin_data`
+  directory beside any parent of this file (the main checkout's
+  `../rasputin_data`, also from a worktree); skips when absent.
 """
 
 from __future__ import annotations
@@ -49,7 +65,9 @@ from numpy.testing import assert_allclose, assert_array_equal
 from cli_helpers import USAGE, invoke, ran, squashed
 from ensightread import Animation
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.io.geotiff_write import encode_geotiff
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.radiation.request import RadiationRequest
 from vtkread import read_vtk
 
 X0, Y0, Z = 500000.0, 6800000.0, 300.0
@@ -424,6 +442,14 @@ def synthetic(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return folder
 
 
+@pytest.fixture(scope="module")
+def mesh2(synthetic: Path) -> Path:
+    """The synthetic terrain meshed at --tolerance 2 (294 770 triangles)."""
+    target = synthetic / "mesh2.vtk"
+    ran("mesh", "--dem", str(synthetic / "synth.tif"), "--tolerance", "2", "--out", str(target))
+    return target
+
+
 class TestEndToEnd:
     """The demonstration case: terrain, mesh, two days of snow, opened by the readers."""
 
@@ -505,12 +531,6 @@ class TestE1:
     """Section 6's table, rows 1-3, from the CLI on the 2 m mesh. A miss is first
     checked against the design probe run on the same mesh."""
 
-    @pytest.fixture(scope="class")
-    def mesh2(self, synthetic: Path) -> Path:
-        target = synthetic / "mesh2.vtk"
-        ran("mesh", "--dem", str(synthetic / "synth.tif"), "--tolerance", "2", "--out", str(target))
-        return target
-
     def test_the_2_m_mesh_has_294_770_triangles(self, mesh2: Path) -> None:
         assert len(read_vtk(mesh2.read_bytes()).polygons) == 294_770
 
@@ -524,3 +544,162 @@ class TestE1:
         assert_allclose(got["swe"], swe, rtol=0.02)
         assert got["south"] == pytest.approx(south, abs=1.0)
         assert got["north"] == pytest.approx(north, abs=1.0)
+
+
+def dem_file(path: Path, *, x0: float = 499950.0, y0: float = 6800150.0, epsg: int = 25833) -> Path:
+    """A flat 300 m DEM, 41 by 41 nodes 10 m apart, node (0, 0) at (x0, y0);
+    by default it covers `facets()`."""
+    path.write_bytes(encode_geotiff(np.full((41, 41), 300.0, dtype=np.float32), x0, y0, 10.0, epsg))
+    return path
+
+
+class TestShadowFlags:
+    def test_dem_turns_shadows_on_by_default(self, mesh: Path, tmp_path: Path) -> None:
+        out = tmp_path / "on"
+        snow(mesh, out, "--dem", str(dem_file(tmp_path / "dem.tif")), *SPRING_10, "--days", "1")
+        job = json.loads((out / "snow.json").read_text())["job"]
+        assert job["shadows"] == RadiationRequest().model_dump(mode="json")
+
+    def test_shadows_off_with_a_dem(self, mesh: Path, tmp_path: Path) -> None:
+        out = tmp_path / "off"
+        dem = str(dem_file(tmp_path / "dem.tif"))
+        snow(mesh, out, "--dem", dem, "--shadows", "off", *SPRING_10, "--days", "1")
+        assert json.loads((out / "snow.json").read_text())["job"]["shadows"] is None
+
+    def test_no_dem_is_no_shadows(self, two_days: Path) -> None:
+        assert json.loads((two_days / "snow.json").read_text())["job"]["shadows"] is None
+
+    def test_a_flat_dem_around_the_facets_changes_little(
+        self, mesh: Path, tmp_path: Path, two_days: Path
+    ) -> None:
+        # The flat DEM at the facets' own height hides only a sun below about
+        # half a degree; the two days' mean dI moves by well under 1 W/m^2.
+        out = tmp_path / "on"
+        dem = str(dem_file(tmp_path / "dem.tif"))
+        snow(mesh, out, "--dem", dem, "--sun-correction", "melt-factor", *SPRING_10, "--days", "2")
+        on = Animation.read(out / "snow.case").static(out, "radiation_anomaly_mean")
+        off = Animation.read(two_days / "snow.case").static(two_days, "radiation_anomaly_mean")
+        assert (on <= off).all()
+        assert_allclose(on, off, atol=1.0)
+
+
+class TestShadowRefusals:
+    """L5: each in plain words, before any file is written."""
+
+    def test_shadows_on_without_a_dem(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh, tmp_path / "out", "--shadows", "on",
+            says="shadows need the DEM the mesh was made from: give --dem",
+        )  # fmt: skip
+
+    def test_a_dem_in_another_crs(self, mesh: Path, tmp_path: Path) -> None:
+        dem = dem_file(tmp_path / "dem.tif", x0=290000.0, y0=6800150.0, epsg=25832)
+        output = refused(mesh, tmp_path / "out", "--dem", str(dem), says="EPSG:25832")
+        assert squashed("EPSG:25833") in squashed(output)
+
+    def test_a_dem_that_does_not_cover_the_mesh(self, mesh: Path, tmp_path: Path) -> None:
+        dem = dem_file(tmp_path / "dem.tif", x0=600000.0)
+        refused(mesh, tmp_path / "out", "--dem", str(dem), says="does not cover the mesh")
+
+    def test_a_dem_that_covers_only_part_of_the_mesh(self, mesh: Path, tmp_path: Path) -> None:
+        # The north facet starts at x 500100: a DEM ending at 500050 misses it.
+        dem = dem_file(tmp_path / "dem.tif", x0=499650.0)
+        refused(mesh, tmp_path / "out", "--dem", str(dem), says="does not cover the mesh")
+
+    def test_an_unknown_shadows_value(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh, tmp_path / "out", "--shadows", "maybe", says="'maybe' is not one of 'on', 'off'"
+        )
+
+
+def _data_dir() -> Path | None:
+    """DTM10's directory: `$RASPUTIN_DATA`, else `rasputin_data` beside a parent."""
+    name = "DTM10_UTM33_20260925"
+    if root := os.environ.get("RASPUTIN_DATA"):
+        return Path(root) / name if (Path(root) / name).is_dir() else None
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "rasputin_data" / name).is_dir():
+            return parent / "rasputin_data" / name
+    return None
+
+
+def _plan_area(vtk_path: Path) -> npt.NDArray[np.float64]:
+    mesh = read_vtk(vtk_path.read_bytes())
+    pts, tri = mesh.points, np.array(mesh.polygons, dtype=np.int64)
+    a, b, c = pts[tri[:, 0]], pts[tri[:, 1]], pts[tri[:, 2]]
+    return 0.5 * np.abs(np.cross(b - a, c - a)[:, 2])
+
+
+@pytest.mark.skipif(
+    os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
+)
+class TestE2:
+    """Section 10.8's E2: shadows on the 2 m mesh, one day, 2027-04-15."""
+
+    def test_shadows_lower_the_days_mean_by_half_to_two_and_a_half_w(
+        self, mesh2: Path, synthetic: Path
+    ) -> None:
+        means = {}
+        for flag in ("on", "off"):
+            out = synthetic / f"e2-{flag}"
+            ran(
+                "snow", "--mesh", str(mesh2), "--out", str(out), "--dem",
+                str(synthetic / "synth.tif"), "--shadows", flag,
+                "--start", "2027-04-15T00:00:00+00:00", "--days", "1",
+            )  # fmt: skip
+            means[flag] = Animation.read(out / "snow.case").static(out, "radiation_anomaly_mean")
+        on, off = (means[f].astype(np.float64) for f in ("on", "off"))
+        assert (on <= off).all()
+        w = _plan_area(mesh2)
+        change = float(w @ (on - off) / w.sum())
+        # Probe S1, on 3000 DEM nodes: -1.1 W/m^2. Narrowed at the acceptance run.
+        assert -2.5 <= change <= -0.5, change
+
+
+@pytest.mark.skipif(
+    os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
+)
+class TestBygdin:
+    """Section 10.9's demonstration: Bygdin on DTM10, 122 days, shadows on and off."""
+
+    DOMAIN = Path(__file__).resolve().parents[2] / (
+        "docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson"
+    )
+
+    @pytest.fixture(scope="class")
+    def runs(self, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path, Path]:
+        dtm10 = _data_dir()
+        if dtm10 is None:
+            pytest.skip("DTM10_UTM33_20260925 not found ($RASPUTIN_DATA or ../rasputin_data)")
+        folder = tmp_path_factory.mktemp("bygdin")
+        mesh = folder / "bygdin.vtk"
+        ran(
+            "mesh", "--dem", str(dtm10), "--domain", str(self.DOMAIN), "--tolerance", "10",
+            "--out", str(mesh),
+        )  # fmt: skip
+        for flag in ("on", "off"):
+            ran(
+                "snow", "--mesh", str(mesh), "--dem", str(dtm10), "--shadows", flag,
+                "--days", "122", "--out", str(folder / f"snow-{flag}"),
+            )  # fmt: skip
+        return mesh, folder / "snow-on", folder / "snow-off"
+
+    def test_the_mesh_is_row_22s(self, runs: tuple[Path, Path, Path]) -> None:
+        # 52 198 triangles at --tolerance 10 (ROADMAP row 22), within 1 %.
+        n = len(read_vtk(runs[0].read_bytes()).polygons)
+        assert abs(n - 52_198) <= 522, n
+
+    def test_122_days_of_daily_frames(self, runs: tuple[Path, Path, Path]) -> None:
+        anim = Animation.read(runs[1] / "snow.case")
+        assert anim.case.times == tuple(24.0 * d for d in range(123))
+
+    def test_shadows_only_take_away(self, runs: tuple[Path, Path, Path]) -> None:
+        mesh, on_dir, off_dir = runs
+        on = Animation.read(on_dir / "snow.case").static(on_dir, "radiation_anomaly_mean")
+        off = Animation.read(off_dir / "snow.case").static(off_dir, "radiation_anomaly_mean")
+        assert (on <= off).all()
+        w = _plan_area(mesh)
+        # Probe B2 on DTM10 nodes: -2.7 to -3.3 W/m^2 on the three dates; the
+        # sign and a loose band only, the figure is the acceptance run's.
+        change = float(w @ (on.astype(np.float64) - off) / w.sum())
+        assert -10.0 < change < -0.5, change
