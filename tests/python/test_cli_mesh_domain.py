@@ -36,7 +36,7 @@ import pytest
 import shapely
 from shapely.geometry import Point, Polygon
 
-from cli_driver import (
+from cli_helpers import (
     COLS,
     HOLE,
     ROWS,

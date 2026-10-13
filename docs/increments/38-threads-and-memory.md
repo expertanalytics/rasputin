@@ -459,7 +459,7 @@ where `RASPUTIN_DATA` is introduced) names `RASPUTIN_THREADS` beside it and
 
 ## 8. Tests (`@tester`), red first
 
-Fixtures: the micro DEMs of `tests/python/cli_driver.py` (`rough_dem(16)`, a
+Fixtures: the micro DEMs of `tests/python/cli_helpers.py` (`rough_dem(16)`, a
 16 x 16-node GeoTIFF; the geographic one of `test_cli_mesh_geographic.py`,
 `tests/fixtures/velhas/anadem_velhas.tif`, for the resampled path) and the
 land-cover fraction fixture of `test_cli_mesh_land_cover_fractions.py`. Pools

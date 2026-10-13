@@ -1,7 +1,7 @@
-"""CRS text and the one reprojection site (increment 15b).
+"""CRS text and the one reprojection site.
 
-`docs/increments/15-dem-mosaic.md` R2, R9 and I8. `_transformer` holds the only
-`Transformer.from_crs` in `src_python/`, always with `always_xy=True`: x is
+`_transformer` holds the only `Transformer.from_crs` in `src_python/`, always
+with `always_xy=True`: x is
 easting or longitude and y northing or latitude, whatever the CRS's own axis
 order, which is the convention a GeoTIFF's model space and GeoJSON both use.
 
@@ -31,10 +31,10 @@ from tin_engine.io.models import CUSTOM_SRS_ID, UNDEFINED_SRS, SrsEntry
 from tin_engine.run_record import escaped_ascii
 
 Xy = npt.NDArray[np.float64]
-#: Increment 35, 3.1 (b): an array of `2 * CHUNK_POINTS` points or more is
-#: split into chunks of at least `CHUNK_POINTS` (a chunk of work, about 60 ms
-#: of PROJ on one machine) and mapped on up to `threads` threads, each with its
-#: own `Transformer` (38: the count is the caller's; one worker by default).
+#: An array of `2 * CHUNK_POINTS` points or more is split into chunks of at
+#: least `CHUNK_POINTS` (a chosen chunk of work, about 60 ms of PROJ on one
+#: machine) and mapped on up to `threads` threads, each with its own
+#: `Transformer` (the count is the caller's; one worker by default).
 CHUNK_POINTS = 250_000
 
 
@@ -80,7 +80,8 @@ def transform_bounds(
     src: str | CRS, dst: str | CRS, box: tuple[float, float, float, float]
 ) -> tuple[float, float, float, float]:
     """`(x_min, y_min, x_max, y_max)` in `src` to the box holding its image in
-    `dst`: pyproj's `transform_bounds`, densified, `always_xy` (23a-2)."""
+    `dst`: pyproj's `transform_bounds`, densified, so a curved image edge is
+    held too, `always_xy`."""
     x0, y0, x1, y1 = _transformer(src, dst).transform_bounds(*box, densify_pts=21)
     return x0, y0, x1, y1
 
@@ -91,15 +92,15 @@ def transform_description(src: str | CRS, dst: str | CRS) -> str:
 
 
 def transform_definition(src: str | CRS, dst: str | CRS) -> str:
-    """PROJ's pipeline for `src` to `dst`, to see which steps it takes (16b R5)."""
+    """PROJ's pipeline for `src` to `dst`, to see which steps it takes."""
     return str(_transformer(src, dst).definition)
 
 
 def same_crs(a: str | CRS, b: str | CRS) -> bool:
     """Whether coordinates in `a` and in `b` name the same points: PROJ calls
     them equivalent once both are in x-then-y order, and the operation it
-    builds between them is its `noop` (`docs/increments/python-audit.md`,
-    section 9). No operation is False."""
+    builds between them is its `noop`, so two texts for one CRS compare
+    equal. No operation is False."""
     t = _equivalent_xy(a, b)
     return t is not None and str(t.definition).startswith("proj=noop")
 
@@ -108,9 +109,9 @@ def epsg_matches(crs: CRS) -> tuple[int, ...]:
     """The EPSG codes PROJ offers for `crs`, at every confidence, that sit on
     `crs`'s own base geographic CRS and that PROJ calls equivalent to `crs`
     once both are in x-then-y order (the first leg of `same_crs`), lowest
-    first. Empty when there are none (`docs/increments/geotiff-crs-by-parameters.md`,
-    section 4). A candidate whose axes carry a meridian (EPSG's polar CRSs)
-    is also taken when the operation to it is PROJ's `noop`."""
+    first. Empty when there are none. A candidate whose axes carry a meridian
+    (EPSG's polar CRSs) is also taken when the operation to it is PROJ's
+    `noop`."""
     base = _base_code(crs)
     offered = {int(m.code) for m in crs.list_authority(auth_name="EPSG", min_confidence=0)}
     return tuple(
@@ -201,7 +202,7 @@ def crs_label(crs: str | CRS) -> str:
 
 
 def srs_entry(crs: str | None) -> SrsEntry:
-    """The `gpkg_spatial_ref_sys` row for `crs` (increment 36): an EPSG code is
+    """The `gpkg_spatial_ref_sys` row for `crs`: an EPSG code is
     its own `srs_id` with WKT1_GDAL (what QGIS and GDAL read); a CRS pyproj
     parses but cannot code is 100000 with its WKT2; no CRS, or text pyproj
     refuses, is the reserved undefined cartesian row -1. Never raises."""
@@ -226,7 +227,7 @@ def srs_entry(crs: str | None) -> SrsEntry:
 
 
 class CrsSuggestion(BaseModel):
-    """A conformal CRS for a box (15c, D8): WKT2 on the DEM's datum, its family's name,
+    """A conformal CRS for a box: WKT2 on the DEM's datum, its family's name,
     and its worst point-scale and areal errors over the box."""
 
     model_config = ConfigDict(frozen=True)
@@ -239,7 +240,8 @@ class CrsSuggestion(BaseModel):
 
 
 def suggest_crs(box: tuple[float, float, float, float], geographic_crs: str | CRS) -> CrsSuggestion:
-    """D8: the family by the box's `(W, E, S, N)` latitude and shape, on the
+    """A conformal CRS for a box in a geographic CRS: the family by the box's
+    `(W, E, S, N)` latitude and shape, on the
     DEM's own ellipsoid, its scale factor balanced over the box (`s = 2 /
     (kmin + kmax)` from a unit-scale evaluation), angles to 0.1 degrees."""
     west, east, south, north = box

@@ -83,11 +83,25 @@ class TestNrel:
         assert s.azimuth_deg == pytest.approx(194.34024, abs=5e-6)
         assert s.e0_deg == pytest.approx(39.872046, abs=5e-7)
 
-    def test_the_sun_earth_distance_at_the_nrel_case(self, core: Any) -> None:
-        # Published R = 0.9965422974 AU; delta T for 2003 is 64-65 s, against
-        # the case's 67 s, which moves R by under 1e-10 AU.
+    def test_the_sun_earth_distance_at_the_nrel_case(
+        self, core: Any, pvlib_spa: ModuleType
+    ) -> None:
+        # sun_positions takes no delta T: it uses the default, 64.508 s for
+        # October 2003, against the published case's 67 s. That 2.5 s moves R
+        # by 7.95e-9 AU, so R is checked against pvlib at the default delta T
+        # (bound: R near 1 AU, float64 rounding; checked at this one case), and
+        # against the published 0.9965422974 AU only within the 1e-8 AU that
+        # the delta T gap explains.
         p = core.sun_positions(np.array([NREL_MS], dtype=np.int64), 39.742476, -105.1786, 1830.14)
-        assert p.distance[0] == pytest.approx(0.9965422974, abs=5e-10)
+        delta_t = core.delta_t_seconds(NREL_MS)
+        assert delta_t == pytest.approx(64.508, abs=1e-3)
+        jd = pvlib_spa.julian_day(NREL_MS / 1000.0)
+        jme = pvlib_spa.julian_ephemeris_millennium(
+            pvlib_spa.julian_ephemeris_century(pvlib_spa.julian_ephemeris_day(jd, delta_t))
+        )
+        expected = pvlib_spa.heliocentric_radius_vector(jme)
+        assert p.distance[0] == pytest.approx(expected, abs=1e-12)
+        assert p.distance[0] == pytest.approx(0.9965422974, abs=1e-8)
 
 
 class TestAgainstPvlib:

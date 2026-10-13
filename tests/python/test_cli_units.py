@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from typer.testing import Result
 
-from cli_driver import plain, refused, runner, write_tiff
+from cli_helpers import plain, refused, runner, write_tiff
 from cog_fixtures import VARIANTS, build, write_cache
 from geotiff_fixtures import (
     GT_MODEL_TYPE,

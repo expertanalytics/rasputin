@@ -52,6 +52,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "viz": "viz.scene viz.style viz.svg",
         "viz.fixtures": "", "viz.protocols": "", "viz.style": "",
         "viz.scene": "viz.protocols",
+        "radiation": "", "radiation.time": "",  # 46: UTC milliseconds, NumPy only
         "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection
