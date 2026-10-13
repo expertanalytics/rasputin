@@ -13,10 +13,10 @@ gives other values in four cells of tests 1 and 2, so the comparison is bit
 for bit, not approximate. Coordinates are float64 products of the file value
 and the factor, compared exactly too.
 
-HOW THIS FILE GOES RED. At the design's base 4099 other than 9001 is refused,
-4096 is never read, a projected CRS in feet is refused, `RasterMeta` has no
-`z_unit` or `file_crs`, the readers take no `z_unit=`, `io.geotiff` has no
-`to_metres`, and `plan_mosaic` does not compare height units.
+Red in b1ec3a52: at the design's base 4099 other than 9001 was refused, 4096
+was never read, a projected CRS in feet was refused, and the readers took no
+`z_unit=`. The kill record of tests 1 to 8 is in the commit that wrote this
+sentence.
 """
 
 from __future__ import annotations

@@ -10,11 +10,11 @@ The refusal contract is the earlier design's
 (`docs/increments/geotiff-crs-by-parameters.md`, section 4): every message
 starts with `P`, then names its keys by number.
 
-HOW THIS FILE GOES RED. At the design's base only 3075 = 1 and 8 are read:
-every other file is refused naming 3075, and the polar files would match no
-EPSG code even with a method row, because their EPSG CRSs label their axes by
-meridian (section 4.5, "Matching widened for polar axes"). Test 11 is green
-at the base and must stay so.
+Red in b1ec3a52: at the design's base only 3075 = 1 and 8 were read, every
+other file was refused naming 3075, and the polar files matched no EPSG code
+even with a method row, because their EPSG CRSs label their axes by meridian
+(section 4.5, "Matching widened for polar axes"). Test 11 was green at the
+base and must stay so.
 """
 
 from __future__ import annotations

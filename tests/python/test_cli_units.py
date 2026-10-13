@@ -7,9 +7,9 @@ coordinates. A metre DEM with silent heights is read as today, with one line
 on stderr (Ola's ruling, section 8). A cached source whose catalogue entry
 states metres says "metres" with no assumption.
 
-HOW THIS FILE GOES RED. At the design's base there is no `--z-unit`, a feet
-CRS is refused for its axes, nothing is printed for an assumed unit, and
-`RemoteSource` has no `z_unit`.
+Red in b1ec3a52: at the design's base there was no `--z-unit`, a feet CRS
+was refused for its axes, nothing was printed for an assumed unit, and
+`RemoteSource` had no `z_unit`.
 """
 
 from __future__ import annotations
