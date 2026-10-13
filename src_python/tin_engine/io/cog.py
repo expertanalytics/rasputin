@@ -1,18 +1,17 @@
-"""Decode only the blocks a window needs (increment 23a-1).
+"""Decode only the blocks a window needs.
 
-`docs/increments/23-basin-scale.md`, "Windowed source reads (23a-1)". A
-GeoTIFF's full-resolution page is stored as blocks, tiles or strips; a window
+A GeoTIFF's full-resolution page is stored as blocks, tiles or strips; a window
 of it needs only the blocks it meets. Where those blocks' bytes come from is a
 `BlockSource`: an open file (`LocalTiffBlocks`, here) or the tile cache
 (`io/repository.py`'s `CachedBlocks`). This module never opens a file.
 
 Every block is decoded into its own slice of one preallocated array, so the
-thread count cannot change a value (decided 7, W2). A block a source lacks is
-refused before any block is decoded (decided 6), and a sparse block (byte
-count 0, which tifffile would fill with 0, a valid elevation) is refused
-(decided 5): a DEM's NoData must be stored, not implied.
+thread count cannot change a value. A block a source lacks is refused before
+any block is decoded, and a sparse block (byte count 0, which tifffile would
+fill with 0, a valid elevation) is refused: a DEM's NoData must be stored, not
+implied.
 
-Increment 26a adds `decode_class_window` for a raster of class numbers
+`decode_class_window` reads a raster of class numbers
 (`uint8`, `PixelIsArea`): the same blocks, but an empty block is a run of 0,
 no data by MapBiomas's convention, and the window's corner is the cell's.
 """
@@ -70,7 +69,7 @@ class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the s
 class LocalTiffBlocks:
     """Blocks read from an open GeoTIFF stream; it lacks none.
 
-    `seek` and `read` share one stream, so they run under a lock (decided 8):
+    `seek` and `read` share one stream, so they run under a lock:
     a read is short against a decode, and `os.pread` would exclude `BytesIO`.
     """
 
@@ -120,9 +119,9 @@ def decode_window(
     `source` lacks is `NotCached`, before any block is read; a sparse or
     undecodable block is a `GeoTiffError` naming `source.where` and the block.
 
-    `threads` decoding workers, one by default (38: the count is the caller's,
+    `threads` decoding workers, one by default (the count is the caller's,
     and no module but `resources.py` reads the machine); the count changes no
-    value (W2).
+    value.
     """
     w, page = window, source.page
     ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
@@ -140,16 +139,17 @@ def decode_window(
     out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
     _decode_into(source, w, indices, out, threads)
     to_metres(out, meta)  # heights in metres
-    # The public constructor's copy, not the canvas's no-copy route: M15
-    # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
-    # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
+    # The public constructor, which copies `out`: `DemTile`'s private no-copy
+    # route is kept to `assemble` and `resample`, and a test in test_mosaic.py
+    # greps the package for its name, so it is not named here either. The copy
+    # holds a window's heights twice while it is made.
     return DemTile(meta=meta.windowed(w), array=out)
 
 
 def decode_class_window(
     source: BlockSource, meta: RasterMeta, window: IndexWindow, *, threads: int = 1
 ) -> ClassWindow:
-    """`window` of the class raster `source` holds, as `uint8` (26a).
+    """`window` of the class raster `source` holds, as `uint8`.
 
     `meta` is the page's, as `read_page` gives it, with the upper-left node
     half a cell inside the raster; the window's corner is moved back out to

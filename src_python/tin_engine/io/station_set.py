@@ -1,8 +1,7 @@
-"""Gauging stations and their reference catchments, read back (increment 29, PR 3).
+"""Gauging stations and their reference catchments, read back.
 
-`docs/increments/29-nve-reference-catchments.md`, "The station set". Reads
-what `rasputin fetch-stations` writes, or a user's own GeoJSON of points with
-a `station` property. Every file must carry a `crs` member; duplicate station
+Reads what `rasputin fetch-stations` writes, or a user's own GeoJSON of points
+with a `station` property. Every file must carry a `crs` member; duplicate station
 numbers and the wrong geometry type are refused with a `ValueError` naming
 them. The file is opened by `io/repository.py`, the one module in `io/` that
 opens files.
