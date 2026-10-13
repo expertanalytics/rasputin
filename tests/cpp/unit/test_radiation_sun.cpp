@@ -599,12 +599,11 @@ TEST_CASE("T1 sunrise, transit and sunset of the NREL case on the reference path
     const std::int64_t transit = crossing(azimuth, kNrelDay + 17 * hour, kNrelDay + 20 * hour);
     CHECK(std::abs(rise - (kNrelDay + 47563000)) <= 3000);
     CHECK(std::abs(transit - (kNrelDay + 67564000)) <= 2000);
-    // SPA's published sunset, 17:20:19, comes from its rise-and-set
-    // interpolation, which TR1 does not build; on the reference path the sun
-    // crosses h0' 88 s earlier, at 17:18:50.94 (00:18:50.94 UTC next day),
-    // as pvlib's SPA bisected gives.
-    const std::int64_t set = crossing(e0, kNrelDay + 23 * hour, kNrelDay + 26 * hour);
-    CHECK(std::abs(set - (kNrelDay + 87530937)) <= 2000);
+    // SPA's published sunset, 17:20:19 local, is the UT day's: 16 October's
+    // evening (00:20:19 UTC on the 17th); the reference path crosses h0' at
+    // 17:20:18.40 (pvlib's SPA, bisected the same way).
+    const std::int64_t set = crossing(e0, kNrelDay - hour, kNrelDay + 2 * hour);
+    CHECK(std::abs(set - (kNrelDay + 1219000)) <= 2000);
 }
 
 // --- G: ranges --------------------------------------------------------------

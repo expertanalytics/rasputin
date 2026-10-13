@@ -33,7 +33,7 @@ from typing import Any
 import pytest
 
 from class_map_snapshot import CORINE_NATURAL
-from cli_driver import runner
+from cli_helpers import runner
 from gpkg_fixtures import OLA_NORWAY
 from tin_engine import palettes
 from tin_engine.cli import app

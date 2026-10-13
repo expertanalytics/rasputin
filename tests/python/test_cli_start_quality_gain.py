@@ -60,7 +60,7 @@ import pytest
 import typer
 
 import tin_engine.cli as cli
-from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from recordread import stats_row
