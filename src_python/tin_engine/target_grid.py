@@ -40,9 +40,9 @@ Block = tuple[npt.NDArray[np.float64], npt.NDArray[np.float32]]
 
 
 def _lattice_step(h: float) -> float:
-    """A whole number of metres from 1 to 1000, or 2^-k m for k from 1 to 10."""
-    if not ((h.is_integer() and 1 <= h <= 1000) or h in (2.0**-k for k in range(1, 11))):
-        raise ValueError(f"need 1 to 1000 whole metres, or 2^-k m for k 1 to 10; got {h}")
+    """A whole number of metres from 1 to 1000, or 2^-k m for k from 1 to 3 (43, 9.5)."""
+    if not ((h.is_integer() and 1 <= h <= 1000) or h in (2.0**-k for k in range(1, 4))):
+        raise ValueError(f"need 1 to 1000 whole metres, or 2^-k m for k 1 to 3; got {h}")
     return h
 
 
@@ -99,7 +99,7 @@ class TileWindows:
 def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
     """The source's north-south node spacing in metres at `at` (in the DEM's
     CRS), rounded to whole metres (Q16 (a)), or below a metre to the nearest
-    power of two, at least 2^-10 (43, 4.6); a projected source's own."""
+    power of two, at least 2^-3 (43, 9.5); a projected source's own."""
     if not meta.geographic:
         return _rounded(meta.delta_y)
     lon, lat = at
@@ -111,7 +111,7 @@ def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
 
 
 def _rounded(s: float) -> float:
-    return max(1, round(s)) if s >= 1 else max(2.0**-10, 2.0 ** round(math.log2(s)))
+    return max(1, round(s)) if s >= 1 else max(2.0**-3, 2.0 ** round(math.log2(s)))
 
 
 def target_grid_for(
