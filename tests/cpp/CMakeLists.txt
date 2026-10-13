@@ -554,3 +554,9 @@ target_link_libraries(test_hbv_snow PRIVATE Threads::Threads)
 # "Verification plan" item 1): Julian day, delta T, NREL's test case, SPA's
 # term tables, the refraction guard. Header-only (include/terrain/radiation/).
 add_terrain_test(test_radiation_sun unit/test_radiation_sun.cpp)
+
+# The receiver frame, increment 46 PR 4 = the terrain-radiation design's TR2
+# (docs/increments/46-hbv-snow.md section 10.8; terrain-radiation.md R3, I3):
+# the east-north-up basis, the ground step through J, the receiver checks.
+# Header-only (include/terrain/radiation/).
+add_terrain_test(test_radiation_receivers unit/test_radiation_receivers.cpp)
