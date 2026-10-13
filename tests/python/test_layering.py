@@ -33,6 +33,7 @@ LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
         "io.models": "", "features": "", "sources": "", "run_record": "", "stats": "",
         "palettes": "", "hydrography": "", "tin_engine": "",
+        "snow": "", "snow.params": "",  # 46: HBV snow parameters, Pydantic only
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",

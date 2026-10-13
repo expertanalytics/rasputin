@@ -406,12 +406,15 @@ class TestRefusals:
 
 
 def test_step_releases_the_gil(core: Any) -> None:
+    # 400 000 triangles x 10 bins, 50 steps: about 0.6 s on an M-series Mac
+    # (5 steps took 0.066 s), a tenfold margin over the 0.05 s floor. More steps,
+    # not more triangles, so the state stays at 64 MB.
     n = 400_000
     s = core.SnowState.uniform(n, ten(core), 600.0)
     t, p, di = np.full(n, 3.0), np.full(n, 1.0), np.full(n, 80.0)
 
     def run() -> None:
-        for _ in range(5):
+        for _ in range(50):
             step(core, s, t, p, di, mode="melt_factor", dt=3600.0, threads=1)
 
     _, ticks, elapsed = ticks_during(run)
