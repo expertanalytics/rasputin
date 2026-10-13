@@ -2998,8 +2998,8 @@ def snow(
         centre = (v[:, :2].min(axis=0) + v[:, :2].max(axis=0)) / 2 if len(v) else (0.0, 0.0)
         site = site_of(arrays.crs, float(centre[0]), float(centre[1]))
     except ValueError as exc:
-        degrees = "snow needs a mesh in a projected CRS in metres; this one is in degrees"
-        why = degrees if "in degrees" in str(exc) else str(exc)
+        _, unit, rest = str(exc).partition("this one is in ")
+        why = f"snow needs a mesh in a projected CRS in metres; {unit}{rest}" if unit else str(exc)
         raise typer.BadParameter(why, param_hint="--mesh") from exc
     given = {"days": days, "step_minutes": step_minutes}
     try:

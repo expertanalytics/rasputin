@@ -108,7 +108,8 @@ class FrameSpec(BaseModel):
 
 class SnowJob(BaseModel):
     """Everything one snow run needs besides the mesh. Refuses frames that do
-    not fall on whole steps."""
+    not fall on whole steps, a spring that is not whole frames, and more
+    frames than the animation's four-digit numbers can count."""
 
     model_config = _FROZEN
 
@@ -131,5 +132,16 @@ class SnowJob(BaseModel):
             raise ValueError(
                 f"a frame every {frames.every_hours} h is not a whole number of "
                 f"{spring.step_minutes}-minute steps"
+            )
+        if spring is not None and spring.days * 24 % frames.every_hours:
+            raise ValueError(
+                f"{spring.days} days is not a whole number of {frames.every_hours}-hour frames"
+            )
+        # Frames are numbered from 0 at the start; the case file's swe****.var
+        # pattern has four digits, so the last frame's number is at most 9999.
+        if spring is not None and (n := spring.days * 24 // frames.every_hours + 1) > 10_000:
+            raise ValueError(
+                f"{spring.days} days with a frame every {frames.every_hours} h is {n:,} frames, "
+                "more than the 10,000 the animation can number"
             )
         return frames

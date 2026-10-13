@@ -306,10 +306,12 @@ class Site(BaseModel):
 
 def site_of(crs: str | CRS, x: float, y: float) -> Site:
     """Where `(x, y)` in the projected `crs` lies on the globe; a geographic
-    CRS is a ValueError."""
+    CRS, or a projected one not in metres, is a ValueError naming the unit."""
     c = parse_crs(crs)
     if not c.is_projected:
         raise ValueError("a projected CRS in metres is needed; this one is in degrees")
+    if units := [a.unit_name for a in c.axis_info if a.unit_conversion_factor != 1.0]:
+        raise ValueError(f"a projected CRS in metres is needed; this one is in {units[0]}")
     lon, lat = _transformer(c, c.geodetic_crs or "EPSG:4326").transform(x, y)
     factors = Proj(c).get_factors(lon, lat)
     return Site(lat_deg=lat, lon_deg=lon, convergence_deg=factors.meridian_convergence)
