@@ -1,13 +1,13 @@
-"""GeoPackage features, read without GDAL (increment 16b R2, R3).
+"""GeoPackage features, read without GDAL.
 
-`docs/increments/16b-terrain-polygons.md` R3; the blob header is OGC 12-128r18
-section 2.1.3, the R-tree Annex F.3. The decoder's stream is an open
-``sqlite3.Connection`` (``io.repository.open_geopackage``): this module opens
+The blob header is OGC 12-128r18 section 2.1.3, the R-tree Annex F.3. The
+decoder's stream is an open ``sqlite3.Connection``
+(``io.repository.open_geopackage``): this module opens
 nothing, knows no path and no CRS object, and imports no ``_core``. The CRS it
 reports is text for ``crs.parse_crs``.
 
 Rows come in primary-key order, whatever order SQLite or the R-tree holds
-them in, because the mesh depends on input order (R7).
+them in, because the mesh depends on input order.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from shapely.geometry.base import BaseGeometry
 
 #: `PRAGMA application_id` of a GeoPackage: "GPKG".
 APPLICATION_ID = 0x47504B47
-#: Envelope code -> bytes after the 8-byte header (R3); 5-7 are refused.
+#: Envelope code -> bytes after the 8-byte header; 5-7 are refused.
 _ENVELOPE_BYTES = {0: 0, 1: 32, 2: 48, 3: 48, 4: 64}
 
 Box = tuple[float, float, float, float]
@@ -132,9 +132,11 @@ def query_features(
     scale: float = 100_000.0,
 ) -> Iterator[RawFeature]:
     """Every row whose R-tree box, widened by ``s * max(1, s / scale)`` with
-    ``s`` its width plus height (R5, "Long edges"), meets the closed ``box``
+    ``s`` its width plus height, meets the closed ``box``
     ``(minx, miny, maxx, maxy)``; every row with no box or no R-tree. A
-    superset of the rows meeting ``box``, in primary-key order."""
+    superset of the rows meeting ``box``, in primary-key order. The widening
+    is for long edges: an edge straight in the file's CRS is drawn straight
+    in the DEM's, and the two lines part by up to that much."""
     columns = {
         row[1].lower(): row[1] for row in conn.execute(f"PRAGMA table_info({_q(layer.table)})")
     }

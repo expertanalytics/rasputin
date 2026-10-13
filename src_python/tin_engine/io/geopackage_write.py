@@ -1,9 +1,8 @@
-"""A mesh as a GeoPackage, written without GDAL (increment 36).
+"""A mesh as a GeoPackage, written without GDAL.
 
-`docs/increments/36-geopackage-output.md`, sections 4 and 5: the mirror of
-`io.geopackage`. The stream is an open ``sqlite3.Connection``; this module
-opens nothing, knows no path, no CRS object and no ``_core``. The blob header
-is OGC 12-128r18 section 2.1.3 (``GP``, version 0, flags ``0b0011``:
+The mirror of `io.geopackage`. The stream is an open ``sqlite3.Connection``;
+this module opens nothing, knows no path, no CRS object and no ``_core``. The
+blob header is OGC 12-128r18 section 2.1.3 (``GP``, version 0, flags ``0b0011``:
 little-endian with a 32-byte XY envelope stored as ``minx, maxx, miny,
 maxy``), the R-tree Annex F.3, attribute tables section 2.3.
 
@@ -29,7 +28,8 @@ from tin_engine.features import EdgeVocabulary
 from tin_engine.io.geopackage import APPLICATION_ID
 from tin_engine.io.models import UNDEFINED_SRS, SrsEntry
 
-#: What every ``last_change`` and ``update_time`` says (design question 3).
+#: What every ``last_change`` and ``update_time`` says, so the same run gives
+#: the same bytes.
 FIXED_TIME = "1970-01-01T00:00:00.000Z"
 #: The colour of a code the palette lacks: the ParaView preset's NaN colour.
 UNNAMED_COLOUR = "#ff00ff"

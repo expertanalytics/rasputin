@@ -1,30 +1,26 @@
-"""A DEM held as tiles on disk: headers first, pixels on request (increment 15a).
+"""A DEM held as tiles on disk: headers first, pixels on request.
 
-`docs/increments/15-dem-mosaic.md` R1-R3 and Ola's Q3 ruling: this is the one
-module in `io/` that opens files, and it opens them read-only (`"rb"`). It
-only stores: which tiles there are (`footprints`, header-only) and one tile's
-pixels (`load`). Choosing tiles and stitching them is `tin_engine.mosaic`'s,
-the same grid arithmetic for any storage.
+The one module in `io/` that opens files; the readers and writers elsewhere in
+`io/` take bytes, a stream or a connection from here. Reads open files
+read-only (`"rb"`); the two writers are `CacheWriter` and `create_sqlite`.
 
-Increment 23a-1 adds windowed loads (`load_window`, only the blocks a window
-meets) and the tile cache's read side (`CacheRepository`): a source fetched
-by `rasputin fetch` (23a-2) is read from `<cache>/<source>/` alone, offline.
-Increment 23a-2 adds the cache's write side (`CacheWriter`), the one writer
-of `<cache>/<source>/`; the tiles and the mesh path still only read.
+`TiffDemRepository` stores, it does not choose: which tiles there are
+(`footprints`, headers only), one tile's pixels (`load`), or only the blocks a
+window meets (`load_window`). Choosing and stitching tiles is
+`tin_engine.mosaic`'s, the same grid arithmetic for any storage.
 
-Increment 16b (R2, R3) adds :func:`open_geopackage`: SQLite cannot read from a
-Python stream, so a GeoPackage's "stream" is a read-only connection opened
-here, and `io/geopackage.py` decodes through it.
+`CacheRepository` reads what `rasputin fetch` copied to `<cache>/<source>/`,
+offline: DEM tiles, a land-cover class raster (`load_class_window`,
+`class_strips`: the cells a box meets, in strips) and the day each object was
+first fetched (`CachedObject.fetched`). `CacheWriter` is the one writer of that
+directory; the mesh path only reads it.
 
-Increment 29 adds :func:`read_json`, for the station and river readers
-(`io/station_set.py`, `io/rivers.py`), which take a path but open nothing.
-Audit PR C adds :func:`read_text`, for `io/domain_file.py`'s WKT domain.
-Increment 36 adds :func:`create_sqlite`, the one writable connection: the
-GeoPackage writer's file, which `io/geopackage_write.py` fills through it.
-
-Increment 26a adds the class raster's reads from the cache
-(`CacheRepository.load_class_window`, `class_strips`: the cells a box meets,
-in strips) and the day each object was first fetched (`CachedObject.fetched`).
+Other files opened here for other modules: `open_geopackage` (SQLite cannot
+read a Python stream, so a GeoPackage is read through a read-only connection,
+and `io/geopackage.py` decodes through it), `create_sqlite` (the one writable
+connection: the GeoPackage file `io/geopackage_write.py` fills), `read_json`
+(station, river, domain and feature files: their readers take a path but open
+nothing) and `read_text` (a WKT domain).
 """
 
 from __future__ import annotations
@@ -71,13 +67,13 @@ if TYPE_CHECKING:
 
     from tin_engine.mosaic import MosaicPlan
 
-#: `from_directory` lists these suffixes, in any case (R2).
+#: `from_directory` lists these suffixes, in any case.
 TILE_SUFFIXES = frozenset({".tif", ".tiff"})
 
 
 class DemRepository(Protocol):
-    """Storage only (R1). Sync: `load` is blocking I/O, and an async caller
-    wraps it in `asyncio.to_thread`."""
+    """Storage only: choosing tiles is the caller's. Sync: `load` is blocking
+    I/O, and an async caller wraps it in `asyncio.to_thread`."""
 
     def footprints(self) -> tuple[TileFootprint, ...]:
         """Every tile's header, sorted by name."""
@@ -144,7 +140,7 @@ class TiffDemRepository:
         return cls(paths, nodata=nodata, threads=threads, z_unit=z_unit)
 
     def footprints(self) -> tuple[TileFootprint, ...]:
-        """Read every header once, on the first call, and keep them (R2)."""
+        """Read every header once, on the first call, and keep them."""
         if self._footprints is None:
             headers = {name: self._read(name, read_header) for name in sorted(self._paths)}
             self._footprints = tuple(
@@ -157,7 +153,7 @@ class TiffDemRepository:
         return self._read(name, decode_dem)
 
     def load_window(self, name: str, window: IndexWindow) -> DemTile:
-        """`window` of tile `name`, decoding only the blocks it meets (23a-1)."""
+        """`window` of tile `name`, decoding only the blocks it meets."""
 
         def read(stream: Any, **keys: Any) -> DemTile:
             meta, dtype, page = read_page(stream, **keys)
@@ -181,8 +177,8 @@ class TiffDemRepository:
 
 class CachedRequest(BaseModel):
     """One fetch asked of the cache: the sha256 of the region as given (the
-    domain's WKB and CRS, or the box's numbers and CRS; 23a-2, decided 9) and
-    the date."""
+    domain's WKB and CRS, or the box's numbers and CRS) and the date, so
+    equal requests on one day are logged once."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -201,13 +197,14 @@ class CachedObject(BaseModel):
     header_sha256: str
     header_bytes: int
     block_shape: tuple[int, int]
-    #: The day the header was first fetched (26a); kept over later runs.
+    #: The day the header was first fetched; kept over later runs.
     fetched: datetime.date | None = None
 
 
 class CacheManifest(BaseModel):
-    """`<cache>/<source>/manifest.json`: what the cache is a copy of (23a-2
-    writes it). The blocks present are the directory's, not the manifest's."""
+    """`<cache>/<source>/manifest.json`: what the cache is a copy of
+    (`CacheWriter` writes it). The blocks present are the directory's, not the
+    manifest's."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -296,7 +293,7 @@ class CacheRepository:
         )
 
     def fetched(self, name: str) -> datetime.date | None:
-        """The day object `name`'s header was first fetched (26a), if recorded."""
+        """The day object `name`'s header was first fetched, if recorded."""
         self.footprints()
         return self._fetched[name]
 
@@ -309,13 +306,13 @@ class CacheRepository:
         return decode_window(self._blocks(name), meta, dtype, window, threads=self._threads)
 
     def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow:
-        """`window` of the class raster `name` (26a), empty blocks as 0."""
+        """`window` of the class raster `name`, empty blocks as 0."""
         meta = self._page(name)[0]
         return decode_class_window(self._blocks(name), meta, window, threads=self._threads)
 
     def class_strips(self, name: str, box: Bounds, *, rows: int) -> Iterator[ClassWindow]:
         """The cells of `name` whose interior meets `box`, clipped to the
-        raster, top to bottom in strips of at most `rows` rows (26a). A box
+        raster, top to bottom in strips of at most `rows` rows. A box
         meeting no cell is a `ValueError`."""
         meta = self._page(name)[0]
         x0, y0 = meta.x_min - meta.delta_x / 2, meta.y_max + meta.delta_y / 2  # the raster's corner
@@ -331,7 +328,8 @@ class CacheRepository:
 
     def check(self, plan: MosaicPlan) -> None:
         """One `NotCached` for every block the plan needs and the cache lacks,
-        before any is decoded (decided 6)."""
+        so a run stops before any decode, with the whole count, rather than at
+        the first window that lacks a block."""
         missing = needed = 0
         for placement in plan.tiles:
             blocks = self._blocks(placement.name)
@@ -350,13 +348,14 @@ class CacheRepository:
 
 
 class CacheWriter:
-    """The write side of `<root>/<source>/` (23a-2, "The cache"). `manifest`
-    and `present` read without the lock, for a dry run; every `put_*` and
-    `discard` run inside `with writer:`, which holds `.lock` by `flock`
-    (decided 5: refused if held, dropped by the OS when the process dies) and
-    clears stray `.part` files. Every file is written as `<name>.part` and
-    renamed, so a crash never leaves half a file under the real name; only the
-    manifest is fsynced (decided 10)."""
+    """The write side of `<root>/<source>/`. `manifest` and `present` read
+    without the lock, for a dry run; every `put_*` and `discard` run inside
+    `with writer:`, which holds `.lock` by `flock` (one fetch per source at a
+    time: refused if held, and dropped by the OS when the process dies, so
+    there is no stale lock) and clears stray `.part` files. Every file is
+    written as `<name>.part` and renamed, so a crash never leaves half a file
+    under the real name; only the manifest is fsynced, since a fetch writes
+    thousands of block files."""
 
     def __init__(self, root: Path, source: str) -> None:
         self.directory, self.source = Path(root) / source, source
@@ -404,7 +403,7 @@ class CacheWriter:
         self._put(self.directory / "NOTICE.txt", text.encode())
 
     def discard(self) -> None:
-        """Everything of the source but the lock (`--refresh`, decided 11)."""
+        """Everything of the source but the lock (`--refresh`)."""
         for child in self.directory.iterdir():
             if child.is_dir():
                 shutil.rmtree(child)
@@ -428,7 +427,7 @@ class CacheWriter:
 
 
 def open_geopackage(path: Path) -> sqlite3.Connection:
-    """``path`` as a read-only SQLite connection (16b R3). The caller closes it.
+    """``path`` as a read-only SQLite connection. The caller closes it.
 
     A URI with ``mode=ro``: a missing file is refused, not created, and the
     file's SpatiaLite triggers never fire. ``as_uri`` percent-encodes a ``?``,
@@ -438,7 +437,7 @@ def open_geopackage(path: Path) -> sqlite3.Connection:
 
 
 def create_sqlite(path: Path) -> sqlite3.Connection:
-    """A writable SQLite connection to ``path`` (increment 36), created if
+    """A writable SQLite connection to ``path``, created if
     missing. Removing a stale file first, and renaming the finished one, are
     the caller's: this module deletes and writes nothing outside the
     connection it hands back. The caller closes it, in the thread that opened
@@ -447,13 +446,13 @@ def create_sqlite(path: Path) -> sqlite3.Connection:
 
 
 def read_json(path: Path) -> Any:
-    """The JSON document in ``path``, read-only (increment 29's readers)."""
+    """The JSON document in ``path``, read-only."""
     with Path(path).open("rb") as stream:
         return json.load(stream)
 
 
 def read_text(path: Path) -> str:
-    """The text in ``path``, decoded as UTF-8 (audit PR C's WKT domain)."""
+    """The text in ``path``, decoded as UTF-8 (a WKT domain file)."""
     return Path(path).read_text(encoding="utf-8")
 
 

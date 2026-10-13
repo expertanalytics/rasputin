@@ -1,20 +1,19 @@
-"""The DEM a run meshes, from a declarative request (increment 15a, R1).
+"""The DEM a run meshes, from a declarative request.
 
-`docs/increments/15-dem-mosaic.md` R1 and R11. A `DemRequest` names the
-sources, the box and the caller's NoData; `open_dem` lists the tiles, plans the
-mosaic and assembles it. `cli.py` parses flags into a request and calls
-`open_dem`; a GUI backend or an API worker builds the same request without
-Typer. Besides `io/repository.py`, this is the one module below `cli.py`
-with paths, and it only hands them to the repository.
+A `DemRequest` names the sources, the box and the caller's NoData; `open_dem`
+lists the tiles, plans the mosaic and assembles it. `cli.py` parses flags
+into a request and calls `open_dem`; a GUI backend or an API worker builds
+the same request without Typer. Besides `io/repository.py`, this is the one
+module below `cli.py` with paths, and it only hands them to the repository.
 
-With a domain (increment 15b, R4 point 5, R6 and R9), the domain is moved into
-the DEM's CRS first; its bounds take the box's place, the polygon grown by one
-cell is the region whose nodes must be covered, and its extent is checked
-against the plan, all before any tile is loaded (I6).
+With a domain, the domain is moved into the DEM's CRS first; its bounds take
+the box's place, the polygon grown by one cell is the region whose nodes must
+be covered, and its extent is checked against the plan, all before any tile is
+loaded, so a bad domain costs no decoding.
 
-A cached source (increment 23a-1) is a catalogue key and a cache root,
-`CachedSource`, read by `CacheRepository`; its missing blocks are refused
-before any block is decoded, and every tile is decoded by window.
+A cached source is a catalogue key and a cache root, `CachedSource`, read by
+`CacheRepository`; its missing blocks are refused before any block is
+decoded, and every tile is decoded by window.
 """
 
 from __future__ import annotations
@@ -65,9 +64,9 @@ class CachedSource(BaseModel):
 
 
 class DemRequest(BaseModel):
-    """Exactly one directory of tiles, or one or more tile files (R11), or a
-    cached source (23a-1), and at most one of a box in the DEM's CRS and a
-    domain in its own (R6)."""
+    """Exactly one directory of tiles, or one or more tile files, or a cached
+    source, and at most one of a box in the DEM's CRS and a domain in its own,
+    since a domain's bounds are its box."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -101,8 +100,8 @@ class DemRequest(BaseModel):
 class DemInput:
     """The tile to mesh, the plan it was assembled by, a name for the run (the
     directory's name, or the stem of the first file as given), the domain in
-    the DEM's CRS (None without one), and the mosaic's disagreeing seams (Ola's
-    Q1 revised). On the reprojected path (15c-2, D1) `tile` is the target
+    the DEM's CRS (None without one), and the mosaic's disagreeing seams,
+    reported rather than refused. On the reprojected path `tile` is the target
     grid's, `domain` is in the target CRS, and `checks` yields the source's
     nodes there for the final check, with the grid and the DEM's CRS."""
 
@@ -125,7 +124,7 @@ def repository_for(
 ) -> tuple[TiffDemRepository | CacheRepository, str]:
     """The repository over one directory of tiles, over the files given, or
     over a cached source, and the run's name: the directory's name, the first
-    file's stem, or the source's key; `threads` decode its blocks (38).
+    file's stem, or the source's key; `threads` decode its blocks.
     `z_unit` is the caller's height unit."""
     keys: dict[str, Any] = {"nodata": nodata, "threads": threads, "z_unit": z_unit}
     if cached is not None:
@@ -139,7 +138,7 @@ def repository_for(
 def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInput:
     """List, plan and assemble. Every refusal is a `ValueError` (`GeoTiffError`,
     `MosaicError`) or, for a file that cannot be opened, an `OSError`.
-    `resources` (38) is the thread count for the decoders and the pools and
+    `resources` is the thread count for the decoders and the pools and
     the memory budget for the canvas; None is `Resources.fallback()`."""
     res = Resources.fallback() if resources is None else resources
     repository, label = repository_for(
@@ -153,15 +152,16 @@ def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInpu
         domain = grown = None
     else:
         plan, domain, grown = _domain_plan(footprints, request.domain, res.memory_budget)
-    # With a domain the seam report counts only the needed region's nodes
-    # (Ola, 2026-09-28); which value a node takes does not depend on it.
+    # With a domain the seam report counts only the needed region's nodes,
+    # the only ones the mesh can read; which value a node takes does not
+    # depend on it.
     repository.check(plan)
     mosaic = assemble(plan, repository.load, grown, load_window=repository.load_window)
     return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
 
 
 class OutCrsRequiredError(ValueError):
-    """A geographic DEM without a target CRS (Q11 (a)): `head` says why and
+    """A geographic DEM without a target CRS: `head` says why and
     what is suggested; `suggestion.proj` is the `--out-crs` to paste."""
 
     def __init__(self, head: str, suggestion: CrsSuggestion) -> None:
@@ -170,9 +170,10 @@ class OutCrsRequiredError(ValueError):
 
 
 def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
-    """Whether the DEM is resampled onto a target grid (D1, Q12 (a)): it is
-    geographic, or `target_crs` differs from its CRS. A geographic DEM with
-    no target is refused, suggesting a CRS for the box (Q11 (a), D8)."""
+    """Whether the DEM is resampled onto a target grid: it is geographic, or
+    `target_crs` differs from its CRS. A geographic DEM with no target is
+    refused, suggesting a CRS for the box, since the mesh is computed in
+    metres and the choice of projection is the caller's."""
     first = metas[0]
     if request.target_crs is not None:
         target = parse_crs(request.target_crs)
@@ -210,9 +211,10 @@ def _open_reprojected(
     label: str,
     res: Resources,
 ) -> DemInput:
-    """D1's reprojected path: the target grid around the domain (or box) in
-    the target CRS, the source region planned and assembled as 15a does,
-    resampled; the check points are a lazy iterator over the source."""
+    """The reprojected path: the target grid around the domain (or box) in
+    the target CRS, the source region planned and assembled as on the
+    projected path, resampled; the check points are a lazy iterator over the
+    source."""
     source_crs = single_crs((f.meta.crs for f in footprints), MosaicError)
     target = crs_label(str(request.target_crs))
     if request.domain is not None:
@@ -247,7 +249,7 @@ def _domain_plan(
     footprints: Sequence[TileFootprint], given: DomainPolygon, budget: int | None = None
 ) -> tuple[MosaicPlan, DomainPolygon, Any]:
     """The domain in the DEM's CRS, the plan of its bounds with the polygon
-    grown by one cell needed (R4 point 5), and that grown polygon, the needed
+    grown by one cell needed, and that grown polygon, the needed
     region. Grown by the cell diagonal with mitred corners, a superset of the
     four nodes bilinear z reads at any point of the polygon. A refusal names
     both CRSs and keeps its type."""
@@ -255,9 +257,10 @@ def _domain_plan(
     try:
         domain = given.to_crs(crs)
         box = Bounds.of(domain.polygon.bounds)
-        # The cell is the chosen lattice's, not a listed tile's (15b review, B1):
-        # plan on the polygon itself, grow by that plan's cell diagonal, and
-        # re-plan while the lattice chosen has a larger one. The reach only
+        # The cell is the chosen lattice's, not a listed tile's, since the
+        # tiles can differ in spacing: plan on the polygon itself, grow by
+        # that plan's cell diagonal, and re-plan while the lattice chosen has
+        # a larger one. The reach only
         # grows, so this ends, and the region needed is never short of the
         # chosen lattice's own cell.
         plan = plan_mosaic(footprints, box, domain.polygon, memory_budget=budget)
@@ -275,9 +278,10 @@ def _domain_plan(
 
 def _past(box: Bounds, m: RasterMeta) -> Bounds | None:
     """`box` with each edge past `m`'s node rectangle moved out by half a cell,
-    or None when none is. 15a's window snaps an edge within `ALIGN_TOLERANCE`
-    cell of a node line onto it; a domain vertex just past that line needs the
-    next one, and moving the edge half a cell out takes exactly that line."""
+    or None when none is. The mosaic's window snaps an edge within
+    `ALIGN_TOLERANCE` cell of a node line onto it; a domain vertex just past
+    that line needs the next one, and moving the edge half a cell out takes
+    exactly that line."""
     _, y_min, x_max, _ = m.node_box()
     out = (box.x_min < m.x_min, box.y_min < y_min, box.x_max > x_max, box.y_max > m.y_max)
     if not any(out):

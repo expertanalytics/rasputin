@@ -5,7 +5,7 @@ refuse the same values in the same words. Imports nothing first-party.
 A PLY header and a legacy VTK string array are line-oriented ASCII. Any control
 character, not just `\\n`, can forge a line: `\\r` terminates one for every
 CRLF-tolerant reader. A non-ASCII character cannot be encoded at all, and
-`--crs` is free text by ruling 5, so both are a documented `ValueError` a
+`--crs` is free text, written as given, so both are a documented `ValueError` a
 caller meets, never a `UnicodeEncodeError` from inside a writer.
 """
 
