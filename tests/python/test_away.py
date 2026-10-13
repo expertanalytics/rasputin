@@ -403,12 +403,13 @@ def test_back_prints_the_queue_by_branch_and_archives_it(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith(f"Back. Unattended since {iso(NOW)} until {until}")
     at = lines.index("Queued while away (3):")
-    assert lines[at + 1 : at + 7] == [
+    assert lines[at + 1 : at + 8] == [
         "  feat-a",
         "    2026-09-30T19:00:00+00:00 guard_push main: git push",
         "    2026-09-30T21:00:00+00:00 guard_push developer: gh pr merge 1",
         "  feat-b",
         "    2026-09-30T20:00:00+00:00 guard_governance tester: Edit /r/CLAUDE.md",
+        "Push grants: (none)",
         "ASK OLA lines, every worktree's .claude/current-task/:",
     ]
     assert "  session.md: ASK OLA: may I push?" in lines
