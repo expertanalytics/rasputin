@@ -52,7 +52,7 @@ from class_fixtures import (
     class_tiff,
     per_year_entry,
 )
-from cli_helpers import USAGE, invoke
+from cli_helpers import USAGE, invoke, squashed
 from fraction_fixtures import (
     oracle_fractions,
     rows_of,
@@ -198,6 +198,14 @@ def float32_tiff() -> bytes:
     ).getvalue()  # fmt: skip
 
 
+def says(output: str, *words: str) -> None:
+    """Each of `words` in `output`, whitespace ignored on both sides: Rich
+    breaks a long path anywhere inside its panel, at a column that depends on
+    the terminal's width and on the length of the temporary directory."""
+    for word in words:
+        assert squashed(word) in squashed(output), (word, output)
+
+
 class TestRefusals:
     """Each a usage error naming the option, before any phase is timed."""
 
@@ -207,7 +215,8 @@ class TestRefusals:
         target = tmp_path / "x.vtk"
         code, output = mesh(scene, target, *extra)
         assert code == USAGE, output
-        assert "No such option" not in output and "Traceback" not in output, output
+        assert "Nosuchoption" not in squashed(output), output
+        assert "Traceback" not in squashed(output), output
         assert not target.exists()
         assert phases == [], phases
         return output
@@ -219,16 +228,14 @@ class TestRefusals:
             scene, tmp_path, phases,
             "--land-cover", str(scene["file"]), "--land-cover-year", "2025",
         )  # fmt: skip
-        assert "--land-cover-year" in output and "no years" in output, output
+        says(output, "--land-cover-year", "no years")
 
     def test_a_missing_path_lists_the_catalogue(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
     ) -> None:
         missing = tmp_path / "nope.tif"
         output = self.refused(scene, tmp_path, phases, "--land-cover", str(missing))
-        assert "--land-cover" in output and "nope.tif" in output, output
-        for key in ("anadem-v1", "glo30", "mapbiomas-c11"):
-            assert key in output, (key, output)
+        says(output, "--land-cover", "nope.tif", "anadem-v1", "glo30", "mapbiomas-c11")
 
     def test_a_float32_raster(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
@@ -236,8 +243,7 @@ class TestRefusals:
         heights = tmp_path / "heights.tif"
         heights.write_bytes(float32_tiff())
         output = self.refused(scene, tmp_path, phases, "--land-cover", str(heights))
-        assert "--land-cover" in output and "heights.tif" in output, output
-        assert "uint8" in output, output
+        says(output, "--land-cover", "heights.tif", "uint8")
 
     def test_a_map_without_codes(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
@@ -246,13 +252,13 @@ class TestRefusals:
             scene, tmp_path, phases,
             "--land-cover", str(scene["file"]), "--land-cover-map", "property",
         )  # fmt: skip
-        assert "--land-cover-map" in output and "property" in output, output
+        says(output, "--land-cover-map", "property")
 
     def test_a_map_without_land_cover(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
     ) -> None:
         output = self.refused(scene, tmp_path, phases, "--land-cover-map", "mapbiomas-c11")
-        assert "--land-cover-map" in output and "needs --land-cover" in output, output
+        says(output, "--land-cover-map", "needs --land-cover")
 
     def test_a_file_stating_feet_heights_is_refused_naming_it(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
@@ -262,7 +268,7 @@ class TestRefusals:
         feet = tmp_path / "feet_heights.tif"
         feet.write_bytes(feet_classes(vertical=US_SURVEY_FOOT))
         output = self.refused(scene, tmp_path, phases, "--land-cover", str(feet))
-        assert "feet_heights.tif" in output and "US survey feet" in output, output
+        says(output, "feet_heights.tif", "US survey feet")
 
 
 def test_a_feet_raster_passes_the_option_check(
@@ -276,5 +282,5 @@ def test_a_feet_raster_passes_the_option_check(
     target = tmp_path / "x.vtk"
     code, output = mesh(scene, target, "--land-cover", str(feet))
     assert code == USAGE, output
-    assert "outside" in output, output
-    assert "--z-unit" not in output and "neither" not in output, output
+    says(output, "outside")
+    assert "--z-unit" not in squashed(output) and "neither" not in squashed(output), output
