@@ -1,6 +1,7 @@
 """The edge strip: check points where constraints cross grid lines, and
-between them, checked after ``refine``, so that a constraint's heights follow
-the DEM's surface at the grid's resolution and not only at the DEM's nodes.
+between them, checked after ``refine``, since a thin triangle along a
+constraint can hold no DEM node, and ``refine`` checks a triangle only at the
+DEM nodes inside it.
 
 Two calls into ``_core`` and their ``--stats`` rows; no geometry. ``generate``
 runs on both paths while the tile is held; ``run`` is the projected path's
