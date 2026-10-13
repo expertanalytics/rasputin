@@ -347,9 +347,7 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
             )
     if not entries:
         print("  (none)")
-    granted = grant_lines(root, state, flag)
-    if len(granted) > 1:
-        print("\n".join(granted))
+    print("\n".join(grant_lines(root, state, flag)))
     try:  # the recap module is optional to --back; the flag and the queue are not (§3.3)
         from session_state import all_decisions
 
@@ -359,8 +357,6 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
     print("ASK OLA lines, every worktree's .claude/current-task/:")
     for line in decisions or ["(none)"]:
         print(f"  {line}")
-    if len(granted) == 1:  # "(none)" goes last: the queue's own tests read on to the ASK lines
-        print(granted[0])
     if queue.exists():
         archive = state / f"queue-{now.astimezone(UTC):%Y-%m-%d}.jsonl"
         if archive.exists():
