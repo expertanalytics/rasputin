@@ -2,10 +2,11 @@
 
 This module is the **single composition root**: joining the file system to the
 engine is its whole job. The paths it is given are read by
-``tin_engine.dem_input``, ``tin_engine.feature_input`` and the readers in
-``io/``. ``viz/`` is written against protocols and never names a core type,
-while the core never sees a file, a path or a CRS. Everything that has to know
-both sides lives here. The core raster is the exception: it is built in
+``tin_engine.dem_input``, ``tin_engine.feature_input``,
+``tin_engine.class_maps`` (a class-map file) and the readers in ``io/``.
+``viz/`` is written against protocols and never names a core type, while the
+core never sees a file, a path or a CRS. Everything that has to know both sides
+lives here. The core raster is the exception: it is built in
 ``tin_engine.raster``, the one module that constructs it.
 
 The `draw` command in particular:
@@ -283,9 +284,9 @@ DEFAULT_LABEL_LIMIT = 500
 #: magnitude clear of that and shows the gallery what its input said.
 DEFAULT_SNAP_SPACING = 1e-3
 # The start mesh's minimum angle, degrees: a chosen cost. Ruppert's 20.7 degrees
-# does not bound this pass (the lattice does); measured, 25 removes the fans of
-# thin triangles for about 5 % more triangles, and 30 costs about twice the nodes
-# for one fewer sliver.
+# is not what ends this pass (the DEM's node lattice is); measured, 25 removes
+# the fans of thin triangles for about 5 % more triangles, and 30 costs about
+# twice the nodes for one fewer sliver.
 DEFAULT_START_MIN_ANGLE = 25.0
 # With land cover simplified, a chosen 15 degrees: the start pass's added
 # triangles are then all at the class borders, and 15 keeps most of 25's cut in
