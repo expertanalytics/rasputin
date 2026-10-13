@@ -1,10 +1,10 @@
 # Increment 43: height units, feet coordinates and more projection methods
 
-**Status: designed, design review round 1 applied** by `@architect`,
-2026-10-13, on `3406a453` (branch `worktree-units`, master with increment 38
-merged in). Next: `@reviewer` on the design, round 2, then `@tester`'s red
-suite (section 6). Python only, one PR. Not refine or mesh code, so no
-`@perf` acceptance run (section 7).
+**Status: green step done, 7 tests left red; settled by the addendum
+(section 9)** by `@architect`, 2026-10-13, on `0f67a567` (branch
+`worktree-units`). Next: `@tester` applies section 9's test changes, then
+`@developer` the one production change (the A4 floor). Python only, one PR.
+Not refine or mesh code, so no `@perf` acceptance run (section 7).
 
 ## 1. What Ola asked, and what this fixes
 
@@ -333,11 +333,12 @@ by 1 degree, all 24 are refused (no match).
 ### 4.6 Resampled spacing below a metre (A4)
 
 `default_spacing` keeps `max(1, round(s))` for a source spacing `s` of at
-least 1 m and returns `2 ** round(log2(s))` below it, at least 2^-10 m.
-`TargetGrid.spacing` becomes a float that must be a whole number from 1 to
-1000 or 2^-k for k from 1 to 10. Powers of two keep the lattice exact: node
-`(R, K)` at `(K h, -R h)` is still exact in float64 for any coordinate below
-2^43 m at h = 2^-10. The record prints the spacing with `:g`, so a whole
+least 1 m and returns `2 ** round(log2(s))` below it, at least 2^-3 m
+(0.125 m; was 2^-10, section 9.5). `TargetGrid.spacing` becomes a float that
+must be a whole number from 1 to 1000 or 2^-k for k from 1 to 3. Powers of two
+keep the lattice exact: node `(R, K)` at `(K h, -R h)` is exact in float64 for
+any coordinate below 2^50 m at h = 2^-3, and every such node is a whole number
+of millimetres, so the start mesh's 1 mm snap leaves it in place. The record prints the spacing with `:g`, so a whole
 spacing prints as today ("10 m").
 
 | source spacing | today | after |
@@ -376,7 +377,7 @@ written only for a feet file.
 | foot, US survey foot | 0.3048, 1200/3937 m | exact definitions | n/a |
 | unit factor match | `rel_tol=1e-12` | factors of order 0.3 to 1 | pyproj's 957 feet CRSs |
 | pole test for 3075 = 15 | abs(lat) == 90 exactly | GDAL writes the EPSG value | 32661, 5041, 32761, 5042 |
-| sub-metre spacing floor | 2^-10 m | coordinates below 2^43 m | 0.5 m (the A4 probe) |
+| sub-metre spacing floor | 2^-3 m (section 9.5) | the 1 mm snap; coordinates below 2^50 m | 0.5 m (the A4 probe); 2^-1 to 2^-3 at origins to 7.7e6 m (section 9.5) |
 | feature margin | max(100 m, 2 cells) | DEM cells 1 m to 1 km | 10 m and 31 m unchanged |
 | EPSG name for a feet twin | PROJ's equivalence, 1e-10 relative | false origins up to 1e7 m, so 1 mm at most | 2229, 2240, 6420 (0.10 mm), 2263 (6e-11 m) |
 
@@ -452,7 +453,7 @@ not only to the corner; the metre case returning without a write.
 13. **A4**: `default_spacing` of a geographic meta with `delta_y =
     0.0000045` at (10, 50) is 0.5; with 1/9 arc-second 3, with 1 arc-second
     31; a projected 10 m meta 10. `TargetGrid(spacing=0.75)` and `spacing=0`
-    are refused; `0.5` and `2**-10` accepted.
+    are refused; `0.5` and `2**-3` accepted, `2**-4` refused (section 9.5).
 14. **F6**: `source_region` with `cell=1000` reaches 2 km beyond the domain
     (a point 1.5 km out is inside the region), with `cell=10` 100 m (the same
     point is outside).
@@ -517,6 +518,143 @@ metres.
 Pinned after design review round 1: a feet CRS's twin is named by the EPSG
 code PROJ calls equivalent, accepting the 0.1 mm false-origin offset of
 section 4.4.
+
+## 9. Addendum after the green step
+
+`@developer`'s green commit `0f67a567` (300 net lines, Python only) left
+tests red. Full suite in the worktree's venv at `0f67a567`
+(`.venv/bin/pytest -q --no-cov`, 2026-10-13): 7 failed, 7655 passed, 18
+skipped. The commit message reports 8 failed and 7654 passed, but names only
+the 7 below; the eighth is in 9.4. Each is settled here; the changes are
+`@tester`'s (tests) unless marked `@developer`.
+
+### 9.1 The word "feet" on stderr: the ban narrowed
+
+Five cases of `test_cli_mesh_plain_output.py::TestStderr::test_no_banned_word_on_a_successful_run`
+fail on the line of section 4.3 that Ola ruled is printed ("If they are feet,
+give --z-unit ft or us-ft."). Increment 25's rule 6 bans `feet` because it
+meant the refinement's jargon ("0 constraint feet, 0 feet refused").
+
+**Ruled** (Ola, 2026-10-13, recorded by the main session; his words were
+"yes, narrow the ban"): the ban covers that jargon only, and "feet" as a unit
+is allowed. In both copies of the pattern,
+`tests/python/test_cli_mesh_plain_output.py` (`BANNED`) and
+`tests/python/test_run_record.py` (`BANNED`, which a feet DEM's record value
+"metres, converted from US survey feet" would trip), replace `\bfeet\b` by
+`\bconstraint feet\b|\bfeet refused\b`:
+
+```python
+BANNED = re.compile(
+    r"(?i)\buncovered\b|\bconstraint feet\b|\bfeet refused\b|\bstride\b|\bchains\b|"
+    r"\bcoincident\b|\bcarved\b|\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
+)
+```
+
+The comment above each says the narrowing is increment 43's, by Ola's ruling.
+No production change.
+
+### 9.2 The catchment fingerprint: updated
+
+`test_catchment.py::test_no_reach_gives_22s_result_bit_for_bit` hashes
+`repr` of the result's fields, `result.meta` among them, and `RasterMeta`
+gained `z_unit='metre'` and `file_crs=None`. **Update the two constants**;
+do not exclude the fields. The fingerprint is meant to trip on any change to
+the result, the meta included; an exclusion list would hide a later wrong
+`z_unit`. The evidence that nothing else moved, re-run here (a scratch copy of
+`digest` that removes the text `, z_unit='metre', file_crs=None` from the repr,
+and asserts it was there): the stripped digests equal the old constants, so
+the mask, outline, counts and every other field are unchanged.
+
+| constant | old | new |
+|---|---|---|
+| `BOWL_LAKE_DIGEST` | `0efdc506ba2c0d63409f13da1bd761388b34762d2cc10bd26e189755cd902c5f` | `10971eaf66ab83436437537731c04863980e617341f1373761f18b7a70ed9e29` |
+| `BOWL_POINT_DIGEST` | `02ca6c38e46f445b5bf01996531616c130a0942766478a26d69b24346ac1740c` | `ea4f31d3aa5e85fa7f7d0c0090b8415f5de743ef5ae3072330a81a3fbe00a407` |
+
+A comment beside them names the two fields and this check.
+
+### 9.3 A feet DEM's mesh: the 1 mm snap, its own increment
+
+`test_cli_units.py::TestTheFeetDem::test_given_us_ft_the_mesh_is_in_metres`
+cannot pass. The noder snaps every start-mesh vertex to a 1 mm lattice
+anchored at zero (`DEFAULT_SNAP_SPACING`,
+`src_python/tin_engine/cli.py@0f67a567:280`; the anchor is fixed by
+`include/terrain/core/snap_grid.hpp@0f67a567:6-11`, which forbids an offset).
+The fixture's nodes (3 ftUS cells, 0.9144018 m) are off that lattice, so
+boundary vertices move outward by up to 0.5 mm, leave the raster and are
+dropped. Increment 27 recorded the effect ("A limit of the exact rule"),
+then for made-up grids only.
+
+Measured (NumPy emulation of `SnapGrid::snap` and `world`, `llround` half
+away from zero; nodes as `x_min + c * delta_x`):
+
+| grid | anchor at zero: outside / nodes | anchored at the DEM's origin: outside / nodes |
+|---|---|---|
+| the test's 4 x 4, 3 ftUS cells | 7 / 16 | 0 / 16 |
+| metre 4 x 4 at x = 500000.0004 | 4 / 16 | 0 / 16 |
+| metre, 10 m, 1 m and 0.5 m cells, whole-metre origin, 300 x 300 | 0 / 90000, none moved | 0 / 90000, none moved |
+| 300 x 300, 1 ftUS cells | 300 / 90000 | 0 / 90000 |
+| 300 x 300, 3 ft cells, origin (300000, 200000) | 599 / 90000 | 599 / 90000 |
+
+So **anchoring at the DEM's origin is not the fix**: it saves the fixture and
+the first grid by luck, but a far edge whose coordinate is off the lattice
+still moves out (last row). It would change no mesh of a metre DEM with a
+whole-millimetre origin and spacing (no node moves under either anchor), but
+that is moot. The real fix decides how the noder's lattice and a DEM's
+lattice meet (keeping DEM nodes unsnapped, a spacing that divides the cell, or
+clamping a sampled vertex onto the raster's edge); it touches the noder or
+the sampler, so it is not Python-only and is outside this design. **It goes to
+its own increment**, with the main session to propose it to Ola.
+
+In 43, `@tester` splits the test:
+
+- **`test_given_us_ft_the_mesh_is_in_metres`, on a fixture whose nodes are on
+  the lattice**: tie point (6 499 987, 2 098 421) ftUS, scale 3937 x 3937
+  ftUS (3937 ftUS is 1200 m exactly), pixel is area, EPSG:2229, no 4099, the
+  same `HEIGHTS`. Measured through `rasputin mesh --z-unit us-ft` at
+  `0f67a567`: exit 0, 16 points, x from 1981800.0 to 1985400.0, y from
+  635400.0 to 639000.0 (all exact), the z values equal the float64 products
+  cast to float32, `dem_file_crs` as in the test, no assumption line. Assert
+  `points[:, 0].min() == 1981800.0` and `points[:, 1].max() == 639000.0` in
+  place of the half-cell expressions, and keep every other assertion.
+- **`test_a_feet_grid_off_the_millimetre_lattice_keeps_its_edge`**, the old
+  3 ftUS fixture and assertions, marked
+  `@pytest.mark.xfail(strict=True, reason=...)`, the reason naming the 1 mm
+  snap anchored at zero and saying a later increment fixes it. Strict, so the
+  fix turns it into a failure that makes someone remove the mark.
+
+Size: no production line. No `@perf` run: nothing under
+`include/terrain/refinement/` or `include/terrain/mesh/` changes.
+
+### 9.4 The eighth failure
+
+Not reproduced. Two full runs at `0f67a567` each gave the same 7 failures
+and 7655 passes; the commit's message names 7 and leaves the eighth
+unnamed, so it was intermittent; its cause was not found. `@tester` names any test outside 9.1 to 9.3 that fails
+in the red-to-green run, with its output, before `@developer` is spawned.
+
+### 9.5 Found here: the A4 floor below 2^-3 m is off the same lattice
+
+The same emulation over A4's resampled grids (300 x 300 nodes, origin a
+multiple of the spacing, at x = 500000, 4000000 and -1234567 plus a few
+cells): spacings 2^-1, 2^-2 and 2^-3 m move no node. From 2^-4 m (62.5 mm,
+not a whole millimetre) down, 67500 to 89996 of 90000 nodes move and 300 to
+599 leave the raster; at 2^-10 m (0.98 mm, under the snap spacing) 4151 nodes
+also merge (85849 distinct of 90000). Section 4.6 shipped 2^-10 as the floor,
+so a source finer than about 9 cm would mesh wrongly. **`@developer`:** the
+floor becomes 2^-3 m: in `src_python/tin_engine/target_grid.py`,
+`default_spacing`'s `2.0**-10` becomes `2.0**-3`, and `_lattice_step` accepts
+2^-k for k from 1 to 3 (its message says so). No net line. **`@tester`:** in
+`tests/python/test_spacing_and_margin.py`, the accepted case `2.0**-10`
+becomes `2.0**-3`, and `2.0**-4` is refused; `default_spacing` of a
+geographic meta whose `delta_y` is 1e-7 degrees (about 1 cm) is 0.125.
+Sections 4.6, 5 and test 13 are updated to match.
+
+### 9.6 Ruling: push and enqueue
+
+Ola, 2026-10-13, recorded by the main session: yes to pushing increment 43
+and enqueuing it once it is review-approved. The main session holds this yes
+under `.claude/REQUIRED-READING.md`'s approval rules (one push and one
+enqueue; a yes recorded on disk is asked again after a context loss).
 
 ## Review
 
