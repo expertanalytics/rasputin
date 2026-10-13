@@ -1,20 +1,19 @@
 """A PLY writer: arrays in, bytes out.
 
-Increment 10, ruling 6. This module is pure. It takes no path, opens no file,
-imports nothing first-party but `features` (increment 13) and the shared
-checks of `io/mesh_checks.py`, and returns
-`bytes`, which is what keeps the whole format testable with no filesystem, no
-raster and no compiled extension: hand it three arrays and compare the bytes.
+This module is pure. It takes no path, opens no file, imports nothing
+first-party but `features`, `io/models.py` and the shared checks of
+`io/mesh_checks.py`, and returns `bytes`, which is what keeps the whole format
+testable with no filesystem, no raster and no compiled extension: hand it
+three arrays and compare the bytes.
 
-THREE RULINGS ARE ENCODED IN THE BYTES RATHER THAN IN PROSE.
+FOUR CHOICES ARE ENCODED IN THE BYTES RATHER THAN IN PROSE.
 
-*Ruling 1* made binary little-endian the default; increment 13's U2 (a) made
-text the default instead, because the user reads the output. Binary stays
-behind the flag, and its endianness is forced by `<`-prefixed dtypes so the
-output does not depend on the host. Text is this writer's own default;
-`rasputin mesh` writes binary unless given `--ascii` (increment 31).
+*Text or binary.* Text is this writer's own default, because a person reads
+the output; `rasputin mesh` writes binary unless given `--ascii`. Binary is
+little-endian, forced by `<`-prefixed dtypes, so the output does not depend on
+the host.
 
-*Ruling 2* makes the coordinates `double`, and float32 is not an option. At a
+*The coordinates are `double`*, and float32 is not an option. At a
 UTM 33N easting of 430 000 the float32 step is 2**19 * 2**-24 = 3.1 cm, which
 is thirty times coarser than `cli.DEFAULT_SNAP_SPACING`: two nodes the noder
 deliberately kept apart would land on the same coordinate. The ASCII body is
@@ -22,13 +21,13 @@ written with `repr`, the shortest representation that round trips, for the same
 reason -- a fixed number of decimal places loses the millimetre lattice just as
 surely as the narrower dtype would.
 
-*Ruling 3* is why `faces` and `edges` are mutually exclusive. MDAL's caveat is
+*`faces` and `edges` are mutually exclusive.* MDAL's caveat is
 that a host application expects either a 1D mesh (edges) or a 2D one (faces),
 so a single file holding both is readable and may still display as nothing --
 a valid file, a silent half-load, and no error message. The signature is the
 one place that can be refused, so it is refused here.
 
-*Ruling 4* is why there is no z anywhere below. The caller supplies an `(N, 3)`
+*No z is made anywhere below.* The caller supplies an `(N, 3)`
 array; a two-column array is a mistake rather than something to fill in,
 because a flat mesh produced by a code path that has no idea it is flat is a
 wrong answer that looks like a right one.
@@ -72,7 +71,7 @@ def write_ply(
     """Encode one mesh as a PLY file.
 
     Args:
-        vertices: `(N, 3)` float64 coordinates. z is the caller's (ruling 4).
+        vertices: `(N, 3)` float64 coordinates. z is the caller's.
         faces: `(T, 3)` vertex indices, or None. The 2D mesh.
         edges: `(E, 2)` vertex indices, or None. The 1D mesh.
         edge_properties: `(E,)` feature masks to ride along with `edges`.
@@ -80,19 +79,18 @@ def write_ply(
         comments: header comment lines, in order, each without its keyword.
         vocabulary: what each bit of `edge_properties` means. Written as
             `feature_bit <bit> <name>` comments sorted by bit and a
-            `feature_vocabulary <fingerprint>` comment (increment 13, ruling
-            9), after `comments`.
+            `feature_vocabulary <fingerprint>` comment, after `comments`.
         face_codes: `(T,)` land-cover codes, written as the face property
-            `int land_cover_code` after `vertex_indices` (increment 16c, R3).
+            `int land_cover_code` after `vertex_indices`.
             The comment naming the code system is the caller's, in `comments`.
-        face_fractions: the sparse table of class fractions per face (increment
-            26b, 1.6), written as the face lists `land_cover_classes` (`list
+        face_fractions: the sparse table of class fractions per face, written
+            as the face lists `land_cover_classes` (`list
             uchar uchar`) and `land_cover_fractions` (`list uchar float`)
             between `vertex_indices` and `land_cover_code`.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `faces` and `edges` are
-            both given or neither is (ruling 3); if `edge_properties` is given
+            both given or neither is; if `edge_properties` is given
             without `edges`, or does not have one entry per edge; if a comment
             contains a control character, any of which forges a header line in
             a line-oriented format; if a comment is not ASCII, which the
@@ -115,7 +113,8 @@ def write_ply(
     if face_fractions is not None and faces is None:
         raise ValueError("face_fractions needs faces; the edge file has none")
     if vocabulary is not None:
-        # Increment 7's mechanism 3: a bit nobody names is refused, not written.
+        # A bit the vocabulary does not name is refused, not written: no
+        # reader could tell what it means.
         if edge_properties is not None:
             for mask in np.unique(np.asarray(edge_properties)):
                 vocabulary.names(int(mask))
@@ -125,7 +124,7 @@ def write_ply(
             f"feature_vocabulary {vocabulary.fingerprint()}",
         ]
     # Any control character forges a header line (\r too, for CRLF-tolerant
-    # readers), and --crs is free text (ruling 5): io/mesh_checks.py's gate.
+    # readers), and --crs is free text: io/mesh_checks.py's gate.
     for comment in comments:
         checked_ascii(comment, "comment")
 
@@ -170,8 +169,7 @@ def _face_block(
     ascii: bool,
 ) -> tuple[list[str], bytes]:
     """The 2D mesh's block: one variable-length index list per triangle, then
-    optionally its class and fraction lists (increment 26b) and its land-cover
-    code (increment 16c, R3)."""
+    optionally its class and fraction lists and its land-cover code."""
     faces = faces.reshape(-1, 3)
     declaration = [
         f"element face {len(faces)}",
