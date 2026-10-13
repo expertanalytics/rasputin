@@ -422,8 +422,11 @@ class TestT3ThroughTheCli:
             "--out", str(target),
         )  # fmt: skip
         assert code == USAGE, output
-        assert "sources.toml" in output and "source.my-dem" in output, output
-        assert "Traceback" not in output, output
+        # Squashed: Rich breaks the long temporary path inside its panel at a
+        # column set by the terminal width ("sources. toml" on CI's runner).
+        assert "sources.toml" in squashed(output), output
+        assert "source.my-dem" in squashed(output), output
+        assert "Traceback" not in squashed(output), output
         assert not target.exists()
 
     def test_cache_alone_loads_no_user_entries(
@@ -439,7 +442,7 @@ class TestT3ThroughTheCli:
             "--tolerance", "1", "--out", str(tmp_path / "x.vtk"),
         )  # fmt: skip
         assert code == USAGE, output
-        assert "my-dem" in output, output
+        assert "my-dem" in squashed(output), output
 
 
 # ------------------------------------------------------------ T6
