@@ -292,6 +292,11 @@ class TestSectionsPerKind:
         phases = seconds(report)
         assert "decode" in phases and "sample" in phases and "trim" in phases
         assert not any(name.startswith("refine") for name in phases)
+        assert "Threads used:" in section(report, "Timings")  # 38: every DEM run, not only refined
+
+    def test_a_fixture_run_has_no_threads_row(self, report_of: ReportOf) -> None:
+        report, _, _ = report_of("fixture")
+        assert "Threads" not in section(report, "Timings")
 
     def test_a_tolerance_run(self, report_of: ReportOf, monkeypatch: pytest.MonkeyPatch) -> None:
         outcomes: list[Any] = []
@@ -315,7 +320,7 @@ class TestSectionsPerKind:
         assert stats_row(report, "points_inserted_on_nodata") == "0"  # no NoData in bumpy
         assert stats_row(report, "dem_nodes_outside_mesh") == "0"
         assert not re.search(r"\d+ rounds, \d+ points inserted", result.stderr), result.stderr
-        assert "Threads:" in section(report, "Timings")
+        assert "Threads used:" in section(report, "Timings")
         phases = seconds(report)
         for name in (
             "refine",

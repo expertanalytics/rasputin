@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import importlib
 import io
-import os
 import re
 from pathlib import Path
 from types import ModuleType
@@ -254,8 +253,8 @@ class TestW2Determinism:
     def test_p2_the_default_thread_count_changes_no_byte(
         self, cog: ModuleType, geotiff: ModuleType, window: Any, variant: Variant
     ) -> None:
-        """30c P2: a call without `threads` (the machine's cores since 30c,
-        4 before) gives `threads=1`'s bytes."""
+        """30c P2: a call without `threads` (one worker since increment 38,
+        the machine's cores from 30c, 4 before) gives `threads=1`'s bytes."""
         data = build(variant)
         w = window(row0=5, col0=9, rows=40, cols=55)
         one = decoded(cog, geotiff, BytesBlocks(data), data, w, threads=1)
@@ -263,28 +262,27 @@ class TestW2Determinism:
         assert np.asarray(default.array).tobytes() == np.asarray(one.array).tobytes()
 
 
-class TestR1DefaultThreadsAreTheMachines:
-    """30c R1 (`docs/increments/30c-dem-read-speed.md`, section 3.1): without
-    `threads`, `decode_window` builds its pool with `os.cpu_count() or 1`
-    workers; a given `threads` is used as given. The pool is observed through
-    a spy in place of `cog.ThreadPoolExecutor` that records the worker count
-    and builds the real pool, so the decode itself still runs."""
+class TestR1DefaultThreadsIsOne:
+    """Increment 38, section 4.2 (replacing 30c R1): without `threads`,
+    `decode_window` builds its pool with one worker, the library default; no
+    module but `resources.py` reads the core count. A given `threads` is used
+    as given. The pool is observed through a spy in place of
+    `cog.ThreadPoolExecutor` that records the worker count and builds the real
+    pool, so the decode itself still runs."""
 
     @pytest.mark.parametrize(
-        ("cores", "kwargs", "workers"),
+        ("kwargs", "workers"),
         [
-            pytest.param(7, {}, 7, id="seven_cores"),
-            pytest.param(None, {}, 1, id="cores_unknown"),
-            pytest.param(7, {"threads": 9}, 9, id="threads_given"),
+            pytest.param({}, 1, id="default_is_one"),
+            pytest.param({"threads": 9}, 9, id="threads_given"),
         ],
     )
-    def test_the_pool_is_built_with_the_machines_core_count(
+    def test_the_pool_is_built_with_the_count_given_or_one(
         self,
         cog: ModuleType,
         geotiff: ModuleType,
         window: Any,
         monkeypatch: pytest.MonkeyPatch,
-        cores: int | None,
         kwargs: dict[str, int],
         workers: int,
     ) -> None:
@@ -296,7 +294,6 @@ class TestR1DefaultThreadsAreTheMachines:
             return real(*args, **kw)
 
         monkeypatch.setattr(cog, "ThreadPoolExecutor", spy)
-        monkeypatch.setattr(os, "cpu_count", lambda: cores)
         data = build(VARIANTS[0])
         w = window(row0=5, col0=9, rows=40, cols=55)
         tile = decoded(cog, geotiff, BytesBlocks(data), data, w, **kwargs)

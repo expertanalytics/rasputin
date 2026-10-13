@@ -178,7 +178,7 @@ def resample(
 
     def block(r0: int) -> None:
         r1 = min(r0 + rows_per, grid.rows)
-        lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
+        lonlat = reprojector(grid.crs, m.crs, threads=1)(grid.xy(r0, r1))
         row, col = m.index_of(lonlat[:, 0], lonlat[:, 1])
         inside = (col >= 0) & (col <= m.cols - 1) & (row >= 0) & (row <= m.rows - 1)
         out = np.full(col.size, fill, dtype=np.float64)
@@ -236,7 +236,7 @@ def check_point_blocks(
     def block(origin: tuple[int, int]) -> Block | None:
         r0, c0 = origin
         r1, c1 = min(r0 + BLOCK, m.rows), min(c0 + BLOCK, m.cols)
-        move = reprojector(m.crs, grid.crs)
+        move = reprojector(m.crs, grid.crs, threads=1)  # 38: no pool inside a pool
         rows, cols = np.arange(r0, r1, dtype=np.float64), np.arange(c0, c1, dtype=np.float64)
         top, bottom = np.full(cols.size, rows[0]), np.full(cols.size, rows[-1])
         left, right = np.full(rows.size, cols[0]), np.full(rows.size, cols[-1])

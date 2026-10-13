@@ -36,13 +36,14 @@ LAYERS: tuple[dict[str, str], ...] = (
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",
-        "mosaic": "io.models",
+        "mosaic": "io.models resources",
         "target_grid": "crs domain grow io.models",
         "grid_domain": "io.models",
         "domain": "crs io.models",
         "chains": "domain features",
-        "elevation": "", "outline": "", "sensitivity": "", "landcover": "", "decompose": "",
+        "elevation": "", "outline": "", "sensitivity": "", "landcover": "",
         "grow": "",  # 30d: the outline grown, shapely and NumPy only
+        "resources": "",  # 38: the one module that reads the machine; os and Pydantic only
         "burn": "gauge io.models",
         "gauge": "hydrography",
         "reference": "io.models",
@@ -77,26 +78,28 @@ LAYERS: tuple[dict[str, str], ...] = (
         "_core": "",
     },
     {  # L4: pipelines
-        "dem_input": "crs domain grow io.models io.repository mosaic target_grid",
+        "dem_input": "crs domain grow io.models io.repository mosaic resources target_grid",
         "feature_input": "border_simplify crs domain features io.geojson io.geopackage io.gml"
                          " io.repository",
         "catchment": "burn catchment_core crs gauge io.models io.repository mosaic outline"
-                     " sensitivity",
-        "catchment_batch": "catchment crs gauge hydrography io.repository reference",
+                     " resources sensitivity",
+        "catchment_batch": "catchment crs gauge hydrography io.repository reference resources",
         "fetch": "",
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
+        "class_maps": "feature_input features",  # 41: class-map files to ClassMap
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
+        "cli": "_core catchment catchment_batch chains class_maps crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_checks io.models io.ply io.repository io.rivers"
                " io.station_set"
                " io.vtk_legacy land_cover_fractions landcover mcp.server mosaic palettes raster"
-               " run_record sources stats target_grid tin_engine tolerance_field viz.fixtures"
+               " resources run_record sources stats target_grid tin_engine tolerance_field"
+               " viz.fixtures"
                " viz.protocols viz.scene viz.style viz.svg",
         "__main__": "cli",  # 37: `python -m tin_engine`, the server's child
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands

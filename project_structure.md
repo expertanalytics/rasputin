@@ -157,6 +157,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   summary and --record JSON; escaped_ascii, the
                            #   one non-ASCII escape (\xe9) for file fields and
                            #   crs_label; imports json and dataclasses only
+  resources.py             # the one module that reads the machine: cores,
+                           #   memory, cgroup limits; Resources (threads, a
+                           #   memory budget), resolved once per command (38);
+                           #   Pydantic and os only
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core.
@@ -167,9 +171,6 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (bit 9), for a cut run's piece files (23c).
                            #   TerrainFeature: one feature's mask and lines
                            #   (moved from feature_input, audit PR C)
-  decompose.py             # partition: the window cut into cells under
-                           #   --pieces and --memory-budget, b(T); pure, reads
-                           #   no machine (23c)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
@@ -231,9 +232,20 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
-  palettes.py              # CORINE_NATURAL (code -> label, colour) and
-                           #   paraview_preset(); data, imports nothing
-                           #   first-party (16c)
+  class_maps.py            # class maps as data (41): load(name | path |
+                           #   'property') reads a TOML file with tomllib into
+                           #   a ClassMap; derived_cleanup(accuracy, cell):
+                           #   repair, simplify, snap from the larger of the
+                           #   source's accuracy and the DEM cell; imports
+                           #   feature_input and features
+  data/class_maps/         # the shipped maps: corine, corine-water,
+                           #   clc18_kode, mapbiomas-c11 (.toml; codes,
+                           #   labels, colours, water, edges, notice,
+                           #   positional accuracy)
+  palettes.py              # paraview_preset(table, name): a ParaView preset
+                           #   from a code -> (label, colour) table (16c);
+                           #   imports nothing first-party; the CORINE table
+                           #   itself is data/class_maps/corine.toml (41)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core

@@ -48,6 +48,7 @@ import shapely
 from numpy.testing import assert_allclose, assert_array_equal
 from shapely.geometry import Polygon, box
 
+from class_map_snapshot import CORINE_NATURAL
 from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import HAS_CODECS, KARTVERKET, TIE_X, TIE_Y, needs_codecs
@@ -55,7 +56,6 @@ from recordread import stats_rows_named
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.io.geopackage import APPLICATION_ID, GpkgLayer, layer_info, query_features
 from tin_engine.io.repository import open_geopackage
-from tin_engine.palettes import CORINE_NATURAL
 from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
 UTM33 = 25833

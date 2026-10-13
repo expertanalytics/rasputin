@@ -1,0 +1,58 @@
+# run 4 (wait for load < 2.0 twice, then --save-baseline), started 2026-10-12 20:15:03 +0200
+20:15:03 load1 2.06
+20:15:34 load1 2.09
+20:16:04 load1 2.94
+20:16:34 load1 3.32
+20:17:04 load1 3.31
+20:17:34 load1 2.81
+20:18:04 load1 2.97
+20:18:34 load1 3.03
+20:19:04 load1 2.47
+20:19:34 load1 2.03
+20:20:04 load1 2.74
+20:20:34 load1 2.34
+20:21:04 load1 2.04
+20:21:34 load1 2.09
+20:22:04 load1 2.56
+20:22:34 load1 2.50
+20:23:04 load1 2.50
+20:23:34 load1 2.73
+20:24:04 load1 3.04
+20:24:34 load1 2.63
+20:25:04 load1 2.25
+20:25:34 load1 2.10
+20:26:04 load1 2.43
+20:26:34 load1 2.65
+20:27:05 load1 3.37
+20:27:35 load1 3.04
+20:28:05 load1 2.91
+20:28:35 load1 2.51
+20:29:05 load1 1.96
+20:29:35 load1 1.76
+## pmset before
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime
+20:29  up 13 days,  9:35, 5 users, load averages: 1.76 2.49 5.13
+## top CPU users
+ 75.2 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 16.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  5.1 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  3.8 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  1.7 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 66 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 43 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 55 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/baseline-1012/docs/benchmarks/quick/baseline-ac.json
+NO BASELINE: input $RASPUTIN_DATA/sweden_glo30_cache changed
+exit 2
+## pmset after
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime after
+20:31  up 13 days,  9:37, 5 users, load averages: 4.98 3.19 5.02

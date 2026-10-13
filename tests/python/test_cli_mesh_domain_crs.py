@@ -82,6 +82,7 @@ from tin_engine.dem_input import DemInput, DemRequest, open_dem
 from tin_engine.domain import DomainPolygon
 from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geotiff import decode_dem
+from tin_engine.resources import Resources
 from vtkread import VtkFile
 
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING: the noder's grid, applied in the DEM's CRS (R9)
@@ -282,11 +283,12 @@ class TestTheSameCrs:
         return seen
 
     @staticmethod
-    def as_16_opened_it(request: DemRequest) -> DemInput:
+    def as_16_opened_it(request: DemRequest, resources: Resources | None = None) -> DemInput:
         """16's data flow for one file and a domain: the whole file, opened as
         without a domain, and the domain object as `read_domain` returned it.
-        Neither `DomainPolygon.to_crs` nor the window cut to the domain runs."""
-        opened = open_dem(request.model_copy(update={"domain": None}))
+        Neither `DomainPolygon.to_crs` nor the window cut to the domain runs.
+        `resources` is `open_dem`'s second parameter (38), passed through."""
+        opened = open_dem(request.model_copy(update={"domain": None}), resources)
         return dataclasses.replace(opened, domain=request.domain)
 
     def assert_as_16(
