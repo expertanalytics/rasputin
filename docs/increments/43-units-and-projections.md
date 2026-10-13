@@ -443,3 +443,5 @@ in the mesh record only? Default: print it. GLO-30 and ANADEM through the
 cache do not print it, because their catalogue entries state metres.
 
 ## Review
+
+**Design review, round 1, 2026-10-13.** Range `97c10c4d..192d7245`, 0 counted lines, @reviewer: CHANGES REQUESTED. A named feet-CRS twin is 0.1 mm off, not exact (EPSG:2229's false easting is 2000000.0001016 m against EPSG:26945's 2000000 m; state the offset and that PROJ's equivalence decides the name); the height test figures don't say float32 or float64 (default float64, cast once); the order paragraph is stale (38, not 41, shares the call chain; merge master before the red step); no speed line; the noop test of the widened `epsg_matches` is unnamed; section 4.8 overclaims unchanged bytes (the run record changes for cached sources). Suggestions: refuse Mercator variant B's key 3081 unless 0; add `fetch/plan.py`'s `read_page` to the `z_unit` list; a test where a converted height equals NoData; say key 4096 is now read; name the module of `source_region`.
