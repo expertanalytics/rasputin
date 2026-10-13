@@ -61,7 +61,9 @@ LEGACY_TAG = "legacy-archive"
 
 # A path is a token with an extension, which keeps ratios and timestamps out.
 # One starting with `/` is an absolute path or the tail of a URL, never a
-# citation.
+# citation -- except under the main checkout or one of its worktrees, whose
+# prefix ABSOLUTE (below) strips before matching, so a review record's
+# full-path cite is read as the relative form.
 PATH = r"(?<![\w/.-])(?!/)([\w./-]+\.(?:md|py|hpp|cpp|h|yaml|yml|toml|txt|cmake))"
 LINES = r":(\d+)(?:-(\d+))?"
 PINNED = re.compile(PATH + r"@([\w./-]+)" + LINES)
@@ -110,6 +112,17 @@ def in_repo_proper(path: Path) -> bool:
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True)
+
+
+# Review records cite by the full path of the checkout they were written in,
+# `<root>/.claude/worktrees/<name>/<path>@<sha>:<n>` or `<root>/<path>@<sha>:<n>`.
+# `<root>` is the main checkout: the parent of the common git dir, the same
+# whether this copy runs there or inside a worktree (where commits happen).
+# The worktree need not exist on disk; records outlive their worktrees. Any
+# other absolute path (another machine, a sibling directory, a URL) is left
+# alone, and PATH then refuses it.
+ROOT = (REPO / git("rev-parse", "--git-common-dir").stdout.strip()).resolve().parent
+ABSOLUTE = re.compile(rf"(?<![\w/.-]){re.escape(str(ROOT))}/(?:\.claude/worktrees/[\w.-]+/)?")
 
 
 def changed_files(base: str) -> set[str] | None:
@@ -387,7 +400,7 @@ def main() -> int:
         for number, fragments in sorted(text_by_line.items()):
             where = f"{rel_source}:{number}"
             for fragment in fragments:
-                rest = fragment
+                rest = fragment = ABSOLUTE.sub("", fragment)
                 for m in PINNED.finditer(fragment):
                     path, rev, start, end = m.groups()
                     last = max(int(start), int(end or 0))
