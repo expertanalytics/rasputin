@@ -37,14 +37,17 @@ from typing import Any
 import pytest
 
 from harness_fixtures import (
+    Granted,
     Tool,
     add_worktree,
     clean_env,
     commit_at,
+    commit_file,
     flag_on,
     flag_path,
     flag_window,
     git,
+    grants_used_path,
     iso,
     make_repo,
     state_dir,
@@ -245,7 +248,10 @@ def test_entering_for_8h_writes_the_flag_and_starts_keep_awake(
     [(args, kwargs)] = spawn.calls
     assert args[0] == ["caffeinate", "-is", "-t", "34560"]
     assert kwargs.get("start_new_session") is True
-    assert windows(repo) == [{"event": "enter", "since": flag["since"], "until": flag["until"]}]
+    # h20 §3.1: the enter entry carries the grants, `[]` without --grant.
+    assert windows(repo) == [
+        {"event": "enter", "since": flag["since"], "until": flag["until"], "grants": []}
+    ]
     assert "Type y to confirm" in tty.written
     assert "UNATTENDED until" in capsys.readouterr().out
 
@@ -924,3 +930,116 @@ def test_back_from_a_worktree_lists_the_main_checkouts_decisions(
         *(f"  session.md: ASK OLA: main question {n}?" for n in range(7)),
         "  .claude/worktrees/w1: tester-101010.md: ASK OLA: worktree question?",
     ]
+
+
+# ---------------------------------------------------------------- h20 §4.1
+#
+# docs/increments/h20-away-push-grants.md §3.1 and §3.6: `--grant <branch>`
+# names the branches an away window may push, open and enqueue; `--back`
+# reports each grant. Pinned beyond the design's words: a `grants-used.jsonl`
+# line's `act` is one of the act names of §3.2's table ("push", "pull
+# request", "enqueue"); `--back` names a head by its first 7 hex digits.
+
+GRANTED_TEXT = "Granted while away: push, pull request and one enqueue per reviewed head of: "
+
+
+def test_1_each_grant_is_written_to_the_flag_and_the_window_and_shown(repo: Path) -> None:
+    git(repo, "branch", "feat")
+    git(repo, "branch", "other")
+    code, tty, _, _ = enter(repo, ["8h", "--grant", "feat", "--grant", "other"])
+    assert code == 0
+    assert read_flag(repo)["grants"] == ["feat", "other"]
+    [window] = windows(repo)
+    assert window["grants"] == ["feat", "other"]
+    assert GRANTED_TEXT + "feat, other." in tty.written
+
+
+def test_2_no_grant_writes_an_empty_list(repo: Path) -> None:
+    code, _, _, _ = enter(repo, ["8h"])
+    assert code == 0
+    assert read_flag(repo)["grants"] == []
+    assert windows(repo)[0]["grants"] == []
+
+
+@pytest.mark.parametrize("name", ["master", "main", "HEAD", "a..b", "~x", "=x", "a*"])
+def test_3_a_grant_that_is_not_a_plain_branch_name_exits_2_before_the_terminal(
+    repo: Path, name: str
+) -> None:
+    opened = Recorder(raises=AssertionError("the terminal was opened"))
+    spawn = spawner()
+    code = run_main(
+        ["8h", "--grant", name], root=repo, now=NOW, open_tty=opened, spawn=spawn, stop=Recorder()
+    )
+    assert code == 2
+    assert opened.calls == []
+    assert spawn.calls == []
+    assert not flag_path(repo).exists()
+
+
+@pytest.mark.parametrize("argv", [["--back", "--grant", "feat"], ["--grant", "feat"]])
+def test_4_a_grant_without_a_duration_exits_2(repo: Path, argv: list[str]) -> None:
+    flag_on(repo, now=NOW)
+    code = run_main(argv, root=repo, now=NOW, open_tty=no_tty, spawn=spawner(), stop=Recorder())
+    assert code == 2
+    assert flag_path(repo).exists(), "--back ran despite the --grant"
+
+
+def test_5_a_grant_for_a_branch_that_does_not_exist_yet_is_accepted(repo: Path) -> None:
+    code, tty, _, _ = enter(repo, ["8h", "--grant", "later"])
+    assert code == 0
+    assert read_flag(repo)["grants"] == ["later"]
+    assert "does not exist yet" in tty.written
+
+
+def test_6_re_entering_replaces_the_grants(repo: Path) -> None:
+    enter(repo, ["8h", "--grant", "a"])
+    code, _, _, _ = enter(repo, ["8h", "--grant", "b"])
+    assert code == 0
+    assert read_flag(repo)["grants"] == ["b"]
+
+
+def used(at: str, window: str, act: str, head: str, review: tuple[str, str]) -> dict[str, Any]:
+    return {"at": at, "window": window, "branch": "feat", "act": act, "head": head,
+            "review": list(review)}  # fmt: skip
+
+
+def test_7_back_reports_this_windows_granted_acts_and_each_unused_grant(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    built = Granted(tmp_path / "repo", flag=False)
+    repo, head = built.repo, built.head
+    git(repo, "branch", "good", head)
+    git(repo, "checkout", "-q", "-b", "bad", head)
+    late = commit_file(repo, "tools/b.py", "b = 1\n", "a code commit after the review")
+    git(repo, "checkout", "-q", "feat")
+    write_flag(repo, {"since": iso(NOW), "until": iso(NOW + timedelta(hours=8)),
+                      "set_by": "away", "keep_awake_pid": None,
+                      "grants": ["feat", "good", "bad"]})  # fmt: skip
+    review = (built.x, "2026-09-30T18:30:00+00:00")
+    earlier = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    log = [
+        used("2026-09-29T21:00:00+00:00", iso(NOW - timedelta(days=1)), "push", earlier, review),
+        used("2026-09-30T19:10:00+00:00", iso(NOW), "push", head, review),
+        used("2026-09-30T19:20:00+00:00", iso(NOW), "enqueue", head, review),
+    ]
+    grants_used_path(repo).write_text("".join(json.dumps(line) + "\n" for line in log))
+
+    lines = back_lines(repo, capsys, BACK_AT)
+
+    at = lines.index("Push grants (3):")
+    assert at > next(i for i, line in enumerate(lines) if line.startswith("Queued while away"))
+    assert at < next(i for i, line in enumerate(lines) if line.startswith("ASK OLA lines"))
+    feat, good, bad = lines[at + 1 : at + 4]
+    assert feat.startswith("  feat: ")
+    for part in (f"pushed {head[:7]} at 19:10 UTC", f"enqueued {head[:7]} at 19:20 UTC",
+                 f"review of {built.x[:7]}", "recorded 18:30 UTC"):  # fmt: skip
+        assert part in feat, feat
+    assert earlier[:7] not in feat, "an earlier window's act was reported"
+    assert good == f"  good: not used; head {head[:7]} reviewed: yes"
+    assert bad.startswith(f"  bad: not used; head {late[:7]} reviewed: no ("), bad
+    assert "tools/b.py" in bad, bad
+
+
+def test_7_back_with_no_grants_says_none(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    flag_on(repo, now=NOW)
+    assert "Push grants: (none)" in back_lines(repo, capsys, BACK_AT)
