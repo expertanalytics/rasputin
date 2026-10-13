@@ -1441,7 +1441,7 @@ Test strength: I planted 16 faults, one at a time, in a scratch copy. 14 were ca
 
 Citations: `check_citations.py` lists three at-risk citations, and all three are quoted review records of earlier revisions, so they stay.
 - `h9-spawn-briefs.md:763` cites `test_brief.py:335` as the file stood at 4ee0328, where that line is a concurrency refusal. That is still true.
-- `h11-ci-path-filter.md:451`'s `.github/workflows/main.yaml:306-307` [path written out in full by the main session so the citation gate resolves it] was already off on bc01cd8; the `CI result` name was at line 311 there and is at 314 now.
+- `h11-ci-path-filter.md:451`'s `.github/workflows/main.yaml@ce8c364f:306-307` [path written out in full by the main session so the citation gate resolves it] was already off on bc01cd8; the `CI result` name was at line 311 there and is at 314 now.
 - `h10-merge-queue.md:183` is unaffected.
 
 Blocking:
@@ -1502,7 +1502,7 @@ Test strength this round: I planted 10 faults, one at a time. 9 were caught. One
 Gates: 111 tests pass in `test_count_loc.py`, `test_scratch_copy.py` and `test_settings_wiring.py`. 347 tests pass and 15 skip in the copy, in the suites that run with the main venv's older `_core`. `ruff check` and `ruff format --check` are clean, and the prohibited-dependency gate passes. No red-step scaffolding remains.
 
 Citations: `check_citations.py` exits 0 and lists 7 at-risk citations, re-read as quotations:
-- The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `.github/workflows/main.yaml:306` [path written out in full by `@architect` so the citation gate resolves it], `scratch_copy.py:10`). They stay.
+- The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `.github/workflows/main.yaml@ce8c364f:306` [path written out in full by `@architect` so the citation gate resolves it], `scratch_copy.py:10`). They stay.
 - `h3-unattended-u1.md:759` names its revision (`as of 6a19357`). It stays.
 - The other 3 are as in round 1.
 

@@ -1,9 +1,9 @@
 # Increment 42 — Readable Python docstrings and comments
 
-Status: **PR 1 built, not yet reviewed: red (`769ae82a`, 38 tests), green
-(`539cf514`, the checker, 128 counted lines), and the rule, the gate line and
-the citation pins; a follow-up red and green for the label rule's full stop
-(section 6) are next** (`@architect`, 2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
+Status: **PR 1 built, code review round 1 fixes in: red (`769ae82a`, 38
+tests), green (`539cf514`, the checker, 128 counted lines), the rule, the gate
+line and the citation pins, and the label rule's full stop (red `1719aae5`,
+green `8c47988f`, 44 tests); next code review round 2** (`@architect`, 2026-10-13, off master `dd33a9ce`). Six PRs (section 8). Every PR but the
 checker's changes no code: its docstrings and comments are rewritten, and an
 AST comparison (section 6) shows that no code token moved.
 
@@ -639,10 +639,17 @@ rewritten in general terms by the sweep.
   docs write limit: 10 in `tests/python/` (`test_edge_strip.py`,
   `test_feature_input.py`, `test_features.py`, `test_grow.py`,
   `test_viz_svg.py`), and 3 in `src_python/tin_engine/features.py` lines
-  42-45, which cite `viz/svg.py`. The script, run without `--write`, lists
-  them.
-- *Next*: the label rule's full stop (section 6), a red commit by `@tester`
-  (section 9, test 3's follow-up) and a green one by `@developer`.
+  42-45, which cite `viz/svg.py`. Those 13 were pinned by `@tester`
+  (`ae34c441`, the 10 in tests) and `@developer` (`8c47988f`, the 3 in
+  `features.py`); the script now lists none.
+- *The label rule's full stop* (section 6): red `1719aae5` (`@tester`, four
+  tests), green `8c47988f` (`@developer`, the lookahead `(?!\w|\.\w|-\d)`);
+  44 tests pass.
+- *Code review round 1*: the CI step moves `.github/workflows/main.yaml` down
+  six lines, so the six citations of its lines 261 and 306 in
+  `37-mcp-server.md` (two), `cpp-audit.md`, `h11-ci-path-filter.md` and
+  `h16-harness-fixes.md` (two) are pinned to master `ce8c364f`, where they
+  were written against.
 
 ## Estimate
 
@@ -655,3 +662,5 @@ sweep PRs.
 **Design review, round 1, 2026-10-13.** Range `dd33a9ce..61460bef`, 0 counted lines, @reviewer: CHANGES REQUESTED, two blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/docstrings/docs/increments/42-readable-docstrings.md@61460bef:348-354 claims the directive check closes the gap, but it matches `noqa` only directly after `#`; file-level `# ruff: noqa` (as in `src_python/tin_engine/stats.py@dd33a9ce:12`), `# mypy:`, `# pyright:` are missed, and adding `# ruff: noqa` gives "same code" (probed); match `noqa` anywhere in a comment, add the `ruff:`, `mypy:`, `pyright:` and `isort:` prefixes, and a test 7 fixture. (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/docstrings/docs/increments/42-readable-docstrings.md@61460bef:191-199 sets limits on design-file pointers (heading form, at most one per module docstring, none in functions) and says "Checked by", but no rule checks them; 35 of the 65 lines with `.md` pointers are flagged by no pattern (`src_python/tin_engine/crs.py@dd33a9ce:101-102` is a pointer in a function docstring); add a `pointer` rule with a test, or say the reviewer checks pointers and correct the sample paragraph. Suggestions: fold PR 0 into PR 1 or pin per sweep (it touches `tests/` and runs full CI anyway); `help=` strings are exempt so labels can return to `--help`; `--river` should be `--rivers`; same-code mode looks only in `body`, so a bare string under `else`, `finally` or `except` gives a false "differs". Verified: the probe reproduces (601 labels, 404 lines, 62 of 65 files, 3,034 lines); 134 unpinned citations in 27 files; `mesh` carries 8 labels and two `help=` strings carry labels; `tools/check_*` is governed; same-code mode catches a changed default and a dropped `# noqa: N818`; check_citations exit 0. Question for Ola, default yes: PR 1 also lists the checker among `CLAUDE.md` section 4's gates (a rule-file edit). Lesson: probe a directive check with file-level forms as well as inline ones.
 
 **Design review, round 2, 2026-10-13.** Range `423223aa..aa70c016`, 0 counted lines, @reviewer: APPROVED. Verified by rerunning the probe: 668 matches on 441 lines in 63 files, 65 pointer hits, identical to `scan_output.txt`; three pointer hits read, all real; a file-level ruff directive, a changed ruff code and a dropped `type: ignore`, `pragma` or `fmt: skip` all give "differs"; bare strings under `except`, `else`, `finally`, a loop's `else` and a `match` case give "same", a real change under them still "differs"; `--rivers` fixed; check_citations exit 0. Suggestion for the build: ruff also obeys an upper-case `NOQA`; make the directive match case-insensitive (/Users/skavhaug/projects/rasputin/.claude/worktrees/docstrings/docs/increments/42-readable-docstrings.md@aa70c016:376-383) and add a test 7 fixture.
+
+**Code review, round 1, 2026-10-13.** Range `origin/master..8c47988f`, 128 counted lines, @reviewer: CHANGES REQUESTED, two blockers. (1) The new CI step moves `.github/workflows/main.yaml` down 6 lines, so 6 unpinned citations into it now land on the wrong line. (2) The increment file's Status and section 13 are stale. Checked and holding: the SKILL.md rule matches section 4 with the bug-report bullet and no history, the CLAUDE.md gate line, all 176 pins against `git blame`, the empty scope green in a clean environment. Ideas: the `hash` rule misses `path@hash:line` pins (three in `features.py`, for PR 6 to remove); test 94's message "does not exist yet" reads like the red step.
