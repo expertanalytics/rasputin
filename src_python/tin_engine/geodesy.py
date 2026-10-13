@@ -81,8 +81,8 @@ class LocalFrame:
         return metres / self.kx, metres / self.ky
 
     def cell_m(self, meta: RasterMeta) -> float:
-        """A cell of `meta`: its longer side in metres, the chosen size of a
-        cell that is not square in metres."""
+        """A cell of `meta`: its longer side in metres, so a floor counted in
+        cells is never smaller than meant."""
         return max(meta.delta_x * self.kx, meta.delta_y * self.ky)
 
     def meta(self, meta: RasterMeta) -> RasterMeta:

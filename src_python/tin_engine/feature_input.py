@@ -102,9 +102,10 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-    #: The land-cover clean-up, all off by default (the CLI derives them from
-    #: the class map's accuracy: 1, on, 50 and 5 for CORINE): the repair's
-    #: tolerance, the same-class merge, the simplification and the outline snap.
+    #: The land-cover clean-up, all off by default. The CLI turns the merge on
+    #: and derives the three distances from the class map's accuracy (1, 50 and
+    #: 5 m for CORINE on a DEM cell up to 100 m): the repair's tolerance, the
+    #: same-class merge, the simplification and the outline snap.
     repair_m: float = 0.0
     merge_same_class: bool = False
     tolerance_m: float = 0.0
@@ -598,7 +599,14 @@ def _bound(
     dem: CRS, region: Polygon
 ) -> tuple[Widening, Callable[[BaseGeometry], bool], Polygon] | None:
     """For a Transverse Mercator DEM, the edge widening ``w(e)`` in degrees, the
-    test of where it applies, and the region in the source CRS; else None."""
+    test of where it applies, and the region in the source CRS; else None.
+
+    ``B(e)`` bounds a curve's distance from its chord, curvature times length
+    squared over 8, with the curvature of a line straight in longitude and
+    latitude (at most 1.09 tan φ / R) plus a Transverse Mercator line's
+    (tan Δλ / R), over the scale k0; 1.25 carries the sphere to the ellipsoid
+    and covers a null or Helmert datum step. Checked with pyproj within
+    |φ| ≤ 80° and |λ - λ0| ≤ 60°: separation at most 0.79 ``B(e)``."""
     op = dem.coordinate_operation
     if op is None or op.method_name != "Transverse Mercator":
         return None
@@ -698,7 +706,8 @@ def _loops(
     """The regions one ring's rule changed: between two consecutive kept input
     vertices whose stretch changed, the loop of the old stretch and the new
     one; with no kept input vertex, the symmetric difference of the old and the
-    new polygon, since the two may overlap and their sum would count it twice."""
+    new polygon, since the two polygons can overlap almost entirely, and adding
+    both would count the unchanged overlap as moved."""
     n, m = len(old) - 1, len(new)
     at = [(a, i) for a, i in enumerate(index) if i >= 0]
     if not at:

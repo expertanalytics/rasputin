@@ -119,9 +119,10 @@ WORDING = {
 }
 _NAMES = list(WORDING)
 INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])
-#: The mesh-file fields. They end with the CORINE notice, the credit the
-#: Copernicus data policy asks for on data derived from CORINE, so the credit
-#: travels with the mesh as ``dem_credit`` does for the DEM.
+#: The mesh-file fields. They end with ``features_notice``, the credit each
+#: class map's licence asks for (CORINE's under the Copernicus data policy,
+#: MapBiomas's under CC BY-SA), so it travels with the mesh as ``dem_credit``
+#: does.
 #: ``land_cover_codes`` is in the file too, but the writers put it there.
 IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("features_notice") + 1])
 FLAT_HEIGHTS = "none: every z is 0 (--flat)"
