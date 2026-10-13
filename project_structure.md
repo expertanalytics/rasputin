@@ -31,6 +31,10 @@ include/terrain/           # public C++ headers, header-only where possible
     receivers.hpp          # ReceiverSet (per-receiver views), its check, the
                            #   east-north-up basis, a true azimuth's frame
                            #   step: TR2
+    horizon.hpp            # the horizon kernel: per-receiver horizon table
+                           #   over a near and a far raster, a max-pyramid,
+                           #   the exhaustive reference and the pruned
+                           #   search: TR3a
   snow/
     hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
                            #   the step with an optional sun correction; depends
@@ -118,8 +122,11 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
+  bound_raster_view.hpp    # the bound raster view type, shared by core.cpp
+                           #   and radiation.cpp
   radiation.cpp            # the sun's position for arrays of UTC times
-                           #   (releases the GIL); the receiver check
+                           #   (releases the GIL); the receiver check; the
+                           #   horizon search over bound rasters
   snow.cpp                 # the snow kernel's binding: arrays in and out,
                            #   refusals as ValueError naming the status,
                            #   and the triangle for a non-finite value
