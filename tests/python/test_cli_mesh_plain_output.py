@@ -59,9 +59,13 @@ VELHAS = FIXTURES / "velhas"
 
 #: D3 rule 6, matched case-blind as whole words (``snap`` also in
 #: ``snapped``), over the whole of stderr of a successful run.
+#: "feet" is banned only as the refinement's jargon ("constraint feet",
+#: "feet refused"), not as a unit: increment 43's narrowing, by Ola's ruling
+#: (section 9.1 of docs/increments/43-units-and-projections.md).
 BANNED = re.compile(
-    r"(?i)\buncovered\b|\bfeet\b|\bstride\b|\bchains\b|\bcoincident\b|\bcarved\b|"
-    r"\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
+    r"(?i)\buncovered\b|\bconstraint feet\b|\bconstraint-feet\b|\bfeet refused\b|"
+    r"\bstride\b|\bchains\b|"
+    r"\bcoincident\b|\bcarved\b|\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
 )
 #: The writers' own fields, describing the file's arrays (D2, "Fields that stay").
 WRITER_FIELDS = {"feature_bits", "feature_names", "feature_vocabulary"}

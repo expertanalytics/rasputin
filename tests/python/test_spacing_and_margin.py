@@ -5,7 +5,9 @@ sections 4.6 and 4.7).
 HOW THIS FILE GOES RED. At the design's base `default_spacing` rounds to whole
 metres, at least 1, so 0.5 m comes back as 1; `TargetGrid.spacing` is a
 strict integer, so 0.5 and 2^-10 are refused; `feature_input.source_region`
-takes no `cell` and always grows the domain by 100 m.
+takes no `cell` and always grows the domain by 100 m. After the green step
+(section 9.5) the floor is 2^-3 m: at 0f67a567 2^-4 and 2^-10 are accepted,
+and a 1 cm source gets 2^-6 m.
 """
 
 from __future__ import annotations
@@ -51,13 +53,18 @@ class TestDefaultSpacing:
         """0.500531 m, 3.432996 m and 30.896962 m (section 4.6's table)."""
         assert target_grid.default_spacing(geographic(step), (10.0, 50.0)) == expected
 
+    def test_a_centimetre_source_stops_at_the_floor(self) -> None:
+        """1e-7 degrees is about 1.1 cm; the floor is 2^-3 m, the finest spacing
+        whose nodes the 1 mm snap leaves fixed (section 9.5)."""
+        assert target_grid.default_spacing(geographic(1e-7), (10.0, 50.0)) == 0.125
+
     def test_a_projected_10_m_source_is_its_own(self) -> None:
         meta = geographic(10.0).model_copy(update={"geographic": False, "epsg": 25833})
         assert target_grid.default_spacing(meta, (500_000.0, 6_600_000.0)) == 10
 
 
 class TestTargetGridSpacing:
-    """Test 13: a whole number from 1 to 1000, or 2^-k for k from 1 to 10."""
+    """Test 13: a whole number from 1 to 1000, or 2^-k for k from 1 to 3."""
 
     @staticmethod
     def grid(spacing: float) -> target_grid.TargetGrid:
@@ -65,13 +72,16 @@ class TestTargetGridSpacing:
             crs="EPSG:25833", spacing=spacing, row0=0, col0=0, rows=2, cols=2
         )
 
-    @pytest.mark.parametrize("spacing", [0.5, 2.0**-10], ids=["half", "2^-10"])
+    @pytest.mark.parametrize("spacing", [0.5, 2.0**-3], ids=["half", "2^-3"])
     def test_a_power_of_two_below_a_metre_is_accepted(self, spacing: float) -> None:
         assert self.grid(spacing).spacing == spacing
 
-    @pytest.mark.parametrize("spacing", [0.75, 0, 2.0**-11], ids=["0.75", "0", "2^-11"])
+    @pytest.mark.parametrize(
+        "spacing", [0.75, 0, 2.0**-4, 2.0**-10], ids=["0.75", "0", "2^-4", "2^-10"]
+    )
     def test_anything_else_below_a_metre_is_refused(self, spacing: float) -> None:
-        with pytest.raises(ValidationError):
+        """2^-4 m and finer move nodes off the noder's 1 mm lattice (section 9.5)."""
+        with pytest.raises(ValidationError, match=r"2\^-k m for k 1 to 3; got"):
             self.grid(spacing)
 
 

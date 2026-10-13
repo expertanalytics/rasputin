@@ -467,8 +467,12 @@ async def test_delineate_runs_in_a_worker_thread(api: Any) -> None:
 #: the lattice-exact fields only (the mask, the fine ring, the counts, the
 #: windows and the meta; not the reduced ring, whose C++ arithmetic may round
 #: differently on another compiler): `reach=None` must leave them unchanged.
-BOWL_LAKE_DIGEST = "0efdc506ba2c0d63409f13da1bd761388b34762d2cc10bd26e189755cd902c5f"
-BOWL_POINT_DIGEST = "02ca6c38e46f445b5bf01996531616c130a0942766478a26d69b24346ac1740c"
+#: Increment 43 added `z_unit='metre'` and `file_crs=None` to `RasterMeta`, so
+#: both digests changed; with that text removed from the repr they equal the
+#: old ones (0efdc506..., 02ca6c38...), so no other field moved (section 9.2 of
+#: docs/increments/43-units-and-projections.md).
+BOWL_LAKE_DIGEST = "10971eaf66ab83436437537731c04863980e617341f1373761f18b7a70ed9e29"
+BOWL_POINT_DIGEST = "ea4f31d3aa5e85fa7f7d0c0090b8415f5de743ef5ae3072330a81a3fbe00a407"
 
 
 def digest(result: Any) -> str:

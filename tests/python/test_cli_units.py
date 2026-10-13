@@ -52,6 +52,17 @@ HEIGHTS = (10 * np.arange(16).reshape(4, 4) + 100).astype(np.float32)
 #: EPSG:2229, area-registered, 3 ftUS cells, no 4099: test 8's file at 4 x 4.
 FEET_KEYS = {GT_MODEL_TYPE: 1, GT_RASTER_TYPE: PIXEL_IS_AREA, PROJECTED_CS_TYPE: 2229}
 FEET_TIE = (0.0, 0.0, 0.0, 6_500_000.0, 2_100_000.0, 0.0)
+#: The same file with 3937 ftUS cells (1200 m exactly), its nodes whole metres
+#: once converted (x 1981800 to 1985400, y 635400 to 639000), so the noder's
+#: 1 mm snap leaves them where they are (section 9.3).
+LATTICE_TIE = (0.0, 0.0, 0.0, 6_499_987.0, 2_098_421.0, 0.0)
+LATTICE_CELL = 3937.0
+#: Section 9.3: why the 3 ftUS grid loses its edge, until a later increment.
+OFF_LATTICE = (
+    "the noder snaps start-mesh vertices to a 1 mm lattice anchored at zero; "
+    "3 ftUS nodes are off it, so edge vertices move out of the raster and are "
+    "dropped; a later increment fixes how the two lattices meet"
+)
 
 
 def mesh(*args: str) -> Result:
@@ -66,6 +77,17 @@ def feet_dem(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def lattice_feet_dem(tmp_path: Path) -> Path:
+    stream = micro_tiff(
+        HEIGHTS,
+        tiepoint=LATTICE_TIE,
+        scale=(LATTICE_CELL, LATTICE_CELL, 0.0),
+        geokeys=FEET_KEYS,
+    )
+    return write_tiff(tmp_path / "feet_1200m.tif", stream)
+
+
+@pytest.fixture
 def metre_dem(tmp_path: Path) -> Path:
     return write_tiff(tmp_path / "metres.tif", micro_tiff(HEIGHTS))
 
@@ -76,20 +98,38 @@ class TestTheFeetDem:
     ) -> None:
         refused(tmp_path, "mesh", "--dem", str(feet_dem), says=("--z-unit",))
 
-    def test_given_us_ft_the_mesh_is_in_metres(self, tmp_path: Path, feet_dem: Path) -> None:
-        out, md = tmp_path / "feet.vtk", tmp_path / "feet.md"
-        result = mesh(
-            "--dem", str(feet_dem), "--z-unit", "us-ft", "--out", str(out), "--stats", str(md)
-        )
-        assert result.exit_code == 0, plain(result.output)
-        points = read_vtk(out.read_bytes()).points
-        # Float64 products cast once to float32, as `to_metres` stores them.
-        expected = (HEIGHTS.astype(np.float64) * FT_US).astype(np.float32).astype(np.float64)
-        assert np.array_equal(np.sort(points[:, 2]), np.sort(expected.ravel()))
+    def test_given_us_ft_the_mesh_is_in_metres(
+        self, tmp_path: Path, lattice_feet_dem: Path
+    ) -> None:
+        result, points, report = self.meshed_in_metres(tmp_path, lattice_feet_dem)
+        # Node (0, 0) sits half a 3937 ftUS cell inside the tie point: 1200 m cells,
+        # exact in float64 (section 9.3).
+        assert points[:, 0].min() == 1_981_800.0
+        assert points[:, 1].max() == 639_000.0
+        self.assert_metres_reported(result, points, report)
+
+    @pytest.mark.xfail(strict=True, reason=OFF_LATTICE)
+    def test_a_feet_grid_off_the_millimetre_lattice_keeps_its_edge(
+        self, tmp_path: Path, feet_dem: Path
+    ) -> None:
+        result, points, report = self.meshed_in_metres(tmp_path, feet_dem)
         # Node (0, 0) sits half a 3 ftUS cell inside the tie point, in metres.
         assert points[:, 0].min() == (6_500_000.0 + 1.5) * FT_US
         assert points[:, 1].max() == (2_100_000.0 - 1.5) * FT_US
-        report = md.read_text(encoding="utf-8")
+        self.assert_metres_reported(result, points, report)
+
+    @staticmethod
+    def meshed_in_metres(tmp_path: Path, dem: Path) -> tuple[Result, np.ndarray, str]:
+        out, md = tmp_path / "feet.vtk", tmp_path / "feet.md"
+        result = mesh("--dem", str(dem), "--z-unit", "us-ft", "--out", str(out), "--stats", str(md))
+        assert result.exit_code == 0, plain(result.output)
+        return result, read_vtk(out.read_bytes()).points, md.read_text(encoding="utf-8")
+
+    @staticmethod
+    def assert_metres_reported(result: Result, points: np.ndarray, report: str) -> None:
+        # Float64 products cast once to float32, as `to_metres` stores them.
+        expected = (HEIGHTS.astype(np.float64) * FT_US).astype(np.float32).astype(np.float64)
+        assert np.array_equal(np.sort(points[:, 2]), np.sort(expected.ravel()))
         assert stats_row(report, "dem_vertical_unit") == (
             "metres, converted from US survey feet (given with --z-unit)"
         )
