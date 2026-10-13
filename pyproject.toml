@@ -170,6 +170,7 @@ paths = [
     "src_python/tin_engine/outline.py",
     "src_python/tin_engine/reference.py",
     "src_python/tin_engine/sensitivity.py",
+    "src_python/tin_engine/snow",
     "src_python/tin_engine/sources.py",
     "src_python/tin_engine/viz",
 ]
