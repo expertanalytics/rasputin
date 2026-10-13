@@ -112,6 +112,7 @@ ruff format --check .  # docs/ and .claude/ are excluded
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
 python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
 python3 tools/check_citations.py        # cited lines resolve; lists the at-risk ones
+python3 tools/check_code_history.py     # no history labels in Python docstrings or comments
 ```
 
 ### CI

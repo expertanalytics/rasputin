@@ -42,11 +42,11 @@ DATA = Path("/Users/skavhaug/projects/rasputin_data")
 c, what = sys.argv[1], sys.argv[2]
 if c == "numedalslagen":
     path = Path("/Users/skavhaug/projects/rasputin_scratch/norway/numedalslagen/numedalslagen_outline_nve.geojson")
-    crs, d = "EPSG:25833", math.sqrt(2) * 10  # dem_input.py:250, the DTM10 cell diagonal
+    crs, d = "EPSG:25833", math.sqrt(2) * 10  # src_python/tin_engine/dem_input.py@d9f9c025:250, the DTM10 cell diagonal
 else:
     name = "lagan_mouth" if c == "lagan" else c
     path = DATA / f"sweden_smhi_svar/{name}_svar2022_3006.geojson"
-    crs, d = "EPSG:3006", math.sqrt(2) * 31  # target_grid.py:107, dem_input.py:213
+    crs, d = "EPSG:3006", math.sqrt(2) * 31  # src_python/tin_engine/target_grid.py@d9f9c025:107, src_python/tin_engine/dem_input.py@d9f9c025:213
 domain = read_domain(path, None).to_crs(crs)
 P = domain.polygon
 n = len(P.exterior.coords) - 1

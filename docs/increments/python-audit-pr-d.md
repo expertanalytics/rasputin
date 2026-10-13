@@ -414,11 +414,11 @@ touch.
 Found by running `python3 tools/check_citations.py --base b26beb8` in the
 prototype clone, which edits the seven production files (14 at risk).
 Pinned in this commit to `44fa7f5`, each quotation re-read there:
-`docs/increments/25-plain-output.md` lines 88 (`io/vtk_legacy.py:123-126`,
-the three vocabulary arrays), 96 and 273 (`io/vtk_legacy.py:118-119`, the
-`land_cover_codes` field), 271 (`io/vtk_legacy.py:124-125` and
-`io/ply.py:111`, `feature_bits`, `feature_names` and the `feature_bit`
-comments) and 272 (`io/vtk_legacy.py:126` and `io/ply.py:112`, the
+`docs/increments/25-plain-output.md` lines 88 (`src_python/tin_engine/io/vtk_legacy.py@7fcb47cf:123-126`,
+the three vocabulary arrays), 96 and 273 (`src_python/tin_engine/io/vtk_legacy.py@7fcb47cf:118-119`, the
+`land_cover_codes` field), 271 (`src_python/tin_engine/io/vtk_legacy.py@7fcb47cf:124-125` and
+`src_python/tin_engine/io/ply.py@7fcb47cf:111`, `feature_bits`, `feature_names` and the `feature_bit`
+comments) and 272 (`src_python/tin_engine/io/vtk_legacy.py@7fcb47cf:126` and `src_python/tin_engine/io/ply.py@7fcb47cf:112`, the
 fingerprint). Left alone, as PRs B and C left them: unpinned citations
 into `cli.py` whose text had already moved (`15f-edge-strip.md` lines 1539
 and 1904, `24-release-hardening.md` lines 515 and 517,

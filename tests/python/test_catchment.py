@@ -549,31 +549,42 @@ def test_a_reach_with_lakes_is_refused(api: Any, gauge_api: Any) -> None:
         )
 
 
-def reach_refusal(api: Any, gauge_api: Any, seed_crs: str) -> str:
-    """`delineate`'s refusal of a gauge request whose reach is in `seed_crs`,
-    over the valley in EPSG:25833 (`gf.EPSG`)."""
-    request = gauge_request(api, gauge_api).model_copy(update={"seed_crs": seed_crs})
-    with pytest.raises(api.CatchmentError) as info:
-        api.delineate(request, valley_repository(gf.valley(dam=True)))
-    return str(info.value)
+def reach_moved(api: Any, gauge_api: Any, crs: str) -> tuple[Any, Any]:
+    """The gauge request, and the same with its seed and reach moved into
+    `crs`, both over the valley in EPSG:25833 (`gf.EPSG`): delineated."""
+    request = gauge_request(api, gauge_api)
+    to = Transformer.from_crs(gf.EPSG, crs, always_xy=True)
+    line = tuple(tuple(float(v) for v in to.transform(x, y)) for x, y in request.reach.line)
+    seed = tuple(float(v) for v in to.transform(*request.seed))
+    other = request.model_copy(
+        update={
+            "seed": seed,
+            "seed_crs": crs,
+            "reach": request.reach.model_copy(update={"line": line}),
+        }
+    )
+    z = gf.valley(dam=True)
+    return (
+        api.delineate(request, valley_repository(z)),
+        api.delineate(other, valley_repository(z)),
+    )
 
 
-def test_a_reach_in_another_crs_is_refused(api: Any, gauge_api: Any) -> None:
-    """A reach is burnt as given, so it must be in the DEM's CRS: EPSG:32633
-    (UTM 33 on WGS 84, not ETRS89) is refused naming the DEM's."""
-    message = reach_refusal(api, gauge_api, "EPSG:32633")
-    assert message.startswith(f"the river reach must be in the DEM's CRS, {gf.EPSG}"), message
-
-
-def test_a_reach_in_a_proj_string_naming_no_datum_is_refused_with_a_hint(
-    api: Any, gauge_api: Any
-) -> None:
-    """Audit PR B, code review round 1, and Ola's D15 b: pyproj's PROJ string
-    of EPSG:25833 names the GRS80 ellipsoid, not ETRS89, so it is not the
-    DEM's CRS; the refusal names the code to write instead."""
-    message = reach_refusal(api, gauge_api, proj4_of(25833))
-    assert message.startswith(f"the river reach must be in the DEM's CRS, {gf.EPSG}"), message
-    assert f"write {gf.EPSG}" in message, message
+@pytest.mark.parametrize("crs", ["EPSG:32633", proj4_of(25833)], ids=["32633", "proj4-25833"])
+def test_a_reach_in_another_crs_is_moved_into_the_dems(api: Any, gauge_api: Any, crs: str) -> None:
+    """Increment 40 (5.5, row A9 of the generality audit) reverses 29's
+    refusal: a reach in another CRS is moved into the DEM's, and `at` is
+    measured again there. EPSG:32633 (UTM 33 on WGS 84) and the PROJ string
+    of EPSG:25833 lie within centimetres of EPSG:25833 here, so the chain,
+    the placed node and the catchment are the reach's in the DEM's CRS."""
+    here, there = reach_moved(api, gauge_api, crs)
+    assert there.crs == here.crs == gf.EPSG
+    assert there.nodes == here.nodes
+    assert np.array_equal(np.asarray(there.mask), np.asarray(here.mask))
+    assert np.allclose(
+        np.asarray(there.gauge.chain), np.asarray(here.gauge.chain), rtol=0, atol=1e-6
+    )
+    assert there.gauge.node == pytest.approx(here.gauge.node, abs=1e-6)
 
 
 def test_no_reach_gives_22s_result_bit_for_bit(api: Any) -> None:

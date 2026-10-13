@@ -89,14 +89,14 @@ The three inventories, by grep, so the reader can re-run them:
 **Machine reads and pools.** `grep -rn -E 'cpu_count|ThreadPoolExecutor\(|sysconf' src_python/tin_engine`:
 
 ```
-src_python/tin_engine/dem_input.py:218:    source, threads = TileWindows(mosaic.tile), os.cpu_count() or 1
-src_python/tin_engine/target_grid.py:156:    with ThreadPoolExecutor(max_workers=max(1, threads)) as pool:
-src_python/tin_engine/crs.py:39:WORKERS = min(8, os.cpu_count() or 1)
-src_python/tin_engine/crs.py:73:        with ThreadPoolExecutor(len(chunks)) as pool:
-src_python/tin_engine/mosaic.py:57:    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-src_python/tin_engine/cli.py:1590:            threads=os.cpu_count() if sizes.start_vertices is not None else None,
-src_python/tin_engine/io/cog.py:124:    `threads` decoding workers, the machine's cores (`os.cpu_count() or 1`)
-src_python/tin_engine/io/cog.py:203:    with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
+src_python/tin_engine/dem_input.py@9e0d60c2:218:    source, threads = TileWindows(mosaic.tile), os.cpu_count() or 1
+src_python/tin_engine/target_grid.py@9e0d60c2:156:    with ThreadPoolExecutor(max_workers=max(1, threads)) as pool:
+src_python/tin_engine/crs.py@9e0d60c2:39:WORKERS = min(8, os.cpu_count() or 1)
+src_python/tin_engine/crs.py@9e0d60c2:73:        with ThreadPoolExecutor(len(chunks)) as pool:
+src_python/tin_engine/mosaic.py@9e0d60c2:57:    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+src_python/tin_engine/cli.py@9e0d60c2:1590:            threads=os.cpu_count() if sizes.start_vertices is not None else None,
+src_python/tin_engine/io/cog.py@9e0d60c2:124:    `threads` decoding workers, the machine's cores (`os.cpu_count() or 1`)
+src_python/tin_engine/io/cog.py@9e0d60c2:203:    with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
 ```
 
 Three pools: the reprojector (`src_python/tin_engine/crs.py@5d2e706d:73`, up
@@ -123,11 +123,11 @@ less the docstring lines: five, at `src_python/tin_engine/_core.pyi@5d2e706d:341
 less the stub and the definitions:
 
 ```
-src_python/tin_engine/cli.py:2137:                slope = SlopeTolerance(to_core(tile), *ramp)
-src_python/tin_engine/cli.py:2139:        out = refine(
-src_python/tin_engine/edge_strip.py:48:    out = refine_strip(
-src_python/tin_engine/final_check.py:60:    out = refine_points(
-src_python/tin_engine/land_cover_fractions.py:110:        parts.append(_core.class_areas(local, classes.array, row_areas(classes), threads=threads))
+src_python/tin_engine/cli.py@9e0d60c2:2137:                slope = SlopeTolerance(to_core(tile), *ramp)
+src_python/tin_engine/cli.py@9e0d60c2:2139:        out = refine(
+src_python/tin_engine/edge_strip.py@9e0d60c2:48:    out = refine_strip(
+src_python/tin_engine/final_check.py@9e0d60c2:60:    out = refine_points(
+src_python/tin_engine/land_cover_fractions.py@9e0d60c2:110:        parts.append(_core.class_areas(local, classes.array, row_areas(classes), threads=threads))
 ```
 
 Five call sites. Four pass no `threads` (the C++ default 0 = every core); the
@@ -140,21 +140,21 @@ benchmark's monkeypatch of `refine` (`tools/bench.py@5d2e706d:788-790`).
 less the definition: 15, the grep as run on `5d2e706d`:
 
 ```
-src_python/tin_engine/land_cover_fractions.py:67:    lonlat = reprojector(mesh_crs, meta.crs)(xy)
-src_python/tin_engine/catchment_batch.py:180:    move = reprojector(stations_crs, segments_crs)
-src_python/tin_engine/domain.py:49:        move = reprojector(source, target)
-src_python/tin_engine/target_grid.py:136:    back = reprojector(grid.crs, meta.crs)
-src_python/tin_engine/target_grid.py:181:        lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
-src_python/tin_engine/target_grid.py:239:        move = reprojector(m.crs, grid.crs)
-src_python/tin_engine/dem_input.py:212:    ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
-src_python/tin_engine/catchment.py:222:    ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
-src_python/tin_engine/catchment.py:373:    ((px, py),) = reprojector(request.seed_crs, request.lakes_crs)([request.seed])
-src_python/tin_engine/catchment.py:381:    move = reprojector(request.lakes_crs, dem_crs)
-src_python/tin_engine/tolerance_field.py:83:    to_mesh = reprojector(found.crs, mesh_crs)
-src_python/tin_engine/feature_input.py:183:        xy = reprojector(dem_crs, source_crs)(xy)
-src_python/tin_engine/feature_input.py:339:        move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
-src_python/tin_engine/feature_input.py:563:        ((x, y),) = reprojector(point_crs, own)([point])
-src_python/tin_engine/cli.py:2282:    ((x, y),) = reprojector(seed_crs, crs)([seed])
+src_python/tin_engine/land_cover_fractions.py@3018192a:67:    lonlat = reprojector(mesh_crs, meta.crs)(xy)
+src_python/tin_engine/catchment_batch.py@3018192a:180:    move = reprojector(stations_crs, segments_crs)
+src_python/tin_engine/domain.py@3018192a:49:        move = reprojector(source, target)
+src_python/tin_engine/target_grid.py@3018192a:136:    back = reprojector(grid.crs, meta.crs)
+src_python/tin_engine/target_grid.py@3018192a:181:        lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
+src_python/tin_engine/target_grid.py@3018192a:239:        move = reprojector(m.crs, grid.crs)
+src_python/tin_engine/dem_input.py@3018192a:212:    ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
+src_python/tin_engine/catchment.py@3018192a:222:    ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
+src_python/tin_engine/catchment.py@3018192a:373:    ((px, py),) = reprojector(request.seed_crs, request.lakes_crs)([request.seed])
+src_python/tin_engine/catchment.py@3018192a:381:    move = reprojector(request.lakes_crs, dem_crs)
+src_python/tin_engine/tolerance_field.py@3018192a:83:    to_mesh = reprojector(found.crs, mesh_crs)
+src_python/tin_engine/feature_input.py@3018192a:183:        xy = reprojector(dem_crs, source_crs)(xy)
+src_python/tin_engine/feature_input.py@3018192a:339:        move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
+src_python/tin_engine/feature_input.py@3018192a:563:        ((x, y),) = reprojector(point_crs, own)([point])
+src_python/tin_engine/cli.py@3018192a:2282:    ((x, y),) = reprojector(seed_crs, crs)([seed])
 ```
 
 The pool opens at 500 000 points (`2 * CHUNK_POINTS`,
@@ -173,12 +173,12 @@ workers). A fourth site runs inside `_pool`'s workers too,
 but moves a block's rim and then its valid nodes, at most `BLOCK` x `BLOCK` =
 512 x 512 = 262 144 points (`:32`, `:238`, `:252`), under the threshold, so it
 never nests a pool; it takes `threads=1` all the same (4.4). The other eleven
-move a point (`dem_input.py:212`, `catchment.py:222`, `:373`,
-`feature_input.py:563`, `cli.py:2282`), a station list
-(`catchment_batch.py:180`), a domain outline (`domain.py:49`), the target
-grid's rim (`target_grid.py:136`), the lakes (`catchment.py:381`), the
-feature hull ring densified to 1 km (`feature_input.py:183`) or one tolerance
-line's vertices at a time (`tolerance_field.py:83`, one `shapely.get_parts`
+move a point (`src_python/tin_engine/dem_input.py@3018192a:212`, `src_python/tin_engine/catchment.py@3018192a:222`, `:373`,
+`src_python/tin_engine/feature_input.py@3018192a:563`, `src_python/tin_engine/cli.py@3018192a:2282`), a station list
+(`src_python/tin_engine/catchment_batch.py@3018192a:180`), a domain outline (`src_python/tin_engine/domain.py@3018192a:49`), the target
+grid's rim (`src_python/tin_engine/target_grid.py@3018192a:136`), the lakes (`src_python/tin_engine/catchment.py@3018192a:381`), the
+feature hull ring densified to 1 km (`src_python/tin_engine/feature_input.py@3018192a:183`) or one tolerance
+line's vertices at a time (`src_python/tin_engine/tolerance_field.py@3018192a:83`, one `shapely.get_parts`
 part per call): none reaches 500 000 points in a run, and all become serial by
 the library default of 4.2 with no change in behaviour.
 
@@ -756,7 +756,7 @@ test's bound of 3 ticks is load-sensitive.
 
 ## Review
 
-**Design review, round 1, 2026-10-12.** Range `5d2e706d..9e0d60c2`, 0 production lines, estimate 60 net with worst case 120, @reviewer: CHANGES REQUESTED, five blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/threads/docs/increments/38-threads-and-memory.md@9e0d60c2:476-481: T10's figures are wrong; probed on the fixture, the first window is 49 x 49, the mosaic cap 9,604 bytes and the flood 14,406, so a budget of 8,192 is refused by the mosaic cap (`/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/catchment.py@5d2e706d:394`) naming 9,604, not the flood, and 13,824 also refuses; fix: a budget in 9,604 to 14,405 for the flood case, 14,406 for "exactly at", the `8K` CLI case restated. (2) @9e0d60c2:485-488: T11 misses `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/tests/python/test_layering.py@5d2e706d:44` (the `decompose` row), whose line 152 fails on a gone module; the red commit drops that row and adds `resources`. (3) @9e0d60c2:457-470: T8 spies no reprojector at `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/feature_input.py@5d2e706d:339` or `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`, two of the three large sites; with the library default of one worker a dropped `threads` serialises them unseen; one spy per site. (4) @9e0d60c2:133-141: 15 reprojector callers, not 14 (`target_grid.py:136`, `tolerance_field.py:83`, `feature_input.py:183` missing; "other ten" is twelve); `target_grid.py:239`'s blocks are 512 x 512 = 262,144 points, under the 500,000 threshold, so only line 181 nests a pool. (5) @9e0d60c2:177-181: `cpu.max` with a non-numeric first word or a zero period is unspecified; apply the memory rule (no quota). Suggestions: the refusal text "half the machine's memory" (:254-256) is false when a budget was given; section 4.5 should say `bench.py` children's stats row still shows the CLI's count; T9's `argv` is `DerivedCommand.argv(model)` (`src_python/tin_engine/mcp/schema.py@5d2e706d:108`). Verified: all 37 pinned cites; the legacy greps; the I/O boundary, the pinned assumptions and the MCP claims; `check_citations` 46 at-risk lines, all `ROADMAP.md` rows 27 and 29, unmoved. Lesson: T10's figures came from a test comment, not a run; one probe script settled it.
+**Design review, round 1, 2026-10-12.** Range `5d2e706d..9e0d60c2`, 0 production lines, estimate 60 net with worst case 120, @reviewer: CHANGES REQUESTED, five blockers. (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/threads/docs/increments/38-threads-and-memory.md@9e0d60c2:476-481: T10's figures are wrong; probed on the fixture, the first window is 49 x 49, the mosaic cap 9,604 bytes and the flood 14,406, so a budget of 8,192 is refused by the mosaic cap (`/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/catchment.py@5d2e706d:394`) naming 9,604, not the flood, and 13,824 also refuses; fix: a budget in 9,604 to 14,405 for the flood case, 14,406 for "exactly at", the `8K` CLI case restated. (2) @9e0d60c2:485-488: T11 misses `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/tests/python/test_layering.py@5d2e706d:44` (the `decompose` row), whose line 152 fails on a gone module; the red commit drops that row and adds `resources`. (3) @9e0d60c2:457-470: T8 spies no reprojector at `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/feature_input.py@5d2e706d:339` or `/Users/skavhaug/projects/rasputin/.claude/worktrees/threads/src_python/tin_engine/land_cover_fractions.py@5d2e706d:67`, two of the three large sites; with the library default of one worker a dropped `threads` serialises them unseen; one spy per site. (4) @9e0d60c2:133-141: 15 reprojector callers, not 14 (`src_python/tin_engine/target_grid.py@3ff48435:136`, `src_python/tin_engine/tolerance_field.py@3ff48435:83`, `src_python/tin_engine/feature_input.py@3ff48435:183` missing; "other ten" is twelve); `src_python/tin_engine/target_grid.py@3ff48435:239`'s blocks are 512 x 512 = 262,144 points, under the 500,000 threshold, so only line 181 nests a pool. (5) @9e0d60c2:177-181: `cpu.max` with a non-numeric first word or a zero period is unspecified; apply the memory rule (no quota). Suggestions: the refusal text "half the machine's memory" (:254-256) is false when a budget was given; section 4.5 should say `bench.py` children's stats row still shows the CLI's count; T9's `argv` is `DerivedCommand.argv(model)` (`src_python/tin_engine/mcp/schema.py@5d2e706d:108`). Verified: all 37 pinned cites; the legacy greps; the I/O boundary, the pinned assumptions and the MCP claims; `check_citations` 46 at-risk lines, all `ROADMAP.md` rows 27 and 29, unmoved. Lesson: T10's figures came from a test comment, not a run; one probe script settled it.
 
 **Design review, round 2, 2026-10-12.** Range `3ff48435..3018192a`, 0 production lines, estimate 60 net, @reviewer: APPROVED. Verified by running: T10's figures with the main venv (8,192 refused by the mosaic cap at 9,604; 9,604 to 14,405 by the flood cap at 14,406; 14,406 refused on the probe window 73 x 55 at 16,060; 235,199 refused naming 224 x 175; 235,200 floods three windows), every figure in the table matching; the `decompose` layering row and its two assertions; the three T8 spy sites and the EPSG:4326-over-25833 case; the caller grep reproducing 15 lines, `target_grid.py` under the 500,000 threshold; the `cpu.max` rule in 4.1 with its cases; section 10's four rulings stated as rulings with date and quote; check_citations exit 0. Idea, non-blocking: T3 omits section 6's unreadable-file case (chmod 000 in `tmp_path`, skipped as root).
 

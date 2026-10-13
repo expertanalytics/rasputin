@@ -523,7 +523,7 @@ the one the CLI already has, extended by one layer rather than reinvented:
 
 * **the picture**: the input drawn alone, in role colours, with findings
   suppressed — `SceneKind.FAILED`, exactly what `not-noded` renders today
-  (`viz/scene.py:235-249`). A drawn failure is still a drawn picture and the
+  (`src_python/tin_engine/viz/scene.py@605a60c6:235-249`). A drawn failure is still a drawn picture and the
   exit code stays 0; a caller who wants the verdict reads the band.
 * **the band**: `status` is the enum's `.name`, `message` is
   `describe(status)` followed by the engine's own `outcome.message` — the same
@@ -571,7 +571,7 @@ change'` is what shows the sentence this section answers.
 
 `cli.py`'s `draw` today passes the **fixture** as the `PslgLike`, together with
 `CLOSED_ROLES = ("outer", "hole")` — *strings*, because a fixture's roles are
-strings. `viz/scene.py:167` closes a ring with
+strings. `src_python/tin_engine/viz/scene.py@605a60c6:167` closes a ring with
 
 ```python
 if len(walk) > 2 and any(chain.role == closed for closed in closed_roles):
@@ -616,7 +616,7 @@ it shows the splits the CDT was actually handed.
 
 Passing `ChainRole` values into `build_scene` does not breach boundary 3.
 `closed_roles` is typed `Sequence[object]` and `_chain_edges` uses only `==` and
-`__hash__` — `viz/protocols.py:33-38` says so in as many words, and it is the
+`__hash__` — `src_python/tin_engine/viz/protocols.py@605a60c6:33-38` says so in as many words, and it is the
 composition root supplying the enum that keeps `viz/` from naming it.
 
 ## The gallery: `not-noded` keeps its name and gains two colours
@@ -635,21 +635,21 @@ product. Renaming it destroys that.
 `docs/increments/README.md`'s rule that a documentation defect found during an
 increment is fixed in that increment's PR or not recorded.
 Line numbers in this passage are at `605a60c`, where this record was written.
-`viz/fixtures.py:21-26` said "**Three** of the eight are deliberate failures...
+`src_python/tin_engine/viz/fixtures.py@5437d0f8:21-26` said "**Three** of the eight are deliberate failures...
 ``not-noded`` and ``hole-in-hole`` are backend refusals". After 5c there are
 **two**, and `not-noded` is the showcase. The inline comment at `:208-209` —
 "the noder (5b) is what fixes it" — becomes a statement about a fix that has
 landed.
 
 **Its two breaklines get property bits.** At `605a60c` both carry mask `0`
-(`viz/fixtures.py:207,210`), while the C++ suite's fixture of the *same
+(`src_python/tin_engine/viz/fixtures.py@2abba36e:207,210`), while the C++ suite's fixture of the *same
 geometry* gives them road and river (`test_noding_node.cpp:162-165`). Two
 changed literals — `1` for the river bit and `2` for the road bit under
 `DEFAULT_VOCABULARY`'s numbering — and the picture becomes the user's sentence:
 a road crossing a river, in two colours, meeting at a constructed node.
 
 `fixtures.py` writes the masks as literals with a comment, because `viz/` may
-not import a vocabulary (`fixtures.py:193-195` at `605a60c` already does exactly this for
+not import a vocabulary (`src_python/tin_engine/viz/fixtures.py@5437d0f8:193-195` at `605a60c` already does exactly this for
 the `RIVER` fixture). Note that `test_noding_node.cpp:76-77` numbers them the other way
 round — `bit(0)` is its road. That is not a defect to reconcile: **the C++ holds
 no vocabulary at all**, by increment 7's ruling, and its test constants are
@@ -657,7 +657,7 @@ local names. It is written down here only so that nobody "fixes" the two into
 agreement and thereby creates the second vocabulary the project has twice
 refused.
 
-**One stylesheet rule and one precedence entry.** `viz/svg.py:60` has
+**One stylesheet rule and one precedence entry.** `src_python/tin_engine/viz/svg.py@605a60c6:60` has
 `line.river` and nothing for `road`; `cli.py`'s `_PRECEDENCE` is `("river",)`.
 Without both, a road edge draws identically to the row above it and the legend
 gains a row a reader cannot tell apart — `cli.py`'s `_PRECEDENCE` comment records that this was
@@ -1287,7 +1287,7 @@ increment's PR, or not recorded:
   number is dropped in favour of the test's name and a `grep`, per
   `.claude/REQUIRED-READING.md` on resolved values. The paragraph's claim is
   still true; only the citation expired.
-* **`src_python/tin_engine/viz/fixtures.py:21-26`** (at `605a60c`) — three deliberate failures
+* **`src_python/tin_engine/viz/fixtures.py@5437d0f8:21-26`** (at `605a60c`) — three deliberate failures
   become two, and `not-noded` changes role.
 
 **Not corrected, because 5b corrected it itself:** the "The C++ rows are *not*

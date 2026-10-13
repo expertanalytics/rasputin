@@ -39,13 +39,15 @@ Two rules here are architecture rather than hygiene:
   than from `sys.modules`.
 * **The name pattern keeps a vocabulary name usable as a CSS class token, and
   is defence in depth. It is not what closes the injection hole.**
-  `viz/svg.py`'s `_edge_classes` (`svg.py:168`) joins
-  `style.PropertyStroke.token` values, which `_edges` then interpolates into a
-  ``class="..."`` attribute **unescaped** (`svg.py:225`) -- only `_text`
-  escapes -- and never an `EdgeProperty` name, because `viz/` cannot import
-  this module. The only bridge is `PROPERTY_STROKES`
+  `viz/svg.py`'s `_edge_classes` (`src_python/tin_engine/viz/svg.py@b213dc01:168`)
+  joins `style.PropertyStroke.token` values, which `_edges` then interpolates
+  into a ``class="..."`` attribute **unescaped**
+  (`src_python/tin_engine/viz/svg.py@20af461e:225`) -- only `_text` escapes --
+  and never an `EdgeProperty` name, because `viz/` cannot import this module.
+  The only bridge is `PROPERTY_STROKES`
   (`src_python/tin_engine/cli.py@390b516:163`), which builds a `PropertyStroke`
-  from a name and so re-validates through `style.py:51`'s own, deliberately
+  from a name and so re-validates through
+  `src_python/tin_engine/viz/style.py@32a9feaf:51`'s own, deliberately
   wider `^[a-z][a-z0-9_-]*$` -- a CSS class may carry a hyphen and a feature
   name may not. A quote-carrying name dies there whatever
   `^[a-z][a-z0-9_]*$` says. The attribute is closed by `PropertyStroke.token`,
@@ -143,9 +145,10 @@ def test_edge_property_refuses_a_name_that_is_not_a_css_class_token(name: str) -
     both stay, under the corrected reason: a quote or a space makes a name
     unusable as a CSS class token, which is what this pattern is for. It is not
     what protects the ``class="..."`` attribute. `svg.py:_edge_classes`
-    (`svg.py:168`) joins `style.PropertyStroke.token` values and `_edges`
-    (`svg.py:225`) interpolates the result unescaped, never a name from this
-    module, and `PROPERTY_STROKES` (`src_python/tin_engine/cli.py@390b516:163`)
+    (`src_python/tin_engine/viz/svg.py@b213dc01:168`) joins `style.PropertyStroke.token`
+    values and `_edges` (`src_python/tin_engine/viz/svg.py@20af461e:225`)
+    interpolates the result unescaped, never a name from this module,
+    and `PROPERTY_STROKES` (`src_python/tin_engine/cli.py@390b516:163`)
     re-validates any name through that model before it can reach the attribute
     -- see `test_viz_svg.py::TestPropertyStrokes`, which refuses the same shapes
     at the boundary that is load-bearing. Relaxing this pattern to any ``str``

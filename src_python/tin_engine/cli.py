@@ -86,7 +86,14 @@ from tin_engine.catchment import (
     check_reach_crs,
     delineate,
 )
-from tin_engine.catchment_batch import BatchRequest, NoRiverLine, StationResult, run_batch, seed_for
+from tin_engine.catchment_batch import (
+    BatchRequest,
+    NoRiverLine,
+    StationResult,
+    cell_at,
+    run_batch,
+    seed_for,
+)
 from tin_engine.chains import start_chains
 from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
 from tin_engine.class_maps import load as load_class_map
@@ -2416,12 +2423,13 @@ def _placed(
 ) -> tuple[tuple[Placement, str | None], CatchmentRequest]:
     """The gauge placed on the river file's nearest line (no watercourse
     number), with its line's river name, and the catchment request seeded by
-    its reach in the file's CRS, which must be the DEM's."""
+    its reach in the file's CRS, which `delineate` moves into the DEM's; `U`'s
+    floor is three of the DEM's cells at the station (increment 40)."""
     segments, crs, _ = _segments(rivers)
-    _reach_crs(crs, repository)
     ((x, y),) = reprojector(seed_crs, crs)([seed])
+    cell = cell_at(repository, seed, seed_crs)
     try:
-        placement, _, made = seed_for(Gauge(x=x, y=y), segments, crs, request)
+        placement, _, made = seed_for(Gauge(x=x, y=y), segments, crs, request, cell_m=cell)
     except NoRiverLine as exc:
         raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
     assert placement is not None  # without lakes, `seed_for` places or refuses
@@ -2532,7 +2540,7 @@ def catchment(
         Path | None,
         typer.Option(
             "--rivers",
-            help="River lines (GeoJSON, in the DEM's CRS): the seed is a gauge, placed on the "
+            help="River lines (GeoJSON, in any CRS): the seed is a gauge, placed on the "
             "nearest line and on the DEM's flow path along it (increment 29).",
         ),
     ] = None,
@@ -2609,23 +2617,27 @@ def catchment(
     except ValueError as exc:
         hint = "--lakes" if isinstance(exc, LakeError) else "--dem"
         raise typer.BadParameter(_words(exc), param_hint=hint) from exc
+    degrees = result.meta.geographic
     for k, w in enumerate(result.windows, 1):
         b = w.bounds
         grown = f"window widened to the {', '.join(w.grown)}"
+        where = (
+            f"longitude {b.x_min:.5f} to {b.x_max:.5f}, latitude {b.y_min:.5f} to {b.y_max:.5f}"
+            if degrees
+            else f"x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}"
+        )
         typer.echo(
-            f"window {k}: x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}, "
-            f"{w.rows} x {w.cols} nodes, searched in {w.seconds:.2f} s, "
+            f"window {k}: {where}, {w.rows} x {w.cols} nodes, searched in {w.seconds:.2f} s, "
             + (grown if w.grown else "catchment inside the window"),
             err=True,
         )
-    cell = result.meta.delta_x * result.meta.delta_y
     extra: dict[str, object] = {}
     if placement is not None and result.gauge is not None:
         extra = _placement_report(placement, result.gauge)
     elif result.lake_area is None:
         typer.echo(
-            f"start: the outlet node at {result.seed} (an outlet must lie on the flow line; "
-            "it is not moved there)",
+            f"start: the outlet node at {tuple(map(float, result.seed))} (an outlet must lie "
+            "on the flow line; it is not moved there)",
             err=True,
         )
     else:
@@ -2634,7 +2646,7 @@ def catchment(
             err=True,
         )
     typer.echo(
-        f"catchment: {result.nodes} DEM nodes, {result.nodes * cell / 1e6:.6f} km2",
+        f"catchment: {result.nodes} DEM nodes, {result.nodes_area / 1e6:.6f} km2",
         err=True,
     )
     vertices = len(result.fine.exterior.coords) - 1
@@ -2649,9 +2661,9 @@ def catchment(
     )
     reduced = result.reduced
     kept = len(reduced.exterior.coords) - 1
-    change = reduced.area - result.fine_area
+    change = result.reduced_area - result.fine_area
     typer.echo(
-        f"reduced outline: {kept} vertices, {reduced.area / 1e6:.6f} km2, difference "
+        f"reduced outline: {kept} vertices, {result.reduced_area / 1e6:.6f} km2, difference "
         f"{change:.3g} m2 ({change / result.fine_area:.2g} relative), tolerance "
         f"{result.tolerance:g} m, {result.reduce_seconds:.2f} s",
         err=True,
@@ -2669,7 +2681,7 @@ def _outline_properties(result: Catchment) -> dict[str, object]:
         "fine_vertices": len(result.fine.exterior.coords) - 1,
         "fine_area_m2": result.fine_area,
         "reduced_vertices": len(result.reduced.exterior.coords) - 1,
-        "reduced_area_m2": result.reduced.area,
+        "reduced_area_m2": result.reduced_area,
         "outline_tolerance_m": result.tolerance,
         "windows": [[w.rows, w.cols] for w in result.windows],
     }
@@ -2850,6 +2862,12 @@ def station_catchments(
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
+    if repository.footprints()[0].meta.geographic:  # increment 40, 5.7
+        raise typer.BadParameter(
+            "station-catchments needs a DEM in metres (a projected CRS); for a DEM in "
+            "degrees, run catchment for each station",
+            param_hint="--dem",
+        )
     _reach_crs(crs, repository)
     request = BatchRequest(
         map_radius=map_radius,

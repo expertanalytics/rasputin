@@ -8,10 +8,10 @@ this file.
 
 **The one hotspot is GEOS `buffer` of the SMHI staircase outline.** On Lagan
 it is 98 % of `decode` and 95–97 % of `features read` (the traced runs). The worst call is
-`feature_input.py:161`, which grows the whole domain by 100 m with round
+`src_python/tin_engine/feature_input.py@d9f9c025:161`, which grows the whole domain by 100 m with round
 corners: 28 s on Lagan. The GeoPackage path calls it **twice** (once for the
-R-tree box, `feature_input.py:294`, and once for the clip region,
-`feature_input.py:311`). The GeoJSON path calls it once.
+R-tree box, `src_python/tin_engine/feature_input.py@d9f9c025:294`, and once for the clip region,
+`src_python/tin_engine/feature_input.py@d9f9c025:311`). The GeoJSON path calls it once.
 
 **The best single fix is to grow the features region from the convex hull**
 (candidate 2). With the shared buffer (candidate 1) in place, it takes Lagan
@@ -46,7 +46,7 @@ reaches up to 10.8 m beyond GEOS's at one place where the outline
 turns back on itself (near vertex 7541), and GEOS's pokes out of the pieced region by 6.9e-6 m, which
 fails a 1e-6 m check. Why GEOS's region is smaller there was not measured.
 The candidate as patched applies to any mitred polygon of 5,000 vertices or
-more, so it would reach Numedalslågen's `dem_input.py:250` buffer. That buffer
+more, so it would reach Numedalslågen's `src_python/tin_engine/dem_input.py@d9f9c025:250` buffer. That buffer
 takes 5 ms there. No patched mesh run was made on Numedalslågen.
 
 **What was not run.** Ola cut the run: "the question needed minutes, not an

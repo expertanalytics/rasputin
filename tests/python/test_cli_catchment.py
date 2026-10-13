@@ -551,8 +551,8 @@ def test_bygdin_reduced_keeps_the_area_and_meshes_at_10_m(tmp_path: Path) -> Non
 # features, copies included). The file's properties gain `placed_on`,
 # `elvid`, `objectid`, `node_offset_m`, `lowered_nodes`, `reach_up_m`,
 # `downstream_checked`, `swing` and `causes` (names from the design's
-# `StationResult`). A river file whose CRS is not the DEM's is refused, and so
-# are a reach with `--lakes`, no line within `--map-radius`, and a radius or
+# `StationResult`). A river file in another CRS is moved into the DEM's
+# (increment 40); refused are a reach with `--lakes`, no line within `--map-radius`, and a radius or
 # reach that is not a finite positive number.
 # ---------------------------------------------------------------------------
 
@@ -712,13 +712,24 @@ def test_rivers_with_lakes_is_refused(tmp_path: Path, valley_dir: Path, rivers: 
     assert re.search(r"(?i)lake", output), output
 
 
-def test_a_river_file_in_another_crs_is_refused(tmp_path: Path, valley_dir: Path) -> None:
-    to_3035 = reprojector(gf.EPSG, "EPSG:3035")
-    line = [tuple(p) for p in to_3035(list(gf.column_line(LINE_COL, 20, 230)))]
-    other = rivers_file(tmp_path / "r3035.geojson", line, crs="EPSG:3035")
-    output = refused(tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(other))
-    assert re.search(r"\bCRS\b", output), output
-    assert "--rivers" in output, output
+@pytest.mark.parametrize("crs", ["EPSG:3035", "EPSG:4326"])
+def test_a_river_file_in_another_crs_is_moved_into_the_dems(
+    tmp_path: Path, valley_dir: Path, rivers: Path, crs: str
+) -> None:
+    """Increment 40 (5.5, R8) reverses 29's refusal: the gauge is placed in
+    the river file's CRS (in metres in a frame at the station when it is in
+    degrees) and the reach moved into the DEM's. The same placed node, so the
+    same catchment, as the river file in the DEM's CRS."""
+    to = reprojector(gf.EPSG, crs)
+    line = [tuple(p) for p in to(list(gf.column_line(LINE_COL, 20, 230)))]
+    other = rivers_file(tmp_path / f"r{crs[5:]}.geojson", line, crs=crs)
+    same, moved = tmp_path / "same.geojson", tmp_path / "moved.geojson"
+    run(valley_dir, same, *gauge_station(), "--rivers", str(rivers))
+    output = run(valley_dir, moved, *gauge_station(), "--rivers", str(other))
+    assert re.search(r"\bwithin 30 m up and down the river\b", output), output
+    assert feature(moved)["properties"]["nodes"] == feature(same)["properties"]["nodes"]
+    assert read_domain(moved).polygon.equals_exact(read_domain(same).polygon, 0.0)
+    assert feature(moved)["properties"]["node_offset_m"] == pytest.approx(4.0, abs=0.05)
 
 
 def test_map_radius_without_rivers_is_refused(tmp_path: Path, valley_dir: Path) -> None:

@@ -171,7 +171,8 @@ def test_the_module_holds_no_geometry_and_no_crs(edge_strip: ModuleType) -> None
 
 
 class TestFinalCheckPassesTheStripOn:
-    """D5, `final_check.py:28`: `run(..., strip=None)`, passed to `refine_points`."""
+    """D5, `src_python/tin_engine/final_check.py@e6348b41:28`: `run(..., strip=None)`,
+    passed to `refine_points`."""
 
     @pytest.fixture
     def seen(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:

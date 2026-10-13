@@ -60,10 +60,10 @@ GEOS buffers, nothing about cost. Nothing is carried across.
 
 | call (`f81b20b7`) | what | Lagan | Ljungan | Numedalslågen |
 |---|---|---|---|---|
-| `target_grid.py:107` | domain grown by √2·h, mitred, for the grid's bounds | 17.3 s | 2.1 s | not on this path |
-| `dem_input.py:213` | **the same buffer again**, for the needed region | 16.7 s | 2.1 s | not on this path |
-| `dem_input.py:250` | projected path: domain grown by the cell diagonal, mitred | not on this path | not on this path | 0.005 s |
-| `feature_input.py:161` | domain grown by 100 m, round, **only to take its convex hull**; called at `:294` (GeoPackage box), `:311` (region), `:316` (geographic source) | 28 s per call, 2 calls | 2.2 s per call | 0.017 s |
+| `src_python/tin_engine/target_grid.py@f300248e:107` | domain grown by √2·h, mitred, for the grid's bounds | 17.3 s | 2.1 s | not on this path |
+| `src_python/tin_engine/dem_input.py@f300248e:213` | **the same buffer again**, for the needed region | 16.7 s | 2.1 s | not on this path |
+| `src_python/tin_engine/dem_input.py@f300248e:250` | projected path: domain grown by the cell diagonal, mitred | not on this path | not on this path | 0.005 s |
+| `src_python/tin_engine/feature_input.py@f300248e:161` | domain grown by 100 m, round, **only to take its convex hull**; called at `:294` (GeoPackage box), `:311` (region), `:316` (geographic source) | 28 s per call, 2 calls | 2.2 s per call | 0.017 s |
 
 Candidates in full runs, Lagan with the GeoPackage: master 103.4 s; (1) one
 buffer instead of two, 61.6 s; (1)+(2) the features region from the hull,
@@ -93,14 +93,14 @@ grow.py (new):  uses_pieces(polygon, distance) -> bool            (3.3, the gate
 
 `target_grid_for(domain, target, spacing)` returns
 `tuple[TargetGrid, Polygon]`: the grid and the grown domain it was snapped
-around. `dem_input.py:212-213` unpack it; line 213's buffer goes. The rule
+around. `src_python/tin_engine/dem_input.py@f300248e:212-213` unpack it; line 213's buffer goes. The rule
 "grown by √2·h with mitred corners" stays in one function. `target_grid_for`
-has one production caller (`dem_input.py:212`) and two test calls
+has one production caller (`src_python/tin_engine/dem_input.py@f300248e:212`) and two test calls
 (`tests/python/test_target_grid.py:148`, `:160`), which `@tester` amends.
 
 ### 3.2 The features region from the hull (F1b)
 
-`feature_input.source_region` (`feature_input.py:158-167`) keeps its
+`feature_input.source_region` (`src_python/tin_engine/feature_input.py@f300248e:158-167`) keeps its
 signature and R5's rule (16b, R5: the region holds the domain's image with
 close to 100 m to spare; anything the margin lets in is clipped exactly in
 R6). Only line 161 changes:
@@ -139,10 +139,10 @@ New module `src_python/tin_engine/grow.py`, pure functions, no state:
   d = 43.84 m (at 1,000 edges the region equals GEOS's, 0 m² symmetric
   difference, equal bounds; at 250 and 500 it differed by up to 6.1e-7 m).
   Below 5,000 vertices there are at most five pieces and GEOS is fast.
-- Callers: `target_grid_for` (`target_grid.py:107`) and `_domain_plan`
-  (`dem_input.py:250`). Not `target_grid.py:145` (the grown polygon moved to
+- Callers: `target_grid_for` (`src_python/tin_engine/target_grid.py@f300248e:107`) and `_domain_plan`
+  (`src_python/tin_engine/dem_input.py@f300248e:250`). Not `src_python/tin_engine/target_grid.py@f300248e:145` (the grown polygon moved to
   the DEM's CRS and grown by a source cell: 0.2 s on Lagan, already no longer
-  a fine staircase) and not `target_grid.py:243` (hull of 512² blocks).
+  a fine staircase) and not `src_python/tin_engine/target_grid.py@f300248e:243` (hull of 512² blocks).
 
 **Why the gate, and why not by vertex count alone.** On a smooth outline the
 pieced region is not GEOS's: on Numedalslågen's NVE outline it reaches 10.8 m
