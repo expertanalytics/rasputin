@@ -49,6 +49,8 @@
 
 namespace py = pybind11;
 
+void bind_snow(py::module_& m);  // bindings/snow.cpp
+
 using terrain::Chain;
 using terrain::ChainRole;
 using terrain::EdgeProperties;
@@ -1575,4 +1577,6 @@ closed window [0, cols] x [0, rows] is a ValueError saying outside; so is a
 zero-area triangle, a non-finite corner or a wrong shape. threads only splits
 the work (0: all cores); the result does not depend on it. Releases the GIL.
 )doc");
+
+    bind_snow(m);
 }

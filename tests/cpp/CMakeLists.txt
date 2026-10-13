@@ -540,3 +540,11 @@ target_link_libraries(test_raster_steepness PRIVATE Threads::Threads)
 add_terrain_backend_test(test_refinement_slope_tolerance unit/test_refinement_slope_tolerance.cpp)
 add_terrain_backend_test(prop_refinement_slope_tolerance property/prop_refinement_slope_tolerance.cpp)
 target_link_libraries(prop_refinement_slope_tolerance PRIVATE Threads::Threads)
+
+# The HBV snow kernel, increment 46 PR 1 (docs/increments/46-hbv-snow.md,
+# sections 4.2 and 7): H1-H12, the invariants I1-I5 as properties P1-P5, the
+# refusals V1 and the renormalisation V2. Header-only (include/terrain/snow/),
+# so it links terrain_headers and Catch2 only. Invariant-critical. P5 starts
+# threads (1 and 8 must agree bit for bit).
+add_terrain_test(test_hbv_snow unit/test_hbv_snow.cpp)
+target_link_libraries(test_hbv_snow PRIVATE Threads::Threads)
