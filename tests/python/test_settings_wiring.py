@@ -161,6 +161,26 @@ def harmless_event(repo: Path, event: str, matcher: str | None) -> dict[str, Any
             "tool_input": {"to": "a1b2c3d4", "message": "Carry on."},
             "cwd": str(repo),
         }
+    if event == "PreToolUse" and tools == {"SubagentHandback"}:
+        # h20: record_review.py records only a handback whose agent_type is reviewer
+        return {
+            "hook_event_name": event,
+            "tool_name": "SubagentHandback",
+            "tool_input": {"message": "Result: done.\nReview: APPROVED " + "a" * 40},
+            "agent_type": "tester",
+            "agent_id": "a1b2c3d4",
+            "cwd": str(repo),
+        }
+    if event == "SubagentStop" and tools == {"reviewer"}:
+        # h20: a reviewer's stop whose last message carries no `Review:` line records nothing
+        return {
+            "hook_event_name": event,
+            "agent_type": "reviewer",
+            "agent_id": "a1b2c3d4",
+            "last_assistant_message": "Findings follow; no verdict yet.",
+            "stop_hook_active": False,
+            "cwd": str(repo),
+        }
     if event == "PermissionRequest":
         return {
             "hook_event_name": event,
@@ -184,7 +204,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_every_hook_script_is_covered_by_path() -> None:
-    """The five hooks under `.claude/hooks/` are all wired as bare paths.
+    """The six hooks under `.claude/hooks/` are all wired as bare paths.
 
     Without this, a hook rewired with an interpreter prefix would drop out of
     the by-path test below unnoticed.
@@ -196,6 +216,7 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "gates_after_commit.py",
         "guard_unattended.py",
         "guard_spawn.py",
+        "record_review.py",
     }
 
 
@@ -239,6 +260,8 @@ def test_hook_runs_by_path(repo: Path, event: str, matcher: str | None, command:
     assert code not in NOT_EXECUTED, f"{relative}: exit {code}, {NOT_EXECUTED.get(code)}"
     assert code == 0, f"{relative}: exit {code}; stderr: {result.stderr}"
     assert not (repo / ".git" / "harness" / "queue.jsonl").exists(), "an attended run queued"
+    reviews = repo / ".git" / "harness" / "reviews.jsonl"
+    assert not reviews.exists(), "a harmless event recorded a review"
 
 
 def test_guard_spawn_by_path_denies_a_blockless_persona_spawn(repo: Path) -> None:
