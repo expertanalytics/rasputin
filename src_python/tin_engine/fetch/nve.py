@@ -1,15 +1,19 @@
-"""`rasputin fetch-stations nve-hrd`: NVE's HRD stations, catchments and rivers (29, PR 3).
+"""`rasputin fetch-stations nve-hrd`: NVE's HRD stations, catchments and rivers.
 
-`docs/increments/29-nve-reference-catchments.md`, "The station set" and
-"Data use". The packaged list says which stations; NVE's map services give
-their points (`HydrologiskeData3` layer 0), their catchment polygons (layer
-38), the river lines round each (`Elvenett1` layer 2) and, for PR 4's lake
-gauges, the lakes near each (`Innsjodatabase2` layer 5). Every request names
-an explicit field allow-list, never `*`, and asks for GeoJSON in EPSG:25833.
+HRD is NVE's Hydrological Reference Dataset, a list of gauging stations. The
+packaged list says which stations; NVE's map services give their points
+(`HydrologiskeData3` layer 0), their catchment polygons (layer 38), the
+river lines round each (`Elvenett1` layer 2) and, for gauges in or at a
+lake, the lakes near each (`Innsjodatabase2` layer 5). Every request names
+an explicit field allow-list, never `*`, so no field NVE's data holds about
+people (owners, editors) is ever collected; and it asks for GeoJSON in
+EPSG:25833.
 
 The network call is injected (`get_text`), and the requests go out one at a
 time. Nothing here writes a file: :func:`fetch_station_set` returns each
 file's bytes, the manifest last, and `cli.py` writes them.
+
+The rules for NVE's data: `docs/increments/29-nve-reference-catchments.md`, *Data use*
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ from tin_engine.sources import StationSource, notice
 
 from .http import FetchError, query_url
 
-#: "Data use": the fields asked of each layer, and the only ones copied.
+#: The fields asked of each layer, and the only ones copied.
 FIELDS: Mapping[int, tuple[str, ...]] = {
     0: (
         "stasjonnr",
@@ -50,9 +54,11 @@ LAYERS = {
 }
 #: Station numbers per `where stasjonnr in (...)` query.
 CHUNK = 40
-#: `map_radius + reach_up + 500 m`, each way round the station point.
+#: Each way round the station point: the batch's default map radius and reach
+#: above the gauge (500 m and 1000 m), plus 500 m.
 ENVELOPE_HALF = 2000.0
-#: Each way round the station point: any lake within `gauge.LAKE_GAP_M` meets it.
+#: Each way round the station point: any lake within the lake gap (three
+#: cells, 30 m on a 10 m DEM) of the station meets it.
 LAKE_ENVELOPE_HALF = 100.0
 FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "lakes.geojson", "NOTICE.txt")
 

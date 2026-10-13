@@ -1,12 +1,23 @@
-"""The mapped reach moved onto the DEM's valley floor and burnt in (increment 29, PR 2).
+"""The mapped reach moved onto the DEM's valley floor and burnt in.
 
-`docs/increments/29-nve-reference-catchments.md`, "Following the river in the
-DEM". The reach is resampled at the node spacing; each point takes the
-lowest node of its cross-section (step 2); the chosen nodes are joined into
-an 8-connected chain and made taut; the direction is checked against the
-DEM; the chain is lowered only where it does not already fall (step 4), and
-extended along the raw valley floor past a lowered end (step 5). Numpy only:
-the window's array in, a burnt copy and the :class:`GaugePath` out.
+A mapped river line rarely lies on the DEM's valley floor, so a flood from it
+would follow the wrong cells. Four steps, named in the comments below:
+
+1. The reach is resampled at the node spacing; each point takes the lowest
+   node of its cross-section (up to `corridor` metres to either side). The
+   chosen nodes are joined into an 8-connected chain and made taut: where the
+   chain comes back within one step of an earlier node, the loop is cut.
+2. The direction is checked against the DEM: the chain's last tenth should
+   not lie well above its first.
+3. The chain is lowered only where it does not already fall.
+4. A lowered end is extended along the raw valley floor until it reaches a
+   node already lower than the channel (at most `END_CAP_M`), so the burnt
+   channel does not end in a pit.
+
+Numpy only: the window's array in, a burnt copy and the :class:`GaugePath`
+out.
+
+`docs/increments/29-nve-reference-catchments.md`, *Following the river in the DEM*
 """
 
 from __future__ import annotations
@@ -22,15 +33,15 @@ from tin_engine.gauge import Reach
 from tin_engine.geodesy import LocalFrame
 from tin_engine.io.models import DemTile, RasterMeta, valid_mask
 
-#: Metres each chain node falls below the one before it, at least (step 4).
+#: Metres each chain node falls below the one before it, at least (step 3).
 DROP_M = 0.001
-#: Metres of arc length the end's extension may run (step 5).
+#: Metres of arc length the end's extension may run (step 4).
 END_CAP_M = 500.0
-#: Metres of slack on the corridor's and the cross-section's bounds (step 2).
+#: Metres of slack on the corridor's and the cross-section's bounds (step 1).
 SLACK_M = 1e-6
-#: Metres the chain's last tenth may lie above its first (step 3).
+#: Metres the chain's last tenth may lie above its first (step 2).
 DIRECTION_M = 2.0
-#: Metres of chain under which its direction is not judged (step 3).
+#: Metres of chain under which its direction is not judged (step 2).
 DIRECTION_MIN_M = 100.0
 _NEIGHBOURS = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (dr, dc) != (0, 0)]
 
@@ -106,7 +117,7 @@ def _join(nodes: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], list[int
 
 
 def _taut(chain: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], list[int]]:
-    """Step 2's taut pass: the kept nodes, and each given node's kept index
+    """Step 1's taut pass: the kept nodes, and each given node's kept index
     (a dropped node maps to the kept node the cut starts from)."""
     a = np.array(chain)
     kept: list[tuple[int, int]] = []
@@ -138,10 +149,11 @@ def burn_reach(
     window: DemTile, reach: Reach, frame: LocalFrame | None = None
 ) -> tuple[DemTile, GaugePath]:
     """The window with the reach burnt in (a copy, same `meta`), and its path.
-    With a `frame` (increment 40, 5.5) the burn runs in its metres: on
-    `frame.meta(window.meta)` and `frame.forward(reach.line)`. A placed
-    position outside the window, a chain node without data, or no node with
-    data near the reach is a `BurnRefusal`."""
+    With a `frame` (metres near the reach, for a DEM in degrees) the burn
+    runs in its metres: on `frame.meta(window.meta)` and
+    `frame.forward(reach.line)`. A placed position outside the window, a chain
+    node without data, or no node with data near the reach is a
+    `BurnRefusal`."""
     m, raw = window.meta, np.asarray(window.array)
     line = np.asarray(reach.line, dtype=np.float64)
     if frame is not None:

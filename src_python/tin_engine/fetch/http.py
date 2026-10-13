@@ -1,18 +1,20 @@
-"""Byte ranges over HTTP, stdlib only (increment 23a-2).
+"""Byte ranges over HTTP, stdlib only.
 
-`docs/increments/23-basin-scale.md`, "Downloading". The one module in
-`tin_engine` that imports `urllib.request` or `http.client` (F11), so network
-code stays in `fetch/` and nothing on `rasputin mesh`'s path can reach it.
+The one module in `tin_engine` that imports `urllib.request` or
+`http.client`, so network code stays in `fetch/` and nothing on
+`rasputin mesh`'s path can reach it.
 
 A range answer must be 206 with `Content-Range: bytes start-(stop-1)/total`
 and exactly that many bytes; a 200 is refused without reading its body (it
-would be the whole file). One range per request (decided 3). Timeouts,
+would be the whole file). One range per request: cloud object stores
+(Amazon's, Google's) do not serve multi-range requests. Timeouts,
 connection errors, short bodies and 5xx are retried after each of `delays`;
 4xx and a malformed answer never are.
 
 Every request names its client, `User-Agent: rasputin/<version>`, instead of
-urllib's default (increment 29, "Data use"). `query_url` builds the query
-strings of `fetch/nve.py`, which may not import `urllib` itself.
+urllib's default, so a data provider can see who reads its service.
+`query_url` builds the query strings of `fetch/nve.py`, which may not import
+`urllib` itself.
 """
 
 from __future__ import annotations

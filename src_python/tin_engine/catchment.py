@@ -1,19 +1,23 @@
-"""The catchment of a lake, from the DEM, as a reduced outline (increment 22).
+"""The catchment of a seed, from the DEM, as a reduced outline.
 
-`docs/increments/22-auto-catchment.md`, "Data flow", "The seed", "The
-window" and "The fine outline". :func:`delineate` moves the seed point and the
-lake into the DEM's CRS, plans and assembles a window round them (15a), floods
-it (`_core.upstream`), grows the window until the catchment lies clearly
-inside it or is cut by the data's edge or NoData, and traces the outline of
-the in-nodes, holes filled and other pieces dropped. The fine outline is then
-reduced to the request's tolerance by `_core.reduce_ring`, keeping its area.
+The seed is a point (its nearest DEM node), a lake, or a gauge on a mapped
+river reach. :func:`delineate` moves the seed point and the lake into the
+DEM's CRS, plans and assembles a window of tiles round them
+(`tin_engine.mosaic`), floods it (`_core.upstream`), grows the window until
+the catchment lies clearly inside it or is cut by the data's edge or NoData,
+and traces the outline of the in-nodes, holes filled and other pieces
+dropped. The fine outline is then reduced to the request's tolerance by
+`_core.reduce_ring`, keeping its area.
 
-With a river reach (increment 29, "The window loop and the catchment"), the
-pour point is the gauge's placed node on the burnt reach (`burn.py`): stage A
-floods from it in each window, burnt afresh, and decides every refusal;
-stage B grows on until the catchment of `D`, the first chain node at or past
-`U`, is clear, and the sensitivity (`sensitivity.py`) is read from one
-`_core.accumulate` of the final window.
+With a river reach, the pour point is the gauge's placed node on the burnt
+reach (`burn.py`). Stage A floods from it in each window, burnt afresh, and
+decides every refusal. Stage B grows on until the catchment of `D` is clear
+of the window's edge too, `D` being the first chain node at least `U` metres
+(the reach's uncertainty) below the placed node. The sensitivity
+(`sensitivity.py`) is then read from one `_core.accumulate` of the final
+window, which holds the whole catchment of every chain node it reads. When
+stage B is refused, stage A's window is read instead, and the sensitivity
+reports how far downstream it could read.
 
 No paths: the DEM comes through a `DemRepository`, and the lakes arrive as
 shapely geometries the CLI read. Blocking (the flood releases the GIL); an
@@ -97,8 +101,8 @@ class CatchmentRequest(BaseModel):
     #: Metres the reduced outline may stray from the fine one; None is twice
     #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
     outline_tolerance: float | None = None
-    #: The gauge's mapped reach (increment 29), in `seed_crs`, moved into the
-    #: DEM's (increment 40): the pour point is the burnt chain's placed node.
+    #: The gauge's mapped reach, in `seed_crs`, moved into the DEM's CRS:
+    #: the pour point is the burnt chain's placed node.
     reach: Reach | None = None
 
     @model_validator(mode="after")
@@ -130,9 +134,9 @@ class Window:
 @dataclass(frozen=True, slots=True)
 class GaugeResult:
     """The gauge on the river: the placed node and the burnt chain in the
-    DEM's CRS, what the burn did, and the sensitivity at the placed node
-    ("The window loop and the catchment"). `causes` joins the sensitivity's
-    causes and, last, `direction` when the line runs against the DEM's slope."""
+    DEM's CRS, what the burn did, and the sensitivity at the placed node.
+    `causes` joins the sensitivity's causes and, last, `direction` when the
+    line runs against the DEM's slope."""
 
     node: tuple[float, float]
     chain: tuple[tuple[float, float], ...]
@@ -208,8 +212,9 @@ def check_reach_crs(crs: str, repository: DemRepository) -> None:
 
 
 def _code_hint(given: str, dem_crs: str) -> str:
-    """D15 b: when the DEM's CRS is exactly an EPSG code and `given` is none,
-    the code to write instead; otherwise nothing."""
+    """When the DEM's CRS is exactly an EPSG code and `given` is not one (a
+    WKT that may mean the same CRS), the code to write instead; otherwise
+    nothing."""
     code = parse_crs(dem_crs).to_epsg(min_confidence=100)
     if code is None or parse_crs(given).to_epsg(min_confidence=100) is not None:
         return ""
@@ -221,8 +226,8 @@ def delineate(
 ) -> Catchment:
     """The catchment of the request's seed over the repository's DEM, or a
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
-    or two under the point, over the memory budget). `resources` (38) gives
-    the budget one window may take; None is `Resources.fallback()`."""
+    or two under the point, over the memory budget). `resources` gives the
+    memory one window may take; None is `Resources.fallback()`."""
     budget = (Resources.fallback() if resources is None else resources).memory_budget
     footprints = repository.footprints()
     dem_crs = single_crs((f.meta.crs for f in footprints), CatchmentError)
@@ -256,7 +261,7 @@ def _grow[T](
     *,
     base: tuple[float, float],
 ) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
-    """22's window loop: flood, grow until the catchment is clear of the
+    """The window loop: flood, grow until the catchment is clear of the
     window's edge by `base` (the margin in the DEM's units, x and y), or
     refuse (NoData, the data's edge, the memory budget, whose per-node figure
     grows by a burnt copy and `accumulate`'s 10 bytes when `burnt`)."""
@@ -388,7 +393,7 @@ def _gauged(
 
 
 def _at_again(request: CatchmentRequest, dem_crs: str, frame: LocalFrame) -> float:
-    """The reach's `at` measured again in the burn `frame` (5.5): the
+    """The reach's `at` measured again in the burn `frame`: the
     mapped position `P`, `at` metres along the line in the request's CRS (in
     its frame there when in degrees), moved and projected onto the moved line."""
     assert request.reach is not None
@@ -546,8 +551,8 @@ def _outline(
 def _reduced(fine: Catchment, dem_crs: str, tolerance: float | None) -> Catchment:
     """The fine outline reduced to `tolerance` metres (None: twice the cell)
     by `_core.reduce_ring`, in metres from its lower-left corner (in a
-    `LocalFrame` at its centre when the DEM is in degrees, 5.6), the seed
-    point kept inside."""
+    `LocalFrame` at its centre when the DEM is in degrees, so the tolerance
+    is in metres either way), the seed point kept inside."""
     x0, y0, x1, y1 = fine.fine.bounds
     frame = LocalFrame.at(dem_crs, ((x0 + x1) / 2, (y0 + y1) / 2))
     tolerance = 2.0 * frame.cell_m(fine.meta) if tolerance is None else tolerance

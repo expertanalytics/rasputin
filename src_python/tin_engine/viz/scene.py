@@ -1,6 +1,6 @@
 """The geometry mapping: ``(Pslg, IndexedMesh2)`` -> a drawable ``Scene``.
 
-This module is increment 6b-i in full. It is pure computation over immutable
+It is pure computation over immutable
 data, it imports the protocols and nothing else first-party, and it never sees a
 file, a path or a CRS -- so it is testable against hand-built dataclasses with
 no compiled extension in the process.
@@ -40,11 +40,11 @@ Pair = tuple[int, int]
 
 
 class SceneKind(enum.Enum):
-    """What the picture is of, which decides how 6b-ii presents it."""
+    """What the picture is of, which decides how ``svg.py`` presents it."""
 
     MESH = "mesh"
     OK_BUT_EMPTY = "ok-but-empty"
-    """A *successful* backend call that produced no triangles (04-cdt risk 5).
+    """A *successful* backend call that produced no triangles.
     Distinct from ``FAILED`` because it is the silent mode, and the viewer is
     its second guard."""
     FAILED = "failed"
@@ -98,7 +98,7 @@ class BBox:
 
 @dataclass(frozen=True, slots=True)
 class Scene:
-    """Everything 6b-ii needs, and nothing it does not."""
+    """Everything ``svg.py`` needs, and nothing it does not."""
 
     kind: SceneKind
     vertices: npt.NDArray[np.float64]
@@ -156,10 +156,9 @@ def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, t
     chain: closing it emits ``_key(a, a)``, a self-loop, which violates
     ``SceneEdge``'s documented ``a < b`` ordering --
     ``test_a_single_vertex_ring_is_never_closed_into_a_self_loop`` is what
-    defends it. Double emission is *not* the reason, whatever the design once
-    said: ``joined`` is keyed on ``_key``, so closing a two-vertex chain would
-    write the same key twice and the second write would only union the
-    properties.
+    defends it. Double emission is *not* the reason: ``joined`` is keyed on
+    ``_key``, so closing a two-vertex chain would write the same key twice and
+    the second write would only union the properties.
     """
     joined: dict[Pair, tuple[object, int]] = {}
     for c, chain in enumerate(pslg.chains):

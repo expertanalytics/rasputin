@@ -1,12 +1,16 @@
 """``rasputin mcp``: the commands served over the Model Context Protocol, each call a child process.
 
-Increment 37 (`docs/increments/37-mcp-server.md`, sections 4 to 7). The
-package's only I/O and only async code: the child ``python -m tin_engine
+The package's only I/O and only async code: the child ``python -m tin_engine
 <argv>``, its stdout and stderr read as data, the record and stats sidecars
 beside ``out`` (removed after the read), progress notifications carrying
 elapsed seconds, a jobs cap, and the kill on cancel. Nothing here imports
 `_core`: the kernel runs in the child, behind the CLI, which keeps every rule
-it has. This process's stdout is the wire, so nothing here prints.
+it has. A child per call also means a cancelled call can be killed mid-C++,
+two calls never share memory or stdout, a crash in the kernel ends only the
+child, and a large run's memory is returned when it exits. This process's
+stdout is the wire, so nothing here prints.
+
+`docs/increments/37-mcp-server.md`, *6.4 Execution: a child process per call*
 """
 
 from __future__ import annotations
@@ -39,11 +43,11 @@ from tin_engine.mcp.schema import DerivedCommand, RunResult, derive
 
 __all__ = ["HEARTBEAT_SECONDS", "RunResult", "build_server", "serve"]
 
-#: Seconds between heartbeats while the child prints nothing (section 6.5); read at every tick.
+#: Seconds between heartbeats while the child prints nothing; read at every tick.
 HEARTBEAT_SECONDS = 5.0
 #: The production child: the same interpreter and installed `tin_engine` as the server.
 CHILD = (sys.executable, "-m", "tin_engine")
-#: Typer's plain refusals and no colour in the child (section 2).
+#: Typer's plain refusals and no colour in the child, so its stderr parses as text.
 CHILD_ENV = {"TYPER_USE_RICH": "0", "NO_COLOR": "1", "TERM": "dumb"}
 MIME_TYPES = {
     ".gpkg": "application/geopackage+sqlite3",
@@ -53,7 +57,7 @@ MIME_TYPES = {
     ".json": "application/json",
     ".md": "text/markdown",
 }
-#: Shown to the model at initialize (section 6.8).
+#: Shown to the model at initialize.
 INSTRUCTIONS = """\
 Paths are on the machine this server runs on, as for the rasputin command line.
 mesh writes a mesh file at out and returns its run record; the mesh itself never travels here.
@@ -141,7 +145,7 @@ def _error(
 
 
 def _refusal(code: int, stderr: list[str]) -> str:
-    """The CLI's own words: its ``Error:`` line(s) without the usage reminder (section 5)."""
+    """The CLI's own words: its ``Error:`` line(s) without the usage reminder."""
     if code < 0:
         return f"killed by signal {-code} ({signal.Signals(-code).name})"
     words = [line for line in stderr if line and not line.startswith(("Usage:", "Try '"))]
@@ -170,7 +174,7 @@ async def _outputs(stdout: list[str], hidden: list[Path]) -> list[str]:
 async def _call(
     tool: DerivedCommand, arguments: BaseModel, prefix: Sequence[str], progress: _Progress
 ) -> types.CallToolResult:
-    """One validated call: the sidecars, the child, the shaped result (sections 5 and 6.4)."""
+    """One validated call: the sidecars, the child, the shaped result."""
     argv = tool.argv(arguments)
     sidecars: list[Path] = []
     record_file = stats_file = None
@@ -250,7 +254,7 @@ def build_server(app: typer.Typer, *, jobs: int = 1, child: Sequence[str] = CHIL
                     return await _call(tool, arguments, prefix, progress)
             finally:
                 semaphore.release()
-        except Exception as exc:  # the server's own fault, in words (section 5)
+        except Exception as exc:  # the server's own fault, in words
             return _error(None, f"{type(exc).__name__}: {exc}")
 
     return Server(
@@ -263,7 +267,7 @@ def build_server(app: typer.Typer, *, jobs: int = 1, child: Sequence[str] = CHIL
 
 
 async def serve(app: typer.Typer, jobs: int = 1) -> None:
-    """``rasputin mcp``: the server on this process's stdin and stdout (section 6.8)."""
+    """``rasputin mcp``: the server on this process's stdin and stdout."""
     server = build_server(app, jobs=jobs)
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())

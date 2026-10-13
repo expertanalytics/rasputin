@@ -1,10 +1,13 @@
-"""The catchment's calls into ``_core`` (python-audit.md, section 11).
+"""The catchment's calls into ``_core``.
 
-Layer 3, as ``edge_strip.py`` is the edge strip's: the flood and the flow
-accumulation over a decoded tile, each the core call on
-``raster.to_core_lattice``'s view (increment 40: a unit lattice, any DEM),
-and the ring reduction re-exported. ``catchment`` imports this module, never
-``_core`` or ``raster``, so it never holds a core raster view.
+One of the adapters that alone may import ``_core`` (layer 3 in
+``tests/python/test_layering.py``), as ``edge_strip.py`` is for the edge
+strip: the flood and the flow accumulation over a decoded tile, each the core
+call on ``raster.to_core_lattice``'s view, and the ring reduction re-exported.
+The view is a unit lattice (spacing 1, no coordinates), since the hydrology
+reads only the grid's shape, values and NoData; so a DEM in degrees floods as
+one in metres. ``catchment`` imports this module, never ``_core`` or
+``raster``, so it never holds a core raster view.
 """
 
 from __future__ import annotations

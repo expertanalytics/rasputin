@@ -1,11 +1,13 @@
 """Each Typer command as an MCP tool: its argument model, its JSON schema, the way back to argv.
 
-Increment 37 (`docs/increments/37-mcp-server.md`, sections 5 and 6.3). Pure:
+Pure:
 a Typer app in, `DerivedCommand`s out; validated arguments in, argv out. No
 I/O, no async, nothing of `tin_engine` imported, so the derivation is tested
 on a toy app without the kernel. The click parameters are the one statement
 of the CLI's surface, so a new option is a new property with no change here;
 `additionalProperties: false` because the CLI refuses an unknown option too.
+
+`docs/increments/37-mcp-server.md`, *5. The tool surface*
 """
 
 from __future__ import annotations
@@ -19,17 +21,18 @@ import mcp_types as types
 import typer
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-#: The command that is the server itself: not a tool (section 6.8).
+#: The command that is the server itself: not a tool.
 SERVER_COMMAND = "mcp"
-#: click's type names as annotations (section 5); a path is a string on the server's machine.
+#: click's type names as annotations; a path is a string on the server's machine.
 SCALARS: dict[str, type] = {"str": str, "int": int, "float": float, "boolean": bool, "path": str}
-#: Section 5's annotations by tool name; every tool is non-destructive.
+#: MCP's tool annotations (hints to the client) by tool name: `version` only
+#: reads, the fetches reach the network; every tool is non-destructive.
 READ_ONLY = frozenset({"version"})
 OPEN_WORLD = frozenset({"fetch", "fetch_stations"})
 
 
 class RunResult(BaseModel):
-    """What a tool call returns when the command exits 0 (section 5's table)."""
+    """What a tool call returns when the command exits 0."""
 
     command: str
     exit_code: int

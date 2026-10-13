@@ -1,10 +1,10 @@
 """The hydrography's value types: river segments, gauging stations, lakes.
 
-Layer 0, no first-party import (python-audit.md, section 11): `gauge` places
-on them without importing a codec, and `io/rivers.py` and
-`io/station_set.py` read files into them. The fields are the ones increment
-29 defines (`docs/increments/29-nve-reference-catchments.md`, "Placing the
-gauge", "The station set" and "Lake gauges").
+Imports nothing else from the package (layer 0 in
+`tests/python/test_layering.py`), so `gauge` places a station on them without
+importing a codec, while `io/rivers.py` and `io/station_set.py` read files
+into them. The field names follow NVE's own where they are kept as
+served.
 """
 
 from __future__ import annotations
@@ -18,7 +18,8 @@ from shapely.geometry import Polygon
 
 class RiverSegment(BaseModel):
     """One mapped line, digitised downstream, in its file's CRS. `objekttype`
-    is kept as served; `kind` is what "Placing the gauge" reads."""
+    is kept as served; `kind` is what `gauge.place` reads (a lake line or a
+    river line)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -49,8 +50,9 @@ class Station(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class Lake:
-    """One lake polygon part, in its file's CRS (PR 4, "Lake gauges").
-    `number` is NVE's `vatnlnr`, None for null or 0; `name` is `navn`."""
+    """One lake polygon part, in its file's CRS; a gauge in or at a lake is
+    seeded with it (`gauge.lake_seed`). `number` is NVE's `vatnlnr`, None for
+    null or 0; `name` is `navn`."""
 
     number: int | None
     name: str | None

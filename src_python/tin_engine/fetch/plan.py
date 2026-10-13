@@ -1,12 +1,12 @@
-"""What a fetch takes, decided from headers alone (increment 23a-2). Pure.
+"""What a fetch takes, decided from headers alone. Pure.
 
-`docs/increments/23-basin-scale.md`, "Planning (`fetch/plan.py`, pure)". The
-blocks fetched are those meeting the domain's *box* (decided 1), because every
-window the mesh decodes is a box: the box in the frame (`out_crs`, else the
-source CRS), grown by `margin` times the source's north-south spacing in
-metres, moved into the source CRS, then grown by two source cells as 15c-2's
-`source_region` grows its own. The missing blocks become byte ranges, runs
-with gaps of at most 64 KiB coalesced up to 8 MiB.
+The blocks fetched are those meeting the domain's *box*, not its outline,
+because every window the mesh decodes is a box: the box in the frame
+(`out_crs`, else the source CRS), grown by `margin` times the source's
+north-south spacing in metres, moved into the source CRS, then grown by two
+source cells as the mesh's own source region (`target_grid.source_region`)
+is grown. The missing blocks become byte ranges, runs with gaps of at most
+64 KiB coalesced up to 8 MiB.
 """
 
 from __future__ import annotations
@@ -47,7 +47,8 @@ class FetchRequest(BaseModel):
     connections: int = 8
     dry_run: bool = False
     refresh: bool = False
-    #: The year of a one-cog-per-year source (26a); None is the source's last.
+    #: The year of a source with one file per year (the land cover); None is
+    #: the source's last.
     year: int | None = None
 
     @model_validator(mode="after")
@@ -71,7 +72,8 @@ class ObjectPlan(BaseModel):
 
 
 class _Prefix(io.BytesIO):
-    """A header prefix that raises on any read past its end (F7). It claims to
+    """A header prefix that raises on any read past its end, so the caller
+    knows to fetch a longer prefix rather than parse a cut header. It claims to
     be a very long file, so tifffile reads a tag value lying past the prefix
     instead of dropping the tag as out of the file."""
 
@@ -90,7 +92,8 @@ def parse_prefix(
     """The header from a prefix of the file, or None while the prefix lacks
     any of it: a read past its end, or an offset or byte count of a block of
     the full-resolution page (tifffile logs a short offset array and goes on,
-    so the count is the check). Geographic CRSs are read (decided 6)."""
+    so the count is the check). A geographic CRS is accepted: a source in
+    degrees can be fetched."""
     try:
         meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata, z_unit=z_unit)
         rows, _, across = block_grid(page)
@@ -144,9 +147,9 @@ def plan_object(
     present: Collection[int],
 ) -> ObjectPlan:
     """The blocks with a node strictly within one cell of `box` (the box
-    snapped outward to the lattice, as 23a-1's windows are), and the ranges of
-    those neither `present` nor sparse (a sparse block is never requested,
-    decided 7)."""
+    snapped outward to the lattice, as the mesh's windowed reads are), and the
+    ranges of those neither `present` nor sparse (a sparse block, byte count 0,
+    has nothing to request)."""
     xs, ys = meta.node_xy(np.arange(meta.rows), np.arange(meta.cols))
     cols = np.flatnonzero((xs > box.x_min - meta.delta_x) & (xs < box.x_max + meta.delta_x))
     rows = np.flatnonzero((ys > box.y_min - meta.delta_y) & (ys < box.y_max + meta.delta_y))
