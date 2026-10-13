@@ -289,3 +289,25 @@ def suggest_crs(box: tuple[float, float, float, float], geographic_crs: str | CR
 
 def _transformer(src: str | CRS, dst: str | CRS) -> Transformer:
     return Transformer.from_crs(parse_crs(src), parse_crs(dst), always_xy=True)
+
+
+class Site(BaseModel):
+    """A point's latitude, longitude and grid convergence, in degrees."""
+
+    model_config = ConfigDict(frozen=True)
+
+    lat_deg: float
+    lon_deg: float
+    #: The true azimuth of grid north (pyproj's meridian convergence).
+    convergence_deg: float
+
+
+def site_of(crs: str | CRS, x: float, y: float) -> Site:
+    """Where `(x, y)` in the projected `crs` lies on the globe; a geographic
+    CRS is a ValueError."""
+    c = parse_crs(crs)
+    if not c.is_projected:
+        raise ValueError("a projected CRS in metres is needed; this one is in degrees")
+    lon, lat = _transformer(c, c.geodetic_crs or "EPSG:4326").transform(x, y)
+    factors = Proj(c).get_factors(lon, lat)
+    return Site(lat_deg=lat, lon_deg=lon, convergence_deg=factors.meridian_convergence)
