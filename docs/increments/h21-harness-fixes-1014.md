@@ -6,8 +6,11 @@ Implements nine changes Ola approved on 2026-10-14 ("yes to all, push and
 enqueue"): P1 to P5 of `docs/retrospectives/2026-10-14-night-snow-46.md`
 section 6; the three guard false positives that retrospective lists as
 waiting on Ola in its section 2 (the GraphQL read, the scratchpad clone, the
-after-commit hook on a conflicted merge); and the open-PR recap of P4 in
-`docs/retrospectives/2026-10-13-merge-43.md`.
+after-commit hook on a conflicted merge); and P2 and P4 of
+`docs/retrospectives/2026-10-13-merge-43.md` section 7 (P2: a read-only
+`gh api graphql` query is not a forge write; P4: the session recap lists
+every open PR with its age and state). `session.md`'s `ASK OLA` lines, and
+the 2026-10-14 retrospective's section 2, call those two "Q1" and "Q2".
 
 Acceptance (PR A, prose): `@reviewer` checks each rule's incident commit; no run beyond the governance gates.
 Acceptance (PR B, code): the harness suites (`pytest -m harness`) and the three live checks of section 9, recorded in this file; no `@perf` run (no refine or mesh code).
@@ -28,11 +31,18 @@ Tooling; no novelty claimed.
   (spec.graphql.org/October2021, read 2026-10-14): "query – a read-only
   fetch", "mutation – a write followed by a fetch", "subscription – a
   long-lived request ..."; the *Query shorthand* omits "the query keyword and
-  operation name" and is a query. Item 1 reads an operation as a read on that
-  basis. Departure: it does not parse GraphQL; it refuses any document that
-  contains the word `mutation` or `subscription` anywhere, comments and
-  strings included. That over-refuses (a read whose text names the word) and
-  never under-refuses, which is the side a guard errs on.
+  operation name" and is a query. An operation type is one token, so a
+  mutation's document holds the word `mutation` as written (GraphQL names
+  are ASCII, `[_A-Za-z][_0-9A-Za-z]*`, and no escape forms a keyword). Item 1
+  reads an operation as a read on that basis. Departure: it does not parse
+  GraphQL; it refuses a line that contains the word `mutation` or
+  `subscription` anywhere, comments and strings included, which
+  over-refuses (a read whose text names the word). Its soundness rests on
+  two premises, each enforced or stated in section 4.1: the text the guard
+  reads is the text `gh` sends (no shell expansion; `-f` sends "static
+  string parameters", where `-F` fills `{owner}`, `{repo}` and `{branch}` and
+  reads `@file`, per `gh api --help`, gh 2.101.0), and nothing else on the
+  line changes what `gh` runs.
 - Claude Code hooks reference (code.claude.com/docs/en/hooks, read
   2026-10-14): every event's `cwd` is the "Current working directory when the
   hook is invoked", and "the new directory after Claude runs `cd`"; both tool
@@ -46,7 +56,13 @@ Tooling; no novelty claimed.
   Fast-forward`); "Already up to date" writes none; a merge stopped on a
   conflict leaves `MERGE_HEAD` and HEAD unchanged; a real merge writes
   `merge main: Merge made by the 'ort' strategy.`. Measured by a probe script
-  in the session scratchpad on a throwaway repository, 2026-10-14.
+  in the session scratchpad on a throwaway repository, 2026-10-14. Not
+  probed, taken from git's documentation of `git log -g` and pinned by
+  tests 12 and 17: a reflog entry's `%H` is the commit HEAD moved to, and
+  `rev-parse --git-common-dir` in a worktree or behind a `.git` gitfile names
+  the other repository's directory. A second probe was refused by the push
+  guard (`git reset --hard` in a scratchpad repository, the false positive
+  item 5 removes).
 - Merge-queue practice (GitHub's merge queue, already in use here per
   `CLAUDE.md` §4) tests each PR on top of those ahead of it; item 6 does the
   same check by hand before the push question, with `git merge-tree`.
@@ -97,9 +113,11 @@ and none can be made while unattended mode is on. `.claude/settings.json`
 
 `segment_why` today calls any `gh api` with a field and no method a write,
 because `gh` then POSTs, and every GraphQL call is a POST. New pure function
-in `guard_push.py`, `graphql_read(rest: list[str]) -> bool`, called where the
-`gh api` write is decided; `True` means "not a write". It is `True` only when
-all hold:
+in `guard_push.py`, `graphql_read(rest: list[str], line: str) -> bool`, called
+where the `gh api` write is decided, with the simple command's argv after
+`api` and the whole command line as written; `True` means "not a write". It
+is called only on the `shell_scan` path: a line `shell_scan.parse` cannot read
+is judged by today's text rules, which ask. It is `True` only when all hold:
 
 1. The endpoint (the first word after `api` that is not an option or an
    option's value) is exactly `graphql`.
@@ -109,15 +127,36 @@ all hold:
    (each with its value), `--paginate`, `--slurp`, `-i`/`--include`,
    `--silent`, `--verbose`; or `-X`/`--method` with `POST` or `GET`. Anything
    else (`--input` included) is `False`.
-3. Exactly one field has the key `query`, and its value does not start with
-   `@` (a file the guard cannot read).
+3. Exactly one field has the key `query`, and it is given by `-f` or
+   `--raw-field` (sent as written). A `query` given by `-F`/`--field` is
+   `False`: `gh` fills `{owner}`, `{repo}` and `{branch}` in it and reads
+   `@file`, so the guard does not see the text sent.
 4. That value, stripped of leading whitespace, starts with `{`, `query` or
-   `fragment`, and contains neither `mutation` nor `subscription` as a word
-   (`\b(mutation|subscription)\b`, anywhere: comments and strings are not
-   stripped).
+   `fragment`.
+5. `literal(line)`: the line, as written, has no shell expansion outside
+   single quotes. A new pure function in `tools/shell_scan.py`, a left-to-right
+   scan with three states (outside quotes, in `'...'`, in `"..."`; a
+   backslash outside single quotes takes the next character): `False` on `$`
+   or a backtick outside single quotes, and outside any quotes on `{`, `}`,
+   `*`, `?`, `[`, `~` or a backslash (brace, glob and tilde expansion, and
+   escapes such as `mu\tation`); also `False` on an unclosed quote. So
+   `$M`, `"$M"`, `$'\x6d'`, `$(printf mut)`, `` `…` `` and `mu{tation,}`
+   are refused, and a query written in single quotes passes.
+6. The whole line, as written, contains neither `mutation` nor
+   `subscription` as a word (`\b(mutation|subscription)\b`): every field,
+   every other command on the line, comments and strings included.
 
 Other fields (GraphQL variables such as `-F number=5`, `-f owner=x`) are
-allowed: a variable cannot turn a query into a mutation.
+allowed: a variable is a value, never an operation type.
+
+What it does not claim. Given 5, the query text `gh` sends is the text the
+guard reads, and given 6 a mutation's keyword is on the line, so a mutation
+or subscription sent through `gh api graphql` by a line that passes 1 to 6
+is not known to exist. It does not hold against a `gh` that is not GitHub's
+(a wrapper earlier on `PATH`, `GH_*` settings pointing elsewhere); the
+guards are tripwires (`.claude/REQUIRED-READING.md`, *The harness*). Rule 5
+over-refuses any line with a `$` outside single quotes (`cd "$W" && gh api
+graphql …` asks); write such reads as one plain line.
 
 ### 4.2 Git in a scratchpad repository (item 5, push guard)
 
@@ -125,31 +164,75 @@ allowed: a variable cannot turn a query into a mutation.
 `update-ref`, `symbolic-ref`, `replace`, a fetch into a named ref, history
 rewrites, `--no-verify`) wherever they run. `git clone` and `git commit` pass
 already (probe of 2026-10-14 against `guard_push.py@55b9f564`; pinned below as
-regression tests). New: such a write passes when the git command's directory
-lies under a scratchpad (`scratchpad.under`, by real path). Never passes,
-whatever the directory: `git push` (`PUSH`, `FORCE`), `gh` of any kind,
-`curl`.
+regression tests). New: such a write passes when its repository is a
+scratchpad's own, by all of the checks below; a failed check means today's
+ask. Never passes, whatever the directory: `git push` (`PUSH`, `FORCE`),
+`gh` of any kind, `curl`.
 
-The directory of each git command comes from a new pure function in
+1. The line is one `shell_scan` reads, and the git command's directory is a
+   `Path` from `directories(..., chain_only=True)` (below) under a
+   scratchpad (`scratchpad.under`, by real path).
+2. Its repository is the scratchpad's: `git -C <dir> rev-parse
+   --path-format=absolute --git-common-dir`, run by the guard (read-only, 5 s
+   timeout, assuming a local rev-parse of milliseconds, one per git write
+   on the line; `GIT_*` removed from its environment), exits 0 and prints a path
+   whose real path is under a scratchpad. A worktree or a `.git` gitfile in
+   the scratchpad whose common directory is the real repository's (shared
+   refs and config) fails here, as does a directory that does not exist yet
+   when the guard runs (`git clone <url> <pad>/c && git -C <pad>/c config …`
+   on one line asks; run the clone first).
+3. The git command names no file outside its repository: `config` with
+   `--global`, `--system` or `--file`/`-f` (joined or separate) fails, as
+   do `--git-dir`/`--work-tree` and `-c include.path=…` anywhere in its argv.
+4. The line's text holds no `GIT_[A-Z_]*` word (`GIT_DIR`, `GIT_CONFIG_GLOBAL`,
+   `GIT_CONFIG_PARAMETERS`, …): the environment could move any of 1 to 3.
+5. Nothing else on the line can change which repository the directory is
+   between the guard's check and the write: every other simple command is
+   `cd`/`pushd`/`popd`, or a git command whose subcommand is not `init`,
+   `clone`, `worktree` or `submodule`, or a command with no `writes`, not
+   `unknown`, and no interpreter `program` or `script`.
+
+The directory of each git command comes from new pure functions in
 `tools/shell_scan.py`, moved out of `gates_after_commit.py` so both hooks and
 the new recorder share one reading:
 
 ```python
-def directories(simples: list[Simple], start: Path) -> list[Path | str]:
+def directories(simples: list[Simple], start: Path, *, chain_only: bool) -> list[Path | str]:
     """The directory each simple command runs in: `cd`/`pushd`/`popd` followed
-    from `start`; a str (the word as written) once a directory is unknown."""
+    from `start`; a str (the word as written) once a directory is unknown.
+    With chain_only, a command's directory is a Path only while every
+    top-level command up to it is `chained`, and a `nested` command's is
+    always a str; the guards use this, the after-commit hook does not."""
 
 def git_directory(argv: list[str], shell_dir: Path | str) -> Path | str:
     """The directory git works in: shell_dir, moved by `-C`; a str when
     `--git-dir` or `--work-tree` is given (h19 §3.2's rule, unchanged)."""
+
+def literal(line: str) -> bool:
+    """True when the line, as written, has no shell expansion outside single
+    quotes (section 4.1, rule 5)."""
 ```
 
-`gates_after_commit.git_dirs` keeps its signature (its tests load it from
-the hook) and becomes a composition of the two. The scratchpad pass needs a
-`Path` that `scratchpad.under` accepts, and fails closed on: a `str`
-directory (`$S`, `~user`, an unknown `cd -`), `--git-dir`/`--work-tree`, and
-any of `GIT_DIR`, `GIT_WORK_TREE`, `GIT_CONFIG`, `GIT_COMMON_DIR` in the
-line's text. `start` is the Pre event's `cwd` (before the command, section 5).
+`Simple` gains two fields the scanner sets (item 5, review point 3):
+
+- `nested: bool`: it runs inside `( … )`, `$( … )`, backticks, `<( … )`, or
+  a nested parse (`sh -c`, a shell's heredoc, `eval`), so its `cd` moves no
+  top-level command.
+- `chained: bool`: it is a top-level command, no reserved word (`!`, `if`,
+  `{`, `while`, …) was stripped from its front, and the only token between it
+  and the previous top-level command is one `&&` (the line's first command:
+  none). `;`, a newline, `||`, `|`, `&`, `(`, `)` or a reserved word there
+  makes it `False`.
+
+So with `chain_only`, `cd <pad> && git config a.b c` passes; `(cd <pad>) ;
+…`, `false && cd <pad>; …`, `cd <pad> || true && …`, `! cd <pad> && …` and
+`cd <pad> | …` give every later command a `str` directory. A `cd` that fails
+inside an `&&` chain stops the line, so no later write runs in the wrong
+place. `gates_after_commit.git_dirs` keeps its signature (its tests load it
+from the hook) and becomes a composition of `directories(...,
+chain_only=False)` and `git_directory`, following `cd` in a straight line as
+today: there a wrong guess gates a wrong tree, it does not pass a write.
+`start` is the Pre event's `cwd` (before the command, section 5).
 
 ## 5. Items 3 and 4: the after-commit hook
 
@@ -199,7 +282,10 @@ until the sweep.
 `gates_after_commit.py` reads and deletes the record for the event's
 `tool_use_id`. **Without a record, it does exactly what it does today**
 (every existing test in `tests/python/test_gates_after_commit.py` runs
-without one and stays as it is). With a record:
+without one and stays as it is). A record it cannot read counts as none: a
+file that is not JSON, not an object, or whose `cwd` is not an absolute
+path or `heads` not an object of 40-hex strings or `null`; and a directory
+missing from `heads` is judged by today's rule (gated). With a record:
 
 1. Directories are resolved from the record's `cwd`, not the event's.
 2. For each resolved directory, in order, its work-tree top and HEAD now:
@@ -212,9 +298,18 @@ without one and stays as it is). With a record:
      if HEAD is unchanged, skip silently; if HEAD moved (a commit, then a
      merge that stopped), one line: `NOT CHECKED: <top> has a <merge|...> in
      progress; run the gates after the commit that ends it.`;
-   - HEAD moved and the newest HEAD reflog subject
-     (`git log -g -1 --format=%gs HEAD`) ends with `: Fast-forward`: skip,
-     silently;
+   - HEAD moved and **every** HEAD reflog entry since the recorded HEAD is a
+     fast-forward: skip, silently. Read with `git log -g -n 50
+     --format=%H%x09%gs HEAD`, newest first; each entry's `%H` is the commit
+     HEAD moved to, so the entries since the recorded HEAD are those before
+     the first whose `%H` is the recorded sha. Skip only when that sha is
+     found, at least one entry precedes it, and each such entry's subject
+     ends with `: Fast-forward`. The sha not among the 50, git failing, or
+     one entry of another kind (`commit: …`, `merge …: Merge made by …`,
+     `reset: …`): gate it. So `git commit -m x && git merge --ff-only y` is
+     gated, and a fast-forward alone is not. Constant: 50 entries, assuming
+     one Bash line moves HEAD fewer than 50 times; more than 50 gates, the
+     safe side;
    - otherwise gate it, as today.
 3. A `str` directory (unknown) stays `NOT CHECKED`, as today.
 
@@ -234,12 +329,26 @@ amend" becomes "A fix is one more commit".
 `In flight:` as `Open PRs (N):`, one line per PR, oldest first:
 
 ```
+  #251  12h  CONFLICTING  worktree-example  An example title
   #255  2d 3h  worktree-catalogue-data  Increment 44: land-cover catalogue as data
 ```
 
 From one call, `gh pr list --state open --limit 100 --json
-number,title,headRefName,createdAt`, run with a 10 s timeout from the main
-checkout. Age is from `createdAt` (opened, not last updated): under 1 h
+number,title,headRefName,createdAt,mergeable`, run with a 10 s timeout from
+the main checkout. The state word after the age: `CONFLICTING` when
+`mergeable` is `CONFLICTING`; `mergeable unknown` when it is `UNKNOWN`;
+nothing when `MERGEABLE`; any other value is printed as given. `UNKNOWN` is
+common, not an error: GitHub computes the value on demand, and the first
+call of 2026-10-14 (08:00 UTC) gave `UNKNOWN` for all three open PRs, the
+next, seconds later, `MERGEABLE` for #258 and `CONFLICTING` for #251 and
+#252. The recap does not wait or retry for it.
+
+Left out of P4's list, with the reason: *reviewed* and *approved* (GitHub's
+`reviewDecision` is `""` on every open PR and on the five newest merged
+ones, 2026-10-14: reviews here are `## Review` lines in increment files, not
+GitHub reviews), and *not enqueued* (`gh pr list --json` has no merge-queue
+field in gh 2.101.0; it needs a second, GraphQL, call at every session
+start). Age is from `createdAt` (opened, not last updated): under 1 h
 `Nm`, under a day `Nh`, else `Nd Nh`. The title is cut at 50 characters with
 `...`. No PRs: `Open PRs: none`. `gh` missing, exit not 0, timeout, or JSON
 that is not a list of such objects: one line `Open PRs: unavailable
@@ -330,13 +439,18 @@ words; the rule now lives only there).
   substitution or interpreter program). `guard_push.py` passes no git write
   in a scratchpad repository." becomes "except a path in a session
   scratchpad: written by Edit or Write, or by a shell line the guard can read
-  whose directories are literal, with no interpreter program and no link
-  made on the line. `guard_push.py` passes git's local writes in a
-  scratchpad repository, never a push."
+  whose directories are literal and reached only through `cd`s joined by
+  `&&`, with no interpreter program and no link made on the line.
+  `guard_push.py` passes git's local writes in a repository that is the
+  scratchpad's own (not a worktree or gitfile of another), never a push; a
+  `gh api graphql` query, written in single quotes and sent by `-f`, is a
+  read."
 
 **Item 8, `.claude/briefs/common.md`:** the line of section 7.2.
 
-Net, by `tools/rule_sizes.py`: about +130 words.
+Net, by `tools/rule_sizes.py`: about +160 words (+30 at design review
+round 1, for the `&&` chain, the scratchpad's own repository and the
+GraphQL read).
 
 ## 9. Item 5, the governance guard, and the live checks
 
@@ -345,7 +459,8 @@ Net, by `tools/rule_sizes.py`: about +130 words.
 `guard_governance.judge_bash` today exempts a scratchpad target only on a
 line that is one plain command. New: on a line `shell_scan` can read, a
 target is exempt when it, joined to its simple command's directory
-(`shell_scan.directories` from the Pre event's `cwd`), lies under a
+(`shell_scan.directories(..., chain_only=True)` from the Pre event's `cwd`,
+section 4.2: only through `cd`s joined by `&&` at top level), lies under a
 scratchpad, provided no simple command on the line:
 
 - is `unknown`, or has an interpreter `program` or `script`;
@@ -385,30 +500,59 @@ network; `gh` is a fake on `PATH` where used.
    viewer { login } }'`; `-fquery=...`; `--raw-field=query=...`; `-F
    number=5 -f query='query($number:Int!){...}'`; with `--jq .data`,
    `--paginate`, `-H 'Accept: x'`, `-X POST`.
-2. Ask: `-f query='mutation { ... }'`; `query Q {...} mutation M {...}`;
-   `subscription {...}`; a read whose text contains `# mutation`; `-F
-   query=@q.graphql`; `--input q.json`; two `query` fields; `-X PUT`; an
-   unknown option `--foo`; endpoint `/graphql` or
-   `https://api.github.com/graphql`; `repos/a/b/issues -f title=x` (unchanged).
+2. Ask, operation: `-f query='mutation { ... }'`; `query Q {...} mutation M
+   {...}`; `subscription {...}`; a read whose text contains `# mutation`; a
+   read followed by `&& echo mutation` (the word anywhere on the line).
+3. Ask, shell expansion (review point 1): `-f query="$M"`; `-f
+   query=$M`; `-f query=$'\x6d'utation...`; `-f query="$(printf
+   mut)ation {...}"`; a backtick form; `-f query=mu{tation,}...` unquoted;
+   `-f query=mu\tation...` unquoted; an unclosed quote (the text rule asks);
+   and `literal` pure: `'$x'` is `True`, `"$x"`, `$x`, `a{b,c}`, `a*` and
+   `~/x` are `False`.
+4. Ask, fields and options: `-F query='{ viewer { login } }'` (query by
+   `-F`, review point 1); `-F query=@q.graphql`; `--input q.json`; two
+   `query` fields; `-X PUT`; an unknown option `--foo`; endpoint `/graphql`
+   or `https://api.github.com/graphql`; `repos/a/b/issues -f title=x`
+   (unchanged).
 
-### 10.2 Scratchpad (test_guard_push.py, test_guard_governance.py, with `point_scratchpad`)
+### 10.2 Scratchpad (test_guard_push.py, test_guard_governance.py, test_shell_scan.py, with `point_scratchpad`)
 
-3. Push guard, pass: `git -C <pad>/c config user.name x`; `cd <pad>/c && git
+Fixture: `<pad>/c` made by `git init -q` (its own common directory);
+`<pad>/w` a worktree of the test repository (`git -C <repo> worktree add`);
+`<pad>/g` a directory whose `.git` file reads `gitdir: <repo>/.git`.
+
+5. Push guard, pass: `git -C <pad>/c config user.name x`; `cd <pad>/c && git
    update-ref refs/x HEAD`; `git -C <pad>/c commit --amend -m m`; and, as
-   regression pins, `git clone <url> <pad>/c && git -C <pad>/c commit -m m`.
-4. Push guard, ask: `git -C <pad>/c push origin x`; `cd <pad>/c && cd <repo>
+   regression pins, `git clone <url> <pad>/d && git -C <pad>/d commit -m m`.
+6. Push guard, ask: `git -C <pad>/c push origin x`; `cd <pad>/c && cd <repo>
    && git config a.b c`; `git -C <pad>/c --git-dir=<repo>/.git config a.b
-   c`; `GIT_DIR=<repo>/.git git -C <pad>/c config a.b c`; `git -C "$S"
+   c`; `GIT_DIR=<repo>/.git git -C <pad>/c config a.b c`;
+   `GIT_CONFIG_GLOBAL=x git -C <pad>/c config a.b c`; `git -C "$S"
    config a.b c`; `git -C <pad>/link config a.b c` where `link` points to the
    repository.
-5. Governance, pass: `cd <pad>/c && printf x >> CLAUDE.md && git -C <pad>/c
+7. Push guard, ask, common directory (review point 2): `git -C <pad>/w
+   config a.b c`; `git -C <pad>/w update-ref refs/x HEAD`; `git -C <pad>/g
+   config a.b c`; `git clone <url> <pad>/e && git -C <pad>/e config a.b c`
+   (no repository yet); `git -C <pad>/c config --global a.b c`, `--system`,
+   `--file <repo>/.git/config`, `-f <repo>/.git/config`; `cd <pad>/c && rm
+   -rf .git && git config a.b c` (rule 5: a writer on the line).
+8. Directory chain (review point 3), `directories(chain_only=True)` pure and
+   both guards end to end: `(cd <pad>/c) ; git config a.b c`; `(cd <pad>/c)
+   && git config a.b c` (the cd moves nothing: the repo is judged); `false &&
+   cd <pad>/c; git config a.b c`; `cd <pad>/c || true && git config a.b c`;
+   `! cd <pad>/c && git config a.b c`; `cd <pad>/c | git config a.b c`; and
+   the governance forms `(cd <pad>) ; printf x >> CLAUDE.md`, `false && cd
+   <pad>; printf x >> CLAUDE.md`: each asks; `chained` and `nested` set as
+   section 4.2 says on each (`test_shell_scan.py`). With `chain_only=False`,
+   `cd <wt>; git commit` resolves to `<wt>` (today's reading kept).
+9. Governance, pass: `cd <pad>/c && printf x >> CLAUDE.md && git -C <pad>/c
    commit -qam m`; `cd <pad> && mkdir -p c/.claude/hooks && cp a.py
    c/.claude/hooks/`.
-6. Governance, ask: the same with `cd <repo>`; `cd <pad> && ln -s
-   <repo>/CLAUDE.md x && printf x >> x`; `cd <pad> && cp -R <repo>/.claude d
-   && printf x >> d/agents/a.md`; `cd $S && printf x >> CLAUDE.md`; `cd
-   <pad> && python3 -c '...' && printf x >> CLAUDE.md`. Existing one-plain-
-   command cases unchanged.
+10. Governance, ask: the same with `cd <repo>`; `cd <pad> && ln -s
+    <repo>/CLAUDE.md x && printf x >> x`; `cd <pad> && cp -R <repo>/.claude d
+    && printf x >> d/agents/a.md`; `cd $S && printf x >> CLAUDE.md`; `cd
+    <pad> && python3 -c '...' && printf x >> CLAUDE.md`. Existing one-plain-
+    command cases unchanged.
 
 ### 10.3 The after-commit hook (test_gates_after_commit.py, new section, real git)
 
@@ -416,58 +560,88 @@ Each case runs the recorder copy on a Pre event, then really runs the git
 command, then the hook copy on the Post event with the same `tool_use_id`
 (the fixture's `Repos`, red detria stub in the worktree).
 
-7. A conflicting `git merge`: exit 0, nothing printed, no gate ran, record
-   file gone.
-8. `git merge` already up to date; `git merge --ff-only` fast-forward;
-   `git commit` with nothing to commit: each exit 0, silent, no gate.
-9. A real commit in the worktree: exit 2, `RED IN <wt>`.
-10. The `cd` case: line `git -C <wt> commit -qm x && cd <plain dir>`, Pre
+11. A conflicting `git merge`: exit 0, nothing printed, no gate ran, record
+    file gone.
+12. `git merge` already up to date; `git merge --ff-only` fast-forward;
+    `git commit` with nothing to commit: each exit 0, silent, no gate.
+13. A real commit in the worktree: exit 2, `RED IN <wt>`.
+14. The `cd` case: line `git -C <wt> commit -qm x && cd <plain dir>`, Pre
     `cwd` the main repository, Post `cwd` the plain directory: the worktree is
     gated (`RED IN <wt>`), no `NOT CHECKED`.
-11. `cd <plain dir> && git commit -m x` (git refuses there): silent.
-12. `git commit -qm a && git merge <conflicting>` in the worktree: one `NOT
+15. `cd <plain dir> && git commit -m x` (git refuses there): silent.
+16. `git commit -qm a && git merge <conflicting>` in the worktree: one `NOT
     CHECKED ... in progress` line, exit 2, no gate ran.
-13. No record (Post event with an unknown `tool_use_id`): today's behaviour,
-    `RED IN <wt>` for `git -C <wt> commit`.
-14. The recorder writes nothing for `git status`, a missing `tool_use_id`,
+17. Fast-forward after a commit (review point 4): `git commit -qm a && git
+    merge -q --ff-only <side>` in the worktree, `<side>` one commit ahead of
+    the new HEAD: exit 2, `RED IN <wt>` (the newest entry is a fast-forward,
+    the one before it a commit). Two fast-forwards on one line, `git merge
+    --ff-only <s1> && git merge --ff-only <s2>`: silent. A record whose
+    `heads` sha is not in the reflog (a made-up 40-hex sha): gated.
+18. No record (Post event with an unknown `tool_use_id`): today's behaviour,
+    `RED IN <wt>` for `git -C <wt> commit`. An unreadable record (review
+    point 4), each written by hand under the call's `tool_use_id`: `not
+    json`, `[]`, `{"cwd": "rel", "heads": {}}`, `{"cwd": "<abs>", "heads":
+    {"<wt>": "xyz"}}`: each gives today's behaviour, `RED IN <wt>`, and the
+    file is deleted.
+19. The recorder writes nothing for `git status`, a missing `tool_use_id`,
     or `tool_use_id` `../x`; deletes a 25-hour-old file in `bash-start/` and
     keeps a 23-hour-old one (mtimes set with `os.utime`); exits 0 and prints
     nothing when `bash-start/` cannot be made (a file at its path).
-15. Item 3: a red gate's stderr contains "new commit" and not "Fix and amend".
+20. Item 3: a red gate's stderr contains "new commit" and not "Fix and amend".
 
 ### 10.4 The recap (test_session_state.py, a fake `gh` like `_fake_ps`)
 
-16. Two PRs, opened 3 days 4 hours and 50 minutes before the test's `now`:
+21. Two PRs, opened 3 days 4 hours and 50 minutes before the test's `now`:
     `Open PRs (2):`, the older first, ages `3d 4h` and `50m`, a 70-character
     title cut to 50 with `...`.
-17. `[]`: `Open PRs: none`. 35 PRs: 30 lines then `... 5 more (gh pr list)`.
-18. Unavailable, each with the rest of the recap still printed: no `gh` on
+22. State (review point 5): three PRs with `mergeable` `CONFLICTING`,
+    `UNKNOWN` and `MERGEABLE`: their lines carry `CONFLICTING`, `mergeable
+    unknown` and no state word; the fake `gh` is called with `mergeable` in
+    its `--json` list.
+23. `[]`: `Open PRs: none`. 35 PRs: 30 lines then `... 5 more (gh pr list)`.
+24. Unavailable, each with the rest of the recap still printed: no `gh` on
     `PATH`; `gh` exits 1 (reason from its first stderr line); `gh` sleeps
     30 s (the recap ends within 15 s); `gh` prints `{}` or `not json`.
 
 ### 10.5 Briefs (test_brief.py)
 
-19. An increment with nine `QUOTED` lines, then `Acceptance (PR 3): @perf
+25. An increment with nine `QUOTED` lines, then `Acceptance (PR 3): @perf
     times the default spring on the 1 m mesh`: the `@reviewer` and
     `@developer` briefs carry the line verbatim after the Status line; the
     `@tester` brief does not; an `Acceptance:` line inside `## Review` is not
     quoted; a 400-character line is cut to 300 with `...`.
-20. No `Acceptance` line: the `none stated in <file>` line.
-21. With `SCRATCH_ROOT` pointed at a temporary base and
+26. No `Acceptance` line: the `none stated in <file>` line.
+27. With `SCRATCH_ROOT` pointed at a temporary base and
     `CLAUDE_CODE_SESSION_ID` set and its scratchpad made: the block names
     `<pad>/logs/<worktree name>`; without the session's scratchpad: the
     `rasputin-logs/<worktree name>` fallback under the temp directory; two
     worktrees get two folders.
 
 **Mutation targets** (this increment's invariant-critical suites are 10.1,
-10.2 and 10.3, the guards and the hook; the kill record covers each): the
-`mutation` word test dropped (2); the `@` file test dropped (2, `@q.graphql`);
-the unknown-option refusal dropped (2, `--foo`); the scratchpad test applied
-to a `str` directory (4, `"$S"`); the `--git-dir` refusal dropped (4); the
-push excluded from the pass dropped (4); the linker test dropped (6, `ln`);
-the post hook resolving from the event's `cwd` (10); the HEAD-unchanged skip
-dropped (8); the in-progress test dropped (7 or 12); the fast-forward skip
-dropped (8); the no-record fallback replaced by "skip" (13).
+10.2 and 10.3, the guards and the hook; the kill record covers each; the
+number is the killing test):
+
+- GraphQL: the `mutation` word test dropped (2); the word test applied to
+  the query value only, not the line (2, `&& echo mutation`); `literal`
+  not called (3, `$M`); `literal` ignoring double quotes (3, `"$M"`);
+  `literal` without the brace check (3, `mu{tation,}`); `-F` accepted for
+  `query` (4); the unknown-option refusal dropped (4, `--foo`).
+- Scratchpad, push guard: the scratchpad test applied to a `str` directory
+  (6, `"$S"`); the `--git-dir` refusal dropped (6); the `GIT_` text test
+  narrowed to the old four names (6, `GIT_CONFIG_GLOBAL`); the push excluded
+  from the pass dropped (6); the common-directory check dropped (7, `<pad>/w`);
+  the common-directory check replaced by `--git-dir` (7, `<pad>/g`); the
+  `--global`/`--system`/`--file` refusal dropped (7); rule 5 dropped (7,
+  `rm -rf .git`).
+- Directory chain: `chained` ignored (8, `false && cd <pad>/c; …`); `nested`
+  ignored, a subshell's `cd` followed (8, `(cd <pad>/c) && …`); `||` read as
+  `&&` (8); a stripped `!` not breaking the chain (8).
+- Governance: the linker test dropped (10, `ln`).
+- After-commit hook: resolving from the event's `cwd` (14); the
+  HEAD-unchanged skip dropped (12); the in-progress test dropped (11 or 16);
+  the fast-forward skip dropped (12); the fast-forward test reading only the
+  newest entry (17, commit then fast-forward); the no-record fallback
+  replaced by "skip" (18); an unreadable record read as "skip" (18).
 
 ## 11. Size and the split
 
@@ -475,14 +649,17 @@ Net production lines (`CLAUDE.md` §2), estimates:
 
 | File | Item | Estimate |
 |---|---|---|
-| `.claude/hooks/guard_push.py` | 1, 5 | about 45 |
+| `.claude/hooks/guard_push.py` (`graphql_read`; scratchpad checks 1 to 5 with the `rev-parse` call) | 1, 5 | about 75 |
 | `.claude/hooks/guard_governance.py` | 5 | about 20 |
-| `tools/shell_scan.py` (`directories`, `git_directory`, moved) | 4, 5 | about 30 |
-| `.claude/hooks/gates_after_commit.py` (less the moved code) | 3, 4 | about 20 |
+| `tools/shell_scan.py` (`directories`, `git_directory` moved; `literal`; `chained`, `nested`) | 1, 4, 5 | about 65 |
+| `.claude/hooks/gates_after_commit.py` (less the moved code; reflog walk; record check) | 3, 4 | about 35 |
 | `.claude/hooks/record_bash_start.py` (new) | 4 | about 40 |
-| `tools/session_state.py` | 2 | about 35 |
+| `tools/session_state.py` (with the state word) | 2 | about 40 |
 | `tools/brief.py` | 7, 8 | about 25 |
-| Total | | about 215 |
+| Total | | about 300 |
+
+Up from about 215 at design review round 1: the five review points add
+about 85, under the 700-line cap with room.
 
 `.claude/settings.json`'s new pre-hook entry is JSON (not counted):
 
