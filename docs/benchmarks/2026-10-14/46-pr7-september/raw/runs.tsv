@@ -1,0 +1,7 @@
+case	threads	repeat	wall_s	max_rss_bytes	peak_footprint_bytes	out_bytes	frames	exit	power	load
+bygdin-on	8	1	29.94	611532800	588563392	65318365	154	0	AC Power	4.46
+bygdin-off	8	1	9.96	149667840	126157424	65318231	154	0	AC Power	6.43
+bygdin-on	8	2	29.09	601473024	578225088	65318365	154	0	AC Power	6.69
+bygdin-off	8	2	9.77	147783680	124256904	65318231	154	0	AC Power	8.83
+bygdin-on	8	3	29.56	594477056	570934208	65318365	154	0	AC Power	9.08
+bygdin-off	8	3	10.09	149504000	125846152	65318231	154	0	AC Power	13.15

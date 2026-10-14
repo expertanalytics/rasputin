@@ -5,7 +5,8 @@ an open horizontal plane, averaged over the step's samples, so a flat
 triangle gets exactly 0. The beam is clear-sky direct normal irradiance,
 I0 (1/R)² Psi^(1/sin e), with one atmospheric pressure for the whole domain.
 The weather is chosen, not measured: dry, with a temperature that rises
-linearly over the run, swings daily and falls with height.
+linearly over the warming days and then holds, swings daily and falls with
+height.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from tin_engine.snow.params import SyntheticSpring
 F64 = npt.NDArray[np.float64]
 #: Solar constant (W/m²) and clear-sky transmissivity, a chosen value.
 I0, PSI = 1368.0, 0.75
-#: At 300 m: -3 °C at the start, +14 °C at the end, ±4 °C daily peaking at
+#: At 300 m: -3 °C at the start, +14 °C after the warming days, ±4 °C daily peaking at
 #: 14:00 mean solar time; 0.6 °C colder per 100 m. Chosen values.
 T_START, T_END, T_DAILY, PEAK_HOUR, BASE_M, LAPSE = -3.0, 14.0, 4.0, 14.0, 300.0, 0.006
 _EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
@@ -70,7 +71,7 @@ def temperature(spring: SyntheticSpring, k: int, heights: F64, lon_deg: float) -
     solar = (of_day + hours + lon_deg / 15.0) % 24.0
     base = (
         T_START
-        + (T_END - T_START) * hours / (spring.days * 24)
+        + (T_END - T_START) * min(hours, spring.warming_days * 24) / (spring.warming_days * 24)
         + T_DAILY * np.cos(2.0 * np.pi * (solar - PEAK_HOUR) / 24.0)
     )
     out: F64 = base - LAPSE * (np.asarray(heights, dtype=np.float64) - BASE_M)

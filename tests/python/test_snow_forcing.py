@@ -10,9 +10,12 @@ n_i . u_s), as under an open sky), u_s the sun's direction in east-north-up
 at the midpoint of sub-interval s of the step (S equal sub-intervals),
 beam_s = I0 (1/R)^2 Psi_a^(1/sin e) with I0 = 1368 W/m^2, Psi_a = 0.75, and
 0 with the sun at or below the horizon. The temperature at 300 m runs
-linearly from -3 to +14 degrees C over the run, plus a +-4 degree cosine
+linearly from -3 to +14 degrees C over the warming days counted from the
+start, then holds at +14 (*11.4 The design*, (a)), plus a +-4 degree cosine
 peaking at 14:00 mean solar time, minus 0.6 degrees per 100 m above 300 m,
-evaluated at each step's midpoint.
+evaluated at each step's midpoint. W1-W3 are section 11.5's: the hold, a run
+length that does not stretch the warming, and today's ramp with
+`warming_days` equal to `days`.
 
 R2 (through `_core.sun_positions` and this module's `beam_anomaly`,
 2027-04-15 at 61.334 N 15 E, 96 samples of 15 minutes): +68.9, -113.5,
@@ -31,7 +34,8 @@ Interface:
 - `forcing.temperature(spring, k, heights, lon_deg) -> (n,)`: at step k's
   midpoint, mean solar time = UTC + lon/15 hours.
 - `params.SyntheticSpring` fields `start` (timezone-aware), `days`,
-  `step_minutes`, `samples_per_step`; defaults 2027-04-01T00:00Z, 91, 60, 4.
+  `warming_days`, `step_minutes`, `samples_per_step`; defaults
+  2027-04-01T00:00Z, 153, 122, 60, 4.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ import datetime as dt
 import importlib
 import math
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -113,7 +118,8 @@ class TestSampleTimes:
 
 
 class TestTemperature:
-    """The ramp, the daily cosine and the lapse, at the step's midpoint."""
+    """The ramp, the daily cosine and the lapse, at the step's midpoint; W3:
+    with `warming_days` equal to `days` (91), the ramp over the run as before."""
 
     @staticmethod
     def expected(k: int, z: float, lon: float) -> float:
@@ -127,7 +133,8 @@ class TestTemperature:
     @pytest.mark.parametrize("k", [0, 12, 13, 500, 2183])
     def test_it_follows_section_4_5(self, forcing: ModuleType, params: ModuleType, k: int) -> None:
         heights = np.array([300.0, 1300.0, 234.0, 1924.4])
-        t = forcing.temperature(params.SyntheticSpring(), k, heights, LON)
+        spring = params.SyntheticSpring(days=91, warming_days=91)
+        t = forcing.temperature(spring, k, heights, LON)
         assert_allclose(t, [self.expected(k, z, LON) for z in heights], atol=1e-12)
 
     def test_the_peak_is_at_13_utc_at_15_east(
@@ -151,6 +158,60 @@ class TestTemperature:
     ) -> None:
         t = forcing.temperature(params.SyntheticSpring(), 40, np.array([500.0, 1500.0]), LON)
         assert t[0] - t[1] == pytest.approx(6.0, abs=1e-12)
+
+
+def day_mean(forcing: ModuleType, spring: Any, day: int, z: float) -> float:
+    """The mean temperature over the 24 hourly steps of `day`, at height `z`, 15 E."""
+    heights = np.array([z])
+    return (
+        math.fsum(
+            forcing.temperature(spring, k, heights, LON)[0] for k in range(24 * day, 24 * day + 24)
+        )
+        / 24
+    )
+
+
+class TestTheHold:
+    """W1 and W2: the default warming reaches +14 degrees C at 300 m after 122
+    days and holds there to the run's end; the run's length does not stretch it.
+    Scale: degrees C, |T| < 25, at heights up to 2240 m."""
+
+    @pytest.mark.parametrize(
+        ("day", "mean"),
+        [(0, -3.0 + 17.0 * 0.5 / 122), (121, -3.0 + 17.0 * 121.5 / 122), (122, 14.0), (136, 14.0)],
+    )
+    def test_w1_day_means_at_300_m(
+        self, forcing: ModuleType, params: ModuleType, day: int, mean: float
+    ) -> None:
+        # The cosine sums to 0 over a day's 24 midpoints, so the day's mean is
+        # the ramp at noon: -3 + 17 (day + 1/2)/122 before day 122 (-2.930328
+        # and 13.930328), 14 from it. Day 136 is 16.020 without the hold.
+        got = day_mean(forcing, params.SyntheticSpring(), day, 300.0)
+        assert got == pytest.approx(mean, abs=1e-9)
+
+    def test_w1_the_hold_at_2240_m(self, forcing: ModuleType, params: ModuleType) -> None:
+        # Bygdin's highest node: 14 - 0.006 * 1940.
+        assert day_mean(forcing, params.SyntheticSpring(), 136, 2240.0) == pytest.approx(
+            2.36, abs=1e-9
+        )
+
+    def test_w1_the_last_step_of_the_default_run(
+        self, forcing: ModuleType, params: ModuleType
+    ) -> None:
+        k = 153 * 24 - 1  # 3671, 2027-08-31T23:30Z
+        solar = (k + 0.5 + LON / 15.0) % 24.0
+        expected = 14.0 + 4.0 * math.cos(2 * math.pi * (solar - 14.0) / 24.0)
+        got = forcing.temperature(params.SyntheticSpring(), k, np.array([300.0]), LON)[0]
+        assert got == pytest.approx(expected, abs=1e-12)
+
+    @pytest.mark.parametrize("k", [0, 100, 239])
+    def test_w2_the_run_length_does_not_stretch_the_warming(
+        self, forcing: ModuleType, params: ModuleType, k: int
+    ) -> None:
+        heights = np.array([300.0, 1300.0, 234.0])
+        short = forcing.temperature(params.SyntheticSpring(days=10), k, heights, LON)
+        long = forcing.temperature(params.SyntheticSpring(days=153), k, heights, LON)
+        assert_array_equal(short, long)
 
 
 class TestSunAndBeam:

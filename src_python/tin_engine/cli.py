@@ -3129,12 +3129,16 @@ def snow(
         "or through the melt threshold.")] = _Sun.melt_factor,
     start: Annotated[str | None, typer.Option(
         help="Start, ISO 8601 with an offset. Default 2027-04-01T00:00Z.")] = None,
-    days: Annotated[int | None, typer.Option(help="Length of the spring. Default 91.")] = None,
+    days: Annotated[int | None, typer.Option(help="Days to run. Default 153: 1 April to "
+        "1 September.")] = None,
+    warming_days: Annotated[int | None, typer.Option(min=1, help="Days the temperature at "
+        "300 m takes to rise from -3 to +14 °C; it then holds. Default 122.")] = None,
     step_minutes: Annotated[int | None, typer.Option(help="Time step. Default 60.")] = None,
     frame_hours: Annotated[int, typer.Option(help="Hours between frames.")] = 24,
     initial_swe: Annotated[float, typer.Option(help="Snow at the start, mm of water.")] = 600.0,
-    snow_cv: Annotated[float, typer.Option(help="Snow depth's variation within a triangle.")] = 0.4,
-    bins: Annotated[int, typer.Option(help="Bins of snow depth per triangle, 1 to 64.")] = 10,
+    snow_cv: Annotated[float, typer.Option(help="Variation of snow depth within a triangle, "
+        "spread over --bins bins; one bin is uniform snow.")] = 0.4,
+    bins: Annotated[int, typer.Option(help="Bins of snow depth per triangle, 1 to 64.")] = 1,
     tx: Annotated[float, typer.Option(help="Snow below this temperature, °C.")] = 0.0,
     ts: Annotated[float, typer.Option(help="Melt above this temperature, °C.")] = 0.0,
     cx: Annotated[float, typer.Option(help="Degree-day factor, mm/°C/day.")] = 3.0,
@@ -3147,7 +3151,7 @@ def snow(
         "terrain within 20 km of the mesh. Default: on with --dem, off without.")] = None,
     threads: THREADS = None,
 ) -> None:  # fmt: skip
-    """Run HBV snow on every triangle of a mesh through a synthetic dry spring,
+    """Run HBV snow on every triangle of a mesh through a synthetic dry spring and summer,
     melt corrected for the sun on each slope, and write an EnSight Gold
     animation (snow.case) that ParaView plays: swe and sca per frame, slope,
     aspect, the mean radiation anomaly and the melt-out day."""
@@ -3171,7 +3175,7 @@ def snow(
         _, unit, rest = str(exc).partition("this one is in ")
         why = f"snow needs a mesh in a projected CRS in metres; {unit}{rest}" if unit else str(exc)
         raise typer.BadParameter(why, param_hint="--mesh") from exc
-    given = {"days": days, "step_minutes": step_minutes}
+    given = {"days": days, "warming_days": warming_days, "step_minutes": step_minutes}
     try:
         job = SnowJob(
             correction=SunCorrection(mode=sun_correction.name),

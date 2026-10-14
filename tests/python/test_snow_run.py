@@ -85,7 +85,10 @@ def facets() -> Mesh:
 
 def job(mods: dict[str, ModuleType], mode: str, *, threads: int = 1, **kw: Any) -> Any:
     p = mods["params"]
-    spring = p.SyntheticSpring(start=dt.datetime(2027, 4, 10, tzinfo=dt.UTC), days=10)
+    # The warming over the ten days, as before section 11: with the default
+    # 122-day warming, 600 mm on a flat triangle loses nothing to outflow in ten days.
+    start = dt.datetime(2027, 4, 10, tzinfo=dt.UTC)
+    spring = p.SyntheticSpring(start=start, days=10, warming_days=10)
     return p.SnowJob(
         correction=p.SunCorrection(mode=mode),
         resources=Resources(threads=threads, memory_budget=1 << 30),
