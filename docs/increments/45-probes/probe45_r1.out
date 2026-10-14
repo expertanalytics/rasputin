@@ -1,0 +1,40 @@
+== _mismatch when a case is skipped (the stored baseline, its own inputs)
+  baseline cases: ['tile', 'tile t=1', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope'] | inputs: 10
+  nothing skipped: ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today's _mismatch: None
+    round 1 rule:      None
+    verdict under the round 1 rule: NO CHANGE, exit 0
+  one case skipped (the first): ran ['quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today's _mismatch: None
+    round 1 rule:      None
+    verdict under the round 1 rule: NO CHANGE, exit 0
+  only the two $TREE cases ran: ran ['tile', 'quarter']
+    today's _mismatch: input $RASPUTIN_DATA/DTM10_UTM33_20260925 changed
+    round 1 rule:      None
+    verdict under the round 1 rule: NO CHANGE, exit 0
+  nothing skipped, one input changed: ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today's _mismatch: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed
+    round 1 rule:      input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed
+    verdict under the round 1 rule: NO BASELINE: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed, exit 2
+== Linux power, round 1 reader (five values; unreadable = missing)
+  no /sys/class/power_supply at all: ac None
+    raw: no power supply under /sys/class/power_supply
+  an empty /sys/class/power_supply: ac None
+    raw: no power supply under /sys/class/power_supply
+  AC online 1; BAT0 Charging 81; mouse scope Device Discharging 40: ac 81
+    raw: AC: online=1, type=Mains | BAT0: capacity=81, status=Charging, type=Battery
+  AC online 0; BAT0 Discharging 64: battery 64
+    raw: AC: online=0, type=Mains | BAT0: capacity=64, status=Discharging, type=Battery
+  BAT0 Full 100, no mains entry: ac 100
+    raw: BAT0: capacity=100, status=Full, type=Battery
+  AC online 0; BAT0 Unknown 50: unknown 50
+    raw: AC: online=0, type=Mains | BAT0: capacity=50, status=Unknown, type=Battery
+  ups0 UPS Discharging only: ac None
+    raw: ups0: status=Discharging, type=UPS
+  BAT0 files Full 100, its multi-line uevent saying Discharging 64: ac 100
+    raw: BAT0: capacity=100, status=Full, type=Battery
+  AC online unreadable (a directory); BAT0 status not UTF-8, capacity unreadable: unknown None
+    raw: AC: type=Mains | BAT0: type=Battery
+  ACAD type unreadable, online 1; no battery: unknown None
+    raw: ACAD: online=1
+  /sys/class/power_supply a file, not a directory: ('unknown', None, 'cannot list /sys/class/power_supply: Not a directory')

@@ -1,12 +1,14 @@
 """The catalogue of remote sources `rasputin fetch` and `rasputin fetch-stations` copy.
 
+The entries are data: `tin_engine/data/sources.toml` ships them, read here at
+import, and `catalogue` adds the user's own from a `sources.toml` in the data root.
 `SOURCES` holds the rasters `rasputin fetch` copies into the tile cache: two
 DEMs (ANADEM and GLO-30) and one land-cover raster (MapBiomas, one COG per
-year). Data only, importing Pydantic alone, so the mesh path can name a
-catalogue key without importing `tin_engine.fetch`: meshing runs offline.
-`url_for` picks a file (a year's, for MapBiomas), `credit_for` fills the
-fetch date and URL into the credit, and `check_values` keeps classes out of
-`--dem` and heights out of `--land-cover`.
+year). This module imports no NumPy, pyproj or `tin_engine.fetch`, so the mesh
+path can name a catalogue key without them: meshing runs offline. `url_for`
+picks a file (a year's, for MapBiomas), `credit_for` fills the fetch date and
+URL into the credit, and `check_values` keeps classes out of `--dem` and
+heights out of `--land-cover`.
 
 `STATION_SOURCES` holds the station lists `rasputin fetch-stations` copies:
 NVE's HRD stations, their catchment polygons and the river lines near them.
@@ -14,39 +16,68 @@ NVE's HRD stations, their catchment polygons and the river lines near them.
 
 from __future__ import annotations
 
+import os
+import string
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Protocol, Self
+from typing import Any, Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, PositiveFloat, model_validator
+
+from tin_engine.toml_data import parse, validate
+
+ZUnit = Literal["metre", "foot", "US survey foot"]
+#: The fields each kind's `url_template` takes, and needs.
+_URL_FIELDS = {"one-cog": set(), "cog-tiles": {"name"}, "one-cog-per-year": {"year"}}
 
 
 class Dated(Protocol):
-    """A `datetime.date`, by its one method used here: this module imports
-    only Pydantic (`test_sources_imports_pydantic_only`)."""
+    """A `datetime.date`, by its one method used here: this module imports no
+    third-party package but Pydantic."""
 
     def isoformat(self) -> str: ...
+
+
+def _fields(name: str, template: str | None, allowed: set[str], *, needed: bool = False) -> None:
+    """Refuse a format string using a field outside `allowed` (a dotted or
+    indexed one too, so a file cannot reach an object's attributes), or,
+    when `needed`, lacking one of them."""
+    used = {f for _, f, _, _ in string.Formatter().parse(template or "") if f is not None}
+    if used - allowed or (needed and allowed - used):
+        shown = ", ".join(f"{{{f}}}" for f in sorted(used)) or "no field"
+        takes = ", ".join(f"{{{f}}}" for f in sorted(allowed)) or "none"
+        raise ValueError(f"{name} uses {shown}; it takes {takes}" + (", each" if needed else ""))
 
 
 class RemoteSource(BaseModel):
     """One source: one COG (`url`), one COG per tile (`url_template` and the
     `tile_list_url` saying which tiles exist), or one COG per year
     (`url_template` with `{year}`, `years`). `crs` is the one expected,
-    checked against each header; `credit` goes into every mesh made from it."""
+    checked against each header; `credit` goes into every mesh made from it.
+    An unknown key is refused, so a misspelt one in a file is not ignored."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     kind: Literal["one-cog", "cog-tiles", "one-cog-per-year"]
     url: str | None = None
     url_template: str | None = None
     tile_list_url: str | None = None
+    #: The object name of the 1° tile whose south-west corner is `{lat}`, `{lon}`
+    #: (absolute degrees), `{ns}` N or S and `{ew}` E or W; tiled sources only.
+    tile_name: str | None = None
+    #: The largest (lon, lat) cell of any tile, in degrees; tiled sources only.
+    tile_spacing: tuple[PositiveFloat, PositiveFloat] | None = None
     #: The years a `one-cog-per-year` source has, ascending; the default is the last.
     years: tuple[int, ...] = ()
     #: What the cells hold: heights for a DEM, land-cover class numbers for MapBiomas.
     values: Literal["heights", "classes"] = "heights"
     crs: str
-    nodata: float | None
+    #: The no-data value the source states; None when it states none.
+    nodata: float | None = None
     credit: str
     licence_note: str
     #: The works the distributor asks to cite; `notice` and the mesh file carry them.
@@ -54,16 +85,35 @@ class RemoteSource(BaseModel):
     #: The class map (`tin_engine.class_maps`) that names and colours its classes.
     class_map: str = ""
     #: The height unit the catalogue states for files that do not.
-    z_unit: Literal["metre", "foot", "US survey foot"] | None = None
+    z_unit: ZUnit | None = None
 
     @model_validator(mode="after")
-    def _per_year_has_years(self) -> Self:
-        if self.kind == "one-cog-per-year":
-            if not self.years:
-                raise ValueError(f"{self.id}: a one-cog-per-year source needs its years")
-            if "{year}" not in (self.url_template or ""):
-                raise ValueError(f"{self.id}: the url_template needs a {{year}} field")
+    def _consistent(self) -> Self:
+        if self.kind == "one-cog-per-year" and not self.years:
+            raise ValueError("years: a one-cog-per-year source needs its years")
+        tiled = self.kind == "cog-tiles"
+        for field in ("tile_list_url", "tile_name", "tile_spacing"):
+            if tiled != (getattr(self, field) is not None):
+                raise ValueError(f"{field}: {'needed' if tiled else 'refused'} for {self.kind}")
+        wanted = _URL_FIELDS[self.kind]
+        _fields("url_template", self.url_template, wanted, needed=bool(wanted))
+        _fields("tile_name", self.tile_name, {"ns", "ew", "lat", "lon"})
+        _fields("credit", self.credit, {"date", "url"})
+        if self.values == "classes" and self.z_unit is not None:
+            raise ValueError("z_unit: class numbers are not heights")
         return self
+
+    @property
+    def read_unit(self) -> ZUnit | None:
+        """The height unit every reader of the source's files is given:
+        metres for classes, which hold no heights, else `z_unit`."""
+        return "metre" if self.values == "classes" else self.z_unit
+
+    def tile_for(self, lat: int, lon: int) -> str:
+        """The name of the tile whose south-west corner is (`lat`, `lon`)."""
+        assert self.tile_name is not None, f"{self.id} is not a tiled source"
+        ns, ew = ("N" if lat >= 0 else "S"), ("E" if lon >= 0 else "W")
+        return self.tile_name.format(ns=ns, ew=ew, lat=abs(lat), lon=abs(lon))
 
     def url_for(self, year: int | None = None) -> str:
         """The file to read: `url`, or the year's (the last year when None).
@@ -93,75 +143,12 @@ def check_values(source: RemoteSource, wanted: Literal["heights", "classes"], op
         raise ValueError(f"{option} takes a source of {wanted}; {source.id} holds {source.values}")
 
 
-_GLO30 = "https://copernicus-dem-30m.s3.amazonaws.com"
-
-SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
-    {
-        "anadem-v1": RemoteSource(
-            id="anadem-v1",
-            kind="one-cog",
-            url="https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/"
-            "anadem_v1_compressed_COG.tif",
-            crs="EPSG:4674",
-            nodata=-9999.0,
-            z_unit="metre",
-            credit="Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital "
-            "Terrain Model for South America. Distributed by OpenTopography. "
-            "https://doi.org/10.5069/G9736P4G.",
-            licence_note="CC BY 4.0 (Creative Commons Attribution 4.0 International)",
-            # OpenTopography's acknowledgement asks for the paper as well as the data.
-            cite=(
-                "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. "
-                "Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321",
-            ),
-        ),
-        "glo30": RemoteSource(
-            id="glo30",
-            kind="cog-tiles",
-            url_template=f"{_GLO30}/{{name}}/{{name}}.tif",
-            tile_list_url=f"{_GLO30}/tileList.txt",
-            crs="EPSG:4326",
-            nodata=None,
-            z_unit="metre",
-            # The licence's Art. 6(b) notice for adapted data, verbatim but "(c)" for the sign.
-            credit="produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus "
-            "Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union "
-            "and ESA; all rights reserved",
-            # Art. 6(c): this sentence goes with any distribution of the data, modified or not.
-            licence_note="Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "
-            '"The organisations in charge of the Copernicus programme by law or by delegation '
-            'do not incur any liability for any use of the Copernicus WorldDEM-30"',
-        ),
-        "mapbiomas-c11": RemoteSource(
-            id="mapbiomas-c11",
-            kind="one-cog-per-year",
-            url_template="https://storage.googleapis.com/mapbiomas-public/initiatives/brasil/"
-            "collection11/lulc/coverage/brazil_coverage/brazil_coverage-col11_{year}.tif",
-            years=tuple(range(1985, 2026)),
-            values="classes",
-            crs="EPSG:4326",
-            nodata=0.0,
-            # MapBiomas's own format (terms of use); the date is the day the file was fetched.
-            credit="MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land "
-            "Cover Maps of Brazil, accessed on {date} through the link: {url}",
-            licence_note="CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 International)",
-            cite=(
-                "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land "
-                "Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. "
-                "Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
-            ),
-            class_map="mapbiomas-c11",
-        ),
-    }
-)
-
-
 class StationSource(BaseModel):
     """One list of gauging stations: the packaged list `list_file` (in
     `tin_engine/data/`) says which stations; `service_url` serves their points,
     polygons and rivers."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     service_url: str
@@ -172,22 +159,77 @@ class StationSource(BaseModel):
     cite: tuple[str, ...] = ()
 
 
-STATION_SOURCES: Mapping[str, StationSource] = MappingProxyType(
-    {
-        "nve-hrd": StationSource(
-            id="nve-hrd",
-            service_url="https://kart.nve.no/enterprise/rest/services",
-            list_file="nve_hrd_2025.csv",
-            crs="EPSG:25833",
-            credit="Kilde: NVE. The station list is the 2025 version of NVE's Hydrological "
-            "Reference Dataset (Norwegian streamflow reference dataset for climate change "
-            "studies); stations, catchments (Totalnedbørfelt til målestasjon) and rivers "
-            "(ELVIS) are from NVE's map services.",
-            licence_note="Norsk lisens for offentlige data (NLOD). NVE disclaims liability for "
-            "errors in the data and their use.",
-        ),
-    }
+class _Tables(BaseModel):
+    """A catalogue file: `[source.<id>]` and `[station.<id>]` tables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: dict[str, dict[str, Any]] = {}
+    station: dict[str, dict[str, Any]] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class Catalogue:
+    """The shipped entries and the user's, by id."""
+
+    sources: Mapping[str, RemoteSource]
+    stations: Mapping[str, StationSource]
+
+
+def _entries[M: BaseModel](
+    tables: dict[str, dict[str, Any]], kind: str, model: type[M], label: str
+) -> dict[str, M]:
+    """Each table validated as `model`, its key the id; an `id` key is refused."""
+    out: dict[str, M] = {}
+    for key, table in tables.items():
+        if "id" in table:
+            raise ValueError(f"{label}: {kind}.{key}.id: the table's key is the id; drop the key")
+        out[key] = validate({**table, "id": key}, model, label, (kind, key))
+    return out
+
+
+_SHIPPED = "sources.toml"
+_tables = parse(
+    (resources.files("tin_engine") / "data" / _SHIPPED).read_text(encoding="utf-8"),
+    _Tables,
+    _SHIPPED,
 )
+SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
+    _entries(_tables.source, "source", RemoteSource, _SHIPPED)
+)
+STATION_SOURCES: Mapping[str, StationSource] = MappingProxyType(
+    _entries(_tables.station, "station", StationSource, _SHIPPED)
+)
+
+
+def catalogue(user_file: Path | None) -> Catalogue:
+    """The shipped entries plus the `[source.<id>]` tables of `user_file`, if
+    it exists. A relative `class_map` path in it is taken from the file's
+    directory. Refused, as a `ValueError` naming the file: anything
+    `RemoteSource` refuses, a station table (fetching a station list follows
+    one service's layout, which is code), and an id the package already has."""
+    found = dict(SOURCES)
+    if user_file is None or not user_file.is_file():
+        return Catalogue(MappingProxyType(found), STATION_SOURCES)
+    label = str(user_file)
+    try:
+        tables = parse(user_file.read_text(encoding="utf-8"), _Tables, label)
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"{label} cannot be read: {exc}") from exc
+    for key in tables.station:
+        raise ValueError(f"{label}: station.{key}: station lists are not added from a file")
+    for table in tables.source.values():
+        given = str(table.get("class_map", ""))
+        if given.endswith(".toml") or "/" in given or os.sep in given:
+            table["class_map"] = str(user_file.parent / given)
+    for key, entry in _entries(tables.source, "source", RemoteSource, label).items():
+        if key in found:
+            raise ValueError(
+                f"{label}: source.{key}: {key} is a source of the package's {_SHIPPED}; "
+                "give yours another id"
+            )
+        found[key] = entry
+    return Catalogue(MappingProxyType(found), STATION_SOURCES)
 
 
 def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) -> str:
@@ -202,4 +244,13 @@ def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) ->
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["SOURCES", "STATION_SOURCES", "RemoteSource", "StationSource", "check_values", "notice"]
+__all__ = [
+    "SOURCES",
+    "STATION_SOURCES",
+    "Catalogue",
+    "RemoteSource",
+    "StationSource",
+    "catalogue",
+    "check_values",
+    "notice",
+]

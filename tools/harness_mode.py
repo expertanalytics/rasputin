@@ -152,13 +152,15 @@ def queue_entry(
     }
 
 
-def append_queue(state: Path | None, entry: dict[str, Any]) -> str | None:
-    """Append one line with one write (under PIPE_BUF); the error text, or None."""
+def append_queue(
+    state: Path | None, entry: dict[str, Any], name: str = "queue.jsonl"
+) -> str | None:
+    """Append one line to `name` with one write (under PIPE_BUF); the error text, or None."""
     if state is None:
         return "git common dir not found"
     try:
         state.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(state / "queue.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = os.open(state / name, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
         try:
             os.write(fd, (json.dumps(entry) + "\n").encode())
         finally:

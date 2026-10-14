@@ -15,7 +15,7 @@ open is chosen here and listed in the handback):
   spacing are read: the lattice runs on past the window as far as either
   polygon reaches.
 - `Agreement`, a frozen dataclass built by keyword: `ours`, `ref`, `both`
-  (node counts), `nve_in_ours` (both / ref), `ours_in_nve` (both / ours),
+  (node counts), `reference_in_ours` (both / ref), `ours_in_reference` (both / ours),
   `area_ratio` (our area / NVE's), `divide_offset_m` and `cell_m` (the
   lattice spacing, which the offset test's 3 cells are counted in).
 - `classify(agreement, gauge, refused=False) -> (class, match_by)`:
@@ -27,7 +27,7 @@ open is chosen here and listed in the handback):
 - `summarise(rows) -> Summary`, a pydantic model whose
   `model_dump(mode="json")` has the keys used in `TestSummary` below. A row
   is read by attribute (`station`, `station_class`, `match_by`,
-  `refusal_cause`, `causes`, `area_ratio`, `nve_in_ours`, `ours_in_nve`,
+  `refusal_cause`, `causes`, `area_ratio`, `reference_in_ours`, `ours_in_reference`,
   `reference_area_km2`, `fine_area_km2`, `tiles`), the same names
   `catchment_batch.StationResult` carries, so a stand-in is passed here.
 - Percentiles are numpy's default (linear interpolation between closest
@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -87,7 +88,7 @@ class TestAgreement:
         square = cells(C0, R0, 100)
         a = ref.agreement(square, square, META)
         assert (a.ours, a.ref, a.both) == (10_000, 10_000, 10_000)
-        assert a.nve_in_ours == 1.0 and a.ours_in_nve == 1.0
+        assert a.reference_in_ours == 1.0 and a.ours_in_reference == 1.0
         assert a.area_ratio == pytest.approx(1.0, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(0.0, abs=1e-9)
         assert a.cell_m == D
@@ -97,8 +98,8 @@ class TestAgreement:
         a 4000 m perimeter is 5 m, half a cell."""
         a = ref.agreement(cells(C0 + 1, R0, 100), cells(C0, R0, 100), META)
         assert (a.ours, a.ref, a.both) == (10_000, 10_000, 9_900)
-        assert a.nve_in_ours == pytest.approx(0.99, rel=1e-12)
-        assert a.ours_in_nve == pytest.approx(0.99, rel=1e-12)
+        assert a.reference_in_ours == pytest.approx(0.99, rel=1e-12)
+        assert a.ours_in_reference == pytest.approx(0.99, rel=1e-12)
         assert a.area_ratio == pytest.approx(1.0, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(0.5 * D, abs=1e-9)
 
@@ -107,15 +108,15 @@ class TestAgreement:
         perimeter: one cell, plus the corner term."""
         a = ref.agreement(cells(C0 - 1, R0 - 1, 102), cells(C0, R0, 100), META)
         assert (a.ours, a.ref, a.both) == (10_404, 10_000, 10_000)
-        assert a.nve_in_ours == 1.0
-        assert a.ours_in_nve == pytest.approx(10_000 / 10_404, rel=1e-12)
+        assert a.reference_in_ours == 1.0
+        assert a.ours_in_reference == pytest.approx(10_000 / 10_404, rel=1e-12)
         assert a.area_ratio == pytest.approx(1.0404, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(1.01 * D, abs=1e-9)
 
     def test_disjoint_polygons_share_nothing(self) -> None:
         a = ref.agreement(cells(C0 + 200, R0, 100), cells(C0, R0, 100), META)
         assert a.both == 0
-        assert a.nve_in_ours == 0.0 and a.ours_in_nve == 0.0
+        assert a.reference_in_ours == 0.0 and a.ours_in_reference == 0.0
         assert a.divide_offset_m == pytest.approx(20_000 * D * D / 4000.0, abs=1e-9)
 
     def test_every_part_of_a_multipart_reference_counts(self) -> None:
@@ -124,8 +125,8 @@ class TestAgreement:
         first, second = cells(C0, R0, 10), cells(C0 + 50, R0, 10)
         a = ref.agreement(first, MultiPolygon([first, second]), META)
         assert (a.ours, a.ref, a.both) == (100, 200, 100)
-        assert a.nve_in_ours == pytest.approx(0.5, rel=1e-12)
-        assert a.ours_in_nve == 1.0
+        assert a.reference_in_ours == pytest.approx(0.5, rel=1e-12)
+        assert a.ours_in_reference == 1.0
         assert a.area_ratio == pytest.approx(0.5, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(100 * D * D / 800.0, abs=1e-9)
 
@@ -149,14 +150,14 @@ class TestAgreement:
 # ---------------------------------------------------------------------------
 
 
-def numbers(nve_in_ours: float, ours_in_nve: float, offset_m: float = 100.0) -> Any:
+def numbers(reference_in_ours: float, ours_in_reference: float, offset_m: float = 100.0) -> Any:
     """An `Agreement` with the two overlaps and the offset given, on DTM10."""
     return ref.Agreement(
         ours=1000,
         ref=1000,
-        both=round(1000 * min(nve_in_ours, ours_in_nve)),
-        nve_in_ours=nve_in_ours,
-        ours_in_nve=ours_in_nve,
+        both=round(1000 * min(reference_in_ours, ours_in_reference)),
+        reference_in_ours=reference_in_ours,
+        ours_in_reference=ours_in_reference,
         area_ratio=1.0,
         divide_offset_m=offset_m,
         cell_m=D,
@@ -270,8 +271,8 @@ class Row:
     refusal_cause: str | None = None
     causes: tuple[str, ...] = ()
     area_ratio: float | None = None
-    nve_in_ours: float | None = None
-    ours_in_nve: float | None = None
+    reference_in_ours: float | None = None
+    ours_in_reference: float | None = None
     reference_area_km2: float | None = 50.0
     fine_area_km2: float | None = 50.0
     tiles: int | None = 1
@@ -281,7 +282,7 @@ class Row:
 def scored(n: int, value: float, **kw: Any) -> Row:
     return Row(
         f"1.{n}.0", kw.pop("station_class", "match"), match_by=kw.pop("match_by", "overlap"),
-        area_ratio=value, nve_in_ours=value, ours_in_nve=value, **kw,
+        area_ratio=value, reference_in_ours=value, ours_in_reference=value, **kw,
     )  # fmt: skip
 
 
@@ -313,9 +314,9 @@ class TestSummary:
         numbers (5.0) must not enter."""
         rows = [scored(k, k / 10, station_class="miss", match_by=None) for k in range(11)]
         rows.append(Row("9.9.0", "uncertain", causes=("swing",), area_ratio=5.0,
-                        nve_in_ours=5.0, ours_in_nve=5.0))  # fmt: skip
+                        reference_in_ours=5.0, ours_in_reference=5.0))  # fmt: skip
         s = self.dump(rows)
-        for key in ("area_ratio", "nve_in_ours", "ours_in_nve"):
+        for key in ("area_ratio", "reference_in_ours", "ours_in_reference"):
             got = s["scored"][key]
             assert list(got) == PERCENTILE_KEYS
             expected = [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
@@ -368,7 +369,7 @@ class TestSummary:
         rows = [
             scored(1, 1.0),
             Row("196.11.0", "refused", refusal_cause="mixed_grid", area_ratio=9.0,
-                nve_in_ours=9.0, ours_in_nve=9.0),
+                reference_in_ours=9.0, ours_in_reference=9.0),
             Row("2.2.0", "refused", refusal_cause="no_river"),
             Row("156.15.0", "refused", refusal_cause="mixed_grid"),
             Row("3.3.0", "refused", refusal_cause="other"),
@@ -463,7 +464,7 @@ class TestSummaryFixedListsAndEmptyGroups:
         band = s["by_size"]["100-1000"]
         assert band["stations"] == 2
         assert band["uncertain_share"] is None
-        for key in ("area_ratio", "nve_in_ours", "ours_in_nve"):
+        for key in ("area_ratio", "reference_in_ours", "ours_in_reference"):
             assert band[key] is None, key
             assert s["scored"][key] is None, key
             assert s["by_size"]["10-100"][key] is None, key
@@ -531,12 +532,27 @@ class TestBySeed:
         assert river["classes"]["uncertain"] == 1 and river["uncertain_share"] == 0.5
         assert lake["classes"] == {"refused": 1, "uncertain": 0, "match": 1, "close": 0, "miss": 1}
         assert lake["uncertain_share"] == 0.0
-        assert lake["nve_in_ours"]["min"] == pytest.approx(0.5, rel=1e-12)
-        assert lake["nve_in_ours"]["max"] == pytest.approx(0.98, rel=1e-12)
-        assert river["nve_in_ours"]["max"] == pytest.approx(1.0, rel=1e-12)
+        assert lake["reference_in_ours"]["min"] == pytest.approx(0.5, rel=1e-12)
+        assert lake["reference_in_ours"]["max"] == pytest.approx(0.98, rel=1e-12)
+        assert river["reference_in_ours"]["max"] == pytest.approx(1.0, rel=1e-12)
 
     def test_an_empty_summary_has_both_groups_empty(self) -> None:
         s = self.dump([])
         assert list(s["by_seed"]) == ["river", "lake"]
         for group in s["by_seed"].values():
             assert group["stations"] == 0 and group["uncertain_share"] is None
+
+
+def test_no_product_source_names_the_old_overlap_fields() -> None:
+    """The overlap fields are `reference_in_ours` and `ours_in_reference`
+    everywhere in the package, with no alias for the old names; the station
+    file's `nve_area_km2` column is a different thing and stays."""
+    package = Path(ref.__file__).resolve().parent
+    found = [
+        f"{path.relative_to(package)}:{number}"
+        for path in sorted(package.rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "nve_in_ours" in line or "ours_in_nve" in line
+    ]
+    assert found == []
+    assert "reference_in_ours" in Path(ref.__file__).read_text(encoding="utf-8")

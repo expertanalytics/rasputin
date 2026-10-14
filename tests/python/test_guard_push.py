@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,12 +24,18 @@ from harness_fixtures import (
     GUARD_PUSH,
     REAL,
     SUBAGENT,
+    Granted,
     Tool,
     add_worktree,
     bash_event,
     clean_env,
     file_event,
+    flag_granting,
+    flag_path,
     git,
+    grants_used_path,
+    iso,
+    jsonl,
     load_tool,
     make_repo,
     point_scratchpad,
@@ -1044,3 +1051,152 @@ def test_four_hundred_shell_words_before_a_read_pass_within_the_bound(
     set_mode(repo, mode)
     assert pretool_decision(timed_hook(repo, SLOW_LINE_PASSED)) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h20 §4.3
+#
+# docs/increments/h20-away-push-grants.md §3.2 and §3.5: while away, a branch
+# Ola granted may be pushed (by sha), opened as a pull request and enqueued
+# once per reviewed head. Each case runs on `Granted`'s fixture repository.
+# Pinned here beyond the design's words: each line of `grants-used.jsonl`
+# carries the keys §3.5 lists, and test 15's refusal carries the grant clause
+# of §3.5 and the word "enqueued".
+
+GRANT_CLAUSE = "granted branch feat, but"
+
+
+@pytest.fixture
+def granted(tmp_path: Path) -> Granted:
+    return Granted(tmp_path / "repo")
+
+
+def granted_acts(head: str) -> list[str]:
+    """The three forms of §3.2 for `feat` at `head`, in the order a night uses them."""
+    return [
+        f"git push origin {head}:refs/heads/feat",
+        "gh pr create --head feat --title 't' --body-file f",
+        f"gh pr merge feat --match-head-commit {head} --merge",
+    ]
+
+
+def guard(repo: Path, command: str, env: dict[str, str] | None = None) -> tuple[str, str] | None:
+    if env is None:
+        return pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    result = subprocess.run(
+        [sys.executable, str(repo / GUARD_PUSH)], input=json.dumps(bash_event(repo, command)),
+        capture_output=True, text=True, cwd=repo, env=env, timeout=60, check=False,
+    )  # fmt: skip
+    return pretool_decision(result)
+
+
+def denied(repo: Path, command: str, env: dict[str, str] | None = None) -> str:
+    """The `why` of the queue line a refused command left; fails if it was not denied."""
+    before = len(queue_lines(repo))
+    found = guard(repo, command, env)
+    assert found is not None and found[0] == "deny", f"{command!r}: {found}"
+    lines = queue_lines(repo)
+    assert len(lines) == before + 1, "the refusal was not queued"
+    why: str = lines[-1]["why"]
+    return why
+
+
+def test_10_a_granted_reviewed_branch_is_pushed_opened_and_enqueued(granted: Granted) -> None:
+    head = granted.head
+    for command in granted_acts(head):
+        assert guard(granted.repo, command) is None, command
+    used = jsonl(grants_used_path(granted.repo))
+    assert len(used) == 3
+    assert len({line["act"] for line in used}) == 3
+    for line in used:
+        assert set(line) == {"at", "window", "branch", "act", "head", "review"}
+        assert (line["branch"], line["head"]) == ("feat", head)
+        assert line["window"] == iso(granted.since)
+        assert line["review"][0] == granted.x
+    assert queue_lines(granted.repo) == []
+
+
+def test_11_with_the_mode_off_a_granted_act_asks_as_today(granted: Granted) -> None:
+    flag_path(granted.repo).unlink()
+    for command in granted_acts(granted.head):
+        found = guard(granted.repo, command)
+        assert found is not None and found[0] == "ask", command
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_12_with_the_flag_broken_a_granted_act_is_denied(granted: Granted) -> None:
+    flag_path(granted.repo).write_text("{not json")
+    for command in granted_acts(granted.head):
+        denied(granted.repo, command)
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_13_a_branch_not_granted_is_denied_without_the_grant_clause(granted: Granted) -> None:
+    flag_granting(granted.repo, ["other"])
+    for command in granted_acts(granted.head):
+        assert "granted branch" not in denied(granted.repo, command)
+    assert not grants_used_path(granted.repo).exists()
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    ["env A=1 {}", "{} 2>&1", "{} && echo done", "sh -c '{}'", "timeout 5 {}"],
+    ids=["env", "redirection", "and-list", "sh-c", "timeout"],
+)
+def test_14_a_granted_act_inside_any_wrapper_is_denied(granted: Granted, wrap: str) -> None:
+    denied(granted.repo, wrap.format(f"git push origin {granted.head}:refs/heads/feat"))
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_15_one_enqueue_per_reviewed_head(granted: Granted) -> None:
+    merge = f"gh pr merge feat --match-head-commit {granted.head}"
+    assert guard(granted.repo, merge) is None
+    why = denied(granted.repo, merge)
+    assert GRANT_CLAUSE in why and "enqueued" in why, why
+    granted.on_master("src/y.py", "y = 1\n")
+    second = granted.merge("refs/remotes/origin/master")
+    again = f"gh pr merge feat --match-head-commit {second}"
+    assert guard(granted.repo, again) is None
+    denied(granted.repo, again)
+    assert [line["head"] for line in jsonl(grants_used_path(granted.repo))] == [
+        granted.rec, second
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("act", ["push", "enqueue"])
+def test_16_a_sha_other_than_the_head_is_denied(granted: Granted, act: str) -> None:
+    command = {
+        "push": f"git push origin {granted.x}:refs/heads/feat",
+        "enqueue": f"gh pr merge feat --match-head-commit {granted.x} --merge",
+    }[act]
+    denied(granted.repo, command)
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_17_a_push_run_in_another_repository_is_denied(granted: Granted, tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(granted.repo), str(other))
+    git(other, "update-ref", "refs/heads/feat", granted.head)
+    git(other, "update-ref", "refs/remotes/origin/master", granted.base)
+    denied(granted.repo, f"git -C {other} push origin {granted.head}:refs/heads/feat")
+    assert not grants_used_path(granted.repo).exists()
+
+
+@pytest.mark.parametrize("directory", ["~/other", "=other"])
+def test_17_a_directory_the_shell_would_expand_is_denied(
+    granted: Granted, tmp_path: Path, directory: str
+) -> None:
+    """`~/other` (through HOME) and `=other` (through PATH) reach the guard's own repository."""
+    home, bin_dir = tmp_path / "home", tmp_path / "bin"
+    home.mkdir()
+    bin_dir.mkdir()
+    (home / "other").symlink_to(granted.repo)
+    (bin_dir / "other").symlink_to(granted.repo)
+    env = {**clean_env(), "HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}{clean_env()['PATH']}"}
+    command = f"git -C {directory} push origin {granted.head}:refs/heads/feat"
+    denied(granted.repo, command, env)
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_18_a_grants_log_that_cannot_be_written_denies(granted: Granted) -> None:
+    grants_used_path(granted.repo).mkdir(parents=True)
+    denied(granted.repo, f"git push origin {granted.head}:refs/heads/feat")
