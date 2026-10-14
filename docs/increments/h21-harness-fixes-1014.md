@@ -140,8 +140,9 @@ is judged by today's text rules, which ask. It is `True` only when all hold:
    `"..."`), written as an allow-list so that a character not named is
    refused:
    - outside quotes, only letters, digits, space, tab and `_ . / : , @ % +
-     -`, and `=` when not the first character of a word (zsh's `=cmd`
-     expands to a path). Everything else is `False`: `$`, backtick,
+     -`, and `=` only right after a letter, digit or `_ . / , @ % + -` written
+     outside quotes (zsh's `=cmd` expands to a path at a word's start, after a
+     quote such as `''=ls`, and with `MAGIC_EQUAL_SUBST` after `=` or `:`). Everything else is `False`: `$`, backtick,
      backslash, `{ } * ? [ ] ~` (brace, glob, tilde), `( )` (zsh
      `mu(t)ation` and ksh-style `@(…)` patterns; `shell_scan.parse` also
      splits a word at `(`), `# ^` (zsh `EXTENDED_GLOB` patterns, and a
@@ -157,7 +158,7 @@ is judged by today's text rules, which ask. It is `True` only when all hold:
    So `$M`, `"$M"`, `$'\x6d'`, `$(printf mut)`, `` `…` ``, `mu{tation,}`
    and `'…'mu(t)ation'…'` are refused, and a query written in single quotes
    passes. The checked list of zsh's unquoted specials (review round 3):
-   `#`, `^`, `|`, `<`, `>`, `(`, `)`, `=` at a word's start, `!`, `~`, and
+   `#`, `^`, `|`, `<`, `>`, `(`, `)`, `=` at a word's start or after a quote, `=` or `:`, `!`, `~`, and
    the bash set above; each is outside the allow-list.
 6. Neither `mutation` nor `subscription` appears as a word
    (`\b(mutation|subscription)\b`) in either of two readings, each over the
@@ -578,7 +579,7 @@ network; `gh` is a fake on `PATH` where used.
    `~/x` are `False`.
    Round 3: the line `gh api graphql -f query='query Q { a } 'mu(t)ation' M
    { b }'` asks. `literal` pure, each `False`: `mu(t)ation`, `a#`, `^a`,
-   `a|b`, `mu<->`, `a>b`, `=ls`, `!x`, `a;b`, `a&b`, `a` newline `b`,
+   `a|b`, `mu<->`, `a>b`, `=ls`, `''=ls`, `x==ls`, `x=a:=ls`, `!x`, `a;b`, `a&b`, `a` newline `b`,
    `"a!b"`, `'a''b'`; each `True`: `-fquery=x`, `--raw-field=query=x`,
    `'(t) # ^ | < > ; & !'`, `"a (b) c"`, `-H 'Accept: x'`, `--jq .data`.
 4. Ask, fields and options: `-F query='{ viewer { login } }'` (query by
@@ -723,7 +724,7 @@ number is the killing test):
   without the parenthesis check (3, the `'mu(t)ation'` line); `literal`
   allowing `#`, `^`, `|`, `<` or `>` outside quotes, one mutant each (3,
   `a#`, `^a`, `a|b`, `mu<->`, `a>b`); `literal` allowing `=` at a word's
-  start (3, `=ls`); `literal` reading `''` as a join (3, `'a''b'`); reading (b)
+  start or after a quote, `=` or `:` (3, `=ls`, `''=ls`, `x==ls`); `literal` reading `''` as a join (3, `'a''b'`); reading (b)
   with `posix=False`, which keeps the quotes (2, `"mut"ation`); `-F`
   accepted for `query` (4); the unknown-option refusal dropped (4,
   `--foo`).
@@ -797,3 +798,5 @@ checks after the merge, recorded here. All by day: every file is governed.
 **Design review, round 2, 2026-10-14.** Range `8f3785ca..d42f04ee`, about 300 net lines estimated, @reviewer: CHANGES REQUESTED. Points 4 and 5 closed. Still open, each broken by a probe: (1) quotes split the word, `-f query='query Q { a } mut''ation M { b }' -f operationName=M` (or `"mut"ation`) passes rule 6 and gh sends `mutation M`: also test every argument after quote removal; (2) `git -C <pad>/c config core.worktree <repo>` passes rules 1-5 and a later `reset --hard` there would overwrite the real tree: require `--show-toplevel` under a scratchpad by real path, or refuse `core.worktree`; (3) zsh's `cd OLD NEW`, `pushd +1` and a `CDPATH=…` prefix move elsewhere than the guards compute: give a path only for a `cd`/`pushd` of one word that is absolute or starts `./` or `../`, with no assignment prefix. A test and a mutation target for each.
 
 **Design review, round 3, 2026-10-14.** Range `bfc5490f..509d1e63`, about 325 net lines estimated, @reviewer: CHANGES REQUESTED. Points 2 (`core.worktree`, `include.`, `includeif.` refused; `--show-toplevel` under a scratchpad) and 3 (one-argument `cd`/`pushd` starting `/`, `./` or `../`, logical and physical paths agreeing) closed. Point 1 still open: `gh api graphql -f query='query Q { a } 'mu(t)ation' M { b }'` passes rules 1-6; zsh reads `mu(t)ation` as a pattern and gh can receive `mutation`, and `shell_scan.parse` splits at `(`: rule 5 also refuses `(` and `)` outside quotes, with a test and a mutation target. Wording: section 4.1's "so 6 (b) and (c) see it" becomes "6 (b) sees it".
+
+**Design review, round 4, 2026-10-14.** Range `d48c5d39..fe9f700b`, about 330 net lines estimated, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `=` allowed only right after a letter, digit or `_ . / , @ % + -` outside quotes, since zsh expands `''=ls`, and with `MAGIC_EQUAL_SUBST` `x==ls` and `x=a:=ls`; the refusal list, the test cases and the mutation target name them. Held, probed in `zsh -f`: the allow-list refuses `mu(t)ation`, `'a''b'`, `|`, `>`, `#`, `^`; `@x`, `+x`, `a%b`, `a:b`, `a,b` stay literal under `ksh_glob` and `extended_glob`; the over-refusals (`| jq`, `> out.json`) stated; "6 (b) sees it". No mutation could pass through `=` (rule 4 fixes the query's start). Building waits for Ola by day (governed files).
