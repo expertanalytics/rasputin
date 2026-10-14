@@ -7,8 +7,8 @@ the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
 evaluator, snow wiring and Bygdin run, code review round 2 approved,
 acceptance run recorded; PR 7, the run to 1 September and one bin by
 default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path);
-PR 8, a continuous snow-covered area in the active bin, designed (section 12),
-awaiting design review**
+PR 8, a continuous snow-covered area in the active bin, design and code
+review round 1 approved with wordings; @perf's Bygdin re-render pending (section 12)**
 (2026-10-14). Eight PRs (section 10.7, which supersedes section 8's table, and sections 11 and 12). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
@@ -583,7 +583,7 @@ Each states the scale it assumes and the largest input it was checked at.
 | cx | 3 mm/°C/day | Norwegian HBV range 2-5; chosen | probe, 294 770 triangles × 2184 steps |
 | lw | 0.1 | Shyft's default | same |
 | cfr | 0.05 | HBV-light's default (to verify); Shyft uses 0.5 | same |
-| CV, N | 0.4, 10; N = 1 by default from PR 7 (section 11) | chosen (2.1, Liston's table not read) | same |
+| CV, N | 0.4, 10; N = 1 by default from PR 7 (section 11), cv 0.1 from PR 8 (section 12.4) | chosen (2.1, Liston's table not read) | same |
 | r | 0.015 mm/°C/day per W/m² | 61° N, April; chosen (4.5) | probe |
 | d | 0.02 °C per W/m² | = 4r/cx; chosen | probe |
 | I0, Ψa | 1368 W/m², 0.75 | Hock 1999's form; Ψa chosen | 0-90° sun |
@@ -1699,9 +1699,10 @@ the log-normal's partial moments, `E[X^j; a < X < b]` through
 rounding). cv = 0 gives `factors (1.0,)`, `deep ()`, as today.
 
 - **One bin** is a uniform depth from `1 − √3·cv` to `1 + √3·cv` times the
-  mean, of exactly the given CV. At the default 0.4: *probe* shallow
+  mean, of exactly the given CV. At 0.4: *probe* shallow
   0.307180, deep 1.692820. A triangle with 600 mm starts to go bare after
-  184 mm has melted and is bare after 1016 mm.
+  184 mm has melted and is bare after 1016 mm. At the default 0.1, shallow
+  0.826795, deep 1.173205 (496 and 704 mm at 600 mm).
 - **Ten bins** at 0.4: *probe* factors (0.4778, 0.6216, 0.7157, 0.8004, 0.8848, 0.9750, 1.0780, 1.2060, 1.3902, 1.8505), deep (0.5964, 0.6736, 0.7592, 0.8421, 0.9280, 1.0226, 1.1343, 1.2796, 1.5074, 2.4245). The bin means
   move from today's midpoint quantiles (section 7's D1) to band means
   (bin 0: 0.4974 → 0.4778). Neighbouring lines overlap (the top bin's
@@ -1731,14 +1732,21 @@ the dry spring of section 6, 91 days:
 
 | run | domain SCA, day 30 / 60 / 90 | domain SWE mm, day 30 / 60 / 90 | median melt-out day, class S / N | share of daily values with 0 < sca < 1 |
 |---|---|---|---|---|
-| none, 10 linear bins | 1.0000 / 0.6219 / 0.0853 | 565.14 / 206.37 / 25.17 | 81.0 / 81.0 | 0.457 |
-| melt_factor, 10 linear bins | 1.0000 / 0.6484 / 0.1193 | 564.97 / 228.71 / 38.34 | 74.0 / −1 | 0.437 |
-| threshold, 10 linear bins | 1.0000 / 0.6259 / 0.0963 | 557.97 / 209.69 / 29.95 | 74.0 / −1 | 0.459 |
-| none, 1 linear bin (the default) | 1.0000 / 0.6484 / 0.0827 | 566.15 / 218.97 / 24.58 | 83.0 / 83.0 | 0.381 |
-| melt_factor, 1 linear bin | 1.0000 / 0.6656 / 0.1148 | 566.36 / 238.85 / 37.17 | 76.0 / −1 | 0.375 |
+| none, 10 linear bins, cv 0.4 | 1.0000 / 0.6219 / 0.0853 | 565.14 / 206.37 / 25.17 | 81.0 / 81.0 | 0.457 |
+| melt_factor, 10 linear bins, cv 0.4 | 1.0000 / 0.6484 / 0.1193 | 564.97 / 228.71 / 38.34 | 74.0 / −1 | 0.437 |
+| threshold, 10 linear bins, cv 0.4 | 1.0000 / 0.6259 / 0.0963 | 557.97 / 209.69 / 29.95 | 74.0 / −1 | 0.459 |
+| none, 1 linear bin, cv 0.4 | 1.0000 / 0.6484 / 0.0827 | 566.15 / 218.97 / 24.58 | 83.0 / 83.0 | 0.381 |
+| melt_factor, 1 linear bin, cv 0.4 | 1.0000 / 0.6656 / 0.1148 | 566.36 / 238.85 / 37.17 | 76.0 / −1 | 0.375 |
+| none, 1 linear bin, cv 0.1 (the default) | 1.0000 / 0.7583 / 0.0805 | 566.15 / 159.84 / 18.50 | 83.0 / 83.0 | 0.086 |
+| melt_factor, 1 linear bin, cv 0.1 | 1.0000 / 0.7379 / 0.1102 | 566.37 / 191.33 / 29.80 | 76.0 / −1 | 0.085 |
+| none, 10 linear bins, cv 0.1 | 1.0000 / 0.7639 / 0.0805 | 566.09 / 158.75 / 18.50 | 83.0 / 83.0 | not printed |
+| melt_factor, 10 linear bins, cv 0.1 | 1.0000 / 0.7368 / 0.1102 | 566.27 / 191.15 / 29.79 | 76.0 / −1 | not printed |
+| threshold, 10 linear bins, cv 0.1 | 1.0000 / 0.7384 / 0.0909 | 559.27 / 166.70 / 23.01 | 75.0 / −1 | not printed |
 | *for comparison, section 6:* none, 1 flat bin | 1.0000 / 0.8884 / 0.0804 | 566.15 / 149.13 / 18.10 | 83.0 / 83.0 | 0 |
 
-What this says. **One linear bin removes the rush**: the default's domain
+The cv 0.1 one-bin rows come from `rasputin snow` at `87d62f21` (@reviewer). The ten-bin rows come from @tester's probe rerun in `c55a570e`. Neither is in probe_sca.out.
+
+What this says. At the default cv 0.1, day-60 SCA is 0.758 with one bin and 0.764 with ten, and 8.6 % of daily values are partly covered (38 % at 0.4). A south-slope one-bin triangle takes 8 days from first bare ground to bare under melt_factor (36 at cv 0.4). E1 checks the cv 0.1 ten-bin rows. At cv 0.4 **one linear bin removes the rush**: the
 SCA at day 60 is 0.648, against 0.888 with one flat bin and 0.622 with ten
 linear bins, so one bin now looks like ten. It also keeps more snow at day
 60 (219 against 149 mm), because the deep edge holds 1.69 times the mean.
@@ -1781,7 +1789,7 @@ by hand in the notes. `swe` = sp + sw, outflow per step.
 | L8 | `uniform(0)`, cfr = 0 | T = −1, P = 10 | sp 10, deep 15, sw 0, sca 1 |
 | L8b | L8 | T = 2.5 (M = 7.5) | sp 2.8125, deep 7.5, sw 0.28125, out 6.90625, sca 0.75 |
 | L9 | L2 | T = 0 = ts = θ | unchanged: sp 40.5, deep 90, sw 4.05, out 0, sca 0.9 |
-| L10 | L0, cfr = 0 | 400 hourly melt steps, T in 0.25 … 3.25 | I8 within 1e-12 (probe: 6.7e-16 over 174.6 mm of melt, through covered, partly bare and bare) |
+| L10 | L0, cfr = 0 | 400 hourly melt steps, T = 0.5 + (k mod 7) °C | I8 within 1e-12 (probe: 6.7e-16 over 174.6 mm of melt, through covered, partly bare and bare) |
 
 Properties (Catch2 generators and Hypothesis, as P1-P5, whose generators
 gain linear distributions: N in 1..8, `deep_k` drawn in `[f_k, 2·f_k]`):
@@ -1791,7 +1799,7 @@ gain linear distributions: N in 1..8, `deep_k` drawn in `[f_k, 2·f_k]`):
 - P7: I7, over melt-only and dry sequences: sca never rises by more than
   1e-12 in a step without snowfall (the probe's largest rise: 2.2e-16).
 - P8: I8 over random positive T sequences, one bin, random deep in
-  `(1, 2]`.
+  `[1.1, 2]` (near-flat bins amplify rounding past 1e-12).
 - P9: I6 is held by H1-H12 and P1-P5 passing unedited on flat
   distributions; no new test.
 
@@ -1820,19 +1828,21 @@ Refusals and the binding (`test_core_snow.py`, `test_snow_params.py`):
 Existing tests to amend in the red commit, each with its reason:
 
 - D1 (`test_snow_params.py`): the factors become the band means (12.4).
-- `test_snow_job.py`: the default distribution is `lognormal(0.4, 1)`
-  (factors `(1.0,)`, deep `(1.6928…,)`); `lognormal(0.4, 1) ==
+- `test_snow_job.py`: the default distribution is `lognormal(0.1, 1)`
+  (factors `(1.0,)`, deep `(1.1732…,)`); `lognormal(0.4, 1) ==
   lognormal(0.0, 1)` is now false (D3).
 - C1: drops "every sca value 0 or 1"; asserts `job.distribution ==
-  lognormal(0.4, 1)`. C4 (new): the two facets, `--sun-correction none --days 30
-  --initial-swe 100 --cfr 0`, other flags default: the last frame's sca is
-  0.627635 on both facets within 1e-5 (*computed*: ΣM 82.314 mm at 300 m by
-  day 30).
+  lognormal(0.1, 1)`. C4 (new): the two facets, `--sun-correction none --days 30
+  --initial-swe 90 --cfr 0`, other flags default: the last frame's sca is
+  0.746517 on both facets within 1e-5 (ΣM 82.314 mm, between the edges 74.4
+  and 105.6 mm; at 100 mm the shallow edge, 82.7 mm, stays covered). C3,
+  renamed `test_c3_ten_bins_alone_keep_the_default_cv`, gives
+  `lognormal(0.1, 10)`.
 - `test_snow_run.py`'s tests that build a job without a distribution now get
-  one bin at cv 0.4; they assert orderings and mass, not figures, and are
+  one bin at cv 0.1; they assert orderings and mass, not figures, and are
   expected to pass unedited; any that fails is amended with its reason in
   the red commit, never in the green one.
-- E1 (slow): `TABLE` becomes 12.5's linear ten-bin rows; same tolerances.
+- E1 (slow): `TABLE` becomes 12.5's linear ten-bin rows at cv 0.1; the triangle count is checked as a range, 150 000 to 600 000; same tolerances.
 
 **Mutation targets** (the kernel is invariant-critical; each with its
 killer):
@@ -1947,3 +1957,5 @@ Expected: about PR 7's, the step being a few flops longer per bin.
 The search is 3.4 times the estimate (135 s against about 40 s) and the evaluator 1.9 times (55 ns per triangle and sample against 29); one profile shows the far part of each ray pruned and the first 2.5 km costing 17.5 µs per ray, the hot loop unnamed for want of symbols. Output byte-identical at 1 and 8 threads except `snow.json`. Beam removed by shadows on Bygdin, plan-area weighted (section 10.6's node figures in brackets): 15 April 1.43 % (1.6), 15 May 1.18 % (1.3), 21 June 1.13 % (1.2); mean ΔI change −2.36, −2.78, −3.09 W/m² (−2.7, −3.0, −3.3). E2 on the 2 m mesh, 15 April: −0.99 W/m². Screenshot `bygdin-swe-day110.png` (20 July, from above): SWE with shadows on, off, and on minus off, never negative (0 to 489 mm), red streaks on steep ridge slopes, most along the northern ridge; viewed by the main session. ParaView outputs outside git in `rasputin_scratch/snow-demo/bygdin-shadows-on/` and `bygdin-shadows-off/`. About 64 % of Bygdin's triangles still hold more than half their snow on 1 August.
 
 **Design review (PR 8, continuous snow cover within a bin), 2026-10-14.** Range `62f62185..d0ab6e7d`, 0 production lines (design only; about 87 estimated, full path), @reviewer: APPROVED WITH WORDINGS, applied by the main session: Sælthun's section 2.3.2 named as read; "covered" requires `sp > 0`; S1's and C4's sca figures from unrounded melt sums (0.975320, 0.452457, 0.204557; 0.627635); question 13 gains the 1 mm example. Held: every cited line of Shyft's `calculator.h` at 37d610ad; the three melt cases, refreeze scaling and snowfall wedge derived by hand (mass kept, cover in [0,1], not rising under melt, flat bins equal to today's kernel bit for bit); fixtures L0-L10 and the ten mutants; the log-normal figures to 4 decimals; the probe. Neither default unsafe (0.4 under the one-bin limit 0.577). Not pushed.
+
+**Code review, round 1 (PR 8, continuous snow cover within a bin), 2026-10-14.** Range `62f62185..87d62f21`, 91 net production lines (about 87 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session (docs) and @tester ("Interface under test" in two test files): section 12.4 and 12.5 at the default cv 0.1 (new table rows from `rasputin snow` at `87d62f21` and @tester's probe rerun), L10's and P8's pins written in, the C1/C3/C4 bullets at 0.1 with C4 at 90 mm, E1's range, the Status line, section 5's CV row, project_structure.md's hbv_snow.hpp entry, probe_sca.py's docstring. Held: the kernel matches section 12.3 line by line; flat bins give the old results (every branch traced, H1-H12 and P1-P5 unedited); no reachable division by zero; the mutation record `6ac0ce25` kills all ten targets; @tester's pins sound (C4 0.74652 recomputed). No acceptance run due. Not pushed, CI pending.

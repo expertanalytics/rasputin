@@ -7,7 +7,7 @@ It runs probe_spring.py's terrain, mesh, geometry and sun (the same code, execut
 up to its D1 section), then section 12's kernel as a NumPy reference: the hand
 fixtures L1-L10, the distribution figures D3, a flat ten-bin run that must
 reproduce probe_spring.out's first row (the reference is today's kernel on flat
-bins), and E1's new rows. Everything printed is quoted by section 12 of
+bins), and the ten-bin rows at cv 0.4. Everything printed is quoted by section 12 of
 docs/increments/46-hbv-snow.md.
 """
 
