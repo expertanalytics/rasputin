@@ -1,0 +1,10 @@
+mesh_2m.vtk: tolerance 2 m, 294770 triangles, 147936 vertices, mean plan area 489 m2, file 10647608 bytes, 0.49 s wall incl. process start and write
+mesh_flat_1m.vtk: tolerance 1 m, 31838 triangles, 16160 vertices, mean plan area 4523 m2, file 1162223 bytes, 0.33 s wall incl. process start and write
+mesh_0p5m.vtk: tolerance 0.5 m, 1279127 triangles, 640798 vertices, mean plan area 113 m2, file 46128210 bytes, 1.17 s wall incl. process start and write
+mesh_1m.vtk: tolerance 1 m, 646870 triangles, 324265 vertices, mean plan area 223 m2, file 23341064 bytes, 0.73 s wall incl. process start and write
+gamma at (494000, 6800000): lat 61.334 lon 14.888, -0.0984 deg
+gamma at (500000, 6800000): lat 61.334 lon 15.000, -0.0000 deg
+gamma at (506000, 6800000): lat 61.334 lon 15.112, +0.0984 deg
+EnSight: 92 frames x 2 values written in 0.33 s; geometry 11654352 bytes; one value one frame 2587724 bytes (244 + 4 x 646870 = 2587724); total 487796213 bytes = 487.8 MB = 465.2 MiB
+.vtk series estimate: (23341064 + 2 x 4 x 646870) x 92 = 2.62 GB
+pvpython read back: 92 time steps 0.0 24.0 2184.0 cells 646870 swe at step 50 50.0

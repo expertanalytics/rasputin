@@ -22,6 +22,10 @@ include/terrain/           # public C++ headers, header-only where possible
     snap_grid.hpp          # GridPoint, SnapGrid: the lattice noded output lies on
     noded_pslg.hpp         # NodedPslg: the noder's output, the CDT's input (5b)
     indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
+  snow/
+    hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
+                           #   the step with an optional sun correction; depends
+                           #   on parallel_util only, and nothing depends on it
   predicates/
     orientation.hpp        # Orientation / Incircle vocabulary; no includes at all
     exact.hpp              # ExactPredicates concept, filter bounds
@@ -105,6 +109,9 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
+  snow.cpp                 # the snow kernel's binding: arrays in and out,
+                           #   refusals as ValueError naming the status,
+                           #   and the triangle for a non-finite value
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # installed_version only; never imports _core
@@ -252,6 +259,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
                            #   itself is data/class_maps/corine.toml (41)
+  snow/                    # snow on the mesh
+    params.py              # the HBV snow parameters and sun-correction mode as
+                           #   a strict Pydantic model; imports nothing first-party
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
