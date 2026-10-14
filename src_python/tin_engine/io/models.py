@@ -30,9 +30,11 @@ from pydantic import (
 
 #: A DEM's height unit, by the name pyproj gives it.
 ZUnit = Literal["metre", "foot", "US survey foot"]
+#: The same units as ``--z-unit`` spells them.
+ZSpelling = Literal["m", "ft", "us-ft"]
 
 #: EPSG unit code to (name pyproj uses, metres per unit, option spelling, plural).
-UNITS: dict[int, tuple[ZUnit, float, str, str]] = {
+UNITS: dict[int, tuple[ZUnit, float, ZSpelling, str]] = {
     9001: ("metre", 1.0, "m", "metres"),
     9002: ("foot", 0.3048, "ft", "feet"),
     9003: ("US survey foot", 1200 / 3937, "us-ft", "US survey feet"),
