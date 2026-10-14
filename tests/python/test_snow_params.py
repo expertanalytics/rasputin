@@ -3,7 +3,7 @@
 `docs/increments/46-hbv-snow.md`, *7. Red suites for `@tester`* (PR 1, D1),
 with sections 4.2 ("`params.py` refuses the same values earlier"), 4.8 and 5.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface under test (names chosen here and listed in the handback):
 
 - `HbvSnowParameters(tx, ts, cx, lw, cfr)`, frozen, section 5's defaults
   (0, 0, 3, 0.1, 0.05); cx, lw and cfr refused below 0; any non-finite value

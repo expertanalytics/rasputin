@@ -5,7 +5,7 @@ hand-computed steps H1-H12 that the C++ suite also runs, the invariants I1-I5
 as Hypothesis properties P1-P5, the refusals V1 as `ValueError`s naming the
 status, the renormalisation V2, and the GIL released during a step.
 
-Interface assumed (names chosen here and listed in the handback; they mirror
+Interface under test (names chosen here and listed in the handback; they mirror
 the C++ in section 4.2):
 
 - `_core.SunCorrection`: `none`, `melt_factor`, `threshold`.
