@@ -66,22 +66,12 @@ def invoke(command: str, *args: str) -> tuple[int, str]:
     return result.exit_code, plain(result.output)
 
 
-#: Wide enough that Rich cuts no option name in a help panel. At the runner's
-#: default 80 columns the name column shrinks as the type column grows, and a
-#: long name such as ``--no-constraint-feet`` ends in an ellipsis.
-HELP_COLUMNS = "200"
+def help_text(command: str, columns: int = 200) -> str:
+    """`rasputin <command> --help` at `columns` wide, required to succeed; the `plain` output.
 
-
-def help_text(command: str) -> str:
-    """`rasputin <command> --help`, required to succeed, at `HELP_COLUMNS`; the `plain` output."""
-    assert command in COMMANDS, f"{command!r} is not a subcommand; they are {sorted(COMMANDS)}"
-    result = runner.invoke(app, [command, "--help"], env={"COLUMNS": HELP_COLUMNS})
-    assert result.exit_code == 0, result.output
-    return plain(result.output)
-
-
-def help_page(command: str, columns: int) -> tuple[int, str]:
-    """`rasputin <command> --help` at `columns` wide: the exit code and the raw output.
+    The default 200 is wide enough that Rich cuts no option name in a help
+    panel: at 80 columns the name column shrinks as the type column grows, and
+    a long name such as ``--no-constraint-feet`` ends in an ellipsis.
 
     `TERM` is not `dumb` here, unlike `runner`'s: where `GITHUB_ACTIONS` is set,
     Typer forces Rich to treat the output as a terminal, and Rich sizes a forced
@@ -92,7 +82,8 @@ def help_page(command: str, columns: int) -> tuple[int, str]:
     assert command in COMMANDS, f"{command!r} is not a subcommand; they are {sorted(COMMANDS)}"
     env = {"NO_COLOR": "1", "TERM": "xterm", "COLUMNS": str(columns)}
     result = CliRunner(env=env).invoke(app, [command, "--help"])
-    return result.exit_code, result.output
+    assert result.exit_code == 0, result.output
+    return plain(result.output)
 
 
 def ran(command: str, *args: str) -> str:

@@ -32,10 +32,9 @@ import tin_engine
 from cli_helpers import (
     USAGE,
     geojson,
-    help_page,
+    help_text,
     invoke,
     no_cache_anywhere,
-    plain,
     says_no_cache,
     squashed,
 )
@@ -424,14 +423,12 @@ class TestW8CacheRoot:
     def test_the_help_states_the_whole_default(self, command: str) -> None:
         """At 300 columns, so Rich prints the option's help on one row instead
         of wrapping it between other columns' text or cutting a long word
-        short with an ellipsis. `help_page` pins the width on CI too."""
-        code, output = help_page(command, columns=300)
-        assert code == 0, output
+        short with an ellipsis. `help_text` pins the width on CI too."""
+        output = help_text(command, columns=300)
         default = (
             "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
         )
-        cache_lines = [line for line in output.splitlines() if "--cache" in line]
-        assert squashed(default) in squashed(plain(output)), cache_lines
+        assert squashed(default) in squashed(output), output
 
     def test_a_path_needs_neither(self, tif: Path, tmp_path: Path, no_cache_dir: None) -> None:
         code, output = invoke("mesh", "--dem", str(tif), "--out", str(tmp_path / "m.vtk"))
