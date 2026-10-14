@@ -9,7 +9,7 @@ rasters only, and the GIL released during the search. The C++ suite
 (`tests/cpp/unit/test_radiation_horizon.cpp`) holds the mutation fixtures and
 the pruned-equals-exhaustive checks; this file checks what crosses.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface under test:
 
 - `_core.horizon_search(x, y, z_obs, lat_deg, lon_deg, jacobian, normal,
   exclusion_radius, near, far, *, n_directions, curvature, d_near, d_far,

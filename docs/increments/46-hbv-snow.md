@@ -3,7 +3,8 @@
 **Status: design and its cast-shadow addendum approved (rounds 1-4); PR 1,
 the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
 and animation, acceptance run recorded, code review round 2 approved; PR 4,
-the receiver frame, approved; PR 5, the horizon kernel, in its red step**
+the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
+evaluator, snow wiring and Bygdin run, green, in review**
 (2026-10-14). Six PRs (section 10.7, which supersedes section 8's table). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
@@ -878,7 +879,7 @@ each sun sample, each built as the radiation design states it:
 |---|---|---|
 | TR1, the sun | the sun at each sample time | all of it: this increment's PR 2 (unchanged) |
 | TR2, the receiver frame | per triangle: latitude and longitude, the normal in true east-north-up, the map from grid to true directions (its J), the exclusion radius, the observer height | all of it: PR 4 |
-| TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 |
+| TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 (built) |
 | TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 |
 | TR4, sky factors and the geometry file | nothing: the lit test needs no sky view, and the horizons are computed in the run, not stored | none |
 | TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6; not its CLI |
@@ -1218,7 +1219,7 @@ k = 16 (east) plus I4 in all 64. "h" is the int16 table entry.
 
 ```sh
 rasputin mesh --dem $DTM10 --domain docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson \
-    --tolerance 10 --out bygdin.vtk                      # 52 198 triangles (ROADMAP row 22)
+    --tolerance 10 --out bygdin.vtk                      # about 52 000 triangles (51 527 on 2026-10-14)
 rasputin snow --mesh bygdin.vtk --dem $DTM10 --shadows on --days 122 --out bygdin_snow/
 ```
 
@@ -1276,3 +1277,5 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
 **PR 3 acceptance run, 2026-10-14** (`@perf`, `96fc053c`, at `914e1f57`; record in `docs/benchmarks/2026-10-14/46-snow-acceptance/`). The default spring on the 1 m mesh (646,870 triangles), Release build, M1 Max on mains power, three runs per thread count, medians: 1 thread 78.75 s (78.61-80.05), peak resident 430.6 MB; 8 threads 37.32 s (37.26-37.46), 431.1 MB; output 498,148,389 B in 191 files at both, identical but for the thread count in `snow.json`. Speed-up 2.11 at 8 threads; total processor time is about equal at both counts, so most of the run is single-threaded (not profiled). ParaView 6.1.1's pvpython reads all 92 frames of 646,870 cells; SWE 600 mm at day 0, 149-600 mm at day 45 (screenshot `swe-day45.png`), 0-592 mm at day 91. NO BASELINE: the first measurement of `rasputin snow`.
 
 **Code review, round 2 (PR 3, the snow run and animation), 2026-10-14.** Range `a1a7fe6e..26e54b0e`, 451 net production lines from `791532f6` (495 estimated), @reviewer: APPROVED WITH WORDINGS (Status line; `crs.py` map entry also imports `io.models`), applied by the main session. Round 1's three blockers are fixed: the acceptance run as sections 8 and 10.7 word it, the map entries true, the 10,000-frame cap matching `run.py`'s numbering. The whole-frames and metre-CRS refusals are in. CI is still to be checked after the push.
+
+**Code review, round 1 (PR 5, TR3a horizon kernel), 2026-10-14.** Range `b1971263..8ecc5596`, 354 net production lines (about 355 estimated: C++ 310 against 300, binding and stub 44 against 55, Python 0), @reviewer: APPROVED WITH WORDINGS: the red step's "Interface assumed" text in both test files becomes "Interface under test" (@tester); `horizon.hpp`'s header says the sample spacing is half the smaller cell side (@developer); TR3a marked built here and in `terrain-radiation.md` (main session); applied in `b8194219`, `e859ec70` and `2eaadb27`. Held: the pruning bound, the early stop over both rasters, far samples from D_near + Δ_far, D_far = D_near with no far raster, rounding half away from zero, pyramid blocks covering their boundary nodes, the pruned search keeping samples through the exhaustive one's functions; @developer's pins (spacing, reach at most 254, the bound's slack, levels 1 and up with a NoData byte per block, d_far checked only with a far raster); the kill record `8ecc5596` covers all 13 targets of section 10.8. Not pushed, CI pending.
