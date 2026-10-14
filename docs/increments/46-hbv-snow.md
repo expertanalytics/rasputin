@@ -5,8 +5,9 @@ the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
 and animation, acceptance run recorded, code review round 2 approved; PR 4,
 the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
 evaluator, snow wiring and Bygdin run, code review round 2 approved,
-acceptance run recorded**
-(2026-10-14). Six PRs (section 10.7, which supersedes section 8's table). Ola was away when it was written; every default taken
+acceptance run recorded; PR 7, the run to 1 September and one bin by
+default, designed (section 11, short path)**
+(2026-10-14). Seven PRs (section 10.7, which supersedes section 8's table, and section 11). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
 `docs/increments/46-probes/probe_spring.py`, whose output is
@@ -431,7 +432,8 @@ the write): `rasputin mesh --dem synth.tif --tolerance 1`, "quite fine":
 23 m sides), 0.73 s. At 2 m: 294 770 triangles, 147 936 vertices, 0.49 s; at
 0.5 m: 1 279 127 triangles, 1.17 s.
 
-**Forcing** (`SyntheticSpring`, all defaults chosen, not derived):
+**Forcing** (`SyntheticSpring`, all defaults chosen, not derived; the run
+length, the ramp and the bins are changed by PR 7, section 11):
 - 2027-04-01T00:00Z to 2027-07-01T00:00Z (91 days), hourly steps, S = 4;
 - temperature at 300 m: −3 °C rising linearly to +14 °C, plus a daily cycle of
   ±4 °C (a cosine) peaking at 14:00 mean solar time at 15° E (13:00 UTC);
@@ -482,6 +484,9 @@ them side by side to compare.
 features); a melt-out map as a GeoPackage layer is offered as an idea.
 
 ### 4.7 Is a continuous SCA worth it on small triangles?
+
+*Overruled by Ola on 2026-10-14: one bin is the default from PR 7 on
+(section 11.2); ten bins stay an option. The figures below stand.*
 
 Yes, as a distribution within the triangle, with a default CV of 0.4, for two
 reasons:
@@ -571,7 +576,7 @@ Each states the scale it assumes and the largest input it was checked at.
 | cx | 3 mm/°C/day | Norwegian HBV range 2-5; chosen | probe, 294 770 triangles × 2184 steps |
 | lw | 0.1 | Shyft's default | same |
 | cfr | 0.05 | HBV-light's default (to verify); Shyft uses 0.5 | same |
-| CV, N | 0.4, 10 | chosen (2.1, Liston's table not read) | same |
+| CV, N | 0.4, 10; N = 1 by default from PR 7 (section 11) | chosen (2.1, Liston's table not read) | same |
 | r | 0.015 mm/°C/day per W/m² | 61° N, April; chosen (4.5) | probe |
 | d | 0.02 °C per W/m² | = 4r/cx; chosen | probe |
 | I0, Ψa | 1368 W/m², 0.75 | Hock 1999's form; Ψa chosen | 0-90° sun |
@@ -1222,6 +1227,7 @@ k = 16 (east) plus I4 in all 64. "h" is the int16 table entry.
 rasputin mesh --dem $DTM10 --domain docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson \
     --tolerance 10 --out bygdin.vtk                      # about 52 000 triangles (51 527 on 2026-10-14)
 rasputin snow --mesh bygdin.vtk --dem $DTM10 --shadows on --days 122 --out bygdin_snow/
+# from PR 7 (section 11): no --days; the default runs to 1 September
 ```
 
 `$DTM10` is `../rasputin_data/DTM10_UTM33_20260925`. The weather is section
@@ -1254,6 +1260,207 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
    Default: the first animation first.
 10. **The Bygdin run uses the same synthetic weather, run to 1 August instead
     of 1 July,** because Bygdin lies above 1050 m. Default: yes.
+
+## 11. PR 7: the run to 1 September, and one bin by default (2026-10-14)
+
+Written by `@architect` on branch `worktree-snow-summer`, stacked on
+`worktree-snow-shadow` (PR 6) at `2073ccf6`. PRs 1-6 go in unchanged.
+Sections 4.5, 4.7, 5 and 10.9 point here where this section changes them.
+Figures marked *computed* come from the formulas below, evaluated by hand in
+NumPy; nothing here needs a new probe.
+
+### 11.1 What Ola ruled
+
+Ola, 2026-10-14, verbatim: "0.6 is kind of better for us, as it gets warmer
+higher up. I also think the initial conditions sound healthy, but we should
+continue melting until hydrological new year, ie sept 1. I would also argue
+that 10 bins on small triangles are way too many." "1: yes. It's not uncommon
+to have periods of 15-18 C at Bygdin during summer, and that is about 1000moh.
+On 2, the triangles are selected based on a lack of variation, right? Larger
+triangles are also flat, so the max number should be very small, perhaps only
+one." "On 2: +14." "1: default."
+
+So: the lapse rate (0.6 °C per 100 m) and the initial snow (600 mm) stay; the
+weather runs to 1 September, warming at the Bygdin run's pace to +14 °C at
+300 m on 1 August and holding there; one bin per triangle by default, with
+`--bins` and `--snow-cv` kept; no scaling with triangle area.
+
+### 11.2 Prior art
+
+- **The hydrological year.** Ola's "hydrological new year, ie sept 1" is the
+  run's end. Nothing to cite: the weather stays synthetic.
+- **One bin.** A single compartment per triangle is plain point HBV-96
+  (Lindström et al. 1997), the `N = 1` case section 4.2's kernel already
+  runs; Shyft's HBV snow with one quantile point is the same. Section 4.7's
+  argument for ten bins (snow varies below any mesh's resolution) is set aside
+  by Ola's argument that a rasputin triangle is chosen to be nearly flat. The
+  cost, measured in section 6 on the 2 m mesh: with one bin the snow line
+  follows triangle edges and the domain stays white longer, then goes bare
+  in a rush (domain SCA 0.888 at day 60 against 0.630 with ten bins).
+  Named, not hidden; `--bins 10` brings the band back.
+- **Novelty:** none claimed.
+- **Legacy:** nothing; section 2.2's grep (no snow model in the legacy tree)
+  covers it.
+
+### 11.3 The ideas file
+
+- **Taken up:** "Snowpack on the TIN", its question *Triangles as single
+  compartments* (a small triangle holds one SWE, SCA 0 or 1), now the default.
+- **Overlaps, left out:** "Snow follow-ups", its snow variation that grows
+  with triangle size (Ola: no area scaling); "Profile the snow run's
+  single-threaded part" (no change here).
+
+### 11.4 The design
+
+**(a) The warming has a length of its own.** `SyntheticSpring` gains one
+field, and its run length a new default:
+
+```python
+#: Days over which the temperature at 300 m rises from T_START to T_END,
+#: counted from `start`; after them it holds at T_END.
+warming_days: int = Field(default=122, ge=1)
+days: int = Field(default=153, ge=1)
+```
+
+`forcing.temperature` uses `min(hours, warming_days * 24) / (warming_days *
+24)` where it used `hours / (days * 24)`. Everything else in it (the daily
+±4 °C cosine peaking at 14:00 mean solar time, the lapse, the step midpoint)
+is unchanged. With the default start, 2027-04-01T00:00Z, the ramp ends at
+2027-08-01T00:00Z and the run at 2027-09-01T00:00Z.
+
+- **Why a length and not an end date.** A length counted from `start` needs
+  no calendar or year logic, works for any `--start`, and keeps the weather a
+  function of the run's own time axis, as section 4.5 defines it. An end date
+  (1 August of the start's year) was rejected: a start after 1 August, or in
+  another year, would need rules of its own for no gain to a synthetic case.
+  A weather anchored to the calendar (the 15 April temperature on 15 April,
+  whatever the start) was rejected for the same reason; it is the shape real
+  forcing will have, and real forcing is outside this increment (4.10).
+- **Why it is a field and a flag, not a constant.** With `warming_days` equal
+  to `days`, the temperature is today's bit for bit (the same expression,
+  since `hours < days * 24` at every step midpoint). Every existing test
+  whose figures came from a ramp over the run keeps those figures by passing
+  it, E1 included (section 6's table, measured over 91 days); without it
+  they would need new probes. The CLI gains `--warming-days` (help: "Days
+  the temperature at 300 m takes to rise from -3 to +14 °C; it then holds.
+  Default 122."). A `warming_days` larger than `days` is allowed: the run ends
+  before the warming does.
+- **The pace.** 17 °C over 122 days, 0.139 °C per day: the Bygdin run's pace
+  (section 10.9). The default 91-day synthetic spring warmed faster
+  (0.187 °C per day); with this PR its default run is 153 days at the slower
+  pace. *Computed* daily means at 300 m: 1 April −2.930 °C, 31 July
+  13.930 °C, any day from 1 August 14.000 °C. In the hold, at 1054 m
+  (Bygdin's lowest node) 9.476 °C, afternoon peak 13.476 °C; at 2240 m
+  (its highest) 2.360 °C.
+- **Help and docstrings.** `--days`: "Days to run. Default 153: 1 April to
+  1 September." `forcing.py`'s module docstring says the temperature rises
+  linearly over the warming days, then holds. The class keeps the name
+  `SyntheticSpring` (a rename touches six source and test files for no behaviour); its
+  docstring says it runs into summer. `snow`'s docstring: "through a
+  synthetic dry spring and summer".
+
+**(b) One bin by default.** `SnowJob.distribution` defaults to
+`SnowDistribution.lognormal(0.0, 1)` (factors `(1.0,)`); `rasputin snow
+--bins` defaults to 1. **`--snow-cv` keeps its default 0.4**, a departure
+from the brief's "matching snow-cv default": `lognormal(cv, 1)` is `(1.0,)`
+for every cv (the one bin's midpoint quantile is the median, which divides
+out), so one bin is uniform snow already, while a default cv of 0 would make
+`--bins 10` alone silently give one bin. `--snow-cv`'s help: "Variation of
+snow depth within a triangle, spread over --bins bins; one bin is uniform
+snow." `snow.json` records the factors, so a one-bin run records `(1.0,)`
+whatever the cv.
+
+**Boundaries.** Unchanged: the C++ kernel, the bindings, `run.py`, the
+I/O modules. The change is two fields of a frozen model, one expression in
+a pure NumPy function, and three CLI options. No dependency.
+
+**Sizes at the new defaults.** The default run has 3672 hourly steps and 154
+frames (under the 10,000 cap). EnSight output on the 1 m synthetic mesh
+(646,870 triangles): 2 × 154 × 2,587,724 = 797,018,992 B of frames plus the
+geometry, against 476,141,216 B of frames at 92; on Bygdin (51,527
+triangles) 2 × 154 × 206,352 = 63,556,416 B. State memory falls from
+2N + 3 = 23 to 5 doubles per triangle.
+
+### 11.5 Red suites for `@tester`
+
+New tests (all pure Python, no slow mark unless said):
+
+- **W1, the hold** (`test_snow_forcing.py`): `SyntheticSpring()` at 300 m,
+  15° E, the mean over the 24 steps of day d: d = 0 → −2.930328, d = 121
+  → 13.930328, d = 122 and d = 136 → 14.0, each within 1e-9 (*computed*);
+  at 2240 m on day 136 → 2.36 within 1e-9. Step k = 3671 (the last of 153
+  days) equals 14 + the cosine term at 300 m within 1e-12.
+- **W2, the run length does not stretch the warming:** for k in {0, 100,
+  239}, `temperature(SyntheticSpring(days=10), k, …)` equals
+  `temperature(SyntheticSpring(days=153), k, …)` bit for bit. Fails today
+  (the ramp is over `days`).
+- **W3, today's forcing with `warming_days = days`:** the existing
+  `TestTemperature.expected` formula (ramp over 91 × 24 hours) against
+  `SyntheticSpring(days=91, warming_days=91)` at k ∈ {0, 12, 13, 500, 2183},
+  atol 1e-12, as today.
+- **J1, the defaults** (`test_snow_job.py`): `SyntheticSpring()` has days 153,
+  warming_days 122, start 2027-04-01T00:00Z, so start + days is
+  2027-09-01T00:00Z and start + warming_days 2027-08-01T00:00Z;
+  `warming_days=0` refused naming the field; frozen. `SnowJob`'s default
+  distribution is `SnowDistribution(factors=(1.0,))`; `lognormal(0.4, 1) ==
+  lognormal(0.0, 1)`; the default job has 154 frames.
+- **C1, the CLI defaults** (`test_cli_snow.py`): `snow` on the two facets
+  with no `--days`, `--bins` or `--warming-days`, and `--frame-hours 3672`:
+  case times (0.0, 3672.0); `snow.json` has days 153, warming_days 122,
+  factors `[1.0]`; every sca value 0 or 1.
+- **C2:** `--warming-days 10` recorded in `snow.json`; `--warming-days 0`
+  refused in plain words naming the option or field.
+- **C3:** `--bins 10` alone gives `lognormal(0.4, 10)`.
+
+Existing tests to amend in the red commit, each with a one-line reason:
+
+- `TestTemperature` (W3 above) and its module docstring's ramp sentence.
+- `test_snow_job.py`'s default test: (91, 60, 4) → (153, 60, 4); default
+  distribution → `(1.0,)`.
+- `test_snow_run.py`'s `job()` helper and `test_cli_snow.py`'s `SPRING_10`
+  users: every run whose assertions need melt within its few days passes
+  `warming_days` equal to its `days` (`--warming-days N` beside `--days N`).
+  *Computed* (one-bin point HBV, 300 m, from 10 April): over 10 days with
+  the new 122-day ramp, 600 mm loses nothing to outflow (6.78 mm melts and
+  is held as liquid), so the flat-triangle and R7 tests would fail; with
+  `warming_days=10`, 137.9 mm leaves. 5 mm melts out in 10 days either way.
+- `two_days`'s `len(factors) == 10` → 1.
+- E1 (slow): passes `--days 91 --warming-days 91 --bins 10`, so section 6's
+  table holds unchanged; it is run once at the green step
+  (`RASPUTIN_SLOW=1`).
+- `TestBygdin` (slow): drops `--days 122`; expects 154 daily frames.
+
+Not invariant-critical: no mutation round. The one branch that matters, the
+`min` that makes the hold, is killed by W1 (without it day 136's mean at 300 m is 16.020 °C).
+
+### 11.6 Size, path and acceptance
+
+| file | net |
+|---|---:|
+| `snow/params.py` (field, default days, default distribution) | ≈ 3 |
+| `snow/forcing.py` (`min`, docstring prose not counted) | ≈ 1 |
+| `cli.py` (`--warming-days`, its key in `given`, defaults) | ≈ 3 |
+| **total** | **≈ 7** |
+
+Under 50 net lines, no C++ file, no refine or mesh code: **the short path**
+(`docs/increments/README.md`), one `@reviewer` round judging this design, the
+red step and the green step together.
+
+**`@perf`:** no acceptance run; no refine or mesh code, and the per-step
+code is unchanged. The Bygdin demonstration to 1 September is wanted anyway:
+`@perf` runs section 10.9's commands without `--days` (shadows on and off,
+8 threads) after green, records wall time and peak memory in this file in
+one line, and leaves the ParaView output in `rasputin_scratch/snow-demo/`.
+Expected from the PR 6 acceptance run: the horizon search unchanged (18.7 s),
+the steps about 153/122 of 8.8 s, so about 30 s with shadows at 8 threads,
+less with one bin; 154 frames, 63.6 MB of frames.
+
+### 11.7 Questions for Ola (defaults taken)
+
+11. **Held at +14 °C at 300 m, Bygdin at 1000 m reaches about 13.8 °C on a
+    summer afternoon (daily mean 9.8 °C), below the 15-18 °C periods you
+    mention there.** Keep +14 °C at 300 m, or hold +14 °C at 1000 m
+    (about +18 °C at 300 m)? Default: +14 °C at 300 m, as ruled.
 
 ## Review
 
