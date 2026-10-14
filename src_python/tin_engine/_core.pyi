@@ -917,3 +917,34 @@ def horizon_search(
     metre: int16 in 0.01 degrees (-9000 where no sample was found) and reach,
     uint8 whole km before the first missing sample (255 when none was), both
     (n, n_directions). Releases the GIL."""
+
+@final
+class InstantFactors:
+    """``lit`` (uint8), ``cos_i``, ``b`` and ``sin_e`` (float32), each (times, receivers)."""
+
+    @property
+    def lit(self) -> npt.NDArray[np.uint8]: ...
+    @property
+    def cos_i(self) -> npt.NDArray[np.float32]: ...
+    @property
+    def b(self) -> npt.NDArray[np.float32]: ...
+    @property
+    def sin_e(self) -> npt.NDArray[np.float32]: ...
+
+def evaluate_instant(
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    horizon: npt.NDArray[np.int16],
+    times_utc_ms: npt.ArrayLike,
+    *,
+    limb_deg: float = 0.0,
+    pressure_hpa: float = 1010.0,
+    temperature_c: float = 10.0,
+    n_directions: int = 64,
+    threads: int = 0,
+) -> InstantFactors:
+    """Per UTC time and receiver: lit, cos_i, the beam factor b = lit max(0,
+    cos_i) and the sine of the apparent elevation, time-major. A ValueError
+    names the field or the receiver; a horizon not int16 is a TypeError.
+    Releases the GIL."""

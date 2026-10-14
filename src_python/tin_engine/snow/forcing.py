@@ -43,6 +43,16 @@ def radiation_anomaly(normals: F64, sun: F64, beam_wm2: F64) -> F64:
     return out
 
 
+def beam_anomaly(b: npt.ArrayLike, sin_e: npt.ArrayLike, beam_wm2: npt.ArrayLike) -> F64:
+    """Per receiver, the mean over samples of beam · (b - max(0, sin e)), W/m²:
+    the evaluator's beam factor `b` and sine of the sun's elevation `sin_e`,
+    each `(S, n)`, against an open horizontal plane; `beam_wm2` `(S,)`."""
+    lit = np.asarray(b, dtype=np.float64) - np.maximum(np.asarray(sin_e, dtype=np.float64), 0.0)
+    w = np.asarray(beam_wm2, dtype=np.float64)
+    out: F64 = w @ lit / len(w)
+    return out
+
+
 def sun_and_beam(
     times_utc_ms: npt.NDArray[np.int64], lat_deg: float, lon_deg: float, height_m: float
 ) -> tuple[F64, F64]:

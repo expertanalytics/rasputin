@@ -20,13 +20,14 @@ F64 = npt.NDArray[np.float64]
 class TriangleGeometry:
     """Per triangle: `normals` `(T, 3)`, `centroid_z`, plan `area` (m²),
     `slope_deg`, `aspect_deg` (true, clockwise from north, in [0, 360));
-    `degenerate`, the count of zero-area triangles."""
+    `zero_area`, which triangles have no area; `degenerate`, their count."""
 
     normals: F64
     centroid_z: F64
     area: F64
     slope_deg: F64
     aspect_deg: F64
+    zero_area: npt.NDArray[np.bool_]
     degenerate: int
 
 
@@ -55,5 +56,6 @@ def triangle_geometry(
         area=0.5 * np.abs(cross[:, 2]),
         slope_deg=np.degrees(np.arctan2(np.hypot(n[:, 0], n[:, 1]), n[:, 2])),
         aspect_deg=np.degrees(np.arctan2(n[:, 0], n[:, 1])) % 360.0,
+        zero_area=flat,
         degenerate=int(flat.sum()),
     )

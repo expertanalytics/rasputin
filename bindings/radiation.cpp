@@ -1,5 +1,5 @@
-// The sun's position, the receiver check and the horizon search
-// (include/terrain/radiation/) for Python: times cross as int64 UTC
+// The sun's position, the receiver check, the horizon search and the instant
+// evaluator (include/terrain/radiation/) for Python: times cross as int64 UTC
 // milliseconds since the Unix epoch, angles in degrees, heights as float32
 // RasterViews. No time zone or CRS crosses here; radiation/time.py turns aware
 // times into UTC milliseconds, radiation/frame.py builds the receivers.
@@ -9,10 +9,12 @@
 
 #include "bound_raster_view.hpp"
 
+#include <terrain/radiation/evaluate.hpp>
 #include <terrain/radiation/horizon.hpp>
 #include <terrain/radiation/receivers.hpp>
 #include <terrain/radiation/solar_position.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -41,6 +43,18 @@ const terrain::raster::RasterView<float>& float32(const BoundRasterView& r, cons
 struct SunPositions {
     py::array_t<double> elevation, azimuth, distance;
 };
+
+struct InstantArrays {
+    py::array lit, cos_i, b, sin_e;
+};
+
+// A (rows, cols) NumPy copy of one of the evaluator's time-major outputs.
+template <class T>
+py::array_t<T> table(const std::vector<T>& v, py::ssize_t rows, py::ssize_t cols) {
+    py::array_t<T> a({rows, cols});
+    std::copy(v.begin(), v.end(), a.mutable_data());
+    return a;
+}
 
 }  // namespace
 
@@ -147,5 +161,44 @@ degrees, -9000 where no sample was found; reach uint8, the whole km searched
 before the first sample off the raster or on NoData, 255 when none was.
 Both rasters must be float32. Refusals are a ValueError naming the field or
 the receiver. Releases the GIL.
+)doc");
+
+    py::class_<InstantArrays>(m, "InstantFactors",
+                              "lit (uint8), cos_i, b and sin_e (float32), each (times, receivers).")
+        .def_readonly("lit", &InstantArrays::lit)
+        .def_readonly("cos_i", &InstantArrays::cos_i)
+        .def_readonly("b", &InstantArrays::b)
+        .def_readonly("sin_e", &InstantArrays::sin_e);
+    m.def(
+        "evaluate_instant",
+        [](const Doubles& lat, const Doubles& lon, const Doubles& normal, const py::array& horizon,
+           const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& times, double limb,
+           double pressure, double temperature, std::size_t n_directions, unsigned threads) {
+            if (!horizon.dtype().is(py::dtype::of<std::int16_t>()))
+                throw py::type_error("evaluate_instant: horizon must be int16, in 0.01 degrees");
+            const auto h = py::array_t<std::int16_t, py::array::c_style>::ensure(horizon);
+            const LitReceivers r{view(lat), view(lon), view(normal),
+                                 {h.data(), static_cast<std::size_t>(h.size())}, n_directions};
+            const std::span<const std::int64_t> t{times.data(), static_cast<std::size_t>(times.size())};
+            InstantFactors f;
+            {
+                const py::gil_scoped_release unlocked;  // the arrays are held by the arguments and h
+                f = evaluate_instant(r, t, SunSettings{limb, pressure, temperature}, threads);
+            }
+            const auto nt = static_cast<py::ssize_t>(t.size()), n = static_cast<py::ssize_t>(lat.size());
+            return InstantArrays{table(f.lit, nt, n), table(f.cos_i, nt, n), table(f.b, nt, n),
+                                 table(f.sin_e, nt, n)};
+        },
+        py::arg("lat_deg"), py::arg("lon_deg"), py::arg("normal"), py::arg("horizon"), py::arg("times_utc_ms"),
+        py::kw_only(), py::arg("limb_deg") = 0.0, py::arg("pressure_hpa") = 1010.0, py::arg("temperature_c") = 10.0,
+        py::arg("n_directions") = 64, py::arg("threads") = 0, R"doc(
+Per UTC time (int64 milliseconds) and receiver: lit, the sun above the
+horizon at its azimuth (raised by limb_deg) and in front of the receiver's
+plane; cos_i, the normal against the apparent sun, unclipped; b = lit
+max(0, cos_i); sin_e, the sine of the apparent elevation. normal is (n, 3) in
+true east, north, up; horizon (n, n_directions) int16 in 0.01 degrees. Each
+output is (times, n), time-major. Refraction at pressure_hpa and
+temperature_c; a pressure of 0 is none. A ValueError names the field or the
+receiver; a horizon that is not int16 is a TypeError. Releases the GIL.
 )doc");
 }
