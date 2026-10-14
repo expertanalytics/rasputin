@@ -202,7 +202,8 @@ TEST_CASE("L1 the lit test on the V-valley floor", "[radiation][evaluate]") {
         const SampleFactors f = sample_factors(constant_row(-9000), south_slope, 30.0, 180.0, 0.0);
         CHECK(f.lit);
         CHECK(f.b == f.cos_i);
-        CHECK_THAT(f.cos_i, WithinAbs(std::cos(30.0 * kDeg) * std::cos(30.0 * kDeg) + 0.5 * 0.5, 1e-12));
+        // Normal (0, -sin 30, cos 30), sun (0, -cos 30, sin 30): cos_i = 2 sin 30 cos 30 = 0.8660.
+        CHECK_THAT(f.cos_i, WithinAbs(2.0 * std::sin(30.0 * kDeg) * std::cos(30.0 * kDeg), 1e-12));
     }
 }
 
