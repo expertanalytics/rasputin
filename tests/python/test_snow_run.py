@@ -5,6 +5,7 @@ radiation anomaly, then `_core.SnowState.step` with the run's threads; per
 frame: swe and sca copied out), *4.8 The Python surface* (`async def run(job,
 geometry) -> AsyncIterator[Frame]`, `Frame(time_hours, swe, sca)` with
 float32 copies; each frame's batch of steps runs in `asyncio.to_thread`) and
+section 12.7's S1 (one linear bin: the cover falls continuously), and
 section 7's R7: a 2-triangle mesh, one 30-degree south facet and one
 30-degree north, through ten April days: the south facet's SWE falls faster
 under both corrections and equally under `none`; mass (I1) holds over the run.
@@ -247,6 +248,39 @@ class TestWiring:
         frames = await frames_of(mods, job(mods, "melt_factor"), facets)
         assert len(frames) == 11
         assert len(calls) >= 10
+
+
+class TestS1:
+    """Section 12.7's S1: one linear bin at cv 0.4, 100 mm, a dry spring, no
+    refreeze: each daily frame's sca is the depletion curve of the melt so far."""
+
+    def test_the_cover_falls_continuously_with_the_melt(
+        self, mods: dict[str, ModuleType], facets: Mesh
+    ) -> None:
+        from tin_engine.snow.forcing import temperature
+
+        p = mods["params"]
+        the_job = job(
+            mods, "none", hbv=p.HbvSnowParameters(cfr=0.0),
+            distribution=p.SnowDistribution.lognormal(0.4, 1), initial_swe_mm=100.0,
+        )  # fmt: skip
+        frames = asyncio.run(frames_of(mods, the_job, facets))
+        spread = math.sqrt(3.0) * 0.4  # the deep edge is 1 + spread, the shallow 1 - spread
+        melt, want = 0.0, [1.0]
+        for k in range(240):  # hourly steps; cx = 3 mm per degree-day
+            t = float(temperature(the_job.spring, k, np.array([Z]), LON)[0])
+            melt += 3.0 / 24.0 * max(0.0, t)
+            if (k + 1) % 24 == 0:
+                want.append(min(1.0, max(0.0, (1.0 + spread - melt / 100.0) / (2.0 * spread))))
+        # The design's sums by day 5, 8, 9 and 10 put day 5 and day 9 in the
+        # partly bare range: 34.138, 106.588, 140.938, 180.388 mm.
+        assert want[5] == pytest.approx(0.975320, abs=1e-6)
+        assert want[8] == pytest.approx(0.452457, abs=1e-6)
+        assert want[9] == pytest.approx(0.204557, abs=1e-6)
+        assert want[10] == 0.0
+        # Scale: sca in [0, 1], stored as float32 (step 6e-8).
+        for f, w in zip(frames, want, strict=True):
+            assert f.sca == pytest.approx([w, w], abs=1e-6), f.time_hours
 
 
 class TestShadows:

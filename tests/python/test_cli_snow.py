@@ -6,8 +6,8 @@
 with the job and the origin), *4.8 The Python surface* (the flags; `--out` a
 new or empty directory), *4.9 Degeneracy and refusal policy* (a geographic
 mesh refused; a zero-area triangle counted on stderr) and section 7's E1
-(marked slow): the synthetic spring on the 2 m mesh against section 6's
-table, rows 1-3.
+(marked slow): the synthetic spring on the 2 m mesh against section 12.5's
+linear ten-bin rows, and C4 (section 12.7): one linear bin by default.
 
 `TestEndToEnd` is the demonstration: `synthetic-terrain`, `mesh`, `snow`, and
 the case read back by the suite's own reader, by VTK's EnSight reader when the
@@ -42,7 +42,8 @@ Interface:
 The run to 1 September (section 11.4, C1-C3 of 11.5): by default `snow` runs
 153 days, the warming over the first 122 (`--warming-days`, at least 1,
 recorded in `snow.json`), one bin per triangle (`--bins 1`); `--snow-cv`
-keeps 0.4, so `--bins 10` alone gives `lognormal(0.4, 10)`.
+defaults to 0.1 (section 12.4, Ola's ruling of 2026-10-14), so `--bins 10`
+alone gives `lognormal(0.1, 10)`.
 
 Cast shadows (section 10.5, 10.8's L5 and E2, 10.9's Bygdin run):
 
@@ -402,10 +403,11 @@ class TestSlivers:
 
 
 class TestTheRunToSeptember:
-    """C1-C3 (section 11.5): the defaults run to 1 September with one bin."""
+    """C1-C3 (section 11.5): the defaults run to 1 September with one bin; C4
+    (section 12.7): that bin's cover is continuous."""
 
     def test_c1_the_defaults(self, mesh: Path, tmp_path: Path) -> None:
-        from tin_engine.snow.params import SnowJob
+        from tin_engine.snow.params import SnowDistribution, SnowJob
 
         out = tmp_path / "summer"
         snow(mesh, out, "--sun-correction", "none", "--frame-hours", "3672")
@@ -413,9 +415,25 @@ class TestTheRunToSeptember:
         assert anim.case.times == (0.0, 3672.0)
         job = SnowJob.model_validate(json.loads((out / "snow.json").read_text("utf-8"))["job"])
         assert (job.spring.days, job.spring.warming_days) == (153, 122)
-        assert job.distribution.factors == (1.0,)
-        for q in range(2):
-            assert set(anim.frame(out, "sca", q).tolist()) <= {0.0, 1.0}
+        # Section 12.4: one linear bin at cv 0.1 by default; snow.json records
+        # its deep edge.
+        assert job.distribution == SnowDistribution.lognormal(0.1, 1)
+        assert job.distribution.deep == pytest.approx((1.0 + math.sqrt(3.0) * 0.1,), abs=1e-12)
+
+    def test_c4_the_default_cover_is_continuous(self, mesh: Path, tmp_path: Path) -> None:
+        """Section 12.7's C4 at the default cv of 0.1: 30 days of the default spring
+        at 300 m melt 82.314 mm of 90, between the shallow (74.4 mm) and the deep
+        edge (105.6 mm), so sca = (1 + sqrt(3) 0.1 - 82.314/90) / (2 sqrt(3) 0.1).
+        The design's 100 mm would still be fully covered at cv 0.1 (shallow edge
+        82.7 mm)."""
+        out = tmp_path / "c4"
+        snow(mesh, out, "--sun-correction", "none", "--days", "30", "--initial-swe", "90",
+             "--cfr", "0")  # fmt: skip
+        anim = Animation.read(out / "snow.case")
+        assert anim.case.times[-1] == 720.0
+        # Scale: sca in [0, 1] as float32; the facets' longitude moves the sum
+        # by about 1e-4 mm (3e-6 in sca at 90 mm, cv 0.1) from 15 degrees east.
+        assert_allclose(anim.frame(out, "sca", 30), [0.746517, 0.746517], atol=1e-5)
 
     def test_c2_warming_days_is_recorded(self, mesh: Path, tmp_path: Path) -> None:
         out = tmp_path / "ten"
@@ -428,13 +446,13 @@ class TestTheRunToSeptember:
         refused(mesh, tmp_path / "out", "--sun-correction", "none", "--warming-days", "0",
                 says="warming")  # fmt: skip
 
-    def test_c3_ten_bins_alone_keep_the_cv_of_0_4(self, mesh: Path, tmp_path: Path) -> None:
+    def test_c3_ten_bins_alone_keep_the_default_cv(self, mesh: Path, tmp_path: Path) -> None:
         from tin_engine.snow.params import SnowDistribution, SnowJob
 
         out = tmp_path / "ten-bins"
         snow(mesh, out, "--sun-correction", "none", *SPRING_10, "--days", "1", "--bins", "10")
         job = SnowJob.model_validate(json.loads((out / "snow.json").read_text("utf-8"))["job"])
-        assert job.distribution == SnowDistribution.lognormal(0.4, 10)
+        assert job.distribution == SnowDistribution.lognormal(0.1, 10)
 
 
 class TestRefusals:
@@ -567,11 +585,14 @@ def reference_figures(vtk_path: Path, out: Path) -> dict[str, Any]:
     }
 
 
-#: Section 6's table, rows 1-3 (2 m mesh, N = 10, NOAA's sun in the probe).
+#: Section 12.5's three ten-bin linear rows re-derived at the default cv of 0.1
+#: (Ola's ruling of 2026-10-14): probe_sca.py with `lognormal_linear(0.1, 10)`
+#: and these three runs only, on the same 2 m mesh (294 770 triangles), NOAA's
+#: sun.
 TABLE = {
-    "none": ([1.0, 0.6298, 0.0829], [565.29, 203.58, 23.56], 83.0, 82.0),
-    "melt-factor": ([1.0, 0.6559, 0.1152], [565.14, 226.07, 36.05], 75.5, -1.0),
-    "threshold": ([1.0, 0.6337, 0.0932], [558.13, 206.93, 28.22], 75.0, -1.0),
+    "none": ([1.0, 0.7639, 0.0805], [566.09, 158.75, 18.50], 83.0, 83.0),
+    "melt-factor": ([1.0, 0.7368, 0.1102], [566.27, 191.15, 29.79], 76.0, -1.0),
+    "threshold": ([1.0, 0.7384, 0.0909], [559.27, 166.70, 23.01], 75.0, -1.0),
 }
 
 
@@ -584,7 +605,8 @@ def synthetic(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="module")
 def mesh2(synthetic: Path) -> Path:
-    """The synthetic terrain meshed at --tolerance 2 (294 770 triangles)."""
+    """The synthetic terrain meshed at --tolerance 2 (294 770 triangles when
+    section 12.5's probe ran)."""
     target = synthetic / "mesh2.vtk"
     ran("mesh", "--dem", str(synthetic / "synth.tif"), "--tolerance", "2", "--out", str(target))
     return target
@@ -672,14 +694,18 @@ class TestEndToEnd:
     os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
 )
 class TestE1:
-    """Section 6's table, rows 1-3, from the CLI on the 2 m mesh. A miss is first
-    checked against the design probe run on the same mesh."""
+    """Section 12.5's linear ten-bin rows at cv 0.1, from the CLI on the 2 m mesh. A miss is
+    first checked against the design probe run on the same mesh."""
 
-    def test_the_2_m_mesh_has_294_770_triangles(self, mesh2: Path) -> None:
-        assert len(read_vtk(mesh2.read_bytes()).polygons) == 294_770
+    def test_the_2_m_mesh_is_the_tolerance_2_mesh(self, mesh2: Path) -> None:
+        # Hundreds of thousands of triangles, not an exact count: the count
+        # belongs to the mesh's own tests (294 770 when the probe ran); this
+        # only catches the wrong terrain or tolerance.
+        n = len(read_vtk(mesh2.read_bytes()).polygons)
+        assert 150_000 <= n <= 600_000, n
 
     @pytest.mark.parametrize("mode", list(TABLE))
-    def test_the_spring_matches_section_6(self, mesh2: Path, synthetic: Path, mode: str) -> None:
+    def test_the_spring_matches_section_12_5(self, mesh2: Path, synthetic: Path, mode: str) -> None:
         out = synthetic / f"e1-{mode}"
         # Section 6's terms, no longer the defaults (section 11.5).
         ran(

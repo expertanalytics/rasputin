@@ -39,20 +39,38 @@ class HbvSnowParameters(BaseModel):
 
 
 class SnowDistribution(BaseModel):
-    """Relative snow depth in equal-area bins within a triangle, ascending, mean 1."""
+    """Relative snow depth in equal-area bins within a triangle: each bin's mean
+    (`factors`, ascending, mean 1) and its depth at the bin's deep edge
+    (`deep`), the depth running linearly across the bin from 2·factor - deep to
+    deep. An empty `deep` is flat: uniform depth in each bin."""
 
     model_config = _FROZEN
 
     factors: tuple[float, ...]
+    deep: tuple[float, ...] = ()
+
+    @field_validator("deep")
+    @classmethod
+    def _edges(cls, deep: tuple[float, ...], info: ValidationInfo) -> tuple[float, ...]:
+        factors = info.data.get("factors")
+        if not deep or factors is None:
+            return deep
+        if len(deep) != len(factors):
+            raise ValueError(f"deep must be empty or one per bin: {len(deep)} for {len(factors)}")
+        if not all(f <= h <= 2.0 * f for f, h in zip(factors, deep, strict=True)):
+            raise ValueError("a bin's deep edge must lie between its mean and twice its mean")
+        return deep
 
     @classmethod
     def lognormal(cls, cv: float, bins: int) -> Self:
-        """Bins of a log-normal snow depth of coefficient of variation `cv`.
+        """Bins of a log-normal snow depth of mean 1 and coefficient of variation `cv`.
 
-        Bin k's factor is the distribution's quantile at the bin's midpoint
-        probability (k + 1/2)/bins, divided by the factors' mean so they average
-        to 1. A cv of 0 is uniform snow, one bin. Refuses bins outside 1 to 64
-        and a negative or non-finite cv with a ValueError naming the argument.
+        For each of `bins` equal-probability bands, the factor is the band's
+        mean and the deep edge its mean plus √3 times its standard deviation:
+        the straight line of the band's mean and variance. Both are divided by
+        the factors' mean. A cv of 0 is uniform snow, one flat bin. Refuses bins
+        outside 1 to 64, a negative or non-finite cv, and a cv so large that a
+        bin's shallow edge would be negative, with a ValueError naming cv.
         """
         if not 1 <= bins <= 64:
             raise ValueError(f"bins must be between 1 and 64, not {bins}")
@@ -60,11 +78,42 @@ class SnowDistribution(BaseModel):
             raise ValueError(f"cv must be finite and not negative, not {cv}")
         if cv == 0.0:
             return cls(factors=(1.0,))
-        sigma = math.sqrt(math.log1p(cv * cv))
-        unit = NormalDist()
-        raw = [math.exp(sigma * unit.inv_cdf((k + 0.5) / bins)) for k in range(bins)]
-        mean = math.fsum(raw) / bins
-        return cls(factors=tuple(v / mean for v in raw))
+        factors, deep = _bands(cv, bins)
+        if not _shallow_edges_ok(factors, deep):
+            low, high = 0.0, cv
+            for _ in range(50):
+                mid = (low + high) / 2
+                low, high = (mid, high) if _shallow_edges_ok(*_bands(mid, bins)) else (low, mid)
+            unit = "bin" if bins == 1 else "bins"
+            raise ValueError(f"snow-cv {cv:g} is too large for {bins} {unit}: at most {low:.3f}")
+        return cls(factors=factors, deep=deep)
+
+
+def _shallow_edges_ok(factors: tuple[float, ...], deep: tuple[float, ...]) -> bool:
+    return all(2.0 * f >= h for f, h in zip(factors, deep, strict=True))
+
+
+def _bands(cv: float, bins: int) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Each band's mean and mean + √3 sd, from the log-normal's partial moments
+    E[X^j; a < X < b] = exp(j·mu + j²·s²/2)·(Φ(zb - j·s) - Φ(za - j·s)),
+    divided by the means' mean."""
+    s = math.sqrt(math.log1p(cv * cv))
+    mu = -s * s / 2
+    unit = NormalDist()
+
+    def mass(z: float, shift: float) -> float:
+        return 0.0 if z == -math.inf else 1.0 if z == math.inf else unit.cdf(z - shift)
+
+    means, edges = [], []
+    for k in range(bins):
+        za = unit.inv_cdf(k / bins) if k > 0 else -math.inf
+        zb = unit.inv_cdf((k + 1) / bins) if k + 1 < bins else math.inf
+        m1 = math.exp(mu + s * s / 2) * (mass(zb, s) - mass(za, s)) * bins
+        m2 = math.exp(2 * mu + 2 * s * s) * (mass(zb, 2 * s) - mass(za, 2 * s)) * bins
+        means.append(m1)
+        edges.append(m1 + math.sqrt(3.0) * math.sqrt(max(0.0, m2 - m1 * m1)))
+    mean = math.fsum(means) / bins
+    return tuple(v / mean for v in means), tuple(v / mean for v in edges)
 
 
 class SunCorrection(BaseModel):
@@ -122,7 +171,7 @@ class SnowJob(BaseModel):
     resources: Resources
     hbv: HbvSnowParameters = HbvSnowParameters()
     distribution: SnowDistribution = Field(
-        default_factory=lambda: SnowDistribution.lognormal(0.0, 1)
+        default_factory=lambda: SnowDistribution.lognormal(0.1, 1)
     )
     spring: SyntheticSpring = SyntheticSpring()
     frames: FrameSpec = Field(default=FrameSpec(), validate_default=True)

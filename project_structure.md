@@ -40,6 +40,8 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   sun's apparent elevation: TR5's instant mode
   snow/
     hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
+                           #   each a straight line of depth, so the bin at the
+                           #   melt front is partly covered;
                            #   the step with an optional sun correction; depends
                            #   on parallel_util only, and nothing depends on it
   predicates/
