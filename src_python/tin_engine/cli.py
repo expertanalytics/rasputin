@@ -3087,9 +3087,9 @@ def snow(
         )
     except ValueError as exc:
         raise typer.BadParameter(_words(exc)) from exc
-    geometry = triangle_geometry(v, arrays.triangles, site.convergence_deg)
-    ok = ~geometry.zero_area
     try:
+        geometry = triangle_geometry(v, arrays.triangles, arrays.crs)
+        ok = ~geometry.zero_area
         frame = receivers_from_mesh(v, arrays.triangles[ok], arrays.crs)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--mesh") from exc

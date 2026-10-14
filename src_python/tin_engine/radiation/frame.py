@@ -76,6 +76,22 @@ def receivers_from_mesh(
     beyond 89.9 degrees of latitude; also a negative offset and a geographic
     CRS.
     """
+    frame, zero = receivers_and_zero_area(points, triangles, crs, observer_offset=observer_offset)
+    _refuse_first(zero, "has zero area, so no normal")
+    return frame
+
+
+def receivers_and_zero_area(
+    points: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    crs: str | CRS,
+    *,
+    observer_offset: float = 0.0,
+) -> tuple[ReceiverFrame, npt.NDArray[np.bool_]]:
+    """`receivers_from_mesh`'s frame and which triangles have zero area, by its
+    `ZERO_AREA_SINE` test, instead of refusing them: a zero-area triangle gets
+    the vertical normal. The other refusals are `receivers_from_mesh`'s, and
+    every other triangle's numbers are the ones it gives."""
     if not observer_offset >= 0.0:
         raise ValueError(f"the observer offset must be 0 or more metres, not {observer_offset}")
     parsed = parse_crs(crs)
@@ -108,15 +124,16 @@ def receivers_from_mesh(
     n = np.cross(ground[:, 0], ground[:, 1])
     area = np.linalg.norm(n, axis=1)
     lengths = np.linalg.norm(ground, axis=2).prod(axis=1)
-    _refuse_first(~(area > ZERO_AREA_SINE * lengths), "has zero area, so no normal")
-    n = np.where(n[:, 2:] < 0.0, -n, n) / area[:, None]
+    zero_area = ~(area > ZERO_AREA_SINE * lengths)
+    n = np.where(n[:, 2:] < 0.0, -n, n) / np.where(zero_area, 1.0, area)[:, None]
+    n[zero_area] = (0.0, 0.0, 1.0)
 
     offsets = np.concatenate([-to_centroid[:, None, :2], d[:, :, :2] - to_centroid[:, None, :2]], 1)
     radius = np.linalg.norm(np.einsum("mij,mkj->mki", jac, offsets), axis=2).max(
         axis=1, initial=0.0
     )
 
-    return ReceiverFrame(
+    frame = ReceiverFrame(
         x=centroid[:, 0],
         y=centroid[:, 1],
         z_obs=centroid[:, 2] + observer_offset,
@@ -127,6 +144,7 @@ def receivers_from_mesh(
         exclusion_radius=radius,
         earth_radius_m=_gaussian_radius(parsed, lat),
     )
+    return frame, zero_area
 
 
 def _refuse_first(bad: npt.NDArray[np.bool_], reason: str) -> None:

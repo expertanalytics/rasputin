@@ -35,14 +35,6 @@ def beam(elevation_deg: npt.ArrayLike, distance_au: npt.ArrayLike) -> F64:
     return np.where(up, I0 / r**2 * PSI ** (1.0 / np.where(up, s, 1.0)), 0.0)
 
 
-def radiation_anomaly(normals: F64, sun: F64, beam_wm2: F64) -> F64:
-    """Per triangle, the mean over samples of beam · (max(0, n·u) - max(0, u_up)),
-    W/m²; `normals` `(n, 3)`, `sun` `(S, 3)` unit, east-north-up, `beam_wm2` `(S,)`."""
-    lit = np.maximum(normals @ sun.T, 0.0) - np.maximum(sun[:, 2], 0.0)
-    out: F64 = lit @ beam_wm2 / len(beam_wm2)
-    return out
-
-
 def beam_anomaly(b: npt.ArrayLike, sin_e: npt.ArrayLike, beam_wm2: npt.ArrayLike) -> F64:
     """Per receiver, the mean over samples of beam · (b - max(0, sin e)), W/m²:
     the evaluator's beam factor `b` and sine of the sun's elevation `sin_e`,
