@@ -36,7 +36,13 @@ Interface:
 - `slope_deg.var` and `aspect_deg.var` are the receiver frame's per-triangle
   true east-north-up normals (`receivers_from_mesh`), never a grid normal
   turned by one convergence for the whole mesh (section 10.5).
-- E1 runs only with `RASPUTIN_SLOW=1` (several minutes).
+- E1 runs only with `RASPUTIN_SLOW=1` (several minutes), on section 6's
+  terms: 91 days, the warming over all of them, ten bins.
+
+The run to 1 September (section 11.4, C1-C3 of 11.5): by default `snow` runs
+153 days, the warming over the first 122 (`--warming-days`, at least 1,
+recorded in `snow.json`), one bin per triangle (`--bins 1`); `--snow-cv`
+keeps 0.4, so `--bins 10` alone gives `lognormal(0.4, 10)`.
 
 Cast shadows (section 10.5, 10.8's L5 and E2, 10.9's Bygdin run):
 
@@ -199,7 +205,7 @@ class TestOutput:
         assert job.spring.days == 2
         assert job.spring.start.isoformat() == "2027-04-10T00:00:00+00:00"
         assert job.initial_swe_mm == 600.0
-        assert len(job.distribution.factors) == 10
+        assert job.distribution.factors == (1.0,)  # one bin by default (section 11.4)
 
     def test_the_frames_start_white_and_melt(self, two_days: Path) -> None:
         anim = Animation.read(two_days / "snow.case")
@@ -395,6 +401,42 @@ class TestSlivers:
                 "--days", "1", says="triangle 2 has its centroid beyond 89.9")  # fmt: skip
 
 
+class TestTheRunToSeptember:
+    """C1-C3 (section 11.5): the defaults run to 1 September with one bin."""
+
+    def test_c1_the_defaults(self, mesh: Path, tmp_path: Path) -> None:
+        from tin_engine.snow.params import SnowJob
+
+        out = tmp_path / "summer"
+        snow(mesh, out, "--sun-correction", "none", "--frame-hours", "3672")
+        anim = Animation.read(out / "snow.case")
+        assert anim.case.times == (0.0, 3672.0)
+        job = SnowJob.model_validate(json.loads((out / "snow.json").read_text("utf-8"))["job"])
+        assert (job.spring.days, job.spring.warming_days) == (153, 122)
+        assert job.distribution.factors == (1.0,)
+        for q in range(2):
+            assert set(anim.frame(out, "sca", q).tolist()) <= {0.0, 1.0}
+
+    def test_c2_warming_days_is_recorded(self, mesh: Path, tmp_path: Path) -> None:
+        out = tmp_path / "ten"
+        snow(mesh, out, "--sun-correction", "none", *SPRING_10, "--days", "1",
+             "--warming-days", "10")  # fmt: skip
+        record = json.loads((out / "snow.json").read_text("utf-8"))
+        assert record["job"]["spring"]["warming_days"] == 10
+
+    def test_c2_no_warming_days_is_refused_by_name(self, mesh: Path, tmp_path: Path) -> None:
+        refused(mesh, tmp_path / "out", "--sun-correction", "none", "--warming-days", "0",
+                says="warming")  # fmt: skip
+
+    def test_c3_ten_bins_alone_keep_the_cv_of_0_4(self, mesh: Path, tmp_path: Path) -> None:
+        from tin_engine.snow.params import SnowDistribution, SnowJob
+
+        out = tmp_path / "ten-bins"
+        snow(mesh, out, "--sun-correction", "none", *SPRING_10, "--days", "1", "--bins", "10")
+        job = SnowJob.model_validate(json.loads((out / "snow.json").read_text("utf-8"))["job"])
+        assert job.distribution == SnowDistribution.lognormal(0.4, 10)
+
+
 class TestRefusals:
     def test_a_folder_with_files_in_it(self, mesh: Path, tmp_path: Path) -> None:
         out = tmp_path / "used"
@@ -573,6 +615,10 @@ class TestEndToEnd:
             "melt-factor",
             "--days",
             "2",
+            "--warming-days",  # melt within the two days (section 11.5)
+            "2",
+            "--bins",  # one bin would hold the two days' melt as liquid
+            "10",
         )
         return out / "snow.case"
 
@@ -635,7 +681,11 @@ class TestE1:
     @pytest.mark.parametrize("mode", list(TABLE))
     def test_the_spring_matches_section_6(self, mesh2: Path, synthetic: Path, mode: str) -> None:
         out = synthetic / f"e1-{mode}"
-        ran("snow", "--mesh", str(mesh2), "--out", str(out), "--sun-correction", mode)
+        # Section 6's terms, no longer the defaults (section 11.5).
+        ran(
+            "snow", "--mesh", str(mesh2), "--out", str(out), "--sun-correction", mode,
+            "--days", "91", "--warming-days", "91", "--bins", "10",
+        )  # fmt: skip
         got = reference_figures(mesh2, out)
         sca, swe, south, north = TABLE[mode]
         assert_allclose(got["sca"], sca, atol=0.01)
@@ -758,7 +808,8 @@ class TestE2:
     os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
 )
 class TestBygdin:
-    """Section 10.9's demonstration: Bygdin on DTM10, 122 days, shadows on and off."""
+    """Section 10.9's demonstration: Bygdin on DTM10, shadows on and off, run
+    to 1 September at the defaults (section 11.6)."""
 
     DOMAIN = Path(__file__).resolve().parents[2] / (
         "docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson"
@@ -778,7 +829,7 @@ class TestBygdin:
         for flag in ("on", "off"):
             ran(
                 "snow", "--mesh", str(mesh), "--dem", str(dtm10), "--shadows", flag,
-                "--days", "122", "--out", str(folder / f"snow-{flag}"),
+                "--out", str(folder / f"snow-{flag}"),
             )  # fmt: skip
         return mesh, folder / "snow-on", folder / "snow-off"
 
@@ -789,9 +840,9 @@ class TestBygdin:
         n = len(read_vtk(runs[0].read_bytes()).polygons)
         assert 20_000 <= n <= 120_000, n
 
-    def test_122_days_of_daily_frames(self, runs: tuple[Path, Path, Path]) -> None:
+    def test_153_days_of_daily_frames(self, runs: tuple[Path, Path, Path]) -> None:
         anim = Animation.read(runs[1] / "snow.case")
-        assert anim.case.times == tuple(24.0 * d for d in range(123))
+        assert anim.case.times == tuple(24.0 * d for d in range(154))
 
     def test_shadows_only_take_away(self, runs: tuple[Path, Path, Path]) -> None:
         mesh, on_dir, off_dir = runs

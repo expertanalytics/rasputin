@@ -3,19 +3,21 @@
 `docs/increments/46-hbv-snow.md`, *4.1 The blueprint* (flags -> `SnowJob`, a
 frozen Pydantic model holding `HbvSnowParameters`, `SnowDistribution`,
 `SunCorrection`, `SyntheticSpring`, `FrameSpec`, `Resources`), *4.5 The
-synthetic case* (2027-04-01T00:00Z, 91 days, hourly steps, S = 4, frames
-every 24 hours, 600 mm initial SWE) and *4.8 The Python surface* (times are
+synthetic case* (2027-04-01T00:00Z, hourly steps, S = 4, frames every 24
+hours, 600 mm initial SWE), *11.4 The design* (153 days to 1 September, the
+warming over the first 122, one bin by default) and *4.8 The Python surface* (times are
 timezone-aware UTC; a naive one is refused). `snow.json` records the job as
 the model dumped, so the dump must load back to an equal job.
 
 Interface:
 
-- `SyntheticSpring(start, days, step_minutes, samples_per_step)`; `days`,
-  `step_minutes` and `samples_per_step` at least 1.
+- `SyntheticSpring(start, days, warming_days, step_minutes,
+  samples_per_step)`; `days`, `warming_days`, `step_minutes` and
+  `samples_per_step` at least 1; `warming_days` may exceed `days`.
 - `FrameSpec(every_hours=24)`, at least 1.
 - `SnowJob(hbv, distribution, correction, spring, frames, resources,
   initial_swe_mm=600.0)`; `hbv`, `spring` and `frames` default to their
-  models' defaults, `distribution` to `SnowDistribution.lognormal(0.4, 10)`;
+  models' defaults, `distribution` to one bin, `SnowDistribution(factors=(1.0,))`;
   `correction` and `resources` are required. A frame interval that is not a
   whole number of steps is refused, located on `frames`.
 - Also refused on `frames` (code review round 1 of PR 3): a spring that is
@@ -58,7 +60,10 @@ class TestSyntheticSpring:
     def test_defaults_are_section_4_5s(self, params: ModuleType) -> None:
         s = params.SyntheticSpring()
         assert s.start == dt.datetime(2027, 4, 1, tzinfo=dt.UTC)
-        assert (s.days, s.step_minutes, s.samples_per_step) == (91, 60, 4)
+        # Section 11.4: 1 April to 1 September, warming to 1 August.
+        assert (s.days, s.warming_days, s.step_minutes, s.samples_per_step) == (153, 122, 60, 4)
+        assert s.start + dt.timedelta(days=s.days) == dt.datetime(2027, 9, 1, tzinfo=dt.UTC)
+        assert s.start + dt.timedelta(days=s.warming_days) == dt.datetime(2027, 8, 1, tzinfo=dt.UTC)
 
     def test_a_start_with_another_offset_is_the_same_instant(self, params: ModuleType) -> None:
         oslo = dt.timezone(dt.timedelta(hours=2))
@@ -73,13 +78,18 @@ class TestSyntheticSpring:
         )
         assert "time zone" in str(error)
 
-    @pytest.mark.parametrize("field", ["days", "step_minutes", "samples_per_step"])
+    @pytest.mark.parametrize("field", ["days", "warming_days", "step_minutes", "samples_per_step"])
     def test_counts_below_1_are_refused(self, params: ModuleType, field: str) -> None:
         refused_on((field,), lambda: params.SyntheticSpring(**{field: 0}))
 
-    def test_it_is_frozen(self, params: ModuleType) -> None:
+    def test_a_warming_longer_than_the_run_is_accepted(self, params: ModuleType) -> None:
+        assert params.SyntheticSpring(days=10, warming_days=122).warming_days == 122
+
+    @pytest.mark.parametrize("field", ["days", "warming_days"])
+    def test_it_is_frozen(self, params: ModuleType, field: str) -> None:
+        spring = params.SyntheticSpring()
         with pytest.raises(pydantic.ValidationError):
-            params.SyntheticSpring().days = 3
+            setattr(spring, field, 3)
 
 
 class TestSnowJob:
@@ -91,11 +101,22 @@ class TestSnowJob:
     def test_defaults_are_section_4_5s(self, params: ModuleType) -> None:
         job = self.job(params)
         assert job.hbv == params.HbvSnowParameters()
-        assert job.distribution == params.SnowDistribution.lognormal(0.4, 10)
+        # Section 11.4 (b): one bin by default, uniform snow on each triangle.
+        assert job.distribution == params.SnowDistribution(factors=(1.0,))
         assert job.spring == params.SyntheticSpring()
         assert job.frames == params.FrameSpec()
         assert job.frames.every_hours == 24
         assert job.initial_swe_mm == 600.0
+
+    def test_one_bin_is_uniform_snow_whatever_the_cv(self, params: ModuleType) -> None:
+        # The one bin's midpoint quantile is the median, which the mean divides out.
+        one = params.SnowDistribution.lognormal(0.4, 1)
+        assert one == params.SnowDistribution.lognormal(0.0, 1)
+        assert one.factors == (1.0,)
+
+    def test_the_default_job_has_154_daily_frames(self, params: ModuleType) -> None:
+        job = self.job(params)
+        assert job.spring.days * 24 // job.frames.every_hours + 1 == 154
 
     def test_the_json_dump_loads_back_to_the_same_job(self, params: ModuleType) -> None:
         job = self.job(params, initial_swe_mm=250.0, frames=params.FrameSpec(every_hours=6))
