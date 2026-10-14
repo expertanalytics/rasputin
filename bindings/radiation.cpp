@@ -1,16 +1,21 @@
-// The sun's position and the receiver check (include/terrain/radiation/) for
-// Python: times cross as int64 UTC milliseconds since the Unix epoch, angles in
-// degrees. No time zone or CRS crosses here; radiation/time.py turns aware
+// The sun's position, the receiver check and the horizon search
+// (include/terrain/radiation/) for Python: times cross as int64 UTC
+// milliseconds since the Unix epoch, angles in degrees, heights as float32
+// RasterViews. No time zone or CRS crosses here; radiation/time.py turns aware
 // times into UTC milliseconds, radiation/frame.py builds the receivers.
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include "bound_raster_view.hpp"
+
+#include <terrain/radiation/horizon.hpp>
 #include <terrain/radiation/receivers.hpp>
 #include <terrain/radiation/solar_position.hpp>
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -24,6 +29,14 @@ utc_ms at(std::int64_t ms) { return utc_ms{std::chrono::milliseconds{ms}}; }
 using Doubles = py::array_t<double, py::array::c_style | py::array::forcecast>;
 
 std::span<const double> view(const Doubles& a) { return {a.data(), static_cast<std::size_t>(a.size())}; }
+
+// The float32 view inside a bound raster, or a TypeError naming float32.
+const terrain::raster::RasterView<float>& float32(const BoundRasterView& r, const char* what) {
+    if (const auto* v = std::get_if<terrain::raster::RasterView<float>>(&r.view))
+        return *v;
+    throw py::type_error(std::string{"horizon_search: the "} + what + " raster must be float32; convert it with "
+                         "astype(numpy.float32)");
+}
 
 struct SunPositions {
     py::array_t<double> elevation, azimuth, distance;
@@ -88,23 +101,8 @@ clockwise, in degrees, and the sun's distance in AU. Releases the GIL.
         "check_receivers",
         [](const Doubles& x, const Doubles& y, const Doubles& z_obs, const Doubles& lat, const Doubles& lon,
            const Doubles& jacobian, const Doubles& normal, const Doubles& exclusion_radius) {
-            const ReceiverCheck c = check_receivers(ReceiverSet{view(x), view(y), view(z_obs), view(lat), view(lon),
-                                                                view(jacobian), view(normal), view(exclusion_radius)});
-            const std::string at = "receiver " + std::to_string(c.index);
-            switch (c.status) {
-            case ReceiverStatus::ok:
-                return;
-            case ReceiverStatus::size_mismatch:
-                throw py::value_error("the receiver arrays differ in length: x, y, z_obs, lat_deg, lon_deg and "
-                                      "exclusion_radius need n values, jacobian 4 n and normal 3 n");
-            case ReceiverStatus::non_finite:
-                throw py::value_error(at + " has a number that is not finite");
-            case ReceiverStatus::polar:
-                throw py::value_error(at + " is at a latitude beyond 89.9 degrees, where east and north are "
-                                           "undefined");
-            case ReceiverStatus::negative_exclusion_radius:
-                throw py::value_error(at + " has a negative exclusion radius");
-            }
+            require_receivers(ReceiverSet{view(x), view(y), view(z_obs), view(lat), view(lon), view(jacobian),
+                                          view(normal), view(exclusion_radius)});
         },
         py::arg("x"), py::arg("y"), py::arg("z_obs"), py::arg("lat_deg"), py::arg("lon_deg"), py::arg("jacobian"),
         py::arg("normal"), py::arg("exclusion_radius"), R"doc(
@@ -112,5 +110,42 @@ The core's check of a receiver set: None, or a ValueError naming the first
 failing receiver (a number that is not finite, a latitude beyond 89.9
 degrees, a negative exclusion radius) or arrays of unequal length. jacobian is
 (n, 2, 2) and normal (n, 3), or the same numbers flat.
+)doc");
+
+    m.def(
+        "horizon_search",
+        [](const Doubles& x, const Doubles& y, const Doubles& z_obs, const Doubles& lat, const Doubles& lon,
+           const Doubles& jacobian, const Doubles& normal, const Doubles& exclusion_radius, const BoundRasterView& near,
+           const BoundRasterView* far, std::size_t n_directions, double curvature, double d_near, double d_far,
+           unsigned threads) {
+            const auto& near_view = float32(near, "near");
+            const auto far_view = far ? std::optional{float32(*far, "far")} : std::nullopt;
+            const ReceiverSet rc{view(x), view(y), view(z_obs), view(lat), view(lon), view(jacobian), view(normal),
+                                 view(exclusion_radius)};
+            HorizonTable t;
+            {
+                const py::gil_scoped_release unlocked;  // the arrays are held by the arguments
+                t = horizon_search(rc, near_view, far_view, {n_directions, curvature, d_near, d_far}, threads);
+            }
+            const auto n = static_cast<py::ssize_t>(rc.size()), N = static_cast<py::ssize_t>(n_directions);
+            py::array_t<std::int16_t> horizon({n, N});
+            py::array_t<std::uint8_t> reach({n, N});
+            std::copy(t.horizon.begin(), t.horizon.end(), horizon.mutable_data());
+            std::copy(t.reach.begin(), t.reach.end(), reach.mutable_data());
+            return py::make_tuple(horizon, reach);
+        },
+        py::arg("x"), py::arg("y"), py::arg("z_obs"), py::arg("lat_deg"), py::arg("lon_deg"), py::arg("jacobian"),
+        py::arg("normal"), py::arg("exclusion_radius"), py::arg("near"), py::arg("far").none(true), py::kw_only(),
+        py::arg("n_directions"), py::arg("curvature"), py::arg("d_near"), py::arg("d_far"), py::arg("threads") = 0,
+        R"doc(
+The horizon of each receiver in n_directions true azimuths (direction k at
+k 360 / n_directions), searched on the near raster to d_near and on the far
+raster from there to d_far; with far None the search ends at d_near. Earth
+curvature and refraction enter as curvature = (1 - k) / (2 R) per metre.
+Returns (horizon, reach), both (n, n_directions): horizon int16 in 0.01
+degrees, -9000 where no sample was found; reach uint8, the whole km searched
+before the first sample off the raster or on NoData, 255 when none was.
+Both rasters must be float32. Refusals are a ValueError naming the field or
+the receiver. Releases the GIL.
 )doc");
 }
