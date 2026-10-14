@@ -1410,6 +1410,8 @@ New tests (all pure Python, no slow mark unless said):
   factors `[1.0]`; every sca value 0 or 1.
 - **C2:** `--warming-days 10` recorded in `snow.json`; `--warming-days 0`
   refused in plain words naming the option or field.
+  Refused by the option (`min=1`): "Invalid value for '--warming-days': 0 is
+  not in the range x>=1."
 - **C3:** `--bins 10` alone gives `lognormal(0.4, 10)`.
 
 Existing tests to amend in the red commit, each with a one-line reason:
@@ -1425,6 +1427,8 @@ Existing tests to amend in the red commit, each with a one-line reason:
   is held as liquid), so the flat-triangle and R7 tests would fail; with
   `warming_days=10`, 137.9 mm leaves. 5 mm melts out in 10 days either way.
 - `two_days`'s `len(factors) == 10` → 1.
+- `TestEndToEnd`: passes `--warming-days 2 --bins 10`: with one bin a
+  triangle holds its two days' melt as liquid (60 mm), so no snow would leave.
 - E1 (slow): passes `--days 91 --warming-days 91 --bins 10`, so section 6's
   table holds unchanged; it is run once at the green step
   (`RASPUTIN_SLOW=1`).
@@ -1493,6 +1497,8 @@ less with one bin; 154 frames, 63.6 MB of frames.
 **Code review, round 1 (PR 6, the evaluator, near raster, RadiationGeometry and snow wiring), 2026-10-14.** Range `80fe061a..e61e0ac6`, 364 net production lines (about 490 estimated), @reviewer: CHANGES REQUESTED. Blocking: (1) section 10.5's one source of normals is not done: `snow/geometry.py` still turns every normal by one convergence angle and feeds `aspect_deg.var`; with test R3 retired and every other test passing an angle of 0, the turn is untested, and `forcing.radiation_anomaly` is called only by tests; slope and aspect come from the receiver frame's per-triangle normals, the turn and `radiation_anomaly` go with their tests; (2) a near-zero-area sliver triangle aborts the snow run: `cli.py` drops only exact-zero areas while `receivers_from_mesh` refuses below its 1e-9 relative limit (three collinear points near (500000, 6800000): "triangle 0 has zero area"), against section 4.9's counted-with-no-correction; the message's index counts kept triangles, not the mesh's; one shared zero-area test, and a test with such a triangle. Wordings: "Interface assumed" in the three new test files becomes "Interface under test", the Python list gains `n_directions`; on approval, TR3b and TR5 marked built in `terrain-radiation.md` and in section 10.4's table. Held: 10.5's ΔI formula; the evaluator's sun axes and refraction against the reference sun; the strict lit test; test S, I7 and I8; @developer's four pins (a zero-area triangle under an open sky gets ΔI exactly 0); amendment `5d318337` fixes three real test defects. Not pushed.
 
 **Code review, round 2 (PR 6), 2026-10-14.** Range `e61e0ac6..e11dcc00`, 368 net production lines from `80fe061a` (about 490 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session: TR3b and TR5 marked built in `terrain-radiation.md` and section 10.4's table; that file's Status and this file's Status; the blueprint's `triangle_geometry(mesh, crs)`. Both round-1 blockers fixed: `snow/geometry.py` takes its normals from `receivers_and_zero_area`, the single turn and `radiation_anomaly` gone, tests at Bygdin and on the central meridian equal to the frame's normals bit for bit; one zero-area test (`ZERO_AREA_SINE`), a zero-area triangle given a vertical normal, the sliver through `rasputin snow` with shadows off and on with a correction of exactly 0, errors naming the mesh's own index. Round 1's wordings applied; no red-step scaffolding. The push waits for `@perf`'s PR 6 acceptance run (sections 10.7 and 10.9). Suggestion: `triangle_geometry` could return its frame so `cli.py` reprojects once. Not pushed.
+
+**Code review, round 1 (PR 7, the run to 1 September and one bin by default), 2026-10-14.** Range `2073ccf6..bccf797e`, 5 net production lines (about 7 estimated), short path, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 11.5 names `TestEndToEnd`'s `--warming-days 2 --bins 10` and C2's refusal text from typer's `min=1`. Held: Ola's 2026-10-14 decisions (lapse 0.006, 600 mm, 122-day warming in a 153-day run, one bin, no area scaling); the figures recomputed; `warming_days == days` leaves temperatures unchanged; `--snow-cv` 0.4 kept, since one bin is uniform at any cv; no red-step scaffolding. Section 11.6's Bygdin run to 1 September comes before the push. Idea: `min=1` on `--days` and `--step-minutes`. Not pushed, CI pending.
 
 **PR 6 acceptance run, 2026-10-14** (`@perf`, `cdb0c053`, at `7cf50a9b`; record in `docs/benchmarks/2026-10-14/46-pr6-acceptance/`). Release build, M1 Max on mains power, medians of 3. NO BASELINE: the first shadowed snow run, compared with section 10.4's estimate.
 
