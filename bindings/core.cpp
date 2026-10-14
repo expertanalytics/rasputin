@@ -2,6 +2,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "bound_raster_view.hpp"
+
 #include <terrain/build_info.hpp>
 #include <terrain/cdt/detria_backend.hpp>
 #include <terrain/cdt/result.hpp>
@@ -281,14 +283,6 @@ py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc) 
     }
     return properties;
 }
-
-// The bound RasterView. The variant picks the cell type once, at construction;
-// `array` is the numpy object the view points into, held so the buffer lives as
-// long as the view does. Destroyed by pybind11 with the GIL held.
-struct BoundRasterView {
-    py::object array;
-    std::variant<terrain::raster::RasterView<float>, terrain::raster::RasterView<double>> view;
-};
 
 // Exact dtype and C order, or nothing: a conversion would be a silent copy the
 // view then outlives, so anything else is a TypeError and the caller converts.

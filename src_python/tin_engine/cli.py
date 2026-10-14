@@ -56,7 +56,6 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Final, TextIO, cast
 
-import click
 import numpy as np
 import numpy.typing as npt
 import typer
@@ -155,6 +154,7 @@ from tin_engine.io.models import (
     DemTile,
     IndexWindow,
     RasterMeta,
+    ZSpelling,
     ZUnit,
 )
 from tin_engine.io.ply import field_comments, write_ply
@@ -248,10 +248,9 @@ MEMORY_BUDGET = Annotated[
     ),
 ]
 Z_UNIT = Annotated[
-    str | None,
+    ZSpelling | None,
     typer.Option(
         "--z-unit",
-        click_type=click.Choice([row[2] for row in UNITS.values()]),
         help="The DEM's height unit when the file does not say: m, ft or us-ft (US survey "
         "foot). Heights are converted to metres. Default: the file's, else metres.",
     ),
@@ -2077,7 +2076,7 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
 
 
-def _z_unit(option: str | None) -> ZUnit | None:
+def _z_unit(option: ZSpelling | None) -> ZUnit | None:
     """``--z-unit``'s spelling to the unit's name."""
     return next((row[0] for row in UNITS.values() if row[2] == option), None)
 

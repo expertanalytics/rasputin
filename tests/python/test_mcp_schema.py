@@ -24,7 +24,7 @@ import pytest
 pytest.importorskip("mcp")
 
 import typer
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from mcp_driver import tool_names
 from tin_engine.cli import app
@@ -128,6 +128,15 @@ def derived(application: typer.Typer) -> dict[str, Any]:
 
 def click_command(application: typer.Typer, tool_name: str) -> Any:
     return typer.main.get_command(application).commands[tool_name.replace("_", "-")]
+
+
+def z_unit_refused(model: type[BaseModel], value: str | None) -> bool:
+    """Whether validation names `z_unit`; the other fields are left out, so they may fail too."""
+    try:
+        model.model_validate({"z_unit": value})
+    except ValidationError as error:
+        return any(e["loc"] == ("z_unit",) for e in error.errors())
+    return False
 
 
 # ---------------------------------------------------------------- T1
@@ -338,6 +347,18 @@ class TestTheRealApp:
         assert mesh.argv(with_budget)[-2:] == ["--memory-budget", "8G"]
         with pytest.raises(ValidationError):
             mesh.model.model_validate({"out": "x.vtk", "threads": -1})
+
+    @pytest.mark.parametrize("name", ["mesh", "catchment", "station_catchments"])
+    def test_z_unit_admits_the_three_spellings_and_null(self, name: str) -> None:
+        """Increment 48, T3: the schema lists the spellings, and the model holds to them."""
+        tool = derived(app)[name]
+        branches = tool.tool().input_schema["properties"]["z_unit"].get("anyOf", [])
+        strings = [b for b in branches if b.get("type") == "string"]
+        listed = {v for b in strings for v in b.get("enum", [b.get("const")])}
+        assert listed == {"m", "ft", "us-ft"}, branches
+        assert {"type": "null"} in branches, branches
+        assert [s for s in ("m", "ft", "us-ft", None) if z_unit_refused(tool.model, s)] == []
+        assert all(z_unit_refused(tool.model, s) for s in ("furlong", "M", "us_ft"))
 
     def test_the_whole_tool_list_stays_small(self) -> None:
         # 22,434 bytes measured with `synthetic-terrain` and `snow` (16,575 for the

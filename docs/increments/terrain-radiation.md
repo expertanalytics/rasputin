@@ -1139,8 +1139,8 @@ not raw literals.
 **Built by increment 46** (`docs/increments/46-hbv-snow.md`, its section 10), to this design and not as a second version:
 
 - TR1: all of it, in increment 46's PR 2 (built).
-- TR2: all of it, in increment 46's PR 4.
-- TR3a: all of it, in PR 5, with the far raster optional (absent means
+- TR2: all of it, in increment 46's PR 4 (built).
+- TR3a: all of it, in increment 46's PR 5 (built), with the far raster optional (absent means
   D_far = D_near) and the pins of `46-hbv-snow.md` section 10.8 (reach found
   from coverage before the march, floored to whole km; the early stop over
   both rasters; far samples from D_near + Δ_far; int16 rounded half away

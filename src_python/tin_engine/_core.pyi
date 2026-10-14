@@ -879,3 +879,41 @@ def sun_positions(
     """The sun at one place for many UTC times at the default delta T: the
     elevation without refraction and the azimuth from true north. Releases the
     GIL."""
+
+def check_receivers(
+    x: npt.ArrayLike,
+    y: npt.ArrayLike,
+    z_obs: npt.ArrayLike,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    jacobian: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    exclusion_radius: npt.ArrayLike,
+) -> None:
+    """The core's check of a receiver set: None, or a ValueError naming the
+    first failing receiver or arrays of unequal length."""
+
+def horizon_search(
+    x: npt.ArrayLike,
+    y: npt.ArrayLike,
+    z_obs: npt.ArrayLike,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    jacobian: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    exclusion_radius: npt.ArrayLike,
+    near: RasterView,
+    far: RasterView | None,
+    *,
+    n_directions: int,
+    curvature: float,
+    d_near: float,
+    d_far: float,
+    threads: int = 0,
+) -> tuple[npt.NDArray[np.int16], npt.NDArray[np.uint8]]:
+    """The horizon of each receiver in ``n_directions`` true azimuths, on the
+    float32 near raster to ``d_near`` and the far one to ``d_far`` (``None``:
+    the search ends at ``d_near``), with curvature ``(1 - k) / (2 R)`` per
+    metre: int16 in 0.01 degrees (-9000 where no sample was found) and reach,
+    uint8 whole km before the first missing sample (255 when none was), both
+    (n, n_directions). Releases the GIL."""
