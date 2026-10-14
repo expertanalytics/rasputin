@@ -54,8 +54,9 @@ async def run(
     receiver per triangle, in the triangles' order; the beam is the clear-sky
     beam seen from (`lat_deg`, `lon_deg`, `height_m`)."""
     n, spring = len(geometry.centroid_z), job.spring
-    factors = np.array(job.distribution.factors)
-    state = _core.SnowState.uniform(n, _core.SnowDistribution(factors), job.initial_swe_mm)
+    shape = job.distribution
+    dist = _core.SnowDistribution(np.array(shape.factors), np.array(shape.deep))
+    state = _core.SnowState.uniform(n, dist, job.initial_swe_mm)
     mode = getattr(_core.SunCorrection, job.correction.mode)
     per_frame = job.frames.every_hours * 60 // spring.step_minutes
     outflow, di_sum, dry, none = np.zeros(n), np.zeros(n), np.zeros(n), np.empty(0)

@@ -75,14 +75,17 @@ void bind_snow(py::module_& m) {
 
     py::class_<SnowDistribution>(m, "SnowDistribution", R"doc(
 The relative snow depth of N equal-area bins within a triangle. factors must
-be 1 to 64 finite, non-negative, ascending values of mean 1 within 1e-9, else
-ValueError; they are kept divided by their mean.
+be 1 to 64 finite, non-negative, ascending values of mean 1 within 1e-9; deep,
+each bin's depth at its deep edge, None or empty (flat) or N finite values
+with factor <= deep <= 2 factor; else ValueError. Both are kept divided by the
+factors' mean.
 )doc")
-        .def(py::init([](const py::object& factors) {
+        .def(py::init([](const py::object& factors, const py::object& deep) {
                  const auto a = vector_arg(factors, "factors");
-                 return SnowDistribution{span_of(a)};
+                 const auto d = deep.is_none() ? F64(0) : vector_arg(deep, "deep");
+                 return SnowDistribution{span_of(a), span_of(d)};
              }),
-             py::arg("factors"))
+             py::arg("factors"), py::arg("deep") = py::none())
         .def_property_readonly(
             "factors",
             [](const SnowDistribution& d) {
@@ -90,11 +93,20 @@ ValueError; they are kept divided by their mean.
                 std::ranges::copy(d.factors(), a.mutable_data());
                 return a;
             },
-            "The factors, float64, mean 1.");
+            "The factors, float64, mean 1.")
+        .def_property_readonly(
+            "deep",
+            [](const SnowDistribution& d) {
+                py::array_t<double> a(static_cast<py::ssize_t>(d.deep().size()));
+                std::ranges::copy(d.deep(), a.mutable_data());
+                return a;
+            },
+            "Each bin's deep-edge factor, float64; the factors for a flat distribution.");
 
     py::class_<SnowState>(m, "SnowState", R"doc(
-The snow pack of n triangles of N bins each: solid sp and liquid sw (n, N) in
-mm, and per triangle swe, sca and the last step's outflow (n,). The arrays are
+The snow pack of n triangles of N bins each: mean solid sp and liquid sw (n, N)
+in mm, and per triangle swe, sca (the bins' mean covered fraction) and the
+last step's outflow (n,). The arrays are
 read-only views that change with each step.
 )doc")
         .def_static("uniform", &SnowState::uniform, py::arg("triangles"), py::arg("distribution"),

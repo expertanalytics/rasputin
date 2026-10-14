@@ -787,11 +787,14 @@ class SunCorrection(Enum):
 class SnowDistribution:
     """The relative snow depth of N equal-area bins; refused (ValueError)
     unless 1 to 64 finite, non-negative, ascending factors of mean 1 within
-    1e-9. Kept divided by their mean."""
+    1e-9, and deep None, empty or N finite deep-edge factors with
+    factor <= deep <= 2 factor. Both kept divided by the factors' mean."""
 
-    def __init__(self, factors: npt.ArrayLike) -> None: ...
+    def __init__(self, factors: npt.ArrayLike, deep: npt.ArrayLike | None = None) -> None: ...
     @property
     def factors(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def deep(self) -> npt.NDArray[np.float64]: ...
 
 @final
 class SnowState:
