@@ -80,13 +80,17 @@ class SunCorrection(BaseModel):
 
 
 class SyntheticSpring(BaseModel):
-    """The synthetic weather's time axis: when it starts, how long, how finely."""
+    """The synthetic weather's time axis, into summer: when it starts, how long,
+    how finely, and how long the warming lasts."""
 
     model_config = _FROZEN
 
     #: Start of the run, timezone-aware; kept in UTC.
     start: dt.datetime = dt.datetime(2027, 4, 1, tzinfo=dt.UTC)
-    days: int = Field(default=91, ge=1)
+    days: int = Field(default=153, ge=1)
+    #: Days over which the temperature at 300 m rises from T_START to T_END,
+    #: counted from `start`; after them it holds at T_END.
+    warming_days: int = Field(default=122, ge=1)
     step_minutes: int = Field(default=60, ge=1)
     #: Sun positions per step, at the midpoints of equal sub-intervals.
     samples_per_step: int = Field(default=4, ge=1)
@@ -118,7 +122,7 @@ class SnowJob(BaseModel):
     resources: Resources
     hbv: HbvSnowParameters = HbvSnowParameters()
     distribution: SnowDistribution = Field(
-        default_factory=lambda: SnowDistribution.lognormal(0.4, 10)
+        default_factory=lambda: SnowDistribution.lognormal(0.0, 1)
     )
     spring: SyntheticSpring = SyntheticSpring()
     frames: FrameSpec = Field(default=FrameSpec(), validate_default=True)
