@@ -36,12 +36,13 @@ from shapely import affinity
 from shapely.geometry import Point, Polygon
 
 import tin_engine
-from cli_helpers import geojson, invoke
+from cli_helpers import geojson, invoke, no_cache_anywhere, runner, says_no_cache
 from cog_fixtures import write_cache
 from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y
 from plyread import read_ply
 from test_cli_mesh_mosaic import field, same_mesh
+from tin_engine.cli import app
 from tin_engine.dem_input import _domain_plan
 from tin_engine.io.cog import blocks_meeting
 from tin_engine.io.domain_file import read_domain
@@ -216,6 +217,25 @@ class TestF10TheCommand:
         assert code == 0, output
         assert (cache / KEY / "NOTICE.txt").read_text() == sources.notice(remote)
 
+    def test_without_cache_or_data_root_it_fetches_into_the_xdg_cache_and_says_where(
+        self, remote: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The default cache: `$XDG_CACHE_HOME/rasputin`, the source's directory
+        under it, and the summary line ends `into <that directory>`. `HOME`
+        points elsewhere, so a write under it would be seen."""
+        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        xdg, home = tmp_path / "xdg", tmp_path / "home"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(xdg))
+        monkeypatch.setenv("HOME", str(home))
+        result = runner.invoke(app, ["fetch", KEY, "--bbox", *self.BBOX])
+        assert result.exit_code == 0, result.output
+        where = xdg / "rasputin" / KEY
+        assert (where / "NOTICE.txt").is_file(), sorted(map(str, tmp_path.rglob("*")))
+        assert not home.exists()
+        (summary,) = [line for line in result.output.splitlines() if " objects, " in line]
+        assert summary.startswith(f"{KEY}: "), summary
+        assert summary.endswith(f" into {where}"), summary
+
     def test_a_refusal_exits_1(
         self, sources: ModuleType, monkeypatch: pytest.MonkeyPatch, server: RangeServer,
         data: bytes, tmp_path: Path,
@@ -277,13 +297,15 @@ class TestF11TheBoundary:
         )
         assert importers == ["fetch/http.py"]
 
-    def test_no_cache_root_is_refused_with_b7s_message(
+    def test_no_cache_directory_is_refused_naming_the_option_and_both_variables(
         self, remote: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        """No `--cache`, `RASPUTIN_DATA`, `XDG_CACHE_HOME` or `HOME`: nowhere to
+        write, so a usage error that names every way to give a place."""
+        no_cache_anywhere(monkeypatch)
         code, output = invoke("fetch", KEY, "--bbox", *TestF10TheCommand.BBOX)
         assert code == USAGE, output
-        assert "no cache: set RASPUTIN_DATA" in output and "--cache" in output, output
+        says_no_cache(output)
 
 
 # --------------------------------------------------------------------------

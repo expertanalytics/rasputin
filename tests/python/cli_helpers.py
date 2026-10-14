@@ -80,6 +80,21 @@ def help_text(command: str) -> str:
     return plain(result.output)
 
 
+def help_page(command: str, columns: int) -> tuple[int, str]:
+    """`rasputin <command> --help` at `columns` wide: the exit code and the raw output.
+
+    `TERM` is not `dumb` here, unlike `runner`'s: where `GITHUB_ACTIONS` is set,
+    Typer forces Rich to treat the output as a terminal, and Rich sizes a forced
+    terminal whose `TERM` is `dumb` at 80 columns whatever `COLUMNS` says, so the
+    same test saw 300 columns locally and 80 on CI. `NO_COLOR` still holds the
+    colour off; the bold and dim codes left are what `plain` strips.
+    """
+    assert command in COMMANDS, f"{command!r} is not a subcommand; they are {sorted(COMMANDS)}"
+    env = {"NO_COLOR": "1", "TERM": "xterm", "COLUMNS": str(columns)}
+    result = CliRunner(env=env).invoke(app, [command, "--help"])
+    return result.exit_code, result.output
+
+
 def ran(command: str, *args: str) -> str:
     """`invoke`, required to succeed; the output."""
     code, output = invoke(command, *args)
@@ -107,6 +122,26 @@ def refused(
             assert word in output, f"{word!r} not in {output!r}"
     assert not target.exists()
     return output
+
+
+#: The one refusal of `fetch`, `mesh --dem SOURCE` and `mesh --land-cover
+#: SOURCE` when no cache directory can be found, as the design words it.
+NO_CACHE = (
+    "no cache directory: pass --cache, or set RASPUTIN_DATA (the cache is then "
+    "$RASPUTIN_DATA/cache) or XDG_CACHE_HOME (then $XDG_CACHE_HOME/rasputin)"
+)
+
+
+def no_cache_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No `RASPUTIN_DATA`, no `XDG_CACHE_HOME` and no `HOME`: the environment
+    names no cache directory, so only `--cache` can."""
+    for name in ("RASPUTIN_DATA", "XDG_CACHE_HOME", "HOME"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def says_no_cache(output: str) -> None:
+    """The output holds the whole no-cache refusal, wherever Rich broke it."""
+    assert squashed(NO_CACHE) in squashed(output), output
 
 
 def mesh_to_vtk(tmp_path: Path, *args: str, out: str = "x.vtk") -> VtkFile:
