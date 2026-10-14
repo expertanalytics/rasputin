@@ -18,7 +18,8 @@ Interface:
 - `SnowJob(hbv, distribution, correction, spring, frames, resources,
   initial_swe_mm=600.0)`; `hbv`, `spring` and `frames` default to their
   models' defaults, `distribution` to one linear bin at the CLI's cv,
-  `SnowDistribution.lognormal(0.4, 1)` (section 12.4);
+  `SnowDistribution.lognormal(0.1, 1)` (section 12.4, by Ola's ruling of
+  2026-10-14);
   `correction` and `resources` are required. A frame interval that is not a
   whole number of steps is refused, located on `frames`.
 - Also refused on `frames` (code review round 1 of PR 3): a spring that is
@@ -102,11 +103,11 @@ class TestSnowJob:
     def test_defaults_are_section_4_5s(self, params: ModuleType) -> None:
         job = self.job(params)
         assert job.hbv == params.HbvSnowParameters()
-        # Section 12.4: one bin by default, at the CLI's cv of 0.4, so its depth
-        # varies linearly.
-        assert job.distribution == params.SnowDistribution.lognormal(0.4, 1)
+        # Section 12.4: one bin by default, at the CLI's cv of 0.1, so its depth
+        # varies linearly from 0.83 to 1.17 times the mean (1 + sqrt(3) * 0.1).
+        assert job.distribution == params.SnowDistribution.lognormal(0.1, 1)
         assert job.distribution.factors == (1.0,)
-        assert job.distribution.deep == pytest.approx((1.6928203230,), abs=1e-9)
+        assert job.distribution.deep == pytest.approx((1.1732050808,), abs=1e-9)
         assert job.spring == params.SyntheticSpring()
         assert job.frames == params.FrameSpec()
         assert job.frames.every_hours == 24
