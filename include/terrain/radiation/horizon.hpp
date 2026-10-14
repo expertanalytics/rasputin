@@ -5,9 +5,9 @@
 // The reference definition, which horizon_exhaustive evaluates sample by
 // sample: receiver i looks along true azimuth A_k = k 360/N, whose frame step
 // u = J_i^-1 (sin A_k, cos A_k) is one ground metre. Near samples lie at
-// d = r_i + j delta_near while d <= D_near (delta_near half the near cell),
-// read bilinearly from the near raster; a sample at d = 0 has no height and is
-// not taken. Far samples lie at D_near + j delta_far, j >= 1, while d <= D_far,
+// d = r_i + j delta_near while d <= D_near (delta_near half the smaller of the
+// near raster's two cell sides), read bilinearly from the near raster; a
+// sample at d = 0 has no height and is not taken. Far samples lie at D_near + j delta_far, j >= 1, while d <= D_far,
 // on the far raster (pin 3); without one, D_far is D_near (pin 4). The march
 // ends at the first sample off its raster or touching a NoData node, and
 // `reach` is that sample's distance floored to whole km, 255 when none is
