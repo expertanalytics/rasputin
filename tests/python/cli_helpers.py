@@ -66,6 +66,20 @@ def invoke(command: str, *args: str) -> tuple[int, str]:
     return result.exit_code, plain(result.output)
 
 
+#: Wide enough that Rich cuts no option name in a help panel. At the runner's
+#: default 80 columns the name column shrinks as the type column grows, and a
+#: long name such as ``--no-constraint-feet`` ends in an ellipsis.
+HELP_COLUMNS = "200"
+
+
+def help_text(command: str) -> str:
+    """`rasputin <command> --help`, required to succeed, at `HELP_COLUMNS`; the `plain` output."""
+    assert command in COMMANDS, f"{command!r} is not a subcommand; they are {sorted(COMMANDS)}"
+    result = runner.invoke(app, [command, "--help"], env={"COLUMNS": HELP_COLUMNS})
+    assert result.exit_code == 0, result.output
+    return plain(result.output)
+
+
 def ran(command: str, *args: str) -> str:
     """`invoke`, required to succeed; the output."""
     code, output = invoke(command, *args)
