@@ -773,3 +773,62 @@ def class_areas(
     zero-area triangle, a non-finite corner or a wrong shape is a ValueError.
     ``threads`` 0 is all cores; the result does not depend on it. Releases
     the GIL."""
+
+# The HBV snow kernel: arrays in, read-only arrays out.
+
+class SunCorrection(Enum):
+    """How the radiation anomaly corrects melt."""
+
+    none = 0
+    melt_factor = 1
+    threshold = 2
+
+@final
+class SnowDistribution:
+    """The relative snow depth of N equal-area bins; refused (ValueError)
+    unless 1 to 64 finite, non-negative, ascending factors of mean 1 within
+    1e-9. Kept divided by their mean."""
+
+    def __init__(self, factors: npt.ArrayLike) -> None: ...
+    @property
+    def factors(self) -> npt.NDArray[np.float64]: ...
+
+@final
+class SnowState:
+    """Solid ``sp`` and liquid ``sw`` water, ``(n, N)`` mm, and per triangle
+    ``swe``, ``sca`` and the last step's ``outflow``; read-only views."""
+
+    @staticmethod
+    def uniform(
+        triangles: int, distribution: SnowDistribution, initial_swe_mm: float
+    ) -> SnowState: ...
+    @property
+    def sp(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def sw(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def swe(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def sca(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def outflow(self) -> npt.NDArray[np.float64]: ...
+    def step(
+        self,
+        *,
+        tx: float,
+        ts: float,
+        cx: float,
+        lw: float,
+        cfr: float,
+        mode: SunCorrection,
+        r: float,
+        d: float,
+        temperature: npt.ArrayLike,
+        precipitation: npt.ArrayLike,
+        radiation_anomaly: npt.ArrayLike,
+        dt_seconds: float,
+        threads: int,
+    ) -> None:
+        """One HBV step for every triangle. A refused input is a ValueError
+        naming the status (and the first non-finite triangle) and leaves the
+        state as it was. Releases the GIL."""

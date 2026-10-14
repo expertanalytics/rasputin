@@ -180,6 +180,7 @@ paths = [
     "src_python/tin_engine/raster.py",
     "src_python/tin_engine/reference.py",
     "src_python/tin_engine/sensitivity.py",
+    "src_python/tin_engine/snow",
     "src_python/tin_engine/sources.py",
     "src_python/tin_engine/target_grid.py",
     "src_python/tin_engine/tolerance_field.py",

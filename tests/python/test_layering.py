@@ -35,6 +35,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "sources": "toml_data",  # 44: the catalogue read from TOML
         "palettes": "", "hydrography": "", "tin_engine": "",
         "toml_data": "",  # 44: the shared TOML reader; tomllib and Pydantic only
+        "snow": "", "snow.params": "",  # 46: HBV snow parameters, Pydantic only
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",
