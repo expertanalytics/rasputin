@@ -154,7 +154,10 @@ def decode_class_window(
     `meta` is the page's, as `read_page` gives it, with the upper-left node
     half a cell inside the raster; the window's corner is moved back out to
     the cell's. A block `source` lacks is `NotCached` before any block is
-    read; an empty block (byte count 0) is cells of 0, no data.
+    read; an empty block (byte count 0) is cells of `meta.nodata`. Every
+    no-data cell comes out as 0, the class rasputin writes for no data; so a
+    raster whose no-data is not 0 and which stores a 0 in the window is
+    refused, since that 0 would be read as no data without a word.
     """
     w, page = window, source.page
     ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
@@ -165,9 +168,17 @@ def decode_class_window(
     indices = blocks_meeting(page, w)
     if absent := source.missing(indices):
         raise NotCached(len(absent), len(indices), source.where)
-    out = np.zeros((w.rows, w.cols), dtype=np.uint8)
+    fill = int(meta.nodata or 0)
+    out = np.full((w.rows, w.cols), fill, dtype=np.uint8)
     stored = [i for i in indices if page.databytecounts[i] > 0]
     _decode_into(source, w, stored, out, threads)
+    if fill:
+        if (out == 0).any():
+            raise GeoTiffError(
+                f"{source.where}: class 0 means no data in rasputin's output; this raster's "
+                f"no-data is {fill} and it holds class 0"
+            )
+        out[out == fill] = 0
     x, y = meta.node_xy(w.row0, w.col0)
     return ClassWindow(
         x_min=x - meta.delta_x / 2,

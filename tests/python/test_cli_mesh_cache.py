@@ -417,12 +417,15 @@ class TestTheCatalogue:
         assert sources.SOURCES["anadem-v1"].kind == "one-cog"
         assert sources.SOURCES["glo30"].kind == "cog-tiles"
 
-    def test_sources_imports_pydantic_only(self, sources: ModuleType) -> None:
+    def test_sources_imports_no_fetch_numpy_pyproj_or_tifffile(self, sources: ModuleType) -> None:
+        """The mesh path names a catalogue key without the fetcher or a codec:
+        the standard library, Pydantic and `tin_engine.toml_data` only."""
         tree = ast.parse(Path(sources.__file__).read_text())
         imported = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                imported.add((node.module or "").split(".")[0])
+                imported.add(node.module or "")
             elif isinstance(node, ast.Import):
-                imported.update(alias.name.split(".")[0] for alias in node.names)
-        assert imported - {"__future__", "collections", "typing", "types"} <= {"pydantic"}
+                imported.update(alias.name for alias in node.names)
+        outside = {name for name in imported if name.split(".")[0] not in sys.stdlib_module_names}
+        assert outside <= {"pydantic", "tin_engine.toml_data"}, sorted(outside)

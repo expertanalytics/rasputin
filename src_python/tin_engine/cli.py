@@ -149,14 +149,21 @@ from tin_engine.io.models import (
     Bounds,
     ClassFractions,
     DemTile,
+    IndexWindow,
     RasterMeta,
     ZUnit,
 )
 from tin_engine.io.ply import field_comments, write_ply
-from tin_engine.io.repository import CacheRepository, DemRepository, create_sqlite
+from tin_engine.io.repository import (
+    CacheRepository,
+    DemRepository,
+    TiffDemRepository,
+    create_sqlite,
+)
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
@@ -177,7 +184,7 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, check_values
+from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, catalogue, check_values
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
@@ -936,8 +943,8 @@ def mesh(
             "--land-cover",
             help="With --dem, the exact share of each land-cover class in every triangle, "
             "from a cached catalogue source of classes "
-            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}), "
-            "in the mesh file.",
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}) or a uint8 "
+            "GeoTIFF, in the mesh file.",
         ),
     ] = None,
     land_cover_year: Annotated[
@@ -945,6 +952,14 @@ def mesh(
         typer.Option(
             "--land-cover-year",
             help="With --land-cover, the year of the classes. Default: the source's last year.",
+        ),
+    ] = None,
+    land_cover_map: Annotated[
+        str | None,
+        typer.Option(
+            "--land-cover-map",
+            help="With --land-cover, a class map with codes naming its classes in a .gpkg, as "
+            "--features-map. Default: the source's.",
         ),
     ] = None,
     threads: THREADS = None,
@@ -1014,6 +1029,9 @@ def mesh(
     sparse table in the file (``land_cover_offsets``, ``land_cover_classes``,
     ``land_cover_fractions``), the largest class as ``land_cover_code``, and
     the source's credit, licence note and citation as fields.
+    ``--land-cover FILE`` reads the classes from a ``uint8`` GeoTIFF instead,
+    and ``--land-cover-map`` names and colours them in a ``.gpkg``. A catalogue
+    source is the package's or an entry of $RASPUTIN_DATA/sources.toml.
 
     What the run did is one record (increment 25, ``tin_engine.run_record``):
     the file carries the fields a user of the mesh needs, ``--stats`` and
@@ -1063,7 +1081,10 @@ def mesh(
         vocabulary = run_vocabulary(maps)
     except ValueError as exc:
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-map") from exc
-    classes = _class_source(land_cover, land_cover_year, bool(dem), cache_root(cache, os.environ))
+    known = _known_sources(os.environ) if dem or land_cover else SOURCES
+    classes = _class_source(
+        land_cover, land_cover_year, land_cover_map, bool(dem), cache_root(cache, os.environ), known
+    )
     if classes is not None:
         for coded_map in (m for m in maps if m.codes):
             raise typer.BadParameter(
@@ -1158,8 +1179,8 @@ def mesh(
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
-        paths, cached = _dem_sources(dem, cache_root(cache, os.environ))
-        caller = _z_unit(z_unit) or (SOURCES[cached.source].z_unit if cached else None)
+        paths, cached = _dem_sources(dem, cache_root(cache, os.environ), known)
+        caller = _z_unit(z_unit) or (known[cached.source].z_unit if cached else None)
         given = None
         if domain is not None:
             with clock.phase("domain read"):
@@ -1251,7 +1272,7 @@ def mesh(
             values |= {"dem_crs": source_crs, "dem_transform": how}
             values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
-            remote = SOURCES[cached.source]
+            remote = known[cached.source]
             values["dem_credit"] = escaped_ascii(remote.credit)
             values["licence_note"] = escaped_ascii(remote.licence_note)
             values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
@@ -1308,8 +1329,8 @@ def mesh(
                 classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
             )
             codes_text = str(more["land_cover_codes"])
-            if classes.source.class_map:  # 41: names and colours for the .gpkg
-                palette = load_class_map(classes.source.class_map).palette
+            if classes.class_map is not None:  # names and colours for the .gpkg
+                palette = classes.class_map.palette
             values |= more
         build = stride_record if tolerance is None else refined_record
         record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
@@ -1466,50 +1487,81 @@ def _write_geopackage(
 
 @dataclass(frozen=True, slots=True)
 class _ClassSource:
-    """``--land-cover`` as checked: the catalogue entry, the year (None for a
-    source without years) and the cache root."""
+    """``--land-cover`` as checked: a catalogue entry with its year (None for a
+    source without years) and cache root, or a file; and the class map that
+    names its classes, if any."""
 
-    source: RemoteSource
+    source: RemoteSource | None
     year: int | None
-    root: Path
+    root: Path | None
+    path: Path | None
+    class_map: ClassMap | None
 
 
 def _class_source(
-    key: str | None, year: int | None, has_dem: bool, root: Path | None
+    value: str | None,
+    year: int | None,
+    map_value: str | None,
+    has_dem: bool,
+    root: Path | None,
+    known: Mapping[str, RemoteSource],
 ) -> _ClassSource | None:
-    """26b: ``--land-cover`` and ``--land-cover-year`` checked before any work;
-    every refusal is a usage error naming the option."""
-    if key is None:
-        if year is not None:
-            raise typer.BadParameter("needs --land-cover", param_hint="--land-cover-year")
+    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-map`` checked
+    before any work: a catalogue key is that cached source, anything else a
+    file, whose header is read here. Every refusal is a usage error naming
+    the option."""
+    if value is None:
+        for given, flag in ((year, "--land-cover-year"), (map_value, "--land-cover-map")):
+            if given is not None:
+                raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
     if not has_dem:
         raise typer.BadParameter(
             "needs --dem: the shares are cut in the DEM's coordinate system",
             param_hint="--land-cover",
         )
-    if key not in SOURCES:
-        raise typer.BadParameter(
-            f"unknown source {key}; the catalogue has {', '.join(SOURCES)}",
-            param_hint="--land-cover",
-        )
-    source = SOURCES[key]
+    source, path, chosen = known.get(value), None, None
+    if source is not None:
+        try:
+            check_values(source, "classes", "--land-cover")
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
+        chosen = year if year is not None else (source.years[-1] if source.years else None)
+        try:
+            source.url_for(chosen)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
+        if root is None:
+            raise typer.BadParameter(
+                "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
+                "or pass --cache",
+                param_hint="--land-cover",
+            )
+    else:
+        if year is not None:
+            raise typer.BadParameter("a file has no years", param_hint="--land-cover-year")
+        path = Path(value)
+        if not path.is_file():
+            raise typer.BadParameter(
+                f"{value} is neither a catalogue source ({', '.join(known)}) nor a file",
+                param_hint="--land-cover",
+            )
+        try:  # the header and one cell: a class raster in uint8 with a CRS
+            corner = IndexWindow(row0=0, col0=0, rows=1, cols=1)
+            TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
+        except (OSError, ValueError) as exc:
+            raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
+    name = map_value or (source.class_map if source is not None else "")
     try:
-        check_values(source, "classes", "--land-cover")
+        class_map = load_class_map(name) if name else None
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
-    chosen = year if year is not None else (source.years[-1] if source.years else None)
-    try:
-        source.url_for(chosen)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
-    if root is None:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover-map") from exc
+    if class_map is not None and not class_map.codes:
         raise typer.BadParameter(
-            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
-            "or pass --cache",
-            param_hint="--land-cover",
+            f"{name} names no class codes; a land-cover raster holds codes",
+            param_hint="--land-cover-map",
         )
-    return _ClassSource(source, chosen, root)
+    return _ClassSource(source, chosen, None if path else root, path, class_map)
 
 
 def _class_fractions(
@@ -1522,29 +1574,40 @@ def _class_fractions(
     cache: Path | None,
     threads: int = 1,
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
-    """26b: the exact class fractions from the cached year, timed as the phase
-    ``land cover fractions``; the table, the codes and the record entries. An
-    object the cache lacks is refused naming the ``fetch`` that gets it."""
+    """The exact class fractions from the cached year or the file, timed as
+    the phase ``land cover fractions``; the table, the codes and the record
+    entries. An object the cache lacks is refused naming the ``fetch`` that
+    gets it."""
     source, year = classes.source, classes.year
-    repository = CacheRepository(classes.root, source.id, nodata=source.nodata, threads=threads)
-    url = source.url_for(year)
-    name = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
-    try:
-        cached = {f.name for f in repository.footprints()}
-    except NotCached:
-        cached = set()
-    if name not in cached:
-        words = [
-            f"rasputin fetch {source.id}",
-            f"--year {year}" if year is not None else "",
-            f"--domain {domain}" if domain is not None else "",
-            f"--out-crs {shlex.quote(out_crs)}" if out_crs else "",
-            f"--cache {cache}" if cache else "",
-        ]
-        run = " ".join(filter(None, words))
-        raise typer.BadParameter(
-            f"{source.id}/{name} is not in the cache; run: {run}", param_hint="--land-cover"
+    repository: ClassRaster
+    if source is None:
+        assert classes.path is not None
+        name = classes.path.name
+        repository = TiffDemRepository([classes.path], z_unit="metre", threads=threads)
+    else:
+        assert classes.root is not None
+        cached_classes = CacheRepository(
+            classes.root, source.id, nodata=source.nodata, threads=threads, z_unit="metre"
         )
+        repository = cached_classes
+        url = source.url_for(year)
+        name = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
+        try:
+            cached = {f.name for f in cached_classes.footprints()}
+        except NotCached:
+            cached = set()
+        if name not in cached:
+            words = [
+                f"rasputin fetch {source.id}",
+                f"--year {year}" if year is not None else "",
+                f"--domain {domain}" if domain is not None else "",
+                f"--out-crs {shlex.quote(out_crs)}" if out_crs else "",
+                f"--cache {cache}" if cache else "",
+            ]
+            run = " ".join(filter(None, words))
+            raise typer.BadParameter(
+                f"{source.id}/{name} is not in the cache; run: {run}", param_hint="--land-cover"
+            )
     with clock.phase("land cover fractions"):
         try:
             assigned = assign_fractions(
@@ -1562,14 +1625,18 @@ def _class_fractions(
         f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
         err=True,
     )
-    fetched = repository.fetched(name) or datetime.date.today()
+    label = escaped_ascii(name) if source is None else source.id
     values: dict[str, Value] = {
-        "land_cover_codes": f"{source.id} class number; 0 = no data, and every constraint line",
-        "land_cover_source": source.id if year is None else f"{source.id}, {year}",
-        "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
-        "land_cover_licence_note": escaped_ascii(source.licence_note),
-        "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
+        "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
+        "land_cover_source": label if year is None else f"{label}, {year}",
     }
+    if source is not None:  # a file carries no credit, licence or citation
+        fetched = cached_classes.fetched(name) or datetime.date.today()
+        values |= {
+            "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
+            "land_cover_licence_note": escaped_ascii(source.licence_note),
+            "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
+        }
     return assigned.table, assigned.codes, values
 
 
@@ -1768,7 +1835,8 @@ def fetch(
     ] = None,
 ) -> None:
     """Copy what a mesh of the domain reads from a remote source into the tile
-    cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline."""
+    cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline.
+    A source is the package's or an entry of $RASPUTIN_DATA/sources.toml."""
     import asyncio
 
     from tin_engine.fetch.http import FetchError, RangeClient
@@ -1776,11 +1844,12 @@ def fetch(
     from tin_engine.fetch.run import fetch as run
     from tin_engine.io.repository import CacheError, CacheWriter
 
-    if source not in SOURCES:
-        raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(SOURCES)})")
+    known = _known_sources(os.environ)
+    if source not in known:
+        raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(known)})")
     if year is not None:  # 26a: refused here, before any request
         try:
-            SOURCES[source].url_for(year)
+            known[source].url_for(year)
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--year") from exc
     if (domain is None) == (bbox is None):
@@ -1813,7 +1882,7 @@ def fetch(
 
     client, writer = RangeClient(), CacheWriter(root, source)
     try:
-        report = asyncio.run(run(request, SOURCES[source], client, writer, progress=progress))
+        report = asyncio.run(run(request, known[source], client, writer, progress=progress))
     except (FetchError, CacheError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -1876,19 +1945,39 @@ def _resources(threads: int | None, memory_budget: str | None) -> Resources:
         raise typer.BadParameter(str(exc), param_hint=hint) from exc
 
 
+def data_root(environ: Mapping[str, str]) -> Path | None:
+    """The data root, ``$RASPUTIN_DATA``, or None when it is unset or empty:
+    the one reader of the variable. The cache and the user's catalogue file
+    lie in it."""
+    data = environ.get("RASPUTIN_DATA")
+    return Path(data) if data else None
+
+
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
     """The tile cache (B7): ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
-    else None. The one reader of the variable; ``mesh`` passes ``os.environ``."""
+    else None; ``mesh`` passes ``os.environ``."""
     if option is not None:
         return option
-    data = environ.get("RASPUTIN_DATA")
-    return Path(data) / "cache" if data else None
+    root = data_root(environ)
+    return root / "cache" if root else None
 
 
-def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], CachedSource | None]:
+def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
+    """The catalogue's sources with the user's from ``$RASPUTIN_DATA/sources.toml``;
+    a file it refuses is a usage error naming it."""
+    root = data_root(environ)
+    try:
+        return catalogue(root / "sources.toml" if root else None).sources
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _dem_sources(
+    dem: list[str], root: Path | None, known: Mapping[str, RemoteSource]
+) -> tuple[tuple[Path, ...], CachedSource | None]:
     """``--dem`` as given: one catalogue key alone is that cached source
     (23a-1); anything else is a path, so ``./glo30`` is a file."""
-    keys = [d for d in dem if d in SOURCES]
+    keys = [d for d in dem if d in known]
     if not keys:
         return tuple(Path(d) for d in dem), None
     if len(dem) > 1:
@@ -1897,7 +1986,7 @@ def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], C
             param_hint="--dem",
         )
     try:
-        check_values(SOURCES[keys[0]], "heights", "--dem")  # 26a: a class source is not a DEM
+        check_values(known[keys[0]], "heights", "--dem")  # 26a: a class source is not a DEM
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     if root is None:
