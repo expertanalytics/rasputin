@@ -287,7 +287,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     time.py                # to_utc_ms: datetimes to int64 UTC milliseconds,
                            #   refusing a time zone; imports nothing first-party
     frame.py               # receivers_from_mesh: centroid, lat/lon, J, normal,
-                           #   exclusion radius; imports crs
+                           #   exclusion radius; receivers_and_zero_area, the
+                           #   same with the zero-area mask; imports crs
     request.py             # RadiationRequest, frozen settings; imports nothing
                            #   first-party
     geometry.py            # RadiationGeometry: per receiver lat/lon, true
@@ -306,7 +307,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   models; imports resources and
                            #   radiation.request
     geometry.py            # each triangle's normal (true east-north-up),
-                           #   slope, aspect, plan area, centroid height; numpy
+                           #   slope, aspect, plan area, centroid height, from
+                           #   the receiver frame; imports radiation.frame
     forcing.py             # the synthetic spring's weather and the sun's
                            #   correction per step, in NumPy (0 on a flat
                            #   triangle); imports _core and snow.params
