@@ -1,0 +1,114 @@
+{
+ "on": {
+  "triangles": 51527,
+  "frames": 154,
+  "map_area_km2": 304.90955078001747,
+  "frames_asked": {
+   "0": {
+    "day": 0,
+    "sca_values": [
+     1.0
+    ],
+    "covered_by_area": 1.0,
+    "covered_by_count": 1.0,
+    "swe_mean_mm_by_area": 599.9999999999999,
+    "swe_max_mm": 600.0
+   },
+   "122": {
+    "day": 122,
+    "sca_values": [
+     0.0,
+     1.0
+    ],
+    "covered_by_area": 0.41140574279821174,
+    "covered_by_count": 0.6489801463310497,
+    "swe_mean_mm_by_area": 84.72353921449006,
+    "swe_max_mm": 600.0
+   },
+   "153": {
+    "day": 153,
+    "sca_values": [
+     0.0,
+     1.0
+    ],
+    "covered_by_area": 0.04288037756270608,
+    "covered_by_count": 0.15686921419838143,
+    "swe_mean_mm_by_area": 6.803310618680664,
+    "swe_max_mm": 590.1934204101562
+   }
+  },
+  "melt_out": {
+   "never": 8083,
+   "never_area_share": 0.04288037756270608,
+   "last_day": 153.0,
+   "median_day_by_count": 126.0
+  }
+ },
+ "off": {
+  "triangles": 51527,
+  "frames": 154,
+  "map_area_km2": 304.90955078001747,
+  "frames_asked": {
+   "0": {
+    "day": 0,
+    "sca_values": [
+     1.0
+    ],
+    "covered_by_area": 1.0,
+    "covered_by_count": 1.0,
+    "swe_mean_mm_by_area": 599.9999999999999,
+    "swe_max_mm": 600.0
+   },
+   "122": {
+    "day": 122,
+    "sca_values": [
+     0.0,
+     1.0
+    ],
+    "covered_by_area": 0.3992203158947206,
+    "covered_by_count": 0.6402856754711123,
+    "swe_mean_mm_by_area": 81.57870479953141,
+    "swe_max_mm": 600.0
+   },
+   "153": {
+    "day": 153,
+    "sca_values": [
+     0.0,
+     1.0
+    ],
+    "covered_by_area": 0.04048009634208589,
+    "covered_by_count": 0.14895103537950977,
+    "swe_mean_mm_by_area": 6.31505516981964,
+    "swe_max_mm": 589.56884765625
+   }
+  },
+  "melt_out": {
+   "never": 7675,
+   "never_area_share": 0.04048009634208589,
+   "last_day": 153.0,
+   "median_day_by_count": 125.0
+  }
+ },
+ "on_minus_off": {
+  "0": {
+   "swe_diff_range_mm": [
+    0.0,
+    0.0
+   ]
+  },
+  "122": {
+   "swe_diff_range_mm": [
+    0.0,
+    513.0970458984375
+   ]
+  },
+  "153": {
+   "swe_diff_range_mm": [
+    0.0,
+    543.4195556640625
+   ]
+  },
+  "melt_out_later_with_shadows": 10256,
+  "melt_out_max_delay_days": 40.0
+ }
+}
