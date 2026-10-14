@@ -1712,9 +1712,12 @@ rounding). cv = 0 gives `factors (1.0,)`, `deep ()`, as today.
   and the limit ("snow-cv 0.6 is too large for 1 bin: at most 0.577");
   the CLI shows it as it shows the other refusals.
 
-**Defaults.** The CLI's are unchanged (`--bins 1`, `--snow-cv 0.4`), so the
-default run now has a continuous SCA. `SnowJob.distribution`'s default
-becomes `lognormal(0.4, 1)`, the CLI's, where PR 7 set `lognormal(0.0, 1)`.
+**Defaults.** `--bins 1` and, by Ola's ruling of 2026-10-14 (question 12),
+`--snow-cv 0.1` (was 0.4), so the default run has a continuous SCA: with one
+bin a triangle's depth runs from 0.83 to 1.17 times its mean (1 ± √3·0.1),
+496 to 704 mm at 600 mm, and melts out over about 208 mm of melt, about a
+week at 30 mm a day. `SnowJob.distribution`'s default becomes
+`lognormal(0.1, 1)`, the CLI's, where PR 7 set `lognormal(0.0, 1)`.
 `--snow-cv 0` is PR 7's stepped one-bin run. `--snow-cv`'s help: "Variation
 of snow depth within a triangle; within each bin the depth varies linearly,
 so the snow-covered area shrinks smoothly. 0 is uniform snow, at most 0.577
@@ -1869,7 +1872,7 @@ C++ is touched: **the full path** (design review, red, green, review).
 **`@perf`:** no refine or mesh code, so no acceptance run. The Bygdin
 animation is wanted: after green, `@perf` reruns the `snow` command of
 `rasputin_scratch/snow-demo/bygdin-sca-animation/commands.txt` on its
-`bygdin_lc.vtk` (defaults: one bin, cv 0.4, now continuous; `--shadows on`,
+`bygdin_lc.vtk` (defaults: one bin, cv 0.1, now continuous; `--shadows on`,
 8 threads), renders with the same `render_sca.py` and `frames_to_mp4.swift`
 into `rasputin_scratch/snow-demo/bygdin-sca-continuous/`, beside the
 stepped one, and records wall time and peak memory in one line here.
@@ -1883,12 +1886,16 @@ Expected: about PR 7's, the step being a few flops longer per bin.
     1016 mm; melt-out is spread over weeks instead of one step, and the
     last snow lasts longer than with uniform snow. Keep 0.4, or a smaller
     default (0.2: from 0.65 to 1.35 times the mean)? Default: 0.4.
+    **Ruled by Ola, 2026-10-14: 0.1** (from 0.83 to 1.17 times the mean): a
+    triangle fits the terrain within the vertical tolerance, so once it starts
+    to melt it should melt out quickly. Tests that pin the default re-derive
+    their figures at 0.1 from the probe; tests that name cv 0.4 keep it.
 13. **Snow falling on a partly bare triangle covers it again, and the old
     snow is spread over the whole triangle as a wedge** (Shyft's rule, mass
     kept), so after new snow melts the front does not return exactly to
     where it was. Example: 600 mm, melted down to 10 % cover; 1 mm of new
     snow; once it melts, cover is about 90 %, and the last 4 mm melt in 20
-    hours instead of 7 days. Default: Shyft's rule. (The synthetic spring is dry, so
+    hours instead of 7 days. Default: Shyft's rule; **kept by Ola, 2026-10-14**. (The synthetic spring is dry, so
     the animation does not show it.)
 
 ## Review
