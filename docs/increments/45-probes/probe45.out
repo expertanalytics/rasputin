@@ -1,0 +1,22 @@
+== cache_root
+  /given   {"RASPUTIN_DATA": "/data", "XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"} -> /given
+  None     {"RASPUTIN_DATA": "/data", "XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"} -> /data/cache
+  None     {"RASPUTIN_DATA": "", "XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"}     -> /xdg/rasputin
+  None     {"XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"}                          -> /xdg/rasputin
+  None     {"XDG_CACHE_HOME": "rel/cache", "HOME": "/home/u"}                     -> /home/u/.cache/rasputin
+  None     {"XDG_CACHE_HOME": "", "HOME": "/home/u"}                              -> /home/u/.cache/rasputin
+  None     {"HOME": "/home/u"}                                                    -> /home/u/.cache/rasputin
+  None     {"HOME": ""}                                                           -> None
+  None     {}                                                                     -> None
+== Linux machine and power
+  x86 server, 2 sockets x 2 cores x 2 threads, no supply: machine=('Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('ac', None)
+  ARM, no topology dir, laptop on AC + mouse: machine=('unknown', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('ac', 81)
+    raw: AC: online=1, type=Mains | BAT0: capacity=81, status=Charging, type=Battery | 
+  laptop on battery: machine=('Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('battery', 64)
+  battery Full, no mains entry: machine=('Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('ac', 100)
+  mains offline, battery status Unknown: machine=('Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('unknown', 50)
+  UPS only: machine=('Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz', 4, 16767614976, 'Ubuntu 24.04.3 LTS') power=('ac', None)
+== the stored quick baseline under a Machine with system/os_version (alias macos)
+  loads: macOS 27.0 | dump keys: ['cpu_brand', 'p_cores', 'e_cores', 'memory_bytes', 'system', 'os_version', 'python', 'numpy', 'shapely', 'geos', 'pyproj', 'proj']
+  stored bench run.json files: 174, machine block loads in 174
+  today's Machine fields: ['cpu_brand', 'p_cores', 'e_cores', 'memory_bytes', 'macos', 'python', 'numpy', 'shapely', 'geos', 'pyproj', 'proj']

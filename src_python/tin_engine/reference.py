@@ -1,4 +1,4 @@
-"""Our catchment against NVE's polygon: agreement, class, summary.
+"""Our catchment against a reference polygon: agreement, class, summary.
 
 Both outlines are counted on the DEM's node lattice
 (the final window's origin and spacing, run on as far as either polygon
@@ -47,7 +47,7 @@ REFUSAL_CAUSES = ("mixed_grid", "no_river", "other")
 BANDS = ("under 10", "10-100", "100-1000", "over 1000")  # km2
 TILE_GROUPS = ("1", "2", "3-4", "5+")
 SEEDS = ("river", "lake")  # a row's `seeded_by`: the burnt reach or the lake
-_MEASURES = ("area_ratio", "nve_in_ours", "ours_in_nve")
+_MEASURES = ("area_ratio", "reference_in_ours", "ours_in_reference")
 _PERCENTILES = {"min": 0, "p10": 10, "p25": 25, "p50": 50, "p75": 75, "p90": 90, "max": 100}
 
 
@@ -61,8 +61,8 @@ class Agreement:
     ours: int
     ref: int
     both: int
-    nve_in_ours: float
-    ours_in_nve: float
+    reference_in_ours: float
+    ours_in_reference: float
     area_ratio: float
     divide_offset_m: float
     cell_m: float
@@ -105,8 +105,8 @@ def agreement(fine: BaseGeometry, reference: BaseGeometry, meta: RasterMeta) -> 
         ours=ours,
         ref=ref,
         both=both,
-        nve_in_ours=both / ref if ref else 0.0,
-        ours_in_nve=both / ours if ours else 0.0,
+        reference_in_ours=both / ref if ref else 0.0,
+        ours_in_reference=both / ours if ours else 0.0,
         area_ratio=ours * cell / reference.area,
         divide_offset_m=(ref + ours - 2 * both) * cell / reference.length,
         cell_m=math.sqrt(cell),
@@ -126,11 +126,13 @@ def classify(
     if agreement is None:
         return None, None
     a = agreement
-    if min(a.nve_in_ours, a.ours_in_nve) >= MATCH_OVERLAP:
+    if min(a.reference_in_ours, a.ours_in_reference) >= MATCH_OVERLAP:
         return "match", "overlap"
     if a.divide_offset_m <= MATCH_OFFSET_CELLS * a.cell_m:
         return "match", "offset"
-    return ("close" if min(a.nve_in_ours, a.ours_in_nve) >= CLOSE_OVERLAP else "miss"), None
+    return (
+        "close" if min(a.reference_in_ours, a.ours_in_reference) >= CLOSE_OVERLAP else "miss"
+    ), None
 
 
 class Measure(BaseModel):
@@ -153,8 +155,8 @@ class Measures(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     area_ratio: Measure | None
-    nve_in_ours: Measure | None
-    ours_in_nve: Measure | None
+    reference_in_ours: Measure | None
+    ours_in_reference: Measure | None
 
 
 class Group(Measures):

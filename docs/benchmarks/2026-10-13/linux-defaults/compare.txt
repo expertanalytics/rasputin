@@ -1,0 +1,10 @@
+case | inputs | old total median s (969c49e2) | new total median s (87df7c96) | change | new spread (max-min)/median | max_error | tolerance | mesh identical
+tile | 1 | 0.43 | 0.425 | -1.2 % | 9.2 % | 0.9999759197235107 | 1.0 | True
+tile t=1 | 1 | 0.711 | 0.725 | +2.0 % | 3.3 % | 0.9999759197235107 | 1.0 | True
+quarter | 2 | 0.366 | 0.364 | -0.7 % | 5.4 % | 0.9999796549479072 | 1.0 | True
+numedalslagen | 3 | 8.894 | 8.846 | -0.5 % | 0.4 % | 10.0 | 10.0 | True
+lagan | 3 | 14.736 | 14.498 | -1.6 % | 0.2 % | 9.999904677002576 | 10.0 | True
+geilo-al-ramp | 3 | 0.344 | 0.334 | -3.1 % | 2.4 % | 19.984358261826856 | 20.0 | True
+romsdal-slope | 1 | 3.624 | 3.588 | -1.0 % | 0.7 % | 9.999908093780277 | 10.0 | True
+velhas | 1 | None | 0.125 | new case | 2.0 % | 0.49993896484375 | 0.5 | -
+old cases: ['geilo-al-ramp', 'lagan', 'numedalslagen', 'quarter', 'romsdal-slope', 'tile', 'tile t=1'] new cases: ['geilo-al-ramp', 'lagan', 'numedalslagen', 'quarter', 'romsdal-slope', 'tile', 'tile t=1', 'velhas']

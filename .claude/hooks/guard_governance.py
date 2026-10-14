@@ -69,6 +69,8 @@ GOVERNED = (
     "tools/brief.py",  # h9: guard_spawn.py imports it
     "tools/scratchpad.py",  # h16: this guard imports it
     "tools/count_loc.py",  # h16: it computes the arithmetic of CLAUDE.md §2
+    "tools/push_grant.py",  # h20: guard_push and record_review import it
+    "tools/ci_changes.py",  # h20: push_grant imports it
     ".claude/profile.toml",
 )
 

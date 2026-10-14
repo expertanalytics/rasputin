@@ -248,8 +248,8 @@ MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
             {"type": "null"},
         ],
         "default": None,
-        "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, snapped "
-        "outward to its nodes.",
+        "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, or in "
+        "--out-crs's when given, snapped outward to its nodes.",
     },
     "tolerance_near": {
         "anyOf": [
