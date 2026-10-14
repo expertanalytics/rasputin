@@ -12,6 +12,8 @@
 #include <cstddef>
 #include <numbers>
 #include <span>
+#include <stdexcept>
+#include <string>
 
 namespace terrain::radiation {
 
@@ -61,6 +63,26 @@ inline ReceiverCheck check_receivers(const ReceiverSet& r) noexcept {
             return {ReceiverStatus::negative_exclusion_radius, i};
     }
     return {ReceiverStatus::ok, 0};
+}
+
+// check_receivers as a refusal: std::invalid_argument naming the first failing
+// receiver, in the words the binding gives Python.
+inline void require_receivers(const ReceiverSet& r) {
+    const ReceiverCheck c = check_receivers(r);
+    const std::string at = "receiver " + std::to_string(c.index);
+    switch (c.status) {
+    case ReceiverStatus::ok:
+        return;
+    case ReceiverStatus::size_mismatch:
+        throw std::invalid_argument("the receiver arrays differ in length: x, y, z_obs, lat_deg, lon_deg and "
+                                    "exclusion_radius need n values, jacobian 4 n and normal 3 n");
+    case ReceiverStatus::non_finite:
+        throw std::invalid_argument(at + " has a number that is not finite");
+    case ReceiverStatus::polar:
+        throw std::invalid_argument(at + " is at a latitude beyond 89.9 degrees, where east and north are undefined");
+    case ReceiverStatus::negative_exclusion_radius:
+        throw std::invalid_argument(at + " has a negative exclusion radius");
+    }
 }
 
 // Unit east, north and up at a geodetic latitude and longitude, in Earth-fixed
