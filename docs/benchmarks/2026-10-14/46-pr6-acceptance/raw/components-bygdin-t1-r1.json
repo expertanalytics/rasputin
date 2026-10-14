@@ -1,0 +1,23 @@
+{
+  "mesh": "bygdin.vtk",
+  "dem": "/Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925",
+  "triangles": 51527,
+  "zero_area": 0,
+  "threads": 1,
+  "days": 122,
+  "day_stride": 7,
+  "near_raster_shape": [
+    6195,
+    7314
+  ],
+  "near_raster_read_s": 0.5785224160645157,
+  "horizon_search_s": 135.46129170805216,
+  "evaluator_steps": 432,
+  "evaluator_total_s": 4.928918338380754,
+  "evaluator_step_median_ms": 10.881291527766734,
+  "evaluator_step_p05_ms": 10.651433566818014,
+  "evaluator_step_p95_ms": 13.9264038822148,
+  "evaluator_ns_per_triangle_sample": 55.357061301338085,
+  "ru_maxrss_bytes": 575438848,
+  "reach_255_share": 1.0
+}

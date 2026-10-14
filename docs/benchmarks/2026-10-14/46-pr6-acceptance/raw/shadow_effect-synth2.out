@@ -1,0 +1,3 @@
+2027-04-15 {"beam_removed_pct": 0.614402490662358, "mean_dI_change_wm2": -0.9879387035872261, "p05_dI_change_wm2": -5.7055761060577055, "losing_more_than_20_wm2_pct": 0.06128472222222222}
+2027-05-15 {"beam_removed_pct": 0.4288924059456023, "mean_dI_change_wm2": -1.001347657534978, "p05_dI_change_wm2": -5.555204772022989, "losing_more_than_20_wm2_pct": 0.021006944444444446}
+2027-06-21 {"beam_removed_pct": 0.40295229041903413, "mean_dI_change_wm2": -1.0940890670505448, "p05_dI_change_wm2": -5.810958211657066, "losing_more_than_20_wm2_pct": 0.017951388888888888}
