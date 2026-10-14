@@ -74,8 +74,9 @@ that judgment misses.
 | `quarter` | same DEM, `docs/benchmarks/2026-09-26/quarter.geojson` | default | 5 | 0.80 s |
 | `numedalslagen` | DTM10, NVE outline, `corine2018_dtm10_utm33.gpkg`, `--tolerance 10` | default | 1 warm-up + 3 | 6.97 s |
 | `lagan` | GLO-30 cache, SMHI outline, the European CORINE GeoPackage (`U2018_CLC2018_V2020_20u1.gpkg`, 8.9 GB), `--out-crs EPSG:3006`, `--tolerance 10` | default | 1 warm-up + 3 | 16.97 s after 30d |
-| `geilo-al-ramp` | DTM10, increment 33's Geilo-Ål section and the Bergen Line, `--tolerance 20 --tolerance-near ... 1 --tolerance-ramp 0 3000` (`docs/increments/33-feature-tolerance.md`) | default | 1 warm-up + 3 | 0.33 s (median of `total`, `docs/benchmarks/quick/baseline-ac.json`, 2026-10-09) |
+| `geilo-al-ramp` | DTM10, increment 33's Geilo-Ål section and the Bergen Line, `--tolerance 20 --tolerance-near ... 1 --tolerance-ramp 0 3000` (`docs/increments/33-feature-tolerance.md`) | default | 1 warm-up + 3 | 0.33 s (median of `total`, `docs/benchmarks/quick/baseline-apple-m1-max-ac.json`, 2026-10-13) |
 | `romsdal-slope` | DTM10 tile `6901_3`, `--tolerance 10 --tolerance-slope 2 25 35`; its input key the DTM10 directory (`docs/increments/34-slope-tolerance.md`, section 10) | default | 1 warm-up + 3 | not built yet: about 4 to 5 s estimated (increment 34, section 6) |
+| `velhas` | the committed ANADEM extract of the upper Rio das Velhas (`tests/fixtures/velhas/anadem_velhas.tif`, EPSG:4674), `--out-crs EPSG:31983 --bbox 592000 7845500 599000 7854000 --tolerance 0.5`: the one geographic DEM, resampled onto a 30 m grid in a southern UTM zone; its input is in the tree, so any machine runs it (`docs/increments/45-linux-defaults.md`, section 4.4) | default | 1 warm-up + 5 | 0.125 s (median of `total`, `docs/benchmarks/quick/baseline-apple-m1-max-ac.json`, 2026-10-13) |
 
 The catchments are two of 30d's cases, one per feature path that a real run
 takes: a pre-cut national GeoPackage in the DEM's CRS, and the continental
@@ -87,7 +88,10 @@ hotspot is gone once 30d merges; `lagan` carries the hotspot that remains
 case needs the network (meshing is offline, `src_python/tin_engine/sources.py@1b347732:6`). Every run is
 `--binary`. Paths start with `$TREE` (the tree measured) or `$RASPUTIN_DATA`
 (default `../rasputin_data` beside the checkout the tool runs from; set it when
-running from a worktree). The Numedalslågen outline was copied there from
+running from a worktree). A case with an input that does not exist is
+skipped, not refused: the run prints `SKIPPED: <case>: no input <path>` and
+judges the cases that ran, so a machine without Ola's data folder runs the
+in-tree cases (`tile`, `quarter`, `velhas`). The Numedalslågen outline was copied there from
 `rasputin_scratch/norway/numedalslagen/numedalslagen_outline_nve.geojson`
 (a results folder) on 2026-10-07; `cmp` of the two files finds no difference.
 
@@ -97,15 +101,25 @@ replacing `cli.PhaseClock` with a subclass that keeps its instance, and adds
 `phases` and `total_s` to its `BENCH` line (old records still parse). Also
 `max_error` and the mesh's SHA-256 from the last run of each case.
 
-**The baseline** is one file per power state, `docs/benchmarks/quick/baseline-ac.json`
-and `baseline-battery.json`, a run of the check on master: commit, machine,
-input fingerprint, keyed by the input as written in `cases.toml` (for a file
+**The baseline** is one file per machine and power state,
+`docs/benchmarks/quick/baseline-<cpu>-<power>.json`, where `<cpu>` is the CPU
+name lower-cased with each run of characters other than `a-z0-9` made one `-`
+(Ola's Mac: `baseline-apple-m1-max-ac.json`), so another machine's save never
+overwrites his. It is a run of the check on master: commit, machine,
+each case's input list as written in `cases.toml`, and each input's
+fingerprint, keyed by the input as written (for a file
 under 100 MB: size and content SHA-256; at 100 MB or more: size and mtime; for
 a directory, such as DTM10's 762 files or the GLO-30 cache: the
 SHA-256 of its sorted relative file names, sizes and mtimes, recursive, no
 content read),
 and per case and measure the median, min and max. A machine, power state or
-input mismatch is `NO BASELINE: <field>`, never a cross comparison. The
+input mismatch is `NO BASELINE: <field>`, never a cross comparison. Inputs
+are compared per case, for each case in both records: the two input lists
+must name the same inputs with the same fingerprints, else
+`NO BASELINE: input <name> of <case> changed`. A case only the baseline holds
+is not compared; a case only the new run holds is `NOT JUDGED`.
+`--save-baseline` with skipped cases saves the cases that ran, and the
+`SKIPPED:` lines print above `baseline saved:`. The
 baselines, `cases.toml` and `hotspots.toml` are read from, and
 `--save-baseline` writes to, the `docs/benchmarks/quick` of the checkout the
 tool runs from, even with `--tree` naming another. It is
@@ -300,7 +314,8 @@ name is the `--stats` row `mesh` writes (`src_python/tin_engine/cli.py@b3439629:
 1. **`$TREE` and `$RASPUTIN_DATA` in `cases.toml`**, expanded when the tool runs.
    *Kept.* The default data folder is `rasputin_data` beside the checkout the
    tool runs from, which is wrong in a worktree under `.claude/worktrees/`.
-   The run then stops with exit 3, naming the missing path. From a worktree,
+   Since increment 45 the cases whose inputs are missing are skipped
+   (`SKIPPED: <case>: no input <path>`), no longer exit 3. From a worktree,
    set `RASPUTIN_DATA`.
 2. **Fingerprints keyed by the input as written, not the expanded path.**
    *Kept*: a master baseline and a branch worktree expand `$TREE` differently.

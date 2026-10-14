@@ -3,7 +3,7 @@
 Design: ``docs/increments/perf-quick-check.md``. ``run`` builds the tree's
 ``_core`` in Release (``bench.build``), times the fixed cases in
 ``QUICK/cases.toml`` through ``bench.py _child``, and judges each case's total
-and its ``--stats`` phases against ``QUICK/baseline-<power>.json``. Every
+and its ``--stats`` phases against ``QUICK/baseline-<cpu>-<power>.json``. Every
 subprocess gets the time left before ``--budget`` less 10 s; a case whose
 baseline does not fit in what is left is skipped. Exit 0 no change or faster,
 1 slower or broken, 2 no baseline, 3 bad input, 4 out of time.
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import statistics
 import sys
 import tempfile
@@ -25,7 +26,7 @@ from typing import Annotated
 import bench
 import typer
 from bench import BenchError, Machine, Verdict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 REPO = Path(__file__).resolve().parents[1]
 QUICK = REPO / "docs/benchmarks/quick"
@@ -33,6 +34,7 @@ MAX_BUDGET = 900.0
 #: Files under this many bytes are fingerprinted by content as well.
 READ_UNDER = 100_000_000
 make_runner = bench.make_runner
+make_host = bench.make_host
 
 
 # ------------------------------------------------------------------ models
@@ -48,6 +50,8 @@ class CaseResult(BaseModel):
     mesh_sha256: str
     #: ``total`` is the clock's total; every other key a ``--stats`` phase.
     measures: dict[str, Spread]
+    #: Its case's inputs as written in cases.toml; empty in a record that did not store them.
+    inputs: list[str] = Field(default_factory=list)
 
 
 class QuickRecord(BaseModel):
@@ -111,10 +115,19 @@ def _mismatch(new: QuickRecord, base: QuickRecord) -> str | None:
     for key, value in new.machine.model_dump().items():
         if value != old_machine[key]:
             return f"machine {key}: {value} vs {old_machine[key]}"
-    for key in sorted(new.inputs.keys() | base.inputs.keys()):
-        if new.inputs.get(key) != base.inputs.get(key):
-            return f"input {key} changed"
+    for name in sorted(new.cases.keys() & base.cases.keys()):
+        ours, theirs = new.cases[name].inputs, base.cases[name].inputs
+        for key in sorted({*ours, *theirs}):
+            both = key in ours and key in theirs
+            if not both or new.inputs.get(key) != base.inputs.get(key):
+                return f"input {key} of {name} changed"
     return None
+
+
+def baseline_path(machine: Machine, power: str) -> Path:
+    """One stored baseline per machine and power state, named by the CPU."""
+    slug = re.sub(r"[^a-z0-9]+", "-", machine.cpu_brand.lower()).strip("-")
+    return QUICK / f"baseline-{slug}-{power}.json"
 
 
 def verdict(new: QuickRecord, base: QuickRecord | None) -> Verdict:
@@ -209,17 +222,20 @@ def run(
 
     runner = make_runner()
     try:
-        cases = load_cases(QUICK / "cases.toml")
-        for path in (Path(expand(i)) for c in cases for i in c.inputs):
-            if not path.exists():
-                raise BenchError(f"{path}: no such input")
+        cases = []
+        for c in load_cases(QUICK / "cases.toml"):  # a case without its input is skipped
+            gone = next((p for i in c.inputs if not (p := Path(expand(i))).exists()), None)
+            if gone is None:
+                cases.append(c)
+            else:
+                typer.echo(f"SKIPPED: {c.name}: no input {gone}")
         inputs = {i: fingerprint(Path(expand(i))) for c in cases for i in c.inputs}
-        before = bench.parse_pmset(runner.run(bench.PMSET).stdout)
-        stored = QUICK / f"baseline-{before.state}.json"
+        host = make_host(runner)
+        before, machine = host.power(), host.machine()
+        stored = baseline_path(machine, before.state)
         base = QuickRecord.model_validate_json(stored.read_text()) if stored.exists() else None
         pkg, _ = bench.build(runner, tree, deadline=deadline)
         commit = bench._checked(runner, ["git", "-C", str(tree), "rev-parse", "HEAD"])
-        machine = bench._machine(runner)
     except (BenchError, OSError, ValueError) as exc:  # ValidationError is a ValueError
         late = time.monotonic() > deadline - 10
         typer.echo(f"{'OUT OF TIME: the build' if late else 'bench_quick:'} {exc}")
@@ -260,18 +276,19 @@ def run(
                 max_error=children[-1].max_error,
                 mesh_sha256=_mesh_sha256(out),
                 measures=measures,
+                inputs=case.inputs,
             )
             continue
         missed += [n for _, _, n in plan[k:]]
         break
-    power = bench.combine_power(before, bench.parse_pmset(runner.run(bench.PMSET).stdout))
+    power = bench.combine_power(before, host.power())
     record = QuickRecord(commit=commit.stdout.strip(), machine=machine, power=power.state,
                          inputs=inputs, cases=results)  # fmt: skip
     v = verdict(record, base)
     lines = [*v.lines, *hotspots(record, load_hotspots(QUICK / "hotspots.toml"))]
     status, code = (f"OUT OF TIME: {', '.join(missed)}", 4) if missed else (v.status, v.exit_code)
     if save and not missed and power.state in ("ac", "battery"):
-        path = QUICK / f"baseline-{power.state}.json"
+        path = baseline_path(machine, power.state)
         path.write_text(record.model_dump_json(indent=1) + "\n")
         lines.append(f"baseline saved: {path}")
     typer.echo("\n".join([*lines, status]))

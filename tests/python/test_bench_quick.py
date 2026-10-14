@@ -20,7 +20,7 @@ the red step's handback ("Pinned or assumed beyond the design"):
   `args` (the `mesh` argv, without `--out` and `--binary`, which the tool adds)
   and `inputs`; `hotspots.toml` is `[[hotspot]]` tables of `case`, `phase`,
   `share` (percent), `date` and `ruling`;
-* `QUICK` is the directory holding `cases.toml`, `baseline-<power>.json` and
+* `QUICK` is the directory holding `cases.toml`, `baseline-<cpu>-<power>.json` and
   `hotspots.toml`, and `make_runner` the factory the tests replace, both
   module attributes of `bench_quick`.
 
@@ -102,6 +102,9 @@ def lagan(**measures: dict[str, float]) -> dict[str, Any]:
         "max_error": 9.97,
         "mesh_sha256": "c" * 64,
         "measures": {**base, **measures},
+        # The case's inputs as cases.toml writes them: the per-case input rule
+        # looks a changed fingerprint up through this list.
+        "inputs": ["lagan dem", "lagan features"],
     }
 
 
@@ -312,7 +315,7 @@ def test_a_geos_upgrade_is_no_baseline_naming_geos(quick: ModuleType) -> None:
     import pyproj
     import shapely
 
-    machine = sys.modules["bench"]._machine(FakeRunner()).model_dump()
+    machine = sys.modules["bench"].MacHost(FakeRunner()).machine().model_dump()
     assert machine["geos"] == shapely.geos_version_string
     assert machine["proj"] == pyproj.proj_version_str
     new, base = record(), record()
@@ -403,12 +406,13 @@ def test_the_shipped_cases_are_sections_3_table(quick: ModuleType) -> None:
         ("lagan", [0], 1, 3),
         ("geilo-al-ramp", [0], 1, 3),
         ("romsdal-slope", [0], 1, 3),
+        ("velhas", [0], 1, 5),
     ]
     # Exact match on "--tolerance": geilo-al-ramp's "--tolerance-near" is a different flag.
     tolerance = {c.name: c.args[c.args.index("--tolerance") + 1] for c in cases}
     assert {k: float(v) for k, v in tolerance.items()} == {
         "tile": 1.0, "quarter": 1.0, "numedalslagen": 10.0, "lagan": 10.0,
-        "geilo-al-ramp": 20.0, "romsdal-slope": 10.0,
+        "geilo-al-ramp": 20.0, "romsdal-slope": 10.0, "velhas": 0.5,
     }  # fmt: skip
     # Increment 34, section 10: the Romsdalen tile with the slope's ramp, and the
     # DTM10 directory as its input key, so every case's baseline still matches.
@@ -423,6 +427,21 @@ def test_the_shipped_cases_are_sections_3_table(quick: ModuleType) -> None:
     assert lagan_args[lagan_args.index("--out-crs") + 1] == "EPSG:3006"
     for c in cases:
         assert "--out" not in c.args and "--binary" not in c.args, c.name
+
+
+def test_the_velhas_case_is_public_and_in_the_tree(quick: ModuleType) -> None:
+    """The one case on a geographic DEM, a resampled target grid and a
+    southern UTM zone, read from the tree, so any machine can run it."""
+    (velhas,) = [c for c in quick.load_cases(SHIPPED / "cases.toml") if c.name == "velhas"]
+    dem = "$TREE/tests/fixtures/velhas/anadem_velhas.tif"
+    assert velhas.args == [
+        "mesh", "--dem", dem, "--out-crs", "EPSG:31983",
+        "--bbox", "592000", "7845500", "599000", "7854000", "--tolerance", "0.5",
+    ]  # fmt: skip
+    assert velhas.inputs == [dem]
+    for name in velhas.inputs:
+        assert name.startswith("$TREE/"), name
+        assert (REPO / name.removeprefix("$TREE/")).is_file(), name
 
 
 def test_the_shipped_hotspots_file_loads(quick: ModuleType) -> None:
@@ -549,6 +568,8 @@ SYSCTL = {
     "hw.perflevel1.physicalcpu": "4",
     "hw.memsize": str(48 * 2**30),
 }
+#: The baseline a run on the fake Mac (`Apple M4 Pro`, AC) saves and reads.
+SAVED = "baseline-apple-m4-pro-ac.json"
 VTK = b"# vtk DataFile Version 3.0\nrasputin\nBINARY\nDATASET POLYDATA\nPOINTS 0 double\n"
 
 
@@ -651,8 +672,16 @@ def write_cases(places: dict[str, Path], alpha: str = "", beta: str = "") -> Non
 
 @pytest.fixture
 def use_runner(quick: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Callable[[FakeRunner], None]:
+    """The fake runner, and the Mac host over it whatever this machine is, so
+    a run test means the same on CI's Linux as on the Mac."""
+
     def install(fake: FakeRunner) -> None:
         monkeypatch.setattr(quick, "make_runner", lambda: fake)
+        monkeypatch.setattr(
+            quick, "make_host",
+            lambda runner, system="darwin": sys.modules["bench"].MacHost(runner),
+            raising=False,
+        )  # fmt: skip
 
     return install
 
@@ -668,8 +697,8 @@ def last_line(output: str) -> str:
 def save_baseline(quick: ModuleType, places: dict[str, Path], use: Callable[..., None]) -> Path:
     use(FakeRunner())
     invoke(quick, places, "--save-baseline")
-    path = places["quick"] / "baseline-ac.json"
-    assert path.is_file(), "--save-baseline wrote no baseline-ac.json"
+    path = places["quick"] / SAVED
+    assert path.is_file(), f"--save-baseline wrote no {SAVED}: {sorted(places['quick'].iterdir())}"
     return path
 
 
@@ -695,7 +724,7 @@ def test_save_baseline_writes_median_min_max_without_the_warm_up(
     fake = FakeRunner(totals=(100.0, 1.0, 2.0, 4.0))
     use_runner(fake)
     invoke(quick, place, "--save-baseline")
-    data = json.loads((place["quick"] / "baseline-ac.json").read_text())
+    data = json.loads((place["quick"] / SAVED).read_text())
     assert data["power"] == "ac"
     assert data["commit"] == "a" * 40
     assert data["cases"]["alpha"]["measures"]["total"] == {"median": 2.0, "min": 1.0, "max": 4.0}
@@ -713,7 +742,7 @@ def test_a_case_at_two_thread_counts_is_recorded_once_per_count(
     fake = FakeRunner()
     use_runner(fake)
     invoke(quick, place, "--save-baseline")
-    data = json.loads((place["quick"] / "baseline-ac.json").read_text())
+    data = json.loads((place["quick"] / SAVED).read_text())
     assert sorted(data["cases"]) == ["alpha", "alpha t=1", "beta"]
     alpha = [c for c in fake.children() if str(place["alpha"]) in c]
     threads = sorted(c[c.index("--threads") + 1] for c in alpha)
@@ -793,7 +822,7 @@ def test_without_a_stored_baseline_the_run_exits_2(
     result = invoke(quick, place)
     assert result.exit_code == 2, result.output
     assert last_line(result.output).startswith("NO BASELINE")
-    assert not (place["quick"] / "baseline-ac.json").exists()
+    assert list(place["quick"].glob("baseline-*.json")) == []
 
 
 def test_a_changed_input_file_is_no_baseline(
@@ -806,6 +835,181 @@ def test_a_changed_input_file_is_no_baseline(
     result = invoke(quick, place)
     assert result.exit_code == 2, result.output
     assert last_line(result.output).startswith("NO BASELINE: ")
+
+
+# ------------------------------------------ inputs per case, and the skip (T9)
+
+
+def per_case(lists: dict[str, list[str]], prints: dict[str, str]) -> dict[str, Any]:
+    """A record whose cases read `lists` and whose inputs have `prints`."""
+    data = record()
+    data["cases"] = {name: {**lagan(), "inputs": names} for name, names in lists.items()}
+    data["inputs"] = prints
+    return data
+
+
+@pytest.mark.parametrize(
+    ("new", "base", "reason"),
+    [
+        pytest.param(({"p": ["a"]}, {"a": "x"}), ({"p": ["a"], "q": ["b"]}, {"a": "x", "b": "y"}),
+                     None, id="a-case-only-the-baseline-holds-is-not-compared"),
+        pytest.param(({"p": ["a"]}, {"a": "x2"}), ({"p": ["a"]}, {"a": "x"}),
+                     "input a of p changed", id="content-edited"),
+        pytest.param(({"p": ["c"]}, {"c": "z"}), ({"p": ["a"]}, {"a": "x"}),
+                     "input a of p changed", id="another-file-the-first-name-in-order"),
+        pytest.param(({"p": ["a"]}, {"a": "x"}), ({"p": ["a", "b"]}, {"a": "x", "b": "y"}),
+                     "input b of p changed", id="an-input-dropped"),
+        pytest.param(({"p": ["a"], "r": ["c"]}, {"a": "x", "c": "z"}), ({"p": ["a"]}, {"a": "x"}),
+                     None, id="a-new-case-is-left-to-the-verdict"),
+        pytest.param(({"p": ["a"]}, {"a": "x"}), ({"p": []}, {"a": "x"}),
+                     "input a of p changed", id="a-record-without-lists"),
+    ],
+)  # fmt: skip
+def test_inputs_are_compared_per_case_in_both_records(
+    quick: ModuleType,
+    new: tuple[dict[str, list[str]], dict[str, str]],
+    base: tuple[dict[str, list[str]], dict[str, str]],
+    reason: str | None,
+) -> None:
+    """For each case in both records, every name in either record's list must
+    be in both lists, with one fingerprint in both records."""
+    assert quick._mismatch(make(quick, per_case(*new)), make(quick, per_case(*base))) == reason
+
+
+def test_a_record_saved_without_lists_loads_with_empty_ones(quick: ModuleType) -> None:
+    data = record()
+    del data["cases"]["lagan"]["inputs"]
+    assert make(quick, data).cases["lagan"].inputs == []
+
+
+def lines_starting(output: str, prefix: str) -> list[str]:
+    return [line for line in output.splitlines() if line.startswith(prefix)]
+
+
+def test_a_case_whose_input_is_absent_is_skipped_and_the_rest_judged(
+    quick: ModuleType, place: dict[str, Path], use_runner: Callable[[FakeRunner], None]
+) -> None:
+    """Against today's rule (every input of either record) this is `NO
+    BASELINE: input <beta's path> changed`, exit 2."""
+    write_cases(place)
+    save_baseline(quick, place, use_runner)
+    place["beta"].unlink()
+    fake = FakeRunner()
+    use_runner(fake)
+    result = invoke(quick, place)
+    assert result.exit_code == 0, result.output
+    assert f"SKIPPED: beta: no input {place['beta']}" in result.output.splitlines()
+    assert not fake.started(str(place["beta"]))
+    assert fake.started(str(place["alpha"]))
+    assert lines_starting(result.output, "NOT JUDGED") == []
+    assert last_line(result.output) == "NO CHANGE"
+
+
+def test_a_save_with_a_skip_keeps_what_ran_and_says_so_first(
+    quick: ModuleType, place: dict[str, Path], use_runner: Callable[[FakeRunner], None]
+) -> None:
+    write_cases(place)
+    place["beta"].unlink()
+    use_runner(FakeRunner())
+    result = invoke(quick, place, "--save-baseline")
+    lines = result.output.splitlines()
+    skipped = lines.index(f"SKIPPED: beta: no input {place['beta']}")
+    (saved,) = [n for n, line in enumerate(lines) if line.startswith("baseline saved: ")]
+    assert skipped < saved, result.output
+    data = json.loads((place["quick"] / SAVED).read_text())
+    assert sorted(data["cases"]) == ["alpha"]
+    assert sorted(data["inputs"]) == [str(place["alpha"])]
+    assert data["cases"]["alpha"]["inputs"] == [str(place["alpha"])]
+
+    place["beta"].write_bytes(b"beta")
+    fake = FakeRunner()
+    use_runner(fake)
+    result = invoke(quick, place)
+    assert result.exit_code == 0, result.output
+    assert "NOT JUDGED: beta is not in the baseline" in result.output.splitlines()
+    assert fake.started(str(place["alpha"])) and fake.started(str(place["beta"]))
+    assert last_line(result.output) == "NO CHANGE"
+
+
+@pytest.mark.parametrize("alpha_too", [False, True], ids=["all-run", "alpha-skipped"])
+def test_a_case_that_keeps_its_name_but_reads_another_file_is_no_baseline(
+    quick: ModuleType,
+    place: dict[str, Path],
+    use_runner: Callable[[FakeRunner], None],
+    alpha_too: bool,
+) -> None:
+    """beta's `--dem` and `inputs` now name `beta2.tif`: its old timings say
+    nothing about the new file. Under a rule that looks only at the new
+    run's names this is `NO CHANGE`, exit 0."""
+    write_cases(place)
+    save_baseline(quick, place, use_runner)
+    old = place["beta"]
+    place["beta"] = old.with_name("beta2.tif")
+    place["beta"].write_bytes(b"beta2")
+    write_cases(place)
+    if alpha_too:
+        place["alpha"].unlink()
+    use_runner(FakeRunner())
+    result = invoke(quick, place)
+    assert result.exit_code == 2, result.output
+    assert last_line(result.output) == f"NO BASELINE: input {old} of beta changed"
+    assert lines_starting(result.output, "SLOWER") == []
+    assert "NO CHANGE" not in result.output
+
+
+def test_another_machine_saves_and_reads_its_own_baseline(
+    quick: ModuleType, place: dict[str, Path], use_runner: Callable[[FakeRunner], None]
+) -> None:
+    """A second machine's save writes beside the first's, never over it."""
+    write_cases(place)
+    theirs = place["quick"] / "baseline-apple-m1-max-ac.json"
+    theirs.write_text("not read by this machine\n")
+    save_baseline(quick, place, use_runner)
+    assert theirs.read_text() == "not read by this machine\n"
+    use_runner(FakeRunner())
+    result = invoke(quick, place)
+    assert result.exit_code == 0, result.output
+    assert last_line(result.output) == "NO CHANGE"
+
+
+@pytest.mark.parametrize(
+    ("brand", "name"),
+    [
+        ("Apple M1 Max", "baseline-apple-m1-max-ac.json"),
+        ("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+         "baseline-intel-r-xeon-r-platinum-8370c-cpu-2-80ghz-ac.json"),
+    ],
+)  # fmt: skip
+def test_the_baseline_is_named_by_the_cpu_and_the_power(
+    quick: ModuleType, brand: str, name: str
+) -> None:
+    machine = quick.Machine.model_validate({**MACHINE, "cpu_brand": brand})
+    assert quick.baseline_path(machine, "ac") == quick.QUICK / name
+
+
+def test_the_quick_check_on_an_unsupported_system_exits_3_and_writes_nothing(
+    quick: ModuleType, place: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_cases(place)
+    monkeypatch.setattr(quick, "make_runner", FakeRunner)
+    real = sys.modules["bench"].make_host
+    monkeypatch.setattr(quick, "make_host", lambda runner, system="win32": real(runner, "win32"))
+    result = invoke(quick, place, "--save-baseline")
+    assert result.exit_code == 3, result.output
+    assert "win32" in result.output
+    assert list(place["quick"].glob("baseline-*.json")) == []
+
+
+def test_every_stored_quick_baseline_loads_as_a_mac_record(quick: ModuleType) -> None:
+    """A baseline written before the system field reads its `macos` key as
+    `os_version`, and is a macOS record."""
+    paths = sorted(SHIPPED.glob("baseline-*.json"))
+    assert paths
+    for path in paths:
+        raw = json.loads(path.read_text())["machine"]
+        machine = quick.QuickRecord.model_validate_json(path.read_text()).machine
+        assert machine.system == "macOS", path.name
+        assert machine.os_version == raw.get("os_version", raw.get("macos")), path.name
 
 
 # ----------------------------------------------------------- one real child

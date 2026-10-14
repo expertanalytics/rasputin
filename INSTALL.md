@@ -185,8 +185,11 @@ The static checks CI runs are listed in `CLAUDE.md`, section 4.
 
 ### Remote DEMs: `rasputin fetch`
 
-Two DEMs rasputin fetches itself, into a tile cache (`$RASPUTIN_DATA/cache`
-by default, or `--cache DIR`):
+Two DEMs rasputin fetches itself, into a tile cache: `--cache DIR` when
+given, else `$RASPUTIN_DATA/cache`, else `$XDG_CACHE_HOME/rasputin`, else
+`~/.cache/rasputin`, so a first run needs no setting. The directory is made
+when the first tile is written, and `fetch` ends its summary line with the
+directory it wrote into:
 
 ```sh
 rasputin fetch glo30 --domain catchment.geojson   # --dry-run prints the plan
