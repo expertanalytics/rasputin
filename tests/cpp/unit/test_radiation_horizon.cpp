@@ -41,8 +41,8 @@
 //   None read as zeros to the asked D_far (pin 4) . F7, S3
 //   int16 truncated or floored (pin 5) ............ Q1, T1 h(45), F7
 //
-// Interface assumed (header include/terrain/radiation/horizon.hpp, namespace
-// terrain::radiation; names chosen here and listed in the handback):
+// Interface under test (header include/terrain/radiation/horizon.hpp,
+// namespace terrain::radiation):
 //
 //   struct HorizonParams {
 //       std::size_t n_directions;  // N; direction k at true azimuth k 360/N
