@@ -21,6 +21,13 @@ the C++ in section 4.2):
   ...) and, for a non-finite value, the first triangle (`triangle 2`), and
   leaves the state as it was. `radiation_anomaly` is empty under `none`.
   Releases the GIL.
+
+Linear bins (section 12, PR 8): `_core.SnowDistribution(factors, deep=None)`,
+each bin's deep-edge factor, f_k <= deep_k <= 2 f_k, refused otherwise with a
+`ValueError` (V3); a read-only `.deep`, float64, divided by the factors' mean,
+equal to `.factors` when no deep is given (V4); the invariants I2 (cover in
+[0, 1]), I7 and I8 as Hypothesis properties P6-P8. `SnowState` gains no Python
+property, so the cover is seen through `sca`.
 """
 
 from __future__ import annotations
@@ -420,3 +427,132 @@ def test_step_releases_the_gil(core: Any) -> None:
     _, ticks, elapsed = ticks_during(run)
     assert elapsed >= 0.05, f"took only {elapsed:.3f}s: too fast to see; enlarge the state"
     assert ticks >= RELEASED_TICKS, f"only {ticks} ticks in {elapsed:.3f}s: it holds the GIL"
+
+
+# ---------------------------------------------------------------- V3, V4 (section 12.7)
+
+BETWEEN = "a bin's deep edge must lie between its mean and twice its mean"
+
+
+class TestLinearDistribution:
+    @pytest.mark.parametrize(
+        ("deep", "reason"),
+        [
+            ([0.5, 0.8, 1.2], "deep"),
+            ([0.5, 0.8, 1.2, 1.5, 3.0], "deep"),
+            ([0.5, NAN, 1.2, 1.5], "deep"),
+            ([0.5, 0.8, 1.2, INF], "deep"),
+            ([0.5, 0.8, 0.99 * 1.2, 1.5], BETWEEN),
+            ([0.5, 0.8, 1.2, 2.01 * 1.5], BETWEEN),
+        ],
+    )
+    def test_v3_refused(self, core: Any, deep: list[float], reason: str) -> None:
+        with pytest.raises(ValueError, match=reason):
+            core.SnowDistribution(FOUR, deep)
+
+    def test_v3_the_mean_and_twice_the_mean_are_accepted(self, core: Any) -> None:
+        d = core.SnowDistribution([0.0, 0.5, 1.0, 2.5], deep=[0.0, 0.5, 2.0, 5.0])
+        assert d.deep.tolist() == [0.0, 0.5, 2.0, 5.0]
+
+    def test_v4_deep_round_trips_divided_by_the_mean(self, core: Any) -> None:
+        f, deep = np.array([0.5, 1.5 + 2e-10]), np.array([1.0, 3.0 + 4e-10])
+        d = core.SnowDistribution(f, deep)
+        assert isinstance(d.deep, np.ndarray) and d.deep.dtype == np.float64
+        np.testing.assert_allclose(d.deep, deep / f.mean(), rtol=0, atol=1e-15)
+
+    @pytest.mark.parametrize("deep", [None, []])
+    def test_v4_no_deep_is_flat(self, core: Any, deep: list[float] | None) -> None:
+        d = core.SnowDistribution(FOUR, deep)
+        assert d.deep.tolist() == d.factors.tolist()
+
+    def test_l2_the_cover_is_a_fraction(self, core: Any) -> None:
+        """Section 12.7's L2 through the binding: sca 0.9 from one bin."""
+        s = core.SnowState.uniform(1, core.SnowDistribution([1.0], [1.5]), 100.0)
+        assert s.sca[0] == 1.0
+        step(core, s, 20.0, 0.0)
+        expect(s, 40.5, 4.05, 55.45, pytest.approx(0.9, abs=1e-12))
+
+
+# ---------------------------------------------------------------- P6-P8 (section 12.7)
+
+
+@st.composite
+def linear(draw: st.DrawFn) -> tuple[list[float], list[float]]:
+    """N in 1..8, ascending factors of mean 1, deep_k in [f_k, 2 f_k]."""
+    n = draw(st.integers(1, 8))
+    f = sorted(draw(st.lists(st.floats(0.2, 2.0), min_size=n, max_size=n)))
+    mean = sum(f) / n
+    f = [v / mean for v in f]
+    spread = draw(st.lists(st.floats(0.0, 1.0), min_size=n, max_size=n))
+    return f, [v * (1.0 + u) for v, u in zip(f, spread, strict=True)]
+
+
+spring = st.lists(
+    st.tuples(
+        st.lists(st.floats(-10.0, 15.0), min_size=N_TRIANGLES, max_size=N_TRIANGLES),
+        st.lists(
+            st.one_of(st.just(0.0), st.floats(0.0, 20.0)),
+            min_size=N_TRIANGLES,
+            max_size=N_TRIANGLES,
+        ),
+        st.lists(st.floats(-300.0, 300.0), min_size=N_TRIANGLES, max_size=N_TRIANGLES),
+    ),
+    min_size=1,
+    max_size=60,
+)
+
+
+class TestLinearProperties:
+    @PROPERTY
+    @given(
+        dist=linear(),
+        steps=spring,
+        initial=st.floats(0.0, 1e3),
+        mode=st.sampled_from(["none", "melt_factor", "threshold"]),
+    )
+    def test_p6_mass_and_bounds(
+        self, core: Any, dist: Any, steps: list[Any], initial: float, mode: str
+    ) -> None:
+        """Scale: swe up to about 2e3 mm, P up to 20 mm per six-hour step."""
+        s = core.SnowState.uniform(N_TRIANGLES, core.SnowDistribution(*dist), initial)
+        for t, p, di in steps:
+            before, precip = s.swe.copy(), np.array(p)
+            step(core, s, np.array(t), precip, np.array(di), mode=mode, dt=6 * 3600.0)
+            tol = 1e-9 * np.maximum(1.0, before + precip)
+            assert (np.abs(s.swe - (before + precip - s.outflow)) <= tol).all()
+            assert (s.sp >= 0.0).all() and (s.sw >= 0.0).all()
+            assert (s.sw <= HBV["lw"] * s.sp + 1e-12).all()
+            assert ((s.sca >= 0.0) & (s.sca <= 1.0)).all() and (s.outflow >= 0.0).all()
+
+    @PROPERTY
+    @given(dist=linear(), steps=spring, mode=st.sampled_from(["none", "melt_factor", "threshold"]))
+    def test_p7_without_snowfall_sca_never_rises(
+        self, core: Any, dist: Any, steps: list[Any], mode: str
+    ) -> None:
+        """Scale: sca in [0, 1]; the probe's largest rise was 2.2e-16."""
+        s = core.SnowState.uniform(N_TRIANGLES, core.SnowDistribution(*dist), 600.0)
+        for t, p, di in steps:
+            temperature = np.array(t)
+            rain = np.where(temperature >= HBV["tx"], np.array(p), 0.0)  # never snow
+            sca = s.sca.copy()
+            step(core, s, temperature, rain, np.array(di), mode=mode, dt=6 * 3600.0)
+            assert (s.sca <= sca + 1e-12).all()
+
+    @PROPERTY
+    @given(
+        deep=st.floats(1.1, 2.0),
+        swe=st.floats(10.0, 1000.0),
+        temperature=st.lists(st.floats(0.01, 10.0), min_size=1, max_size=200),
+    )
+    def test_p8_one_bin_follows_the_depletion_curve(
+        self, core: Any, deep: float, swe: float, temperature: list[float]
+    ) -> None:
+        """Scale: swe 10 to 1000 mm; deep from 1.1, since the curve divides by
+        deep0 - lo0 = 2 (deep - 1) swe and a near-flat bin amplifies rounding."""
+        s = core.SnowState.uniform(1, core.SnowDistribution([1.0], [deep]), swe)
+        deep0, lo0, melt = deep * swe, (2.0 - deep) * swe, 0.0
+        for t in temperature:
+            step(core, s, t, 0.0, cfr=0.0)
+            melt += HBV["cx"] * t
+            want = min(1.0, max(0.0, (deep0 - melt) / (deep0 - lo0)))
+            assert s.sca[0] == pytest.approx(want, abs=1e-12)
