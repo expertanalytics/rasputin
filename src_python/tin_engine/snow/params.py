@@ -15,6 +15,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from tin_engine.radiation.request import RadiationRequest
 from tin_engine.resources import Resources
 
 _FROZEN = ConfigDict(frozen=True, allow_inf_nan=False)
@@ -123,6 +124,8 @@ class SnowJob(BaseModel):
     frames: FrameSpec = Field(default=FrameSpec(), validate_default=True)
     #: Snow water equivalent on every triangle at the start, mm.
     initial_swe_mm: float = Field(default=600.0, ge=0.0)
+    #: The horizon search's settings for cast shadows; None: an open sky.
+    shadows: RadiationRequest | None = None
 
     @field_validator("frames")
     @classmethod

@@ -57,8 +57,9 @@ LAYERS: tuple[dict[str, str], ...] = (
         "viz.scene": "viz.protocols",
         "radiation": "", "radiation.time": "",  # 46: UTC milliseconds, NumPy only
         "radiation.frame": "crs",  # 46: the receiver frame, pyproj through crs
-        "snow.params": "resources",  # 46: the run's parameters carry its threads and memory
-        "snow.geometry": "", "snow.terrain": "",  # 46: NumPy only
+        "snow.params": "radiation.request resources",  # 46: threads, memory and the shadow request
+        "snow.geometry": "radiation.frame",  # 46: slope and aspect from the frame's normals
+        "snow.terrain": "",  # 46: NumPy only
         "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection
@@ -86,7 +87,10 @@ LAYERS: tuple[dict[str, str], ...] = (
         "border_simplify": "_core",  # 32: land-cover borders within a band
         "land_cover_fractions": "_core crs io.models io.repository",  # 26b: class_areas
         "snow.forcing": "_core snow.params",  # 46: the sun's anomaly per step
-        "snow.run": "_core snow.forcing snow.geometry snow.params",  # 46: steps the HBV kernel
+        "snow.run": "_core radiation.evaluate radiation.geometry snow.forcing snow.geometry"
+                    " snow.params",  # 46: steps the HBV kernel, lit by the shadows
+        "radiation.geometry": "_core radiation.frame radiation.request",  # 46: RadiationGeometry
+        "radiation.evaluate": "_core radiation.geometry",  # 46: the instant evaluator
         "_core": "",
     },
     {  # L4: pipelines
@@ -103,6 +107,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
         "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
+        "radiation.search": "dem_input io.models radiation.frame radiation.geometry"
+                            " radiation.request raster resources",  # 46: the near raster, searched
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core catchment catchment_batch chains class_maps crs dem_input domain edge_strip"
@@ -110,7 +116,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.ensight"
                " io.geojson io.geopackage_write io.geotiff_write io.mesh_checks io.models io.ply"
                " io.repository io.rivers io.station_set io.vtk_legacy io.vtk_read"
-               " land_cover_fractions landcover mcp.server mosaic palettes raster resources"
+               " land_cover_fractions landcover mcp.server mosaic palettes radiation.frame"
+               " radiation.geometry radiation.request radiation.search raster resources"
                " run_record snow.geometry snow.params snow.run snow.terrain sources stats"
                " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
                " viz.style viz.svg",

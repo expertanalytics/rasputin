@@ -1,26 +1,27 @@
-"""The synthetic spring's forcing and the sun correction in NumPy: `snow/forcing.py`, R1, R2.
+"""The synthetic spring's forcing and the sun correction in NumPy: `snow/forcing.py` and R2.
 
 `docs/increments/46-hbv-snow.md`, *4.3 The sun correction*, *4.5 The
 synthetic case* and *10.5 How the lit factor enters the sun correction*:
 
-    dI_i = (1/S) sum_s beam_s (max(0, n_i . u_s) - max(0, u_s.up))
+    dI_i = (1/S) sum_s beam_s (b_is - max(0, sin e_s))
 
-with u_s the sun's direction in east-north-up at the midpoint of sub-interval
-s of the step (S equal sub-intervals), beam_s = I0 (1/R)^2 Psi_a^(1/sin e)
-with I0 = 1368 W/m^2, Psi_a = 0.75, and 0 with the sun at or below the
-horizon. The temperature at 300 m runs linearly from -3 to +14 degrees C over
-the run, plus a +-4 degree cosine peaking at 14:00 mean solar time, minus 0.6
-degrees per 100 m above 300 m, evaluated at each step's midpoint.
+with b_is the beam factor on triangle i (here self-shading only, max(0,
+n_i . u_s), as under an open sky), u_s the sun's direction in east-north-up
+at the midpoint of sub-interval s of the step (S equal sub-intervals),
+beam_s = I0 (1/R)^2 Psi_a^(1/sin e) with I0 = 1368 W/m^2, Psi_a = 0.75, and
+0 with the sun at or below the horizon. The temperature at 300 m runs
+linearly from -3 to +14 degrees C over the run, plus a +-4 degree cosine
+peaking at 14:00 mean solar time, minus 0.6 degrees per 100 m above 300 m,
+evaluated at each step's midpoint.
 
-R1 (hand planes, one sample, sun at 30 degrees due south, beam 800): +292.8,
--400, -53.6 W/m^2 for 30-degree south, north and east planes; 0 with the beam
-0. R2 (through `_core.sun_positions` and this module, 2027-04-15 at 61.334 N
-15 E, 96 samples of 15 minutes): +68.9, -113.5, -12.6, -12.1 W/m^2 within
-0.5. Only R2 and `TestSunAndBeam` need the sun binding (PR 2).
+R2 (through `_core.sun_positions` and this module's `beam_anomaly`,
+2027-04-15 at 61.334 N 15 E, 96 samples of 15 minutes): +68.9, -113.5,
+-12.6, -12.1 W/m^2 within 0.5. Only `TestSunAndBeam` needs the sun binding
+(PR 2). The combiner's own edges are L2 in `test_radiation_evaluate.py`.
 
 Interface:
 
-- `forcing.radiation_anomaly(normals (n, 3), sun (S, 3), beam (S,)) -> (n,)`.
+- `forcing.beam_anomaly(b (S, n), sin_e (S, n), beam (S,)) -> (n,)`.
 - `forcing.beam(elevation_deg, distance_au) -> array`, elementwise.
 - `forcing.sun_and_beam(times_utc_ms, lat_deg, lon_deg, height_m) -> (sun
   (S, 3), beam (S,))`, sun = (cos e sin A, cos e cos A, sin e) from
@@ -66,48 +67,6 @@ def plane(slope_deg: float, aspect_deg: float) -> F64:
 
 
 PLANES = np.array([plane(30, 180), plane(30, 0), plane(30, 90), plane(30, 270), plane(0, 0)])
-E30 = math.radians(30.0)
-SUN_SOUTH_30 = np.array([[0.0, -math.cos(E30), math.sin(E30)]])
-
-
-class TestAnomaly:
-    """R1, and the formula's edges."""
-
-    def test_r1_hand_planes(self, forcing: ModuleType) -> None:
-        di = forcing.radiation_anomaly(PLANES, SUN_SOUTH_30, np.array([800.0]))
-        assert_allclose(
-            di,
-            [800 * math.cos(E30) - 400, -400.0, 800 * 0.5 * math.cos(E30) - 400, -53.6, 0.0],
-            atol=0.06,
-        )
-        assert di[0] == pytest.approx(292.8, abs=0.05)
-        assert di[2] == pytest.approx(-53.6, abs=0.05)
-
-    def test_a_flat_triangle_gets_exactly_zero(self, forcing: ModuleType) -> None:
-        sun = np.array([[0.3, -0.5, 0.812403840463596], [0.1, 0.2, -0.9746794344808963]])
-        di = forcing.radiation_anomaly(np.array([[0.0, 0.0, 1.0]]), sun, np.array([900.0, 0.0]))
-        assert di[0] == 0.0
-
-    def test_no_beam_gives_no_anomaly(self, forcing: ModuleType) -> None:
-        di = forcing.radiation_anomaly(PLANES, SUN_SOUTH_30, np.array([0.0]))
-        assert_array_equal(di, np.zeros(len(PLANES)))
-
-    def test_the_samples_are_averaged(self, forcing: ModuleType) -> None:
-        sun = np.repeat(SUN_SOUTH_30, 4, axis=0)
-        di = forcing.radiation_anomaly(PLANES, sun, np.array([800.0, 0.0, 800.0, 0.0]))
-        one = forcing.radiation_anomaly(PLANES, SUN_SOUTH_30, np.array([800.0]))
-        assert_allclose(di, one / 2, rtol=1e-15, atol=1e-12)
-
-    def test_a_sun_behind_the_slope_counts_as_no_sun_on_it(self, forcing: ModuleType) -> None:
-        # Sun at 10 degrees due north: behind a 30-degree south slope.
-        e = math.radians(10.0)
-        sun = np.array([[0.0, math.cos(e), math.sin(e)]])
-        di = forcing.radiation_anomaly(PLANES[:1], sun, np.array([500.0]))
-        assert di[0] == pytest.approx(-500.0 * math.sin(e), rel=1e-12)
-
-    def test_no_triangles_give_an_empty_array(self, forcing: ModuleType) -> None:
-        di = forcing.radiation_anomaly(np.empty((0, 3)), SUN_SOUTH_30, np.array([800.0]))
-        assert di.shape == (0,)
 
 
 class TestBeam:
@@ -212,7 +171,8 @@ class TestSunAndBeam:
         total = np.zeros(len(PLANES))
         for k in range(24):
             sun, beam = forcing.sun_and_beam(forcing.sample_times(spring, k), LAT, LON, 0.0)
-            total += forcing.radiation_anomaly(PLANES, sun, beam)
+            b = np.maximum(sun @ PLANES.T, 0.0) * (sun[:, 2:] > 0.0)
+            total += forcing.beam_anomaly(b, np.repeat(sun[:, 2:], len(PLANES), axis=1), beam)
         mean = total / 24
         # NOAA's calculator in the probe, TR1 here: about 0.01 degrees apart.
         assert_allclose(mean[:4], [68.9, -113.5, -12.6, -12.1], atol=0.5)

@@ -2,9 +2,10 @@
 
 An async generator, so a GUI or a server can drive it: the steps between two
 frames run in one `asyncio.to_thread` call, and the kernel releases the GIL.
-The sun's correction is computed under every mode, `none` included, so its
-mean can be written whatever the mode; the kernel receives it only under a
-correction.
+The sun's correction is the evaluator's beam on each triangle, cast shadows
+and self-shading included, less the beam on an open horizontal plane. It is
+computed under every mode, `none` included, so its mean can be written
+whatever the mode; the kernel receives it only under a correction.
 """
 
 from __future__ import annotations
@@ -17,7 +18,9 @@ import numpy as np
 import numpy.typing as npt
 
 from tin_engine import _core
-from tin_engine.snow.forcing import radiation_anomaly, sample_times, sun_and_beam, temperature
+from tin_engine.radiation.evaluate import evaluate_instant
+from tin_engine.radiation.geometry import RadiationGeometry
+from tin_engine.snow.forcing import beam_anomaly, sample_times, sun_and_beam, temperature
 from tin_engine.snow.geometry import TriangleGeometry
 from tin_engine.snow.params import SnowJob
 
@@ -38,11 +41,18 @@ class Frame:
 
 
 async def run(
-    job: SnowJob, geometry: TriangleGeometry, *, lat_deg: float, lon_deg: float, height_m: float
+    job: SnowJob,
+    geometry: TriangleGeometry,
+    *,
+    radiation: RadiationGeometry,
+    lat_deg: float,
+    lon_deg: float,
+    height_m: float,
 ) -> AsyncIterator[Frame]:
-    """Frames of `job` on `geometry`, the sun as seen from (`lat_deg`,
-    `lon_deg`, `height_m`): the initial state, then one every
-    `job.frames.every_hours` to the end of the spring."""
+    """Frames of `job` on `geometry`: the initial state, then one every
+    `job.frames.every_hours` to the end of the spring. `radiation` holds one
+    receiver per triangle, in the triangles' order; the beam is the clear-sky
+    beam seen from (`lat_deg`, `lon_deg`, `height_m`)."""
     n, spring = len(geometry.centroid_z), job.spring
     factors = np.array(job.distribution.factors)
     state = _core.SnowState.uniform(n, _core.SnowDistribution(factors), job.initial_swe_mm)
@@ -53,8 +63,10 @@ async def run(
 
     def advance(first: int) -> None:
         for k in range(first, first + per_frame):
-            sun, beam = sun_and_beam(sample_times(spring, k), lat_deg, lon_deg, height_m)
-            di = radiation_anomaly(geometry.normals, sun, beam)
+            times = sample_times(spring, k)
+            _, beam = sun_and_beam(times, lat_deg, lon_deg, height_m)
+            f = evaluate_instant(radiation, times, threads=job.resources.threads)
+            di = beam_anomaly(f.b, f.sin_e, beam)
             state.step(
                 **hbv, mode=mode, r=job.correction.r, d=job.correction.d,
                 temperature=temperature(spring, k, geometry.centroid_z, lon_deg),

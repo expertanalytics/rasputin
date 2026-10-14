@@ -35,6 +35,9 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   over a near and a far raster, a max-pyramid,
                            #   the exhaustive reference and the pruned
                            #   search: TR3a
+    evaluate.hpp           # the instant evaluator: per receiver and UTC time,
+                           #   lit, cos_i, the beam factor and the sine of the
+                           #   sun's apparent elevation: TR5's instant mode
   snow/
     hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
                            #   the step with an optional sun correction; depends
@@ -126,7 +129,8 @@ bindings/
                            #   and radiation.cpp
   radiation.cpp            # the sun's position for arrays of UTC times
                            #   (releases the GIL); the receiver check; the
-                           #   horizon search over bound rasters
+                           #   horizon search over bound rasters; the
+                           #   instant evaluator (releases the GIL)
   snow.cpp                 # the snow kernel's binding: arrays in and out,
                            #   refusals as ValueError naming the status,
                            #   and the triangle for a non-finite value
@@ -284,21 +288,35 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     time.py                # to_utc_ms: datetimes to int64 UTC milliseconds,
                            #   refusing a time zone; imports nothing first-party
     frame.py               # receivers_from_mesh: centroid, lat/lon, J, normal,
-                           #   exclusion radius; imports crs
+                           #   exclusion radius; receivers_and_zero_area, the
+                           #   same with the zero-area mask; imports crs
     request.py             # RadiationRequest, frozen settings; imports nothing
                            #   first-party
+    geometry.py            # RadiationGeometry: per receiver lat/lon, true
+                           #   normal, horizon table and reach; the open sky;
+                           #   the horizon search's core call; imports _core,
+                           #   radiation.frame and radiation.request
+    evaluate.py            # evaluate_instant, the synchronous evaluator call;
+                           #   imports _core and radiation.geometry
+    search.py              # the near raster (TR3b's near part only) and the
+                           #   horizon of every receiver on it; imports
+                           #   dem_input, io.models, raster, resources and
+                           #   the radiation modules
   snow/                    # snow on the mesh
     params.py              # the HBV snow parameters, sun-correction mode, the
                            #   synthetic spring and SnowJob as strict Pydantic
-                           #   models; imports resources
+                           #   models; imports resources and
+                           #   radiation.request
     geometry.py            # each triangle's normal (true east-north-up),
-                           #   slope, aspect, plan area, centroid height; numpy
+                           #   slope, aspect, plan area, centroid height, from
+                           #   the receiver frame; imports radiation.frame
     forcing.py             # the synthetic spring's weather and the sun's
                            #   correction per step, in NumPy (0 on a flat
                            #   triangle); imports _core and snow.params
     run.py                 # the snow run: an async generator of frames, the
                            #   steps between frames in one to_thread call;
-                           #   imports _core and the snow modules
+                           #   imports _core, the snow modules,
+                           #   radiation.evaluate and radiation.geometry
     terrain.py             # a synthetic mountain on a square grid, for tests
                            #   and demonstrations; numpy and Pydantic
   chains.py                # start_chains: the domain's rings, then every

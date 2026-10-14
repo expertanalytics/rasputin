@@ -28,8 +28,31 @@ Interface:
   whose SCA is below 0.5, -1 if none.
 - `--sun-correction` takes `none`, `melt-factor`, `threshold`; `--start` an
   ISO 8601 time with an offset. Refusals exit 2 and say why.
-- The degenerate count is reported as "1 degenerate triangle".
+- The degenerate count is reported as "1 degenerate triangle". A triangle
+  is degenerate by the receiver frame's own zero-area test (its ground edges
+  span less than 1e-9 of the product of their lengths), so a near-zero-area
+  sliver is counted and given no sun correction (dI exactly 0), never
+  refused. An error naming a triangle gives its index in the mesh.
+- `slope_deg.var` and `aspect_deg.var` are the receiver frame's per-triangle
+  true east-north-up normals (`receivers_from_mesh`), never a grid normal
+  turned by one convergence for the whole mesh (section 10.5).
 - E1 runs only with `RASPUTIN_SLOW=1` (several minutes).
+
+Cast shadows (section 10.5, 10.8's L5 and E2, 10.9's Bygdin run):
+
+- `--dem PATH` (repeatable, as `mesh --dem`) and `--shadows on|off`, default
+  `on` with `--dem` and `off` without. `snow.json`'s job records `shadows`: the
+  default `RadiationRequest` dumped, or null.
+- Refused before any file is written, in plain words: `--shadows on` without
+  `--dem` ("shadows need the DEM the mesh was made from: give --dem"); a DEM in
+  another CRS than the mesh (naming both, as `EPSG:25832` and `EPSG:25833`); a
+  DEM that does not cover the mesh ("does not cover the mesh").
+- E2 (`RASPUTIN_SLOW=1`): on the 2 m mesh, 2027-04-15, the plan-area-weighted
+  domain mean of the day's dI falls by 0.5 to 2.5 W/m^2 with shadows on.
+- The Bygdin run (`RASPUTIN_SLOW=1`, and DTM10 present): looks for
+  `DTM10_UTM33_20260925` under `$RASPUTIN_DATA`, else under a `rasputin_data`
+  directory beside any parent of this file (the main checkout's
+  `../rasputin_data`, also from a worktree); skips when absent.
 """
 
 from __future__ import annotations
@@ -49,7 +72,9 @@ from numpy.testing import assert_allclose, assert_array_equal
 from cli_helpers import USAGE, invoke, ran, squashed
 from ensightread import Animation
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.io.geotiff_write import encode_geotiff
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.radiation.request import RadiationRequest
 from vtkread import read_vtk
 
 X0, Y0, Z = 500000.0, 6800000.0, 300.0
@@ -86,8 +111,11 @@ def mesh_file(
     crs: str = "EPSG:25833",
     binary: bool = True,
     extra: list[list[float]] | None = None,
+    arrays: tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]] | None = None,
 ) -> Path:
-    vertices, triangles = facets(extra)
+    """`facets(extra)` as a binary mesh in `crs`, or `arrays` (vertices,
+    triangles) when given."""
+    vertices, triangles = facets(extra) if arrays is None else arrays
     path.write_bytes(
         write_vtk(
             vertices,
@@ -182,8 +210,11 @@ class TestOutput:
 
     def test_slope_aspect_and_the_sun_per_facet(self, two_days: Path) -> None:
         anim = Animation.read(two_days / "snow.case")
-        assert_allclose(anim.static(two_days, "slope_deg"), [30.0, 30.0], atol=1e-3)
-        assert_allclose(anim.static(two_days, "aspect_deg"), [180.0, 0.0], atol=1e-3)
+        # True slope and aspect: UTM's scale 0.9996 makes a grid 30-degree
+        # facet 29.99 degrees on the ground, and the north facet, 110 m east
+        # of the central meridian, faces 0.002 degrees east of true north.
+        assert_allclose(anim.static(two_days, "slope_deg"), [30.0, 30.0], atol=0.02)
+        assert_allclose(anim.static(two_days, "aspect_deg"), [180.0, 0.0], atol=0.01)
         sun = anim.static(two_days, "radiation_anomaly_mean")
         assert sun[0] > 20.0 and sun[1] < -20.0
         assert_array_equal(anim.static(two_days, "melt_out_day"), [-1.0, -1.0])
@@ -277,6 +308,91 @@ class TestFlags:
         anim = Animation.read(out / "snow.case")
         assert anim.static(out, "radiation_anomaly_mean")[2] == 0.0
         assert np.isfinite(anim.frame(out, "swe", 1)).all()
+
+
+def true_facet(
+    x: float, y: float, slope_deg: float, aspect_deg: float, *, side: float = SIDE
+) -> npt.NDArray[np.float64]:
+    """Three corners at (x, y) in EPSG:25833 on the plane of that true slope and
+    true aspect, built through J = (1/m) R(gamma) at the centroid (pyproj)."""
+    from pyproj import Proj
+
+    proj = Proj("EPSG:25833")
+    lon, lat = proj(x + side / 3, y + side / 3, inverse=True)
+    f = proj.get_factors(lon, lat)
+    g, m = math.radians(f.meridian_convergence), f.meridional_scale
+    j = np.array([[math.cos(g), math.sin(g)], [-math.sin(g), math.cos(g)]]) / m
+    s, a = math.radians(slope_deg), math.radians(aspect_deg)
+    grad = -math.tan(s) * j.T @ np.array([math.sin(a), math.cos(a)])
+    plan = ((0.0, 0.0), (side, 0.0), (0.0, side))
+    return np.array(
+        [[x + dx, y + dy, Z + grad @ (dx - side / 3, dy - side / 3)] for dx, dy in plan]
+    )
+
+
+#: Bygdin's centre in EPSG:25833 (convergence -5.724 degrees), and a point on
+#: the central meridian (convergence 0): no one turn serves both.
+BYGDIN_XY = (152147.55, 6821319.44)
+#: A sliver near (X0, Y0): edges (10, 10) and (20, 20 + 1e-8) m, a cross
+#: product of 1e-7 m^2 (not 0) and a sine of 2.5e-10, under the frame's 1e-9.
+SLIVER = [[X0 + 300.0, Y0, Z], [X0 + 310.0, Y0 + 10.0, Z], [X0 + 320.0, Y0 + 20.0 + 1e-8, Z]]
+#: Float32 in the .var files: a step of 1.5e-5 degrees near 180.
+VAR_DEG = 1e-4
+
+
+class TestOneSourceOfNormals:
+    """Section 10.5: slope and aspect from the receiver frame's normals."""
+
+    def test_slope_and_aspect_files_are_the_frames_true_normals(self, tmp_path: Path) -> None:
+        from tin_engine.radiation.frame import receivers_from_mesh
+
+        vertices = np.concatenate(
+            [true_facet(*BYGDIN_XY, 30.0, 180.0), true_facet(X0, Y0, 20.0, 90.0)]
+        )
+        triangles = np.array([[0, 1, 2], [3, 4, 5]])
+        mesh = mesh_file(tmp_path / "wide.vtk", arrays=(vertices, triangles))
+        out = tmp_path / "anim"
+        snow(mesh, out, "--sun-correction", "none", *SPRING_10, "--days", "1")
+        anim = Animation.read(out / "snow.case")
+        slope, aspect = anim.static(out, "slope_deg"), anim.static(out, "aspect_deg")
+        assert_allclose(slope, [30.0, 20.0], rtol=0, atol=VAR_DEG)
+        assert_allclose(aspect, [180.0, 90.0], rtol=0, atol=VAR_DEG)
+        e, n, u = receivers_from_mesh(vertices, triangles, "EPSG:25833").normal.T
+        assert_array_equal(slope, np.degrees(np.arctan2(np.hypot(e, n), u)).astype(np.float32))
+        assert_array_equal(aspect, (np.degrees(np.arctan2(e, n)) % 360.0).astype(np.float32))
+
+
+class TestSlivers:
+    """Section 4.9: a near-zero-area triangle is counted, not refused."""
+
+    @pytest.mark.parametrize("shadows", ["off", "on"])
+    def test_a_sliver_runs_through_and_gets_no_sun_correction(
+        self, tmp_path: Path, shadows: str
+    ) -> None:
+        mesh = mesh_file(tmp_path / "sliver.vtk", extra=SLIVER)
+        dem = ("--dem", str(dem_file(tmp_path / "dem.tif"))) if shadows == "on" else ()
+        out = tmp_path / "anim"
+        output = snow(mesh, out, *dem, "--shadows", shadows, "--sun-correction", "melt-factor",
+                      *SPRING_10, "--days", "1")  # fmt: skip
+        assert "1 degenerate triangle" in output
+        anim = Animation.read(out / "snow.case")
+        mean = anim.static(out, "radiation_anomaly_mean")
+        assert mean[2] == 0.0
+        assert mean[0] > 20.0 and mean[1] < -20.0
+        assert anim.static(out, "slope_deg")[2] == 0.0
+        assert np.isfinite(anim.frame(out, "swe", 1)).all()
+
+    def test_an_error_names_the_triangle_by_its_index_in_the_mesh(self, tmp_path: Path) -> None:
+        # Triangle 0 has no area and is left out of the frame; triangle 2 lies
+        # at 89.97 N (northing 9 995 000), past the frame's 89.9: it is
+        # triangle 2 of the mesh, not 1 of the triangles kept.
+        line = [[X0, Y0, Z], [X0 + 10.0, Y0 + 10.0, Z], [X0 + 20.0, Y0 + 20.0, Z]]
+        fine = [[X0 + 100.0, Y0, Z], [X0 + 120.0, Y0, Z], [X0 + 100.0, Y0 + 20.0, Z]]
+        pole = [[X0, 9_995_000.0, Z], [X0 + 20.0, 9_995_000.0, Z], [X0, 9_995_020.0, Z]]
+        arrays = (np.array(line + fine + pole), np.arange(9).reshape(3, 3))
+        mesh = mesh_file(tmp_path / "pole.vtk", arrays=arrays)
+        refused(mesh, tmp_path / "out", "--sun-correction", "none", *SPRING_10,
+                "--days", "1", says="triangle 2 has its centroid beyond 89.9")  # fmt: skip
 
 
 class TestRefusals:
@@ -424,6 +540,14 @@ def synthetic(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return folder
 
 
+@pytest.fixture(scope="module")
+def mesh2(synthetic: Path) -> Path:
+    """The synthetic terrain meshed at --tolerance 2 (294 770 triangles)."""
+    target = synthetic / "mesh2.vtk"
+    ran("mesh", "--dem", str(synthetic / "synth.tif"), "--tolerance", "2", "--out", str(target))
+    return target
+
+
 class TestEndToEnd:
     """The demonstration case: terrain, mesh, two days of snow, opened by the readers."""
 
@@ -505,12 +629,6 @@ class TestE1:
     """Section 6's table, rows 1-3, from the CLI on the 2 m mesh. A miss is first
     checked against the design probe run on the same mesh."""
 
-    @pytest.fixture(scope="class")
-    def mesh2(self, synthetic: Path) -> Path:
-        target = synthetic / "mesh2.vtk"
-        ran("mesh", "--dem", str(synthetic / "synth.tif"), "--tolerance", "2", "--out", str(target))
-        return target
-
     def test_the_2_m_mesh_has_294_770_triangles(self, mesh2: Path) -> None:
         assert len(read_vtk(mesh2.read_bytes()).polygons) == 294_770
 
@@ -524,3 +642,164 @@ class TestE1:
         assert_allclose(got["swe"], swe, rtol=0.02)
         assert got["south"] == pytest.approx(south, abs=1.0)
         assert got["north"] == pytest.approx(north, abs=1.0)
+
+
+def dem_file(path: Path, *, x0: float = 499950.0, y0: float = 6800150.0, epsg: int = 25833) -> Path:
+    """A flat 300 m DEM, 41 by 41 nodes 10 m apart, node (0, 0) at (x0, y0);
+    by default it covers `facets()`."""
+    path.write_bytes(encode_geotiff(np.full((41, 41), 300.0, dtype=np.float32), x0, y0, 10.0, epsg))
+    return path
+
+
+class TestShadowFlags:
+    def test_dem_turns_shadows_on_by_default(self, mesh: Path, tmp_path: Path) -> None:
+        out = tmp_path / "on"
+        snow(mesh, out, "--dem", str(dem_file(tmp_path / "dem.tif")), *SPRING_10, "--days", "1")
+        job = json.loads((out / "snow.json").read_text())["job"]
+        assert job["shadows"] == RadiationRequest().model_dump(mode="json")
+
+    def test_shadows_off_with_a_dem(self, mesh: Path, tmp_path: Path) -> None:
+        out = tmp_path / "off"
+        dem = str(dem_file(tmp_path / "dem.tif"))
+        snow(mesh, out, "--dem", dem, "--shadows", "off", *SPRING_10, "--days", "1")
+        assert json.loads((out / "snow.json").read_text())["job"]["shadows"] is None
+
+    def test_no_dem_is_no_shadows(self, two_days: Path) -> None:
+        assert json.loads((two_days / "snow.json").read_text())["job"]["shadows"] is None
+
+    def test_a_flat_dem_around_the_facets_changes_little(
+        self, mesh: Path, tmp_path: Path, two_days: Path
+    ) -> None:
+        # The flat DEM at the facets' own height hides only a sun below about
+        # half a degree; the two days' mean dI moves by well under 1 W/m^2.
+        out = tmp_path / "on"
+        dem = str(dem_file(tmp_path / "dem.tif"))
+        snow(mesh, out, "--dem", dem, "--sun-correction", "melt-factor", *SPRING_10, "--days", "2")
+        on = Animation.read(out / "snow.case").static(out, "radiation_anomaly_mean")
+        off = Animation.read(two_days / "snow.case").static(two_days, "radiation_anomaly_mean")
+        assert (on <= off).all()
+        assert_allclose(on, off, atol=1.0)
+
+
+class TestShadowRefusals:
+    """L5: each in plain words, before any file is written."""
+
+    def test_shadows_on_without_a_dem(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh, tmp_path / "out", "--shadows", "on",
+            says="shadows need the DEM the mesh was made from: give --dem",
+        )  # fmt: skip
+
+    def test_a_dem_in_another_crs(self, mesh: Path, tmp_path: Path) -> None:
+        dem = dem_file(tmp_path / "dem.tif", x0=290000.0, y0=6800150.0, epsg=25832)
+        output = refused(mesh, tmp_path / "out", "--dem", str(dem), says="EPSG:25832")
+        assert squashed("EPSG:25833") in squashed(output)
+
+    def test_a_dem_that_does_not_cover_the_mesh(self, mesh: Path, tmp_path: Path) -> None:
+        dem = dem_file(tmp_path / "dem.tif", x0=600000.0)
+        refused(mesh, tmp_path / "out", "--dem", str(dem), says="does not cover the mesh")
+
+    def test_a_dem_that_covers_only_part_of_the_mesh(self, mesh: Path, tmp_path: Path) -> None:
+        # The north facet starts at x 500100: a DEM ending at 500050 misses it.
+        dem = dem_file(tmp_path / "dem.tif", x0=499650.0)
+        refused(mesh, tmp_path / "out", "--dem", str(dem), says="does not cover the mesh")
+
+    def test_an_unknown_shadows_value(self, mesh: Path, tmp_path: Path) -> None:
+        refused(
+            mesh, tmp_path / "out", "--shadows", "maybe", says="'maybe' is not one of 'on', 'off'"
+        )
+
+
+def _data_dir() -> Path | None:
+    """DTM10's directory: `$RASPUTIN_DATA`, else `rasputin_data` beside a parent."""
+    name = "DTM10_UTM33_20260925"
+    if root := os.environ.get("RASPUTIN_DATA"):
+        return Path(root) / name if (Path(root) / name).is_dir() else None
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "rasputin_data" / name).is_dir():
+            return parent / "rasputin_data" / name
+    return None
+
+
+def _plan_area(vtk_path: Path) -> npt.NDArray[np.float64]:
+    mesh = read_vtk(vtk_path.read_bytes())
+    pts, tri = mesh.points, np.array(mesh.polygons, dtype=np.int64)
+    a, b, c = pts[tri[:, 0]], pts[tri[:, 1]], pts[tri[:, 2]]
+    return 0.5 * np.abs(np.cross(b - a, c - a)[:, 2])
+
+
+@pytest.mark.skipif(
+    os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
+)
+class TestE2:
+    """Section 10.8's E2: shadows on the 2 m mesh, one day, 2027-04-15."""
+
+    def test_shadows_lower_the_days_mean_by_half_to_two_and_a_half_w(
+        self, mesh2: Path, synthetic: Path
+    ) -> None:
+        means = {}
+        for flag in ("on", "off"):
+            out = synthetic / f"e2-{flag}"
+            ran(
+                "snow", "--mesh", str(mesh2), "--out", str(out), "--dem",
+                str(synthetic / "synth.tif"), "--shadows", flag,
+                "--start", "2027-04-15T00:00:00+00:00", "--days", "1",
+            )  # fmt: skip
+            means[flag] = Animation.read(out / "snow.case").static(out, "radiation_anomaly_mean")
+        on, off = (means[f].astype(np.float64) for f in ("on", "off"))
+        assert (on <= off).all()
+        w = _plan_area(mesh2)
+        change = float(w @ (on - off) / w.sum())
+        # Probe S1, on 3000 DEM nodes: -1.1 W/m^2. Narrowed at the acceptance run.
+        assert -2.5 <= change <= -0.5, change
+
+
+@pytest.mark.skipif(
+    os.environ.get("RASPUTIN_SLOW") != "1", reason="slow (minutes): RASPUTIN_SLOW=1"
+)
+class TestBygdin:
+    """Section 10.9's demonstration: Bygdin on DTM10, 122 days, shadows on and off."""
+
+    DOMAIN = Path(__file__).resolve().parents[2] / (
+        "docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson"
+    )
+
+    @pytest.fixture(scope="class")
+    def runs(self, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path, Path]:
+        dtm10 = _data_dir()
+        if dtm10 is None:
+            pytest.skip("DTM10_UTM33_20260925 not found ($RASPUTIN_DATA or ../rasputin_data)")
+        folder = tmp_path_factory.mktemp("bygdin")
+        mesh = folder / "bygdin.vtk"
+        ran(
+            "mesh", "--dem", str(dtm10), "--domain", str(self.DOMAIN), "--tolerance", "10",
+            "--out", str(mesh),
+        )  # fmt: skip
+        for flag in ("on", "off"):
+            ran(
+                "snow", "--mesh", str(mesh), "--dem", str(dtm10), "--shadows", flag,
+                "--days", "122", "--out", str(folder / f"snow-{flag}"),
+            )  # fmt: skip
+        return mesh, folder / "snow-on", folder / "snow-off"
+
+    def test_the_mesh_is_bygdin_at_tolerance_10(self, runs: tuple[Path, Path, Path]) -> None:
+        # Tens of thousands of triangles, not an exact count: the count belongs
+        # to the mesh's own tests and has moved between about 51,500 and 56,000
+        # across increments; this only catches the wrong domain or tolerance.
+        n = len(read_vtk(runs[0].read_bytes()).polygons)
+        assert 20_000 <= n <= 120_000, n
+
+    def test_122_days_of_daily_frames(self, runs: tuple[Path, Path, Path]) -> None:
+        anim = Animation.read(runs[1] / "snow.case")
+        assert anim.case.times == tuple(24.0 * d for d in range(123))
+
+    def test_shadows_only_take_away(self, runs: tuple[Path, Path, Path]) -> None:
+        mesh, on_dir, off_dir = runs
+        on = Animation.read(on_dir / "snow.case").static(on_dir, "radiation_anomaly_mean")
+        off = Animation.read(off_dir / "snow.case").static(off_dir, "radiation_anomaly_mean")
+        assert (on <= off).all()
+        w = _plan_area(mesh)
+        # Probe B2 on DTM10 nodes: -2.7 to -3.3 W/m^2 on the three dates; the
+        # sign and a loose band only, the figure is the acceptance run's.
+        change = float(w @ (on.astype(np.float64) - off) / w.sum())
+        assert -10.0 < change < -0.5, change

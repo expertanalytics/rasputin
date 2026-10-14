@@ -11,8 +11,14 @@ under both corrections and equally under `none`; mass (I1) holds over the run.
 
 Interface:
 
-- `run.run(job, geometry, *, lat_deg, lon_deg, height_m)`: the site of the
-  sun, passed by the caller (the CLI takes it from the mesh's centre).
+- `run.run(job, geometry, *, radiation, lat_deg, lon_deg, height_m)`: the
+  site of the sun's beam, passed by the caller (the CLI takes it from the
+  mesh's centre), and `radiation`, a `RadiationGeometry` (one receiver per
+  triangle, in the triangles' order) whose evaluator gives b and sin e per
+  triangle and sample (`docs/increments/46-hbv-snow.md`, *10.5 How the lit
+  factor enters the sun correction*): dI = the mean over the step's samples
+  of beam (b - max(0, sin e)). With `RadiationGeometry.open_sky` (no
+  terrain) only self-shading is left.
 - `Frame` has `time_hours` (float, hours since the start), `swe`, `sca`,
   `outflow` (cumulative since the start, mm) and `radiation_anomaly_mean`
   (the mean dI over the steps so far, W/m^2, 0 at the start), each float32
@@ -20,7 +26,8 @@ Interface:
   every `frames.every_hours`. dI is computed under every correction, `none`
   included, so its mean is written whatever the mode.
 - The steps between two frames run in one `asyncio.to_thread` call, looked up
-  as `asyncio.to_thread` when called.
+  as `asyncio.to_thread` when called; the evaluator is reached through
+  `_core.evaluate_instant`, looked up when called, with the job's threads.
 """
 
 from __future__ import annotations
@@ -60,6 +67,7 @@ def two_facets() -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
 
 
 SOUTH, NORTH = 0, 1
+Mesh = tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]
 
 
 @pytest.fixture(scope="module")
@@ -71,8 +79,8 @@ def mods() -> dict[str, ModuleType]:
 
 
 @pytest.fixture(scope="module")
-def facets(mods: dict[str, ModuleType]) -> Any:
-    return mods["geometry"].triangle_geometry(*two_facets(), 0.0)
+def facets() -> Mesh:
+    return two_facets()
 
 
 def job(mods: dict[str, ModuleType], mode: str, *, threads: int = 1, **kw: Any) -> Any:
@@ -86,8 +94,30 @@ def job(mods: dict[str, ModuleType], mode: str, *, threads: int = 1, **kw: Any) 
     )
 
 
-async def frames_of(mods: dict[str, ModuleType], the_job: Any, geometry: Any) -> list[Any]:
-    run = mods["run"].run(the_job, geometry, lat_deg=LAT, lon_deg=LON, height_m=Z)
+def sky_of(mesh: Mesh, horizon: int | None = None) -> Any:
+    """The open-sky radiation geometry of `mesh`, or one with `horizon`
+    (0.01 degrees) in every direction."""
+    from tin_engine.radiation.frame import receivers_from_mesh
+    from tin_engine.radiation.request import RadiationRequest
+
+    geometry_cls = importlib.import_module("tin_engine.radiation.geometry").RadiationGeometry
+    g = geometry_cls.open_sky(receivers_from_mesh(*mesh, "EPSG:25833"), RadiationRequest())
+    if horizon is None:
+        return g
+    return geometry_cls(
+        lat=g.lat, lon=g.lon, normal=g.normal, horizon=np.full_like(g.horizon, horizon),
+        reach=g.reach, n_directions=g.n_directions, request=g.request,
+    )  # fmt: skip
+
+
+async def frames_of(
+    mods: dict[str, ModuleType], the_job: Any, mesh: Mesh, radiation: Any = None
+) -> list[Any]:
+    geometry = mods["geometry"].triangle_geometry(*mesh, "EPSG:25833")
+    run = mods["run"].run(
+        the_job, geometry, radiation=sky_of(mesh) if radiation is None else radiation,
+        lat_deg=LAT, lon_deg=LON, height_m=Z,
+    )  # fmt: skip
     return [frame async for frame in run]
 
 
@@ -165,10 +195,9 @@ class TestWiring:
     def test_a_flat_triangle_melts_the_same_under_every_correction(
         self, mods: dict[str, ModuleType]
     ) -> None:
-        flat = mods["geometry"].triangle_geometry(
+        flat = (
             np.array([[X0, Y0, Z], [X0 + SIDE, Y0, Z], [X0, Y0 + SIDE, Z]]),
             np.array([[0, 1, 2]]),
-            0.0,
         )
         out = {m: asyncio.run(frames_of(mods, job(mods, m), flat)) for m in MODES}
         for a, b, c in zip(out["none"], out["melt_factor"], out["threshold"], strict=True):
@@ -177,6 +206,8 @@ class TestWiring:
         # Not equal by doing nothing: melt is held as liquid water until it passes
         # a tenth of the ice, so SWE first falls after about four days, then does.
         assert out["none"][-1].swe[0] < 600.0
+        # Open sky, flat: b is max(0, sin e) bit for bit, so dI is exactly 0.
+        assert all(f.radiation_anomaly_mean[0] == 0.0 for f in out["none"])
 
     def test_the_frames_do_not_depend_on_the_thread_count(
         self, mods: dict[str, ModuleType], facets: Any, runs: dict[str, list[Any]]
@@ -213,3 +244,58 @@ class TestWiring:
         frames = await frames_of(mods, job(mods, "melt_factor"), facets)
         assert len(frames) == 11
         assert len(calls) >= 10
+
+
+class TestShadows:
+    """The sun correction from the evaluator (section 10.5)."""
+
+    def test_the_anomaly_is_the_beam_less_the_horizontal_one(
+        self, mods: dict[str, ModuleType], facets: Mesh
+    ) -> None:
+        from tin_engine.snow.forcing import sample_times, sun_and_beam
+
+        evaluate_instant = importlib.import_module("tin_engine.radiation.evaluate").evaluate_instant
+        beam_anomaly = importlib.import_module("tin_engine.snow.forcing").beam_anomaly
+
+        the_job = job(mods, "melt_factor")
+        frames = asyncio.run(frames_of(mods, the_job, facets))
+        sky = sky_of(facets)
+        want = np.zeros(2)
+        for k in range(24):  # the first frame's 24 hourly steps
+            times = sample_times(the_job.spring, k)
+            _, beam = sun_and_beam(times, LAT, LON, Z)
+            f = evaluate_instant(sky, times, threads=1)
+            want += beam_anomaly(f.b, f.sin_e, beam)
+        # Scale: dI up to about 300 W/m^2, stored as float32 (about 3e-5).
+        assert frames[1].radiation_anomaly_mean == pytest.approx(want / 24, abs=1e-3)
+
+    def test_a_horizon_above_the_sun_shades_both_facets_alike(
+        self, mods: dict[str, ModuleType], facets: Mesh
+    ) -> None:
+        # 60 degrees all round: above the April sun at 61 N (at most about 40).
+        frames = asyncio.run(
+            frames_of(mods, job(mods, "melt_factor"), facets, sky_of(facets, 6000))
+        )
+        mean = frames[-1].radiation_anomaly_mean
+        assert mean[SOUTH] < -20.0 and mean[NORTH] < -20.0
+        # Both get -beam sin e; the facets are 100 m apart, so their suns differ a little.
+        assert mean[SOUTH] == pytest.approx(mean[NORTH], rel=1e-3)
+        open_sky = asyncio.run(frames_of(mods, job(mods, "melt_factor"), facets))
+        assert (mean < open_sky[-1].radiation_anomaly_mean).all()
+        assert frames[-1].swe[SOUTH] > open_sky[-1].swe[SOUTH]
+
+    def test_the_thread_count_reaches_the_evaluator(
+        self, mods: dict[str, ModuleType], facets: Mesh, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import tin_engine._core as core
+
+        seen: list[int] = []
+        real = core.evaluate_instant
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            seen.append(kwargs.get("threads", -1))
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(core, "evaluate_instant", spy)
+        asyncio.run(frames_of(mods, job(mods, "none", threads=3), facets))
+        assert seen and set(seen) == {3}
