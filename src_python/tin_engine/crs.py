@@ -76,6 +76,24 @@ def reprojector(src: str | CRS, dst: str | CRS, *, threads: int = 1) -> Callable
     return apply
 
 
+def frame_factors(crs: str | CRS, lon: Any, lat: Any) -> tuple[Xy, Xy]:
+    """The meridian convergence (degrees: the true azimuth of grid north) and
+    the point scale of the projected `crs` at each `(lon, lat)` in degrees, as
+    two float64 arrays: pyproj's `get_factors`. A grid direction's true azimuth
+    is its grid azimuth plus the convergence. A geographic CRS is refused: it
+    has no grid to converge."""
+    parsed = parse_crs(crs)
+    if not parsed.is_projected:
+        raise ValueError(f"{crs_label(parsed)} is not a projected CRS; a projected CRS is needed")
+    lon_a = np.asarray(lon, dtype=np.float64).ravel()
+    lat_a = np.asarray(lat, dtype=np.float64).ravel()
+    if lon_a.size == 0:
+        return np.empty(0), np.empty(0)
+    f = Proj(parsed).get_factors(lon_a, lat_a)
+    gamma = np.asarray(f.meridian_convergence, dtype=np.float64)
+    return gamma, np.asarray(f.meridional_scale, dtype=np.float64)
+
+
 def transform_bounds(
     src: str | CRS, dst: str | CRS, box: tuple[float, float, float, float]
 ) -> tuple[float, float, float, float]:

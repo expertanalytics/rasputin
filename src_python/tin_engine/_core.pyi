@@ -879,3 +879,16 @@ def sun_positions(
     """The sun at one place for many UTC times at the default delta T: the
     elevation without refraction and the azimuth from true north. Releases the
     GIL."""
+
+def check_receivers(
+    x: npt.ArrayLike,
+    y: npt.ArrayLike,
+    z_obs: npt.ArrayLike,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    jacobian: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    exclusion_radius: npt.ArrayLike,
+) -> None:
+    """The core's check of a receiver set: None, or a ValueError naming the
+    first failing receiver or arrays of unequal length."""

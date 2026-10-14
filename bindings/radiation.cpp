@@ -1,14 +1,18 @@
-// The sun's position (include/terrain/radiation/) for Python: times cross as
-// int64 UTC milliseconds since the Unix epoch, angles in degrees. No time zone
-// crosses here; radiation/time.py turns aware times into UTC milliseconds.
+// The sun's position and the receiver check (include/terrain/radiation/) for
+// Python: times cross as int64 UTC milliseconds since the Unix epoch, angles in
+// degrees. No time zone or CRS crosses here; radiation/time.py turns aware
+// times into UTC milliseconds, radiation/frame.py builds the receivers.
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include <terrain/radiation/receivers.hpp>
 #include <terrain/radiation/solar_position.hpp>
 
 #include <chrono>
 #include <cstdint>
+#include <span>
+#include <string>
 
 namespace py = pybind11;
 using namespace terrain::radiation;
@@ -16,6 +20,10 @@ using namespace terrain::radiation;
 namespace {
 
 utc_ms at(std::int64_t ms) { return utc_ms{std::chrono::milliseconds{ms}}; }
+
+using Doubles = py::array_t<double, py::array::c_style | py::array::forcecast>;
+
+std::span<const double> view(const Doubles& a) { return {a.data(), static_cast<std::size_t>(a.size())}; }
 
 struct SunPositions {
     py::array_t<double> elevation, azimuth, distance;
@@ -74,5 +82,35 @@ azimuth from true north, clockwise.
 The sun at one place for many UTC times (int64 milliseconds) at the default
 delta T: the elevation without refraction and the azimuth from true north,
 clockwise, in degrees, and the sun's distance in AU. Releases the GIL.
+)doc");
+
+    m.def(
+        "check_receivers",
+        [](const Doubles& x, const Doubles& y, const Doubles& z_obs, const Doubles& lat, const Doubles& lon,
+           const Doubles& jacobian, const Doubles& normal, const Doubles& exclusion_radius) {
+            const ReceiverCheck c = check_receivers(ReceiverSet{view(x), view(y), view(z_obs), view(lat), view(lon),
+                                                                view(jacobian), view(normal), view(exclusion_radius)});
+            const std::string at = "receiver " + std::to_string(c.index);
+            switch (c.status) {
+            case ReceiverStatus::ok:
+                return;
+            case ReceiverStatus::size_mismatch:
+                throw py::value_error("the receiver arrays differ in length: x, y, z_obs, lat_deg, lon_deg and "
+                                      "exclusion_radius need n values, jacobian 4 n and normal 3 n");
+            case ReceiverStatus::non_finite:
+                throw py::value_error(at + " has a number that is not finite");
+            case ReceiverStatus::polar:
+                throw py::value_error(at + " is at a latitude beyond 89.9 degrees, where east and north are "
+                                           "undefined");
+            case ReceiverStatus::negative_exclusion_radius:
+                throw py::value_error(at + " has a negative exclusion radius");
+            }
+        },
+        py::arg("x"), py::arg("y"), py::arg("z_obs"), py::arg("lat_deg"), py::arg("lon_deg"), py::arg("jacobian"),
+        py::arg("normal"), py::arg("exclusion_radius"), R"doc(
+The core's check of a receiver set: None, or a ValueError naming the first
+failing receiver (a number that is not finite, a latitude beyond 89.9
+degrees, a negative exclusion radius) or arrays of unequal length. jacobian is
+(n, 2, 2) and normal (n, 3), or the same numbers flat.
 )doc");
 }
