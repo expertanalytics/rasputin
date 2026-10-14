@@ -1,19 +1,27 @@
-# Increment 48 — Every third-party import is a declared dependency
+# Increment 48 — Every third-party import is declared, and a bad `--z-unit` is a usage error
 
 Status: **designed** (`@architect`, 2026-10-14), short path
-(`docs/increments/README.md`, "Small changes: the short path"). Shares its
-code change with increment 47 (`--z-unit` usage errors); see section 6.
+(`docs/increments/README.md`, "Small changes: the short path"). **This
+increment absorbs increment 47** (`--z-unit` usage error, designed on branch
+`worktree-z-unit-usage`, commits `84b40250` and `069dd4f0`); the number 47 is
+retired and not reused. Both defects have one cause and one fix (section 2),
+so one PR carries the fix and both sets of tests; the main session took this
+default while Ola was away. Every `file:line` is pinned to master `55b9f564`.
 
-## 1. The ask
+## 1. The asks
 
-`@perf` reported that a fresh install fails because
-`src_python/tin_engine/cli.py` line 58 does `import click` and
-`pyproject.toml` does not declare click. Ola approved the fix as its own small
-PR on 2026-10-14 (as relayed by the main session; no verbatim quote).
+- `@perf` reported that a fresh install fails because
+  `src_python/tin_engine/cli.py@55b9f564:58` does `import click` and
+  `pyproject.toml` does not declare click.
+- `rasputin mesh --z-unit furlong` prints a traceback and exits 1, where every
+  other bad option value is a one-line usage error with exit 2.
+
+Ola approved each as its own small PR on 2026-10-14 (as relayed by the main
+session; no verbatim quote).
 
 ## 2. What the check found
 
-**The failure is real.** Reproduced in the main checkout's venv
+**The missing import is real.** Reproduced in the main checkout's venv
 (`.venv`, editable install, typer 0.27.2, no `mcp` extra):
 
 ```
@@ -23,36 +31,40 @@ $ /Users/skavhaug/projects/rasputin/.venv/bin/rasputin --help
 ModuleNotFoundError: No module named 'click'
 ```
 
-**Why click is missing.** typer 0.26.0 dropped click as a dependency and
-vendors it as `typer._click` (typer 0.26.0 release notes, "Breaking
-Changes", PR #1774: "Typer no longer depends on Click as a third party
-dependency, it vendors (includes the source code of) Click. [...]
-Click-specific functionality is no longer supported"). PyPI metadata:
-typer 0.25.0 requires `click>=8.2.1`; 0.26.0 and 0.27.0 do not.
-`pyproject.toml` says `typer>=0.12`, so pip picks 0.27.x.
+typer 0.26.0 dropped click as a dependency and carries its own copy as
+`typer._click` (typer 0.26.0 release notes, "Breaking Changes", PR #1774:
+"Typer no longer depends on Click as a third party dependency, it vendors
+(includes the source code of) Click. [...] Click-specific functionality is no
+longer supported"). PyPI metadata: typer 0.25.0 requires `click>=8.2.1`;
+0.26.0 and 0.27.0 do not. `pyproject.toml` says `typer>=0.12`, so pip picks
+0.27.x. CI is green only because it installs `.[dev]`: `dev` holds
+`mcp>=2.3`, which requires `uvicorn`, which requires `click>=7.0` (checked in
+the `catalogue-data` worktree's venv: uvicorn is the only installed
+distribution requiring click).
 
-**Why CI is green.** CI installs `.[dev]`, and `dev` holds `mcp>=2.3`, which
-requires `uvicorn`, which requires `click>=7.0`. Checked in the
-`catalogue-data` worktree's venv (mcp 2.3.0, click 8.5.0, typer 0.27.3) by
-listing every installed distribution that requires click: only uvicorn. A
-plain `pip install .` has no click.
+**The traceback has the same cause.** The one use of click is
+`click_type=click.Choice(...)` on `Z_UNIT`
+(`src_python/tin_engine/cli.py@55b9f564:229`), shared by `mesh`, `catchment`
+and `station-catchments`. typer wraps the foreign `Choice` as a plain function
+type, so the real-click `BadParameter` it raises is not the class typer's
+handler catches. Probed by increment 47's design on master's code (typer
+0.27.3, click 8.5.0):
 
-**Declaring click is the wrong fix.** The one use of click is
-`click_type=click.Choice(...)` on `--z-unit` (`cli.py` line 229). On typer
-0.26 and later that passes a real-click type into typer's vendored click,
-which the release notes say is no longer supported. Measured on a toy Typer
-app in a scratch venv (typer 0.27.3, click 8.5.0) with the same
-`click_type=click.Choice(["m", "ft"])` option:
+| Command line | Exit | Last line |
+|---|---|---|
+| `mesh --z-unit furlong --out x.vtk` | 1 | `BadParameter: 'furlong' is not one of 'm', 'ft', 'us-ft'.` |
+| `catchment --z-unit furlong` | 1 | same |
+| `station-catchments --z-unit furlong` | 1 | same |
+| `mesh --tolerance abc --out x.vtk` | 2 | `Invalid value for '--tolerance': 'abc' is not a valid float.` |
 
-| input | result |
-|---|---|
-| `--z-unit ft` | accepted, exit 0 |
-| `--z-unit yd` | **traceback** (`click.exceptions.BadParameter` from real click, not caught by typer's vendored click), exit 1 |
-| `--help` | metavar shown as `<function>` |
+The same wrapping shows the option as `<function>` in `--help`, and gives the
+MCP tool schema (`tin_engine/mcp/schema.py`, `_annotation`) any string for
+`z_unit` instead of the three spellings, because the wrapped type has no
+`choices`.
 
-That traceback is increment 47's defect. With click declared, the import
-succeeds and the traceback stays. The fix is to remove the import and
-express the choice the way Typer itself supports: an enum.
+**So declaring click is the wrong fix**: the import would succeed and all
+three faults would stay. The fix removes the import and declares the choice
+the way typer supports.
 
 **Every other third-party import.** An AST scan of all 70 `.py` files under
 `src_python/tin_engine/` (every `import` and absolute `from` import,
@@ -70,152 +82,146 @@ names:
 | typer | 3 | yes |
 | mcp | 1 (`mcp/server.py`) | yes, `mcp` extra |
 | **click** | 1 (`cli.py`) | **no** |
-| **mcp_types** | 2 (`mcp/schema.py`, `mcp/server.py`) | **no**; distribution `mcp-types`, pulled by `mcp==2.3.0` as `mcp-types==2.3.0` |
+| **mcp_types** | 2 (`mcp/schema.py`, `mcp/server.py`) | **no**; distribution `mcp-types`, pulled by `mcp` 2.3.0 as `mcp-types==2.3.0` |
 | **anyio** | 1 (`mcp/server.py`) | **no**; pulled by `mcp` as `anyio>=4.9` (`>=4.10` on Python 3.14) |
 
-So beyond click, two direct imports of the `mcp` package's own dependencies
-are undeclared. They cannot fail today (the `mcp` extra always brings them),
-but they are imported by name, so they are declared by name (deptry's rule
-DEP003, section 3). Each import name above maps to its distribution by
-PEP 503 normalisation (lower case, `_` to `-`); no alias table is needed.
+`anyio` and `mcp-types` cannot fail today (the `mcp` extra always brings
+them), but they are imported by name, so they are declared by name (deptry's
+rule DEP003, section 3). Each import name maps to its distribution by PEP 503
+normalisation (lower case, `_` to `-`); no alias table is needed.
 
 ## 3. Prior art: legacy and literature
 
-*Literature.* This is packaging practice, not a method; nothing new is
-claimed.
+*Literature.* This is packaging practice and the CLI library's own choice
+type used as documented; nothing new is claimed.
 
 - PEP 621, *Storing project metadata in pyproject.toml*: `dependencies` and
-  `optional-dependencies` are the project's declared requirements; an
-  installer installs nothing else on the project's behalf.
-- PEP 503, *Simple Repository API*, section "Normalized Names": the name
-  normalisation the test uses to match an import name to a requirement.
+  `optional-dependencies` are the project's declared requirements.
+- PEP 503, *Simple Repository API*, "Normalized Names": the normalisation the
+  import gate uses to match an import name to a requirement.
 - deptry (`https://deptry.com/rules-violations/`), rules DEP001 (an imported
   module has no declared package) and DEP003 (an imported module comes only
-  through another package's dependency tree). Click here is a DEP003 case that
-  became DEP001 the day typer 0.26 shipped. The test below is those two rules
-  for one package, written as a short pytest rather than a new dev
-  dependency: deptry is a compiled tool, and one test over 70 files does not
-  justify it.
-- typer 0.26.0 release notes (`https://github.com/fastapi/typer/releases/tag/0.26.0`):
-  click vendored, click-specific functionality unsupported. typer documents
-  an `enum.Enum` annotation as its own way to declare a choice
-  (`https://typer.tiangolo.com/tutorial/parameter-types/enum/`).
+  through another package's dependency tree). Click here was a DEP003 case
+  that became DEP001 the day typer 0.26 shipped. The gate below is those two
+  rules for one package, as a short pytest rather than a new dev dependency.
+- typer release notes (`https://typer.tiangolo.com/release-notes/`): 0.19.0,
+  "Support `typing.Literal` to define a set of predefined choices"; 0.26.0,
+  click vendored, click-specific functionality unsupported.
 
-*Legacy.* Nothing to carry: the legacy tree neither uses click nor declares
-dependencies in a form this increment could reuse.
+*Legacy.* Nothing to carry: the legacy tree has no command-line height unit,
+no click, and no dependency declaration this increment could reuse.
 
 ```
-$ git grep -l -i click legacy-archive -- legacy
-(no output)
+$ git grep -l -iE 'z_unit|z-unit|click|vertical.?unit' legacy-archive -- legacy
+legacy-archive:legacy/rasputin/reader.py
 $ git grep -l -E "install_requires|requirements" legacy-archive -- legacy
 (no output)
 ```
 
-## 4. What changes
+The one hit is `legacy/rasputin/reader.py@legacy-archive:86`,
+`VerticalUnitsGeoKey = 4099`, a GeoTIFF key constant that
+`tin_engine/io/geotiff.py` already reads.
 
-1. **`cli.py`: `--z-unit` becomes an enum option.** Remove `import click`.
-   Add, beside `Z_UNIT`:
+## 4. Literal or enum: Literal
 
-   ```python
-   class ZUnitOption(enum.StrEnum):
-       """``--z-unit``'s spellings, one per row of ``UNITS``."""
-       M = "m"
-       FT = "ft"
-       US_FT = "us-ft"
-   ```
+Increment 47 proposed `Literal["m", "ft", "us-ft"]` with `typer>=0.19`; this
+file's first version proposed a `StrEnum` with `typer>=0.26`. **The Literal
+is taken**, because:
 
-   and `Z_UNIT = Annotated[ZUnitOption | None, typer.Option("--z-unit", help=...)]`
-   with no `click_type`. Nothing downstream changes: `_z_unit(option: str | None)`
-   and `_z_words` take a `str`, a `StrEnum` member is one, `==` against
-   `"ft"` holds and `str()` gives the spelling. The MCP schema
-   (`mcp/schema.py`, `_annotation`) reads `param_type.choices` by duck typing,
-   so the tool's `z_unit` property stays `Literal["m", "ft", "us-ft"]`.
-   Measured on the toy app with this enum: typer 0.26.0 with click
-   uninstalled, 0.25.1 with click 8.5.0, and 0.12.0 with click 8.1.8 all
-   accept `ft` (the function receives `ZUnitOption.FT`, equal to `"ft"`) and
-   answer `yd` with "Invalid value for '--z-unit': 'yd' is not one of 'm',
-   'ft', 'us-ft'." (exit 2 measured on 0.26.0 and 0.25.1); typer's `choices` is
-   `('m', 'ft', 'us-ft')`; `--help` shows `<m|ft|us-ft>`.
-   The members are written out, not built from `UNITS`, because mypy strict
-   rejects a functional `Enum(...)` call with a computed second argument;
-   test 2 keeps the two in step.
-2. **`pyproject.toml`: the floor of typer becomes `typer>=0.26`.** Below
-   0.26 typer requires click with no upper bound, and the resolver can pair an
-   old typer with a click it does not work with: typer 0.12.0 with click 8.5.0
-   (what pip picks for `typer==0.12.0` today) answers the toy's
-   `--z-unit ft` with "Got unexpected extra argument (ft)". From 0.26 typer
-   carries its own click, so the floor is the first version whose click
-   cannot drift.
-3. **`pyproject.toml`: the `mcp` extra declares `anyio>=4.9` and
-   `mcp-types>=2.3`.** The bounds are the ones `mcp` 2.3.0 itself requires
-   (the 3.14-only `anyio>=4.10` stays `mcp`'s to impose). `dev` is unchanged:
-   it lists `mcp>=2.3`, which brings both.
+- it keeps the value a plain `str`, as today, so `_z_unit`, `_z_words` and
+  the MCP default handling see what they see now;
+- typing `UNITS` with it makes mypy refuse a row whose spelling is not one of
+  the three, where the enum needed a second hand-written list kept in step
+  only by a test;
+- its floor is sound. My reason for 0.26 was that an old typer can be paired
+  with a click it does not parse with (measured: typer 0.12.0 with click 8.5.0
+  answers `--z-unit ft` with "Got unexpected extra argument (ft)"). typer
+  0.19.0 does not have that fault: measured on a toy app with the Literal
+  option, typer 0.19.0 with click 8.5.0 and typer 0.26.0 with click
+  uninstalled both accept `us-ft` (the function receives `'us-ft'`) and answer
+  `yd` with exit 2 and "Invalid value for '--z-unit': 'yd' is not one of 'm',
+  'ft', 'us-ft'."
 
-Click is **not** declared: after change 1 no first-party file imports it.
+## 5. What changes
 
-## 5. The tests that pin it
+1. `src_python/tin_engine/io/models.py`: beside `ZUnit`, the option's
+   spellings `ZSpelling = Literal["m", "ft", "us-ft"]`, and `UNITS` typed
+   `dict[int, tuple[ZUnit, float, ZSpelling, str]]`.
+2. `src_python/tin_engine/cli.py`: `Z_UNIT` becomes
+   `Annotated[ZSpelling | None, typer.Option("--z-unit", help=...)]` with no
+   `click_type`; `import click` is removed; `_z_unit` takes
+   `ZSpelling | None`. The help text is unchanged.
+3. `pyproject.toml` (not counted): `typer>=0.19`; the `mcp` extra adds
+   `anyio>=4.9` and `mcp-types>=2.3` (the bounds `mcp` 2.3.0 itself requires;
+   the 3.14-only `anyio>=4.10` stays `mcp`'s to impose). `dev` is unchanged:
+   its `mcp>=2.3` brings both. **Click is not declared**: after change 2 no
+   first-party file imports it.
 
-New file `tests/python/test_declared_imports.py`, product suite (not
-`harness`: it reads `src_python/`).
+## 6. The tests that pin it (`@tester`, red first)
 
-1. **Every third-party import is declared.** Parse `pyproject.toml` with
-   `tomllib`; take each requirement's name (the leading
-   `[A-Za-z0-9._-]+`) and normalise it (PEP 503). Walk every `.py` under
-   `src_python/tin_engine/` with `ast` (every `Import`, every `ImportFrom`
-   with `level == 0`, inside functions and `TYPE_CHECKING` blocks too); take
-   the top-level name, skip `sys.stdlib_module_names` and `tin_engine`,
-   normalise it. A file under `tin_engine/mcp/` may use `dependencies` plus
-   the `mcp` extra; every other file only `dependencies`. The assertion lists
-   each offender as `path:line name`. Static: it imports nothing and needs
-   no installed extra, so it runs the same in every CI leg.
-   Fixture figures (master `55b9f564`): 70 files, ten third-party names
-   (section 2's table); on master it fails with five offending lines:
-   `cli.py:58 click`, `mcp/schema.py:20 mcp_types`, `mcp/server.py:31 anyio`,
-   `mcp/server.py:32 mcp_types`, `mcp/server.py:34 anyio`. After change 3 only
-   the first remains; after change 1, none. A core module importing `mcp`
-   would also fail, which is the second rule's point; `@tester` shows it by a
-   planted line in a copy, not in the suite.
-2. **The enum matches the unit table.** `{m.value for m in ZUnitOption} ==
-   {row[2] for row in UNITS.values()}` (three spellings: `m`, `ft`, `us-ft`).
-   Fails red on `ImportError` until `ZUnitOption` exists.
-3. **A wrong `--z-unit` is a usage error.** `CliRunner().invoke(app,
-   ["mesh", ..., "--z-unit", "yd"])` exits 2, says "Invalid value for
-   '--z-unit'", and `result.exception` is `None` or `SystemExit`. The other
-   arguments are `@tester`'s to choose so that parsing reaches `--z-unit`
-   (click converts every option before the command body runs, so no DEM is
-   read); the red step records the argv used. If increment 47 lands first
-   with this pin, 48 drops it (section 6).
+No fixture files: every CLI test is an argument list. click converts the given
+`--z-unit` before it checks for missing required options (master's
+`station-catchments --z-unit furlong`, with no `--dem`, already reaches the
+conversion). Use the runner directly, not `refused()`, which appends `--out`
+where `station-catchments` has `--out-dir`.
 
-No mutation round: no invariant-critical suite here.
+- **T1, the usage error** (parametrised over `mesh`, `catchment`,
+  `station-catchments`): `--z-unit furlong` gives exit 2, the result's
+  exception is `SystemExit`, and the output names `--z-unit`, `furlong`, `m`,
+  `ft` and `us-ft` (Rich may wrap: compare with whitespace removed). Red on
+  master: exit 1, the exception a `BadParameter`.
+- **T2, the help** (same three): `--help` output, whitespace removed, contains
+  `m|ft|us-ft` and not `<function>`. Red on master.
+- **T3, the MCP schema** (in `tests/python/test_mcp_schema.py`, which skips
+  without `mcp`): for `mesh`, `catchment` and `station_catchments`, the
+  `z_unit` property admits exactly `m`, `ft`, `us-ft` and null. Red on master
+  (any string).
+- **T4, no drift**: the members of `ZSpelling`
+  (`typing.get_args`) equal the spellings in `UNITS` (three: `m`, `ft`,
+  `us-ft`). Red on master (no `ZSpelling`).
+- **T5, the import gate** (new file `tests/python/test_declared_imports.py`,
+  product suite, not `harness`): parse `pyproject.toml` with `tomllib`; take
+  each requirement's name (the leading `[A-Za-z0-9._-]+`) and normalise it
+  (PEP 503). Walk every `.py` under `src_python/tin_engine/` with `ast`
+  (every `Import`, every `ImportFrom` with `level == 0`, inside functions and
+  `TYPE_CHECKING` blocks too); take the top-level name, skip
+  `sys.stdlib_module_names` and `tin_engine`, normalise it. A file under
+  `tin_engine/mcp/` may use `dependencies` plus the `mcp` extra; every other
+  file only `dependencies`. The assertion lists each offender as
+  `path:line name`. Static: imports nothing, needs no installed extra.
+  Fixture figures (master `55b9f564`): 70 files, ten third-party names
+  (section 2's table); red with five offending lines: `cli.py:58 click`,
+  `mcp/schema.py:20 mcp_types`, `mcp/server.py:31 anyio`,
+  `mcp/server.py:32 mcp_types`, `mcp/server.py:34 anyio`. A core module
+  importing `mcp` must also fail; `@tester` shows it once by a planted line
+  in a scratch copy, not in the suite.
+- **Happy path, kept**: `tests/python/test_cli_units.py`'s mesh with
+  `--z-unit us-ft` (and the refusal of a feet DEM without it) stays green
+  unchanged.
 
-## 6. Overlap with increment 47
-
-Increment 47 (designed at the same time on `worktree-z-unit-usage`) is about
-`rasputin mesh --z-unit <bad value>` printing a traceback instead of a usage
-error. Section 2 shows that traceback and this missing import have **one
-cause** (a real-click type handed to typer's vendored click) and **one fix**
-(change 1). Whichever increment lands second finds its red test already
-green. The main session sequences them: either one PR carries change 1 with
-both increments' tests, or 48 lands first and 47 keeps only the pins 48 does
-not have (for instance the same check on the two other commands taking
-`--z-unit`, `catchment` and `station-catchments`; `Z_UNIT` is used at
-`cli.py` lines 967, 2654 and 2917).
+No mutation round: nothing here is invariant-critical.
 
 ## 7. Left out
 
-- `tools/`, `tests/` and `docs/benchmarks/` imports: not shipped in the wheel.
-  `tests/` uses `pytest`, `hypothesis` and `vtk`, all in extras.
+- `tools/`, `tests/` and `docs/benchmarks/` imports: not shipped in the
+  wheel. `tests/` uses `pytest`, `hypothesis` and `vtk`, all in extras.
 - Unused declared dependencies (deptry DEP002): all six core dependencies and
-  `imagecodecs` (loaded by tifffile, not imported) are in use; no check added.
-- A fresh-venv install test in CI (`pip install .` without extras, then
-  `rasputin --help`): it would catch this class at the cost of a C++ build per
-  run; test 1 catches it statically. Handed back as an idea.
-- Upper bounds on typer: typer is 0.x and has broken its API in a minor
-  release once already, but a cap is a policy for Ola, not part of this fix.
+  `imagecodecs` (loaded by tifffile, not imported) are in use.
+- A CI job that installs without extras and runs `rasputin --help`: it would
+  catch this class of fault at the cost of a C++ build per run; T5 catches it
+  statically. Handed back as an idea.
+- An upper bound on typer: a policy for Ola, not part of this fix.
+- A general check that no option escapes as a crash: no other option is
+  parsed through a foreign type (`grep -rn click_type src_python` returns
+  only `cli.py:229`); options with a `callback=` raise `typer.BadParameter`
+  and exit 2.
+- From Ola's private ideas file, not taken up (as 47 noted): "`--stats`
+  swallows the next option as its path" and "Two small fixes from 37's code
+  review" (`schema._annotation` dropping a zero bound).
 
 ## 8. Estimate
 
-Production lines (`CLAUDE.md` §2; TOML is not counted): `cli.py` about +3 net
-(`import enum` +1, `import click` -1, the class 4, the `click_type` line -1).
-Tests about 60 lines. Well under the short path's 50-line limit; no C++ file;
-nothing under *Acceptance*.
+Production lines (`CLAUDE.md` §2; TOML is not counted): about 0 net
+(`import click` and the `click_type` line removed, one alias added to
+`models.py`, three lines changed in place). Tests about 90 lines. Under the
+short path's 50-line limit; no C++ file; nothing under *Acceptance*.
