@@ -22,6 +22,12 @@ include/terrain/           # public C++ headers, header-only where possible
     snap_grid.hpp          # GridPoint, SnapGrid: the lattice noded output lies on
     noded_pslg.hpp         # NodedPslg: the noder's output, the CDT's input (5b)
     indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
+  radiation/
+    time.hpp               # UTC time points (std::chrono), Julian day, ΔT
+    solar_position.hpp     # the sun's position by NREL's SPA: geocentric,
+                           #   topocentric, refraction; the terrain-radiation
+                           #   design's TR1
+    spa_tables.hpp         # SPA's periodic-term and nutation tables
   snow/
     hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
                            #   the step with an optional sun correction; depends
@@ -109,6 +115,8 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
+  radiation.cpp            # the sun's position for arrays of UTC times;
+                           #   releases the GIL
   snow.cpp                 # the snow kernel's binding: arrays in and out,
                            #   refusals as ValueError naming the status,
                            #   and the triangle for a non-finite value
@@ -259,6 +267,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
                            #   itself is data/class_maps/corine.toml (41)
+  radiation/               # sun and terrain radiation
+    time.py                # to_utc_ms: datetimes to int64 UTC milliseconds,
+                           #   refusing a time zone; imports nothing first-party
   snow/                    # snow on the mesh
     params.py              # the HBV snow parameters and sun-correction mode as
                            #   a strict Pydantic model; imports nothing first-party

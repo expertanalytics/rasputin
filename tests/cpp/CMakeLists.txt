@@ -548,3 +548,9 @@ target_link_libraries(prop_refinement_slope_tolerance PRIVATE Threads::Threads)
 # threads (1 and 8 must agree bit for bit).
 add_terrain_test(test_hbv_snow unit/test_hbv_snow.cpp)
 target_link_libraries(test_hbv_snow PRIVATE Threads::Threads)
+
+# The sun's position, increment 46 PR 2 = the terrain-radiation design's TR1
+# (docs/increments/46-hbv-snow.md section 4.4; terrain-radiation.md R2 and its
+# "Verification plan" item 1): Julian day, delta T, NREL's test case, SPA's
+# term tables, the refraction guard. Header-only (include/terrain/radiation/).
+add_terrain_test(test_radiation_sun unit/test_radiation_sun.cpp)
