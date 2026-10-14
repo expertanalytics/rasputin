@@ -1,8 +1,8 @@
 # Terrain radiation: a radiation geometry per mesh, and time series on demand
 
-Status: **designed; TR1 built by increment 46's PR 2**, the rest not started (2026-09-28, `@architect`, branch
-`design-terrain-radiation`; brought to master by increment 46's PR 2). TR1 has code
-and tests in that PR; the rest is design only. The work is split
+Status: **designed; TR1, TR2, TR3a, TR3b's near raster and TR5's instant evaluator built by increment 46's PRs 2, 4, 5 and 6**, the rest not started (2026-09-28, `@architect`, branch
+`design-terrain-radiation`; brought to master by increment 46's PR 2). Those steps have code
+and tests in those PRs; the rest is design only. The work is split
 into seven increments, TR1-TR7 ("Increments and LOC"). ROADMAP places it after
 auto-catchment. TR1 (the sun's position) depends on nothing and can move earlier
 if Ola wants. Written before `@tester`, per `docs/increments/README.md` step 1.
@@ -1145,10 +1145,10 @@ not raw literals.
   from coverage before the march, floored to whole km; the early stop over
   both rasters; far samples from D_near + Δ_far; int16 rounded half away
   from zero).
-- TR3b: only the near raster's call in `radiation/search.py`, in PR 6; no
+- TR3b: only the near raster's call in `radiation/search.py`, in increment 46's PR 6 (built); no
   far raster, no `rasputin radiation geometry` CLI, no N-by-latitude run.
 - TR5: the C++ `instant` evaluator, its binding and a synchronous Python
-  call, in PR 6, reading the receiver set and horizon table as arrays
+  call, in increment 46's PR 6 (built), reading the receiver set and horizon table as arrays
   before TR4 exists; no CLI, no async call, no `mean` mode.
   `RadiationGeometry` gets only TR2's and TR3a's fields; TR4 adds the sky
   factors, the `.npz` file, TR5's CLI and its async call to the same class

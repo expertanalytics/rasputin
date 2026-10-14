@@ -4,7 +4,8 @@
 the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
 and animation, acceptance run recorded, code review round 2 approved; PR 4,
 the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
-evaluator, snow wiring and Bygdin run, green, in review**
+evaluator, snow wiring and Bygdin run, code review round 2 approved,
+acceptance run next**
 (2026-10-14). Six PRs (section 10.7, which supersedes section 8's table). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
@@ -197,7 +198,7 @@ Read `../rasputin_scratch/ideas/ideas.md` before the design.
        │  flags -> SnowJob (frozen Pydantic: HbvSnowParameters, SnowDistribution,
        │          SunCorrection, SyntheticSpring, FrameSpec, Resources)
        ├─ io/vtk_read.py  read_mesh(bytes) -> MeshArrays(vertices, triangles, crs)
-       ├─ snow/geometry.py  triangle_geometry(mesh, convergence) -> normals (ENU),
+       ├─ snow/geometry.py  triangle_geometry(mesh, crs) -> normals (ENU),
        │                    centroid z, horizontal area                 pure numpy
        ├─ crs.py  centre (lat, lon) and grid convergence at the centre  pyproj
        ├─ snow/forcing.py  SyntheticSpring -> per step: temperature per triangle,
@@ -880,9 +881,9 @@ each sun sample, each built as the radiation design states it:
 | TR1, the sun | the sun at each sample time | all of it: this increment's PR 2 (unchanged) |
 | TR2, the receiver frame | per triangle: latitude and longitude, the normal in true east-north-up, the map from grid to true directions (its J), the exclusion radius, the observer height | all of it: PR 4 |
 | TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 (built) |
-| TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 |
+| TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 (built) |
 | TR4, sky factors and the geometry file | nothing: the lit test needs no sky view, and the horizons are computed in the run, not stored | none |
-| TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6; not its CLI |
+| TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6 (built); not its CLI |
 | TR6, TR7 | nothing (exact lit intervals and the `mean` mode; adapters) | none |
 
 **What is left out of TR3b, and why that is safe in the melt season.** TR3b
@@ -1281,3 +1282,5 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
 **Code review, round 1 (PR 5, TR3a horizon kernel), 2026-10-14.** Range `b1971263..8ecc5596`, 354 net production lines (about 355 estimated: C++ 310 against 300, binding and stub 44 against 55, Python 0), @reviewer: APPROVED WITH WORDINGS: the red step's "Interface assumed" text in both test files becomes "Interface under test" (@tester); `horizon.hpp`'s header says the sample spacing is half the smaller cell side (@developer); TR3a marked built here and in `terrain-radiation.md` (main session); applied in `b8194219`, `e859ec70` and `2eaadb27`. Held: the pruning bound, the early stop over both rasters, far samples from D_near + Δ_far, D_far = D_near with no far raster, rounding half away from zero, pyramid blocks covering their boundary nodes, the pruned search keeping samples through the exhaustive one's functions; @developer's pins (spacing, reach at most 254, the bound's slack, levels 1 and up with a NoData byte per block, d_far checked only with a far raster); the kill record `8ecc5596` covers all 13 targets of section 10.8. Not pushed, CI pending.
 
 **Code review, round 1 (PR 6, the evaluator, near raster, RadiationGeometry and snow wiring), 2026-10-14.** Range `80fe061a..e61e0ac6`, 364 net production lines (about 490 estimated), @reviewer: CHANGES REQUESTED. Blocking: (1) section 10.5's one source of normals is not done: `snow/geometry.py` still turns every normal by one convergence angle and feeds `aspect_deg.var`; with test R3 retired and every other test passing an angle of 0, the turn is untested, and `forcing.radiation_anomaly` is called only by tests; slope and aspect come from the receiver frame's per-triangle normals, the turn and `radiation_anomaly` go with their tests; (2) a near-zero-area sliver triangle aborts the snow run: `cli.py` drops only exact-zero areas while `receivers_from_mesh` refuses below its 1e-9 relative limit (three collinear points near (500000, 6800000): "triangle 0 has zero area"), against section 4.9's counted-with-no-correction; the message's index counts kept triangles, not the mesh's; one shared zero-area test, and a test with such a triangle. Wordings: "Interface assumed" in the three new test files becomes "Interface under test", the Python list gains `n_directions`; on approval, TR3b and TR5 marked built in `terrain-radiation.md` and in section 10.4's table. Held: 10.5's ΔI formula; the evaluator's sun axes and refraction against the reference sun; the strict lit test; test S, I7 and I8; @developer's four pins (a zero-area triangle under an open sky gets ΔI exactly 0); amendment `5d318337` fixes three real test defects. Not pushed.
+
+**Code review, round 2 (PR 6), 2026-10-14.** Range `e61e0ac6..e11dcc00`, 368 net production lines from `80fe061a` (about 490 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session: TR3b and TR5 marked built in `terrain-radiation.md` and section 10.4's table; that file's Status and this file's Status; the blueprint's `triangle_geometry(mesh, crs)`. Both round-1 blockers fixed: `snow/geometry.py` takes its normals from `receivers_and_zero_area`, the single turn and `radiation_anomaly` gone, tests at Bygdin and on the central meridian equal to the frame's normals bit for bit; one zero-area test (`ZERO_AREA_SINE`), a zero-area triangle given a vertical normal, the sliver through `rasputin snow` with shadows off and on with a correction of exactly 0, errors naming the mesh's own index. Round 1's wordings applied; no red-step scaffolding. The push waits for `@perf`'s PR 6 acceptance run (sections 10.7 and 10.9). Suggestion: `triangle_geometry` could return its frame so `cli.py` reprojects once. Not pushed.
