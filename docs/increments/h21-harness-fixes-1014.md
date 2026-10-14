@@ -136,21 +136,32 @@ is judged by today's text rules, which ask. It is `True` only when all hold:
 5. `literal(line)`: the line, as written, has no shell expansion outside
    single quotes. A new pure function in `tools/shell_scan.py`, a left-to-right
    scan with three states (outside quotes, in `'...'`, in `"..."`; a
-   backslash outside single quotes takes the next character): `False` on `$`
-   or a backtick outside single quotes, and outside any quotes on `{`, `}`,
-   `*`, `?`, `[`, `~` or a backslash (brace, glob and tilde expansion, and
-   escapes such as `mu\tation`); also `False` on an unclosed quote. So
+   backslash outside single quotes takes the next character): `False` on `$`,
+   a backtick or a backslash outside single quotes (a backslash inside
+   double quotes too: `"muta\` and a newline joins lines), and outside any
+   quotes on `{`, `}`, `*`, `?`, `[` or `~` (brace, glob and tilde
+   expansion); also `False` on an unclosed quote. So
    `$M`, `"$M"`, `$'\x6d'`, `$(printf mut)`, `` `…` `` and `mu{tation,}`
    are refused, and a query written in single quotes passes.
-6. The whole line, as written, contains neither `mutation` nor
-   `subscription` as a word (`\b(mutation|subscription)\b`): every field,
-   every other command on the line, comments and strings included.
+6. Neither `mutation` nor `subscription` appears as a word
+   (`\b(mutation|subscription)\b`) in either of two readings, each over the
+   whole line: (a) the line as written, comments and strings included; (b)
+   every token of `shlex.split(line)` (POSIX mode, so quotes are removed and
+   adjacent quoted parts joined; a `ValueError` is `False`). Quote removal
+   is what joins `'mut''ation'`, `"mut"ation` or `mut'a'tion` into the word
+   `gh` receives, so (a) alone misses them (review round 2, point 1). With
+   rule 5 the line holds no expansion and no backslash outside single
+   quotes, so shlex's quote removal and the shell's agree, and its tokens
+   are the arguments `gh` gets. One reader is enough: `shell_scan`'s argv
+   would agree with shlex on every line rule 5 passes, and a second reader
+   no mutant could tell apart is not kept.
 
 Other fields (GraphQL variables such as `-F number=5`, `-f owner=x`) are
 allowed: a variable is a value, never an operation type.
 
 What it does not claim. Given 5, the query text `gh` sends is the text the
-guard reads, and given 6 a mutation's keyword is on the line, so a mutation
+guard reads after quote removal, and a mutation's keyword is one token
+inside one argument, so 6 (b) and (c) see it; a mutation
 or subscription sent through `gh api graphql` by a line that passes 1 to 6
 is not known to exist. It does not hold against a `gh` that is not GitHub's
 (a wrapper earlier on `PATH`, `GH_*` settings pointing elsewhere); the
@@ -184,6 +195,21 @@ ask. Never passes, whatever the directory: `git push` (`PUSH`, `FORCE`),
 3. The git command names no file outside its repository: `config` with
    `--global`, `--system` or `--file`/`-f` (joined or separate) fails, as
    do `--git-dir`/`--work-tree` and `-c include.path=…` anywhere in its argv.
+   And it cannot point the repository at another tree: any argv word that
+   contains, case-insensitively, `core.worktree`, `include.` or
+   `includeif.` fails (`git config core.worktree <repo>`, `git config
+   include.path <file>` holding such a key, `-c core.worktree=…`).
+3b. Its work tree is in the scratchpad too: `git -C <dir> rev-parse
+   --show-toplevel`, run as in 2, exits 0 and prints a path whose real path
+   is under a scratchpad. Both checks, and why (review round 2, point 2):
+   3's key refusal stops a line from setting `core.worktree`; 3b catches one
+   set before, by a line the guard did not see as git (a `printf >>
+   <pad>/c/.git/config`, which the governance guard lets through as a
+   scratchpad write). A bare repository has no top level: it fails 3b and
+   asks. Residual, stated: work-tree writes that are not local writes
+   (`git checkout -f`, `git clean`) are not asked today in any repository,
+   so a repository whose config was edited by hand is not guarded for them;
+   the guards are tripwires.
 4. The line's text holds no `GIT_[A-Z_]*` word (`GIT_DIR`, `GIT_CONFIG_GLOBAL`,
    `GIT_CONFIG_PARAMETERS`, …): the environment could move any of 1 to 3.
 5. Nothing else on the line can change which repository the directory is
@@ -221,8 +247,27 @@ def literal(line: str) -> bool:
 - `chained: bool`: it is a top-level command, no reserved word (`!`, `if`,
   `{`, `while`, …) was stripped from its front, and the only token between it
   and the previous top-level command is one `&&` (the line's first command:
-  none). `;`, a newline, `||`, `|`, `&`, `(`, `)` or a reserved word there
-  makes it `False`.
+  none), and no assignment word (`CDPATH=x`, `HOME=x`) was stripped from
+  its front. `;`, a newline, `||`, `|`, `&`, `(`, `)` or a reserved word there
+  makes it `False`, as does an assignment-only command before it
+  (`CDPATH=x && cd ./c`: two `&&` between top-level commands).
+
+With `chain_only`, a directory-changing command gives a `Path` only in one
+form (review round 2, point 3): `cd` or `pushd` with exactly one argument,
+which, quotes removed, starts with `/`, `./` or `../`. The new directory is
+the current one joined with that word and normalised lexically
+(`os.path.normpath`), as the default logical `cd -L` of bash and zsh does;
+the real path is taken only afterwards, by `scratchpad.under`. Because bash
+falls back to the physical path when the logical one fails, the form also
+requires the two to agree: `os.path.realpath` of the normalised join equals
+`os.path.realpath` of the raw join; else `str` (`cd <pad>/l/../x` with `l` a
+link out of the scratchpad). Every other
+form gives the `str` reading for it and all later commands: zsh's
+two-argument `cd OLD NEW`, `pushd +1`/`-1`, `pushd` or `cd` with no
+argument, `cd -`, `popd`, an option (`cd -P x`), a bare relative word (`cd
+c`, which `CDPATH`, zsh's `cdpath` or named directories can send
+elsewhere), and `~`. `CDPATH` is not consulted for a word starting `/`,
+`./` or `../`, in either shell.
 
 So with `chain_only`, `cd <pad> && git config a.b c` passes; `(cd <pad>) ;
 …`, `false && cd <pad>; …`, `cd <pad> || true && …`, `! cd <pad> && …` and
@@ -503,6 +548,11 @@ network; `gh` is a fake on `PATH` where used.
 2. Ask, operation: `-f query='mutation { ... }'`; `query Q {...} mutation M
    {...}`; `subscription {...}`; a read whose text contains `# mutation`; a
    read followed by `&& echo mutation` (the word anywhere on the line).
+   Quote removal (review round 2, point 1): `-f query='query Q { a }
+   mut''ation M { b }' -f operationName=M`; `-f query='query Q { a }
+   '"mut"ation' M { b }'`; `-f query='{ a } mut'a'tion M { b }'`;
+   `subscrip''tion`: each asks. `literal` pure, round 2: `"muta\` newline
+   `tion"` and `"a\"b"` are `False`.
 3. Ask, shell expansion (review point 1): `-f query="$M"`; `-f
    query=$M`; `-f query=$'\x6d'utation...`; `-f query="$(printf
    mut)ation {...}"`; a backtick form; `-f query=mu{tation,}...` unquoted;
@@ -519,7 +569,11 @@ network; `gh` is a fake on `PATH` where used.
 
 Fixture: `<pad>/c` made by `git init -q` (its own common directory);
 `<pad>/w` a worktree of the test repository (`git -C <repo> worktree add`);
-`<pad>/g` a directory whose `.git` file reads `gitdir: <repo>/.git`.
+`<pad>/g` a directory whose `.git` file reads `gitdir: <repo>/.git`;
+`<pad>/t` made by `git init -q`, then `[core] worktree = <repo>` appended to
+`<pad>/t/.git/config` by the test with Python file I/O (a hand edit the
+guard never saw); `<pad>/b` made by `git init -q --bare`; `<pad>/l` a
+symbolic link to `<repo>/sub`, with `<repo>/x` and no `<pad>/x`.
 
 5. Push guard, pass: `git -C <pad>/c config user.name x`; `cd <pad>/c && git
    update-ref refs/x HEAD`; `git -C <pad>/c commit --amend -m m`; and, as
@@ -536,6 +590,12 @@ Fixture: `<pad>/c` made by `git init -q` (its own common directory);
    (no repository yet); `git -C <pad>/c config --global a.b c`, `--system`,
    `--file <repo>/.git/config`, `-f <repo>/.git/config`; `cd <pad>/c && rm
    -rf .git && git config a.b c` (rule 5: a writer on the line).
+   Work tree (review round 2, point 2): `git -C <pad>/c config core.worktree
+   <repo>`; `git -C <pad>/c config CORE.WORKTREE <repo>`; `git -C <pad>/c
+   config include.path ../inc`; `git -C <pad>/c -c core.worktree=<repo>
+   update-ref refs/x HEAD`; `git -C <pad>/t update-ref refs/x HEAD` and `git
+   -C <pad>/t reset --hard` (3b: the top level is `<repo>`); `git -C <pad>/b
+   config a.b c` (bare, no top level): each asks.
 8. Directory chain (review point 3), `directories(chain_only=True)` pure and
    both guards end to end: `(cd <pad>/c) ; git config a.b c`; `(cd <pad>/c)
    && git config a.b c` (the cd moves nothing: the repo is judged); `false &&
@@ -545,6 +605,17 @@ Fixture: `<pad>/c` made by `git init -q` (its own common directory);
    <pad>; printf x >> CLAUDE.md`: each asks; `chained` and `nested` set as
    section 4.2 says on each (`test_shell_scan.py`). With `chain_only=False`,
    `cd <wt>; git commit` resolves to `<wt>` (today's reading kept).
+   The `cd` form (review round 2, point 3), each asking, with
+   `directories` giving a `str` from that command on: `cd <pad>/c <repo> &&
+   git config a.b c` (zsh's two-argument `cd`); `pushd <pad>/c && pushd +1
+   && git config a.b c`; `CDPATH=<repo> cd ./c && git config a.b c` (the
+   prefix alone refuses it; a pinned over-refusal);
+   `CDPATH=<repo> && cd ./c && git config a.b c`; `cd <pad> && cd c && git
+   config a.b c` (bare relative word); `cd -P <pad>/c && …`; `cd <pad>/c &&
+   popd && …`; `cd ~ && …`; `cd <pad>/l/../x && printf x >> CLAUDE.md`
+   (lexical `<pad>/x`, physical `<repo>/x`: the two disagree). Passing:
+   `cd <pad> && cd ./c && git config a.b c`; `cd <pad>/c/sub && cd ../ &&
+   git config a.b c`; `pushd <pad>/c && git config a.b c`.
 9. Governance, pass: `cd <pad>/c && printf x >> CLAUDE.md && git -C <pad>/c
    commit -qam m`; `cd <pad> && mkdir -p c/.claude/hooks && cp a.py
    c/.claude/hooks/`.
@@ -624,18 +695,28 @@ number is the killing test):
 - GraphQL: the `mutation` word test dropped (2); the word test applied to
   the query value only, not the line (2, `&& echo mutation`); `literal`
   not called (3, `$M`); `literal` ignoring double quotes (3, `"$M"`);
-  `literal` without the brace check (3, `mu{tation,}`); `-F` accepted for
-  `query` (4); the unknown-option refusal dropped (4, `--foo`).
+  `literal` without the brace check (3, `mu{tation,}`); `literal` allowing a
+  backslash inside double quotes (2, `"muta\` newline `tion"`); reading (b)
+  dropped, the word test on the raw line only (2, `mut''ation`); reading (b)
+  with `posix=False`, which keeps the quotes (2, `"mut"ation`); `-F`
+  accepted for `query` (4); the unknown-option refusal dropped (4,
+  `--foo`).
 - Scratchpad, push guard: the scratchpad test applied to a `str` directory
   (6, `"$S"`); the `--git-dir` refusal dropped (6); the `GIT_` text test
   narrowed to the old four names (6, `GIT_CONFIG_GLOBAL`); the push excluded
   from the pass dropped (6); the common-directory check dropped (7, `<pad>/w`);
   the common-directory check replaced by `--git-dir` (7, `<pad>/g`); the
   `--global`/`--system`/`--file` refusal dropped (7); rule 5 dropped (7,
-  `rm -rf .git`).
+  `rm -rf .git`); the `core.worktree` key refusal dropped (7, `config
+  core.worktree <repo>`); that refusal made case-sensitive (7,
+  `CORE.WORKTREE`); the `--show-toplevel` check dropped (7, `<pad>/t`).
 - Directory chain: `chained` ignored (8, `false && cd <pad>/c; …`); `nested`
   ignored, a subshell's `cd` followed (8, `(cd <pad>/c) && …`); `||` read as
-  `&&` (8); a stripped `!` not breaking the chain (8).
+  `&&` (8); a stripped `!` not breaking the chain (8); the one-argument rule
+  dropped (8, `cd <pad>/c <repo>`); `pushd +N` followed (8, `pushd +1`); an
+  assignment prefix not breaking the chain (8, `CDPATH=<repo> cd ./c`); a bare
+  relative word accepted (8, `cd c`); the lexical-equals-physical check
+  dropped (8, `cd <pad>/l/../x`).
 - Governance: the linker test dropped (10, `ln`).
 - After-commit hook: resolving from the event's `cwd` (14); the
   HEAD-unchanged skip dropped (12); the in-progress test dropped (11 or 16);
@@ -649,17 +730,17 @@ Net production lines (`CLAUDE.md` §2), estimates:
 
 | File | Item | Estimate |
 |---|---|---|
-| `.claude/hooks/guard_push.py` (`graphql_read`; scratchpad checks 1 to 5 with the `rev-parse` call) | 1, 5 | about 75 |
+| `.claude/hooks/guard_push.py` (`graphql_read`; scratchpad checks 1 to 5 with the two `rev-parse` calls; the work-tree keys) | 1, 5 | about 85 |
 | `.claude/hooks/guard_governance.py` | 5 | about 20 |
-| `tools/shell_scan.py` (`directories`, `git_directory` moved; `literal`; `chained`, `nested`) | 1, 4, 5 | about 65 |
+| `tools/shell_scan.py` (`directories`, `git_directory` moved; `literal`; `chained`, `nested`; the one-word `cd` form) | 1, 4, 5 | about 80 |
 | `.claude/hooks/gates_after_commit.py` (less the moved code; reflog walk; record check) | 3, 4 | about 35 |
 | `.claude/hooks/record_bash_start.py` (new) | 4 | about 40 |
 | `tools/session_state.py` (with the state word) | 2 | about 40 |
 | `tools/brief.py` | 7, 8 | about 25 |
-| Total | | about 300 |
+| Total | | about 325 |
 
-Up from about 215 at design review round 1: the five review points add
-about 85, under the 700-line cap with room.
+Up from about 215 at design review round 1 (round 1's five points add about
+85; round 2's three about 25), under the 700-line cap with room.
 
 `.claude/settings.json`'s new pre-hook entry is JSON (not counted):
 
