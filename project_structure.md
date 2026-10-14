@@ -153,10 +153,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   to_crs, check_extent, DomainError; reads no file
                            #   (io/domain_file.py reads --domain); never imports
                            #   _core
-  crs.py                   # parse_crs, reprojector, frame_factors: the one Transformer.from_crs
+  crs.py                   # parse_crs, reprojector, frame_factors, site_of
+                           #   (latitude, longitude and convergence at a point,
+                           #   metres only): the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy;
                            #   crs_label escapes through run_record's
-                           #   escaped_ascii, its one first-party import
+                           #   escaped_ascii, with io.models' SRS constants, its
+                           #   first-party imports
   geodesy.py               # LocalFrame (a local metres frame around one point),
                            #   cell areas by row (a cell centred on its node),
                            #   geodesic area over outlines (40); pyproj and numpy;
@@ -285,8 +288,19 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     request.py             # RadiationRequest, frozen settings; imports nothing
                            #   first-party
   snow/                    # snow on the mesh
-    params.py              # the HBV snow parameters and sun-correction mode as
-                           #   a strict Pydantic model; imports nothing first-party
+    params.py              # the HBV snow parameters, sun-correction mode, the
+                           #   synthetic spring and SnowJob as strict Pydantic
+                           #   models; imports resources
+    geometry.py            # each triangle's normal (true east-north-up),
+                           #   slope, aspect, plan area, centroid height; numpy
+    forcing.py             # the synthetic spring's weather and the sun's
+                           #   correction per step, in NumPy (0 on a flat
+                           #   triangle); imports _core and snow.params
+    run.py                 # the snow run: an async generator of frames, the
+                           #   steps between frames in one to_thread call;
+                           #   imports _core and the snow modules
+    terrain.py             # a synthetic mountain on a square grid, for tests
+                           #   and demonstrations; numpy and Pydantic
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
@@ -355,6 +369,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (name, value) fields as header comments;
                            #   face_fractions= adds the per-face class lists
                            #   (26b); imports features, mesh_checks and models
+    ensight.py             # EnSight Gold binary encoders for values per
+                           #   triangle over frames: the geometry once, one
+                           #   file per value per frame, the case file; bytes
+                           #   and text out, no path
+    vtk_read.py            # reads back rasputin's own binary legacy .vtk:
+                           #   bytes in, crs, points and triangles out; no path
+    geotiff_write.py       # a height grid to GeoTIFF bytes (point-registered,
+                           #   float32) through tifffile; no path
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
                            #   ParaView; takes no path and opens nothing;
                            #   triangle_codes=, land_cover_codes= add the cell

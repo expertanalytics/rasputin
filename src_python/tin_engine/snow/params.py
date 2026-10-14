@@ -8,11 +8,14 @@ chosen values for Norwegian spring snow, explained in
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from statistics import NormalDist
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+
+from tin_engine.resources import Resources
 
 _FROZEN = ConfigDict(frozen=True, allow_inf_nan=False)
 
@@ -73,3 +76,72 @@ class SunCorrection(BaseModel):
     r: float = 0.015
     #: Threshold form: °C per W/m² of radiation anomaly.
     d: float = 0.02
+
+
+class SyntheticSpring(BaseModel):
+    """The synthetic weather's time axis: when it starts, how long, how finely."""
+
+    model_config = _FROZEN
+
+    #: Start of the run, timezone-aware; kept in UTC.
+    start: dt.datetime = dt.datetime(2027, 4, 1, tzinfo=dt.UTC)
+    days: int = Field(default=91, ge=1)
+    step_minutes: int = Field(default=60, ge=1)
+    #: Sun positions per step, at the midpoints of equal sub-intervals.
+    samples_per_step: int = Field(default=4, ge=1)
+
+    @field_validator("start")
+    @classmethod
+    def _utc(cls, start: dt.datetime) -> dt.datetime:
+        if start.utcoffset() is None:
+            raise ValueError(f"{start.isoformat()} has no time zone; give it an offset or Z")
+        return start.astimezone(dt.UTC)
+
+
+class FrameSpec(BaseModel):
+    """How often the run writes a frame of the animation."""
+
+    model_config = _FROZEN
+
+    every_hours: int = Field(default=24, ge=1)
+
+
+class SnowJob(BaseModel):
+    """Everything one snow run needs besides the mesh. Refuses frames that do
+    not fall on whole steps, a spring that is not whole frames, and more
+    frames than the animation's four-digit numbers can count."""
+
+    model_config = _FROZEN
+
+    correction: SunCorrection
+    resources: Resources
+    hbv: HbvSnowParameters = HbvSnowParameters()
+    distribution: SnowDistribution = Field(
+        default_factory=lambda: SnowDistribution.lognormal(0.4, 10)
+    )
+    spring: SyntheticSpring = SyntheticSpring()
+    frames: FrameSpec = Field(default=FrameSpec(), validate_default=True)
+    #: Snow water equivalent on every triangle at the start, mm.
+    initial_swe_mm: float = Field(default=600.0, ge=0.0)
+
+    @field_validator("frames")
+    @classmethod
+    def _whole_steps(cls, frames: FrameSpec, info: ValidationInfo) -> FrameSpec:
+        spring = info.data.get("spring")
+        if spring is not None and frames.every_hours * 60 % spring.step_minutes:
+            raise ValueError(
+                f"a frame every {frames.every_hours} h is not a whole number of "
+                f"{spring.step_minutes}-minute steps"
+            )
+        if spring is not None and spring.days * 24 % frames.every_hours:
+            raise ValueError(
+                f"{spring.days} days is not a whole number of {frames.every_hours}-hour frames"
+            )
+        # Frames are numbered from 0 at the start; the case file's swe****.var
+        # pattern has four digits, so the last frame's number is at most 9999.
+        if spring is not None and (n := spring.days * 24 // frames.every_hours + 1) > 10_000:
+            raise ValueError(
+                f"{spring.days} days with a frame every {frames.every_hours} h is {n:,} frames, "
+                "more than the 10,000 the animation can number"
+            )
+        return frames
