@@ -66,6 +66,21 @@ def invoke(command: str, *args: str) -> tuple[int, str]:
     return result.exit_code, plain(result.output)
 
 
+def help_page(command: str, columns: int) -> tuple[int, str]:
+    """`rasputin <command> --help` at `columns` wide: the exit code and the raw output.
+
+    `TERM` is not `dumb` here, unlike `runner`'s: where `GITHUB_ACTIONS` is set,
+    Typer forces Rich to treat the output as a terminal, and Rich sizes a forced
+    terminal whose `TERM` is `dumb` at 80 columns whatever `COLUMNS` says, so the
+    same test saw 300 columns locally and 80 on CI. `NO_COLOR` still holds the
+    colour off; the bold and dim codes left are what `plain` strips.
+    """
+    assert command in COMMANDS, f"{command!r} is not a subcommand; they are {sorted(COMMANDS)}"
+    env = {"NO_COLOR": "1", "TERM": "xterm", "COLUMNS": str(columns)}
+    result = CliRunner(env=env).invoke(app, [command, "--help"])
+    return result.exit_code, result.output
+
+
 def ran(command: str, *args: str) -> str:
     """`invoke`, required to succeed; the output."""
     code, output = invoke(command, *args)

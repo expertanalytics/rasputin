@@ -32,10 +32,10 @@ import tin_engine
 from cli_helpers import (
     USAGE,
     geojson,
+    help_page,
     invoke,
     no_cache_anywhere,
     plain,
-    runner,
     says_no_cache,
     squashed,
 )
@@ -43,7 +43,6 @@ from cog_fixtures import VARIANTS, build, write_cache
 from geotiff_fixtures import TIE_X, TIE_Y
 from test_cli_mesh_mosaic import field, same_mesh, terrain
 from test_cli_mesh_refine import stats_row
-from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.io.geotiff import decode_dem
 from vtkread import read_vtk
@@ -423,15 +422,16 @@ class TestW8CacheRoot:
 
     @pytest.mark.parametrize("command", ["mesh", "fetch"])
     def test_the_help_states_the_whole_default(self, command: str) -> None:
-        """At 300 columns, so Rich prints the option's help in full instead
-        of cutting a long word short with an ellipsis."""
-        result = runner.invoke(app, [command, "--help"], env={"COLUMNS": "300"})
-        assert result.exit_code == 0, result.output
+        """At 300 columns, so Rich prints the option's help on one row instead
+        of wrapping it between other columns' text or cutting a long word
+        short with an ellipsis. `help_page` pins the width on CI too."""
+        code, output = help_page(command, columns=300)
+        assert code == 0, output
         default = (
             "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
         )
-        cache_lines = [line for line in result.output.splitlines() if "--cache" in line]
-        assert squashed(default) in squashed(plain(result.output)), cache_lines
+        cache_lines = [line for line in output.splitlines() if "--cache" in line]
+        assert squashed(default) in squashed(plain(output)), cache_lines
 
     def test_a_path_needs_neither(self, tif: Path, tmp_path: Path, no_cache_dir: None) -> None:
         code, output = invoke("mesh", "--dem", str(tif), "--out", str(tmp_path / "m.vtk"))
