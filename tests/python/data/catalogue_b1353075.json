@@ -1,0 +1,115 @@
+{
+ "notices": {
+  "anadem-v1": "anadem-v1\n\nCredit:\nAgência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.\n\nLicence:\nCC BY 4.0 (Creative Commons Attribution 4.0 International)\n\nCite:\nLaipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321\n",
+  "glo30": "glo30\n\nCredit:\nproduced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved\n\nLicence:\nLicence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): \"The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30\"\n",
+  "mapbiomas-c11": "mapbiomas-c11\n\nCredit:\nMapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil, accessed on {date} through the link: {url}\n\nLicence:\nCC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 International)\n\nCite:\nSouza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735\n",
+  "nve-hrd": "nve-hrd\n\nCredit:\nKilde: NVE. The station list is the 2025 version of NVE's Hydrological Reference Dataset (Norwegian streamflow reference dataset for climate change studies); stations, catchments (Totalnedbørfelt til målestasjon) and rivers (ELVIS) are from NVE's map services.\n\nLicence:\nNorsk lisens for offentlige data (NLOD). NVE disclaims liability for errors in the data and their use.\n"
+ },
+ "sources": {
+  "anadem-v1": {
+   "cite": [
+    "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321"
+   ],
+   "class_map": "",
+   "credit": "Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.",
+   "crs": "EPSG:4674",
+   "id": "anadem-v1",
+   "kind": "one-cog",
+   "licence_note": "CC BY 4.0 (Creative Commons Attribution 4.0 International)",
+   "nodata": -9999.0,
+   "tile_list_url": null,
+   "url": "https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif",
+   "url_template": null,
+   "values": "heights",
+   "years": [],
+   "z_unit": "metre"
+  },
+  "glo30": {
+   "cite": [],
+   "class_map": "",
+   "credit": "produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+   "crs": "EPSG:4326",
+   "id": "glo30",
+   "kind": "cog-tiles",
+   "licence_note": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): \"The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30\"",
+   "nodata": null,
+   "tile_list_url": "https://copernicus-dem-30m.s3.amazonaws.com/tileList.txt",
+   "url": null,
+   "url_template": "https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif",
+   "values": "heights",
+   "years": [],
+   "z_unit": "metre"
+  },
+  "mapbiomas-c11": {
+   "cite": [
+    "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735"
+   ],
+   "class_map": "mapbiomas-c11",
+   "credit": "MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil, accessed on {date} through the link: {url}",
+   "crs": "EPSG:4326",
+   "id": "mapbiomas-c11",
+   "kind": "one-cog-per-year",
+   "licence_note": "CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 International)",
+   "nodata": 0.0,
+   "tile_list_url": null,
+   "url": null,
+   "url_template": "https://storage.googleapis.com/mapbiomas-public/initiatives/brasil/collection11/lulc/coverage/brazil_coverage/brazil_coverage-col11_{year}.tif",
+   "values": "classes",
+   "years": [
+    1985,
+    1986,
+    1987,
+    1988,
+    1989,
+    1990,
+    1991,
+    1992,
+    1993,
+    1994,
+    1995,
+    1996,
+    1997,
+    1998,
+    1999,
+    2000,
+    2001,
+    2002,
+    2003,
+    2004,
+    2005,
+    2006,
+    2007,
+    2008,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "z_unit": null
+  }
+ },
+ "stations": {
+  "nve-hrd": {
+   "cite": [],
+   "credit": "Kilde: NVE. The station list is the 2025 version of NVE's Hydrological Reference Dataset (Norwegian streamflow reference dataset for climate change studies); stations, catchments (Totalnedbørfelt til målestasjon) and rivers (ELVIS) are from NVE's map services.",
+   "crs": "EPSG:25833",
+   "id": "nve-hrd",
+   "licence_note": "Norsk lisens for offentlige data (NLOD). NVE disclaims liability for errors in the data and their use.",
+   "list_file": "nve_hrd_2025.csv",
+   "service_url": "https://kart.nve.no/enterprise/rest/services"
+  }
+ }
+}

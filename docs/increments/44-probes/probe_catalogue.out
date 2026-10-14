@@ -1,0 +1,20 @@
+== P1 a class raster read by path (the test fixture, EPSG:4326, 40 x 48, tile 16)
+meta crs EPSG:4326 geographic True nodata None absent
+equals oracle: True zeros: 356
+== P2 GDAL_NODATA 255 on a uint8 class raster; an empty tile
+meta nodata 255.0 tag | cells 255: 16 cells 0 (empty tile today): 256 classes: [0, 7, 9, 255]
+nodata -9999 on uint8: GeoTiffError GDAL_NODATA (42113) = '-9999' cannot be held by a uint8 cell
+== P3 a projected class raster (EPSG:3035, 8 x 8 cells of 100 m, classes 10 | 20)
+meta crs EPSG:3035 epsg 3035 geographic False delta 100.0
+row_areas today on it: [nan, nan, nan]
+assign today: IndexError index 2 is out of bounds for axis 0 with size 2
+with constant 1e4 m2 rows: [10, 20] [0.75, 0.25] areas m2 [240000.0, 80000.0]
+== P4 the ellipsoid of a geographic class raster: rows of 1/128 deg at 60 N
+EPSG:4326 WGS 84                       a=6378137.0 1/f=298.257224 cell 379488.217823 m2, 10 rows down 380377.918340, ratio 1.002344474676
+EPSG:4674 GRS 1980                     a=6378137.0 1/f=298.257222 cell 379488.217830 m2, 10 rows down 380377.918345, ratio 1.002344474674
+EPSG:4230 International 1924           a=6378388.0 1/f=297.000000 cell 379523.462526 m2, 10 rows down 380413.219975, ratio 1.002344406966
+EPSG:4277 Airy 1830                    a=6377563.396 1/f=299.324965 cell 379415.434915 m2, 10 rows down 380304.986440, ratio 1.002344531728
+== P5 GLO-30 tile names from a template
+template equals _tile_name on 6 corners: True | TILE_SPACING today 0.001
+== P2b a stored class 0 beside GDAL_NODATA 255
+cells 0: 1 at [(20, 2)]

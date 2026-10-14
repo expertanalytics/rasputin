@@ -1,0 +1,37 @@
+== the stored baseline under the round 2 model (CaseResult.inputs defaults to [])
+  loads: QuickRecord2 | cases: ['tile', 'tile t=1', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+  inputs per case as loaded: {'tile': [], 'tile t=1': [], 'quarter': [], 'numedalslagen': [], 'lagan': [], 'geilo-al-ramp': [], 'romsdal-slope': []}
+  a round 2 save of it holds per case, e.g. quarter: ['$TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif', '$TREE/docs/benchmarks/2026-09-26/quarter.geojson']
+== the input rules, against the baseline as a round 2 save writes it
+  nothing skipped: ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today:    None  ->  NO CHANGE, exit 0
+    round 1:  None  ->  NO CHANGE, exit 0
+    round 2:  None  ->  NO CHANGE, exit 0
+    option A: None
+  only the two $TREE cases ran (the skip): ran ['tile', 'quarter']
+    today:    input $RASPUTIN_DATA/DTM10_UTM33_20260925 changed  ->  NO BASELINE: input $RASPUTIN_DATA/DTM10_UTM33_20260925 changed, exit 2
+    round 1:  None  ->  NO CHANGE, exit 0
+    round 2:  None  ->  NO CHANGE, exit 0
+    option A: None
+  nothing skipped, the DEM tile's content changed: ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today:    input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed  ->  NO BASELINE: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed, exit 2
+    round 1:  input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed  ->  NO BASELINE: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif changed, exit 2
+    round 2:  input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif of quarter changed  ->  NO BASELINE: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif of quarter changed, exit 2
+    option A: input $TREE/tests/fixtures/dem_archive/7908_3_10m_z33.tif of quarter changed
+  quarter's .geojson replaced by another file in cases.toml (the reviewer's case): ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today:    input $TREE/docs/benchmarks/2026-09-26/quarter.geojson changed  ->  NO BASELINE: input $TREE/docs/benchmarks/2026-09-26/quarter.geojson changed, exit 2
+    round 1:  None  ->  NO CHANGE, exit 0
+    round 2:  input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed  ->  NO BASELINE: input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed, exit 2
+    option A: input $TREE/docs/benchmarks/2026-09-26/quarter_v2.geojson of quarter changed
+  the same, with only the two $TREE cases run: ran ['tile', 'quarter']
+    today:    input $RASPUTIN_DATA/DTM10_UTM33_20260925 changed  ->  NO BASELINE: input $RASPUTIN_DATA/DTM10_UTM33_20260925 changed, exit 2
+    round 1:  None  ->  NO CHANGE, exit 0
+    round 2:  input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed  ->  NO BASELINE: input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed, exit 2
+    option A: input $TREE/docs/benchmarks/2026-09-26/quarter_v2.geojson of quarter changed
+  quarter's .geojson dropped from its inputs in cases.toml: ran ['tile', 'quarter', 'numedalslagen', 'lagan', 'geilo-al-ramp', 'romsdal-slope']
+    today:    input $TREE/docs/benchmarks/2026-09-26/quarter.geojson changed  ->  NO BASELINE: input $TREE/docs/benchmarks/2026-09-26/quarter.geojson changed, exit 2
+    round 1:  None  ->  NO CHANGE, exit 0
+    round 2:  input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed  ->  NO BASELINE: input $TREE/docs/benchmarks/2026-09-26/quarter.geojson of quarter changed, exit 2
+    option A: None
+== a new run against the stored baseline as it is (no per-case lists)
+  round 2: input $RASPUTIN_DATA/DTM10_UTM33_20260925 of geilo-al-ramp changed  ->  NO BASELINE: input $RASPUTIN_DATA/DTM10_UTM33_20260925 of geilo-al-ramp changed, exit 2

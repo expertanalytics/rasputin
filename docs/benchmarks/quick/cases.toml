@@ -76,3 +76,16 @@ warmup = 1
 args = ["mesh", "--dem", "$RASPUTIN_DATA/DTM10_UTM33_20260925/6901_3_10m_z33.tif",
         "--tolerance", "10", "--tolerance-slope", "2", "25", "35"]
 inputs = ["$RASPUTIN_DATA/DTM10_UTM33_20260925"]
+
+# The upper Rio das Velhas from the committed ANADEM extract: the one case on a
+# geographic DEM (EPSG:4674), resampled onto a 30 m grid in a southern UTM zone.
+# Its input is in the tree, so any machine can run it.
+[[case]]
+name = "velhas"
+threads = [0]
+runs = 5
+warmup = 1
+args = ["mesh", "--dem", "$TREE/tests/fixtures/velhas/anadem_velhas.tif",
+        "--out-crs", "EPSG:31983", "--bbox", "592000", "7845500", "599000", "7854000",
+        "--tolerance", "0.5"]
+inputs = ["$TREE/tests/fixtures/velhas/anadem_velhas.tif"]

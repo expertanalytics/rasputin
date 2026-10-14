@@ -52,6 +52,10 @@ try:
     import shell_scan
 except ImportError:  # every line is then judged as text, as before h4
     shell_scan = None
+try:  # h20: a branch Ola granted for an away window
+    import push_grant
+except ImportError:  # no grant then passes anything
+    push_grant = None
 
 PUBLISHES = (
     (re.compile(r"\bgit\b[^|;&]*\bpush\b"), "git push writes to the remote"),
@@ -327,6 +331,11 @@ def main() -> int:
         if not reasons:
             return 0
         why = "; ".join(reasons)
+        grant = push_grant.judge(event, command, reasons) if push_grant else None
+        if grant is not None and grant.passed:
+            return 0
+        if grant is not None:
+            why += f"; granted branch {grant.branch}, but {grant.why}"
         reason = (
             "This reaches beyond the working tree: " + why + ".\nPRINCIPLES.md E1 -- the "
             "working tree is the agent's, the remote is the user's. Approval of an earlier "

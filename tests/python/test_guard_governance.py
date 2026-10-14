@@ -64,6 +64,10 @@ GOVERNED_NOW = (
     # plain `git fetch s` writes the named refs they give.
     ".git/remotes/s",
     ".git/branches/s",
+    # h20 §2 row 6: guard_push and record_review import these two, so an edit
+    # to either is an edit to a hook.
+    "tools/push_grant.py",
+    "tools/ci_changes.py",
 )
 
 #: Files named `config` that are not a git config: GOVERNED_SUFFIXES is matched

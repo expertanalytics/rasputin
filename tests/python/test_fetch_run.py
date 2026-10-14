@@ -48,6 +48,10 @@ if TYPE_CHECKING:
     from tin_engine.io.models import Bounds
 
 SOURCE = "test-src"
+#: GLO-30's tile name template and planning spacing (lon, lat) in degrees, as
+#: the catalogue file states them (design 4.4: 10" and 1", rounded up).
+GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
+GLO30_TILE_SPACING = (0.0027778, 0.00027778)
 CITES = ("First cited work, 2024.", "Second cited work, 2025.")
 
 
@@ -446,6 +450,8 @@ class TestF8Glo30:
             kind="cog-tiles",
             url_template=server.url("{name}/{name}.tif"),
             tile_list_url=server.url("tileList.txt"),
+            tile_name=GLO30_TILE_NAME,
+            tile_spacing=GLO30_TILE_SPACING,
             crs="EPSG:4326",
             nodata=None,
             credit="Test credit",
@@ -458,6 +464,50 @@ class TestF8Glo30:
         assert report.objects == 2
         assert not [e for e in server.log if "N60" in e.path]
         assert sorted(manifest(api, tmp_path).objects) == sorted(listed)
+
+    @pytest.mark.parametrize(
+        ("box", "tiles"),
+        [
+            pytest.param(
+                {"x_min": 165.2, "y_min": -87.8, "x_max": 165.9937, "y_max": -87.2},
+                [(-88, 165), (-88, 166)],
+                id="87 S, east edge 0.0063 deg short of 166 E: the 10-second band",
+            ),
+            pytest.param(
+                {"x_min": 10.003, "y_min": 60.003, "x_max": 10.997, "y_max": 60.997},
+                [(60, 9), (60, 10), (60, 11)],
+                id="60 N, every edge 0.003 deg inside one tile",
+            ),
+        ],
+    )
+    async def test_the_tiles_are_planned_from_the_entrys_tile_spacing(
+        self,
+        api: SimpleNamespace,
+        server: RangeServer,
+        tmp_path: Path,
+        box: dict[str, float],
+        tiles: list[tuple[int, int]],
+    ) -> None:
+        """Design 4.4 and probe P6: the box grows by the default margin (4
+        latitude cells) and two cells each way, at the entry's spacing. At 87 S
+        a tile's own 10" spacing needs the east neighbour, which 0.001 deg
+        missed (1 tile); at 60 N the 1" latitude spacing keeps the box inside
+        one row of tiles (0.001 deg chose 9). No tile is listed, so every
+        chosen name is `no_tile` and a dry run reads no header."""
+        server.put("tileList.txt", b"\n")
+        source = api.sources.RemoteSource(
+            id=SOURCE, kind="cog-tiles", url_template=server.url("{name}/{name}.tif"),
+            tile_list_url=server.url("tileList.txt"), tile_name=GLO30_TILE_NAME,
+            tile_spacing=GLO30_TILE_SPACING, crs="EPSG:4326", nodata=None, credit="Test credit",
+            licence_note="Test licence",
+        )  # fmt: skip
+        client = api.http.RangeClient(delays=(0, 0, 0))
+        writer = api.repository.CacheWriter(tmp_path, SOURCE)
+        asked = api.plan.FetchRequest(source=SOURCE, box=bounds(**box), dry_run=True)
+        report = await api.run.fetch(asked, source, client, writer)
+        assert sorted(report.no_tile) == sorted(glo30_name(lat, lon) for lat, lon in tiles)
+        assert report.objects == 0
+        assert [e.path for e in server.log] == ["tileList.txt"]
 
 
 # --------------------------------------------------------------------------
