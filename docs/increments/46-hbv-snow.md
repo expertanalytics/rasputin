@@ -6,8 +6,10 @@ and animation, acceptance run recorded, code review round 2 approved; PR 4,
 the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
 evaluator, snow wiring and Bygdin run, code review round 2 approved,
 acceptance run recorded; PR 7, the run to 1 September and one bin by
-default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path)**
-(2026-10-14). Seven PRs (section 10.7, which supersedes section 8's table, and section 11). Ola was away when it was written; every default taken
+default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path);
+PR 8, a continuous snow-covered area in the active bin, designed (section 12),
+awaiting design review**
+(2026-10-14). Eight PRs (section 10.7, which supersedes section 8's table, and sections 11 and 12). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
 `docs/increments/46-probes/probe_spring.py`, whose output is
@@ -62,13 +64,17 @@ Written before the design.
   bins with a constant factor each, not factors at quantile points with
   piecewise-linear interpolation, because Shyft's interpolated snow-covered
   area (SCA) needs a fix-up after every snowfall and its own comment says it
-  can break the mass balance; bins balance mass exactly (section 4.2, I1);
+  can break the mass balance; bins balance mass exactly (section 4.2, I1).
+  *Corrected by section 12.2: the fix-up keeps mass, the comment is about
+  rounding, and PR 8 takes up Shyft's piecewise-linear depth;*
   (c) the parameter defaults differ (section 5): Shyft's `cx = 1` and
   `cfr = 0.5` are placeholders, not values for Norway.
 - Sælthun, N. R. (1996). *The "Nordic" HBV model.* NVE Publication 7/1996.
   Snowfall log-normally distributed within a unit, with a fixed coefficient of
   variation (CV), which gives a snow-covered area that falls continuously as
-  the pack melts. The CV form of the distribution used here is this one. (Its
+  the pack melts. *Corrected by section 12.2, from the report itself: nine
+  classes, each treated alone, so the snow-covered area falls in nine steps.*
+  The CV form of the distribution used here is this one. (Its
   section on the distribution was not read; the description is from papers
   citing it, found 2026-10-13. To verify before a publication.)
 - Skaugen, T. (2004, Annals of Glaciology 38) argues that a distribution fixed
@@ -486,7 +492,9 @@ features); a melt-out map as a GeoPackage layer is offered as an idea.
 ### 4.7 Is a continuous SCA worth it on small triangles?
 
 *Overruled by Ola on 2026-10-14: one bin is the default from PR 7 on
-(section 11.2); ten bins stay an option. The figures below stand.*
+(section 11.2); ten bins stay an option. The figures below stand. From PR 8
+(section 12) each bin's depth is a straight line, so SCA is continuous, not
+in steps of 1/N, at no cost to the mass balance.*
 
 Yes, as a distribution within the triangle, with a default CV of 0.4, for two
 reasons:
@@ -1465,6 +1473,422 @@ less with one bin; 154 frames, 63.6 MB of frames.
     summer afternoon (daily mean 9.8 °C), below the 15-18 °C periods you
     mention there.** Keep +14 °C at 300 m, or hold +14 °C at 1000 m
     (about +18 °C at 300 m)? Default: +14 °C at 300 m, as ruled.
+
+## 12. PR 8: a continuous snow-covered area in the active bin (2026-10-14)
+
+Written by `@architect` on branch `worktree-snow-sca`, stacked on
+`worktree-snow-summer` (PR 7) at `62f62185`. PRs 1-7 go in unchanged. This
+section changes the kernel of section 4.2 and the distribution of 4.8;
+where it differs, it wins. Every figure marked *probe* is printed by
+`46-probes/probe_sca.py` into `46-probes/probe_sca.out` (run 2026-10-14 on an
+M1 Max, AC power, NumPy, with the `rasputin` of the `snow-summer` worktree
+for the 2 m mesh); the probe runs `probe_spring.py`'s terrain, mesh and sun
+code unchanged and holds a NumPy reference of the kernel below.
+
+### 12.1 What Ola asked
+
+Ola, 2026-10-14, verbatim: "I'm not sure you're right about the sca - there
+is a version of HBV snow that has a continuous sca in the \"active\" bin."
+
+Today each bin holds one depth, so a bin goes from covered to bare in one
+step, and with one bin (the default since PR 7) a triangle's SCA is 0 or 1.
+He wants the version where the cover of the bin holding the melt front is a
+fraction, so SCA is continuous, with one bin too.
+
+### 12.2 Prior art
+
+**Ola is right: that version exists, in Shyft.** Read from source on
+2026-10-14. `github.com/statkraft/shyft` now holds only a README pointing to
+GitLab (its tree, through the GitHub API, is one file); the code is
+`gitlab.com/shyft-os/shyft` at commit `37d610ad` (2026-09-04),
+`cpp/shyft/hydrology/methods/hbv/snow/calculator.h` and
+`cpp/shyft/hydrology/hydro_functions.h` (`hbv_snow_common`). What it does:
+
+- **Depth is piecewise linear in area.** The parameter holds quantile points
+  `intervals` (0 to 1, default 0, 0.25, 0.5, 0.75, 1) and a factor `s` at
+  each; the state holds solid `sp` and liquid `sw` at each point; between
+  points the depth is the straight line, and `integrate` takes the area
+  under it (Shyft's hydro_functions, lines 359-389). Deepest snow at area 0.
+- **SCA is where the line meets zero.** Melt `potmelt = cx·Δt·(T − ts)` is
+  subtracted from every point; the new front is found on the segment where
+  the depth crosses `potmelt` by linear interpolation
+  (the calculator, lines 150-161), or, on the segment already holding the front,
+  by scaling the distance to the old front (line 160). Snow cover inside
+  that one segment, the active bin, is a fraction; elsewhere a segment is
+  wholly covered or wholly bare. This is the continuous SCA Ola means.
+- **New snow on a partly bare segment** (lines 118-130): the active point's
+  values are rescaled so the old snow, spread linearly over the whole
+  segment down to zero at its far end, keeps its mass; then every point
+  gains `snow·s_i`, and SCA returns to 1 (or to the last point with
+  `s_i > 0`). A line-by-line Python transliteration of the step
+  (scratch only, not committed) confirms the rescaling conserves mass: a
+  10 mm snowfall on a state of SCA 0.75 gives an outflow of 0.0. So section
+  2.1's "can break the mass balance" overstated it: the comment at lines
+  53-56 is about rounding only. **Corrected in 2.1 by this PR.**
+- **Rain** enters the pack on the covered fraction only (`swe += snow +
+  sca·rain`, line 109); the rest leaves.
+- **Outflow is a residual**: total water before minus the integrated swe
+  after (lines 175-186), with a throw if it would be negative beyond 1e-6,
+  and a cut-off that empties a pack below 0.1 mm (lines 110-117).
+- **With Shyft's default factors (all 1, uniform snow) SCA is 0 or 1 there
+  too**: every point reaches `potmelt` together. The continuity needs a
+  depth that varies across the active segment.
+- **An edge Shyft gets wrong**, from the transliteration: at T = ts exactly
+  `potmelt` is 0, `melt_index` finds no point below it and SCA is set to 1
+  on a partly bare pack (line 155); the integrated swe then rises and the
+  step throws "Negative outflow". Not run against Shyft itself. Fixture L9
+  below pins that this kernel leaves SCA alone at T = θ.
+
+**The Nordic HBV is stepped, not continuous.** Sælthun, N. R. (1996). *The
+"Nordic" HBV model.* NVE Publication 7, section 2.3.2, read 2026-10-14 from
+`publikasjoner.nve.no/publication/1996/publication1996_07.pdf`: the
+log-normal distribution of fixed CV is "calculated for the quantile
+intervals 0.0-0.01, 0.01-0.05, …, 0.99-1.0", "this will give the following
+possibilities for snow cover percentage: 0, 1, 5, 15, 35, 65, 85, 95, 99,
+100%", and "all nine subdivisions … are treated individually" (2.3.3). So
+the Nordic HBV is today's kernel with nine unequal bins. Section 2.1's
+sentence that Sælthun's distribution "gives a snow-covered area that falls
+continuously" was wrong; **corrected in 2.1 by this PR.** The report credits
+the distribution concept to Killingtveit and Aam (1978, NTH, in Norwegian;
+not read) and also documents `SPDIST`, an even accumulation up to a set
+storage before the distribution applies (not taken up). Killingtveit and
+Sælthun (1995, *Hydropower Development* vol. 7) was not read; Skaugen et al.
+(2004, Annals of Glaciology 38) describe it as log-normal snowfall of fixed
+CV, perfectly correlated in space, with ablation uniform over the covered
+fraction, which is what both forms here assume.
+
+**Bergström** (1976; 1992, SMHI RH 4) and **HBV-96** (Lindström et al.
+1997): not read for a within-zone distribution this round; nothing here
+depends on them beyond section 4.2's point update.
+
+**What differs from Shyft, and why:**
+
+1. **Each bin has its own straight line** (its shallow and deep edge), not
+   one line through shared points. Shyft's form is the special case where
+   each bin's deep edge meets the next bin's shallow edge. Separate lines let
+   one bin carry a spread (Shyft needs two points, one segment, for the same
+   thing, which is exactly this design at N = 1), and keep flat bins, the
+   existing distributions, bit for bit as today (12.3, I6).
+2. **Mass is kept by construction, not as a residual.** Each update moves
+   mass between solid, liquid and outflow explicitly, as section 4.2 does;
+   no 0.1 mm cut-off and no throw.
+3. **Liquid water is one value per bin** (its mean), capped at lw times the
+   bin's mean solid, as today; Shyft holds it at each point. Integrated over
+   a bin the two caps are the same (lw times the area under the solid
+   line); what differs is only where in the bin the water is assumed to be.
+4. **Refreezing in a partly bare bin scales the bin's line** about its
+   front, so SCA does not change; Shyft adds at each covered point and
+   leaves SCA alone too. Same SCA, the same mass.
+5. **The bins come from a log-normal by matching each band's mean and
+   variance with a straight line** (12.4). Shyft takes factors at points
+   from the user, default uniform.
+
+**Novelty: none claimed.** A piecewise-linear depth with a moving front is
+Shyft's; a uniform depth distribution giving a linear depletion curve is
+textbook. The band-matching rule of 12.4 is a choice, not a claim.
+
+**Legacy:** nothing; section 2.2's grep (no snow model in the legacy tree)
+covers it.
+
+### 12.3 The design
+
+**State.** Per triangle i and bin k, as today, the bin's mean solid `sp` and
+mean liquid `sw` (mm over the bin's area); new, `deep`, the solid depth at
+the bin's deep edge (mm). The solid depth across the bin is the straight
+line from `2·sp − deep` at the shallow edge to `deep` at the deep edge, cut
+at zero:
+
+- **covered** (`2·sp ≥ deep`): the shallow edge `lo = 2·sp − deep ≥ 0`;
+  cover c = 1.
+- **partly bare** (`0 < 2·sp < deep`): the line runs from zero at the front
+  to `deep` at the deep edge; cover c = `2·sp / deep`.
+- **bare** (`sp = 0`, and then `deep = 0`): c = 0.
+
+So `0 ≤ sp ≤ deep` always, and a flat bin (`deep = sp`) is today's bin:
+covered while it has snow. Memory: 3N + 3 doubles per triangle (6 at
+N = 1), against 2N + 3.
+
+**The distribution.** `SnowDistribution` gains, beside `factors` (each bin's
+mean, unchanged: ascending, mean 1), `deep`: each bin's deep-edge factor,
+with `factor_k ≤ deep_k ≤ 2·factor_k` (the shallow edge `2·f − deep` is
+then between 0 and f). Empty means flat (`deep = factors`). The constructor
+divides both by the factors' mean, as today. New snow `P_s` adds
+`f_k·P_s` to `sp` and `deep_k·P_s` to `deep`: perfectly correlated
+snowfall, the assumption Skaugen et al. name.
+
+**One step, per triangle and bin.** Section 4.2's steps 1-7, with these
+changes (unchanged steps are not repeated):
+
+2. **Snowfall.** If snow > 0 and the bin is partly bare or bare
+   (`2·sp < deep` or `sp = 0`), first spread its old solid over the whole
+   bin as a wedge from zero at the shallow edge: `deep = 2·sp` (mass kept;
+   Shyft's rescaling, lines 118-130). Then `sp += f_k·snow`,
+   `deep += deep_k·snow`. The bin is then covered (c = 1 when
+   `deep_k < 2·f_k`; at `deep_k = 2·f_k` its shallow edge is zero and c = 1
+   all the same).
+4. **Rain** by cover: `sw += c·rain`, `out += (1 − c)·rain`, with c after
+   the snowfall. (Today: all of it if `sp > 0`, else none; the same for c
+   in {0, 1}.)
+5. **Melt** (T > θ), potential `M = m·Δt·(T − θ)` per unit of covered area,
+   in this order:
+   - (a) **melts out** if `deep ≤ M`: melt `sp`; `sp = deep = 0`.
+   - (b) **stays covered** if covered and `M ≤ 2·sp − deep`: melt M;
+     `sp −= M`; `deep −= M`. (Today's melt, exactly.)
+   - (c) **otherwise the front moves**: `deep' = deep − M`;
+     `sp' = deep'² / (4·(deep − sp))` if the bin was covered, or
+     `sp' = sp·(deep'/deep)²` if partly bare; melt `sp − sp'`. If `sp'`
+     is 0 (underflow), `deep' = 0`.
+   The melt goes to `sw`, as today. Each branch is the exact area under the
+   line less M, cut at zero; c then falls linearly with M:
+   c' = `(deep − M)/(deep − lo)` from covered, `c·(deep − M)/deep` from
+   partly bare.
+   **Refreeze** (T < ts, no melt): `F = min(c·cfr·cx·Δt·(ts − T), sw)`,
+   refreezing on the covered part only. Covered: `sp += F`, `deep += F`
+   (today's refreeze). Partly bare: `deep *= (sp + F)/sp`, then `sp += F`,
+   which keeps c.
+6. Unchanged: the cap `lw·sp` on `sw`.
+7. `sca_i = mean_k c_k`; swe and outflow as today.
+
+**Why flat bins stay bit for bit.** For `deep = sp` the snowfall wedge is
+never taken on a bin with snow and is `0` on a bare one; c is exactly 0.0 or
+1.0, so `c·rain` and `(1 − c)·rain` are `rain` and `+0.0` or the reverse;
+branch (a) is today's `min(M, sp) = sp`, branch (b) today's `sp −= M`, and
+(c) is never reached (covered with `lo = deep` means `M > lo` is `deep ≤ M`,
+branch (a)). So every distribution that exists before this PR (all of PR
+1-7's tests, and `--snow-cv 0`) runs exactly as before, and **H1-H12, H8b,
+V1, V2 and P1-P5 pass unedited**; that is the evidence for I6 below.
+
+**Invariants** (section 4.2's I1-I5 hold as written; I4 reads "a flat
+single bin is plain HBV-96"):
+
+- I2, extended: `0 ≤ sp ≤ deep`, `sp = 0` exactly when `deep = 0`, and
+  `0 ≤ c ≤ 1` per bin.
+- I6, flat is today: a distribution with `deep = factors` gives states
+  bit-identical to the kernel before this PR.
+- I7, SCA falls with melt: in a step with no snowfall each bin's c does not
+  rise; melt lowers it, refreeze and rain leave it.
+- I8, the depletion curve: one bin, no precipitation, cfr = 0: after
+  cumulative melt potential ΣM, `sca = clamp((deep₀ − ΣM)/(deep₀ − lo₀), 0,
+  1)`, to 1e-12, with `deep₀`, `lo₀` the initial edges. This is the
+  continuous SCA, as a property.
+- I9, snowfall whitens: snow > 0 on a bin leaves it covered, with `sp`
+  raised by exactly `f_k·snow`.
+
+**Boundaries.** The kernel stays pure: no new parameter in `step`, no new
+status; the distribution carries the shape. `SnowState::sca()` keeps its
+meaning. `bindings/snow.cpp`: `SnowDistribution(factors, deep=None)` and a
+read-only `deep` property; `SnowState` gains no Python property (sp, sw,
+swe, sca and outflow suffice). `_core.pyi` follows. `run.py` passes `deep`.
+No dependency.
+
+**Refusals.** `SnowDistribution`'s constructor throws
+`std::invalid_argument` (Python `ValueError`) when `deep` is neither empty
+nor of N values, a deep factor is not finite, or `deep_k < f_k` or
+`deep_k > 2·f_k` ("a bin's deep edge must lie between its mean and twice
+its mean"), checked on the given values before the division. The Pydantic
+model refuses the same, earlier.
+
+### 12.4 The log-normal, as straight lines
+
+`SnowDistribution.lognormal(cv, bins)` (`params.py`) now gives, for bin k
+of N equal-probability bands of a log-normal of mean 1 and the given CV,
+the band's mean μ_k as the factor and `μ_k + √3·σ_k` as the deep edge,
+where σ_k is the band's standard deviation: the straight line (a uniform
+depth) with the band's mean and variance. Both come in closed form from
+the log-normal's partial moments, `E[X^j; a < X < b]` through
+`statistics.NormalDist`; the factors are then divided by their mean (1 to
+rounding). cv = 0 gives `factors (1.0,)`, `deep ()`, as today.
+
+- **One bin** is a uniform depth from `1 − √3·cv` to `1 + √3·cv` times the
+  mean, of exactly the given CV. At the default 0.4: *probe* shallow
+  0.307180, deep 1.692820. A triangle with 600 mm starts to go bare after
+  184 mm has melted and is bare after 1016 mm.
+- **Ten bins** at 0.4: *probe* factors (0.4778, 0.6216, 0.7157, 0.8004, 0.8848, 0.9750, 1.0780, 1.2060, 1.3902, 1.8505), deep (0.5964, 0.6736, 0.7592, 0.8421, 0.9280, 1.0226, 1.1343, 1.2796, 1.5074, 2.4245). The bin means
+  move from today's midpoint quantiles (section 7's D1) to band means
+  (bin 0: 0.4974 → 0.4778). Neighbouring lines overlap (the top bin's
+  shallow edge, 1.2765, lies below the next bin's deep edge, 1.5074), so
+  two bins can be partly bare at once; SCA is continuous all the same.
+- **The largest cv** with no negative shallow edge (*probe*): 0.5774 with one bin (1/√3), 0.8282 with two, 1.0130 with four, 1.2412 with ten, 1.7121 with 64.
+  `lognormal` refuses a larger one with a `ValueError` naming cv, the bins
+  and the limit ("snow-cv 0.6 is too large for 1 bin: at most 0.577");
+  the CLI shows it as it shows the other refusals.
+
+**Defaults.** The CLI's are unchanged (`--bins 1`, `--snow-cv 0.4`), so the
+default run now has a continuous SCA. `SnowJob.distribution`'s default
+becomes `lognormal(0.4, 1)`, the CLI's, where PR 7 set `lognormal(0.0, 1)`.
+`--snow-cv 0` is PR 7's stepped one-bin run. `--snow-cv`'s help: "Variation
+of snow depth within a triangle; within each bin the depth varies linearly,
+so the snow-covered area shrinks smoothly. 0 is uniform snow, at most 0.577
+with one bin." `snow.json` records `deep` with the factors.
+
+### 12.5 What the probe shows
+
+The NumPy reference on flat bins reproduces probe_spring.out's first row
+(none, N = 10): *probe* domain SCA 1.0000 / 0.6298 / 0.0829, SWE 565.29 / 203.58 / 23.56 mm, melt-out days 83.0 / 82.0, the same to every printed digit, and mass to 4.9e-12 mm. On the 2 m mesh (294 770 triangles),
+the dry spring of section 6, 91 days:
+
+| run | domain SCA, day 30 / 60 / 90 | domain SWE mm, day 30 / 60 / 90 | median melt-out day, class S / N | share of daily values with 0 < sca < 1 |
+|---|---|---|---|---|
+| none, 10 linear bins | 1.0000 / 0.6219 / 0.0853 | 565.14 / 206.37 / 25.17 | 81.0 / 81.0 | 0.457 |
+| melt_factor, 10 linear bins | 1.0000 / 0.6484 / 0.1193 | 564.97 / 228.71 / 38.34 | 74.0 / −1 | 0.437 |
+| threshold, 10 linear bins | 1.0000 / 0.6259 / 0.0963 | 557.97 / 209.69 / 29.95 | 74.0 / −1 | 0.459 |
+| none, 1 linear bin (the default) | 1.0000 / 0.6484 / 0.0827 | 566.15 / 218.97 / 24.58 | 83.0 / 83.0 | 0.381 |
+| melt_factor, 1 linear bin | 1.0000 / 0.6656 / 0.1148 | 566.36 / 238.85 / 37.17 | 76.0 / −1 | 0.375 |
+| *for comparison, section 6:* none, 1 flat bin | 1.0000 / 0.8884 / 0.0804 | 566.15 / 149.13 / 18.10 | 83.0 / 83.0 | 0 |
+
+What this says. **One linear bin removes the rush**: the default's domain
+SCA at day 60 is 0.648, against 0.888 with one flat bin and 0.622 with ten
+linear bins, so one bin now looks like ten. It also keeps more snow at day
+60 (219 against 149 mm), because the deep edge holds 1.69 times the mean.
+**Ten bins barely move** from flat to linear (SCA within 0.008, SWE within
+3 mm at days 60 and 90); the rows above replace section 6's in E1. On
+30° south slopes at 1000 m under the melt-factor correction a one-bin
+triangle takes 36 days (median) from first bare ground to bare, against
+0 with a flat bin. **SCA never rose in a step** by more than 2.2e-16
+(rounding of the refreeze scaling), and mass held to 7.6e-12 mm. The runs
+took 45 min in NumPy (4.5 GB); no timing is quoted for the C++.
+
+### 12.6 The ideas file
+
+- **Taken up:** "Snowpack on the TIN", part 1's "with continuous SCA" (Ola's
+  first words on the idea), now meant in Shyft's sense.
+- **Overlaps, left out:** "Snow follow-ups": its variation that grows with
+  triangle size (still left out; the CV is one number for every triangle),
+  the melt-out-day map and outflow per frame; "Profile the snow run's
+  single-threaded part" (the step is a few flops longer per bin; no
+  change).
+
+### 12.7 Red suites for `@tester`
+
+All C++ fixtures use one bin, factors (1.0), deep (1.5) (shallow edge 0.5,
+cv 0.2887), tx = ts = 0, cx = 3, lw = 0.1, cfr = 0.05, Δt = 1 day, P = 0,
+unless they say otherwise; each figure is *probe* (line named) and checked
+by hand in the notes. `swe` = sp + sw, outflow per step.
+
+| test | from | input | expected |
+|---|---|---|---|
+| L0 | `uniform(100)` | — | sp 100, deep 150, sca 1 (not 2·100/150 = 1.33) |
+| L1 | L0 | T = 5 (M = 15 ≤ lo 50) | sp 85, deep 135, sw 8.5, out 6.5, sca 1 |
+| L2 | L0 | T = 20 (M = 60) | sp 40.5, deep 90, sw 4.05, out 55.45, swe 44.55, sca 0.9 |
+| L3 | L2 | T = 10 (M = 30) | sp 18, deep 60, sw 1.8, out 24.75, sca 0.6 |
+| L4 | L3 | T = 20 | sp 0, deep 0, sw 0, out 19.8, sca 0 |
+| L5 | L0, lw = 2, T = 20 | then T = 0, P = 10 (rain, no melt, no refreeze) | sp 40.5, deep 90, sw 68.5, out 1, swe 109, sca 0.9 |
+| L6 | L0, lw = 2, T = 20 | then T = −10 | sp 41.85, deep 93, sw 58.15, out 0, swe 100, sca 0.9 |
+| L7 | L3 with cfr = 0 | T = −1, P = 10 (snow) | sp 28, deep 51, sw 1.8, out 0, swe 29.8, sca 1 |
+| L7c | L7 | T = 10/3 (M = 10) | sp 18.271739, deep 41, sw 1.827174, out 9.701087, sca 0.891304 (41/46) |
+| L8 | `uniform(0)`, cfr = 0 | T = −1, P = 10 | sp 10, deep 15, sw 0, sca 1 |
+| L8b | L8 | T = 2.5 (M = 7.5) | sp 2.8125, deep 7.5, sw 0.28125, out 6.90625, sca 0.75 |
+| L9 | L2 | T = 0 = ts = θ | unchanged: sp 40.5, deep 90, sw 4.05, out 0, sca 0.9 |
+| L10 | L0, cfr = 0 | 400 hourly melt steps, T in 0.25 … 3.25 | I8 within 1e-12 (probe: 6.7e-16 over 174.6 mm of melt, through covered, partly bare and bare) |
+
+Properties (Catch2 generators and Hypothesis, as P1-P5, whose generators
+gain linear distributions: N in 1..8, `deep_k` drawn in `[f_k, 2·f_k]`):
+
+- P6: I1 and I2 (extended) over random forcing with snow, rain, melt and
+  refreeze.
+- P7: I7, over melt-only and dry sequences: sca never rises by more than
+  1e-12 in a step without snowfall (the probe's largest rise: 2.2e-16).
+- P8: I8 over random positive T sequences, one bin, random deep in
+  `(1, 2]`.
+- P9: I6 is held by H1-H12 and P1-P5 passing unedited on flat
+  distributions; no new test.
+
+Refusals and the binding (`test_core_snow.py`, `test_snow_params.py`):
+
+- V3: `SnowDistribution` refuses deep of length N ± 1, NaN or inf in deep,
+  deep_k = 0.99·f_k and deep_k = 2.01·f_k; accepts deep_k = f_k and
+  deep_k = 2·f_k. Python: `ValueError` with the message. The state is not
+  touched (there is none yet).
+- V4: `_core.SnowDistribution(f, deep).deep` round-trips divided by the
+  mean; `SnowDistribution(f).deep == factors`.
+- D3: `lognormal(0.4, 10)` factors and deep to 1e-4 as 12.4's *probe*
+  lines; `lognormal(0.4, 1)` factors `(1.0,)`, deep `1 + √3·0.4` within
+  1e-12; `lognormal(0.0, n)` gives `(1.0,)`, `()`; `lognormal(0.58, 1)`
+  refused naming cv and 0.577; `lognormal(0.4, 1) !=
+  lognormal(0.0, 1)`.
+- S1 (`test_snow_run.py`): the two facets (centroids at 300 m), `none`,
+  cfr = 0, one bin at cv 0.4, initial swe 100 mm, the ten-day job: each
+  daily frame's sca equals `clamp((1 + √3·0.4 − ΣM/100)/(2·√3·0.4), 0, 1)`
+  within 1e-6 (float32 frames), ΣM summed in the test from
+  `forcing.temperature` at 300 m (`3/24·max(0, T)` per hourly step).
+  *Computed* ΣM by day 5, 8, 9, 10: 34.138, 106.588, 140.938, 180.388 mm,
+  so sca 0.975318, 0.452455, 0.204555, 0; the shallow edge (30.7 mm) is
+  passed on day 5 and the deep one (169.3 mm) on day 10.
+
+Existing tests to amend in the red commit, each with its reason:
+
+- D1 (`test_snow_params.py`): the factors become the band means (12.4).
+- `test_snow_job.py`: the default distribution is `lognormal(0.4, 1)`
+  (factors `(1.0,)`, deep `(1.6928…,)`); `lognormal(0.4, 1) ==
+  lognormal(0.0, 1)` is now false (D3).
+- C1: drops "every sca value 0 or 1"; asserts `job.distribution ==
+  lognormal(0.4, 1)`. C4 (new): the two facets, `--sun-correction none --days 30
+  --initial-swe 100 --cfr 0`, other flags default: the last frame's sca is
+  0.627638 on both facets within 1e-5 (*computed*: ΣM 82.314 mm at 300 m by
+  day 30).
+- `test_snow_run.py`'s tests that build a job without a distribution now get
+  one bin at cv 0.4; they assert orderings and mass, not figures, and are
+  expected to pass unedited; any that fails is amended with its reason in
+  the red commit, never in the green one.
+- E1 (slow): `TABLE` becomes 12.5's linear ten-bin rows; same tolerances.
+
+**Mutation targets** (the kernel is invariant-critical; each with its
+killer):
+
+| mutant | killed by |
+|---|---|
+| partly bare melt without the square, `sp·deep'/deep` | L3 |
+| covered-to-front melt `/(4·(deep − sp))` → `/(2·(deep − sp))` | L2 |
+| branch (b)'s test `M ≤ 2·sp − deep` → `M ≤ sp` (flat logic) | L2 |
+| rain all into the pack (`c·rain` → `rain`) | L5 |
+| refreeze not weighted by c | L6 |
+| partly bare refreeze adds to deep instead of scaling | L6 (sca) |
+| the snowfall wedge dropped | L7 |
+| snowfall raises deep by `f_k` instead of `deep_k` | L8b |
+| the cover clamp dropped (`2·sp/deep` when covered) | L0 |
+| the constructor's `deep_k ≤ 2·f_k` check dropped | V3 |
+
+Equivalent, not targets: `M ≤ 2·sp − deep` → `<` (at equality both
+branches give the same state); `T > θ` → `T ≥ θ` (M = 0 changes nothing,
+L9 guards the outcome); the underflow guard `deep' = 0` (needs a
+denormal). Section 7's targets stand, killed by H1-H12 as before.
+
+### 12.8 Size, path and acceptance
+
+| file | net |
+|---|---:|
+| `hbv_snow.hpp` (deep in distribution and state, cover, the step's four changes) | ≈ 45 |
+| `bindings/snow.cpp` (`deep` argument and property) | ≈ 12 |
+| `_core.pyi` | ≈ 3 |
+| `snow/params.py` (`deep`, its checks, band moments in `lognormal`, default) | ≈ 25 |
+| `snow/run.py`, `cli.py` (pass deep; help) | ≈ 2 |
+| **total** | **≈ 87** |
+
+C++ is touched: **the full path** (design review, red, green, review).
+`project_structure.md` unchanged (same module).
+
+**`@perf`:** no refine or mesh code, so no acceptance run. The Bygdin
+animation is wanted: after green, `@perf` reruns the `snow` command of
+`rasputin_scratch/snow-demo/bygdin-sca-animation/commands.txt` on its
+`bygdin_lc.vtk` (defaults: one bin, cv 0.4, now continuous; `--shadows on`,
+8 threads), renders with the same `render_sca.py` and `frames_to_mp4.swift`
+into `rasputin_scratch/snow-demo/bygdin-sca-continuous/`, beside the
+stepped one, and records wall time and peak memory in one line here.
+Expected: about PR 7's, the step being a few flops longer per bin.
+
+### 12.9 Questions for Ola (defaults taken)
+
+12. **One bin at cv 0.4 means a triangle's deepest edge holds 1.69 times its
+    mean snow and its shallowest 0.31 times**, so with 600 mm a triangle
+    starts to show bare ground after 184 mm of melt and is bare after
+    1016 mm; melt-out is spread over weeks instead of one step, and the
+    last snow lasts longer than with uniform snow. Keep 0.4, or a smaller
+    default (0.2: from 0.65 to 1.35 times the mean)? Default: 0.4.
+13. **Snow falling on a partly bare triangle covers it again, and the old
+    snow is spread over the whole triangle as a wedge** (Shyft's rule, mass
+    kept), so after new snow melts the front does not return exactly to
+    where it was. Default: Shyft's rule. (The synthetic spring is dry, so
+    the animation does not show it.)
 
 ## Review
 
