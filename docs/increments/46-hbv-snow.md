@@ -6,7 +6,7 @@ and animation, acceptance run recorded, code review round 2 approved; PR 4,
 the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
 evaluator, snow wiring and Bygdin run, code review round 2 approved,
 acceptance run recorded; PR 7, the run to 1 September and one bin by
-default, designed (section 11, short path)**
+default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path)**
 (2026-10-14). Seven PRs (section 10.7, which supersedes section 8's table, and section 11). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
@@ -1499,6 +1499,8 @@ less with one bin; 154 frames, 63.6 MB of frames.
 **Code review, round 2 (PR 6), 2026-10-14.** Range `e61e0ac6..e11dcc00`, 368 net production lines from `80fe061a` (about 490 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session: TR3b and TR5 marked built in `terrain-radiation.md` and section 10.4's table; that file's Status and this file's Status; the blueprint's `triangle_geometry(mesh, crs)`. Both round-1 blockers fixed: `snow/geometry.py` takes its normals from `receivers_and_zero_area`, the single turn and `radiation_anomaly` gone, tests at Bygdin and on the central meridian equal to the frame's normals bit for bit; one zero-area test (`ZERO_AREA_SINE`), a zero-area triangle given a vertical normal, the sliver through `rasputin snow` with shadows off and on with a correction of exactly 0, errors naming the mesh's own index. Round 1's wordings applied; no red-step scaffolding. The push waits for `@perf`'s PR 6 acceptance run (sections 10.7 and 10.9). Suggestion: `triangle_geometry` could return its frame so `cli.py` reprojects once. Not pushed.
 
 **Code review, round 1 (PR 7, the run to 1 September and one bin by default), 2026-10-14.** Range `2073ccf6..bccf797e`, 5 net production lines (about 7 estimated), short path, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 11.5 names `TestEndToEnd`'s `--warming-days 2 --bins 10` and C2's refusal text from typer's `min=1`. Held: Ola's 2026-10-14 decisions (lapse 0.006, 600 mm, 122-day warming in a 153-day run, one bin, no area scaling); the figures recomputed; `warming_days == days` leaves temperatures unchanged; `--snow-cv` 0.4 kept, since one bin is uniform at any cv; no red-step scaffolding. Section 11.6's Bygdin run to 1 September comes before the push. Idea: `min=1` on `--days` and `--step-minutes`. Not pushed, CI pending.
+
+**PR 7 Bygdin run to 1 September, 2026-10-14** (`@perf`, `be375390`; record in `docs/benchmarks/2026-10-14/46-pr7-september/`). 51 527 triangles, 8 threads, Release, mains power, median of 3: shadows on 29.56 s, 601.5 MB; off 9.96 s, 149.5 MB; 154 frames; covered share of map area 0.411/0.399 (on/off) on 1 August and 0.043/0.040 on 1 September; 8 083/7 675 triangles never melt out; with shadows SWE is never lower and 10 256 triangles melt out later, by up to 40 days; slow TestBygdin passed. Screenshot `bygdin-swe-day137.png` (16 August).
 
 **PR 6 acceptance run, 2026-10-14** (`@perf`, `cdb0c053`, at `7cf50a9b`; record in `docs/benchmarks/2026-10-14/46-pr6-acceptance/`). Release build, M1 Max on mains power, medians of 3. NO BASELINE: the first shadowed snow run, compared with section 10.4's estimate.
 
