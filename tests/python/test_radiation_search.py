@@ -7,7 +7,7 @@ far raster) and *10.8 Red suites for `@tester`* (L4; and, marked slow, L3 and
 I8 on the synthetic 2 m mesh). Every test here calls
 `_core.horizon_search` (TR3a), so each also fails while that kernel is absent.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface under test:
 
 - `search.near_raster(sources, box, request, resources=None) -> DemTile`:
   `open_dem(DemRequest(sources=tuple(sources), bounds=Bounds.of(box grown by

@@ -113,7 +113,7 @@ def sky_of(mesh: Mesh, horizon: int | None = None) -> Any:
 async def frames_of(
     mods: dict[str, ModuleType], the_job: Any, mesh: Mesh, radiation: Any = None
 ) -> list[Any]:
-    geometry = mods["geometry"].triangle_geometry(*mesh, 0.0)
+    geometry = mods["geometry"].triangle_geometry(*mesh, "EPSG:25833")
     run = mods["run"].run(
         the_job, geometry, radiation=sky_of(mesh) if radiation is None else radiation,
         lat_deg=LAT, lon_deg=LON, height_m=Z,

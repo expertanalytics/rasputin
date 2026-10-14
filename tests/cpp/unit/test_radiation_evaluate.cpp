@@ -19,8 +19,8 @@
 //          reference path's crossing, lit 4 s after, on 04-15 and 06-21;
 //   V      refusals.
 //
-// Interface assumed (header include/terrain/radiation/evaluate.hpp, namespace
-// terrain::radiation; names chosen here and listed in the handback):
+// Interface under test (header include/terrain/radiation/evaluate.hpp,
+// namespace terrain::radiation):
 //
 //   inline constexpr double kUpperLimbDeg = 0.2667;
 //   // Degrees: entry / 100.0 on a stored direction, linear between the two

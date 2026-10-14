@@ -56,7 +56,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "radiation": "", "radiation.time": "",  # 46: UTC milliseconds, NumPy only
         "radiation.frame": "crs",  # 46: the receiver frame, pyproj through crs
         "snow.params": "radiation.request resources",  # 46: threads, memory and the shadow request
-        "snow.geometry": "", "snow.terrain": "",  # 46: NumPy only
+        "snow.geometry": "radiation.frame",  # 46: slope and aspect from the frame's normals
+        "snow.terrain": "",  # 46: NumPy only
         "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection

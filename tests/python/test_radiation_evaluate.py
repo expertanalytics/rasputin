@@ -10,15 +10,15 @@ suites for `@tester`* (L2, and I7 and I8 as they cross);
 (`tests/cpp/unit/test_radiation_evaluate.cpp`) holds the lit test, I7 in full
 and the sunrise; this file checks what crosses and the Python surface.
 
-Interface assumed (names chosen here and listed in the handback):
+Interface under test:
 
 - `_core.evaluate_instant(lat_deg, lon_deg, normal, horizon, times_utc_ms, *,
-  limb_deg=0.0, pressure_hpa=1010.0, temperature_c=10.0, threads=0) ->
-  InstantFactors`: `normal` (n, 3) float64, `horizon` (n, N) int16 in 0.01
-  degrees, `times_utc_ms` int64; `InstantFactors` has `lit` uint8 and `cos_i`,
-  `b`, `sin_e` float32, each (T, n). A `ValueError` naming the field or
-  "receiver i"; a horizon that is not int16 is a `TypeError` naming int16.
-  Releases the GIL.
+  limb_deg=0.0, pressure_hpa=1010.0, temperature_c=10.0, n_directions=64,
+  threads=0) -> InstantFactors`: `normal` (n, 3) float64, `horizon` (n, N)
+  int16 in 0.01 degrees, N = `n_directions`, `times_utc_ms` int64;
+  `InstantFactors` has `lit` uint8 and `cos_i`, `b`, `sin_e` float32, each
+  (T, n). A `ValueError` naming the field or "receiver i"; a horizon that is
+  not int16 is a `TypeError` naming int16. Releases the GIL.
 - `radiation.geometry.RadiationGeometry`, frozen: `lat`, `lon` (n,),
   `normal` (n, 3), `horizon` (n, N) int16, `reach` (n, N) uint8,
   `n_directions`, `request` (a `RadiationRequest`).
