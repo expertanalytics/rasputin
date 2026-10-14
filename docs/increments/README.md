@@ -52,6 +52,15 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    it reviewed and its LOC count, verbatim, into a `## Review` section of
    `docs/increments/NN-name.md` (one entry per review round), and commits it
    before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
+   `@reviewer`'s handback ends with one line, `Review: <verdict> <sha>`: its
+   verdict and the full sha of the head it reviewed; a hook records it, and
+   the away-mode push grant reads only that record. When `@reviewer`'s only
+   findings are wordings in prose files (Markdown at the root or under
+   `docs/`) that it names line by line with the new text, its verdict is
+   `APPROVED WITH WORDINGS`. The main session applies them exactly, in the
+   recording commit, and a branch whose only change after the review is that
+   commit counts as reviewed: no second round. A wording in a code file, or
+   any other finding, is `CHANGES REQUESTED`.
 
 The main session writes the as-built record (pins, kill record, counts) into
 the increment file from `@tester`'s and `@developer`'s handbacks or the
@@ -98,7 +107,8 @@ diff touches refine or mesh code (`include/terrain/refinement/`,
 
 - **the 1 m benchmark and a thread-scaling sweep**, run from a checked-in
   script, `tools/bench.py`, and compared with the previous increment's run;
-- **the power state recorded with each run** (`pmset -g batt`). A battery run
+- **the power state recorded with each run** (`pmset -g batt` on macOS;
+  `/sys/class/power_supply` on Linux). A battery run
   is compared only against a battery baseline, and an AC run only against an
   AC one, because the power state changes timings;
 - the evidence committed under `docs/benchmarks/<date>/`.

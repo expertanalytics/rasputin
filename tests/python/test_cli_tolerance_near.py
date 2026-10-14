@@ -34,7 +34,7 @@ from shapely.geometry.base import BaseGeometry
 import tin_engine.cli as cli
 import tin_engine.edge_strip as edge_strip
 import tin_engine.final_check as final_check
-from cli_helpers import SQUARE, UTM33, geojson, invoke, refused, rough_dem
+from cli_helpers import SQUARE, UTM33, geojson, help_text, refused, rough_dem
 from geotiff_fixtures import TIE_X, TIE_Y
 from gpkg_fixtures import Layer, Row, write_gpkg
 from test_cli_constraint_feet_all_paths import Spy
@@ -502,7 +502,6 @@ def test_more_vertices_near_the_line_than_the_far_mesh(
 
 
 def test_the_flags_are_documented_in_plain_words() -> None:
-    code, output = invoke("mesh", "--help")
-    assert code == 0, output
+    output = help_text("mesh")
     for flag in ("--tolerance-near", "--tolerance-ramp", "--tolerance-near-crs"):
         assert flag in output, flag

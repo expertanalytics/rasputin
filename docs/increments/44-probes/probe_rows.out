@@ -1,0 +1,6 @@
+brazil_coverage-col11_2025 crs EPSG:4326 rows 146501 cols 154470 delta 0.00026949458523585647 0.00026949458523585647 y_max 5.422904791408522
+brazil_coverage-col11_2025: rows checked 12000, rows differing in a bit (worst window) 2301, max rel diff 1.2e-10
+fixture 1/128 deg: rows checked 87, rows differing in a bit (worst window) 10, max rel diff 3.29e-13
+== GLO-30 nominal growth per latitude band (x: 4 dy + 2 dx, y: 6 dy), degrees
+today 0.001, 0.001: grows x 0.006000, y 0.006000; bands whose own growth exceeds it: ['85-90']
+design 0.0027778, 0.00027778: grows x 0.006667, y 0.001667; bands whose own growth exceeds it: none

@@ -60,7 +60,7 @@ import pytest
 import typer
 
 import tin_engine.cli as cli
-from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, help_text, invoke, rough_dem
 from feature_fixtures import write_geojson
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from recordread import stats_row
@@ -223,9 +223,7 @@ class TestTheFlag:
             assert record[name] == 0, name
 
     def test_the_help_names_the_flag(self) -> None:
-        code, output = invoke("mesh", "--help")
-        assert code == 0, output
-        assert "--start-quality-gain" in output
+        assert "--start-quality-gain" in help_text("mesh")
 
     def test_the_help_ties_the_line_split_to_the_constraint_feet(self) -> None:
         """Pin 4: the line split (R8) runs only with the gain test and the

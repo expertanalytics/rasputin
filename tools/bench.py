@@ -31,14 +31,14 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
-from typing import Annotated, Any, Literal, NamedTuple, Protocol
+from typing import Annotated, Any, Final, Literal, NamedTuple, Protocol
 
 import numpy as np
 import numpy.typing as npt
 import pyproj
 import shapely
 import typer
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 REPO = Path(__file__).resolve().parents[1]
 BENCH = Path(__file__).resolve()
@@ -158,7 +158,9 @@ class Machine(BaseModel):
     p_cores: int
     e_cores: int
     memory_bytes: int
-    macos: str
+    system: Literal["macOS", "Linux"] = "macOS"
+    #: Also read from the key ``macos``, which the stored macOS records use.
+    os_version: str = Field(validation_alias=AliasChoices("os_version", "macos"))
     python: str
     numpy: str
     shapely: str | None = None
@@ -480,9 +482,9 @@ def _readme(r: RunRecord) -> list[str]:
         f"- Started {r.started.isoformat()}; tree `{r.tree.commit}`{' (dirty)' * r.tree.dirty}; "
         f"bench.py blob `{r.bench_blob}`. Build: {build}; bounds checks: {r.hardening}.",
         f"- {m.cpu_brand}, {m.p_cores} P + {m.e_cores} E cores, {m.memory_bytes / 2**30:.0f} GiB, "
-        f"macOS {m.macos}, Python {m.python}, numpy {m.numpy}, "
+        f"{m.system} {m.os_version}, Python {m.python}, numpy {m.numpy}, "
         f"shapely {m.shapely} (GEOS {m.geos}), pyproj {m.pyproj} (PROJ {m.proj}).",
-        f"- Power **{p.state}** ({p.percent}%), `pmset -g batt` before and after (in run.json).",
+        f"- Power **{p.state}** ({p.percent}%), read before and after (raw text in run.json).",
         f"- DEM `{i.dem}` (sha256 `{i.dem_sha256}`), tolerance {i.tolerance}, extra mesh args "
         f"`{' '.join(i.extra_args)}`; domains: "
         + ", ".join(f"`{d.name}` ({d.path or 'the whole tile'})" for d in i.domains) + ".",
@@ -584,18 +586,124 @@ def build(
     )  # fmt: skip
 
 
-def _machine(runner: Runner) -> Machine:
-    keys = ["machdep.cpu.brand_string", "hw.perflevel0.physicalcpu"]
-    keys += ["hw.perflevel1.physicalcpu", "hw.memsize"]
-    brand, *counts = (runner.run(["sysctl", "-n", k]).stdout.strip() for k in keys)
-    p, e, mem = (int(c) if c.isdigit() else 0 for c in counts)
-    return Machine(
-        cpu_brand=brand, p_cores=p, e_cores=e, memory_bytes=mem,
-        macos=runner.run(["sw_vers", "-productVersion"]).stdout.strip(),
+def _versions() -> dict[str, str]:
+    """The Python side's versions, the same on every system."""
+    return dict(
         python=platform.python_version(), numpy=np.__version__,
         shapely=shapely.__version__, geos=shapely.geos_version_string,
         pyproj=pyproj.__version__, proj=pyproj.proj_version_str,
     )  # fmt: skip
+
+
+class Host(Protocol):
+    def machine(self) -> Machine: ...
+    def power(self) -> Power: ...
+
+
+class MacHost:
+    """The machine from ``sysctl`` and ``sw_vers``, the power from ``pmset -g batt``."""
+
+    def __init__(self, runner: Runner) -> None:
+        self.runner = runner
+
+    def machine(self) -> Machine:
+        keys = ["machdep.cpu.brand_string", "hw.perflevel0.physicalcpu"]
+        keys += ["hw.perflevel1.physicalcpu", "hw.memsize"]
+        brand, *counts = (self.runner.run(["sysctl", "-n", k]).stdout.strip() for k in keys)
+        p, e, mem = (int(c) if c.isdigit() else 0 for c in counts)
+        version = self.runner.run(["sw_vers", "-productVersion"]).stdout.strip()
+        return Machine(
+            cpu_brand=brand, p_cores=p, e_cores=e, memory_bytes=mem, os_version=version,
+            **_versions(),
+        )  # fmt: skip
+
+    def power(self) -> Power:
+        return parse_pmset(self.runner.run(PMSET).stdout)
+
+
+#: The only files of a power supply read: ``uevent`` repeats them and could disagree.
+POWER_VALUES: Final = ("type", "scope", "online", "status", "capacity")
+SUPPLIES = "sys/class/power_supply"
+#: A battery's states on external power, on a laptop that lists no adapter.
+CHARGED = ("Charging", "Full", "Not charging")
+
+
+def _value(path: Path) -> str | None:
+    """A sysfs value: the file's first line, stripped; None when it is absent,
+    unreadable (a directory, no permission, a driver's ENODATA), not UTF-8 or empty."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return (lines[0].strip() if lines else "") or None
+
+
+def _key(text: str, key: str, sep: str = ":") -> str | None:
+    """The first ``key: value`` line's value in ``/proc`` text (``key=value`` in os-release)."""
+    found = re.search(rf"^{key}\s*{sep}\s*(.*)$", text, re.MULTILINE)
+    return found.group(1).strip() if found else None
+
+
+class LinuxHost:
+    """The machine and the power from text files under ``root``; starts no process."""
+
+    def __init__(self, root: Path = Path("/")) -> None:
+        self.root = root
+
+    def machine(self) -> Machine:
+        cpuinfo = (self.root / "proc/cpuinfo").read_text(encoding="utf-8")
+        topology = self.root.glob("sys/devices/system/cpu/cpu[0-9]*/topology")
+        cores = {(_value(t / "physical_package_id"), _value(t / "core_id")) for t in topology}
+        meminfo = (self.root / "proc/meminfo").read_text(encoding="utf-8")
+        kb = (_key(meminfo, "MemTotal") or "0").split()[0]
+        release = self.root / "etc/os-release"
+        text = release.read_text(encoding="utf-8") if release.is_file() else ""
+        pretty = _key(text, "PRETTY_NAME", "=")
+        return Machine(
+            cpu_brand=_key(cpuinfo, "model name") or _key(cpuinfo, "Hardware") or "unknown",
+            p_cores=len(cores) or len(re.findall(r"^processor\s*:", cpuinfo, re.MULTILINE)),
+            e_cores=0, memory_bytes=int(kb) * 1024, system="Linux",
+            os_version=(pretty or "Linux").strip('"'), **_versions(),
+        )  # fmt: skip
+
+    def power(self) -> Power:
+        try:
+            names = sorted(p.name for p in (self.root / SUPPLIES).iterdir())
+        except FileNotFoundError:
+            names = []
+        except OSError as exc:
+            raw = f"cannot list /{SUPPLIES}: {exc.strerror}"
+            return Power(state="unknown", percent=None, raw=raw)
+        kept = [(n, {k: v for k in POWER_VALUES if (v := _value(self.root / SUPPLIES / n / k))})
+                for n in names]  # fmt: skip
+        kept = [(n, v) for n, v in kept if v.get("scope", "System") != "Device"]
+        mains = [v for _, v in kept if v.get("type") in ("Mains", "USB", "Wireless")]
+        batteries = [v for _, v in kept if v.get("type") == "Battery"]
+        state: State
+        if any(v.get("online") in ("1", "2") for v in mains):
+            state = "ac"
+        elif any(v.get("status") == "Discharging" for v in batteries):
+            state = "battery"
+        else:  # mains: a machine listing no adapter or battery, or batteries all on charge
+            nothing = not mains and not batteries and all("type" in v for _, v in kept)
+            charged = batteries and all(v.get("status") in CHARGED for v in batteries)
+            state = "ac" if nothing or charged else "unknown"
+        capacity = batteries[0].get("capacity", "") if batteries else ""
+        lines = [f"{n}: " + (", ".join(f"{k}={v[k]}" for k in sorted(v)) or "nothing readable")
+                 for n, v in kept]  # fmt: skip
+        return Power(
+            state=state, percent=int(capacity) if capacity.isdigit() else None,
+            raw="\n".join(lines) or f"no power supply under /{SUPPLIES}",
+        )  # fmt: skip
+
+
+def make_host(runner: Runner, system: str = sys.platform) -> Host:
+    """The reader of this system's machine and power; another system is refused."""
+    if system == "darwin":
+        return MacHost(runner)
+    if system == "linux":
+        return LinuxHost()
+    raise BenchError(f"no machine or power reader for {system}: macOS and Linux only")
 
 
 def _load(directory: Path) -> RunRecord:
@@ -692,6 +800,7 @@ def run(
             if not path.exists():
                 raise BenchError(f"{path}: no such file")
         base = _load(baseline) if baseline is not None else None
+        host = make_host(runner)
         if no_build and hardening is not None:
             raise BenchError("--hardening with --no-build: nothing is built")
     except BenchError as exc:
@@ -715,8 +824,7 @@ def run(
         commit = _checked(runner, ["git", "-C", str(tree), "rev-parse", "HEAD"]).stdout.strip()
         dirty = bool(runner.run(["git", "-C", str(tree), "status", "--porcelain"]).stdout.strip())
         blob = runner.run(["git", "-C", str(REPO), "hash-object", str(BENCH)]).stdout.strip()
-        machine = _machine(runner)
-        before = parse_pmset(runner.run(PMSET).stdout)
+        machine, before = host.machine(), host.power()
         samples, qualities, modes = _measure(
             runner, head, domains, mesh, counts, repeats, meshes, tolerance, label
         )
@@ -725,7 +833,7 @@ def run(
         (mode,) = modes
         if hardening is not None and (hardening == "on") != (mode != "none"):
             raise BenchError(f"--hardening {hardening}, but the children's _core reports {mode}")
-        power = combine_power(before, parse_pmset(runner.run(PMSET).stdout))
+        power = combine_power(before, host.power())
     except BenchError as exc:
         typer.echo(f"bench: {exc}")
         raise typer.Exit(3) from exc
