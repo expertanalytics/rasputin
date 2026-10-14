@@ -3037,7 +3037,7 @@ def snow(
     initial_swe: Annotated[float, typer.Option(help="Snow at the start, mm of water.")] = 600.0,
     snow_cv: Annotated[float, typer.Option(help="Variation of snow depth within a triangle; "
         "within each bin the depth varies linearly, so the snow-covered area shrinks smoothly. "
-        "0 is uniform snow, at most 0.577 with one bin.")] = 0.4,
+        "0 is uniform snow, at most 0.577 with one bin.")] = 0.1,
     bins: Annotated[int, typer.Option(help="Bins of snow depth per triangle, 1 to 64.")] = 1,
     tx: Annotated[float, typer.Option(help="Snow below this temperature, °C.")] = 0.0,
     ts: Annotated[float, typer.Option(help="Melt above this temperature, °C.")] = 0.0,

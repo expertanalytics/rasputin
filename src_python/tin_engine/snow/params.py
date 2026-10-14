@@ -171,7 +171,7 @@ class SnowJob(BaseModel):
     resources: Resources
     hbv: HbvSnowParameters = HbvSnowParameters()
     distribution: SnowDistribution = Field(
-        default_factory=lambda: SnowDistribution.lognormal(0.4, 1)
+        default_factory=lambda: SnowDistribution.lognormal(0.1, 1)
     )
     spring: SyntheticSpring = SyntheticSpring()
     frames: FrameSpec = Field(default=FrameSpec(), validate_default=True)
