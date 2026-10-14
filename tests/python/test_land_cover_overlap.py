@@ -227,7 +227,7 @@ class TestRefusals:
 
 class TestRowAreas:
     def test_each_rows_cell_area_is_the_ellipsoids(self) -> None:
-        got = row_areas(WINDOW)
+        got = row_areas(WINDOW, "EPSG:4326")
         assert got.dtype == np.float64 and got.shape == (EXTENT,)
         want = geod_row_areas(LAT0, STEP, EXTENT)
         assert got == pytest.approx(want, rel=1e-9)
@@ -239,12 +239,12 @@ class TestRowAreas:
                 x_min=-45.0, y_max=lat, delta_x=ANADEM_STEP, delta_y=ANADEM_STEP,
                 array=np.zeros((1, 1), dtype=np.uint8),
             )  # fmt: skip
-            assert row_areas(window)[0] == pytest.approx(want, abs=0.5)
+            assert row_areas(window, "EPSG:4326")[0] == pytest.approx(want, abs=0.5)
             assert geod_cell_area(lat, ANADEM_STEP) == pytest.approx(want, abs=0.5)
 
     def test_the_longitude_does_not_matter(self) -> None:
         east = WINDOW.model_copy(update={"x_min": LON0 + 3.0})
-        assert_array_equal(row_areas(east), row_areas(WINDOW))
+        assert_array_equal(row_areas(east, "EPSG:4326"), row_areas(WINDOW, "EPSG:4326"))
 
 
 # ------------------------------------------------------------ the table

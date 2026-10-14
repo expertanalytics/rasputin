@@ -244,16 +244,17 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   in a thread, compare, StationResult rows to a
                            #   BatchSink; no paths (29, PR 4)
   land_cover_fractions.py  # exact class fractions per triangle from a class
-                           #   raster in the cache: index-space corners, row
-                           #   areas, chunks through _core.class_areas, the
-                           #   ClassFractions table and dominant class (26b);
-                           #   imports _core, crs, io.models, io.repository
+                           #   raster in the cache or a file (`ClassRaster`):
+                           #   index-space corners, row areas, chunks through
+                           #   _core.class_areas, the ClassFractions table and
+                           #   dominant class (26b); imports _core, crs,
+                           #   io.models; io.repository for type checks only
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
   class_maps.py            # class maps as data (41): load(name | path |
-                           #   'property') reads a TOML file with tomllib into
+                           #   'property') reads a TOML file through toml_data into
                            #   a ClassMap; derived_cleanup(accuracy, cell):
                            #   repair, simplify, snap from the larger of the
                            #   source's accuracy and the DEM cell; imports
@@ -278,8 +279,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   sources.py               # the catalogues `rasputin fetch` and `rasputin
                            #   fetch-stations` copy from: RemoteSource (ANADEM,
                            #   GLO-30; 23a-1, 23a-2), StationSource (NVE's HRD,
-                           #   29), notice(); data, imports Pydantic alone, so
-                           #   the mesh path names a key without importing fetch/
+                           #   29), notice(); the entries are data/sources.toml,
+                           #   plus `catalogue()` adding $RASPUTIN_DATA/sources.toml;
+                           #   imports Pydantic and toml_data only, so the mesh
+                           #   path names a key without importing fetch/
+  toml_data.py             # parse/validate: TOML into a strict Pydantic model,
+                           #   refusals naming the file
   fetch/                   # copies remote data to disk; the only package that
                            #   touches the network, and nothing on `rasputin
                            #   mesh`'s path imports it (23a-2)
@@ -296,6 +301,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   manifest last); field allow-lists; writes
                            #   nothing, cli.py writes the files (29)
   data/                    # package data, read by importlib.resources
+    sources.toml           # the shipped catalogue
     nve_hrd_2025.csv       # NVE's 140 HRD stations, 2025 version: which
                            #   stations, series version, start year; its names
                            #   only check the extraction from the PDF (29)

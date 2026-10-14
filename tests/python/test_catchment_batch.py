@@ -21,7 +21,7 @@ names it leaves open are chosen here and listed in the handback):
   placement's `placed_on`, `distance_m`, `uncertainty_m`, `objectid`,
   `elvid`, `reach_down_m`; `causes` (the joined list of `GaugeResult`);
   `nodes`, `fine_area_km2`, `reference_area_km2` (NVE's polygon),
-  `nve_area_km2` (the station layer's), `nve_in_ours`, `ours_in_nve`,
+  `nve_area_km2` (the station layer's), `reference_in_ours`, `ours_in_reference`,
   `area_ratio`; `tiles` (how many of the repository's tiles meet our fine
   outline), `windows` (how many) and `seconds`. A refused row has None for
   every placement, gauge and agreement field it could not have.
@@ -172,7 +172,7 @@ def test_the_match_is_its_own_flood_node_for_node(five: tuple[ListSink, Any]) ->
     r = by_station(five[0])[bf.TREFF.station]
     mask = filled(bf.flood_mask(bf.TREFF))
     assert r.nodes == int(bf.flood_mask(bf.TREFF).sum())
-    assert r.nve_in_ours == 1.0 and r.ours_in_nve == 1.0
+    assert r.reference_in_ours == 1.0 and r.ours_in_reference == 1.0
     assert r.area_ratio == pytest.approx(1.0, rel=1e-9)
     assert r.fine_area_km2 == pytest.approx(mask.sum() * gf.CELL_KM2, rel=1e-9)
     assert r.reference_area_km2 == pytest.approx(bf.references()[r.station].area / 1e6, rel=1e-9)
@@ -181,14 +181,14 @@ def test_the_match_is_its_own_flood_node_for_node(five: tuple[ListSink, Any]) ->
 
 def test_the_miss_shares_nothing_with_its_moved_reference(five: tuple[ListSink, Any]) -> None:
     r = by_station(five[0])[bf.BOM.station]
-    assert r.nve_in_ours == 0.0 and r.ours_in_nve == 0.0
+    assert r.reference_in_ours == 0.0 and r.ours_in_reference == 0.0
     assert tuple(r.causes) == ()
 
 
 def test_a_confluence_just_below_is_uncertain_by_its_swing(five: tuple[ListSink, Any]) -> None:
     r = by_station(five[0])[bf.SAMLOP.station]
     assert "swing" in r.causes
-    assert r.nve_in_ours == 1.0 and r.ours_in_nve == 1.0  # uncertain beats match
+    assert r.reference_in_ours == 1.0 and r.ours_in_reference == 1.0  # uncertain beats match
 
 
 def test_a_river_ending_within_u_is_uncertain_although_its_overlap_is_100(
@@ -197,7 +197,7 @@ def test_a_river_ending_within_u_is_uncertain_although_its_overlap_is_100(
     r = by_station(five[0])[bf.SLUTT.station]
     assert tuple(r.causes) == ("downstream_unread",)
     assert r.reach_down_m == pytest.approx(10.0, abs=1e-6)
-    assert r.nve_in_ours == 1.0 and r.ours_in_nve == 1.0
+    assert r.reference_in_ours == 1.0 and r.ours_in_reference == 1.0
     assert r.objectid == 201 and r.elvid == "2-2-1"
 
 
@@ -219,7 +219,7 @@ def test_no_river_line_near_is_refused_and_the_batch_goes_on(five: tuple[ListSin
     assert r.refusal_cause == "no_river"
     assert "no mapped river line within 500 m of the station" in r.refusal_message
     assert r.grid_tiles is None
-    assert r.placed_on is None and r.nodes is None and r.nve_in_ours is None
+    assert r.placed_on is None and r.nodes is None and r.reference_in_ours is None
     assert sink.rows[-1].station == bf.LANGT.station  # the last row, after the others
 
 
@@ -271,7 +271,7 @@ def test_the_summary(five: tuple[ListSink, Any]) -> None:
 
 def test_the_batch_is_deterministic(five: tuple[ListSink, Any], tmp_path: Path) -> None:
     sink, summary = run(tmp_path)
-    keep = ("station", "station_class", "nodes", "nve_in_ours", "causes", "refusal_message")
+    keep = ("station", "station_class", "nodes", "reference_in_ours", "causes", "refusal_message")
     assert [[getattr(r, k) for k in keep] for r in sink.rows] == [
         [getattr(r, k) for k in keep] for r in five[0].rows
     ]
@@ -420,7 +420,7 @@ def test_without_references_no_class_beyond_refused_and_uncertain(tmp_path: Path
     rows = by_station(sink)
     assert rows[bf.TREFF.station].station_class is None
     assert rows[bf.TREFF.station].match_by is None
-    assert rows[bf.TREFF.station].nve_in_ours is None
+    assert rows[bf.TREFF.station].reference_in_ours is None
     assert rows[bf.TREFF.station].reference_area_km2 is None
     assert rows[bf.TREFF.station].nodes == int(bf.flood_mask(bf.TREFF).sum())
     assert rows[bf.SAMLOP.station].station_class == "uncertain"
@@ -656,7 +656,7 @@ def test_a_lake_row_with_its_reference_is_a_match_never_uncertain(
     lake row decides from the agreement alone."""
     r = by_station(lake_run[0])[bf.SAMLOP.station]
     assert r.station_class == "match" and r.match_by == "overlap"
-    assert r.nve_in_ours == 1.0 and r.ours_in_nve == 1.0
+    assert r.reference_in_ours == 1.0 and r.ours_in_reference == 1.0
 
 
 def test_a_river_row_beside_it_keeps_the_river_path(lake_run: tuple[ListSink, Any]) -> None:

@@ -39,10 +39,6 @@ from tin_engine.sources import RemoteSource, notice
 
 MIB = 1 << 20
 MAX_HEADER = 64 * MIB
-#: GLO-30's tiles are chosen from a box grown as if the spacing were this many
-#: degrees: more than any tile's below 80° (3", 0.00083°), so the box each tile's
-#: blocks are planned from contains the one its own spacing would give.
-TILE_SPACING = 0.001
 
 Header = tuple[bytes, int, str, RasterMeta, tifffile.TiffPage]
 
@@ -225,7 +221,7 @@ def _header(
             entry.last_modified,
         ):
             raise FetchError(_changed(url, entry, got.total, got.last_modified))
-        parsed = parse_prefix(got.data, nodata=source.nodata, z_unit=source.z_unit)
+        parsed = parse_prefix(got.data, nodata=source.nodata, z_unit=source.read_unit)
         if parsed is not None:
             break
         if entry is not None or size >= MAX_HEADER or len(got.data) < size:
@@ -250,29 +246,25 @@ def _changed(url: str, entry: CachedObject, total: int, modified: str) -> str:
 async def _tiles(
     request: FetchRequest, source: RemoteSource, client: RangeClient
 ) -> tuple[Bounds, list[str], list[str]]:
-    """GLO-30: the box, and the 1° tiles meeting it, listed and not."""
-    assert source.tile_list_url is not None
+    """The box, grown at the source's `tile_spacing` so that it holds the one
+    any tile's own spacing gives, and the 1° tiles meeting it, listed and not."""
+    assert source.tile_list_url is not None and source.tile_spacing is not None
     text = await asyncio.to_thread(client.get_text, source.tile_list_url)
     listed = set(text.split())
     epsg = parse_crs(source.crs).to_epsg()
     assert epsg is not None
     nominal = RasterMeta(
-        x_min=0.0, y_max=0.0, delta_x=TILE_SPACING, delta_y=TILE_SPACING, cols=1, rows=1,
-        epsg=epsg, nodata=None, nodata_source="absent", pixel_is_area=False,
+        x_min=0.0, y_max=0.0, delta_x=source.tile_spacing[0], delta_y=source.tile_spacing[1],
+        cols=1, rows=1, epsg=epsg, nodata=None, nodata_source="absent", pixel_is_area=False,
         vertical_unit_assumed=True,
     )  # fmt: skip
     box = source_box(request, nominal)
     names = [
-        _tile_name(lat, lon)
+        source.tile_for(lat, lon)
         for lat in range(math.floor(box.y_min), math.ceil(box.y_max))
         for lon in range(math.floor(box.x_min), math.ceil(box.x_max))
     ]
     return box, [n for n in names if n in listed], sorted(n for n in names if n not in listed)
-
-
-def _tile_name(lat: int, lon: int) -> str:
-    ns, ew = ("N" if lat >= 0 else "S"), ("E" if lon >= 0 else "W")
-    return f"Copernicus_DSM_COG_10_{ns}{abs(lat):02d}_00_{ew}{abs(lon):03d}_00_DEM"
 
 
 def _region(request: FetchRequest, source: RemoteSource) -> str:

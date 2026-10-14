@@ -29,7 +29,16 @@ import numpy as np
 import pytest
 
 import tin_engine
-from cli_helpers import USAGE, geojson, invoke, squashed
+from cli_helpers import (
+    USAGE,
+    geojson,
+    help_page,
+    invoke,
+    no_cache_anywhere,
+    plain,
+    says_no_cache,
+    squashed,
+)
 from cog_fixtures import VARIANTS, build, write_cache
 from geotiff_fixtures import TIE_X, TIE_Y
 from test_cli_mesh_mosaic import field, same_mesh, terrain
@@ -92,6 +101,12 @@ def cache(tmp_path: Path, data: bytes) -> Path:
 @pytest.fixture
 def no_data_root(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+
+
+@pytest.fixture
+def no_cache_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neither `RASPUTIN_DATA`, `XDG_CACHE_HOME` nor `HOME`: no default cache."""
+    no_cache_anywhere(monkeypatch)
 
 
 def no_network(*args: Any, **kwargs: Any) -> Any:
@@ -322,8 +337,35 @@ class TestW8CacheRoot:
     def test_the_variable_alone_is_its_cache_directory(self, cache_root: Any) -> None:
         assert cache_root(None, {"RASPUTIN_DATA": "/data"}) == Path("/data/cache")
 
-    def test_neither_is_none(self, cache_root: Any) -> None:
-        assert cache_root(None, {}) is None
+    @pytest.mark.parametrize(
+        ("option", "environ", "expected"),
+        [
+            pytest.param("/given", {"RASPUTIN_DATA": "/data", "XDG_CACHE_HOME": "/xdg",
+                                    "HOME": "/home/u"}, "/given", id="the-option"),
+            pytest.param(None, {"RASPUTIN_DATA": "/data", "XDG_CACHE_HOME": "/xdg",
+                                "HOME": "/home/u"}, "/data/cache", id="the-data-root"),
+            pytest.param(None, {"RASPUTIN_DATA": "", "XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"},
+                         "/xdg/rasputin", id="an-empty-data-root-is-unset"),
+            pytest.param(None, {"XDG_CACHE_HOME": "/xdg", "HOME": "/home/u"}, "/xdg/rasputin",
+                         id="xdg-over-home"),
+            pytest.param(None, {"XDG_CACHE_HOME": "rel/cache", "HOME": "/home/u"},
+                         "/home/u/.cache/rasputin", id="a-relative-xdg-is-ignored"),
+            pytest.param(None, {"XDG_CACHE_HOME": "", "HOME": "/home/u"},
+                         "/home/u/.cache/rasputin", id="an-empty-xdg-is-unset"),
+            pytest.param(None, {"HOME": "/home/u"}, "/home/u/.cache/rasputin", id="home-alone"),
+            pytest.param(None, {"HOME": ""}, None, id="an-empty-home-is-none"),
+            pytest.param(None, {}, None, id="nothing-is-none"),
+        ],
+    )  # fmt: skip
+    def test_the_rule_in_order(
+        self, cache_root: Any, option: str | None, environ: dict[str, str], expected: str | None
+    ) -> None:
+        """The XDG Base Directory rule after `--cache` and `RASPUTIN_DATA`. A
+        pure function of its two arguments: the process's own environment
+        (where the suite's fixture sets `XDG_CACHE_HOME`, and `HOME` is set)
+        never shows through, so the last two rows are None."""
+        got = cache_root(None if option is None else Path(option), environ)
+        assert got == (None if expected is None else Path(expected))
 
     def test_through_the_cli_the_option_wins_over_the_variable(
         self,
@@ -354,14 +396,44 @@ class TestW8CacheRoot:
         code, output = invoke("mesh", "--dem", KEY, "--out", str(tmp_path / "m.vtk"))
         assert code == 0, output
 
-    def test_neither_refuses_a_catalogue_key_naming_both(
-        self, catalogue: dict[str, Any], tmp_path: Path, no_data_root: None
+    def test_no_cache_directory_refuses_a_catalogue_key_naming_every_way_to_give_one(
+        self, catalogue: dict[str, Any], tmp_path: Path, no_cache_dir: None
     ) -> None:
         code, output = invoke("mesh", "--dem", KEY, "--out", str(tmp_path / "m.vtk"))
         assert code == USAGE, output
-        assert "no cache: set RASPUTIN_DATA" in output and "--cache" in output, output
+        says_no_cache(output)
+        assert not (tmp_path / "m.vtk").exists()
 
-    def test_a_path_needs_neither(self, tif: Path, tmp_path: Path, no_data_root: None) -> None:
+    def test_the_xdg_cache_alone_finds_the_cache(
+        self,
+        catalogue: dict[str, Any],
+        tmp_path: Path,
+        data: bytes,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No `--cache`, no `RASPUTIN_DATA`: the cache is `$XDG_CACHE_HOME/rasputin`."""
+        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        write_cache(tmp_path / "xdg" / "rasputin", KEY, {"dem": data})
+        code, output = invoke("mesh", "--dem", KEY, "--out", str(tmp_path / "m.vtk"))
+        assert code == 0, output
+        assert (tmp_path / "m.vtk").is_file()
+
+    @pytest.mark.parametrize("command", ["mesh", "fetch"])
+    def test_the_help_states_the_whole_default(self, command: str) -> None:
+        """At 300 columns, so Rich prints the option's help on one row instead
+        of wrapping it between other columns' text or cutting a long word
+        short with an ellipsis. `help_page` pins the width on CI too."""
+        code, output = help_page(command, columns=300)
+        assert code == 0, output
+        default = (
+            "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
+        )
+        cache_lines = [line for line in output.splitlines() if "--cache" in line]
+        assert squashed(default) in squashed(plain(output)), cache_lines
+
+    def test_a_path_needs_neither(self, tif: Path, tmp_path: Path, no_cache_dir: None) -> None:
         code, output = invoke("mesh", "--dem", str(tif), "--out", str(tmp_path / "m.vtk"))
         assert code == 0, output
 
@@ -370,7 +442,7 @@ class TestW8CacheRoot:
         sources: ModuleType,
         tmp_path: Path,
         data: bytes,
-        no_data_root: None,
+        no_cache_dir: None,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         assert "glo30" in sources.SOURCES
@@ -380,7 +452,7 @@ class TestW8CacheRoot:
         assert code == 0, output
         code, output = invoke("mesh", "--dem", "glo30", "--out", str(tmp_path / "key.vtk"))
         assert code == USAGE, output
-        assert "no cache: set RASPUTIN_DATA" in output, output
+        says_no_cache(output)
 
     def test_a_key_and_a_path_together_are_refused(
         self, catalogue: dict[str, Any], cache: Path, tif: Path, tmp_path: Path
@@ -417,12 +489,15 @@ class TestTheCatalogue:
         assert sources.SOURCES["anadem-v1"].kind == "one-cog"
         assert sources.SOURCES["glo30"].kind == "cog-tiles"
 
-    def test_sources_imports_pydantic_only(self, sources: ModuleType) -> None:
+    def test_sources_imports_no_fetch_numpy_pyproj_or_tifffile(self, sources: ModuleType) -> None:
+        """The mesh path names a catalogue key without the fetcher or a codec:
+        the standard library, Pydantic and `tin_engine.toml_data` only."""
         tree = ast.parse(Path(sources.__file__).read_text())
         imported = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                imported.add((node.module or "").split(".")[0])
+                imported.add(node.module or "")
             elif isinstance(node, ast.Import):
-                imported.update(alias.name.split(".")[0] for alias in node.names)
-        assert imported - {"__future__", "collections", "typing", "types"} <= {"pydantic"}
+                imported.update(alias.name for alias in node.names)
+        outside = {name for name in imported if name.split(".")[0] not in sys.stdlib_module_names}
+        assert outside <= {"pydantic", "tin_engine.toml_data"}, sorted(outside)

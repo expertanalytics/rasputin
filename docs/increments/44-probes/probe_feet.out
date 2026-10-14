@@ -1,0 +1,15 @@
+fixture feet_classes.tif: 656 bytes
+== P9 the reader as merged
+read_page, no z_unit (today's route for a class raster): GeoTiffError the DEM's coordinates are in US survey feet (EPSG:2229) and the file does not say what unit its heights are in; give --z-unit us-ft, ft or m
+TiffDemRepository([file]).footprints(), no z_unit: GeoTiffError feet_classes.tif: the DEM's coordinates are in US survey feet (EPSG:2229) and the file does not say what unit its heights are in; give --z-unit us-ft, ft or m
+TiffDemRepository([file], z_unit='metre').footprints(): read; crs EPSG:26945 file_crs EPSG:2229 delta 30.480060960121918 x_min 1981219.2024384048 y_max 640066.0401320802 z_unit metre assumed True
+with VerticalUnitsGeoKey 4099 = 9001 (metre), z_unit='metre': read; crs EPSG:26945 file_crs EPSG:2229 delta 30.480060960121918 x_min 1981219.2024384048 y_max 640066.0401320802 z_unit metre assumed False
+with VerticalUnitsGeoKey 4099 = 9003 (US survey foot), z_unit='metre': GeoTiffError the file says its heights are in US survey feet; --z-unit says metres
+== P9 fractions on the metre twin, with z_unit='metre'
+triangle (metres, mesh CRS = meta.crs): [[1981264.922529845, 640081.2801625603], [1981386.8427736855, 640081.2801625603], [1981264.922529845, 639959.3599187199]]
+corners in index space: [[[2.0000000000029026, 0.0], [2.0000000000029026, 3.999999999998167], [6.000000000001069, 0.0]]]
+rows of delta_x * delta_y m2: 929.0341161327483 | classes [10, 20] fractions [0.7499999999995035, 0.25000000000049644] areas m2 [5574.20469678769, 1858.0682322674834]
+today's row_areas on it: [nan, nan]
+== P9b the cached MapBiomas header (argument 3: the data root)
+vertical GeoKeys: none
+meta with z_unit='metre' equals meta with none: True
