@@ -1,6 +1,6 @@
 # Increment 48 — Every third-party import is declared, and a bad `--z-unit` is a usage error
 
-Status: **designed** (`@architect`, 2026-10-14), short path
+Status: **approved** (code review round 2, 2026-10-14), short path
 (`docs/increments/README.md`, "Small changes: the short path"). **This
 increment absorbs increment 47** (`--z-unit` usage error, designed on branch
 `worktree-z-unit-usage`, commits `84b40250` and `069dd4f0`); the number 47 is
@@ -227,3 +227,5 @@ Production lines (`CLAUDE.md` §2; TOML is not counted): about 0 net
 short path's 50-line limit; no C++ file; nothing under *Acceptance*.
 
 **Code review, round 1 (short path), 2026-10-14.** Range `55b9f564..d5d29945`, 0 net production lines (about 0 estimated), @reviewer: CHANGES REQUESTED. Blocking: `help_text` in `tests/python/cli_helpers.py` sets `COLUMNS=200` under `TERM=dumb`, which Rich ignores under `GITHUB_ACTIONS` (80 columns), so the three moved help tests fail on CI (reproduced with `GITHUB_ACTIONS=true`); fold it onto #258's `help_page` (`TERM=xterm`, `NO_COLOR=1`, `COLUMNS`) after #258 merges, as one helper. Accepted pins: T3's two checks, T5's 70-file floor, T1 and T2 in a new file. Held: short path; red before green, green touching no test; no scaffolding; prose matches code. Not pushed.
+
+**Code review, round 2 (short path), 2026-10-14.** Range `01bc86b2..3812553c` (master merged in `d4463c88`), 0 net production lines, @reviewer: APPROVED. Round 1's blocker closed: one helper, `help_text(command, columns=200)` with `TERM=xterm`, `NO_COLOR=1` and `COLUMNS`; `help_page` gone and its callers moved; help tests pass with `GITHUB_ACTIONS=true` (39 passed); the branch merges onto master with #260 without conflicts and `test_declared_imports` passes there, `radiation/` included. Not pushed, CI pending.
