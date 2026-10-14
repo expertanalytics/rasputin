@@ -1,14 +1,7 @@
 # Increment 46: HBV snow on the triangles, melt corrected for the sun, and a melt animation
 
-**Status: design and its cast-shadow addendum approved (rounds 1-4); PR 1,
-the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
-and animation, acceptance run recorded, code review round 2 approved; PR 4,
-the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
-evaluator, snow wiring and Bygdin run, code review round 2 approved,
-acceptance run recorded; PR 7, the run to 1 September and one bin by
-default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path);
-PR 8, a continuous snow-covered area in the active bin, design and code
-review round 1 approved with wordings, Bygdin re-render recorded (section 12)**
+**Status: merged, all eight PRs (PR 1 #257, PR 2 #260, PR 3 #261, PR 4 #262,
+PR 5 #263, PR 6 #265, PR 7 #266, PR 8 #267; the last 2026-10-14 18:26 UTC)**
 (2026-10-14). Eight PRs (section 10.7, which supersedes section 8's table, and sections 11 and 12). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
