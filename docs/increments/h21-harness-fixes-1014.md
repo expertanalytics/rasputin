@@ -133,16 +133,32 @@ is judged by today's text rules, which ask. It is `True` only when all hold:
    `@file`, so the guard does not see the text sent.
 4. That value, stripped of leading whitespace, starts with `{`, `query` or
    `fragment`.
-5. `literal(line)`: the line, as written, has no shell expansion outside
-   single quotes. A new pure function in `tools/shell_scan.py`, a left-to-right
-   scan with three states (outside quotes, in `'...'`, in `"..."`; a
-   backslash outside single quotes takes the next character): `False` on `$`,
-   a backtick or a backslash outside single quotes (a backslash inside
-   double quotes too: `"muta\` and a newline joins lines), and outside any
-   quotes on `{`, `}`, `*`, `?`, `[` or `~` (brace, glob and tilde
-   expansion); also `False` on an unclosed quote. So
-   `$M`, `"$M"`, `$'\x6d'`, `$(printf mut)`, `` `…` `` and `mu{tation,}`
-   are refused, and a query written in single quotes passes.
+5. `literal(line)`: the line, as written, is one command with no shell
+   expansion, read the same by bash and by zsh (the Bash tool's shell here)
+   whatever their options. A new pure function in `tools/shell_scan.py`, a
+   left-to-right scan with three states (outside quotes, in `'...'`, in
+   `"..."`), written as an allow-list so that a character not named is
+   refused:
+   - outside quotes, only letters, digits, space, tab and `_ . / : , @ % +
+     -`, and `=` when not the first character of a word (zsh's `=cmd`
+     expands to a path). Everything else is `False`: `$`, backtick,
+     backslash, `{ } * ? [ ] ~` (brace, glob, tilde), `( )` (zsh
+     `mu(t)ation` and ksh-style `@(…)` patterns; `shell_scan.parse` also
+     splits a word at `(`), `# ^` (zsh `EXTENDED_GLOB` patterns, and a
+     comment), `| < >` (pipes and redirections, and zsh's `<->` number
+     pattern), `; &` and a newline (a second command), and `!`;
+   - inside `"…"`: `False` on `$`, backtick, backslash (`"muta\` and a
+     newline joins lines) and `!`; anything else is literal in both shells;
+   - inside `'…'`: anything, but a `'` that opens right where one closed
+     (`'a''b'`) is `False`, since zsh's `RC_QUOTES` reads it as a quote
+     character, not a join;
+   - an unclosed quote is `False`.
+
+   So `$M`, `"$M"`, `$'\x6d'`, `$(printf mut)`, `` `…` ``, `mu{tation,}`
+   and `'…'mu(t)ation'…'` are refused, and a query written in single quotes
+   passes. The checked list of zsh's unquoted specials (review round 3):
+   `#`, `^`, `|`, `<`, `>`, `(`, `)`, `=` at a word's start, `!`, `~`, and
+   the bash set above; each is outside the allow-list.
 6. Neither `mutation` nor `subscription` appears as a word
    (`\b(mutation|subscription)\b`) in either of two readings, each over the
    whole line: (a) the line as written, comments and strings included; (b)
@@ -161,13 +177,14 @@ allowed: a variable is a value, never an operation type.
 
 What it does not claim. Given 5, the query text `gh` sends is the text the
 guard reads after quote removal, and a mutation's keyword is one token
-inside one argument, so 6 (b) and (c) see it; a mutation
+inside one argument, so 6 (b) sees it; a mutation
 or subscription sent through `gh api graphql` by a line that passes 1 to 6
 is not known to exist. It does not hold against a `gh` that is not GitHub's
 (a wrapper earlier on `PATH`, `GH_*` settings pointing elsewhere); the
 guards are tripwires (`.claude/REQUIRED-READING.md`, *The harness*). Rule 5
-over-refuses any line with a `$` outside single quotes (`cd "$W" && gh api
-graphql …` asks); write such reads as one plain line.
+over-refuses: a GraphQL read passes only as a line that is that one `gh`
+command, its query in single quotes (`cd "$W" && gh api graphql …`, `… |
+jq`, `… > out.json` ask); use `--jq` and write such reads as one plain line.
 
 ### 4.2 Git in a scratchpad repository (item 5, push guard)
 
@@ -488,8 +505,8 @@ words; the rule now lives only there).
   `&&`, with no interpreter program and no link made on the line.
   `guard_push.py` passes git's local writes in a repository that is the
   scratchpad's own (not a worktree or gitfile of another), never a push; a
-  `gh api graphql` query, written in single quotes and sent by `-f`, is a
-  read."
+  `gh api graphql` query, written in single quotes, sent by `-f`, on a line
+  that is that one command, is a read."
 
 **Item 8, `.claude/briefs/common.md`:** the line of section 7.2.
 
@@ -559,6 +576,11 @@ network; `gh` is a fake on `PATH` where used.
    `-f query=mu\tation...` unquoted; an unclosed quote (the text rule asks);
    and `literal` pure: `'$x'` is `True`, `"$x"`, `$x`, `a{b,c}`, `a*` and
    `~/x` are `False`.
+   Round 3: the line `gh api graphql -f query='query Q { a } 'mu(t)ation' M
+   { b }'` asks. `literal` pure, each `False`: `mu(t)ation`, `a#`, `^a`,
+   `a|b`, `mu<->`, `a>b`, `=ls`, `!x`, `a;b`, `a&b`, `a` newline `b`,
+   `"a!b"`, `'a''b'`; each `True`: `-fquery=x`, `--raw-field=query=x`,
+   `'(t) # ^ | < > ; & !'`, `"a (b) c"`, `-H 'Accept: x'`, `--jq .data`.
 4. Ask, fields and options: `-F query='{ viewer { login } }'` (query by
    `-F`, review point 1); `-F query=@q.graphql`; `--input q.json`; two
    `query` fields; `-X PUT`; an unknown option `--foo`; endpoint `/graphql`
@@ -697,7 +719,11 @@ number is the killing test):
   not called (3, `$M`); `literal` ignoring double quotes (3, `"$M"`);
   `literal` without the brace check (3, `mu{tation,}`); `literal` allowing a
   backslash inside double quotes (2, `"muta\` newline `tion"`); reading (b)
-  dropped, the word test on the raw line only (2, `mut''ation`); reading (b)
+  dropped, the word test on the raw line only (2, `mut'a'tion`); `literal`
+  without the parenthesis check (3, the `'mu(t)ation'` line); `literal`
+  allowing `#`, `^`, `|`, `<` or `>` outside quotes, one mutant each (3,
+  `a#`, `^a`, `a|b`, `mu<->`, `a>b`); `literal` allowing `=` at a word's
+  start (3, `=ls`); `literal` reading `''` as a join (3, `'a''b'`); reading (b)
   with `posix=False`, which keeps the quotes (2, `"mut"ation`); `-F`
   accepted for `query` (4); the unknown-option refusal dropped (4,
   `--foo`).
@@ -732,15 +758,16 @@ Net production lines (`CLAUDE.md` §2), estimates:
 |---|---|---|
 | `.claude/hooks/guard_push.py` (`graphql_read`; scratchpad checks 1 to 5 with the two `rev-parse` calls; the work-tree keys) | 1, 5 | about 85 |
 | `.claude/hooks/guard_governance.py` | 5 | about 20 |
-| `tools/shell_scan.py` (`directories`, `git_directory` moved; `literal`; `chained`, `nested`; the one-word `cd` form) | 1, 4, 5 | about 80 |
+| `tools/shell_scan.py` (`directories`, `git_directory` moved; `literal`; `chained`, `nested`; the one-word `cd` form) | 1, 4, 5 | about 85 |
 | `.claude/hooks/gates_after_commit.py` (less the moved code; reflog walk; record check) | 3, 4 | about 35 |
 | `.claude/hooks/record_bash_start.py` (new) | 4 | about 40 |
 | `tools/session_state.py` (with the state word) | 2 | about 40 |
 | `tools/brief.py` | 7, 8 | about 25 |
-| Total | | about 325 |
+| Total | | about 330 |
 
 Up from about 215 at design review round 1 (round 1's five points add about
-85; round 2's three about 25), under the 700-line cap with room.
+85; round 2's three about 25; round 3's allow-list about 5), under the
+700-line cap with room.
 
 `.claude/settings.json`'s new pre-hook entry is JSON (not counted):
 
