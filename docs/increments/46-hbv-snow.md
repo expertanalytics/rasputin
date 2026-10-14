@@ -75,8 +75,7 @@ Written before the design.
   the pack melts. *Corrected by section 12.2, from the report itself: nine
   classes, each treated alone, so the snow-covered area falls in nine steps.*
   The CV form of the distribution used here is this one. (Its
-  section on the distribution was not read; the description is from papers
-  citing it, found 2026-10-13. To verify before a publication.)
+  section 2.3.2 was read for section 12.2.)
 - Skaugen, T. (2004, Annals of Glaciology 38) argues that a distribution fixed
   in time misstates melt floods. Noted, not adopted: a fixed distribution is
   what HBV and Shyft's HBV use.
@@ -1598,7 +1597,7 @@ the bin's deep edge (mm). The solid depth across the bin is the straight
 line from `2·sp − deep` at the shallow edge to `deep` at the deep edge, cut
 at zero:
 
-- **covered** (`2·sp ≥ deep`): the shallow edge `lo = 2·sp − deep ≥ 0`;
+- **covered** (`sp > 0` and `2·sp ≥ deep`): the shallow edge `lo = 2·sp − deep ≥ 0`;
   cover c = 1.
 - **partly bare** (`0 < 2·sp < deep`): the line runs from zero at the front
   to `deep` at the deep edge; cover c = `2·sp / deep`.
@@ -1812,7 +1811,7 @@ Refusals and the binding (`test_core_snow.py`, `test_snow_params.py`):
   within 1e-6 (float32 frames), ΣM summed in the test from
   `forcing.temperature` at 300 m (`3/24·max(0, T)` per hourly step).
   *Computed* ΣM by day 5, 8, 9, 10: 34.138, 106.588, 140.938, 180.388 mm,
-  so sca 0.975318, 0.452455, 0.204555, 0; the shallow edge (30.7 mm) is
+  so sca 0.975320, 0.452457, 0.204557, 0; the shallow edge (30.7 mm) is
   passed on day 5 and the deep one (169.3 mm) on day 10.
 
 Existing tests to amend in the red commit, each with its reason:
@@ -1824,7 +1823,7 @@ Existing tests to amend in the red commit, each with its reason:
 - C1: drops "every sca value 0 or 1"; asserts `job.distribution ==
   lognormal(0.4, 1)`. C4 (new): the two facets, `--sun-correction none --days 30
   --initial-swe 100 --cfr 0`, other flags default: the last frame's sca is
-  0.627638 on both facets within 1e-5 (*computed*: ΣM 82.314 mm at 300 m by
+  0.627635 on both facets within 1e-5 (*computed*: ΣM 82.314 mm at 300 m by
   day 30).
 - `test_snow_run.py`'s tests that build a job without a distribution now get
   one bin at cv 0.4; they assert orderings and mass, not figures, and are
@@ -1887,7 +1886,9 @@ Expected: about PR 7's, the step being a few flops longer per bin.
 13. **Snow falling on a partly bare triangle covers it again, and the old
     snow is spread over the whole triangle as a wedge** (Shyft's rule, mass
     kept), so after new snow melts the front does not return exactly to
-    where it was. Default: Shyft's rule. (The synthetic spring is dry, so
+    where it was. Example: 600 mm, melted down to 10 % cover; 1 mm of new
+    snow; once it melts, cover is about 90 %, and the last 4 mm melt in 20
+    hours instead of 7 days. Default: Shyft's rule. (The synthetic spring is dry, so
     the animation does not show it.)
 
 ## Review
@@ -1937,3 +1938,5 @@ Expected: about PR 7's, the step being a few flops longer per bin.
 | wall time, shadows off | 62.18 / 11.14 s | 168.38 / 31.46 s |
 
 The search is 3.4 times the estimate (135 s against about 40 s) and the evaluator 1.9 times (55 ns per triangle and sample against 29); one profile shows the far part of each ray pruned and the first 2.5 km costing 17.5 µs per ray, the hot loop unnamed for want of symbols. Output byte-identical at 1 and 8 threads except `snow.json`. Beam removed by shadows on Bygdin, plan-area weighted (section 10.6's node figures in brackets): 15 April 1.43 % (1.6), 15 May 1.18 % (1.3), 21 June 1.13 % (1.2); mean ΔI change −2.36, −2.78, −3.09 W/m² (−2.7, −3.0, −3.3). E2 on the 2 m mesh, 15 April: −0.99 W/m². Screenshot `bygdin-swe-day110.png` (20 July, from above): SWE with shadows on, off, and on minus off, never negative (0 to 489 mm), red streaks on steep ridge slopes, most along the northern ridge; viewed by the main session. ParaView outputs outside git in `rasputin_scratch/snow-demo/bygdin-shadows-on/` and `bygdin-shadows-off/`. About 64 % of Bygdin's triangles still hold more than half their snow on 1 August.
+
+**Design review (PR 8, continuous snow cover within a bin), 2026-10-14.** Range `62f62185..d0ab6e7d`, 0 production lines (design only; about 87 estimated, full path), @reviewer: APPROVED WITH WORDINGS, applied by the main session: Sælthun's section 2.3.2 named as read; "covered" requires `sp > 0`; S1's and C4's sca figures from unrounded melt sums (0.975320, 0.452457, 0.204557; 0.627635); question 13 gains the 1 mm example. Held: every cited line of Shyft's `calculator.h` at 37d610ad; the three melt cases, refreeze scaling and snowfall wedge derived by hand (mass kept, cover in [0,1], not rising under melt, flat bins equal to today's kernel bit for bit); fixtures L0-L10 and the ten mutants; the log-normal figures to 4 decimals; the probe. Neither default unsafe (0.4 under the one-bin limit 0.577). Not pushed.
