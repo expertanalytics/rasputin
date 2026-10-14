@@ -248,8 +248,8 @@ MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
             {"type": "null"},
         ],
         "default": None,
-        "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, snapped "
-        "outward to its nodes.",
+        "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, or in "
+        "--out-crs's when given, snapped outward to its nodes.",
     },
     "tolerance_near": {
         "anyOf": [
@@ -340,9 +340,10 @@ class TestTheRealApp:
             mesh.model.model_validate({"out": "x.vtk", "threads": -1})
 
     def test_the_whole_tool_list_stays_small(self) -> None:
-        # 16,575 bytes measured (section 3); the bound leaves room for help text to grow.
+        # 20,141 bytes measured 2026-10-13, after --land-cover-map (increment 44);
+        # the bound keeps the original ~20 % headroom (16,575 against 20,000) for help text.
         size = sum(len(json.dumps(d.tool().input_schema)) for d in mcp_schema.derive(app))
-        assert size < 20_000, size
+        assert size < 24_000, size
 
     def test_descriptions_and_annotations(self) -> None:
         tools = {name: d.tool() for name, d in derived(app).items()}

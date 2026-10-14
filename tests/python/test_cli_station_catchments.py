@@ -182,6 +182,29 @@ def test_the_summary_json(full: tuple[Path, str]) -> None:
     assert s["river_copies_dropped"] == 1
 
 
+def test_the_agreement_columns_carry_general_names_in_the_old_place(
+    full: tuple[Path, str],
+) -> None:
+    """The comparison works on any reference polygon set, so its two overlap
+    columns say "reference", not the Norwegian authority's name; they stay
+    right after `nve_area_km2`, a column of the station file, which keeps its
+    name."""
+    with (full[0] / "results.csv").open(encoding="utf-8", newline="") as f:
+        header = next(csv.reader(f))
+    at = header.index("nve_area_km2")
+    assert header[at + 1 : at + 4] == ["reference_in_ours", "ours_in_reference", "area_ratio"]
+    assert "nve_in_ours" not in header and "ours_in_nve" not in header
+    by = {r["station"]: r for r in table(full[0])}
+    assert float(by[bf.TREFF.station]["reference_in_ours"]) > 0.0
+
+
+def test_the_summary_measures_carry_general_names(full: tuple[Path, str]) -> None:
+    s = json.loads((full[0] / "summary.json").read_text(encoding="utf-8"))
+    assert set(s["scored"]) == {"area_ratio", "reference_in_ours", "ours_in_reference"}
+    for group in (*s["by_size"].values(), *s["by_tiles"].values(), *s["by_seed"].values()):
+        assert "nve_in_ours" not in group and "ours_in_nve" not in group, group
+
+
 # ---------------------------------------------------------------------------
 # What it says
 # ---------------------------------------------------------------------------
@@ -201,6 +224,16 @@ def test_one_stderr_line_per_station_with_its_name_and_class(full: tuple[Path, s
         line = station_line(output, spec.station)
         assert spec.name in line, line
         assert CLASSES[spec.station] in line, line
+
+
+def test_a_scored_stations_line_names_the_reference_in_general_words(
+    full: tuple[Path, str],
+) -> None:
+    """ "reference in ours 98.2 %, ours in reference 97.6 %, area ratio 1.003":
+    the reference set need not be NVE's."""
+    line = station_line(full[1], bf.TREFF.station)
+    assert re.search(r"; reference in ours [\d.]+ %, ours in reference [\d.]+ %, area ratio", line)
+    assert "NVE" not in line, line
 
 
 def test_the_summary_comes_after_the_station_lines(full: tuple[Path, str]) -> None:

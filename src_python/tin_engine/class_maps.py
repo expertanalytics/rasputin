@@ -10,16 +10,16 @@ identity map over the vocabulary's names, is built here, not shipped.
 from __future__ import annotations
 
 import os
-import tomllib
 from collections.abc import Iterable
 from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tin_engine.feature_input import ClassMap
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
+from tin_engine.toml_data import parse
 
 Code = Annotated[int, Field(ge=1, lt=2**31)]
 Edges = list[str] | Literal["drop"]
@@ -188,16 +188,7 @@ def load(value: str) -> ClassMap:
             known = ", ".join([*shipped_names(), "property"])
             raise ValueError(f"unknown class map {value}; use {known}, or a .toml file")
         text = (_shipped() / shown).read_text(encoding="utf-8")
-    try:
-        return _File.model_validate(tomllib.loads(text)).class_map()
-    except tomllib.TOMLDecodeError as exc:
-        raise ValueError(f"class map file {shown}: {exc}") from exc
-    except ValidationError as exc:
-        why = "; ".join(
-            f"{'.'.join(map(str, e['loc'])) or 'file'}: {e['msg'].removeprefix('Value error, ')}"
-            for e in exc.errors()
-        )
-        raise ValueError(f"class map file {shown}: {why}") from exc
+    return parse(text, _File, f"class map file {shown}").class_map()
 
 
 def run_vocabulary(maps: Iterable[ClassMap]) -> EdgeVocabulary:
