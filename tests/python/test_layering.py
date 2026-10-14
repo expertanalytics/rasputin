@@ -31,9 +31,11 @@ from importscan import first_party_imports
 # fmt: off
 LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
-        "io.models": "", "features": "", "sources": "", "run_record": "", "stats": "",
+        "io.models": "", "features": "", "run_record": "", "stats": "",
+        "sources": "toml_data",  # 44: the catalogue read from TOML
         "palettes": "", "hydrography": "", "tin_engine": "",
-        "snow": "",
+        "toml_data": "",  # 44: the shared TOML reader; tomllib and Pydantic only
+        "snow": "", "snow.params": "",  # 46: HBV snow parameters, Pydantic only
         "radiation.request": "",  # 46: the radiation request, Pydantic only
     },
     {  # L1: pure algorithms
@@ -104,7 +106,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
-        "class_maps": "feature_input features",  # 41: class-map files to ClassMap
+        "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
         "radiation.search": "dem_input io.models radiation.frame radiation.geometry"
                             " radiation.request raster resources",  # 46: the near raster, searched
     },

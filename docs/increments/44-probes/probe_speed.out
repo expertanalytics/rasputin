@@ -1,0 +1,10 @@
+draft catalogue: 3036 bytes, 47 lines
+P8a parse and validate the catalogue, first call: median 0.314 ms, largest 0.324 ms
+P8a2 read a shipped 4.8 kB data file through importlib.resources: median 0.712 ms, largest 1.719 ms
+P8b import tin_engine.cli today (every mesh run pays it): median 188.643 ms, largest 194.260 ms
+P8c tomllib already imported by tin_engine.cli today: True
+P8d CRS read and Geod for EPSG:4326, first call: median 0.702 ms, largest 0.716 ms
+P8d CRS read and Geod for EPSG:3035, first call: median 1.005 ms, largest 1.040 ms
+P8e the same for EPSG:4326, second call in one process: median 0.032 ms, largest 0.033 ms
+P8f row_areas today on a 1,000-row MapBiomas window: median 2.150 ms, largest 2.343 ms
+{"python": "3.14.7"}

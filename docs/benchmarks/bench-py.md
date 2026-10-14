@@ -68,9 +68,10 @@ python tools/bench.py compare NEW_DIR [--baseline DIR] [--out-root DIR]
 
 - `run.json`, one Pydantic `RunRecord`: tree commit and dirty flag; bench.py's
   blob hash; the child argv; build type, `CMAKE_CXX_FLAGS_RELEASE`, compiler
-  and `.so` sha256 (or `no-build`); CPU brand, P/E core counts, memory, macOS,
-  Python and numpy; power (`ac` | `battery` | `mixed` | `unknown`, percent,
-  raw `pmset -g batt` text); DEM and domain paths and sha256, tolerance, extra
+  and `.so` sha256 (or `no-build`); CPU brand, P/E core counts, memory, system
+  (`macOS` or `Linux`) and its version, Python and numpy; power (`ac` |
+  `battery` | `mixed` | `unknown`, percent, the raw text it was read from:
+  `pmset -g batt` on macOS, the `/sys/class/power_supply` values on Linux); DEM and domain paths and sha256, tolerance, extra
   args; every raw sample, and median/min/max per (domain, threads); quality
   per domain: worst angle, angle median, share under 1 degree, max degree (from
   `tin_engine.stats.quality`, as `--stats` computes them), `max_error <=
@@ -130,6 +131,15 @@ Nothing below needs the 1 m DEM or a real build.
   refusal on a Debug cache, `--no-build` recorded, power read before and after)
   is tested with no process started. The Typer app gets it from a module-level
   factory the test overrides.
+- **`Host` Protocol** (increment 45): `machine() -> Machine`, `power() ->
+  Power`. `make_host(runner, system=sys.platform)` gives `MacHost(runner)`
+  on `darwin` (`sysctl`, `sw_vers`, `pmset -g batt`, through the runner),
+  `LinuxHost(root)` on `linux`, and refuses anything else (exit 3, nothing
+  written). `LinuxHost` starts no process: it reads text files under `root`
+  (`/proc/cpuinfo`, the CPU topology under `/sys/devices/system/cpu`,
+  `/proc/meminfo`, `/etc/os-release`, and five values per supply under
+  `/sys/class/power_supply`), so a test hands it a directory of fixture text.
+  The power rules are `docs/increments/45-linux-defaults.md`, section 4.3.
 - The signatures in this list are the design's first sketch; where they
   differ, "Pinned by the red suite" and the code win.
 - **`parse_pmset(text) -> Power`**, pure. Canned texts: `'AC Power'` with and
@@ -259,8 +269,9 @@ over the file's bytes from `POINTS` on; a `BINARY` file is a `ValueError`.
 **Record.** `RunRecord` fields: `label`, `started` (aware datetime), `tree`
 (`commit`, `dirty`), `bench_blob`, `child_argv`, `build` (`no_build`, `type`,
 `cxx_flags_release`, `compiler`, `so_sha256`, all but `no_build` optional),
-`machine` (`cpu_brand`, `p_cores`, `e_cores`, `memory_bytes`, `macos`,
-`python`, `numpy`), `power` (a combined `Power`), `inputs` (`dem`,
+`machine` (`cpu_brand`, `p_cores`, `e_cores`, `memory_bytes`, `system`
+(`macOS` or `Linux`, default `macOS`), `os_version` (read also from the stored
+records' old key `macos`), `python`, `numpy`), `power` (a combined `Power`), `inputs` (`dem`,
 `dem_sha256`, `domains`: list of `name`, `path`, `sha256`; `tolerance`,
 `extra_args`), `samples`, `stats`, `quality` (domain name to `MeshQuality`),
 `accept_quality`, `threshold_pct` (default 5.0), `verdict` (the verdict lines).
@@ -292,10 +303,12 @@ non-Release `CMakeCache.txt` under `<tree>/build-bench`) or a failing child
 exits 3 and writes no evidence. Timing runs go in the order domain, then
 repeat, then thread count (0 first, then the `--threads` list); the quality
 run is one `--ascii` child at `--threads 0` per domain, after its timing runs.
-`pmset -g batt` is read exactly twice, before the first child and after the
-last. Machine facts come from `sysctl -n machdep.cpu.brand_string`,
-`hw.perflevel0.physicalcpu`, `hw.perflevel1.physicalcpu`, `hw.memsize`, and
-`sw_vers -productVersion`.
+The power state is read exactly twice, before the first child and after the
+last. On macOS it is `pmset -g batt`, and machine facts come from
+`sysctl -n machdep.cpu.brand_string`, `hw.perflevel0.physicalcpu`,
+`hw.perflevel1.physicalcpu`, `hw.memsize`, and `sw_vers -productVersion`. On
+Linux both come from `LinuxHost`'s text files (the `Host` seam above);
+`e_cores` is 0 there.
 
 **Evidence.** `write_evidence(record, directory)` writes `run.json`
 (`record.model_dump_json()`, round-tripping), `raw.tsv` (no header, one line

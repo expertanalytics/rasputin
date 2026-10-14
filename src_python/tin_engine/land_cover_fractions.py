@@ -5,7 +5,7 @@ coordinates", 1.2 and section 6. Every mesh vertex is moved once to the class
 raster's longitude and latitude (`crs.reprojector`, the one place a transformer
 is built) and then to the raster's index space, where every cell is a unit
 square; the triangles are cut into chunks, each chunk's class window read from
-the cache and handed with the triangle corners to `_core.class_areas`, whose
+the repository and handed with the triangle corners to `_core.class_areas`, whose
 exact areas become fractions. The cutoff and the ledger are increment 26c's;
 this module writes the exact fractions.
 
@@ -17,20 +17,32 @@ not replaced. Blocking; the C++ call releases the GIL, so an API worker runs
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import numpy.typing as npt
 from pyproj import Geod
 
 from tin_engine import _core
-from tin_engine.crs import reprojector
-from tin_engine.io.models import ClassFractions, ClassWindow, IndexWindow, RasterMeta
-from tin_engine.io.repository import CacheRepository
+from tin_engine.crs import parse_crs, reprojector
+from tin_engine.io.models import ClassFractions, ClassWindow, IndexWindow, RasterMeta, TileFootprint
 
 #: Triangles per chunk, each chunk with its own class window (1.3).
 CHUNK = 2**18
 
-_GEOD = Geod(ellps="WGS84")
+
+class ClassRaster(Protocol):
+    """Where class windows come from: the tile cache or a file."""
+
+    def footprints(self) -> tuple[TileFootprint, ...]: ...
+
+    def load_class_window(self, name: str, window: IndexWindow) -> ClassWindow: ...
+
+
+if TYPE_CHECKING:  # mypy checks that both repositories are class rasters
+    from tin_engine.io.repository import CacheRepository, TiffDemRepository
+
+    _RASTERS: tuple[type[ClassRaster], ...] = (CacheRepository, TiffDemRepository)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,15 +54,32 @@ class Assigned:
     codes: npt.NDArray[np.int32]
 
 
-def row_areas(window: ClassWindow) -> npt.NDArray[np.float64]:
-    """The WGS 84 ellipsoidal area in m2 of one cell of each row of `window`
-    (1.1: computed once per row by `pyproj.Geod`). A cell's area does not
-    depend on its longitude, so every row is measured at longitude 0."""
+def row_areas(window: ClassWindow, crs: str) -> npt.NDArray[np.float64]:
+    """The area in m2 of one cell of each row of `window`, a raster in `crs`.
+
+    Projected: `delta_x * delta_y`, the area on the grid plane; its scale
+    against the ellipsoid cancels in a triangle's fractions. Geographic: the
+    ellipsoidal area, computed once per row by `pyproj.Geod` on the CRS's own
+    ellipsoid, built from its semi-major axis and inverse flattening (0 is a
+    sphere): `CRS.get_geod()` differs from it in the last bits for WGS 84. A
+    cell's area does not depend on its longitude, so every row is measured at
+    longitude 0."""
+    parsed = parse_crs(crs)
+    if not parsed.is_geographic:
+        return np.full(window.rows, window.delta_x * window.delta_y, dtype=np.float64)
+    ellipsoid = parsed.ellipsoid
+    assert ellipsoid is not None, f"{crs} has no ellipsoid"
+    rf = ellipsoid.inverse_flattening
+    geod = (
+        Geod(a=ellipsoid.semi_major_metre, rf=rf)
+        if rf
+        else Geod(a=ellipsoid.semi_major_metre, f=0.0)
+    )
     lons = [0.0, window.delta_x, window.delta_x, 0.0]
     out = np.empty(window.rows, dtype=np.float64)
     for r in range(window.rows):
         top = window.y_max - r * window.delta_y
-        area, _ = _GEOD.polygon_area_perimeter(
+        area, _ = geod.polygon_area_perimeter(
             lons, [top, top, top - window.delta_y, top - window.delta_y]
         )
         out[r] = abs(float(area))
@@ -88,12 +117,12 @@ def assign(
     triangles: npt.ArrayLike,
     *,
     mesh_crs: str,
-    repository: CacheRepository,
+    repository: ClassRaster,
     name: str,
     chunk: int = CHUNK,
     threads: int = 1,
 ) -> Assigned:
-    """The exact class fractions of every triangle from the cached class raster
+    """The exact class fractions of every triangle from the class raster
     `name` of `repository`, in chunks of `chunk` triangles in row order."""
     metas = {f.name: f.meta for f in repository.footprints()}
     if name not in metas:
@@ -107,7 +136,9 @@ def assign(
         window = window_of(piece, meta)
         classes = repository.load_class_window(name, window)
         local = piece - np.array([window.col0, window.row0], dtype=np.float64)
-        parts.append(_core.class_areas(local, classes.array, row_areas(classes), threads=threads))
+        parts.append(
+            _core.class_areas(local, classes.array, row_areas(classes, meta.crs), threads=threads)
+        )
     offsets = np.zeros(len(tri) + 1, dtype=np.uint32)
     at = 0
     for t, (o, _, _) in enumerate(parts):
