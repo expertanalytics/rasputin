@@ -1,10 +1,11 @@
-"""Reading rasputin's own mesh back: `tin_engine.io.vtk_read.read_mesh`, test R4.
+"""Reading rasputin's own mesh back: `tin_engine.io.vtk_read.read_mesh`.
 
-`docs/increments/46-hbv-snow.md`, *4.8 The Python surface*: `read_mesh(data:
+`docs/increments/51-open-core.md`, *3.1 What moves to the private package*:
+the reader stays in the core, offered to plugins. `read_mesh(data:
 bytes) -> MeshArrays` reads the binary legacy VTK that `rasputin mesh` writes
 (header line `rasputin mesh`): the `crs` string from the dataset's field data,
 POINTS and POLYGONS, skipping LINES. It refuses ASCII ("write the mesh without
---ascii"), another program's file and a file with no `crs`. Section 7's R4:
+--ascii"), another program's file and a file with no `crs`. The round trip
 `read_mesh(write_vtk(...))` gives the same vertices, triangles and crs bit for
 bit; the three refusals are in plain words.
 
