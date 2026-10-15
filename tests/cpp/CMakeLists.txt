@@ -548,3 +548,39 @@ target_link_libraries(prop_refinement_slope_tolerance PRIVATE Threads::Threads)
 # threads (1 and 8 must agree bit for bit).
 add_terrain_test(test_hbv_snow unit/test_hbv_snow.cpp)
 target_link_libraries(test_hbv_snow PRIVATE Threads::Threads)
+
+# Linear bins, a continuous snow-covered area in the active bin, increment 46
+# PR 8 (docs/increments/46-hbv-snow.md, section 12): the fixtures L0-L10, the
+# invariants I2 (extended), I7 and I8 as properties P6-P8, and the refusals V3.
+# Header-only, as test_hbv_snow. Invariant-critical.
+add_terrain_test(test_hbv_snow_linear unit/test_hbv_snow_linear.cpp)
+
+# The sun's position, increment 46 PR 2 = the terrain-radiation design's TR1
+# (docs/increments/46-hbv-snow.md section 4.4; terrain-radiation.md R2 and its
+# "Verification plan" item 1): Julian day, delta T, NREL's test case, SPA's
+# term tables, the refraction guard. Header-only (include/terrain/radiation/).
+add_terrain_test(test_radiation_sun unit/test_radiation_sun.cpp)
+
+# The receiver frame, increment 46 PR 4 = the terrain-radiation design's TR2
+# (docs/increments/46-hbv-snow.md section 10.8; terrain-radiation.md R3, I3):
+# the east-north-up basis, the ground step through J, the receiver checks.
+# Header-only (include/terrain/radiation/).
+add_terrain_test(test_radiation_receivers unit/test_radiation_receivers.cpp)
+
+# The horizon kernel, increment 46 PR 5 = the terrain-radiation design's TR3a
+# (docs/increments/46-hbv-snow.md section 10.8; terrain-radiation.md R4, I4,
+# I5 and its verification 3): the int16 entry, the max-pyramid, section
+# 10.8's mutation fixtures F1-F7, the switch between rasters, the analytic
+# terrains, the degeneracies and refusals, pruned equal to exhaustive.
+# Header-only (include/terrain/radiation/). Invariant-critical. Starts threads
+# (1 and 8 must agree bit for bit).
+add_terrain_test(test_radiation_horizon unit/test_radiation_horizon.cpp)
+target_link_libraries(test_radiation_horizon PRIVATE Threads::Threads)
+
+# The instant evaluator, increment 46 PR 6 = the terrain-radiation design's TR5
+# without its CLI (docs/increments/46-hbv-snow.md section 10.8 "PR 6";
+# terrain-radiation.md R5, I7, I8): the horizon at an azimuth, the lit test,
+# the beam factor, against the reference sun, thread-count independence, the
+# flat plane's sunrise. Header-only (include/terrain/radiation/). Starts threads.
+add_terrain_test(test_radiation_evaluate unit/test_radiation_evaluate.cpp)
+target_link_libraries(test_radiation_evaluate PRIVATE Threads::Threads)

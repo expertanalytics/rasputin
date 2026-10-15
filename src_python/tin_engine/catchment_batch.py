@@ -112,8 +112,8 @@ class StationResult:
     reduced_area_km2: float | None = None
     reference_area_km2: float | None = None
     nve_area_km2: float | None = None
-    nve_in_ours: float | None = None
-    ours_in_nve: float | None = None
+    reference_in_ours: float | None = None
+    ours_in_reference: float | None = None
     area_ratio: float | None = None
     divide_offset_m: float | None = None
     tiles: int | None = None
@@ -252,7 +252,7 @@ async def run_batch(
             m = result.meta
             if ref is not None:
                 found = agreement(result.fine, ref, m)
-                keys = ("nve_in_ours", "ours_in_nve", "area_ratio", "divide_offset_m")
+                keys = ("reference_in_ours", "ours_in_reference", "area_ratio", "divide_offset_m")
                 fields |= {k: getattr(found, k) for k in keys}
             # Our fine area on the lattice, as the agreement counts it: the
             # nodes inside the outline, each its cell's area.

@@ -1,0 +1,9 @@
+time steps: 92, first 0.0, last 2184.0 hours
+cell arrays: ['swe', 'sca', 'slope_deg', 'aspect_deg', 'radiation_anomaly_mean', 'melt_out_day']
+frame 0 t=0.0 h cells=646870 swe range=(600.0, 600.0)
+frame 45 t=1080.0 h cells=646870 swe range=(149.4154052734375, 600.0)
+frame 91 t=2184.0 h cells=646870 swe range=(0.0, 592.4682006835938)
+frames read: 92, frames with a wrong cell count: []
+
+
+screenshot: /Users/skavhaug/projects/rasputin/.claude/worktrees/snow-anim/docs/benchmarks/2026-10-14/46-snow-acceptance/swe-day45.png

@@ -36,7 +36,7 @@ from typing import Any
 import pytest
 
 import tin_engine.cli as cli
-from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, help_text, invoke, rough_dem
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row
@@ -169,9 +169,7 @@ class TestTheFlag:
         assert FEET.search(stderr) is None, stderr  # D7: the counts left stderr
 
     def test_the_help_names_the_flag(self) -> None:
-        code, output = invoke("mesh", "--help")
-        assert code == 0, output
-        assert "--no-constraint-feet" in output
+        assert "--no-constraint-feet" in help_text("mesh")
 
     def test_the_setting_is_not_in_the_file(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
         """D2: the file carries what a user of the mesh needs; the setting is --stats'."""

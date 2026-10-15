@@ -37,7 +37,7 @@ dependencies = [
     "pydantic>=2.6",
     "shapely>=2.2",
     "pyproj>=3.6",
-    "typer>=0.12",
+    "typer>=0.19",
     "numpy>=1.26",
     "tifffile>=2024.1",
 ]
@@ -64,7 +64,7 @@ viewer = ["vtk>=9.3"]
 # the command refuses with an install line; every other command is unchanged.
 # `dev` pulls it so the suite's MCP tests run wherever the suite does (CI
 # installs `.[dev]`); without it they skip.
-mcp = ["mcp>=2.3"]
+mcp = ["mcp>=2.3", "anyio>=4.9", "mcp-types>=2.3"]
 dev = [
     "mcp>=2.3",
     "pytest>=8.0",
@@ -72,6 +72,7 @@ dev = [
     "pytest-cov>=4.1",
     "hypothesis>=6.100",
     "mypy>=1.10",
+    "pvlib>=0.11",  # test-only: an independent SPA to check the sun's position against
     "ruff~=0.16.8",  # pinned: `ruff format --check` gates CI; style shifts per minor
 ]
 
@@ -177,6 +178,7 @@ paths = [
     "src_python/tin_engine/mcp",
     "src_python/tin_engine/mosaic.py",
     "src_python/tin_engine/outline.py",
+    "src_python/tin_engine/radiation",
     "src_python/tin_engine/raster.py",
     "src_python/tin_engine/reference.py",
     "src_python/tin_engine/sensitivity.py",

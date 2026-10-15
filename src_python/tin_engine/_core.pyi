@@ -787,11 +787,14 @@ class SunCorrection(Enum):
 class SnowDistribution:
     """The relative snow depth of N equal-area bins; refused (ValueError)
     unless 1 to 64 finite, non-negative, ascending factors of mean 1 within
-    1e-9. Kept divided by their mean."""
+    1e-9, and deep None, empty or N finite deep-edge factors with
+    factor <= deep <= 2 factor. Both kept divided by the factors' mean."""
 
-    def __init__(self, factors: npt.ArrayLike) -> None: ...
+    def __init__(self, factors: npt.ArrayLike, deep: npt.ArrayLike | None = None) -> None: ...
     @property
     def factors(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def deep(self) -> npt.NDArray[np.float64]: ...
 
 @final
 class SnowState:
@@ -832,3 +835,119 @@ class SnowState:
         """One HBV step for every triangle. A refused input is a ValueError
         naming the status (and the first non-finite triangle) and leaves the
         state as it was. Releases the GIL."""
+
+# The sun's position: UTC milliseconds since the Unix epoch, degrees.
+
+def delta_t_seconds(time_utc_ms: int) -> float:
+    """The default delta T (TT - UT) in seconds."""
+
+@final
+class SolarPosition:
+    """``e0_deg`` without refraction, ``e_deg`` with it, ``azimuth_deg`` from
+    true north, clockwise."""
+
+    @property
+    def e0_deg(self) -> float: ...
+    @property
+    def e_deg(self) -> float: ...
+    @property
+    def azimuth_deg(self) -> float: ...
+
+def solar_position(
+    time_utc_ms: int,
+    lat_deg: float,
+    lon_deg: float,
+    height_m: float,
+    delta_t_s: float,
+    pressure_hpa: float,
+    temperature_c: float,
+) -> SolarPosition:
+    """NREL's SPA at one time and place; the refraction is held at its -1.8
+    degree value below that."""
+
+@final
+class SunPositions:
+    """``elevation`` and ``azimuth`` in degrees, ``distance`` in AU."""
+
+    @property
+    def elevation(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def azimuth(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def distance(self) -> npt.NDArray[np.float64]: ...
+
+def sun_positions(
+    times_utc_ms: npt.NDArray[np.int64], lat: float, lon: float, height_m: float
+) -> SunPositions:
+    """The sun at one place for many UTC times at the default delta T: the
+    elevation without refraction and the azimuth from true north. Releases the
+    GIL."""
+
+def check_receivers(
+    x: npt.ArrayLike,
+    y: npt.ArrayLike,
+    z_obs: npt.ArrayLike,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    jacobian: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    exclusion_radius: npt.ArrayLike,
+) -> None:
+    """The core's check of a receiver set: None, or a ValueError naming the
+    first failing receiver or arrays of unequal length."""
+
+def horizon_search(
+    x: npt.ArrayLike,
+    y: npt.ArrayLike,
+    z_obs: npt.ArrayLike,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    jacobian: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    exclusion_radius: npt.ArrayLike,
+    near: RasterView,
+    far: RasterView | None,
+    *,
+    n_directions: int,
+    curvature: float,
+    d_near: float,
+    d_far: float,
+    threads: int = 0,
+) -> tuple[npt.NDArray[np.int16], npt.NDArray[np.uint8]]:
+    """The horizon of each receiver in ``n_directions`` true azimuths, on the
+    float32 near raster to ``d_near`` and the far one to ``d_far`` (``None``:
+    the search ends at ``d_near``), with curvature ``(1 - k) / (2 R)`` per
+    metre: int16 in 0.01 degrees (-9000 where no sample was found) and reach,
+    uint8 whole km before the first missing sample (255 when none was), both
+    (n, n_directions). Releases the GIL."""
+
+@final
+class InstantFactors:
+    """``lit`` (uint8), ``cos_i``, ``b`` and ``sin_e`` (float32), each (times, receivers)."""
+
+    @property
+    def lit(self) -> npt.NDArray[np.uint8]: ...
+    @property
+    def cos_i(self) -> npt.NDArray[np.float32]: ...
+    @property
+    def b(self) -> npt.NDArray[np.float32]: ...
+    @property
+    def sin_e(self) -> npt.NDArray[np.float32]: ...
+
+def evaluate_instant(
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    normal: npt.ArrayLike,
+    horizon: npt.NDArray[np.int16],
+    times_utc_ms: npt.ArrayLike,
+    *,
+    limb_deg: float = 0.0,
+    pressure_hpa: float = 1010.0,
+    temperature_c: float = 10.0,
+    n_directions: int = 64,
+    threads: int = 0,
+) -> InstantFactors:
+    """Per UTC time and receiver: lit, cos_i, the beam factor b = lit max(0,
+    cos_i) and the sine of the apparent elevation, time-major. A ValueError
+    names the field or the receiver; a horizon not int16 is a TypeError.
+    Releases the GIL."""

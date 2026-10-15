@@ -76,6 +76,24 @@ def reprojector(src: str | CRS, dst: str | CRS, *, threads: int = 1) -> Callable
     return apply
 
 
+def frame_factors(crs: str | CRS, lon: Any, lat: Any) -> tuple[Xy, Xy]:
+    """The meridian convergence (degrees: the true azimuth of grid north) and
+    the point scale of the projected `crs` at each `(lon, lat)` in degrees, as
+    two float64 arrays: pyproj's `get_factors`. A grid direction's true azimuth
+    is its grid azimuth plus the convergence. A geographic CRS is refused: it
+    has no grid to converge."""
+    parsed = parse_crs(crs)
+    if not parsed.is_projected:
+        raise ValueError(f"{crs_label(parsed)} is not a projected CRS; a projected CRS is needed")
+    lon_a = np.asarray(lon, dtype=np.float64).ravel()
+    lat_a = np.asarray(lat, dtype=np.float64).ravel()
+    if lon_a.size == 0:
+        return np.empty(0), np.empty(0)
+    f = Proj(parsed).get_factors(lon_a, lat_a)
+    gamma = np.asarray(f.meridian_convergence, dtype=np.float64)
+    return gamma, np.asarray(f.meridional_scale, dtype=np.float64)
+
+
 def transform_bounds(
     src: str | CRS, dst: str | CRS, box: tuple[float, float, float, float]
 ) -> tuple[float, float, float, float]:
@@ -291,3 +309,27 @@ def suggest_crs(box: tuple[float, float, float, float], geographic_crs: str | CR
 
 def _transformer(src: str | CRS, dst: str | CRS) -> Transformer:
     return Transformer.from_crs(parse_crs(src), parse_crs(dst), always_xy=True)
+
+
+class Site(BaseModel):
+    """A point's latitude, longitude and grid convergence, in degrees."""
+
+    model_config = ConfigDict(frozen=True)
+
+    lat_deg: float
+    lon_deg: float
+    #: The true azimuth of grid north (pyproj's meridian convergence).
+    convergence_deg: float
+
+
+def site_of(crs: str | CRS, x: float, y: float) -> Site:
+    """Where `(x, y)` in the projected `crs` lies on the globe; a geographic
+    CRS, or a projected one not in metres, is a ValueError naming the unit."""
+    c = parse_crs(crs)
+    if not c.is_projected:
+        raise ValueError("a projected CRS in metres is needed; this one is in degrees")
+    if units := [a.unit_name for a in c.axis_info if a.unit_conversion_factor != 1.0]:
+        raise ValueError(f"a projected CRS in metres is needed; this one is in {units[0]}")
+    lon, lat = _transformer(c, c.geodetic_crs or "EPSG:4326").transform(x, y)
+    factors = Proj(c).get_factors(lon, lat)
+    return Site(lat_deg=lat, lon_deg=lon, convergence_deg=factors.meridian_convergence)

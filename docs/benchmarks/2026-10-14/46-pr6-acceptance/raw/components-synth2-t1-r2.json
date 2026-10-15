@@ -1,0 +1,23 @@
+{
+  "mesh": "mesh2.vtk",
+  "dem": "synth.tif",
+  "triangles": 294770,
+  "zero_area": 0,
+  "threads": 1,
+  "days": 91,
+  "day_stride": 7,
+  "near_raster_shape": [
+    1201,
+    1201
+  ],
+  "near_raster_read_s": 0.01496616704389453,
+  "horizon_search_s": 329.9557588750031,
+  "evaluator_steps": 312,
+  "evaluator_total_s": 20.17785746138543,
+  "evaluator_step_median_ms": 62.17129196738824,
+  "evaluator_step_p05_ms": 60.73372684768401,
+  "evaluator_step_p95_ms": 79.16755438782275,
+  "evaluator_ns_per_triangle_sample": 54.85006960388018,
+  "ru_maxrss_bytes": 431423488,
+  "reach_255_share": 0.0
+}

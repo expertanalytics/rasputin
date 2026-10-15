@@ -107,7 +107,8 @@ diff touches refine or mesh code (`include/terrain/refinement/`,
 
 - **the 1 m benchmark and a thread-scaling sweep**, run from a checked-in
   script, `tools/bench.py`, and compared with the previous increment's run;
-- **the power state recorded with each run** (`pmset -g batt`). A battery run
+- **the power state recorded with each run** (`pmset -g batt` on macOS;
+  `/sys/class/power_supply` on Linux). A battery run
   is compared only against a battery baseline, and an AC run only against an
   AC one, because the power state changes timings;
 - the evidence committed under `docs/benchmarks/<date>/`.

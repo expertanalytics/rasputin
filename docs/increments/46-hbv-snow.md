@@ -1,9 +1,15 @@
 # Increment 46: HBV snow on the triangles, melt corrected for the sun, and a melt animation
 
-**Status: designed; design review round 2 approved; addendum for cast
-shadows (section 10) written 2026-10-13, not yet reviewed** (`@architect`,
-branch `worktree-snow-melt`). PR 1's kernel is built. Six PRs (section 10.7,
-which supersedes section 8's table). Ola was away when it was written; every default taken
+**Status: design and its cast-shadow addendum approved (rounds 1-4); PR 1,
+the kernel, merged (#257); PR 2, sun position, approved; PR 3, the snow run
+and animation, acceptance run recorded, code review round 2 approved; PR 4,
+the receiver frame, approved; PR 5, the horizon kernel, approved; PR 6, the
+evaluator, snow wiring and Bygdin run, code review round 2 approved,
+acceptance run recorded; PR 7, the run to 1 September and one bin by
+default, code review round 1 approved, Bygdin run to 1 September recorded (section 11, short path);
+PR 8, a continuous snow-covered area in the active bin, design and code
+review round 1 approved with wordings, Bygdin re-render recorded (section 12)**
+(2026-10-14). Eight PRs (section 10.7, which supersedes section 8's table, and sections 11 and 12). Ola was away when it was written; every default taken
 without him is listed in section 9 as one of seven questions with its
 default. Every measured figure comes from the saved probe,
 `docs/increments/46-probes/probe_spring.py`, whose output is
@@ -58,15 +64,18 @@ Written before the design.
   bins with a constant factor each, not factors at quantile points with
   piecewise-linear interpolation, because Shyft's interpolated snow-covered
   area (SCA) needs a fix-up after every snowfall and its own comment says it
-  can break the mass balance; bins balance mass exactly (section 4.2, I1);
+  can break the mass balance; bins balance mass exactly (section 4.2, I1).
+  *Corrected by section 12.2: the fix-up keeps mass, the comment is about
+  rounding, and PR 8 takes up Shyft's piecewise-linear depth;*
   (c) the parameter defaults differ (section 5): Shyft's `cx = 1` and
   `cfr = 0.5` are placeholders, not values for Norway.
 - Sælthun, N. R. (1996). *The "Nordic" HBV model.* NVE Publication 7/1996.
   Snowfall log-normally distributed within a unit, with a fixed coefficient of
   variation (CV), which gives a snow-covered area that falls continuously as
-  the pack melts. The CV form of the distribution used here is this one. (Its
-  section on the distribution was not read; the description is from papers
-  citing it, found 2026-10-13. To verify before a publication.)
+  the pack melts. *Corrected by section 12.2, from the report itself: nine
+  classes, each treated alone, so the snow-covered area falls in nine steps.*
+  The CV form of the distribution used here is this one. (Its
+  section 2.3.2 was read for section 12.2.)
 - Skaugen, T. (2004, Annals of Glaciology 38) argues that a distribution fixed
   in time misstates melt floods. Noted, not adopted: a fixed distribution is
   what HBV and Shyft's HBV use.
@@ -195,7 +204,7 @@ Read `../rasputin_scratch/ideas/ideas.md` before the design.
        │  flags -> SnowJob (frozen Pydantic: HbvSnowParameters, SnowDistribution,
        │          SunCorrection, SyntheticSpring, FrameSpec, Resources)
        ├─ io/vtk_read.py  read_mesh(bytes) -> MeshArrays(vertices, triangles, crs)
-       ├─ snow/geometry.py  triangle_geometry(mesh, convergence) -> normals (ENU),
+       ├─ snow/geometry.py  triangle_geometry(mesh, crs) -> normals (ENU),
        │                    centroid z, horizontal area                 pure numpy
        ├─ crs.py  centre (lat, lon) and grid convergence at the centre  pyproj
        ├─ snow/forcing.py  SyntheticSpring -> per step: temperature per triangle,
@@ -428,7 +437,8 @@ the write): `rasputin mesh --dem synth.tif --tolerance 1`, "quite fine":
 23 m sides), 0.73 s. At 2 m: 294 770 triangles, 147 936 vertices, 0.49 s; at
 0.5 m: 1 279 127 triangles, 1.17 s.
 
-**Forcing** (`SyntheticSpring`, all defaults chosen, not derived):
+**Forcing** (`SyntheticSpring`, all defaults chosen, not derived; the run
+length, the ramp and the bins are changed by PR 7, section 11):
 - 2027-04-01T00:00Z to 2027-07-01T00:00Z (91 days), hourly steps, S = 4;
 - temperature at 300 m: −3 °C rising linearly to +14 °C, plus a daily cycle of
   ±4 °C (a cosine) peaking at 14:00 mean solar time at 15° E (13:00 UTC);
@@ -479,6 +489,11 @@ them side by side to compare.
 features); a melt-out map as a GeoPackage layer is offered as an idea.
 
 ### 4.7 Is a continuous SCA worth it on small triangles?
+
+*Overruled by Ola on 2026-10-14: one bin is the default from PR 7 on
+(section 11.2); ten bins stay an option. The figures below stand. From PR 8
+(section 12) each bin's depth is a straight line, so SCA is continuous, not
+in steps of 1/N, at no cost to the mass balance.*
 
 Yes, as a distribution within the triangle, with a default CV of 0.4, for two
 reasons:
@@ -568,7 +583,7 @@ Each states the scale it assumes and the largest input it was checked at.
 | cx | 3 mm/°C/day | Norwegian HBV range 2-5; chosen | probe, 294 770 triangles × 2184 steps |
 | lw | 0.1 | Shyft's default | same |
 | cfr | 0.05 | HBV-light's default (to verify); Shyft uses 0.5 | same |
-| CV, N | 0.4, 10 | chosen (2.1, Liston's table not read) | same |
+| CV, N | 0.4, 10; N = 1 by default from PR 7 (section 11), cv 0.1 from PR 8 (section 12.4) | chosen (2.1, Liston's table not read) | same |
 | r | 0.015 mm/°C/day per W/m² | 61° N, April; chosen (4.5) | probe |
 | d | 0.02 °C per W/m² | = 4r/cx; chosen | probe |
 | I0, Ψa | 1368 W/m², 0.75 | Hock 1999's form; Ψa chosen | 0-90° sun |
@@ -877,10 +892,10 @@ each sun sample, each built as the radiation design states it:
 |---|---|---|
 | TR1, the sun | the sun at each sample time | all of it: this increment's PR 2 (unchanged) |
 | TR2, the receiver frame | per triangle: latitude and longitude, the normal in true east-north-up, the map from grid to true directions (its J), the exclusion radius, the observer height | all of it: PR 4 |
-| TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 |
-| TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 |
+| TR3a, the horizon kernel | the horizon in N = 64 true directions per triangle, with Earth curvature and refraction; the exhaustive reference and the pruned search that must equal it bit for bit | all of it: PR 5 (built) |
+| TR3b, the horizon's inputs | the **near raster**: the DEM within 20 km of the mesh, at full resolution | **the near raster only**, in PR 6 (built) |
 | TR4, sky factors and the geometry file | nothing: the lit test needs no sky view, and the horizons are computed in the run, not stored | none |
-| TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6; not its CLI |
+| TR5, the evaluator | the `instant` mode: per triangle and sample time, lit, cos(incidence), the beam factor b = lit·max(0, cos i) and the sine of the apparent sun elevation | the C++ evaluator, its binding and a synchronous Python call, in PR 6 (built); not its CLI |
 | TR6, TR7 | nothing (exact lit intervals and the `mean` mode; adapters) | none |
 
 **What is left out of TR3b, and why that is safe in the melt season.** TR3b
@@ -1217,8 +1232,9 @@ k = 16 (east) plus I4 in all 64. "h" is the int16 table entry.
 
 ```sh
 rasputin mesh --dem $DTM10 --domain docs/benchmarks/2026-09-29/bygdin/bygdin_reduced_t20.geojson \
-    --tolerance 10 --out bygdin.vtk                      # 52 198 triangles (ROADMAP row 22)
+    --tolerance 10 --out bygdin.vtk                      # about 52 000 triangles (51 527 on 2026-10-14)
 rasputin snow --mesh bygdin.vtk --dem $DTM10 --shadows on --days 122 --out bygdin_snow/
+# from PR 7 (section 11): no --days; the default runs to 1 September
 ```
 
 `$DTM10` is `../rasputin_data/DTM10_UTM33_20260925`. The weather is section
@@ -1252,6 +1268,646 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
 10. **The Bygdin run uses the same synthetic weather, run to 1 August instead
     of 1 July,** because Bygdin lies above 1050 m. Default: yes.
 
+## 11. PR 7: the run to 1 September, and one bin by default (2026-10-14)
+
+Written by `@architect` on branch `worktree-snow-summer`, stacked on
+`worktree-snow-shadow` (PR 6) at `2073ccf6`. PRs 1-6 go in unchanged.
+Sections 4.5, 4.7, 5 and 10.9 point here where this section changes them.
+Figures marked *computed* come from the formulas below, evaluated by hand in
+NumPy; nothing here needs a new probe.
+
+### 11.1 What Ola ruled
+
+Ola, 2026-10-14, verbatim: "0.6 is kind of better for us, as it gets warmer
+higher up. I also think the initial conditions sound healthy, but we should
+continue melting until hydrological new year, ie sept 1. I would also argue
+that 10 bins on small triangles are way too many." "1: yes. It's not uncommon
+to have periods of 15-18 C at Bygdin during summer, and that is about 1000moh.
+On 2, the triangles are selected based on a lack of variation, right? Larger
+triangles are also flat, so the max number should be very small, perhaps only
+one." "On 2: +14." "1: default."
+
+So: the lapse rate (0.6 °C per 100 m) and the initial snow (600 mm) stay; the
+weather runs to 1 September, warming at the Bygdin run's pace to +14 °C at
+300 m on 1 August and holding there; one bin per triangle by default, with
+`--bins` and `--snow-cv` kept; no scaling with triangle area.
+
+### 11.2 Prior art
+
+- **The hydrological year.** Ola's "hydrological new year, ie sept 1" is the
+  run's end. Nothing to cite: the weather stays synthetic.
+- **One bin.** A single compartment per triangle is plain point HBV-96
+  (Lindström et al. 1997), the `N = 1` case section 4.2's kernel already
+  runs; Shyft's HBV snow with one quantile point is the same. Section 4.7's
+  argument for ten bins (snow varies below any mesh's resolution) is set aside
+  by Ola's argument that a rasputin triangle is chosen to be nearly flat. The
+  cost, measured in section 6 on the 2 m mesh: with one bin the snow line
+  follows triangle edges and the domain stays white longer, then goes bare
+  in a rush (domain SCA 0.888 at day 60 against 0.630 with ten bins).
+  Named, not hidden; `--bins 10` brings the band back.
+- **Novelty:** none claimed.
+- **Legacy:** nothing; section 2.2's grep (no snow model in the legacy tree)
+  covers it.
+
+### 11.3 The ideas file
+
+- **Taken up:** "Snowpack on the TIN", its question *Triangles as single
+  compartments* (a small triangle holds one SWE, SCA 0 or 1), now the default.
+- **Overlaps, left out:** "Snow follow-ups", its snow variation that grows
+  with triangle size (Ola: no area scaling); "Profile the snow run's
+  single-threaded part" (no change here).
+
+### 11.4 The design
+
+**(a) The warming has a length of its own.** `SyntheticSpring` gains one
+field, and its run length a new default:
+
+```python
+#: Days over which the temperature at 300 m rises from T_START to T_END,
+#: counted from `start`; after them it holds at T_END.
+warming_days: int = Field(default=122, ge=1)
+days: int = Field(default=153, ge=1)
+```
+
+`forcing.temperature` uses `min(hours, warming_days * 24) / (warming_days *
+24)` where it used `hours / (days * 24)`. Everything else in it (the daily
+±4 °C cosine peaking at 14:00 mean solar time, the lapse, the step midpoint)
+is unchanged. With the default start, 2027-04-01T00:00Z, the ramp ends at
+2027-08-01T00:00Z and the run at 2027-09-01T00:00Z.
+
+- **Why a length and not an end date.** A length counted from `start` needs
+  no calendar or year logic, works for any `--start`, and keeps the weather a
+  function of the run's own time axis, as section 4.5 defines it. An end date
+  (1 August of the start's year) was rejected: a start after 1 August, or in
+  another year, would need rules of its own for no gain to a synthetic case.
+  A weather anchored to the calendar (the 15 April temperature on 15 April,
+  whatever the start) was rejected for the same reason; it is the shape real
+  forcing will have, and real forcing is outside this increment (4.10).
+- **Why it is a field and a flag, not a constant.** With `warming_days` equal
+  to `days`, the temperature is today's bit for bit (the same expression,
+  since `hours < days * 24` at every step midpoint). Every existing test
+  whose figures came from a ramp over the run keeps those figures by passing
+  it, E1 included (section 6's table, measured over 91 days); without it
+  they would need new probes. The CLI gains `--warming-days` (help: "Days
+  the temperature at 300 m takes to rise from -3 to +14 °C; it then holds.
+  Default 122."). A `warming_days` larger than `days` is allowed: the run ends
+  before the warming does.
+- **The pace.** 17 °C over 122 days, 0.139 °C per day: the Bygdin run's pace
+  (section 10.9). The default 91-day synthetic spring warmed faster
+  (0.187 °C per day); with this PR its default run is 153 days at the slower
+  pace. *Computed* daily means at 300 m: 1 April −2.930 °C, 31 July
+  13.930 °C, any day from 1 August 14.000 °C. In the hold, at 1054 m
+  (Bygdin's lowest node) 9.476 °C, afternoon peak 13.476 °C; at 2240 m
+  (its highest) 2.360 °C.
+- **Help and docstrings.** `--days`: "Days to run. Default 153: 1 April to
+  1 September." `forcing.py`'s module docstring says the temperature rises
+  linearly over the warming days, then holds. The class keeps the name
+  `SyntheticSpring` (a rename touches six source and test files for no behaviour); its
+  docstring says it runs into summer. `snow`'s docstring: "through a
+  synthetic dry spring and summer".
+
+**(b) One bin by default.** `SnowJob.distribution` defaults to
+`SnowDistribution.lognormal(0.0, 1)` (factors `(1.0,)`); `rasputin snow
+--bins` defaults to 1. **`--snow-cv` keeps its default 0.4**, a departure
+from the brief's "matching snow-cv default": `lognormal(cv, 1)` is `(1.0,)`
+for every cv (the one bin's midpoint quantile is the median, which divides
+out), so one bin is uniform snow already, while a default cv of 0 would make
+`--bins 10` alone silently give one bin. `--snow-cv`'s help: "Variation of
+snow depth within a triangle, spread over --bins bins; one bin is uniform
+snow." `snow.json` records the factors, so a one-bin run records `(1.0,)`
+whatever the cv.
+
+**Boundaries.** Unchanged: the C++ kernel, the bindings, `run.py`, the
+I/O modules. The change is two fields of a frozen model, one expression in
+a pure NumPy function, and three CLI options. No dependency.
+
+**Sizes at the new defaults.** The default run has 3672 hourly steps and 154
+frames (under the 10,000 cap). EnSight output on the 1 m synthetic mesh
+(646,870 triangles): 2 × 154 × 2,587,724 = 797,018,992 B of frames plus the
+geometry, against 476,141,216 B of frames at 92; on Bygdin (51,527
+triangles) 2 × 154 × 206,352 = 63,556,416 B. State memory falls from
+2N + 3 = 23 to 5 doubles per triangle.
+
+### 11.5 Red suites for `@tester`
+
+New tests (all pure Python, no slow mark unless said):
+
+- **W1, the hold** (`test_snow_forcing.py`): `SyntheticSpring()` at 300 m,
+  15° E, the mean over the 24 steps of day d: d = 0 → −2.930328, d = 121
+  → 13.930328, d = 122 and d = 136 → 14.0, each within 1e-9 (*computed*);
+  at 2240 m on day 136 → 2.36 within 1e-9. Step k = 3671 (the last of 153
+  days) equals 14 + the cosine term at 300 m within 1e-12.
+- **W2, the run length does not stretch the warming:** for k in {0, 100,
+  239}, `temperature(SyntheticSpring(days=10), k, …)` equals
+  `temperature(SyntheticSpring(days=153), k, …)` bit for bit. Fails today
+  (the ramp is over `days`).
+- **W3, today's forcing with `warming_days = days`:** the existing
+  `TestTemperature.expected` formula (ramp over 91 × 24 hours) against
+  `SyntheticSpring(days=91, warming_days=91)` at k ∈ {0, 12, 13, 500, 2183},
+  atol 1e-12, as today.
+- **J1, the defaults** (`test_snow_job.py`): `SyntheticSpring()` has days 153,
+  warming_days 122, start 2027-04-01T00:00Z, so start + days is
+  2027-09-01T00:00Z and start + warming_days 2027-08-01T00:00Z;
+  `warming_days=0` refused naming the field; frozen. `SnowJob`'s default
+  distribution is `SnowDistribution(factors=(1.0,))`; `lognormal(0.4, 1) ==
+  lognormal(0.0, 1)`; the default job has 154 frames.
+- **C1, the CLI defaults** (`test_cli_snow.py`): `snow` on the two facets
+  with no `--days`, `--bins` or `--warming-days`, and `--frame-hours 3672`:
+  case times (0.0, 3672.0); `snow.json` has days 153, warming_days 122,
+  factors `[1.0]`; every sca value 0 or 1.
+- **C2:** `--warming-days 10` recorded in `snow.json`; `--warming-days 0`
+  refused in plain words naming the option or field.
+  Refused by the option (`min=1`): "Invalid value for '--warming-days': 0 is
+  not in the range x>=1."
+- **C3:** `--bins 10` alone gives `lognormal(0.4, 10)`.
+
+Existing tests to amend in the red commit, each with a one-line reason:
+
+- `TestTemperature` (W3 above) and its module docstring's ramp sentence.
+- `test_snow_job.py`'s default test: (91, 60, 4) → (153, 60, 4); default
+  distribution → `(1.0,)`.
+- `test_snow_run.py`'s `job()` helper and `test_cli_snow.py`'s `SPRING_10`
+  users: every run whose assertions need melt within its few days passes
+  `warming_days` equal to its `days` (`--warming-days N` beside `--days N`).
+  *Computed* (one-bin point HBV, 300 m, from 10 April): over 10 days with
+  the new 122-day ramp, 600 mm loses nothing to outflow (6.78 mm melts and
+  is held as liquid), so the flat-triangle and R7 tests would fail; with
+  `warming_days=10`, 137.9 mm leaves. 5 mm melts out in 10 days either way.
+- `two_days`'s `len(factors) == 10` → 1.
+- `TestEndToEnd`: passes `--warming-days 2 --bins 10`: with one bin a
+  triangle holds its two days' melt as liquid (60 mm), so no snow would leave.
+- E1 (slow): passes `--days 91 --warming-days 91 --bins 10`, so section 6's
+  table holds unchanged; it is run once at the green step
+  (`RASPUTIN_SLOW=1`).
+- `TestBygdin` (slow): drops `--days 122`; expects 154 daily frames.
+
+Not invariant-critical: no mutation round. The one branch that matters, the
+`min` that makes the hold, is killed by W1 (without it day 136's mean at 300 m is 16.020 °C).
+
+### 11.6 Size, path and acceptance
+
+| file | net |
+|---|---:|
+| `snow/params.py` (field, default days, default distribution) | ≈ 3 |
+| `snow/forcing.py` (`min`, docstring prose not counted) | ≈ 1 |
+| `cli.py` (`--warming-days`, its key in `given`, defaults) | ≈ 3 |
+| **total** | **≈ 7** |
+
+Under 50 net lines, no C++ file, no refine or mesh code: **the short path**
+(`docs/increments/README.md`), one `@reviewer` round judging this design, the
+red step and the green step together.
+
+**`@perf`:** no acceptance run; no refine or mesh code, and the per-step
+code is unchanged. The Bygdin demonstration to 1 September is wanted anyway:
+`@perf` runs section 10.9's commands without `--days` (shadows on and off,
+8 threads) after green, records wall time and peak memory in this file in
+one line, and leaves the ParaView output in `rasputin_scratch/snow-demo/`.
+Expected from the PR 6 acceptance run: the horizon search unchanged (18.7 s),
+the steps about 153/122 of 8.8 s, so about 30 s with shadows at 8 threads,
+less with one bin; 154 frames, 63.6 MB of frames.
+
+### 11.7 Questions for Ola (defaults taken)
+
+11. **Held at +14 °C at 300 m, Bygdin at 1000 m reaches about 13.8 °C on a
+    summer afternoon (daily mean 9.8 °C), below the 15-18 °C periods you
+    mention there.** Keep +14 °C at 300 m, or hold +14 °C at 1000 m
+    (about +18 °C at 300 m)? Default: +14 °C at 300 m, as ruled.
+
+## 12. PR 8: a continuous snow-covered area in the active bin (2026-10-14)
+
+Written by `@architect` on branch `worktree-snow-sca`, stacked on
+`worktree-snow-summer` (PR 7) at `62f62185`. PRs 1-7 go in unchanged. This
+section changes the kernel of section 4.2 and the distribution of 4.8;
+where it differs, it wins. Every figure marked *probe* is printed by
+`46-probes/probe_sca.py` into `46-probes/probe_sca.out` (run 2026-10-14 on an
+M1 Max, AC power, NumPy, with the `rasputin` of the `snow-summer` worktree
+for the 2 m mesh); the probe runs `probe_spring.py`'s terrain, mesh and sun
+code unchanged and holds a NumPy reference of the kernel below.
+
+### 12.1 What Ola asked
+
+Ola, 2026-10-14, verbatim: "I'm not sure you're right about the sca - there
+is a version of HBV snow that has a continuous sca in the \"active\" bin."
+
+Today each bin holds one depth, so a bin goes from covered to bare in one
+step, and with one bin (the default since PR 7) a triangle's SCA is 0 or 1.
+He wants the version where the cover of the bin holding the melt front is a
+fraction, so SCA is continuous, with one bin too.
+
+### 12.2 Prior art
+
+**Ola is right: that version exists, in Shyft.** Read from source on
+2026-10-14. `github.com/statkraft/shyft` now holds only a README pointing to
+GitLab (its tree, through the GitHub API, is one file); the code is
+`gitlab.com/shyft-os/shyft` at commit `37d610ad` (2026-09-04),
+`cpp/shyft/hydrology/methods/hbv/snow/calculator.h` and
+`cpp/shyft/hydrology/hydro_functions.h` (`hbv_snow_common`). What it does:
+
+- **Depth is piecewise linear in area.** The parameter holds quantile points
+  `intervals` (0 to 1, default 0, 0.25, 0.5, 0.75, 1) and a factor `s` at
+  each; the state holds solid `sp` and liquid `sw` at each point; between
+  points the depth is the straight line, and `integrate` takes the area
+  under it (Shyft's hydro_functions, lines 359-389). Deepest snow at area 0.
+- **SCA is where the line meets zero.** Melt `potmelt = cx·Δt·(T − ts)` is
+  subtracted from every point; the new front is found on the segment where
+  the depth crosses `potmelt` by linear interpolation
+  (the calculator, lines 150-161), or, on the segment already holding the front,
+  by scaling the distance to the old front (line 160). Snow cover inside
+  that one segment, the active bin, is a fraction; elsewhere a segment is
+  wholly covered or wholly bare. This is the continuous SCA Ola means.
+- **New snow on a partly bare segment** (lines 118-130): the active point's
+  values are rescaled so the old snow, spread linearly over the whole
+  segment down to zero at its far end, keeps its mass; then every point
+  gains `snow·s_i`, and SCA returns to 1 (or to the last point with
+  `s_i > 0`). A line-by-line Python transliteration of the step
+  (scratch only, not committed) confirms the rescaling conserves mass: a
+  10 mm snowfall on a state of SCA 0.75 gives an outflow of 0.0. So section
+  2.1's "can break the mass balance" overstated it: the comment at lines
+  53-56 is about rounding only. **Corrected in 2.1 by this PR.**
+- **Rain** enters the pack on the covered fraction only (`swe += snow +
+  sca·rain`, line 109); the rest leaves.
+- **Outflow is a residual**: total water before minus the integrated swe
+  after (lines 175-186), with a throw if it would be negative beyond 1e-6,
+  and a cut-off that empties a pack below 0.1 mm (lines 110-117).
+- **With Shyft's default factors (all 1, uniform snow) SCA is 0 or 1 there
+  too**: every point reaches `potmelt` together. The continuity needs a
+  depth that varies across the active segment.
+- **An edge Shyft gets wrong**, from the transliteration: at T = ts exactly
+  `potmelt` is 0, `melt_index` finds no point below it and SCA is set to 1
+  on a partly bare pack (line 155); the integrated swe then rises and the
+  step throws "Negative outflow". Not run against Shyft itself. Fixture L9
+  below pins that this kernel leaves SCA alone at T = θ.
+
+**The Nordic HBV is stepped, not continuous.** Sælthun, N. R. (1996). *The
+"Nordic" HBV model.* NVE Publication 7, section 2.3.2, read 2026-10-14 from
+`publikasjoner.nve.no/publication/1996/publication1996_07.pdf`: the
+log-normal distribution of fixed CV is "calculated for the quantile
+intervals 0.0-0.01, 0.01-0.05, …, 0.99-1.0", "this will give the following
+possibilities for snow cover percentage: 0, 1, 5, 15, 35, 65, 85, 95, 99,
+100%", and "all nine subdivisions … are treated individually" (2.3.3). So
+the Nordic HBV is today's kernel with nine unequal bins. Section 2.1's
+sentence that Sælthun's distribution "gives a snow-covered area that falls
+continuously" was wrong; **corrected in 2.1 by this PR.** The report credits
+the distribution concept to Killingtveit and Aam (1978, NTH, in Norwegian;
+not read) and also documents `SPDIST`, an even accumulation up to a set
+storage before the distribution applies (not taken up). Killingtveit and
+Sælthun (1995, *Hydropower Development* vol. 7) was not read; Skaugen et al.
+(2004, Annals of Glaciology 38) describe it as log-normal snowfall of fixed
+CV, perfectly correlated in space, with ablation uniform over the covered
+fraction, which is what both forms here assume.
+
+**Bergström** (1976; 1992, SMHI RH 4) and **HBV-96** (Lindström et al.
+1997): not read for a within-zone distribution this round; nothing here
+depends on them beyond section 4.2's point update.
+
+**What differs from Shyft, and why:**
+
+1. **Each bin has its own straight line** (its shallow and deep edge), not
+   one line through shared points. Shyft's form is the special case where
+   each bin's deep edge meets the next bin's shallow edge. Separate lines let
+   one bin carry a spread (Shyft needs two points, one segment, for the same
+   thing, which is exactly this design at N = 1), and keep flat bins, the
+   existing distributions, bit for bit as today (12.3, I6).
+2. **Mass is kept by construction, not as a residual.** Each update moves
+   mass between solid, liquid and outflow explicitly, as section 4.2 does;
+   no 0.1 mm cut-off and no throw.
+3. **Liquid water is one value per bin** (its mean), capped at lw times the
+   bin's mean solid, as today; Shyft holds it at each point. Integrated over
+   a bin the two caps are the same (lw times the area under the solid
+   line); what differs is only where in the bin the water is assumed to be.
+4. **Refreezing in a partly bare bin scales the bin's line** about its
+   front, so SCA does not change; Shyft adds at each covered point and
+   leaves SCA alone too. Same SCA, the same mass.
+5. **The bins come from a log-normal by matching each band's mean and
+   variance with a straight line** (12.4). Shyft takes factors at points
+   from the user, default uniform.
+
+**Novelty: none claimed.** A piecewise-linear depth with a moving front is
+Shyft's; a uniform depth distribution giving a linear depletion curve is
+textbook. The band-matching rule of 12.4 is a choice, not a claim.
+
+**Legacy:** nothing; section 2.2's grep (no snow model in the legacy tree)
+covers it.
+
+### 12.3 The design
+
+**State.** Per triangle i and bin k, as today, the bin's mean solid `sp` and
+mean liquid `sw` (mm over the bin's area); new, `deep`, the solid depth at
+the bin's deep edge (mm). The solid depth across the bin is the straight
+line from `2·sp − deep` at the shallow edge to `deep` at the deep edge, cut
+at zero:
+
+- **covered** (`sp > 0` and `2·sp ≥ deep`): the shallow edge `lo = 2·sp − deep ≥ 0`;
+  cover c = 1.
+- **partly bare** (`0 < 2·sp < deep`): the line runs from zero at the front
+  to `deep` at the deep edge; cover c = `2·sp / deep`.
+- **bare** (`sp = 0`, and then `deep = 0`): c = 0.
+
+So `0 ≤ sp ≤ deep` always, and a flat bin (`deep = sp`) is today's bin:
+covered while it has snow. Memory: 3N + 3 doubles per triangle (6 at
+N = 1), against 2N + 3.
+
+**The distribution.** `SnowDistribution` gains, beside `factors` (each bin's
+mean, unchanged: ascending, mean 1), `deep`: each bin's deep-edge factor,
+with `factor_k ≤ deep_k ≤ 2·factor_k` (the shallow edge `2·f − deep` is
+then between 0 and f). Empty means flat (`deep = factors`). The constructor
+divides both by the factors' mean, as today. New snow `P_s` adds
+`f_k·P_s` to `sp` and `deep_k·P_s` to `deep`: perfectly correlated
+snowfall, the assumption Skaugen et al. name.
+
+**One step, per triangle and bin.** Section 4.2's steps 1-7, with these
+changes (unchanged steps are not repeated):
+
+2. **Snowfall.** If snow > 0 and the bin is partly bare or bare
+   (`2·sp < deep` or `sp = 0`), first spread its old solid over the whole
+   bin as a wedge from zero at the shallow edge: `deep = 2·sp` (mass kept;
+   Shyft's rescaling, lines 118-130). Then `sp += f_k·snow`,
+   `deep += deep_k·snow`. The bin is then covered (c = 1 when
+   `deep_k < 2·f_k`; at `deep_k = 2·f_k` its shallow edge is zero and c = 1
+   all the same).
+4. **Rain** by cover: `sw += c·rain`, `out += (1 − c)·rain`, with c after
+   the snowfall. (Today: all of it if `sp > 0`, else none; the same for c
+   in {0, 1}.)
+5. **Melt** (T > θ), potential `M = m·Δt·(T − θ)` per unit of covered area,
+   in this order:
+   - (a) **melts out** if `deep ≤ M`: melt `sp`; `sp = deep = 0`.
+   - (b) **stays covered** if covered and `M ≤ 2·sp − deep`: melt M;
+     `sp −= M`; `deep −= M`. (Today's melt, exactly.)
+   - (c) **otherwise the front moves**: `deep' = deep − M`;
+     `sp' = deep'² / (4·(deep − sp))` if the bin was covered, or
+     `sp' = sp·(deep'/deep)²` if partly bare; melt `sp − sp'`. If `sp'`
+     is 0 (underflow), `deep' = 0`.
+   The melt goes to `sw`, as today. Each branch is the exact area under the
+   line less M, cut at zero; c then falls linearly with M:
+   c' = `(deep − M)/(deep − lo)` from covered, `c·(deep − M)/deep` from
+   partly bare.
+   **Refreeze** (T < ts, no melt): `F = min(c·cfr·cx·Δt·(ts − T), sw)`,
+   refreezing on the covered part only. Covered: `sp += F`, `deep += F`
+   (today's refreeze). Partly bare: `deep *= (sp + F)/sp`, then `sp += F`,
+   which keeps c.
+6. Unchanged: the cap `lw·sp` on `sw`.
+7. `sca_i = mean_k c_k`; swe and outflow as today.
+
+**Why flat bins stay bit for bit.** For `deep = sp` the snowfall wedge is
+never taken on a bin with snow and is `0` on a bare one; c is exactly 0.0 or
+1.0, so `c·rain` and `(1 − c)·rain` are `rain` and `+0.0` or the reverse;
+branch (a) is today's `min(M, sp) = sp`, branch (b) today's `sp −= M`, and
+(c) is never reached (covered with `lo = deep` means `M > lo` is `deep ≤ M`,
+branch (a)). So every distribution that exists before this PR (all of PR
+1-7's tests, and `--snow-cv 0`) runs exactly as before, and **H1-H12, H8b,
+V1, V2 and P1-P5 pass unedited**; that is the evidence for I6 below.
+
+**Invariants** (section 4.2's I1-I5 hold as written; I4 reads "a flat
+single bin is plain HBV-96"):
+
+- I2, extended: `0 ≤ sp ≤ deep`, `sp = 0` exactly when `deep = 0`, and
+  `0 ≤ c ≤ 1` per bin.
+- I6, flat is today: a distribution with `deep = factors` gives states
+  bit-identical to the kernel before this PR.
+- I7, SCA falls with melt: in a step with no snowfall each bin's c does not
+  rise; melt lowers it, refreeze and rain leave it.
+- I8, the depletion curve: one bin, no precipitation, cfr = 0: after
+  cumulative melt potential ΣM, `sca = clamp((deep₀ − ΣM)/(deep₀ − lo₀), 0,
+  1)`, to 1e-12, with `deep₀`, `lo₀` the initial edges. This is the
+  continuous SCA, as a property.
+- I9, snowfall whitens: snow > 0 on a bin leaves it covered, with `sp`
+  raised by exactly `f_k·snow`.
+
+**Boundaries.** The kernel stays pure: no new parameter in `step`, no new
+status; the distribution carries the shape. `SnowState::sca()` keeps its
+meaning. `bindings/snow.cpp`: `SnowDistribution(factors, deep=None)` and a
+read-only `deep` property; `SnowState` gains no Python property (sp, sw,
+swe, sca and outflow suffice). `_core.pyi` follows. `run.py` passes `deep`.
+No dependency.
+
+**Refusals.** `SnowDistribution`'s constructor throws
+`std::invalid_argument` (Python `ValueError`) when `deep` is neither empty
+nor of N values, a deep factor is not finite, or `deep_k < f_k` or
+`deep_k > 2·f_k` ("a bin's deep edge must lie between its mean and twice
+its mean"), checked on the given values before the division. The Pydantic
+model refuses the same, earlier.
+
+### 12.4 The log-normal, as straight lines
+
+`SnowDistribution.lognormal(cv, bins)` (`params.py`) now gives, for bin k
+of N equal-probability bands of a log-normal of mean 1 and the given CV,
+the band's mean μ_k as the factor and `μ_k + √3·σ_k` as the deep edge,
+where σ_k is the band's standard deviation: the straight line (a uniform
+depth) with the band's mean and variance. Both come in closed form from
+the log-normal's partial moments, `E[X^j; a < X < b]` through
+`statistics.NormalDist`; the factors are then divided by their mean (1 to
+rounding). cv = 0 gives `factors (1.0,)`, `deep ()`, as today.
+
+- **One bin** is a uniform depth from `1 − √3·cv` to `1 + √3·cv` times the
+  mean, of exactly the given CV. At 0.4: *probe* shallow
+  0.307180, deep 1.692820. A triangle with 600 mm starts to go bare after
+  184 mm has melted and is bare after 1016 mm. At the default 0.1, shallow
+  0.826795, deep 1.173205 (496 and 704 mm at 600 mm).
+- **Ten bins** at 0.4: *probe* factors (0.4778, 0.6216, 0.7157, 0.8004, 0.8848, 0.9750, 1.0780, 1.2060, 1.3902, 1.8505), deep (0.5964, 0.6736, 0.7592, 0.8421, 0.9280, 1.0226, 1.1343, 1.2796, 1.5074, 2.4245). The bin means
+  move from today's midpoint quantiles (section 7's D1) to band means
+  (bin 0: 0.4974 → 0.4778). Neighbouring lines overlap (the top bin's
+  shallow edge, 1.2765, lies below the next bin's deep edge, 1.5074), so
+  two bins can be partly bare at once; SCA is continuous all the same.
+- **The largest cv** with no negative shallow edge (*probe*): 0.5774 with one bin (1/√3), 0.8282 with two, 1.0130 with four, 1.2412 with ten, 1.7121 with 64.
+  `lognormal` refuses a larger one with a `ValueError` naming cv, the bins
+  and the limit ("snow-cv 0.6 is too large for 1 bin: at most 0.577");
+  the CLI shows it as it shows the other refusals.
+
+**Defaults.** `--bins 1` and, by Ola's ruling of 2026-10-14 (question 12),
+`--snow-cv 0.1` (was 0.4), so the default run has a continuous SCA: with one
+bin a triangle's depth runs from 0.83 to 1.17 times its mean (1 ± √3·0.1),
+496 to 704 mm at 600 mm, and melts out over about 208 mm of melt, about a
+week at 30 mm a day. `SnowJob.distribution`'s default becomes
+`lognormal(0.1, 1)`, the CLI's, where PR 7 set `lognormal(0.0, 1)`.
+`--snow-cv 0` is PR 7's stepped one-bin run. `--snow-cv`'s help: "Variation
+of snow depth within a triangle; within each bin the depth varies linearly,
+so the snow-covered area shrinks smoothly. 0 is uniform snow, at most 0.577
+with one bin." `snow.json` records `deep` with the factors.
+
+### 12.5 What the probe shows
+
+The NumPy reference on flat bins reproduces probe_spring.out's first row
+(none, N = 10): *probe* domain SCA 1.0000 / 0.6298 / 0.0829, SWE 565.29 / 203.58 / 23.56 mm, melt-out days 83.0 / 82.0, the same to every printed digit, and mass to 4.9e-12 mm. On the 2 m mesh (294 770 triangles),
+the dry spring of section 6, 91 days:
+
+| run | domain SCA, day 30 / 60 / 90 | domain SWE mm, day 30 / 60 / 90 | median melt-out day, class S / N | share of daily values with 0 < sca < 1 |
+|---|---|---|---|---|
+| none, 10 linear bins, cv 0.4 | 1.0000 / 0.6219 / 0.0853 | 565.14 / 206.37 / 25.17 | 81.0 / 81.0 | 0.457 |
+| melt_factor, 10 linear bins, cv 0.4 | 1.0000 / 0.6484 / 0.1193 | 564.97 / 228.71 / 38.34 | 74.0 / −1 | 0.437 |
+| threshold, 10 linear bins, cv 0.4 | 1.0000 / 0.6259 / 0.0963 | 557.97 / 209.69 / 29.95 | 74.0 / −1 | 0.459 |
+| none, 1 linear bin, cv 0.4 | 1.0000 / 0.6484 / 0.0827 | 566.15 / 218.97 / 24.58 | 83.0 / 83.0 | 0.381 |
+| melt_factor, 1 linear bin, cv 0.4 | 1.0000 / 0.6656 / 0.1148 | 566.36 / 238.85 / 37.17 | 76.0 / −1 | 0.375 |
+| none, 1 linear bin, cv 0.1 (the default) | 1.0000 / 0.7583 / 0.0805 | 566.15 / 159.84 / 18.50 | 83.0 / 83.0 | 0.086 |
+| melt_factor, 1 linear bin, cv 0.1 | 1.0000 / 0.7379 / 0.1102 | 566.37 / 191.33 / 29.80 | 76.0 / −1 | 0.085 |
+| none, 10 linear bins, cv 0.1 | 1.0000 / 0.7639 / 0.0805 | 566.09 / 158.75 / 18.50 | 83.0 / 83.0 | not printed |
+| melt_factor, 10 linear bins, cv 0.1 | 1.0000 / 0.7368 / 0.1102 | 566.27 / 191.15 / 29.79 | 76.0 / −1 | not printed |
+| threshold, 10 linear bins, cv 0.1 | 1.0000 / 0.7384 / 0.0909 | 559.27 / 166.70 / 23.01 | 75.0 / −1 | not printed |
+| *for comparison, section 6:* none, 1 flat bin | 1.0000 / 0.8884 / 0.0804 | 566.15 / 149.13 / 18.10 | 83.0 / 83.0 | 0 |
+
+The cv 0.1 one-bin rows come from `rasputin snow` at `87d62f21` (@reviewer). The ten-bin rows come from @tester's probe rerun in `c55a570e`. Neither is in probe_sca.out.
+
+What this says. At the default cv 0.1, day-60 SCA is 0.758 with one bin and 0.764 with ten, and 8.6 % of daily values are partly covered (38 % at 0.4). A south-slope one-bin triangle takes 8 days from first bare ground to bare under melt_factor (36 at cv 0.4). E1 checks the cv 0.1 ten-bin rows. At cv 0.4 **one linear bin removes the rush**: the
+SCA at day 60 is 0.648, against 0.888 with one flat bin and 0.622 with ten
+linear bins, so one bin now looks like ten. It also keeps more snow at day
+60 (219 against 149 mm), because the deep edge holds 1.69 times the mean.
+**Ten bins barely move** from flat to linear (SCA within 0.008, SWE within
+3 mm at days 60 and 90); the rows above replace section 6's in E1. On
+30° south slopes at 1000 m under the melt-factor correction a one-bin
+triangle takes 36 days (median) from first bare ground to bare, against
+0 with a flat bin. **SCA never rose in a step** by more than 2.2e-16
+(rounding of the refreeze scaling), and mass held to 7.6e-12 mm. The runs
+took 45 min in NumPy (4.5 GB); no timing is quoted for the C++.
+
+### 12.6 The ideas file
+
+- **Taken up:** "Snowpack on the TIN", part 1's "with continuous SCA" (Ola's
+  first words on the idea), now meant in Shyft's sense.
+- **Overlaps, left out:** "Snow follow-ups": its variation that grows with
+  triangle size (still left out; the CV is one number for every triangle),
+  the melt-out-day map and outflow per frame; "Profile the snow run's
+  single-threaded part" (the step is a few flops longer per bin; no
+  change).
+
+### 12.7 Red suites for `@tester`
+
+All C++ fixtures use one bin, factors (1.0), deep (1.5) (shallow edge 0.5,
+cv 0.2887), tx = ts = 0, cx = 3, lw = 0.1, cfr = 0.05, Δt = 1 day, P = 0,
+unless they say otherwise; each figure is *probe* (line named) and checked
+by hand in the notes. `swe` = sp + sw, outflow per step.
+
+| test | from | input | expected |
+|---|---|---|---|
+| L0 | `uniform(100)` | — | sp 100, deep 150, sca 1 (not 2·100/150 = 1.33) |
+| L1 | L0 | T = 5 (M = 15 ≤ lo 50) | sp 85, deep 135, sw 8.5, out 6.5, sca 1 |
+| L2 | L0 | T = 20 (M = 60) | sp 40.5, deep 90, sw 4.05, out 55.45, swe 44.55, sca 0.9 |
+| L3 | L2 | T = 10 (M = 30) | sp 18, deep 60, sw 1.8, out 24.75, sca 0.6 |
+| L4 | L3 | T = 20 | sp 0, deep 0, sw 0, out 19.8, sca 0 |
+| L5 | L0, lw = 2, T = 20 | then T = 0, P = 10 (rain, no melt, no refreeze) | sp 40.5, deep 90, sw 68.5, out 1, swe 109, sca 0.9 |
+| L6 | L0, lw = 2, T = 20 | then T = −10 | sp 41.85, deep 93, sw 58.15, out 0, swe 100, sca 0.9 |
+| L7 | L3 with cfr = 0 | T = −1, P = 10 (snow) | sp 28, deep 51, sw 1.8, out 0, swe 29.8, sca 1 |
+| L7c | L7 | T = 10/3 (M = 10) | sp 18.271739, deep 41, sw 1.827174, out 9.701087, sca 0.891304 (41/46) |
+| L8 | `uniform(0)`, cfr = 0 | T = −1, P = 10 | sp 10, deep 15, sw 0, sca 1 |
+| L8b | L8 | T = 2.5 (M = 7.5) | sp 2.8125, deep 7.5, sw 0.28125, out 6.90625, sca 0.75 |
+| L9 | L2 | T = 0 = ts = θ | unchanged: sp 40.5, deep 90, sw 4.05, out 0, sca 0.9 |
+| L10 | L0, cfr = 0 | 400 hourly melt steps, T = 0.5 + (k mod 7) °C | I8 within 1e-12 (probe: 6.7e-16 over 174.6 mm of melt, through covered, partly bare and bare) |
+
+Properties (Catch2 generators and Hypothesis, as P1-P5, whose generators
+gain linear distributions: N in 1..8, `deep_k` drawn in `[f_k, 2·f_k]`):
+
+- P6: I1 and I2 (extended) over random forcing with snow, rain, melt and
+  refreeze.
+- P7: I7, over melt-only and dry sequences: sca never rises by more than
+  1e-12 in a step without snowfall (the probe's largest rise: 2.2e-16).
+- P8: I8 over random positive T sequences, one bin, random deep in
+  `[1.1, 2]` (near-flat bins amplify rounding past 1e-12).
+- P9: I6 is held by H1-H12 and P1-P5 passing unedited on flat
+  distributions; no new test.
+
+Refusals and the binding (`test_core_snow.py`, `test_snow_params.py`):
+
+- V3: `SnowDistribution` refuses deep of length N ± 1, NaN or inf in deep,
+  deep_k = 0.99·f_k and deep_k = 2.01·f_k; accepts deep_k = f_k and
+  deep_k = 2·f_k. Python: `ValueError` with the message. The state is not
+  touched (there is none yet).
+- V4: `_core.SnowDistribution(f, deep).deep` round-trips divided by the
+  mean; `SnowDistribution(f).deep == factors`.
+- D3: `lognormal(0.4, 10)` factors and deep to 1e-4 as 12.4's *probe*
+  lines; `lognormal(0.4, 1)` factors `(1.0,)`, deep `1 + √3·0.4` within
+  1e-12; `lognormal(0.0, n)` gives `(1.0,)`, `()`; `lognormal(0.58, 1)`
+  refused naming cv and 0.577; `lognormal(0.4, 1) !=
+  lognormal(0.0, 1)`.
+- S1 (`test_snow_run.py`): the two facets (centroids at 300 m), `none`,
+  cfr = 0, one bin at cv 0.4, initial swe 100 mm, the ten-day job: each
+  daily frame's sca equals `clamp((1 + √3·0.4 − ΣM/100)/(2·√3·0.4), 0, 1)`
+  within 1e-6 (float32 frames), ΣM summed in the test from
+  `forcing.temperature` at 300 m (`3/24·max(0, T)` per hourly step).
+  *Computed* ΣM by day 5, 8, 9, 10: 34.138, 106.588, 140.938, 180.388 mm,
+  so sca 0.975320, 0.452457, 0.204557, 0; the shallow edge (30.7 mm) is
+  passed on day 5 and the deep one (169.3 mm) on day 10.
+
+Existing tests to amend in the red commit, each with its reason:
+
+- D1 (`test_snow_params.py`): the factors become the band means (12.4).
+- `test_snow_job.py`: the default distribution is `lognormal(0.1, 1)`
+  (factors `(1.0,)`, deep `(1.1732…,)`); `lognormal(0.4, 1) ==
+  lognormal(0.0, 1)` is now false (D3).
+- C1: drops "every sca value 0 or 1"; asserts `job.distribution ==
+  lognormal(0.1, 1)`. C4 (new): the two facets, `--sun-correction none --days 30
+  --initial-swe 90 --cfr 0`, other flags default: the last frame's sca is
+  0.746517 on both facets within 1e-5 (ΣM 82.314 mm, between the edges 74.4
+  and 105.6 mm; at 100 mm the shallow edge, 82.7 mm, stays covered). C3,
+  renamed `test_c3_ten_bins_alone_keep_the_default_cv`, gives
+  `lognormal(0.1, 10)`.
+- `test_snow_run.py`'s tests that build a job without a distribution now get
+  one bin at cv 0.1; they assert orderings and mass, not figures, and are
+  expected to pass unedited; any that fails is amended with its reason in
+  the red commit, never in the green one.
+- E1 (slow): `TABLE` becomes 12.5's linear ten-bin rows at cv 0.1; the triangle count is checked as a range, 150 000 to 600 000; same tolerances.
+
+**Mutation targets** (the kernel is invariant-critical; each with its
+killer):
+
+| mutant | killed by |
+|---|---|
+| partly bare melt without the square, `sp·deep'/deep` | L3 |
+| covered-to-front melt `/(4·(deep − sp))` → `/(2·(deep − sp))` | L2 |
+| branch (b)'s test `M ≤ 2·sp − deep` → `M ≤ sp` (flat logic) | L2 |
+| rain all into the pack (`c·rain` → `rain`) | L5 |
+| refreeze not weighted by c | L6 |
+| partly bare refreeze adds to deep instead of scaling | L6 (sca) |
+| the snowfall wedge dropped | L7 |
+| snowfall raises deep by `f_k` instead of `deep_k` | L8b |
+| the cover clamp dropped (`2·sp/deep` when covered) | L0 |
+| the constructor's `deep_k ≤ 2·f_k` check dropped | V3 |
+
+Equivalent, not targets: `M ≤ 2·sp − deep` → `<` (at equality both
+branches give the same state); `T > θ` → `T ≥ θ` (M = 0 changes nothing,
+L9 guards the outcome); the underflow guard `deep' = 0` (needs a
+denormal). Section 7's targets stand, killed by H1-H12 as before.
+
+### 12.8 Size, path and acceptance
+
+| file | net |
+|---|---:|
+| `hbv_snow.hpp` (deep in distribution and state, cover, the step's four changes) | ≈ 45 |
+| `bindings/snow.cpp` (`deep` argument and property) | ≈ 12 |
+| `_core.pyi` | ≈ 3 |
+| `snow/params.py` (`deep`, its checks, band moments in `lognormal`, default) | ≈ 25 |
+| `snow/run.py`, `cli.py` (pass deep; help) | ≈ 2 |
+| **total** | **≈ 87** |
+
+C++ is touched: **the full path** (design review, red, green, review).
+`project_structure.md` unchanged (same module).
+
+**`@perf`:** no refine or mesh code, so no acceptance run. The Bygdin
+animation is wanted: after green, `@perf` reruns the `snow` command of
+`rasputin_scratch/snow-demo/bygdin-sca-animation/commands.txt` on its
+`bygdin_lc.vtk` (defaults: one bin, cv 0.1, now continuous; `--shadows on`,
+8 threads), renders with the same `render_sca.py` and `frames_to_mp4.swift`
+into `rasputin_scratch/snow-demo/bygdin-sca-continuous/`, beside the
+stepped one, and records wall time and peak memory in one line here.
+Expected: about PR 7's, the step being a few flops longer per bin.
+
+### 12.9 Questions for Ola (defaults taken)
+
+12. **One bin at cv 0.4 means a triangle's deepest edge holds 1.69 times its
+    mean snow and its shallowest 0.31 times**, so with 600 mm a triangle
+    starts to show bare ground after 184 mm of melt and is bare after
+    1016 mm; melt-out is spread over weeks instead of one step, and the
+    last snow lasts longer than with uniform snow. Keep 0.4, or a smaller
+    default (0.2: from 0.65 to 1.35 times the mean)? Default: 0.4.
+    **Ruled by Ola, 2026-10-14: 0.1** (from 0.83 to 1.17 times the mean): a
+    triangle fits the terrain within the vertical tolerance, so once it starts
+    to melt it should melt out quickly. Tests that pin the default re-derive
+    their figures at 0.1 from the probe; tests that name cv 0.4 keep it.
+13. **Snow falling on a partly bare triangle covers it again, and the old
+    snow is spread over the whole triangle as a wedge** (Shyft's rule, mass
+    kept), so after new snow melts the front does not return exactly to
+    where it was. Example: 600 mm, melted down to 10 % cover; 1 mm of new
+    snow; once it melts, cover is about 90 %, and the last 4 mm melt in 20
+    hours instead of 7 days. Default: Shyft's rule; **kept by Ola, 2026-10-14**. (The synthetic spring is dry, so
+    the animation does not show it.)
+
 ## Review
 
 **Design review, round 1, 2026-10-13.** Range `b1353075..0e3247f7`, 0 production lines, @reviewer: CHANGES REQUESTED. Blocking: (1) placeholders left in the file: section 6 says `[RESULTS]` and section 4.7 `[single-bin figures in section 6]`; the melt-out and snow-cover figures the architect's handback gave (about a week earlier on 30° south slopes at 1000 m; cover 0.62 against 0.88 at day 60) are not in the file, and test E1 checks against them; (2) test R1's south case: with the sun at 30° and the slope at 30°, the angle from the slope's normal is 30°, so 800·0.866 − 400 = +292.8, not +400 (north −400 and east −53.6 are right); (3) test V1 asks the C++ to refuse negative cx, lw or cfr and bad bin factors, but `StepStatus` has no status for bad parameters, and the `SnowDistribution` constructor's refusal (exception or factory) is not said; (4) listed mutants not all killed: `<=` for `<` in the rain/snow test needs a fixture at T = tx with P > 0; dropping the min on refreeze needs a refreeze larger than sw; refreezing when T < θ instead of T < ts needs H8 to start with sw > 0; add the m ≥ 0 clamp and the refreeze condition as targets; (5) the mass-balance tolerance 1e-9·max(1, swe) is tighter than the error bin factors with a mean checked only to 1e-9 can give (P·1e-9): renormalise in the constructor, or scale the tolerance with P; (6) section 9 has seven questions, the ROADMAP row says eight. Wordings: `parallel_util::parallel_for` does not exist, the function is `for_each_block`; R9 of the radiation design does not state the beam formula; 465 MB is MiB (488 MB decimal, the unit of the 2.6 GB). Verified: the D1 factors, tests H1-H9 except R1, section 6's ΔI values (NOAA formula within 0.5 W/m²), latitude and γ, the EnSight byte sizes, TR1's estimate and split, the literature citations, the I/O boundary, std::chrono only; the full sun-position PR over the 40-line formula justified as the default. Idea: pass the step length as `std::chrono::duration<double>`.
@@ -1263,3 +1919,45 @@ do not touch it. Its *Facts to verify* hold nothing this work depends on.
 **Design review, round 4 (the addendum), 2026-10-13.** Range `52a3bddf..9793bc83`, 0 production lines, @reviewer: APPROVED WITH WORDINGS (pin 2 says the maxima of the rasters still ahead; a PR 3b split point at 650), applied by the main session. All three blockers and four wordings of round 3 fixed; `probe_review3.py` re-run, output identical; section 10.8's 13 targets on six fixtures, pruned equal to exhaustive on every fixture, every mutant killed in the one-dimensional model; I7, I8 and test S in PR 6, the vertical east-facing receiver right for test S; pins 1, 3, 4, 5 hold, and coastal DTM10 tiles (`67m1_1`, `67m1_2`, `6700_1`, `66m1_1`) hold no NoData, the sea stored as 0, so pin 1's stop at the first missing sample bites only at the mosaic's edge. PR 3 at 495 against a 37 % overrun is about 678, under 700, so the split point is a margin, not a requirement.
 
 **Code review, round 1 (PR 1, the HBV kernel), 2026-10-13.** Range `origin/master..ced40c13`, 369 net production lines (about 270 estimated: C++ 168 against 120, mostly the full validation; binding 125 against 70, mostly five repeated property lambdas; no split seam named, far under 700), @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 7's kill-table row for "`none` applying ΔI" names V1, not H8; `project_structure.md`'s `snow.cpp` entry says the ValueError names the status, and the triangle for a non-finite value. The kernel follows section 4.2 step by step and checks every refusal before it writes a slot; `step()` checks parameters, sizes, step length, non-finite values, negative precipitation in that order, the size check before any array is indexed; the binding passes arrays only and releases the GIL; "triangle i" is the 0-based index; the kill record in `ced40c13` covers all 11 targets; no red-step markers. Not pushed, no CI yet. Suggestions: a refusal case with NaN at triangles 1 and 2 expecting "triangle 1"; one helper for the five array views (about 15 lines); `inline` on `step`'s forward declaration. Idea: PR 3 should name a split point before it starts, since the same 37 % overrun would take its 545 to about 745.
+
+**Code review, round 1 (PR 2, TR1 sun position), 2026-10-13.** Range `cde70666..e08034b7`, 568 net production lines (about 540-560 estimated; tables 301), @reviewer: CHANGES REQUESTED. (1) The sunset test's comment in `tests/cpp/unit/test_radiation_sun.cpp` is wrong: SPA's published sunset, 17:20:19 local, is the UT day's (16 October's evening, 00:20:19 UTC on the 17th), and the reference path crosses h0' at 17:20:18.40 (pvlib's SPA, bisected), so the published sunset is checkable and must be checked: `crossing(e0, kNrelDay - hour, kNrelDay + 2 * hour)` within 2000 ms of `kNrelDay + 1219000`. (2) The branch conflicts with master in `pyproject.toml`: merged by the main session, both paths kept. Wording: the radiation headers, binding and package in `project_structure.md`: added by the main session. Held: equations 4-46 match SPA; ΔT's decimal-year rule (64.508 s for October 2003 by hand); the 195 L/B/R rows and 63 nutation rows identical to pvlib 0.16.1's arrays; std::chrono only; the I/O boundary; the GIL released; layer 1; the terrain-radiation.md paragraph. Ideas: refuse NaT in `to_utc_ms`; stop `sun_positions` truncating float input silently; name pvlib (BSD-3) as the tables' source; the default pressure and temperature belong in TR5.
+
+**Code review, round 2 (PR 2, TR1 sun position), 2026-10-14.** Range `e08034b7..6b795249`, 568 net production lines (unchanged), @reviewer: APPROVED. Round 1's sunset blocker is fixed: the crossing is checked within 2000 ms of 17:20:19, the published sunset of the UT day. The merge keeps both sides of `pyproject.toml` (`git merge-tree`: only the conflict markers differ). The project_structure.md entries for radiation are true. CI is still to be checked after the push.
+
+**Code review, round 1 (PR 3, the snow run and animation), 2026-10-14.** Range `791532f6..427ebf85`, 440 net production lines (495 estimated, under the 650 split point), @reviewer: CHANGES REQUESTED. (1) Sections 8 and 10.7's acceptance run is not recorded: the 1 m spring at 1 and 8 threads with wall time, peak memory and output size in this file, and one ParaView screenshot under `docs/benchmarks/<date>/` (the main session's brief wrongly said no `@perf` run; the demo outside git covers 8 threads only); (2) `project_structure.md` says `snow/params.py` imports nothing first-party, but it imports `tin_engine.resources`; and it lacks `snow/geometry.py`, `forcing.py`, `run.py`, `terrain.py`, `io/ensight.py`, `io/vtk_read.py`, `io/geotiff_write.py` and `crs.site_of`; (3) frame 10,000 and up writes `swe10000.var`, which the case file's four-digit `****` pattern misses, silently (e.g. `--days 417 --frame-hours 1`): refuse more than 9,999 frames in `SnowJob`. Held: the sun correction matches section 10.5 (a flat triangle gets exactly 0); the γ turn's sign as pinned; the terrain matches the probe bit for bit; files written only in `cli.py`, the `io/` encoders pure bytes; EnSight Gold binary geometry, variable and case files as specified; no red-step scaffolding; the developer's pins sound; the `# fmt: skip` regions readable. Suggestions: refuse a spring that is not a whole number of frames (`--days 91 --frame-hours 48` silently runs 90 days); refuse a projected CRS not in metres; correct the stale Status line.
+
+**PR 3 acceptance run, 2026-10-14** (`@perf`, `96fc053c`, at `914e1f57`; record in `docs/benchmarks/2026-10-14/46-snow-acceptance/`). The default spring on the 1 m mesh (646,870 triangles), Release build, M1 Max on mains power, three runs per thread count, medians: 1 thread 78.75 s (78.61-80.05), peak resident 430.6 MB; 8 threads 37.32 s (37.26-37.46), 431.1 MB; output 498,148,389 B in 191 files at both, identical but for the thread count in `snow.json`. Speed-up 2.11 at 8 threads; total processor time is about equal at both counts, so most of the run is single-threaded (not profiled). ParaView 6.1.1's pvpython reads all 92 frames of 646,870 cells; SWE 600 mm at day 0, 149-600 mm at day 45 (screenshot `swe-day45.png`), 0-592 mm at day 91. NO BASELINE: the first measurement of `rasputin snow`.
+
+**Code review, round 2 (PR 3, the snow run and animation), 2026-10-14.** Range `a1a7fe6e..26e54b0e`, 451 net production lines from `791532f6` (495 estimated), @reviewer: APPROVED WITH WORDINGS (Status line; `crs.py` map entry also imports `io.models`), applied by the main session. Round 1's three blockers are fixed: the acceptance run as sections 8 and 10.7 word it, the map entries true, the 10,000-frame cap matching `run.py`'s numbering. The whole-frames and metre-CRS refusals are in. CI is still to be checked after the push.
+
+**Code review, round 1 (PR 4, TR2 receiver frame), 2026-10-14.** Range `e08034b7..59910025`, 216 net production lines (about 350 estimated: C++ 59 against 80, binding and stub 40 against 40, Python 117 against 230, since TR2 covers the projected case only), @reviewer: APPROVED WITH WORDINGS, applied by the main session after merging PR 2's later commits (`791532f6`): `project_structure.md` gains `receivers.hpp`, the receiver check on `radiation.cpp`, `frame.py`, `request.py` and `frame_factors` on `crs.py`; its rule that every number crossing is metres in a projected CRS gains the increment 46 exception (latitude and longitude in degrees and the per-receiver J cross as numbers describing each place); `terrain-radiation.md` marks TR2 built. J is (1/m)·Rot(γ) with true = grid + γ; the exclusion radius a ground distance through J; the zero-area test |n| > 1e-9 times the edge-length product, edges from the first vertex; "receiver i" errors; defaults 64 directions, k 0.13, 20 km and 200 km, centre limb; no CRS crosses; no red-step scaffolding; no acceptance run set for PR 4. Not pushed, CI pending.
+
+**Code review, round 1 (PR 5, TR3a horizon kernel), 2026-10-14.** Range `b1971263..8ecc5596`, 354 net production lines (about 355 estimated: C++ 310 against 300, binding and stub 44 against 55, Python 0), @reviewer: APPROVED WITH WORDINGS: the red step's "Interface assumed" text in both test files becomes "Interface under test" (@tester); `horizon.hpp`'s header says the sample spacing is half the smaller cell side (@developer); TR3a marked built here and in `terrain-radiation.md` (main session); applied in `b8194219`, `e859ec70` and `2eaadb27`. Held: the pruning bound, the early stop over both rasters, far samples from D_near + Δ_far, D_far = D_near with no far raster, rounding half away from zero, pyramid blocks covering their boundary nodes, the pruned search keeping samples through the exhaustive one's functions; @developer's pins (spacing, reach at most 254, the bound's slack, levels 1 and up with a NoData byte per block, d_far checked only with a far raster); the kill record `8ecc5596` covers all 13 targets of section 10.8. Not pushed, CI pending.
+
+**Code review, round 2 (PR 5, TR3a horizon kernel), 2026-10-14.** Range `8ecc5596..cacdac7d` (PR range `b1971263..cacdac7d`), 354 net production lines (unchanged), @reviewer: APPROVED. Round 1's wordings are comment, docstring and doc only (5 files, +10 -8); no assertion or code line moved; `horizon.hpp`'s header matches `0.5 * std::min(delta_x(), delta_y())`; the record names the right commits. Suggestion: wrap the 117-character comment line 10 of `horizon.hpp`. Not pushed, CI pending.
+
+**Code review, round 1 (PR 6, the evaluator, near raster, RadiationGeometry and snow wiring), 2026-10-14.** Range `80fe061a..e61e0ac6`, 364 net production lines (about 490 estimated), @reviewer: CHANGES REQUESTED. Blocking: (1) section 10.5's one source of normals is not done: `snow/geometry.py` still turns every normal by one convergence angle and feeds `aspect_deg.var`; with test R3 retired and every other test passing an angle of 0, the turn is untested, and `forcing.radiation_anomaly` is called only by tests; slope and aspect come from the receiver frame's per-triangle normals, the turn and `radiation_anomaly` go with their tests; (2) a near-zero-area sliver triangle aborts the snow run: `cli.py` drops only exact-zero areas while `receivers_from_mesh` refuses below its 1e-9 relative limit (three collinear points near (500000, 6800000): "triangle 0 has zero area"), against section 4.9's counted-with-no-correction; the message's index counts kept triangles, not the mesh's; one shared zero-area test, and a test with such a triangle. Wordings: "Interface assumed" in the three new test files becomes "Interface under test", the Python list gains `n_directions`; on approval, TR3b and TR5 marked built in `terrain-radiation.md` and in section 10.4's table. Held: 10.5's ΔI formula; the evaluator's sun axes and refraction against the reference sun; the strict lit test; test S, I7 and I8; @developer's four pins (a zero-area triangle under an open sky gets ΔI exactly 0); amendment `5d318337` fixes three real test defects. Not pushed.
+
+**Code review, round 2 (PR 6), 2026-10-14.** Range `e61e0ac6..e11dcc00`, 368 net production lines from `80fe061a` (about 490 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session: TR3b and TR5 marked built in `terrain-radiation.md` and section 10.4's table; that file's Status and this file's Status; the blueprint's `triangle_geometry(mesh, crs)`. Both round-1 blockers fixed: `snow/geometry.py` takes its normals from `receivers_and_zero_area`, the single turn and `radiation_anomaly` gone, tests at Bygdin and on the central meridian equal to the frame's normals bit for bit; one zero-area test (`ZERO_AREA_SINE`), a zero-area triangle given a vertical normal, the sliver through `rasputin snow` with shadows off and on with a correction of exactly 0, errors naming the mesh's own index. Round 1's wordings applied; no red-step scaffolding. The push waits for `@perf`'s PR 6 acceptance run (sections 10.7 and 10.9). Suggestion: `triangle_geometry` could return its frame so `cli.py` reprojects once. Not pushed.
+
+**Code review, round 1 (PR 7, the run to 1 September and one bin by default), 2026-10-14.** Range `2073ccf6..bccf797e`, 5 net production lines (about 7 estimated), short path, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 11.5 names `TestEndToEnd`'s `--warming-days 2 --bins 10` and C2's refusal text from typer's `min=1`. Held: Ola's 2026-10-14 decisions (lapse 0.006, 600 mm, 122-day warming in a 153-day run, one bin, no area scaling); the figures recomputed; `warming_days == days` leaves temperatures unchanged; `--snow-cv` 0.4 kept, since one bin is uniform at any cv; no red-step scaffolding. Section 11.6's Bygdin run to 1 September comes before the push. Idea: `min=1` on `--days` and `--step-minutes`. Not pushed, CI pending.
+
+**PR 7 Bygdin run to 1 September, 2026-10-14** (`@perf`, `be375390`; record in `docs/benchmarks/2026-10-14/46-pr7-september/`). 51 527 triangles, 8 threads, Release, mains power, median of 3: shadows on 29.56 s, 601.5 MB; off 9.96 s, 149.5 MB; 154 frames; covered share of map area 0.411/0.399 (on/off) on 1 August and 0.043/0.040 on 1 September; 8 083/7 675 triangles never melt out; with shadows SWE is never lower and 10 256 triangles melt out later, by up to 40 days; slow TestBygdin passed. Screenshot `bygdin-swe-day137.png` (16 August).
+
+**PR 6 acceptance run, 2026-10-14** (`@perf`, `cdb0c053`, at `7cf50a9b`; record in `docs/benchmarks/2026-10-14/46-pr6-acceptance/`). Release build, M1 Max on mains power, medians of 3. NO BASELINE: the first shadowed snow run, compared with section 10.4's estimate.
+
+| | Bygdin, 51,527 triangles, 122 days, 1 / 8 threads | synthetic 2 m, 294,770 triangles, 91 days, 1 / 8 threads |
+|---|---|---|
+| wall time | 176.37 / 27.49 s | 507.76 / 78.34 s |
+| horizon search | 135.2 / 18.7 s | 330.0 / 45.5 s |
+| evaluator per step | 10.88 / 1.82 ms | 62.17 / 9.66 ms |
+| peak memory | 590 / 596 MB | 481 / 482 MB |
+| wall time, shadows off | 62.18 / 11.14 s | 168.38 / 31.46 s |
+
+The search is 3.4 times the estimate (135 s against about 40 s) and the evaluator 1.9 times (55 ns per triangle and sample against 29); one profile shows the far part of each ray pruned and the first 2.5 km costing 17.5 µs per ray, the hot loop unnamed for want of symbols. Output byte-identical at 1 and 8 threads except `snow.json`. Beam removed by shadows on Bygdin, plan-area weighted (section 10.6's node figures in brackets): 15 April 1.43 % (1.6), 15 May 1.18 % (1.3), 21 June 1.13 % (1.2); mean ΔI change −2.36, −2.78, −3.09 W/m² (−2.7, −3.0, −3.3). E2 on the 2 m mesh, 15 April: −0.99 W/m². Screenshot `bygdin-swe-day110.png` (20 July, from above): SWE with shadows on, off, and on minus off, never negative (0 to 489 mm), red streaks on steep ridge slopes, most along the northern ridge; viewed by the main session. ParaView outputs outside git in `rasputin_scratch/snow-demo/bygdin-shadows-on/` and `bygdin-shadows-off/`. About 64 % of Bygdin's triangles still hold more than half their snow on 1 August.
+
+**Design review (PR 8, continuous snow cover within a bin), 2026-10-14.** Range `62f62185..d0ab6e7d`, 0 production lines (design only; about 87 estimated, full path), @reviewer: APPROVED WITH WORDINGS, applied by the main session: Sælthun's section 2.3.2 named as read; "covered" requires `sp > 0`; S1's and C4's sca figures from unrounded melt sums (0.975320, 0.452457, 0.204557; 0.627635); question 13 gains the 1 mm example. Held: every cited line of Shyft's `calculator.h` at 37d610ad; the three melt cases, refreeze scaling and snowfall wedge derived by hand (mass kept, cover in [0,1], not rising under melt, flat bins equal to today's kernel bit for bit); fixtures L0-L10 and the ten mutants; the log-normal figures to 4 decimals; the probe. Neither default unsafe (0.4 under the one-bin limit 0.577). Not pushed.
+
+**Code review, round 1 (PR 8, continuous snow cover within a bin), 2026-10-14.** Range `62f62185..87d62f21`, 91 net production lines (about 87 estimated), @reviewer: APPROVED WITH WORDINGS, applied by the main session (docs) and @tester ("Interface under test" in two test files): section 12.4 and 12.5 at the default cv 0.1 (new table rows from `rasputin snow` at `87d62f21` and @tester's probe rerun), L10's and P8's pins written in, the C1/C3/C4 bullets at 0.1 with C4 at 90 mm, E1's range, the Status line, section 5's CV row, project_structure.md's hbv_snow.hpp entry, probe_sca.py's docstring. Held: the kernel matches section 12.3 line by line; flat bins give the old results (every branch traced, H1-H12 and P1-P5 unedited); no reachable division by zero; the mutation record `6ac0ce25` kills all ten targets; @tester's pins sound (C4 0.74652 recomputed). No acceptance run due. Not pushed, CI pending.
+
+**PR 8 Bygdin re-render, 2026-10-14** (`@perf`, `9ceb2e36`, Release, mains power, M1 Max, 8 threads, shadows on, median of 3): 54 431 triangles, wall time 33.6 s, peak memory 600 MB. Domain snow-covered area by map area: 1.000 on 1 July, 0.409 on 1 August, 0.045 on 1 September (the stepped run gave 1.000, 0.411 and 0.042); 4 641 triangles partly covered on 15 July, 12 721 on 1 August. Output in `rasputin_scratch/snow-demo/bygdin-sca-continuous/`.

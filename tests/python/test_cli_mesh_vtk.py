@@ -31,7 +31,7 @@ import pytest
 from numpy.testing import assert_array_equal
 
 import tin_engine.cli as cli
-from cli_helpers import invoke, plain, runner
+from cli_helpers import help_text, invoke
 from plyread import parse_header
 from test_cli_mesh import constrained_edge_set
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -141,11 +141,10 @@ class TestEncoding:
         # Increment 31, D3: Typer prints the default itself, so the help and
         # the behaviour cannot drift apart. The marker is read from the
         # `--binary --ascii` row onward, so another option's marker cannot
-        # stand in for it. COLUMNS is pinned so the caller's terminal cannot
-        # truncate the option names; `plain` undoes Rich's wrapping.
-        result = runner.invoke(cli.app, ["mesh", "--help"], env={"COLUMNS": "100"})
-        text = plain(result.output)
-        assert result.exit_code == 0, text
+        # stand in for it. The width is pinned (`help_text`, on CI too) so the
+        # caller's terminal cannot truncate the option names; `help_text` undoes
+        # Rich's wrapping.
+        text = help_text("mesh", columns=100)
         marker = re.search(r"--binary --ascii\b.*?\[default: ([^\]]+)\]", text)
         assert marker is not None, text
         assert marker.group(1) == "binary", text

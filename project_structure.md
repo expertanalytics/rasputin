@@ -22,8 +22,26 @@ include/terrain/           # public C++ headers, header-only where possible
     snap_grid.hpp          # GridPoint, SnapGrid: the lattice noded output lies on
     noded_pslg.hpp         # NodedPslg: the noder's output, the CDT's input (5b)
     indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
+  radiation/
+    time.hpp               # UTC time points (std::chrono), Julian day, ΔT
+    solar_position.hpp     # the sun's position by NREL's SPA: geocentric,
+                           #   topocentric, refraction; the terrain-radiation
+                           #   design's TR1
+    spa_tables.hpp         # SPA's periodic-term and nutation tables
+    receivers.hpp          # ReceiverSet (per-receiver views), its check, the
+                           #   east-north-up basis, a true azimuth's frame
+                           #   step: TR2
+    horizon.hpp            # the horizon kernel: per-receiver horizon table
+                           #   over a near and a far raster, a max-pyramid,
+                           #   the exhaustive reference and the pruned
+                           #   search: TR3a
+    evaluate.hpp           # the instant evaluator: per receiver and UTC time,
+                           #   lit, cos_i, the beam factor and the sine of the
+                           #   sun's apparent elevation: TR5's instant mode
   snow/
     hbv_snow.hpp           # HBV snow per triangle: equal-area log-normal bins,
+                           #   each a straight line of depth, so the bin at the
+                           #   melt front is partly covered;
                            #   the step with an optional sun correction; depends
                            #   on parallel_util only, and nothing depends on it
   predicates/
@@ -109,6 +127,12 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
+  bound_raster_view.hpp    # the bound raster view type, shared by core.cpp
+                           #   and radiation.cpp
+  radiation.cpp            # the sun's position for arrays of UTC times
+                           #   (releases the GIL); the receiver check; the
+                           #   horizon search over bound rasters; the
+                           #   instant evaluator (releases the GIL)
   snow.cpp                 # the snow kernel's binding: arrays in and out,
                            #   refusals as ValueError naming the status,
                            #   and the triangle for a non-finite value
@@ -135,10 +159,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   to_crs, check_extent, DomainError; reads no file
                            #   (io/domain_file.py reads --domain); never imports
                            #   _core
-  crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
+  crs.py                   # parse_crs, reprojector, frame_factors, site_of
+                           #   (latitude, longitude and convergence at a point,
+                           #   metres only): the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy;
                            #   crs_label escapes through run_record's
-                           #   escaped_ascii, its one first-party import
+                           #   escaped_ascii, with io.models' SRS constants, its
+                           #   first-party imports
   geodesy.py               # LocalFrame (a local metres frame around one point),
                            #   cell areas by row (a cell centred on its node),
                            #   geodesic area over outlines (40); pyproj and numpy;
@@ -259,9 +286,41 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
                            #   itself is data/class_maps/corine.toml (41)
+  radiation/               # sun and terrain radiation
+    time.py                # to_utc_ms: datetimes to int64 UTC milliseconds,
+                           #   refusing a time zone; imports nothing first-party
+    frame.py               # receivers_from_mesh: centroid, lat/lon, J, normal,
+                           #   exclusion radius; receivers_and_zero_area, the
+                           #   same with the zero-area mask; imports crs
+    request.py             # RadiationRequest, frozen settings; imports nothing
+                           #   first-party
+    geometry.py            # RadiationGeometry: per receiver lat/lon, true
+                           #   normal, horizon table and reach; the open sky;
+                           #   the horizon search's core call; imports _core,
+                           #   radiation.frame and radiation.request
+    evaluate.py            # evaluate_instant, the synchronous evaluator call;
+                           #   imports _core and radiation.geometry
+    search.py              # the near raster (TR3b's near part only) and the
+                           #   horizon of every receiver on it; imports
+                           #   dem_input, io.models, raster, resources and
+                           #   the radiation modules
   snow/                    # snow on the mesh
-    params.py              # the HBV snow parameters and sun-correction mode as
-                           #   a strict Pydantic model; imports nothing first-party
+    params.py              # the HBV snow parameters, sun-correction mode, the
+                           #   synthetic spring and SnowJob as strict Pydantic
+                           #   models; imports resources and
+                           #   radiation.request
+    geometry.py            # each triangle's normal (true east-north-up),
+                           #   slope, aspect, plan area, centroid height, from
+                           #   the receiver frame; imports radiation.frame
+    forcing.py             # the synthetic spring's weather and the sun's
+                           #   correction per step, in NumPy (0 on a flat
+                           #   triangle); imports _core and snow.params
+    run.py                 # the snow run: an async generator of frames, the
+                           #   steps between frames in one to_thread call;
+                           #   imports _core, the snow modules,
+                           #   radiation.evaluate and radiation.geometry
+    terrain.py             # a synthetic mountain on a square grid, for tests
+                           #   and demonstrations; numpy and Pydantic
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
@@ -330,6 +389,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (name, value) fields as header comments;
                            #   face_fractions= adds the per-face class lists
                            #   (26b); imports features, mesh_checks and models
+    ensight.py             # EnSight Gold binary encoders for values per
+                           #   triangle over frames: the geometry once, one
+                           #   file per value per frame, the case file; bytes
+                           #   and text out, no path
+    vtk_read.py            # reads back rasputin's own binary legacy .vtk:
+                           #   bytes in, crs, points and triangles out; no path
+    geotiff_write.py       # a height grid to GeoTIFF bytes (point-registered,
+                           #   float32) through tifffile; no path
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
                            #   ParaView; takes no path and opens nothing;
                            #   triangle_codes=, land_cover_codes= add the cell
@@ -518,6 +585,11 @@ optional NoData sentinel — nothing else.
   (spacing 1, `raster.to_core_lattice`); no coordinate crosses, and the flood,
   `upstream` and `accumulate` read none. Every metre figure on that path
   (cell sizes, areas, distances) is computed in Python by `geodesy.py`.
+  One more since increment 46 (terrain-radiation design R10): geodetic
+  latitude and longitude in degrees, and per receiver a 2×2 matrix J from
+  frame metres to true east and north metres, cross as numbers describing
+  each place, not as a frame the core reasons in; convergence and scale enter
+  only inside J.
   Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
   east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy

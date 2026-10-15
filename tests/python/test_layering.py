@@ -36,6 +36,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "palettes": "", "hydrography": "", "tin_engine": "",
         "toml_data": "",  # 44: the shared TOML reader; tomllib and Pydantic only
         "snow": "", "snow.params": "",  # 46: HBV snow parameters, Pydantic only
+        "radiation.request": "",  # 46: the radiation request, Pydantic only
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",
@@ -54,6 +55,11 @@ LAYERS: tuple[dict[str, str], ...] = (
         "viz": "viz.scene viz.style viz.svg",
         "viz.fixtures": "", "viz.protocols": "", "viz.style": "",
         "viz.scene": "viz.protocols",
+        "radiation": "", "radiation.time": "",  # 46: UTC milliseconds, NumPy only
+        "radiation.frame": "crs",  # 46: the receiver frame, pyproj through crs
+        "snow.params": "radiation.request resources",  # 46: threads, memory and the shadow request
+        "snow.geometry": "radiation.frame",  # 46: slope and aspect from the frame's normals
+        "snow.terrain": "",  # 46: NumPy only
         "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection
@@ -71,6 +77,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.station_set": "hydrography io.geojson io.repository",
         "io.vtk_legacy": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
         "fetch.http": "tin_engine",
+        "io.ensight": "", "io.geotiff_write": "", "io.vtk_read": "",  # 46: the snow run's files
     },
     {  # L3: the only importers of _core
         "raster": "_core io.models",
@@ -79,6 +86,11 @@ LAYERS: tuple[dict[str, str], ...] = (
         "catchment_core": "_core io.models raster",
         "border_simplify": "_core",  # 32: land-cover borders within a band
         "land_cover_fractions": "_core crs io.models io.repository",  # 26b: class_areas
+        "snow.forcing": "_core snow.params",  # 46: the sun's anomaly per step
+        "snow.run": "_core radiation.evaluate radiation.geometry snow.forcing snow.geometry"
+                    " snow.params",  # 46: steps the HBV kernel, lit by the shadows
+        "radiation.geometry": "_core radiation.frame radiation.request",  # 46: RadiationGeometry
+        "radiation.evaluate": "_core radiation.geometry",  # 46: the instant evaluator
         "_core": "",
     },
     {  # L4: pipelines
@@ -95,17 +107,20 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
         "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
+        "radiation.search": "dem_input io.models radiation.frame radiation.geometry"
+                            " radiation.request raster resources",  # 46: the near raster, searched
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core catchment catchment_batch chains class_maps crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
-               " final_check gauge grid_domain hydrography io.cog io.domain_file io.geojson"
-               " io.geopackage_write io.mesh_checks io.models io.ply io.repository io.rivers"
-               " io.station_set"
-               " io.vtk_legacy land_cover_fractions landcover mcp.server mosaic palettes raster"
-               " resources run_record sources stats target_grid tin_engine tolerance_field"
-               " viz.fixtures"
-               " viz.protocols viz.scene viz.style viz.svg",
+               " final_check gauge grid_domain hydrography io.cog io.domain_file io.ensight"
+               " io.geojson io.geopackage_write io.geotiff_write io.mesh_checks io.models io.ply"
+               " io.repository io.rivers io.station_set io.vtk_legacy io.vtk_read"
+               " land_cover_fractions landcover mcp.server mosaic palettes radiation.frame"
+               " radiation.geometry radiation.request radiation.search raster resources"
+               " run_record snow.geometry snow.params snow.run snow.terrain sources stats"
+               " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
+               " viz.style viz.svg",
         "__main__": "cli",  # 37: `python -m tin_engine`, the server's child
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
         "mcp.server": "mcp.schema tin_engine",
