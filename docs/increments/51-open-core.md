@@ -1,7 +1,8 @@
 # Increment 51: open core, the snow and radiation code moved to a private package
 
-**Status: designed** (`@architect`, 2026-10-15). Not reviewed. Five questions
-for Ola, each with a default, in section 11.
+**Status: designed** (`@architect`, 2026-10-15). Design review round 1
+(changes requested) answered in this file. The five questions for Ola were
+ruled at their defaults on 2026-10-15 (section 11).
 
 ## 1. What Ola asked
 
@@ -64,10 +65,13 @@ Written before the design.
   similar versions of pybind11 and of the C++ compiler and C++ standard
   library"; `py::module_local()` keeps a binding to one module
   (pybind11.readthedocs.io/en/stable/advanced/classes.html, *Module-local
-  class bindings*). The private module is built later, by another build, so
-  this design shares **no** bound type between the two modules: only NumPy
-  arrays and Python scalars cross, and the one C++ type both modules bind
-  (the raster view) is bound `module_local` on the private side.
+  class bindings*). `module_local` alone does not keep two modules apart:
+  pybind11 identifies a C++ type by its `typeid` name, and a module-local
+  caster that finds no local match falls back to the global registration of
+  the same name (section 4.3). The private module is built later, by another
+  build, so this design shares **no** bound type between the two modules: only
+  NumPy arrays and Python scalars cross, and the raster view each module binds
+  is a distinct C++ type.
 
 No novelty is claimed. This is packaging practice, applied.
 
@@ -106,7 +110,7 @@ table in the private repository, at Q1.
 | Bindings | `bindings/snow.cpp`, `bindings/radiation.cpp` | same paths, plus `bindings/module.cpp` for `_snow` |
 | Python | `src_python/tin_engine/snow/`, `src_python/tin_engine/radiation/` | `src/rasputin_snow/snow/`, `src/rasputin_snow/radiation/` |
 | Python I/O used only by snow | `src_python/tin_engine/io/ensight.py` (its header line names `rasputin snow`) | `src/rasputin_snow/ensight.py` |
-| CLI | the `synthetic-terrain` and `snow` commands and their helpers at the end of `cli.py` (`_snow_folder`, `_Sun`, `_Shadows`, `_shadow_dem`, `_contains`, `_per_triangle`, and any the private increments add) | `src/rasputin_snow/cli.py`, a `typer.Typer` |
+| CLI | the `synthetic-terrain` and `snow` commands and their helpers at the end of `cli.py` (`_snow_folder`, `_SNOW_STATIC`, `_Sun`, `_Shadows`, `_shadow_dem`, `_contains`, `_per_triangle`, and any the private increments add) | `src/rasputin_snow/cli.py`, a `typer.Typer` |
 | Data | package data the private increments add under `src_python/tin_engine/data/` for snow | `src/rasputin_snow/data/` |
 | Stubs | the snow and radiation entries of `_core.pyi` | `src/rasputin_snow/_snow.pyi` |
 | C++ tests | `tests/cpp/unit/test_hbv_snow.cpp`, `test_hbv_snow_linear.cpp`, `test_radiation_{sun,receivers,horizon,evaluate}.cpp` and their six `add_terrain_test` lines | `tests/cpp/`, own `CMakeLists.txt` |
@@ -116,7 +120,9 @@ table in the private repository, at Q1.
 
 What stays public, though only snow uses it today: `io/geotiff_write.py`
 (a GeoTIFF encoder, the reader's counterpart and a GIS output Ola wants) and
-`io/vtk_read.py` (the mesh reader, used by `mesh` too).
+`io/vtk_read.py` (the mesh reader; its only production caller is `snow`,
+`cli.py:3165`, but reading a mesh back is the core's own format, and
+`tests/python/test_io_vtk_read.py` keeps it covered after P2).
 
 Catchment hydrology (flood fill, accumulation, upstream) stays public: it
 delineates catchments for the mesh, so it is meshing, not hydrological
@@ -135,7 +141,8 @@ public core therefore never reuses `include/terrain/snow/` or
    builds its own extension module, `rasputin_snow._snow`.
 2. `bindings/radiation.cpp` takes `BoundRasterView`, a type `core.cpp` binds,
    as `horizon_search`'s `near` and `far`. Resolved in section 4.3.
-3. `cli.py` imports snow and radiation at module level (lines 176-206).
+3. `cli.py` imports snow and radiation at module level (line 135, the EnSight
+   writer, and lines 176-206).
    Replaced by the plugin hook (section 4.1).
 
 ## 4. What the public core exposes
@@ -176,6 +183,25 @@ New module `src_python/tin_engine/plugins.py`.
   MCP tools too (question 5).
 - **`rasputin version`** adds one line per loaded plugin, distribution name
   and version, so a run record can name what produced it.
+- **Startup cost: discovery runs before every command, eagerly.** Measured
+  2026-10-15 on an Apple M1 Max, Python 3.14.7, a venv of 69 installed
+  distributions and no plugin, six fresh processes each:
+  `entry_points(group="rasputin.commands")` takes 2.4 to 2.6 ms once
+  `tin_engine.cli` is imported. Importing `importlib.metadata` itself costs
+  about 18 ms in a bare interpreter, but `tin_engine.cli` already imports it
+  (`installed_version`), so the core pays that today; a bare
+  `import importlib.metadata` plus the scan is the roughly 22 ms the review
+  saw. For scale: importing `tin_engine.cli` takes about 200 ms and
+  `python -m tin_engine --help` about 310 ms wall time. The scan grows with the
+  number of installed distributions (checked at 69 only). **The plugin's own
+  import cost is unmeasured** until the private package exists (Q1); it is
+  paid by every command, `mesh` included, because a Typer app must be loaded
+  for its command names to appear. Lazy discovery is not needed for the scan:
+  `rasputin mcp` pays it once per server start and a `mesh` run lasts seconds
+  or more. Q1 measures `rasputin mesh --help` with and without the package,
+  and if the package adds more than 50 ms (a sixth of today's `--help`), the
+  private `cli.py` moves its heavy imports into the command bodies; that is a
+  private change, and the public hook stays eager.
 
 ### 4.2 The Python API a plugin may import (`tin_engine.plugin_api`)
 
@@ -231,21 +257,46 @@ built separately, so `_core`'s bound type cannot be its argument (section
   array refused, a geographic DEM refused). `to_core(tile)` becomes
   `raster_view(**core_args(tile))`. Validation stays in one place.
 - **C++: `bindings/numpy_raster.hpp`**, public, pybind11-dependent,
-  header-only: `BoundRasterView` (from `bindings/bound_raster_view.hpp`,
-  which it replaces), today's `try_view` from `core.cpp` (lines 287-308)
-  unchanged, and the body of `_core.raster_view` (lines 833-843) as one
-  inline function both modules call. It is installed beside the
+  header-only: `template <class Tag> struct TaggedRasterView`, today's
+  `BoundRasterView` (from `bindings/bound_raster_view.hpp`, which it replaces)
+  with a tag parameter that is never used in the body; today's `try_view` from
+  `core.cpp` (lines 287-308) and the body of `_core.raster_view` (lines
+  833-843), each made a template over `Tag` and otherwise unchanged. `_core`
+  declares `struct CoreRasterTag;` in `core.cpp` and
+  `using BoundRasterView = TaggedRasterView<CoreRasterTag>;`, so no call site
+  in `core.cpp` changes. It is installed beside the
   headers (section 4.4) and lives under `bindings/`, never under
   `include/terrain/`, so the core headers stay free of pybind11 (the
   `modern-cxx` skill's binding isolation).
-- **The private module** binds its own `RasterView` class with
-  `py::module_local()` and its own `raster_view` function from that header.
-  The private Python builds the view as
+- **The private module** declares its own tag in its own source
+  (`struct SnowRasterTag;` in the private `bindings/module.cpp`, never in a
+  public header), binds `TaggedRasterView<SnowRasterTag>` as `RasterView`
+  with `py::module_local()`, and its own `raster_view` function from that
+  header. The private Python builds the view as
   `_snow.raster_view(**dataclasses.asdict(core_args(tile)))`.
-- **Why `module_local` is required, not tidy:** without it, importing both
-  `_core` and `_snow` in one process, when they share pybind11 internals,
-  registers the same C++ type globally twice, which pybind11 refuses at
-  import. QT3 imports both.
+- **Why the tag, read in pybind11 3.1.0** (the version in all 35 worktree venvs; `pyproject.toml` asks for `pybind11>=2.12`). pybind11 keys
+  its type registry on `std::type_index`, and under libc++ compares by the
+  `typeid` name (`detail/internals.h`, `same_type`, `type_hash` and
+  `type_equal_to`, lines 182-206; under libstdc++ `type_info` equality is name-based too). A
+  module-local caster that finds no local match retries with the global
+  registration of the same C++ type (`detail/type_caster_base.h`, lines
+  1294-1299), and accepts another module's module-local instance of the same
+  type (`try_load_foreign_module_local`, lines 1198-1218, `same_type`). So
+  with one struct in both modules, `module_local` or not, a `_core.RasterView`
+  would load as `_snow`'s argument whenever the two share pybind11 internals.
+  With distinct tags the two `typeid` names differ, both lookups miss, and the
+  argument is refused with a `TypeError`. When the two modules do not share
+  internals (another pybind11 ABI), neither registry sees the other's type and
+  the result is the same `TypeError`. No C++ type is registered twice, so the
+  `generic_type: type "RasterView" is already registered!` failure
+  (`pybind11.h`, line 1823) cannot occur either. `module_local` is kept so
+  `_snow`'s class never enters the global registry, but the tag, not
+  `module_local`, is what refuses.
+- **Considered and not taken:** `_snow.horizon_search` taking the arrays and
+  scalars of both rasters directly, with no bound view type. It registers
+  nothing, but gives the call twelve raster arguments in place of two, and
+  moves the `nodata` and dtype checks into each kernel binding instead of the
+  one `raster_view` function.
 - Only NumPy arrays and Python scalars cross between `_core` and `_snow`. A
   `_core.RasterView` passed to `_snow.horizon_search` is a `TypeError`
   (QT3 checks it).
@@ -463,7 +514,10 @@ no monkeypatching. Variants change one line each.
   module imported is `tin_engine.plugin_api`.
 - **QT3** one process imports `tin_engine._core` and `rasputin_snow._snow`,
   builds a raster view in each, and runs `_snow.horizon_search` on its own
-  view; a `_core.RasterView` passed to it is a `TypeError`.
+  view; a `_core.RasterView` passed to it is a `TypeError`. The check is
+  planted once, locally, before Q1's red commit: `_snow` built with
+  `CoreRasterTag` in place of `SnowRasterTag` must make QT3 fail (the
+  `_core` view is then accepted), and the result is recorded in Q1's review.
 - **QT4** the installed console script, in a subprocess: `rasputin --help`
   lists `snow` and `synthetic-terrain`; `rasputin version` lists
   `rasputin-snow`.
