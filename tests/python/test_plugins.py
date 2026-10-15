@@ -206,7 +206,9 @@ def test_the_core_mesh_is_kept_in_process(on_path: PluginPath) -> None:
     on_path(body=MESH, entry="mesh")
     merged = commands(plugins.application())["mesh"]
     core = commands(core_app)["mesh"]
-    assert merged.callback is core.callback
+    # Typer wraps the registered function afresh on every get_command, so the
+    # Click callbacks differ even for cli.app twice; the function it wraps does not.
+    assert merged.callback.__wrapped__ is core.callback.__wrapped__
     assert merged.help == core.help
 
 
@@ -334,3 +336,31 @@ async def test_rasputin_mcp_serves_the_plugin_command(tmp_path: Path) -> None:
         async with Client(params) as client:
             listed = await client.list_tools()
     assert "hello" in [tool.name for tool in listed.tools]
+
+
+@pytest.mark.parametrize(
+    ("body", "entry", "reason"),
+    [(IMPORT_ERROR, "hello", "fakeplug is broken on purpose"), (MESH, "mesh", "mesh")],
+    ids=["broken", "named-like-core"],
+)
+def test_rasputin_mcp_reports_each_refusal_once(
+    body: str, entry: str, reason: str, tmp_path: Path
+) -> None:
+    """Section 4.1's one stderr line holds for ``mcp`` too, which builds its
+    own ``application()`` inside a CLI that already built one. Stdin is empty,
+    so the server sees end of input and exits (measured about 0.7 s)."""
+    pytest.importorskip("mcp")
+    root = write_plugin(tmp_path / "site", body=body, entry=entry)
+    served = subprocess.run(
+        [sys.executable, "-m", "tin_engine", "mcp"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=child_env(root),
+        timeout=60,
+        check=False,
+    )
+    assert served.returncode == 0, served.stderr
+    named = lines_naming(served.stderr, "fakeplug")
+    assert len(named) == 1, served.stderr
+    assert reason in named[0]
