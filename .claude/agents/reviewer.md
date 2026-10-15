@@ -52,11 +52,8 @@ probe only for a figure the design marks unmeasured.
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 
 Feedback format:
-1. **Verdict:** `APPROVED`, `APPROVED WITH WORDINGS` (only prose wordings, each named line
-   by line with its new text; `docs/increments/README.md` step 4), or
-   `CHANGES REQUESTED` (with explicit blocking issues). End the handback with
-   exactly one line `Review: <verdict> <full sha of the head you reviewed>`;
-   a hook records it, and no other line may start with `Review:`.
+1. **Verdict:** one of step 4's three (`docs/increments/README.md`), and
+   the handback ends with step 4's `Review:` line.
 2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
 3. **Blocking Issues:** What *must* be fixed before merging (e.g., red CI, exceeding the LOC ceiling, surviving red-step scaffolding, a prose claim the change made false).
 4. **Suggestions:** Non-blocking, and only where no gate would catch it. One

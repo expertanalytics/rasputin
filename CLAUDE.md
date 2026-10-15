@@ -67,6 +67,11 @@ the personas. Its rules:
   Ola between steps (tests to code, code to review); loop until `@tester` and
   `@reviewer` are satisfied. `.claude/REQUIRED-READING.md` says which acts
   need a fresh yes.
+* **Conflicts before a push question.** Before asking Ola to push a branch,
+  run `git fetch` and `git merge-tree --write-tree origin/master <branch>`,
+  and the same against each branch queued or asked for ahead of it. When
+  master conflicts, a writer merges it in first (`tools/merge_master.py`);
+  when a branch ahead conflicts, the question names the files.
 * **Recap each round.** At every new round or increment, run
   `python3 tools/session_state.py` and open with its recap.
 * **Milestone updates.** After each milestone, give Ola a one-line log of
