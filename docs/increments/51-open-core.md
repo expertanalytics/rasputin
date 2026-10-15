@@ -123,7 +123,7 @@ table in the private repository, at Q1.
 What stays public, though only snow uses it today: `io/geotiff_write.py`
 (a GeoTIFF encoder, the reader's counterpart and a GIS output Ola wants) and
 `io/vtk_read.py` (the mesh reader; its only production caller is `snow`,
-`cli.py:3165`, but reading a mesh back is the core's own format, and
+`src_python/tin_engine/cli.py@a058bb6b:3165`, but reading a mesh back is the core's own format, and
 `tests/python/test_io_vtk_read.py` keeps it covered after P2).
 
 Catchment hydrology (flood fill, accumulation, upstream) stays public: it
@@ -584,7 +584,7 @@ what uses it.
 
 ## Review
 
-**Design review, round 1, 2026-10-15.** Range `master..ac9fef5a`, 0 counted lines, @reviewer: CHANGES REQUESTED. (1) Section 4.3 and QT3: pybind11 3.1.0 finds types by name (pybind11 header detail/internals.h, line 202), and `_lsm`'s module-local caster falls back to `_core`'s global registration (pybind11 header detail/type_caster_base.h, lines 1294-1299), so a `_core.RasterView` is accepted by `_lsm.horizon_search`, not refused; bind a differently named C++ type on the private side (e.g. a tag template parameter). (2) No startup cost stated for `discover()` before every command (entry-point scan about 22 ms warm with no plugin); state it, plugin import cost unmeasured until Q1. Wordings: `io/vtk_read.py`'s only production caller is `snow` (`cli.py:3165`); add `_SNOW_STATIC` (`cli.py:3069`) to the moving helpers; section 3.2 cites line 135 too; the status line and ROADMAP row 51 say the five questions were ruled at their defaults on 2026-10-15.
+**Design review, round 1, 2026-10-15.** Range `master..ac9fef5a`, 0 counted lines, @reviewer: CHANGES REQUESTED. (1) Section 4.3 and QT3: pybind11 3.1.0 finds types by name (pybind11 header detail/internals.h, line 202), and `_lsm`'s module-local caster falls back to `_core`'s global registration (pybind11 header detail/type_caster_base.h, lines 1294-1299), so a `_core.RasterView` is accepted by `_lsm.horizon_search`, not refused; bind a differently named C++ type on the private side (e.g. a tag template parameter). (2) No startup cost stated for `discover()` before every command (entry-point scan about 22 ms warm with no plugin); state it, plugin import cost unmeasured until Q1. Wordings: `io/vtk_read.py`'s only production caller is `snow` (`src_python/tin_engine/cli.py@a058bb6b:3165`); add `_SNOW_STATIC` (`src_python/tin_engine/cli.py@a058bb6b:3069`) to the moving helpers; section 3.2 cites line 135 too; the status line and ROADMAP row 51 say the five questions were ruled at their defaults on 2026-10-15.
 
 **Design review, round 2, 2026-10-15.** Range `ac9fef5a..ecfea310`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (section 4.3: the separate-registry case is refused because the tags differ, not because the registries are apart; pybind11's C++ conduit crosses them).
 
