@@ -140,12 +140,15 @@ bindings/
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # installed_version only; never imports _core
-  cli.py                   # Typer entry point declared in pyproject;
+  cli.py                   # the core's Typer app (cli.app);
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c); encodes no mesh
                            #   file: picks the io/ writer by suffix and writes
                            #   its bytes; the gallery's --crs goes through
                            #   io/mesh_checks' checked_ascii before any writer
+  plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
+  plugin_api.py            # re-exports only: what a plugin may import
+  cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
