@@ -48,7 +48,6 @@ import math
 import os
 import shlex
 import sys
-import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -97,6 +96,10 @@ from tin_engine.catchment_batch import (
 from tin_engine.chains import start_chains
 from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
 from tin_engine.class_maps import load as load_class_map
+from tin_engine.cli_kit import THREADS
+from tin_engine.cli_kit import cli_resources as _resources
+from tin_engine.cli_kit import destination as _destination
+from tin_engine.cli_kit import words as _words
 from tin_engine.crs import (
     crs_label,
     parse_crs,
@@ -178,7 +181,7 @@ from tin_engine.radiation.geometry import OPEN_HORIZON, RadiationGeometry
 from tin_engine.radiation.request import RadiationRequest
 from tin_engine.radiation.search import near_raster, search_horizons
 from tin_engine.raster import to_core
-from tin_engine.resources import VARIABLE, Resources, resources
+from tin_engine.resources import Resources
 from tin_engine.run_record import (
     SEAMS_AGREE,
     RunRecord,
@@ -229,18 +232,6 @@ CACHE_DEFAULT: Final = (
     "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
 )
 
-#: Increment 38: the two options `mesh`, `catchment` and `station-catchments` share.
-THREADS = Annotated[
-    int | None,
-    typer.Option(
-        "--threads",
-        min=0,
-        metavar="N",
-        help="Threads for every parallel step (refinement, decoding, resampling, "
-        "reprojection); 0 means every core, a container's CPU quota counted. Default: "
-        "$RASPUTIN_THREADS, else every core.",
-    ),
-]
 MEMORY_BUDGET = Annotated[
     str | None,
     typer.Option(
@@ -360,6 +351,10 @@ def version() -> None:
     """Print the installed rasputin version, then whether it is bounds-checked."""
     typer.echo(installed_version())
     typer.echo(f"bounds checks: {bounds_checks()}")
+    from tin_engine.plugins import loaded  # then each plugin; the hook imports this module
+
+    for line in loaded():
+        typer.echo(line)
 
 
 #: The install line for the ``mcp`` extra. Rich help reads ``[mcp]`` as a markup
@@ -386,7 +381,9 @@ def mcp(
     except ImportError:
         typer.echo(f"Error: the mcp extra is not installed; run {INSTALL_MCP}", err=True)
         raise typer.Exit(2) from None
-    asyncio.run(server.serve(app, jobs))
+    from tin_engine.plugins import application  # the hook imports this module
+
+    asyncio.run(server.serve(application(), jobs))
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,39 +535,6 @@ def _snap_spacing(value: float) -> float:
     if not math.isfinite(value) or value <= 0.0:
         raise typer.BadParameter(f"snap-spacing must be finite and positive, got {value}")
     return value
-
-
-def _destination(out: Path | None, out_parent: Path | None, name: str, hint: str = "--out") -> Path:
-    """Where to write, having refused every path this process should not touch; a
-    refusal names the option, ``hint``.
-
-    A hostile boundary, per the python skill. ``resolve()`` first, so that
-    ``..`` cannot smuggle a write out of an explicitly permitted parent; refuse
-    a symlinked ``--out`` rather than following it, because a link pointing back
-    *inside* the permitted parent passes containment and still overwrites a file
-    the user never named; and turn a missing directory into a message rather
-    than a traceback.
-
-    The symlink check is on the **final component only**: a symlinked parent
-    directory is resolved by ``resolve()`` and then judged by containment, which
-    is the right answer for ``--out-parent`` and is all this boundary claims.
-    """
-    if out is None:
-        # "The common case is show me this now": a fresh directory of its own,
-        # so a second run cannot overwrite the picture still open in a browser.
-        return Path(tempfile.mkdtemp(prefix="rasputin-")) / f"{name}.svg"
-    if out.is_symlink():
-        raise typer.BadParameter(f"{out} is a symlink; refusing to follow it", param_hint=hint)
-    target = out.resolve()
-    if out_parent is not None:
-        permitted = out_parent.resolve()
-        if not target.is_relative_to(permitted):
-            raise typer.BadParameter(
-                f"{target} is outside the permitted parent {permitted}", param_hint=hint
-            )
-    if not target.parent.is_dir():
-        raise typer.BadParameter(f"{target.parent} is not an existing directory", param_hint=hint)
-    return target
 
 
 @app.command()
@@ -1961,17 +1925,6 @@ def fetch_stations(
     typer.echo(f"{source}: {len(files)} files written to {out_dir}", err=True)
 
 
-def _resources(threads: int | None, memory_budget: str | None) -> Resources:
-    """``--threads`` and ``--memory-budget`` resolved against the environment
-    (38, built once per command); a refusal is a usage error naming the
-    option or the variable."""
-    try:
-        return resources(threads, memory_budget, os.environ)
-    except ValueError as exc:
-        hint = VARIABLE if str(exc).startswith(VARIABLE) else "--memory-budget"
-        raise typer.BadParameter(str(exc), param_hint=hint) from exc
-
-
 def data_root(environ: Mapping[str, str]) -> Path | None:
     """The data root, ``$RASPUTIN_DATA``, or None when it is unset or empty:
     the one reader of the variable. The cache and the user's catalogue file
@@ -2261,13 +2214,6 @@ def _line_field(
         return LineTolerance(to_core(tile), segs, near, far, start, end, margin), values
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--tolerance-near") from exc
-
-
-def _words(exc: ValueError) -> str:
-    """A refusal's own words: Pydantic's messages without its wrapper."""
-    if isinstance(exc, ValidationError):
-        return "; ".join(str(e["msg"]) for e in exc.errors())
-    return str(exc)
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
-#include "bound_raster_view.hpp"
+#include "numpy_raster.hpp"
 
 #include <terrain/radiation/evaluate.hpp>
 #include <terrain/radiation/horizon.hpp>
@@ -22,6 +22,9 @@
 #include <string>
 
 namespace py = pybind11;
+
+struct CoreRasterTag;  // the view _core binds (core.cpp)
+using BoundRasterView = TaggedRasterView<CoreRasterTag>;
 using namespace terrain::radiation;
 
 namespace {
