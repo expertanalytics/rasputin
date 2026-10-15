@@ -14,7 +14,6 @@ start and a ``version`` call under 1 s in `test_mcp_stdio`), each 30 s or more.
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
@@ -36,8 +35,10 @@ from plugin_fixtures import (
     MESH,
     NOT_TYPER,
     RUNTIME_ERROR,
+    child_env,
     hello_from,
     lines_naming,
+    plain,
     run_rasputin,
     write_plugin,
 )
@@ -79,16 +80,9 @@ def core_names() -> list[str]:
     return list(commands(core_app))
 
 
-def child_env(root: Path) -> dict[str, str]:
-    """This process's environment with ``root`` first on ``PYTHONPATH``."""
-    inherited = os.environ.get("PYTHONPATH")
-    path = os.pathsep.join([str(root), inherited]) if inherited else str(root)
-    return dict(os.environ, PYTHONPATH=path)
-
-
 def lists_command(help_text: str, name: str) -> bool:
     """Whether ``--help`` lists ``name`` as a command (a whole word on a line)."""
-    return re.search(rf"(?m)^\W*{re.escape(name)}\b", help_text) is not None
+    return re.search(rf"(?m)^\W*{re.escape(name)}\b", plain(help_text)) is not None
 
 
 # ---------------------------------------------------------------- the fixture

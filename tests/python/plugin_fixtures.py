@@ -14,6 +14,7 @@ target, or the distribution's name.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -80,22 +81,44 @@ def write_plugin(
     return root
 
 
-def run_rasputin(
-    *args: str, path: list[Path] | None = None, timeout: float = 60.0
-) -> subprocess.CompletedProcess[str]:
-    """``python -m tin_engine *args`` in a child, with ``path`` ahead of the
-    inherited ``PYTHONPATH``. Wide columns, so help never wraps a name.
+#: Variables that make Typer force rich, coloured output whatever ``NO_COLOR``
+#: says (``typer/rich_utils.py``); GitHub Actions sets the first.
+FORCES_COLOUR = ("GITHUB_ACTIONS", "FORCE_COLOR", "PY_COLORS")
 
-    The timeout is a hang guard only: ``--help`` measured about 0.3 s.
-    """
+#: An ANSI CSI escape sequence, such as the bold ``\x1b[1m`` rich writes.
+ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def plain(text: str) -> str:
+    """``text`` without ANSI escapes, so a parser never depends on the terminal."""
+    return ANSI.sub("", text)
+
+
+def child_env(*path: Path) -> dict[str, str]:
+    """This process's environment for a child: ``path`` ahead of the inherited
+    ``PYTHONPATH``, wide columns so help never wraps a name, and no colour,
+    whether or not the tests run under CI."""
     env = dict(os.environ, COLUMNS="200", NO_COLOR="1")
-    entries = [str(p) for p in path or []]
+    for name in FORCES_COLOUR:
+        env.pop(name, None)
+    entries = [str(p) for p in path]
     if env.get("PYTHONPATH"):
         entries.append(env["PYTHONPATH"])
     if entries:
         env["PYTHONPATH"] = os.pathsep.join(entries)
     else:
         env.pop("PYTHONPATH", None)
+    return env
+
+
+def run_rasputin(
+    *args: str, path: list[Path] | None = None, timeout: float = 60.0
+) -> subprocess.CompletedProcess[str]:
+    """``python -m tin_engine *args`` in a child, in ``child_env(*path)``.
+
+    The timeout is a hang guard only: ``--help`` measured about 0.3 s.
+    """
+    env = child_env(*(path or []))
     return subprocess.run(
         [sys.executable, "-m", "tin_engine", *args],
         capture_output=True,
@@ -107,5 +130,5 @@ def run_rasputin(
 
 
 def lines_naming(text: str, word: str) -> list[str]:
-    """The lines of ``text`` that contain ``word``."""
-    return [line for line in text.splitlines() if word in line]
+    """The lines of ``text``, escapes stripped, that contain ``word``."""
+    return [line for line in plain(text).splitlines() if word in line]
