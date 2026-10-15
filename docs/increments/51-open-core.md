@@ -1,8 +1,6 @@
 # Increment 51: open core, the snow and radiation code moved to a private package
 
-**Status: designed** (`@architect`, 2026-10-15). Design review round 1
-(changes requested) answered in this file. The five questions for Ola were
-ruled at their defaults on 2026-10-15 (section 11).
+**Status: P1 merged** (#270, `3663448f`); P2 built on `worktree-open-core-p2`, code review round 1 approved with wordings.
 
 ## 1. What Ola asked
 
@@ -135,16 +133,16 @@ The private headers keep their paths and the `terrain::snow` and
 public core therefore never reuses `include/terrain/snow/` or
 `include/terrain/radiation/`; T10 enforces it.
 
-### 3.2 The three places the core points the wrong way today
+### 3.2 The three places the core points the wrong way on master `a058bb6b`
 
 1. `bindings/core.cpp` declares and calls `bind_snow` and `bind_radiation`
-   inside `_core` (lines 54-55, 1576-1577), and `CMakeLists.txt` compiles
-   both files into `_core` (line 89). After the split the private package
+   inside `_core` (`bindings/core.cpp@a058bb6b:54-55`, `bindings/core.cpp@a058bb6b:1576-1577`), and `CMakeLists.txt` compiles
+   both files into `_core` (`CMakeLists.txt@a058bb6b:89`). After the split the private package
    builds its own extension module, `rasputin_lsm._lsm`.
 2. `bindings/radiation.cpp` takes `BoundRasterView`, a type `core.cpp` binds,
    as `horizon_search`'s `near` and `far`. Resolved in section 4.3.
-3. `cli.py` imports snow and radiation at module level (line 135, the EnSight
-   writer, and lines 176-206).
+3. `cli.py` imports snow and radiation at module level (`src_python/tin_engine/cli.py@a058bb6b:135`, the EnSight
+   writer, and `src_python/tin_engine/cli.py@a058bb6b:176-206`).
    Replaced by the plugin hook (section 4.1).
 
 ## 4. What the public core exposes
@@ -591,3 +589,5 @@ what uses it.
 **Code review (P1), round 1, 2026-10-15.** Range `master..9d44f60f`, 157 net production lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `project_structure.md` says `cli.py` is the core's Typer app, not the entry point, and lists `plugins.py`, `plugin_api.py` and `cli_kit.py`. Not blocking: `plugins.served` is module-level state (`ctx.obj` would remove it); `application()` ignores a plugin's sub-groups and does not sort an explicit plugin list.
 
 **Code review (P1), round 2, 2026-10-15.** Range `b70db9ac..e9f1808b`, 0 net production lines, @reviewer: CHANGES REQUESTED on CI only: the CI-colour test fix is sound (it also ends a vacuous pass of the "no hello listed" control), but e9f1808b was unpushed and had no CI run, and the PR head a4793396 was red. To close: push, and `CI result` green on that head.
+
+**Code review (P2), round 1, 2026-10-15.** Range `3663448f..aa171207`, −2,317 net production lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (section 3.2's citations pinned to `a058bb6b`; status line and ROADMAP row 51); Python tests 8613 → 8173 (−445 moved, −14 layering, +19 T10), C++ suites 87 → 81; CI not yet run (unpushed).
