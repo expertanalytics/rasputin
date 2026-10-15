@@ -111,17 +111,22 @@ LAYERS: tuple[dict[str, str], ...] = (
                             " radiation.request raster resources",  # 46: the near raster, searched
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains class_maps crs dem_input domain edge_strip"
+        "cli": "_core catchment catchment_batch chains class_maps cli_kit crs dem_input domain"
+               " edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
                " final_check gauge grid_domain hydrography io.cog io.domain_file io.ensight"
                " io.geojson io.geopackage_write io.geotiff_write io.mesh_checks io.models io.ply"
                " io.repository io.rivers io.station_set io.vtk_legacy io.vtk_read"
-               " land_cover_fractions landcover mcp.server mosaic palettes radiation.frame"
+               " land_cover_fractions landcover mcp.server mosaic palettes plugins radiation.frame"
                " radiation.geometry radiation.request radiation.search raster resources"
                " run_record snow.geometry snow.params snow.run snow.terrain sources stats"
                " target_grid tin_engine tolerance_field viz.fixtures viz.protocols viz.scene"
                " viz.style viz.svg",
-        "__main__": "cli",  # 37: `python -m tin_engine`, the server's child
+        "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
+        "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
+        "plugins": "cli",  # 51: the core's commands, then each installed plugin's
+        "plugin_api": "cli_kit crs dem_input io.geotiff_write io.models io.vtk_read raster"
+                      " resources run_record",  # 51: what a plugin may import
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
         "mcp.server": "mcp.schema tin_engine",
     },

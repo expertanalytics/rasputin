@@ -2,7 +2,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "bound_raster_view.hpp"
+#include "numpy_raster.hpp"
 
 #include <terrain/build_info.hpp>
 #include <terrain/cdt/detria_backend.hpp>
@@ -50,6 +50,10 @@
 #include <vector>
 
 namespace py = pybind11;
+
+// The core's own raster view type; another module binds its own tag (numpy_raster.hpp).
+struct CoreRasterTag;
+using BoundRasterView = TaggedRasterView<CoreRasterTag>;
 
 void bind_snow(py::module_& m);  // bindings/snow.cpp
 void bind_radiation(py::module_& m);  // bindings/radiation.cpp
@@ -282,30 +286,6 @@ py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc) 
         }
     }
     return properties;
-}
-
-// Exact dtype and C order, or nothing: a conversion would be a silent copy the
-// view then outlives, so anything else is a TypeError and the caller converts.
-template <typename T>
-[[nodiscard]] std::optional<BoundRasterView> try_view(const py::object& array,
-                                                      const terrain::raster::RasterGeometry* g,
-                                                      std::optional<double> nodata) {
-    using Exact = py::array_t<T, py::array::c_style>;
-    if (!py::isinstance<Exact>(array))
-        return std::nullopt;
-    const auto a = array.cast<Exact>();
-    if (a.ndim() != 2)
-        throw py::value_error(std::format("raster_view: array must be 2-D, got {} dimensions",
-                                          a.ndim()));
-    // Rows and columns come from the array's own shape, never from an argument.
-    const terrain::raster::RasterGeometry geometry{
-        g->x_min(), g->y_max(), g->delta_x(), g->delta_y(),
-        static_cast<std::size_t>(a.shape(1)), static_cast<std::size_t>(a.shape(0))};
-    // One conversion of the sentinel to T. decode_dem has already refused a
-    // sentinel the cell type cannot hold, so it is exact.
-    const std::optional<T> sentinel =
-        nodata ? std::optional<T>{static_cast<T>(*nodata)} : std::nullopt;
-    return BoundRasterView{array, terrain::raster::RasterView<T>{geometry, a.data(), sentinel}};
 }
 
 // The flood's outcome with the shape its mask is viewed in.
@@ -829,18 +809,7 @@ Built by raster_view(), not constructible from Python. Holds the array alive.
 
     m.def(
         "raster_view",
-        [](const py::object& array, double x_min, double y_max, double delta_x, double delta_y,
-           std::optional<double> nodata) {
-            // Placeholder cols/rows of 1: only the affine half is read from it,
-            // and the RasterGeometry constructor validates the deltas here.
-            const terrain::raster::RasterGeometry affine{x_min, y_max, delta_x, delta_y, 1, 1};
-            if (auto v = try_view<float>(array, &affine, nodata))
-                return std::move(*v);
-            if (auto v = try_view<double>(array, &affine, nodata))
-                return std::move(*v);
-            throw py::type_error("raster_view: array must be a C-contiguous float32 or float64 "
-                                 "numpy array; convert it explicitly rather than have it copied");
-        },
+        &rasputin_bindings::raster_view<CoreRasterTag>,
         py::arg("array"), py::kw_only(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"),
         py::arg("delta_y"), py::arg("nodata") = py::none(), R"doc(
 View a row-major DEM array as a raster without copying it.
