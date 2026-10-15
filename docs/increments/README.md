@@ -52,7 +52,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    it reviewed and its LOC count, verbatim, into a `## Review` section of
    `docs/increments/NN-name.md` (one entry per review round), and commits it
    before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
-   `@reviewer`'s handback ends with one line, `Review: <verdict> <sha>`: its
+   `@reviewer`'s handback ends with exactly one line `Review: <verdict> <sha>`,
+   and no other line starts with `Review:`: its
    verdict and the full sha of the head it reviewed; a hook records it, and
    the away-mode push grant reads only that record. When `@reviewer`'s only
    findings are wordings in prose files (Markdown at the root or under
