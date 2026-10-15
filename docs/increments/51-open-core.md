@@ -518,6 +518,8 @@ No mutation round: the loader's rules are small and each has its own test.
 5. **Should the snow commands also appear as tools in `rasputin mcp`** when
    the private package is installed? Default: yes.
 
+Ruled by Ola, 2026-10-15: "Yes to all." All five defaults hold.
+
 ## 12. Ideas file
 
 The ideas file is private; the entries this design takes up, overlaps and
