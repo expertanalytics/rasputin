@@ -127,8 +127,9 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
-  bound_raster_view.hpp    # the bound raster view type, shared by core.cpp
-                           #   and radiation.cpp
+  numpy_raster.hpp         # TaggedRasterView<Tag>, the bound raster view over a
+                           #   NumPy array; installed for plugin modules, each
+                           #   with its own tag
   radiation.cpp            # the sun's position for arrays of UTC times
                            #   (releases the GIL); the receiver check; the
                            #   horizon search over bound rasters; the

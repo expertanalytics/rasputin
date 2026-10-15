@@ -18,12 +18,14 @@ and wind into a private package (open core)?": "yes".
 
 What this increment delivers, in one line: a public core with no snow
 or radiation code and a small, tested plugin interface; and a private
-package, working name `rasputin-snow`, that builds against that interface
+package, working name `rasputin-lsm`, that builds against that interface
 and makes `rasputin snow` appear when it is installed.
 
 What it does not do: rewrite history. The snow pull requests merged on public
 master (#257 to #267) stay in the public history and stay MIT for anyone who
 has a copy; the removal is a pull request on public master like any other.
+
+The private package is named `rasputin-lsm` (import `rasputin_lsm`, extension module `_lsm`): a land surface model on the TIN, not a catchment hydrology model (Ola, 2026-10-15).
 
 ## 2. Prior art: legacy and literature
 
@@ -107,12 +109,12 @@ table in the private repository, at Q1.
 | Kind | Path on public master | In the private package |
 |---|---|---|
 | C++ headers | `include/terrain/snow/`, `include/terrain/radiation/` | same paths |
-| Bindings | `bindings/snow.cpp`, `bindings/radiation.cpp` | same paths, plus `bindings/module.cpp` for `_snow` |
-| Python | `src_python/tin_engine/snow/`, `src_python/tin_engine/radiation/` | `src/rasputin_snow/snow/`, `src/rasputin_snow/radiation/` |
-| Python I/O used only by snow | `src_python/tin_engine/io/ensight.py` (its header line names `rasputin snow`) | `src/rasputin_snow/ensight.py` |
-| CLI | the `synthetic-terrain` and `snow` commands and their helpers at the end of `cli.py` (`_snow_folder`, `_SNOW_STATIC`, `_Sun`, `_Shadows`, `_shadow_dem`, `_contains`, `_per_triangle`, and any the private increments add) | `src/rasputin_snow/cli.py`, a `typer.Typer` |
-| Data | package data the private increments add under `src_python/tin_engine/data/` for snow | `src/rasputin_snow/data/` |
-| Stubs | the snow and radiation entries of `_core.pyi` | `src/rasputin_snow/_snow.pyi` |
+| Bindings | `bindings/snow.cpp`, `bindings/radiation.cpp` | same paths, plus `bindings/module.cpp` for `_lsm` |
+| Python | `src_python/tin_engine/snow/`, `src_python/tin_engine/radiation/` | `src/rasputin_lsm/snow/`, `src/rasputin_lsm/radiation/` |
+| Python I/O used only by snow | `src_python/tin_engine/io/ensight.py` (its header line names `rasputin snow`) | `src/rasputin_lsm/ensight.py` |
+| CLI | the `synthetic-terrain` and `snow` commands and their helpers at the end of `cli.py` (`_snow_folder`, `_SNOW_STATIC`, `_Sun`, `_Shadows`, `_shadow_dem`, `_contains`, `_per_triangle`, and any the private increments add) | `src/rasputin_lsm/cli.py`, a `typer.Typer` |
+| Data | package data the private increments add under `src_python/tin_engine/data/` for snow | `src/rasputin_lsm/data/` |
+| Stubs | the snow and radiation entries of `_core.pyi` | `src/rasputin_lsm/_lsm.pyi` |
 | C++ tests | `tests/cpp/unit/test_hbv_snow.cpp`, `test_hbv_snow_linear.cpp`, `test_radiation_{sun,receivers,horizon,evaluate}.cpp` and their six `add_terrain_test` lines | `tests/cpp/`, own `CMakeLists.txt` |
 | Python tests | `test_cli_snow`, `test_core_snow`, `test_core_horizon`, `test_radiation_{evaluate,frame,search,sun}`, `test_snow_{forcing,geometry,job,params,run,terrain}`, `test_io_ensight`, plus the private increments' suites; helpers `ensightread.py` moved, `cli_helpers.py`, `gil_probe.py`, `vtkread.py` copied | `tests/python/` |
 | Test-only dependency | `pvlib` in `dev` | the private `dev` extra |
@@ -138,7 +140,7 @@ public core therefore never reuses `include/terrain/snow/` or
 1. `bindings/core.cpp` declares and calls `bind_snow` and `bind_radiation`
    inside `_core` (lines 54-55, 1576-1577), and `CMakeLists.txt` compiles
    both files into `_core` (line 89). After the split the private package
-   builds its own extension module, `rasputin_snow._snow`.
+   builds its own extension module, `rasputin_lsm._lsm`.
 2. `bindings/radiation.cpp` takes `BoundRasterView`, a type `core.cpp` binds,
    as `horizon_search`'s `near` and `far`. Resolved in section 4.3.
 3. `cli.py` imports snow and radiation at module level (line 135, the EnSight
@@ -158,7 +160,7 @@ New module `src_python/tin_engine/plugins.py`.
 - **Group:** `rasputin.commands`. An entry point's value is a `typer.Typer`;
   each of its commands becomes a top-level `rasputin` command. The private
   package declares
-  `[project.entry-points."rasputin.commands"] snow = "rasputin_snow.cli:app"`.
+  `[project.entry-points."rasputin.commands"] snow = "rasputin_lsm.cli:app"`.
 - **`discover() -> tuple[Plugin, ...]`:** one frozen record per entry point in
   the group: distribution name and version, entry-point name, and either the
   loaded `typer.Typer` or the reason it could not be loaded. Loading a broken
@@ -247,7 +249,7 @@ run against public master (section 6) reports.
 The one real design question in the split. The radiation kernel reads a
 float32 DEM through `terrain::raster::RasterView<float>`; today Python builds
 that view with `_core.raster_view` and hands the bound object to
-`_core.horizon_search`. After the split `horizon_search` lives in `_snow`,
+`_core.horizon_search`. After the split `horizon_search` lives in `_lsm`,
 built separately, so `_core`'s bound type cannot be its argument (section
 2.1).
 
@@ -269,11 +271,11 @@ built separately, so `_core`'s bound type cannot be its argument (section
   `include/terrain/`, so the core headers stay free of pybind11 (the
   `modern-cxx` skill's binding isolation).
 - **The private module** declares its own tag in its own source
-  (`struct SnowRasterTag;` in the private `bindings/module.cpp`, never in a
-  public header), binds `TaggedRasterView<SnowRasterTag>` as `RasterView`
+  (`struct LsmRasterTag;` in the private `bindings/module.cpp`, never in a
+  public header), binds `TaggedRasterView<LsmRasterTag>` as `RasterView`
   with `py::module_local()`, and its own `raster_view` function from that
   header. The private Python builds the view as
-  `_snow.raster_view(**dataclasses.asdict(core_args(tile)))`.
+  `_lsm.raster_view(**dataclasses.asdict(core_args(tile)))`.
 - **Why the tag, read in pybind11 3.1.0** (the version in all 35 worktree venvs; `pyproject.toml` asks for `pybind11>=2.12`). pybind11 keys
   its type registry on `std::type_index`, and under libc++ compares by the
   `typeid` name (`detail/internals.h`, `same_type`, `type_hash` and
@@ -283,20 +285,20 @@ built separately, so `_core`'s bound type cannot be its argument (section
   1294-1299), and accepts another module's module-local instance of the same
   type (`try_load_foreign_module_local`, lines 1198-1218, `same_type`). So
   with one struct in both modules, `module_local` or not, a `_core.RasterView`
-  would load as `_snow`'s argument whenever the two share pybind11 internals.
+  would load as `_lsm`'s argument whenever the two share pybind11 internals.
   With distinct tags the two `typeid` names differ, both lookups miss, and the
   argument is refused with a `TypeError`. When the two modules do not share internals but have the same platform ABI, pybind11's C++ conduit (`detail/type_caster_base.h`, lines 1317 and 1329-1352) asks the other module for the argument by its `typeid` name: one struct in both modules would be accepted, but with distinct tags the other registry finds no such type and the result is the same `TypeError`. With a different platform ABI there is no route at all. No C++ type is registered twice, so the
   `generic_type: type "RasterView" is already registered!` failure
   (`pybind11.h`, line 1823) cannot occur either. `module_local` is kept so
-  `_snow`'s class never enters the global registry, but the tag, not
+  `_lsm`'s class never enters the global registry, but the tag, not
   `module_local`, is what refuses.
-- **Considered and not taken:** `_snow.horizon_search` taking the arrays and
+- **Considered and not taken:** `_lsm.horizon_search` taking the arrays and
   scalars of both rasters directly, with no bound view type. It registers
   nothing, but gives the call twelve raster arguments in place of two, and
   moves the `nodata` and dtype checks into each kernel binding instead of the
   one `raster_view` function.
-- Only NumPy arrays and Python scalars cross between `_core` and `_snow`. A
-  `_core.RasterView` passed to `_snow.horizon_search` is a `TypeError`
+- Only NumPy arrays and Python scalars cross between `_core` and `_lsm`. A
+  `_core.RasterView` passed to `_lsm.horizon_search` is a `TypeError`
   (QT3 checks it).
 
 ### 4.4 The C++ surface a plugin may include
@@ -326,12 +328,12 @@ the private module needs none (the promised headers are header-only).
 ### 5.1 Layout, on `rasputin-private` master after Q1
 
 ```
-pyproject.toml          rasputin-snow; scikit-build-core>=0.11
-CMakeLists.txt          find_package(rasputin), pybind11_add_module(_snow ...)
+pyproject.toml          rasputin-lsm; scikit-build-core>=0.11
+CMakeLists.txt          find_package(rasputin), pybind11_add_module(_lsm ...)
 include/terrain/{snow,radiation}/
 bindings/{module,snow,radiation}.cpp
-src/rasputin_snow/      cli.py, ensight.py, raster.py, snow/, radiation/,
-                        data/, _snow.pyi, py.typed
+src/rasputin_lsm/      cli.py, ensight.py, raster.py, snow/, radiation/,
+                        data/, _lsm.pyi, py.typed
 tests/cpp/              CMakeLists.txt (Catch2 by FetchContent, as public)
 tests/python/
 docs/increments/        46, terrain-radiation and the private increments
@@ -353,15 +355,15 @@ ROADMAP.md, CLAUDE.md, .claude/, tools/   (section 5.3)
 - Bumping the pin is a private PR whose CI is the compatibility check.
 - `CMakeLists.txt`: `find_package(rasputin CONFIG REQUIRED)`,
   `find_package(pybind11 CONFIG REQUIRED)`,
-  `pybind11_add_module(_snow bindings/module.cpp bindings/snow.cpp
+  `pybind11_add_module(_lsm bindings/module.cpp bindings/snow.cpp
   bindings/radiation.cpp)`, linked to `rasputin::terrain_headers` and
   `Threads::Threads`, `-Wall -Wextra -Wpedantic -Werror`, installed to
-  `rasputin_snow`. The private C++ tests link the same target.
-- Python imports: `tin_engine.snow.*` becomes `rasputin_snow.snow.*`, and so
+  `rasputin_lsm`. The private C++ tests link the same target.
+- Python imports: `tin_engine.snow.*` becomes `rasputin_lsm.snow.*`, and so
   on; `from tin_engine import _core` in snow and radiation code becomes
-  `from rasputin_snow import _snow`; core imports go through
+  `from rasputin_lsm import _lsm`; core imports go through
   `tin_engine.plugin_api`. `importlib.resources.files("tin_engine")` in
-  package data becomes `files("rasputin_snow")`.
+  package data becomes `files("rasputin_lsm")`.
 - Licence: proprietary, Expert Analytics, all rights reserved (the licensing
   decision's default), stated in the private `LICENSE` and `pyproject.toml`.
   The public `LICENSE` and `NOTICE.md` are untouched.
@@ -387,8 +389,8 @@ never reused; the public ROADMAP has no rows for private increments.
 On `rasputin-private`, GitHub Actions, Team plan: no merge queue.
 
 - **Gating, every PR, Linux:** install the package (which builds the pinned
-  core and `_snow`); `ruff check`, `ruff format --check`, `mypy` (strict over
-  `src/rasputin_snow`); `pytest`; configure `tests/cpp` against the installed
+  core and `_lsm`); `ruff check`, `ruff format --check`, `mypy` (strict over
+  `src/rasputin_lsm`); `pytest`; configure `tests/cpp` against the installed
   core and run `ctest`, reading `cmake --build`'s exit status first;
   `tools/check_prohibited_deps.py`; `tools/count_loc.py` against the base.
   Branch protection requires this one job.
@@ -428,7 +430,7 @@ Each PR is under the 700-line rule of `CLAUDE.md` §2, counted by
 | Q0 | private | the private increments (section 7) merged into private master, one PR each, in chain order | as each was reviewed |
 | P1 | public | the seam: `plugins.py`, `plugin_api.py`, `cli_kit.py` (moved), `raster.core_args`, `bindings/numpy_raster.hpp` (moved), header and CMake-config install, `cmake.root` entry point, console script and `mcp` through `application()`, `rasputin version` lists plugins | about +190 |
 | P2 | public | the removal: everything in section 3.1's left column, `bind_snow`/`bind_radiation` out of `core.cpp` and `CMakeLists.txt`, the six C++ tests out of `tests/cpp/CMakeLists.txt` and CI's sanitizer list, `pvlib` out of `dev`, the snow and radiation paths out of `[tool.check_code_history]`, layering rows, `project_structure.md` entries, ROADMAP row 46 reduced to a pointer | about −2,600 |
-| Q1 | private | the package: core copy deleted from the private tree, snow files moved into the layout of 5.1, `_snow` module, CMake and pyproject, pin = P2's merge commit, CI workflow, private `CLAUDE.md` §4 | far below zero; about +150 added |
+| Q1 | private | the package: core copy deleted from the private tree, snow files moved into the layout of 5.1, `_lsm` module, CMake and pyproject, pin = P2's merge commit, CI workflow, private `CLAUDE.md` §4 | far below zero; about +150 added |
 
 **Order, and why neither repository breaks:**
 
@@ -504,21 +506,21 @@ no monkeypatching. Variants change one line each.
 ### 9.2 Private (Q1)
 
 - **QT1** every moved test passes, changed only in imports (`tin_engine.snow`
-  to `rasputin_snow.snow`, `_core` to `_snow` for snow and radiation names,
+  to `rasputin_lsm.snow`, `_core` to `_lsm` for snow and radiation names,
   helpers' imports). The reviewer checks with `git diff -M` on `tests/` that
   no other line changed, and that the count of collected tests equals the
   count on private master before Q1.
-- **QT2** an import scan over `src/rasputin_snow`: the only `tin_engine`
+- **QT2** an import scan over `src/rasputin_lsm`: the only `tin_engine`
   module imported is `tin_engine.plugin_api`.
-- **QT3** one process imports `tin_engine._core` and `rasputin_snow._snow`,
-  builds a raster view in each, and runs `_snow.horizon_search` on its own
+- **QT3** one process imports `tin_engine._core` and `rasputin_lsm._lsm`,
+  builds a raster view in each, and runs `_lsm.horizon_search` on its own
   view; a `_core.RasterView` passed to it is a `TypeError`. The check is
-  planted once, locally, before Q1's red commit: `_snow` built with
-  `CoreRasterTag` in place of `SnowRasterTag` must make QT3 fail (the
+  planted once, locally, before Q1's red commit: `_lsm` built with
+  `CoreRasterTag` in place of `LsmRasterTag` must make QT3 fail (the
   `_core` view is then accepted), and the result is recorded in Q1's review.
 - **QT4** the installed console script, in a subprocess: `rasputin --help`
   lists `snow` and `synthetic-terrain`; `rasputin version` lists
-  `rasputin-snow`.
+  `rasputin-lsm`.
 - **QT5** the core pin in `[build-system].requires` equals the one in
   `dependencies`.
 - **QT6, the split changes no result:** a probe, run once and recorded in
@@ -532,8 +534,8 @@ No mutation round: the loader's rules are small and each has its own test.
 
 ## 10. Pinned or assumed beyond Ola's words
 
-1. The private package's working name `rasputin-snow`, import name
-   `rasputin_snow` (question 1).
+1. The private package's working name `rasputin-lsm`, import name
+   `rasputin_lsm` (question 1).
 2. `rasputin-private` is turned into the package's repository; the full copy
    is kept as a tag (question 2).
 3. `io/geotiff_write.py` and `io/vtk_read.py` stay public; `io/ensight.py`
@@ -555,8 +557,8 @@ No mutation round: the loader's rules are small and each has its own test.
 
 ## 11. Questions for Ola
 
-1. **The private package's name?** Default: `rasputin-snow`, imported as
-   `rasputin_snow`, even though it will also hold radiation and later
+1. **The private package's name?** Default: `rasputin-lsm`, imported as
+   `rasputin_lsm`, even though it will also hold radiation and later
    runoff. A broader name such as `rasputin-hydro` is cheap now and costly
    later.
 2. **Turn the existing private repository `rasputin-private` into the
@@ -582,6 +584,6 @@ what uses it.
 
 ## Review
 
-**Design review, round 1, 2026-10-15.** Range `master..ac9fef5a`, 0 counted lines, @reviewer: CHANGES REQUESTED. (1) Section 4.3 and QT3: pybind11 3.1.0 finds types by name (pybind11 header detail/internals.h, line 202), and `_snow`'s module-local caster falls back to `_core`'s global registration (pybind11 header detail/type_caster_base.h, lines 1294-1299), so a `_core.RasterView` is accepted by `_snow.horizon_search`, not refused; bind a differently named C++ type on the private side (e.g. a tag template parameter). (2) No startup cost stated for `discover()` before every command (entry-point scan about 22 ms warm with no plugin); state it, plugin import cost unmeasured until Q1. Wordings: `io/vtk_read.py`'s only production caller is `snow` (`cli.py:3165`); add `_SNOW_STATIC` (`cli.py:3069`) to the moving helpers; section 3.2 cites line 135 too; the status line and ROADMAP row 51 say the five questions were ruled at their defaults on 2026-10-15.
+**Design review, round 1, 2026-10-15.** Range `master..ac9fef5a`, 0 counted lines, @reviewer: CHANGES REQUESTED. (1) Section 4.3 and QT3: pybind11 3.1.0 finds types by name (pybind11 header detail/internals.h, line 202), and `_lsm`'s module-local caster falls back to `_core`'s global registration (pybind11 header detail/type_caster_base.h, lines 1294-1299), so a `_core.RasterView` is accepted by `_lsm.horizon_search`, not refused; bind a differently named C++ type on the private side (e.g. a tag template parameter). (2) No startup cost stated for `discover()` before every command (entry-point scan about 22 ms warm with no plugin); state it, plugin import cost unmeasured until Q1. Wordings: `io/vtk_read.py`'s only production caller is `snow` (`cli.py:3165`); add `_SNOW_STATIC` (`cli.py:3069`) to the moving helpers; section 3.2 cites line 135 too; the status line and ROADMAP row 51 say the five questions were ruled at their defaults on 2026-10-15.
 
 **Design review, round 2, 2026-10-15.** Range `ac9fef5a..ecfea310`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (section 4.3: the separate-registry case is refused because the tags differ, not because the registries are apart; pybind11's C++ conduit crosses them).
