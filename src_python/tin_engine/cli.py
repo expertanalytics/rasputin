@@ -42,7 +42,6 @@ from __future__ import annotations
 import asyncio
 import csv
 import datetime
-import enum
 import json
 import math
 import os
@@ -53,7 +52,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, Any, Final, TextIO, cast
+from typing import Annotated, Final, TextIO, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -105,7 +104,6 @@ from tin_engine.crs import (
     parse_crs,
     reprojector,
     same_crs,
-    site_of,
     srs_entry,
     transform_description,
     transform_label,
@@ -135,7 +133,6 @@ from tin_engine.grid_domain import default_stride, refine_start_stride, subsampl
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
 from tin_engine.io.domain_file import read_domain
-from tin_engine.io.ensight import case_text, frame_file, geometry_bytes, variable_bytes
 from tin_engine.io.geojson import catchment_geojson
 from tin_engine.io.geopackage_write import (
     Palette,
@@ -147,7 +144,6 @@ from tin_engine.io.geopackage_write import (
     write_styles,
     write_triangles,
 )
-from tin_engine.io.geotiff_write import encode_geotiff
 from tin_engine.io.mesh_checks import checked_ascii
 from tin_engine.io.models import (
     BY_NAME,
@@ -170,16 +166,11 @@ from tin_engine.io.repository import (
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
-from tin_engine.io.vtk_read import read_mesh
 from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
 from tin_engine.palettes import paraview_preset
-from tin_engine.radiation.frame import receivers_from_mesh
-from tin_engine.radiation.geometry import OPEN_HORIZON, RadiationGeometry
-from tin_engine.radiation.request import RadiationRequest
-from tin_engine.radiation.search import near_raster, search_horizons
 from tin_engine.raster import to_core
 from tin_engine.resources import Resources
 from tin_engine.run_record import (
@@ -196,17 +187,6 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.snow.geometry import triangle_geometry
-from tin_engine.snow.params import (
-    FrameSpec,
-    HbvSnowParameters,
-    SnowDistribution,
-    SnowJob,
-    SunCorrection,
-    SyntheticSpring,
-)
-from tin_engine.snow.run import run as run_snow
-from tin_engine.snow.terrain import TerrainSpec, mountain
 from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, catalogue, check_values
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
@@ -2980,208 +2960,3 @@ def station_catchments(
     if summary.known_refusals.line is not None:
         typer.echo(summary.known_refusals.line, err=True)
     typer.echo(f"{target}")
-
-
-@app.command("synthetic-terrain")
-def synthetic_terrain(
-    out: Annotated[Path, typer.Option("--out", help="The GeoTIFF to write.")],
-) -> None:
-    """Write a synthetic mountain as a GeoTIFF, to mesh and run snow on: a
-    12 km square on a 10 m grid in EPSG:25833, heights 234 to 1924 m."""
-    spec = TerrainSpec()
-    target = _destination(out, None, out.stem)
-    target.write_bytes(encode_geotiff(mountain(spec), spec.x0, spec.y0, spec.step, spec.epsg))
-    typer.echo(f"{target}")
-
-
-def _snow_folder(out: Path) -> Path:
-    """`out` resolved, refused unless it is a new or empty directory."""
-    if out.is_symlink() or (out.exists() and (not out.is_dir() or any(out.iterdir()))):
-        raise typer.BadParameter(f"{out} must be a new or empty directory", param_hint="--out")
-    return out.resolve()
-
-
-class _Sun(enum.Enum):
-    none = "none"
-    melt_factor = "melt-factor"
-    threshold = "threshold"
-
-
-class _Shadows(enum.Enum):
-    on = "on"
-    off = "off"
-
-
-_SNOW_STATIC = ("slope_deg", "aspect_deg", "radiation_anomaly_mean", "melt_out_day")
-
-
-def _shadow_dem(
-    dem: list[str], crs: str, box: tuple[float, float, float, float], job: SnowJob,
-    request: RadiationRequest,
-) -> DemTile:  # fmt: skip
-    """The near raster for the mesh's box, refused in plain words when the
-    DEM is in another CRS than the mesh or does not cover the whole mesh."""
-    paths = tuple(Path(d) for d in dem)
-    try:
-        metas = [f.meta for f in repository_for(paths)[0].footprints()]
-        if metas and not same_crs(metas[0].crs, crs):
-            raise ValueError(f"the DEM is in {metas[0].crs} and the mesh in {crs}; shadows "
-                             "need the DEM the mesh was made from")  # fmt: skip
-        if not any(_contains(m.node_box(), box, overlap=True) for m in metas):
-            raise ValueError("the DEM does not cover the mesh")
-        tile = near_raster(paths, box, request, job.resources)
-    except (OSError, ValueError) as exc:
-        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
-    if not _contains(tile.meta.node_box(), box):
-        raise typer.BadParameter("the DEM does not cover the mesh", param_hint="--dem")
-    return tile
-
-
-def _contains(a: tuple[float, ...], b: tuple[float, ...], *, overlap: bool = False) -> bool:
-    """Whether box `a` holds box `b` (both x_min, y_min, x_max, y_max), or
-    with `overlap` only meets it."""
-    if overlap:
-        return a[0] <= b[2] and a[1] <= b[3] and b[0] <= a[2] and b[1] <= a[3]
-    return a[0] <= b[0] and a[1] <= b[1] and b[2] <= a[2] and b[3] <= a[3]
-
-
-def _per_triangle(g: RadiationGeometry, ok: npt.NDArray[np.bool_]) -> RadiationGeometry:
-    """`g`, built on the triangles `ok` marks, spread over all of them: a
-    zero-area triangle gets an upward normal under an open sky at the first
-    receiver's place, which gives it no sun correction."""
-    if ok.all():
-        return g
-
-    def spread(a: npt.NDArray[Any], fill: Any) -> npt.NDArray[Any]:
-        out = np.empty((len(ok), *a.shape[1:]), dtype=a.dtype)
-        out[...] = fill
-        out[ok] = a
-        return out
-
-    lat, lon = (float(a[0]) if len(a) else 0.0 for a in (g.lat, g.lon))
-    return RadiationGeometry(
-        lat=spread(g.lat, lat), lon=spread(g.lon, lon), normal=spread(g.normal, (0.0, 0.0, 1.0)),
-        horizon=spread(g.horizon, OPEN_HORIZON), reach=spread(g.reach, 0),
-        n_directions=g.n_directions, request=g.request,
-    )  # fmt: skip
-
-
-@app.command()
-def snow(
-    mesh: Annotated[Path, typer.Option("--mesh", help="A binary mesh written by rasputin mesh.")],
-    out: Annotated[Path, typer.Option("--out", help="A new or empty directory for the animation.")],
-    sun_correction: Annotated[_Sun, typer.Option(
-        help="How the sun on each slope corrects melt: not at all, through the melt factor, "
-        "or through the melt threshold.")] = _Sun.melt_factor,
-    start: Annotated[str | None, typer.Option(
-        help="Start, ISO 8601 with an offset. Default 2027-04-01T00:00Z.")] = None,
-    days: Annotated[int | None, typer.Option(help="Days to run. Default 153: 1 April to "
-        "1 September.")] = None,
-    warming_days: Annotated[int | None, typer.Option(min=1, help="Days the temperature at "
-        "300 m takes to rise from -3 to +14 °C; it then holds. Default 122.")] = None,
-    step_minutes: Annotated[int | None, typer.Option(help="Time step. Default 60.")] = None,
-    frame_hours: Annotated[int, typer.Option(help="Hours between frames.")] = 24,
-    initial_swe: Annotated[float, typer.Option(help="Snow at the start, mm of water.")] = 600.0,
-    snow_cv: Annotated[float, typer.Option(help="Variation of snow depth within a triangle; "
-        "within each bin the depth varies linearly, so the snow-covered area shrinks smoothly. "
-        "0 is uniform snow, at most 0.577 with one bin.")] = 0.1,
-    bins: Annotated[int, typer.Option(help="Bins of snow depth per triangle, 1 to 64.")] = 1,
-    tx: Annotated[float, typer.Option(help="Snow below this temperature, °C.")] = 0.0,
-    ts: Annotated[float, typer.Option(help="Melt above this temperature, °C.")] = 0.0,
-    cx: Annotated[float, typer.Option(help="Degree-day factor, mm/°C/day.")] = 3.0,
-    lw: Annotated[float, typer.Option(help="Liquid water held, fraction of the snow.")] = 0.1,
-    cfr: Annotated[float, typer.Option(help="Refreeze coefficient.")] = 0.05,
-    dem: Annotated[list[str] | None, typer.Option("--dem", help="The DEM the mesh was made "
-        "from (repeat for several files, or one directory of tiles): its terrain casts "
-        "shadows.")] = None,
-    shadows: Annotated[_Shadows | None, typer.Option(help="Cast shadows from the DEM's "
-        "terrain within 20 km of the mesh. Default: on with --dem, off without.")] = None,
-    threads: THREADS = None,
-) -> None:  # fmt: skip
-    """Run HBV snow on every triangle of a mesh through a synthetic dry spring and summer,
-    melt corrected for the sun on each slope, and write an EnSight Gold
-    animation (snow.case) that ParaView plays: swe and sca per frame, slope,
-    aspect, the mean radiation anomaly and the melt-out day."""
-    folder = _snow_folder(out)
-    shade = bool(dem) if shadows is None else shadows is _Shadows.on
-    if shade and not dem:
-        raise typer.BadParameter("shadows need the DEM the mesh was made from: give --dem",
-                                 param_hint="--shadows")  # fmt: skip
-    try:
-        arrays = read_mesh(mesh.read_bytes())
-    except OSError as exc:
-        raise typer.BadParameter(f"cannot read {mesh}: {exc}", param_hint="--mesh") from exc
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--mesh") from exc
-    v = arrays.vertices
-    origin = (float(v[:, 0].min()), float(v[:, 1].min())) if len(v) else (0.0, 0.0)
-    try:
-        centre = (v[:, :2].min(axis=0) + v[:, :2].max(axis=0)) / 2 if len(v) else (0.0, 0.0)
-        site = site_of(arrays.crs, float(centre[0]), float(centre[1]))
-    except ValueError as exc:
-        _, unit, rest = str(exc).partition("this one is in ")
-        why = f"snow needs a mesh in a projected CRS in metres; {unit}{rest}" if unit else str(exc)
-        raise typer.BadParameter(why, param_hint="--mesh") from exc
-    given = {"days": days, "warming_days": warming_days, "step_minutes": step_minutes}
-    try:
-        job = SnowJob(
-            correction=SunCorrection(mode=sun_correction.name),
-            resources=_resources(threads, None),
-            hbv=HbvSnowParameters(tx=tx, ts=ts, cx=cx, lw=lw, cfr=cfr),
-            distribution=SnowDistribution.lognormal(snow_cv, bins),
-            spring=SyntheticSpring(
-                **{k: x for k, x in given.items() if x is not None},
-                **({} if start is None else {"start": datetime.datetime.fromisoformat(start)}),
-            ),
-            frames=FrameSpec(every_hours=frame_hours),
-            initial_swe_mm=initial_swe,
-            shadows=RadiationRequest() if shade else None,
-        )
-    except ValueError as exc:
-        raise typer.BadParameter(_words(exc)) from exc
-    try:
-        geometry = triangle_geometry(v, arrays.triangles, arrays.crs)
-        ok = ~geometry.zero_area
-        frame = receivers_from_mesh(v, arrays.triangles[ok], arrays.crs)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--mesh") from exc
-    box = (*v[:, :2].min(axis=0), *v[:, :2].max(axis=0)) if len(v) else (0.0, 0.0, 1.0, 1.0)
-    near = _shadow_dem(dem or [], arrays.crs, box, job, job.shadows) if job.shadows else None
-    if geometry.degenerate:
-        typer.echo(plural(geometry.degenerate, "degenerate triangle", "degenerate triangles")
-                   + " (no area): given no sun correction", err=True)  # fmt: skip
-    folder.mkdir(exist_ok=True)
-    (folder / "snow.geo").write_bytes(geometry_bytes(v, arrays.triangles, origin=origin))
-    melt_out = np.full(len(arrays.triangles), -1.0)
-    times: list[float] = []
-
-    async def frames() -> npt.NDArray[np.float32]:
-        last = np.zeros(len(arrays.triangles), dtype=np.float32)
-        height = float(np.mean(v[:, 2])) if len(v) else 0.0
-        if near is None or job.shadows is None:
-            sky = RadiationGeometry.open_sky(frame, RadiationRequest())
-        else:
-            sky = await asyncio.to_thread(search_horizons, frame, near, job.shadows,
-                                          threads=job.resources.threads)  # fmt: skip
-        frames = run_snow(job, geometry, radiation=_per_triangle(sky, ok), lat_deg=site.lat_deg,
-                          lon_deg=site.lon_deg, height_m=height)  # fmt: skip
-        async for f in frames:
-            melt_out[(melt_out < 0) & (f.sca < 0.5)] = f.time_hours / 24.0
-            for name, values in (("swe", f.swe), ("sca", f.sca)):
-                (folder / frame_file(name, len(times))).write_bytes(variable_bytes(name, values))
-            times.append(f.time_hours)
-            last = f.radiation_anomaly_mean
-        return last
-
-    clock = time.perf_counter()
-    mean = asyncio.run(frames())
-    static: tuple[npt.NDArray[Any], ...] = (geometry.slope_deg, geometry.aspect_deg, mean, melt_out)
-    for name, values in zip(_SNOW_STATIC, static, strict=True):
-        (folder / f"{name}.var").write_bytes(variable_bytes(name, values))
-    record = {"job": job.model_dump(mode="json"), "origin": list(origin)}
-    (folder / "snow.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    case = case_text(geometry="snow.geo", timed=("swe", "sca"), static=_SNOW_STATIC,
-                     times_hours=times)  # fmt: skip
-    (folder / "snow.case").write_text(case, encoding="ascii")
-    typer.echo(f"{len(times)} frames in {time.perf_counter() - clock:.1f} s", err=True)
-    typer.echo(f"{folder / 'snow.case'}")

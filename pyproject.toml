@@ -72,7 +72,6 @@ dev = [
     "pytest-cov>=4.1",
     "hypothesis>=6.100",
     "mypy>=1.10",
-    "pvlib>=0.11",  # test-only: an independent SPA to check the sun's position against
     "ruff~=0.16.8",  # pinned: `ruff format --check` gates CI; style shifts per minor
 ]
 
@@ -186,11 +185,9 @@ paths = [
     "src_python/tin_engine/outline.py",
     "src_python/tin_engine/plugin_api.py",
     "src_python/tin_engine/plugins.py",
-    "src_python/tin_engine/radiation",
     "src_python/tin_engine/raster.py",
     "src_python/tin_engine/reference.py",
     "src_python/tin_engine/sensitivity.py",
-    "src_python/tin_engine/snow",
     "src_python/tin_engine/sources.py",
     "src_python/tin_engine/target_grid.py",
     "src_python/tin_engine/tolerance_field.py",
