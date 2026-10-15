@@ -96,6 +96,13 @@ def loaded() -> list[str]:
     return [f"{p.dist} {p.version}" for p in discover() if p.app is not None]
 
 
+#: The app `main` built and runs, so ``mcp`` serves it rather than building a
+#: second one (and printing each refusal twice); ``None`` outside `main`.
+served: typer.Typer | None = None
+
+
 def main() -> None:
     """The ``rasputin`` console script: the core and every installed plugin."""
-    application()()
+    global served
+    served = application()
+    served()

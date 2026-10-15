@@ -381,9 +381,9 @@ def mcp(
     except ImportError:
         typer.echo(f"Error: the mcp extra is not installed; run {INSTALL_MCP}", err=True)
         raise typer.Exit(2) from None
-    from tin_engine.plugins import application  # the hook imports this module
+    from tin_engine import plugins  # the hook imports this module
 
-    asyncio.run(server.serve(application(), jobs))
+    asyncio.run(server.serve(plugins.served or plugins.application(), jobs))
 
 
 @dataclass(frozen=True, slots=True)
