@@ -589,3 +589,5 @@ what uses it.
 **Design review, round 2, 2026-10-15.** Range `ac9fef5a..ecfea310`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (section 4.3: the separate-registry case is refused because the tags differ, not because the registries are apart; pybind11's C++ conduit crosses them).
 
 **Code review (P1), round 1, 2026-10-15.** Range `master..9d44f60f`, 157 net production lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `project_structure.md` says `cli.py` is the core's Typer app, not the entry point, and lists `plugins.py`, `plugin_api.py` and `cli_kit.py`. Not blocking: `plugins.served` is module-level state (`ctx.obj` would remove it); `application()` ignores a plugin's sub-groups and does not sort an explicit plugin list.
+
+**Code review (P1), round 2, 2026-10-15.** Range `b70db9ac..e9f1808b`, 0 net production lines, @reviewer: CHANGES REQUESTED on CI only: the CI-colour test fix is sound (it also ends a vacuous pass of the "no hello listed" control), but e9f1808b was unpushed and had no CI run, and the PR head a4793396 was red. To close: push, and `CI result` green on that head.
