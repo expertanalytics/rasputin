@@ -778,8 +778,9 @@ Up from about 215 at design review round 1 (round 1's five points add about
 ```
 
 **Two PRs.** PR A, prose only (items 6 and 9, and section 8's other text
-held for PR B): `CLAUDE.md`, `reviewer.md`, README step 4; CI runs only the
-governance gates, one review, and it can merge the same day. PR B, code
+held for PR B): `CLAUDE.md`, `reviewer.md`, README step 4; CI runs every job
+(`tools/ci_changes.py` counts `reviewer.md`, and the files the suites read, as
+code), one review, and it can merge the same day. PR B, code
 (items 1 to 5, 7 and 8, with their rule text): full path, red then green,
 one code review, Ola's settings yes for the entry above, the live checks
 of 9.2 after the merge. Both count as one item toward the three in flight.
@@ -800,3 +801,5 @@ checks after the merge, recorded here. All by day: every file is governed.
 **Design review, round 3, 2026-10-14.** Range `bfc5490f..509d1e63`, about 325 net lines estimated, @reviewer: CHANGES REQUESTED. Points 2 (`core.worktree`, `include.`, `includeif.` refused; `--show-toplevel` under a scratchpad) and 3 (one-argument `cd`/`pushd` starting `/`, `./` or `../`, logical and physical paths agreeing) closed. Point 1 still open: `gh api graphql -f query='query Q { a } 'mu(t)ation' M { b }'` passes rules 1-6; zsh reads `mu(t)ation` as a pattern and gh can receive `mutation`, and `shell_scan.parse` splits at `(`: rule 5 also refuses `(` and `)` outside quotes, with a test and a mutation target. Wording: section 4.1's "so 6 (b) and (c) see it" becomes "6 (b) sees it".
 
 **Design review, round 4, 2026-10-14.** Range `d48c5d39..fe9f700b`, about 330 net lines estimated, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `=` allowed only right after a letter, digit or `_ . / , @ % + -` outside quotes, since zsh expands `''=ls`, and with `MAGIC_EQUAL_SUBST` `x==ls` and `x=a:=ls`; the refusal list, the test cases and the mutation target name them. Held, probed in `zsh -f`: the allow-list refuses `mu(t)ation`, `'a''b'`, `|`, `>`, `#`, `^`; `@x`, `+x`, `a%b`, `a:b`, `a,b` stay literal under `ksh_glob` and `extended_glob`; the over-refusals (`| jq`, `> out.json`) stated; "6 (b) sees it". No mutation could pass through `=` (rule 4 fixes the query's start). Building waits for Ola by day (governed files).
+
+**Code review (PR A), round 1, 2026-10-15.** Range `b02b6fc3..fa7bb196`, 0 net production lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session. (1) README step 4 names the three verdicts. (2) Section 11 says CI runs every job on PR A. The rule text matches section 8 word for word; it holds no history; no rule file contradicts it.
