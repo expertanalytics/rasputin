@@ -285,9 +285,7 @@ built separately, so `_core`'s bound type cannot be its argument (section
   with one struct in both modules, `module_local` or not, a `_core.RasterView`
   would load as `_snow`'s argument whenever the two share pybind11 internals.
   With distinct tags the two `typeid` names differ, both lookups miss, and the
-  argument is refused with a `TypeError`. When the two modules do not share
-  internals (another pybind11 ABI), neither registry sees the other's type and
-  the result is the same `TypeError`. No C++ type is registered twice, so the
+  argument is refused with a `TypeError`. When the two modules do not share internals but have the same platform ABI, pybind11's C++ conduit (`detail/type_caster_base.h`, lines 1317 and 1329-1352) asks the other module for the argument by its `typeid` name: one struct in both modules would be accepted, but with distinct tags the other registry finds no such type and the result is the same `TypeError`. With a different platform ABI there is no route at all. No C++ type is registered twice, so the
   `generic_type: type "RasterView" is already registered!` failure
   (`pybind11.h`, line 1823) cannot occur either. `module_local` is kept so
   `_snow`'s class never enters the global registry, but the tag, not
@@ -585,3 +583,5 @@ what uses it.
 ## Review
 
 **Design review, round 1, 2026-10-15.** Range `master..ac9fef5a`, 0 counted lines, @reviewer: CHANGES REQUESTED. (1) Section 4.3 and QT3: pybind11 3.1.0 finds types by name (pybind11 header detail/internals.h, line 202), and `_snow`'s module-local caster falls back to `_core`'s global registration (pybind11 header detail/type_caster_base.h, lines 1294-1299), so a `_core.RasterView` is accepted by `_snow.horizon_search`, not refused; bind a differently named C++ type on the private side (e.g. a tag template parameter). (2) No startup cost stated for `discover()` before every command (entry-point scan about 22 ms warm with no plugin); state it, plugin import cost unmeasured until Q1. Wordings: `io/vtk_read.py`'s only production caller is `snow` (`cli.py:3165`); add `_SNOW_STATIC` (`cli.py:3069`) to the moving helpers; section 3.2 cites line 135 too; the status line and ROADMAP row 51 say the five questions were ruled at their defaults on 2026-10-15.
+
+**Design review, round 2, 2026-10-15.** Range `ac9fef5a..ecfea310`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (section 4.3: the separate-registry case is refused because the tags differ, not because the registries are apart; pybind11's C++ conduit crosses them).
