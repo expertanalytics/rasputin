@@ -25,7 +25,7 @@ What it does not do: rewrite history. The snow pull requests merged on public
 master (#257 to #267) stay in the public history and stay MIT for anyone who
 has a copy; the removal is a pull request on public master like any other.
 
-The private package is named `rasputin-lsm` (import `rasputin_lsm`, extension module `_lsm`): a land surface model on the TIN, not a catchment hydrology model (Ola, 2026-10-15).
+The private package is named `rasputin-lsm` (import `rasputin_lsm`, extension module `_lsm`) (Ola, 2026-10-15).
 
 ## 2. Prior art: legacy and literature
 
