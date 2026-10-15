@@ -86,7 +86,7 @@ option(RASPUTIN_BUILD_PYTHON "Build the Python extension module" OFF)
 if(RASPUTIN_BUILD_PYTHON)
     find_package(pybind11 CONFIG REQUIRED)
 
-    pybind11_add_module(_core bindings/core.cpp bindings/snow.cpp bindings/radiation.cpp)
+    pybind11_add_module(_core bindings/core.cpp)
     # terrain_cdt for DetriaBackend::triangulate, and terrain_predicates
     # because build_pslg validates under DefaultKernel -- the same pair, for
     # the same two reasons, that tests/cpp/CMakeLists.txt's add_terrain_cdt_test
