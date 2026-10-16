@@ -118,7 +118,18 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   its bytes
   plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
   plugin_api.py            # re-exports only: what a plugin may import
-  cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins
+  cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins;
+                           #   destination refuses a symlinked output file and
+                           #   makes the output's missing folders
+  mcp/                     # `rasputin mcp`: the commands as MCP tools; needs
+                           #   the mcp extra
+    schema.py              # pure: one tool per Typer command, its argument
+                           #   model and JSON schema, argv back, and writes():
+                           #   the arguments on writable path parameters
+    server.py              # the only async code: each call a child process;
+                           #   the output root (--out-root, default
+                           #   ~/rasputin-output): a written path resolving
+                           #   outside it is refused before the child runs
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
@@ -271,13 +282,26 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   added by `catalogue()`; data_root, xdg_base and
                            #   user_source_candidates/user_source_file find that
                            #   file from an environment mapping ($RASPUTIN_DATA,
-                           #   else the XDG config directory; 55); imports
+                           #   else the XDG config directory; 55); a local
+                           #   entry is GeoTIFFs or a vector file (.gpkg,
+                           #   .geojson, .json; values "features"); plugins'
+                           #   sources.toml files come through the entry point
+                           #   group rasputin.sources (plugin_source_files),
+                           #   after the user's, never replacing an entry;
+                           #   OUT_ROOT_VARIABLE, the MCP server's output root
+                           #   as the `sources` child sees it; imports
                            #   Pydantic and toml_data only, so the mesh path
                            #   names a key without importing fetch/
   source_report.py         # `rasputin sources` (55): each source's coverage
                            #   (lon/lat box), cell size in metres, CRS, height
                            #   unit, tiles, read from headers through
-                           #   dem_input.repository_for or the tile cache;
+                           #   dem_input.repository_for or the tile cache; a
+                           #   vector source's layer, geometry, feature count,
+                           #   attributes and class values through
+                           #   io/geopackage and io/geojson; fits(), pure: the
+                           #   commands, options and MCP arguments each source
+                           #   fits, restating the readers' rules; the MCP
+                           #   output root (out_root);
                            #   imports pyproj and shapely, so kept out of
                            #   sources.py; imports nothing from cli.py
   toml_data.py             # parse/validate: TOML into a strict Pydantic model,

@@ -115,7 +115,7 @@ takes this in `claude_desktop_config.json` (on macOS under
 `~/Library/Application Support/Claude/`):
 
 ```json
-{"mcpServers": {"rasputin": {"command": "/path/to/venv/bin/rasputin", "args": ["mcp"]}}}
+{"mcpServers": {"rasputin": {"command": "/path/to/venv/bin/rasputin", "args": ["mcp", "--out-root", "/path/to/outputs"]}}}
 ```
 
 Codex takes the same two fields in `~/.codex/config.toml`:
@@ -123,10 +123,15 @@ Codex takes the same two fields in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.rasputin]
 command = "/path/to/venv/bin/rasputin"
-args = ["mcp"]
+args = ["mcp", "--out-root", "/path/to/outputs"]
 ```
 
-Those two fields are all a client needs. An `env` table is optional: with
+Those two fields are all a client needs. Every file a tool call writes must
+lie inside the output root, `--out-root`, else the call is refused: a path
+that leads out through `..` or a symbolic link is refused too. Missing folders
+inside the root are made as needed, the root among them. Without
+`--out-root` the root is `~/rasputin-output`. The tools that take an input
+file read it wherever it is. An `env` table is optional: with
 `env = { RASPUTIN_DATA = "/path/to/data" }` the server reads the cache in
 `/path/to/data/cache`, and a `/path/to/data/sources.toml`, if one exists, as
 your sources file; without it, the cache is in `~/.cache/rasputin` (or
@@ -152,6 +157,13 @@ with its coverage as a longitude/latitude box, cell size in metres, CRS,
 height unit, description and credit, read from the files' headers (with
 `bbox`, the share of an area each covers). The agent passes the chosen
 source's id as `dem` to `mesh`, `catchment` or `station_catchments`.
+The listing also names vector datasets (polygons, lines, points) with their
+path, layer, geometry types, feature count, attributes and, for land cover,
+the class values, and it reports the output root as `out_root`. Each source's
+`fits` names the tools and arguments it can be given to (`mesh` `features`
+with the class map to pass, `catchment` `lakes`, `station_catchments`
+`stations`, ...), read from the file's header; the agent passes a vector
+source's path, not its id.
 
 Data already on the machine is registered by name in your sources file,
 `~/.config/rasputin/sources.toml` (or `$XDG_CONFIG_HOME/rasputin/sources.toml`;
@@ -167,10 +179,34 @@ licence_note = "CC BY 4.0"
 description = "Bare-ground terrain model, 10 m cells."
 ```
 
-A relative `path` is taken from the file's directory. The CRS, cell size and
-coverage come from the GeoTIFFs themselves; `z_unit = "metre"` names the
+A vector dataset is a `.gpkg`, `.geojson` or `.json` path; `layer` names the
+table of a GeoPackage that holds more than one, and `class_map` the class map
+a land-cover file is coded in:
+
+```toml
+[source.my-lakes]
+kind = "local"
+path = "/data/hydrography/lakes.geojson"
+credit = "© The data's owner"
+licence_note = "CC BY 4.0"
+description = "Lake polygons, 1:50 000."
+
+[source.my-land-cover]
+kind = "local"
+path = "~/data/landcover.gpkg"
+layer = "landcover"
+class_map = "corine"
+credit = "© The data's owner"
+licence_note = "CC BY 4.0"
+description = "Land-cover polygons, minimum mapping unit 25 ha."
+```
+
+A relative `path` is taken from the file's directory, and `~` is your home.
+The CRS, cell size and coverage come from the files themselves; `z_unit = "metre"` names the
 height unit for files that do not state it. `rasputin sources` on the
 command line shows the same listing, and says which sources file it read.
+An installed plugin may add datasets of its own (`docs/plugins.md`, *Ship
+datasets*).
 
 ## Add a command of your own
 

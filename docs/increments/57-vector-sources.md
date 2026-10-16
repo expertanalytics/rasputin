@@ -1,6 +1,6 @@
 # Increment 57: vector datasets in the catalogue, the options each fits, output folders made
 
-**Status: designed** (branch `worktree-vector-sources`, from master `a0a1ad45`); revised to design review round 1.
+**Status: in progress** (branch `worktree-vector-sources`, from master `a0a1ad45`): code green at `08cb70c2` except the output folders, whose design (section 4.6) is revised to Ola's ruling on `--out-parent`: the guard moves into the MCP server.
 
 ## 1. What Ola asked, and what failed
 
@@ -96,7 +96,9 @@ Read: `../rasputin_scratch/ideas/ideas.md`. Overlapping, left out:
 "Structure for rasputin_data and rasputin_scratch" (registration, not a
 folder layout, is how data is found); "Atomic mesh outputs" (this touches the
 output path but not how a file is written); "Data-dependent tests never run in
-a worktree"; "Intent layer over rasputin". Taken up from outside the file: the
+a worktree"; "Intent layer over rasputin"; "`--stats` swallows the next option
+as its path" (`--stats` becomes a writable path that allows `-`; the
+ambiguity stays). Taken up from outside the file: the
 three ideas from 55's code review (section 4.8), which the main session's
 brief names but the file does not yet hold.
 
@@ -307,35 +309,130 @@ layer as `--features-layer` or `--lakes-layer` and the fit's `class_map` as
 `--features-map`. `cli.py`'s vector options, their help and the MCP tool
 schemas are unchanged.
 
-### 4.6 Output folders are created (`cli_kit.destination`)
+### 4.6 Output folders: made by the CLI, fenced by the MCP server
 
-After every existing check passes, `destination` creates the missing folders
-of `target.parent` (`mkdir(parents=True, exist_ok=True)`); an `OSError` there
-(a file in the way, no permission) is a `typer.BadParameter` naming the
-folder and the option. With `--out-parent`:
+Ola's ruling (2026-10-16), on removing `--out-parent`: "We could remove it,
+but we should have some kind of guard against writing everywhere"; on the
+guard in the server with a fixed default root: "Yes, go with (a)". So the
+fence moves from three CLI options to the one process an agent talks to, and
+the CLI keeps only the checks every caller needs.
 
-- Default, while Ola's question is open: `--out-parent` must be an existing
-  directory, else refused naming `--out-parent`. It is the boundary the caller drew; creating it would turn a
-  typo into a new tree.
-- The containment check runs before any folder is made, on the resolved path,
-  so only folders under the permitted parent are created, and a refused path
-  creates nothing.
+```
+rasputin mcp [--out-root DIR]            DIR, else ~/rasputin-output
+   │  build_server(app, out_root=...)    root = DIR.expanduser().resolve(), once
+   v
+call_tool: validate the arguments (as today)
+   │  tool.writes(arguments)             schema.py, pure: (argument, path) for each
+   │                                     value set on a writable path parameter
+   │  _outside_root(writes, root)        server.py: await AsyncPath(p).resolve();
+   │                                     not is_relative_to(root) -> refusal
+   v  (refused: an error result, no child, nothing made, no job slot taken)
+child: python -m tin_engine <argv>, env + RASPUTIN_MCP_OUT_ROOT=<root>
+   │  cli_kit.destination(out, hint)     refuses a symlinked last part, resolves,
+   v                                     makes the missing folders (the root too)
+writer
+```
 
-So every writer that goes through `destination` gains it, a plugin's too
-(`plugin_api` re-exports `destination`); `palette --out` is routed through it
-(today it writes with no check). `station-catchments --out-dir` already makes
-its own last folder; `destination` now makes its parents.
+**Which arguments are output paths.** The marker is Click's own: a path
+parameter declared `writable=True` (`typer.Option(..., writable=True)`;
+Click's `Path.writable`, which Typer passes through). `DerivedCommand` gains
 
-Default, while Ola's question is open (accepted cost): the folders are made when the path is checked, before the run,
-so a run that fails later leaves an empty folder. Deferring the creation to
-each writer would put it in every writer, plugins included.
+```python
+def writes(self, arguments: BaseModel) -> list[tuple[str, str]]:
+    """(argument, path) for each value the caller set on a parameter whose type
+    is a writable path, options and positional arguments alike, every item of
+    a repeatable one; "-" is skipped where the parameter allows a dash
+    (stdout, not a file)."""
+```
 
-Overlap with increment 56 (deletion of `rasputin draw`, branch
-`worktree-delete-draw`, built): 56 removes `destination`'s `out is None` branch
-and moves its boundary tests to a new `tests/python/test_cli_kit.py`, whose
-"a missing directory is a refusal naming it" this increment reverses. 56
-merges first; this branch takes master with 56 before `@tester` starts, and
-`@tester` amends that test in the red commit.
+derived from `command.params`, as `argv` is: no list per tool. Typer ignores
+`writable` on a `str` annotation (probe: `StringParamType` has no
+`writable`), so `--stats` and `--record` become `Path | None` with
+`writable=True, allow_dash=True`; their `== "-"` tests compare to
+`Path("-")`. The JSON schema is the same (`path` and `str` are both
+`"string"`; probed on a toy app). Marked in the core:
+
+| Tool | Arguments marked `writable=True` |
+| --- | --- |
+| `mesh` | `out`, `out_edges`, `stats`, `record_path` |
+| `palette` | `out` |
+| `catchment` | `out` |
+| `station_catchments` | `out_dir` |
+| `fetch_stations` | `out_dir` |
+| `fetch` | `cache` (it writes tiles there; the read-only `--cache` of `mesh`, `catchment`, `station-catchments` and `sources` is not marked) |
+
+A plugin's command is a tool of the same server, so its output options are
+recognised the same way: the plugin declares them `writable=True`
+(`docs/plugins.md`, *Output paths*). An unmarked option is not fenced; that
+is stated there, and is the cost of deriving rather than listing.
+
+**The check** (`server.py`, in `call_tool`, after validation and before the
+job slot, so a refusal never waits behind a running job). Each path is
+resolved with `AsyncPath.resolve()` (non-strict: a missing tail is kept),
+which removes `..` and follows every symlink, the last part included, and is
+judged against the root resolved once at build. A relative path is resolved
+against the server's working directory, which the child inherits, so both
+read it alike; `~` is not expanded, as the CLI does not expand it. The first
+path outside is an error result, exit code None (as a validation error), in
+these words:
+
+```
+out: /tmp/x/../escape/m.vtk resolves to /private/tmp/escape/m.vtk, outside the output root /Users/o/rasputin-output; write inside it (rasputin mcp --out-root sets the root)
+```
+
+The root itself may be a symlink (`~/rasputin-output` linked to a data disk):
+it is resolved once, and paths through either spelling pass. Not checked,
+stated limitations: a hard link inside the root to a file outside (rasputin
+writes `.vtk`, `.ply` and JSON in place; an agent with only the MCP tools
+cannot make a link); a symlink swapped in between the check and the child's
+write (no tool makes one). The guard is about what an agent can name; a
+plugin's own code can write anywhere, as any installed code can.
+
+**`build_server(app, *, jobs=1, child=CHILD, out_root: Path | None = None)`**:
+None means `Path.home() / DEFAULT_OUT_ROOT`, `DEFAULT_OUT_ROOT =
+"rasputin-output"` (a chosen name). `rasputin mcp` gains `--out-root DIR`
+(`Path | None`, help: "Tool calls may write only inside this folder, through
+`..` and links too; missing folders inside it are made. Default:
+~/rasputin-output.") and passes it to `serve`. Neither the given nor the
+default root is made or checked at start: the first write makes it, through
+`destination`, so an explicit root and the default behave alike, and a file
+in the way is that first call's refusal naming the folder.
+
+**Missing folders are made by the CLI**, in `destination`, not by the
+server: the server then does no file writes beyond its sidecars, a shell
+user gets the same folders, and a plugin writer through `destination` gets
+them too. The containment check has already run, so only folders inside the
+root are made from an MCP call. `fetch-stations --out-dir` already makes its
+own (`mkdir(parents=True)`); `station-catchments --out-dir` makes its last
+folder, `destination` its parents.
+
+**`cli_kit.destination` becomes `destination(out: Path, hint: str = "--out")
+-> Path`**: the final-part symlink refusal (kept: a link inside the root that
+points elsewhere inside it passes containment and still overwrites a file the
+caller never named), `resolve()`, then
+`target.parent.mkdir(parents=True, exist_ok=True)`, an `OSError` a
+`typer.BadParameter` naming `target.parent` and `hint`. `out_parent` goes
+with the option, and `name` goes because the body never read it. It stays in
+`plugin_api`; the change is a promised name changing, so the release that
+carries it says so (`docs/plugins.md` table). No plugin caller is known:
+`rasputin-radiation` has none (`grep -rn destination`); the private package
+is not on this machine, so it is assumed to have none.
+
+**`--out-parent` is removed** from `mesh`, `catchment` and
+`station-catchments`, with its parameter through `_report_target`,
+`_record_target` and the seven `_destination` calls. From a shell there is
+no fence: the shell user can write anywhere already.
+
+**`sources` reports the root.** The server puts `RASPUTIN_MCP_OUT_ROOT=<root>`
+in every child's environment (beside `CHILD_ENV`); `OUT_ROOT_VARIABLE` is
+defined in `sources.py` (standard library only, so the server imports it
+without pyproj). `listing(environ, ...)` already takes the environment and
+sets the new `CatalogueReport.out_root: str | None` from it: the root under
+the server, null from a shell. The variable only informs the listing; the
+CLI fences nothing with it, and the help of `sources` does not offer it.
+
+Accepted cost (as before): the folders are made when the path is checked,
+before the run, so a run that fails later leaves an empty folder.
 
 ### 4.7 Plugins register sources
 
@@ -398,22 +495,34 @@ general guidance only (no dataset, country or resolution):
 
 ```
 sources also lists vector datasets (polygons, lines, points) with their path, layer, geometry, feature count, attributes and, for land cover, the class values. Each source's fits names the tools and arguments it can be given to, with the class map to pass as features_map; what the features are is in its description. Pass its path to those arguments, its layer as features_layer or lakes_layer, and the fit's class map as features_map.
-Output folders are created as needed, inside out_parent when it is given.
+Output folders are created as needed, inside the output root that sources reports as out_root; a path outside it, through .. or a link too, is refused.
 ```
 
-`READ_ONLY`, `RunResult`, the schema derivation and the tool schemas are
-unchanged (the snapshots too).
+`READ_ONLY`, `RunResult` and the schema derivation are unchanged; the tool
+schemas lose `out_parent` (from `mesh`, `catchment`, `station_catchments`);
+`test_mcp_schema.py`'s `MESH_SNAPSHOTS` hold none of the changed properties,
+so they stand. The root is not in the instructions: they are fixed text, and
+the listing carries it.
 
 ### 4.10 Docs
 
-- `README.md`, *Connect an agent*: a vector example table beside the raster
-  one (generic names and paths), one sentence on `fits`, one on output
-  folders.
-- `docs/plugins.md`: a section "Ship datasets", the entry point group, the
-  package holding `sources.toml`, and the clash rule.
-- `project_structure.md`: `sources.py` holds vector entries and plugin
-  files; `source_report.py` reads vector headers and derives the fits.
-- `data/sources.toml`'s header comment: the third place entries come from.
+Written with this revision by `@architect`, except the last:
+
+- `README.md`, *Connect an agent*: `--out-root` in the args example, the
+  output root paragraph, a vector example table beside the raster one
+  (generic names and paths), one sentence on `fits`.
+- `docs/plugins.md`: *Ship datasets* (the entry point group, the package
+  holding `sources.toml`, the clash rule); *Output paths* (`writable=True`);
+  the `destination` row.
+- `project_structure.md`: `sources.py`, `source_report.py`, `cli_kit.py`, and
+  an entry for `mcp/`, which it lacked.
+- `src_python/tin_engine/data/sources.toml`'s header comment is outside
+  `@architect`'s write limit; `@developer` replaces its third sentence with:
+  "Your own sources, local datasets among them (kind = "local", path: GeoTIFFs,
+  or vector files .gpkg, .geojson or .json), go in your sources file in the
+  same [source.<id>] form, under ids of their own: [the three places, as now].
+  A plugin may ship a sources.toml of its own (entry point group
+  rasputin.sources)."
 
 ### 4.11 Repeating Ola's Codex test without a shell
 
@@ -434,6 +543,9 @@ counterpart is T7.
 
 - `destination`'s refusal "is not an existing directory", replaced by the
   creation of the folders (section 4.6).
+- `--out-parent` on `mesh`, `catchment` and `station-catchments`, and
+  `destination`'s `out_parent` and unused `name` parameters, replaced by the
+  server's output root (section 4.6).
 - `palette`'s unchecked `out.write_text`, replaced by `destination`.
 - `listing`'s rule `register = user or looked[0]`, replaced by section 4.8.1.
 
@@ -447,6 +559,11 @@ counterpart is T7.
 - Footprints finer than the extent box; feature counts inside `--bbox`.
 - Telling lakes from land cover in `fits`: the description says it.
 - `station-catchments --only`, `--reference` beyond the key: unchanged.
+- A fence for shell users: `--out-parent` is gone, and `RASPUTIN_MCP_OUT_ROOT`
+  fences nothing in the CLI (section 4.6).
+- Relative output paths taken from the root (running the child in it): a
+  relative input path would then change meaning.
+- Hard links and a symlink swapped in after the check (section 4.6).
 
 ## 7. Tests
 
@@ -536,32 +653,81 @@ package directory holding `sources.toml`.
   `.config/rasputin/sources.toml` registers fixture L, the lake file and the
   land-cover GeoPackage under ids that name nothing real; `RASPUTIN_DATA` and
   `XDG_CONFIG_HOME` unset). After that setup the test acts only through tool
-  calls: `sources` with `bbox` (15.15 59.33 15.20 59.38); it takes the DEM
+  calls, on a server built with **no `out_root`**, so the default root
+  `<HOME>/rasputin-output` applies and is absent before the first call:
+  `sources` with `bbox` (15.15 59.33 15.20 59.38); it reads `out_root` off
+  the listing (equal to the resolved `<HOME>/rasputin-output`), takes the DEM
   id from the entry fitting `catchment` `dem` with `box_covered` 1.0, and
   the lake source's `path` and the land-cover source's `path`, `layer` and
   fit `class_map` from the entries whose `fits` name `lakes` and `features`;
   `catchment` with `dem=[dem id]`, `seed`, `seed_crs`, `lakes=<lake path>`,
-  `out` in `<tmp>/new/deeper/c.geojson` (absent): exit 0, the output listed;
+  `out` = `<out_root>/new/deeper/c.geojson`: exit 0, the output listed;
   `mesh` with `dem=[dem id]`, `domain` the catchment's output path taken from
   the tool result, `tolerance` 5, `features=[land-cover path]`,
-  `features_layer=[its layer]`, `features_map=[the fit's class_map]`, `out` in `<tmp>/meshes/run1/m.gpkg`
-  (absent): exit 0, the run record (structured data) naming layer
-  `landcover` and map `corine`. The oracle may then read the files: 766
-  nodes, 1083 triangles, codes 311:1004 and 512:79.
-- **T8 output folders**: `destination` creates a missing chain under no
-  `out_parent` and under an existing one; a path outside `out_parent` is
-  refused and creates nothing (asserted by listing `tmp_path` before and
-  after); a missing `--out-parent` is refused naming `--out-parent`; a file in
-  the way is refused naming the folder; `palette corine --out <absent>/p.json`
-  writes. 56's `test_a_missing_directory_is_a_refusal_naming_it` becomes the
-  creation test.
+  `features_layer=[its layer]`, `features_map=[the fit's class_map]`, `out` =
+  `<out_root>/meshes/run1/m.gpkg`: exit 0, the run record (structured data)
+  naming layer `landcover` and map `corine`. The oracle may then read the
+  files: 766 nodes, 1083 triangles, codes 311:1004 and 512:79 (the figures
+  measured above; the folders do not change them).
+- **T8 output folders and the fence.** Replaces the eight red tests at
+  `08cb70c2` that named `out_parent` or expected it (TestOutputFolders'
+  three, the two palette tests, T7, T10's two): the palette tests, T7 and
+  T10 stay with the changes stated here; the rest are below. Every refusal
+  asserts that nothing was made (`sorted(tmp_path.rglob("*"))` before and
+  after) and, through the server, that the child never ran (`mcp_driver.fake_child` with an `argv_file`,
+  which stays absent).
+  - **T8a `destination`** (`test_cli_kit.py`): a missing chain is made and
+    the file is not; an existing folder is left as it is; `tmp/a/../b/x.ply`
+    makes `tmp/b`, not `tmp/a`; a file in the way is refused naming the folder,
+    hint `--out`; a symlinked `--out` whose target's folder is absent is
+    refused before any folder is made. `palette corine --out <absent>/p.json`
+    writes; `palette` refuses a symlinked `--out` (both as at `08cb70c2`).
+    `TestOutputFolders`' three `out_parent` tests are deleted with the
+    parameter.
+  - **T8b recognition, pure** (`test_mcp_schema.py`): on a toy app, `writes`
+    returns a writable option's value, each item of a repeatable one and a
+    writable positional argument's; skips an unset one, `-` on a parameter
+    that allows a dash, and a path parameter not marked writable. On
+    `cli.app`, the set of (tool, argument) with a writable path equals the
+    table of section 4.6 (a drift guard: the list is the test's, not the
+    code's), and no tool has an `out_parent` argument.
+  - **T8c the fence** (`test_mcp_vector_sources.py`, `build_server(app,
+    out_root=<tmp>/root, child=fake_child(...))`, the root absent): `mesh` with `out`
+    `<root>/a/m.vtk` runs the child; refused, each naming the argument and the
+    root: `out` = `<root>/../escape/m.vtk`; `out` through a symlinked folder
+    `<root>/link` (made by the test) pointing at `<tmp>/outside`; `out` =
+    `<root>/l.vtk`, a symlink to `<tmp>/outside/real.vtk`; `record_path`,
+    `out_edges` and `stats` each outside with `out` inside. Passes: `stats`
+    `-`; a relative `out` with the working directory (`monkeypatch.chdir`)
+    inside the root; a root given as a symlink to `<tmp>/real` with `out`
+    spelled through either name. `fetch` with `cache` outside is refused.
+  - **T8d a plugin's output** (`test_plugins.py`, `plugin_fixtures`' fake
+    distribution gaining a command with a `writable=True` `--out` that writes
+    a line): over `build_server(plugins.application(...), out_root=<root>)`,
+    inside writes, outside is refused and the child never runs.
+  - **T8e the root reported**: `sources` over a server with
+    `out_root=<tmp>/root` lists `out_root` as its resolved path; `rasputin
+    sources` from the CLI with no `RASPUTIN_MCP_OUT_ROOT` lists `out_root`
+    null; `rasputin mcp --out-root <dir>` (through `mcp_stdio_launcher.py`, the
+    real stdio entry) reports it the same way; `mesh --out-parent x` is a
+    usage error (no such option).
+  - Existing tests that name `out_parent` go with the option:
+    `test_mcp_server.py` (`test_out_parent_passes_through...`, the
+    `with_out_parent` parametrisation, `test_out_outside_out_parent_...`),
+    `test_cli_mesh_stats.py` (`test_out_parent_applies_to_the_report`,
+    `test_stats_outside_out_parent`), `test_cli_mesh_plain_output.py`
+    (`test_outside_out_parent`). Every other `build_server` call that writes
+    outside the default root passes `out_root=tmp_path` (`mcp_driver.py`,
+    `test_mcp_server.py`'s builder, `mcp_stdio_launcher.py`,
+    `test_plugins.py`, `test_mcp_datasets.py` where it writes).
 - **T9 the review ideas**: `register_at` is the XDG file with
   `RASPUTIN_DATA` set and its file present, and the `note` says so; the
   fetch hints of `mesh` (missing cache with `--domain` and `--cache` holding a
   space) and `catchment` (fixture C of 55, its seed block row skipped, a
   cache path with a space) parse back with `shlex.split` to the same values.
 - **T10 instructions**: the initialise result contains "fits", "Pass its
-  path" and "Output folders are created as needed", and no source id.
+  path", "Output folders are created as needed" and "out_root", and no
+  source id.
 - Unchanged: `test_mcp_schema.py`'s snapshots. 55's `register_at`
   assertions (`test_cli_sources.py`, `test_mcp_datasets.py`) all run with
   the XDG file as the only candidate, so they hold unchanged.
@@ -578,8 +744,11 @@ Net production lines (`CLAUDE.md` §2; TOML and docs not counted):
 | `io/geopackage.py` `layer_summary`, `distinct_values`; `io/geojson.py` `collection_summary` | 45 |
 | `source_report.py`: vector branch, `_lonlat` split, `ClassField`, new fields, `register_at`, notes, plugin problems; `Facts`, `Fit`, `fits` | 125 |
 | `cli.py`: plugin files to `_known_sources`, refusals on stderr, quoted hints, palette through `destination` | 15 |
-| `cli_kit.destination`; `mcp/server.py` instructions | 12 |
-| **Total** | **about 270**; worst case 370 |
+| `cli_kit.destination`: containment out, folders made | 0 |
+| `cli.py`: `--out-parent` out of three commands and two helpers; `writable=True` and `Path` on the marked options; `mcp --out-root` | -10 |
+| `mcp/schema.py` `writes`; `mcp/server.py` root, fence, child variable, instructions | 35 |
+| `sources.py` `OUT_ROOT_VARIABLE`; `source_report.py` `out_root` | 4 |
+| **Total** | **about 315**: 286 measured at `08cb70c2` before the folder part (`python3 tools/count_loc.py da133bce 08cb70c2`), plus about 30 for it; worst case 400 |
 
 Round 1 of the design review cut about 40 lines: `_vector_source` and the
 seven options' retyping (section 4.5), and a module's overhead.
@@ -590,7 +759,7 @@ One PR, the full path (over 50 lines). It touches no refine or mesh code
 ## 9. Files
 
 `src_python/tin_engine/sources.py`, `source_report.py`, `io/geopackage.py`, `io/geojson.py`, `cli.py`, `cli_kit.py`,
-`mcp/server.py`, `data/sources.toml` (comment); `README.md`, `docs/plugins.md`,
+`mcp/server.py`, `mcp/schema.py`, `data/sources.toml` (comment); `README.md`, `docs/plugins.md`,
 `project_structure.md`, `ROADMAP.md`; tests under `tests/python/` (T1 to T10,
 the fixture helpers).
 
