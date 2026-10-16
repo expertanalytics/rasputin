@@ -126,10 +126,11 @@ command = "/path/to/venv/bin/rasputin"
 args = ["mcp"]
 ```
 
-Those two fields are all a client needs. An `env` table is optional, and only
-says where the tile cache lives: with
+Those two fields are all a client needs. An `env` table is optional: with
 `env = { RASPUTIN_DATA = "/path/to/data" }` the server reads the cache in
-`/path/to/data/cache`; without it, in `~/.cache/rasputin`.
+`/path/to/data/cache`, and a `/path/to/data/sources.toml`, if one exists, as
+your sources file; without it, the cache is in `~/.cache/rasputin` (or
+`$XDG_CACHE_HOME/rasputin`).
 
 The agent sees one tool per rasputin command (`sources`, `mesh`, `catchment`,
 `fetch`, `fetch_stations`, ...; the names use underscores), each with the command's

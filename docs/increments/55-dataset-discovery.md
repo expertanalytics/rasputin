@@ -1,6 +1,6 @@
 # Increment 55: an agent finds the local elevation data and passes it by name
 
-**Status: built, awaiting code review** (branch `worktree-mcp-datasets`, green at `8024f89d`); design review round 1 APPROVED WITH WORDINGS, applied by the main session.
+**Status: built** (branch `worktree-mcp-datasets`, green at `8024f89d`; code review round 1 approved with wordings); design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked, and why it failed
 
@@ -172,8 +172,9 @@ Rules in `_consistent`, each a `ValueError` naming the field:
   `tile_name`, `tile_spacing`, `years` and `crs` refused (the CRS is the files'
   own, read from their headers; one source of truth); `values = "classes"`
   refused ("a local class raster is given to --land-cover as a file").
-- any other kind: `path` refused, `crs` needed (as today, so `fetch/run.py`
-  narrows it at each of its three reads (`_header`, `_tiles`, `_region`)).
+- any other kind: `path` refused, `crs` needed (as today; `fetch/run.py`
+  narrows it where it needs a string, in `_header` and `_tiles`, and `fetch`
+  refuses a local key before either).
 - `catalogue()` resolves a relative `path` from the sources file's directory,
   as it already does for `class_map`. It does not check that the path
   exists: the listing reports a missing path as that source's problem, and a
@@ -360,8 +361,8 @@ What each figure is, all from the headers through the existing readers:
   covered by the union, else 0.0. None without `--bbox` or when nothing was read.
 - `z_unit_from`: "file" when the header states it, "catalogue" when the entry's
   `z_unit` was used, "assumed" when neither (metres); None for classes.
-- `problem`: any `OSError` or `ValueError` from reading that source, in its
-  own words (`cli._words` where it applies); the other sources are still read.
+- `problem`: any `OSError` or `ValueError` from reading that source, its
+  message as raised; the other sources are still read.
 - `note`: when no user file exists, "No user sources file: looked at
   <paths>. To use a local DEM, add a [source.<id>] table with kind = "local",
   path, credit, licence_note and description to <register_at>."; when a
@@ -555,3 +556,4 @@ updates).
 ## Review
 
 - **Design review, round 1, 2026-10-16.** Commit `8a29e876`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `local` (repeats `kind`), `RunResult.data`/`JSON_STDOUT` and the `Origin`/`Place`/`cache_place` origin tracking dropped; T5 selects from the listing before use; the CRS narrowing at three reads. Held: no second registry; the windowed cache read is needed (`CacheRepository.load` reads whole tiles); the SDK passes HOME by default.
+- **Code review, round 1, 2026-10-16.** Range `9a7c312d..7fe02783`, 240 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the CRS narrowing names `_header` and `_tiles`; `problem` is the message as raised; README's `env` note names the sources file too. Held: no second registry, no Norway or machine specifics, windowed catchment read; unquoted hint path not blocking (as mesh's; MCP passes a list). Field check: Ola's Codex run on the branch build with only command and args found `dtm10-norway` through `sources` and ran catchment then mesh by key.
