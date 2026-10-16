@@ -83,8 +83,9 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def server() -> Any:
-    return mcp_server.build_server(app)
+def server(out_root: Path | None = None) -> Any:
+    """The production server; a test that writes gives its own directory as the output root."""
+    return mcp_server.build_server(app, out_root=out_root)
 
 
 def body_of(result: Any) -> dict[str, Any]:
@@ -214,7 +215,7 @@ class TestT5SelectionThenUse:
         lakes = lake_file(tmp_path / "lakes.geojson")
         outline = tmp_path / "catchment.geojson"
         catchment = await call(
-            server(),
+            server(tmp_path),
             "catchment",
             {"out": str(outline), "dem": [key], "seed": list(SEED), "seed_crs": EPSG,
              "lakes": str(lakes)},
@@ -224,7 +225,7 @@ class TestT5SelectionThenUse:
         assert feature["properties"]["nodes"] == NODES_WITH_LAKE
         out = tmp_path / "mesh.vtk"
         mesh = await call(
-            server(), "mesh", {"out": str(out), "dem": [key], "domain": str(outline),
+            server(tmp_path), "mesh", {"out": str(out), "dem": [key], "domain": str(outline),
                                "tolerance": 5.0},
         )  # fmt: skip
         record = body_of(mesh)["record"]

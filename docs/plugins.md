@@ -51,6 +51,46 @@ and the core runs on:
 
 `rasputin version` lists only the plugins that loaded.
 
+## Output paths
+
+`rasputin mcp` lets a tool call write only inside its output root
+(`--out-root`, default `~/rasputin-output`). It tells an output path from an
+input path by Click's own marker: a path option or argument declared
+`writable=True`. Mark every option your command writes to:
+
+```python
+out: Annotated[Path, typer.Option("--out", writable=True, help="Where to write.")]
+```
+
+A value of such an option that resolves outside the root, through `..` or a
+symbolic link too, is refused before your command runs. An option left
+unmarked is not fenced. Typer ignores `writable` on a `str` option, so
+declare it as `Path`; add `allow_dash=True` where `-` means stdout. Pass the
+path to `destination` (below) before writing: it refuses a symbolic link as
+the file itself and makes the missing folders.
+
+## Ship datasets
+
+A plugin may add datasets to the catalogue that `rasputin sources` lists
+and `--dem` reads by id. Declare an entry point in the group
+`rasputin.sources` whose value names a package, not an attribute; the
+package holds a `sources.toml` in the format of your own sources file
+(`[source.<id>]` tables; see the README, *Connect an agent*):
+
+```toml
+[project.entry-points."rasputin.sources"]
+mydata = "my_plugin.data"
+```
+
+A relative `path` in it is taken from the package's directory. A plugin
+needs no command to ship data. The catalogue is the package's sources, then
+the user's file, then each plugin's in distribution-name order, and a plugin
+never replaces an entry: its whole file is skipped, with one line on stderr
+starting `rasputin: plugin <name>`, when it cannot be read or validated or
+when one of its ids is already taken. `rasputin sources` lists the skipped
+files under `plugin_problems`, and each source's `origin` says where it
+came from (`plugin <distribution>`).
+
 ## Where it appears in `--help`
 
 A command that sets `rich_help_panel` is shown under that panel. Any other
@@ -69,7 +109,7 @@ plugins use today, and grows on request.
 | `THREADS` | The `--threads` option, as a Typer annotation |
 | `Resources` | What a run may use of the machine: threads and a memory budget |
 | `cli_resources` | `--threads` and `--memory-budget` resolved against the environment, as `Resources` |
-| `destination` | The output path, after refusing every path the process should not touch |
+| `destination` | `destination(out, hint="--out")`: the resolved output path, refusing a symbolic link as the file itself and making the missing folders; a refusal names the option `hint`. It no longer takes `out_parent` or `name`: the output root of `rasputin mcp` replaced them |
 | `words` | A refusal's own words from a `ValueError`, without Pydantic's wrapper |
 | `plural` | `"1 tile"`, `"2 tiles"` |
 | `DemRequest` | Which DEM to read: a directory, files or a cached source, and an optional box or domain |

@@ -12,6 +12,11 @@ picks a file (a year's, for MapBiomas), `credit_for` fills the fetch date and
 URL into the credit, and `check_values` keeps classes out of `--dem` and
 heights out of `--land-cover`.
 
+A local entry may also be a vector file (`.gpkg`, `.geojson`, `.json`): it
+holds features, which the vector options take by path. A plugin distribution
+adds its own `sources.toml` through the entry point group `rasputin.sources`
+(`plugin_source_files`).
+
 `STATION_SOURCES` holds the station lists `rasputin fetch-stations` copies:
 NVE's HRD stations, their catchment polygons and the river lines near them.
 """
@@ -23,6 +28,7 @@ import string
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
+from importlib.metadata import entry_points
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Protocol, Self
@@ -34,6 +40,13 @@ from tin_engine.toml_data import parse, validate
 ZUnit = Literal["metre", "foot", "US survey foot"]
 #: The fields each kind's `url_template` takes, and needs.
 _URL_FIELDS = {"one-cog": set(), "cog-tiles": {"name"}, "one-cog-per-year": {"year"}}
+#: The suffixes of the files the lake and feature readers both take.
+VECTOR_SUFFIXES = (".gpkg", ".geojson", ".json")
+#: The entry point group whose value names a package holding a `sources.toml`.
+SOURCE_GROUP = "rasputin.sources"
+#: The MCP server's output root, set in its children's environment; the listing
+#: reports it and nothing is fenced by it.
+OUT_ROOT_VARIABLE = "RASPUTIN_MCP_OUT_ROOT"
 _REMOTE_FIELDS = ("url", "url_template", "tile_list_url", "tile_name", "tile_spacing", "years")
 
 
@@ -59,7 +72,8 @@ class RemoteSource(BaseModel):
     """One source: one COG (`url`), one COG per tile (`url_template` and the
     `tile_list_url` saying which tiles exist), one COG per year
     (`url_template` with `{year}`, `years`), or a local GeoTIFF or directory
-    of them (`path`, read in place; its CRS is the files' own). A remote
+    of them (`path`, read in place; its CRS is the files' own), or a local
+    vector file, which holds features (`layer`: the GeoPackage's). A remote
     source's `crs` is the one expected, checked against each header; `credit`
     goes into every mesh made from it.
     An unknown key is refused, so a misspelt one in a file is not ignored."""
@@ -80,8 +94,11 @@ class RemoteSource(BaseModel):
     tile_spacing: tuple[PositiveFloat, PositiveFloat] | None = None
     #: The years a `one-cog-per-year` source has, ascending; the default is the last.
     years: tuple[int, ...] = ()
-    #: What the cells hold: heights for a DEM, land-cover class numbers for MapBiomas.
-    values: Literal["heights", "classes"] = "heights"
+    #: What the cells hold: heights for a DEM, land-cover class numbers for
+    #: MapBiomas; a vector file holds features.
+    values: Literal["heights", "classes", "features"] = "heights"
+    #: The layer of a GeoPackage with more than one features table.
+    layer: str | None = None
     crs: str | None = None
     #: The no-data value the source states; None when it states none.
     nodata: float | None = None
@@ -96,8 +113,28 @@ class RemoteSource(BaseModel):
     #: What the cells represent, and the resolution and region, as the distributor states them.
     description: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _features_by_suffix(cls, data: Any) -> Any:
+        """A vector path stating no `values` holds features: the file says what it is."""
+        if isinstance(data, dict) and "values" not in data and _vector(data.get("path")):
+            return {**data, "values": "features"}
+        return data
+
     @model_validator(mode="after")
     def _consistent(self) -> Self:
+        suffix = "" if self.path is None else self.path.suffix.lower()
+        if self.layer is not None and suffix != ".gpkg":
+            raise ValueError("layer: only a .gpkg path has layers")
+        if self.values == "features":
+            if self.kind != "local":
+                raise ValueError(f"values: features need a local source, not {self.kind}")
+            if not _vector(self.path):
+                raise ValueError("values: features need a .gpkg, .geojson or .json path")
+            if self.z_unit is not None:
+                raise ValueError("z_unit: features hold no heights")
+        elif _vector(self.path):
+            raise ValueError(f"values: a {suffix} path holds features")
         if self.kind == "local":
             for field in (*_REMOTE_FIELDS, "crs"):
                 if getattr(self, field) not in (None, ()):
@@ -158,6 +195,11 @@ class RemoteSource(BaseModel):
         return self.credit.format(date=date.isoformat(), url=url)
 
 
+def _vector(path: object) -> bool:
+    """Whether `path` names a vector file, by its suffix."""
+    return path is not None and Path(str(path)).suffix.lower() in VECTOR_SUFFIXES
+
+
 def check_values(source: RemoteSource, wanted: Literal["heights", "classes"], option: str) -> None:
     """Refuse `source` for `option` unless its cells hold `wanted`."""
     if source.values != wanted:
@@ -191,10 +233,24 @@ class _Tables(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class Catalogue:
-    """The shipped entries and the user's, by id."""
+    """The shipped entries, the user's and the plugins', by id; where each
+    came from ("package", "user", "plugin <distribution>"), and one line per
+    plugin file skipped."""
 
     sources: Mapping[str, RemoteSource]
     stations: Mapping[str, StationSource]
+    origins: Mapping[str, str]
+    refused: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PluginFile:
+    """One entry point of `SOURCE_GROUP`: its distribution, and its
+    `sources.toml` or why there is none."""
+
+    dist: str
+    path: Path | None
+    error: str | None = None
 
 
 def _entries[M: BaseModel](
@@ -253,19 +309,40 @@ def user_source_file(environ: Mapping[str, str]) -> Path | None:
     return next((p for p in user_source_candidates(environ) if p.is_file()), None)
 
 
-def catalogue(user_file: Path | None) -> Catalogue:
-    """The shipped entries plus the `[source.<id>]` tables of `user_file`, if
-    it exists. A relative `class_map` or `path` in it is taken from the file's
-    directory; whether a `path` exists is the reader's to find out. Refused,
-    as a `ValueError` naming the file: anything `RemoteSource` refuses, a
-    station table (fetching a station list follows one service's layout,
-    which is code), and an id the package already has."""
-    found = dict(SOURCES)
-    if user_file is None or not user_file.is_file():
-        return Catalogue(MappingProxyType(found), STATION_SOURCES)
-    label = str(user_file)
+def plugin_source_files() -> tuple[PluginFile, ...]:
+    """The `sources.toml` of each package named in `SOURCE_GROUP`, in
+    distribution-name order. Never raises: a value naming an attribute, a
+    package that fails to import, or one with no `sources.toml` is recorded
+    with the reason."""
+    found = []
+    for ep in entry_points(group=SOURCE_GROUP):
+        dist = ep.dist.name if ep.dist else ep.name
+        try:
+            if ep.attr:
+                raise ValueError(f"{ep.value} names an attribute; name the package")
+            path = Path(str(resources.files(ep.module) / _SHIPPED))
+            if not path.is_file():
+                raise ValueError(f"{ep.module} holds no {_SHIPPED}")
+        except Exception as exc:  # a broken plugin is reported, never raised
+            found.append(PluginFile(dist, None, f"{type(exc).__name__}: {exc}"))
+            continue
+        found.append(PluginFile(dist, path))
+    return tuple(sorted(found, key=lambda p: p.dist))
+
+
+def _beside(file: Path, value: str) -> Path:
+    """A path a catalogue file names: `~` expanded, a relative one from the file's directory."""
+    return file.parent / Path(value).expanduser()
+
+
+def _read(file: Path) -> dict[str, RemoteSource]:
+    """The `[source.<id>]` tables of a catalogue file; a relative `class_map`
+    or `path` is taken from the file's directory. Refused, as a `ValueError`
+    naming the file: anything `RemoteSource` refuses, and a station table
+    (fetching a station list follows one service's layout, which is code)."""
+    label = str(file)
     try:
-        tables = parse(user_file.read_text(encoding="utf-8"), _Tables, label)
+        tables = parse(file.read_text(encoding="utf-8"), _Tables, label)
     except (OSError, UnicodeError) as exc:
         raise ValueError(f"{label} cannot be read: {exc}") from exc
     for key in tables.station:
@@ -273,17 +350,43 @@ def catalogue(user_file: Path | None) -> Catalogue:
     for table in tables.source.values():
         given = str(table.get("class_map", ""))
         if given.endswith(".toml") or "/" in given or os.sep in given:
-            table["class_map"] = str(user_file.parent / given)
+            table["class_map"] = str(_beside(file, given))
         if "path" in table:
-            table["path"] = str(user_file.parent / str(table["path"]))
-    for key, entry in _entries(tables.source, "source", RemoteSource, label).items():
-        if key in found:
-            raise ValueError(
-                f"{label}: source.{key}: {key} is a source of the package's {_SHIPPED}; "
-                "give yours another id"
-            )
-        found[key] = entry
-    return Catalogue(MappingProxyType(found), STATION_SOURCES)
+            table["path"] = str(_beside(file, str(table["path"])))
+    return _entries(tables.source, "source", RemoteSource, label)
+
+
+def catalogue(user_file: Path | None, plugins: Sequence[PluginFile] = ()) -> Catalogue:
+    """The shipped entries, the `[source.<id>]` tables of `user_file` if it
+    exists, then each plugin's. Whether a `path` exists is the reader's to
+    find out. The user's file is refused whole, as a `ValueError` naming it,
+    when `_read` refuses it or an id is the package's. A plugin's file is
+    skipped whole, as one `refused` line, when it cannot be read or one of
+    its ids is taken: a plugin never replaces an entry nor stops the core."""
+    found, origins, refused = dict(SOURCES), dict.fromkeys(SOURCES, "package"), []
+    if user_file is not None and user_file.is_file():
+        for key, entry in _read(user_file).items():
+            if key in found:
+                raise ValueError(
+                    f"{user_file}: source.{key}: {key} is a source of the package's "
+                    f"{_SHIPPED}; give yours another id"
+                )
+            found[key], origins[key] = entry, "user"
+    for plugin in plugins:
+        try:
+            if plugin.path is None:
+                raise ValueError(plugin.error)
+            entries = _read(plugin.path)
+            if taken := sorted(entries.keys() & found.keys()):
+                raise ValueError(f"source {taken[0]} is taken by the {origins[taken[0]]}")
+        except ValueError as exc:
+            refused.append(f"plugin {plugin.dist}: its sources skipped: {exc}")
+            continue
+        found |= entries
+        origins |= dict.fromkeys(entries, f"plugin {plugin.dist}")
+    return Catalogue(
+        MappingProxyType(found), STATION_SOURCES, MappingProxyType(origins), tuple(refused)
+    )
 
 
 def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) -> str:
@@ -299,15 +402,20 @@ def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) ->
 
 
 __all__ = [
+    "OUT_ROOT_VARIABLE",
     "SOURCES",
+    "SOURCE_GROUP",
     "STATION_SOURCES",
+    "VECTOR_SUFFIXES",
     "Catalogue",
+    "PluginFile",
     "RemoteSource",
     "StationSource",
     "catalogue",
     "check_values",
     "data_root",
     "notice",
+    "plugin_source_files",
     "user_source_candidates",
     "user_source_file",
     "xdg_base",

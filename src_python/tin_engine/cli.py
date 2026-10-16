@@ -161,6 +161,7 @@ from tin_engine.sources import (
     catalogue,
     check_values,
     data_root,
+    plugin_source_files,
     user_source_file,
     xdg_base,
 )
@@ -300,6 +301,15 @@ def mcp(
     jobs: Annotated[
         int, typer.Option("--jobs", min=1, help="Tool calls run at once; one beyond this waits.")
     ] = 1,
+    out_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--out-root",
+            metavar="DIR",
+            help="Tool calls may write only inside this folder, through .. and links too; "
+            "missing folders inside it are made. Default: ~/rasputin-output.",
+        ),
+    ] = None,
 ) -> None:
     """Serve the commands to an agent over the Model Context Protocol (``--help`` says how)."""
     try:
@@ -309,7 +319,7 @@ def mcp(
         raise typer.Exit(2) from None
     from tin_engine import plugins  # the hook imports this module
 
-    asyncio.run(server.serve(plugins.served or plugins.application(), jobs))
+    asyncio.run(server.serve(plugins.served or plugins.application(), jobs, out_root))
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,7 +473,11 @@ def _constraint_arrays(
 def mesh(
     out: Annotated[
         Path,
-        typer.Option("--out", help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS."),
+        typer.Option(
+            "--out",
+            writable=True,
+            help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS.",
+        ),
     ],
     dem: Annotated[
         list[str],
@@ -489,11 +503,11 @@ def mesh(
     ] = None,
     out_edges: Annotated[
         Path | None,
-        typer.Option("--out-edges", help="With .ply, also write the constraint edges as a PLY."),
-    ] = None,
-    out_parent: Annotated[
-        Path | None,
-        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
+        typer.Option(
+            "--out-edges",
+            writable=True,
+            help="With .ply, also write the constraint edges as a PLY.",
+        ),
     ] = None,
     binary: Annotated[
         bool,
@@ -705,17 +719,21 @@ def mesh(
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
     stats: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--stats",
+            writable=True,
+            allow_dash=True,
             help="Also write sizes, quality and timings as Markdown to this path (.md "
             "recommended); - prints it on stdout after the path line(s).",
         ),
     ] = None,
     record_path: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--record",
+            writable=True,
+            allow_dash=True,
             help="Also write the run's record as JSON to this path, for reproducibility.",
         ),
     ] = None,
@@ -868,16 +886,17 @@ def mesh(
     try:
         opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
     except NotCached as exc:
-        area = f"--domain {domain}" if domain is not None else ""
+        area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
         if bbox is not None:
             area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
         frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
-        flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
-        run = f"rasputin fetch {dem[0]} {flags}".rstrip()
+        store = f"--cache {shlex.quote(str(cache))}" if cache else ""
+        flags = " ".join(filter(None, (area, frame, store)))
+        run = f"rasputin fetch {shlex.quote(dem[0])} {flags}".rstrip()
         raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
     # What is read later comes out of `opened`, which then goes, so the
     # tile's one reference is the holder `_dem_mesh` empties.
-    label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
+    plan, grid, source_crs = opened.plan, opened.grid, opened.source_crs
     dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
     held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
     # The clean-up scale is the coarsest coded map's accuracy (CORINE's
@@ -1012,14 +1031,14 @@ def mesh(
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
     vertices = surface_mesh.vertices
-    surface = _destination(out, out_parent, label)
+    surface = _destination(out)
     targets = [surface]
     if out_edges is not None:
         # Resolved, because two spellings of one path are still one file. Both
         # writes succeed, the second overwrites the first, the command echoes
         # two paths and exits 0 -- the caller has lost the surface they asked
         # for and nothing said so.
-        constraints = _destination(out_edges, out_parent, label, "--out-edges")
+        constraints = _destination(out_edges, "--out-edges")
         if constraints == surface:
             raise typer.BadParameter(
                 f"--out and --out-edges both resolve to {surface}; "
@@ -1027,8 +1046,8 @@ def mesh(
                 param_hint="--out-edges",
             )
         targets.append(constraints)
-    report_target = _report_target(stats, out_parent, label, targets)
-    record_target = _record_target(record_path, out_parent, label, [*targets, report_target])
+    report_target = _report_target(stats, targets)
+    record_target = _record_target(record_path, [*targets, report_target])
     typer.echo(summary(record), err=True)
     if unstated:
         typer.echo(
@@ -1241,9 +1260,9 @@ def _class_fractions(
             words = [
                 f"rasputin fetch {source.id}",
                 f"--year {year}" if year is not None else "",
-                f"--domain {domain}" if domain is not None else "",
+                f"--domain {shlex.quote(str(domain))}" if domain is not None else "",
                 f"--out-crs {shlex.quote(out_crs)}" if out_crs else "",
-                f"--cache {cache}" if cache else "",
+                f"--cache {shlex.quote(str(cache))}" if cache else "",
             ]
             run = " ".join(filter(None, words))
             raise typer.BadParameter(
@@ -1306,7 +1325,8 @@ def palette(
         typer.Argument(help=f"A class map: {', '.join(shipped_names())}, or a .toml file."),
     ],
     out: Annotated[
-        Path | None, typer.Option("--out", help="Write the preset here, not to stdout.")
+        Path | None,
+        typer.Option("--out", writable=True, help="Write the preset here, not to stdout."),
     ] = None,
 ) -> None:
     """Write a ParaView colour preset for a mesh's land_cover_code.
@@ -1325,18 +1345,16 @@ def palette(
     if out is None:
         typer.echo(text, nl=False)
         return
-    out.write_text(text)
+    _destination(out).write_text(text)
     typer.echo(f"{out}")
 
 
-def _report_target(
-    stats: str | None, out_parent: Path | None, label: str, meshes: list[Path]
-) -> Path | None:
+def _report_target(stats: Path | None, meshes: list[Path]) -> Path | None:
     """Where ``--stats`` writes, None for stdout (``-``) or no report,
     checked before any mesh file is written."""
-    if stats is None or stats == "-":
+    if stats is None or stats == Path("-"):
         return None
-    target = _destination(Path(stats), out_parent, label, "--stats")
+    target = _destination(stats, "--stats")
     if target in meshes:
         raise typer.BadParameter(
             f"resolves to {target}; the report would overwrite the mesh", param_hint="--stats"
@@ -1344,16 +1362,14 @@ def _report_target(
     return target
 
 
-def _record_target(
-    record: str | None, out_parent: Path | None, label: str, taken: list[Path | None]
-) -> Path | None:
+def _record_target(record: Path | None, taken: list[Path | None]) -> Path | None:
     """Where ``--record`` writes, checked before any file is written; never
     standard output (``--stats -``'s) nor a file this run also writes."""
     if record is None:
         return None
-    if record == "-":
+    if record == Path("-"):
         raise typer.BadParameter("standard output is --stats -'s", param_hint="--record")
-    target = _destination(Path(record), out_parent, label, "--record")
+    target = _destination(record, "--record")
     if target in taken:
         raise typer.BadParameter(
             f"resolves to {target}, which this run also writes", param_hint="--record"
@@ -1438,7 +1454,7 @@ def fetch(
         str | None, typer.Option("--out-crs", help="The frame the mesh's box is in.")
     ] = None,
     cache: Annotated[
-        Path | None, typer.Option("--cache", help=f"The tile cache. {CACHE_DEFAULT}")
+        Path | None, typer.Option("--cache", writable=True, help=f"The tile cache. {CACHE_DEFAULT}")
     ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Read the headers, print the plan, write nothing.")
@@ -1524,7 +1540,9 @@ def fetch(
 
 def fetch_stations(
     source: Annotated[str, typer.Argument(help=f"A station list: {', '.join(STATION_SOURCES)}.")],
-    out_dir: Annotated[Path, typer.Option("--out-dir", help="Where to write the files.")],
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", writable=True, help="Where to write the files.")
+    ],
     refresh: Annotated[
         bool, typer.Option("--refresh", help="Fetch again even if the files are there.")
     ] = False,
@@ -1601,11 +1619,15 @@ def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
 
 def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
     """The catalogue's sources with the user's from their sources file
-    (`user_source_file`); a file it refuses is a usage error naming it."""
+    (`user_source_file`) and the plugins'; a user file it refuses is a usage
+    error naming it, a plugin file skipped a line on stderr."""
     try:
-        return catalogue(user_source_file(environ)).sources
+        found = catalogue(user_source_file(environ), plugin_source_files())
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
+    for line in found.refused:
+        typer.echo(f"rasputin: {line}", err=True)
+    return found.sources
 
 
 def _dem_sources(
@@ -2226,7 +2248,8 @@ CATCHMENT_SUFFIXES = (".geojson", ".json")
 
 def catchment(
     out: Annotated[
-        Path, typer.Option("--out", help="Where to write the polygon: .geojson or .json.")
+        Path,
+        typer.Option("--out", writable=True, help="Where to write the polygon: .geojson or .json."),
     ],
     dem: Annotated[list[str], typer.Option("--dem", help=f"{DEM_HELP}.")],
     seed: Annotated[
@@ -2257,10 +2280,6 @@ def catchment(
             "0 writes the fine outline without its collinear vertices. Default: twice the "
             "DEM's cell.",
         ),
-    ] = None,
-    out_parent: Annotated[
-        Path | None,
-        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
     ] = None,
     rivers: Annotated[
         Path | None,
@@ -2316,7 +2335,7 @@ def catchment(
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
-    target = _destination(out, out_parent, out.stem)
+    target = _destination(out)
     try:
         found = None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
     except FeatureError as exc:
@@ -2343,8 +2362,9 @@ def catchment(
         result = delineate(request, repository, res)
     except NotCached as exc:
         fetch = "" if exc.box is None else " ".join(repr(v).removesuffix(".0") for v in exc.box)
-        given = f" --cache {cache}" if cache else ""
-        hint = f"; run: rasputin fetch {dem[0]} --bbox {fetch}{given}" if fetch else ""
+        given = f" --cache {shlex.quote(str(cache))}" if cache else ""
+        key = shlex.quote(dem[0])
+        hint = f"; run: rasputin fetch {key} --bbox {fetch}{given}" if fetch else ""
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
@@ -2509,7 +2529,9 @@ def station_catchments(
     rivers: Annotated[
         Path, typer.Option("--rivers", help="River lines (GeoJSON, in the DEM's CRS).")
     ],
-    out_dir: Annotated[Path, typer.Option("--out-dir", help="Where to write the files.")],
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", writable=True, help="Where to write the files.")
+    ],
     reference: Annotated[
         Path | None,
         typer.Option(
@@ -2549,10 +2571,6 @@ def station_catchments(
             help="Reduce each outline to within this of the fine one; default twice the cell.",
         ),
     ] = None,
-    out_parent: Annotated[
-        Path | None,
-        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
-    ] = None,
     cache: CACHE = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
@@ -2571,7 +2589,7 @@ def station_catchments(
         math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
     ):
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
-    target = _destination(out_dir, out_parent, out_dir.name, "--out-dir")
+    target = _destination(out_dir, "--out-dir")
     try:
         station_list, stations_crs = read_stations(stations)
     except (OSError, ValueError) as exc:

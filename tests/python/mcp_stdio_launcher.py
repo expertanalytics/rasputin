@@ -13,7 +13,9 @@ the config, written by `mcp_driver.stdio_server`, holds
 ``jobs``
     the concurrent-jobs cap (default 1);
 ``heartbeat``
-    seconds between heartbeats, or absent for the module's constant.
+    seconds between heartbeats, or absent for the module's constant;
+``out_root``
+    the folder tool calls may write in, or absent for the default.
 
 Everything else is the production server: `build_server` on the real Typer
 app, run by the SDK's own ``stdio_server``. Test support only.
@@ -38,6 +40,8 @@ async def main(config: dict[str, object]) -> None:
     options: dict[str, object] = {"jobs": config.get("jobs", 1)}
     if "child" in config:
         options["child"] = config["child"]
+    if "out_root" in config:
+        options["out_root"] = Path(str(config["out_root"]))
     server = server_module.build_server(app, **options)
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())

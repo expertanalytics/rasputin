@@ -392,3 +392,126 @@ class TestTheRealApp:
             output = d.tool().output_schema
             assert output is not None, d.tool_name
             assert set(output["properties"]) >= RUN_RESULT_FIELDS, d.tool_name
+
+
+# ---------------------------------------------------------------- 57, T8b: output paths
+
+
+def writing_app() -> typer.Typer:
+    """One command per way a parameter can name an output path, and one that names none.
+
+    `docs/increments/57-vector-sources.md`, section 4.6: a path parameter
+    declared ``writable=True`` is an output path; `DerivedCommand.writes`
+    returns the values the caller set on one, so the server can fence them.
+    """
+    toy = typer.Typer()
+
+    @toy.command()
+    def save(
+        target: Annotated[Path, typer.Argument(writable=True, help="Positional output.")],
+        out: Annotated[Path | None, typer.Option("--out", writable=True)] = None,
+        many: Annotated[list[Path] | None, typer.Option("--many", writable=True)] = None,
+        report: Annotated[
+            Path | None, typer.Option("--report", writable=True, allow_dash=True)
+        ] = None,
+        dashless: Annotated[Path | None, typer.Option("--dashless", writable=True)] = None,
+        kept: Annotated[Path, typer.Option("--kept", writable=True)] = Path("default.out"),
+        read: Annotated[Path | None, typer.Option("--read")] = None,
+        text: Annotated[str | None, typer.Option("--text")] = None,
+    ) -> None:
+        """Save things."""
+
+    @toy.command()
+    def other() -> None:
+        """Writes nothing."""
+
+    return toy
+
+
+def writes_of(tool: Any, arguments: dict[str, Any]) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = tool.writes(tool.model.model_validate(arguments))
+    return result
+
+
+#: Section 4.6's table: every (tool, argument) whose path is an output. The list
+#: is the test's, not the code's, so a newly marked or unmarked option is a
+#: visible edit here.
+WRITABLE = {
+    ("mesh", "out"), ("mesh", "out_edges"), ("mesh", "stats"), ("mesh", "record_path"),
+    ("palette", "out"),
+    ("catchment", "out"),
+    ("station_catchments", "out_dir"),
+    ("fetch_stations", "out_dir"),
+    ("fetch", "cache"),
+}  # fmt: skip
+
+
+class TestT8bWritesFromAToyApp:
+    def test_each_set_output_value_in_the_clis_order(self) -> None:
+        save = derived(writing_app())["save"]
+        got = writes_of(save, {
+            "target": "t.txt", "out": "o.vtk", "many": ["m1.ply", "m2.ply"],
+            "report": "r.md", "dashless": "d.md", "kept": "k.out",
+        })  # fmt: skip
+        assert got == [
+            ("target", "t.txt"), ("out", "o.vtk"), ("many", "m1.ply"), ("many", "m2.ply"),
+            ("report", "r.md"), ("dashless", "d.md"), ("kept", "k.out"),
+        ]  # fmt: skip
+
+    def test_an_unset_output_with_a_default_is_its_default(self) -> None:
+        # The child writes to the default when the caller leaves it unset, so
+        # the default is an output; an unset one defaulting to None is not.
+        save = derived(writing_app())["save"]
+        assert writes_of(save, {"target": "t.txt"}) == [
+            ("target", "t.txt"),
+            ("kept", "default.out"),
+        ]
+
+    def test_a_dash_is_skipped_only_where_the_parameter_allows_one(self) -> None:
+        save = derived(writing_app())["save"]
+        got = writes_of(save, {"target": "t.txt", "report": "-", "dashless": "-"})
+        assert got == [("target", "t.txt"), ("dashless", "-"), ("kept", "default.out")]
+
+    def test_a_path_not_marked_writable_and_a_string_are_not_outputs(self) -> None:
+        save = derived(writing_app())["save"]
+        got = writes_of(save, {"target": "t.txt", "read": "in.tif", "text": "words"})
+        assert got == [("target", "t.txt"), ("kept", "default.out")]
+
+    def test_a_command_with_no_output_writes_nothing(self) -> None:
+        assert writes_of(derived(writing_app())["other"], {}) == []
+
+
+class TestT8bWritesOnTheRealApp:
+    def test_the_writable_paths_are_section_4_6s_table(self) -> None:
+        # Read the attribute, not the class: Typer ships its own click copy,
+        # whose path type is no subclass of `click.Path`.
+        marked = {
+            (name, p.name)
+            for name, d in derived(app).items()
+            for p in d.command.params
+            if getattr(p.type, "writable", False)
+        }
+        assert marked == WRITABLE
+
+    def test_the_marked_text_options_are_paths_that_allow_a_dash(self) -> None:
+        mesh = click_command(app, "mesh")
+        for name in ("stats", "record_path"):
+            (param,) = [p for p in mesh.params if p.name == name]
+            assert param.type.writable and param.type.allow_dash, name
+
+    def test_no_tool_has_an_out_parent_argument(self) -> None:
+        for name, d in derived(app).items():
+            assert "out_parent" not in d.tool().input_schema["properties"], name
+
+    def test_mesh_writes_skip_stats_dash_and_the_read_only_cache(self) -> None:
+        mesh = derived(app)["mesh"]
+        got = writes_of(mesh, {
+            "out": "x.vtk", "dem": ["d.tif"], "stats": "-", "cache": "tiles",
+            "out_edges": "e.ply", "record_path": "r.json",
+        })  # fmt: skip
+        assert sorted(got) == [("out", "x.vtk"), ("out_edges", "e.ply"), ("record_path", "r.json")]
+
+    def test_fetch_cache_is_an_output(self) -> None:
+        assert writes_of(derived(app)["fetch"], {"source": "s", "cache": "tiles"}) == [
+            ("cache", "tiles")
+        ]

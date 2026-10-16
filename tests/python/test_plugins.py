@@ -35,11 +35,13 @@ from plugin_fixtures import (
     MESH,
     NOT_TYPER,
     RUNTIME_ERROR,
+    SCRIBBLE,
     child_env,
     hello_from,
     lines_naming,
     plain,
     run_rasputin,
+    scribble_defaulting_to,
     write_plugin,
 )
 from tin_engine.cli import app as core_app
@@ -319,6 +321,91 @@ async def test_build_server_derives_a_tool_from_the_plugin(
     assert not result.is_error, result.content
     body = structured(result)
     assert (body["exit_code"], body["stdout"]) == (0, ["hello"])
+
+
+def everything_but_plugins(directory: Path) -> list[Path]:
+    """Every path under ``directory`` but the ``site-*`` folders `on_path` writes."""
+    return sorted(
+        p for p in directory.rglob("*") if not p.relative_to(directory).parts[0].startswith("site-")
+    )
+
+
+class TestT8dAPluginsOutputIsFenced:
+    """`docs/increments/57-vector-sources.md`, section 4.6, T8d: a plugin's
+    ``writable=True`` option is fenced by the server's output root as a core
+    command's is. The plugin writes by itself, so the root is made first."""
+
+    async def scribble(
+        self,
+        on_path: PluginPath,
+        monkeypatch: pytest.MonkeyPatch,
+        root: Path,
+        out: Path | None,
+        body: str = SCRIBBLE,
+    ) -> Any:
+        plugins = hook()
+        pytest.importorskip("mcp")
+        from mcp.client import Client
+
+        from tin_engine.mcp.server import build_server
+
+        site = on_path(body=body, entry="scribble")
+        monkeypatch.setenv("PYTHONPATH", child_env(site)["PYTHONPATH"])
+        server = build_server(plugins.application(plugins.discover()), out_root=root)
+        with anyio.fail_after(30):
+            async with Client(server) as client:
+                arguments = {} if out is None else {"out": str(out)}
+                return await client.call_tool("scribble", arguments)
+
+    async def test_inside_the_root_it_writes(
+        self, on_path: PluginPath, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from mcp_driver import structured
+
+        root = tmp_path / "root"
+        root.mkdir()
+        out = root / "w.txt"
+        result = await self.scribble(on_path, monkeypatch, root, out)
+        assert not result.is_error, result.content
+        assert structured(result)["exit_code"] == 0, structured(result)
+        assert out.read_text() == "a line\n"
+
+    async def test_outside_the_root_it_is_refused_and_never_runs(
+        self, on_path: PluginPath, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from mcp_driver import structured
+
+        root = tmp_path / "root"
+        root.mkdir()
+        out = tmp_path / "outside.txt"
+        result = await self.scribble(on_path, monkeypatch, root, out)
+        assert result.is_error, result.content
+        body = structured(result)
+        assert body["exit_code"] is None, body
+        assert str(body["error"]).startswith("out: "), body
+        assert f"outside the output root {root.resolve()}" in body["error"], body
+        assert not out.exists()  # the child would have written it
+
+    async def test_an_unset_option_whose_default_lies_outside_is_refused(
+        self, on_path: PluginPath, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The caller names no ``out``; the plugin's default does, outside the
+        root. The default is what the child writes, so it is what is checked."""
+        from mcp_driver import structured
+
+        root = tmp_path / "root"
+        root.mkdir()
+        default = tmp_path / "outside-default.txt"
+        before = everything_but_plugins(tmp_path)
+        plugin = scribble_defaulting_to(default)
+        result = await self.scribble(on_path, monkeypatch, root, None, plugin)
+        assert result.is_error, result.content
+        body = structured(result)
+        assert body["exit_code"] is None, body  # no child started
+        assert str(body["error"]).startswith("out: "), body
+        assert f"outside the output root {root.resolve()}" in body["error"], body
+        assert not default.exists()  # the child would have written it
+        assert everything_but_plugins(tmp_path) == before
 
 
 async def test_rasputin_mcp_serves_the_plugin_command(tmp_path: Path) -> None:

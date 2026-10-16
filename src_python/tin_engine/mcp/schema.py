@@ -125,6 +125,21 @@ class DerivedCommand:
                     argv.extend([max(param.opts, key=len), *_words(item)])
         return argv
 
+    def writes(self, arguments: BaseModel) -> list[tuple[str, str]]:
+        """(argument, path) for each value, given or default, of a parameter whose type is
+        a writable path, options and positional arguments alike, every item of a
+        repeatable one; a default is checked because the command writes there all the
+        same. "-" is skipped where the parameter allows a dash (stdout, not a file)."""
+        found = []
+        for param in self.command.params:
+            value = getattr(arguments, param.name)
+            if not getattr(param.type, "writable", False) or value is None:
+                continue
+            for item in value if param.multiple else [value]:
+                if not (item == "-" and param.type.allow_dash):
+                    found.append((param.name, str(item)))
+        return found
+
 
 def derive(app: typer.Typer) -> list[DerivedCommand]:
     """One `DerivedCommand` per shown command of ``app``, in its order, the server's own

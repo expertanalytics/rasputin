@@ -91,7 +91,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.nve": "fetch.http io.geojson sources",
         "tolerance_field": "crs feature_input",
         "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
-        "source_report": "crs dem_input geodesy io.models io.repository sources",  # 55: the listing
+        "source_report": "class_maps crs dem_input feature_input geodesy io.geojson io.geopackage"
+                         " io.models io.repository sources",  # 55: the listing; 57: vector sources
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core catchment catchment_batch chains class_maps cli_kit crs dem_input domain"
@@ -107,7 +108,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "plugin_api": "cli_kit crs dem_input io.geotiff_write io.models io.vtk_read raster"
                       " resources run_record",  # 51: what a plugin may import
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
-        "mcp.server": "mcp.schema tin_engine",
+        "mcp.server": "mcp.schema sources tin_engine",  # 57: the output root's variable
     },
 )
 # fmt: on

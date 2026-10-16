@@ -5,8 +5,9 @@
 other, so no test module is a helper library for another.
 
 The server under test is `tin_engine.mcp.server.build_server(app, *, jobs,
-child)`, where ``child`` is the argv prefix the server runs a command with
-(production: ``[sys.executable, "-m", "tin_engine"]``).
+child, out_root)`, where ``child`` is the argv prefix the server runs a command
+with (production: ``[sys.executable, "-m", "tin_engine"]``) and ``out_root``
+the folder tool calls may write in (default ``~/rasputin-output``).
 
 In process, the SDK's `Client(server)` connects without a transport; it
 carries no progress token (section 2, measured), so progress is asserted over
@@ -72,11 +73,13 @@ def fake_child(tmp_path: Path, **spec: Any) -> list[str]:
 
 
 def stdio_server(tmp_path: Path, **config: Any) -> StdioServerParameters:
-    """The launcher as a stdio server (`mcp_stdio_launcher`: ``child``, ``jobs``, ``heartbeat``).
+    """The launcher as a stdio server (`mcp_stdio_launcher`: ``child``, ``jobs``, ``heartbeat``,
+    ``out_root``, the last ``tmp_path`` unless given).
 
     The environment is passed whole: the SDK's default is a short allow-list,
     and the server's child must find the same interpreter and data as the test.
     """
+    config.setdefault("out_root", str(tmp_path))
     path = tmp_path / "launcher.json"
     path.write_text(json.dumps(config))
     return StdioServerParameters(
@@ -84,10 +87,11 @@ def stdio_server(tmp_path: Path, **config: Any) -> StdioServerParameters:
     )
 
 
-def production_server() -> StdioServerParameters:
-    """``python -m tin_engine mcp``: the entry an agent's configuration names (section 6.8)."""
+def production_server(*options: str) -> StdioServerParameters:
+    """``python -m tin_engine mcp *options``: the entry an agent's configuration names
+    (section 6.8)."""
     return StdioServerParameters(
-        command=sys.executable, args=["-m", "tin_engine", "mcp"], env=dict(os.environ)
+        command=sys.executable, args=["-m", "tin_engine", "mcp", *options], env=dict(os.environ)
     )
 
 

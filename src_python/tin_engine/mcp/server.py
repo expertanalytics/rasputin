@@ -40,8 +40,9 @@ from pydantic import BaseModel, ValidationError
 
 from tin_engine import installed_version
 from tin_engine.mcp.schema import DerivedCommand, RunResult, derive
+from tin_engine.sources import OUT_ROOT_VARIABLE
 
-__all__ = ["HEARTBEAT_SECONDS", "RunResult", "build_server", "serve"]
+__all__ = ["DEFAULT_OUT_ROOT", "HEARTBEAT_SECONDS", "RunResult", "build_server", "serve"]
 
 #: Seconds between heartbeats while the child prints nothing; read at every tick.
 HEARTBEAT_SECONDS = 5.0
@@ -49,6 +50,8 @@ HEARTBEAT_SECONDS = 5.0
 CHILD = (sys.executable, "-m", "tin_engine")
 #: Typer's plain refusals and no colour in the child, so its stderr parses as text.
 CHILD_ENV = {"TYPER_USE_RICH": "0", "NO_COLOR": "1", "TERM": "dumb"}
+#: The output root under the home folder when none is given: a chosen name.
+DEFAULT_OUT_ROOT = "rasputin-output"
 MIME_TYPES = {
     ".gpkg": "application/geopackage+sqlite3",
     ".vtk": "application/octet-stream",
@@ -69,6 +72,15 @@ INSTRUCTIONS = (
     "is read from the cache: fetch the area first; a run that lacks data says what to fetch."
     "\nsources also says which sources file and cache it read, and where a local dataset "
     "would be registered.\n"
+    "sources also lists vector datasets (polygons, lines, points) with their path, layer, "
+    "geometry, feature count, attributes and, for land cover, the class values. Each source's "
+    "fits names the tools and arguments it can be given to, with the class map to pass as "
+    "features_map; what the features are is in its description. Pass its path to those "
+    "arguments, its layer as features_layer or lakes_layer, and the fit's class map as "
+    "features_map.\n"
+    "Output folders are created as needed, inside the output root that sources reports as "
+    "out_root; give output paths in full: a path outside it, through .. or a link too, is "
+    "refused.\n"
     """\
 Paths are on the machine this server runs on, as for the rasputin command line.
 mesh writes a mesh file at out and returns its run record; the mesh itself never travels here.
@@ -116,14 +128,17 @@ class _Progress:
                 task.cancel()
 
 
-async def _run_child(argv: Sequence[str], progress: _Progress) -> tuple[int, list[str], list[str]]:
-    """Run ``argv`` to the end, or kill it when cancelled; each stderr line is a notification."""
+async def _run_child(
+    argv: Sequence[str], progress: _Progress, root: Path
+) -> tuple[int, list[str], list[str]]:
+    """Run ``argv`` to the end, or kill it when cancelled; each stderr line is a notification.
+    The child's environment names the output root, which its ``sources`` listing reports."""
     process = await asyncio.create_subprocess_exec(
         *argv,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={**os.environ, **CHILD_ENV},
+        env={**os.environ, **CHILD_ENV, OUT_ROOT_VARIABLE: str(root)},
     )
     assert process.stdout is not None and process.stderr is not None  # both are PIPE
     stderr: list[str] = []
@@ -186,7 +201,11 @@ async def _outputs(stdout: list[str], hidden: list[Path]) -> list[str]:
 
 
 async def _call(
-    tool: DerivedCommand, arguments: BaseModel, prefix: Sequence[str], progress: _Progress
+    tool: DerivedCommand,
+    arguments: BaseModel,
+    prefix: Sequence[str],
+    progress: _Progress,
+    root: Path,
 ) -> types.CallToolResult:
     """One validated call: the sidecars, the child, the shaped result."""
     argv = tool.argv(arguments)
@@ -206,7 +225,7 @@ async def _call(
             sidecars.append(stats_file)
     try:
         began = time.monotonic()
-        code, stdout, stderr = await _run_child([*prefix, *argv], progress)
+        code, stdout, stderr = await _run_child([*prefix, *argv], progress, root)
         seconds = round(time.monotonic() - began, 3)
         if code != 0:
             return _error(code, _refusal(code, stderr), stderr)
@@ -241,8 +260,32 @@ async def _call(
     )
 
 
-def build_server(app: typer.Typer, *, jobs: int = 1, child: Sequence[str] = CHILD) -> Server[Any]:
-    """The server over ``app``'s commands; ``child`` is the argv prefix a command is run with."""
+async def _outside_root(writes: list[tuple[str, str]], root: Path) -> str | None:
+    """The refusal of the first output path that resolves outside ``root``, None when all
+    are inside; ``..`` and every link, the last part included, are followed first."""
+    for argument, given in writes:
+        resolved = await AsyncPath(given).resolve()
+        if not Path(resolved).is_relative_to(root):
+            return (
+                f"{argument}: {given} resolves to {resolved}, outside the output root {root}; "
+                "write inside it (rasputin mcp --out-root sets the root)"
+            )
+    return None
+
+
+def build_server(
+    app: typer.Typer,
+    *,
+    jobs: int = 1,
+    child: Sequence[str] = CHILD,
+    out_root: Path | None = None,
+) -> Server[Any]:
+    """The server over ``app``'s commands; ``child`` is the argv prefix a command is run with.
+
+    A call may write only inside ``out_root`` (default ``~/rasputin-output``), resolved
+    once here; neither is made nor checked until a call writes.
+    """
+    root = (out_root or Path.home() / DEFAULT_OUT_ROOT).expanduser().resolve()
     tools = {d.tool_name: d for d in derive(app)}
     semaphore, prefix = anyio.Semaphore(jobs), list(child)
 
@@ -259,13 +302,16 @@ def build_server(app: typer.Typer, *, jobs: int = 1, child: Sequence[str] = CHIL
             arguments = tool.model.model_validate(params.arguments or {})
         except ValidationError as exc:
             return _error(None, "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()))
+        refusal = await _outside_root(tool.writes(arguments), root)
+        if refusal is not None:
+            return _error(None, refusal)
         progress = _Progress(ctx)
         try:
             async with progress.heartbeat("waiting for a running job"):
                 await semaphore.acquire()
             try:
                 async with progress.heartbeat("running"):
-                    return await _call(tool, arguments, prefix, progress)
+                    return await _call(tool, arguments, prefix, progress, root)
             finally:
                 semaphore.release()
         except Exception as exc:  # the server's own fault, in words
@@ -280,8 +326,8 @@ def build_server(app: typer.Typer, *, jobs: int = 1, child: Sequence[str] = CHIL
     )
 
 
-async def serve(app: typer.Typer, jobs: int = 1) -> None:
+async def serve(app: typer.Typer, jobs: int = 1, out_root: Path | None = None) -> None:
     """``rasputin mcp``: the server on this process's stdin and stdout."""
-    server = build_server(app, jobs=jobs)
+    server = build_server(app, jobs=jobs, out_root=out_root)
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())

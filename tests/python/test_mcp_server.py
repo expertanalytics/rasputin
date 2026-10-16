@@ -53,10 +53,13 @@ Build = Callable[..., Any]
 
 
 @pytest.fixture
-def build() -> Build:
-    """`build_server` on the real app; ``child`` and ``jobs`` as the test says."""
+def build(tmp_path: Path) -> Build:
+    """`build_server` on the real app; ``child`` and ``jobs`` as the test says, and the
+    output root the test's own directory unless it says otherwise, so a write the test
+    names is inside it."""
 
     def _build(**options: Any) -> Any:
+        options.setdefault("out_root", tmp_path)
         return mcp_server.build_server(app, **options)
 
     return _build
@@ -128,26 +131,6 @@ class TestValidationBeforeTheChild:
         assert body["exit_code"] is None
         assert body["error"].startswith(error_prefix), body
         assert not argv_file.exists()
-
-    async def test_out_parent_passes_through_and_the_record_sidecar_is_beside_out(
-        self, tmp_path: Path, out_dir: Path, build: Build
-    ) -> None:
-        argv_file = tmp_path / "argv.json"
-        server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
-        await call(
-            server,
-            "mesh",
-            mesh_arguments(Path("d.tif"), out_dir / "a.vtk", out_parent=str(out_dir)),
-        )
-        argv = json.loads(argv_file.read_text())
-        assert argv[0] == "mesh"
-        assert option_value(argv, "--out") == str(out_dir / "a.vtk")
-        assert option_value(argv, "--out-parent") == str(out_dir)
-        record = Path(option_value(argv, "--record"))
-        assert record.parent == out_dir
-        match = RECORD_SIDECAR.fullmatch(record.name)
-        assert match is not None and match["out"] == "a.vtk", record.name
-        assert "--stats" not in argv
 
     async def test_stats_dash_becomes_a_stats_sidecar_beside_out(
         self, tmp_path: Path, out_dir: Path, build: Build
@@ -286,33 +269,14 @@ def assert_micro_mesh(result: Any, out: Path) -> dict[str, Any]:
 
 
 class TestRealMesh:
-    @pytest.mark.parametrize("with_out_parent", [False, True], ids=["plain", "out_parent"])
     async def test_mesh_writes_the_vtk_returns_the_record_and_leaves_no_sidecar(
-        self, out_dir: Path, micro_dem: Path, build: Build, with_out_parent: bool
+        self, out_dir: Path, micro_dem: Path, build: Build
     ) -> None:
         out = out_dir / "a.vtk"
-        extra = {"out_parent": str(out_dir)} if with_out_parent else {}
-        result = await call(build(), "mesh", mesh_arguments(micro_dem, out, **extra))
+        result = await call(build(), "mesh", mesh_arguments(micro_dem, out))
         body = assert_micro_mesh(result, out)
         assert body["stats"] is None
         only_files(out_dir, ["a.vtk"])
-
-    async def test_out_outside_out_parent_is_refused_naming_out_not_the_sidecar(
-        self, tmp_path: Path, out_dir: Path, micro_dem: Path, build: Build
-    ) -> None:
-        sibling = tmp_path / "sibling"
-        sibling.mkdir()
-        out = out_dir / "a.vtk"
-        result = await call(
-            build(), "mesh", mesh_arguments(micro_dem, out, out_parent=str(sibling))
-        )
-        assert result.is_error
-        body = structured(result)
-        assert body["exit_code"] == 2
-        assert "--out" in body["error"], body["error"]
-        assert "--record" not in body["error"] and "--stats" not in body["error"], body["error"]
-        only_files(out_dir, [])
-        only_files(sibling, [])
 
     async def test_a_relative_out_lands_in_the_servers_working_directory(
         self, out_dir: Path, micro_dem: Path, build: Build, monkeypatch: pytest.MonkeyPatch

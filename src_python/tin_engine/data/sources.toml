@@ -1,9 +1,12 @@
 # The remote sources `rasputin fetch` copies ([source.<id>]) and the station
 # lists `rasputin fetch-stations` copies ([station.<id>]). A table's key is the
 # entry's id. Your own sources, local datasets among them (kind = "local",
-# path), go in your sources file in the same [source.<id>] form, under ids of
-# their own: $RASPUTIN_DATA/sources.toml if it exists, else
+# path: GeoTIFFs, or vector files .gpkg, .geojson or .json), go in your sources
+# file in the same [source.<id>] form, under ids of their own:
+# $RASPUTIN_DATA/sources.toml if it exists, else
 # $XDG_CONFIG_HOME/rasputin/sources.toml, else ~/.config/rasputin/sources.toml.
+# A plugin may ship a sources.toml of its own (entry point group
+# rasputin.sources).
 # `rasputin sources` says which file it read.
 
 [source.anadem-v1]
