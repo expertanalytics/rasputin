@@ -1,7 +1,7 @@
 # Increment 54: the open core reads as one tool
 
 **Status: designed** (`@architect`, 2026-10-16), one public PR, branch
-`worktree-open-core-cleanup`. Not reviewed yet.
+`worktree-open-core-cleanup`. Design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked
 
@@ -176,8 +176,16 @@ missing `--dem` is Click's own "Missing option '--dem'" (exit 2). Today
 - the `has_dem`/`dem: bool` parameter of `_class_source`, `_tolerance_lines`
   and `_tolerance_slope` and the refusal each makes on it (`mesh` is their only
   caller: `grep -n` on the three names);
-- the `None` cases of `dem_run` that become unreachable, where mypy then
-  shows them dead;
+- the `None` cases only a gallery run reached, listed here because mypy's
+  strict mode does not report unreachable code: `dem_run` in `mesh` and
+  `_write_report`'s `dem_run` and `threads` lose `| None`, with the
+  `if dem_run` conditionals in `_write_report` and the
+  `used = ... if dem_run is not None else None` line;
+  `known = ... if dem or land_cover else SOURCES` becomes the `_known_sources`
+  call alone; `stats.Sizes.dem_nodes`, `dem_spacing` and `stats.Report.threads`
+  lose `| None` and the branches that omit them (`mesh` is their only
+  constructor: `grep -rn 'Sizes(\|Report(' src_python`);
+- the `clock` parameter of `_triangulated`, which only `_fixture_mesh` passes;
 - the now unused imports (`checked_ascii`, `flat_record`).
 
 **Deleted from `run_record.py`:** `flat_record`, `FLAT_HEIGHTS` and the
@@ -280,8 +288,9 @@ spacing, EPSG:25833, z uniform in 0 to 50 m from a seed); the hello plugin of
   `rasputin.commands`, and names every entry of `plugin_api.__all__`, so a
   name added to the interface without a line in the page fails.
 - **Moved, not new.** The tests that run `mesh <fixture> --flat` to exercise a
-  writer (68 `--flat` occurrences in 19 files under `tests/python/`, counted at
-  `9a7c312d`) move to `--dem` with `rough_dem`, or with `--domain` and
+  writer (70 `--flat` occurrences on 69 lines in 19 files under `tests/python/`,
+  `grep -rno -- '--flat' tests/python` at `9a7c312d`; four are writer test
+  strings such as `"none (z=0, --flat)"`, not `mesh` calls) move to `--dem` with `rough_dem`, or with `--domain` and
   `--features` where they need constraint edges with feature bits. Tests that
   pin only the deleted path go with it: `--flat`, `--crs`, the flat record and
   its sentence, the unknown fixture, the fixture with no mesh. Tests that call
@@ -314,3 +323,7 @@ One PR. Commit order on the branch: the red suite; fix 1 alone (the
    synthetic test shapes and an SVG renderer, plus their tests) instead of
    hiding the command? **Default: hidden in this PR; deletion is a separate PR
    only on your yes.**
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `4fe7a3cd`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS (the `None` cases listed by name, as mypy strict does not report unreachable code; the `--flat` count is 70 on 69 lines, four of them writer strings), applied by the main session.
