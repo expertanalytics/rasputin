@@ -2,9 +2,8 @@
 
 This module is the single composition root: joining the file system to the
 engine is its whole job. Paths from the command line also reach the domain,
-DEM-input and repository modules, which read the files they name; ``viz/`` is
-written against protocols and never names a core type, while the core never
-sees a file, a path or a CRS. Everything that has to know both sides lives here.
+DEM-input and repository modules, which read the files they name, while the
+core never sees a file, a path or a CRS. Everything that has to know both sides lives here.
 """
 
 from __future__ import annotations
@@ -159,11 +158,6 @@ from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, catalogue
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
-from tin_engine.viz.fixtures import GALLERY, Fixture
-from tin_engine.viz.protocols import PslgLike
-from tin_engine.viz.scene import build_scene
-from tin_engine.viz.style import PropertyStroke, SvgStyle
-from tin_engine.viz.svg import render_svg
 
 #: What rasputin does, in one sentence: the root help and `pyproject.toml` say it.
 DESCRIPTION: Final = (
@@ -203,7 +197,7 @@ Z_UNIT = Annotated[
     ),
 ]
 
-#: The fixtures' vocabulary, mapped onto the enum. A role outside it is a
+#: The chain roles' names, mapped onto the enum. A role outside it is a
 #: ``KeyError`` here rather than a silently unconstrained chain downstream.
 ROLES = {
     "outer": ChainRole.Outer,
@@ -212,45 +206,11 @@ ROLES = {
 }
 
 #: Which roles name chains that are rings, and therefore carry a closing edge no
-#: graph stores. ``scene.py`` cannot work this out -- it may not name the enum --
-#: and without it every ring closure is drawn as a false alarm.
-#:
-#: TWO vocabularies, because there are two kinds of source. A fixture's roles are
-#: strings and a core graph's are ``ChainRole`` members, and the two compare
-#: unequal; which one applies is a property of the source, so it is carried by
-#: :class:`Attempt` beside it rather than chosen by a caller.
-FIXTURE_CLOSED_ROLES: tuple[object, ...] = ("outer", "hole")
+#: graph stores.
 CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
 
-#: The **gallery's** draw precedence, in DESCENDING priority: first match wins,
-#: and an edge carrying several properties is drawn with exactly one token.
-#:
-#: Named by FEATURE rather than derived from the vocabulary's numbering, because
-#: those are two different questions -- water is drawn over infrastructure
-#: however a vocabulary chose to number them -- and named *here* because
-#: `style.py` and `svg.py` hold no vocabulary and `viz/` may not import one at
-#: all. It is this module's to supply, exactly as :data:`ROLES`,
-#: :data:`FIXTURE_CLOSED_ROLES` and :data:`CORE_CLOSED_ROLES` are.
-#:
-#: It is the gallery's list and not all of :data:`DEFAULT_VOCABULARY`. The
-#: legend is derived from it, and a token `svg.py`'s stylesheet has no rule for
-#: draws identically to the row above it, so declaring all nine features would
-#: put six legend rows on every picture that a reader cannot tell apart --
-#: measured by drawing the gallery. It grows when the stylesheet does.
-#: `coastline` is listed because `bridge-over-lake`'s shoreline is an area
-#: feature: without an entry its token is never emitted, and the shoreline would
-#: draw as a plain breakline. It sits between the other two, water still over
-#: infrastructure, and `svg.py` has its CSS rule.
-_PRECEDENCE = ("river", "coastline", "road")
-
-_BIT_OF = {prop.name: prop.bit for prop in DEFAULT_VOCABULARY.properties}
-
-PROPERTY_STROKES = tuple(PropertyStroke(bit=_BIT_OF[name], token=name) for name in _PRECEDENCE)
-
-DEFAULT_LABEL_LIMIT = 500
-
-#: Metres. The gallery's coordinates are UTM-shaped (``viz.fixtures.ORIGIN``), so
-#: this is a millimetre on the ground.
+#: Metres: input coordinates are UTM-shaped, so this is a millimetre on the
+#: ground.
 #:
 #: A policy choice made here on the record, because there is no default spacing
 #: anywhere in C++ and three of the nine noder statuses point at this number --
@@ -259,7 +219,7 @@ DEFAULT_LABEL_LIMIT = 500
 #: bits); finer runs out of lattice, ``kMaxGridIndex`` being ``2**51``, so at
 #: spacing ``s`` the representable coordinate is ``s * 2.25e15`` and a UTM
 #: easting overflows well before ``1e-12``. A millimetre sits four orders of
-#: magnitude clear of that and shows the gallery what its input said.
+#: magnitude clear of that.
 DEFAULT_SNAP_SPACING = 1e-3
 # The start mesh's minimum angle, degrees.
 DEFAULT_START_MIN_ANGLE = 25.0
@@ -336,42 +296,11 @@ def mcp(
 
 
 @dataclass(frozen=True, slots=True)
-class Attempt:
-    """What the engine made of a fixture, and what to draw it from.
-
-    ``source`` is **the most-processed graph that exists**, with no branch on the
-    CDT's status: no ``Pslg`` means the fixture, a ``Pslg`` but no ``NodedPslg``
-    still means the fixture (a ``Pslg``'s indices *are* the fixture's, so nothing
-    is gained by switching), and a ``NodedPslg`` means the noded graph whether or
-    not the triangulation then succeeded -- when the noder succeeded and the
-    backend did not, the noded graph is the truer picture, because it shows the
-    splits the backend was actually handed.
-
-    ``closed_roles`` is the vocabulary ``source``'s roles speak, and it is a
-    field rather than a module constant because it is a property of the source:
-    a fixture's roles are strings and a ``NodedPslg``'s are ``ChainRole``
-    members, which compare unequal, so a source drawn with the other's
-    vocabulary closes no ring and draws every ring edge as an alarm.
-
-    Both are set together at every exit point below, which is the only form of
-    this that a later edit cannot undo by accident.
-    """
-
-    source: PslgLike
-    closed_roles: tuple[object, ...]
-    mesh: IndexedMesh2 | None
-    ok: bool
-    status: str
-    message: str
-
-
-@dataclass(frozen=True, slots=True)
 class _Run:
     """What ``build_pslg`` -> ``node`` -> ``triangulate`` made of some chains.
 
     ``noded`` is None when the validator or the noder refused; ``mesh`` is None
-    when anything refused. Shared by the fixture path and the DEM path, so the
-    DEM path reaches the engine without going through a ``Fixture``.
+    when anything refused.
     """
 
     noded: NodedPslg | None
@@ -390,8 +319,8 @@ def _engine(
 ) -> _Run:
     """Validate, node and triangulate, reducing every refusal to words.
 
-    ``clock`` records the three calls as ``start mesh: ...`` rows; ``draw``
-    passes none and gets a fresh one that is discarded."""
+    ``clock`` records the three calls as ``start mesh: ...`` rows; without one
+    a fresh clock is used and discarded."""
     clock = clock or PhaseClock()
     with clock.phase("start mesh: build"):
         result = build_pslg(np.asarray(vertices), chains)
@@ -424,138 +353,23 @@ def _engine(
     )
 
 
-def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
-    """Run the engine on a fixture and reduce what it said to one record.
-
-    ``status`` and ``message`` are plain text for the header band. THREE distinct
-    refusals reach this point and none of them is an exception: the validator can
-    reject the constraint set, in which case there is no ``Pslg`` and the words
-    come from every ``PslgDiagnostic`` rather than only the first; the noder can
-    refuse to resolve it at this spacing; or the backend can refuse to
-    triangulate what the noder produced.
-
-    The two-part message is one string on purpose -- ``describe(status)`` and
-    then the engine's own words, and nothing this module wrote. A sentence
-    authored here would be a second authority for a C++ fact, drifting the first
-    time a row is reworded.
-    """
-    chains = [
-        ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
-        for c, chain in enumerate(fixture.chains)
-    ]
-    run = _engine(fixture.vertices, chains, delaunay, spacing)
-    if run.noded is None:
-        return Attempt(
-            source=fixture,
-            closed_roles=FIXTURE_CLOSED_ROLES,
-            mesh=None,
-            ok=False,
-            status=run.status,
-            message=run.message,
-        )
-    return Attempt(
-        source=run.noded,
-        closed_roles=CORE_CLOSED_ROLES,
-        mesh=run.mesh,
-        ok=run.ok,
-        status=run.status,
-        message=run.message,
-    )
-
-
 def _band(sentence: str, detail: str) -> str:
-    """The engine's prose and the engine's detail, as ONE row of the band.
-
-    One string rather than two, because ``svg.py`` joins rows with no separator
-    and a sentence split across two would be printed with its words run
-    together.
-    """
+    """The engine's prose and then the engine's detail, as one sentence."""
     return " ".join(part for part in (sentence, detail) if part)
 
 
 def _snap_spacing(value: float) -> float:
-    """A usage error, exited before anything is drawn.
+    """A usage error, exited before the engine runs.
 
     NOT duplication of the engine's ``InvalidSnapSpacing``: the two answer
     different questions to different callers. This is a mis-typed option, and
-    ``typer`` refuses it the same way a bad ``--out`` is refused, without drawing
-    a picture of a failure that is not about the terrain. The C++ check is a
-    library precondition with callers that are not this CLI, and neither can be
-    deleted in favour of the other.
+    ``typer`` refuses it the same way a bad ``--out`` is refused. The C++ check
+    is a library precondition with callers that are not this CLI, and neither
+    can be deleted in favour of the other.
     """
     if not math.isfinite(value) or value <= 0.0:
         raise typer.BadParameter(f"snap-spacing must be finite and positive, got {value}")
     return value
-
-
-def draw(
-    name: Annotated[str | None, typer.Argument(help="Gallery fixture to draw.")] = None,
-    list_: Annotated[bool, typer.Option("--list", help="List the gallery and exit.")] = False,
-    out: Annotated[Path | None, typer.Option("--out", help="Where to write the SVG.")] = None,
-    out_parent: Annotated[
-        Path | None,
-        typer.Option("--out-parent", help="Refuse any --out that resolves outside this."),
-    ] = None,
-    title: Annotated[str, typer.Option("--title", help="Free text for the header band.")] = "",
-    labels: Annotated[bool, typer.Option("--labels", help="Draw vertex indices.")] = False,
-    label_limit: Annotated[
-        int, typer.Option("--label-limit", help="Refuse --labels above this many vertices.")
-    ] = DEFAULT_LABEL_LIMIT,
-    show_vertices: Annotated[
-        bool, typer.Option("--vertices", help="Draw a dot per vertex.")
-    ] = False,
-    delaunay: Annotated[
-        bool,
-        typer.Option(
-            "--delaunay/--no-delaunay",
-            help="Triangulate with or without the Delaunay property, to compare the two.",
-        ),
-    ] = True,
-    snap_spacing: Annotated[
-        float,
-        typer.Option(
-            "--snap-spacing",
-            callback=_snap_spacing,
-            help="Snap grid spacing for the noder, in the input's units.",
-        ),
-    ] = DEFAULT_SNAP_SPACING,
-) -> None:
-    """Draw a gallery fixture as an SVG.
-
-    A fixture the engine refuses is drawn too, with the engine's status and
-    words in the header band.
-    """
-    if list_:
-        for fixture in GALLERY.values():
-            typer.echo(f"{fixture.name}: {fixture.description}")
-        return
-    if name is None:
-        raise typer.BadParameter("no fixture named; run 'rasputin draw --list' to see the gallery")
-    if name not in GALLERY:
-        raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
-
-    fixture = GALLERY[name]
-    attempt = _triangulated(fixture, delaunay=delaunay, spacing=snap_spacing)
-    scene = build_scene(
-        attempt.source, attempt.mesh, ok=attempt.ok, closed_roles=attempt.closed_roles
-    )
-    if labels and len(scene.vertices) > label_limit:
-        raise typer.BadParameter(
-            f"{len(scene.vertices)} vertices exceeds the label limit of {label_limit}; "
-            f"raise --label-limit or drop --labels"
-        )
-
-    target = _destination(out, out_parent, name)
-    document = render_svg(
-        scene,
-        SvgStyle(show_vertices=show_vertices, property_strokes=PROPERTY_STROKES),
-        title=title,
-        status=attempt.status,
-        message=attempt.message,
-        labels=labels,
-    )
-    target.write_text(document, encoding="utf-8")
-    typer.echo(f"{target}")
 
 
 #: What the suffix of ``--out`` selects.
@@ -596,7 +410,7 @@ def _chain_masks(pslg: NodedPslg) -> dict[tuple[int, int], int]:
     so ``(k + 1) % n`` is unconditional. Getting that wrong shifts every mask
     after the first ring onto the wrong edge.
 
-    A pair reached by two chains takes the UNION, as ``viz.scene`` does: the
+    A pair reached by two chains takes the UNION: the
     set means "every property of every chain that contributed geometry here",
     and union is the only merge whose answer does not depend on chain order.
     """
@@ -617,11 +431,6 @@ def _constraint_arrays(
     mesh: IndexedMesh2, pslg: NodedPslg
 ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.uint32]]:
     """The edge block: the mesh's own constrained edges, and their feature bits.
-
-    Computed from ``constrained_edges`` and the noded graph alone, never from
-    ``viz.scene``: that module is the renderer, and a mesh writer reaching into
-    it for a topology join would make ``viz/`` load-bearing for a path that
-    draws nothing.
 
     A constrained mesh edge with no entry in the noded graph gets 0, which
     ``_core.pyi`` defines as *unclassified* rather than *wrong*.
@@ -2801,4 +2610,3 @@ for panel, commands in (
     for command in commands:
         app.command(rich_help_panel=panel)(command)
 app.command(rich_help_panel=OTHER, help=MCP_HELP)(mcp)
-app.command(hidden=True)(draw)

@@ -192,5 +192,4 @@ paths = [
     "src_python/tin_engine/sources.py",
     "src_python/tin_engine/target_grid.py",
     "src_python/tin_engine/tolerance_field.py",
-    "src_python/tin_engine/viz",
 ]
