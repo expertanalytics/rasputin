@@ -264,13 +264,23 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
-  sources.py               # the catalogues `rasputin fetch` and `rasputin
-                           #   fetch-stations` copy from: RemoteSource (ANADEM,
-                           #   GLO-30; 23a-1, 23a-2), StationSource (NVE's HRD,
-                           #   29), notice(); the entries are data/sources.toml,
-                           #   plus `catalogue()` adding $RASPUTIN_DATA/sources.toml;
-                           #   imports Pydantic and toml_data only, so the mesh
-                           #   path names a key without importing fetch/
+  sources.py               # the source catalogue: RemoteSource (ANADEM,
+                           #   GLO-30; 23a-1, 23a-2; also kind "local", a path
+                           #   to GeoTIFFs on this machine, 55), StationSource
+                           #   (NVE's HRD, 29), notice(); the entries are
+                           #   data/sources.toml plus the user's sources file,
+                           #   added by `catalogue()`; data_root, xdg_base and
+                           #   user_source_candidates/user_source_file find that
+                           #   file from an environment mapping ($RASPUTIN_DATA,
+                           #   else the XDG config directory; 55); imports
+                           #   Pydantic and toml_data only, so the mesh path
+                           #   names a key without importing fetch/
+  source_report.py         # `rasputin sources` (55): each source's coverage
+                           #   (lon/lat box), cell size in metres, CRS, height
+                           #   unit, tiles, read from headers through
+                           #   dem_input.repository_for or the tile cache;
+                           #   imports pyproj and shapely, so kept out of
+                           #   sources.py; imports nothing from cli.py
   toml_data.py             # parse/validate: TOML into a strict Pydantic model,
                            #   refusals naming the file
   fetch/                   # copies remote data to disk; the only package that

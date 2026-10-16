@@ -1,6 +1,6 @@
 # Increment 55: an agent finds the local elevation data and passes it by name
 
-**Status: designed** (branch `worktree-mcp-datasets`), design review round 1 APPROVED WITH WORDINGS, applied by the main session.
+**Status: built, awaiting code review** (branch `worktree-mcp-datasets`, green at `8024f89d`); design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked, and why it failed
 
@@ -235,9 +235,14 @@ def user_source_file(environ: Mapping[str, str]) -> Path | None:
     """The first candidate that is a file."""
 ```
 
-`cli.cache_root` is unchanged. `cli._known_sources` reads `user_source_file(environ)`.
-`cli.data_root` stays, now used by `cache_root` and
-`user_source_candidates` only.
+`cli._known_sources` reads `user_source_file(environ)`. As built, `data_root`
+(the one reader of `RASPUTIN_DATA`) and `xdg_base` (the XDG rule, an absolute
+variable else under `HOME`) moved from `cli.py` into `sources.py`, and
+`cli.cache_root` calls both with the same result as before. The design said
+`cli.data_root` stays; it cannot, because `user_source_candidates` needs it
+and `sources.py` cannot import `cli.py`: `cli.py` imports `sources.py`, and
+the catalogue sits below the CLI layer (the mesh path and `source_report.py`
+import it without the CLI).
 
 ### 4.4 `--dem KEY` everywhere (`cli.py`)
 
@@ -385,12 +390,16 @@ calls `report`, fills the places, and prints `model_dump_json()`.
 
 ### 4.7 Docs
 
-- `README.md`, *Connect an agent*: the Codex block shows an optional
-  `env = { RASPUTIN_DATA = "/path/to/data" }` line, marked as optional (for a
-  cache kept there); a short paragraph says local datasets are registered in
-  `~/.config/rasputin/sources.toml` (or `$RASPUTIN_DATA/sources.toml`) with
-  the TOML example of section 4.2, and that `rasputin sources` lists what is
-  registered. No test reads the README's `env` line.
+- `README.md`, *Connect an agent*: the client blocks keep only `command`
+  and `args`, and a sentence says they are all a client needs; `env` with
+  `RASPUTIN_DATA` is mentioned only as an optional note on where the cache
+  lives (as built: Ola's objection to fiddling in Codex's config, main
+  session's brief). `sources` is listed first among the tools; a short
+  paragraph says local datasets are registered in
+  `~/.config/rasputin/sources.toml` (or `$XDG_CONFIG_HOME/rasputin`, or
+  `$RASPUTIN_DATA/sources.toml`) with a generic version of the TOML example
+  of section 4.2 (no machine path, no country), and that `rasputin sources`
+  lists what is registered. No test reads the README's `env` note.
 - `project_structure.md`: an entry for `source_report.py`; the `sources.py`
   entry says it holds local entries and finds the user's file.
 - `data/sources.toml`'s header comment: where the user's file is looked for.
