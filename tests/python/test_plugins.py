@@ -80,6 +80,11 @@ def core_names() -> list[str]:
     return list(commands(core_app))
 
 
+def shown_core_names() -> list[str]:
+    """The core's commands that `rasputin --help` lists: the hidden ones left out."""
+    return [name for name, command in commands(core_app).items() if not command.hidden]
+
+
 def lists_command(help_text: str, name: str) -> bool:
     """Whether ``--help`` lists ``name`` as a command (a whole word on a line)."""
     return re.search(rf"(?m)^\W*{re.escape(name)}\b", plain(help_text)) is not None
@@ -221,7 +226,7 @@ def test_a_broken_plugin_is_skipped_with_one_line(variant: str, tmp_path: Path) 
     root = write_plugin(tmp_path / "site", body=body)
     listed = run_rasputin("--help", path=[root])
     assert listed.returncode == 0, listed.stderr
-    for name in core_names():
+    for name in shown_core_names():
         assert lists_command(listed.stdout, name), (name, listed.stdout)
     named = lines_naming(listed.stderr, "fakeplug")
     assert len(named) == 1, listed.stderr

@@ -196,18 +196,6 @@ class TestUsageErrors:
             assert word in output, f"{word!r} not in {output!r}"
         assert not out.exists()
 
-    def test_both_a_fixture_and_dem(self, tmp_path: Path, baseline: Path) -> None:
-        self.refused(tmp_path, "catchment", "--dem", str(baseline), says=("--dem",))
-
-    def test_neither_a_fixture_nor_dem(self, tmp_path: Path) -> None:
-        self.refused(tmp_path, says=("--dem",))
-
-    def test_dem_with_flat(self, tmp_path: Path, baseline: Path) -> None:
-        self.refused(tmp_path, "--dem", str(baseline), "--flat", says=("--flat",))
-
-    def test_dem_with_crs(self, tmp_path: Path, baseline: Path) -> None:
-        self.refused(tmp_path, "--dem", str(baseline), "--crs", "EPSG:4326", says=("--crs",))
-
     def test_a_missing_file(self, tmp_path: Path) -> None:
         missing = tmp_path / "nowhere.tif"
         self.refused(tmp_path, "--dem", str(missing), says=("nowhere.tif",))

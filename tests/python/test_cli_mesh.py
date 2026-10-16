@@ -1,78 +1,50 @@
-"""`rasputin mesh`: increment 10's command.
+"""`rasputin mesh --dem`: the writers' side of the command, and the chain-mask join.
 
-Amended red by increment 13's U2 (a), and only there: the default-encoding
-test is inverted (text by default), and the vertex-block identity test asks
-for `--binary`. Amended red again by increment 31 (`31-binary-default.md`):
-the default-encoding test is inverted back, so both files are binary by
-default and `--ascii` asks for text.
+Every refusal asserts what it *says*, because `exit_code != 0` alone would
+pass against a missing option.
 
-Committed red at `1d4ec8b`; `tin_engine.cli` already existed, so the intended
-failure was Click's `No such command 'mesh'` -- exit code 2, no file written. Every test that
-asserts a refusal also asserts what the refusal *says*, because an assertion of
-the form `exit_code != 0` alone would pass against the missing command and
-measure nothing (the same trap `test_cli_draw.py` documents).
+The edge file's oracle is the surface file's faces (an edge of one triangle is
+on the outline), or the features given, never the writer's own record. The
+chain-mask join is `cli._triangulated`'s, which `draw` still runs on the
+gallery; it is tested against an independent rebuild from the chains.
 
-This is the composition-root half of the increment. `io/ply.py` is pure and has
-no path; this command is the only thing that has one, which keeps
-`06-cdt-viewer.md`'s "no file is written below `cli.py`" true for the mesh path
-as it already is for the SVG path.
+`cli._destination`'s refusals (traversal, symlinks, a missing parent) are
+covered in `test_cli_draw.py`; `--out` and `--out-edges` are asserted to go
+through it, and nothing more.
 
-The oracle for the edge file is built from the **mesh**, not from the writer:
-`IndexedMesh2.constrained_edges` sets bit `e` of a triangle's mask iff the edge
-`(v[e], v[(e + 1) % 3])` is constrained, per `_core.pyi`, and
-`constrained_edge_set` below walks that convention directly. A test that asked
-the writer which edges it had chosen would agree with any internally consistent
-answer, including a wrong one (`GLOSSARY.md`, "self-confirming oracle").
-
-`cli._destination`'s refusals -- traversal, symlinks, a missing parent -- are
-increment 6b-ii's boundary and are covered in `test_cli_draw.py`. They are not
-re-tested here; `--out` and `--out-edges` are asserted to *go through* it, and
-nothing more.
-
-NOT ASSERTED, AND NOT ASSERTABLE HERE: that QGIS or ParaView opens either file.
-No runner in this repository has them. Ruling 2 puts that in acceptance, to be
-done once by a person who then writes the version down.
+Not asserted, and not assertable here: that QGIS or ParaView opens either file.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pytest
-from numpy.testing import assert_array_equal
 from typer.testing import CliRunner
 
 import tin_engine.cli as cli
-from cli_helpers import plain, runner
-from plyread import element_bytes, parse_header, read_ply, vertex_array
+from cli_helpers import (
+    SQUARE,
+    crossing_lines,
+    featured_args,
+    plain,
+    polygon_file,
+    rough_dem,
+    runner,
+)
+from plyread import element_bytes, parse_header, read_ply
 from tin_engine.cli import app
+from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.viz.fixtures import GALLERY
 
-#: The design's acceptance line uses this one. It triangulates cleanly.
+#: A gallery fixture that triangulates cleanly.
 FIXTURE = "catchment"
 
 #: A fixture whose constraints carry feature bits, so the edge file's scalar
 #: has something other than 0 to carry. Increment 8 renamed it from `not-noded`.
 FEATURED = "road-crosses-river"
-
-
-def constrained_edge_set(mesh: object) -> set[frozenset[int]]:
-    """Every constrained edge of a mesh, deduplicated across shared triangles.
-
-    Built from `_core.pyi`'s stated bit convention, independently of anything
-    increment 10 adds. The two triangles either side of an interior constraint
-    both flag it, which is why this is a set of unordered pairs rather than a
-    list.
-    """
-    triangles = np.asarray(mesh.triangles)  # type: ignore[attr-defined]
-    masks = np.asarray(mesh.constrained_edges)  # type: ignore[attr-defined]
-    return {
-        frozenset((int(tri[e]), int(tri[(e + 1) % 3])))
-        for tri, mask in zip(triangles, masks, strict=True)
-        for e in range(3)
-        if mask & (1 << e)
-    }
 
 
 @pytest.fixture
@@ -82,21 +54,34 @@ def attempt(request: pytest.FixtureRequest) -> cli.Attempt:
     return cli._triangulated(GALLERY[name], delaunay=True, spacing=cli.DEFAULT_SNAP_SPACING)
 
 
+bumpy = rough_dem(16)
+square = polygon_file(SQUARE)
+crossing = crossing_lines()
+
+
+def boundary_edges(triangles: np.ndarray) -> set[frozenset[int]]:
+    """The edges of exactly one triangle: the outline of a mesh with no hole."""
+    count: Counter[frozenset[int]] = Counter(
+        frozenset((int(tri[e]), int(tri[(e + 1) % 3]))) for tri in triangles for e in range(3)
+    )
+    return {edge for edge, n in count.items() if n == 1}
+
+
 @pytest.fixture
-def written(tmp_path: Path) -> tuple[bytes, bytes]:
-    """The acceptance invocation: one fixture, two destinations, exit code 0."""
+def written(tmp_path: Path, bumpy: Path) -> tuple[bytes, bytes]:
+    """A DEM run to two destinations, exit code 0."""
     surface = tmp_path / "surface.ply"
     edges = tmp_path / "edges.ply"
     result = runner.invoke(
         app,
-        ["mesh", FIXTURE, "--flat", "--out", str(surface), "--out-edges", str(edges)],
+        ["mesh", "--dem", str(bumpy), "--out", str(surface), "--out-edges", str(edges)],
     )
     assert result.exit_code == 0, plain(result.output)
     return surface.read_bytes(), edges.read_bytes()
 
 
-class TestTheAcceptanceInvocation:
-    """`rasputin mesh catchment --flat --out A --out-edges B`."""
+class TestTwoDestinations:
+    """`rasputin mesh --dem bumpy.tif --out A --out-edges B`."""
 
     def test_the_surface_file_is_a_2d_mesh(self, written: tuple[bytes, bytes]) -> None:
         assert parse_header(written[0]).names == ("vertex", "face")
@@ -105,23 +90,19 @@ class TestTheAcceptanceInvocation:
         assert parse_header(written[1]).names == ("vertex", "edge")
 
     def test_both_files_are_binary_by_default(self, written: tuple[bytes, bytes]) -> None:
-        # Increment 31 (D1, D2): binary by default for both formats, reversing
-        # increment 13's U2 (a), under which this was
-        # `test_both_files_are_ascii_by_default`. Before that it was this test,
-        # under increment 10's ruling 1.
         assert {parse_header(blob).fmt for blob in written} == {"binary_little_endian"}
 
-    def test_the_vertex_blocks_are_byte_identical(self, tmp_path: Path) -> None:
-        # Ruling 3. The two layers register on each other only because of this.
-        # Asked for in binary since U2 (a): `element_bytes` locates fixed-width
-        # records, and byte identity is a claim about the packed block.
+    def test_the_vertex_blocks_are_byte_identical(self, tmp_path: Path, bumpy: Path) -> None:
+        # The two layers register on each other only because of this. Asked
+        # for in binary: `element_bytes` locates fixed-width records, and byte
+        # identity is a claim about the packed block.
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         result = runner.invoke(
             app,
             [
                 "mesh",
-                FIXTURE,
-                "--flat",
+                "--dem",
+                str(bumpy),
                 "--binary",
                 "--out",
                 str(surface),
@@ -134,66 +115,55 @@ class TestTheAcceptanceInvocation:
         assert element_bytes(blobs[0], "vertex") == element_bytes(blobs[1], "vertex")
         assert element_bytes(blobs[0], "vertex"), "two empty slices are trivially equal"
 
-    def test_it_names_what_it_wrote(self, tmp_path: Path) -> None:
+    def test_it_names_what_it_wrote(self, tmp_path: Path, bumpy: Path) -> None:
         surface = tmp_path / "surface.ply"
-        result = runner.invoke(app, ["mesh", FIXTURE, "--flat", "--out", str(surface)])
+        result = runner.invoke(app, ["mesh", "--dem", str(bumpy), "--out", str(surface)])
         assert result.exit_code == 0
         assert str(surface) in plain(result.output)
 
 
-class TestTheGeometryIsTheEngines:
-    """The file holds the mesh the engine produced, vertex for vertex."""
+class TestTheEdgeFileIsTheOutline:
+    """With no domain and no features, the only constraint is the grid's outline.
 
-    def test_the_vertices_are_the_meshs_own(
-        self, written: tuple[bytes, bytes], attempt: cli.Attempt
-    ) -> None:
-        assert attempt.mesh is not None
-        _, data = read_ply(written[0])
-        assert_array_equal(vertex_array(data)[:, :2], np.asarray(attempt.mesh.vertices))
+    The oracle is the surface file's own faces: an edge of exactly one
+    triangle is on the outline. Nothing asks the edge writer what it chose.
+    """
 
-    def test_the_faces_are_the_meshs_own(
-        self, written: tuple[bytes, bytes], attempt: cli.Attempt
-    ) -> None:
-        assert attempt.mesh is not None
-        _, data = read_ply(written[0])
-        assert_array_equal(data["face"]["vertex_indices"], np.asarray(attempt.mesh.triangles))
-
-    def test_the_edges_are_the_meshs_constrained_edges(
-        self, written: tuple[bytes, bytes], attempt: cli.Attempt
-    ) -> None:
-        assert attempt.mesh is not None
-        _, data = read_ply(written[1])
+    def test_the_edges_are_the_surfaces_boundary(self, written: tuple[bytes, bytes]) -> None:
+        _, surface = read_ply(written[0])
+        _, edges = read_ply(written[1])
         pairs = {
             frozenset((int(a), int(b)))
-            for a, b in zip(data["edge"]["vertex1"], data["edge"]["vertex2"], strict=True)
+            for a, b in zip(edges["edge"]["vertex1"], edges["edge"]["vertex2"], strict=True)
         }
-        assert pairs == constrained_edge_set(attempt.mesh)
+        assert pairs == boundary_edges(surface["face"]["vertex_indices"])
 
-    def test_each_constrained_edge_is_written_once(
-        self, written: tuple[bytes, bytes], attempt: cli.Attempt
-    ) -> None:
-        # The dedup ruling 6 names: the two triangles sharing an interior
-        # constraint must not produce two edge records.
+    def test_each_constrained_edge_is_written_once(self, written: tuple[bytes, bytes]) -> None:
+        # The two triangles sharing an interior constraint must not produce
+        # two edge records; on the outline there is one triangle, so the count
+        # is the outline's.
         header, _ = read_ply(written[1])
-        assert attempt.mesh is not None
-        assert header.element("edge").count == len(constrained_edge_set(attempt.mesh))
+        _, surface = read_ply(written[0])
+        assert header.element("edge").count == len(
+            boundary_edges(surface["face"]["vertex_indices"])
+        )
 
 
 class TestTheTwoDestinationsAreDistinct:
     """One path given twice is one file, and the second write wins.
 
-    Before this guard both writes succeeded, the second overwrote the first,
-    the command echoed two paths and exited 0. The caller had lost the surface
+    Without this guard both writes succeed, the second overwrites the first,
+    the command echoes two paths and exits 0. The caller has lost the surface
     they asked for with nothing to tell them.
     """
 
     def test_the_same_path_twice_is_refused_before_anything_is_written(
-        self, tmp_path: Path
+        self, tmp_path: Path, bumpy: Path
     ) -> None:
         target = tmp_path / "both.ply"
         result = CliRunner().invoke(
             app,
-            ["mesh", "catchment", "--flat", "--out", str(target), "--out-edges", str(target)],
+            ["mesh", "--dem", str(bumpy), "--out", str(target), "--out-edges", str(target)],
         )
         assert result.exit_code != 0, plain(result.output)
         assert "overwrite" in plain(result.output)
@@ -242,19 +212,17 @@ class TestTheChainMaskJoin:
 
 
 class TestTheFeatureScalar:
-    """The edge file carries the noded PSLG's feature bits, or 0."""
+    """The edge file carries the feature bits of the lines given, or 0."""
 
-    @pytest.mark.parametrize("attempt", [FEATURED], indirect=True)
-    def test_the_masks_come_from_the_noded_graph(
-        self, tmp_path: Path, attempt: cli.Attempt
+    def test_the_masks_come_from_the_features(
+        self, tmp_path: Path, bumpy: Path, square: Path, crossing: Path
     ) -> None:
         edges = tmp_path / "edges.ply"
         result = runner.invoke(
             app,
             [
                 "mesh",
-                FEATURED,
-                "--flat",
+                *featured_args(bumpy, square, crossing),
                 "--out",
                 str(tmp_path / "s.ply"),
                 "--out-edges",
@@ -264,80 +232,35 @@ class TestTheFeatureScalar:
         assert result.exit_code == 0, plain(result.output)
         header, data = read_ply(edges.read_bytes())
         written_masks = set(data["edge"][header.element("edge").properties[2].name].tolist())
-        available = set(np.asarray(attempt.source.edge_properties).tolist())  # type: ignore[union-attr]
-        assert written_masks <= available | {0}, "a mask nothing in the input carries"
-        assert written_masks - {0}, f"{FEATURED} carries feature bits; none reached the file"
-
-
-class TestFlatIsAlwaysAWordSomebodyTyped:
-    """Ruling 4. Nothing in the tree can supply an elevation yet."""
-
-    def test_without_flat_it_refuses(self, tmp_path: Path) -> None:
-        out = tmp_path / "surface.ply"
-        result = runner.invoke(app, ["mesh", FIXTURE, "--out", str(out)])
-        assert result.exit_code != 0
-        assert "--flat" in plain(result.output)
-        assert not out.exists(), "a refusal must not leave a file behind"
-
-    def test_flat_fills_z_with_zero(self, written: tuple[bytes, bytes]) -> None:
-        _, data = read_ply(written[0])
-        assert_array_equal(data["vertex"]["z"], np.zeros(len(data["vertex"]["z"])))
-
-    def test_flat_says_so_in_both_headers(self, written: tuple[bytes, bytes]) -> None:
-        # Ruling 4's comment, as increment 25 words it (D2, `heights`): the
-        # comment is the only thing that tells a person six months later that
-        # the surface is not terrain.
-        for blob in written:
-            comments = parse_header(blob).comments
-            assert "heights none: every z is 0 (--flat)" in comments
-            assert not any(c.startswith("elevation ") for c in comments), comments
-
-
-class TestTheCrsComment:
-    """Ruling 5: the CRS is a comment, and no reader acts on it."""
-
-    def test_the_crs_reaches_the_header(self, tmp_path: Path) -> None:
-        out = tmp_path / "surface.ply"
-        result = runner.invoke(
-            app, ["mesh", FIXTURE, "--flat", "--crs", "EPSG:25833", "--out", str(out)]
-        )
-        assert result.exit_code == 0, plain(result.output)
-        assert "crs EPSG:25833" in parse_header(out.read_bytes()).comments
-
-    def test_it_is_not_validated(self, tmp_path: Path) -> None:
-        # The writer does not import pyproj and the command does not check the
-        # string: CRS authority is `raster.py`'s and `io/`'s, and a second
-        # opinion inside a byte writer would be a second authority.
-        out = tmp_path / "surface.ply"
-        result = runner.invoke(
-            app, ["mesh", FIXTURE, "--flat", "--crs", "not-a-crs", "--out", str(out)]
-        )
-        assert result.exit_code == 0, plain(result.output)
-        assert "crs not-a-crs" in parse_header(out.read_bytes()).comments
+        bits = {p.name: 1 << p.bit for p in DEFAULT_VOCABULARY.properties}
+        road, river = bits["road"], bits["river"]
+        assert written_masks <= {0, road, river, road | river}, "a mask no input carries"
+        assert {road, river} <= written_masks, "the road and the river reach the file"
 
 
 class TestTheSecondFileIsNamedOrNotWritten:
     """Ruling 3's rejected alternative: two files always is a surprise."""
 
-    def test_without_out_edges_only_one_file_appears(self, tmp_path: Path) -> None:
-        out = tmp_path / "surface.ply"
-        result = runner.invoke(app, ["mesh", FIXTURE, "--flat", "--out", str(out)])
+    def test_without_out_edges_only_one_file_appears(self, tmp_path: Path, bumpy: Path) -> None:
+        out = tmp_path / "out" / "surface.ply"
+        out.parent.mkdir()
+        result = runner.invoke(app, ["mesh", "--dem", str(bumpy), "--out", str(out)])
         assert result.exit_code == 0, plain(result.output)
-        assert [p.name for p in tmp_path.iterdir()] == ["surface.ply"]
+        assert [p.name for p in out.parent.iterdir()] == ["surface.ply"]
 
 
 class TestTheAsciiFlag:
-    """A small mesh under `--ascii` is inspectable with `head`. Ruling 1."""
+    """A small mesh under `--ascii` is inspectable with `head`."""
 
-    def test_both_files_switch_together(self, tmp_path: Path) -> None:
+    def test_both_files_switch_together(self, tmp_path: Path, bumpy: Path) -> None:
         surface = tmp_path / "surface.ply"
         edges = tmp_path / "edges.ply"
         result = runner.invoke(
             app,
             [
                 "mesh",
-                FIXTURE,
-                "--flat",
+                "--dem",
+                str(bumpy),
                 "--ascii",
                 "--out",
                 str(surface),
@@ -348,26 +271,3 @@ class TestTheAsciiFlag:
         assert result.exit_code == 0, plain(result.output)
         assert parse_header(surface.read_bytes()).fmt == "ascii"
         assert parse_header(edges.read_bytes()).fmt == "ascii"
-
-
-class TestRefusals:
-    """What the command says no to, and in what words."""
-
-    def test_an_unknown_fixture_names_the_gallery(self, tmp_path: Path) -> None:
-        result = runner.invoke(
-            app, ["mesh", "no-such-fixture", "--flat", "--out", str(tmp_path / "s.ply")]
-        )
-        assert result.exit_code != 0
-        assert "no-such-fixture" in plain(result.output)
-        assert FIXTURE in plain(result.output), "the gallery is listed, as `draw` lists it"
-
-    def test_a_fixture_with_no_mesh_writes_nothing(self, tmp_path: Path) -> None:
-        # `degenerate` is refused by the PSLG validator before the noder runs,
-        # so there is no mesh to write. `draw` answers that with a picture of
-        # the failure; there is no such thing as a picture of a failed file, so
-        # this command fails instead, with the engine's own words.
-        out = tmp_path / "surface.ply"
-        result = runner.invoke(app, ["mesh", "degenerate", "--flat", "--out", str(out)])
-        assert result.exit_code != 0
-        assert "DegenerateRing" in plain(result.output)
-        assert not out.exists()

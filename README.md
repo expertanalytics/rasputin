@@ -140,6 +140,14 @@ caveat: a `mesh` cancelled while writing a `.vtk` or `.ply` can leave a
 truncated file under the asked name, so rerun before reading it; a `.gpkg`
 goes through a `.part` file and a rename, so it cannot.
 
+## Add a command of your own
+
+An installed Python package can add commands to `rasputin`, and they appear
+in `--help` and as MCP tools like the built-in ones. It may also build a C++
+extension module against rasputin's installed headers.
+[docs/plugins.md](docs/plugins.md) says what such a plugin declares, which
+names it may import, and which headers it may include.
+
 ## How it is built
 
 - **A C++20 core** (`include/terrain/`, `src/`): exact geometric predicates,

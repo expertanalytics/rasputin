@@ -22,7 +22,7 @@ The Python suite is not run on macOS in CI, but it passes there locally (see
 ## Prerequisites
 
 - **A C++20 compiler.** CI builds with GCC 13.3 (Ubuntu) and AppleClang 21
-  (macOS); the compiler must provide the C++20 `<chrono>` calendar types.
+  (macOS).
 - **CMake 3.24 or newer** (`cmake_minimum_required` in `CMakeLists.txt`).
 - **Python 3.12 or newer** (`requires-python` in `pyproject.toml`), with its
   development headers.
@@ -275,8 +275,7 @@ index. If you publish results, credit the data as `corine/NOTICE` shows.
 - **A GeoTIFF is refused with "cannot be decoded as installed; the `codecs`
   extra (imagecodecs) may decode it".** Install the extra:
   `pip install ".[codecs]"`.
-- **The build fails on `<chrono>` calendar types, `concept` or other C++20
-  features.** Your compiler is too old. On macOS, check
+- **The build fails on `concept` or other C++20 features.** Your compiler is too old. On macOS, check
   `c++ --version`; if `/usr/bin/c++` points at an old toolchain, run
   `sudo xcode-select --switch /Library/Developer/CommandLineTools`. You can pick
   a compiler with `export CXX=...` before installing; for GCC, `CXX` must be

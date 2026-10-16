@@ -93,14 +93,6 @@ def steep_args(v2: Path, box: Path, *flags: str) -> tuple[str, ...]:
 class TestRefusals:
     """Section 5, in its order; each names --tolerance-slope."""
 
-    def test_without_dem(self, tmp_path: Path) -> None:
-        refused(
-            tmp_path,
-            "mesh",
-            *("catchment", "--flat", *STEEP),
-            says=("applies only with --dem", "--tolerance-slope"),
-        )
-
     def test_without_tolerance(self, tmp_path: Path, v2: Path) -> None:
         """No --domain, so no other flag asks for --tolerance first."""
         refused(

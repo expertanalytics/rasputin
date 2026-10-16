@@ -115,8 +115,8 @@ class Sizes:
     output_triangles: int
     constraint_edges: int
     files: Sequence[tuple[str, int]]
-    dem_nodes: tuple[int, int] | None = None
-    dem_spacing: tuple[float, float] | None = None
+    dem_nodes: tuple[int, int]
+    dem_spacing: tuple[float, float]
     domain_vertices: int | None = None
     domain_holes: int | None = None
     start_vertices: int | None = None
@@ -137,7 +137,7 @@ class Report:
     #: The text after ``bounds checks: ``, ``off`` or ``on (<mode>)``: which
     #: build made the mesh (increment 24). Filled by the CLI from ``_core``.
     bounds_checks: str
-    threads: int | None = None
+    threads: int
     #: One row per disagreeing pair of DEM tiles: two names, nodes, max and
     #: median, already formatted (`mosaic.Seam.cells`; Ola's Q1 revised).
     seams: Sequence[Sequence[str]] = ()
@@ -167,11 +167,10 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
 
 def _sizes(s: Sizes) -> list[str]:
     rows: list[tuple[str, str]] = []
-    if s.dem_nodes is not None and s.dem_spacing is not None:
-        dx, dy = s.dem_spacing
-        spacing = f"{dx:g}" if dx == dy else f"{dx:g} × {dy:g}"
-        item = "resampled grid nodes" if s.resampled else "DEM nodes"
-        rows.append((item, f"{s.dem_nodes[0]} × {s.dem_nodes[1]} ({spacing} m)"))
+    dx, dy = s.dem_spacing
+    spacing = f"{dx:g}" if dx == dy else f"{dx:g} × {dy:g}"
+    item = "resampled grid nodes" if s.resampled else "DEM nodes"
+    rows.append((item, f"{s.dem_nodes[0]} × {s.dem_nodes[1]} ({spacing} m)"))
     if s.domain_vertices is not None:
         holes = s.domain_holes or 0
         plural = "" if holes == 1 else "s"
@@ -237,9 +236,7 @@ def _timings(report: Report) -> list[str]:
 
     rows = [(n, f"{s:.3f}", share(s)) for n, s in (*report.phases, ("other", total - top))]
     rows.append(("**total**", f"**{total:.3f}**", "**100 %**"))
-    intro = _TIMINGS
-    if report.threads is not None:
-        intro += f" Threads used: {report.threads}."
+    intro = f"{_TIMINGS} Threads used: {report.threads}."
     lines = ["## Timings", "", intro, "", *_table(("phase", "seconds", "share"), rows), ""]
     if subs:
         lines += ["Sub-rows sum to their parent and are not added to the total.", ""]

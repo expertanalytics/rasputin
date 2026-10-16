@@ -60,7 +60,6 @@ from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
 UTM33 = 25833
 FIXED_TIME = "1970-01-01T00:00:00.000Z"
-GALLERY_FIXTURE = "catchment"
 
 
 def rect(x0: float, y0: float, x1: float, y1: float) -> Polygon:
@@ -249,19 +248,23 @@ class TestCli:
             "run": "attributes",
         }
 
-    def test_out_edges_is_refused_because_edges_are_the_lines_layer(self, tmp_path: Path) -> None:
-        out, edges = tmp_path / "flat.gpkg", tmp_path / "edges.ply"
+    def test_out_edges_is_refused_because_edges_are_the_lines_layer(
+        self, tmp_path: Path, bumpy: Path
+    ) -> None:
+        out, edges = tmp_path / "x.gpkg", tmp_path / "edges.ply"
         code, output = invoke(
-            "mesh", GALLERY_FIXTURE, "--flat", "--out", str(out), "--out-edges", str(edges)
+            "mesh", "--dem", str(bumpy), "--out", str(out), "--out-edges", str(edges)
         )
         assert code == USAGE, output
         assert "--out-edges" in output
         assert "lines" in output and "layer of the GeoPackage" in output
         assert not out.exists() and not edges.exists()
 
-    def test_ascii_is_refused_because_it_applies_to_vtk_and_ply(self, tmp_path: Path) -> None:
-        out = tmp_path / "flat.gpkg"
-        code, output = invoke("mesh", GALLERY_FIXTURE, "--flat", "--out", str(out), "--ascii")
+    def test_ascii_is_refused_because_it_applies_to_vtk_and_ply(
+        self, tmp_path: Path, bumpy: Path
+    ) -> None:
+        out = tmp_path / "x.gpkg"
+        code, output = invoke("mesh", "--dem", str(bumpy), "--out", str(out), "--ascii")
         assert code == USAGE, output
         assert "--ascii" in output
         assert "applies to .vtk and .ply" in output
@@ -539,19 +542,6 @@ class TestSrs:
         assert definition.startswith("PROJCS[")
         ids = {r[0] for r in opened.execute("SELECT srs_id FROM gpkg_spatial_ref_sys")}
         assert ids == {-1, 0, 4326, UTM33}
-
-    def test_free_text_crs_is_the_undefined_row_and_stays_in_run(self, tmp_path: Path) -> None:
-        out = tmp_path / "flat.gpkg"
-        code, output = invoke(
-            "mesh", GALLERY_FIXTURE, "--flat", "--crs", "free text", "--out", str(out)
-        )
-        assert code == 0, output
-        with closing(open_geopackage(out)) as con:
-            assert layer_info(con, "triangles").srs_id == -1
-            ids = {r[0] for r in con.execute("SELECT srs_id FROM gpkg_spatial_ref_sys")}
-            assert ids == {-1, 0, 4326}
-            (crs,) = con.execute("SELECT value FROM run WHERE name = 'crs'").fetchone()
-        assert crs == "free text"
 
 
 # ---------------------------------------------------------------- T9: style

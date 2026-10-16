@@ -11,7 +11,7 @@ Pinned by the design: ``Entry(name, wording, value, number, in_file)`` and
 ``RunRecord(entries)``, frozen; ``file_fields(record)`` as ``(name, value)``
 pairs; ``stats_rows(record)`` as ``(wording, value, name)``;
 ``summary(record)``; ``as_json(record, version, command)``; the builders
-``refined_record``, ``stride_record`` and ``flat_record``; D2's file fields
+``refined_record`` and ``stride_record``; D2's file fields
 and their wording ("The fields, for Ola"); D3's rules; D5's JSON.
 
 PINNED HERE, where D1 is silent (the builders' arguments): every builder takes
@@ -65,7 +65,6 @@ FILE_WORDING = {
     "nodata_vertices_removed": "Vertices removed on NoData",
     "heights": "Heights",
 }
-FLAT_HEIGHTS = "none: every z is 0 (--flat)"
 CREDIT = "Agencia Nacional de Aguas (ANA), Brazil; https://doi.org/10.5069/G9736P4G"
 LICENCE = "CC BY 4.0 (Creative Commons Attribution 4.0 International)"
 CITE = "Laipelt, L., et al. (2024). ANADEM"
@@ -126,12 +125,7 @@ def stride(rr: ModuleType, **over: Any) -> Any:
     return rr.stride_record(**(args | over))
 
 
-def flat(rr: ModuleType, **over: Any) -> Any:
-    args: dict[str, Any] = {"crs": "EPSG:25833", "triangles": 60}
-    return rr.flat_record(**(args | over))
-
-
-PATHS = ("projected", "reprojected", "downloaded", "stride", "flat")
+PATHS = ("projected", "reprojected", "downloaded", "stride")
 
 
 def record_of(rr: ModuleType, path: str) -> Any:
@@ -140,7 +134,6 @@ def record_of(rr: ModuleType, path: str) -> Any:
         "reprojected": reprojected,
         "downloaded": downloaded,
         "stride": stride,
-        "flat": flat,
     }[path](rr)
 
 
@@ -264,7 +257,6 @@ class TestFileFields:
                 },
             ),
             ("stride", {"crs", "dem_source", "nodata_vertices_removed"}),
-            ("flat", {"crs", "heights"}),
         ],
     )
     def test_exactly_d2s_fields_for_each_path(
@@ -287,12 +279,6 @@ class TestFileFields:
         assert got["dem_source"] == "anadem-v1"
         assert (got["dem_credit"], got["licence_note"], got["cite"]) == (CREDIT, LICENCE, CITE)
         assert fields(rr, projected(rr))["nodata_vertices_removed"] == "199"
-
-    def test_flat_says_the_heights_are_not_real(self, rr: ModuleType) -> None:
-        assert fields(rr, flat(rr))["heights"] == FLAT_HEIGHTS
-
-    def test_flat_without_a_crs_has_no_crs_field(self, rr: ModuleType) -> None:
-        assert fields(rr, flat(rr, crs=None)) == {"heights": FLAT_HEIGHTS}
 
     def test_a_source_that_asks_no_citation_writes_no_cite(self, rr: ModuleType) -> None:
         assert "cite" not in fields(rr, downloaded(rr, cite=None))
@@ -327,7 +313,7 @@ class TestOmission:
         """D6, the default taken while Ola was away: a projected run (before
         15f-3) has neither entry, rather than a 0 nobody measured; a path that
         measures them has both, 0 included."""
-        for record in (projected(rr), stride(rr), flat(rr)):
+        for record in (projected(rr), stride(rr)):
             names = {e.name for e in record.entries}
             assert "dem_nodes_at_vertices" not in names
             assert "dem_nodes_at_vertices_max_error_m" not in names
@@ -336,7 +322,7 @@ class TestOmission:
         assert by_name["dem_nodes_at_vertices_max_error_m"][1] == "0"
 
     def test_no_tolerance_means_no_tolerance_fields(self, rr: ModuleType) -> None:
-        for record in (stride(rr), flat(rr)):
+        for record in (stride(rr),):
             names = {e.name for e in record.entries}
             assert not names & {"tolerance_m", "max_error_m", "refinement_rounds"}, names
 
@@ -504,7 +490,7 @@ class TestSummary:
     ) -> None:
         record = record_of(rr, path)
         known = {float(f"{v:.5g}") for v in numbers(record).values()}
-        known |= {float(record_of_triangles(path)), 0.0}  # "every z is 0" on --flat
+        known |= {float(record_of_triangles(path))}
         text = rr.summary(record)
         for token in NUMBER_TOKEN.findall(text):
             assert float(token) in known, (token, text)
@@ -517,9 +503,7 @@ class TestSummary:
 
 
 def record_of_triangles(path: str) -> int:
-    return {"projected": 116389, "reprojected": 983, "downloaded": 983, "stride": 8, "flat": 60}[
-        path
-    ]
+    return {"projected": 116389, "reprojected": 983, "downloaded": 983, "stride": 8}[path]
 
 
 # ---------------------------------------------------------------- --record's JSON (D5)

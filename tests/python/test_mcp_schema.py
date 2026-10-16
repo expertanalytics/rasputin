@@ -238,16 +238,16 @@ class TestArgvRoundTrip:
 
 # ---------------------------------------------------------------- T3
 
-#: Section 1's eight commands as tool names. Their parameter counts are not
-#: pinned: the test below holds each schema's properties equal to the command's
-#: own click parameters, which implies the count, and a pinned count would turn
-#: red on every master merge that adds a CLI option (as `mesh` 34 -> 36 did when
-#: `--land-cover` and `--land-cover-year` landed) without saying anything about
-#: the schema.
-TOOL_NAMES = {
-    "mesh", "draw", "fetch", "catchment", "station_catchments",
-    "fetch_stations", "palette", "version",
-}  # fmt: skip
+#: The seven commands an agent is offered, as tool names, in the order of
+#: `rasputin --help` (`draw` is hidden, `mcp` is the server). Their parameter
+#: counts are not pinned: the test below holds each schema's properties equal
+#: to the command's own click parameters, which implies the count, and a
+#: pinned count would turn red on every merge that adds a CLI option without
+#: saying anything about the schema.
+TOOL_NAMES = [
+    "mesh", "palette", "catchment", "station_catchments",
+    "fetch", "fetch_stations", "version",
+]  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
 MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
@@ -257,8 +257,6 @@ MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
             {"type": "null"},
         ],
         "default": None,
-        "description": "With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, or in "
-        "--out-crs's when given, snapped outward to its nodes.",
     },
     "tolerance_near": {
         "anyOf": [
@@ -302,10 +300,10 @@ RUN_RESULT_FIELDS = {
 
 
 class TestTheRealApp:
-    def test_the_eight_commands_in_the_clis_order(self) -> None:
+    def test_the_seven_commands_in_the_clis_order(self) -> None:
         tools = derived(app)
         assert list(tools) == tool_names(app)
-        assert set(tools) == TOOL_NAMES
+        assert list(tools) == TOOL_NAMES
 
     def test_no_drift_from_the_click_parameters(self) -> None:
         tools = derived(app)
@@ -313,11 +311,13 @@ class TestTheRealApp:
             params = {p.name for p in click_command(app, name).params}
             assert set(d.tool().input_schema["properties"]) == params, name
 
-    def test_mesh_requires_out_and_matches_the_snapshots(self) -> None:
+    def test_mesh_requires_out_and_dem_and_matches_the_snapshots(self) -> None:
         schema = derived(app)["mesh"].tool().input_schema
-        assert schema["required"] == ["out"]
+        assert set(schema["required"]) == {"out", "dem"}
         assert schema["additionalProperties"] is False
         properties = without_titles(schema["properties"])
+        bbox = properties["bbox"].pop("description")
+        assert "snapped outward to the DEM's nodes" in bbox, bbox
         assert {k: properties[k] for k in MESH_SNAPSHOTS} == MESH_SNAPSHOTS
 
     def test_an_integer_range_carries_its_minimum(self) -> None:
@@ -341,12 +341,14 @@ class TestTheRealApp:
             assert {"type": "null"} in threads["anyOf"], name
             assert budget["default"] is None and {"type": "string"} in budget["anyOf"], name
         mesh = tools["mesh"]
-        with_threads = mesh.model.model_validate({"out": "x.vtk", "threads": 3})
+        with_threads = mesh.model.model_validate({"out": "x.vtk", "dem": ["d.tif"], "threads": 3})
         assert mesh.argv(with_threads)[-2:] == ["--threads", "3"]
-        with_budget = mesh.model.model_validate({"out": "x.vtk", "memory_budget": "8G"})
+        with_budget = mesh.model.model_validate(
+            {"out": "x.vtk", "dem": ["d.tif"], "memory_budget": "8G"}
+        )
         assert mesh.argv(with_budget)[-2:] == ["--memory-budget", "8G"]
         with pytest.raises(ValidationError):
-            mesh.model.model_validate({"out": "x.vtk", "threads": -1})
+            mesh.model.model_validate({"out": "x.vtk", "dem": ["d.tif"], "threads": -1})
 
     @pytest.mark.parametrize("name", ["mesh", "catchment", "station_catchments"])
     def test_z_unit_admits_the_three_spellings_and_null(self, name: str) -> None:

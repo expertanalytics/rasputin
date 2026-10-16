@@ -115,8 +115,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c); encodes no mesh
                            #   file: picks the io/ writer by suffix and writes
-                           #   its bytes; the gallery's --crs goes through
-                           #   io/mesh_checks' checked_ascii before any writer
+                           #   its bytes
   plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
   plugin_api.py            # re-exports only: what a plugin may import
   cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins
@@ -303,7 +302,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   precedence, which is structure, not taste, and
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
-    fixtures.py            # the synthetic gallery, declarative; `rasputin draw
+    fixtures.py            # the synthetic gallery, declarative; drawn by
+                           #   `rasputin draw`, hidden from --help
   io/                      # all file decoding AND encoding lives here. A
                            #   document built outside cli.py and serialised
                            #   there by one standard-library call is printing,
@@ -400,6 +400,8 @@ auto_catchments.md
 project_structure.md       # this file
 testing.md
 docs/increments/           # per-increment design records; see its README
+docs/plugins.md            # for a third-party plugin author: the hook, plugin_api,
+                           #   the installed headers
 ```
 
 ## Module responsibilities and dependencies
@@ -663,7 +665,7 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 ## Python API surface
 
-The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command, hidden from `--help` and from the MCP tools, drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
 
 The catchment file's bytes come from `io/geojson.py`'s `catchment_geojson`, which opens nothing; `rasputin catchment` and `rasputin station-catchments` both call it, and `cli.py` keeps only the write.
 

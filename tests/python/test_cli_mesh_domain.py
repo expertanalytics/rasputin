@@ -425,16 +425,6 @@ class TestRefusals:
     def test_domain_without_tolerance(self, tmp_path: Path, bumpy: Path, square: Path) -> None:
         self.refused(tmp_path, bumpy, square, says=("--tolerance",))
 
-    def test_domain_without_dem(self, tmp_path: Path, square: Path) -> None:
-        target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "mesh", "catchment", "--domain", str(square), "--tolerance", "1", "--out", str(target)
-        )
-        assert code == USAGE, output
-        assert "No such option" not in output, output
-        assert "--domain" in output
-        assert not target.exists()
-
     def test_a_missing_domain_file(self, tmp_path: Path, bumpy: Path) -> None:
         self.refused(
             tmp_path, bumpy, tmp_path / "absent.geojson", "--tolerance", "1", says=("--domain",)

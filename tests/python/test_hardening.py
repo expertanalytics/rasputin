@@ -36,12 +36,14 @@ from pathlib import Path
 import pytest
 
 import tin_engine._core as core
-from cli_helpers import runner
+from cli_helpers import rough_dem, runner
 from harness_fixtures import Tool
 from tin_engine import cli, installed_version
 from tin_engine.cli import app
 
 REPO = Path(__file__).resolve().parents[2]
+
+bumpy = rough_dem(16)
 
 #: h11's classifier, ``tools/ci_changes.py``: the trap's copy leaves out the
 #: files its ``is_prose`` accepts (``copy_source_tree``).
@@ -78,10 +80,10 @@ def version_lines() -> list[str]:
     return result.stdout.splitlines()
 
 
-def stats_report(tmp_path: Path) -> str:
-    """``rasputin mesh catchment --flat --stats -``: the report after the path line."""
+def stats_report(tmp_path: Path, dem: Path) -> str:
+    """``rasputin mesh --dem DEM --stats -``: the report after the path line."""
     out = tmp_path / "c.vtk"
-    result = runner.invoke(app, ["mesh", "catchment", "--flat", "--out", str(out), "--stats", "-"])
+    result = runner.invoke(app, ["mesh", "--dem", str(dem), "--out", str(out), "--stats", "-"])
     assert result.exit_code == 0, result.output
     _path_line, report = result.stdout.split("\n", 1)
     return report
@@ -134,16 +136,16 @@ class TestStatsLine:
     """T7, the CLI half: the --stats report names the build it was made with."""
 
     def test_exactly_one_line_before_the_first_section_equal_to_version(
-        self, tmp_path: Path
+        self, tmp_path: Path, bumpy: Path
     ) -> None:
-        every, above = bounds_lines_before_first_section(stats_report(tmp_path))
+        every, above = bounds_lines_before_first_section(stats_report(tmp_path, bumpy))
         assert len(every) == 1, every
         assert above == every
         assert every == version_lines()[1:]
 
     @pytest.mark.usefixtures("unchecked")
-    def test_an_unchecked_build_says_off(self, tmp_path: Path) -> None:
-        every, above = bounds_lines_before_first_section(stats_report(tmp_path))
+    def test_an_unchecked_build_says_off(self, tmp_path: Path, bumpy: Path) -> None:
+        every, above = bounds_lines_before_first_section(stats_report(tmp_path, bumpy))
         assert every == above == ["bounds checks: off"]
 
 

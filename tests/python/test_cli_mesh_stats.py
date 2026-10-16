@@ -34,7 +34,6 @@ import tin_engine.cli as cli
 from cli_helpers import COLS, HOLE, ROWS, SQUARE, USAGE, invoke, polygon_file, rough_dem, runner
 from recordread import stats_names, stats_row
 from tin_engine.cli import app
-from vtkread import read_vtk
 
 ReportOf = Callable[..., tuple[str, Result, Path]]
 
@@ -46,13 +45,12 @@ bumpy = rough_dem(17)
 square = polygon_file(SQUARE, (HOLE,))
 
 
-#: The four kinds of run, as the arguments before ``--out``.
-KINDS = ("fixture", "dem", "tolerance", "domain")
+#: The three kinds of run, as the arguments before ``--out``.
+KINDS = ("dem", "tolerance", "domain")
 
 
 def kind_args(kind: str, bumpy: Path, square: Path) -> list[str]:
     return {
-        "fixture": ["catchment", "--flat"],
         "dem": ["--dem", str(bumpy)],
         "tolerance": ["--dem", str(bumpy), "--tolerance", "1"],
         "domain": ["--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"],
@@ -128,9 +126,9 @@ class TestOffByDefault:
         assert HEADING not in result.stdout + result.stderr
         assert list(tmp_path.rglob("*.md")) == []
 
-    def test_ply_with_edges_prints_two_paths(self, tmp_path: Path) -> None:
+    def test_ply_with_edges_prints_two_paths(self, tmp_path: Path, bumpy: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
-        result = mesh("catchment", "--flat", "--out", str(surface), "--out-edges", str(edges))
+        result = mesh("--dem", str(bumpy), "--out", str(surface), "--out-edges", str(edges))
         lines = result.stdout.splitlines()
         assert len(lines) == 2 and same_file(lines[0], surface) and same_file(lines[1], edges)
         assert list(tmp_path.rglob("*.md")) == []
@@ -156,11 +154,11 @@ class TestStatsToAFile:
         assert md.read_text(encoding="utf-8").startswith(HEADING + "\n")
         assert stats_out.read_bytes() == plain_out.read_bytes()
 
-    def test_ply_with_edges_then_the_report(self, tmp_path: Path) -> None:
+    def test_ply_with_edges_then_the_report(self, tmp_path: Path, bumpy: Path) -> None:
         surface, edges, md = tmp_path / "s.ply", tmp_path / "e.ply", tmp_path / "s.md"
         result = mesh(
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(surface),
             "--out-edges",
@@ -177,11 +175,11 @@ class TestStatsToAFile:
         rows = table(section(md.read_text(encoding="utf-8"), "Sizes"))
         assert "s.ply" in rows and "e.ply" in rows
 
-    def test_out_parent_applies_to_the_report(self, tmp_path: Path) -> None:
+    def test_out_parent_applies_to_the_report(self, tmp_path: Path, bumpy: Path) -> None:
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(out),
             "--stats",
@@ -229,11 +227,11 @@ class TestStatsToStdout:
         assert not (tmp_path / "-").exists()
         assert list(tmp_path.rglob("*.md")) == []
 
-    def test_after_both_ply_paths(self, tmp_path: Path) -> None:
+    def test_after_both_ply_paths(self, tmp_path: Path, bumpy: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         result = mesh(
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(surface),
             "--out-edges",
@@ -248,35 +246,6 @@ class TestStatsToStdout:
 
 class TestSectionsPerKind:
     """C4."""
-
-    def test_a_fixture(self, report_of: ReportOf) -> None:
-        report, _, out = report_of("fixture")
-        found = sections(report)
-        for name in ("Sizes", "Quality (plan view, x/y)", "Timings"):
-            assert name in found, found
-        assert "Refinement" not in found and "Inputs" not in found, found
-        assert stats_row(report, "heights") == "none: every z is 0 (--flat)"
-        sizes = table(section(report, "Sizes"))
-        for absent in ("DEM nodes", "domain vertices", "vertices without data dropped"):
-            assert absent not in sizes
-        vtk = read_vtk(out.read_bytes())
-        assert sizes["output vertices"] == [str(len(vtk.points))]
-        assert sizes["output triangles"] == [str(len(vtk.polygons))]
-        assert out.name in sizes
-        phases = seconds(report)
-        for row in (
-            "start mesh: build",
-            "start mesh: node",
-            "start mesh: triangulate",
-            "start mesh: constraint edges",
-            "write: encode",
-            "write: disk",
-            "other",
-            "total",
-        ):
-            assert row in phases, row
-        for absent in ("decode", "sample", "refine", "trim"):
-            assert absent not in phases, absent
 
     def test_a_dem_without_tolerance(self, report_of: ReportOf) -> None:
         report, _, _ = report_of("dem")
@@ -293,10 +262,6 @@ class TestSectionsPerKind:
         assert "decode" in phases and "sample" in phases and "trim" in phases
         assert not any(name.startswith("refine") for name in phases)
         assert "Threads used:" in section(report, "Timings")  # 38: every DEM run, not only refined
-
-    def test_a_fixture_run_has_no_threads_row(self, report_of: ReportOf) -> None:
-        report, _, _ = report_of("fixture")
-        assert "Threads" not in section(report, "Timings")
 
     def test_a_tolerance_run(self, report_of: ReportOf, monkeypatch: pytest.MonkeyPatch) -> None:
         outcomes: list[Any] = []
@@ -349,12 +314,12 @@ class TestRefusals:
     def nothing_written(tmp_path: Path) -> list[Path]:
         return [p for p in tmp_path.rglob("*") if p.suffix in {".vtk", ".ply", ".md"}]
 
-    def test_stats_resolving_to_out(self, tmp_path: Path) -> None:
+    def test_stats_resolving_to_out(self, tmp_path: Path, bumpy: Path) -> None:
         out = tmp_path / "x.vtk"
         code, output = invoke(
             "mesh",
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(out),
             "--stats",
@@ -364,11 +329,11 @@ class TestRefusals:
         assert "--stats" in output and "overwrite" in output
         assert self.nothing_written(tmp_path) == []
 
-    def test_stats_resolving_to_out_edges(self, tmp_path: Path) -> None:
+    def test_stats_resolving_to_out_edges(self, tmp_path: Path, bumpy: Path) -> None:
         code, output = invoke(
             "mesh",
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(tmp_path / "s.ply"),
             "--out-edges",
@@ -380,13 +345,13 @@ class TestRefusals:
         assert "--stats" in output and "overwrite" in output
         assert self.nothing_written(tmp_path) == []
 
-    def test_stats_outside_out_parent(self, tmp_path: Path) -> None:
+    def test_stats_outside_out_parent(self, tmp_path: Path, bumpy: Path) -> None:
         inside = tmp_path / "inside"
         inside.mkdir()
         code, output = invoke(
             "mesh",
-            "catchment",
-            "--flat",
+            "--dem",
+            str(bumpy),
             "--out",
             str(inside / "x.vtk"),
             "--out-parent",
@@ -398,13 +363,13 @@ class TestRefusals:
         assert "outside the permitted parent" in output
         assert self.nothing_written(tmp_path) == []
 
-    def test_stats_through_a_symlink(self, tmp_path: Path) -> None:
+    def test_stats_through_a_symlink(self, tmp_path: Path, bumpy: Path) -> None:
         target = tmp_path / "real.md"
         target.write_text("keep\n")
         link = tmp_path / "link.md"
         link.symlink_to(target)
         code, output = invoke(
-            "mesh", "catchment", "--flat", "--out", str(tmp_path / "x.vtk"), "--stats", str(link)
+            "mesh", "--dem", str(bumpy), "--out", str(tmp_path / "x.vtk"), "--stats", str(link)
         )
         assert code == USAGE, output
         assert "symlink" in output
