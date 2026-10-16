@@ -1,0 +1,29 @@
+# run 5 (increment 38, --tree /Users/skavhaug/projects/rasputin/.claude/worktrees/threads, judged against the baseline run 4 saved), started 2026-10-12 20:31:45 +0200
+## tree 38 head
+8f9289c49f69b95e6e9207a3b2f80ab2467d3351
+## pmset before
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime
+20:31  up 13 days,  9:37, 5 users, load averages: 4.98 3.19 5.02
+## top CPU users
+ 75.6 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 11.0 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.5 /usr/libexec/airportd
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  2.8 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 43 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+NO CHANGE
+exit 0
+## pmset after
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+## uptime after
+20:34  up 13 days,  9:40, 5 users, load averages: 3.57 3.24 4.73

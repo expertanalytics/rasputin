@@ -1,5 +1,5 @@
 <!--
-The three checks below are the ones no gate can make. Each exists because it
+The checks below are the ones no gate can make. Each exists because it
 failed at least once here, silently, and CI stayed green throughout. CI covers
 the rest; if you skip these, nothing covers them.
 -->
@@ -13,6 +13,7 @@ the rest; if you skip these, nothing covers them.
 - [ ] **Red-step scaffolding is gone.** A TDD increment leaves comments saying headers "do not build yet — that is the intended red step". Three of those survived three merges in `tests/cpp/CMakeLists.txt`, each describing headers that existed by the time it merged.
 - [ ] **Every prose claim this change touched is still true.** Read the docs the change affects against the code, not against the previous version of the docs. Eleven false or stale statements accumulated across six files before anyone looked — a README advertising a deleted program, three documents naming a test framework four suites explicitly decline, two listing three ctest targets when there were sixteen.
 - [ ] **Actual LOC reconciled against the increment's estimate.** Measure it; there is no gate for this. Increment 3's design said "no split", named the seam to use if it overran, and named the likely cause. The overrun happened in exactly that place and the contingency never fired, because nobody re-measured. Non-comment production lines, per `CLAUDE.md` §2.
+- [ ] **A suite the increment file names invariant-critical has had its mutants run**, with the kill record in a handback. 15e and 15f-2 named one each and merged without it, because their briefs said "no mutation rounds".
 
 ## Verification
 

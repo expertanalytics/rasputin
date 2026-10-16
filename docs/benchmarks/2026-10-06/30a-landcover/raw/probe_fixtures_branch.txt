@@ -1,0 +1,77 @@
+tin_engine from /Users/skavhaug/projects/rasputin/.claude/worktrees/landcover-speed/src_python/tin_engine
+........................................................................ [ 66%]
+s...................................                                     [100%]
+107 passed, 1 skipped in 3.34s
+fixture tests/python/test_landcover.py::TestRegions::test_an_unconstrained_shared_edge_joins_two_triangles #1 regions n=2 ids=374708fff7719dd5
+fixture tests/python/test_landcover.py::TestRegions::test_a_constrained_shared_edge_separates_them #1 regions n=2 ids=9d34149fbd1fe777
+fixture tests/python/test_landcover.py::TestRegions::test_a_constraint_given_backwards_still_blocks #1 regions n=2 ids=9d34149fbd1fe777
+fixture tests/python/test_landcover.py::TestRegions::test_no_constraints_at_all #1 regions n=2 ids=374708fff7719dd5
+fixture tests/python/test_landcover.py::TestRegions::test_a_strip_of_1000_triangles_is_one_component[forward] #1 regions n=1000 ids=668946bab9868b28
+fixture tests/python/test_landcover.py::TestRegions::test_a_strip_of_1000_triangles_is_one_component[reversed] #1 regions n=1000 ids=668946bab9868b28
+fixture tests/python/test_landcover.py::TestRegions::test_a_strip_of_1000_triangles_is_one_component[shuffled] #1 regions n=1000 ids=668946bab9868b28
+fixture tests/python/test_landcover.py::TestRegions::test_ids_are_the_smallest_triangle_index_of_each_component #1 regions n=800 ids=fda30e5d6839c90c
+fixture tests/python/test_landcover.py::TestRegions::test_permuting_and_flipping_the_constraint_rows_changes_nothing #1 regions n=800 ids=ef2925575b3ff25d
+fixture tests/python/test_landcover.py::TestRegions::test_permuting_and_flipping_the_constraint_rows_changes_nothing #2 regions n=800 ids=ef2925575b3ff25d
+fixture tests/python/test_landcover.py::TestRegions::test_permuting_and_flipping_the_constraint_rows_changes_nothing #3 regions n=800 ids=ef2925575b3ff25d
+fixture tests/python/test_landcover.py::TestLabelBasics::test_codes_are_int32_one_per_triangle #1 label_triangles triangles=800 dtype=int32 regions=2 outside=1 overlapped=0 thin=0 codes=fa1051af4acd83ec
+fixture tests/python/test_landcover.py::TestLabelBasics::test_a_square_cut_by_a_constrained_diagonal #1 label_triangles triangles=800 dtype=int32 regions=2 outside=0 overlapped=0 thin=0 codes=d3ad6b268742d1c5
+fixture tests/python/test_landcover.py::TestLabelBasics::test_no_polygons_is_all_zero_and_every_region_outside #1 label_triangles triangles=800 dtype=int32 regions=4 outside=4 overlapped=0 thin=0 codes=5a312281df4bd8df
+fixture tests/python/test_landcover.py::TestLabelBasics::test_a_sliver_component_is_counted_thin_and_still_labelled #1 label_triangles triangles=2 dtype=int32 regions=2 outside=0 overlapped=0 thin=1 codes=fc6abcdbeb8fcebe
+fixture tests/python/test_landcover.py::TestLabelBasics::test_a_sliver_component_is_counted_thin_and_still_labelled #2 label_triangles triangles=2 dtype=int32 regions=2 outside=0 overlapped=0 thin=0 codes=fc6abcdbeb8fcebe
+fixture tests/python/test_landcover.py::TestFixtures::test_two_squares_side_by_side #1 label_triangles triangles=800 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=09ad166692238dd7
+fixture tests/python/test_landcover.py::TestFixtures::test_a_forest_with_an_empty_hole #1 label_triangles triangles=800 dtype=int32 regions=3 outside=2 overlapped=0 thin=0 codes=532133f1cf9aa8db
+fixture tests/python/test_landcover.py::TestFixtures::test_a_lake_filling_the_hole_of_a_holed_forest #1 label_triangles triangles=800 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=01177b0b29163a58
+fixture tests/python/test_landcover.py::TestFixtures::test_a_lake_inside_an_unholed_forest_goes_to_the_smaller #1 label_triangles triangles=800 dtype=int32 regions=3 outside=1 overlapped=1 thin=0 codes=01177b0b29163a58
+fixture tests/python/test_landcover.py::TestFixtures::test_a_polygon_clipped_by_the_domain_into_two_pieces #1 label_triangles triangles=720 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=827c7291b8ff08a7
+fixture tests/python/test_landcover.py::TestFixtures::test_a_polygon_clipped_by_the_domain_into_two_pieces #2 regions n=720 ids=ea02ace553c19479
+fixture tests/python/test_landcover.py::TestFixtures::test_a_road_across_a_polygon #1 label_triangles triangles=800 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=fa1051af4acd83ec
+fixture tests/python/test_landcover.py::TestFixtures::test_a_road_across_a_polygon #2 regions n=800 ids=875dbacb55eadbd0
+fixture tests/python/test_landcover.py::TestFixtures::test_a_polygon_covering_the_domain #1 label_triangles triangles=800 dtype=int32 regions=1 outside=0 overlapped=0 thin=0 codes=3978c0ddf118ab2b
+fixture tests/python/test_landcover.py::TestFixtures::test_boundaries_a_tenth_of_a_millimetre_apart #1 label_triangles triangles=840 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=7d42edba725d5003
+fixture tests/python/test_landcover.py::TestOverlaps::test_equal_areas_go_to_the_smaller_code[False] #1 label_triangles triangles=800 dtype=int32 regions=2 outside=1 overlapped=1 thin=0 codes=25d4322b5872e1c6
+fixture tests/python/test_landcover.py::TestOverlaps::test_equal_areas_go_to_the_smaller_code[True] #1 label_triangles triangles=800 dtype=int32 regions=2 outside=1 overlapped=1 thin=0 codes=25d4322b5872e1c6
+fixture tests/python/test_landcover.py::TestOverlaps::test_nested_polygons_give_the_inner_code[False] #1 label_triangles triangles=800 dtype=int32 regions=2 outside=0 overlapped=1 thin=0 codes=7068e8cb5639a80d
+fixture tests/python/test_landcover.py::TestOverlaps::test_nested_polygons_give_the_inner_code[True] #1 label_triangles triangles=800 dtype=int32 regions=2 outside=0 overlapped=1 thin=0 codes=7068e8cb5639a80d
+fixture tests/python/test_landcover.py::TestDeterminism::test_the_same_call_twice_is_the_same_array #1 label_triangles triangles=800 dtype=int32 regions=6 outside=2 overlapped=2 thin=0 codes=bd877ed2f4a75328
+fixture tests/python/test_landcover.py::TestDeterminism::test_the_same_call_twice_is_the_same_array #2 label_triangles triangles=800 dtype=int32 regions=6 outside=2 overlapped=2 thin=0 codes=bd877ed2f4a75328
+fixture tests/python/test_landcover.py::TestDeterminism::test_permuted_triangles_edges_and_polygons_give_the_same_labels #1 label_triangles triangles=800 dtype=int32 regions=6 outside=2 overlapped=2 thin=0 codes=bd877ed2f4a75328
+fixture tests/python/test_landcover.py::TestDeterminism::test_permuted_triangles_edges_and_polygons_give_the_same_labels #2 label_triangles triangles=800 dtype=int32 regions=6 outside=2 overlapped=2 thin=0 codes=0048d6e18aa24ce4
+fixture tests/python/test_landcover.py::TestDeterminism::test_permuted_triangles_edges_and_polygons_give_the_same_labels #3 label_triangles triangles=800 dtype=int32 regions=6 outside=2 overlapped=2 thin=0 codes=bd877ed2f4a75328
+fixture tests/python/test_landcover.py::TestCallerPolygons::test_unprepared_and_unchanged #1 label_triangles triangles=800 dtype=int32 regions=19 outside=1 overlapped=0 thin=0 codes=29de7aa9cf8c634d
+fixture tests/python/test_landcover.py::TestDegenerateMeshes::test_a_zero_area_component_is_labelled_and_counted_thin #1 label_triangles triangles=2 dtype=int32 regions=2 outside=0 overlapped=0 thin=1 codes=b691f5d75ab75552
+fixture tests/python/test_landcover.py::TestDegenerateMeshes::test_no_triangles[0] #1 label_triangles triangles=0 dtype=int32 regions=0 outside=0 overlapped=0 thin=0 codes=e3b0c44298fc1c14
+fixture tests/python/test_landcover.py::TestDegenerateMeshes::test_no_triangles[0] #2 regions n=0 ids=e3b0c44298fc1c14
+fixture tests/python/test_landcover.py::TestDegenerateMeshes::test_no_triangles[4] #1 label_triangles triangles=0 dtype=int32 regions=0 outside=0 overlapped=0 thin=0 codes=e3b0c44298fc1c14
+fixture tests/python/test_landcover.py::TestDegenerateMeshes::test_no_triangles[4] #2 regions n=0 ids=e3b0c44298fc1c14
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_two_squares_side_by_side #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_forest_with_an_empty_hole #1 label_triangles triangles=590 dtype=int32 regions=3 outside=2 overlapped=0 thin=0 codes=957a9eb31fd365ac
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_lake_in_the_hole_of_a_holed_forest #1 label_triangles triangles=590 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=9fb97c9d5c35c3c2
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_lake_in_an_unholed_forest #1 label_triangles triangles=590 dtype=int32 regions=3 outside=1 overlapped=1 thin=0 codes=9fb97c9d5c35c3c2
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_polygon_clipped_by_the_domain_into_two_pieces #1 label_triangles triangles=462 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=f43a27de554f3315
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_road_across_a_polygon #1 label_triangles triangles=568 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=5cef1828851f7407
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_polygon_covering_the_domain #1 label_triangles triangles=482 dtype=int32 regions=1 outside=0 overlapped=0 thin=0 codes=c887dc6638da15c0
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_boundaries_a_tenth_of_a_millimetre_apart #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_code_given_as_a_json_number #1 label_triangles triangles=546 dtype=int32 regions=2 outside=1 overlapped=0 thin=0 codes=ef9943499126a3c7
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_the_codes_field #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_every_cell_carries_a_code_in_both_encodings[ascii] #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_every_cell_carries_a_code_in_both_encodings[binary] #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_no_coded_map_no_codes #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_the_stats_phase #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_landcover.py::TestPly::test_the_face_file_carries_the_codes_and_the_edge_file_not #1 label_triangles triangles=592 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=e1e5f4612cc154e2
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_both_sources_constraints_are_present #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_wall_edge_is_a_constraint_alongside_the_coded_edges #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_coded_source_labels_the_cells #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_file_records_both_sources #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestPositionalPairing::test_one_map_two_sources_defaults_the_second #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestPositionalPairing::test_one_features_with_no_paired_options_is_unchanged #1 label_triangles triangles=580 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=2e64a38851600d66
+fixture tests/python/test_cli_mesh_multi_features.py::TestSameFileTwice::test_two_layers_of_one_geopackage #1 label_triangles triangles=580 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=2e64a38851600d66
+fixture tests/python/test_cli_mesh_multi_features.py::TestSameFileTwice::test_same_geojson_twice_two_maps #1 label_triangles triangles=580 dtype=int32 regions=3 outside=1 overlapped=1 thin=0 codes=2e64a38851600d66
+fixture tests/python/test_cli_mesh_multi_features.py::TestCrossSourceMerge::test_the_shared_seam_carries_both_masks #1 label_triangles triangles=594 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=edc5980c570faf24
+fixture tests/python/test_cli_mesh_multi_features.py::TestCrossSourceMerge::test_the_seam_is_one_run_of_edges_not_doubled #1 label_triangles triangles=594 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=edc5980c570faf24
+fixture tests/python/test_cli_mesh_multi_features.py::TestDegeneracy::test_a_shorter_paired_list_is_allowed #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestCodeSystems::test_a_coded_source_and_a_codeless_source_is_allowed #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestCodeSystems::test_two_same_system_coded_sources_is_allowed #1 label_triangles triangles=580 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=2e64a38851600d66
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_two_corine_sources_give_one_notice #1 label_triangles triangles=580 dtype=int32 regions=3 outside=1 overlapped=0 thin=0 codes=2e64a38851600d66
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_per_source_feature_counts_are_correct #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_features_crs_has_one_entry_per_source #1 label_triangles triangles=588 dtype=int32 regions=5 outside=1 overlapped=0 thin=0 codes=11af79b33ed58e4f
+fixtures: pytest exit 0, 72 calls recorded

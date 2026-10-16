@@ -1,9 +1,9 @@
-"""OGR-written GML2 features, read with the standard library (increment 16b, Q6).
+"""OGR-written GML2 features, read with the standard library.
 
-`docs/increments/16b-terrain-polygons.md` R1 and R2. The reader is strict (Ola,
-2026-09-28): a document that is not well-formed XML is refused, naming the
-parser's line, and nothing is recovered from it. It takes a binary stream and
-opens nothing.
+The reader is strict: a document that is not well-formed XML is refused,
+naming the parser's line, and nothing is recovered from it, so a damaged file
+cannot lose features without a word. It takes a binary stream and opens
+nothing.
 
 A feature is an element with a ``fid`` attribute directly inside a
 ``gml:featureMember``. Its geometry is the first GML2 geometry inside it,

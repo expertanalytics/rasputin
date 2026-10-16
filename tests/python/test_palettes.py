@@ -31,13 +31,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
 
+from class_map_snapshot import CORINE_NATURAL
+from cli_helpers import runner
 from gpkg_fixtures import OLA_NORWAY
 from tin_engine import palettes
 from tin_engine.cli import app
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 #: R4's "in the Norway extract" column: 34 codes.
 NORWAY = frozenset(
@@ -66,7 +65,7 @@ HEX = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def table() -> dict[int, tuple[str, str]]:
-    return dict(palettes.CORINE_NATURAL)
+    return dict(CORINE_NATURAL)
 
 
 def rgb(code: int) -> tuple[float, float, float]:
@@ -154,7 +153,7 @@ class TestFamilies:
 
 class TestPreset:
     def preset(self) -> dict[str, Any]:
-        out = palettes.paraview_preset(palettes.CORINE_NATURAL, "a name")
+        out = palettes.paraview_preset(CORINE_NATURAL, "a name")
         assert isinstance(out, list) and len(out) == 1
         assert isinstance(out[0], dict)
         return out[0]
@@ -198,7 +197,7 @@ class TestCommand:
     def test_stdout_is_the_preset(self) -> None:
         result = runner.invoke(app, ["palette", "corine"])
         assert result.exit_code == 0, result.output
-        expected = palettes.paraview_preset(palettes.CORINE_NATURAL, PRESET_NAME)
+        expected = palettes.paraview_preset(CORINE_NATURAL, PRESET_NAME)
         assert json.loads(result.stdout) == expected
 
     def test_an_unknown_name_is_a_usage_error_listing_the_known(self) -> None:

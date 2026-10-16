@@ -1,4 +1,6 @@
-"""The edge-property vocabulary: which bit of an edge's property word means what.
+"""The edge-property vocabulary (which bit of an edge's property word means what), and
+:class:`TerrainFeature`, one feature's mask and lines (moved from ``feature_input``
+by audit PR C, so ``chains`` imports it from layer 0).
 
 The C++ core carries a per-edge set of 32 opaque bits and never spells a feature
 name. The names live here, at the boundary, exactly as CRS metadata does -- and
@@ -7,15 +9,8 @@ constant in the source.
 
 **This module imports nothing first-party and never imports the compiled
 extension**, so it is constructible and testable with no extension in the
-process. It is emphatically *not* a module ``tin_engine.viz`` may reach for:
-``test_viz_svg.py::TestModuleIsolation`` pins that ``style.py`` and
-``fixtures.py`` import no first-party module at all, and ``viz/`` needs no
-vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
-``cli.py``, the composition root, is the only module that imports both this
-one and ``viz.style``. (It is *not* "the one module that names both a bit and a
-feature", as this docstring said until increment 7's review round:
-:data:`DEFAULT_VOCABULARY` below names nine of each, and ``cli.py`` names no
-bit literal -- it looks one up through ``_BIT_OF[name]``.)
+process. ``cli.py``, the composition root, names no bit literal: it looks bits
+up by name in a vocabulary.
 
 The risk this module exists to narrow is a producer and a consumer disagreeing
 about which bit means "river". Nothing in C++ can see that: it merges opaque
@@ -34,19 +29,11 @@ mechanisms, in descending strength:
    than dropping it. Dropping is the silent loss; this is the only moment the
    system can see it.
 
-The name pattern ``^[a-z][a-z0-9_]*$`` keeps a vocabulary name usable as a CSS
-class token, and is defence in depth. It is **not** what closes the injection
-hole, and this docstring said it was: ``viz/svg.py``'s ``_edge_classes``
-(``svg.py:166``) joins at most one ``style.PropertyStroke.token`` with up to
-three other classes -- the ``constrained``/``unconstrained`` and ``finding``
-literals, and the enum-derived ``role-*`` (``svg.py:177-184``) -- which
-``_edges`` then interpolates into a ``class="..."`` attribute unescaped (``svg.py:225``) --
-never an :class:`EdgeProperty` name, because ``viz/`` cannot import this
-module. The only bridge is ``cli.py``, which constructs a ``PropertyStroke``
-from a name and so re-validates through ``style.py``'s own, deliberately wider
-``^[a-z][a-z0-9_-]*$`` (a CSS class may carry a hyphen; a feature name may
-not). A quote-carrying name dies there whatever this pattern says. The boundary
-is documented where it is enforced, in ``viz/style.py``.
+The name pattern ``^[a-z][a-z0-9_]*$`` is what keeps a name safe in the files
+that carry it. The PLY header writes ``feature_bit {bit} {name}``,
+space-separated, so a space would split a name; the GeoPackage writer puts each
+used name, quoted but not escaped, into a ``CREATE TABLE`` statement as a
+column, so the pattern is what keeps a quote out of that SQL.
 
 See ``docs/increments/07-edge-properties.md``.
 """
@@ -57,6 +44,7 @@ import hashlib
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 # The C++ ceiling (``EdgeProperties::kMaxProperties``), restated at the only
 # layer that meets untrusted input.
@@ -144,6 +132,10 @@ class EdgeVocabulary(BaseModel):
                 found.append(name_of[bit])
         return tuple(found)
 
+    def table(self) -> list[tuple[int, str]]:
+        """The (bit, name) pairs in ascending bit order, as files write them."""
+        return sorted((prop.bit, prop.name) for prop in self.properties)
+
     def fingerprint(self) -> str:
         """A stable digest over the sorted ``(bit, name)`` pairs.
 
@@ -157,14 +149,13 @@ class EdgeVocabulary(BaseModel):
         property renamed -- and a digest that cannot see either blesses exactly
         the disagreement it is here to detect.
         """
-        pairs = sorted((prop.bit, prop.name) for prop in self.properties)
-        payload = ";".join(f"{bit}:{name}" for bit, name in pairs)
+        payload = ";".join(f"{bit}:{name}" for bit, name in self.table())
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # A DEFAULT, NOT A SCHEMA. Any caller may supply its own vocabulary; the
 # fingerprint is what makes two of them comparable. Bit 0 is ``river`` so that
-# today's one-bit data and the ``river`` gallery fixture keep meaning what they
+# today's one-bit data keeps meaning what it
 # meant -- a migration convenience, and it will be read as a specification if
 # this sentence is not here.
 DEFAULT_VOCABULARY = EdgeVocabulary(
@@ -182,10 +173,25 @@ DEFAULT_VOCABULARY = EdgeVocabulary(
     )
 )
 
-# Increment 23c (question A as ruled): a cut run's piece files mark a seam,
-# the edge a partition line adds, on bit 9, the lowest the default leaves
-# free. A vocabulary of its own, so the uncut path, its fingerprint and the
-# classes feature_input builds from the default stay as they are.
+# A cut run's piece files mark a seam, the edge a partition line adds, on bit
+# 9, the lowest the default leaves free. A vocabulary of its own, so the uncut
+# path, its fingerprint and the classes feature_input builds from the default
+# stay as they are. No command makes a cut run yet.
 PIECE_VOCABULARY = EdgeVocabulary(
     properties=(*DEFAULT_VOCABULARY.properties, EdgeProperty(name="seam", bit=9))
 )
+
+
+class TerrainFeature(BaseModel):
+    """One feature: its fid, mask, and clipped lines in the DEM's CRS; a
+    closed line (first point repeated) is an unclipped ring. Under a coded
+    map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
+    ``polygon`` moved into the DEM's CRS by the transform its lines took."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    fid: int | str
+    mask: int
+    lines: tuple[LineString, ...]
+    code: int | None = None
+    polygon: Polygon | MultiPolygon | None = None

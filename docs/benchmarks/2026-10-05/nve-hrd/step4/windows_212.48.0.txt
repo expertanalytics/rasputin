@@ -1,0 +1,9 @@
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window x 818510..822920 y 7780290..7785250; in-nodes 71741 x 819920..822910 y 7780300..7783340; edge True nodata False
+window x 815920..826910 y 7776300..7787340; in-nodes 362306 x 819410..826900 y 7776310..7783340; edge True nodata False
+window x 811410..834900 y 7768310..7791340; in-nodes 1224955 x 819410..834890 y 7769890..7783340; edge True nodata False
+window x 803410..850890 y 7753890..7799340; in-nodes 2336585 x 819410..849770 y 7766760..7783340; edge False nodata False
+212.48.0 Sagafoss: refused: the request selects tiles on two lattices, 7707_2_10m_z33.tif and 7707_1_10m_z33.tif: 7707_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7707_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+summary: 1 station: refused 1, uncertain 0, match 0, close 0, miss 0
+1 station refused because its window selects tiles on two different grids, which rasputin does not combine, and neither grid covers the window alone (a known refusal, not a failure)
+/Users/skavhaug/projects/rasputin_scratch/nve-hrd-2026-10-05/probe/212.48.0

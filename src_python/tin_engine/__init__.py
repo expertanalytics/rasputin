@@ -2,9 +2,7 @@
 
 import importlib.metadata
 
-from tin_engine._core import Point2, Point3, cross, dot
-
-__all__ = ["Point2", "Point3", "cross", "dot", "installed_version"]
+__all__ = ["installed_version"]
 
 
 def installed_version() -> str:

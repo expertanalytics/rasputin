@@ -1,16 +1,13 @@
 #pragma once
 
-// Test-only scaffolding for the ring suites: the (kernel x ring model) matrix
-// the structural invariants run over, and deterministic generators for rings
-// whose classification is known by construction.
+// Test-only scaffolding for the ring suites: the kernel matrix the structural
+// invariants run over, and deterministic generators for rings whose
+// classification is known by construction.
 //
-// The matrix matters. PointRing is the contiguous model and is what every
-// hand-written test reaches for, so it is the one that gets exercised by
-// accident; IndexedRing is the zero-copy view the PSLG will hand the
-// algorithms, and nothing would instantiate it on day one unless a test
-// insisted. The holders below store an IndexedRing's points *reversed behind a
-// decoy vertex*, so an algorithm that quietly reads the vertex buffer in
-// storage order instead of going through vertex(i) fails rather than passes.
+// IndexedRing is the one ring model: the zero-copy view the PSLG hands the
+// algorithms. The holder below stores its points *reversed behind a decoy
+// vertex*, so an algorithm that quietly reads the vertex buffer in storage
+// order instead of going through vertex(i) fails rather than passes.
 //
 // Every generator takes an explicit std::mt19937_64, matching point_families:
 // a test seeds once and the whole sequence is reproducible.
@@ -36,20 +33,6 @@ namespace terrain::test {
 // ---------------------------------------------------------------------------
 // Ring models, behind a uniform "build one from a vertex list" interface
 // ---------------------------------------------------------------------------
-
-struct PointRingCase {
-    static constexpr const char* name = "PointRing";
-
-    class Holder {
-    public:
-        explicit Holder(std::span<const Point2> pts) : pts_{pts.begin(), pts.end()} {}
-
-        [[nodiscard]] PointRing ring() const { return PointRing{std::span<const Point2>{pts_}}; }
-
-    private:
-        std::vector<Point2> pts_;
-    };
-};
 
 struct IndexedRingCase {
     static constexpr const char* name = "IndexedRing";
@@ -83,18 +66,15 @@ struct RingCase {
     using Model = RC;
 };
 
-using FastPointCase = RingCase<pred::FastKernel, PointRingCase>;
 using FastIndexedCase = RingCase<pred::FastKernel, IndexedRingCase>;
-using DefaultPointCase = RingCase<pred::DefaultKernel, PointRingCase>;
 using DefaultIndexedCase = RingCase<pred::DefaultKernel, IndexedRingCase>;
 
-// The four instantiations every structural invariant is required to hold for.
-using RingCases =
-    std::tuple<FastPointCase, FastIndexedCase, DefaultPointCase, DefaultIndexedCase>;
+// The two instantiations every structural invariant is required to hold for.
+using RingCases = std::tuple<FastIndexedCase, DefaultIndexedCase>;
 
 // The subset that is exact. Anything asserting a *correct* answer on
 // near-degenerate input belongs here, not in RingCases.
-using ExactRingCases = std::tuple<DefaultPointCase, DefaultIndexedCase>;
+using ExactRingCases = std::tuple<DefaultIndexedCase>;
 
 // ---------------------------------------------------------------------------
 // Vertex-list transforms
@@ -183,15 +163,6 @@ using ExactRingCases = std::tuple<DefaultPointCase, DefaultIndexedCase>;
 // them a total, deterministic classification.
 [[nodiscard]] inline std::vector<Point2> bowtie_ring() {
     return {Point2{0.0, 0.0}, Point2{4.0, 4.0}, Point2{4.0, 0.0}, Point2{0.0, 4.0}};
-}
-
-[[nodiscard]] inline std::string describe(PointInRing c) {
-    switch (c) {
-        case PointInRing::Outside: return "Outside";
-        case PointInRing::Boundary: return "Boundary";
-        case PointInRing::Inside: return "Inside";
-    }
-    return "?";
 }
 
 }  // namespace terrain::test

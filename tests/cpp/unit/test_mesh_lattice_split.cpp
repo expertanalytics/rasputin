@@ -21,9 +21,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <random>
 #include <set>
 #include <type_traits>
 #include <utility>
@@ -346,4 +348,251 @@ TEST_CASE("as_node is exact for a node and empty for an off-node vertex", "[refi
     REQUIRE_FALSE(MeshVertex{7.5, 3.0}.as_node().has_value());
     REQUIRE_FALSE(MeshVertex{7.0, 3.0 + 1e-9}.as_node().has_value());
     REQUIRE_FALSE(MeshVertex{0.625, 0.625}.as_node().has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Increment 15f-4 (docs/increments/15f-edge-strip.md, "Settled after 15f-3's
+// acceptance", A4, B1 to B3): build's refusals and its neighbour table. build
+// refuses a directed edge used twice, an index out of range and mismatched
+// lengths, and its neighbour across each edge, bits and masks equal a
+// brute-force oracle's, whatever its lookup structure.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using Masks = std::vector<std::array<std::uint32_t, 3>>;
+
+// (a, b, c) or (a, c, b), whichever is counter-clockwise in build's frame, so
+// a fixture never depends on hand-ordering corners. REQUIREs a non-degenerate
+// triple: a zero-area fixture would make every refusal below vacuous.
+TriangleIndices ccw(const std::vector<MeshVertex>& v, std::uint32_t a, std::uint32_t b,
+                    std::uint32_t c) {
+    const int s = terrain::mesh::orient_sign(v[a], v[b], v[c]);
+    REQUIRE(s != 0);
+    return s > 0 ? TriangleIndices{a, b, c} : TriangleIndices{a, c, b};
+}
+
+std::optional<LatticeMesh> build_plain(const std::vector<MeshVertex>& v,
+                                       const std::vector<TriangleIndices>& tris) {
+    return LatticeMesh::build(v, tris, std::vector<std::uint8_t>(tris.size(), 0),
+                              Masks(tris.size(), {0, 0, 0}));
+}
+
+// The oracle: for every ordered pair of triangles and every pair of edges, u
+// is t's neighbour across edge k exactly when u holds that edge reversed.
+// Quadratic, independent of build's lookup structure.
+std::vector<std::array<std::uint32_t, 3>> brute_neighbours(
+    const std::vector<TriangleIndices>& tris) {
+    std::vector<std::array<std::uint32_t, 3>> out(tris.size(),
+                                                  {kNoNeighbour, kNoNeighbour, kNoNeighbour});
+    for (std::uint32_t t = 0; t < tris.size(); ++t)
+        for (std::uint32_t u = 0; u < tris.size(); ++u)
+            for (unsigned k = 0; k < 3; ++k)
+                for (unsigned j = 0; j < 3; ++j)
+                    if (u != t && tris[t][k] == tris[u][(j + 1) % 3]
+                        && tris[t][(k + 1) % 3] == tris[u][j]) {
+                        REQUIRE(out[t][k] == kNoNeighbour);  // the fixture is a manifold
+                        out[t][k] = u;
+                    }
+    return out;
+}
+
+// Builds with per-triangle bits and masks drawn from rng, and checks the
+// neighbour table against the oracle and every slot's bits and masks against
+// the input (build moves them; a re-indexing table must not reorder them).
+void check_against_oracle(const std::vector<MeshVertex>& v,
+                          const std::vector<TriangleIndices>& tris, std::mt19937& rng) {
+    std::vector<std::uint8_t> bits;
+    Masks masks;
+    for (std::size_t t = 0; t < tris.size(); ++t) {
+        bits.push_back(static_cast<std::uint8_t>(rng() % 8));
+        masks.push_back({static_cast<std::uint32_t>(rng()), static_cast<std::uint32_t>(rng()),
+                         static_cast<std::uint32_t>(rng())});
+    }
+    const auto m = LatticeMesh::build(v, tris, bits, masks);
+    REQUIRE(m.has_value());
+    REQUIRE(m->triangle_count() == tris.size());
+    const auto expected = brute_neighbours(tris);
+    std::size_t boundary = 0;
+    for (std::size_t t = 0; t < tris.size(); ++t) {
+        CAPTURE(t);
+        REQUIRE(m->triangles()[t] == tris[t]);
+        REQUIRE(m->neighbours(t) == expected[t]);
+        for (unsigned k = 0; k < 3; ++k) {
+            REQUIRE(m->is_constrained(t, k) == ((bits[t] >> k & 1u) != 0));
+            REQUIRE(m->mask(t, k) == masks[t][k]);
+            boundary += expected[t][k] == kNoNeighbour ? 1 : 0;
+        }
+    }
+    REQUIRE(boundary > 0);  // the oracle saw both kinds of edge
+    REQUIRE(boundary < 3 * tris.size());
+}
+
+// Fisher-Yates over mt19937's raw output: std::shuffle and the standard
+// distributions are implementation-defined, this is the same on every
+// standard library.
+template <typename T>
+void shuffle(std::vector<T>& xs, std::mt19937& rng) {
+    for (std::size_t i = xs.size(); i > 1; --i)
+        std::swap(xs[i - 1], xs[rng() % i]);
+}
+
+}  // namespace
+
+TEST_CASE("B1: build refuses a directed edge used twice", "[refinement][lattice][15f-4]") {
+    // (col, row): a-b is the shared edge, c and e above it, d below it.
+    const std::vector<MeshVertex> v{{0, 2}, {2, 2}, {1, 0}, {1, 4}, {1, 1}};
+    const auto abc = ccw(v, 0, 1, 2), abd = ccw(v, 0, 1, 3), abe = ccw(v, 0, 1, 4);
+    REQUIRE(build_plain(v, {abc, abd}).has_value());  // control: one edge, two sides
+
+    SECTION("two coincident triangles, the same slots") {
+        REQUIRE_FALSE(build_plain(v, {abc, abc}).has_value());
+    }
+    SECTION("two coincident triangles, rotated") {
+        const TriangleIndices rotated{abc[1], abc[2], abc[0]};
+        REQUIRE_FALSE(build_plain(v, {abc, rotated}).has_value());
+    }
+    SECTION("coincident triangles that are not adjacent in the array") {
+        REQUIRE_FALSE(build_plain(v, {abc, abd, abc}).has_value());
+    }
+    SECTION("three triangles on one edge") {
+        REQUIRE_FALSE(build_plain(v, {abc, abd, abe}).has_value());
+        REQUIRE_FALSE(build_plain(v, {abe, abd, abc}).has_value());
+    }
+    SECTION("two triangles overlapping on one side of an edge") {
+        REQUIRE_FALSE(build_plain(v, {abc, abe}).has_value());
+    }
+}
+
+TEST_CASE("B1: build refuses a degenerate triangle from a duplicate vertex",
+          "[refinement][lattice][15f-4]") {
+    // Two indices at one position: a zero-area triangle, refused like 14's
+    // collinear case. A repeated index is the same thing.
+    const std::vector<MeshVertex> v{{0, 2}, {2, 2}, {1, 0}, {0, 2}};
+    REQUIRE_FALSE(build_plain(v, {TriangleIndices{0, 3, 1}}).has_value());
+    REQUIRE_FALSE(build_plain(v, {TriangleIndices{0, 0, 1}}).has_value());
+    REQUIRE(build_plain(v, {ccw(v, 3, 1, 2)}).has_value());  // the duplicate alone is fine
+}
+
+TEST_CASE("B2: build refuses a vertex index out of range", "[refinement][lattice][15f-4]") {
+    const std::vector<MeshVertex> v{{0, 2}, {2, 2}, {1, 0}, {1, 4}};
+    const auto abc = ccw(v, 0, 1, 2), abd = ccw(v, 0, 1, 3);
+    REQUIRE(build_plain(v, {abc, abd}).has_value());  // control
+
+    const auto n = static_cast<std::uint32_t>(v.size());
+    const auto index = GENERATE_COPY(n, n + 1, kNoNeighbour);
+    const auto slot = GENERATE(0u, 1u, 2u);
+    CAPTURE(index, slot);
+    auto bad = abd;
+    bad[slot] = index;
+    REQUIRE_FALSE(build_plain(v, {bad}).has_value());
+    REQUIRE_FALSE(build_plain(v, {abc, bad}).has_value());  // after a valid triangle
+    REQUIRE_FALSE(build_plain({}, {abc}).has_value());     // no vertices at all
+}
+
+TEST_CASE("B2: build refuses mismatched array lengths", "[refinement][lattice][15f-4]") {
+    const std::vector<MeshVertex> v{{0, 2}, {2, 2}, {1, 0}, {1, 4}};
+    const std::vector<TriangleIndices> tris{ccw(v, 0, 1, 2), ccw(v, 0, 1, 3)};
+    const std::vector<std::uint8_t> bits(2, 0);
+    const Masks masks(2, {0, 0, 0});
+    REQUIRE(LatticeMesh::build(v, tris, bits, masks).has_value());  // control
+
+    SECTION("constrained short or long") {
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, {0}, masks).has_value());
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, {0, 0, 0}, masks).has_value());
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, {}, masks).has_value());
+    }
+    SECTION("masks short or long") {
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, bits, Masks(1, {0, 0, 0})).has_value());
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, bits, Masks(3, {0, 0, 0})).has_value());
+        REQUIRE_FALSE(LatticeMesh::build(v, tris, bits, Masks{}).has_value());
+    }
+    SECTION("no triangles, but bits or masks") {
+        REQUIRE_FALSE(LatticeMesh::build(v, {}, {0}, Masks{}).has_value());
+        REQUIRE_FALSE(LatticeMesh::build(v, {}, {}, Masks(1, {0, 0, 0})).has_value());
+    }
+}
+
+TEST_CASE("B2: build accepts an empty mesh and unreferenced vertices",
+          "[refinement][lattice][15f-4]") {
+    const auto empty = LatticeMesh::build(std::vector<MeshVertex>{}, {}, {}, Masks{});
+    REQUIRE(empty.has_value());
+    REQUIRE(empty->triangle_count() == 0);
+
+    // One triangle among unused vertices (to_lattice passes every start
+    // vertex, referenced or not): all three edges are boundary.
+    const std::vector<MeshVertex> v{{5, 5}, {0, 2}, {2, 2}, {9, 9}, {1, 0}};
+    const auto one = build_plain(v, {ccw(v, 1, 2, 4)});
+    REQUIRE(one.has_value());
+    REQUIRE(one->vertices().size() == v.size());
+    REQUIRE(one->neighbours(0) == std::array<std::uint32_t, 3>{kNoNeighbour, kNoNeighbour,
+                                                                kNoNeighbour});
+}
+
+TEST_CASE("B3: build's neighbours equal the brute-force oracle on a shuffled grid",
+          "[refinement][lattice][15f-4]") {
+    // A cols x rows node grid, each cell cut along a random diagonal, then
+    // triangle order and each triangle's first corner shuffled. Long straight
+    // grid lines give long collinear vertex runs along the boundary.
+    const auto seed = GENERATE(1u, 2u, 3u);
+    std::mt19937 rng{seed};
+    constexpr std::uint32_t kCols = 31, kRows = 23;
+    std::vector<MeshVertex> v;
+    for (std::uint32_t r = 0; r < kRows; ++r)
+        for (std::uint32_t c = 0; c < kCols; ++c)
+            v.emplace_back(static_cast<double>(c), static_cast<double>(r));
+    std::vector<TriangleIndices> tris;
+    for (std::uint32_t r = 0; r + 1 < kRows; ++r)
+        for (std::uint32_t c = 0; c + 1 < kCols; ++c) {
+            const auto tl = r * kCols + c, tr = tl + 1, bl = tl + kCols, br = bl + 1;
+            if (rng() % 2 == 0) {
+                tris.push_back(ccw(v, tl, bl, br));
+                tris.push_back(ccw(v, tl, br, tr));
+            } else {
+                tris.push_back(ccw(v, tl, bl, tr));
+                tris.push_back(ccw(v, tr, bl, br));
+            }
+        }
+    shuffle(tris, rng);
+    for (auto& t : tris)
+        std::rotate(t.begin(), t.begin() + rng() % 3, t.end());
+    CAPTURE(seed);
+    check_against_oracle(v, tris, rng);
+}
+
+TEST_CASE("B3: build's neighbours equal the brute-force oracle on a high-degree fan",
+          "[refinement][lattice][15f-4]") {
+    // A centre joined to n cocircular rim points: degree n >= 1000 at the
+    // centre. Closed (the rim wraps around) and open (one wedge missing, so
+    // the centre has two boundary edges). Also at a lattice offset of 1e6
+    // with a 1e-3 radius, where the rim's spacing is about 1e-10 of the
+    // coordinates' magnitude.
+    const auto n = GENERATE(1000u, 1531u);
+    const bool closed = GENERATE(true, false);
+    const auto [offset, radius] =
+        GENERATE(std::pair{5000.0, 4000.0}, std::pair{1.0e6, 1.0e-3});
+    CAPTURE(n, closed, offset, radius);
+    constexpr double kTau = 6.283185307179586;
+    std::vector<MeshVertex> v{{offset, offset}};
+    for (std::uint32_t i = 0; i < n; ++i) {
+        const double a = kTau * i / n;
+        v.emplace_back(offset + radius * std::cos(a), offset + radius * std::sin(a));
+    }
+    std::vector<TriangleIndices> tris;
+    for (std::uint32_t i = 0; i + (closed ? 0 : 1) < n; ++i)
+        tris.push_back(ccw(v, 0, 1 + i, 1 + (i + 1) % n));
+    std::mt19937 rng{n};
+    shuffle(tris, rng);
+    check_against_oracle(v, tris, rng);
+
+    // Every spoke is interior except, on the open fan, the two at the gap.
+    const auto m = build_plain(v, tris);
+    REQUIRE(m.has_value());
+    std::size_t centre_boundary = 0;
+    for (std::size_t t = 0; t < tris.size(); ++t)
+        for (unsigned k = 0; k < 3; ++k)
+            if ((tris[t][k] == 0 || tris[t][(k + 1) % 3] == 0)
+                && m->neighbours(t)[k] == kNoNeighbour)
+                ++centre_boundary;
+    REQUIRE(centre_boundary == (closed ? 0u : 2u));
 }

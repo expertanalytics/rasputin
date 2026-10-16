@@ -498,7 +498,7 @@ assemble(plan, load) -> Mosaic                                pixels, no files
 
 - [15a] Carried from the parked R3: `_header(tif, nodata) -> (RasterMeta,
   dtype)` holds everything `decode_dem` does before `page.asarray()`
-  (now `_header` itself, `io/geotiff.py:121-159`). `read_meta(source, *,
+  (now `_header` itself, `src_python/tin_engine/io/geotiff.py@65cd528:121-159`). `read_meta(source, *,
   nodata=None)` calls it (through `read_header`, which also returns the
   decoded dtype, S2) and returns, and `decode_dem` calls it and then decodes.
   The header phase keeps the codec refusal.
@@ -617,7 +617,7 @@ over the budget is cut into pieces, not refused.*
 **[15a] One canvas, capped at half of physical memory.**
 
 - **No second canvas copy.** `DemTile`'s validator copies its array
-  (`io/models.py:108`), so the parked design peaked at two canvases. `assemble`
+  (`src_python/tin_engine/io/models.py@44fa7f5:108`), so the parked design peaked at two canvases. `assemble`
   builds the canvas privately, so it can hand it over without a copy: a
   private constructor in `io/models.py`, `_adopt(meta, array)`. It runs the
   same shape and dtype checks, sets the array read-only, and stores it. Its one
@@ -757,7 +757,7 @@ before anything else sees them.
   straight segment between them in the frame the mesh is built in. Within one
   UTM zone the edges bend by millimetres per kilometre of edge (B7's order of
   magnitude). Not densified.
-- `check_crs`'s must-match rule (`domain.py:97` at `d34d79d`) is replaced by
+- `check_crs`'s must-match rule (`src_python/tin_engine/domain.py@d34d79d:97`) is replaced by
   the transform. It was kept as "one replaceable function at the Python
   boundary" for exactly this (16, "Ruled by the user"). The extent check (16
   R1) now runs after the transform, against the mosaic's coverage (R4 point

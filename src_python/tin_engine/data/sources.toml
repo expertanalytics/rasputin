@@ -1,0 +1,72 @@
+# The remote sources `rasputin fetch` copies ([source.<id>]) and the station
+# lists `rasputin fetch-stations` copies ([station.<id>]). A table's key is the
+# entry's id. Your own sources, local datasets among them (kind = "local",
+# path: GeoTIFFs, or vector files .gpkg, .geojson or .json), go in your sources
+# file in the same [source.<id>] form, under ids of their own:
+# $RASPUTIN_DATA/sources.toml if it exists, else
+# $XDG_CONFIG_HOME/rasputin/sources.toml, else ~/.config/rasputin/sources.toml.
+# A plugin may ship a sources.toml of its own (entry point group
+# rasputin.sources).
+# `rasputin sources` says which file it read.
+
+[source.anadem-v1]
+kind = "one-cog"
+url = "https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif"
+crs = "EPSG:4674"
+nodata = -9999.0
+z_unit = "metre"
+credit = "Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G."
+licence_note = "CC BY 4.0 (Creative Commons Attribution 4.0 International)"
+# OpenTopography's acknowledgement asks for the paper as well as the data.
+cite = [
+    "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321",
+]
+# Quoted from the abstract of Laipelt et al. (2024), cited above.
+description = "A digital terrain model for South America, made by removing vegetation bias in the Copernicus DEM GLO-30 \"using machine learning, Global Ecosystem Dynamics Investigation (GEDI) elevation data, and multispectral remote sensing products\"."
+
+[source.glo30]
+kind = "cog-tiles"
+url_template = "https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
+tile_list_url = "https://copernicus-dem-30m.s3.amazonaws.com/tileList.txt"
+# The 1-degree tile whose south-west corner is (lat, lon).
+tile_name = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
+# The largest (lon, lat) cell of any tile, degrees: 10" and 1" (Copernicus DEM
+# Product Handbook, Table 3), each rounded up, so the box grown from them holds
+# the one any tile's own spacing gives.
+tile_spacing = [0.0027778, 0.00027778]
+crs = "EPSG:4326"
+z_unit = "metre"
+# The licence's Art. 6(b) notice for adapted data, verbatim but "(c)" for the sign.
+credit = "produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
+# Art. 6(c): this sentence goes with any distribution of the data, modified or not.
+# Quoted from the readme of the bucket (copernicus-dem-30m.s3.amazonaws.com/readme.html).
+description = "\"The Copernicus DEM is a Digital Surface Model (DSM) which represents the surface of the Earth including buildings, infrastructure and vegetation.\" \"GLO-30 Public provides limited worldwide coverage at 30 meters\"; 1 arc-second cells."
+licence_note = 'Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30"'
+
+[source.mapbiomas-c11]
+kind = "one-cog-per-year"
+url_template = "https://storage.googleapis.com/mapbiomas-public/initiatives/brasil/collection11/lulc/coverage/brazil_coverage/brazil_coverage-col11_{year}.tif"
+years = [
+    1985, 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+    1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012,
+    2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025,
+]
+values = "classes"
+crs = "EPSG:4326"
+nodata = 0.0
+# MapBiomas's own format (terms of use); the date is the day the file was fetched.
+credit = "MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil, accessed on {date} through the link: {url}"
+licence_note = "CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 International)"
+cite = [
+    "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
+]
+class_map = "mapbiomas-c11"
+# Quoted from the abstract of Souza et al. (2020), cited above.
+description = "Annual land use and land cover classes of Brazil, \"the most comprehensive and detailed mapping for the country at a 30 m pixel resolution\"; one map per year."
+
+[station.nve-hrd]
+service_url = "https://kart.nve.no/enterprise/rest/services"
+list_file = "nve_hrd_2025.csv"
+crs = "EPSG:25833"
+credit = "Kilde: NVE. The station list is the 2025 version of NVE's Hydrological Reference Dataset (Norwegian streamflow reference dataset for climate change studies); stations, catchments (Totalnedbørfelt til målestasjon) and rivers (ELVIS) are from NVE's map services."
+licence_note = "Norsk lisens for offentlige data (NLOD). NVE disclaims liability for errors in the data and their use."

@@ -25,7 +25,10 @@ from typing import Any
 
 import pytest
 
-from harness_fixtures import REAL, bash_event, clean_env, git, make_repo
+from harness_fixtures import REAL, bash_event, clean_env, git, is_work_tree_top, make_repo
+
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
 
 SETTINGS = REAL / ".claude" / "settings.json"
 REQUIRED_READING = REAL / ".claude" / "REQUIRED-READING.md"
@@ -35,6 +38,7 @@ UNATTENDED = f"{PROJECT}/.claude/hooks/guard_unattended.py"
 GOVERNANCE = f"{PROJECT}/.claude/hooks/guard_governance.py"
 PUSH = f"{PROJECT}/.claude/hooks/guard_push.py"
 GATES = f"{PROJECT}/.claude/hooks/gates_after_commit.py"
+SPAWN = f"{PROJECT}/.claude/hooks/guard_spawn.py"
 SESSION_STATE = 'python3 "$CLAUDE_PROJECT_DIR/tools/session_state.py"'
 
 CONFIG_SOURCES = "user_settings|project_settings|local_settings|skills"
@@ -44,6 +48,11 @@ NEW_WIRING = [
     pytest.param("PreToolUse", "AskUserQuestion", UNATTENDED, id="pretooluse-askuserquestion"),
     pytest.param("PermissionRequest", None, UNATTENDED, id="permissionrequest-no-matcher"),
     pytest.param("ConfigChange", CONFIG_SOURCES, UNATTENDED, id="configchange-sources"),
+]
+
+#: h9 §6 (docs/increments/h9-spawn-briefs.md): one entry, after AskUserQuestion's.
+H9_WIRING = [
+    pytest.param("PreToolUse", "Agent|SendMessage", SPAWN, id="guard-spawn"),
 ]
 
 EXISTING_WIRING = [
@@ -85,6 +94,25 @@ def test_guard_unattended_is_wired(event: str, matcher: str | None, command: str
     )
 
 
+@pytest.mark.parametrize(("event", "matcher", "command"), H9_WIRING)
+def test_guard_spawn_is_wired(event: str, matcher: str | None, command: str) -> None:
+    """h9 test 24: the entry, with its matcher exactly as §6 gives it."""
+    wired = wired_hooks()
+    assert (event, matcher, command) in wired, (
+        f"{event} (matcher {matcher!r}) does not run {command}; "
+        f"{event} runs {[(m, c) for e, m, c in wired if e == event]}"
+    )
+
+
+def test_guard_spawn_is_the_only_new_pretooluse_entry() -> None:
+    """h9 test 24: the existing PreToolUse entries are unchanged, and kept in order."""
+    entries = settings()["hooks"]["PreToolUse"]
+    matchers = [entry.get("matcher") for entry in entries]
+    assert matchers.count("Agent|SendMessage") == 1
+    spawn = matchers.index("Agent|SendMessage")
+    assert matchers.index("AskUserQuestion") == spawn - 1, matchers
+
+
 @pytest.mark.parametrize(("event", "matcher", "command"), EXISTING_WIRING)
 def test_existing_wiring_is_kept(event: str, matcher: str | None, command: str) -> None:
     """§3.11: `guard_push.py`, `guard_governance.py` and the rest keep their wiring."""
@@ -102,7 +130,7 @@ def bare_path_hooks() -> list[Any]:
     The spec's entries are included whether or not settings.json has them yet,
     so `guard_unattended.py` is run by path before it is wired.
     """
-    specified = [tuple(p.values) for p in (*NEW_WIRING, *EXISTING_WIRING)]
+    specified = [tuple(p.values) for p in (*NEW_WIRING, *H9_WIRING, *EXISTING_WIRING)]
     params = []
     for event, matcher, command in dict.fromkeys([*wired_hooks(), *specified]):
         assert isinstance(event, str) and isinstance(command, str)
@@ -124,6 +152,33 @@ def harmless_event(repo: Path, event: str, matcher: str | None) -> dict[str, Any
             "hook_event_name": event,
             "tool_name": "AskUserQuestion",
             "tool_input": {"questions": [question]},
+            "cwd": str(repo),
+        }
+    if event == "PreToolUse" and tools == {"Agent", "SendMessage"}:
+        return {
+            "hook_event_name": event,
+            "tool_name": "SendMessage",
+            "tool_input": {"to": "a1b2c3d4", "message": "Carry on."},
+            "cwd": str(repo),
+        }
+    if event == "PreToolUse" and tools == {"SubagentHandback"}:
+        # h20: record_review.py records only a handback whose agent_type is reviewer
+        return {
+            "hook_event_name": event,
+            "tool_name": "SubagentHandback",
+            "tool_input": {"message": "Result: done.\nReview: APPROVED " + "a" * 40},
+            "agent_type": "tester",
+            "agent_id": "a1b2c3d4",
+            "cwd": str(repo),
+        }
+    if event == "SubagentStop" and tools == {"reviewer"}:
+        # h20: a reviewer's stop whose last message carries no `Review:` line records nothing
+        return {
+            "hook_event_name": event,
+            "agent_type": "reviewer",
+            "agent_id": "a1b2c3d4",
+            "last_assistant_message": "Findings follow; no verdict yet.",
+            "stop_hook_active": False,
             "cwd": str(repo),
         }
     if event == "PermissionRequest":
@@ -149,7 +204,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_every_hook_script_is_covered_by_path() -> None:
-    """The four hooks under `.claude/hooks/` are all wired as bare paths.
+    """The six hooks under `.claude/hooks/` are all wired as bare paths.
 
     Without this, a hook rewired with an interpreter prefix would drop out of
     the by-path test below unnoticed.
@@ -160,6 +215,8 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "guard_push.py",
         "gates_after_commit.py",
         "guard_unattended.py",
+        "guard_spawn.py",
+        "record_review.py",
     }
 
 
@@ -170,6 +227,8 @@ def test_hook_is_executable_in_the_checkout(event: str, matcher: str | None, com
     path = REAL / relative
     assert path.is_file(), f"{relative} is wired on {event} but missing"
     assert os.access(path, os.X_OK), f"{relative} is not executable (mode {path.stat().st_mode:o})"
+    if not is_work_tree_top(REAL):  # h16 P9: a `git archive` copy has no index to read
+        pytest.skip(f"{REAL} is not the top of a git work tree, so git's index mode is not checked")
     staged = git(REAL, "ls-files", "-s", "--", relative).split()
     assert staged, f"{relative} is not tracked"
     assert staged[0] == "100755", f"{relative} is tracked at mode {staged[0]}, not 100755"
@@ -201,6 +260,38 @@ def test_hook_runs_by_path(repo: Path, event: str, matcher: str | None, command:
     assert code not in NOT_EXECUTED, f"{relative}: exit {code}, {NOT_EXECUTED.get(code)}"
     assert code == 0, f"{relative}: exit {code}; stderr: {result.stderr}"
     assert not (repo / ".git" / "harness" / "queue.jsonl").exists(), "an attended run queued"
+    reviews = repo / ".git" / "harness" / "reviews.jsonl"
+    assert not reviews.exists(), "a harmless event recorded a review"
+
+
+def test_guard_spawn_by_path_denies_a_blockless_persona_spawn(repo: Path) -> None:
+    """h9 test 24: the wired command, run by a shell from the fixture's copy."""
+    relative = SPAWN.removeprefix(f"{PROJECT}/")
+    assert (repo / relative).exists(), f"{relative} is missing from the copy"
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Agent",
+        "tool_input": {
+            "description": "red",
+            "prompt": "Write the tests.",
+            "subagent_type": "tester",
+        },
+        "cwd": str(repo),
+    }
+    result = subprocess.run(
+        ["/bin/sh", "-c", SPAWN],
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        env={**clean_env(), "CLAUDE_PROJECT_DIR": str(repo)},
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, f"exit {result.returncode}; stderr: {result.stderr}"
+    output = json.loads(result.stdout)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"].startswith("brief: no block")
 
 
 # -- the rule text ------------------------------------------------------------

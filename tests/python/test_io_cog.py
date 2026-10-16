@@ -10,6 +10,11 @@ HOW THIS FILE GOES RED. `tin_engine.io.cog`, `read_page` and the moved
 `IndexWindow` are reached through module-scoped fixtures, so while they are
 missing each test fails on its own (`ModuleNotFoundError`, `AttributeError`)
 and the rest of `tests/python` still collects.
+
+AMENDED FOR 30c (`docs/increments/30c-dem-read-speed.md`, section 7). R1
+(`TestR1DefaultThreadsAreTheMachines`): without `threads` the pool has the
+machine's core count of workers, not a fixed 4. P2 (in `TestW2Determinism`):
+that default gives `threads=1`'s bytes.
 """
 
 from __future__ import annotations
@@ -128,7 +133,7 @@ class TestW1WindowEqualsWholeSliced:
         tile = decoded(cog, geotiff, local(cog, geotiff, data), data, w)
         assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
         meta = geotiff.read_header(io.BytesIO(data), nodata=None)[0]
-        assert tile.meta == cog.window_meta(meta, w)
+        assert tile.meta == meta.windowed(w)
         assert not tile.array.flags.writeable
 
     @pytest.mark.parametrize("name", WINDOWS)
@@ -165,9 +170,8 @@ class TestW1WindowEqualsWholeSliced:
         )
         assert tile.array.dtype == np.float32
 
-    def test_window_meta_moves_the_corner_by_whole_cells(
-        self, cog: ModuleType, window: Any
-    ) -> None:
+    def test_windowed_moves_the_corner_by_whole_cells(self, window: Any) -> None:
+        """`RasterMeta.windowed`, which replaced `cog.window_meta` (audit PR A)."""
         from mosaic_fixtures import meta as make_meta
 
         whole = make_meta(rows=ROWS, cols=COLS, nodata=-9999.0)
@@ -180,7 +184,7 @@ class TestW1WindowEqualsWholeSliced:
                 "cols": 3,
             }
         )
-        assert cog.window_meta(whole, w) == expected
+        assert whole.windowed(w) == expected
 
     @pytest.mark.parametrize(
         "bounds",
@@ -230,7 +234,7 @@ def test_w1_a_dtm10_window_across_a_512_tile_corner(
     with tifffile.TiffFile(DTM10_FILE) as tif:
         oracle = tif.pages.first.asarray()
     assert same_bytes(np.asarray(tile.array), sliced(oracle, w).astype(np.float32))
-    assert tile.meta == cog.window_meta(meta, w)
+    assert tile.meta == meta.windowed(w)
 
 
 class TestW2Determinism:
@@ -244,6 +248,57 @@ class TestW2Determinism:
         eight = decoded(cog, geotiff, BytesBlocks(data), data, w, threads=8)
         assert np.asarray(one.array).tobytes() == np.asarray(eight.array).tobytes()
         assert same_bytes(np.asarray(one.array), sliced(whole_page(data), w))
+
+    @pytest.mark.parametrize("variant", variant_params())
+    def test_p2_the_default_thread_count_changes_no_byte(
+        self, cog: ModuleType, geotiff: ModuleType, window: Any, variant: Variant
+    ) -> None:
+        """30c P2: a call without `threads` (one worker since increment 38,
+        the machine's cores from 30c, 4 before) gives `threads=1`'s bytes."""
+        data = build(variant)
+        w = window(row0=5, col0=9, rows=40, cols=55)
+        one = decoded(cog, geotiff, BytesBlocks(data), data, w, threads=1)
+        default = decoded(cog, geotiff, BytesBlocks(data), data, w)
+        assert np.asarray(default.array).tobytes() == np.asarray(one.array).tobytes()
+
+
+class TestR1DefaultThreadsIsOne:
+    """Increment 38, section 4.2 (replacing 30c R1): without `threads`,
+    `decode_window` builds its pool with one worker, the library default; no
+    module but `resources.py` reads the core count. A given `threads` is used
+    as given. The pool is observed through a spy in place of
+    `cog.ThreadPoolExecutor` that records the worker count and builds the real
+    pool, so the decode itself still runs."""
+
+    @pytest.mark.parametrize(
+        ("kwargs", "workers"),
+        [
+            pytest.param({}, 1, id="default_is_one"),
+            pytest.param({"threads": 9}, 9, id="threads_given"),
+        ],
+    )
+    def test_the_pool_is_built_with_the_count_given_or_one(
+        self,
+        cog: ModuleType,
+        geotiff: ModuleType,
+        window: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        kwargs: dict[str, int],
+        workers: int,
+    ) -> None:
+        built: list[int | None] = []
+        real = cog.ThreadPoolExecutor
+
+        def spy(*args: Any, **kw: Any) -> Any:
+            built.append(kw.get("max_workers", args[0] if args else None))
+            return real(*args, **kw)
+
+        monkeypatch.setattr(cog, "ThreadPoolExecutor", spy)
+        data = build(VARIANTS[0])
+        w = window(row0=5, col0=9, rows=40, cols=55)
+        tile = decoded(cog, geotiff, BytesBlocks(data), data, w, **kwargs)
+        assert built == [workers]
+        assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
 
 
 class TestW3OnlyTheNeededBlocks:

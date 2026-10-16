@@ -1,17 +1,17 @@
-"""A cut run's index, `<out>.pieces/index.json`, and K4's check before it is written.
+"""A cut run's index, `<out>.pieces/index.json`, and the seam check before it is written.
 
-Increment 23c, `docs/increments/23-basin-scale.md`, "Output" and "Settled
-after 23c's red step" (items 3, 5, 6 and 11, question B). `MeshIndex` is
-frozen and refuses an unknown key: it is read by other programs (23d's
-stitcher, a consumer), so a key it does not know is drift, not data.
+`MeshIndex` is frozen and refuses an unknown key: it is written for other
+programs to read (the step that will join the pieces, any consumer), so a key
+it does not know is drift, not data.
 
-`check_conformity` is K4: the records two pieces wrote of one seam edge are
-equal bit for bit, or the run fails naming the seam and the two pieces. Bit
-for bit means bytes, so a NaN z equals a NaN z and 0.0 differs from -0.0.
+`check_conformity` is the seam check: the records two pieces wrote of one seam
+edge are equal bit for bit, or the run fails naming the seam and the two
+pieces. Bit for bit means bytes, so a NaN z equals a NaN z and 0.0 differs
+from -0.0.
 One record alone is a seam edge on the outline, which has one piece.
 
-Like the rest of `io/`, this module imports nothing first-party but
-`io/models.py`, and never `_core`.
+This module imports nothing first-party but `io/models.py`, and never
+`_core`. No command writes a cut run yet.
 """
 
 from __future__ import annotations
@@ -34,10 +34,10 @@ class _Record(BaseModel):
 
 
 class PartitionRecord(_Record):
-    """The rule's inputs and its cells, as `decompose.partition` gave them."""
+    """The rule's inputs and its cells, as the partition rule gave them."""
 
     pieces: int = Field(ge=1)
-    memory_budget: int = Field(ge=1)
+    piece_budget: int = Field(ge=1)
     bytes_per_node: int = Field(ge=1)
     nx: int = Field(ge=1)
     ny: int = Field(ge=1)
@@ -45,7 +45,7 @@ class PartitionRecord(_Record):
     dy: int = Field(ge=1)
     cols: int = Field(ge=1)
     rows: int = Field(ge=1)
-    # Where the lines are ("Three points from 23c-1's green", point 1): line i
+    # Where the lines are: line i
     # at x = origin_x + (col0 + i dx) spacing, line j at y = origin_y - (row0 +
     # j dy) spacing, origin being lattice node (0, 0) in the index's crs.
     row0: int
@@ -108,7 +108,7 @@ class SeamRecord:
 
 
 class ConformityError(ValueError):
-    """Two pieces wrote one seam edge differently (K4)."""
+    """Two pieces wrote one seam edge differently."""
 
     def __init__(self, edge: int, pieces: tuple[PieceId, PieceId]) -> None:
         super().__init__(

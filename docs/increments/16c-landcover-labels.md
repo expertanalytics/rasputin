@@ -86,8 +86,11 @@ any code system other than CORINE.
   hooking larger onto smaller cannot make a cycle) but claims no round bound.
   The acceptance records the rounds.
 - **Point in polygon** is GEOS's (shapely 2 `STRtree.query(...,
-  predicate="intersects")` over prepared polygons). Nothing is claimed about it
-  beyond what shapely documents.
+  predicate="intersects")`). Nothing is claimed about it
+  beyond what shapely documents. (This line said "over prepared polygons";
+  as built, the polygons were the tree and were not prepared. Increment 30a,
+  `docs/increments/30a-landcover-speed.md`, makes each polygon the query, which
+  GEOS prepares.)
 - **Where the labels came from before.** The legacy labelled cell centres,
   one Python point test per cell (see Legacy). The per-centre test is kept,
   as the **test oracle**, not as production (R1).

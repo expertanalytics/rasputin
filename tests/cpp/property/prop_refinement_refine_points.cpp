@@ -11,10 +11,12 @@
 //   tolerance oracle (J2): every given check point that is not a start vertex,
 //     in every output triangle whose CLOSED area holds it (exact orientation
 //     on (col, -row), recovered from the output's world points), is within
-//     tolerance of that triangle's plane, the plane recomputed here from the
+//     tolerance of that triangle's plane, the plane recomputed from the
 //     output's z. It walks the given points, never the store, and reads no
 //     scan record. It returns its violations, so it can be shown to fail: the
-//     control plants the output's z shifted by twice the tolerance.
+//     control plants the output's z shifted by twice the tolerance. Written
+//     once in tests/cpp/support/j2_oracle.hpp (h17 §4a), shared with ES9;
+//     its hand-built cases are at the end of this file.
 //   Delaunay oracle: every interior edge that is not a constraint edge has
 //     neither apex strictly inside the other triangle's circumcircle, by the
 //     exact incircle in the producer's frame, lattice_frame(h, h, ...), i.e.
@@ -26,6 +28,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -34,12 +37,14 @@
 #include <terrain/refinement/check_points.hpp>
 #include <terrain/refinement/refine_points.hpp>
 
+#include "j2_oracle.hpp"
 #include "refinement_fixtures.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <random>
 #include <set>
@@ -137,39 +142,21 @@ PointRefineOutcome run(const CheckPoints& cp, const Start& s, double tol, unsign
 
 double cross(Point2 a, Point2 b, Point2 c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
 
-// J2's oracle: the number of (point, triangle) pairs over tolerance, with z
-// taken from `z` (the output's, or a planted copy).
-std::size_t violations(const Points& pts, const Start& start, const PointRefineOutcome& out,
+// J2's oracle (tests/cpp/support/j2_oracle.hpp), with z taken from `z` (the
+// output's, or a planted copy): the start vertices marked once per point, the
+// output and the points framed as (col, -row).
+j2_oracle::Findings j2(const Points& pts, const Start& start, const PointRefineOutcome& out,
                        const std::vector<double>& z, double tol) {
     std::set<std::pair<double, double>> start_xy;
     for (const Point2 v : start.mesh.vertices()) start_xy.insert({v.x, v.y});
-    std::vector<Point2> fp;
-    double zmax = 1.0;
-    for (std::size_t i = 0; i < out.vertices.size(); ++i) {
-        fp.push_back(frame(out.vertices[i]));
-        zmax = std::max(zmax, std::abs(z[i]));
+    std::vector<Point2> fv, fp;
+    std::vector<std::uint8_t> skip;
+    for (const Point2 v : out.vertices) fv.push_back(frame(v));
+    for (const Point2 w : pts.xy) {
+        fp.push_back(frame(w));
+        skip.push_back(start_xy.contains({w.x, w.y}) ? 1 : 0);  // J2 excludes them
     }
-    std::size_t bad = 0;
-    for (const auto& t : out.triangles) {
-        const Point2 a = fp[t[0]], b = fp[t[1]], c = fp[t[2]];
-        REQUIRE(DefaultKernel::orient2d(a, b, c) == Orientation::CounterClockwise);
-        if (!(out.valid[t[0]] && out.valid[t[1]] && out.valid[t[2]])) continue;
-        const double lo_x = std::min({a.x, b.x, c.x}), hi_x = std::max({a.x, b.x, c.x});
-        const double lo_y = std::min({a.y, b.y, c.y}), hi_y = std::max({a.y, b.y, c.y});
-        const double two_a = cross(a, b, c);
-        for (std::size_t i = 0; i < pts.xy.size(); ++i) {
-            if (start_xy.contains({pts.xy[i].x, pts.xy[i].y})) continue;  // J2 excludes them
-            const Point2 p = frame(pts.xy[i]);
-            if (p.x < lo_x || p.x > hi_x || p.y < lo_y || p.y > hi_y) continue;
-            if (DefaultKernel::orient2d(a, b, p) == Orientation::Clockwise
-                || DefaultKernel::orient2d(b, c, p) == Orientation::Clockwise
-                || DefaultKernel::orient2d(c, a, p) == Orientation::Clockwise)
-                continue;
-            const double plane = (cross(p, b, c) * z[t[0]] + cross(a, p, c) * z[t[1]] + cross(a, b, p) * z[t[2]]) / two_a;
-            if (std::abs(plane - static_cast<double>(pts.z[i])) > tol + 1e-9 * zmax) ++bad;
-        }
-    }
-    return bad;
+    return j2_oracle::violations(fv, z, out.valid, out.triangles, fp, pts.z, skip, kN, kN, tol);
 }
 
 void delaunay_oracle(const PointRefineOutcome& out) {
@@ -250,7 +237,9 @@ TEST_CASE("RP3: J2 holds at every check point, and the mesh is constrained Delau
     REQUIRE(out.max_error <= tol);
     REQUIRE(out.uncovered == 0);
     REQUIRE(out.coincident == 0);  // no offset is 0, so no point is a node
-    REQUIRE(violations(pts, s, out, out.z, tol) == 0);
+    const auto j = j2(pts, s, out, out.z, tol);
+    REQUIRE(j.not_ccw == 0);
+    REQUIRE(j.over == 0);
     delaunay_oracle(out);
     constraints_oracle(out);
     inserted_are_check_points(pts, s, out);
@@ -266,7 +255,9 @@ TEST_CASE("RP3: the oracle fails on a mesh whose z is shifted by twice the toler
     REQUIRE(out.ok());
     std::vector<double> planted = out.z;
     for (auto& z : planted) z += 2.0 * tol;
-    REQUIRE(violations(pts, s, out, planted, tol) > 0);
+    const auto j = j2(pts, s, out, planted, tol);
+    REQUIRE(j.not_ccw == 0);
+    REQUIRE(j.over > 0);
 }
 
 TEST_CASE("RP5: a split shared edge skips the neighbour's stale result",
@@ -302,7 +293,9 @@ TEST_CASE("RP5: a split shared edge skips the neighbour's stale result",
         area += cross(a, b, c) / 2.0;
     }
     REQUIRE(area == static_cast<double>((kN - 1) * (kN - 1)));
-    REQUIRE(violations(pts, s, out, out.z, 1.0) == 0);
+    const auto j = j2(pts, s, out, out.z, 1.0);
+    REQUIRE(j.not_ccw == 0);
+    REQUIRE(j.over == 0);
     delaunay_oracle(out);
     inserted_are_check_points(pts, s, out);
 }
@@ -346,7 +339,9 @@ TEST_CASE("RP5: interior edges split with work on both sides in one round stay a
     }
     const double side = static_cast<double>(kN - 1);
     REQUIRE(area == side * side);  // dyadic corners: every term is exact
-    REQUIRE(violations(pts, s, out, out.z, tol) == 0);
+    const auto j = j2(pts, s, out, out.z, tol);
+    REQUIRE(j.not_ccw == 0);
+    REQUIRE(j.over == 0);
     delaunay_oracle(out);
     constraints_oracle(out);
     inserted_are_check_points(pts, s, out);
@@ -379,4 +374,101 @@ TEST_CASE("RP4: output is bit-identical for 1, 2 and 8 threads and two add order
             REQUIRE(out.coincident == ref.coincident);
             REQUIRE(out.coincident_max_error == ref.coincident_max_error);
         }
+}
+
+// ---------------------------------------------------------------------------
+// J2's shared oracle by hand (h17 §4a): known counts on a 3 x 3 node grid
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The frame is (col, -row) on a 3 x 3 node grid (2 x 2 cells). Two triangles
+// split the square along the diagonal p0-p2 (where row == col): T0 below it
+// (row >= col), T1 above it (row <= col). The plane z = 10 + x + 2y, i.e.
+// 10 + col - 2 row, is planted at the corners, so both triangles carry it and
+// every value below is a small integer or a dyadic fraction, exact in double.
+struct HandCase {
+    std::vector<Point2> vertices{{0, 0}, {2, 0}, {2, -2}, {0, -2}};  // p0 p1 p2 p3
+    std::vector<double> z{10, 12, 8, 6};
+    std::vector<std::uint8_t> valid{1, 1, 1, 1};
+    std::vector<std::array<std::uint32_t, 3>> triangles{{0, 3, 2}, {0, 2, 1}};  // T0, T1, both CCW
+    std::vector<Point2> points;
+    std::vector<float> point_z;
+    std::vector<std::uint8_t> skip;
+    // A check point at (col, row), off the plane by `off`.
+    void add(double col, double row, double off, std::uint8_t skipped = 0) {
+        points.push_back(Point2{col, -row});
+        point_z.push_back(static_cast<float>(10.0 + col - 2.0 * row + off));
+        skip.push_back(skipped);
+    }
+    j2_oracle::Findings run(double tol) const {
+        return j2_oracle::violations(vertices, z, valid, triangles, points, point_z, skip, 3, 3, tol);
+    }
+};
+
+// Tolerance 1 m; zmax = 12, so the slack is 1 + 1.2e-8. The pairs over it:
+HandCase hand_case() {
+    HandCase h;
+    h.add(0.0, 0.0, 3.0);       // on vertex p0, shared: in T0 and T1          -> 2
+    h.add(0.5, 0.5, -2.0);      // on the shared edge p0-p2: in both            -> 2
+    h.add(1.0, 0.5, 1.5);       // on the cell boundary col = 1, inside T1     -> 1
+    h.add(1.5, 1.0, 0.75);      // on the cell boundary row = 1, inside T1, under -> 0
+    h.add(2.0, 0.5, 4.0);       // on the last column (edge p1-p2), T1 only    -> 1
+    h.add(0.5, 2.0, -1.25);     // on the last row (edge p3-p2), T0 only       -> 1
+    h.add(2.0, 2.0, 5.0);       // on the last column and row (p2), both       -> 2
+    h.add(0.25, 1.5, 1.0);      // inside T0, exactly at tolerance             -> 0
+    h.add(1.5, 0.25, 9.0, 1);   // inside T1, far off, but a start vertex      -> 0
+    return h;
+}
+
+}  // namespace
+
+TEST_CASE("J2 oracle: known counts on a hand-built 3 x 3 grid", "[refine_points][RP3][j2_oracle]") {
+    HandCase h = hand_case();
+    const auto f = h.run(1.0);
+    CHECK(f.not_ccw == 0);
+    CHECK(f.over == 9);
+
+    SECTION("a triangle with an invalid vertex is skipped: T1 out, T0's four pairs remain") {
+        h.valid[1] = 0;  // p1 is T1's only
+        CHECK(h.run(1.0).over == 4);
+        CHECK(h.run(1.0).not_ccw == 0);
+    }
+    SECTION("not_ccw counts every clockwise triangle, valid or not") {
+        h.triangles = {{0, 2, 3}, {0, 1, 2}};
+        h.valid[3] = 0;
+        CHECK(h.run(1.0).not_ccw == 2);
+    }
+    SECTION("the skip mark is all that hides the start vertex") {
+        h.skip.back() = 0;
+        CHECK(h.run(1.0).over == 10);
+    }
+    SECTION("a triangle reaching past the last column still finds the points on it") {
+        // p4 = (col 3, row 1), off the grid, on the plane; T2 = (p1, p2, p4)
+        // holds the points on the last column (edge p1-p2): (2, 0.5) and p2.
+        // Its bucket range is clamped to the grid (rule 6); unclamped, it
+        // would index past the bucket table, which ASan reports.
+        h.vertices.push_back(Point2{3, -1});
+        h.z.push_back(11);
+        h.valid.push_back(1);
+        h.triangles.push_back({1, 2, 4});
+        CHECK(h.run(1.0).not_ccw == 0);
+        CHECK(h.run(1.0).over == 11);
+    }
+}
+
+TEST_CASE("J2 oracle: a check point outside the grid throws", "[refine_points][RP3][j2_oracle]") {
+    using Catch::Matchers::ContainsSubstring;
+    HandCase h = hand_case();
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const auto [col, row] = GENERATE_COPY(table<double, double>({
+        {2.0 + 1.0 / 1024.0, 1.0},   // past the last column
+        {1.0, -1.0 / 1024.0},        // above row 0
+        {-1.0 / 1024.0, 1.0},        // left of column 0
+        {1.0, 2.0 + 1.0 / 1024.0},   // past the last row
+        {nan, 1.0},                  // not a position
+    }));
+    CAPTURE(col, row);
+    h.add(col, row, 0.0);
+    CHECK_THROWS_WITH(h.run(1.0), ContainsSubstring("check point 9 at") && ContainsSubstring("outside the 3 x 3 grid"));
 }

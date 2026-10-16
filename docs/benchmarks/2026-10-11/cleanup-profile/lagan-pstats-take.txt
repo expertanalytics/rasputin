@@ -1,0 +1,116 @@
+Sun Oct 11 10:32:49 2026    /Users/skavhaug/projects/rasputin/.claude/worktrees/cleanup-speed/docs/benchmarks/2026-10-11/cleanup-profile/lagan.prof
+
+         4813648 function calls (4806924 primitive calls) in 20.609 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1468 to 22 due to restriction <'transform|pyproj|_transformer|prepared\\.py|prepare\\)|base\\.py:815|contains_properly|is_simple'>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+8027/7901    4.153    0.001    4.661    0.001 transformer.py:841(transform)
+     7867    0.013    0.000    4.085    0.001 coordinates.py:27(transform)
+     4255    0.001    0.000    0.761    0.000 base.py:815(covers)
+   121/44    0.002    0.000    0.443    0.010 crs.py:203(_transformer)
+   121/44    0.001    0.000    0.393    0.009 transformer.py:667(from_crs)
+   121/44    0.003    0.000    0.255    0.006 transformer.py:441(__init__)
+       90    0.000    0.000    0.243    0.003 prepared.py:51(intersects)
+   121/44    0.052    0.000    0.044    0.001 transformer.py:105(__call__)
+     4255    0.018    0.000    0.018    0.000 predicates.py:605(contains_properly)
+     3380    0.016    0.000    0.016    0.000 predicates.py:382(is_simple)
+        2    0.000    0.000    0.006    0.003 crs.py:114(transform_label)
+        2    0.000    0.000    0.005    0.002 crs.py:65(transform_description)
+    16092    0.003    0.000    0.003    0.000 transformer.py:463(_transformer)
+        8    0.001    0.000    0.002    0.000 transformer.py:588(source_crs)
+        8    0.001    0.000    0.001    0.000 transformer.py:604(target_crs)
+       90    0.000    0.000    0.001    0.000 prepared.py:72(prep)
+       90    0.000    0.000    0.001    0.000 prepared.py:22(__init__)
+       93    0.001    0.000    0.001    0.000 creation.py:751(prepare)
+      121    0.000    0.000    0.000    0.000 transformer.py:424(__init__)
+        8    0.000    0.000    0.000    0.000 thread.py:49(prepare)
+        4    0.000    0.000    0.000    0.000 transformer.py:490(definition)
+        2    0.000    0.000    0.000    0.000 transformer.py:483(description)
+
+
+### callees of _take\)
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'_take\\)'>
+
+Function                     called...
+                                 ncalls  tottime  cumtime
+feature_input.py:329(_take)  ->       1    0.000    0.000  __init__.py:398(name)
+                                   7866    0.042    0.042  _geometry.py:933(force_2d)
+                                  15732    0.003    0.005  base.py:333(geom_type)
+                                   7866    0.002    0.003  base.py:770(is_empty)
+                                      1    0.000    0.000  creation.py:751(prepare)
+                                      1    0.000    0.000  crs.py:32(parse_crs)
+                                      1    0.000    0.003  crs.py:42(reprojector)
+                                      1    0.000    0.004  crs.py:75(same_crs)
+                                      1    0.000    0.000  crs.py:1462(is_geographic)
+                                   7866    0.004    4.084  decorators.py:182(wrapper)
+                                      1    0.000    0.004  feature_input.py:172(source_region)
+                                      1    0.016    7.753  feature_input.py:410(_clean)
+                                   7866    0.012    0.053  feature_input.py:562(_finite)
+                                   7866    0.003    0.004  feature_input.py:566(_code)
+                                   7866    0.007    0.016  feature_input.py:578(_mask)
+                                  15732    0.002    0.002  {built-in method time.perf_counter}
+                                   7866    0.001    0.001  {method 'append' of 'list' objects}
+
+
+### callees of feature_input\.py:389
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'feature_input\\.py:389'>
+
+Function                         called...
+                                     ncalls  tottime  cumtime
+feature_input.py:389(<genexpr>)  ->    4283    0.001    0.001  base.py:358(length)
+                                       1750    0.001    0.631  decorators.py:182(wrapper)
+                                       4255    0.007    0.058  feature_input.py:244(_untouched)
+                                       4283    0.000    0.000  {built-in method builtins.isinstance}
+
+
+### callees of feature_input\.py:402
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'feature_input\\.py:402'>
+
+Function                         called...
+                                     ncalls  tottime  cumtime
+feature_input.py:402(<genexpr>)  ->    4255    0.001    0.761  base.py:815(covers)
+
+
+### callees of _outline_lines\)
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'_outline_lines\\)'>
+
+Function                              called...
+                                          ncalls  tottime  cumtime
+feature_input.py:714(_outline_lines)  ->   15700    0.006    0.183  decorators.py:182(wrapper)
+                                            3895    0.029    0.148  feature_input.py:737(_chains)
+                                            7790    0.039    0.039  measurement.py:51(distance)
+                                              24    0.000    0.000  multiarray.py:197(concatenate)
+                                            3919    0.001    0.002  shape_base.py:368(_stack_dispatcher)
+                                            3919    0.022    0.024  shape_base.py:378(stack)
+                                              24    0.112    0.114  strtree.py:75(__init__)
+                                            3895    0.004    0.159  strtree.py:108(query)
+                                            3895    0.000    0.000  {built-in method builtins.len}
+                                            3895    0.001    0.001  {built-in method numpy.zeros}
+                                            3895    0.001    0.001  {method 'tolist' of 'numpy.ndarray' objects}
+
+
+### callees of base\.py:815
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'base\\.py:815'>
+
+Function             called...
+                         ncalls  tottime  cumtime
+base.py:815(covers)  ->    4255    0.759    0.759  {covers_scalar}
+                           4255    0.000    0.000  {is_valid_input_scalar}
+
+
+### callers of covers
+   Ordered by: cumulative time
+   List reduced from 1468 to 1 due to restriction <'base\\.py:815'>
+
+Function             was called by...
+                         ncalls  tottime  cumtime
+base.py:815(covers)  <-    4255    0.001    0.761  feature_input.py:402(<genexpr>)
+
+

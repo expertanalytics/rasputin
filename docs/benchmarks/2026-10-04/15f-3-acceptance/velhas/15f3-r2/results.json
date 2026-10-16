@@ -1,0 +1,311 @@
+{
+ "label": "15f3-r2",
+ "tree": "/Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3",
+ "commit": "83c7fd2da5112d721bd65b84984ebdcc91eadfdb",
+ "crs": "EPSG:31983",
+ "runs": [
+  {
+   "tolerance": 20.0,
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_before": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)",
+   "timed": [
+    {
+     "wall_s": 3.1882687500328757,
+     "real_s": 3.18,
+     "max_rss_bytes": 2032058368,
+     "child": {
+      "refine_s": 0.2283517920295708,
+      "app_s": 2.8951804590178654,
+      "max_error": 19.999762066340054,
+      "rounds": 30,
+      "inserted": 118273,
+      "flips": 311670,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "141768",
+      "output triangles": "276209",
+      "constraint edges": "7325",
+      "t20.bin.vtk": "10.2 MB",
+      "total_s": "2.837"
+     }
+    },
+    {
+     "wall_s": 3.1459808339714073,
+     "real_s": 3.14,
+     "max_rss_bytes": 2012823552,
+     "child": {
+      "refine_s": 0.23061937501188368,
+      "app_s": 2.8488119590329006,
+      "max_error": 19.999762066340054,
+      "rounds": 30,
+      "inserted": 118273,
+      "flips": 311670,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "141768",
+      "output triangles": "276209",
+      "constraint edges": "7325",
+      "t20.bin.vtk": "10.2 MB",
+      "total_s": "2.788"
+     }
+    }
+   ],
+   "started_utc": "2026-10-04T00:43:11Z",
+   "ascii": {
+    "wall_s": 3.5243639580439776,
+    "real_s": 3.52,
+    "max_rss_bytes": 1941602304,
+    "child": {
+     "refine_s": 0.22331291699083522,
+     "app_s": 3.232185542001389,
+     "max_error": 19.999762066340054,
+     "rounds": 30,
+     "inserted": 118273,
+     "flips": 311670,
+     "hardening": "libc++ fast"
+    },
+    "stats": {
+     "item": "count",
+     "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+     "domain vertices": "7309 (1 ring, 0 holes)",
+     "start vertices": "7309",
+     "start triangles": "7307",
+     "output vertices": "141768",
+     "output triangles": "276209",
+     "constraint edges": "7325",
+     "t20.ascii.vtk": "14.2 MB",
+     "total_s": "3.173"
+    }
+   },
+   "quality": {
+    "worst_angle": 0.11345786709489519,
+    "angle_median": 37.00983245081948,
+    "share_under_1": 2.172268101329066e-05,
+    "max_degree": 14,
+    "within_tolerance": false,
+    "delaunay_checked": 410651,
+    "delaunay_ambiguous": 994,
+    "delaunay_violations": 0,
+    "mesh_sha256": ""
+   },
+   "mesh_sha256": "9056a6a8f8348e06f120c205fd9eb356c5c8447965d3ed2dd658264236d36a11",
+   "vtk": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/velhas/15f3-r2/t20.ascii.vtk",
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_after": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)"
+  },
+  {
+   "tolerance": 10.0,
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_before": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)",
+   "timed": [
+    {
+     "wall_s": 4.313938082952518,
+     "real_s": 4.31,
+     "max_rss_bytes": 1894154240,
+     "child": {
+      "refine_s": 0.45665399997960776,
+      "app_s": 4.011347708990797,
+      "max_error": 9.999976905616563,
+      "rounds": 35,
+      "inserted": 310810,
+      "flips": 789337,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "358020",
+      "output triangles": "708612",
+      "constraint edges": "7426",
+      "t10.bin.vtk": "25.7 MB",
+      "total_s": "3.863"
+     }
+    },
+    {
+     "wall_s": 4.2908937920001335,
+     "real_s": 4.28,
+     "max_rss_bytes": 1852604416,
+     "child": {
+      "refine_s": 0.45521366700995713,
+      "app_s": 3.981397667026613,
+      "max_error": 9.999976905616563,
+      "rounds": 35,
+      "inserted": 310810,
+      "flips": 789337,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "358020",
+      "output triangles": "708612",
+      "constraint edges": "7426",
+      "t10.bin.vtk": "25.7 MB",
+      "total_s": "3.837"
+     }
+    }
+   ],
+   "started_utc": "2026-10-04T00:43:21Z",
+   "ascii": {
+    "wall_s": 5.522765165951569,
+    "real_s": 5.51,
+    "max_rss_bytes": 2070691840,
+    "child": {
+     "refine_s": 0.45247050002217293,
+     "app_s": 5.222544874995947,
+     "max_error": 9.999976905616563,
+     "rounds": 35,
+     "inserted": 310810,
+     "flips": 789337,
+     "hardening": "libc++ fast"
+    },
+    "stats": {
+     "item": "count",
+     "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+     "domain vertices": "7309 (1 ring, 0 holes)",
+     "start vertices": "7309",
+     "start triangles": "7307",
+     "output vertices": "358020",
+     "output triangles": "708612",
+     "constraint edges": "7426",
+     "t10.ascii.vtk": "37.1 MB",
+     "total_s": "5.072"
+    }
+   },
+   "quality": {
+    "worst_angle": 0.05254902045990914,
+    "angle_median": 36.86989764584402,
+    "share_under_1": 9.878466636184541e-06,
+    "max_degree": 14,
+    "within_tolerance": false,
+    "delaunay_checked": 1059205,
+    "delaunay_ambiguous": 7918,
+    "delaunay_violations": 0,
+    "mesh_sha256": ""
+   },
+   "mesh_sha256": "8b4611fb865bd594fecd23b93af0812507fc88d01aa33464b447cc2ed16f0b2a",
+   "vtk": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/velhas/15f3-r2/t10.ascii.vtk",
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_after": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)"
+  },
+  {
+   "tolerance": 5.0,
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_before": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)",
+   "timed": [
+    {
+     "wall_s": 7.351500666001812,
+     "real_s": 7.34,
+     "max_rss_bytes": 2127134720,
+     "child": {
+      "refine_s": 0.9915657920064405,
+      "app_s": 7.053028290974908,
+      "max_error": 4.999982561383945,
+      "rounds": 37,
+      "inserted": 774301,
+      "flips": 1885927,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "934979",
+      "output triangles": "1862154",
+      "constraint edges": "7802",
+      "t5.bin.vtk": "67.3 MB",
+      "total_s": "6.655"
+     }
+    },
+    {
+     "wall_s": 7.186564625008032,
+     "real_s": 7.18,
+     "max_rss_bytes": 2019704832,
+     "child": {
+      "refine_s": 0.997842957964167,
+      "app_s": 6.885423917032313,
+      "max_error": 4.999982561383945,
+      "rounds": 37,
+      "inserted": 774301,
+      "flips": 1885927,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "934979",
+      "output triangles": "1862154",
+      "constraint edges": "7802",
+      "t5.bin.vtk": "67.3 MB",
+      "total_s": "6.498"
+     }
+    }
+   ],
+   "started_utc": "2026-10-04T00:43:37Z",
+   "ascii": {
+    "wall_s": 10.26980204199208,
+    "real_s": 10.26,
+    "max_rss_bytes": 2004221952,
+    "child": {
+     "refine_s": 1.0145562500110827,
+     "app_s": 9.971930374973454,
+     "max_error": 4.999982561383945,
+     "rounds": 37,
+     "inserted": 774301,
+     "flips": 1885927,
+     "hardening": "libc++ fast"
+    },
+    "stats": {
+     "item": "count",
+     "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+     "domain vertices": "7309 (1 ring, 0 holes)",
+     "start vertices": "7309",
+     "start triangles": "7307",
+     "output vertices": "934979",
+     "output triangles": "1862154",
+     "constraint edges": "7802",
+     "t5.ascii.vtk": "99.1 MB",
+     "total_s": "9.579"
+    }
+   },
+   "quality": {
+    "worst_angle": 0.0557543043945256,
+    "angle_median": 36.86989764584402,
+    "share_under_1": 1.288830032317413e-05,
+    "max_degree": 14,
+    "within_tolerance": false,
+    "delaunay_checked": 2789330,
+    "delaunay_ambiguous": 52046,
+    "delaunay_violations": 0,
+    "mesh_sha256": ""
+   },
+   "mesh_sha256": "c908795128d52dd69ce1cfe035fb48f613e7a64da1f0faec13ab517ff1df9742",
+   "vtk": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/velhas/15f3-r2/t5.ascii.vtk",
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_after": "total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)"
+  }
+ ]
+}

@@ -18,7 +18,7 @@
 //
 // Everything numeric here is a kernel call or a comparison between coordinates
 // the mesh already holds. No constructed intersection point, no tolerance, no
-// division -- the same rule point_in_ring keeps, and for the same reason: an
+// division -- the rule point_in_ring.hpp keeps, and for the same reason: an
 // oracle that rounds cannot judge a predicate that does not.
 
 #include <terrain/core/indexed_mesh.hpp>

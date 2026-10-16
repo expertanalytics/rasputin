@@ -1,0 +1,20 @@
+bc01cd824f9d8ec20f2f58bac27a7fd37dc5aa84
+0.2.0.dev0
+bounds checks: on (libc++ fast)
+Python 3.13.15
+40c245a19a6d6173c5d35c7a4d522dcd285e9a52c8ce844d2e241e03939fc45e  .venv/lib/python3.13/site-packages/tin_engine/_core.cpython-313-darwin.so
+7388b454a83edfde959d3bcdad453474ee9335d8db5a59447b226e791c63ce5e  /Users/skavhaug/projects/rasputin_data/nve_hrd/lakes.geojson
+e3a99779ade0599118a190c96ff60920effb6393b5a7f20ae4250ee7bc0a5b9e  /Users/skavhaug/projects/rasputin_data/nve_hrd/manifest.json
+f3bb51b1c4cd587353a3860043ef65664b2679eac594f2c75dba9a9187b30cc8  /Users/skavhaug/projects/rasputin_data/nve_hrd/NOTICE.txt
+809429868314371fdaaddf9cbd5685402b930e7cf08bca468e418603287e8a9c  /Users/skavhaug/projects/rasputin_data/nve_hrd/reference.geojson
+add27c0fd23ec0b632d809970b6aedad0bb47e60b5ae6ebb2019e3a2abec880c  /Users/skavhaug/projects/rasputin_data/nve_hrd/rivers.geojson
+e29a45dd24f0c04a9620a768751fc8c81f99113156ec67148491a378c829e182  /Users/skavhaug/projects/rasputin_data/nve_hrd/stations.geojson
+Mon Oct  5 10:29:30 CEST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+Mon Oct  5 11:02:45 CEST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+
+# lake_query.py, 2026-10-05 12:00 CEST (step 4 review): NVE lake layer 5 along each reach, 93 queries, 187 lakes; not committed
+480b71307f27109f93aa67aa8a91bb8c9d1b36b322c6b8b271e76e6eff45e34f  $WORK/lakes_reach.geojson

@@ -13,11 +13,15 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
 
 ## 2. Core Constraints & Technical Mandates
-* **Strict Size Limit:** Under **700 lines of production code per pull request**,
-  where a line counts unless it is blank, a comment, a docstring, or the body of
-  a raw literal; tests excluded. The exclusions exist so the ceiling does not
-  penalise the comment density this project asks for, and blank lines add no
-  reading. Lines count as written: packing code by hand under `# fmt: skip` /
+* **Strict Size Limit:** Under **700 net lines of production code per pull
+  request**: lines added minus lines removed, both under the same exclusions. A
+  line counts unless it is blank, a comment, a docstring, or the body of a raw
+  literal. Files under `tests/` or `docs/`, and files that are not Python, C++,
+  CMake or shell, are not counted; a file renamed across that boundary counts in
+  full. Added and removed lines are the `+` and `-` ranges of the PR's
+  `git diff -U0` hunks against its base, judged at the new and the old
+  revision; `python3 tools/count_loc.py <base> <head>` counts them. Lines count
+  as written: packing code by hand under `# fmt: skip` /
   `# fmt: off` is allowed, provided the packed lines stay readable and the
   review says why each new region is packed. This is the only statement of the
   rule; everywhere else points here.
@@ -41,26 +45,33 @@ Every code alteration must execute this strict pipeline, dispatched by the main 
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
 
-Step 4 is not conditional on the branch containing code, and the push that
-would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
-rules on both — the approval boundary and when the assessment fires.
-
 ### The main session dispatches
 The main session, started with no agent name, is the dispatcher: it spawns
 the personas. Its rules:
 * **Step order.** Design (`@architect`), failing tests (`@tester`), code
   (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance run
-  when refine or mesh code is touched (`docs/increments/README.md`). Failing
+  when refine or mesh code is touched (`docs/increments/README.md`).
+  A performance fix is timed by `@perf` before review. Failing
   tests go back to `@developer`.
-* **Briefs.** `@tester`: happy paths and `tester.md` §3A; §3C only when the
-  increment reads external input; on a refinement increment, name §3D's two
-  oracles. `@developer`: minimal code, under the ceiling of §2. `@reviewer`:
-  the three checks of `reviewer.md` §5, not what the gates cover; ask for the
-  review explicitly, since green CI is not done.
+* **Resume while small.** Resume a persona only while its transcript is under
+  about 150 k tokens; past that, spawn fresh on the increment file.
+* **Finish before starting.** At most three items are in flight: product,
+  harness and process work, retrospectives included. An item counts from
+  its first spawn until its PR merges or Ola parks or drops it, except while
+  it waits only on Ola. A new item starts only when fewer than three count.
+  If Ola asks for one beyond that, warn him with the count ("this makes
+  4 of 3") and start it only after he confirms. A free writer goes first to
+  the item nearest to merging, then to product work before harness and process work.
+  The next item is chosen with Ola from his private ideas file.
 * **No asking between internal steps, but stop at the remote.** Do not ask
   Ola between steps (tests to code, code to review); loop until `@tester` and
   `@reviewer` are satisfied. `.claude/REQUIRED-READING.md` says which acts
   need a fresh yes.
+* **Conflicts before a push question.** Before asking Ola to push a branch,
+  run `git fetch` and `git merge-tree --write-tree origin/master <branch>`,
+  and the same against each branch queued or asked for ahead of it. When
+  master conflicts, a writer merges it in first (`tools/merge_master.py`);
+  when a branch ahead conflicts, the question names the files.
 * **Recap each round.** At every new round or increment, run
   `python3 tools/session_state.py` and open with its recap.
 * **Milestone updates.** After each milestone, give Ola a one-line log of
@@ -106,6 +117,7 @@ ruff format --check .  # docs/ and .claude/ are excluded
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
 python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
 python3 tools/check_citations.py        # cited lines resolve; lists the at-risk ones
+python3 tools/check_code_history.py     # no history labels in Python docstrings or comments
 ```
 
 ### CI
@@ -115,4 +127,17 @@ CI is authoritative: local green does not mean the branch is green, so
 ```bash
 gh pr checks <pr>      # must be green; required for merge on master
 ```
+`CI result` is green only when every gating job passed, or was skipped on a
+prose-only change; it is meant to be the one required check on `master`, and
+`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks`
+shows whether it is yet. While the per-job checks are still required, a
+prose-only PR waits on matrix checks that never report. A PR that changes
+only prose (Markdown at the root or under `docs/`, less the files the suites
+read; `tools/ci_changes.py` decides) skips the C++, sanitizer and Python jobs
+and runs only the governance gates, so its green says nothing about code.
+`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR (the
+queue's method, merge commit, applies), and the queue tests it on top of the
+PRs ahead and merges it. No update-branch loop. A method flag such as `--merge`
+only prints a warning (the queue's method wins); `-d`/`--delete-branch` is
+refused. Never pass `--admin`: it bypasses the queue.
 

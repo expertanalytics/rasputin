@@ -1,0 +1,10 @@
+bygdin/base_t10_ascii.vtk: constraint vertices 8776, on nodes 0, on one grid line 73, off the grid lines 8703
+bygdin/base_t1_ascii.vtk: constraint vertices 13968, on nodes 1, on one grid line 74, off the grid lines 13893
+bygdin/15f3_t10_ascii.vtk: constraint vertices 8975, on nodes 0, on one grid line 262, off the grid lines 8713
+bygdin/15f3_t1_ascii.vtk: constraint vertices 22980, on nodes 1, on one grid line 8465, off the grid lines 14514
+velhas/base-r1/t20.ascii.vtk: constraint vertices 7319, on nodes 0, on one grid line 1, off the grid lines 7318
+velhas/base-r1/t10.ascii.vtk: constraint vertices 7381, on nodes 0, on one grid line 1, off the grid lines 7380
+velhas/base-r1/t5.ascii.vtk: constraint vertices 7527, on nodes 0, on one grid line 1, off the grid lines 7526
+velhas/15f3-r1/t20.ascii.vtk: constraint vertices 7325, on nodes 0, on one grid line 6, off the grid lines 7319
+velhas/15f3-r1/t10.ascii.vtk: constraint vertices 7426, on nodes 0, on one grid line 44, off the grid lines 7382
+velhas/15f3-r1/t5.ascii.vtk: constraint vertices 7802, on nodes 0, on one grid line 254, off the grid lines 7548

@@ -7,12 +7,8 @@ red for increment 7's commit 1. The module landed in `e5dee4e` and the suite
 has been green since.
 
 What outlives that step is the choice the red step made: the import is
-deliberately module-scope rather than the per-test import
-`test_viz_protocols.py` uses. There the point was that a missing `viz/`
-package should name itself in one test instead of aborting collection of a
-suite that also tests the bindings; here the whole file is about one module
-that either exists or does not, so aborting collection is the honest failure
-and remains the right shape now that the module exists.
+module-scope, because the whole file is about one module that either exists or
+does not, so aborting collection is the honest failure.
 
 **This is the only invariant-critical suite in increment 7 and it carries the
 increment's one mutation round** (`docs/increments/07-edge-properties.md`, "What
@@ -28,40 +24,20 @@ Two rules here are architecture rather than hygiene:
 
 * **`features.py` imports nothing first-party and never imports `_core`.** The
   reason is the one the module's own docstring gives: it is constructible and
-  testable with no extension in the process. It is emphatically *not* that
-  `viz/` is allowed to depend on it -- `viz/` may not import this module at
-  all, and `test_viz_svg.py::TestModuleIsolation` exists to deny exactly that
-  permission, pinning `style.py` and `fixtures.py` to zero first-party imports.
-  `cli.py`, the composition root, is the only module that imports both this
-  one and `viz.style` (its `tin_engine.features` and `tin_engine.viz.style` imports,
-  `src_python/tin_engine/cli.py@390b516:95` and `src_python/tin_engine/cli.py@390b516:110`).
-  The rule is checked here by parsing the source, not by inspecting `sys.modules`, because
-  `tin_engine/__init__.py` imports `_core` itself -- so an import-time check
-  would be asserting something about the package rather than about this module.
-  Same reasoning, same mechanism, as `test_viz_protocols.py`.
-* **The name pattern keeps a vocabulary name usable as a CSS class token, and
-  is defence in depth. It is not what closes the injection hole.**
-  `viz/svg.py`'s `_edge_classes` (`svg.py:168`) joins
-  `style.PropertyStroke.token` values, which `_edges` then interpolates into a
-  ``class="..."`` attribute **unescaped** (`svg.py:225`) -- only `_text`
-  escapes -- and never an `EdgeProperty` name, because `viz/` cannot import
-  this module. The only bridge is `PROPERTY_STROKES`
-  (`src_python/tin_engine/cli.py@390b516:163`), which builds a `PropertyStroke`
-  from a name and so re-validates through `style.py:51`'s own, deliberately
-  wider `^[a-z][a-z0-9_-]*$` -- a CSS class may carry a hyphen and a feature
-  name may not. A quote-carrying name dies there whatever
-  `^[a-z][a-z0-9_]*$` says. The attribute is closed by `PropertyStroke.token`,
-  and the suite over that boundary is `test_viz_svg.py::TestPropertyStrokes`.
-
-  What tokens exist today is not an enum, either: `_PRECEDENCE`
-  (`src_python/tin_engine/cli.py@390b516:159`) is a literal tuple of `str`, and there is no
-  enum anywhere on this path. A vocabulary read from a configuration file is still untrusted
-  input, and a second, narrower gate on it is worth its lines -- so every case below stays.
+  testable with no extension in the process. The rule is `features`' row in
+  `test_layering.py`, read from the source rather than from `sys.modules`.
+* **The name pattern is what keeps a name safe where it is written.** The PLY
+  header writes ``feature_bit {bit} {name}``, space-separated
+  (`src_python/tin_engine/io/ply.py:123`), and the GeoPackage writer puts each
+  name, quoted but not escaped, into a ``CREATE TABLE`` statement as a column
+  (`src_python/tin_engine/io/geopackage_write.py:321`). A space would split
+  the header line and a quote would end the SQL identifier, so
+  ``^[a-z][a-z0-9_]*$`` is the gate, and a vocabulary read from a
+  configuration file is untrusted input: every case below stays.
 """
 
 from __future__ import annotations
 
-import ast
 import os
 import subprocess
 import sys
@@ -73,7 +49,6 @@ import pytest
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FEATURES_SOURCE = REPO_ROOT / "src_python" / "tin_engine" / "features.py"
 
 # The features `DEFAULT_VOCABULARY` ships with, in bit order: the seven linear
 # ones of increment 7, then increment 16b's `land_cover` (7) and `water` (8)
@@ -118,7 +93,7 @@ def test_edge_property_rejects_a_bit_outside_the_32_bit_ceiling(bit: int) -> Non
 
 
 @pytest.mark.parametrize("name", ["river", "road", "r", "a0", "land_cover_2", "x_"])
-def test_edge_property_accepts_a_lowercase_css_safe_token(name: str) -> None:
+def test_edge_property_accepts_a_lowercase_token(name: str) -> None:
     assert EdgeProperty(name=name, bit=0).name == name
 
 
@@ -140,24 +115,14 @@ def test_edge_property_accepts_a_lowercase_css_safe_token(name: str) -> None:
         pytest.param("rivér", id="non-ascii"),
     ],
 )
-def test_edge_property_refuses_a_name_that_is_not_a_css_class_token(name: str) -> None:
+def test_edge_property_refuses_a_name_unsafe_in_a_header_or_a_column(name: str) -> None:
     """MUTANT 5: the name pattern relaxed to any ``str``.
 
-    The design names two of these as the minimum -- a quote and a space -- and
-    both stay, under the corrected reason: a quote or a space makes a name
-    unusable as a CSS class token, which is what this pattern is for. It is not
-    what protects the ``class="..."`` attribute. `svg.py:_edge_classes`
-    (`svg.py:168`) joins `style.PropertyStroke.token` values and `_edges`
-    (`svg.py:225`) interpolates the result unescaped, never a name from this
-    module, and `PROPERTY_STROKES` (`src_python/tin_engine/cli.py@390b516:163`)
-    re-validates any name through that model before it can reach the attribute
-    -- see `test_viz_svg.py::TestPropertyStrokes`, which refuses the same shapes
-    at the boundary that is load-bearing. Relaxing this pattern to any ``str``
-    therefore does not open the injection hole; it lets a name into the
-    vocabulary that the drawing layer would then refuse, which is a failure
-    moved to a worse place rather than prevented.
+    The design names two of these as the minimum -- a quote and a space. A
+    space splits the PLY header's ``feature_bit`` line, and a quote ends the
+    column name the GeoPackage writer puts, unescaped, into its SQL.
 
-    ``river\\n`` is the one that is not about SVG. Python's ``re`` matches ``$``
+    ``river\\n`` is the one that is not about either file. Python's ``re`` matches ``$``
     *before* a trailing newline, so a validator hand-written as
     ``re.match(r"^[a-z][a-z0-9_]*$", name)`` accepts it while
     ``Field(pattern=...)`` -- pydantic's Rust engine, where ``$`` is
@@ -331,7 +296,7 @@ def test_mask_raises_on_a_name_the_vocabulary_does_not_have() -> None:
 def test_mask_raises_even_when_one_of_several_names_is_known() -> None:
     # The partial case is the dangerous one: returning the known bits and
     # dropping the unknown name is indistinguishable from success in any
-    # picture drawn afterwards.
+    # file written afterwards.
     with pytest.raises(ValueError, match="glacier"):
         DEFAULT_VOCABULARY.mask("river", "glacier")
 
@@ -573,36 +538,27 @@ def test_the_default_vocabulary_is_an_edge_vocabulary_and_is_frozen() -> None:
 
 
 # ---------------------------------------------------------------------------
-# The import firewall, read from the source.
+# table(): the (bit, name) pairs files write (PR D, `python-audit-pr-d.md`).
 # ---------------------------------------------------------------------------
 
-
-def test_features_imports_nothing_first_party() -> None:
-    """What lets `viz/` depend on this module.
-
-    `viz/` may not import the extension (`project_structure.md:359`), and
-    `tin_engine/__init__.py` imports `_core`, so this is checked by parsing the
-    source rather than by inspecting `sys.modules`: an import-time check would
-    be asserting something about the package, not about this module.
-    """
-    tree = ast.parse(FEATURES_SOURCE.read_text(encoding="utf-8"))
-
-    imported: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            assert node.level == 0, "no relative imports: features.py stands alone"
-            imported.append(node.module or "")
-
-    assert imported, "expected at least the pydantic import"
-    for module in imported:
-        root = module.split(".")[0]
-        assert root != "tin_engine", f"features.py imports first-party {module}"
-        assert "_core" not in module, f"features.py imports the extension: {module}"
+#: `DEFAULT_VOCABULARY.fingerprint()` at `b26beb8`, before `table()` existed.
+#: Written out, so `fingerprint` calling `table` cannot move it unseen: the
+#: digest is in every edge file written since increment 7.
+DEFAULT_FINGERPRINT = "f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61"
 
 
-def test_features_never_mentions_the_extension_at_all() -> None:
-    # Belt and braces for the one import `ast` cannot see: `importlib` by name,
-    # or a deferred import inside a function body written as a string.
-    assert "_core" not in FEATURES_SOURCE.read_text(encoding="utf-8")
+def test_table_is_the_default_vocabulary_as_sorted_bit_name_pairs() -> None:
+    assert DEFAULT_VOCABULARY.table() == [(bit, name) for name, bit in DEFAULT_ROWS]
+
+
+def test_table_is_in_ascending_bit_order_whatever_the_declaration_order() -> None:
+    shuffled = vocabulary(("water", 8), ("river", 0), ("ditch", 6), ("road", 1))
+    assert shuffled.table() == [(0, "river"), (1, "road"), (6, "ditch"), (8, "water")]
+
+
+def test_table_of_the_empty_vocabulary_is_empty() -> None:
+    assert EdgeVocabulary(properties=()).table() == []
+
+
+def test_the_default_fingerprint_is_the_one_files_already_carry() -> None:
+    assert DEFAULT_VOCABULARY.fingerprint() == DEFAULT_FINGERPRINT

@@ -53,8 +53,21 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
    code reached through 2048 is always refused, whatever it resolves to (§5,
    refusal 13). *Amended (round 3), user ruling:* the 3072 CRS must also be
    two-dimensional. A compound CRS in 3072 is refused (§5, refusal 13a).
+   *Amended (Ola's ruling D9, 2026-10-05):* a 3072 of 32767 may yield an
+   accepted CRS when its parameters match an EPSG code on the datum 2048
+   names; the result is that code. `docs/increments/geotiff-crs-by-parameters.md`.
+   For 3072 = 32767 this overrides: this ruling's first sentence (the CRS is
+   built from the parameters, then named by a code) and "`GeographicTypeGeoKey`
+   is read only when 3072 is absent" (2048 is read, as the datum); §5 refusal
+   12's "or its value is 32767" and "Refusal 12 now means ... 3072 set to
+   32767"; and round 2's reading (d), "When 3072 is present, whatever its
+   value, 2048 is not consulted", with "must not claim 2048 was consulted".
+   "No proj4 reassembly, no free-text ellipsoid regex" still holds.
 7. **Projected-and-metre is tested on the constructed CRS**, never on which
-   GeoKeys are present.
+   GeoKeys are present. *Amended for 3072 = 32767 (Ola's ruling D9):* the
+   built CRS is projected and in metres by construction, so there metres are
+   decided by `ProjLinearUnitsGeoKey` (3076), which must be present and 9001.
+   `docs/increments/geotiff-crs-by-parameters.md`, section 4.
 8. **`always_xy=True` is a hard requirement**, enforced by a grep test that
    lands in this increment, before the first transformer exists.
 9. **NoData: absent tag means no sentinel.** No value is ever guessed. An

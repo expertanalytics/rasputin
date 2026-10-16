@@ -11,7 +11,7 @@ Pinned by the design: ``Entry(name, wording, value, number, in_file)`` and
 ``RunRecord(entries)``, frozen; ``file_fields(record)`` as ``(name, value)``
 pairs; ``stats_rows(record)`` as ``(wording, value, name)``;
 ``summary(record)``; ``as_json(record, version, command)``; the builders
-``refined_record``, ``stride_record`` and ``flat_record``; D2's file fields
+``refined_record`` and ``stride_record``; D2's file fields
 and their wording ("The fields, for Ola"); D3's rules; D5's JSON.
 
 PINNED HERE, where D1 is silent (the builders' arguments): every builder takes
@@ -35,15 +35,19 @@ import json
 import math
 import re
 from types import ModuleType
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 #: D3 rule 6, matched case-blind as whole words (``snap`` also in
 #: ``snapped``); ``snap_to_lines`` is a name, and names are not searched.
+#: "feet" is banned only as the refinement's jargon ("constraint feet",
+#: "feet refused"), not as a unit: increment 43's narrowing, by Ola's ruling
+#: (section 9.1 of docs/increments/43-units-and-projections.md).
 BANNED = re.compile(
-    r"(?i)\buncovered\b|\bfeet\b|\bstride\b|\bchains\b|\bcoincident\b|\bcarved\b|"
-    r"\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
+    r"(?i)\buncovered\b|\bconstraint feet\b|\bconstraint-feet\b|\bfeet refused\b|"
+    r"\bstride\b|\bchains\b|"
+    r"\bcoincident\b|\bcarved\b|\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
 )
 NAME = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*")
 #: A number a person reads: not part of a word, a file name or ``EPSG:31983``.
@@ -61,7 +65,6 @@ FILE_WORDING = {
     "nodata_vertices_removed": "Vertices removed on NoData",
     "heights": "Heights",
 }
-FLAT_HEIGHTS = "none: every z is 0 (--flat)"
 CREDIT = "Agencia Nacional de Aguas (ANA), Brazil; https://doi.org/10.5069/G9736P4G"
 LICENCE = "CC BY 4.0 (Creative Commons Attribution 4.0 International)"
 CITE = "Laipelt, L., et al. (2024). ANADEM"
@@ -122,12 +125,7 @@ def stride(rr: ModuleType, **over: Any) -> Any:
     return rr.stride_record(**(args | over))
 
 
-def flat(rr: ModuleType, **over: Any) -> Any:
-    args: dict[str, Any] = {"crs": "EPSG:25833", "triangles": 60}
-    return rr.flat_record(**(args | over))
-
-
-PATHS = ("projected", "reprojected", "downloaded", "stride", "flat")
+PATHS = ("projected", "reprojected", "downloaded", "stride")
 
 
 def record_of(rr: ModuleType, path: str) -> Any:
@@ -136,7 +134,6 @@ def record_of(rr: ModuleType, path: str) -> Any:
         "reprojected": reprojected,
         "downloaded": downloaded,
         "stride": stride,
-        "flat": flat,
     }[path](rr)
 
 
@@ -260,7 +257,6 @@ class TestFileFields:
                 },
             ),
             ("stride", {"crs", "dem_source", "nodata_vertices_removed"}),
-            ("flat", {"crs", "heights"}),
         ],
     )
     def test_exactly_d2s_fields_for_each_path(
@@ -283,12 +279,6 @@ class TestFileFields:
         assert got["dem_source"] == "anadem-v1"
         assert (got["dem_credit"], got["licence_note"], got["cite"]) == (CREDIT, LICENCE, CITE)
         assert fields(rr, projected(rr))["nodata_vertices_removed"] == "199"
-
-    def test_flat_says_the_heights_are_not_real(self, rr: ModuleType) -> None:
-        assert fields(rr, flat(rr))["heights"] == FLAT_HEIGHTS
-
-    def test_flat_without_a_crs_has_no_crs_field(self, rr: ModuleType) -> None:
-        assert fields(rr, flat(rr, crs=None)) == {"heights": FLAT_HEIGHTS}
 
     def test_a_source_that_asks_no_citation_writes_no_cite(self, rr: ModuleType) -> None:
         assert "cite" not in fields(rr, downloaded(rr, cite=None))
@@ -323,7 +313,7 @@ class TestOmission:
         """D6, the default taken while Ola was away: a projected run (before
         15f-3) has neither entry, rather than a 0 nobody measured; a path that
         measures them has both, 0 included."""
-        for record in (projected(rr), stride(rr), flat(rr)):
+        for record in (projected(rr), stride(rr)):
             names = {e.name for e in record.entries}
             assert "dem_nodes_at_vertices" not in names
             assert "dem_nodes_at_vertices_max_error_m" not in names
@@ -332,7 +322,7 @@ class TestOmission:
         assert by_name["dem_nodes_at_vertices_max_error_m"][1] == "0"
 
     def test_no_tolerance_means_no_tolerance_fields(self, rr: ModuleType) -> None:
-        for record in (stride(rr), flat(rr)):
+        for record in (stride(rr),):
             names = {e.name for e in record.entries}
             assert not names & {"tolerance_m", "max_error_m", "refinement_rounds"}, names
 
@@ -433,6 +423,33 @@ class TestSelfChecks:
 # ---------------------------------------------------------------- the summary (D7)
 
 
+class TestRefusedLinePoints:
+    """25's D7, after 15f-3: points along the lines that could not be added
+    (15f's refused strip points) give one stderr warning with their count and
+    largest difference; none, none. Plurals as "Settled after the red step", 8."""
+
+    @staticmethod
+    def warnings(rr: ModuleType, refused: int, worst: float) -> list[str]:
+        record = projected(rr, line_points_refused=refused, line_points_refused_max_error_m=worst)
+        return [ln for ln in rr.summary(record).splitlines() if ln.startswith("Warning:")]
+
+    def test_one_is_singular(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 1, 5.4)
+        assert warning == (
+            "Warning: 1 point along the lines could not be added; its difference is 5.4 m."
+        )
+
+    def test_several_are_plural(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 3, 7.25)
+        assert warning == (
+            "Warning: 3 points along the lines could not be added; "
+            "their largest difference is 7.25 m."
+        )
+
+    def test_none_is_silent(self, rr: ModuleType) -> None:
+        assert self.warnings(rr, 0, 0.0) == []
+
+
 class TestSummary:
     def test_the_projected_summary(self, rr: ModuleType) -> None:
         text = rr.summary(projected(rr))
@@ -473,7 +490,7 @@ class TestSummary:
     ) -> None:
         record = record_of(rr, path)
         known = {float(f"{v:.5g}") for v in numbers(record).values()}
-        known |= {float(record_of_triangles(path)), 0.0}  # "every z is 0" on --flat
+        known |= {float(record_of_triangles(path))}
         text = rr.summary(record)
         for token in NUMBER_TOKEN.findall(text):
             assert float(token) in known, (token, text)
@@ -486,9 +503,7 @@ class TestSummary:
 
 
 def record_of_triangles(path: str) -> int:
-    return {"projected": 116389, "reprojected": 983, "downloaded": 983, "stride": 8, "flat": 60}[
-        path
-    ]
+    return {"projected": 116389, "reprojected": 983, "downloaded": 983, "stride": 8}[path]
 
 
 # ---------------------------------------------------------------- --record's JSON (D5)
@@ -553,3 +568,97 @@ class TestAsJson:
 
     def test_the_same_record_gives_the_same_bytes(self, rr: ModuleType) -> None:
         assert self.text(rr, downloaded(rr)) == self.text(rr, downloaded(rr))
+
+
+class TestEscapedAscii:
+    """PR D (`python-audit-pr-d.md`, section 3): the one ASCII escape, which
+    `cli._ascii` and `crs_label` each carried before. Appended at the end of
+    the file, because `27-node-sampling.md` cites a line above unpinned."""
+
+    def test_non_ascii_is_escaped_as_a_python_escape(self, rr: ModuleType) -> None:
+        assert (
+            rr.escaped_ascii(
+                "d\N{LATIN SMALL LETTER E WITH ACUTE}m; \N{LATIN SMALL LETTER O WITH STROKE}"
+            )
+            == "d\\xe9m; \\xf8"
+        )
+
+    def test_a_character_beyond_latin_1_is_escaped_too(self, rr: ModuleType) -> None:
+        assert rr.escaped_ascii("\N{SNOWMAN} \N{GRINNING FACE}") == "\\u2603 \\U0001f600"
+
+    @pytest.mark.parametrize("text", ["", "EPSG:25833", "a\rb"], ids=["empty", "plain", "control"])
+    def test_ascii_text_is_unchanged(self, rr: ModuleType, text: str) -> None:
+        # A control character is ASCII: escaping it is not this function's
+        # job, refusing it is the writers' gate's.
+        assert rr.escaped_ascii(text) == text
+
+
+# ---------------------------------------------------------------- increment 34, the slope
+
+
+class TestSlopeFields:
+    """Increment 34, section 4.5: ``--tolerance-slope``'s four fields, their
+    plain labels, and the summary's sentence about steep ground."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "tolerance_slope_m": "Tolerance on steep ground",
+        "tolerance_slope_deg": (
+            "Slope where the tolerance starts to tighten, and where it reaches the steep value"
+        ),
+        "slope_nodes_tightened": (
+            "DEM nodes held to less than the general tolerance because of their slope"
+        ),
+        "max_error_slope_share_of_tolerance": (
+            "Largest error as a share of the tolerance its slope allows"
+        ),
+    }
+    SENTENCE = "Nodes on steep ground are within the tolerance their slope allows (largest error "
+
+    @staticmethod
+    def steep(rr: ModuleType, share: float) -> Any:
+        return projected(
+            rr,
+            tolerance_slope_m=2.0,
+            tolerance_slope_deg="25 to 35",
+            slope_nodes_tightened="661 of 1353 DEM nodes (48.9 %)",
+            max_error_slope_share_of_tolerance=share,
+        )
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_the_values_in_the_file(self, rr: ModuleType) -> None:
+        got = fields(rr, self.steep(rr, 0.83))
+        assert got["tolerance_slope_deg"] == "25 to 35"
+        assert got["slope_nodes_tightened"] == "661 of 1353 DEM nodes (48.9 %)"
+
+    def test_the_summary_gains_one_sentence(self, rr: ModuleType) -> None:
+        text = rr.summary(self.steep(rr, 0.83))
+        first = text.splitlines()[0]
+        assert "Every DEM node inside the mesh is within 5 m of it" in first, first
+        assert self.SENTENCE + "83" in first, first
+        assert first.endswith("of it)."), first
+        assert "Warning" not in text
+
+    @pytest.mark.parametrize("share", [1.25, 1.001, 1.0 + 1e-9])
+    def test_a_share_clearly_above_one_is_a_warning(self, rr: ModuleType, share: float) -> None:
+        warnings = [
+            ln for ln in rr.summary(self.steep(rr, share)).splitlines() if ln.startswith("Warning:")
+        ]
+        assert len(warnings) == 1, warnings
+        assert "slope" in warnings[0], warnings
+
+    @pytest.mark.parametrize("share", [1.0, 1.0 + 2.0**-52, 1.0 + 5e-13, 1.0 + 1e-12])
+    def test_a_share_above_one_only_by_rounding_is_within(
+        self, rr: ModuleType, share: float
+    ) -> None:
+        """Code review round 1, S1: the weight 1 / t is rounded, so a share of at
+        most 1 + 1e-12 (section 4.3's test bound) is within the tolerance: no
+        warning, and the sentence says so."""
+        text = rr.summary(self.steep(rr, share))
+        assert not [ln for ln in text.splitlines() if ln.startswith("Warning:")], text
+        assert self.SENTENCE in text.splitlines()[0], text
+
+    def test_nothing_about_steep_ground_without_the_flag(self, rr: ModuleType) -> None:
+        assert "steep" not in rr.summary(projected(rr))

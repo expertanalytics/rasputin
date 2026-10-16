@@ -305,11 +305,12 @@ TEST_CASE("Q8: a stride start with square cells gets no quality node through ref
 
 // ----------------------------------------------------------------------- Q10
 
-TEST_CASE("Q10: a domain over a NoData block terminates and its NoData vertices are invalid",
+TEST_CASE("Q10: a domain over a NoData block terminates and the pass inserts no NoData node",
           "[refinement][quality]") {
-    // R9: the pass reads no height, so it may insert a NoData node; that vertex
-    // is invalid, its triangles void, and refine still ends. The trim that
-    // drops them is Python's (tests/python/test_cli_start_quality.py).
+    // R9 as the fix replaces it ("Fix: the start-quality pass skips NoData
+    // nodes"): refine asks the pass about each snapped node, so a node in the
+    // block is skipped and counted, and no vertex is invalid. The ring is
+    // outside the block, so every invalid vertex would be the pass's.
     const std::size_t n = 33;
     const bool sentinel = GENERATE(false, true);
     CAPTURE(sentinel);
@@ -324,6 +325,6 @@ TEST_CASE("Q10: a domain over a NoData block terminates and its NoData vertices 
     // circumcentre snaps to node (16, 17), inside the hole.
     const auto out = run(dem, start, 1.0, kTheta);
     check(dem, start.mesh, out, 1.0);
-    REQUIRE(out.quality_inserted > 0);
-    REQUIRE(std::count(out.valid.begin(), out.valid.end(), std::uint8_t{0}) > 0);
+    REQUIRE(out.quality_skipped > 0);
+    REQUIRE(std::count(out.valid.begin(), out.valid.end(), std::uint8_t{0}) == 0);
 }

@@ -30,9 +30,8 @@ TWO THINGS THIS SUITE DELIBERATELY DOES NOT ASSERT.
    ruling 2 forbids the claim until a person has opened a file and said so in
    the record (`PRINCIPLES.md` A1, A4). What the suite asserts is what the
    bytes are.
-2. `cli._destination`'s refusals. They are increment 6b-ii's and are covered in
-   `test_cli_draw.py`; re-testing them here would pin one boundary in two
-   places.
+2. `cli_kit.destination`'s refusals. They are covered in `test_cli_kit.py`;
+   re-testing them here would pin one boundary in two places.
 
 THE PROPERTY NAMES ARE THIS SUITE'S CHOICE, NOT THE DESIGN'S. The design fixes
 the element types and the coordinate width and says nothing about spelling. The
@@ -50,13 +49,12 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from importscan import first_party_imports
 from plyread import element_bytes, parse_header, read_ply, vertex_array
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.io.ply import write_ply
 
-#: A millimetre-resolved easting at UTM 33N magnitudes -- `viz.fixtures.ORIGIN`
-#: is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
+#: A millimetre-resolved easting at UTM 33N magnitudes -- the road-crosses-river
+#: shape's origin is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
 #: `TestDoublePrecision` proves the probe can fail before trusting it (A3).
 EASTING = 430_000.001
 
@@ -326,6 +324,14 @@ class TestTheGuardsThatHadNeverRun:
         with pytest.raises(ValueError, match="control character"):
             write_ply(VERTICES, faces=FACES, comments=[f"crs x{bad}forged"])
 
+    def test_the_control_character_refusal_reads_as_the_vtk_writers_does(self) -> None:
+        # PR D (`python-audit-pr-d.md`, section 9, red test 2): one wording for
+        # both writers, the shared gate's. Before it this said "control
+        # characters" while the `.vtk` writer said "a control character".
+        with pytest.raises(ValueError) as refusal:
+            write_ply(VERTICES, faces=FACES, comments=["crs x\rforged"])
+        assert str(refusal.value) == "a comment may not contain a control character; got '\\r'"
+
     def test_a_non_ascii_comment_is_refused_by_name(self) -> None:
         # A degree sign in a projection string is ordinary. This used to escape
         # as UnicodeEncodeError, which the Raises contract does not promise.
@@ -420,23 +426,10 @@ class TestTheEdgeFileNamesItsBits:
 
 
 class TestPurity:
-    """Ruling 6: bytes out, no path in, no first-party import."""
+    """Ruling 6: bytes out, no path in; the imports are `test_layering.py`'s."""
 
     def test_the_return_value_is_bytes(self, surface: bytes) -> None:
         assert isinstance(surface, bytes)
-
-    def test_the_only_first_party_import_is_the_vocabulary(self) -> None:
-        # A writer that reached for `_core` would need the extension built to
-        # test, and a writer that reached for `viz` would couple output to the
-        # renderer -- the design refuses both by name. Read from the module's
-        # own import statements, so a mention in prose is not a finding.
-        #
-        # Widened by increment 13's U1 (a) from "nothing first-party": the edge
-        # file now carries the vocabulary (ruling 9), and `features.py` imports
-        # only hashlib and pydantic, so depending on it reaches nothing new.
-        import tin_engine.io.ply as module
-
-        assert first_party_imports(module) <= {"tin_engine.features"}
 
     def test_it_is_deterministic(self) -> None:
         assert write_ply(VERTICES, faces=FACES) == write_ply(VERTICES, faces=FACES)
@@ -492,3 +485,29 @@ class TestFaceCodes:
     def test_a_code_outside_int32_is_refused(self) -> None:
         with pytest.raises(ValueError, match="int32"):
             write_ply(VERTICES, faces=FACES, face_codes=np.array([311, 2**31], dtype=np.int64))
+
+
+class TestFieldComments:
+    """PR D (`python-audit-pr-d.md`, section 3): a run's file fields as header
+    comments, `name value`, the line `cli._comments` built before it moved here.
+
+    Imported inside each test, so its absence at the red commit (`8dcfa2a`)
+    failed these tests and left the rest of the file collecting. It landed in
+    `7346a0e`.
+    """
+
+    def test_each_field_is_its_name_a_space_and_its_value(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        fields = [("crs", "EPSG:25833"), ("heights", "x")]
+        assert field_comments(fields) == ["crs EPSG:25833", "heights x"]
+
+    def test_no_fields_is_no_comments(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        assert field_comments([]) == []
+
+    def test_it_takes_any_iterable_of_pairs(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        assert field_comments(iter([("tolerance_m", "0.5 m")])) == ["tolerance_m 0.5 m"]

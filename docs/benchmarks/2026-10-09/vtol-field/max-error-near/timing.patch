@@ -1,0 +1,39 @@
+--- a/include/terrain/refinement/refine.hpp (67af3081)
++++ b/include/terrain/refinement/refine.hpp (timing patch, scratch copy only)
+@@ -70,6 +70,7 @@
+ #include <array>
+ #include <chrono>
+ #include <cmath>
++#include <cstdio>
+ #include <cstddef>
+ #include <cstdint>
+ #include <iterator>
+@@ -290,17 +291,26 @@
+ template <TolerancePolicy P, class Error>
+ [[nodiscard]] double max_error_near(const P& policy, const mesh::LatticeMesh& m,
+                                     const std::vector<double>& allowed, unsigned threads, Error error) {
++    const auto instr_t0 = std::chrono::steady_clock::now();  // INSTRUMENTATION (perf, scratch only)
+     constexpr std::size_t b = 4096;
+     std::vector<double> part(allowed.size() / b + 1, 0.0);
++    std::vector<std::size_t> instr_q(allowed.size() / b + 1, 0);
+     parallel_util::for_each_block(allowed.size(), threads, parallel_util::BlockSchedule{b},
+                                   [&](std::size_t begin, std::size_t end) {
+                                       double& w = part[begin / b];
++                                      std::size_t& q = instr_q[begin / b];
+                                       for (auto t = static_cast<std::uint32_t>(begin); t < end; ++t)
+                                           if (const double e = error(t); e > w && !(allowed[t] > policy.lowest())
+-                                                                         && policy.at(m, t) <= policy.lowest())
++                                                                         && (++q, policy.at(m, t) <= policy.lowest()))
+                                               w = e;
+                                   });
+-    return *std::max_element(part.begin(), part.end());
++    const double instr_r = *std::max_element(part.begin(), part.end());
++    std::size_t instr_n = 0;
++    for (const std::size_t q : instr_q)
++        instr_n += q;
++    std::fprintf(stderr, "MAX_ERROR_NEAR seconds %.6f slots %zu queries %zu\n",
++                 std::chrono::duration<double>(std::chrono::steady_clock::now() - instr_t0).count(), allowed.size(), instr_n);
++    return instr_r;
+ }
+ 
+ template <TolerancePolicy P>

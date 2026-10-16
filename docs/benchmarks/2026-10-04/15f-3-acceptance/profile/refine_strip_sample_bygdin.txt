@@ -1,0 +1,41 @@
+terrain::refinement::refine_strip<: 8284 samples in 1 call site(s)
+  8284 100.0 %  terrain::refinement::detail::point_loop<…>()
+    7531  90.9 %  terrain::refinement::detail::to_lattice()
+      6188  74.7 %  terrain::mesh::LatticeMesh::build()
+        4122  49.8 %  std::__hash_table<…>::__emplace_unique_key_args<…>()
+          2120  25.6 %  ???
+           205   2.5 %  operator new()
+             151   1.8 %  _xzm_malloc_tc
+        1055  12.7 %  _xzm_free_tc
+         150   1.8 %  _free
+       109   1.3 %  std::__hash_table<…>::__emplace_unique_key_args<…>()
+     393   4.7 %  terrain::mesh::legalise_all<…>()
+       324   3.9 %  terrain::mesh::detail::must_flip<…>()
+         107   1.3 %  terrain::mesh::lattice_incircle()
+      63   0.8 %  std::__introsort<…>()
+        59   0.7 %  std::__introsort<…>()
+          56   0.7 %  std::__introsort<…>()
+            50   0.6 %  std::__introsort<…>()
+              45   0.5 %  std::__introsort<…>()
+      46   0.6 %  std::vector<…>::__append()
+
+Sort by top of stack, same collapsed (when >= 5):
+        std::__hash_table<std::__hash_value_type<unsigned long long, unsigned int>>::__emplace_unique_key_args<unsigned long long, unsigned long long, unsigned int&>(unsigned long long const&, unsigned long long&&, unsig
+        ???    load address 0x10a660000 + 0x7218  [0x10a667218]        1805
+        terrain::refinement::detail::to_lattice(terrain::raster::RasterGeometry const&, terrain::IndexedMesh2 const&, std::span<std::array<unsigned int, 2ul> const, 18446744073709551615ul>, std::span<unsigned int const, 
+        _xzm_free_tc  (in libsystem_malloc.dylib)        1056
+        terrain::mesh::LatticeMesh::build(std::vector<terrain::mesh::MeshVertex>, std::vector<std::array<unsigned int, 3ul>>, std::vector<unsigned char>, std::vector<std::array<unsigned int, 3ul>>)          758
+        terrain::mesh::detail::must_flip<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>>(terrain::mesh::LatticeMesh const&, unsigned int, unsigned int, terrain::mesh::LatticeFrame const&)          233
+        ???    load address 0x10a660000 + 0x7268  [0x10a667268]        155
+        _xzm_malloc_tc  (in libsystem_malloc.dylib)        152
+        _free  (in libsystem_malloc.dylib)        151
+        terrain::mesh::lattice_incircle(terrain::mesh::MeshVertex, terrain::mesh::MeshVertex, terrain::mesh::MeshVertex, terrain::mesh::MeshVertex, terrain::mesh::LatticeFrame const&)          108
+        terrain::refinement::detail::point_loop<terrain::refinement::detail::NoSet, terrain::raster::RasterView<float>>(std::basic_string<char> const&, terrain::raster::RasterGeometry const&, terrain::refinement::detail:
+        terrain::refinement::detail::scan_strip(terrain::refinement::ConstraintCheckPoints const&, std::span<unsigned long const, 18446744073709551615ul>, std::span<char const, 18446744073709551615ul>, std::unordered_map
+        terrain::mesh::legalise_all<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>, terrain::refinement::PointRefineOutcome terrain::refinement::detail::point_loop<terrain::refinement::detail::NoSet, terrain::
+        _platform_memmove  (in libsystem_platform.dylib)        50
+        __xzm_xzone_free_to_freelist_chunk  (in libsystem_malloc.dylib)        47
+        std::__bitset_partition[abi:nqe220106]<std::_ClassicAlgPolicy, unsigned long long*, std::ranges::less>(unsigned long long*, unsigned long long*, std::ranges::less)  (in libc++.1.dylib)        44
+        terrain::mesh::for_each_row_span<terrain::refinement::ScanResult terrain::refinement::scan<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::mesh::LatticeMesh const&, unsigne
+        ???    load address 0x10a660000 + 0x7250  [0x10a667250]        37
+        ???    load address 0x10a660000 + 0x7270  [0x10a667270]        37

@@ -12,7 +12,7 @@ with 25 (#157), merged in. Decisions for Ola are in "For Ola".
 any of the four corners of its cell is NoData, also a corner whose weight is
 zero (`sample.hpp:42-44`). A vertex exactly on a DEM node that has a value
 then gets no height when a neighbour has none, and the trim
-(`src_python/tin_engine/elevation.py:52-55`) removes it with its triangles.
+(`src_python/tin_engine/elevation.py@c277ce10:52-55`) removes it with its triangles.
 So a ring of valid data, one cell wide, is lost along every NoData area. On
 increment 25's fixture at stride 1 that is 36 vertices removed where 25 are
 NoData (`25-plain-output.md`, "NoData on the no-tolerance path").
@@ -111,8 +111,8 @@ rerun with other draws got 31 116 and 6.72e-7. With origin 0 and spacing 1,
 with a dyadic grid (500000.5 / 7900000.25, spacing 0.5 / 0.25), and with the
 Kartverket fixture's geometry, there are none. Node identity is also the relation the producers use:
 `subsample` builds stride vertices with `node`'s expression
-(`grid_domain.py:68-69`), and refine decides that a start vertex is a node by
-the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
+(`src_python/tin_engine/grid_domain.py@44fa7f5:68-69`), and refine decides that a start vertex is a node by
+the same `node(round) == p` test (`lattice_position`, `include/terrain/refinement/refine.hpp@ed125121:132-141`).
 
 ### Where it lives
 
@@ -121,7 +121,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   nullopt. nullopt also for a non-finite `p` and for a point outside the node
   rectangle (`cell_of`'s test). The clamp-and-round is written the way
   `lattice_position` writes it, so `node_at` says "node" exactly where
-  refine's whole test at `refine.hpp:400-407` does; a test pins that (S5).
+  refine's whole test at `include/terrain/refinement/refine.hpp@ed125121:417-426` does; a test pins that (S5).
   `node_at` answers on any raster, a 1 x N one included; it is `bilinear`'s
   guard, not `node_at`, that keeps such a raster at nullopt.
 - **`bilinear`** (`sample.hpp`): after the existing `bilinear_cell_of` guard,
@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:833-838`), the stub's
+  code. The binding's docstring (`bindings/core.cpp@44fa7f5:935-940`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would
@@ -140,14 +140,14 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
 ### Why cell sides are not in this increment
 
 1. **No vertex on the path being fixed lies on a cell side.** Without
-   `--tolerance` there is no `--domain` and no `--features` (`cli.py:830`
+   `--tolerance` there is no `--domain` and no `--features` (`src_python/tin_engine/cli.py@44fa7f5:845`
    refuses `--domain` without `--tolerance`). The vertices are the stride
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
 2. **On the tolerance path the two samplers must agree.** refine measures and
-   carves with `vertex_z` (`include/terrain/refinement/scan.hpp:69-94`) and
+   carves with `vertex_z` (`include/terrain/refinement/scan.hpp@da3d1d63:75-99`) and
    writes the output z of an off-node start vertex with `raster::bilinear`
-   (`refine.hpp:407`). If only `bilinear` skipped cell-side corners, a domain
+   (`include/terrain/refinement/refine.hpp@ed125121:425-426`). If only `bilinear` skipped cell-side corners, a domain
    vertex on a lattice line next to NoData would be void to the scan but valid
    in the output. A cell-side rule must change both. That changes refine:
    carving, the golden digests, and `@perf` acceptance. Increment 23 cuts
@@ -168,10 +168,10 @@ measured run shows ragged seams along NoData.
 |---|---|---|
 | no `--tolerance`, stride grid (12's R6) | **yes** | every vertex is a node; a valid node next to NoData keeps its height and its triangles |
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
-| `--tolerance`, start-boundary / domain output z (`refine.hpp:407`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
-| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:80-81`) |
-| `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`target_grid.py:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
-| a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`target_grid.py:48`), so they are exact |
+| `--tolerance`, start-boundary / domain output z (`include/terrain/refinement/refine.hpp@ed125121:425-426`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
+| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`include/terrain/refinement/scan.hpp@da3d1d63:86-87`) |
+| `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`src_python/tin_engine/target_grid.py@44fa7f5:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
+| a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`src_python/tin_engine/target_grid.py@44fa7f5:48`), so they are exact |
 
 **What changes in the stride output, exactly.** (a) Valid nodes next to NoData
 keep their z and their triangles; `nodata_vertices_removed` becomes the number
@@ -260,7 +260,7 @@ New:
   exact today too (measured: 0 failures).
 - **S5. `node_at` agrees with refine's node test** (invariant-critical for
   "the tolerance path is unchanged"). The reference is refine's whole test at
-  `refine.hpp:400-407`: `v = lattice_position(g, p)`, then `v.is_node() &&
+  `include/terrain/refinement/refine.hpp@ed125121:417-426`: `v = lattice_position(g, p)`, then `v.is_node() &&
   g.node(c) == p` with `c` the node of `v`. `lattice_position(g, p).is_node()`
   alone is **not** the reference. It is true for an off-node point whose
   fractional coordinates round to integers, so it disagrees with a correct
@@ -312,7 +312,7 @@ Changed (one amendment commit on top of 25's tests, the reason in the message):
   removes more than the NoData nodes (both done in the red step, `6605dfe`).
 - `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that had
   it: renamed `test_the_no_tolerance_summary_says_on_nodata_cells`
-  (`test_cli_mesh_plain_output.py:279`, `test_run_record.py:443`). Both expect
+  (`tests/python/test_cli_mesh_plain_output.py@80990e0:279`, `test_run_record.py:443`). Both expect
   `vertices on NoData cells were removed`, and also check that "next to" is
   absent from stderr.
 - `test_cli_mesh_dem.py`, `test_a_nodata_edge_row_is_dropped_and_counted`: the
@@ -397,16 +397,16 @@ Recommended defaults: 1 and 2 as recommended; 3 noted.
 
 ## Review
 
-**Design review, round 1, 2026-10-03.** Commit c277ce1. Verdict: CHANGES REQUESTED. LOC: 0 (design only); ~15 plausible (a `node_at` prototype is 8 lines). The rule, the unchanged `--tolerance` path, the 38,580 / 60,000 and 95 / 300 measurements, Kartverket's 0 off-node samples and the test plan all hold; every 25 test named exists on master. Blocking: (1) merge master; `cli.py:811-812` is now :830; (2) cite `grid_domain.py` 66-67 for the stride expression; (3) the status line and line 219 assume 25 not yet merged; (4) `test_the_no_tolerance_summary_says_on_or_next_to` exists in two files: name both. Not pushed; no CI.
+**Design review, round 1, 2026-10-03.** Commit c277ce1. Verdict: CHANGES REQUESTED. LOC: 0 (design only); ~15 plausible (a `node_at` prototype is 8 lines). The rule, the unchanged `--tolerance` path, the 38,580 / 60,000 and 95 / 300 measurements, Kartverket's 0 off-node samples and the test plan all hold; every 25 test named exists on master. Blocking: (1) merge master; `src_python/tin_engine/cli.py@1477da0b:811-812` is now :830; (2) cite `grid_domain.py` 66-67 for the stride expression; (3) the status line and line 219 assume 25 not yet merged; (4) `test_the_no_tolerance_summary_says_on_or_next_to` exists in two files: name both. Not pushed; no CI.
 
-**Design review, round 2, 2026-10-03.** Range `1477da0..8d8e394` (merge 9fb2218, prose 8d8e394). Verdict: CHANGES REQUESTED, one line: the stride expression is at `grid_domain.py:68-69`, not 66-67 (the round-1 number was the reviewer's slip). Everything else checked: the merge is clean, the new citations read as quoted, the round-1 items done. APPROVED once 68-69 is in, with no further round. Not pushed; no CI.
+**Design review, round 2, 2026-10-03.** Range `1477da0..8d8e394` (merge 9fb2218, prose 8d8e394). Verdict: CHANGES REQUESTED, one line: the stride expression is at `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`, not 66-67 (the round-1 number was the reviewer's slip). Everything else checked: the merge is clean, the new citations read as quoted, the round-1 items done. APPROVED once 68-69 is in, with no further round. Not pushed; no CI.
 
-**Design review, round 2 condition met, 2026-10-03.** b50c8d0 cites `grid_domain.py:68-69` as the reviewer required; per round 2 the design is APPROVED with no further round. Not pushed; no CI.
+**Design review, round 2 condition met, 2026-10-03.** b50c8d0 cites `grid_domain.py` lines 68-69, unpinned, as the reviewer required (the same lines, pinned since: `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`); per round 2 the design is APPROVED with no further round. Not pushed; no CI.
 
 ## Ruled by Ola, 2026-10-03
 
 Ola: "yes to both", to the two decisions as recommended. (1) Nodes only now: a point exactly on a DEM node reads that node; cell sides are deferred until a measured run shows ragged edges along NoData. (2) The rule lives in the C++ sampler (`bilinear` with `RasterGeometry::node_at`), not only in the Python stride path.
 
-**27, code review, round 1, 2026-10-04.** Range `7eb0b79..a0817ba` (red 6605dfe, pins 80990e0, green 6fd4076 and a0817ba). Verdict: CHANGES REQUESTED. LOC: 13 net (`node_at` in `geometry.hpp` 11, the early return in `sample.hpp` 3, `run_record.py` -1) against about 15. Code sound; the notes in `12-dem-to-mesh.md` and `25-plain-output.md`, the binding docstring and the stub match the code; citations into this increment's files re-read and hold. Blocking: (1) red-step text in `tests/cpp/unit/test_raster_node_at.cpp:16-18` and `tests/cpp/CMakeLists.txt:389-390` (say why the target is separate now, without the red-step story); (2) this file's status line says "designed … Not started"; (3) `ROADMAP.md:50`'s sampler row still says "not designed", and this design assigns it to become row 27 in this PR. Not pushed; no CI.
+**27, code review, round 1, 2026-10-04.** Range `7eb0b79..a0817ba` (red 6605dfe, pins 80990e0, green 6fd4076 and a0817ba). Verdict: CHANGES REQUESTED. LOC: 13 net (`node_at` in `geometry.hpp` 11, the early return in `sample.hpp` 3, `run_record.py` -1) against about 15. Code sound; the notes in `12-dem-to-mesh.md` and `25-plain-output.md`, the binding docstring and the stub match the code; citations into this increment's files re-read and hold. Blocking: (1) red-step text in `tests/cpp/unit/test_raster_node_at.cpp@9a47922:16-18` and `tests/cpp/CMakeLists.txt@9a47922:389-390` (say why the target is separate now, without the red-step story); (2) this file's status line says "designed … Not started"; (3) `ROADMAP.md:50`'s sampler row still says "not designed", and this design assigns it to become row 27 in this PR. Not pushed; no CI.
 
 **27, code review, round 2, 2026-10-04.** Range `9a47922..11759aa` (6c1369a test comments, 11759aa status line and ROADMAP row 27); whole increment `7eb0b79..11759aa`. Verdict: APPROVED. LOC: 13 net, unchanged. All three round-1 blockers closed: both comments now give the reason the target is separate (it includes `refine.hpp`, so it needs the backend target and Threads), the status line and `ROADMAP.md:50` match the branch; citations unchanged in line count and hold. Not pushed; no CI. At merge, ROADMAP row 27 says shipped.

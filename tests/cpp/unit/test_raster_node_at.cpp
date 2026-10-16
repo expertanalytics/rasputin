@@ -75,7 +75,7 @@ std::optional<CellIndex> refine_reads_as_node(const RasterGeometry& g, const Poi
 
 // Node (r, c) by NumPy's expression, never fused: the product is forced
 // through memory, so `x_min + product` is two roundings (subsample builds
-// stride vertices this way, grid_domain.py:68-69).
+// stride vertices this way, src_python/tin_engine/grid_domain.py@44fa7f5:68-69).
 Point2 unfused_node(const RasterGeometry& g, std::size_t r, std::size_t c) {
     volatile double cx = static_cast<double>(c) * g.delta_x();
     volatile double ry = static_cast<double>(r) * g.delta_y();

@@ -50,7 +50,7 @@ to do with any fix here.
 
 ## Fix 1: resample blocks sized by node count
 
-**Site.** `src_python/tin_engine/target_grid.py:155`
+**Site.** `src_python/tin_engine/target_grid.py@44fa7f5:155`
 (`block_rows: int = 256`), used at `:166` and `:187`.
 
 **Change.** Add a module constant `BLOCK_NODES = 1 << 20` and a pure helper
@@ -82,7 +82,7 @@ constructions. @perf times this.
 
 ## Fix 2: adopt the canvas instead of copying it
 
-**Site.** `src_python/tin_engine/target_grid.py:205`,
+**Site.** `src_python/tin_engine/target_grid.py@44fa7f5:205`,
 `return DemTile(meta=meta, array=canvas)`. This is the public constructor's
 copy: 2.15 GB on 761 [m, the "P2 end" row].
 
@@ -90,9 +90,9 @@ copy: 2.15 GB on 761 [m, the "P2 end" row].
 already gives a C-contiguous array of shape `(rows, cols)`, which is what
 `_adopt` checks. `resample` never hands the canvas out writable, which is
 R7's condition. These texts change with it:
-- `DemTile._adopt`'s docstring (`io/models.py:114-121`): two callers,
+- `DemTile._adopt`'s docstring (`src_python/tin_engine/io/models.py@44fa7f5:114-121`): two callers,
   `assemble` and `resample`;
-- the comment at `io/cog.py:160-161`, which still says M15 pins `assemble`
+- the comment at `src_python/tin_engine/io/cog.py@44fa7f5:160-161`, which still says M15 pins `assemble`
   as the one caller. `cog`'s own copy stays: it belongs to fix 5;
 - 15c D3's "*Built otherwise (15c-2)*" note
   (`docs/increments/15c-geographic-dem.md:394-396`) becomes "as designed".
@@ -113,12 +113,12 @@ R7's condition. These texts change with it:
 **Site.** Three references keep the target tile alive through
 `final_check.run`. 15c D6 records this as "*Built otherwise (15c-2)*"
 (`15c-geographic-dem.md:587-590`). The references are:
-- `mesh()` holds `opened`, a frozen `DemInput` (`cli.py:829`). It reads
+- `mesh()` holds `opened`, a frozen `DemInput` (`src_python/tin_engine/cli.py@92e5356:829`). It reads
   `opened.tile` at `:839`, `:846` and `:864-865`.
-- The call `_dem_mesh(opened.tile, ...)` (`cli.py:845-859`). Its argument
+- The call `_dem_mesh(opened.tile, ...)` (`src_python/tin_engine/cli.py@92e5356:845-859`). Its argument
   lives on the caller's frame until the call returns, so a `del` inside the
   callee frees nothing.
-- `_dem_mesh`'s parameter `tile` (`cli.py:1398`), live until `:1491`.
+- `_dem_mesh`'s parameter `tile` (`src_python/tin_engine/cli.py@92e5356:1398`), live until `:1491`.
 
 **Change** (CLI only; `open_dem` and `DemInput` keep their public shape):
 - A private one-shot holder in `cli.py`, `_Once[T]`, whose `take()` returns
@@ -324,8 +324,8 @@ Blocking:
 1. Red-step scaffolding written in the present tense, now false (it is
    `@tester`'s to fix, because `@developer` does not edit tests):
    `tests/cpp/unit/test_refinement_check_points_arena.cpp:22-24`,
-   `tests/python/test_target_grid.py:399-400` and `:514-515`, and
-   `tests/python/test_cli_mesh_geographic.py:327-328`. Put them in the past
+   `tests/python/test_target_grid.py@44fa7f5:399-400` and `tests/python/test_target_grid.py@44fa7f5:514-515`, and
+   `tests/python/test_cli_mesh_geographic.py@3e01580:327-328`. Put them in the past
    tense ("went red at 9879805 because ...") or delete them.
 2. This file's status line still says "Not started", and none of the
    as-built departures is recorded. Update the status line and add an
@@ -383,7 +383,7 @@ green CI.
   no shift) and line 107; every cited line at or below 106 reads the same on
   both trees. Already stale on master and not this PR's: the `cli.py:NN`
   citations in `16e-multi-features.md`, `test_features.py` (`:39,42`, `:79`,
-  `:84`), `test_viz_svg.py:665` and `test_cli_mesh_multi_features.py:17`.
+  `:84`), `tests/python/test_viz_svg.py@390b516:665` and `tests/python/test_cli_mesh_multi_features.py@97eea35:17`.
   `05b-noder-driver.md:1749` and `15-dem-mosaic.md:616` hold.
 - f288504 holds: the status line, the ROADMAP row and "Acceptance run" match
   `docs/benchmarks/2026-10-03/15e-acceptance.md`, whose figures match

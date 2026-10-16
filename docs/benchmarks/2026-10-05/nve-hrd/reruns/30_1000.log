@@ -1,0 +1,8 @@
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+12.215.0 Storeskar: miss; NVE's in ours 98.7 %, ours in NVE's 74.7 %, area ratio 1.321
+15.49.0 Halledalsvatn: miss; NVE's in ours 98.8 %, ours in NVE's 57.1 %, area ratio 1.730
+83.2.0 Viksvatn (Hestadfjorden): miss (seeded by the lake Hestadfjorden); NVE's in ours 3.8 %, ours in NVE's 99.3 %, area ratio 0.038
+105.1.0 Osenelv v/Øren: miss; NVE's in ours 0.4 %, ours in NVE's 77.6 %, area ratio 0.005
+153.1.0 Storvatn: miss; NVE's in ours 5.4 %, ours in NVE's 98.0 %, area ratio 0.055
+307.7.0 Landbru: miss; NVE's in ours 98.5 %, ours in NVE's 77.3 %, area ratio 1.275
+summary: 6 stations: refused 0, uncertain 0, match 0, close 0, miss 6

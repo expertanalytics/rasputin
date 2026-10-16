@@ -1,0 +1,25 @@
+2026-10-07T04:20:12Z start b1m-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+NO BASELINE: no comparable stored run
+2026-10-07T04:22:54Z end b1m-base-r1 exit 2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:22:54Z start b1m-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-head-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+ACCEPTED
+2026-10-07T04:25:33Z end b1m-head-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:25:33Z start b1m-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+ACCEPTED
+2026-10-07T04:27:57Z end b1m-head-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:27:57Z start b1m-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+ACCEPTED
+2026-10-07T04:30:22Z end b1m-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:30:22Z start b1m-base-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+ACCEPTED
+2026-10-07T04:32:47Z end b1m-base-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:32:47Z start b1m-head-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/out/2026-10-07/b1m-head-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1b/meshes1m
+ACCEPTED
+2026-10-07T04:35:11Z end b1m-head-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+DONE

@@ -1,0 +1,10 @@
+e0ccdd96d1882fb29ea41dd92f66f629c0efa0c8
+6215e9f2f49539175a4dac4eda88ade4b5b1f0ee5d7f8b0061b1aa0475cda8b6  .venv/lib/python3.14/site-packages/tin_engine/_core.cpython-314-darwin.so
+6215e9f2f49539175a4dac4eda88ade4b5b1f0ee5d7f8b0061b1aa0475cda8b6  build-pyext/_core.cpython-314-darwin.so
+809429868314371fdaaddf9cbd5685402b930e7cf08bca468e418603287e8a9c  /Users/skavhaug/projects/rasputin_data/nve_hrd/reference.geojson
+add27c0fd23ec0b632d809970b6aedad0bb47e60b5ae6ebb2019e3a2abec880c  /Users/skavhaug/projects/rasputin_data/nve_hrd/rivers.geojson
+e29a45dd24f0c04a9620a768751fc8c81f99113156ec67148491a378c829e182  /Users/skavhaug/projects/rasputin_data/nve_hrd/stations.geojson
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true

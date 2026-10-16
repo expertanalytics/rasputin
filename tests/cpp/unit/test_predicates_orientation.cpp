@@ -17,8 +17,6 @@
 using terrain::pred::Incircle;
 using terrain::pred::Orientation;
 using terrain::pred::incircle_of_sign;
-using terrain::pred::is_collinear;
-using terrain::pred::is_left_turn;
 using terrain::pred::orientation_of_sign;
 using terrain::pred::reversed;
 
@@ -109,17 +107,3 @@ TEST_CASE("reversed is an involution", "[predicates][orientation]") {
     STATIC_REQUIRE(reversed(reversed(Orientation::Collinear)) == Orientation::Collinear);
 }
 
-TEST_CASE("is_left_turn is true only for a counterclockwise orientation", "[predicates][orientation]") {
-    STATIC_REQUIRE(is_left_turn(Orientation::CounterClockwise));
-    STATIC_REQUIRE_FALSE(is_left_turn(Orientation::Clockwise));
-    // Collinear is not a left turn: a degenerate triple must not be reported as
-    // turning either way, or a convex-hull walk will keep collinear points on
-    // the hull depending on which side the test is written from.
-    STATIC_REQUIRE_FALSE(is_left_turn(Orientation::Collinear));
-}
-
-TEST_CASE("is_collinear is true only for the degenerate orientation", "[predicates][orientation]") {
-    STATIC_REQUIRE(is_collinear(Orientation::Collinear));
-    STATIC_REQUIRE_FALSE(is_collinear(Orientation::CounterClockwise));
-    STATIC_REQUIRE_FALSE(is_collinear(Orientation::Clockwise));
-}

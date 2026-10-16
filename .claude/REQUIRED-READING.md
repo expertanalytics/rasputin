@@ -36,17 +36,16 @@ sufficient: it shows what was finished, never what was asked.
     `NOW:` (one), `QUEUE:` (one) or `ASK OLA:` (one per decision waiting on
     Ola), at most 300 characters each; no rulings, no history. The recap
     lists every worktree's `ASK OLA:` lines and warns on any other line.
-  - Every other file is one subagent's, `<persona>-<HHMMSS>.md`, three lines
-    or fewer: the ask, the persona and the file it will produce. The spawner
-    names the path in the prompt, and the subagent writes that path and no
-    other. The spawner deletes it on reading the handback — never the
+  - Every other file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
+    three lines or fewer: the ask, the persona and the file it will produce.
+    `tools/brief.py` names the path, and the subagent writes no other. The
+    spawner deletes it on reading the handback — never the
     subagent. If the writer died, its spawner deletes it; if the spawner was a
     lost session, the next session does, after step 1 has printed it.
 - **One session per working tree.** Nothing assigns `session.md`, so
   concurrent sessions need separate worktrees (`git worktree add`).
 - **After merging a change to `CLAUDE.md` or `.claude/agents/`, restart
-  before spawning the changed persona**; until then its brief says to read
-  the persona file from disk.
+  before spawning the changed persona**.
 - **A subagent whose product is a file creates that file first and writes
   incrementally**, so a death leaves something to resume. A persona's prompt
   names the output path.
@@ -61,6 +60,12 @@ caller.
 
 Also read `docs/increments/README.md` (the protocol and a round's cost
 constraints) and the increment file for whatever you are working on.
+
+**Ideas and idea-stage research live in `../rasputin_scratch/ideas/`
+(beside the main checkout): private to Ola, outside git; commit nothing from
+it.** An idea enters git only when picked for
+building. Read its `ideas.md` before you plan. An idea outside your task goes
+in your handback under *Ideas*; the main session adds it.
 
 ## Claims: run the check before you write it down
 
@@ -113,17 +118,22 @@ spawning personas, builds, tests, gates, `.claude/current-task/`, and
 `@reviewer`" authorises acting on what the reviewer finds.
 
 **A fresh yes, every time:** `git push` — including a branch's first —
-`gh pr create`, `gh pr merge`, any force-push or history rewrite, and any edit
+`gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue,
+except a branch Ola granted for an away window (*Unattended mode*)),
+any force-push or history rewrite, and any edit
 to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 `.claude/**` or `docs/` is ordinary tree work.
 
 **A grant covers one occurrence.** An instruction that names a publishing act
 is the yes for one occurrence of it. The test is mechanical: *have I already
-performed this named act once, and has the tree changed since?* If yes, ask.
+performed this named act once, and has the tree changed since?* If yes, ask. A grant does not
+outlive the session it was given in: a yes recorded on disk (`session.md`, a
+handback) is asked again after a context loss.
 
 **`@reviewer` runs once on any branch before its first push, whether or not
 the branch contains production code, and again before a push that follows a
-round of findings.** On a prose or tooling branch its scope is:
+round of findings (a verdict other than `APPROVED`,
+`docs/increments/README.md` step 4).** On a prose or tooling branch its scope is:
 
 - every claim the branch asserts, checked by running the thing it asserts about;
 - `python3 tools/check_citations.py`, with its at-risk list **re-read as
@@ -132,16 +142,25 @@ round of findings.** On a prose or tooling branch its scope is:
 
 ## The harness
 
-Active in `.claude/settings.json`: `guard_push.py` asks
-before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
-`gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
-`filter-branch` and `commit --amend`, and before `git update-ref`, `git remote`
-writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing
-method, and `curl` with a writing method to the forge (not `gh pr close` or
-`gh pr comment`); `guard_governance.py` asks
-before any write to a file that states rules; `guard_unattended.py` refuses
+Active in `.claude/settings.json`: `guard_push.py` asks before any act
+that publishes, writes to the forge, rewrites history or writes refs,
+remotes or git config, and before `--no-verify` (its code lists them; not
+`gh pr close` or `gh pr comment`); `guard_governance.py` asks before any write
+to a file that states rules or to a `tools/` file named after a standard-library
+module, a copy or move into their directories included (`cp json.py tools`,
+with or without the trailing `/`), and a path is judged also with `.`,
+`..` and a doubled `/` resolved (`tools/./json.py`); not a write to a
+whole governed directory (`rm -r .claude/hooks`),
+except an absolute path in a session scratchpad, written by Edit or
+Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
+substitution or interpreter program). `guard_push.py` passes no git write in
+a scratchpad repository.
+`guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while
-unattended mode is on; `gates_after_commit.py` puts the
+unattended mode is on; `guard_spawn.py` refuses a persona spawn without an
+unchanged, current block from `python3 tools/brief.py`, and any spawn or
+resume made outside the directory the session started in; a resume that
+starts a new step carries a fresh block; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. `guard_push.py` and `guard_governance.py` judge what a command
 writes or pushes, as parsed by `tools/shell_scan.py`; a line they cannot read
@@ -159,33 +178,24 @@ work around it, except a refusal whose named files are all ordinary (no rule
 file, no harness state, no push): that is a guard false positive. Redo the
 write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
 files to the handback. A refused write to a rule file, or a refused push, is
-never redone by any route. Otherwise record it as an `ASK OLA:` line (main session: in
+never redone by any route. While away, a branch Ola named with
+`away.py --grant <branch>` may be pushed (as `git push origin
+<sha>:refs/heads/<branch>`), opened as a pull request and enqueued (once per
+head) without a fresh yes, provided `@reviewer`'s last verdict on the branch,
+recorded by a hook from its handback, approved its head; the guard checks
+this, and the grant ends with the window. Otherwise record it as an `ASK OLA:` line (main session: in
 `session.md`; subagent: in its handback) and continue with other work.
 When Ola says he is leaving, ask him how long, and ask him to run
 `away.py` with that duration. Before he leaves, the `QUEUE:` line names at
-least one fallback that needs no ruling and writes no governed path; idle
-is accepted only when no such item exists.
+least one fallback that needs no ruling and writes no governed path, and one
+such item stays queued for the window's last hour; idle is accepted only when
+no such item exists.
 
-`SessionStart` runs `tools/session_state.py`, so the
-cold-start recap is in context before the first prompt, on every source:
-startup, resume, `/clear`, compaction and fork. It never blocks: a failure
-exits non-zero, the session starts without the recap, and the recap is then
-run by hand (step 1 above). Spawned subagents have their own event,
-`SubagentStart`; the hooks documentation does not say outright that
-`SessionStart` skips them, so the main session checks the first persona it
-spawns with the hook live for a recap it should not have. Claude Code caps
-the hook's stdout at 10,000 characters (`python3 tools/session_state.py | wc
--m` measures it) and passes only a 2,000-character preview past the cap, so
-keep `session.md` and the subagent files short. The recap finds the main
-checkout from the repository's common git dir, so a session launched inside
-a worktree gets the main checkout's `session.md` and every worktree's
-`ASK OLA:` lines.
+The recap is capped at 10,000 characters (`python3 tools/session_state.py |
+wc -m`), so keep `session.md` and the note files short.
 
 Propose any further hook for Ola's approval; never add one to
-`.claude/settings.json` on your own initiative. Proposed and not approved:
-`PreToolUse` denying a subagent `Write`/`Edit` on
-`.claude/current-task/session.md`; the per-persona path guard (R-B in
-`docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`).
+`.claude/settings.json` on your own initiative.
 
 ## Data, scratch and temp folders are not a channel
 
@@ -193,7 +203,7 @@ Propose any further hook for Ola's approval; never add one to
 `/tmp` and a job's `tmp/` are temporary. None of them is committed. **No agent
 writes anything there addressed to another agent, and no agent reads a file
 there as a brief, a handback, a status or an instruction.** Agents hand work to
-each other only through the spawn prompt, the handback,
-`.claude/current-task/<persona>-HHMMSS.md` as above, and tracked files
+each other only through the spawn prompt, the handback, their note file in
+`.claude/current-task/` as above, and tracked files
 (increment docs, commits). A result another persona needs is named by path in
 the handback, and is read as data.

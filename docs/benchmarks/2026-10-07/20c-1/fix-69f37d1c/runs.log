@@ -1,0 +1,505 @@
+2026-10-07T04:35:22Z start lagan-nofeet-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:36:44Z end lagan-nofeet-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:36:44Z start lagan-head-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:38:06Z end lagan-head-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:38:06Z start lagan-base-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:39:29Z end lagan-base-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:39:29Z start numed-nofeet-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:39:43Z end numed-nofeet-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:39:43Z start numed-head-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:39:56Z end numed-head-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:39:56Z start numed-base-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:10Z end numed-base-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:10Z start tile-nofeet-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:12Z end tile-nofeet-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:12Z start tile-head-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:15Z end tile-head-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:15Z start tile-base-r0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:18Z end tile-base-r0 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:18Z start tile-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:21Z end tile-base-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:21Z start tile-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:23Z end tile-head-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:23Z start tile-nofeet-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:26Z end tile-nofeet-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:26Z start numed-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:39Z end numed-base-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:40Z start numed-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:40:53Z end numed-head-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:40:53Z start numed-nofeet-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:41:06Z end numed-nofeet-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:41:06Z start lagan-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:42:28Z end lagan-base-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:42:28Z start lagan-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:43:51Z end lagan-head-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:43:51Z start lagan-nofeet-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:45:13Z end lagan-nofeet-r1 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:45:13Z start lagan-nofeet-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:46:37Z end lagan-nofeet-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:46:37Z start lagan-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:48:00Z end lagan-head-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:48:00Z start lagan-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:49:23Z end lagan-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:49:23Z start numed-nofeet-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:49:36Z end numed-nofeet-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:49:36Z start numed-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:49:49Z end numed-head-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:49:49Z start numed-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:03Z end numed-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:03Z start tile-nofeet-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:05Z end tile-nofeet-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:05Z start tile-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:08Z end tile-head-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:08Z start tile-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:11Z end tile-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:11Z start tile-base-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:14Z end tile-base-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:14Z start tile-head-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:16Z end tile-head-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:16Z start tile-nofeet-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:19Z end tile-nofeet-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:19Z start numed-base-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:32Z end numed-base-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:32Z start numed-head-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:45Z end numed-head-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:45Z start numed-nofeet-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:50:59Z end numed-nofeet-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:50:59Z start lagan-base-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:52:21Z end lagan-base-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:52:21Z start lagan-head-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:53:44Z end lagan-head-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:53:44Z start lagan-nofeet-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:55:06Z end lagan-nofeet-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:55:06Z start lagan-nofeet-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:56:29Z end lagan-nofeet-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:56:29Z start lagan-head-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:57:51Z end lagan-head-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:57:51Z start lagan-base-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:14Z end lagan-base-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:14Z start numed-nofeet-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:27Z end numed-nofeet-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:27Z start numed-head-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:40Z end numed-head-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:40Z start numed-base-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:53Z end numed-base-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:53Z start tile-nofeet-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:56Z end tile-nofeet-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:56Z start tile-head-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T04:59:59Z end tile-head-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T04:59:59Z start tile-base-r4  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:02Z end tile-base-r4 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:02Z start tile-base-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:04Z end tile-base-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:04Z start tile-head-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:07Z end tile-head-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:07Z start tile-nofeet-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:10Z end tile-nofeet-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:10Z start numed-base-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:23Z end numed-base-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:23Z start numed-head-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:36Z end numed-head-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:36Z start numed-nofeet-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:00:50Z end numed-nofeet-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:00:50Z start lagan-base-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:02:13Z end lagan-base-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:02:13Z start lagan-head-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:03:35Z end lagan-head-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:03:35Z start lagan-nofeet-r5  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:04:57Z end lagan-nofeet-r5 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:04:57Z start lagan-nofeet-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:06:20Z end lagan-nofeet-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:06:20Z start lagan-head-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:07:42Z end lagan-head-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:07:42Z start lagan-base-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:05Z end lagan-base-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:05Z start numed-nofeet-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:19Z end numed-nofeet-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:19Z start numed-head-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:32Z end numed-head-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:32Z start numed-base-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:45Z end numed-base-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:45Z start tile-nofeet-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:48Z end tile-nofeet-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:48Z start tile-head-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:51Z end tile-head-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T05:09:51Z start tile-base-r6  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /opt/homebrew, got /opt/homebrew/bin
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /opt/homebrew, got /opt/homebrew/bin
+2026-10-07T05:09:54Z end tile-base-r6 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+DONE

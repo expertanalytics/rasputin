@@ -1,0 +1,53 @@
+kernel source: include/terrain/vector_simplify/border_collapse.hpp blob dc879c8490fe7485c5534fe83715e2f3d8994b6a (the _core built from it is the .venv's)
+fold coverage valid: True polygons valid: True
+====================================================================================================
+17a short edge at a junction: B=(102.0, 24.0) C=(99.0, 40.0) island=None
+   WINNER on A-B: E=(100.0400,0.4800) deviation 1.969; |E-A| 0.482 |E-D| 99.520 vertex-to-new-edge 99.961 A-to-ED 0.482 D-to-AE 99.520 E-to-edge 0.480; min 0.480
+   other  on C-D: E=(100.0400,102.4000) deviation 2.400; |E-A| 102.400 |E-D| 2.400 vertex-to-new-edge 99.961 A-to-ED 100.000 D-to-AE 0.039 E-to-edge 2.400; min 0.039
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(100.04, 0.48)]; equals the re-enacted winner: True
+   other placement as a collapse: crosses or touches another edge: True; deviation 2.400 (band 50)
+====================================================================================================
+17b the other placement (M9): B=(104.1, 52.4) C=(99.5, 4.9) island=None
+   WINNER on A-B: E=(99.9629,-0.4742) deviation 4.118; |E-A| 0.476 |E-D| 100.474 vertex-to-new-edge 99.963 A-to-ED 0.037 D-to-AE 100.000 E-to-edge 0.474; min 0.037
+   other  on C-D: E=(99.9629,92.9436) deviation 4.121; |E-A| 92.944 |E-D| 7.057 vertex-to-new-edge 99.999 A-to-ED 92.944 D-to-AE 7.057 E-to-edge 7.056; min 7.056
+   kernel, clearance 0: collapses 0, rejected crossing 1, side 0; new vertices []; equals the re-enacted winner: False
+   other placement as a collapse: crosses or touches another edge: False; deviation 4.121 (band 50)
+====================================================================================================
+18 vertex 0.5 m from a new edge: B=(84.0, 10.0) C=(84.0, 55.0) island=((95.24, 10.64), (88.45, 14.88), (88.66, 7.67))
+   WINNER on A-B: E=(76.8000,14.5000) deviation 7.200; |E-A| 27.359 |E-D| 88.592 vertex-to-new-edge 0.494 A-to-ED 27.359 D-to-AE 88.592 E-to-edge 11.656; min 0.494
+   other  on C-D: E=(76.8000,34.7500) deviation 7.754; |E-A| 41.783 |E-D| 69.252 vertex-to-new-edge 1.344 A-to-ED 41.783 D-to-AE 69.252 E-to-edge 23.033; min 1.344
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(76.8, 14.5)]; equals the re-enacted winner: True
+   island ok (inside one square, crossing neither chain, no vertex swept): True
+   other placement as a collapse: crosses or touches another edge: True; deviation 7.754 (band 50)
+====================================================================================================
+19 E 0.5 m from an edge: B=(84.0, 10.0) C=(84.0, 55.0) island=((75.44, 19.34), (70.4, 13.37), (77.18, 9.49))
+   WINNER on A-B: E=(76.8000,14.5000) deviation 7.200; |E-A| 27.359 |E-D| 88.592 vertex-to-new-edge 2.580 A-to-ED 27.359 D-to-AE 88.592 E-to-edge 0.497; min 0.497
+   other  on C-D: E=(76.8000,34.7500) deviation 7.754; |E-A| 41.783 |E-D| 69.252 vertex-to-new-edge 9.688 A-to-ED 41.783 D-to-AE 69.252 E-to-edge 15.470; min 9.688
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(76.8, 14.5)]; equals the re-enacted winner: True
+   island ok (inside one square, crossing neither chain, no vertex swept): True
+   other placement as a collapse: crosses or touches another edge: False; deviation 7.754 (band 50)
+====================================================================================================
+20b 2 m to spare, junction A (M10): B=(84.0, 10.0) C=(84.0, 55.0) island=None
+   WINNER on A-B: E=(76.8000,14.5000) deviation 7.200; |E-A| 27.359 |E-D| 88.592 vertex-to-new-edge 78.157 A-to-ED 27.359 D-to-AE 88.592 E-to-edge 14.500; min 14.500
+   other  on C-D: E=(76.8000,34.7500) deviation 7.754; |E-A| 41.783 |E-D| 69.252 vertex-to-new-edge 84.296 A-to-ED 41.783 D-to-AE 69.252 E-to-edge 34.750; min 34.750
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(76.8, 14.5)]; equals the re-enacted winner: True
+   other placement as a collapse: crosses or touches another edge: False; deviation 7.754 (band 50)
+====================================================================================================
+20b(a) vertex 1.5 m from a new edge: B=(84.0, 10.0) C=(84.0, 55.0) island=((95.77, 11.49), (88.98, 15.73), (89.19, 8.52))
+   WINNER on A-B: E=(76.8000,14.5000) deviation 7.200; |E-A| 27.359 |E-D| 88.592 vertex-to-new-edge 1.496 A-to-ED 27.359 D-to-AE 88.592 E-to-edge 12.211; min 1.496
+   other  on C-D: E=(76.8000,34.7500) deviation 7.754; |E-A| 41.783 |E-D| 69.252 vertex-to-new-edge 0.431 A-to-ED 41.783 D-to-AE 69.252 E-to-edge 22.586; min 0.431
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(76.8, 14.5)]; equals the re-enacted winner: True
+   island ok (inside one square, crossing neither chain, no vertex swept): True
+   other placement as a collapse: crosses or touches another edge: True; deviation 7.754 (band 50)
+====================================================================================================
+20b(b) 1.5 m at the junction: B=(116.5, 45.0) C=(84.5, 55.0) island=None
+   WINNER on A-B: E=(100.5500,1.5000) deviation 16.193; |E-A| 1.598 |E-D| 98.502 vertex-to-new-edge 99.461 A-to-ED 1.598 D-to-AE 98.502 E-to-edge 1.500; min 1.500
+   other  on C-D: E=(100.5500,101.5968) deviation 16.256; |E-A| 101.598 |E-D| 1.689 vertex-to-new-edge 99.457 A-to-ED 100.000 D-to-AE 0.541 E-to-edge 1.597; min 0.541
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(100.55, 1.5)]; equals the re-enacted winner: True
+   other placement as a collapse: crosses or touches another edge: True; deviation 16.256 (band 50)
+====================================================================================================
+F12 the fold (M12), band 60: B=(0.0, -1.25) C=(-20.0, 0.0) island=None
+   WINNER on A-B: E=(0.0000,-0.2500) deviation 1.000; |E-A| 0.750 |E-D| 100.000 vertex-to-new-edge 49.500 A-to-ED 0.750 D-to-AE 100.000 E-to-edge 0.750; min 0.750
+   other  on C-D: E=(50.0000,0.0000) deviation 50.000; |E-A| 50.002 |E-D| 150.000 vertex-to-new-edge 49.500 A-to-ED 0.500 D-to-AE 100.001 E-to-edge 50.000; min 0.500
+   kernel, clearance 0: collapses 1, rejected crossing 0, side 0; new vertices [(0.0, -0.25)]; equals the re-enacted winner: True
+   other placement as a collapse: crosses or touches another edge: False; deviation 50.000 (band 60)

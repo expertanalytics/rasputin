@@ -105,7 +105,9 @@ inline FrozenFindings frozen_findings(const RasterGeometry& g, std::span<const P
             if (v >= out.vertices.size() || !(out.vertices[v] == start_vertices[v])) ++f.moved;
         bool found = false;
         for (std::size_t e = 0; e < out.edges.size(); ++e)
-            if (std::minmax(out.edges[e][0], out.edges[e][1]) == std::pair{i, j}) {
+            // minmax returns a pair of references; libstdc++ (GCC 13) has no
+            // == between pair<const T&, const T&> and pair<T, T>, so compare values.
+            if (const auto [lo, hi] = std::minmax(out.edges[e][0], out.edges[e][1]); lo == i && hi == j) {
                 found = true;
                 if (out.masks[e] != start_masks[k]) ++f.wrong_mask;
             }

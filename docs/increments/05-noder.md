@@ -68,7 +68,7 @@ needs no change** — nothing in `include/terrain/predicates/` moves for the
 noder. Three things follow, all of them local to this increment:
 
 1. **The hot-pixel gap, and it is the substantive one.** `on_segment<K>`
-   (`include/terrain/core/segment.hpp:68-74`) gates on
+   (`include/terrain/core/segment.hpp@44fa7f5:68-74`) gates on
    `orient2d(...) == Collinear`, which is **exact incidence**. Snap rounding
    needs **hot-pixel proximity** — whether a segment passes *through* a cell —
    and at a decimal spacing the two differ on the great majority of snapped
@@ -660,7 +660,7 @@ is worth one instantiation axis in a function whose misuse is otherwise silent.
 
 **This is a different question from the one `on_segment` answers, and the
 difference is the whole finding of the kernel audit.** `on_segment<K>`
-(`segment.hpp:68-74`) returns `false` unless
+(`include/terrain/core/segment.hpp@44fa7f5:68-74`) returns `false` unless
 `K::orient2d(s.a, s.b, p) == Collinear`: **exact incidence**. Snap rounding is
 defined on **proximity**: Goodrich-Guibas-Hershberger-Tanenbaum route each
 segment through every hot pixel it *passes through*, not through every pixel
@@ -1446,7 +1446,7 @@ Catch2 `GENERATE` over a seeded range, per `testing.md`'s framework section.
   mask honest. **The oracle may not call `on_segment<K>`**: `classify`'s endpoint
   arm calls it, so an oracle that shares it is tautological on exactly the
   exact-incidence cases the property is about. The oracle spells betweenness out
-  instead, in the four comparisons `segment.hpp:68-74` uses —
+  instead, in the four comparisons `include/terrain/core/segment.hpp@44fa7f5:68-74` uses —
   `min(a.x,b.x) <= p.x <= max(a.x,b.x)` and likewise in y, with the collinearity
   it is conditioned on coming from the oracle's own `orient2d` call. Four lines,
   no shared code, and the sharing is then only of `K` itself, which is the

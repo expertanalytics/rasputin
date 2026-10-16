@@ -15,7 +15,11 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
   equals, in every point, cell and array, the same run with `cli.open_dem`
   replaced by 16's data flow (the whole file, and the domain object exactly as
   `read_domain` returned it, never through `DomainPolygon.to_crs`), and the
-  domain `_dem_mesh` receives has the read vertices bit for bit. This
+  domain `_dem_mesh` receives has the read vertices bit for bit. Since
+  15f-3 (`docs/increments/15f-edge-strip.md`, S4) the edge strip's vertices
+  agree to rounding only, because their lattice coordinates are measured from
+  the window's corner and the two flows cut different windows; everything a
+  window cannot change stays bit for bit (`assert_16s_but_the_strip`). This
   replaced two digests recorded on macOS arm64 at `d34d79d` (test amendment
   after PR #106's CI): Linux x86 with GCC gives the square a different digest,
   so a recorded digest pins a platform, not a behaviour. The platform-stable
@@ -54,8 +58,7 @@ mismatch message already names both CRSs).
 from __future__ import annotations
 
 import dataclasses
-import hashlib
-import json
+import io
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -68,47 +71,22 @@ from shapely.geometry import Polygon
 import test_cli_mesh_mosaic
 import test_dem_input_domain
 import tin_engine.cli as cli
-from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
+from cli_helpers import HOLE, SQUARE, Ring, geojson, mesh_to_vtk, refused, rough_dem
+from geotiff_fixtures import KARTVERKET, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
-from test_cli_mesh_dem import write_tiff
-from test_cli_mesh_domain import COLS, HOLE, ROWS, SQUARE, quarter_circle
-from test_cli_mesh_domain import geojson as utm33_geojson
-from test_cli_mesh_mosaic import USAGE, invoke, terrain, write_tiles
+from recordread import sizes_row
+from test_cli_mesh_domain import quarter_circle
+from test_cli_mesh_mosaic import terrain, write_tiles
 from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
 from tin_engine.dem_input import DemInput, DemRequest, open_dem
-from tin_engine.domain import DomainPolygon, read_domain
-from vtkread import VtkFile, read_vtk
+from tin_engine.domain import DomainPolygon
+from tin_engine.io.domain_file import read_domain
+from tin_engine.io.geotiff import decode_dem
+from tin_engine.resources import Resources
+from vtkread import VtkFile
 
-Ring = list[tuple[float, float]]
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING: the noder's grid, applied in the DEM's CRS (R9)
 LCC = "+proj=lcc +lat_1=60 +lat_2=65 +lat_0=62 +lon_0=15 +ellps=GRS80 +units=m +no_defs"
-
-
-def digest(vtk: VtkFile) -> str:
-    """SHA-256 over the mesh itself: points, cells and every cell and point
-    array, each prefixed with its name, dtype and shape. Field data is left out,
-    since 15b adds `domain_crs` and `domain_transform` to it."""
-    h = hashlib.sha256()
-
-    def put(name: str, a: Any) -> None:
-        arr = np.ascontiguousarray(np.asarray(a))
-        h.update(f"{name}{arr.dtype.str}{arr.shape}".encode())
-        h.update(arr.tobytes())
-
-    put("points", vtk.points)
-    for i, cell in enumerate(vtk.lines):
-        put(f"line{i}", cell)
-    for i, cell in enumerate(vtk.polygons):
-        put(f"polygon{i}", cell)
-    for group in (vtk.point_scalars, vtk.scalars):
-        for name in sorted(group):
-            put(name, group[name].values)
-    for block in sorted(vtk.cell_fields):
-        for name in sorted(vtk.cell_fields[block]):
-            values = vtk.cell_fields[block][name].values
-            if isinstance(values, np.ndarray):
-                put(f"{block}.{name}", values)
-    return h.hexdigest()
 
 
 def to_crs(src: str, dst: str, ring: Ring) -> Ring:
@@ -122,16 +100,6 @@ def description(src: str, dst: str = "EPSG:25833") -> str:
     return str(Transformer.from_crs(src, dst, always_xy=True).description)
 
 
-def write_geojson(
-    path: Path, outer: Ring, holes: tuple[Ring, ...] = (), crs: str | None = None
-) -> Path:
-    doc: dict[str, Any] = {"type": "Polygon", "coordinates": [[*r, r[0]] for r in (outer, *holes)]}
-    if crs is not None:
-        doc["crs"] = {"type": "name", "properties": {"name": crs}}
-    path.write_text(json.dumps(doc))
-    return path
-
-
 def the_field(vtk: VtkFile, name: str) -> str:
     return file_field(vtk, name)
 
@@ -140,29 +108,9 @@ def the_field(vtk: VtkFile, name: str) -> str:
 MOVED = ("domain", "domain_crs", "domain_transform", "dem_tiles", "dem_seams")
 
 
-def run(tmp_path: Path, *args: str, out: str = "x.vtk") -> VtkFile:
-    """Mesh with ``--stats`` beside the file; ``inputs`` reads that report."""
-    target = tmp_path / out
-    code, output = invoke(*args, "--out", str(target), "--stats", str(target.with_suffix(".md")))
-    assert code == 0, output
-    return read_vtk(target.read_bytes())
-
-
 def inputs(tmp_path: Path, name: str, out: str = "x.vtk") -> str:
-    """The ``--stats`` row ``name`` of the last ``run`` writing ``out``."""
+    """The ``--stats`` row ``name`` of the last ``mesh_to_vtk`` writing ``out``."""
     return stats_row((tmp_path / out).with_suffix(".md").read_text(encoding="utf-8"), name)
-
-
-def refused(tmp_path: Path, *args: str, says: tuple[str, ...]) -> str:
-    target = tmp_path / "refused.vtk"
-    code, output = invoke(*args, "--out", str(target))
-    assert code == USAGE, output
-    assert "Traceback" not in output
-    assert "No such option" not in output, "refused for the wrong reason"
-    for word in says:
-        assert word in output, f"{word!r} not in {output!r}"
-    assert not target.exists()
-    return output
 
 
 def assert_ring_in_output(vtk: VtkFile, ring: Ring) -> None:
@@ -193,6 +141,10 @@ ACROSS: Ring = [
 ]
 
 
+#: `TestTheSameCrs`'s DEM, bound here: a class-level binding would get the instance.
+bumpy = rough_dem(16)
+
+
 @pytest.fixture
 def quad_dir(tmp_path: Path) -> Path:
     tiles = quadrants(whole(9, 13, array=terrain(9, 13)), row_cut=4, col_cut=6, overlap=1)
@@ -214,8 +166,8 @@ class TestTheDomainInItsOwnCrs:
 
     def test_wgs84_geojson_without_a_crs_member(self, tmp_path: Path, quad_dir: Path) -> None:
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
-        domain = write_geojson(tmp_path / "catchment.geojson", lon_lat)
-        vtk = run(tmp_path, *mesh_args(quad_dir, domain))
+        domain = geojson(tmp_path / "catchment.geojson", lon_lat, crs=None)
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain))
         expected = to_crs("EPSG:4326", "EPSG:25833", lon_lat)
         assert_ring_in_output(vtk, expected)
         assert_inside(vtk, expected)
@@ -229,8 +181,8 @@ class TestTheDomainInItsOwnCrs:
 
     def test_utm32_geojson(self, tmp_path: Path, quad_dir: Path) -> None:
         ring = to_crs("EPSG:25833", "EPSG:25832", ACROSS)
-        domain = write_geojson(tmp_path / "d.geojson", ring, crs="urn:ogc:def:crs:EPSG::25832")
-        vtk = run(tmp_path, *mesh_args(quad_dir, domain))
+        domain = geojson(tmp_path / "d.geojson", ring, crs="urn:ogc:def:crs:EPSG::25832")
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain))
         assert_ring_in_output(vtk, to_crs("EPSG:25832", "EPSG:25833", ring))
         assert inputs(tmp_path, "domain_crs") == "EPSG:25832"
         assert inputs(tmp_path, "domain_transform") == description("EPSG:25832")
@@ -239,7 +191,7 @@ class TestTheDomainInItsOwnCrs:
         ring = to_crs("EPSG:25833", "EPSG:3035", ACROSS)
         domain = tmp_path / "d.wkt"
         domain.write_text(Polygon(ring).wkt)
-        vtk = run(tmp_path, *mesh_args(quad_dir, domain, "--domain-crs", "EPSG:3035"))
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain, "--domain-crs", "EPSG:3035"))
         assert_ring_in_output(vtk, to_crs("EPSG:3035", "EPSG:25833", ring))
         assert inputs(tmp_path, "domain_crs") == "EPSG:3035"
         assert inputs(tmp_path, "domain_transform") == description("EPSG:3035")
@@ -249,7 +201,7 @@ class TestTheDomainInItsOwnCrs:
         ring = to_crs("EPSG:25833", LCC, ACROSS)
         domain = tmp_path / "d.wkt"
         domain.write_text(Polygon(ring).wkt)
-        vtk = run(tmp_path, *mesh_args(quad_dir, domain, "--domain-crs", LCC))
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain, "--domain-crs", LCC))
         assert_ring_in_output(vtk, to_crs(LCC, "EPSG:25833", ring))
         recorded = inputs(tmp_path, "domain_crs")
         assert recorded.isascii()
@@ -258,8 +210,8 @@ class TestTheDomainInItsOwnCrs:
 
     def test_ogc_crs84_member(self, tmp_path: Path, quad_dir: Path) -> None:
         lon_lat = to_crs("EPSG:25833", "OGC:CRS84", ACROSS)
-        domain = write_geojson(tmp_path / "d.geojson", lon_lat, crs="urn:ogc:def:crs:OGC:1.3:CRS84")
-        vtk = run(tmp_path, *mesh_args(quad_dir, domain))
+        domain = geojson(tmp_path / "d.geojson", lon_lat, crs="urn:ogc:def:crs:OGC:1.3:CRS84")
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain))
         assert_ring_in_output(vtk, to_crs("OGC:CRS84", "EPSG:25833", lon_lat))
         recorded = CRS.from_user_input(inputs(tmp_path, "domain_crs"))
         assert recorded == CRS.from_user_input("OGC:CRS84")
@@ -272,8 +224,8 @@ class TestTheDomainInItsOwnCrs:
             (X0 + 6.1, Y0 - 3.7),
         ]
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", inside)
-        domain = write_geojson(tmp_path / "d.geojson", lon_lat)
-        vtk = run(tmp_path, *mesh_args(quad_dir / "nw.tif", domain))
+        domain = geojson(tmp_path / "d.geojson", lon_lat, crs=None)
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(quad_dir / "nw.tif", domain))
         assert the_field(vtk, "dem_source") == "nw.tif"
         assert inputs(tmp_path, "domain_crs") == "EPSG:4326"
 
@@ -290,8 +242,8 @@ class TestTheDomainInItsOwnCrs:
             (X0 + 5.5, Y0 - 105.5),
         ]
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ell)
-        domain = write_geojson(tmp_path / "ell.geojson", lon_lat)
-        vtk = run(tmp_path, *mesh_args(tmp_path / "ell", domain))
+        domain = geojson(tmp_path / "ell.geojson", lon_lat, crs=None)
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(tmp_path / "ell", domain))
         assert np.isfinite(vtk.points).all()
         assert_inside(vtk, to_crs("EPSG:4326", "EPSG:25833", lon_lat))
 
@@ -302,16 +254,20 @@ class TestTheSameCrs:
     run as it is against the run with 16's data flow put back."""
 
     @pytest.fixture
-    def bumpy(self, tmp_path: Path) -> Path:
-        array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-        return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-    @pytest.fixture
     def no_transformer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def refuse(*args: Any, **kwargs: Any) -> Any:
-            raise AssertionError(f"Transformer.from_crs{args} was called")
+        """No point is moved: every `Transformer` method that maps coordinates
+        refuses. Building a transformer is allowed, since audit PR B's
+        `crs.same_crs` builds one to compare two CRSs (python-audit.md,
+        section 9) and moves nothing with it."""
 
-        monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
+        def refusing(name: str) -> Any:
+            def refuse(*args: Any, **kwargs: Any) -> Any:
+                raise AssertionError(f"Transformer.{name} was called")
+
+            return refuse
+
+        for name in ("transform", "itransform", "transform_bounds"):
+            monkeypatch.setattr(Transformer, name, refusing(name))
 
     @pytest.fixture
     def handed_on(self, monkeypatch: pytest.MonkeyPatch) -> list[DomainPolygon | None]:
@@ -327,11 +283,12 @@ class TestTheSameCrs:
         return seen
 
     @staticmethod
-    def as_16_opened_it(request: DemRequest) -> DemInput:
+    def as_16_opened_it(request: DemRequest, resources: Resources | None = None) -> DemInput:
         """16's data flow for one file and a domain: the whole file, opened as
         without a domain, and the domain object as `read_domain` returned it.
-        Neither `DomainPolygon.to_crs` nor the window cut to the domain runs."""
-        opened = open_dem(request.model_copy(update={"domain": None}))
+        Neither `DomainPolygon.to_crs` nor the window cut to the domain runs.
+        `resources` is `open_dem`'s second parameter (38), passed through."""
+        opened = open_dem(request.model_copy(update={"domain": None}), resources)
         return dataclasses.replace(opened, domain=request.domain)
 
     def assert_as_16(
@@ -342,21 +299,26 @@ class TestTheSameCrs:
         domain: Path,
         *args: str,
     ) -> None:
-        now = run(tmp_path, *args, out="now.vtk")
+        now = mesh_to_vtk(tmp_path, *args, out="now.vtk")
         with monkeypatch.context() as m:
             m.setattr(cli, "open_dem", self.as_16_opened_it)
-            before = run(tmp_path, *args, out="before.vtk")
+            before = mesh_to_vtk(tmp_path, *args, out="before.vtk")
         assert len(handed_on) == 2, handed_on
         read = read_domain(domain)
         for given in handed_on:
             assert given is not None
-            assert given.crs == read.crs
+            # Audit PR B: `to_crs` into the same CRS labels the domain as
+            # its target, the DEM's text; the CRS and the bits are unchanged.
+            assert CRS.from_user_input(given.crs) == CRS.from_user_input(read.crs)
             for got, want in zip(rings(given), rings(read), strict=True):
                 assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
         assert len(now.points) > 0
-        assert digest(now) == digest(before)
+        dem = Path(args[args.index("--dem") + 1])
+        report = (tmp_path / "now.md").read_text(encoding="utf-8")
+        start = int(sizes_row(report, "start vertices"))
+        assert_16s_but_the_strip(now, before, dem, start)
 
-    def test_the_mesh_is_16s_bit_for_bit(
+    def test_the_mesh_is_16s_up_to_the_strips_rounding(
         self,
         tmp_path: Path,
         bumpy: Path,
@@ -364,26 +326,73 @@ class TestTheSameCrs:
         handed_on: list[DomainPolygon | None],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        square = utm33_geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
+        square = geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
         self.assert_as_16(tmp_path, monkeypatch, handed_on, square, *mesh_args(bumpy, square))
 
     def test_the_fields_say_so(self, tmp_path: Path, bumpy: Path) -> None:
-        square = utm33_geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
-        run(tmp_path, *mesh_args(bumpy, square))
+        square = geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
+        mesh_to_vtk(tmp_path, *mesh_args(bumpy, square))
         assert inputs(tmp_path, "domain_crs") == "EPSG:25833"
         assert "none" in inputs(tmp_path, "domain_transform").lower()
 
     @needs_codecs
-    def test_the_quarter_circle_is_16s_bit_for_bit(
+    def test_the_quarter_circle_is_16s_up_to_the_strips_rounding(
         self,
         tmp_path: Path,
         no_transformer: None,
         handed_on: list[DomainPolygon | None],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        domain = utm33_geojson(tmp_path / "quarter.geojson", quarter_circle())
+        domain = geojson(tmp_path / "quarter.geojson", quarter_circle())
         args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
         self.assert_as_16(tmp_path, monkeypatch, handed_on, domain, *args)
+
+
+def assert_16s_but_the_strip(now: VtkFile, before: VtkFile, dem: Path, start: int) -> None:
+    """15f's S4: 16's mesh bit for bit, except the edge strip's vertices.
+
+    A strip point is a fraction computed in lattice coordinates measured
+    from the corner of the window the core is given (15f, L16); 16's data
+    flow opens the whole file, today's cuts the window to the domain, so
+    such a vertex can differ in its last bits. What a window cannot change
+    stays bit-identical: the triangles, the constraint edges and every cell
+    array (their masks), the start vertices (the first `start`; trim keeps
+    order), and every vertex that is a DEM node, with its z. Taking the first
+    `start` vertices as the start's rests on refine writing its start
+    vertices first and trim keeping order; if either ever changed, a strip
+    vertex could fall in that prefix and be held to bit-identity, so the
+    test would fail rather than pass wrongly. Every other
+    vertex agrees within 1e-9 lattice units in each coordinate and within
+    `1e-9 max(1, |z|)` in z. A difference in connectivity means a predicate
+    flipped on a rounding-level difference, and fails here."""
+    assert [c.tolist() for c in now.polygons] == [c.tolist() for c in before.polygons]
+    assert [c.tolist() for c in now.lines] == [c.tolist() for c in before.lines]
+    assert sorted(now.cell_fields) == sorted(before.cell_fields)
+    for block in now.cell_fields:
+        for name, array in now.cell_fields[block].items():
+            other = before.cell_fields[block][name].values
+            assert np.array_equal(np.asarray(array.values), np.asarray(other)), (block, name)
+    for name in now.scalars:
+        assert np.array_equal(now.scalars[name].values, before.scalars[name].values), name
+    a, b = now.points, before.points
+    assert a.shape == b.shape
+    m = decode_dem(io.BytesIO(dem.read_bytes())).meta
+    col, row = (a[:, 0] - m.x_min) / m.delta_x, (m.y_max - a[:, 1]) / m.delta_y
+    node = (col == np.round(col)) & (row == np.round(row))
+    node &= m.x_min + np.round(col) * m.delta_x == a[:, 0]
+    node &= m.y_max - np.round(row) * m.delta_y == a[:, 1]
+    exact = node.copy()
+    exact[:start] = True
+    assert np.array_equal(a[exact], b[exact]), "a start or DEM-node vertex moved"
+    for name in now.point_scalars:
+        ours, theirs = now.point_scalars[name].values, before.point_scalars[name].values
+        assert np.array_equal(np.asarray(ours)[exact], np.asarray(theirs)[exact]), name
+    rest = ~exact
+    d_col = np.abs(a[rest, 0] - b[rest, 0]) / m.delta_x
+    d_row = np.abs(a[rest, 1] - b[rest, 1]) / m.delta_y
+    assert (d_col <= 1e-9).all() and (d_row <= 1e-9).all(), (d_col.max(), d_row.max())
+    bound = 1e-9 * np.maximum(1.0, np.abs(a[rest, 2]))
+    assert (np.abs(a[rest, 2] - b[rest, 2]) <= bound).all()
 
 
 def rings(domain: DomainPolygon) -> list[np.ndarray]:
@@ -395,9 +404,10 @@ class TestUsage:
     def test_bbox_with_domain_is_refused(self, tmp_path: Path, quad_dir: Path) -> None:
         """R11: `--bbox` excludes `--domain` [15b]. The domain is in the DEM's
         own CRS, so nothing but the flag pair can refuse it."""
-        domain = utm33_geojson(tmp_path / "d.geojson", ACROSS)
+        domain = geojson(tmp_path / "d.geojson", ACROSS)
         refused(
             tmp_path,
+            "mesh",
             *mesh_args(quad_dir, domain),
             "--bbox", "500000", "6599960", "500120", "6600000",
             says=("--bbox", "--domain"),
@@ -407,7 +417,7 @@ class TestUsage:
     def test_an_unknown_domain_crs_is_named(self, tmp_path: Path, quad_dir: Path, bad: str) -> None:
         domain = tmp_path / "d.wkt"
         domain.write_text(Polygon(ACROSS).wkt)
-        refused(tmp_path, *mesh_args(quad_dir, domain, "--domain-crs", bad), says=(bad,))
+        refused(tmp_path, "mesh", *mesh_args(quad_dir, domain, "--domain-crs", bad), says=(bad,))
 
 
 class TestRefusedAfterTheTransform:
@@ -416,20 +426,22 @@ class TestRefusedAfterTheTransform:
 
     def test_a_domain_far_from_the_dem(self, tmp_path: Path, quad_dir: Path) -> None:
         far = [(x - 200_000.0, y + 50_000.0) for x, y in ACROSS]
-        domain = write_geojson(tmp_path / "d.geojson", to_crs("EPSG:25833", "EPSG:4326", far))
-        refused(tmp_path, *mesh_args(quad_dir, domain), says=("4326", "25833"))
+        domain = geojson(tmp_path / "d.geojson", to_crs("EPSG:25833", "EPSG:4326", far), crs=None)
+        refused(tmp_path, "mesh", *mesh_args(quad_dir, domain), says=("4326", "25833"))
 
     def test_a_domain_reaching_past_the_tiles(self, tmp_path: Path, quad_dir: Path) -> None:
         past = [*ACROSS[:2], (X0 + 123.0, Y0 - 3.7), ACROSS[3]]
-        domain = write_geojson(tmp_path / "d.geojson", to_crs("EPSG:25833", "EPSG:4326", past))
-        refused(tmp_path, *mesh_args(quad_dir, domain), says=("--domain", "outside", "4326"))
+        domain = geojson(tmp_path / "d.geojson", to_crs("EPSG:25833", "EPSG:4326", past), crs=None)
+        refused(
+            tmp_path, "mesh", *mesh_args(quad_dir, domain), says=("--domain", "outside", "4326")
+        )
 
     def test_latitude_first_is_a_wrong_file(self, tmp_path: Path, quad_dir: Path) -> None:
         """ "A GeoJSON with latitude first is a wrong file, not a case, and is
         refused by the extent check." """
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
-        domain = write_geojson(tmp_path / "d.geojson", [(y, x) for x, y in lon_lat])
-        refused(tmp_path, *mesh_args(quad_dir, domain), says=("4326", "25833"))
+        domain = geojson(tmp_path / "d.geojson", [(y, x) for x, y in lon_lat], crs=None)
+        refused(tmp_path, "mesh", *mesh_args(quad_dir, domain), says=("4326", "25833"))
 
     def test_axis_order_is_able_to_fail(
         self, tmp_path: Path, quad_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -444,10 +456,10 @@ class TestRefusedAfterTheTransform:
             return real(*args, **kwargs)
 
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
-        domain = write_geojson(tmp_path / "catchment.geojson", lon_lat)
-        run(tmp_path, *mesh_args(quad_dir, domain))  # the control: unpatched, it meshes
+        domain = geojson(tmp_path / "catchment.geojson", lon_lat, crs=None)
+        mesh_to_vtk(tmp_path, *mesh_args(quad_dir, domain))  # the control: unpatched, it meshes
         monkeypatch.setattr(Transformer, "from_crs", staticmethod(latitude_first))
-        refused(tmp_path, *mesh_args(quad_dir, domain), says=("4326", "25833"))
+        refused(tmp_path, "mesh", *mesh_args(quad_dir, domain), says=("4326", "25833"))
 
 
 class TestSeamsWithADomain:
@@ -460,7 +472,7 @@ class TestSeamsWithADomain:
         source = whole(9, 13, array=terrain(9, 13))
         dem = test_cli_mesh_mosaic.TestQ1Seams.disagreeing(tmp_path, source)
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
-        run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        mesh_to_vtk(tmp_path, *mesh_args(dem, geojson(tmp_path / "c.geojson", lon_lat, crs=None)))
         assert inputs(tmp_path, "domain_crs") == "EPSG:4326"
         assert (
             inputs(tmp_path, "dem_seams")
@@ -469,7 +481,9 @@ class TestSeamsWithADomain:
 
     def test_agreeing_tiles_record_none(self, tmp_path: Path, quad_dir: Path) -> None:
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
-        run(tmp_path, *mesh_args(quad_dir, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        mesh_to_vtk(
+            tmp_path, *mesh_args(quad_dir, geojson(tmp_path / "c.geojson", lon_lat, crs=None))
+        )
         assert inputs(tmp_path, "dem_seams") == SEAMS_AGREE
 
     @pytest.mark.parametrize(
@@ -488,7 +502,7 @@ class TestSeamsWithADomain:
         planted = test_dem_input_domain.TestSeamsInsideTheNeededRegion
         dem = planted.disagreeing(tmp_path)
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", planted.utm33(getattr(planted, shape)))
-        run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        mesh_to_vtk(tmp_path, *mesh_args(dem, geojson(tmp_path / "c.geojson", lon_lat, crs=None)))
         assert inputs(tmp_path, "dem_seams") == recorded
 
 
@@ -506,8 +520,8 @@ class TestRealSeam:
     def test_meshes_with_the_domain_fields(self, tmp_path: Path) -> None:
         seam = Path(__file__).resolve().parents[1] / "fixtures" / "dtm10" / "seam"
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", self.UTM33_RING)
-        domain = write_geojson(tmp_path / "catchment.geojson", lon_lat)
-        vtk = run(tmp_path, *mesh_args(seam, domain))
+        domain = geojson(tmp_path / "catchment.geojson", lon_lat, crs=None)
+        vtk = mesh_to_vtk(tmp_path, *mesh_args(seam, domain))
         assert inputs(tmp_path, "dem_tiles") == "6400_1_10m_z33.tif; 6400_4_10m_z33.tif"
         assert inputs(tmp_path, "domain_crs") == "EPSG:4326"
         assert inputs(tmp_path, "domain_transform") == description("EPSG:4326")

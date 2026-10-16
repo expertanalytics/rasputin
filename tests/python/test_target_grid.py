@@ -5,8 +5,10 @@
 
 - `TargetGrid(crs, spacing, row0, col0, rows, cols)`, frozen; node `(R, K)`
   at `(K h, -R h)` in the target CRS (J6); `spacing` whole metres, 1 to 1000.
-- `target_grid_for(domain, target, spacing) -> TargetGrid`: the domain grown
-  by the cell diagonal with mitred corners, snapped outward to the lattice.
+- `target_grid_for(domain, target, spacing) -> tuple[TargetGrid, Polygon]`:
+  the domain grown by the cell diagonal with mitred corners, snapped outward
+  to the lattice, and that grown domain (increment 30d, section 3.1: the
+  caller no longer grows it a second time).
 - `TileWindows(tile)`, a `SourceWindows`: `.meta` and `.window(r0, r1, c0, c1)`.
 - `resample(grid, source, threads) -> DemTile`: bilinear in the source's
   index space; a node whose stencil touches NoData or leaves the source is
@@ -32,6 +34,9 @@ HOW THIS FILE GOES RED: `tin_engine.target_grid` does not exist; it is
 imported in a fixture, so each test fails on its own. The `to_core` gate
 fails on its assertion (no refusal), because `RasterMeta` ignores
 `geographic` before 15c-2.
+
+AMENDED for 30d (`docs/increments/30d-outline-buffer-speed.md`, section 3.1):
+the two G3 tests unpack `(grid, grown)`.
 """
 
 from __future__ import annotations
@@ -145,7 +150,7 @@ class TestTheTargetGrid:
     def test_nodes_are_multiples_of_h_bit_for_bit(
         self, tg: ModuleType, domain: DomainPolygon
     ) -> None:
-        grid = tg.target_grid_for(domain, TARGET, H)
+        grid, _ = tg.target_grid_for(domain, TARGET, H)
         assert (grid.crs, grid.spacing) == (TARGET, H)
         source = tg.TileWindows(geographic_tile(rough(80, 80)))
         tile = tg.resample(grid, source, threads=2)
@@ -157,8 +162,13 @@ class TestTheTargetGrid:
     def test_the_extent_covers_the_grown_domain_and_no_more(
         self, tg: ModuleType, domain: DomainPolygon
     ) -> None:
-        grid = tg.target_grid_for(domain, TARGET, H)
-        grown = domain.polygon.buffer(math.sqrt(2) * H, join_style="mitre")
+        result = tg.target_grid_for(domain, TARGET, H)
+        assert isinstance(result, tuple) and len(result) == 2, type(result)
+        grid, grown = result
+        # 30d, section 3.1: the grown domain it returns is GEOS's mitred buffer
+        # (a 4-vertex domain is off the gate of section 3.3), bit for bit.
+        expected = domain.polygon.buffer(math.sqrt(2) * H, join_style="mitre")
+        assert shapely.to_wkb(grown) == shapely.to_wkb(expected)
         x0, y1 = grid.col0 * H, -grid.row0 * H
         x1, y0 = x0 + (grid.cols - 1) * H, y1 - (grid.rows - 1) * H
         gx0, gy0, gx1, gy1 = grown.bounds
@@ -258,6 +268,83 @@ class TestResampling:
         first = runs[0].array.tobytes()  # NaN compares as bytes
         assert all(run.array.tobytes() == first for run in runs[1:])
         assert all(run.meta == runs[0].meta for run in runs[1:])
+
+
+# ------------------------------------------------------------------ +-inf is data (audit PR A)
+
+# Ola's ruling (`docs/increments/python-audit.md`, section 7, ruling 1;
+# `python-audit-pr-a.md`, "The +-infinity ruling" and red test 2): NoData is
+# NaN or the sentinel, as in the core's `Raster::is_nodata`; +-inf is data.
+# A 6 x 5 source of 10 m cells, one infinity at node (2, 2), resampled in its
+# own CRS onto the lattice at 5 m: target node (R, K) reads source (R/2, K/2).
+UTM = "EPSG:25833"
+INF_AT = (2, 2)
+#: Target nodes whose stencil holds the infinity at positive weight (source
+#: rows and cols 1.5 to 2.5): +-inf.
+POSITIVE = [(r, k) for r in (3, 4, 5) for k in (3, 4, 5)]
+#: Target nodes whose stencil holds it at weight 0 (0 x inf): NaN.
+ZERO = [(2, 2), (2, 3), (2, 4), (2, 5), (3, 2), (4, 2), (5, 2)]
+
+
+def plane_tile(dtype: Any, nodata: float | None, at: float | None = None) -> DemTile:
+    r, c = np.indices((6, 5))
+    z = (100.0 + 3.0 * r + 2.0 * c).astype(dtype)
+    if at is not None:
+        z[INF_AT] = at
+    meta = RasterMeta(
+        x_min=500_000.0,
+        y_max=6_600_000.0,
+        delta_x=10.0,
+        delta_y=10.0,
+        cols=5,
+        rows=6,
+        epsg=25833,
+        nodata=nodata,
+        nodata_source="absent" if nodata is None else "tag",
+        pixel_is_area=False,
+        vertical_unit_assumed=True,
+    )
+    return DemTile(meta=meta, array=z)
+
+
+def half_cells(tg: ModuleType) -> Any:
+    return tg.TargetGrid(
+        crs=UTM, spacing=5, row0=-6_600_000 // 5, col0=500_000 // 5, rows=11, cols=9
+    )
+
+
+@pytest.mark.parametrize("nodata", [None, -32767.0], ids=["no_sentinel", "sentinel"])
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+@pytest.mark.parametrize("sign", [1.0, -1.0], ids=["+inf", "-inf"])
+class TestInfinityIsData:
+    def test_resample_carries_it_at_positive_weight_and_is_nan_at_zero_weight(
+        self, tg: ModuleType, sign: float, dtype: Any, nodata: float | None
+    ) -> None:
+        grid = half_cells(tg)
+        out = tg.resample(grid, tg.TileWindows(plane_tile(dtype, nodata, sign * math.inf)), 1)
+        clean = tg.resample(grid, tg.TileWindows(plane_tile(dtype, nodata)), 1)
+        values, reference = np.asarray(out.array), np.asarray(clean.array)
+        assert [values[n] for n in POSITIVE] == [sign * math.inf] * len(POSITIVE)
+        assert np.isnan([values[n] for n in ZERO]).all(), "0 x inf is NaN, NoData to the core"
+        away = np.ones(values.shape, dtype=bool)
+        away[tuple(np.transpose(POSITIVE + ZERO))] = False
+        assert np.isfinite(reference).all(), "the clean source must give a value everywhere"
+        assert values[away].tobytes() == reference[away].tobytes(), "away from it, unchanged"
+
+    def test_check_point_blocks_yields_the_node_with_its_infinity(
+        self, tg: ModuleType, sign: float, dtype: Any, nodata: float | None
+    ) -> None:
+        tile = plane_tile(dtype, nodata, sign * math.inf)
+        domain = DomainPolygon(
+            polygon=shapely.box(499_990.0, 6_599_940.0, 500_050.0, 6_600_010.0), crs=UTM
+        )
+        blocks = list(tg.check_point_blocks(half_cells(tg), tg.TileWindows(tile), domain, 1))
+        xy = np.concatenate([b[0] for b in blocks])
+        z = np.concatenate([b[1] for b in blocks])
+        assert xy.shape == (30, 2), "every source node, the infinite one too"
+        at = (xy[:, 0] == 500_020.0) & (xy[:, 1] == 6_599_980.0)
+        assert at.sum() == 1
+        assert z[at][0] == np.float32(sign * math.inf)
 
 
 # ------------------------------------------------------------------ G5, check points
@@ -405,13 +492,13 @@ class _SpiedReprojector:
     number of points it is given. One transformer per block (J5), so the
     record is one entry per block."""
 
-    def __init__(self, real: Callable[[str, str], Callable[[Any], Any]]) -> None:
+    def __init__(self, real: Callable[..., Callable[[Any], Any]]) -> None:
         self._real = real
         self._lock = threading.Lock()
         self.lengths: list[int] = []
 
-    def __call__(self, source: str, target: str) -> Callable[[Any], Any]:
-        transform = self._real(source, target)
+    def __call__(self, source: str, target: str, *, threads: int = 1) -> Callable[[Any], Any]:
+        transform = self._real(source, target, threads=threads)
 
         def recording(points: Any) -> Any:
             with self._lock:

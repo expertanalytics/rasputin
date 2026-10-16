@@ -1,0 +1,14 @@
+{
+ "mesh": "/Users/skavhaug/projects/rasputin_scratch/germany/isar-loisach/clc_simplify/ft30_tol50_a0.vtk",
+ "triangles": 84027,
+ "dem_nodes_in_domain": 1848536,
+ "compared": 1848536,
+ "not_covered": 0,
+ "max_abs_m": 49.99397030193359,
+ "mean_abs_m": 9.525796907048964,
+ "rms_m": 12.929027810393789,
+ "p50_abs_m": 6.834243314340711,
+ "p95_abs_m": 27.849949076087796,
+ "p99_abs_m": 37.72044600975929,
+ "mean_signed_m": 0.39424348896454253
+}

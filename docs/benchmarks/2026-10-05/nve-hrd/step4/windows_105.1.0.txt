@@ -1,0 +1,7 @@
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window x 127470..132580 y 6981470..6985760; in-nodes 7468 x 129620..130890 y 6983220..6984540; edge False nodata False
+window x 125620..134890 y 6979220..6988540; in-nodes 7468 x 129620..130890 y 6983220..6984540; edge False nodata False
+window x 125620..134890 y 6979220..6988540; in-nodes 7482 x 129590..130890 y 6983220..6984540; edge False nodata False
+105.1.0 Osenelv v/Øren: miss; NVE's in ours 0.4 %, ours in NVE's 77.6 %, area ratio 0.005
+summary: 1 station: refused 0, uncertain 0, match 0, close 0, miss 1
+/Users/skavhaug/projects/rasputin_scratch/nve-hrd-2026-10-05/probe/105.1.0

@@ -22,6 +22,7 @@ import math
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import ModuleType
@@ -146,6 +147,24 @@ def test_parse_child_refuses_with_the_run_named(bench: ModuleType, stderr: str) 
 
 def test_child_error_is_a_value_error(bench: ModuleType) -> None:
     assert issubclass(bench.ChildError, ValueError)
+
+
+# Increment pq (docs/increments/perf-quick-check.md, section 3): the child adds
+# `phases` and `total_s` to its BENCH line, and a line without them still parses.
+
+
+def test_parse_child_reads_phases_and_the_clock_total(bench: ModuleType) -> None:
+    phases = {"decode": 1.25, "features clip": 6.89, "refine": 3.5}
+    child = bench.parse_child(bench_line({**CHILD_JSON, "phases": phases, "total_s": 16.97}), "t")
+    assert dict(child.phases) == phases
+    assert list(dict(child.phases)) == ["decode", "features clip", "refine"]  # the clock's order
+    assert child.total_s == pytest.approx(16.97)
+
+
+def test_parse_child_of_an_older_line_has_no_phases_and_no_total(bench: ModuleType) -> None:
+    child = bench.parse_child(bench_line(CHILD_JSON), run="t")
+    assert dict(child.phases) == {}
+    assert child.total_s is None
 
 
 # ------------------------------------------------------- statistics, ceiling
@@ -313,6 +332,32 @@ def test_read_vtk_ascii_refuses_binary(bench: ModuleType, tmp_path: Path) -> Non
     write_mesh(tmp_path / "bin.vtk", binary=True)
     with pytest.raises(ValueError, match="BINARY"):
         bench.read_vtk_ascii(tmp_path / "bin.vtk")
+
+
+# ------------------------------------------- increment pq: Runner.run timeout
+#
+# docs/increments/perf-quick-check.md, section 3: every subprocess gets a
+# `timeout`, through a new argument of `Runner.run`; on expiry the child is
+# killed and `Completed.timed_out` says so.
+
+
+def test_completed_is_not_timed_out_by_default(bench: ModuleType) -> None:
+    assert bench.Completed(0, "", "", 0.1).timed_out is False
+
+
+def test_subprocess_runner_without_a_timeout_is_not_timed_out(bench: ModuleType) -> None:
+    done = bench.SubprocessRunner().run([sys.executable, "-c", "print('ok')"])
+    assert (done.returncode, done.stdout.strip(), done.timed_out) == (0, "ok", False)
+
+
+def test_subprocess_runner_kills_a_child_past_its_timeout(bench: ModuleType) -> None:
+    """*Scale:* a 60 s sleep against a 0.5 s timeout; the call returning within
+    20 s, timed from outside, is what shows the child was killed, not awaited."""
+    sleeper = [sys.executable, "-c", "import time; time.sleep(60)"]
+    start = time.perf_counter()
+    done = bench.SubprocessRunner().run(sleeper, timeout=0.5)
+    assert time.perf_counter() - start < 20.0
+    assert done.timed_out is True
 
 
 # ------------------------------------------------------------ run records
@@ -879,7 +924,9 @@ class FakeRunner:
         self.child_code = child_code
         self.calls: list[list[str]] = []
 
-    def run(self, argv: Sequence[str], cwd: Path | None = None) -> Any:
+    def run(
+        self, argv: Sequence[str], cwd: Path | None = None, timeout: float | None = None
+    ) -> Any:
         args = [str(a) for a in argv]
         self.calls.append(args)
         program = Path(args[0]).name
@@ -949,8 +996,16 @@ def run_args(ws: dict[str, Path], label: str, *extra: str) -> list[str]:
 
 @pytest.fixture
 def use_runner(bench: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Callable[[Any], None]:
+    """The fake runner, and the Mac host over it whatever this machine is, so
+    a run test means the same on CI's Linux as on the Mac (a Linux host would
+    read the runner's own `/sys`)."""
+
     def install(fake: Any) -> None:
         monkeypatch.setattr(bench, "make_runner", lambda: fake)
+        monkeypatch.setattr(
+            bench, "make_host", lambda runner, system="darwin": bench.MacHost(runner),
+            raising=False,
+        )  # fmt: skip
 
     return install
 
@@ -1143,6 +1198,20 @@ def test_compare_rejudges_stored_evidence(
 # `ValidationError`), a message naming the offending file, and, for `run`,
 # refused before any build or child, so a missing input is not found out only
 # after the measurement it spoils.
+
+
+def test_run_on_an_unsupported_system_exits_3_and_writes_nothing(
+    bench: ModuleType, workspace: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host factory refuses a system with no reader (`win32`): exit 3,
+    the system named, no evidence written. The real factory, asked for
+    `win32`, not the Mac host the other run tests pin."""
+    monkeypatch.setattr(bench, "make_runner", lambda: FakeRunner(bench))
+    real = bench.make_host
+    monkeypatch.setattr(bench, "make_host", lambda runner, system="win32": real(runner, "win32"))
+    result = cli.invoke(bench.app, [*run_args(workspace, "t1"), "--no-build"])
+    assert_refused(result, "win32")
+    assert list(workspace["out_root"].rglob("*")) == []
 
 
 def assert_refused(result: Any, names: str) -> None:
@@ -1464,3 +1533,54 @@ def test_real_child_reports_the_loaded_mode(bench: ModuleType, tmp_path: Path) -
     child = bench.parse_child(proc.stderr, run="real")
     assert child.hardening == getattr(core, "hardening", "none")
     assert child.hardening != "none"
+
+
+# -------------------------------------------------- the record format (T7)
+
+REPO = TOOL.parents[1]
+
+
+def test_every_stored_run_loads_as_a_mac_run(bench: ModuleType) -> None:
+    """A record written before the system field reads its `macos` key as
+    `os_version`, and is a macOS run. One test over every stored run.json,
+    each failure named."""
+    paths = sorted((REPO / "docs" / "benchmarks").rglob("run.json"))
+    assert len(paths) >= 174, len(paths)
+    wrong: list[str] = []
+    for path in paths:
+        raw = json.loads(path.read_text())["machine"]
+        machine = bench.RunRecord.model_validate_json(path.read_text()).machine
+        got = (getattr(machine, "system", None), getattr(machine, "os_version", None))
+        if got != ("macOS", raw.get("os_version", raw.get("macos"))):
+            wrong.append(f"{path.relative_to(REPO)}: {got}")
+    assert wrong == [], f"{len(wrong)} of {len(paths)}: {wrong[:3]}"
+
+
+def linux_machine() -> dict[str, Any]:
+    machine = {k: v for k, v in record_dict()["machine"].items() if k != "macos"}
+    return {**machine, "cpu_brand": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+            "p_cores": 4, "e_cores": 0, "system": "Linux",
+            "os_version": "Ubuntu 24.04.3 LTS"}  # fmt: skip
+
+
+def test_a_linux_runs_readme_names_the_system_and_its_version(
+    bench: ModuleType, tmp_path: Path
+) -> None:
+    linux = {"state": "ac", "percent": None, "raw": "no power supply under /sys/class/power_supply"}
+    bench.write_evidence(make(bench, machine=linux_machine(), power=linux), tmp_path)
+    readme = (tmp_path / "README.md").read_text()
+    assert "Linux Ubuntu 24.04.3 LTS" in readme
+    assert "macOS" not in readme
+    assert "pmset" not in readme
+    stored = bench.RunRecord.model_validate_json((tmp_path / "run.json").read_text())
+    assert (stored.machine.system, stored.machine.os_version) == ("Linux", "Ubuntu 24.04.3 LTS")
+
+
+def test_a_mac_runs_readme_names_macos_and_no_command(bench: ModuleType, tmp_path: Path) -> None:
+    """The power is "read before and after (raw text in run.json)", by
+    whichever command or files the host reads."""
+    bench.write_evidence(make(bench), tmp_path)
+    readme = (tmp_path / "README.md").read_text()
+    assert "macOS 26.0" in readme
+    assert "pmset" not in readme
+    assert "raw text in run.json" in readme

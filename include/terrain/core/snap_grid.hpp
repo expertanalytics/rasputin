@@ -37,7 +37,7 @@
 namespace terrain {
 
 // The dedup key. Integral on purpose: std::int64_t has no NaN, so the ordering
-// below is total and equality is exact. point.hpp's std::hash<Point2> is
+// below is total and equality is exact. A hash of the raw doubles is
 // prohibited as a dedup key here (`parallel_refinement.md:126-128`) -- it
 // cannot find a NaN and it hashes near-coincident points apart.
 struct GridPoint {

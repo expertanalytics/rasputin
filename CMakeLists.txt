@@ -109,6 +109,29 @@ if(RASPUTIN_BUILD_PYTHON)
     target_compile_options(_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
     install(TARGETS _core LIBRARY DESTINATION tin_engine)
+
+    # The headers a plugin compiles against, and a CMake config for
+    # find_package(rasputin): rasputin::terrain_headers, carrying C++20 and the
+    # definitions the core was built with, so the shared headers compile alike.
+    install(DIRECTORY include/terrain DESTINATION tin_engine/include)
+    install(FILES bindings/numpy_raster.hpp DESTINATION tin_engine/include/rasputin_bindings)
+    get_target_property(RASPUTIN_DEFINITIONS terrain_headers INTERFACE_COMPILE_DEFINITIONS)
+    if(NOT RASPUTIN_DEFINITIONS)
+        set(RASPUTIN_DEFINITIONS "")
+    endif()
+    file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rasputinConfig.cmake" @ONLY CONTENT [[
+if(NOT TARGET rasputin::terrain_headers)
+    get_filename_component(_rasputin_include "${CMAKE_CURRENT_LIST_DIR}/../../../include" ABSOLUTE)
+    add_library(rasputin::terrain_headers INTERFACE IMPORTED)
+    set_target_properties(rasputin::terrain_headers PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_rasputin_include}"
+        INTERFACE_COMPILE_FEATURES cxx_std_20
+        INTERFACE_COMPILE_DEFINITIONS "@RASPUTIN_DEFINITIONS@")
+    unset(_rasputin_include)
+endif()
+]])
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/rasputinConfig.cmake"
+            DESTINATION tin_engine/share/cmake/rasputin)
 endif()
 
 option(RASPUTIN_BUILD_TESTS "Build C++ unit tests" ON)

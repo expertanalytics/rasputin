@@ -1,0 +1,45 @@
+== 101.1.0
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window 1: x 67360-72390, y 6959330-6963640, 432 x 504 nodes, searched in 0.03 s, window widened to the north, west, south, east
+window 2: x 65110-74850, y 6957150-6966600, 946 x 975 nodes, searched in 0.12 s, window widened to the east
+window 3: x 61110-82840, y 6951350-6971290, 1995 x 2174 nodes, searched in 0.58 s, catchment inside the window
+placed on the river line 3 m from the station (river Tennfjordelva, line 12155230), moved 4 m onto the DEM's valley floor; 40.64 km2 drain through it, and the area changes by 0.0 % within 30 m up and down the river: well defined
+catchment: 406405 DEM nodes, 40.640500 km2
+outline along DEM cells: 4560 vertices, 40.640550 km2, 0 separate patches left out (0 nodes), 1 enclosed gap filled (0.000050 km2), traced in 0.04 s
+reduced outline: 176 vertices, 40.640550 km2, difference 7.6e-07 m2 (1.9e-14 relative), tolerance 20 m, 0.01 s
+== 2.32.0
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window 1: x 245850-250890, y 6864790-6869380, 460 x 505 nodes, searched in 0.03 s, window widened to the north, west, south, east
+window 2: x 242310-253590, y 6861790-6873370, 1159 x 1129 nodes, searched in 0.17 s, window widened to the north, west
+window 3: x 234320-257590, y 6855870-6881360, 2550 x 2328 nodes, searched in 0.86 s, window widened to the north, west
+window 4: x 218330-265590, y 6847870-6897350, 4949 x 4727 nodes, searched in 4.07 s, window widened to the west
+window 5: x 186340-281590, y 6831050-6921960, 9092 x 9526 nodes, searched in 20.00 s, catchment inside the window
+placed on the river line 94 m from the station (river Atna, line 10794796), moved 12 m onto the DEM's valley floor; 459.8 km2 drain through it, and the area changes by 0.0 % within 94 m up and down the river: well defined
+catchment: 4598478 DEM nodes, 459.847800 km2
+outline along DEM cells: 19232 vertices, 459.847850 km2, 0 separate patches left out (0 nodes), 1 enclosed gap filled (0.000050 km2), traced in 0.72 s
+reduced outline: 668 vertices, 459.847850 km2, difference -1.07e-06 m2 (-2.3e-15 relative), tolerance 20 m, 0.04 s
+== 2.11.0
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window 1: x 315810-320310, y 6917250-6922030, 479 x 451 nodes, searched in 0.03 s, window widened to the east
+window 2: x 313870-322430, y 6915370-6923890, 853 x 857 nodes, searched in 0.09 s, catchment inside the window
+placed on the river line 84 m from the station (line 12252329), moved 2 m onto the DEM's valley floor; 0.0012 km2 drain through it, and the area changes by -33.3 % within 84 m up and down the river: uncertain (chain_not_draining, chain_end_open)
+catchment: 12 DEM nodes, 0.001200 km2
+outline along DEM cells: 48 vertices, 0.001150 km2, 0 separate patches left out (0 nodes), 0 enclosed gaps filled (0.000000 km2), traced in 0.01 s
+reduced outline: 4 vertices, 0.001150 km2, difference 0 m2 (0 relative), tolerance 20 m, 0.00 s
+== 73.27.0
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window 1: x 127090-131650, y 6798650-6803640, 500 x 457 nodes, searched in 0.03 s, catchment inside the window
+window 2: x 123490-134590, y 6794660-6805570, 1092 x 1111 nodes, searched in 0.16 s, window widened to the south, east
+window 3: x 119490-142210, y 6786670-6809570, 2291 x 2273 nodes, searched in 0.76 s, catchment inside the window
+placed on the river line 12 m from the station (river Lærdalsvassdraget, line 11789696), moved 12 m onto the DEM's valley floor; 0.0033 km2 drain through it, and the area changes by 63.6 % within 30 m up and down the river: uncertain (swing, chain_not_draining)
+catchment: 33 DEM nodes, 0.003300 km2
+outline along DEM cells: 54 vertices, 0.003250 km2, 0 separate patches left out (0 nodes), 0 enclosed gaps filled (0.000000 km2), traced in 0.05 s
+reduced outline: 4 vertices, 0.003250 km2, difference 1.96e-08 m2 (6e-12 relative), tolerance 20 m, 0.00 s
+== 24.9.0
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window 1: x 43910-48380, y 6497400-6502630, 524 x 448 nodes, searched in 0.03 s, window widened to the west, south, east
+window 2: x 41350-50800, y 6494920-6503700, 879 x 946 nodes, searched in 0.11 s, catchment inside the window
+placed on the river line 165 m from the station (river Lygna, line 10746896), moved 5 m onto the DEM's valley floor; 0.48 km2 drain through it, and the area changes by -3.0 % within 165 m up and down the river: uncertain (chain_not_draining, chain_end_open)
+catchment: 4800 DEM nodes, 0.480000 km2
+outline along DEM cells: 574 vertices, 0.479950 km2, 0 separate patches left out (0 nodes), 0 enclosed gaps filled (0.000000 km2), traced in 0.01 s
+reduced outline: 31 vertices, 0.479950 km2, difference -1.25e-07 m2 (-2.6e-13 relative), tolerance 20 m, 0.00 s

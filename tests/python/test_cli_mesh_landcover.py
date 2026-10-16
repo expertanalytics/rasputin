@@ -46,21 +46,17 @@ import shapely
 from numpy.testing import assert_array_equal
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
-from typer.testing import CliRunner
 
 import feature_fixtures as ff
+from class_map_snapshot import CORINE_NATURAL
+from cli_helpers import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
 from feature_fixtures import Feat, domain_of, write_geojson
-from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
+from geotiff_fixtures import TIE_X, TIE_Y
 from landcover_fixtures import MARGIN, landcover_oracle, spread_violations, vtk_labels
 from plyread import read_ply
-from test_cli_mesh import plain
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson
 from tin_engine.cli import app
-from tin_engine.palettes import CORINE_NATURAL, paraview_preset
+from tin_engine.palettes import paraview_preset
 from vtkread import VtkFile, read_vtk
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 LAND_COVER_LINE = re.compile(
     r"land cover: (?P<r>\d+) areas between lines; (?P<o>\d+) in no polygon, "
@@ -110,17 +106,17 @@ NOTCHED: list[tuple[float, float]] = [
     rel(13.9, -7.1),
 ]
 BAND = rect(50.2, -30.1, 150.3, -15.2)
+#: 20c-3's four land-cover switches off: today's features, byte for byte.
+CLEAN_UP_OFF = (
+    "--features-repair=0",
+    "--no-features-merge-same-class",
+    "--features-tolerance=0",
+    "--features-outline-snap=0",
+)
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def plain_square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE)
+bumpy = rough_dem(16)
+plain_square = polygon_file(SQUARE)
 
 
 def run(
@@ -128,7 +124,16 @@ def run(
 ) -> tuple[int, str, Path]:
     target = tmp_path / out
     code, output = invoke(
-        "--dem", str(tif), "--domain", str(domain), "--tolerance", "1", "--out", str(target), *extra
+        "mesh",
+        "--dem",
+        str(tif),
+        "--domain",
+        str(domain),
+        "--tolerance",
+        "1",
+        "--out",
+        str(target),
+        *extra,
     )
     return code, output, target
 
@@ -169,12 +174,12 @@ def polygons_of(features: list[Feat]) -> list[tuple[BaseGeometry, int]]:
 
 
 def mesh_corine(
-    tmp_path: Path, tif: Path, features: list[Feat], domain: Path | None = None
+    tmp_path: Path, tif: Path, features: list[Feat], domain: Path | None = None, *extra: str
 ) -> Labelled:
     path = write_geojson(tmp_path / "corine.geojson", features)
     domain = domain or geojson(tmp_path / "square.geojson", SQUARE)
     code, output, target = run(
-        tmp_path, tif, domain, "--features", str(path), "--features-map", "corine"
+        tmp_path, tif, domain, "--features", str(path), "--features-map", "corine", *extra
     )
     assert code == 0, output
     return labelled_vtk(read_vtk(target.read_bytes()), output, polygons_of(features))
@@ -219,8 +224,13 @@ class TestFixtures:
         assert got.stderr_counts()["v"] == 0
 
     def test_a_lake_in_an_unholed_forest(self, tmp_path: Path, bumpy: Path) -> None:
-        """D2: the smaller polygon wins, and stderr counts the overlap."""
-        got = mesh_corine(tmp_path, bumpy, [coded("f", FOREST, "312"), coded("l", LAKE, "512")])
+        """D2: the smaller polygon wins, and stderr counts the overlap. With
+        20c-3's land-cover clean-up off (``CLEAN_UP_OFF``): by default its
+        repair resolves the overlap before labelling, so stderr would count
+        none (20c-3 red step; the default is ``test_feature_repair.py``'s
+        ``TestOverlap``)."""
+        features = [coded("f", FOREST, "312"), coded("l", LAKE, "512")]
+        got = mesh_corine(tmp_path, bumpy, features, None, *CLEAN_UP_OFF)
         assert set(got.codes[got.inside(LAKE)].tolist()) == {512}
         assert set(got.codes[got.inside(FOREST.difference(LAKE))].tolist()) == {312}
         assert got.stderr_counts()["v"] > 0
@@ -228,8 +238,15 @@ class TestFixtures:
     def test_a_polygon_clipped_by_the_domain_into_two_pieces(
         self, tmp_path: Path, bumpy: Path
     ) -> None:
+        """16c's labelling of one polygon the domain clips into two pieces.
+        With 20c-3's outline rule off (``--features-outline-snap=0``, ruling
+        G2): the band's borders cross the notch's sides, and the rule, on by
+        default, moves them there as designed (OR3), while this oracle
+        checks every triangle against the input polygon as given. The repair
+        and the merge stay at their defaults."""
         domain = geojson(tmp_path / "notched.geojson", NOTCHED)
-        got = mesh_corine(tmp_path, bumpy, [coded("b", BAND, "324")], domain=domain)
+        features = [coded("b", BAND, "324")]
+        got = mesh_corine(tmp_path, bumpy, features, domain, "--features-outline-snap=0")
         west = got.inside(BAND.intersection(rect(12, -80, 80.1, 0)))
         east = got.inside(BAND.intersection(rect(119.9, -80, 190, 0)))
         assert west.any() and east.any()
@@ -293,7 +310,9 @@ class TestRecord:
     def test_every_cell_carries_a_code_in_both_encodings(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, two_squares: Path, binary: bool
     ) -> None:
-        extra = ["--binary"] if binary else []
+        # Each case names its flag, so the default (binary since increment 31)
+        # cannot quietly turn the ascii case into a second binary one.
+        extra = ["--binary"] if binary else ["--ascii"]
         code, output, target = run(
             tmp_path,
             bumpy,
@@ -497,7 +516,7 @@ class TestWhatFeatureInputKeeps:
         ],
     )
     def test_the_maps_name_their_code_system(self, name: str, codes: str) -> None:
-        assert ff.feature_input().CLASS_MAPS[name].codes == codes
+        assert ff.class_map(name).codes == codes
 
     def test_a_coded_polygon_keeps_its_code_and_polygon(self, tmp_path: Path) -> None:
         fs = self.open(tmp_path, [coded(1, WEST, "311")], "corine")

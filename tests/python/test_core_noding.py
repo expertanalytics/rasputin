@@ -31,9 +31,8 @@ to the binding layer is a lifetime or a reinterpret:
 * the GIL is released around `node()`, which is licensed by `node.hpp:5-11`'s
   purity claim and by nothing else, so the purity is measured here too.
 
-What this file does **not** own: the CLI's presentation of a refusal
-(`test_cli_draw.py`), the structural join onto `viz/protocols.py`
-(`test_viz_protocols.py`), and `triangulate`'s own surface (`test_core_cdt.py`,
+What this file does **not** own: the CLI's refusal of `--snap-spacing`
+(`test_cli_mesh.py`), and `triangulate`'s own surface (`test_core_cdt.py`,
 which pins that it no longer accepts a `Pslg` at all).
 """
 
@@ -44,13 +43,13 @@ import gc
 import sys
 import threading
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
+from gil_probe import ticks_during
 from tin_engine import _core
 from tin_engine.features import DEFAULT_VOCABULARY
 
@@ -356,7 +355,7 @@ class TestNodeRefusalsAreData:
         self, crossing_pslg: Any, spacing: float
     ) -> None:
         # The C++ half of the two refusal channels the design keeps apart: the
-        # CLI refuses `--snap-spacing` as a usage error before drawing
+        # CLI refuses `--snap-spacing` as a usage error before reading
         # anything, and the library refuses it as a precondition for callers
         # that are not the CLI. Neither is removable in favour of the other.
         outcome = _core.node(crossing_pslg, spacing)
@@ -414,8 +413,7 @@ class TestNodeRefusalsAreData:
 
 
 class TestNodedPslgShape:
-    """`PslgLike` is a structural contract with three implementations --
-    `Pslg`, `NodedPslg` and `viz.fixtures.Fixture`. The four shared accessors
+    """`Pslg` and `NodedPslg` share four accessors. They
     are bound by one function template precisely so that a member cannot be
     added to one and forgotten on the other."""
 
@@ -493,8 +491,8 @@ class TestEdgeProperties:
         assert noded_crossing.edge_properties.shape == (expected_edge_count(noded_crossing),)
 
     def test_carries_both_input_features_after_the_split(self, noded_crossing: Any) -> None:
-        # The picture the increment exists to draw: a road and a river, in two
-        # colours, meeting at a constructed node. Both bits must survive, and
+        # The road-crosses-river shape: a road and a river meeting at a
+        # constructed node. Both bits must survive, and
         # neither may be smeared over the other.
         masks = [int(m) for m in noded_crossing.edge_properties]
         assert sum(1 for m in masks if m & ROAD) >= 2
@@ -716,45 +714,6 @@ class TestEndToEnd:
 # --------------------------------------------------------------------------
 # The GIL, and the purity that licenses releasing it
 # --------------------------------------------------------------------------
-
-
-class _Ticker:
-    """A thread that ticks once per millisecond, and cannot tick without the
-    GIL. `time.sleep` releases the GIL and must re-acquire it to continue, so a
-    tick is direct evidence that the GIL was available."""
-
-    def __init__(self) -> None:
-        self.ticks = 0
-        self._stop = threading.Event()
-        self._ready = threading.Event()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-
-    def _run(self) -> None:
-        self._ready.set()
-        while not self._stop.is_set():
-            self.ticks += 1
-            time.sleep(0.001)
-
-    def __enter__(self) -> _Ticker:
-        self._thread.start()
-        assert self._ready.wait(timeout=10.0), "ticker never started"
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self._stop.set()
-        self._thread.join(timeout=10.0)
-
-
-def ticks_during[T](call: Callable[[], T]) -> tuple[T, int, float]:
-    """Return the call's result, the ticks observed during it, and its duration."""
-    with _Ticker() as ticker:
-        time.sleep(0.02)  # let the ticker reach steady state
-        before = ticker.ticks
-        started = time.perf_counter()
-        result = call()
-        elapsed = time.perf_counter() - started
-        after = ticker.ticks
-    return result, after - before, elapsed
 
 
 RELEASED_TICKS = 20

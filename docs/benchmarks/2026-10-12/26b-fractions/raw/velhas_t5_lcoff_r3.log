@@ -1,0 +1,21 @@
+1571955 triangles. Every DEM node inside the mesh is within 5 m of it (largest difference 5 m).
+/Users/skavhaug/projects/rasputin_scratch/sao_francisco_piece_meshes/26b-fractions/velhas_t5_lcoff.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/mapbiomas-26b/docs/benchmarks/2026-10-12/26b-fractions/raw/velhas_t5_lcoff_r3.stats.md
+        2.82 real         5.99 user         0.29 sys
+          1378893824  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               89006  page reclaims
+                  44  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   4  voluntary context switches
+                9040  involuntary context switches
+         38588146770  instructions retired
+         18987199606  cycles elapsed
+          1354941976  peak memory footprint

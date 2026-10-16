@@ -35,7 +35,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from test_core_cdt import RELEASED_TICKS, ticks_during
+from gil_probe import ticks_during
+from test_core_cdt import RELEASED_TICKS
 from tin_engine import _core
 from tin_engine._core import ChainRole
 from tin_engine.cli import DEFAULT_SNAP_SPACING, _constraint_arrays, _engine
@@ -397,11 +398,25 @@ class TestStubs:
     def test_the_stub_declares_the_new_surface(self, name: str) -> None:
         assert name in self.declared()
 
-    def test_refine_points_takes_tolerance_and_threads_by_keyword(self) -> None:
+    def test_refine_points_takes_tolerance_threads_strip_and_frozen_mask_by_keyword(self) -> None:
+        """`strip` since increment 15f-3 (D5; keyword-only, as chosen in
+        `test_core_edge_strip.py`), `frozen_mask` since 23b (N13),
+        `constraint_feet` since 20c-1 (pin 10)."""
         fn = self.declared().get("refine_points")
         assert isinstance(fn, ast.FunctionDef), "refine_points is not stubbed"
-        # 23b (N13) adds frozen_mask after them.
-        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads", "frozen_mask"]
+        # 23b (N13) adds frozen_mask, after 15f-3's strip (merged first);
+        # 20c-1 (pin 10) adds constraint_feet, last, after frozen_mask;
+        # increment 33 adds field, last (test_cli_tolerance_near.py's pin);
+        # increment 34 adds slope, last, after field (as 33 passes field=).
+        assert [a.arg for a in fn.args.kwonlyargs] == [
+            "tolerance",
+            "threads",
+            "strip",
+            "frozen_mask",
+            "constraint_feet",
+            "field",
+            "slope",
+        ]
 
     def test_point_refine_outcome_carries_the_two_counters(self) -> None:
         cls = self.declared().get("PointRefineOutcome")

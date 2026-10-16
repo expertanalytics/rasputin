@@ -27,7 +27,7 @@ import io
 import itertools
 from collections.abc import Sequence
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyproj
@@ -36,6 +36,7 @@ from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
 
 from cog_fixtures import block_rectangles
+from crs_fixtures import axes_swapped, refuse_point_moves
 from fetch_fixtures import (
     GAP,
     MAX_RANGE,
@@ -51,7 +52,9 @@ from fetch_fixtures import (
 from geotiff_fixtures import TIE_X, TIE_Y
 from tin_engine.domain import DomainPolygon
 from tin_engine.io.geotiff import read_page
-from tin_engine.mosaic import Bounds
+
+if TYPE_CHECKING:
+    from tin_engine.io.models import Bounds
 
 METRES_PER_DEGREE = 111_000.0
 
@@ -74,7 +77,11 @@ def header(data: bytes, *, geographic: bool = False) -> tuple[Any, Any, Any]:
 
 
 def box_of(x0: float, y0: float, x1: float, y1: float) -> Bounds:
-    return Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    """A `Bounds`, from `io.models` (audit PR A moved it there from `mosaic`),
+    read at call time so a missing name fails the test, not the collection."""
+    models = importlib.import_module("tin_engine.io.models")
+    box: Bounds = models.Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    return box
 
 
 def domain(ring: Sequence[tuple[float, float]], crs: str) -> DomainPolygon:
@@ -173,6 +180,21 @@ class TestF2TheSourceBox:
         back = pyproj.Transformer.from_crs("EPSG:3035", PROJECTED_CRS, always_xy=True)
         moved = np.column_stack(back.transform(points[:, 0], points[:, 1]))
         assert inside(moved, got, 2 * meta.delta_x * 0.999, 2 * meta.delta_y * 0.999)
+
+    def test_out_crs_spelt_as_the_sources_definition_is_no_out_crs(
+        self, plan: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Audit PR B, red test 10: `out_crs` as the WKT of the source's
+        EPSG code (25833), without its ID and axes swapped, is the source's
+        CRS (`crs.same_crs`), so the box is the one with no `out_crs`, and no
+        bounds are transformed."""
+        meta = header(projected())[0]
+        assert meta.crs == f"EPSG:{meta.epsg}" == PROJECTED_CRS
+        box = box_of(TIE_X + 101.3, TIE_Y - 187.7, TIE_X + 333.9, TIE_Y - 61.1)
+        bare = plan.source_box(plan.FetchRequest(source="s", box=box, margin=4), meta)
+        refuse_point_moves(monkeypatch)
+        spelt = plan.FetchRequest(source="s", box=box, margin=4, out_crs=axes_swapped(meta.epsg))
+        assert plan.source_box(spelt, meta) == bare
 
     def test_a_geographic_source_grows_by_its_spacing_in_metres(self, plan: ModuleType) -> None:
         """Source EPSG:4326 at 0.001°; the frame is UTM 33N, in metres."""

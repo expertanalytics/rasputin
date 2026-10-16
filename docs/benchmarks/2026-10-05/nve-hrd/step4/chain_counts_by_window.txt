@@ -1,0 +1,30 @@
+half 2600
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw     0.747  burnt     0.747 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.289  burnt     2.289 km2  z    51.94 ->    51.94  <- placed
+half 4700
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw     0.747  burnt     0.747 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.703  burnt     2.703 km2  z    51.94 ->    51.94  <- placed
+half 6000
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw    30.299  burnt    30.299 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.703  burnt     2.703 km2  z    51.94 ->    51.94  <- placed
+half 8000
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw    56.463  burnt    56.463 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.703  burnt     2.703 km2  z    51.94 ->    51.94  <- placed
+half 10000
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw    66.609  burnt    66.609 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.703  burnt     2.703 km2  z    51.94 ->    51.94  <- placed
+half 12000
+== 105.1.0 Osenelv v/Øren: corridor 30 m, 113 chain nodes, placed 100
+      0.0 m  raw   119.731  burnt   119.731 km2  z     4.56 ->     4.56  <- placed
+== 153.1.0 Storvatn: corridor 30 m, 105 chain nodes, placed 88
+      0.0 m  raw     2.703  burnt     2.703 km2  z    51.94 ->    51.94  <- placed

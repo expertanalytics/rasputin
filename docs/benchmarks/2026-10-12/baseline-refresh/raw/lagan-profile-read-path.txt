@@ -1,0 +1,190 @@
+Lagan case under cProfile, two runs per tree, alternating old/new (2026-10-12 15:25-15:27 local, AC).
+old = 357808b1 (the stored baseline's commit, .so sha256 51872f0a...), new = c317c7e4 (master, .so 55bb3993...).
+Meshes of all four runs: sha256 6c110f9eb1fb6a741bd4a19a954a91b7a7424d43f7ba04c354d25f9a42495fa0.
+
+
+######## old-1: profiled total 16.63 s; read-path functions by cumulative time
+Mon Oct 12 15:25:49 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-old-1.prof
+
+         4459643 function calls (4450810 primitive calls) in 16.630 seconds
+
+   Random listing order was used
+   List reduced from 1522 to 94 due to restriction <'feature_input|geopackage|repository|crs\\.py|land_cover\\.py'>
+   List reduced from 94 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   175/60    0.003    0.000    0.457    0.008 crs.py:224(_transformer)
+   111/34    0.003    0.000    0.319    0.009 crs.py:50(reprojector)
+        2    0.000    0.000    0.005    0.003 crs.py:86(transform_description)
+        2    0.000    0.000    0.007    0.004 crs.py:135(transform_label)
+        8    0.000    0.000    0.018    0.002 crs.py:96(same_crs)
+        3    0.000    0.000    0.000    0.000 crs.py:152(crs_label)
+      363    0.000    0.000    0.156    0.000 crs.py:40(parse_crs)
+        1    0.000    0.000    0.000    0.000 crs.py:140(single_crs)
+       60    0.000    0.000    0.000    0.000 crs.py:352(_crs)
+      108    0.000    0.000    0.001    0.000 repository.py:189(_path)
+      346    0.000    0.000    0.001    0.000 crs.py:155(_is_epsg_code)
+        8    0.001    0.000    0.001    0.000 crs.py:961(equals)
+        8    0.000    0.000    0.018    0.002 crs.py:124(_equivalent_xy)
+      362    0.001    0.000    0.001    0.000 crs.py:62(__init__)
+       10    0.000    0.000    0.001    0.000 crs.py:381(from_epsg)
+       10    0.000    0.000    0.000    0.000 crs.py:151(_prepare_from_epsg)
+        1    0.000    0.000    0.000    0.000 crs.py:505(get_geod)
+        1    0.000    0.000    0.000    0.000 crs.py:458(to_string)
+       10    0.000    0.000    0.000    0.000 crs.py:147(_prepare_from_authority)
+      704    0.001    0.000    0.156    0.000 crs.py:477(from_user_input)
+
+
+
+######## new-1: profiled total 16.53 s; read-path functions by cumulative time
+Mon Oct 12 15:26:05 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-new-1.prof
+
+         4460981 function calls (4451978 primitive calls) in 16.535 seconds
+
+   Random listing order was used
+   List reduced from 1527 to 94 due to restriction <'feature_input|geopackage|repository|crs\\.py|land_cover\\.py'>
+   List reduced from 94 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   111/35    0.003    0.000    0.344    0.010 crs.py:52(reprojector)
+        8    0.000    0.000    0.018    0.002 crs.py:98(same_crs)
+        3    0.000    0.000    0.000    0.000 crs.py:154(crs_label)
+        2    0.000    0.000    0.005    0.002 crs.py:88(transform_description)
+        2    0.000    0.000    0.006    0.003 crs.py:137(transform_label)
+      342    0.000    0.000    0.001    0.000 crs.py:155(_is_epsg_code)
+      359    0.000    0.000    0.162    0.000 crs.py:42(parse_crs)
+        1    0.000    0.000    0.000    0.000 crs.py:142(single_crs)
+       60    0.000    0.000    0.000    0.000 crs.py:352(_crs)
+        8    0.001    0.000    0.001    0.000 crs.py:961(equals)
+   173/61    0.003    0.000    0.733    0.012 crs.py:251(_transformer)
+        8    0.000    0.000    0.018    0.002 crs.py:126(_equivalent_xy)
+      358    0.001    0.000    0.001    0.000 crs.py:62(__init__)
+       10    0.000    0.000    0.000    0.000 crs.py:151(_prepare_from_epsg)
+        1    0.000    0.000    0.000    0.000 crs.py:505(get_geod)
+        1    0.000    0.000    0.000    0.000 crs.py:458(to_string)
+       10    0.000    0.000    0.000    0.000 crs.py:147(_prepare_from_authority)
+       10    0.000    0.000    0.001    0.000 crs.py:381(from_epsg)
+      696    0.001    0.000    0.162    0.000 crs.py:477(from_user_input)
+        4    0.000    0.000    0.000    0.000 crs.py:1300(to_epsg)
+
+
+
+######## old-2: profiled total 16.59 s; read-path functions by cumulative time
+Mon Oct 12 15:26:22 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-old-2.prof
+
+         4460489 function calls (4451308 primitive calls) in 16.590 seconds
+
+   Random listing order was used
+   List reduced from 1522 to 94 due to restriction <'feature_input|geopackage|repository|crs\\.py|land_cover\\.py'>
+   List reduced from 94 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   182/63    0.002    0.000    0.594    0.009 crs.py:224(_transformer)
+   111/37    0.003    0.000    0.441    0.012 crs.py:50(reprojector)
+        2    0.000    0.000    0.005    0.002 crs.py:86(transform_description)
+        2    0.000    0.000    0.006    0.003 crs.py:135(transform_label)
+        8    0.000    0.000    0.017    0.002 crs.py:96(same_crs)
+        3    0.000    0.000    0.000    0.000 crs.py:152(crs_label)
+  377/375    0.000    0.000    0.180    0.000 crs.py:40(parse_crs)
+        1    0.000    0.000    0.000    0.000 crs.py:140(single_crs)
+       60    0.000    0.000    0.000    0.000 crs.py:352(_crs)
+      108    0.000    0.000    0.001    0.000 repository.py:189(_path)
+      360    0.000    0.000    0.001    0.000 crs.py:155(_is_epsg_code)
+        8    0.001    0.000    0.001    0.000 crs.py:961(equals)
+        8    0.000    0.000    0.017    0.002 crs.py:124(_equivalent_xy)
+      376    0.001    0.000    0.001    0.000 crs.py:62(__init__)
+       10    0.000    0.000    0.001    0.000 crs.py:381(from_epsg)
+       10    0.000    0.000    0.000    0.000 crs.py:151(_prepare_from_epsg)
+        1    0.000    0.000    0.000    0.000 crs.py:505(get_geod)
+        1    0.000    0.000    0.000    0.000 crs.py:458(to_string)
+       10    0.000    0.000    0.000    0.000 crs.py:147(_prepare_from_authority)
+  732/728    0.001    0.000    0.179    0.000 crs.py:477(from_user_input)
+
+
+
+######## new-2: profiled total 16.52 s; read-path functions by cumulative time
+Mon Oct 12 15:26:39 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-new-2.prof
+
+         4462069 function calls (4452848 primitive calls) in 16.520 seconds
+
+   Random listing order was used
+   List reduced from 1527 to 94 due to restriction <'feature_input|geopackage|repository|crs\\.py|land_cover\\.py'>
+   List reduced from 94 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   111/33    0.003    0.000    0.431    0.013 crs.py:52(reprojector)
+        8    0.000    0.000    0.018    0.002 crs.py:98(same_crs)
+        3    0.000    0.000    0.000    0.000 crs.py:154(crs_label)
+        2    0.000    0.000    0.005    0.003 crs.py:88(transform_description)
+        2    0.000    0.000    0.007    0.003 crs.py:137(transform_label)
+      356    0.000    0.000    0.001    0.000 crs.py:155(_is_epsg_code)
+      373    0.000    0.000    0.182    0.000 crs.py:42(parse_crs)
+        1    0.000    0.000    0.000    0.000 crs.py:142(single_crs)
+       60    0.000    0.000    0.000    0.000 crs.py:352(_crs)
+        8    0.001    0.000    0.001    0.000 crs.py:961(equals)
+   180/58    0.006    0.000    0.749    0.013 crs.py:251(_transformer)
+        8    0.000    0.000    0.018    0.002 crs.py:126(_equivalent_xy)
+      372    0.001    0.000    0.001    0.000 crs.py:62(__init__)
+       10    0.000    0.000    0.000    0.000 crs.py:151(_prepare_from_epsg)
+        1    0.000    0.000    0.000    0.000 crs.py:505(get_geod)
+        1    0.000    0.000    0.000    0.000 crs.py:458(to_string)
+       10    0.000    0.000    0.000    0.000 crs.py:147(_prepare_from_authority)
+       10    0.000    0.000    0.001    0.000 crs.py:381(from_epsg)
+      724    0.001    0.000    0.183    0.000 crs.py:477(from_user_input)
+        4    0.000    0.000    0.000    0.000 crs.py:1300(to_epsg)
+
+
+
+######## old-1: top 15 by own time (section 7's report; shares, not times)
+Mon Oct 12 15:25:49 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-old-1.prof
+
+         4459643 function calls (4450810 primitive calls) in 16.630 seconds
+
+   Random listing order was used
+   List reduced from 1522 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+       14    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:304(acquire)
+       10    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:1243(_find_spec)
+      6/1    0.000    0.000    0.006    0.006 <frozen importlib._bootstrap>:1409(_handle_fromlist)
+      690    0.000    0.000    0.000    0.000 {built-in method _struct.calcsize}
+     9286    0.001    0.000    0.001    0.000 {built-in method _struct.unpack}
+        5    0.000    0.000    0.000    0.000 {method 'find' of 'bytearray' objects}
+       26    0.000    0.000    0.000    0.000 {method 'decode' of 'bytes' objects}
+       11    0.001    0.000    0.001    0.000 {method 'join' of 'bytes' objects}
+       11    0.000    0.000    0.000    0.000 {method 'rstrip' of 'bytes' objects}
+        8    0.000    0.000    0.000    0.000 {method 'startswith' of 'bytes' objects}
+       24    0.000    0.000    0.000    0.000 {method 'translate' of 'bytes' objects}
+    12318    0.001    0.000    0.001    0.000 {method 'get' of 'mappingproxy' objects}
+       84    0.000    0.000    0.000    0.000 {method 'values' of 'mappingproxy' objects}
+        1    0.000    0.000    0.000    0.000 {method 'items' of 'mappingproxy' objects}
+
+
+
+######## new-1: top 15 by own time (section 7's report; shares, not times)
+Mon Oct 12 15:26:05 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/lagan-new-1.prof
+
+         4460981 function calls (4451978 primitive calls) in 16.535 seconds
+
+   Random listing order was used
+   List reduced from 1527 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        5    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:750(create_module)
+        5    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:457(_validate_timestamp_pyc)
+        1    0.000    0.000    0.000    0.000 _compiler.py:421(_generate_overlap_table)
+        1    0.000    0.000    0.000    0.000 ast.py:72(_convert_signed_num)
+        1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1331(__init__)
+        5    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:48(_new_module)
+       11    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:185(_path_isabs)
+       40    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1225(__enter__)
+       40    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1229(__exit__)
+       30    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:145(_path_stat)
+        8    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1337(<genexpr>)
+       10    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1352(_get_spec)
+       24    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:648(parent)
+       10    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:67(_relax_case)
+        1    0.000    0.000    0.000    0.000 <frozen posixpath>:166(basename)
+
+

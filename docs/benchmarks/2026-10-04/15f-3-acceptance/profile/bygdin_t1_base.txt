@@ -1,0 +1,35 @@
+Sun Oct  4 02:40:31 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/prof_base.prof
+         2516185 function calls (2502542 primitive calls) in 4.577 seconds
+   Ordered by: cumulative time
+   List reduced from 3825 to 30 due to restriction <30>
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    498/1    0.021    0.000    4.578    4.578 {built-in method builtins.exec}
+        1    0.000    0.000    4.578    4.578 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    4.405    4.405 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    4.253    4.253 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/main.
+        1    0.000    0.000    4.238    4.238 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        1    0.000    0.000    4.238    4.238 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        1    0.000    0.000    4.238    4.238 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        1    0.000    0.000    4.237    4.237 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        2    0.000    0.000    4.236    2.118 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        2    0.000    0.000    4.236    2.118 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        2    0.000    0.000    4.236    2.118 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/main.
+        1    0.000    0.000    4.236    4.236 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    1.876    1.876 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.008    0.008    1.876    1.876 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    1.868    1.868 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.011    0.011    1.744    1.744 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+      421    0.287    0.001    1.678    0.004 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    1.266    1.266 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.266    0.266    1.266    1.266 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.121    0.121    0.967    0.967 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+69570/69567    0.086    0.000    0.782    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/shapely/d
+        5    0.734    0.147    0.734    0.147 {method 'argsort' of 'numpy.ndarray' objects}
+        1    0.000    0.000    0.700    0.700 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    0.602    0.602 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.602    0.602    0.602    0.602 {built-in method tin_engine._core.refine}
+43570/43565    0.018    0.000    0.561    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/shapely/d
+    20853    0.006    0.000    0.503    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/numpy/_core
+    20954    0.372    0.000    0.472    0.000 /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpa
+        1    0.000    0.000    0.470    0.470 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/numpy/_core
+    21152    0.425    0.000    0.428    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/shapely/cre

@@ -13,7 +13,7 @@
 //
 // THE FAILURE CHANNEL IS DIAGNOSTICS, NOT A STATUS AND NOT AN EXCEPTION, and
 // the split from increment 2's channel is by error CLASS, not by taste.
-// PointRing's and IndexedRing's constructors throw std::invalid_argument
+// IndexedRing's constructor throws std::invalid_argument
 // because a malformed view is a PROGRAMMER error on a type built per query,
 // where a returned status would be ignored at ten call sites. A malformed
 // constraint set is a DATA error arriving from outside the process, where a
@@ -35,12 +35,12 @@
 // still throw bad_alloc; nothing else does.
 //
 // NO DEDUP ANYWHERE. This header includes no <unordered_map>, <unordered_set>
-// or <map> and specifies no key, because there is no legal key: std::hash<Point2>
-// is for finding a KNOWN point in a hashed container, and anything dedup-shaped
-// in this project keys on snapped integer coordinates, which do not exist until
-// increment 5. Dedup is also a mutation of caller-declared topology, and this
-// increment's posture is check, do not fix -- the same posture that refuses to
-// reverse a wrongly wound ring.
+// or <map> and specifies no key, because there is no legal key: a hash of the
+// raw doubles cannot find a NaN and splits near-coincident points, so anything
+// dedup-shaped in this project keys on snapped integer coordinates (increment
+// 5). Dedup is also a mutation of caller-declared topology, and this increment's
+// posture is check, do not fix -- the same posture that refuses to reverse a
+// wrongly wound ring.
 
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
@@ -301,8 +301,8 @@ template <pred::GeometryKernel K>
         }
     }
 
-    // 5. Winding, per closed chain, one orientation<K> call -- never
-    // signed_area, whose sign cancels to noise on a sliver at UTM33 magnitudes
+    // 5. Winding, per closed chain, one orientation<K> call -- never a
+    // shoelace area, whose sign cancels to noise on a sliver at UTM33 magnitudes
     // and which increment 2 forbade from driving a topology decision. A wrong
     // winding is NEVER SILENTLY REVERSED: if the caller's geometry disagrees
     // with the caller's declared role, one of the two is a bug and guessing

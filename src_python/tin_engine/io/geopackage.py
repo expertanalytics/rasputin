@@ -1,13 +1,13 @@
-"""GeoPackage features, read without GDAL (increment 16b R2, R3).
+"""GeoPackage features, read without GDAL.
 
-`docs/increments/16b-terrain-polygons.md` R3; the blob header is OGC 12-128r18
-section 2.1.3, the R-tree Annex F.3. The decoder's stream is an open
-``sqlite3.Connection`` (``io.repository.open_geopackage``): this module opens
+The blob header is OGC 12-128r18 section 2.1.3, the R-tree Annex F.3. The
+decoder's stream is an open ``sqlite3.Connection``
+(``io.repository.open_geopackage``): this module opens
 nothing, knows no path and no CRS object, and imports no ``_core``. The CRS it
 reports is text for ``crs.parse_crs``.
 
 Rows come in primary-key order, whatever order SQLite or the R-tree holds
-them in, because the mesh depends on input order (R7).
+them in, because the mesh depends on input order.
 """
 
 from __future__ import annotations
@@ -16,14 +16,14 @@ import sqlite3
 import struct
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import shapely
 from shapely.geometry.base import BaseGeometry
 
 #: `PRAGMA application_id` of a GeoPackage: "GPKG".
 APPLICATION_ID = 0x47504B47
-#: Envelope code -> bytes after the 8-byte header (R3); 5-7 are refused.
+#: Envelope code -> bytes after the 8-byte header; 5-7 are refused.
 _ENVELOPE_BYTES = {0: 0, 1: 32, 2: 48, 3: 48, 4: 64}
 
 Box = tuple[float, float, float, float]
@@ -132,9 +132,11 @@ def query_features(
     scale: float = 100_000.0,
 ) -> Iterator[RawFeature]:
     """Every row whose R-tree box, widened by ``s * max(1, s / scale)`` with
-    ``s`` its width plus height (R5, "Long edges"), meets the closed ``box``
+    ``s`` its width plus height, meets the closed ``box``
     ``(minx, miny, maxx, maxy)``; every row with no box or no R-tree. A
-    superset of the rows meeting ``box``, in primary-key order."""
+    superset of the rows meeting ``box``, in primary-key order. The widening
+    is for long edges: an edge straight in the file's CRS is drawn straight
+    in the DEM's, and the two lines part by up to that much."""
     columns = {
         row[1].lower(): row[1] for row in conn.execute(f"PRAGMA table_info({_q(layer.table)})")
     }
@@ -173,3 +175,53 @@ def query_features(
                 f"layer {layer.table!r} row {fid}: srs_id {srs_id}, the layer's is {layer.srs_id}"
             )
         yield RawFeature(fid=fid, geometry=geometry, value=value)
+
+
+@dataclass(frozen=True, slots=True)
+class LayerSummary:
+    """A layer's header: its declared geometry type name, feature count,
+    columns less the key and the geometry, and extent in its CRS (None
+    when neither the R-tree nor `gpkg_contents` states one)."""
+
+    geometry: str
+    features: int
+    attributes: tuple[str, ...]
+    extent: Box | None
+
+
+def layer_summary(conn: sqlite3.Connection, layer: GpkgLayer) -> LayerSummary:
+    """The header of ``layer``: the extent from its R-tree when it has one,
+    else `gpkg_contents`' bounds when all four are set."""
+    (geometry,) = conn.execute(
+        "SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?",
+        (layer.table,),
+    ).fetchone()
+    table = _q(layer.table)
+    (features,) = conn.execute(f"SELECT count(*) FROM {table}").fetchone()
+    names = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
+    if layer.rtree is not None:
+        query = f"SELECT min(minx), min(miny), max(maxx), max(maxy) FROM {_q(layer.rtree)}"
+        bounds = conn.execute(query).fetchone()
+    else:
+        bounds = conn.execute(
+            "SELECT min_x, min_y, max_x, max_y FROM gpkg_contents WHERE table_name = ?",
+            (layer.table,),
+        ).fetchone()
+    return LayerSummary(
+        geometry=str(geometry),
+        features=features,
+        attributes=tuple(n for n in names if n not in (layer.pk, layer.column)),
+        extent=None if None in bounds else cast(Box, tuple(map(float, bounds))),
+    )
+
+
+def distinct_values(
+    conn: sqlite3.Connection, layer: GpkgLayer, column: str, limit: int
+) -> tuple[tuple[str, ...], int]:
+    """The distinct values of ``column`` as text, sorted, at most ``limit``
+    of them, and how many there are; a null is no value."""
+    rows = conn.execute(
+        f"SELECT DISTINCT CAST({_q(column)} AS TEXT) AS v FROM {_q(layer.table)} "
+        "WHERE v IS NOT NULL ORDER BY v"
+    ).fetchall()
+    return tuple(v for (v,) in rows[:limit]), len(rows)

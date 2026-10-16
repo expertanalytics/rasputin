@@ -17,8 +17,7 @@ Readers come from `recordread.py` (`file_field`, `stats_row`, `stats_names`,
 
 PINNED HERE, where D5 is silent: `--record`'s refusals are usage errors
 (exit 2) naming `--record`, as `--stats`'s are; its path is echoed on stdout
-on its own line after the mesh and `--stats` paths; `PATH` outside
-`--out-parent` is refused like any other output.
+on its own line after the mesh and `--stats` paths.
 
 External input: none new. `--record` writes a file and reads nothing, so
 `tester.md` section 3C does not apply.
@@ -35,21 +34,18 @@ import shlex
 import socket
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
-from typer.testing import CliRunner, Result
+from typer.testing import Result
 
-import tin_engine.cli as cli
+from cli_helpers import COLS, ROWS, SQUARE, USAGE, geojson, plain, runner, write_tiff
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
 from mosaic_fixtures import quadrants, whole
 from plyread import parse_header
 from recordread import file_field, ply_fields, stats_names, stats_row
-from test_cli_mesh import plain
-from test_cli_mesh_dem import SENTINEL, write_tiff
-from test_cli_mesh_domain import SQUARE, geojson
+from test_cli_mesh_dem import SENTINEL
 from test_cli_mesh_features import FOREST
 from test_cli_mesh_mosaic import terrain, write_tiles
 from tin_engine import installed_version
@@ -57,17 +53,18 @@ from tin_engine.cli import app
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, read_vtk
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-USAGE = 2
-ROWS, COLS = 17, 21
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 VELHAS = FIXTURES / "velhas"
 
 #: D3 rule 6, matched case-blind as whole words (``snap`` also in
 #: ``snapped``), over the whole of stderr of a successful run.
+#: "feet" is banned only as the refinement's jargon ("constraint feet",
+#: "feet refused"), not as a unit: increment 43's narrowing, by Ola's ruling
+#: (section 9.1 of docs/increments/43-units-and-projections.md).
 BANNED = re.compile(
-    r"(?i)\buncovered\b|\bfeet\b|\bstride\b|\bchains\b|\bcoincident\b|\bcarved\b|"
-    r"\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
+    r"(?i)\buncovered\b|\bconstraint feet\b|\bconstraint-feet\b|\bfeet refused\b|"
+    r"\bstride\b|\bchains\b|"
+    r"\bcoincident\b|\bcarved\b|\bnoded\b|R-tree|\bsnap|\bDEM holes\b|\bvoid\b"
 )
 #: The writers' own fields, describing the file's arrays (D2, "Fields that stay").
 WRITER_FIELDS = {"feature_bits", "feature_names", "feature_vocabulary"}
@@ -303,8 +300,10 @@ class TestTheValuesAreRight:
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, tolerance: str
     ) -> None:
         """At least the largest error at a DEM node inside a written triangle,
-        computed here, and at most the tolerance (the projected path has no
-        at-vertex figure before 15f-3, D6)."""
+        computed here, and at least the at-vertex figure; at most the tolerance
+        (25's D2 and D6). Since 15f-3 the projected path measures the DEM
+        nodes within rounding of a vertex (15f's L14), so both at-vertex rows
+        are in `--stats` there (15f's P1, S3)."""
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(monkeypatch, "--dem", str(holed), "--tolerance", tolerance, "--out", str(out),
              "--stats", str(md))  # fmt: skip
@@ -315,7 +314,9 @@ class TestTheValuesAreRight:
         stated = float(file_field(vtk, "max_error_m"))
         assert stated >= errors.max()
         report = md.read_text(encoding="utf-8")
-        assert "dem_nodes_at_vertices" not in stats_names(report)
+        names = stats_names(report)
+        assert {"dem_nodes_at_vertices", "dem_nodes_at_vertices_max_error_m"} <= set(names)
+        assert stated >= float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
         assert stated <= float(file_field(vtk, "tolerance_m")) == float(tolerance)
 
 
@@ -333,22 +334,6 @@ class TestTheOtherPaths:
             "dem_source",
             "nodata_vertices_removed",
         }
-
-    @pytest.mark.parametrize("suffix", [".vtk", ".ply"])
-    @pytest.mark.parametrize("crs", [(), ("--crs", "EPSG:25833")], ids=["no-crs", "crs"])
-    def test_flat(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str, crs: tuple[str, ...]
-    ) -> None:
-        out = tmp_path / f"c{suffix}"
-        mesh(monkeypatch, "catchment", "--flat", *crs, "--out", str(out))
-        if suffix == ".vtk":
-            fields = vtk_fields(read_vtk(out.read_bytes()))
-        else:
-            fields = ply_fields(parse_header(out.read_bytes()).comments)
-        expected = {"heights": "none: every z is 0 (--flat)"}
-        if crs:
-            expected["crs"] = "EPSG:25833"
-        assert fields == expected
 
     def test_tiles(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         source = whole(9, 13, array=terrain(9, 13))
@@ -408,7 +393,6 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
             *("--dem", str(holed), "--domain", str(square), "--tolerance", "1"),
             *("--features", str(corine), "--features-map", "corine"),
         ],
-        "flat": ["catchment", "--flat"],
         "reprojected": [
             *("--dem", str(VELHAS / "anadem_velhas.tif")),
             *("--domain", str(VELHAS / "catchment.geojson")),
@@ -417,7 +401,7 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
     }
 
 
-KINDS = ("refined", "strided", "tiles", "features", "flat", "reprojected")
+KINDS = ("refined", "strided", "tiles", "features", "reprojected")
 
 
 class TestStderr:
@@ -554,23 +538,20 @@ class TestRecord:
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Refinement is bit-identical for any thread count (increments 14 and
-        21), and the record holds no thread count: ``cli.refine`` wrapped to
-        pass ``threads=1`` (the binding's keyword; the CLI has none) changes
-        no byte."""
-        args = ("--dem", str(holed), "--tolerance", "1")
-        _, _, _, rec = record_run(monkeypatch, tmp_path, *args)
-        first = rec.read_bytes()
-        real = cli.refine
-        seen: list[int] = []
-
-        def one_thread(*a: Any, **k: Any) -> Any:
-            seen.append(1)
-            return real(*a, **k, threads=1)
-
-        monkeypatch.setattr(cli, "refine", one_thread)
-        record_run(monkeypatch, tmp_path, *args)
-        assert seen == [1], "the wrapper did not run"
-        assert rec.read_bytes() == first
+        21): ``--threads 1`` and ``--threads 2`` (38) write the same mesh
+        bytes to the same paths, and records that differ only where they must,
+        the ``threads`` entry reporting the count used (38, T6) and the echoed
+        command line carrying the option."""
+        args = ("--dem", str(holed), "--tolerance", "1", "--threads")
+        _, out, _, rec = record_run(monkeypatch, tmp_path, *args, "1")
+        one_mesh, one_record = out.read_bytes(), json.loads(rec.read_text(encoding="ascii"))
+        record_run(monkeypatch, tmp_path, *args, "2")
+        two_mesh, two_record = out.read_bytes(), json.loads(rec.read_text(encoding="ascii"))
+        assert two_mesh == one_mesh
+        assert (one_record.pop("threads"), two_record.pop("threads")) == (1, 2)
+        one_command, two_command = one_record.pop("command"), two_record.pop("command")
+        assert two_command == one_command.replace("--threads 1", "--threads 2") != one_command
+        assert two_record == one_record
 
     def test_no_time_date_host_or_seconds(
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
@@ -583,7 +564,7 @@ class TestRecord:
             assert "seconds" not in text.lower(), text
             assert not re.search(r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}:\d{2}(:\d{2})?\b", text), text
             assert not host or host not in text, text
-        for absent in ("threads", "total", "stats_seconds"):
+        for absent in ("total", "stats_seconds"):
             assert absent not in obj
 
     def test_the_path_is_echoed_after_the_others(
@@ -593,16 +574,13 @@ class TestRecord:
         lines = result.stdout.splitlines()
         assert [Path(p).resolve() for p in lines] == [out.resolve(), md.resolve(), rec.resolve()]
 
-    @pytest.mark.parametrize("kind", ["strided", "flat"])
-    def test_the_no_tolerance_and_flat_paths_write_a_record(
-        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+    def test_the_no_tolerance_path_writes_a_record(
+        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        args = run_kinds(tmp_path, holed)[kind]
+        args = run_kinds(tmp_path, holed)["strided"]
         _, _, _, rec = record_run(monkeypatch, tmp_path, *args)
         obj = json.loads(rec.read_text(encoding="ascii"))
         assert "tolerance_m" not in obj and "max_error_m" not in obj
-        if kind == "flat":
-            assert obj["heights"] == "none: every z is 0 (--flat)"
 
     def test_without_the_flag_nothing_is_written(
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
@@ -669,17 +647,6 @@ class TestRecordRefusals:
                          "--record", "-")  # fmt: skip
         assert "--record" in output, output
         self.assert_nothing_written(tmp_path, before)
-
-    def test_outside_out_parent(
-        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        inside = tmp_path / "inside"
-        inside.mkdir()
-        before = {p.name for p in tmp_path.iterdir()}
-        refused(monkeypatch, "--dem", str(holed), "--out-parent", str(inside),
-                "--out", str(inside / "x.vtk"), "--record", str(tmp_path / "x.json"))  # fmt: skip
-        self.assert_nothing_written(tmp_path, before)
-        assert list(inside.iterdir()) == []
 
     @pytest.mark.parametrize("value", ["-1", "nan"])
     def test_a_refused_run_writes_no_record(

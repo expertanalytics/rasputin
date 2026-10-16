@@ -11,10 +11,10 @@ include/terrain/           # public C++ headers, header-only where possible
   build_info.hpp           # stdlib_hardening(): the bounds-check mode the standard
                            #   library reports; _core.hardening and the guard (24)
   core/
-    point.hpp              # Point2 / Point3 value types
+    point.hpp              # Point2 value type, dot and cross
     bbox.hpp               # Box2; empty-box identity, exact closed containment
     segment.hpp            # Segment2 and on_segment<K>
-    ring.hpp               # Ring concept, PointRing / IndexedRing, point_in_ring<K>
+    ring.hpp               # IndexedRing, orientation<K> of a ring
     edge_properties.hpp    # EdgeProperties: a set of 32 opaque feature bits,
                            #   no feature NAME anywhere in terrain::
     pslg.hpp               # Pslg, Chain, ChainRole — validated planar input
@@ -49,7 +49,7 @@ include/terrain/           # public C++ headers, header-only where possible
     window.hpp             # window_for: bbox -> index window (planned; unbuilt,
                            #   refinement walks lattice nodes directly)
   parallel_util/
-    chunks.hpp             # for_each_chunk (contiguous chunks) and for_each_block (dynamic blocks) over std::jthread
+    chunks.hpp             # for_each_block (dynamic blocks) over std::jthread
   mesh/
     lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
                            #   neighbour links, the three splits (14), flip (14b)
@@ -73,13 +73,22 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   where constraint edges cross grid lines, and
                            #   the midpoints between, filed by edge (15f)
   hydrology/
-    upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
-                           #   Priority-Flood labelling the nodes that drain
-                           #   into the seed set, plus edge/NoData flags (22)
+    flood.hpp              # detail::flood: the one Priority-Flood of both (29)
+    upstream.hpp           # upstream(z, seed): the seed set's catchment (22)
+    accumulate.hpp         # accumulate(z): count, reach, flow_to per node (29)
+  land_cover/
+    overlap.hpp            # class_areas: exact triangle-against-cell overlap
+                           #   areas on an index-space raster, strips, full-cell
+                           #   spans, canonical crossings so shared edges give
+                           #   complementary areas, chunks in parallel (26b);
+                           #   sees arrays only, no file, path or CRS
   vector_simplify/
     area_collapse.hpp      # reduce_ring: area-preserving segment collapse
                            #   (Kronenfeld et al. 2020) to a horizontal
                            #   tolerance, exact crossing tests, keep-points (22)
+    border_collapse.hpp    # simplify_borders: a coverage cut into borders at
+                           #   its junctions, each border collapsed as above
+                           #   within a band, every face's area kept (32)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
@@ -96,43 +105,100 @@ src/                       # C++ implementation, one directory per module
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
+  numpy_raster.hpp         # TaggedRasterView<Tag>, the bound raster view over a
+                           #   NumPy array; installed for plugin modules, each
+                           #   with its own tag
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
-  __init__.py              # re-exports from tin_engine._core
-  cli.py                   # Typer entry point declared in pyproject;
+  __init__.py              # installed_version only; never imports _core
+  cli.py                   # the core's Typer app (cli.app);
                            #   `rasputin palette NAME [--out FILE]` writes a
-                           #   ParaView colour preset (16c)
+                           #   ParaView colour preset (16c); encodes no mesh
+                           #   file: picks the io/ writer by suffix and writes
+                           #   its bytes
+  plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
+  plugin_api.py            # re-exports only: what a plugin may import
+  cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins;
+                           #   destination refuses a symlinked output file and
+                           #   makes the output's missing folders
+  mcp/                     # `rasputin mcp`: the commands as MCP tools; needs
+                           #   the mcp extra
+    schema.py              # pure: one tool per Typer command, its argument
+                           #   model and JSON schema, argv back, and writes():
+                           #   the arguments on writable path parameters
+    server.py              # the only async code: each call a child process;
+                           #   the output root (--out-root, default
+                           #   ~/rasputin-output): a written path resolving
+                           #   outside it is refused before the child runs
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
-                           #   check overlaps and coverage, stitch; no files (15a)
+                           #   check overlaps and coverage, stitch; no files (15a);
+                           #   imports only io.models first-party
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   label, domain in the DEM's CRS) (15a, 15b)
-  domain.py                # --domain: reads one polygon (GeoJSON or WKT) in its
-                           #   own CRS, to_crs, check_extent; never imports _core
-  crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
-                           #   site, always_xy (15b); pyproj and numpy
-  target_grid.py           # TargetGrid on one global lattice, source_region,
-                           #   SourceWindows / TileWindows, resample (bilinear,
-                           #   threads), check_point_blocks; never imports _core
-                           #   (15c-2)
+                           #   label, domain in the DEM's CRS) (15a, 15b);
+                           #   takes a DemRepository and TileFootprints, and
+                           #   the union of the tiles' node_box
+  domain.py                # DomainPolygon (one polygon in its own CRS) and its
+                           #   to_crs, check_extent, DomainError; reads no file
+                           #   (io/domain_file.py reads --domain); never imports
+                           #   _core
+  crs.py                   # parse_crs, reprojector, frame_factors, site_of
+                           #   (latitude, longitude and convergence at a point,
+                           #   metres only): the one Transformer.from_crs
+                           #   site, always_xy (15b); pyproj and numpy;
+                           #   crs_label escapes through run_record's
+                           #   escaped_ascii, with io.models' SRS constants, its
+                           #   first-party imports
+  geodesy.py               # LocalFrame (a local metres frame around one point),
+                           #   cell areas by row (a cell centred on its node),
+                           #   geodesic area over outlines (40); pyproj and numpy;
+                           #   layer 1, never imports _core
+  target_grid.py           # TargetGrid (its node_box) on one global lattice,
+                           #   source_region, SourceWindows / TileWindows,
+                           #   resample (bilinear, threads), check_point_blocks;
+                           #   NoData by valid_mask (+-inf is data); never
+                           #   imports _core or mosaic (15c-2)
+  grow.py                  # uses_pieces (the gate), grow_mitred: a polygon
+                           #   grown with mitred corners, a long staircase
+                           #   outline in pieces (30d); shapely and NumPy
+                           #   only, never imports _core
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
-                           #   mesh (15c-2), seams frozen in a cut run (23c)
+                           #   mesh (15c-2), seams frozen in a cut run (23c);
+                           #   takes the edge strip, checked in the same loop
+                           #   (15f-3)
+  edge_strip.py            # generate / run: the edge strip's two _core calls
+                           #   (constraint_check_points, refine_strip) and
+                           #   their clock rows; holds no geometry (15f-3)
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
                            #   Markdown; numpy only, no _core, no typer
-  features.py              # EdgeVocabulary: which bit means which feature.
-                           #   The names C++ refuses to hold. Imports nothing
-                           #   first-party and never imports _core
-                           #   PIECE_VOCABULARY: the default plus `seam`
-                           #   (bit 9), for a cut run's piece files (23c)
+  run_record.py            # RunRecord: one mesh run's record and its wording
+                           #   (25), printed as file fields, --stats rows, a
+                           #   summary and --record JSON; escaped_ascii, the
+                           #   one non-ASCII escape (\xe9) for file fields and
+                           #   crs_label; imports json and dataclasses only
+  resources.py             # the one module that reads the machine: cores,
+                           #   memory, cgroup limits; Resources (threads, a
+                           #   memory budget), resolved once per command (38);
+                           #   Pydantic and os only
   decompose.py             # partition: the window cut into cells under
-                           #   --pieces and --memory-budget, b(T); lines: the
+                           #   --pieces and --piece-budget, b(T); lines: the
                            #   partition lines clipped to the domain; pure,
                            #   reads no machine (23c)
+  features.py              # EdgeVocabulary: which bit means which feature.
+                           #   The names C++ refuses to hold. Imports nothing
+                           #   first-party and never imports _core.
+                           #   EdgeVocabulary.table(): the (bit, name) pairs by
+                           #   bit, the order the .ply and .vtk writers write
+                           #   and fingerprint() hashes (audit PR D).
+                           #   PIECE_VOCABULARY: the default plus `seam`
+                           #   (bit 9), for a cut run's piece files (23c).
+                           #   TerrainFeature: one feature's mask and lines
+                           #   (moved from feature_input, audit PR C)
   pieces.py                # piece_ids, start_slice, seam_records: a cut
                            #   run's pieces from its one start triangulation,
                            #   each seam edge fanned at its seam-pass points;
@@ -144,64 +210,214 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
-                           #   as linework -> FeatureSet (16b); opens GeoJSON
-                           #   and .gml itself; never imports _core.
-                           #   read_source: one file's raw rows (16b's reader,
-                           #   shared); read_lakes: the polygons of --lakes
-                           #   near the seed point, in the file's CRS (22)
+                           #   as linework -> FeatureSet (16b); opens .gml
+                           #   itself, reads GeoJSON through io/repository's
+                           #   read_json and io/geojson's read_collection;
+                           #   reaches _core only through border_simplify
+                           #   (32). read_source: one file's raw
+                           #   rows (16b's reader, shared); read_lake_polygons:
+                           #   the polygons of `catchment --lakes` near the
+                           #   seed point, in the file's CRS (22)
+  border_simplify.py       # simplify_borders: land-cover polygons to flat
+                           #   rings for _core.simplify_borders and back, same
+                           #   polygons, parts and holes in order; no I/O (32)
   outline.py               # trace(mask): marching-squares rings between in-
                            #   and out-nodes, (8, 4) saddle rule; numpy only,
                            #   never imports _core (22)
   catchment.py             # CatchmentRequest -> delineate(request, repo) ->
                            #   Catchment: seed, the window loop over 15a's
-                           #   plan, _core.upstream, the fine ring, and
-                           #   _core.reduce_ring; takes a DemRepository and
-                           #   no path (22)
+                           #   plan, the flood, the fine ring and its
+                           #   reduction (via catchment_core, never _core);
+                           #   takes a DemRepository and no path (22); with a
+                           #   river reach, the pour point is the gauge's node
+                           #   on the burnt reach (29)
+  catchment_core.py        # upstream, accumulate: the core call on
+                           #   raster.to_core_lattice's view of a DemTile (a
+                           #   unit lattice, any DEM, projected or in degrees); reduce_ring
+                           #   re-exported; the catchment's _core calls, as
+                           #   edge_strip.py is the edge strip's (python-
+                           #   audit.md, section 11)
+  hydrography.py           # RiverSegment, Station, Lake: the hydrography's
+                           #   value types; no first-party import, so gauge
+                           #   places on them without a codec, and io/rivers.py
+                           #   and io/station_set.py read into them (python-
+                           #   audit.md, section 11)
+  gauge.py                 # place: a station's foot P on NVE's river lines,
+                           #   by tier, and the reach round it (29, PR 2);
+                           #   lake_seed -> LakeSeed: the gauges seeded with
+                           #   their lake, by containment and one distance
+                           #   (PR 4); pure shapely, no DEM, no file, no codec
+  burn.py                  # burn_reach: the reach moved onto the window's
+                           #   valley floor and burnt in -> (burnt copy,
+                           #   GaugePath); numpy only (29, PR 2)
+  sensitivity.py           # assess -> Sensitivity: is the area well defined
+                           #   along the burnt chain within U; arrays in,
+                           #   no DEM, no shapely (29, PR 2)
+  reference.py             # agreement, classify, summarise: our catchment
+                           #   against NVE's polygon, counted on the DEM's
+                           #   node lattice; pure, no file (29, PR 4)
+  catchment_batch.py       # seed_for: place, lake_seed, the request (shared
+                           #   with catchment --rivers); run_batch: delineate
+                           #   in a thread, compare, StationResult rows to a
+                           #   BatchSink; no paths (29, PR 4)
+  land_cover_fractions.py  # exact class fractions per triangle from a class
+                           #   raster in the cache or a file (`ClassRaster`):
+                           #   index-space corners, row areas, chunks through
+                           #   _core.class_areas, the ClassFractions table and
+                           #   dominant class (26b); imports _core, crs,
+                           #   io.models; io.repository for type checks only
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
-  palettes.py              # CORINE_NATURAL (code -> label, colour) and
-                           #   paraview_preset(); data, imports nothing
-                           #   first-party (16c)
+  class_maps.py            # class maps as data (41): load(name | path |
+                           #   'property') reads a TOML file through toml_data into
+                           #   a ClassMap; derived_cleanup(accuracy, cell):
+                           #   repair, simplify, snap from the larger of the
+                           #   source's accuracy and the DEM cell; imports
+                           #   feature_input and features
+  data/class_maps/         # the shipped maps: corine, corine-water,
+                           #   clc18_kode, mapbiomas-c11 (.toml; codes,
+                           #   labels, colours, water, edges, notice,
+                           #   positional accuracy)
+  palettes.py              # paraview_preset(table, name): a ParaView preset
+                           #   from a code -> (label, colour) table (16c);
+                           #   imports nothing first-party; the CORINE table
+                           #   itself is data/class_maps/corine.toml (41)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
-  _core.pyi                # type stubs for the compiled extension
-  viz/                     # CDT -> SVG renderer; never imports _core
-    __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
-    protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
-    scene.py               # build_scene(pslg, mesh=None, ...) -> Scene
-    style.py               # SvgStyle: frozen Pydantic V2. Canvas geometry,
-                           #   plus PropertyStroke — the bit -> CSS-token draw
-                           #   precedence, which is structure, not taste, and
-                           #   carries positions rather than feature names
-    svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
-    fixtures.py            # the synthetic gallery, declarative; `rasputin draw
-  io/                      # all file decoding AND encoding lives here, with
-                           #   known exceptions to move here in a follow-up:
-                           #   `palette`'s JSON is encoded in cli.py (16c), and
-                           #   the catchment GeoJSON writer is in cli.py (22);
-                           #   see "Python API surface"
+  sources.py               # the source catalogue: RemoteSource (ANADEM,
+                           #   GLO-30; 23a-1, 23a-2; also kind "local", a path
+                           #   to GeoTIFFs on this machine, 55), StationSource
+                           #   (NVE's HRD, 29), notice(); the entries are
+                           #   data/sources.toml plus the user's sources file,
+                           #   added by `catalogue()`; data_root, xdg_base and
+                           #   user_source_candidates/user_source_file find that
+                           #   file from an environment mapping ($RASPUTIN_DATA,
+                           #   else the XDG config directory; 55); a local
+                           #   entry is GeoTIFFs or a vector file (.gpkg,
+                           #   .geojson, .json; values "features"); plugins'
+                           #   sources.toml files come through the entry point
+                           #   group rasputin.sources (plugin_source_files),
+                           #   after the user's, never replacing an entry;
+                           #   OUT_ROOT_VARIABLE, the MCP server's output root
+                           #   as the `sources` child sees it; imports
+                           #   Pydantic and toml_data only, so the mesh path
+                           #   names a key without importing fetch/
+  source_report.py         # `rasputin sources` (55): each source's coverage
+                           #   (lon/lat box), cell size in metres, CRS, height
+                           #   unit, tiles, read from headers through
+                           #   dem_input.repository_for or the tile cache; a
+                           #   vector source's layer, geometry, feature count,
+                           #   attributes and class values through
+                           #   io/geopackage and io/geojson; fits(), pure: the
+                           #   commands, options and MCP arguments each source
+                           #   fits, restating the readers' rules; the MCP
+                           #   output root (out_root);
+                           #   imports pyproj and shapely, so kept out of
+                           #   sources.py; imports nothing from cli.py
+  toml_data.py             # parse/validate: TOML into a strict Pydantic model,
+                           #   refusals naming the file
+  fetch/                   # copies remote data to disk; the only package that
+                           #   touches the network, and nothing on `rasputin
+                           #   mesh`'s path imports it (23a-2)
     __init__.py
+    http.py                # RangeClient: byte ranges over HTTP, stdlib only,
+                           #   retries; `User-Agent: rasputin/<version>` (29);
+                           #   query_url; the one module importing urllib
+    plan.py                # FetchRequest -> the blocks meeting the domain's
+                           #   box, from headers alone; pure (23a-2)
+    run.py                 # fetch(): headers, plan, bounded async download;
+                           #   client and cache writer injected (23a-2)
+    nve.py                 # fetch_station_set(source, get_text) -> each file's
+                           #   bytes (stations, references, rivers, lakes,
+                           #   manifest last); field allow-lists; writes
+                           #   nothing, cli.py writes the files (29)
+  data/                    # package data, read by importlib.resources
+    sources.toml           # the shipped catalogue
+    nve_hrd_2025.csv       # NVE's 140 HRD stations, 2025 version: which
+                           #   stations, series version, start year; its names
+                           #   only check the extraction from the PDF (29)
+  _core.pyi                # type stubs for the compiled extension
+  io/                      # all file decoding AND encoding lives here. A
+                           #   document built outside cli.py and serialised
+                           #   there by one standard-library call is printing,
+                           #   not an encoder: `palette`'s JSON (16c), station-
+                           #   catchments' results.csv and summary.json (29)
+    __init__.py
+    geojson.py             # read_collection: a parsed GeoJSON object ->
+                           #   (features, crs text), the one crs and shape rule
+                           #   for every GeoJSON reader (audit PR C);
+                           #   feature_collection: the document both writers
+                           #   build; catchment_geojson: a polygon, its CRS and
+                           #   its properties -> the catchment file's bytes
+                           #   (22's writer, moved here in 29); opens nothing
+    domain_file.py         # read_domain: --domain's one Polygon (GeoJSON or
+                           #   WKT, by suffix) in its own CRS, checked and
+                           #   oriented -> DomainPolygon; reads through
+                           #   repository's read_json / read_text, opens
+                           #   nothing itself (16; moved from domain.py in
+                           #   audit PR C)
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing;
                            #   face_codes= adds the face property
-                           #   land_cover_code (16c)
+                           #   land_cover_code (16c); field_comments: a file's
+                           #   (name, value) fields as header comments;
+                           #   face_fractions= adds the per-face class lists
+                           #   (26b); imports features, mesh_checks and models
+    vtk_read.py            # reads back rasputin's own binary legacy .vtk:
+                           #   bytes in, crs, points and triangles out; no path
+    geotiff_write.py       # a height grid to GeoTIFF bytes (point-registered,
+                           #   float32) through tifffile; no path
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
                            #   ParaView; takes no path and opens nothing;
                            #   triangle_codes=, land_cover_codes= add the cell
-                           #   array land_cover_code and its field (16c)
+                           #   array land_cover_code and its field (16c);
+                           #   class_fractions= adds the FieldData arrays (26b);
+                           #   imports features, mesh_checks and models
+    mesh_checks.py         # the mesh writers' shared checks, one copy each:
+                           #   checked_ascii (no control character, ASCII
+                           #   only, one wording) and check_int32; imports
+                           #   nothing first-party (audit PR D)
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
-    models.py              # Pydantic RasterMeta / DemTile
+    models.py              # frozen Pydantic Bounds (`of` a shapely-order
+                           #   box), IndexWindow, RasterMeta, TileFootprint,
+                           #   DemTile; RasterMeta's node arithmetic, the
+                           #   core's spelling: node_xy, index_of, node_box,
+                           #   windowed; valid_mask, the one NoData rule (NaN
+                           #   or the sentinel; +-inf is data); imports
+                           #   nothing first-party
     geopackage.py          # GeoPackage layer_info / query_features over an
                            #   open sqlite3.Connection; frozen dataclasses,
                            #   opens nothing, knows no path (16b)
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,
                            #   standard library XML; opens nothing (16b)
-    repository.py          # TiffDemRepository: the ONE io/ module that opens
-                           #   files ("rb"); lists headers, loads tiles (15a);
-                           #   open_geopackage: a read-only SQLite
-                           #   connection (16b)
+    cog.py                 # decode_window: only the blocks a window meets,
+                           #   from a BlockSource (an open file or the tile
+                           #   cache), its meta `meta.windowed(window)`;
+                           #   opens nothing (23a-1)
+    station_set.py         # read_stations -> (stations, crs) and
+                           #   read_references -> ({station: polygon}, crs):
+                           #   fetch-stations' files or a user's points file,
+                           #   read by io/geojson's read_collection with no
+                           #   default CRS, so the `crs` member is required;
+                           #   duplicates and wrong geometry refused with
+                           #   ValueError (29); read_nve_lakes -> (Lake parts,
+                           #   crs): `station-catchments --lakes`, a
+                           #   MultiPolygon split (29, PR 4)
+    rivers.py              # kind_of (lake or river, total over NVE's
+                           #   objekttype spellings), drop_copies,
+                           #   read_segments -> (RiverSegments, crs, copies
+                           #   dropped); one LineString per segment (29)
+    repository.py          # the ONE io/ module that opens files:
+                           #   DemRepository, the Protocol: footprints, load,
+                           #   load_window, check; TiffDemRepository lists
+                           #   headers, loads tiles (15a); open_geopackage, a read-only SQLite
+                           #   connection (16b); CacheRepository and
+                           #   CachedBlocks read the tile cache (23a-1);
+                           #   CacheWriter writes it under a lock (23a-2);
+                           #   read_json, a JSON document, read-only (29);
+                           #   read_text, UTF-8 text (audit PR C's WKT domain)
     mesh_index.py          # MeshIndex (a cut run's index.json, frozen,
                            #   unknown keys refused), SeamRecord,
                            #   check_conformity (K4); opens nothing (23c)
@@ -220,6 +436,8 @@ auto_catchments.md
 project_structure.md       # this file
 testing.md
 docs/increments/           # per-increment design records; see its README
+docs/plugins.md            # for a third-party plugin author: the hook, plugin_api,
+                           #   the installed headers
 ```
 
 ## Module responsibilities and dependencies
@@ -336,6 +554,11 @@ optional NoData sentinel — nothing else.
   is reprojected in Python too (`crs.py`, the one `from_crs` site); see
   `docs/increments/15c-geographic-dem.md` D6 and
   `docs/increments/11-raster-ingestion.md` §9, §10.
+  One exception since increment 40: on the catchment path a tile in degrees
+  crosses into the hydrology only as values and NoData on a unit lattice
+  (spacing 1, `raster.to_core_lattice`); no coordinate crosses, and the flood,
+  `upstream` and `accumulate` read none. Every metre figure on that path
+  (cell sizes, areas, distances) is computed in Python by `geodesy.py`.
   Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
   east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy
@@ -386,15 +609,23 @@ only TU that includes `detria.hpp`, enforced by CMake privacy, an `#error` guard
 
 ### `parallel_util`
 
-Header-only. Two helpers in `chunks.hpp`, both over `std::jthread` created per call and joined before it returns, no pool: `for_each_chunk(n, threads, fn)`, contiguous equal-count chunks; and `for_each_block(n, threads, BlockSchedule, fn)`, blocks handed out from one atomic counter, run inline below `BlockSchedule::inline_below`, which refine's scan uses (increment 21a). `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
+Header-only. One helper in `chunks.hpp`, over `std::jthread` created per call and joined before it returns, no pool: `for_each_block(n, threads, BlockSchedule, fn)`, blocks handed out from one atomic counter, run inline below `BlockSchedule::inline_below`, which refine's scan uses (increment 21a). `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
 
 ### `vector_simplify`
 
 Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stanislawski, Buttenfield and Brockmeyer's area-preserving segment collapse (APSC, 2020): each collapse replaces two vertices by one on the line that keeps the area, so the area is kept up to rounding; collapses are taken least deviation first while the fine ring's vertices stay within a horizontal tolerance; each new edge is tested for crossings with `noding::classify<K>` over a uniform grid, and keep-points (the seed) must stay inside. Serial and deterministic. Visvalingam-Whyatt and Douglas-Peucker are not used: neither keeps area. See `docs/increments/22-auto-catchment.md`.
 
+`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--features-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--features-tolerance` above 0. See `docs/increments/32-landcover-simplify.md`.
+
 ### `hydrology`
 
-Header-only; depends on `raster` only. `upstream.hpp` (increment 22): `upstream(z, seed)`, a template on the `RasterSource` concept. One Priority-Flood (Barnes, Lehman and Mulla 2014) from the window's edge and from the nodes beside NoData, ties first in, first out, labels a node *in* when it is a seed or was flooded from an *in* node. So each node drains to the node that flooded it, its lowest filled neighbour, and there is no separate fill, no flat resolution and no D8 or accumulation pass. Returns the mask, the in-nodes' count and bounds, and `touches_edge` / `touches_nodata` (an in-node that is, or neighbours, an outlet of that kind). Serial; the binding releases the GIL. What `auto_catchments.md` also sketches (epsilon filling, D8, accumulation, streams and Strahler order, RichDEM) is not built; the outline tracer is Python (`outline.py`). See `docs/increments/22-auto-catchment.md`.
+Header-only; depends on `raster` only. `flood.hpp` (increment 29) holds the one Priority-Flood (Barnes, Lehman and Mulla 2014), `detail::flood(z, state, on_reach)`, from the window's edge and from the nodes beside NoData, ties first in, first out; it calls `on_reach(j, j)` for each outlet and `on_reach(i, j)` when popped node `i` reaches node `j` first, and returns the outlets beside NoData. Both functions below run it, so they cannot drift. Each node drains to the node that flooded it, its lowest filled neighbour, so there is no separate fill, no flat resolution and no D8 pass.
+
+`upstream.hpp` (increment 22): `upstream(z, seed)`, a template on the `RasterSource` concept, labels a node *in* when it is a seed or was flooded from an *in* node. Returns the mask, the in-nodes' count and bounds, and `touches_edge` / `touches_nodata` (an in-node that is, or neighbours, an outlet of that kind).
+
+`accumulate.hpp` (increment 29): `accumulate(z)`, the accumulation pass. One flood records each node's flooder (`flow_to`, 255 for an outlet and on NoData) and the push order; one sweep in reverse push order adds each node's count and reach bits to its flooder. For every node `c` with data, `count[c]` and the two `reach` bits equal `upstream(z, {c})`'s `nodes_in`, `touches_edge` and `touches_nodata`. Refused with `std::length_error` (a `ValueError` in Python) at 2^32 nodes or more, before any per-node array is allocated, since the count and order are 32-bit.
+
+Serial; the bindings release the GIL. What `auto_catchments.md` also sketches (epsilon filling, D8, streams and Strahler order, RichDEM) is not built; the outline tracer is Python (`outline.py`). See `docs/increments/22-auto-catchment.md` and `docs/increments/29-nve-reference-catchments.md`.
 
 ### `noding`
 
@@ -435,12 +666,12 @@ Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-c
 
 ### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. The **value types only** are re-exported by `src_python/tin_engine/__init__.py` (`__all__` is `Point2`, `Point3`, `cross`, `dot`); the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root and `viz/` never imports the extension. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. Nothing is re-exported: `src_python/tin_engine/__init__.py` holds only `installed_version` (`__all__`), so the package imports without the extension; the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
 
 As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
 
-- the `Point2`/`Point3` value types, whose `__repr__` routes through the `std::formatter` specializations in `point.hpp` so the C++ and Python renderings cannot drift;
-- the `dot` and `cross` free functions over both point types;
+- no point value types: coordinates cross as `(N, 2)` float64 arrays (the Python `Point2`, `Point3`, `dot` and `cross` went in PR B of `docs/increments/cpp-audit.md`, section 7);
+- no free functions over points: the C++ `dot` and `cross` in `point.hpp` stay inside the core;
 - `Pslg`, `Chain`, `PslgDiagnostic`, `PslgBuildResult`, `IndexedMesh2` and `CdtOutcome`, plus the `ChainRole`, `PslgError` and `CdtStatus` enums and a `describe(CdtStatus)` helper;
 - two more free functions: `build_pslg`, which validates and returns a `PslgBuildResult` carrying a diagnostics list rather than raising, and `triangulate`, which wraps the kernel call in `py::gil_scoped_release` -- the only call in the module long enough to be worth the release.
 
@@ -470,9 +701,9 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 ## Python API surface
 
-The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. `cli.py` is the single composition root: the core's commands are defined there (plugins add theirs through `plugins.py`), and it joins the readers under `io/`, the engine and the writers -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. It is also where an output path is resolved and refused, through `cli_kit.destination`, before anything is written.
 
-**The catchment GeoJSON writer is in `cli.py`** (increment 22, `rasputin catchment`): it builds a one-feature `FeatureCollection` with a `crs` member and writes it, an exception to "all file encoding lives in `io/`". Recommended (@architect, 2026-09-29): move it, as a function from a polygon, its CRS text and its properties to bytes that takes no path and opens nothing, into `io/geojson.py`, the shape `io/ply.py` and `io/vtk_legacy.py` already have; `cli.py` keeps only the write. It is small, and a GUI or API worker writing a catchment would otherwise have to go through the CLI. Until it moves, this paragraph is the record of the exception.
+The catchment file's bytes come from `io/geojson.py`'s `catchment_geojson`, which opens nothing; `rasputin catchment` and `rasputin station-catchments` both call it, and `cli.py` keeps only the write.
 
 The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are not in the working tree. They, with the CGAL-based `triangulate_dem.h` and `bindings.cpp`, left it in the release-hygiene PR and are kept in history under the annotated tag `legacy-archive` (`docs/increments/release-hygiene.md`, section 3). A shape worth preserving is read back with `git show legacy-archive:legacy/rasputin/<file>` before it is reintroduced, and an increment's "Legacy" section greps the tag. `tools/check_citations.py` resolves a `legacy/…:N` citation through the tag.
 

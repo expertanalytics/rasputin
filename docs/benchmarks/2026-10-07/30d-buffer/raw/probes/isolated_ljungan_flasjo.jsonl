@@ -1,0 +1,19 @@
+{"tin_engine": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-30d2/pkg/tin_engine/__init__.py", "shapely": "2.1.2", "geos": "3.13.1"}
+{"catchment": "ljungan_flasjo", "step": "footprints (tile headers)", "runs": [0.04041533300187439, 1.1208932846784592e-05, 9.124982170760632e-06], "median": 1.1208932846784592e-05}
+{"catchment": "ljungan_flasjo", "step": "domain.to_crs(target)", "runs": [0.0024123330367729068, 0.0003797500394284725, 0.00032962497789412737], "median": 0.0003797500394284725}
+{"catchment": "ljungan_flasjo", "step": "target_grid_for (target_grid.py:107's buffer inside)", "runs": [2.1964325420558453, 2.1413371668895707, 2.1151315830647945], "median": 2.1413371668895707}
+{"catchment": "ljungan_flasjo", "step": "buffer target_grid.py:107 = dem_input.py:213 (the same call)", "runs": [2.0864384579472244, 2.087255083024502, 2.204603875055909], "median": 2.087255083024502, "distance": 43.84062043356595, "vertices": 23260}
+{"catchment": "ljungan_flasjo", "step": "target_grid.source_region (target_grid.py:145's buffer inside)", "runs": [0.09048962499946356, 0.09019754093606025, 0.08911329100374132], "median": 0.09019754093606025}
+{"catchment": "ljungan_flasjo", "step": "buffer target_grid.py:145", "runs": [0.08444412506651133, 0.08441104204393923, 0.0865079170325771], "median": 0.08444412506651133, "distance": 0.0005007710104811096, "vertices": 18451}
+{"catchment": "ljungan_flasjo", "step": "plan_mosaic", "runs": [0.0005677079316228628, 0.0003357499372214079, 0.00031991698779165745], "median": 0.0003357499372214079}
+{"catchment": "ljungan_flasjo", "step": "repository.check", "runs": [0.00029266695491969585, 0.0001517079072073102, 0.00015108298975974321], "median": 0.0001517079072073102}
+{"catchment": "ljungan_flasjo", "step": "assemble (decode + seams)", "runs": [0.07890970795415342, 0.07370374992024153, 0.07373566599562764], "median": 0.07373566599562764}
+{"catchment": "ljungan_flasjo", "step": "resample", "runs": [0.2114785419544205, 0.1936390419723466, 0.19292720791418105], "median": 0.1936390419723466}
+{"catchment": "ljungan_flasjo", "step": "buffer feature_input.py:161", "runs": [2.3126228749752045, 2.22619095898699, 2.25895725004375], "median": 2.25895725004375, "distance": 100.0, "vertices": 23260}
+{"catchment": "ljungan_flasjo", "step": "feature_input.source_region(domain, dem, dem)", "runs": [2.3133718750905246, 2.2622077909763902, 2.2395862919511274], "median": 2.2622077909763902}
+{"catchment": "ljungan_flasjo", "step": "read_json (GeoJSON window)", "runs": [0.23993945808615535, 0.2581453330349177, 0.2557355839526281], "median": 0.2557355839526281, "mb": 22.423039}
+{"catchment": "ljungan_flasjo", "step": "read_source (GeoJSON window: read_json + shape)", "runs": [0.5822838749736547, 0.5474124159663916, 0.546520666917786], "median": 0.5474124159663916}
+{"catchment": "ljungan_flasjo", "source": "geojson", "rows": 851, "vertices": 678103}
+{"catchment": "ljungan_flasjo", "step": "feature_input.source_region(domain, dem, EPSG:3035) [gpkg box]", "runs": [2.22873700002674, 2.2204816669691354, 2.2720415419898927], "median": 2.22873700002674}
+{"catchment": "ljungan_flasjo", "step": "query_features (gpkg, 8.86 GB)", "runs": [1.72740662493743, 1.0093131670728326, 0.9464817499974743], "median": 1.0093131670728326}
+{"catchment": "ljungan_flasjo", "source": "gpkg", "rows": 1156, "vertices": 14921039}

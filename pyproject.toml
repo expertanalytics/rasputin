@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "rasputin"
 version = "0.2.0.dev0"
-description = "Parallel TIN engine for terrain meshing — CGAL-free, GDAL-free, pure C++20 core with async Python bindings."
+description = "Rasputin turns a digital elevation model (DEM) into a triangle mesh of the terrain that stays within a height tolerance you choose."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
@@ -35,9 +35,9 @@ classifiers = [
 # input format is a packaging defect.
 dependencies = [
     "pydantic>=2.6",
-    "shapely>=2.0",
+    "shapely>=2.2",
     "pyproj>=3.6",
-    "typer>=0.12",
+    "typer>=0.19",
     "numpy>=1.26",
     "tifffile>=2024.1",
 ]
@@ -59,7 +59,14 @@ codecs = ["imagecodecs>=2024.1"]
 # the wheels are 100-140 MB. It carries no GDAL reader (13-bundled-mesh.md,
 # "Dependency facts"). CI installs it in its own step.
 viewer = ["vtk>=9.3"]
+# `rasputin mcp` (increment 37): the official Model Context Protocol SDK, MIT,
+# 13 pure-Python dependencies, none on CLAUDE.md section 2's list. Without it
+# the command refuses with an install line; every other command is unchanged.
+# `dev` pulls it so the suite's MCP tests run wherever the suite does (CI
+# installs `.[dev]`); without it they skip.
+mcp = ["mcp>=2.3", "anyio>=4.9", "mcp-types>=2.3"]
 dev = [
+    "mcp>=2.3",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.1",
@@ -69,7 +76,12 @@ dev = [
 ]
 
 [project.scripts]
-rasputin = "tin_engine.cli:app"
+rasputin = "tin_engine.plugins:main"
+
+# A plugin's build finds the installed headers and CMake config with
+# find_package(rasputin): scikit-build-core sets rasputin_ROOT from this.
+[project.entry-points."cmake.root"]
+rasputin = "tin_engine"
 
 [project.urls]
 Homepage = "https://github.com/expertanalytics/rasputin"
@@ -107,6 +119,11 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-fail-under=85",
 ]
+# h17 §4b: CI runs `-m harness` in its own job and `-m "not harness"` in the
+# product legs; a local `pytest` with no -m runs both.
+markers = [
+    "harness: tests of tools/ and .claude/ that import nothing from tin_engine",
+]
 
 [tool.ruff]
 line-length = 100
@@ -129,8 +146,9 @@ ignore = []
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src_python/tin_engine", "tools/bench.py", "tools/harness_mode.py", "tools/away.py",
-         "tools/shell_scan.py"]
+files = ["src_python/tin_engine", "tools/bench.py", "tools/bench_quick.py",
+         "tools/harness_mode.py", "tools/away.py", "tools/shell_scan.py",
+         "tools/new_worktree.py", "tools/merge_master.py", "tools/push_grant.py"]
 plugins = ["pydantic.mypy"]
 
 # shapely ships no type information and types-shapely is not a dependency;
@@ -138,3 +156,40 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["shapely", "shapely.*"]
 ignore_missing_imports = true
+
+# tools/check_code_history.py's scope: the paths whose docstrings, comments and
+# help strings must carry no project history.
+[tool.check_code_history]
+paths = [
+    "src_python/tin_engine/__init__.py",
+    "src_python/tin_engine/__main__.py",
+    "src_python/tin_engine/burn.py",
+    "src_python/tin_engine/catchment.py",
+    "src_python/tin_engine/catchment_batch.py",
+    "src_python/tin_engine/catchment_core.py",
+    "src_python/tin_engine/cli.py",
+    "src_python/tin_engine/cli_kit.py",
+    "src_python/tin_engine/crs.py",
+    "src_python/tin_engine/dem_input.py",
+    "src_python/tin_engine/domain.py",
+    "src_python/tin_engine/edge_strip.py",
+    "src_python/tin_engine/elevation.py",
+    "src_python/tin_engine/fetch",
+    "src_python/tin_engine/final_check.py",
+    "src_python/tin_engine/gauge.py",
+    "src_python/tin_engine/grid_domain.py",
+    "src_python/tin_engine/grow.py",
+    "src_python/tin_engine/hydrography.py",
+    "src_python/tin_engine/io",
+    "src_python/tin_engine/mcp",
+    "src_python/tin_engine/mosaic.py",
+    "src_python/tin_engine/outline.py",
+    "src_python/tin_engine/plugin_api.py",
+    "src_python/tin_engine/plugins.py",
+    "src_python/tin_engine/raster.py",
+    "src_python/tin_engine/reference.py",
+    "src_python/tin_engine/sensitivity.py",
+    "src_python/tin_engine/sources.py",
+    "src_python/tin_engine/target_grid.py",
+    "src_python/tin_engine/tolerance_field.py",
+]

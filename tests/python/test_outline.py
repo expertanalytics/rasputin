@@ -38,8 +38,6 @@ import pytest
 import shapely
 from shapely.geometry import LinearRing, Point, Polygon
 
-from importscan import first_party_imports
-
 Ring = npt.NDArray[np.float64]
 Trace = Callable[[Any], list[Any]]
 
@@ -131,12 +129,6 @@ def traced(trace: Trace, mask: npt.ArrayLike) -> list[Ring]:
     rings = [open_ring(r) for r in trace(m)]
     check_guarantee(m, rings)
     return rings
-
-
-def test_the_tracer_imports_no_core() -> None:
-    import tin_engine.outline as outline
-
-    assert not any(name.startswith("tin_engine._core") for name in first_party_imports(outline))
 
 
 def test_an_empty_mask_has_no_ring(trace: Trace) -> None:

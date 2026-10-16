@@ -7,8 +7,7 @@ the failure mode is a named `AttributeError` on the symbol that is missing and
 pytest still collects the file. A collection error would hide the next real
 problem behind an import.
 
-Scope is 6a only: the bindings, the stubs and `viz/protocols.py`. The renderer,
-the fixtures and `rasputin draw` are 6b and appear nowhere here.
+Scope is the bindings and the stubs.
 
 AMENDED AT INCREMENT 5c, when `triangulate` stopped taking a `Pslg`. Every
 triangulation below now goes through `node()` first, and the entry point's
@@ -38,13 +37,13 @@ import gc
 import sys
 import threading
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
+from gil_probe import ticks_during
 from tin_engine import _core
 from tin_engine.features import DEFAULT_VOCABULARY, MAX_PROPERTIES
 
@@ -579,7 +578,7 @@ class TestMeshArrays:
         # triangulate.hpp semantic obligation 1 and indexed_mesh.hpp guarantee
         # 4: index k means the same point on both sides. 6b's role join is
         # built entirely on this, and as of 5c the side that has to match is
-        # the NODED graph's -- `cli.py` draws the scene from that graph, so a
+        # the NODED graph's -- `cli.py` joins feature masks on that graph, so a
         # mesh whose indices agreed with the pre-noding `Pslg` instead would
         # put every edge in the wrong place.
         n = noded_breakline.vertices.shape[0]
@@ -746,48 +745,6 @@ class TestTriangulate:
 # --------------------------------------------------------------------------
 # The GIL
 # --------------------------------------------------------------------------
-
-
-class _Ticker:
-    """A thread that ticks once per millisecond, and cannot tick without the GIL.
-
-    `time.sleep` releases the GIL and must re-acquire it to continue, so a tick
-    is direct evidence that the GIL was available. The tick rate is bounded by
-    the sleep, so the ticker never starves the thread it is observing.
-    """
-
-    def __init__(self) -> None:
-        self.ticks = 0
-        self._stop = threading.Event()
-        self._ready = threading.Event()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-
-    def _run(self) -> None:
-        self._ready.set()
-        while not self._stop.is_set():
-            self.ticks += 1
-            time.sleep(0.001)
-
-    def __enter__(self) -> _Ticker:
-        self._thread.start()
-        assert self._ready.wait(timeout=10.0), "ticker never started"
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self._stop.set()
-        self._thread.join(timeout=10.0)
-
-
-def ticks_during[T](call: Callable[[], T]) -> tuple[T, int, float]:
-    """Return the call's result, the ticks observed during it, and its duration."""
-    with _Ticker() as ticker:
-        time.sleep(0.02)  # let the ticker reach steady state
-        before = ticker.ticks
-        started = time.perf_counter()
-        result = call()
-        elapsed = time.perf_counter() - started
-        after = ticker.ticks
-    return result, after - before, elapsed
 
 
 # Thresholds from the control below, measured on CPython 3.14 (arm64): a
@@ -965,7 +922,7 @@ NEW_SURFACE = (
 
 class TestDocumentation:
     """CLAUDE.md section 4 requires every pybind11-exposed surface to be
-    documented; `tests/python/test_core.py` holds the same line for Point2."""
+    documented."""
 
     @pytest.mark.parametrize("name", NEW_SURFACE)
     def test_every_bound_name_carries_a_docstring(self, name: str) -> None:

@@ -15,46 +15,17 @@ from __future__ import annotations
 
 import itertools
 import math
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from fractions import Fraction
 
 import numpy as np
 import numpy.typing as npt
 import shapely
 from shapely.geometry import LineString, Polygon
 
-#: `--memory-budget`'s default, 16 GiB in bytes (B14 as ruled).
-DEFAULT_MEMORY_BUDGET = 2**34
-
-#: `--memory-budget`'s grammar (B17 (b)): ASCII digits, then K, M, G or T,
-#: each optionally with B or iB, or B alone; any case, no whitespace.
-_SIZE = re.compile(r"([0-9]+)(?:([kmgt])(?:i?b)?|b)?", re.IGNORECASE)
-_DECIMAL = re.compile(r"([0-9]+\.[0-9]+)([kmgt])?(?:i?b)?", re.IGNORECASE)
-_UNITS = "bkmgt"  # the power of 1024 is the index
-
-
-def parse_memory_budget(text: str) -> int:
-    """A size such as `16G`, `512MiB` or `17179869184` in bytes; every unit is
-    a power of 1024. A `ValueError` for anything else, and for zero."""
-    found = _SIZE.fullmatch(text)
-    if found is None:
-        hint = ""
-        if decimal := _DECIMAL.fullmatch(text):  # suggest a whole number in a smaller unit
-            power = _UNITS.index((decimal[2] or "b").lower())
-            value = Fraction(decimal[1]) * 1024**power
-            for q in range(power - 1, -1, -1):
-                if (value / 1024**q).denominator == 1:
-                    hint = f"; try {value / 1024**q}{_UNITS[q].upper() if q else ''}"
-                    break
-        raise ValueError(
-            f"{text!r} is not a size: a whole number, then K, M, G or T (powers of 1024){hint}"
-        )
-    size = int(found[1]) << 10 * _UNITS.index((found[2] or "b").lower())
-    if size == 0:
-        raise ValueError("a memory budget of 0 bytes holds no node")
-    return size
+#: `--piece-budget`'s default, 16G (2^34 bytes): a constant, so the cut is
+#: the same on every machine.
+DEFAULT_PIECE_BUDGET = 2**34
 
 
 #: `b(T)`: bytes per window node at tolerance T (m), from the basin-piece
@@ -94,12 +65,12 @@ def partition(
     tolerance: float,
     *,
     pieces: int = 1,
-    memory_budget: int = DEFAULT_MEMORY_BUDGET,
+    piece_budget: int = DEFAULT_PIECE_BUDGET,
 ) -> Partition:
     """The cells of a `cols` x `rows` window: the design's steps 1-3.
 
     The count approximates `max(pieces, ceil(N b / B))` and is not a floor;
-    only `dx dy b <= memory_budget` is guaranteed. Refuses an empty window,
+    only `dx dy b <= piece_budget` is guaranteed. Refuses an empty window,
     `pieces < 1`, and a budget under one node's bytes, for which no cell fits.
     """
     if cols < 1 or rows < 1:
@@ -107,11 +78,9 @@ def partition(
     if pieces < 1:
         raise ValueError(f"pieces must be at least 1, got {pieces}")
     b = bytes_per_node(tolerance)
-    if memory_budget < b:
-        raise ValueError(
-            f"the memory budget of {memory_budget} bytes is under one node's {b} bytes"
-        )
-    wanted = max(pieces, -(-cols * rows * b // memory_budget))
+    if piece_budget < b:
+        raise ValueError(f"the piece budget of {piece_budget} bytes is under one node's {b} bytes")
+    wanted = max(pieces, -(-cols * rows * b // piece_budget))
     if wanted <= 1:
         return Partition(1, 1, cols, rows)
     nx = max(1, round(math.sqrt(wanted * cols / rows)))
@@ -122,7 +91,7 @@ def partition(
     # A step adds one to nx only while dx >= dy and the cell is over, so
     # dx > 1, i.e. nx < cols; likewise ny only while dy > 1, i.e. ny < rows.
     # So nx stays at most cols and ny at most rows: at most cols + rows - 2 steps.
-    while dx * dy * b > memory_budget:
+    while dx * dy * b > piece_budget:
         if dx >= dy:
             nx += 1
         else:

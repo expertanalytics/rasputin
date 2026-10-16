@@ -1,0 +1,86 @@
+=== 15f-3-base-r1 start 2026-10-04T00:13:05Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10566.56M  free = 697.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-base-r1
+REGRESSION: quarter refine_s[t=1] 0.4340 -> 0.4591 (+5.8 %)
+REGRESSION: tile refine_s[t=2] 0.3175 -> 0.3349 (+5.5 %)
+=== 15f-3-base-r1 exit 1 2026-10-04T00:15:22Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10566.56M  free = 697.44M  (encrypted)
+=== 15f-3-r1 start 2026-10-04T00:15:22Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10566.56M  free = 697.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-r1
+ACCEPTED
+=== 15f-3-r1 exit 0 2026-10-04T00:18:47Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10550.56M  free = 713.44M  (encrypted)
+=== 15f-3-r2 start 2026-10-04T00:18:47Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10550.56M  free = 713.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-r2
+ACCEPTED
+=== 15f-3-r2 exit 0 2026-10-04T00:22:08Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f-3-base-r2 start 2026-10-04T00:22:08Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-base-r2
+REGRESSION: quarter refine_s[t=1] 0.4345 -> 0.4697 (+8.1 %)
+REGRESSION: quarter refine_s[t=11] 0.1719 -> 0.1814 (+5.5 %)
+=== 15f-3-base-r2 exit 1 2026-10-04T00:24:24Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f-3-r3 start 2026-10-04T00:24:24Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-r3
+REGRESSION: tile refine_s[t=1] 0.4923 -> 0.5216 (+6.0 %)
+REGRESSION: tile refine_s[t=2] 0.3190 -> 0.3373 (+5.7 %)
+=== 15f-3-r3 exit 1 2026-10-04T00:27:49Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f-3-base-r3 start 2026-10-04T00:27:49Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-base-r3
+ACCEPTED
+=== 15f-3-base-r3 exit 0 2026-10-04T00:30:07Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f-3-base-r4 start 2026-10-04T00:30:07Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-base-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-base-r4
+ACCEPTED
+=== 15f-3-base-r4 exit 0 2026-10-04T00:32:24Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f-3-r4 start 2026-10-04T00:32:24Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-3-r4
+ACCEPTED
+=== 15f-3-r4 exit 0 2026-10-04T00:35:49Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+ALLDONE
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true

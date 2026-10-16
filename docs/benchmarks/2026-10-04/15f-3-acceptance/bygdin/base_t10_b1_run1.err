@@ -1,0 +1,24 @@
+features: 79 kept (35 cut at the domain outline), 342 outside the domain, 0 empty
+lines: 15846 vertices read, 8242 after joining shared edges and adding crossings
+DEM: 2 files, 3314 columns x 2195 rows
+land cover: 124 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+83171 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 9.9997 m).
+BENCH {"refine_s": 0.04986854095477611, "app_s": 2.2740386659861542, "max_error": 9.999732907715497, "rounds": 17, "inserted": 17879, "flips": 39582, "hardening": "libc++ fast"}
+        2.59 real         2.34 user         0.17 sys
+           378847232  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               32729  page reclaims
+                 191  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                1732  voluntary context switches
+                1047  involuntary context switches
+         32919902882  instructions retired
+          7846718813  cycles elapsed
+           331727640  peak memory footprint

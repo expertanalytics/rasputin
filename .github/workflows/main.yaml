@@ -1,10 +1,13 @@
 name: CI
 
+# No `push` trigger: the merge queue tests the commit that lands, so a run on
+# master after the merge repeats it (h11). A hand-started run is a full run.
 on:
-  push:
-    branches: [ master ]
   pull_request:
     branches: [ master ]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 
 # A push to a PR branch supersedes the run already in flight for it.
 concurrency:
@@ -12,6 +15,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # h11: decides whether this change needs the code jobs. Prose-only changes
+  # (as tools/ci_changes.py decides) skip them; governance always runs. Any
+  # doubt (no base, a git failure) gives code=true, a full run. The full history
+  # is fetched because the base commit must be in the clone.
+  changes:
+    name: Changed files
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify the changed files
+        id: classify
+        run: >
+          python3 tools/ci_changes.py
+          "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
+          "${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
   # The C++ core builds and tests without Python in the loop. Keeping it a
   # separate job is the CI expression of the I/O boundary: if this job ever
   # needs a Python package to pass, the core has grown a dependency it should
@@ -19,6 +43,10 @@ jobs:
   cpp:
     name: C++ core (${{ matrix.os }}${{ matrix.hardening == 'OFF' && ', unchecked' || '' }})
     runs-on: ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+    # The unchecked leg does not block a merge (h11 §9, ruling 1).
+    continue-on-error: ${{ matrix.hardening == 'OFF' }}
     # A hang (a non-terminating refinement loop under a bug) must fail the
     # job, not hold the runner for GitHub's 6-hour default.
     timeout-minutes: 30
@@ -42,7 +70,9 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRASPUTIN_HARDENING=${{ matrix.hardening }}
 
       - name: Build
-        run: cmake --build build --parallel
+        # One job per CPU. A bare --parallel is an unlimited make -j, which
+        # pages the 7 GB macOS runner (h13). Same on every build line below.
+        run: cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -59,6 +89,8 @@ jobs:
   sanitizers:
     name: C++ sanitizers (asan+ubsan)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     # A hang (a non-terminating refinement loop under a bug) must fail the
     # job, not hold the runner for GitHub's 6-hour default.
     timeout-minutes: 30
@@ -77,10 +109,12 @@ jobs:
           -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g"
 
       - name: Build
-        run: cmake --build build-san --parallel
+        run: cmake --build build-san --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Test
-        run: ctest --test-dir build-san --output-on-failure
+        # One test per CPU. Every Catch2 case is its own process and none
+        # shares a file or other state (h14 §2d).
+        run: ctest --test-dir build-san --output-on-failure --parallel "$(getconf _NPROCESSORS_ONLN)"
 
   # Increment 14, R7: refinement is the first code path that starts threads,
   # and asan+ubsan cannot see a data race. TSan cannot share a build with ASan,
@@ -88,10 +122,15 @@ jobs:
   # the parallel helpers they use). T6 runs
   # the loop at 1, 2, 7 and all threads; a clean run is the independent check
   # of the design's "no shared writes" claim. The binaries are run directly
-  # because ctest names the tests by Catch case, not by target.
+  # because ctest names the tests by Catch case, not by target. h17 §4c: only
+  # suites that reach parallel_util/chunks.hpp, the one file that starts
+  # threads, are listed; asan+ubsan runs the thread-free ones on every PR.
+  # test_border_collapse (increment 32) starts its own threads to check purity.
   tsan:
     name: C++ thread sanitizer (refinement)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     # A hang (a non-terminating refinement loop under a bug) must fail the
     # job, not hold the runner for GitHub's 6-hour default.
     timeout-minutes: 30
@@ -113,33 +152,43 @@ jobs:
 
       - name: Build
         run: >
-          cmake --build build-tsan --parallel --target
-          test_refinement_chunks test_mesh_lattice_split
-          test_refinement_scan prop_refinement_refine test_mesh_lawson
-          test_refinement_scan_offnode test_refinement_refine
-          test_mesh_row_spans prop_refinement_scan_equivalence
-          test_mesh_quality prop_refinement_quality
-          test_refinement_constraint_feet
-          test_refinement_chunks_dynamic test_refinement_active test_mesh_lawson_stack
+          cmake --build build-tsan --parallel "$(getconf _NPROCESSORS_ONLN)" --target
+          prop_refinement_refine test_refinement_refine
+          prop_refinement_quality test_refinement_constraint_feet
+          test_refinement_chunks_dynamic test_refinement_active
           test_refinement_refine_points prop_refinement_refine_points
           prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam
+          test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final test_quality_gain_refine
+          test_border_collapse prop_refinement_line_tolerance
+          test_raster_steepness prop_refinement_slope_tolerance
 
+      # One suite per CPU (h17 §4c). Each suite's output goes to its own log,
+      # printed whole once all have ended; a suite that fails is named in
+      # tsan-logs/failed, and any name there fails the step.
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
         run: |
-          for suite in test_refinement_chunks test_mesh_lattice_split \
-                       test_refinement_scan prop_refinement_refine test_mesh_lawson \
-                       test_refinement_scan_offnode test_refinement_refine \
-                       test_mesh_row_spans prop_refinement_scan_equivalence \
-                       test_mesh_quality prop_refinement_quality \
-                       test_refinement_constraint_feet \
-                       test_refinement_chunks_dynamic test_refinement_active \
-                       test_mesh_lawson_stack test_refinement_refine_points \
-                       prop_refinement_refine_points prop_refinement_edge_strip \
-                       prop_refinement_frozen prop_refinement_seam; do
-            build-tsan/tests/cpp/$suite
+          mkdir -p tsan-logs
+          printf '%s\n' prop_refinement_refine test_refinement_refine \
+                         prop_refinement_quality test_refinement_constraint_feet \
+                         test_refinement_chunks_dynamic test_refinement_active \
+                         test_refinement_refine_points prop_refinement_refine_points \
+                         prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam \
+                         test_constraint_foot_quality test_constraint_foot_refine test_constraint_foot_final test_quality_gain_refine \
+                         test_border_collapse prop_refinement_line_tolerance \
+                         test_raster_steepness prop_refinement_slope_tolerance |
+            xargs -P "$(getconf _NPROCESSORS_ONLN)" -I {} sh -c \
+              'build-tsan/tests/cpp/"$1" > tsan-logs/"$1".log 2>&1 || echo "$1" >> tsan-logs/failed' sh {}
+          for log in tsan-logs/*.log; do
+            echo "===== ${log#tsan-logs/}"
+            cat "$log"
           done
+          if [ -s tsan-logs/failed ]; then
+            echo "Failed under TSan:"
+            cat tsan-logs/failed
+            exit 1
+          fi
 
   # Rules that previously existed only as prose in CLAUDE.md and were enforced
   # by nothing. All three scripts are dependency-free and parse rather than execute,
@@ -184,9 +233,90 @@ jobs:
       - name: Citations resolve
         run: python tools/check_citations.py
 
+      # Docstrings, comments and help strings describe the code, not its
+      # history. The scope is `[tool.check_code_history] paths` in
+      # pyproject.toml; it grows as each package is rewritten.
+      - name: No history in code docs
+        run: python tools/check_code_history.py
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+
+    steps:
+      # The full history. test_count_loc.py, which recounts recorded PRs from
+      # it, runs in the harness job since h17; the depth stays (h17 §7: no
+      # environment change in a gating job).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Editable, so the compiled extension is built from this checkout rather
+      # than resolved from an index.
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      # A plugin's build against the installed core alone: it fails when a
+      # promised header is not installed or the CMake config is wrong. The
+      # install puts the headers and config beside the installed _core.
+      - name: Consumer build
+        run: |
+          python -m pip install pybind11
+          root="$(python -c 'import importlib.util as u, pathlib as p; print(p.Path(u.find_spec("tin_engine._core").origin).parent)')"
+          cmake -S tests/consumer -B build-consumer -Drasputin_ROOT="$root" -Dpybind11_DIR="$(python -m pybind11 --cmakedir)"
+          cmake --build build-consumer --parallel "$(getconf _NPROCESSORS_ONLN)"
+          ./build-consumer/consumer_headers
+
+      # The harness tests run in the harness job below (h17 §4b); the two
+      # marker expressions are complements, so each test runs in one of them.
+      - name: Tests
+        run: pytest -m "not harness"
+
+  # h17 §4b: the tests of the harness tools (tools/ and .claude/), marked
+  # `harness`, import nothing from tin_engine. So this job installs only the
+  # test tools, at the dev extra's bounds, not the package, and runs on the
+  # floor version only. tests/python/conftest.py skips collecting the files
+  # with no harness mark, which would fail to import without the package.
+  # The full history: test_count_loc.py recounts recorded PRs from it.
+  harness:
+    name: Python harness tools
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the test tools
+        run: python -m pip install --upgrade pip && python -m pip install "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-cov>=4.1"
+
+      - name: Tests
+        run: pytest --no-cov -m harness
+
+  # h15 §5 P: the steps that ran after the main suite, in their own job per
+  # version, so they run beside it instead of after it. Same installs, same
+  # order, each step's text unchanged; only the main suite's pytest is gone.
+  python-extras:
+    name: Python ${{ matrix.python-version }}, extras
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -199,13 +329,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Editable, so the compiled extension is built from this checkout rather
-      # than resolved from an index.
       - name: Install
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
-
-      - name: Tests
-        run: pytest
 
       # Increment 24, T6: an unchecked install (-C
       # cmake.define.RASPUTIN_HARDENING=OFF) must not leave its OFF in the shared
@@ -220,10 +345,10 @@ jobs:
 
       # Suites that branch on the `codecs` extra: some tests need imagecodecs
       # (LZW, the real Kartverket DEM and DTM10 extracts), others test its
-      # absence. No single environment runs both halves, so the step above
-      # covers the absent half and this one installs the extra and re-runs the
-      # codecs-gated suites: the GeoTIFF ones, and the CLI and golden suites that
-      # mesh the real tile (test_cli_mesh_dem.py runs in the viewer step below).
+      # absence. No single environment runs both halves, so the main suite
+      # (the python job) covers the absent half and this one installs the extra
+      # and re-runs the codecs-gated suites: the GeoTIFF ones, and the CLI and
+      # golden suites that mesh the real tile (test_cli_mesh_dem.py runs in the viewer step below).
       - name: Tests with the codecs extra
         run: |
           python -m pip install -e ".[dev,codecs]"
@@ -264,3 +389,35 @@ jobs:
       - name: ruff format
         if: matrix.python-version == '3.12'
         run: ruff format --check .
+
+  # h11: the one required check. It runs even when a needed job failed (a
+  # skipped job would report success). `changes` and governance must succeed;
+  # the others must succeed, or be skipped when the change is prose only. TSan
+  # is left out on purpose: it does not block a merge (h11 §9, ruling 1).
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, cpp, sanitizers, governance, python, python-extras, harness]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every gating job passed, or was skipped on a prose-only change
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          GOVERNANCE: ${{ needs.governance.result }}
+          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }} ${{ needs.python-extras.result }} ${{ needs.harness.result }}
+        run: |
+          fail=0
+          if [ "$CHANGES" != success ]; then echo "Changed files ended: $CHANGES"; fail=1; fi
+          if [ "$GOVERNANCE" != success ]; then echo "Governance gates ended: $GOVERNANCE"; fail=1; fi
+          allowed=" success "
+          if [ "$CODE" = false ]; then allowed=" success skipped "; fi
+          set -- $OTHERS
+          for job in "C++ core" "C++ sanitizers" "Python" "Python extras" "Python harness tools"; do
+            case "$allowed" in
+              *" ${1:-none} "*) ;;
+              *) echo "$job ended: ${1:-none} (code=$CODE)"; fail=1 ;;
+            esac
+            shift || true
+          done
+          exit "$fail"

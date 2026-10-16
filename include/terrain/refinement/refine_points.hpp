@@ -54,6 +54,24 @@
 // error against the edge's linear z at its projection. L12 never takes a
 // frozen edge, the DEM rescan is refine's scan, and a frozen strip edge is a
 // programming error (std::logic_error).
+//
+// Constraint feet (docs/increments/20c-soft-quality.md, R4). With
+// constraint_feet, a source point or DEM node that L12 left Inside and that
+// lies within delta_p of a constraint (mesh::constraint_foot) goes in as its
+// foot, once; if its error stays above the tolerance it goes in later as
+// itself (feet_fallback). Feet are counted in `inserted`.
+//
+// A tolerance policy (docs/increments/33-feature-tolerance.md, 4.4): each
+// triangle's error is compared with the policy's allowed error, asked only
+// between lowest() and highest(), as refine does; options.tolerance is not
+// read by the overloads that take one.
+//
+// A slope (docs/increments/34-slope-tolerance.md, 4.3): with Sloped<P> a
+// stored point or strip point is held to allowed(cell_class(its position)),
+// a rescanned DEM node to its own class's. Each triangle keeps a second
+// winner, the largest (error * weight, error) across the sets; when some
+// point is above its allowed error, the triangle splits there, and the
+// triangle part is not asked.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -75,6 +93,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -90,6 +109,7 @@ struct PointRefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
     std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
+    bool constraint_feet = false;   // 20c R4.6: a point near a constraint goes in as its foot first
 };
 
 // RefineOutcome, with max_error over check points, plus the coincident points
@@ -105,13 +125,15 @@ struct PointRefineOutcome : RefineOutcome {
     std::size_t nodes_inserted = 0;  // refine_strip: DEM nodes, a subset of `inserted`
     std::size_t on_frozen = 0;          // stored points on a frozen edge, each once (N6)
     double on_frozen_max_error = 0.0;   // their largest error, edges with two valid ends only
+    std::size_t feet_fallback = 0;      // 20c R4.5: footed points later inserted as themselves
 };
 
 namespace detail {
 
-template <class Store>
-[[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m,
-                                    std::span<const double> zt, std::uint32_t t, double radius = 0.0) {
+template <class Store, class S = NoSlope>
+[[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m, std::span<const double> zt,
+                                    std::uint32_t t, double radius = 0.0, const S* slope = nullptr,
+                                    PointScan* steep = nullptr) {
     using mesh::MeshVertex;
     const raster::RasterGeometry& g = points.geometry();
     const auto& tri = m.triangles()[t];
@@ -167,6 +189,9 @@ template <class Store>
             r.point = p;
             r.z = z;
         }
+        if constexpr (!std::is_same_v<S, NoSlope>)
+            if (steep->rank(err, slope->cell_class(p), *slope))
+                std::tie(steep->point, steep->z) = std::pair{p, z};
     };
 
     // Per cell row, the triangle's column range in the band [b, b + 1]: its
@@ -196,11 +221,17 @@ template <class Store>
         const auto c1 = std::min(static_cast<std::size_t>(std::floor(hi) + 1.0), last_col);
         points.for_each_in(b, c0, c1, visit);
     }
+    const auto locate = [&](MeshVertex p) {
+        return mesh::orient_sign(v[0], v[1], p) == 0   ? NodeLocation::Edge0
+               : mesh::orient_sign(v[1], v[2], p) == 0 ? NodeLocation::Edge1
+               : mesh::orient_sign(v[2], v[0], p) == 0 ? NodeLocation::Edge2
+                                                       : NodeLocation::Inside;
+    };
     if (r.point)
-        r.where = mesh::orient_sign(v[0], v[1], *r.point) == 0   ? NodeLocation::Edge0
-                  : mesh::orient_sign(v[1], v[2], *r.point) == 0 ? NodeLocation::Edge1
-                  : mesh::orient_sign(v[2], v[0], *r.point) == 0 ? NodeLocation::Edge2
-                                                                 : NodeLocation::Inside;
+        r.where = locate(*r.point);
+    if constexpr (!std::is_same_v<S, NoSlope>)
+        if (steep->point)
+            steep->where = locate(*steep->point);
     return r;
 }
 
@@ -215,13 +246,14 @@ struct NoSet {};  // point_loop without a store, or without a DEM
 // The loop of refine_points and refine_strip (D4). `points` (a store) or `dem`
 // may be null, `strip` too; refusals (2) to (4) of L2, the tolerance being the
 // caller's.
-template <class Store, class R>
+template <class Store, class R, TolerancePolicy P>
 [[nodiscard]] PointRefineOutcome point_loop(const std::string& name, const raster::RasterGeometry& g,
                                             const Store* points, const R* dem, const ConstraintCheckPoints* strip,
                                             const IndexedMesh2& start, std::span<const double> z,
                                             std::span<const std::uint8_t> valid,
                                             std::span<const std::array<std::uint32_t, 2>> edges,
-                                            std::span<const std::uint32_t> masks, const PointRefineOptions& options) {
+                                            std::span<const std::uint32_t> masks, const PointRefineOptions& options,
+                                            const P& policy) {
     constexpr bool has_store = !std::is_same_v<Store, NoSet>, has_dem = !std::is_same_v<R, NoSet>;
     SubEdges subs;
     std::vector<std::size_t> offset{0};
@@ -264,23 +296,72 @@ template <class Store, class R>
     std::vector<char> written(m.triangle_count(), 0), refused(offset.back(), 0);  // L3, L1
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [&](std::uint32_t s) { written[s] = 1; });
     std::vector<PointScan> results;
+    [[maybe_unused]] Allowed<P> allowed;
+    constexpr bool sloped = is_sloped<P>;
+    const auto* slope = slope_of(policy);
+    std::vector<PointScan> steep;  // the slope's winners, per slot; empty without one
     mesh::FlipStack flip_stack;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
         active[t] = t;
 
+    // 20c R4: feet on constraints, each point footed once (by exact position),
+    // delta_p half the smaller cell side. R4.3, the foot's z: with a raster,
+    // vertex_z; else linear in s between the strip points bracketing the foot
+    // on its sub-edge (the sub-edge's end where there is none), or linear
+    // between the edge's ends where it has no strip record. NaN refuses it.
+    std::set<std::pair<double, double>> footed;
+    const double delta_p = std::min(g.delta_x(), g.delta_y()) / 2.0;
+    const auto foot_z = [&](const mesh::FootSearch& s) {
+        if constexpr (has_dem) {
+            return vertex_z(*dem, s.at).value_or(std::numeric_limits<double>::quiet_NaN());
+        } else {
+            const auto sigma = [&](std::uint32_t a, std::uint32_t b) {
+                const mesh::MeshVertex va = m.vertices()[a], vb = m.vertices()[b];
+                const double dc = vb.col - va.col, dr = vb.row - va.row;
+                return ((s.at.col - va.col) * dc + (s.at.row - va.row) * dr) / (dc * dc + dr * dr);
+            };
+            const auto& tri = m.triangles()[s.owner];
+            const std::uint32_t ea = tri[s.edge], eb = tri[(s.edge + 1) % 3];
+            const auto it = strip ? subs.find(edge_key(ea, eb)) : subs.end();
+            if (it == subs.end())
+                return zt[ea] + sigma(ea, eb) * (zt[eb] - zt[ea]);
+            const SubEdge& se = it->second;
+            const double sf = se.s_a + sigma(se.a, se.b) * (se.s_b - se.s_a);
+            double s0 = se.s_a, z0 = zt[se.a], s1 = se.s_b, z1 = zt[se.b];
+            for (const ConstraintPoint& c : strip->on_edge(se.k)) {
+                if (c.s > se.s_a && c.s <= sf)
+                    std::tie(s0, z0) = std::pair{c.s, c.z};
+                else if (c.s > sf && c.s < s1)
+                    std::tie(s1, z1) = std::pair{c.s, c.z};
+            }
+            return s1 > s0 ? z0 + (sf - s0) / (s1 - s0) * (z1 - z0) : z0;
+        }
+    };
+
     // Source, strip, DEM, in that order (D4, "Combining").
-    const auto scan_one = [&](std::uint32_t t) {
+    const auto scan_one = [&](std::uint32_t t, PointScan* s) {
         PointScan r;
         if constexpr (has_store) {
-            r = scan_points(*points, m, zt, t, radius);
+            r = scan_points(*points, m, zt, t, radius, slope, s);
             r.error = r.max_error;
         }
         if (strip)
-            scan_strip(*strip, offset, refused, subs, m, zt, t, r);
+            scan_strip(*strip, offset, refused, subs, m, zt, t, r, slope, s);
         if constexpr (has_dem)
             if (written[t] != 0) {
-                const ScanResult d = scan(*dem, m, t, radius);
+                SlopeScan ss;
+                const ScanResult d = scan(*dem, m, t, radius, slope, &ss);
+                if constexpr (sloped)
+                    if (ss.node) {
+                        PointScan c;
+                        static_cast<SlopeRank&>(c) = ss;
+                        c.point = mesh::MeshVertex{*ss.node};
+                        c.z = vertex_z(*dem, *c.point).value_or(std::numeric_limits<double>::quiet_NaN());
+                        c.where = ss.where;
+                        c.set = PointSet::Dem;
+                        s->offer_steep(c);
+                    }
                 r.max_error = d.max_error;
                 r.uncovered += d.uncovered;
                 if (d.node) {
@@ -304,11 +385,26 @@ template <class Store, class R>
     while (true) {
         ++out.rounds;
         results.resize(m.triangle_count());
+        if constexpr (varies<P>)
+            allowed.resize(m.triangle_count());
+        if constexpr (sloped)
+            steep.resize(m.triangle_count());
         auto t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
-                                          for (std::size_t i = begin; i < end; ++i)
-                                              results[active[i]] = scan_one(active[i]);
+                                          for (std::size_t i = begin; i < end; ++i) {
+                                              const std::uint32_t t = active[i];
+                                              PointScan* s = nullptr;
+                                              if constexpr (sloped)
+                                                  *(s = &steep[t]) = PointScan{};
+                                              results[t] = scan_one(t, s);
+                                              const bool over = sloped && !results[t].is_void && s->over;
+                                              if constexpr (varies<P>)
+                                                  allowed[t] = over ? -std::numeric_limits<double>::infinity()
+                                                                    : allowed_at(policy, m, t, results[t].error);
+                                              if (over)  // the point inserted is the slope's; take keeps `over`
+                                                  results[t].take(*s);
+                                          }
                                       });
         out.scan_seconds += since(t0);
         t0 = clock::now();
@@ -317,7 +413,10 @@ template <class Store, class R>
         bool any = false;
         for (const std::uint32_t t : active) {
             const PointScan& r = results[t];
-            if (!r.point || !(r.is_void || r.error > options.tolerance))
+            double limit = policy.lowest();
+            if constexpr (varies<P>)
+                limit = allowed[t];
+            if (!r.point || !(r.is_void || r.over || r.error > limit))
                 continue;
             any = true;
             if (touched[t] != 0)
@@ -333,9 +432,24 @@ template <class Store, class R>
             else if (strip)
                 edge = near_constraint(m, t, *r.point, radius);
             const bool near = edge && r.where == NodeLocation::Inside;
+            // 20c R4: a source point or DEM node L12 left Inside, not yet footed, may go in as its foot.
+            std::uint32_t owner = t;
+            mesh::MeshVertex p = *r.point;
+            double pz = r.z;
+            std::size_t refused_feet = 0;
+            std::optional<mesh::FootSearch> foot;
+            const bool was_footed = r.set != PointSet::Strip && footed.contains({p.col, p.row});
+            if (options.constraint_feet && !edge && !r.is_void && r.set != PointSet::Strip && !was_footed) {
+                const auto s = mesh::constraint_foot(m, t, p, delta_p, frame);
+                const double fz = s.status == mesh::FootStatus::Hit ? foot_z(s) : 0.0;
+                const bool fits = s.status == mesh::FootStatus::Hit && !std::isnan(fz)
+                                  && (!strip || strip_fits(m, s.owner, s.edge, s.at, frame));
+                if ((foot = usable(s, fits, refused_feet)))
+                    std::tie(owner, edge, p, pz) = std::tuple{foot->owner, foot->edge, foot->at, fz};
+            }
             if (edge) {
-                const std::uint32_t u = m.neighbours(t)[*edge];
-                if (u != mesh::kNoNeighbour && touched[u] != 0) {
+                const std::uint32_t u = m.neighbours(owner)[*edge];
+                if (touched[owner] != 0 || (u != mesh::kNoNeighbour && touched[u] != 0)) {
                     skipped.push_back(t);
                     continue;
                 }
@@ -354,21 +468,24 @@ template <class Store, class R>
                 q = m.split_inside(t, *r.point);
             } else {
                 const auto e = *edge;
-                const std::uint32_t u = m.neighbours(t)[e];
-                const auto& tri = m.triangles()[t];
+                const std::uint32_t u = m.neighbours(owner)[e];
+                const auto& tri = m.triangles()[owner];
                 const std::uint32_t ea = tri[e], eb = tri[(e + 1) % 3];
-                const bool constrained = m.is_constrained(t, e);
-                q = m.split_edge(t, e, *r.point);
+                const bool constrained = m.is_constrained(owner, e);
+                q = m.split_edge(owner, e, p);
                 if (strip && constrained)
                     cut(subs, *strip, m, ea, eb, q,
                         r.set == PointSet::Strip ? std::optional<double>{r.s} : std::nullopt);
+                seeds[0] = owner;
                 n_seeds = u != mesh::kNoNeighbour ? 4 : 2;
                 if (n_seeds == 4)
                     seeds[3] = u;
             }
-            zt.push_back(r.z);
+            if (owner != t)  // R4.2, as R3: t is unchanged and its point still a candidate
+                skipped.push_back(t);
+            zt.push_back(pz);
             touched.resize(m.triangle_count(), 1);
-            touched[t] = 1;
+            touched[owner] = 1;
             if (n_seeds == 4)
                 touched[seeds[3]] = 1;
             out.flips += mesh::legalise_around<pred::DefaultKernel>(
@@ -377,7 +494,12 @@ template <class Store, class R>
             ++out.inserted;
             out.carved += r.is_void ? 1 : 0;
             out.strip_inserted += r.set == PointSet::Strip ? 1 : 0;
-            out.nodes_inserted += r.set == PointSet::Dem ? 1 : 0;
+            out.nodes_inserted += r.set == PointSet::Dem && !foot ? 1 : 0;
+            out.feet += foot ? 1 : 0;
+            out.feet_fallback += was_footed ? 1 : 0;
+            out.feet_refused += refused_feet;
+            if (foot)
+                footed.insert({r.point->col, r.point->row});
         }
         out.split_seconds += since(t0);
         if (!any)
@@ -393,6 +515,15 @@ template <class Store, class R>
         out.max_error = std::max(out.max_error, r.max_error);
         out.on_frozen += r.on_frozen;
         out.on_frozen_max_error = std::max(out.on_frozen_max_error, r.frozen_error);
+    }
+    out.max_error_near = out.max_error;
+    if constexpr (varies<P>)
+        out.max_error_near = max_error_near(policy, m, allowed, options.threads,
+                                            [&](std::uint32_t t) { return results[t].max_error; });
+    if constexpr (sloped) {
+        for (const PointScan& s : steep)
+            out.max_slope_share = std::max(out.max_slope_share, s.ratio);
+        out.slope_nodes = count_slope_nodes(m, *slope, options.threads);
     }
     // Step 6: every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
@@ -466,6 +597,23 @@ template <class Store, class R>
 // With a strip (the reprojected path), its points join the loop (D4); a strip
 // on another geometry, or with an edge that is not a constraint edge of the
 // start, is std::logic_error (L2).
+template <class Store, TolerancePolicy P>
+[[nodiscard]] PointRefineOutcome refine_points(const Store& points, const IndexedMesh2& start,
+                                               std::span<const double> z, std::span<const std::uint8_t> valid,
+                                               std::span<const std::array<std::uint32_t, 2>> edges,
+                                               std::span<const std::uint32_t> masks,
+                                               const PointRefineOptions& options, const P& policy,
+                                               const ConstraintCheckPoints* strip = nullptr) {
+    if (detail::bad_policy(policy))
+        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
+                                                     "refine_points: tolerance must be finite and >= 0"));
+    if (!points.frozen())
+        throw std::logic_error("refine_points: the check-point store is not frozen");
+    return detail::point_loop("refine_points", points.geometry(), &points,
+                              static_cast<const detail::NoSet*>(nullptr), strip, start, z, valid, edges, masks,
+                              options, policy);
+}
+
 template <class Store>
 [[nodiscard]] PointRefineOutcome refine_points(const Store& points, const IndexedMesh2& start,
                                                std::span<const double> z, std::span<const std::uint8_t> valid,
@@ -473,19 +621,26 @@ template <class Store>
                                                std::span<const std::uint32_t> masks,
                                                const PointRefineOptions& options,
                                                const ConstraintCheckPoints* strip = nullptr) {
-    if (!std::isfinite(options.tolerance) || options.tolerance < 0.0)
-        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
-                                                     "refine_points: tolerance must be finite and >= 0"));
-    if (!points.frozen())
-        throw std::logic_error("refine_points: the check-point store is not frozen");
-    return detail::point_loop("refine_points", points.geometry(), &points,
-                              static_cast<const detail::NoSet*>(nullptr), strip, start, z, valid, edges, masks,
-                              options);
+    return refine_points(points, start, z, valid, edges, masks, options, UniformTolerance{options.tolerance}, strip);
 }
 
 // The projected path (D4, F2): the strip's points, and the DEM's nodes in every
 // triangle the run has written (L3), with refine's own scan. Refusals as
 // refine_points', against dem.geometry() (L2).
+template <raster::RasterSource R, TolerancePolicy P>
+[[nodiscard]] PointRefineOutcome refine_strip(const R& dem, const ConstraintCheckPoints& strip,
+                                              const IndexedMesh2& start, std::span<const double> z,
+                                              std::span<const std::uint8_t> valid,
+                                              std::span<const std::array<std::uint32_t, 2>> edges,
+                                              std::span<const std::uint32_t> masks,
+                                              const PointRefineOptions& options, const P& policy) {
+    if (detail::bad_policy(policy))
+        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
+                                                     "refine_strip: tolerance must be finite and >= 0"));
+    return detail::point_loop("refine_strip", dem.geometry(), static_cast<const detail::NoSet*>(nullptr), &dem,
+                              &strip, start, z, valid, edges, masks, options, policy);
+}
+
 template <raster::RasterSource R>
 [[nodiscard]] PointRefineOutcome refine_strip(const R& dem, const ConstraintCheckPoints& strip,
                                               const IndexedMesh2& start, std::span<const double> z,
@@ -493,11 +648,7 @@ template <raster::RasterSource R>
                                               std::span<const std::array<std::uint32_t, 2>> edges,
                                               std::span<const std::uint32_t> masks,
                                               const PointRefineOptions& options) {
-    if (!std::isfinite(options.tolerance) || options.tolerance < 0.0)
-        return detail::point_refusal(detail::refusal(RefineStatus::InvalidTolerance,
-                                                     "refine_strip: tolerance must be finite and >= 0"));
-    return detail::point_loop("refine_strip", dem.geometry(), static_cast<const detail::NoSet*>(nullptr), &dem,
-                              &strip, start, z, valid, edges, masks, options);
+    return refine_strip(dem, strip, start, z, valid, edges, masks, options, UniformTolerance{options.tolerance});
 }
 
 }  // namespace terrain::refinement

@@ -1,0 +1,166 @@
+{
+ "1 placed straight onto the flow path": {
+  "station": null,
+  "candidates_run": []
+ },
+ "2 the line burnt in": {
+  "station": "101.1.0",
+  "candidates_run": [
+   {
+    "station": "101.1.0",
+    "full_run": "well posed",
+    "chosen": true
+   }
+  ]
+ },
+ "3 marked uncertain (swing, confluence step)": {
+  "station": null,
+  "candidates_run": [
+   {
+    "station": "2.11.0",
+    "full_run": "chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "2.633.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "6.10.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "12.70.0",
+    "full_run": "swing;downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "16.66.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "16.122.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "24.9.0",
+    "full_run": "chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "38.1.0",
+    "full_run": "swing;downstream_unread",
+    "chosen": false
+   },
+   {
+    "station": "55.4.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "62.10.0",
+    "full_run": "downstream_unread;chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "73.27.0",
+    "full_run": "swing;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "76.5.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "83.2.0",
+    "full_run": "swing;chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "83.6.0",
+    "full_run": "swing;chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "83.12.0",
+    "full_run": "chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "84.20.0",
+    "full_run": "swing;downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "87.10.0",
+    "full_run": "swing;downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "109.9.0",
+    "full_run": "downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "122.11.0",
+    "full_run": "chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "122.14.0",
+    "full_run": "chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "139.35.0",
+    "full_run": "swing;downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "151.15.0",
+    "full_run": "well posed",
+    "chosen": false
+   },
+   {
+    "station": "156.24.0",
+    "full_run": "the request selects tiles on two lattices, 7404_2_10m_z33.tif and 7304_1_10m_z33.tif: 7304_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7404_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed",
+    "chosen": false
+   },
+   {
+    "station": "205.6.0",
+    "full_run": "swing;downstream_unread;chain_not_draining",
+    "chosen": false
+   },
+   {
+    "station": "206.3.0",
+    "full_run": "the request selects tiles on two lattices, 7606_1_10m_z33.tif and 7707_3_10m_z33.tif: 7707_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7606_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed",
+    "chosen": false
+   },
+   {
+    "station": "213.4.0",
+    "full_run": "the request selects tiles on two lattices, 7808_4_10m_z33.tif and 7808_3_10m_z33.tif: 7808_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7808_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed",
+    "chosen": false
+   }
+  ]
+ },
+ "4 a lake gauge": {
+  "station": "2.32.0",
+  "candidates_run": [
+   {
+    "station": "2.11.0",
+    "full_run": "chain_not_draining;chain_end_open",
+    "chosen": false
+   },
+   {
+    "station": "2.32.0",
+    "full_run": "well posed",
+    "chosen": true
+   }
+  ]
+ }
+}

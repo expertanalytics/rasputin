@@ -1,8 +1,8 @@
 """Type stubs for the _core C++ extension.
 
-Hand-written rather than generated: the dimensional asymmetry of ``cross`` --
-scalar for 2D, vector for 3D -- is expressed with ``@overload``, and no stub
-generator infers that from the pybind11 signatures.
+Hand-written rather than generated: the pybind11 enums are declared as
+``enum.Enum`` for the checker's benefit (see below), and no stub generator
+infers that from the pybind11 signatures.
 """
 
 from collections.abc import Iterable, Sequence
@@ -12,63 +12,9 @@ from typing import final, overload
 import numpy as np
 import numpy.typing as npt
 
-@final
-class Point2:
-    """A 2D point with double-precision coordinates. Immutable and hashable."""
-
-    def __init__(self, x: float = ..., y: float = ...) -> None: ...
-    @property
-    def x(self) -> float: ...
-    @property
-    def y(self) -> float: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __ne__(self, other: object) -> bool: ...
-    def __add__(self, other: Point2) -> Point2: ...
-    def __sub__(self, other: Point2) -> Point2: ...
-    def __mul__(self, scalar: float) -> Point2: ...
-    def __rmul__(self, scalar: float) -> Point2: ...
-    def __truediv__(self, scalar: float) -> Point2: ...
-    def __neg__(self) -> Point2: ...
-    def __hash__(self) -> int: ...
-    def __repr__(self) -> str: ...
-
-@final
-class Point3:
-    """A 3D point with double-precision coordinates. Immutable and hashable."""
-
-    def __init__(self, x: float = ..., y: float = ..., z: float = ...) -> None: ...
-    @property
-    def x(self) -> float: ...
-    @property
-    def y(self) -> float: ...
-    @property
-    def z(self) -> float: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __ne__(self, other: object) -> bool: ...
-    def __add__(self, other: Point3) -> Point3: ...
-    def __sub__(self, other: Point3) -> Point3: ...
-    def __mul__(self, scalar: float) -> Point3: ...
-    def __rmul__(self, scalar: float) -> Point3: ...
-    def __truediv__(self, scalar: float) -> Point3: ...
-    def __neg__(self) -> Point3: ...
-    def __hash__(self) -> int: ...
-    def __repr__(self) -> str: ...
-
 #: The standard library's bounds checks compiled into this build: "libc++ fast",
 #: "libc++ extensive", "libc++ debug", "libstdc++ assertions", or "none".
 hardening: str
-
-@overload
-def dot(a: Point2, b: Point2) -> float: ...
-@overload
-def dot(a: Point3, b: Point3) -> float: ...
-@overload
-def cross(a: Point2, b: Point2) -> float:
-    """2D cross product: the scalar z-component of the 3D cross product."""
-
-@overload
-def cross(a: Point3, b: Point3) -> Point3:
-    """3D cross product: a vector orthogonal to both operands."""
 
 # The CDT surface (increment 6a). The three enums are spelled as ``enum.Enum``
 # for the checker's benefit; at runtime they are pybind11 enum objects, which
@@ -316,12 +262,12 @@ class CdtOutcome:
     def mesh(self) -> IndexedMesh2: ...
     def ok(self) -> bool: ...
 
-# Two ``@overload`` stubs and no union parameter, the pattern ``cross`` above
-# uses: pybind11 resolves this by exact type with conversions disabled, and both
+# Two ``@overload`` stubs and no union parameter, because pybind11 resolves
+# this by exact type with conversions disabled, and both
 # enumerations' ``Ok`` is integer 0, so a single union stub would type-check a
 # call the runtime rejects. No implementation stub follows, because a stub file
 # may not carry one: mypy rejects "an implementation for an overloaded function"
-# in a ``.pyi``, and ``cross`` above declares two overloads and nothing else.
+# in a ``.pyi``.
 @overload
 def describe(status: CdtStatus) -> str:
     """One sentence of prose for a ``CdtStatus``."""
@@ -360,6 +306,42 @@ def triangulate(pslg: NodedPslg, delaunay: bool = ...) -> CdtOutcome:
 class RasterView:
     """A zero-copy view over a 2-D DEM array. Built by :func:`raster_view`;
     holds the array alive."""
+
+@final
+class LineTolerance:
+    """A tolerance that varies with distance to lines (increment 33): ``near``
+    on them, ``far`` from ``end`` metres out, linear from ``start``; distances
+    less ``margin``. Copies ``view``'s geometry and the ``(K, 4)`` float64
+    segments ``x0 y0 x1 y1``. A bad bound or coordinate is a ``ValueError``."""
+
+    def __init__(
+        self,
+        view: RasterView,
+        segments: npt.NDArray[np.float64],
+        near: float,
+        far: float,
+        start: float,
+        end: float,
+        margin: float,
+    ) -> None: ...
+
+@final
+class SlopeTolerance:
+    """A tolerance that follows the slope (increment 34): every DEM node of
+    ``view`` held to ``near`` from ``end`` degrees of its slope up, to ``far``
+    up to ``start`` degrees, linear between. A bad bound is a ``ValueError``."""
+
+    def __init__(
+        self,
+        view: RasterView,
+        near: float,
+        far: float,
+        start: float,
+        end: float,
+        threads: int = ...,
+    ) -> None: ...
+    def histogram(self) -> list[int]:
+        """Nodes per class (half degrees, rounded up); entry 255 counts NoData."""
 
 def raster_view(
     array: npt.NDArray[np.float32] | npt.NDArray[np.float64],
@@ -420,6 +402,18 @@ class RefineOutcome:
     @property
     def max_error(self) -> float: ...
     @property
+    def max_error_near(self) -> float:
+        """``max_error`` over the triangles a field holds to its near value;
+        ``max_error`` without a field."""
+    @property
+    def max_slope_share(self) -> float:
+        """The largest error as a share of the tolerance its slope allows; 0.0
+        without a slope."""
+    @property
+    def slope_nodes(self) -> tuple[int, int]:
+        """(valid DEM nodes inside the mesh, those held below the general
+        tolerance by their slope); (0, 0) without a slope."""
+    @property
     def uncovered(self) -> int: ...
     @property
     def carved(self) -> int: ...
@@ -439,6 +433,12 @@ class RefineOutcome:
     def feet(self) -> int: ...
     @property
     def feet_refused(self) -> int: ...
+    @property
+    def quality_feet(self) -> int: ...
+    @property
+    def quality_no_gain(self) -> int: ...
+    @property
+    def quality_line_splits(self) -> int: ...
 
 def refine(
     view: RasterView,
@@ -451,6 +451,9 @@ def refine(
     min_angle_deg: float = ...,
     constraint_feet: bool = ...,
     frozen_mask: int = ...,
+    min_gain_deg: float = ...,
+    field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
@@ -458,7 +461,14 @@ def refine(
     depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
     mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
     node's foot on a nearby constraint segment instead of the node. No vertex
-    goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off)."""
+    goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off).
+    ``min_gain_deg`` >= 0 adds a start-quality point only if it raises the
+    smallest angle around it by that much, and with ``constraint_feet``
+    splits a line the point lies beyond; negative is off. ``field``, built on
+    this view's geometry, sets each triangle's tolerance instead of
+    ``tolerance``; another geometry is a ``ValueError``. ``slope``, built
+    on this view's geometry too, holds every DEM node to its own slope's
+    tolerance as well."""
 
 @final
 class CheckPoints:
@@ -500,6 +510,66 @@ class PointRefineOutcome(RefineOutcome):
         """Check points on a frozen edge, never inserted, each counted once."""
     @property
     def on_frozen_max_error(self) -> float: ...
+    @property
+    def strip_points(self) -> int: ...
+    @property
+    def strip_inserted(self) -> int: ...
+    @property
+    def strip_max_error(self) -> float: ...
+    @property
+    def strip_refused(self) -> int: ...
+    @property
+    def strip_refused_max_error(self) -> float: ...
+    @property
+    def nodes_inserted(self) -> int:
+        """``refine_strip`` only: DEM nodes its rescan inserted."""
+    @property
+    def feet_fallback(self) -> int:
+        """Points put onto a line at their foot and later added where they were."""
+
+@final
+class ConstraintCheckPoints:
+    """The edge strip's check points, filed by constraint edge; built only by
+    :func:`constraint_check_points`, read-only."""
+
+    @property
+    def size(self) -> int: ...
+    @property
+    def no_data(self) -> int: ...
+    @property
+    def duplicates(self) -> int: ...
+    @property
+    def edge_count(self) -> int: ...
+
+def constraint_check_points(
+    view: RasterView, vertices: npt.ArrayLike, edges: npt.ArrayLike
+) -> ConstraintCheckPoints:
+    """Grid-line crossings of each constraint edge and the midpoints between
+    neighbours, z from ``view``. A refused input is a ``ValueError``.
+    Releases the GIL."""
+
+def refine_strip(
+    view: RasterView,
+    strip: ConstraintCheckPoints,
+    vertices: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    z: npt.ArrayLike,
+    valid: npt.ArrayLike,
+    edges: npt.ArrayLike,
+    masks: npt.ArrayLike,
+    *,
+    tolerance: float,
+    threads: int = ...,
+    frozen_mask: int = ...,
+    constraint_feet: bool = ...,
+    field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
+) -> PointRefineOutcome:
+    """The edge strip on the projected path: refine's output refined until every
+    strip point is within ``tolerance``, the DEM's nodes rescanned in every
+    triangle it writes. Nothing goes on an edge whose mask meets
+    ``frozen_mask``; a strip point on one is a ``RuntimeError``. Releases the
+    GIL."""
 
 def refine_points(
     points: CheckPoints,
@@ -512,12 +582,16 @@ def refine_points(
     *,
     tolerance: float,
     threads: int = ...,
+    strip: ConstraintCheckPoints | None = ...,
     frozen_mask: int = ...,
+    constraint_feet: bool = ...,
+    field: LineTolerance | None = ...,
+    slope: SlopeTolerance | None = ...,
 ) -> PointRefineOutcome:
-    """Refine phase 1's mesh until every check point in a frozen store is within
-    ``tolerance`` of each triangle holding it. Releases the GIL; the output
-    does not depend on ``threads``. A check point on an edge whose mask meets
-    ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
+    """Refine phase 1's mesh until every check point in a frozen store, and
+    every point of ``strip``, is within ``tolerance``. Releases the GIL; the
+    output does not depend on ``threads``. A check point on an edge whose mask
+    meets ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
 
 @final
 class SeamOutcome:
@@ -553,7 +627,8 @@ def refine_seam(
     """The seam pass for the seam edge ``(a, b)``: check points inserted by a
     one-dimensional greedy until each is within ``tolerance``. The same output
     for either order of the ends. A bad tolerance, ``a == b`` or an end outside
-    the node rectangle is a ``ValueError``. Releases the GIL."""
+    the node rectangle is a ``ValueError``. Releases the GIL. No command calls
+    it yet."""
 
 @final
 class UpstreamOutcome:
@@ -581,6 +656,24 @@ class UpstreamOutcome:
 def upstream(view: RasterView, seed: npt.ArrayLike) -> UpstreamOutcome:
     """Every node draining into a seed of the ``(rows, cols)`` mask
     (Priority-Flood); another shape is a ``ValueError``. Releases the GIL."""
+
+@final
+class AccumulateOutcome:
+    """What :func:`accumulate` returned; every array is read-only ``(rows, cols)``."""
+
+    @property
+    def count(self) -> npt.NDArray[np.uint32]:
+        """0 on NoData, else the nodes draining through the node, itself included."""
+    @property
+    def reach(self) -> npt.NDArray[np.uint8]:
+        """Bit 0: the catchment touches the window's edge; bit 1: it touches NoData."""
+    @property
+    def flow_to(self) -> npt.NDArray[np.uint8]:
+        """``3*(dr+1)+(dc+1)`` of the neighbour drained to; 255 outlet or NoData."""
+
+def accumulate(view: RasterView) -> AccumulateOutcome:
+    """Flow accumulation from :func:`upstream`'s flood; 2^32 nodes or more is
+    a ``ValueError``. Releases the GIL."""
 
 class ReduceStatus(Enum):
     """Why :func:`reduce_ring` refused, or ``Ok``."""
@@ -612,3 +705,72 @@ class ReduceOutcome:
 def reduce_ring(ring: npt.ArrayLike, tolerance: float, keep: npt.ArrayLike) -> ReduceOutcome:
     """Reduce an open counter-clockwise ``(N, 2)`` ring to ``tolerance``, keeping
     its area and the ``(K, 2)`` keep-points inside. Releases the GIL."""
+
+class BorderStatus(Enum):
+    """Why :func:`simplify_borders` refused, or ``Ok``."""
+
+    Ok = 0
+    InvalidBand = 1
+    BadRings = 2
+    InvalidClearance = 3
+
+@final
+class BorderCounts:
+    """What :func:`simplify_borders` found and did."""
+
+    @property
+    def junctions(self) -> int: ...
+    @property
+    def borders(self) -> int: ...
+    @property
+    def fixed_borders(self) -> int: ...
+    @property
+    def collinear(self) -> int: ...
+    @property
+    def collapses(self) -> int: ...
+    @property
+    def rejected_crossing(self) -> int: ...
+    @property
+    def rejected_side(self) -> int: ...
+    @property
+    def rejected_clearance(self) -> int: ...
+    @property
+    def skipped_placements(self) -> int: ...
+
+@final
+class BorderOutcome:
+    """What :func:`simplify_borders` returned: the rings, open, back to back."""
+
+    @property
+    def points(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def ring_starts(self) -> npt.NDArray[np.uint64]: ...
+    @property
+    def status(self) -> BorderStatus: ...
+    @property
+    def counts(self) -> BorderCounts: ...
+
+def simplify_borders(
+    points: npt.ArrayLike, ring_starts: npt.ArrayLike, band: float, clearance: float = 0.0
+) -> BorderOutcome:
+    """Simplify a coverage's borders within ``band``, keeping every ring's area,
+    the junctions and the outer boundary, no new vertex or edge closer than
+    ``clearance`` to what it does not share an end with. Releases the GIL."""
+
+def class_areas(
+    corners: npt.ArrayLike,
+    classes: npt.NDArray[np.uint8],
+    row_area: npt.ArrayLike,
+    *,
+    threads: int = 0,
+) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.uint8], npt.NDArray[np.float64]]:
+    """The exact area of each class inside each triangle (increment 26b), as
+    ``(offsets, classes, areas)``: triangle ``t``'s entries are
+    ``[offsets[t], offsets[t + 1])``, classes ascending, areas positive in the
+    unit of ``row_area``. ``corners`` is ``(T, 3, 2)`` in the grid's index
+    space (x the column, y the row growing downward); ``classes`` a
+    C-contiguous 2-D uint8 array viewed without a copy (else a TypeError);
+    ``row_area`` one cell area per row. A corner past the closed window, a
+    zero-area triangle, a non-finite corner or a wrong shape is a ValueError.
+    ``threads`` 0 is all cores; the result does not depend on it. Releases
+    the GIL."""

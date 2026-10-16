@@ -155,7 +155,7 @@ depends on 6b-ii merging, 5b does not depend on it at all. Three things it buys,
 in descending order of how load-bearing they are:
 
 1. **It has already falsified a piece of this design, before any code was
-   written.** `src_python/tin_engine/viz/scene.py:209`'s `build_scene(pslg,
+   written.** `src_python/tin_engine/viz/scene.py@7bca7294:209`'s `build_scene(pslg,
    mesh, ...)` joins the PSLG's chain edges to the mesh's masked edges **by
    vertex-index pair** (`_chain_edges` builds `dict[Pair, ...]` from
    `indices_of(c)`; `_mesh_edges` builds `set[Pair]` from triangle corners).
@@ -1054,7 +1054,7 @@ Between 5 and 6, for every closed chain:
 - **Distinct node count.** Fewer than 3 → `RingCollapsed`, naming the chain and
   the spacing.
 - **Winding under `K`**, re-evaluated on the *snapped* ring with
-  `orientation<K>` (`include/terrain/core/ring.hpp:233`). An `Outer` ring that is
+  `orientation<K>` (`include/terrain/core/ring.hpp@44fa7f5:233`). An `Outer` ring that is
   no longer counterclockwise, or a `Hole` no longer clockwise, or either now
   `Collinear` → `RingDegenerateAfterSnap`. **Never silently reversed**, following
   increment 3's stage 5 rule. **It is a self-check, not a diagnosis** — see
@@ -1125,7 +1125,7 @@ return `Collinear`, `Collinear != want`, and the ring would raise
 unreachable — on the very input the demotion is argued from.
 
 `orientation<K>` survives because increment 2 spelled it as an **extreme-vertex
-walk advancing `prev` and `fwd` independently** (`include/terrain/core/ring.hpp:233`,
+walk advancing `prev` and `fwd` independently** (`include/terrain/core/ring.hpp@44fa7f5:233`,
 with the reason in the comment above it: a lockstep walk returns `Collinear` for
 the proper triangle `{A,A,B,C}`). A repeated vertex costs it one collinear triple
 and it walks past. Measured, because "walks past" is a claim: over 500 000
@@ -1746,7 +1746,7 @@ testing" — and they are **not all registered the same way**.
 
 Four go through `add_terrain_backend_test`, because they name a kernel.
 `prop_noding_broad_phase` goes through plain `add_terrain_test`
-(`tests/cpp/CMakeLists.txt:189`), **and the asymmetry is a design property, not
+(`tests/cpp/CMakeLists.txt:199`), **and the asymmetry is a design property, not
 an oversight.** `broad_phase.hpp` includes `core/bbox.hpp`, `core/point.hpp` and
 `core/segment.hpp` and no predicate header: it compares bounding boxes and never
 asks an orientation. Registering its suite without the backend leaves

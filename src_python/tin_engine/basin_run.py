@@ -88,7 +88,7 @@ Refine = Callable[
 
 @dataclass(frozen=True, slots=True)
 class CutAsk:
-    """``--pieces`` and ``--memory-budget``, and the window on its lattice:
+    """``--pieces`` and ``--piece-budget``, and the window on its lattice:
     lattice node (0, 0) at ``origin``, the window's first node ``(row0, col0)``."""
 
     pieces: int
@@ -128,7 +128,7 @@ def cut_partition(meta: RasterMeta, tolerance: float, ask: CutAsk) -> Partitione
     """The window's partition ("The partition", 23c), or None for one cell,
     which is today's run (K1). Line ``i`` is at the index's
     ``origin_x + (col0 + i dx) h``, line ``j`` at ``origin_y - (row0 + j dy) h``."""
-    cells = partition(meta.cols, meta.rows, tolerance, pieces=ask.pieces, memory_budget=ask.budget)
+    cells = partition(meta.cols, meta.rows, tolerance, pieces=ask.pieces, piece_budget=ask.budget)
     if cells.nx * cells.ny == 1:
         return None
     h = meta.delta_x
@@ -136,7 +136,7 @@ def cut_partition(meta: RasterMeta, tolerance: float, ask: CutAsk) -> Partitione
         raise RunError(f"the DEM's cells are {h} x {meta.delta_y}; a cut needs square ones")
     (ox, oy), r0, c0 = ask.origin, ask.row0, ask.col0
     record = PartitionRecord(
-        pieces=ask.pieces, memory_budget=ask.budget, bytes_per_node=bytes_per_node(tolerance),
+        pieces=ask.pieces, piece_budget=ask.budget, bytes_per_node=bytes_per_node(tolerance),
         nx=cells.nx, ny=cells.ny, dx=cells.dx, dy=cells.dy, cols=meta.cols, rows=meta.rows,
         row0=r0, col0=c0, spacing=h, origin=(ox, oy),
     )  # fmt: skip

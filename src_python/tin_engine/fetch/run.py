@@ -1,14 +1,18 @@
-"""The fetch: headers, identity, plan, bounded async download (increment 23a-2).
+"""The fetch: headers, identity, plan, bounded async download.
 
-`docs/increments/23-basin-scale.md`, "The cache" and "Downloading". `client`
-and `writer` are parameters, so the run is tested against a local server and
-a cache in `tmp_path`, and an API worker awaits it in its own loop.
+`client` and `writer` are parameters, so the run is tested against a local
+server and a cache in `tmp_path`, and an API worker awaits it in its own loop.
 
-Order of writes (a crash at any point leaves a cache 23a-1 reads): headers and
-the manifest first, so a new object is listed before any of its blocks; then
-blocks, each request's only after its whole body arrived and every length
-matched (decided 4); then the request appended to the manifest. A dry run
-reads headers and the cache, and writes nothing.
+Order of writes (a crash at any point leaves a cache the mesh can read):
+headers and the manifest first, so a new object is listed before any of its
+blocks; then blocks, each request's only after its whole body arrived and
+every length matched, so a failed request writes nothing and a rerun resumes
+it whole; then the request appended to the manifest. A dry run reads headers
+and the cache, and writes nothing.
+
+A `one-cog-per-year` source is fetched as `one-cog`, the file being the
+requested year's (`url_for`); each object records the day its header was
+first fetched, and `NOTICE.txt` carries every object's credit with that date.
 """
 
 from __future__ import annotations
@@ -26,20 +30,15 @@ import tifffile
 from pydantic import BaseModel, ConfigDict
 
 from tin_engine import installed_version
-from tin_engine.crs import parse_crs
+from tin_engine.crs import parse_crs, same_crs
 from tin_engine.fetch.http import FetchError, RangeClient
 from tin_engine.fetch.plan import FetchRequest, ObjectPlan, parse_prefix, plan_object, source_box
-from tin_engine.io.models import RasterMeta
+from tin_engine.io.models import Bounds, RasterMeta
 from tin_engine.io.repository import CachedObject, CachedRequest, CacheManifest, CacheWriter
-from tin_engine.mosaic import Bounds
 from tin_engine.sources import RemoteSource, notice
 
 MIB = 1 << 20
 MAX_HEADER = 64 * MIB
-#: GLO-30's tiles are chosen from a box grown as if the spacing were this many
-#: degrees: more than any tile's below 80° (3", 0.00083°), so the box each tile's
-#: blocks are planned from contains the one its own spacing would give.
-TILE_SPACING = 0.001
 
 Header = tuple[bytes, int, str, RasterMeta, tifffile.TiffPage]
 
@@ -96,12 +95,17 @@ async def _run(
             return await asyncio.to_thread(_header, client, source, object_id, url, entries)
 
     no_tile: tuple[str, ...] = ()
-    if source.kind == "one-cog":
-        assert source.url is not None
-        object_id = source.url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
-        headers = {object_id: (source.url, await header(object_id, source.url))}
+    if source.kind != "cog-tiles":
+        try:
+            url = source.url_for(request.year)
+        except ValueError as exc:
+            raise FetchError(str(exc)) from exc
+        object_id = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
+        headers = {object_id: (url, await header(object_id, url))}
         box = source_box(request, headers[object_id][1][3])
     else:
+        if request.year is not None:
+            raise FetchError(f"{source.id} has no years; --year does not apply to it")
         box, listed, unlisted = await _tiles(request, source, client)
         no_tile = tuple(unlisted)
         assert source.url_template is not None
@@ -146,6 +150,7 @@ async def _run(
             header_sha256=hashlib.sha256(prefix).hexdigest(),
             header_bytes=len(prefix),
             block_shape=tuple(int(n) for n in page.chunks[:2]),
+            fetched=datetime.date.today(),
         )
     manifest = CacheManifest(
         source=source.id,
@@ -156,7 +161,11 @@ async def _run(
     )
     if new or known is None:
         writer.put_manifest(manifest)
-    writer.put_notice(notice(source))
+    credits = dict.fromkeys(
+        source.credit_for(url=e.url, date=e.fetched or datetime.date.today())
+        for e in entries.values()
+    )
+    writer.put_notice(notice(source, tuple(credits)))
     for object_id, page, index in empty:
         writer.put_block(object_id, page, index, b"")
 
@@ -212,14 +221,15 @@ def _header(
             entry.last_modified,
         ):
             raise FetchError(_changed(url, entry, got.total, got.last_modified))
-        parsed = parse_prefix(got.data, nodata=source.nodata)
+        parsed = parse_prefix(got.data, nodata=source.nodata, z_unit=source.read_unit)
         if parsed is not None:
             break
         if entry is not None or size >= MAX_HEADER or len(got.data) < size:
             raise FetchError(f"{url}: no complete header in the first {MAX_HEADER // MIB} MiB")
         size *= 2
     meta, _, page = parsed
-    if parse_crs(meta.crs) != parse_crs(source.crs):
+    assert source.crs is not None, f"{source.id} is a local source"
+    if not same_crs(meta.crs, source.crs):
         raise FetchError(
             f"{object_id}: the header's CRS is {meta.crs}; the catalogue's {source.id} "
             f"is {source.crs}"
@@ -237,34 +247,32 @@ def _changed(url: str, entry: CachedObject, total: int, modified: str) -> str:
 async def _tiles(
     request: FetchRequest, source: RemoteSource, client: RangeClient
 ) -> tuple[Bounds, list[str], list[str]]:
-    """GLO-30: the box, and the 1° tiles meeting it, listed and not."""
-    assert source.tile_list_url is not None
+    """The box, grown at the source's `tile_spacing` so that it holds the one
+    any tile's own spacing gives, and the 1° tiles meeting it, listed and not."""
+    assert source.tile_list_url is not None and source.tile_spacing is not None
     text = await asyncio.to_thread(client.get_text, source.tile_list_url)
     listed = set(text.split())
+    assert source.crs is not None, f"{source.id} is a local source"
     epsg = parse_crs(source.crs).to_epsg()
     assert epsg is not None
     nominal = RasterMeta(
-        x_min=0.0, y_max=0.0, delta_x=TILE_SPACING, delta_y=TILE_SPACING, cols=1, rows=1,
-        epsg=epsg, nodata=None, nodata_source="absent", pixel_is_area=False,
+        x_min=0.0, y_max=0.0, delta_x=source.tile_spacing[0], delta_y=source.tile_spacing[1],
+        cols=1, rows=1, epsg=epsg, nodata=None, nodata_source="absent", pixel_is_area=False,
         vertical_unit_assumed=True,
     )  # fmt: skip
     box = source_box(request, nominal)
     names = [
-        _tile_name(lat, lon)
+        source.tile_for(lat, lon)
         for lat in range(math.floor(box.y_min), math.ceil(box.y_max))
         for lon in range(math.floor(box.x_min), math.ceil(box.x_max))
     ]
     return box, [n for n in names if n in listed], sorted(n for n in names if n not in listed)
 
 
-def _tile_name(lat: int, lon: int) -> str:
-    ns, ew = ("N" if lat >= 0 else "S"), ("E" if lon >= 0 else "W")
-    return f"Copernicus_DSM_COG_10_{ns}{abs(lat):02d}_00_{ew}{abs(lon):03d}_00_DEM"
-
-
 def _region(request: FetchRequest, source: RemoteSource) -> str:
     """The sha256 of the region as given: the domain's WKB and CRS, or the
-    box's four numbers and its CRS (decided 9)."""
+    box's four numbers and its CRS, so equal requests on one day are logged
+    once in the manifest."""
     if request.domain is not None:
         data: Any = request.domain.polygon.wkb + request.domain.crs.encode()
     else:

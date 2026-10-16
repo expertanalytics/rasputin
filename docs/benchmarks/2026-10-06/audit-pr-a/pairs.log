@@ -1,0 +1,33 @@
+2026-10-06T02:22:28Z start pra-base-r1  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+NO BASELINE: no comparable stored run
+2026-10-06T02:24:55Z end pra-base-r1 exit 2
+2026-10-06T02:24:55Z start pra-head-r1  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-head-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:27:22Z end pra-head-r1 exit 0
+2026-10-06T02:27:22Z start pra-head-r2  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:29:48Z end pra-head-r2 exit 0
+2026-10-06T02:29:48Z start pra-base-r2  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+REGRESSION: quarter refine_s[t=3] 0.2262 -> 0.2381 (+5.3 %)
+2026-10-06T02:32:15Z end pra-base-r2 exit 1
+2026-10-06T02:32:15Z start pra-head-r3  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-head-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:34:42Z end pra-head-r3 exit 0
+2026-10-06T02:34:42Z start pra-base-r3  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:37:08Z end pra-base-r3 exit 0
+2026-10-06T02:37:08Z start pra-base-r4  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-base-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:39:35Z end pra-base-r4 exit 0
+2026-10-06T02:39:35Z start pra-head-r4  -InternalBattery-0 (id=24117347)	80%; AC attached; not charging present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/out/2026-10-06/pra-head-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/meshes
+ACCEPTED
+2026-10-06T02:42:03Z end pra-head-r4 exit 0
+DONE

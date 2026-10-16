@@ -7,29 +7,38 @@ window from `load_window` instead of slicing a whole tile. The oracle is
 shared and true overlaps, a disagreeing overlap (so there are seams), mixed
 dtypes, with and without a box. 15a's own suite is not edited.
 
-HOW THIS FILE GOES RED. `window_meta` is reached through a module-scoped
-fixture and `load_window` is a keyword argument, so if either is missing
-(`ModuleNotFoundError`, `TypeError`) each test fails on its own and the rest
-of `tests/python` still collects.
+HOW THIS FILE GOES RED. `RasterMeta.windowed`, `Bounds` and `TileFootprint`
+(in `io.models` since audit PR A) are reached through module-scoped fixtures
+and `load_window` is a keyword argument, so if any is missing
+(`AttributeError`, `TypeError`) each test fails on its own and the rest of
+`tests/python` still collects.
 """
 
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
 from mosaic_fixtures import X0, Y0, piece, quadrants, same_array, whole
 from tin_engine.io.models import DemTile
-from tin_engine.io.repository import TileFootprint
-from tin_engine.mosaic import Bounds, MosaicError, assemble, plan_mosaic
+from tin_engine.mosaic import MosaicError, assemble, plan_mosaic
+
+if TYPE_CHECKING:
+    from tin_engine.io.models import TileFootprint
+
+
+@pytest.fixture(scope="module")
+def models() -> Any:
+    return importlib.import_module("tin_engine.io.models")
 
 
 @pytest.fixture(scope="module")
 def window_meta() -> Any:
-    return importlib.import_module("tin_engine.io.cog").window_meta
+    """`meta` cut to `window`, the way `assemble` checks a loaded window."""
+    return lambda meta, window: meta.windowed(window)
 
 
 class Windows:
@@ -68,24 +77,29 @@ CASES = {
     "disagreeing_overlap": lambda: disagreeing(quadrants(whole(), row_cut=4, col_cut=6, overlap=3)),
     "mixed_dtypes": lambda: mixed(quadrants(whole(), row_cut=4, col_cut=6, overlap=2)),
 }
-BOXES: dict[str, Bounds | None] = {
+BOXES: dict[str, tuple[float, float, float, float] | None] = {
     "no_box": None,
-    "inner_box": Bounds(x_min=X0 + 20.0, y_min=Y0 - 35.0, x_max=X0 + 100.0, y_max=Y0 - 5.0),
+    "inner_box": (X0 + 20.0, Y0 - 35.0, X0 + 100.0, Y0 - 5.0),
 }
 
 
 def footprints(tiles: dict[str, DemTile]) -> list[TileFootprint]:
+    models = importlib.import_module("tin_engine.io.models")
     return [
-        TileFootprint(name=name, meta=tile.meta, dtype=tile.array.dtype)
+        models.TileFootprint(name=name, meta=tile.meta, dtype=tile.array.dtype)
         for name, tile in tiles.items()
     ]
 
 
 @pytest.mark.parametrize("box", BOXES)
 @pytest.mark.parametrize("case", CASES)
-def test_w6_windowed_assembly_equals_whole_assembly(window_meta: Any, case: str, box: str) -> None:
+def test_w6_windowed_assembly_equals_whole_assembly(
+    models: Any, window_meta: Any, case: str, box: str
+) -> None:
     tiles = CASES[case]()
-    plan = plan_mosaic(footprints(tiles), BOXES[box], None)
+    corners = BOXES[box]
+    bounds = None if corners is None else models.Bounds.of(corners)
+    plan = plan_mosaic(footprints(tiles), bounds, None)
     whole_result = assemble(plan, tiles.__getitem__)
     windows = Windows(tiles, window_meta)
     windowed = assemble(plan, tiles.__getitem__, load_window=windows)

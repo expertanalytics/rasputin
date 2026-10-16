@@ -1,0 +1,3 @@
+d-lagan: calls 1; (d) mismatched border inside, beyond 1 mm of the outline: 0.000 m
+d-lagan: plant (0, 1, np.int64(29)); (d) with one shared vertex moved 0.5 m: 208.170 m
+d-lagan: (e) population-3 length inside the domain: 161163.969 m

@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.append(str(REPO / "tools"))  # appended: the stdlib wins (h16 G4)
 if TYPE_CHECKING:  # imported in print_recap, where a harness fault costs one line (§3.8)
     import harness_mode
 UNKNOWN = (

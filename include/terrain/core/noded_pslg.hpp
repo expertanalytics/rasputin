@@ -40,9 +40,8 @@
 // diagnosed inside it.
 //
 // It does, however, have the same SHAPE as Pslg -- vertices, chains,
-// chain_indices, indices_of -- because the Python renderer's scene join is
-// structural (viz/protocols.py's PslgLike) and must be fed the noded graph, not
-// the input one. Two independent reasons for one decision.
+// chain_indices, indices_of -- so that Python code reads either graph the same
+// way.
 //
 // Like Pslg, NodedPslg STORES NO SPAN AND NO ITERATOR INTO ITSELF: every view is
 // computed on demand, which is what makes the defaulted copy and move correct.

@@ -1,0 +1,37 @@
+2026-10-07T17:51:05Z start b1m-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/out/2026-10-07/b1m-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/meshes1m
+NO BASELINE: no comparable stored run
+2026-10-07T17:53:33Z end b1m-base-r1 exit 2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 86765ff1875fbbccbe77e3e79a181d4085a99890f533323d71c47cd213ca081e
+2026-10-07T17:53:33Z start b1m-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+REGRESSION: quarter refine_s[t=1] 0.4258 -> 0.4524 (+6.3 %)
+REGRESSION: quarter refine_s[t=20] 0.1728 -> 0.1817 (+5.1 %)
+2026-10-07T17:56:16Z end b1m-head-r1 exit 1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 28f1db862ababa668307538b01732da762de3bee1afb8766f93cc91e236f8960
+2026-10-07T17:56:16Z start b1m-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/out/2026-10-07/b1m-head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/meshes1m
+ACCEPTED
+2026-10-07T17:58:45Z end b1m-head-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 28f1db862ababa668307538b01732da762de3bee1afb8766f93cc91e236f8960
+2026-10-07T17:58:45Z start b1m-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/out/2026-10-07/b1m-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/meshes1m
+ACCEPTED
+2026-10-07T18:01:13Z end b1m-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 86765ff1875fbbccbe77e3e79a181d4085a99890f533323d71c47cd213ca081e
+2026-10-07T18:01:13Z start b1m-base-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/out/2026-10-07/b1m-base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/meshes1m
+ACCEPTED
+2026-10-07T18:03:42Z end b1m-base-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/base/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 86765ff1875fbbccbe77e3e79a181d4085a99890f533323d71c47cd213ca081e
+2026-10-07T18:03:42Z start b1m-head-r3  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/out/2026-10-07/b1m-head-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c2b/meshes1m
+ACCEPTED
+2026-10-07T18:06:10Z end b1m-head-r3 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+tin_engine.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/__init__.py
+_core.__file__ = /Users/skavhaug/projects/rasputin/.claude/worktrees/soft-quality-2/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so sha256 28f1db862ababa668307538b01732da762de3bee1afb8766f93cc91e236f8960
+DONE

@@ -8,10 +8,9 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill
 
 ## Required reading
 
-See `.claude/REQUIRED-READING.md`, and load it before acting.
+Load `.claude/REQUIRED-READING.md` before acting.
 
-You are an expert C++ and Python engineer. Before writing code, invoke and obey
-the skills `.claude/REQUIRED-READING.md` names for what the code touches.
+You are an expert C++ and Python engineer.
 
 ## Non-negotiable, and specific to this role
 
@@ -25,8 +24,9 @@ the skills `.claude/REQUIRED-READING.md` names for what the code touches.
 - **Stay under the ceiling in `CLAUDE.md` §2**, and report your actual count
   against the increment doc's estimate; if you overrun, say so. `@reviewer`
   reconciles the two (`reviewer.md` §5, check 3).
-- **Verify before reporting**: Release and Debug+asan/ubsan, the compiler gate
-  (`CLAUDE.md` §4), and the governance gates in `tools/`. For
+- **Verify before reporting**: Release, the compiler gate (`CLAUDE.md` §4), and
+  the governance gates in `tools/`; Debug+asan/ubsan once, at the green step
+  (CI runs it on every PR push), and TSan only when a threaded test changed. For
   anything touching floating-point geometry, also build under `-ffp-contract=off`:
   a compiler that contracts a determinant to a single fma can make a test pass
   on one platform and fail on another.

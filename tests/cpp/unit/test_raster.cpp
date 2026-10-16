@@ -131,17 +131,6 @@ TEST_CASE("cell_of rejects out-of-domain, clamped_cell_of saturates", "[raster][
     REQUIRE(g.clamped_cell_of(Point2{99.0, -99.0}) == CellIndex{2, 4});
 }
 
-TEST_CASE("contains_strict excludes the boundary", "[raster][geometry]") {
-    const auto g = grid_3x5();
-    REQUIRE(g.contains_strict(Point2{2.0, 8.0}));
-    // The strict test is what lets boundary draping skip edges lying on the
-    // raster border instead of re-emitting them as duplicate constraints.
-    REQUIRE_FALSE(g.contains_strict(Point2{0.0, 8.0}));
-    REQUIRE_FALSE(g.contains_strict(Point2{4.0, 8.0}));
-    REQUIRE_FALSE(g.contains_strict(Point2{2.0, 10.0}));
-    REQUIRE_FALSE(g.contains_strict(Point2{2.0, 6.0}));
-}
-
 TEST_CASE("bilinear reproduces a plane exactly", "[raster][sample]") {
     const auto g = grid_3x5();
     const auto r = plane_raster(g, 3.0, 2.0, -5.0);
@@ -234,8 +223,6 @@ TEST_CASE("non-finite query points are rejected, never answered plausibly",
         REQUIRE_FALSE(g.cell_of(p).has_value());
         REQUIRE_FALSE(g.bilinear_cell_of(p).has_value());
         REQUIRE_FALSE(bilinear(r, p).has_value());
-        // A non-finite point is not strictly inside anything.
-        REQUIRE_FALSE(g.contains_strict(p));
     }
 }
 
@@ -268,25 +255,6 @@ TEST_CASE("RasterSource is satisfiable by more than the class it was written aro
     const auto z = bilinear(c, Point2{2.5, 7.5});
     REQUIRE(z.has_value());
     REQUIRE_THAT(*z, WithinAbs(7.0, 1e-12));
-}
-
-TEST_CASE("boundary tolerance stays above rounding noise at UTM scale",
-          "[raster][geometry][edge]") {
-    // The legacy tolerance scaled only with cell size, which at UTM33
-    // northings is about 1.5 ulp -- noise. It must scale with coordinate
-    // magnitude too.
-    const RasterGeometry g{500000.0, 7900000.0, 10.0, 10.0, 100, 100};
-
-    const double one_ulp = std::nextafter(7900000.0, 1e9) - 7900000.0;
-    REQUIRE(g.boundary_epsilon() > one_ulp * 100.0);   // well clear of noise
-    REQUIRE(g.boundary_epsilon() < g.delta_x() * 1e-3); // still far below a cell
-
-    // A point one ulp inside the border still reads as on the border.
-    REQUIRE_FALSE(g.contains_strict(Point2{std::nextafter(g.x_min(), g.x_max()), 7899500.0}));
-    REQUIRE_FALSE(g.contains_strict(Point2{500500.0, std::nextafter(g.y_max(), g.y_min())}));
-
-    // A metre inside is unambiguously interior.
-    REQUIRE(g.contains_strict(Point2{500001.0, 7899999.0}));
 }
 
 TEST_CASE("nodata is fixed at construction and readable", "[raster][edge]") {

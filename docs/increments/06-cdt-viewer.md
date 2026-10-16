@@ -730,7 +730,7 @@ prints exactly `203:    *,`.
 
 The unqualified present-tense form (`grep -nE '^\s*\*'` over
 `src_python/tin_engine/viz/*.py` and `_core.pyi`, "prints exactly
-`scene.py:203:    *,`") stood here and is **false of the tree today**, in two
+`src_python/tin_engine/viz/scene.py@e51ad75a:203:    *,`") stood here and is **false of the tree today**, in two
 ways: `scene.py`'s line is now `:212`, and `svg.py` — which did not exist at
 `995f258` — contributes two more real undercounted lines plus two docstring lines the
 pattern also matches (`grep -nE '^\s*\*' src_python/tin_engine/viz/svg.py`
@@ -962,8 +962,8 @@ it.
    `.github/workflows/main.yaml` on all three interpreter legs.
 
    **What does not guard it: asan.** No CI job compiles this increment's array
-   code under a sanitizer. The `sanitizers` job
-   (`.github/workflows/main.yaml:59-83`) configures `-DCMAKE_BUILD_TYPE=Debug`
+   code under a sanitizer. The `sanitizers` job in
+   `.github/workflows/main.yaml` configures `-DCMAKE_BUILD_TYPE=Debug`
    with `-fsanitize=address,undefined` and sets no other option, and
    `RASPUTIN_BUILD_PYTHON` defaults `OFF` (`CMakeLists.txt:85`), so
    `bindings/core.cpp` is never in that build at all. The `python` job builds

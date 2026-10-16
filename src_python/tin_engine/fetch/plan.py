@@ -1,12 +1,12 @@
-"""What a fetch takes, decided from headers alone (increment 23a-2). Pure.
+"""What a fetch takes, decided from headers alone. Pure.
 
-`docs/increments/23-basin-scale.md`, "Planning (`fetch/plan.py`, pure)". The
-blocks fetched are those meeting the domain's *box* (decided 1), because every
-window the mesh decodes is a box: the box in the frame (`out_crs`, else the
-source CRS), grown by `margin` times the source's north-south spacing in
-metres, moved into the source CRS, then grown by two source cells as 15c-2's
-`source_region` grows its own. The missing blocks become byte ranges, runs
-with gaps of at most 64 KiB coalesced up to 8 MiB.
+The blocks fetched are those meeting the domain's *box*, not its outline,
+because every window the mesh decodes is a box: the box in the frame
+(`out_crs`, else the source CRS), grown by `margin` times the source's
+north-south spacing in metres, moved into the source CRS, then grown by two
+source cells as the mesh's own source region (`target_grid.source_region`)
+is grown. The missing blocks become byte ranges, runs with gaps of at most
+64 KiB coalesced up to 8 MiB.
 """
 
 from __future__ import annotations
@@ -20,13 +20,12 @@ import numpy as np
 import tifffile
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from tin_engine.crs import parse_crs, transform_bounds
+from tin_engine.crs import parse_crs, same_crs, transform_bounds
 from tin_engine.domain import DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.io.cog import block_grid, blocks_meeting
 from tin_engine.io.geotiff import read_page
-from tin_engine.io.models import GeoTiffError, IndexWindow, RasterMeta
-from tin_engine.mosaic import Bounds
+from tin_engine.io.models import Bounds, GeoTiffError, IndexWindow, RasterMeta, ZUnit
 
 GAP = 64 * 1024
 MAX_RANGE = 8 * 1024 * 1024
@@ -48,6 +47,9 @@ class FetchRequest(BaseModel):
     connections: int = 8
     dry_run: bool = False
     refresh: bool = False
+    #: The year of a source with one file per year (the land cover); None is
+    #: the source's last.
+    year: int | None = None
 
     @model_validator(mode="after")
     def _one_region(self) -> FetchRequest:
@@ -70,7 +72,8 @@ class ObjectPlan(BaseModel):
 
 
 class _Prefix(io.BytesIO):
-    """A header prefix that raises on any read past its end (F7). It claims to
+    """A header prefix that raises on any read past its end, so the caller
+    knows to fetch a longer prefix rather than parse a cut header. It claims to
     be a very long file, so tifffile reads a tag value lying past the prefix
     instead of dropping the tag as out of the file."""
 
@@ -84,14 +87,15 @@ class _Prefix(io.BytesIO):
 
 
 def parse_prefix(
-    prefix: bytes, *, nodata: float | None
+    prefix: bytes, *, nodata: float | None, z_unit: ZUnit | None = None
 ) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage] | None:
     """The header from a prefix of the file, or None while the prefix lacks
     any of it: a read past its end, or an offset or byte count of a block of
     the full-resolution page (tifffile logs a short offset array and goes on,
-    so the count is the check). Geographic CRSs are read (decided 6)."""
+    so the count is the check). A geographic CRS is accepted: a source in
+    degrees can be fetched."""
     try:
-        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata)
+        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata, z_unit=z_unit)
         rows, _, across = block_grid(page)
         count = -(-int(page.imagelength) // rows) * across
         if len(page.dataoffsets) != count or len(page.databytecounts) != count:
@@ -115,7 +119,7 @@ def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
         assert request.box is not None
         b = request.box
         x0, y0, x1, y1 = b.x_min, b.y_min, b.x_max, b.y_max
-    if frame == source:
+    if same_crs(frame, source):
         grow = request.margin * meta.delta_y
     else:
         grow = request.margin * meta.delta_y * (METRES_PER_DEGREE if source.is_geographic else 1)
@@ -143,11 +147,10 @@ def plan_object(
     present: Collection[int],
 ) -> ObjectPlan:
     """The blocks with a node strictly within one cell of `box` (the box
-    snapped outward to the lattice, as 23a-1's windows are), and the ranges of
-    those neither `present` nor sparse (a sparse block is never requested,
-    decided 7)."""
-    xs = meta.x_min + meta.delta_x * np.arange(meta.cols)
-    ys = meta.y_max - meta.delta_y * np.arange(meta.rows)
+    snapped outward to the lattice, as the mesh's windowed reads are), and the
+    ranges of those neither `present` nor sparse (a sparse block, byte count 0,
+    has nothing to request)."""
+    xs, ys = meta.node_xy(np.arange(meta.rows), np.arange(meta.cols))
     cols = np.flatnonzero((xs > box.x_min - meta.delta_x) & (xs < box.x_max + meta.delta_x))
     rows = np.flatnonzero((ys > box.y_min - meta.delta_y) & (ys < box.y_max + meta.delta_y))
     if not len(cols) or not len(rows):

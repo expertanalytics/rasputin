@@ -1,32 +1,105 @@
 """What a decoded GeoTIFF becomes: `RasterMeta`, `DemTile`, and the one error.
 
-Increment 11, `docs/increments/11-raster-ingestion.md` §7. Both models are
-frozen Pydantic V2. `RasterMeta` is a superset of the `_core` boundary
-contract: `epsg`, `nodata_source`, `pixel_is_area` and `vertical_unit_assumed`
-are provenance and must not be forwarded to `_core` (increment 12's adapter
-owns that). This module imports nothing first-party and never `_core`.
+Both models are frozen Pydantic V2. `RasterMeta` is a superset of the `_core`
+boundary contract: `epsg`, `nodata_source`, `pixel_is_area` and
+`vertical_unit_assumed` are provenance and must not be forwarded to `_core`
+(`tin_engine.raster`, the one adapter, keeps them out). This module imports
+nothing first-party and never `_core`.
+
+`ClassWindow` is a window of land-cover class numbers
+(`uint8`) with the corner of its upper-left *cell*, not a node: a class raster
+is `PixelIsArea`, and what matters is which cell a point falls in.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal, Self
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
+#: A DEM's height unit, by the name pyproj gives it.
+ZUnit = Literal["metre", "foot", "US survey foot"]
+#: The same units as ``--z-unit`` spells them.
+ZSpelling = Literal["m", "ft", "us-ft"]
+
+#: EPSG unit code to (name pyproj uses, metres per unit, option spelling, plural).
+UNITS: dict[int, tuple[ZUnit, float, ZSpelling, str]] = {
+    9001: ("metre", 1.0, "m", "metres"),
+    9002: ("foot", 0.3048, "ft", "feet"),
+    9003: ("US survey foot", 1200 / 3937, "us-ft", "US survey feet"),
+}
+BY_NAME = {row[0]: row for row in UNITS.values()}
 
 
 class GeoTiffError(ValueError):
-    """A file the reader refuses (§5).
+    """A file the reader refuses.
 
     The message names the tag or GeoKey by number and by name, and the file's
     value. One type on purpose: no caller branches on which refusal fired.
     """
 
 
+class SrsEntry(BaseModel):
+    """One ``gpkg_spatial_ref_sys`` row of a GeoPackage: what
+    `crs.srs_entry` makes of a CRS text and `io.geopackage_write` stores."""
+
+    model_config = ConfigDict(frozen=True)
+
+    srs_id: int
+    organization: str
+    code: int
+    name: str
+    definition: str
+
+
+#: The reserved undefined cartesian row: no CRS, or text pyproj refuses.
+UNDEFINED_SRS = SrsEntry(
+    srs_id=-1, organization="NONE", code=-1, name="Undefined cartesian SRS", definition="undefined"
+)
+#: ``srs_id`` of a CRS pyproj parses but cannot give an EPSG code.
+CUSTOM_SRS_ID = 100_000
+
+
+class Bounds(BaseModel):
+    """A box in the DEM's CRS: finite, with `x_min < x_max` and `y_min < y_max`."""
+
+    model_config = ConfigDict(frozen=True)
+
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+    @classmethod
+    def of(cls, box: tuple[float, float, float, float]) -> Self:
+        """The box `(x_min, y_min, x_max, y_max)`, shapely's `bounds` order."""
+        return cls(x_min=box[0], y_min=box[1], x_max=box[2], y_max=box[3])
+
+    @model_validator(mode="after")
+    def _a_box(self) -> Self:
+        corners = (self.x_min, self.y_min, self.x_max, self.y_max)
+        if not all(map(math.isfinite, corners)) or not (
+            self.x_min < self.x_max and self.y_min < self.y_max
+        ):
+            raise ValueError(f"need finite x_min < x_max and y_min < y_max, got {corners}")
+        return self
+
+
 class IndexWindow(BaseModel):
-    """`rows x cols` nodes starting at `(row0, col0)` (moved from `mosaic.py` by
-    23a-1, because `io/` imports nothing first-party but this module)."""
+    """`rows x cols` nodes starting at `(row0, col0)`. It lives here, not in
+    `mosaic.py`, so the readers in `io/` can take one without importing
+    `mosaic.py`, which itself imports this module."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -38,12 +111,12 @@ class IndexWindow(BaseModel):
 
 class RasterMeta(BaseModel):
     """The node grid of one tile, in metres of a projected CRS, or in degrees
-    when `geographic` (15c-2, D6). `crs` is `EPSG:n` when `epsg` is
+    when `geographic`. `crs` is `EPSG:n` when `epsg` is
     given; a CRS without an EPSG code has `epsg` None and its text in `crs`.
 
     `x_min`/`y_max` are the upper-left *node*, already shifted inward half a
-    cell for an area-registered file (§4). `rows`/`cols` are `StrictInt`
-    (B1, §14), so the legacy's `(12.0, 16.0)` is refused at the type.
+    cell for an area-registered file. `rows`/`cols` are `StrictInt`, so a
+    float such as `12.0` is refused at the type.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -57,12 +130,16 @@ class RasterMeta(BaseModel):
     epsg: int | None
     crs: str = ""
     geographic: bool = False
-    # Finite or None (§6, round 2): a NaN sentinel matches no cell under
+    # Finite or None: a NaN sentinel matches no cell under
     # `==`, and a NaN field would also break model equality.
     nodata: float | None = Field(allow_inf_nan=False)
     nodata_source: Literal["tag", "caller", "absent"]
     pixel_is_area: bool
     vertical_unit_assumed: bool
+    #: The file's height unit; the array is in metres whatever it is.
+    z_unit: ZUnit = "metre"
+    #: The file's own CRS, when the grid is read as its metre twin.
+    file_crs: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -81,13 +158,128 @@ class RasterMeta(BaseModel):
             raise ValueError("nodata_source 'absent' requires nodata None")
         return self
 
+    def node_xy[T: (float, npt.NDArray[Any])](self, rows: T, cols: T) -> tuple[T, T]:
+        """Node `(row, col)`'s `(x, y)`, elementwise: `x_min + col * delta_x`,
+        `y_max - row * delta_y`, the core's `RasterGeometry::node`."""
+        return self.x_min + cols * self.delta_x, self.y_max - rows * self.delta_y
+
+    def index_of[T: (float, npt.NDArray[Any])](self, x: T, y: T) -> tuple[T, T]:
+        """The fractional `(row, col)` of `(x, y)`, unrounded."""
+        return (self.y_max - y) / self.delta_y, (x - self.x_min) / self.delta_x
+
+    def node_box(self) -> tuple[float, float, float, float]:
+        """The node rectangle `(x_min, y_min, x_max, y_max)`; flat for one row
+        or one column (not a `Bounds`, which refuses a flat box)."""
+        x_max, y_min = self.node_xy(self.rows - 1, self.cols - 1)
+        return self.x_min, y_min, x_max, self.y_max
+
+    def windowed(self, window: IndexWindow) -> RasterMeta:
+        """This grid cut to `window`: the corner moved by whole cells."""
+        x_min, y_max = self.node_xy(window.row0, window.col0)
+        update = {"x_min": x_min, "y_max": y_max, "rows": window.rows, "cols": window.cols}
+        return self.model_copy(update=update)
+
+
+def valid_mask(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.bool_]:
+    """Not NoData. NoData is NaN or the sentinel; +-inf is data, as in the
+    core's `Raster::is_nodata`."""
+    valid: npt.NDArray[np.bool_] = ~np.isnan(values)
+    return valid if nodata is None else valid & (values != nodata)
+
+
+class ClassWindow(BaseModel):
+    """A window of class numbers: `array[r, c]` is the class of the cell whose
+    upper-left corner is `corner(r, c)`; the window's own is `(x_min, y_max)`.
+    Frozen; `array` is a read-only `uint8` copy of what was given."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    x_min: float
+    y_max: float
+    delta_x: float
+    delta_y: float
+    array: npt.NDArray[np.uint8]
+
+    @field_validator("array")
+    @classmethod
+    def _read_only_uint8(cls, value: npt.NDArray[Any]) -> npt.NDArray[np.uint8]:
+        if value.ndim != 2 or value.dtype != np.uint8:
+            raise ValueError(f"need a 2-D uint8 array, got {value.dtype} {value.shape}")
+        copy = np.array(value, order="C", copy=True)
+        copy.flags.writeable = False
+        return copy.view()
+
+    @property
+    def rows(self) -> int:
+        return int(self.array.shape[0])
+
+    @property
+    def cols(self) -> int:
+        return int(self.array.shape[1])
+
+    def corner(self, row: int, col: int) -> tuple[float, float]:
+        """The upper-left corner of cell `(row, col)`."""
+        return self.x_min + col * self.delta_x, self.y_max - row * self.delta_y
+
+
+class ClassFractions(BaseModel):
+    """The sparse table of land-cover fractions per triangle: triangle `t`'s
+    entries are `[offsets[t], offsets[t + 1])`, classes
+    ascending within a row, fractions `float32` as the file holds them. Frozen;
+    the arrays are kept as given, and another dtype is refused, not converted."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    offsets: npt.NDArray[np.uint32]
+    classes: npt.NDArray[np.uint8]
+    fractions: npt.NDArray[np.float32]
+
+    @field_validator("offsets", "classes", "fractions")
+    @classmethod
+    def _one_dimensional(cls, value: npt.NDArray[Any], info: ValidationInfo) -> npt.NDArray[Any]:
+        want = {"offsets": np.uint32, "classes": np.uint8, "fractions": np.float32}[
+            str(info.field_name)
+        ]
+        if value.ndim != 1 or value.dtype != want:
+            raise ValueError(
+                f"{info.field_name} must be 1-D {np.dtype(want)}, got {value.dtype} {value.shape}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _rows_index_the_entries(self) -> Self:
+        steps = np.diff(self.offsets.astype(np.int64))
+        if len(self.offsets) == 0 or self.offsets[0] != 0 or (steps < 0).any():
+            raise ValueError("offsets must start at 0 and never decrease")
+        if not (self.offsets[-1] == len(self.classes) == len(self.fractions)):
+            raise ValueError(
+                f"offsets end at {self.offsets[-1]} for {len(self.classes)} classes and "
+                f"{len(self.fractions)} fractions"
+            )
+        return self
+
+    @property
+    def triangles(self) -> int:
+        return len(self.offsets) - 1
+
+
+class TileFootprint(BaseModel):
+    """One tile as its header describes it: the file's name, its node grid, and
+    the dtype it decodes to (float32 unless given)."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    name: str
+    meta: RasterMeta
+    dtype: np.dtype[Any] = np.dtype(np.float32)
+
 
 class DemTile(BaseModel):
     """One decoded tile: its metadata and a read-only, C-contiguous 2-D array.
 
     A disagreement between `meta` and `array.shape` is Pydantic's
     `ValidationError`, not `GeoTiffError`: it is a programming error in
-    whoever built the model, not a fact about a file (§7, B1).
+    whoever built the model, not a fact about a file.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -104,21 +296,22 @@ class DemTile(BaseModel):
             )
         # An owned read-only copy, stored as a view of it: the caller's buffer
         # is never shared, and the view's flag cannot be set back because its
-        # base is read-only too (§7, the concurrency rule, round 3).
+        # base is read-only too. Every refinement thread samples the same
+        # raster, so no one may hold a writable handle to it.
         copy = np.array(value, order="C", copy=True)
         copy.flags.writeable = False
         return copy.view()
 
     @classmethod
     def _adopt(cls, meta: RasterMeta, array: npt.NDArray[Any]) -> DemTile:
-        """Take `array` as the tile's own, without the copy (increment 15a, R7).
+        """Take `array` as the tile's own, without the copy.
 
         Private: its two callers are `mosaic.assemble` and
-        `target_grid.resample` (increment 15e), each on a canvas it allocated
+        `target_grid.resample`, each on a canvas it allocated
         and never hands out writable, so each peaks at one canvas, not two.
         The same checks as the public constructor, plus C-contiguity, which
         the constructor gets from its copy. The **passed** buffer is set
-        read-only, so the concurrency rule (§7) holds: nobody keeps a writable
+        read-only, so threads may share it as above: nobody keeps a writable
         reference.
         """
         if array.ndim != 2 or array.dtype not in (np.float32, np.float64):

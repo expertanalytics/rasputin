@@ -1,0 +1,17 @@
+2026-10-07T03:21:06Z start b1m-base-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1/out/2026-10-07/b1m-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1/meshes1m
+NO BASELINE: no comparable stored run
+2026-10-07T03:23:34Z end b1m-base-r1 exit 2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T03:23:34Z start b1m-head-r1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+REGRESSION: tile refine_s[t=19] 0.1922 -> 0.2377 (+23.7 %)
+REGRESSION: tile refine_s[t=20] 0.1934 -> 0.2395 (+23.8 %)
+2026-10-07T03:26:08Z end b1m-head-r1 exit 1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T03:26:09Z start b1m-head-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+REGRESSION: quarter refine_s[t=20] 0.2040 -> 0.2164 (+6.0 %)
+REGRESSION: tile refine_s[t=12] 0.2243 -> 0.2369 (+5.6 %)
+2026-10-07T03:28:43Z end b1m-head-r2 exit 1  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+2026-10-07T03:28:43Z start b1m-base-r2  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1/out/2026-10-07/b1m-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-20c1/meshes1m
+ACCEPTED
+2026-10-07T03:31:10Z end b1m-base-r2 exit 0  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+DONE

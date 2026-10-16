@@ -1,0 +1,197 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30b/venv-branch/lib/python3.13/site-packages/tin_engine
+........................................................................ [ 21%]
+........................................................................ [ 43%]
+......................................ss................................ [ 65%]
+..............s......................................................... [ 87%]
+.........................................                                [100%]
+=============================== warnings summary ===============================
+tests/python/test_cli_mesh_features.py::TestCommittedExtract::test_i7_the_tolerance_holds
+  /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30b/venv-branch/lib/python3.13/site-packages/_pytest/fixtures.py:1313: PytestRemovedIn10Warning: Class-scoped fixture defined as instance method is deprecated.
+  Instance attributes set in this fixture will NOT be visible to test methods,
+  as each test gets a new instance while the fixture runs only once per class.
+  Use @classmethod decorator and set attributes on cls instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+    fixturefunc = resolve_fixture_function(fixturedef, request)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+326 passed, 3 skipped, 1 warning in 22.31s
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_one_name #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_a_list_of_names_is_their_union #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=88e4d72e258570f7
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=f7f8c2a25e08282b
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #2 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #3 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=4b1035d8d4c63039
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #4 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=cdcb8f187eeacac6
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #5 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=b85de8402d984c27
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #6 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=be73ba3b0aa1e2ee
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #7 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c02c01e57247a2c0
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #8 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=2e4c94d642dcb8df
+fixture tests/python/test_feature_input.py::TestClassMaps::test_property_every_vocabulary_name_including_the_new_bits #9 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=afdb0ed4078d1589
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_codes_are_land_cover_and_water[511] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=bb6087370474ed11
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_codes_are_land_cover_and_water[512] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=da3dea5daa335b2f
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_codes_are_land_cover_and_water[521] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=fa66be979a769d70
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_codes_are_land_cover_and_water[522] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=5c19d5c3aaf3fa16
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_codes_are_land_cover_and_water[523] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=4cfd0e65801d0276
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[111] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=13bfabb2d1db80d7
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[311] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=6ea1c396074291b1
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[412] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=546fc12120230ff4
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[423] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=5f117ed02665f880
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[999] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=741b769dfacb8d50
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[5] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=1aa8efc4f7380b46
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[51] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=d3d78d835cf8cb9b
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[513] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=b1df441f765527d1
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_every_other_code_is_land_cover[530] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=df453d3da60ded2c
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_keeps_water_only[511] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=d15cf007a9d39294
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_keeps_water_only[512] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=1e77fa5ad66b661a
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_keeps_water_only[521] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=b1c1f478f967568c
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_keeps_water_only[522] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=2e332d02678436d9
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_keeps_water_only[523] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=8e6bd1e8280ef05d
+fixture tests/python/test_feature_input.py::TestClassMaps::test_corine_water_drops_land #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=189a97a4a8b4f565
+fixture tests/python/test_feature_input.py::TestClassMaps::test_clc18_kode[512-names0] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=da3dea5daa335b2f
+fixture tests/python/test_feature_input.py::TestClassMaps::test_clc18_kode[322-names1] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=77096a4e2e69b203
+fixture tests/python/test_feature_input.py::TestClassMaps::test_the_request_vocabulary_is_the_one_masks_come_from #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=2a2d6fff1e9d96d1
+fixture tests/python/test_feature_input.py::TestSources::test_geojson_order_and_ids #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=f8bb4fbbd76bcc7b
+fixture tests/python/test_feature_input.py::TestSources::test_json_suffix_is_geojson #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestSources::test_geopackage_rows_in_key_order_with_their_values #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=7c5e5a0f9e21e292
+fixture tests/python/test_feature_input.py::TestSources::test_geopackage_several_layers_need_one_named #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=6bc5854e3c47cce0
+fixture tests/python/test_feature_input.py::TestSources::test_the_geopackage_is_left_unchanged #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=6bc5854e3c47cce0
+fixture tests/python/test_feature_input.py::TestSources::test_gml_with_the_clc18_kode_map #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=667424e0884dadbe
+fixture tests/python/test_feature_input.py::TestSources::test_gml_without_a_crs_needs_one_given #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=4c9a1fd8bd5b315d
+fixture tests/python/test_feature_input.py::TestSources::test_the_legacy_gml_over_the_benchmark_tile #1 open_features features=42 outside=158 clipped=11 empty=0 vertices=9041 lines=63 sha=6cf97b8009962368
+fixture tests/python/test_feature_input.py::TestGeometry::test_z_is_dropped #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=4 lines=1 sha=710f2990abf1b37e
+fixture tests/python/test_feature_input.py::TestGeometry::test_an_empty_geometry_is_skipped_and_counted[empty-polygon] #1 open_features features=1 outside=0 clipped=0 empty=1 vertices=5 lines=1 sha=e0a7d18286d58d2e
+fixture tests/python/test_feature_input.py::TestGeometry::test_an_empty_geometry_is_skipped_and_counted[empty-line] #1 open_features features=1 outside=0 clipped=0 empty=1 vertices=5 lines=1 sha=e0a7d18286d58d2e
+fixture tests/python/test_feature_input.py::TestGeometry::test_an_empty_geometry_is_skipped_and_counted[null] #1 open_features features=1 outside=0 clipped=0 empty=1 vertices=5 lines=1 sha=e0a7d18286d58d2e
+fixture tests/python/test_feature_input.py::TestGeometry::test_an_empty_flag_row_is_skipped_and_counted #1 open_features features=1 outside=0 clipped=0 empty=1 vertices=5 lines=1 sha=6bc5854e3c47cce0
+fixture tests/python/test_feature_input.py::TestGeometry::test_a_self_intersecting_ring_is_linework_not_refused #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=9 lines=3 sha=e1dfc202930bbae9
+fixture tests/python/test_feature_input.py::TestCrs::test_geojson_without_a_crs_member_is_wgs84 #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=b18c1f250420e779
+fixture tests/python/test_feature_input.py::TestCrs::test_geojson_in_the_dems_crs_is_not_moved #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestCrs::test_the_dems_epsg_code_by_definition_is_not_moved #1 open_features features=2 outside=0 clipped=1 empty=0 vertices=7 lines=2 sha=b9a3b992101bf65f
+fixture tests/python/test_feature_input.py::TestCrs::test_the_dems_epsg_code_by_definition_is_not_moved #2 open_features features=2 outside=0 clipped=1 empty=0 vertices=7 lines=2 sha=b9a3b992101bf65f
+fixture tests/python/test_feature_input.py::TestCrs::test_a_given_crs_agreeing_with_the_files_is_accepted #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestCrs::test_a_given_crs_agreeing_with_the_files_is_accepted #2 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestCrs::test_a_geopackage_in_3035 #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=60bb35d7e90b6e0b
+fixture tests/python/test_feature_input.py::TestClip::test_a_ring_wholly_inside_is_one_closed_line #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestClip::test_a_polygon_gives_its_exterior_then_its_holes #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=d9759b6a1274c578
+fixture tests/python/test_feature_input.py::TestClip::test_a_multipolygon_gives_its_parts_in_order #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=80e9e6c2e10e2f8a
+fixture tests/python/test_feature_input.py::TestClip::test_a_multilinestring_gives_its_parts #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=4 lines=2 sha=391d3f96fa8bc246
+fixture tests/python/test_feature_input.py::TestClip::test_a_ring_crossing_the_boundary_is_open_pieces #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=5 lines=2 sha=c0e328092ec8f114
+fixture tests/python/test_feature_input.py::TestClip::test_a_line_leaving_the_domain_loses_its_exterior_part #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=2 lines=1 sha=fe8471101fea037b
+fixture tests/python/test_feature_input.py::TestClip::test_a_ring_touching_the_boundary_at_one_point_keeps_no_point_piece #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=930ac23ef0707f77
+fixture tests/python/test_feature_input.py::TestClip::test_a_ring_outside_touching_at_one_point_is_dropped_and_counted #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestClip::test_a_feature_edge_along_the_boundary_is_kept #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=7 lines=3 sha=3273517a6fa7de9b
+fixture tests/python/test_feature_input.py::TestClip::test_a_feature_in_a_domain_hole_is_dropped_and_counted #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestClip::test_a_feature_just_outside_is_dropped_and_counted #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestClip::test_a_feature_far_away_is_not_a_feature #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestClip::test_no_feature_left_is_legitimate #1 open_features features=0 outside=0 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestClip::test_a_domain_hole_cuts_rings_as_lines #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=5 lines=1 sha=6da1c8266983ebe8
+fixture tests/python/test_feature_input.py::TestPreClip::test_i4_the_extract_gives_the_same_noded_graph_as_no_pre_clip #1 open_features features=60 outside=9 clipped=19 empty=0 vertices=10315 lines=87 sha=1450267bbb7e5eea
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_ring_wholly_inside_stays_closed_with_its_start_vertex #1 pre_clip chains=1 sha=fe83cbb6e1b1b61c
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_ring_poking_out_with_no_edge_wholly_outside_stays_closed #1 pre_clip chains=1 sha=d650597b6bfbdd28
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_ring_losing_one_run_is_one_open_chain_joined_across_its_start #1 pre_clip chains=1 sha=103e7f33f6e3ac72
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_ring_losing_two_runs_is_two_open_chains #1 pre_clip chains=2 sha=0fc9cc056a4590f5
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_run_of_several_edges_is_dropped_as_one #1 pre_clip chains=1 sha=a54288769e702d9d
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_line_losing_its_middle_is_two_chains #1 pre_clip chains=2 sha=0fa43d581e3be453
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_line_losing_its_ends_keeps_its_middle #1 pre_clip chains=1 sha=124619509c4cf61e
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_an_edge_touching_the_region_at_one_point_is_kept #1 pre_clip chains=1 sha=6875de4a242e983b
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_a_polygon_whose_exterior_is_dropped_keeps_its_hole_closed #1 pre_clip chains=1 sha=0f3effe2c4127fcd
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_parts_in_order_exterior_before_holes #1 pre_clip chains=3 sha=7b52bf70313192a1
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_no_vertex_is_added[one-run] #1 pre_clip chains=1 sha=103e7f33f6e3ac72
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_no_vertex_is_added[two-runs] #1 pre_clip chains=2 sha=0fc9cc056a4590f5
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_no_vertex_is_added[line] #1 pre_clip chains=2 sha=2135b7595ea76edc
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_no_vertex_is_added[crossing] #1 pre_clip chains=2 sha=cd6d02381d322aeb
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_no_vertex_is_added[slanted] #1 pre_clip chains=1 sha=422b2fa35ada4ff5
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_nothing_kept_is_nothing #1 pre_clip chains=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_an_edge_within_its_widening_is_kept_and_one_beyond_it_is_not #1 pre_clip chains=1 sha=3235d46aa5641aef
+fixture tests/python/test_feature_input.py::TestPreClipKeepsWholeEdges::test_an_edge_within_its_widening_is_kept_and_one_beyond_it_is_not #2 pre_clip chains=1 sha=4aaa7c64146b2e06
+fixture tests/python/test_feature_input.py::TestPreClipThroughOpenFeatures::test_a_polygon_around_the_domain_with_no_edge_kept_is_dropped_and_counted #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestLongWgs84Edge::test_an_edge_crossing_the_region_boundary_is_not_split_there #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=2 lines=1 sha=daddb268eb72fbc3
+fixture tests/python/test_feature_input.py::TestLongEdgeWidening::test_an_edge_outside_the_region_whose_dem_straight_line_enters_is_kept #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=2 lines=1 sha=983157c15f2fefa8
+fixture tests/python/test_feature_input.py::TestManySources::test_counts_are_per_source_in_order #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=48d91e16daf171c6
+fixture tests/python/test_feature_input.py::TestManySources::test_crs_and_layers_are_per_source #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=48d91e16daf171c6
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it[ring-touching-the-outline-at-one-vertex] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=6 lines=2 sha=e5c0ab6fb9b1c244
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it[line-along-the-outline] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=4 lines=2 sha=03eb4920d2a074fc
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it[self-crossing-ring] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=9 lines=3 sha=e1dfc202930bbae9
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it[ring-with-a-repeated-vertex] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p3_features_missing_the_region_are_counted_outside #1 open_features features=1 outside=3 clipped=0 empty=0 vertices=5 lines=1 sha=c077a579bca0dd23
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p4_an_edge_is_kept_by_the_edge_not_by_its_ends[both-ends-outside-crossing] #1 pre_clip chains=1 sha=011302aa559dad1b
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p4_an_edge_is_kept_by_the_edge_not_by_its_ends[one-end-on-the-boundary] #1 pre_clip chains=1 sha=18245d992397ada3
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p4_an_edge_is_kept_by_the_edge_not_by_its_ends[both-ends-outside-passing-a-corner] #1 pre_clip chains=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p5_the_whole_feature_test_keeps_what_the_pre_clip_keeps[hole-inside-shell-s-envelope-misses-the-region-s] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p5_the_whole_feature_test_keeps_what_the_pre_clip_keeps[hole-inside-shell-s-envelope-overlaps-the-region-s] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture tests/python/test_feature_input.py::TestTheClipStaysTheSame::test_p5_the_whole_feature_test_keeps_what_the_pre_clip_keeps[line-with-both-ends-outside-the-region] #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=2 lines=1 sha=d599dafa7b5de422
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_fields #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_fields #2 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_start_mesh_and_the_max_error #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_vocabulary_is_the_writers_fields_and_no_edge_vocabulary #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_a_reprojected_source #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=e9a6142cdb9676d5
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_corine_notice #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_the_ply_comments #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_features.py::TestRecord::test_stderr_and_stats #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_stderr_gives_the_clipped_count #1 open_features features=3 outside=1 clipped=2 empty=0 vertices=11 lines=3 sha=d68cec3f0a6b49f3
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_stderr_counts_the_features_kept #1 open_features features=3 outside=1 clipped=2 empty=0 vertices=11 lines=3 sha=d68cec3f0a6b49f3
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_nothing_crossing_is_zero_clipped #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=a00e72bbe5de5f85
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_a_layer_without_an_index_is_scanned_and_reported #1 open_features features=3 outside=1 clipped=2 empty=0 vertices=11 lines=3 sha=9a34f5b4fe2844a9
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_an_indexed_layer_gives_the_same_file_and_no_scan_line #1 open_features features=3 outside=0 clipped=2 empty=0 vertices=11 lines=3 sha=9a34f5b4fe2844a9
+fixture tests/python/test_cli_mesh_features.py::TestReport::test_an_indexed_layer_gives_the_same_file_and_no_scan_line #2 open_features features=3 outside=1 clipped=2 empty=0 vertices=11 lines=3 sha=9a34f5b4fe2844a9
+fixture tests/python/test_cli_mesh_features.py::TestGalleryRows::test_the_road_ends_inside_the_forest #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestGalleryRows::test_the_bridge_is_split_at_both_shores #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestGalleryRows::test_the_wall_stops_at_the_domain_boundary #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestGalleryRows::test_the_boundary_carries_no_feature_bit #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestGalleryRows::test_both_oracles_hold #1 open_features features=5 outside=0 clipped=1 empty=0 vertices=16 lines=5 sha=a407040ba778dc0c
+fixture tests/python/test_cli_mesh_features.py::TestCommittedExtract::test_i7_the_tolerance_holds #1 open_features features=60 outside=9 clipped=19 empty=0 vertices=10315 lines=87 sha=1450267bbb7e5eea
+fixture tests/python/test_cli_mesh_features.py::TestCommittedExtract::test_i3_rows_in_reverse_order_give_the_same_file #1 open_features features=60 outside=9 clipped=19 empty=0 vertices=10315 lines=87 sha=1450267bbb7e5eea
+fixture tests/python/test_cli_mesh_features.py::TestCommittedExtract::test_the_legacy_gml #1 open_features features=42 outside=158 clipped=11 empty=0 vertices=9041 lines=63 sha=6cf97b8009962368
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_both_sources_constraints_are_present #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_wall_edge_is_a_constraint_alongside_the_coded_edges #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_coded_source_labels_the_cells #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestTwoSources::test_the_file_records_both_sources #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestPositionalPairing::test_one_map_two_sources_defaults_the_second #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestPositionalPairing::test_a_single_crs_binds_the_first_source #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=7 lines=2 sha=55409d9bb68208c8
+fixture tests/python/test_cli_mesh_multi_features.py::TestPositionalPairing::test_one_features_with_no_paired_options_is_unchanged #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=097b78392196cede
+fixture tests/python/test_cli_mesh_multi_features.py::TestSameFileTwice::test_two_layers_of_one_geopackage #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=1003deab9dae0aa6
+fixture tests/python/test_cli_mesh_multi_features.py::TestSameFileTwice::test_same_geojson_twice_two_maps #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=3cf7e35d3479cdae
+fixture tests/python/test_cli_mesh_multi_features.py::TestCrossSourceMerge::test_the_shared_seam_carries_both_masks #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=ad02122ba237b828
+fixture tests/python/test_cli_mesh_multi_features.py::TestCrossSourceMerge::test_the_seam_is_one_run_of_edges_not_doubled #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=ad02122ba237b828
+fixture tests/python/test_cli_mesh_multi_features.py::TestDegeneracy::test_a_shorter_paired_list_is_allowed #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestCodeSystems::test_a_coded_source_and_a_codeless_source_is_allowed #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_multi_features.py::TestCodeSystems::test_two_same_system_coded_sources_is_allowed #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3db7503cf7c90cfa
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_two_corine_sources_give_one_notice #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3db7503cf7c90cfa
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_per_source_feature_counts_are_correct #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=c5249605caa1b58c
+fixture tests/python/test_cli_mesh_multi_features.py::TestRecordPerSource::test_features_crs_has_one_entry_per_source #1 open_features features=3 outside=0 clipped=0 empty=0 vertices=12 lines=3 sha=35f276bcee04d723
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_two_squares_side_by_side #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_forest_with_an_empty_hole #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=fbda919577f39136
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_lake_in_the_hole_of_a_holed_forest #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=15 lines=3 sha=e12c5e61a71e80af
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_lake_in_an_unholed_forest #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3927814fc049c2d4
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_polygon_clipped_by_the_domain_into_two_pieces #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=9 lines=3 sha=f5138281fd8fa962
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_road_across_a_polygon #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=7 lines=2 sha=9b0a1fa5f37a3e05
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_polygon_covering_the_domain #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=0 lines=0 sha=4e9a3d2d80112b03
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_boundaries_a_tenth_of_a_millimetre_apart #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=f9ef4a60aa14b03a
+fixture tests/python/test_cli_mesh_landcover.py::TestFixtures::test_a_code_given_as_a_json_number #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=9ec0565743654658
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_the_codes_field #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_every_cell_carries_a_code_in_both_encodings[ascii] #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_every_cell_carries_a_code_in_both_encodings[binary] #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_no_coded_map_no_codes #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3165eb661a595733
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_no_coded_map_no_codes #2 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestRecord::test_the_stats_phase #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestPly::test_the_face_file_carries_the_codes_and_the_edge_file_not #1 open_features features=2 outside=0 clipped=0 empty=0 vertices=10 lines=2 sha=3d5d1d3721142bff
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_a_coded_polygon_keeps_its_code_and_polygon #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=9ec0565743654658
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_a_coded_line_keeps_its_code_and_no_polygon #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=2 lines=1 sha=1a6795c929fcbc56
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_the_property_map_keeps_neither #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=9513c384c947f534
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_corine_water_keeps_the_water_only #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=123d52faa5942ecd
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_a_reprojected_polygon_is_moved_into_the_dems_crs #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=8233be8641cfb2ca
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_a_covering_polygon_is_kept_and_a_disjoint_one_dropped #1 open_features features=1 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=4e9a3d2d80112b03
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_an_uncoded_map_still_drops_a_covering_polygon #1 open_features features=0 outside=1 clipped=0 empty=0 vertices=0 lines=0 sha=e3b0c44298fc1c14
+fixture tests/python/test_cli_mesh_landcover.py::TestWhatFeatureInputKeeps::test_an_uncoded_map_still_drops_a_covering_polygon #2 open_features features=1 outside=0 clipped=0 empty=0 vertices=0 lines=0 sha=4e9a3d2d80112b03
+fixture tests/python/test_cli_mesh_edge_strip.py::TestProjectedPath::test_the_stats_carry_the_line_check #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=82cf37facb693476
+fixture tests/python/test_cli_mesh_edge_strip.py::TestProjectedPath::test_points_beside_nodata_are_counted_and_the_rest_hold #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=82cf37facb693476
+fixture tests/python/test_cli_mesh_edge_strip.py::TestProjectedPath::test_a_failed_strip_run_writes_nothing #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=82cf37facb693476
+fixture tests/python/test_cli_mesh_plain_output.py::TestTheOtherPaths::test_features #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_plain_output.py::TestStderr::test_no_banned_word_on_a_successful_run[features] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_plain_output.py::TestStderr::test_one_summary_line_names_the_triangles[features] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_plain_output.py::TestRecord::test_the_shape_and_the_key_order[features] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_plain_output.py::TestRecord::test_values_follow_stats[features] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture tests/python/test_cli_mesh_plain_output.py::TestRecord::test_every_file_field_is_in_it[features] #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=959ce26d1d7456ed
+fixture probe::P5 hole inside, shell's box misses the region's #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture probe::P5 hole inside, shell's box overlaps the region's #1 open_features features=1 outside=0 clipped=0 empty=0 vertices=5 lines=1 sha=c08e64ad1a8ee9b7
+fixture probe::P5 line with both ends outside the region #1 open_features features=1 outside=0 clipped=1 empty=0 vertices=2 lines=1 sha=d599dafa7b5de422
+fixtures: pytest exit 0, 179 calls recorded

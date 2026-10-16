@@ -36,6 +36,9 @@ written before the design. Its rules are `docs/increments/README.md`, step 1
 (*Literature* and *Legacy*).
 
 ## 5. Operational Instructions for Claude Code
-* **Tone:** Pragmatic, analytical, uncompromising on architectural boundaries, yet direct and constructive.
+* **Constants:** Every absolute constant in a design states the scale it assumes and the largest input it was checked at.
+* **Fixtures:** each test a design specifies carries its fixture's measured figures.
 * **Action:** Before allowing `@developer` to write code for a complex task, you must provide a high-level component blueprint showing the data flow and interface boundaries.
+* **Ideas:** before a design, read the private ideas file; name each entry
+  the design takes up or overlaps, and hand back each idea it leaves out.
 

@@ -1,0 +1,27 @@
+Increment 32 fix, the 0.311 deg triangle on Numedalslagen (@architect, 2026-10-09). Mac on AC.
+Code: worktree-clc-simplify at b192a2c6; the .venv's _core rebuilt from HEAD by @perf. PYTHONDONTWRITEBYTECODE=1.
+D=../rasputin_data. Flags: the quick check's Numedalslagen case plus --ascii.
+
+1. rasputin mesh ... --ascii --out fix.vtk      -> 653039 triangles (as @perf's stats)
+   cap.py                                       -> the same mesh (fix2.vtk, byte-identical) and simp.pkl, the simplifier's input and output
+2. worst.py fix.vtk (six worst; abridged to the two worst here)
+under 1 deg: 76 under 0.4: 1
+0.3114 deg at apex (120343.953,6712649.268); arms 958.55 / 1038.36; opposite 79.991; constrained arms [False, True], opposite False
+     (121379.991,6712579.862) line vertex True; no cover vertex within 1 cm; 7516.58 m from outline
+     (120343.953,6712649.268) line vertex True; simplifier E, polys [13, 16]; 6743.60 m from outline
+     (121300.000,6712580.000) line vertex False; no cover vertex within 1 cm; 7458.19 m from outline
+0.4873 deg at apex (207219.871,6611416.252); arms 302.05 / 282.21; opposite 20.000; constrained arms [False, False], opposite False
+     (206940.000,6611380.000) line vertex False; no cover vertex within 1 cm; 5721.17 m from outline
+     (207219.871,6611416.252) line vertex True; source vertex, polys [9, 14, 20]; 5533.86 m from outline
+     (206920.000,6611380.000) line vertex False; no cover vertex within 1 cm; 5732.75 m from outline
+   (the next four, 0.513 to 0.520 deg, have the same make-up: a cover vertex and DEM nodes or a point on a constraint line)
+3. cap_probe.py 0 ; cap_probe.py 500   (split every simplified edge over L into equal collinear pieces, then mesh)
+L=0 m: points added 0, triangles 653039, worst 0.311 deg, under 0.4 1, under 1 76, five worst [0.311, 0.487, 0.513, 0.519, 0.519]
+L=500 m: points added 8274, triangles 650407, worst 0.326 deg, under 0.4 1, under 1 13, five worst [0.326, 0.707, 0.795, 0.817, 0.853]
+   worst.py cap500.vtk:
+0.3264 deg at apex (188347.814,6656374.925); arms 193.53 / 207.63; opposite 14.142; constrained arms [False, False], opposite False
+     (188190.000,6656240.000) line vertex False; no cover vertex within 1 cm; 5326.92 m from outline
+     (188347.814,6656374.925) line vertex True; source vertex, polys [14, 17]; 5124.30 m from outline
+     (188200.000,6656250.000) line vertex False; no cover vertex within 1 cm; 5312.91 m from outline
+   (cap_probe.py's "simplified edges" line miscounts edges, shapely.get_rings on a MultiPolygon; not used.)
+4. The 0.311 deg triangle's DEM node (121300, 6712580) lies 5.209 m from the constraint segment E-P (1038.36 m long); refine_points.hpp's delta_p (half the 10 m cell, 5 m) puts a node within 5 m in as its foot on the segment, so this one went in as itself.

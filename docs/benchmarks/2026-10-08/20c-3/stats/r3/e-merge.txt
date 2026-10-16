@@ -1,0 +1,3 @@
+e-lagan-merge: calls 1; (d) mismatched border inside, beyond 1 mm of the outline: 0.000 m
+e-lagan-merge: plant (16, 1, np.int64(10)); (d) with one shared vertex moved 0.5 m: 0.000 m
+e-lagan-merge: (e) population-3 length inside the domain: 26.194 m

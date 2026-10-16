@@ -1,0 +1,4 @@
+before fixtures: Now drawing from 'AC Power'
+after fixtures: Now drawing from 'AC Power'
+before mesh: Now drawing from 'AC Power'
+after mesh: Now drawing from 'AC Power'

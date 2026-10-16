@@ -69,8 +69,9 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import feature_fixtures as ff
+from cli_helpers import SQUARE, USAGE, geojson, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, domain_of, write_geojson
-from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
+from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, needs_codecs
 from gpkg_fixtures import (
     DTM10,
     EXTRACT,
@@ -86,8 +87,7 @@ from gpkg_fixtures import (
 )
 from landcover_fixtures import triangle_areas, vtk_labels
 from plyread import read_ply
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson, quarter_circle
+from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_refine import file_field, ply_fields, stats_row
 from tin_engine.crs import transform_description
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -122,15 +122,8 @@ GALLERY = [
 ]
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def plain_square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE)
+bumpy = rough_dem(16)
+plain_square = polygon_file(SQUARE)
 
 
 @pytest.fixture
@@ -146,6 +139,7 @@ def mesh(
     target = tmp_path / out
     stats = [] if "--stats" in extra else ["--stats", str(target.with_suffix(".md"))]
     code, output = invoke(
+        "mesh",
         "--dem",
         str(tif),
         "--domain",
@@ -202,7 +196,13 @@ class TestUsage:
         self, tmp_path: Path, bumpy: Path, gallery: Path
     ) -> None:
         code, output = invoke(
-            "--dem", str(bumpy), "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
+            "mesh",
+            "--dem",
+            str(bumpy),
+            "--features",
+            str(gallery),
+            "--out",
+            str(tmp_path / "x.vtk"),
         )
         assert code == USAGE and "--features" in output, output
         assert "No such option" not in output
@@ -218,14 +218,6 @@ class TestUsage:
         code, output, target = mesh(tmp_path, bumpy, plain_square, flag, value)
         assert code == USAGE and flag in output and "No such option" not in output, output
         assert not target.exists()
-
-    def test_a_gallery_fixture_with_features_is_refused(
-        self, tmp_path: Path, gallery: Path
-    ) -> None:
-        code, output = invoke(
-            "river", "--flat", "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
-        )
-        assert code == USAGE and "--features" in output and "No such option" not in output, output
 
     def test_an_unknown_suffix_is_refused_naming_it(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
@@ -688,14 +680,35 @@ class TestCommittedExtract:
         assert code == 0, output
         assert target.read_bytes() == first.read_bytes()
 
+    @pytest.fixture(scope="class")
+    def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
+        """The same run with ``--features-tolerance 0`` (increment 32, test 16:
+        the default band moves borders up to 50 m from the extract's, so I2's
+        oracle, which labels by the extract's polygons, needs the band off)."""
+        tmp = tmp_path_factory.mktemp("extract_band_0")
+        domain = geojson(tmp / "quarter.geojson", quarter_circle())
+        code, output, target = mesh(
+            tmp,
+            KARTVERKET,
+            domain,
+            "--features",
+            str(EXTRACT),
+            "--features-map",
+            "corine",
+            "--features-tolerance",
+            "0",
+            tolerance="10",
+        )
+        assert code == 0, output
+        return read_vtk(target.read_bytes())
+
     @needs_codecs
-    def test_16c_i1_i2_i3_land_cover_codes(self, run: Any) -> None:
+    def test_16c_i1_i2_i3_land_cover_codes(self, run_band_0: VtkFile) -> None:
         """Increment 16c on the real mesh: every cell carries a code, 0 on the
         lines (I3); the spread (I1); the centroid oracle against the extract's
         polygons moved to EPSG:25833 (I2). The extract covers the quarter
-        circle, so no triangle is 0."""
-        vtk, _, _ = run
-        _, _, codes = vtk_labels(vtk, _extract_polygons())
+        circle, so no triangle is 0. On the band-0 run (increment 32)."""
+        _, _, codes = vtk_labels(run_band_0, _extract_polygons())
         assert 0 not in set(codes.tolist())
 
     @needs_codecs

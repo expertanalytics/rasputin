@@ -1,0 +1,3 @@
+uniform-1m refine median s 0.4436 min 0.4399 max 0.4602 triangles 970037 us per triangle 0.457
+ramp refine median s 0.1008 min 0.1005 max 0.1016 triangles 64162 us per triangle 1.572
+ratio ramp / uniform, refine per output triangle 3.44

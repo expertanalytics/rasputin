@@ -33,20 +33,18 @@ import time
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pytest
 
 import tin_engine.cli as cli
-from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import SQUARE, geojson, quarter_circle
+from cli_helpers import SQUARE, USAGE, geojson, help_text, invoke, rough_dem
+from geotiff_fixtures import KARTVERKET, needs_codecs
+from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row
 from test_cli_mesh_stats import mesh
 from test_refine_golden import GOLDEN, digest, refined
 from tin_engine import _core
 from vtkread import VtkFile, read_vtk
 
-ROWS, COLS = 17, 21
 FEET = re.compile(r"(\d+) constraint feet, (\d+) feet refused")  # the pre-25 stderr report
 
 # Recorded from increment 20's CLI; see the module docstring.
@@ -57,10 +55,7 @@ INCREMENT_20 = {
 }
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(20).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
+bumpy = rough_dem(20)
 
 
 @pytest.fixture
@@ -174,9 +169,7 @@ class TestTheFlag:
         assert FEET.search(stderr) is None, stderr  # D7: the counts left stderr
 
     def test_the_help_names_the_flag(self) -> None:
-        code, output = invoke("--help")
-        assert code == 0, output
-        assert "--no-constraint-feet" in output
+        assert "--no-constraint-feet" in help_text("mesh")
 
     def test_the_setting_is_not_in_the_file(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
         """D2: the file carries what a user of the mesh needs; the setting is --stats'."""
@@ -190,19 +183,12 @@ class TestRefusals:
 
     def test_without_tolerance(self, tmp_path: Path, bumpy: Path) -> None:
         target = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(bumpy), "--no-constraint-feet", "--out", str(target))
+        code, output = invoke(
+            "mesh", "--dem", str(bumpy), "--no-constraint-feet", "--out", str(target)
+        )
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its use, not unknown
         assert "--no-constraint-feet needs --tolerance" in output
-        assert not target.exists()
-
-    def test_without_dem(self, tmp_path: Path) -> None:
-        target = tmp_path / "x.vtk"
-        code, output = invoke("catchment", "--flat", "--no-constraint-feet", "--out", str(target))
-        assert code == USAGE, output
-        assert "No such option" not in output  # refused for its use, not unknown
-        assert "applies only with --dem" in output
-        assert "--no-constraint-feet" in output
         assert not target.exists()
 
 
@@ -246,7 +232,7 @@ def _cli_outcome(
     args = ["--dem", str(KARTVERKET), "--tolerance", tolerance, "--out", str(tmp_path / "x.vtk")]
     if case == "quarter_circle":
         args += ["--domain", str(geojson(tmp_path / "quarter.geojson", quarter_circle()))]
-    code, output = invoke(*args, *extra)
+    code, output = invoke("mesh", *args, *extra)
     assert code == 0, output
     (out,) = seen
     return out

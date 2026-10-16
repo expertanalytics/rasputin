@@ -1,7 +1,8 @@
 #include <pybind11/numpy.h>
-#include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+
+#include "numpy_raster.hpp"
 
 #include <terrain/build_info.hpp>
 #include <terrain/cdt/detria_backend.hpp>
@@ -13,7 +14,9 @@
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/hydrology/accumulate.hpp>
 #include <terrain/hydrology/upstream.hpp>
+#include <terrain/land_cover/overlap.hpp>
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
@@ -21,11 +24,17 @@
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
 #include <terrain/refinement/check_points.hpp>
+#include <terrain/refinement/constraint_points.hpp>
+#include <terrain/refinement/line_tolerance.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
+#include <terrain/refinement/slope_tolerance.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
+#include <terrain/vector_simplify/border_collapse.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -42,13 +51,16 @@
 
 namespace py = pybind11;
 
+// The core's own raster view type; another module binds its own tag (numpy_raster.hpp).
+struct CoreRasterTag;
+using BoundRasterView = TaggedRasterView<CoreRasterTag>;
+
 using terrain::Chain;
 using terrain::ChainRole;
 using terrain::EdgeProperties;
 using terrain::IndexedMesh2;
 using terrain::NodedPslg;
 using terrain::Point2;
-using terrain::Point3;
 using terrain::Pslg;
 using terrain::PslgBuilder;
 using terrain::PslgBuildResult;
@@ -63,11 +75,14 @@ using terrain::noding::NodeOptions;
 using terrain::noding::NodeOutcome;
 using terrain::noding::NodeStatus;
 using terrain::refinement::CheckPoints;
+using terrain::refinement::ConstraintCheckPoints;
+using terrain::refinement::LineTolerance;
 using terrain::refinement::PointRefineOutcome;
 using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
 using terrain::refinement::SeamOutcome;
 using terrain::refinement::SeamPoint;
+using terrain::refinement::SlopeTolerance;
 
 namespace {
 
@@ -123,11 +138,10 @@ template <typename T>
                                         {static_cast<py::ssize_t>(sizeof(EdgeProperties))});
 }
 
-// The four accessors of viz/protocols.py's PslgLike, bound once for both graph
-// types. NOT ~25 lines saved: PslgLike is a structural contract with three
-// implementations, and a member added to one hand-written block and forgotten
-// on the other is a drift the protocol suite catches only for whichever type it
-// happens to name. One template makes the two bindings the same object.
+// The four shared accessors (vertices, chains, chain_indices, indices_of),
+// bound once for both graph types. A member added to one hand-written block and
+// forgotten on the other would be a drift between two types Python reads the
+// same way; one template makes the two bindings the same object.
 //
 // The return is deliberately NOT [[nodiscard]], where 05c-noder-wiring.md's
 // sketch of this signature had it: Pslg chains nothing onto it, so the
@@ -270,41 +284,16 @@ py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc) 
     return properties;
 }
 
-// The bound RasterView. The variant picks the cell type once, at construction;
-// `array` is the numpy object the view points into, held so the buffer lives as
-// long as the view does. Destroyed by pybind11 with the GIL held.
-struct BoundRasterView {
-    py::object array;
-    std::variant<terrain::raster::RasterView<float>, terrain::raster::RasterView<double>> view;
-};
-
-// Exact dtype and C order, or nothing: a conversion would be a silent copy the
-// view then outlives, so anything else is a TypeError and the caller converts.
-template <typename T>
-[[nodiscard]] std::optional<BoundRasterView> try_view(const py::object& array,
-                                                      const terrain::raster::RasterGeometry* g,
-                                                      std::optional<double> nodata) {
-    using Exact = py::array_t<T, py::array::c_style>;
-    if (!py::isinstance<Exact>(array))
-        return std::nullopt;
-    const auto a = array.cast<Exact>();
-    if (a.ndim() != 2)
-        throw py::value_error(std::format("raster_view: array must be 2-D, got {} dimensions",
-                                          a.ndim()));
-    // Rows and columns come from the array's own shape, never from an argument.
-    const terrain::raster::RasterGeometry geometry{
-        g->x_min(), g->y_max(), g->delta_x(), g->delta_y(),
-        static_cast<std::size_t>(a.shape(1)), static_cast<std::size_t>(a.shape(0))};
-    // One conversion of the sentinel to T. decode_dem has already refused a
-    // sentinel the cell type cannot hold, so it is exact.
-    const std::optional<T> sentinel =
-        nodata ? std::optional<T>{static_cast<T>(*nodata)} : std::nullopt;
-    return BoundRasterView{array, terrain::raster::RasterView<T>{geometry, a.data(), sentinel}};
-}
-
 // The flood's outcome with the shape its mask is viewed in.
 struct BoundUpstream {
     terrain::hydrology::UpstreamOutcome outcome;
+    std::size_t rows;
+    std::size_t cols;
+};
+
+// The accumulation with the shape its arrays are viewed in.
+struct BoundAccumulate {
+    terrain::hydrology::AccumulateOutcome outcome;
     std::size_t rows;
     std::size_t cols;
 };
@@ -313,11 +302,83 @@ struct BoundUpstream {
 [[nodiscard]] std::vector<Point2> xy_points(const py::object& a, const char* what) {
     const auto xy = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(a);
     if (!xy || xy.ndim() != 2 || xy.shape(1) != 2)
-        throw py::value_error(std::format("reduce_ring: {} must have shape (N, 2)", what));
+        throw py::value_error(std::format("{} must have shape (N, 2)", what));
     std::vector<Point2> out(static_cast<std::size_t>(xy.shape(0)));
     for (std::size_t i = 0; i < out.size(); ++i)
         out[i] = Point2{xy.at(static_cast<py::ssize_t>(i), 0), xy.at(static_cast<py::ssize_t>(i), 1)};
     return out;
+}
+
+using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
+using F64 = py::array_t<double, py::array::c_style | py::array::forcecast>;
+using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
+
+// A start mesh as refine_points and refine_strip take it (15f, D5): the arrays
+// checked, the triangles copied into a mesh, the spans into arrays it holds.
+struct StartMesh {
+    F64 zs;
+    U8 ok;
+    U32 e, k;
+    IndexedMesh2 mesh;
+    std::span<const double> z;
+    std::span<const std::uint8_t> valid;
+    std::span<const std::array<std::uint32_t, 2>> edges;
+    std::span<const std::uint32_t> masks;
+};
+
+// Every refusal is a ValueError whose message starts with `name`.
+[[nodiscard]] StartMesh start_mesh(const std::string& name, const py::object& vertices,
+                                   const py::object& triangles, const py::object& z,
+                                   const py::object& valid, const py::object& edges,
+                                   const py::object& masks) {
+    const auto t = U32::ensure(triangles);
+    StartMesh s{F64::ensure(z), U8::ensure(valid), U32::ensure(edges), U32::ensure(masks), {}, {}, {}, {}, {}};
+    const auto v = F64::ensure(vertices);
+    if (!v || v.ndim() != 2 || v.shape(1) != 2)
+        throw py::value_error(name + ": vertices must be float64 (N, 2)");
+    const auto n = static_cast<std::size_t>(v.shape(0));
+    if (!t || !s.e || !s.k || !s.zs || !s.ok || t.ndim() != 2 || t.shape(1) != 3 || s.zs.ndim() != 1
+        || s.zs.shape(0) != v.shape(0) || s.ok.ndim() != 1 || s.ok.shape(0) != v.shape(0)
+        || s.e.ndim() != 2 || s.e.shape(1) != 2 || s.k.ndim() != 1 || s.k.shape(0) != s.e.shape(0))
+        throw py::value_error(name + ": triangles must be (T, 3) uint32, z and valid (N,), "
+                                     "edges (E, 2) and masks (E,) uint32");
+    const auto nt = static_cast<std::size_t>(t.shape(0)), ne = static_cast<std::size_t>(s.k.shape(0));
+    const std::span<const TriangleIndices> tris{reinterpret_cast<const TriangleIndices*>(t.data()), nt};
+    for (const auto& tri : tris)
+        for (const auto i : tri)
+            if (i >= n)
+                throw py::value_error(name + ": a triangle index is out of range");
+    const auto* xy = reinterpret_cast<const Point2*>(v.data());
+    s.mesh = IndexedMesh2{{xy, xy + n}, {tris.begin(), tris.end()}, std::vector<std::uint8_t>(nt, 0)};
+    s.z = {s.zs.data(), n};
+    s.valid = {s.ok.data(), n};
+    s.edges = {reinterpret_cast<const std::array<std::uint32_t, 2>*>(s.e.data()), ne};
+    s.masks = {s.k.data(), ne};
+    return s;
+}
+
+// Increments 33 and 34: run `f` with the field as the policy, or with today's
+// single tolerance when there is none, and with the slope beside it when there
+// is one. A field or slope built on another raster geometry is refused (33,
+// 9.1, B; 34, 4.5), before the caller releases the GIL.
+template <class F>
+[[nodiscard]] auto with_policy(const LineTolerance* field, const SlopeTolerance* slope,
+                               const terrain::raster::RasterGeometry& g, double tolerance, F&& f) {
+    using terrain::refinement::Sloped;
+    using terrain::refinement::UniformTolerance;
+    if (field && !(field->geometry() == g))
+        throw py::value_error("the tolerance field was built on another raster geometry");
+    if (slope && !(slope->geometry() == g))
+        throw py::value_error("the slope tolerance was built on another raster geometry");
+    const py::gil_scoped_release unlocked;
+    const UniformTolerance uniform{tolerance};
+    if (slope)
+        return field ? f(Sloped<const LineTolerance&>{*field, slope}) : f(Sloped<UniformTolerance>{uniform, slope});
+    return field ? f(*field) : f(uniform);
+}
+
+[[nodiscard]] terrain::raster::RasterGeometry geometry_of(const BoundRasterView& raster) {
+    return std::visit([](const auto& v) { return v.geometry(); }, raster.view);
 }
 
 }  // namespace
@@ -330,95 +391,11 @@ PYBIND11_MODULE(_core, m) {
     // does not fit -- a parallel refinement pass holding the GIL would
     // serialise every worker -- so it, and anything as long-running that lands
     // later, is wrapped in py::gil_scoped_release.
-    m.doc() = "C++20 geometry primitives and the constrained Delaunay\n"
-            "triangulator for the rasputin terrain engine.";
+    m.doc() = "The C++20 constrained Delaunay triangulator and mesh\n"
+            "refinement for the rasputin terrain engine.";
     // Which standard-library checks this build carries, as the library itself
     // reports them (terrain/build_info.hpp; increment 24).
     m.attr("hardening") = std::string(terrain::stdlib_hardening());
-
-    py::class_<Point2>(m, "Point2", R"doc(
-A 2D point with double-precision coordinates.
-
-Immutable: the coordinates are read-only because the type is hashable, and a
-mutable hashable value silently corrupts any set or dict holding it.
-
-Equality is exact, component-wise floating-point comparison, so NaN coordinates
-never compare equal and +0.0 equals -0.0. Hashing is consistent with that.
-Coordinate de-duplication that must tolerate floating-point drift should snap
--round upstream rather than rely on this.
-)doc")
-        .def(py::init([](double x, double y) { return Point2{x, y}; }),
-             py::arg("x") = 0.0, py::arg("y") = 0.0,
-             "Construct from coordinates, defaulting to the origin.")
-        .def_readonly("x", &Point2::x, "The x coordinate (read-only).")
-        .def_readonly("y", &Point2::y, "The y coordinate (read-only).")
-        .def(py::self == py::self, "Exact component-wise equality.")
-        .def(py::self != py::self, "Exact component-wise inequality.")
-        .def(py::self + py::self, "Component-wise sum.")
-        .def(py::self - py::self, "Component-wise difference.")
-        .def(py::self * double(), "Scale by a scalar.")
-        .def(double() * py::self, "Scale by a scalar.")
-        .def(py::self / double(), "Divide by a scalar. Division by zero yields inf or nan.")
-        .def(-py::self, "Component-wise negation.")
-        // Mirrors the std::formatter specialization in point.hpp, so the C++
-        // and Python renderings of a point cannot drift apart.
-        .def("__repr__", [](const Point2& p) { return std::format("{}", p); },
-             "Render as Point2(x, y), matching the C++ std::formatter output.")
-        .def("__hash__", [](const Point2& p) { return std::hash<Point2>{}(p); },
-             "Hash of the coordinate pair, consistent with equality.");
-
-    py::class_<Point3>(m, "Point3", R"doc(
-A 3D point with double-precision coordinates.
-
-Immutable and hashable on the same terms as Point2: exact component-wise
-equality, read-only coordinates, and a hash consistent with equality.
-)doc")
-        .def(py::init([](double x, double y, double z) { return Point3{x, y, z}; }),
-             py::arg("x") = 0.0, py::arg("y") = 0.0, py::arg("z") = 0.0,
-             "Construct from coordinates, defaulting to the origin.")
-        .def_readonly("x", &Point3::x, "The x coordinate (read-only).")
-        .def_readonly("y", &Point3::y, "The y coordinate (read-only).")
-        .def_readonly("z", &Point3::z, "The z coordinate (read-only).")
-        .def(py::self == py::self, "Exact component-wise equality.")
-        .def(py::self != py::self, "Exact component-wise inequality.")
-        .def(py::self + py::self, "Component-wise sum.")
-        .def(py::self - py::self, "Component-wise difference.")
-        .def(py::self * double(), "Scale by a scalar.")
-        .def(double() * py::self, "Scale by a scalar.")
-        .def(py::self / double(), "Divide by a scalar. Division by zero yields inf or nan.")
-        .def(-py::self, "Component-wise negation.")
-        .def("__repr__", [](const Point3& p) { return std::format("{}", p); },
-             "Render as Point3(x, y, z), matching the C++ std::formatter output.")
-        .def("__hash__", [](const Point3& p) { return std::hash<Point3>{}(p); },
-             "Hash of the coordinate triple, consistent with equality.");
-
-    // Overloaded rather than method-bound: dot and cross are symmetric binary
-    // operations, and mixing dimensions is a TypeError rather than a coercion.
-    m.def("dot", py::overload_cast<const Point2&, const Point2&>(&terrain::dot),
-          py::arg("a"), py::arg("b"),
-          R"doc(
-Dot product of two points of the same dimension.
-
-Accepts two Point2 or two Point3. Mixing dimensions raises TypeError rather
-than coercing.
-)doc");
-    m.def("dot", py::overload_cast<const Point3&, const Point3&>(&terrain::dot),
-          py::arg("a"), py::arg("b"), "Dot product of two Point3.");
-
-    m.def("cross", py::overload_cast<const Point2&, const Point2&>(&terrain::cross),
-          py::arg("a"), py::arg("b"),
-          R"doc(
-Cross product, whose result type depends on the dimension.
-
-For two Point2 this returns a float: the scalar z-component of the 3D cross
-product, i.e. a.x*b.y - a.y*b.x. Its sign gives the orientation of the turn
-from a to b. For two Point3 it returns a Point3 orthogonal to both.
-
-Mixing dimensions raises TypeError.
-)doc");
-    m.def("cross", py::overload_cast<const Point3&, const Point3&>(&terrain::cross),
-          py::arg("a"), py::arg("b"),
-          "Cross product of two Point3, returning a Point3 orthogonal to both.");
 
     // ----------------------------------------------------------------------
     // The CDT surface. docs/increments/06-cdt-viewer.md, "The binding
@@ -828,18 +805,7 @@ Built by raster_view(), not constructible from Python. Holds the array alive.
 
     m.def(
         "raster_view",
-        [](const py::object& array, double x_min, double y_max, double delta_x, double delta_y,
-           std::optional<double> nodata) {
-            // Placeholder cols/rows of 1: only the affine half is read from it,
-            // and the RasterGeometry constructor validates the deltas here.
-            const terrain::raster::RasterGeometry affine{x_min, y_max, delta_x, delta_y, 1, 1};
-            if (auto v = try_view<float>(array, &affine, nodata))
-                return std::move(*v);
-            if (auto v = try_view<double>(array, &affine, nodata))
-                return std::move(*v);
-            throw py::type_error("raster_view: array must be a C-contiguous float32 or float64 "
-                                 "numpy array; convert it explicitly rather than have it copied");
-        },
+        &rasputin_bindings::raster_view<CoreRasterTag>,
         py::arg("array"), py::kw_only(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"),
         py::arg("delta_y"), py::arg("nodata") = py::none(), R"doc(
 View a row-major DEM array as a raster without copying it.
@@ -955,6 +921,15 @@ unless ok().
         .def_readonly("flips", &RefineOutcome::flips, "Lawson flips, the start mesh's included.")
         .def_readonly("max_error", &RefineOutcome::max_error,
                       "Largest |z - plane| over triangles with three valid vertices.")
+        .def_readonly("max_error_near", &RefineOutcome::max_error_near,
+                      "max_error over the triangles a field holds to its near value; max_error without one.")
+        .def_readonly("max_slope_share", &RefineOutcome::max_slope_share,
+                      "The largest error as a share of the tolerance its slope allows; 0.0 without a slope.")
+        .def_property_readonly(
+            "slope_nodes",
+            [](const RefineOutcome& o) { return py::make_tuple(o.slope_nodes.valid, o.slope_nodes.tightened); },
+            "(valid DEM nodes inside the mesh, those held below the general tolerance by their slope); "
+            "(0, 0) without a slope.")
         .def_readonly("uncovered", &RefineOutcome::uncovered,
                       "Valid DEM nodes left inside triangles with a NoData vertex.")
         .def_readonly("carved", &RefineOutcome::carved,
@@ -974,13 +949,72 @@ unless ok().
         .def_readonly("feet", &RefineOutcome::feet,
                       "Feet inserted on constraint segments, counted in inserted.")
         .def_readonly("feet_refused", &RefineOutcome::feet_refused,
-                      "Feet refused, their node inserted instead.");
+                      "Feet refused, their node inserted instead.")
+        .def_readonly("quality_feet", &RefineOutcome::quality_feet,
+                      "Feet the start-quality pass inserted, in neither quality_inserted nor inserted.")
+        .def_readonly("quality_no_gain", &RefineOutcome::quality_no_gain,
+                      "Start-quality points refused for lowering the worst angle, in quality_skipped.")
+        .def_readonly("quality_line_splits", &RefineOutcome::quality_line_splits,
+                      "Constraint lines the start-quality pass split, in no other count.");
+
+    py::class_<LineTolerance>(m, "LineTolerance", R"doc(
+A tolerance that varies with distance to lines (increment 33): near on them,
+far from end metres out, linear from start to end; distances less margin.
+Built on a view's geometry, with its own copy of the segments.
+)doc")
+        .def(py::init([](const BoundRasterView& raster, const py::object& segments, double near, double far,
+                         double start, double end, double margin) {
+                 const auto a = F64::ensure(segments);
+                 if (!a || a.ndim() != 2 || a.shape(1) != 4)
+                     throw py::value_error("LineTolerance: segments must be float64 (K, 4)");
+                 const std::span<const std::array<double, 4>> rows{
+                     reinterpret_cast<const std::array<double, 4>*>(a.data()), static_cast<std::size_t>(a.shape(0))};
+                 std::string why;
+                 auto f = LineTolerance::make(geometry_of(raster), rows, {near, far, start, end, margin}, why);
+                 if (!f)
+                     throw py::value_error("LineTolerance: " + why);
+                 return std::move(*f);
+             }),
+             py::arg("view"), py::arg("segments"), py::arg("near"), py::arg("far"), py::arg("start"),
+             py::arg("end"), py::arg("margin"), R"doc(
+segments (K, 4) float64, x0 y0 x1 y1 in the view's CRS; K may be 0. A ramp
+value out of its bound, or a coordinate that is not finite, is a ValueError
+naming it.
+)doc");
+
+    py::class_<SlopeTolerance>(m, "SlopeTolerance", R"doc(
+A tolerance that follows the slope (increment 34): every DEM node of the view
+held to near from end degrees of Horn's slope up, to far up to start degrees,
+linear between. Computes the slope of every node once, on the view's geometry.
+)doc")
+        .def(py::init([](const BoundRasterView& raster, double near, double far, double start, double end,
+                         unsigned threads) {
+                 std::string why;
+                 std::optional<SlopeTolerance> s;
+                 {
+                     const py::gil_scoped_release unlocked;  // `raster` holds the buffer
+                     s = std::visit([&](const auto& v) { return SlopeTolerance::make(v, {near, far, start, end}, threads, why); },
+                                    raster.view);
+                 }
+                 if (!s)
+                     throw py::value_error("SlopeTolerance: " + why);
+                 return std::move(*s);
+             }),
+             py::arg("view"), py::arg("near"), py::arg("far"), py::arg("start"), py::arg("end"), py::arg("threads") = 0,
+             R"doc(
+near and far in metres, start and end in degrees; 0 < near <= far and
+0 <= start <= end < 90, all finite, else a ValueError naming the bound.
+threads only splits the work (0: all cores). Releases the GIL.
+)doc")
+        .def("histogram", &SlopeTolerance::histogram,
+             "256 counts of nodes per class (half degrees, rounded up); entry 255 counts NoData.");
 
     m.def(
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
-           bool constraint_feet, std::uint32_t frozen_mask) {
+           bool constraint_feet, std::uint32_t frozen_mask, double min_gain_deg, const LineTolerance* field,
+           const SlopeTolerance* slope) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -992,19 +1026,21 @@ unless ok().
                 reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), n};
             const std::span<const std::uint32_t> bits{k.data(), n};
             const terrain::refinement::RefineOptions options{tolerance, threads, min_angle_deg,
-                                                             constraint_feet, frozen_mask};
-            // Every buffer read below is held by a local or by `raster`, and
-            // the outcome is converted after the lock returns.
-            const py::gil_scoped_release unlocked;
-            return std::visit(
-                [&](const auto& v) {
-                    return terrain::refinement::refine(v, mesh, pairs, bits, options);
-                },
-                raster.view);
+                                                             constraint_feet, frozen_mask, min_gain_deg};
+            // Every buffer read below is held by a local, `raster` or `field`,
+            // and the outcome is converted after the lock returns.
+            return with_policy(field, slope, geometry_of(raster), tolerance, [&](const auto& policy) {
+                return std::visit(
+                    [&](const auto& v) {
+                        return terrain::refinement::refine(v, mesh, pairs, bits, options, policy);
+                    },
+                    raster.view);
+            });
         },
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
         py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
-        py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, R"doc(
+        py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, py::arg("min_gain_deg") = -1.0,
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -1017,6 +1053,13 @@ meet that minimum angle or a stated reason prevents it; 0 is off.
 constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
 frozen_mask: no vertex goes on an edge whose mask meets it (a seam); 0 is off.
+min_gain_deg >= 0: the start-quality pass adds a point only if the smallest
+angle around it rises by at least this many degrees, and, with
+constraint_feet, splits a line a point lies beyond; negative is off.
+field, a LineTolerance built on this view's geometry, sets each triangle's
+tolerance in place of `tolerance`; another geometry is a ValueError.
+slope, a SlopeTolerance built on this view's geometry, holds every DEM node
+to the tolerance of its own slope as well; another geometry is a ValueError.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");
@@ -1054,8 +1097,9 @@ in outside; points at one stored position after the first in duplicates.
         .def_property_readonly("outside", &CheckPoints::outside, "Points dropped as outside or not finite.");
 
     py::class_<PointRefineOutcome, RefineOutcome>(m, "PointRefineOutcome", R"doc(
-What refine_points returned: RefineOutcome's fields, max_error over check
-points, plus the check points that coincide with a start vertex.
+What refine_points or refine_strip returned: RefineOutcome's fields, max_error
+over check points (refine_strip: over DEM nodes in the triangles it rescanned),
+the check points that coincide with a start vertex, and the edge strip's figures.
 )doc")
         .def_readonly("coincident", &PointRefineOutcome::coincident,
                       "Check points at a start vertex, never inserted.")
@@ -1064,56 +1108,89 @@ points, plus the check points that coincide with a start vertex.
         .def_readonly("on_frozen", &PointRefineOutcome::on_frozen,
                       "Check points on a frozen edge, never inserted, each counted once.")
         .def_readonly("on_frozen_max_error", &PointRefineOutcome::on_frozen_max_error,
-                      "Their largest |z - the edge's linear z|, edges with two valid ends.");
+                      "Their largest |z - the edge's linear z|, edges with two valid ends.")
+        .def_readonly("strip_points", &PointRefineOutcome::strip_points, "The strip's points, 0 without one.")
+        .def_readonly("strip_inserted", &PointRefineOutcome::strip_inserted, "Strip points inserted.")
+        .def_readonly("strip_max_error", &PointRefineOutcome::strip_max_error,
+                      "Largest strip-point error at the end, refused points excluded.")
+        .def_readonly("strip_refused", &PointRefineOutcome::strip_refused, "Strip points refused.")
+        .def_readonly("strip_refused_max_error", &PointRefineOutcome::strip_refused_max_error,
+                      "Their largest error at the end.")
+        .def_readonly("nodes_inserted", &PointRefineOutcome::nodes_inserted,
+                      "refine_strip: DEM nodes its rescan inserted; 0 in refine_points.")
+        .def_readonly("feet_fallback", &PointRefineOutcome::feet_fallback,
+                      "Points put onto a constraint at their foot and later inserted as themselves.");
+
+    py::class_<ConstraintCheckPoints>(m, "ConstraintCheckPoints", R"doc(
+The edge strip's check points, filed by constraint edge and by the parameter
+along it. Built only by constraint_check_points(); read-only.
+)doc")
+        .def_property_readonly("size", &ConstraintCheckPoints::size, "Points kept.")
+        .def_property_readonly("no_data", &ConstraintCheckPoints::no_data, "Points dropped: NoData in their cell.")
+        .def_property_readonly("duplicates", &ConstraintCheckPoints::duplicates,
+                               "Points dropped: the same position or parameter as a neighbour.")
+        .def_property_readonly("edge_count", &ConstraintCheckPoints::edge_count, "Edges filed.");
+
+    m.def(
+        "constraint_check_points",
+        [](const BoundRasterView& raster, const py::object& vertices, const py::object& edges) {
+            const auto v = F64::ensure(vertices);
+            const auto e = U32::ensure(edges);
+            if (!v || !e || v.ndim() != 2 || v.shape(1) != 2 || e.ndim() != 2 || e.shape(1) != 2)
+                throw py::value_error("constraint_check_points: vertices must be float64 (N, 2) and "
+                                      "edges (E, 2) uint32");
+            const std::span<const Point2> xy{reinterpret_cast<const Point2*>(v.data()),
+                                             static_cast<std::size_t>(v.shape(0))};
+            const std::span<const std::array<std::uint32_t, 2>> pairs{
+                reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), static_cast<std::size_t>(e.shape(0))};
+            const py::gil_scoped_release unlocked;
+            return std::visit(
+                [&](const auto& g) { return terrain::refinement::constraint_check_points(g, xy, pairs); },
+                raster.view);
+        },
+        py::arg("view"), py::arg("vertices"), py::arg("edges"), R"doc(
+The edge strip (15f, D2): every crossing of a constraint edge with a grid line,
+and the midpoint between neighbouring crossings, an edge's ends included, with
+z from the DEM. vertices (N, 2) in the DEM's frame; edges (E, 2) index them.
+A refused input is a ValueError. Releases the GIL.
+)doc");
 
     m.def(
         "refine_points",
         [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
            const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
-           double tolerance, unsigned threads, std::uint32_t frozen_mask) {
-            using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
-            const auto t = U32::ensure(triangles), e = U32::ensure(edges), k = U32::ensure(masks);
-            const auto zs = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(z);
-            const auto ok = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>::ensure(valid);
-            const auto v = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(vertices);
-            if (!v || v.ndim() != 2 || v.shape(1) != 2)
-                throw py::value_error("refine_points: vertices must be float64 (N, 2)");
-            const auto n = v.shape(0);
-            std::vector<Point2> xy{reinterpret_cast<const Point2*>(v.data()),
-                                   reinterpret_cast<const Point2*>(v.data()) + n};
-            if (!t || !e || !k || !zs || !ok || t.ndim() != 2 || t.shape(1) != 3 || zs.ndim() != 1
-                || zs.shape(0) != n || ok.ndim() != 1 || ok.shape(0) != n || e.ndim() != 2 || e.shape(1) != 2
-                || k.ndim() != 1 || k.shape(0) != e.shape(0))
-                throw py::value_error("refine_points: triangles must be (T, 3) uint32, z and valid (N,), "
-                                      "edges (E, 2) and masks (E,) uint32");
-            const auto nt = static_cast<std::size_t>(t.shape(0)), ne = static_cast<std::size_t>(k.shape(0));
-            const std::span<const TriangleIndices> tris{reinterpret_cast<const TriangleIndices*>(t.data()), nt};
-            for (const auto& tri : tris)
-                for (const auto i : tri)
-                    if (i >= xy.size())
-                        throw py::value_error("refine_points: a triangle index is out of range");
-            const IndexedMesh2 mesh{std::move(xy), {tris.begin(), tris.end()}, std::vector<std::uint8_t>(nt, 0)};
-            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
-            // Every buffer read below is held by a local or by `points`, and
-            // the outcome is converted after the lock returns.
-            const py::gil_scoped_release unlocked;
-            return terrain::refinement::refine_points(
-                points, mesh, {zs.data(), static_cast<std::size_t>(n)}, {ok.data(), static_cast<std::size_t>(n)},
-                {reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), ne}, {k.data(), ne}, options);
+           double tolerance, unsigned threads, const ConstraintCheckPoints* strip,
+           std::uint32_t frozen_mask, bool constraint_feet, const LineTolerance* field,
+           const SlopeTolerance* slope) {
+            const auto s = start_mesh("refine_points", vertices, triangles, z, valid, edges, masks);
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
+                                                                  constraint_feet};
+            // Every buffer read below is held by `s`, `points`, `strip` or
+            // `field`, and the outcome is converted after the lock returns.
+            return with_policy(field, slope, points.geometry(), tolerance, [&](const auto& policy) {
+                return terrain::refinement::refine_points(points, s.mesh, s.z, s.valid, s.edges, s.masks, options,
+                                                          policy, strip);
+            });
         },
         py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
         py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0,
-        py::arg("frozen_mask") = 0u, R"doc(
+        py::arg("strip") = py::none(), py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
 Refine phase 1's mesh against a frozen CheckPoints store until every check
 point is within tolerance of the plane of each triangle holding it.
 
 vertices (N, 2) in the store's frame, triangles (T, 3) counter-clockwise, z
 and valid (N,) per vertex, edges (E, 2) and masks (E,) its constraint edges.
-Inserted vertices are check points with their own z. The output does not
-depend on threads (0: all cores). A refused input comes back as a status; a
-mis-shaped array is a ValueError, an unfrozen store a RuntimeError.
+Inserted vertices are check points with their own z. strip, the edge strip on
+the same grid, joins the same loop. The output does not depend on threads (0:
+all cores). A refused input comes back as a status; a mis-shaped array is a
+ValueError, an unfrozen store or a strip that does not fit a RuntimeError.
 A check point on an edge whose mask meets frozen_mask is not inserted; it
 is counted in on_frozen with its error.
+constraint_feet puts a check point close to a constraint segment onto it
+first, at its foot; off by default.
+field and slope as refine's, built on the store's geometry; a check point is
+held to the slope of the steepest valid corner of its cell.
 Releases the GIL.
 )doc");
 
@@ -1168,6 +1245,39 @@ a == b, or an end outside the node rectangle is a ValueError.
 Releases the GIL.
 )doc");
 
+    m.def(
+        "refine_strip",
+        [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
+           const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
+           const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask,
+           bool constraint_feet, const LineTolerance* field, const SlopeTolerance* slope) {
+            const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask,
+                                                                  constraint_feet};
+            // Every buffer read below is held by `s`, `raster`, `strip` or `field`.
+            return with_policy(field, slope, geometry_of(raster), tolerance, [&](const auto& policy) {
+                return std::visit(
+                    [&](const auto& g) {
+                        return terrain::refinement::refine_strip(g, strip, s.mesh, s.z, s.valid, s.edges, s.masks,
+                                                                 options, policy);
+                    },
+                    raster.view);
+            });
+        },
+        py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
+        py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
+        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, py::arg("constraint_feet") = false,
+        py::arg("field") = py::none(), py::arg("slope") = py::none(), R"doc(
+The edge strip on the projected path (15f, D4): refine's output, refined until
+every strip point is within tolerance, with the DEM's nodes rescanned in every
+triangle the run writes. Arrays as refine_points'. A refused input comes back
+as a status; a mis-shaped array is a ValueError, a strip that does not fit a
+RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
+strip point on such an edge is a RuntimeError (filter the strip's edges).
+constraint_feet, field and slope as refine_points'.
+Releases the GIL.
+)doc");
+
     py::class_<BoundUpstream>(m, "UpstreamOutcome", R"doc(
 What upstream() returned: the catchment's node mask, its size and bounds, and
 whether it may continue past the window's edge or past NoData.
@@ -1219,6 +1329,49 @@ seed is (rows, cols), non-zero (or True) for a seed; any other shape is a
 ValueError. NoData is never in. Releases the GIL.
 )doc");
 
+    // A (rows, cols) read-only view of one of the outcome's arrays, owned by it.
+    const auto grid_of = [](auto member) {
+        return [member](const py::object& self) {
+            const auto& b = self.cast<const BoundAccumulate&>();
+            const auto& v = b.outcome.*member;
+            const auto cols = static_cast<py::ssize_t>(b.cols);
+            return readonly_view(self, v.data(), {static_cast<py::ssize_t>(b.rows), cols},
+                                 {cols * static_cast<py::ssize_t>(sizeof(v[0])),
+                                  static_cast<py::ssize_t>(sizeof(v[0]))});
+        };
+    };
+    using terrain::hydrology::AccumulateOutcome;
+    py::class_<BoundAccumulate>(m, "AccumulateOutcome", R"doc(
+What accumulate() returned: per node, how many nodes drain through it, whether
+that catchment touches the window's edge or NoData, and where the node drains.
+)doc")
+        .def_property_readonly("count", grid_of(&AccumulateOutcome::count),
+                               "Read-only (rows, cols) uint32: 0 on NoData, else the nodes "
+                               "draining through the node, itself included.")
+        .def_property_readonly("reach", grid_of(&AccumulateOutcome::reach),
+                               "Read-only (rows, cols) uint8: bit 0 the catchment touches the "
+                               "window's edge, bit 1 it touches NoData.")
+        .def_property_readonly("flow_to", grid_of(&AccumulateOutcome::flow_to),
+                               "Read-only (rows, cols) uint8: 3*(dr+1)+(dc+1) of the neighbour "
+                               "the node drains to; 255 for an outlet and on NoData.");
+
+    m.def(
+        "accumulate",
+        [](const BoundRasterView& raster) {
+            const auto g = std::visit([](const auto& v) { return v.geometry(); }, raster.view);
+            // Every buffer read below is held by `raster`.
+            const py::gil_scoped_release unlocked;
+            return BoundAccumulate{
+                std::visit([](const auto& v) { return terrain::hydrology::accumulate(v); },
+                           raster.view),
+                g.rows(), g.cols()};
+        },
+        py::arg("view"), R"doc(
+Flow accumulation from the same flood as upstream(): for every node, the count,
+the two reach bits and the node's flooder (the neighbour it drains to).
+2^32 nodes or more is a ValueError. Releases the GIL.
+)doc");
+
     using terrain::vector_simplify::ReduceOutcome;
     using terrain::vector_simplify::ReduceStatus;
     py::enum_<ReduceStatus>(m, "ReduceStatus", R"doc(
@@ -1251,8 +1404,8 @@ What reduce_ring returned: the reduced ring, open, a status, and the counts.
     m.def(
         "reduce_ring",
         [](const py::object& ring, double tolerance, const py::object& keep) {
-            const std::vector<Point2> points = xy_points(ring, "ring");
-            const std::vector<Point2> kept = xy_points(keep, "keep");
+            const std::vector<Point2> points = xy_points(ring, "reduce_ring: ring");
+            const std::vector<Point2> kept = xy_points(keep, "reduce_ring: keep");
             const py::gil_scoped_release unlocked;
             return terrain::vector_simplify::reduce_ring<terrain::pred::DefaultKernel>(
                 points, tolerance, kept);
@@ -1264,5 +1417,124 @@ keep-points inside (area-preserving segment collapse, exact crossing tests).
 ring is (N, 2) and keep (K, 2), float64-convertible; any other shape is a
 ValueError. Tolerance 0 only drops exactly collinear vertices. A refused input
 comes back as a status. Releases the GIL.
+)doc");
+
+    using terrain::vector_simplify::BorderCounts;
+    using terrain::vector_simplify::BorderOutcome;
+    using terrain::vector_simplify::BorderStatus;
+    py::enum_<BorderStatus>(m, "BorderStatus", R"doc(
+Why simplify_borders simplified the rings or did not: Ok, or a refusal of the input.
+)doc")
+        .value("Ok", BorderStatus::Ok)
+        .value("InvalidBand", BorderStatus::InvalidBand)
+        .value("BadRings", BorderStatus::BadRings)
+        .value("InvalidClearance", BorderStatus::InvalidClearance);
+
+    py::class_<BorderCounts>(m, "BorderCounts", R"doc(
+What simplify_borders found and did: junctions, borders (fixed ones included),
+collinear vertices dropped, collapses made, collapses refused, and placements
+skipped for the clearance.
+)doc")
+        .def_readonly("junctions", &BorderCounts::junctions)
+        .def_readonly("borders", &BorderCounts::borders)
+        .def_readonly("fixed_borders", &BorderCounts::fixed_borders)
+        .def_readonly("collinear", &BorderCounts::collinear)
+        .def_readonly("collapses", &BorderCounts::collapses)
+        .def_readonly("rejected_crossing", &BorderCounts::rejected_crossing)
+        .def_readonly("rejected_side", &BorderCounts::rejected_side)
+        .def_readonly("rejected_clearance", &BorderCounts::rejected_clearance)
+        .def_readonly("skipped_placements", &BorderCounts::skipped_placements);
+
+    py::class_<BorderOutcome>(m, "BorderOutcome", R"doc(
+What simplify_borders returned: the rings, open, back to back, their starts, a
+status and the counts.
+)doc")
+        .def_property_readonly(
+            "points",
+            [](const py::object& self) {
+                return point_view(self, self.cast<const BorderOutcome&>().points);
+            },
+            "Read-only (M, 2) float64: every ring, open, back to back.")
+        .def_property_readonly(
+            "ring_starts",
+            [](const py::object& self) {
+                const auto& starts = self.cast<const BorderOutcome&>().ring_starts;
+                return readonly_view<std::uint64_t>(self, starts.data(),
+                                                    {static_cast<py::ssize_t>(starts.size())},
+                                                    {static_cast<py::ssize_t>(sizeof(std::uint64_t))});
+            },
+            "Read-only (R + 1,) uint64: ring k is points[starts[k]:starts[k + 1]].")
+        .def_readonly("status", &BorderOutcome::status)
+        .def_readonly("counts", &BorderOutcome::counts);
+
+    m.def(
+        "simplify_borders",
+        [](const py::object& points, const py::object& ring_starts, double band, double clearance) {
+            const std::vector<Point2> xy = xy_points(points, "simplify_borders: points");
+            const auto starts = py::array_t<std::uint64_t, py::array::c_style | py::array::forcecast>::ensure(ring_starts);
+            if (!starts || starts.ndim() != 1)
+                throw py::value_error("simplify_borders: ring_starts must be one-dimensional, shape (R + 1,)");
+            const std::vector<std::uint64_t> s(starts.data(), starts.data() + starts.size());
+            const py::gil_scoped_release unlocked;
+            return terrain::vector_simplify::simplify_borders<terrain::pred::DefaultKernel>(xy, s, band, clearance);
+        },
+        py::arg("points"), py::arg("ring_starts"), py::arg("band"), py::arg("clearance") = 0.0, R"doc(
+Simplify the borders of a coverage within a band, keeping every ring's area,
+the junctions and the outer boundary (area-preserving segment collapse, exact
+crossing and side tests).
+
+points is (N, 2) float64-convertible and ring_starts (R + 1,) unsigned; any
+other shape is a ValueError. Band 0 returns the input. No new vertex or edge
+comes closer than clearance to a vertex or edge it does not share an end with.
+A refused input comes back as a status. Releases the GIL.
+)doc");
+
+    m.def(
+        "class_areas",
+        [](const py::object& corners, const py::object& classes, const py::object& row_area,
+           unsigned threads) {
+            using Exact = py::array_t<std::uint8_t, py::array::c_style>;
+            const auto xy = F64::ensure(corners);
+            if (!xy || xy.ndim() != 3 || xy.shape(1) != 3 || xy.shape(2) != 2)
+                throw py::value_error("class_areas: corners must be float64 of shape (T, 3, 2)");
+            if (!py::isinstance<Exact>(classes))
+                throw py::type_error("class_areas: classes must be a C-contiguous uint8 array; "
+                                     "convert it explicitly rather than have it copied");
+            const auto grid = classes.cast<Exact>();
+            if (grid.ndim() != 2)
+                throw py::value_error("class_areas: classes must be 2-D (rows, cols)");
+            const auto weights = F64::ensure(row_area);
+            if (!weights || weights.ndim() != 1)
+                throw py::value_error("class_areas: row_area must be float64 of shape (rows,)");
+            const terrain::raster::RasterGeometry geometry{
+                0.0, 0.0, 1.0, 1.0, static_cast<std::size_t>(grid.shape(1)), static_cast<std::size_t>(grid.shape(0))};
+            const terrain::raster::RasterView<std::uint8_t> view{geometry, grid.data(), std::nullopt};
+            const std::span<const Point2> pts{reinterpret_cast<const Point2*>(xy.data()), static_cast<std::size_t>(3 * xy.shape(0))};
+            const std::span<const double> rows{weights.data(), static_cast<std::size_t>(weights.shape(0))};
+            terrain::land_cover::ClassAreas out;
+            {
+                const py::gil_scoped_release unlocked;  // every buffer is held by a local
+                out = terrain::land_cover::class_areas(pts, view, rows, threads);
+            }
+            const auto copy = [](const auto& v) {
+                py::array_t<typename std::decay_t<decltype(v)>::value_type> a(static_cast<py::ssize_t>(v.size()));
+                std::copy(v.begin(), v.end(), a.mutable_data());
+                return a;
+            };
+            return py::make_tuple(copy(out.offsets), copy(out.classes), copy(out.areas));
+        },
+        py::arg("corners"), py::arg("classes"), py::arg("row_area"), py::kw_only(), py::arg("threads") = 0, R"doc(
+The exact area of each land-cover class inside each triangle (increment 26b),
+as (offsets, classes, areas): uint32 (T + 1,), uint8 and float64 of one
+length. Triangle t's entries are [offsets[t], offsets[t + 1]), classes
+ascending, areas in the unit of row_area and positive.
+
+corners is (T, 3, 2) in the grid's index space: x the column, y the row (y
+grows downward), cell (r, c) the square [c, c + 1] x [r, r + 1]. classes is a
+C-contiguous 2-D uint8 array viewed without a copy (another dtype or layout is
+a TypeError); row_area the area of one cell of each row. A corner past the
+closed window [0, cols] x [0, rows] is a ValueError saying outside; so is a
+zero-area triangle, a non-finite corner or a wrong shape. threads only splits
+the work (0: all cores); the result does not depend on it. Releases the GIL.
 )doc");
 }

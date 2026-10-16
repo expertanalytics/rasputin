@@ -1,6 +1,8 @@
 # Increment 20 — a quality start: minimum-angle Steiner nodes before DEM refinement
 
-Status: **landed with 20b as interim; C1-C3 open, carried to 20c.** Red
+Status: **landed with 20b as interim; C1-C3 open, carried to 20c. Fix: the pass
+inserted NoData nodes that trim then removed (wasted work); it now skips them,
+implemented `0d60c69` and accepted `13aeb4f`, 11 lines (end of this file).** Red
 `f7ae381`; green `affc955`, `a66632c` (ASCII wording), `f5489ab`. The build
 ran on the main session's provisional picks C1 (a), C2 (a) 25° and C3 (a).
 Ola reviewed them on 2026-09-26 and accepted none as final; see "Ola's
@@ -256,6 +258,8 @@ needs `split_edge` to take a `MeshVertex`, and its output z is bilinear.
 
 ### R9. NoData
 
+**Replaced by "Fix: the start-quality pass skips NoData nodes" (end of this
+file): the pass no longer inserts a NoData node.** As first ruled:
 The pass is geometry only (R2), so it can insert a NoData node. That vertex is
 invalid, its triangles are void, and 14 R6's carving handles them, as it does
 for an off-node start vertex in a NoData cell (16 R2). The quarter circle has
@@ -519,3 +523,164 @@ a minimum insertion distance scaled by z_tol / |grad z|).
 - Segment splitting (C1 b), a size bound (C2 d), the angle during refinement
   (C3 b), and R7's slivers (C4).
 - Increment 19's carving, parked by Ola.
+
+## Fix: the start-quality pass skips NoData nodes
+
+Designed by `@architect`, 2026-10-04, on branch `worktree-20-nodata` off
+master `2060f14`. Found by 23c-2's DC10 (`23-basin-scale.md`, "23c-2
+stopped at dbbe1c6", ruling 2). One small PR, independent of 23c in order.
+
+### The defect
+
+`mesh::improve` (`include/terrain/mesh/quality.hpp`) "knows no raster and
+reads no height" (its header). For a bad triangle it inserts the DEM node
+nearest the circumcentre, whatever that node's value. R9 accepted this:
+"That vertex is invalid, its triangles are void, and 14 R6's carving
+handles them".
+
+**Corrected after the red step (309b23f, 9a372fb).** This section first
+said the insert left a hole on every path, and that the uncut path had the
+same defect. `@tester` measured otherwise. On the uncut path, refine's
+carving surrounds the NoData vertex with valid neighbours before trim, and
+trim then removes it: 0 of 220 valid nodes uncovered on the projected
+path, and 0 on DC10's reprojected scene run uncut. So uncut, the defect is
+waste, not a hole. The pass inserts a vertex that trim always removes
+(`nodata_vertices_removed` 1 where it should be 0), and refine spends
+nodes closing around it. DC10's "hole" in 23c-2 was traced by
+`@developer` to this same insert. The seam fans make the pass insert 34 to
+49 nodes per piece, one of them on a NoData node. The carving closes, and
+what the check reports is a micrometre rounding of phase-2 vertices at the
+edge of the trimmed star, a 15c question (`23-basin-scale.md`, point 10,
+and B18). So this fix does lift DC10's `xfail`.
+
+**Still worth shipping on its own**, at about 15 lines. The start pass is
+there to improve angles, not to put vertices where trim will remove them,
+and skipping the node is the pass's own rule for every other candidate it
+cannot use (R4). Its one visible effect is the count of removed NoData
+vertices.
+
+**Order with 23c-2.** None needed. This fix may be merged into the 23c
+branch once it is on master (`23-basin-scale.md`, point 10).
+
+**R9 is replaced** by this: the pass never inserts a NoData node. A bad
+triangle whose nearest node is NoData stays as it is and is counted.
+Carving by 14 R6 still applies to start vertices in NoData (16 R2), which
+the pass does not create.
+
+### Prior art
+
+The method is R3's and is unchanged: Steiner points restricted to the DEM's
+node lattice, as in Ruppert's and Chew's refinement with an admissibility
+test on the candidate point. Skipping an inadmissible candidate rather than
+moving it is the pass's existing rule for its other skips (R4: outside the
+rectangle, already a vertex, behind a constraint). It drops no guarantee
+the pass made, because R5 already allows a triangle to stay bad for a
+stated reason. No novelty is claimed.
+
+Legacy: nothing. `git grep -l -i -e "min_angle" -e "nodata" legacy-archive
+-- legacy` returned no files (the legacy had no start pass and, per
+`raster.hpp`, no NoData handling).
+
+### The change
+
+- **`improve` takes a validity callable** as a template parameter with a
+  default, so `quality.hpp` still includes no raster header and every
+  existing caller (`test_mesh_quality.cpp`'s two) compiles unchanged:
+
+  ```cpp
+  template <class K, class Valid = AllNodesValid>
+  QualityOutcome improve(LatticeMesh&, const LatticeFrame&, const QualityOptions&,
+                         const Valid& valid = {});
+  // Valid: bool(const LatticeVertex&) const; AllNodesValid returns true.
+  ```
+
+- **Where it is asked:** after the node is snapped and found inside the
+  rectangle, before the visibility walk. That is the cheapest point, and it
+  keeps R4's order for every other skip. A NoData node increments
+  **`QualityOutcome::skipped_void`**, and the entry is dropped like any
+  other skip.
+- **`refine`** passes
+  `[&](const LatticeVertex& v) { return !dem.is_nodata({v.row, v.col}); }`
+  over its raster view (`raster.hpp`'s `is_nodata`: NaN, or the sentinel).
+  It adds `skipped_void` to `RefineOutcome::quality_skipped`'s total. The
+  binding, `_core.pyi`, `cli.py` and `stats.py` do not change (R11: the
+  per-reason counts are the C++ test surface).
+- **With 23b.** `QualityOutcome` also carries `skipped_frozen`
+  (`23-basin-scale.md`, N4), summed into the same total; the frozen check
+  stays where it is, after the walk.
+
+### Tests `@tester` writes red first
+
+- **Q-V1 (C++, `test_mesh_quality.cpp`): the skip and its counter.** A
+  lattice fixture with one bad start triangle whose circumcentre's nearest
+  node is marked invalid by a test callable. `improve` inserts nothing
+  there, `skipped_void == 1`, and the same fixture with every node valid
+  inserts that node (the control). One more check: the default callable
+  gives today's outcome on an existing fixture, field by field.
+- **Q-V2 (Python, through `rasputin mesh`, uncut): the wasted insert.** The smallest
+  scene that reproduces DC10's shape: a small projected DEM, a `--domain`
+  polygon with a sliver-making corner, and the DEM node nearest that bad
+  triangle's circumcentre set to NoData (both the sentinel and NaN, as
+  parameters). `@tester` finds the node from a first run at the default,
+  without the void: it is the vertex the pass added nearest that corner.
+  With the void in place:
+  - no output vertex sits on a NoData node;
+  - every valid node inside the domain lies in a written triangle, so no
+    hole;
+  - the tolerance oracle (section 3D's) passes over the valid nodes.
+  The control is the same run on today's master, which leaves a hole. That
+  is what makes the test red now.
+  *As written at red (confirmed):* there is no hole uncut, so Q-V2 is red
+  on `nodata_vertices_removed` (1 against 0). `@tester` finds the pass's
+  node by diffing two runs at `--tolerance 1000`, pass on and off. Q-V1 is
+  in its own file and target, `test_mesh_quality_void`. Q10 (the C++
+  property and `test_cli_start_quality.py::TestNoData`) pinned R9 as first
+  ruled and is amended in `9a372fb` to pin the skip. That is the right
+  place for the change: a ruling changed, so the pinned behaviour changes
+  in its own commit. Q-V3 expects every golden test unchanged, because none
+  runs the pass over NoData inside its domain.
+- **Q-V3: bytes unchanged where there is no NoData.** Every existing golden
+  hash and byte-equality test passes unchanged, and `tools/bench.py`'s mesh
+  hash on the 1 m tile is the same (below). `@tester` lists any golden test
+  over a scene with NoData that changes, and says why. Each such change is
+  the fix showing, and is amended in its own commit with that reason.
+
+Not mutation-critical. The suite is small, and Q-V1's control and Q-V2's
+master run are what make it able to fail.
+
+### LOC
+
+About **15** in `CLAUDE.md` §2's unit: `quality.hpp` about 10 (the
+template parameter, `AllNodesValid`, the check, the counter), and
+`refine.hpp` about 5 (the lambda, the sum). At +60 %, 24. Not split.
+
+### `@perf`'s acceptance
+
+It touches `include/terrain/mesh/` and `include/terrain/refinement/`, so
+"Acceptance" in `docs/increments/README.md` applies:
+
+- `tools/bench.py` on the 1 m tile, compared with master's stored run on the
+  same power state. `@perf` first counts the tile's NoData nodes inside the
+  benchmark domain. If there are none, **the mesh hash must be unchanged**,
+  because the callable is then always true, and a changed hash is a defect
+  in the fix, not a result. If there are some, a changed hash is expected
+  only where the pass met one, and `@perf` reports how many it met
+  (`skipped_void`, from a debug print or the C++ count).
+- Refine time within noise. The check is one array read per quality entry
+  popped, a few hundred to a few thousand per run against millions of scan
+  reads. The thread-scaling sweep as the README requires. Evidence in
+  `docs/benchmarks/<date>/`.
+
+### Lifting 23c-2's `xfail`
+
+23c-2's DC10 at the default `--start-min-angle` is `xfail(strict=True)`,
+naming this fix (`23-basin-scale.md`, point 10, which withdrew point 9).
+Once this PR is on master and master is merged into the 23c branch, the
+case passes. A strict `xfail` that passes fails the suite, so the merge
+flags it, and `@tester` removes the marker in its own commit, naming this
+PR. If the case still fails, it goes back to `@architect` and the marker
+stays.
+
+**Fix (start pass skips NoData nodes), code review, round 1, 2026-10-04.** Range `2060f14..13aeb4f` (design 76abbf9, bde46c8, cce79b0; red 309b23f, 9a372fb; green 0d60c69; @perf 13aeb4f ACCEPTED). Verdict: CHANGES REQUESTED. LOC: 11 net (`quality.hpp` 10, `refine.hpp` 1) against about 15. Behaviour correct: the check sits after the outside-the-rectangle skip and before the walk; the default callable gives today's outcome; the header comment matches the corrected design; no red-step scaffolding; citations resolve. Blocking: (1) ROADMAP row 20 still says the inserts became holes and the fix is "designed"; say trimming removed them (wasted work) and the fix is implemented and accepted, 11 lines; (2) this file's status paragraph says "designed". Suggestion: Q-V2's heading "the hole" reads as current; say "the wasted insert". `25-plain-output.md`'s two `refine.hpp` citations move here and in 15f-4 (#163): whichever merges second recomputes both. Not pushed; no CI.
+
+**Fix (start pass skips NoData nodes), code review, round 2, 2026-10-04.** Range `de5d06c..519f57d` (519f57d: ROADMAP row 20, the status paragraph, Q-V2's heading); whole PR `2060f14..519f57d`. Verdict: APPROVED. LOC: 11 net, unchanged. Both blockers and the suggestion closed; citations resolve. Before merge: CI green; whichever of this PR and 15f-4 (#163) merges second recomputes `25-plain-output.md:115` and `:120`. Not pushed; no CI.

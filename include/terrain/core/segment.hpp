@@ -3,8 +3,8 @@
 // The directed 2D segment and its one predicate.
 //
 // Segment2's equality is *ordered*: {a, b} != {b, a}. Ring edges are directed
-// -- the parity rule in point_in_ring and every future constraint edge depend
-// on which way an edge runs -- so a segment comparing equal to its own reverse
+// -- a ring's winding and every constraint edge depend on which way an edge
+// runs -- so a segment comparing equal to its own reverse
 // would make "the same edge" an ambiguous phrase in the one module where it
 // must not be. An unordered comparison, if ever needed, gets its own name.
 //
@@ -38,11 +38,6 @@ struct Segment2 {
 
 [[nodiscard]] constexpr Segment2 reversed(const Segment2& s) noexcept {
     return Segment2{s.b, s.a};
-}
-
-// Exact, not approximate: a segment one ulp long is not degenerate.
-[[nodiscard]] constexpr bool is_degenerate(const Segment2& s) noexcept {
-    return s.a == s.b;
 }
 
 // Validating, like the free bounding_box it delegates to: throws

@@ -4,9 +4,10 @@ Rasputin is not on PyPI yet. You install it from a clone, and `pip` (or `uv`)
 compiles the C++ core on the way. It takes a minute or less.
 
 Steps marked **(not verified)** were not run when this file was written.
-Everything else was run on 2026-09-29 on macOS arm64 (AppleClang 21, CMake
-4.4, Python 3.13), in a fresh clone of the local repository (not of GitHub),
-with both `uv` and `pip`; or it is what CI runs.
+Every other install step was run on 2026-09-29 on macOS arm64 (AppleClang 21,
+CMake 4.4, Python 3.13), in a fresh clone of the local repository (not of
+GitHub), with both `uv` and `pip`; or it is what CI runs. The data sections
+were checked again on 2026-10-11.
 
 ## Platforms
 
@@ -21,7 +22,7 @@ The Python suite is not run on macOS in CI, but it passes there locally (see
 ## Prerequisites
 
 - **A C++20 compiler.** CI builds with GCC 13.3 (Ubuntu) and AppleClang 21
-  (macOS); the compiler must provide the C++20 `<chrono>` calendar types.
+  (macOS).
 - **CMake 3.24 or newer** (`cmake_minimum_required` in `CMakeLists.txt`).
 - **Python 3.12 or newer** (`requires-python` in `pyproject.toml`), with its
   development headers.
@@ -138,13 +139,10 @@ reinstalling after C++ changes (see Troubleshooting).
 
 Another libc++ mode (`extensive`, `debug`) is chosen by setting the option OFF
 and passing the mode yourself, e.g.
-`-DCMAKE_CXX_FLAGS=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE`.
-With the option ON as well, the two definitions collide and the build fails.
-This works only for a build without the C++ tests: a `pip install` (which
-turns them off), or a plain CMake build with `-DRASPUTIN_BUILD_TESTS=OFF`. The
-tests are on by default in a plain CMake build, and their compile-time guard
-refuses a build whose option says OFF while the library reports a hardening
-mode, so a test build with the option OFF must have no hardening mode at all.
+`-DCMAKE_CXX_FLAGS=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE`;
+with the option ON as well, the two definitions collide. This works only for a
+build without the C++ tests (`pip install`, or `-DRASPUTIN_BUILD_TESTS=OFF`),
+whose compile-time guard refuses an OFF option beside a hardening mode.
 
 ## Running the tests
 
@@ -185,17 +183,80 @@ The static checks CI runs are listed in `CLAUDE.md`, section 4.
 - `corine/clc2018_7908_3.gpkg`: CORINE Land Cover 2018 polygons over that
   tile, for `--features`. Its credits are in `corine/NOTICE`.
 
-### Norway: Kartverket DTM10 **(not verified)**
+### Remote DEMs: `rasputin fetch`
 
-The national 10 m terrain model is free from
-[hoydedata.no](https://hoydedata.no/LaserInnsyn/) under CC BY 4.0. Choose
-"Nedlasting" (download), then "Landsdekkende" (nationwide), "UTM-sone 33",
-and DTM10. Unpack the tiles into one directory and give that directory to
-`--dem`; use `--bbox XMIN YMIN XMAX YMAX` or `--domain` to mesh part of it.
+Two DEMs rasputin fetches itself, into a tile cache: `--cache DIR` when
+given, else `$RASPUTIN_DATA/cache`, else `$XDG_CACHE_HOME/rasputin`, else
+`~/.cache/rasputin`, so a first run needs no setting. The directory is made
+when the first tile is written, and `fetch` ends its summary line with the
+directory it wrote into:
+
+```sh
+rasputin fetch glo30 --domain catchment.geojson   # --dry-run prints the plan
+rasputin mesh --dem glo30 --domain catchment.geojson --out-crs EPSG:32723 \
+    --tolerance 5 --out catchment.vtk             # offline from here
+```
+
+One more environment variable: `RASPUTIN_THREADS` is the default thread
+count for `mesh`, `catchment` and `station-catchments` (0 or unset means every
+core; `--threads N` overrides it), and inside a container the core count and
+the memory follow the container's own limits (`cpu.max`, `memory.max`).
+`--memory-budget 8G` caps the DEM window one run assembles; the default is
+half the machine's memory.
+
+`glo30` is the Copernicus GLO-30 (30 m, worldwide) and `anadem-v1` the ANADEM
+terrain model of South America. Both are in geographic coordinates, so `mesh`
+needs `--out-crs`; its refusal suggests one. The source's cache directory
+holds a `NOTICE.txt` with the distributor's credit and licence, and every mesh
+made from it carries the credit line.
+
+### Norway: Kartverket DTM10
+
+Kartverket's 10 m terrain model of mainland Norway is open data under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), credit
+"© Kartverket" (its Geonorge record and Kartverket's terms of use, read
+2026-10-11). It is on offer in two places, and no login is needed for either:
+
+- **The current model, from [hoydedata.no](https://hoydedata.no/LaserInnsyn2/).**
+  Open the "Nedlasting" (download) tab, then "Landsdekkende" (nationwide),
+  "UTM sone 33", and the "DTM10" entry (the click path is from the project's own
+  2026-09-25 download; the download endpoints, not the web page, were
+  checked by script): one zip of about 19.6 GB named `DTM10_UTM33_<date>.zip`,
+  re-exported every few weeks. The 2026-09-25 export unpacked to 254 tiles of
+  the national 50 km grid as GeoTIFF (`7908_3_10m_z33.tif` and so on:
+  5051 × 5051 float32 cells, LZW, EPSG:25833, NoData −32767; about 20 GB);
+  a later export's tile list was not checked. The committed tile and the
+  project's own runs come from here.
+- **The 2013-based model, from Geonorge**, one zip per tile:
+  `https://nedlasting.geonorge.no/geonorge/Basisdata/DTM10UTM33/TIFF/Basisdata_<cell>_Celle_25833_DTM10UTM33_TIFF.zip`,
+  `<cell>` from `6400-1` to `7910-3`; all 254 are listed in the Atom feed
+  `https://nedlasting.geonorge.no/geonorge/ATOM-feeds/DTM10UTM33_AtomFeedTIFF.xml`,
+  7.5 GB in all. Its tiles are 5041 × 5041 and sit half a cell off
+  hoydedata.no's lattice (checked on tile 6400-1), so keep the two sets in
+  separate directories. Kartverket says this set is no longer updated.
+
+Unpack the tiles into one directory and give that directory to `--dem`; use
+`--bbox XMIN YMIN XMAX YMAX` or `--domain` to mesh part of it. The tiles need
+the `codecs` extra. A `rasputin fetch dtm10` is possible, since both routes
+are plain HTTP: `docs/research/2026-10-11-dtm10-fetcher.md`.
 
 The project's own runs keep data in a directory next to the clone, for example
-`../rasputin_data/DTM10_UTM33_20260925/`. Nothing reads a fixed location: every
-path is given on the command line.
+`../rasputin_data/DTM10_UTM33_20260925/`. Nothing reads a fixed data location:
+every path is given on the command line, or registered under a name of your
+own in your sources file (`kind = "local"`; README, *Connect an agent*), so
+that `--dem NAME` and an agent find it. `rasputin sources` lists what is
+registered.
+
+### Norway: NVE's reference gauging stations
+
+```sh
+rasputin fetch-stations nve-hrd --out-dir ../rasputin_data/nve-hrd
+```
+
+fetches the stations of NVE's Hydrological Reference Dataset, their catchment
+polygons and the river lines round them, with a `NOTICE.txt` (licence NLOD,
+"Kilde: NVE"); files already there are kept unless `--refresh`. They are the
+inputs of `rasputin station-catchments`.
 
 ### Europe: CORINE Land Cover **(not verified)**
 
@@ -217,8 +278,7 @@ index. If you publish results, credit the data as `corine/NOTICE` shows.
 - **A GeoTIFF is refused with "cannot be decoded as installed; the `codecs`
   extra (imagecodecs) may decode it".** Install the extra:
   `pip install ".[codecs]"`.
-- **The build fails on `<chrono>` calendar types, `concept` or other C++20
-  features.** Your compiler is too old. On macOS, check
+- **The build fails on `concept` or other C++20 features.** Your compiler is too old. On macOS, check
   `c++ --version`; if `/usr/bin/c++` points at an old toolchain, run
   `sudo xcode-select --switch /Library/Developer/CommandLineTools`. You can pick
   a compiler with `export CXX=...` before installing; for GCC, `CXX` must be

@@ -128,7 +128,6 @@ TEST_CASE("a degenerate Box2 at a single point is not empty", "[bbox][ctor][dege
     REQUIRE(b.width() == 0.0);
     REQUIRE(b.height() == 0.0);
     REQUIRE(b.contains(p));
-    REQUIRE(b.center() == p);
 }
 
 // A box may be zero-extent in one axis only -- a horizontal or vertical
@@ -302,39 +301,6 @@ TEST_CASE("the empty box intersects nothing, including itself", "[bbox][intersec
     REQUIRE_FALSE(Box2{}.intersects(unit_box()));
     REQUIRE_FALSE(unit_box().intersects(Box2{}));
     REQUIRE_FALSE(Box2{}.intersects(Box2{}));
-}
-
-// ---------------------------------------------------------------------------
-// center
-// ---------------------------------------------------------------------------
-
-TEST_CASE("center is the midpoint of a non-empty box", "[bbox][center]") {
-    REQUIRE(Box2{Point2{0.0, 0.0}, Point2{2.0, 4.0}}.center() == Point2{1.0, 2.0});
-    REQUIRE(Box2{Point2{-3.0, -1.0}, Point2{1.0, 1.0}}.center() == Point2{-1.0, 0.0});
-}
-
-// `(lo + hi) / 2` overflows to infinity on a box this wide while
-// `lo / 2 + hi / 2` does not. The corners are finite and the box is legal, so
-// a finite centre is the only defensible answer.
-TEST_CASE("center does not overflow on an extreme-scale box", "[bbox][center][extreme]") {
-    // Deliberately asymmetric: lo + hi overflows to +inf here, where a box
-    // centred on the origin would have cancelled and hidden the bug.
-    const Box2 b{Point2{1.0e308, 1.0e308}, Point2{1.5e308, 1.5e308}};
-    const Point2 c = b.center();
-
-    REQUIRE(std::isfinite(c.x));
-    REQUIRE(std::isfinite(c.y));
-    REQUIRE(c == Point2{1.25e308, 1.25e308});
-    REQUIRE(b.contains(c));
-
-    const Box2 symmetric{Point2{-1e308, -1e308}, Point2{1e308, 1e308}};
-    REQUIRE(symmetric.center() == Point2{0.0, 0.0});
-}
-
-TEST_CASE("center of a box lies inside it", "[bbox][center]") {
-    const Box2 b{utm33_offset(Point2{0.0, 0.0}), utm33_offset(Point2{1000.0, 250.0})};
-
-    REQUIRE(b.contains(b.center()));
 }
 
 // ---------------------------------------------------------------------------

@@ -22,8 +22,14 @@ target_include_directories(terrain_test_support INTERFACE
 # Every suite gets the same warning posture: the tests compile under exactly the
 # flags the core does, so a warning introduced by a header is caught by whoever
 # includes it first.
+#
+# Optional `COST <value>`: a ctest scheduling hint put on every Catch2 case of
+# the target, so `ctest --parallel` starts the long ones first. Without it the
+# suite is registered exactly as before. The helpers below forward ${ARGN}, so
+# they accept it too.
 function(add_terrain_test name)
-    add_executable(${name} ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "COST" "")
+    add_executable(${name} ${arg_UNPARSED_ARGUMENTS})
     target_link_libraries(${name} PRIVATE
         terrain_headers
         terrain_test_support
@@ -32,7 +38,11 @@ function(add_terrain_test name)
     target_compile_options(${name} PRIVATE
         -Wall -Wextra -Wpedantic -Werror
     )
-    catch_discover_tests(${name})
+    if(DEFINED arg_COST)
+        catch_discover_tests(${name} PROPERTIES COST ${arg_COST})
+    else()
+        catch_discover_tests(${name})
+    endif()
 endfunction()
 
 add_terrain_test(test_point unit/test_point.cpp)
@@ -205,14 +215,12 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. All three link Threads: the loop and chunk suites
-# start threads through for_each_chunk. The pair are backend tests because
-# lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
-# which needs terrain_predicates.
-add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
+# invariant-critical pair. Both link Threads but start none, so neither runs in
+# the TSan job (h17 §4c, docs/increments/h17-ci-test-time.md). Both are backend
+# tests because lattice_mesh.hpp includes default_kernel.hpp (increment 16's
+# orient_sign), which needs terrain_predicates.
 add_terrain_backend_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
 add_terrain_backend_test(test_refinement_scan unit/test_refinement_scan.cpp)
-target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 
@@ -246,11 +254,20 @@ add_terrain_backend_test(prop_refinement_scan_equivalence
 # A quality start, increment 20 (docs/increments/20-start-quality.md, "Tests for
 # @tester"). test_mesh_quality (Q1 to Q6, Q8, Q9) is the invariant-critical
 # suite; prop_refinement_quality re-runs 14b's T3 and T6 with the pass on and
-# holds Q7, Q8 and Q10 through refine. Both run in the TSan job.
+# holds Q7, Q8 and Q10 through refine. prop_refinement_quality starts threads
+# through refine and runs in the TSan job; test_mesh_quality starts none, so it
+# is not in it (h17 §4c).
 add_terrain_backend_test(test_mesh_quality unit/test_mesh_quality.cpp)
 add_terrain_backend_test(prop_refinement_quality property/prop_refinement_quality.cpp)
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
 target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
+
+# The pass skips NoData nodes (docs/increments/20-start-quality.md, "Fix: the
+# start-quality pass skips NoData nodes", Q-V1): improve's validity callable
+# and skipped_void, in a target of their own so test_mesh_quality's
+# default-call guard builds without them. Not mutation-critical.
+add_terrain_backend_test(test_mesh_quality_void unit/test_mesh_quality_void.cpp)
+target_link_libraries(test_mesh_quality_void PRIVATE Threads::Threads)
 
 # Constraint feet, increment 20b (docs/increments/20b-min-insertion-distance.md,
 # "Tests for @tester"). test_refinement_constraint_feet (F1 to F5, plus 14b's
@@ -265,7 +282,8 @@ target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
 # test_refinement_chunks_dynamic (QW1, the dynamic block scheduler) is the
 # invariant-critical suite; test_refinement_active (QW3) and
 # test_mesh_lawson_stack (legalise_around's caller-owned stack) compare with
-# today's code. All three run in the TSan job.
+# today's code. The first two run in the TSan job; test_mesh_lawson_stack
+# starts no threads, so it does not (h17 §4c).
 
 add_terrain_test(test_refinement_chunks_dynamic unit/test_refinement_chunks_dynamic.cpp)
 target_link_libraries(test_refinement_chunks_dynamic PRIVATE Threads::Threads)
@@ -300,11 +318,35 @@ add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifie
 # invariants on random DEMs are the defence. It starts no threads.
 add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
 
+# Accumulation from the same flood, increment 29 PR 1
+# (docs/increments/29-nve-reference-catchments.md, "Accumulation, from the same
+# flood (C++)" and "The red suites"). INVARIANT-CRITICAL: the exact oracle
+# against upstream, node for node; mutation target is accumulate's on_reach
+# callback and its reverse pass. It starts no threads.
+add_terrain_test(test_hydrology_accumulate unit/test_hydrology_accumulate.cpp)
+
 # The outline reduction, increment 22 PR 2 (docs/increments/22-auto-catchment.md,
 # "The reduction" and "The red suites"): area-preserving segment collapse with
 # the exact kernel. A backend test because it names DefaultKernel. Not named
 # invariant-critical; it starts no threads.
 add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
+
+# Land-cover borders simplified within a band, each class's area kept,
+# increment 32 (docs/increments/32-landcover-simplify.md, sections 6 to 9).
+# INVARIANT-CRITICAL: mutation targets M1 to M6 of section 9. A backend test
+# because it names DefaultKernel; its own target, so a compile failure in it
+# leaves every other suite built and run. Its purity test starts threads.
+add_terrain_backend_test(test_border_collapse unit/test_border_collapse.cpp)
+
+# The exact land-cover overlap, increment 26b (docs/increments/26-land-cover.md,
+# 1.2 "The exact overlap" and section 10's "26b"). Not named invariant-critical
+# (section 9: 26b has no mutation round). The plain helper, deliberately:
+# overlap.hpp clips by horizontal and vertical lines and names no kernel, so a
+# version that reached for a predicate would fail to link here. Its thread
+# test starts threads.
+add_terrain_test(test_land_cover_overlap unit/test_land_cover_overlap.cpp)
+target_link_libraries(test_land_cover_overlap PRIVATE Threads::Threads)
+target_link_libraries(test_border_collapse PRIVATE Threads::Threads)
 
 # The final check, increment 15c-1 (docs/increments/15c-geographic-dem.md, D4,
 # D5 and "Tests for @tester"): the check-point store (CP1), refine_points on
@@ -332,6 +374,8 @@ target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
 # lattice_position's suite stays free of the strip. Not invariant-critical (the
 # mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
 # refine.hpp includes the chunk scheduler, so both link Threads.
+# test_refinement_lattice_position also pins to_lattice's constraint lookup
+# (increment 15f-4, B4).
 add_terrain_backend_test(test_refinement_constraint_points
                          unit/test_refinement_constraint_points.cpp)
 target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads)
@@ -349,7 +393,10 @@ target_link_libraries(test_refinement_lattice_position PRIVATE Threads::Threads)
 # cases. Both start threads (refine's scheduler; ES4 sweeps 1, 2 and 8).
 add_terrain_backend_test(test_refinement_strip_oracle unit/test_refinement_strip_oracle.cpp)
 target_link_libraries(test_refinement_strip_oracle PRIVATE Threads::Threads)
-add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp)
+# COST 100: its ES9 case runs 97-171 s under the sanitizers; without a cost
+# ctest --parallel would start it near the end (h14 section 2c).
+add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp
+                         COST 100)
 target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
 
 # L16 (docs/increments/15f-edge-strip.md): detail::coincidence_radius, by
@@ -417,3 +464,79 @@ catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)
 # refine.hpp names DefaultKernel, hence the backend target.
 add_terrain_backend_test(test_raster_node_at unit/test_raster_node_at.cpp)
 target_link_libraries(test_raster_node_at PRIVATE Threads::Threads)
+
+# The foot rule on every insertion path, increment 20c PR 20c-1
+# (docs/increments/20c-soft-quality.md, R1 to R6 and "Tests @tester writes red
+# first", 20c-1). The design's invariant-critical suite test_constraint_foot,
+# in four targets so a compile failure in one leaves the others built and run:
+#   test_constraint_foot          CF1, the helper constraint_foot on
+#                                 hand-built meshes; starts no threads;
+#   test_constraint_foot_quality  CF2, the quality start's foot, through
+#                                 improve and through refine, with 14b's T3
+#                                 and T6 re-run with the rule on;
+#   test_constraint_foot_refine   CF3, refinement's search through a
+#                                 neighbour, and the features-start off switch;
+#   test_constraint_foot_final    CF4, the final check's foot on both paths,
+#                                 its bound and fallback, T3 and T6, and the
+#                                 off switch.
+# The last three start threads through refine's scheduler; their T6 cases are
+# the TSan job's (the design: "T6 is the TSan job's").
+add_terrain_backend_test(test_constraint_foot unit/test_constraint_foot.cpp)
+add_terrain_backend_test(test_constraint_foot_quality unit/test_constraint_foot_quality.cpp)
+target_link_libraries(test_constraint_foot_quality PRIVATE Threads::Threads)
+add_terrain_backend_test(test_constraint_foot_refine property/prop_constraint_foot_refine.cpp)
+target_link_libraries(test_constraint_foot_refine PRIVATE Threads::Threads)
+add_terrain_backend_test(test_constraint_foot_final property/prop_constraint_foot_final.cpp)
+target_link_libraries(test_constraint_foot_final PRIVATE Threads::Threads)
+
+# The soft criterion and the line split in the quality start, increment 20c
+# PR 20c-2 (docs/increments/20c-soft-quality.md, R7 and R8 and "Tests @tester
+# writes red first", 20c-2). Two targets, so a compile failure in one leaves
+# the other built and run:
+#   test_quality_gain         the design's invariant-critical suite: T-P1 (the
+#                             predicted cavity is what legalise_around writes),
+#                             T-P2 (no accepted candidate lowers the worst
+#                             angle) and LS1 (R8's split), on improve; starts
+#                             no threads;
+#   test_quality_gain_refine  T-P3 (gain -1 is 20c-1's output, digests
+#                             recorded from 41bda81a), determinism over
+#                             threads, and the QA rules' section D oracles
+#                             with the gain on, through refine. It starts
+#                             threads; its determinism case is the TSan job's.
+add_terrain_backend_test(test_quality_gain unit/test_quality_gain.cpp)
+add_terrain_backend_test(test_quality_gain_refine property/prop_quality_gain_refine.cpp)
+target_link_libraries(test_quality_gain_refine PRIVATE Threads::Threads)
+
+# A vertical tolerance that varies with distance to named lines, increment 33
+# (docs/increments/33-feature-tolerance.md, sections 3, 4 and 9). Two targets:
+#   test_refinement_line_tolerance   the field alone: the ramp (test 4), the
+#                                    triangle-to-segment distance and its
+#                                    search (test 6), make's refusals (test 10);
+#                                    starts no threads;
+#   prop_refinement_line_tolerance   the field in refine, refine_points and
+#                                    refine_strip: tests 1, 2, 3, 5, 7, 8 and 9,
+#                                    with the QA rules' section D oracles. It
+#                                    starts threads; test 9 is the TSan job's.
+# Tests 1 to 8 are the design's invariant-critical suite.
+add_terrain_backend_test(test_refinement_line_tolerance unit/test_refinement_line_tolerance.cpp)
+add_terrain_backend_test(prop_refinement_line_tolerance property/prop_refinement_line_tolerance.cpp)
+target_link_libraries(prop_refinement_line_tolerance PRIVATE Threads::Threads)
+
+# A vertical tolerance that follows the slope, increment 34
+# (docs/increments/34-slope-tolerance.md, sections 3, 4 and 9). Three targets:
+#   test_raster_steepness            test 2: every node's class against the
+#                                    test's own Horn; starts threads (1 and 8);
+#   test_refinement_slope_tolerance  the ramp (test 3), cell_class beside NoData
+#                                    (test 6 (b), M9), make's refusals (test 9),
+#                                    the histogram; starts no threads;
+#   prop_refinement_slope_tolerance  the slope in refine, refine_strip and
+#                                    refine_points: tests 1, 4, 5, 6, 7 and 8 and
+#                                    the laziness count (M8), with the QA rules'
+#                                    section D oracles. It starts threads; test 7
+#                                    is the TSan job's.
+# Tests 2, 4, 5, 6 and 8 are the design's invariant-critical suite.
+add_terrain_test(test_raster_steepness unit/test_raster_steepness.cpp)
+target_link_libraries(test_raster_steepness PRIVATE Threads::Threads)
+add_terrain_backend_test(test_refinement_slope_tolerance unit/test_refinement_slope_tolerance.cpp)
+add_terrain_backend_test(prop_refinement_slope_tolerance property/prop_refinement_slope_tolerance.cpp)
+target_link_libraries(prop_refinement_slope_tolerance PRIVATE Threads::Threads)

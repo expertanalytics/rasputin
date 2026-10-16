@@ -41,11 +41,26 @@ COPIED = (
     # h8: the recap prints the size table through this module
     # (docs/increments/h8-window-and-recap.md §3.6).
     "tools/rule_sizes.py",
+    # h9: the brief writer and the hook that checks briefs
+    # (docs/increments/h9-spawn-briefs.md §5). The template, .claude/briefs/
+    # common.md, is copied by brief_fixtures.make_brief_repo instead: it is rule
+    # text, and here it would change test_rule_sizes.py's totals.
+    "tools/brief.py",
+    ".claude/hooks/guard_spawn.py",
+    # h16 G3a: guard_governance asks it whether a path lies under a session
+    # scratchpad (docs/increments/h16-harness-fixes.md §3).
+    "tools/scratchpad.py",
+    # h20: the push guard's grant check and the hook that records review
+    # verdicts (docs/increments/h20-away-push-grants.md §4).
+    "tools/push_grant.py",
+    "tools/ci_changes.py",
+    ".claude/hooks/record_review.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
 GUARD_GOVERNANCE = ".claude/hooks/guard_governance.py"
 GUARD_UNATTENDED = ".claude/hooks/guard_unattended.py"
+RECORD_REVIEW = ".claude/hooks/record_review.py"
 
 #: MAX_HOURS x BUFFER, in the constants of §3.1.
 MAX_WINDOW = timedelta(hours=72 * 1.2)
@@ -64,6 +79,15 @@ def git(repo: Path, *args: str) -> str:
 def clean_env() -> dict[str, str]:
     """The test's environment without GIT_* variables, which would redirect git."""
     return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
+def is_work_tree_top(path: Path) -> bool:
+    """`path` is the top of a git work tree (not a copy, nor a directory inside another tree)."""
+    top = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, env=clean_env(), check=False,
+    )  # fmt: skip
+    return top.returncode == 0 and Path(top.stdout.strip()).resolve() == path.resolve()
 
 
 def make_repo(root: Path) -> Path:
@@ -290,3 +314,141 @@ class Tool:
         if self._module is None:
             self._module = load_tool(self._name)
         return getattr(self._module, attr)
+
+
+#: h16 G3: the fixed head of the scratchpad pattern, as the design states it
+#: (`^/private/tmp/claude-\d+/[^/]+/[^/]+/scratchpad(/|$)`).
+SCRATCHPAD_HEAD = "/private/tmp/claude-"
+
+
+def point_scratchpad(repo: Path, base: Path) -> Path:
+    """Point the copy's scratchpad pattern at `base`; return a scratchpad made under it.
+
+    The hooks run as subprocesses, so the pattern cannot be patched in memory:
+    the copied `tools/scratchpad.py` is rewritten instead, with `/private/tmp`
+    in its one pattern literal replaced by `base`. The rest of the pattern is
+    kept, so the scratchpad returned has the real shape,
+    `<base>/claude-501/<project>/<session>/scratchpad`.
+    """
+    module = repo / "tools" / "scratchpad.py"
+    if not module.exists():
+        pytest.fail("tools/scratchpad.py is missing from the copy (h16 §3)")
+    base = base.resolve()
+    assert all(c.isalnum() or c in "/._-" for c in str(base)), base  # no regex specials but '.'
+    text = module.read_text()
+    assert text.count(SCRATCHPAD_HEAD) == 1, (
+        f"tools/scratchpad.py states {SCRATCHPAD_HEAD!r} {text.count(SCRATCHPAD_HEAD)} times, "
+        "not once; the test cannot point the pattern elsewhere"
+    )
+    module.write_text(text.replace(SCRATCHPAD_HEAD, f"{base}/claude-"))
+    pad = base / "claude-501" / "-Users-x-project" / "0f1e2d3c-session" / "scratchpad"
+    pad.mkdir(parents=True)
+    return pad
+
+
+# ---------------------------------------------------------------- h20
+
+
+def commit_file(repo: Path, relative: str, text: str, message: str) -> str:
+    """Write `relative` (creating its directory), commit it alone; the full sha."""
+    path = repo / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    git(repo, "add", relative)
+    git(repo, "commit", "-q", "-m", message)
+    return git(repo, "rev-parse", "HEAD").strip()
+
+
+def review_record(sha: str, verdict: str = "APPROVED", at: str = "2026-10-13T20:00:00+00:00"
+                  ) -> dict[str, Any]:  # fmt: skip
+    """One line of `reviews.jsonl`, with the keys h20 §3.3 names."""
+    return {"at": at, "sha": sha, "verdict": verdict, "agent_id": "r1", "session_id": "s1",
+            "event": "PreToolUse"}  # fmt: skip
+
+
+def reviews_path(repo: Path) -> Path:
+    return state_dir(repo) / "reviews.jsonl"
+
+
+def write_reviews(repo: Path, records: list[dict[str, Any]]) -> None:
+    """Replace `reviews.jsonl` with `records`, oldest first (the last line is the newest)."""
+    reviews_path(repo).parent.mkdir(parents=True, exist_ok=True)
+    reviews_path(repo).write_text("".join(json.dumps(r) + "\n" for r in records))
+
+
+def jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def grants_used_path(repo: Path) -> Path:
+    return state_dir(repo) / "grants-used.jsonl"
+
+
+def flag_granting(repo: Path, grants: Any, now: datetime | None = None) -> datetime:
+    """The flag `on` (until = now + 1 h) with a `grants` value; returns `since`."""
+    now = now or datetime.now(UTC).replace(microsecond=0)
+    write_flag(repo, {"since": iso(now), "until": iso(now + timedelta(hours=1)),
+                      "set_by": "away", "keep_awake_pid": None, "grants": grants})  # fmt: skip
+    return now
+
+
+class Granted:
+    """h20 §4's fixture repository, measured by construction.
+
+    `master` with 1 commit, `refs/remotes/origin/master` set to it by
+    `git update-ref` (no remote); branch `feat` (checked out) with a code
+    commit `x` adding `tools/x.py` (1 line), then a recording commit `rec`
+    adding `docs/increments/h99.md` (1 line, no trailer). `reviews.jsonl`
+    holds one record, `APPROVED` at `x`. The flag is on only if `flag` is.
+    """
+
+    def __init__(self, root: Path, flag: bool = True, recording_code: bool = False) -> None:
+        self.repo = make_repo(root)
+        self.base = git(self.repo, "rev-parse", "master").strip()
+        git(self.repo, "update-ref", "refs/remotes/origin/master", self.base)
+        git(self.repo, "checkout", "-q", "-b", "feat")
+        self.x = commit_file(self.repo, "tools/x.py", "x = 1\n", "X: a code commit")
+        (self.repo / "docs/increments").mkdir(parents=True)
+        (self.repo / "docs/increments/h99.md").write_text("review recorded\n")
+        git(self.repo, "add", "docs/increments/h99.md")
+        if recording_code:  # test 24: the recording commit also changes code
+            (self.repo / "tools/x.py").write_text("x = 2\n")
+            git(self.repo, "add", "tools/x.py")
+        git(self.repo, "commit", "-q", "-m", "h99 review round 1 recorded")
+        self.rec = self.head
+        write_reviews(self.repo, [review_record(self.x)])
+        self.since = flag_granting(self.repo, ["feat"]) if flag else None
+
+    @property
+    def head(self) -> str:
+        return git(self.repo, "rev-parse", "refs/heads/feat").strip()
+
+    def records(self) -> list[dict[str, Any]]:
+        return jsonl(reviews_path(self.repo))
+
+    def on_master(self, relative: str, text: str, advance_origin: bool = True) -> str:
+        """A commit on master (feat stays checked out); origin/master follows it if told."""
+        git(self.repo, "checkout", "-q", "master")
+        sha = commit_file(self.repo, relative, text, f"master changes {relative}")
+        if advance_origin:
+            git(self.repo, "update-ref", "refs/remotes/origin/master", sha)
+        git(self.repo, "checkout", "-q", "feat")
+        return sha
+
+    def merge(self, ref: str, resolve: dict[str, str] | None = None) -> str:
+        """Merge `ref` into feat with a merge commit; resolve conflicts by hand with `resolve`."""
+        done = subprocess.run(
+            ["git", "-C", str(self.repo), "merge", "-q", "--no-ff", "--no-edit", ref],
+            capture_output=True, text=True, env=clean_env(), check=False,
+        )  # fmt: skip
+        if done.returncode != 0:
+            assert resolve, f"merge of {ref} conflicted: {done.stdout}{done.stderr}"
+            for relative, text in resolve.items():
+                (self.repo / relative).write_text(text)
+                git(self.repo, "add", relative)
+            git(self.repo, "commit", "-q", "--no-edit")
+        else:
+            assert not resolve, f"merge of {ref} was expected to conflict"
+        return self.head

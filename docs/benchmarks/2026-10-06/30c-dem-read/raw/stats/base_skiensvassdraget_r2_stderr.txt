@@ -1,0 +1,7 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30c/venv-base/lib/python3.14/site-packages/tin_engine/__init__.py
+features: 2628 kept (216 cut at the domain outline), 2894 outside the domain, 0 empty
+lines: 500511 vertices read, 256482 after joining shared edges and adding crossings
+DEM: 12 files, 14653 columns x 13675 rows
+land cover: 2881 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+3029295 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 10 m).
+exit 0

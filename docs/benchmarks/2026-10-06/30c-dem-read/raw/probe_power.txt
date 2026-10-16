@@ -1,0 +1,8 @@
+base fixtures before 19:27:13: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+base fixtures after 19:27:50: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+base mesh before 19:27:50: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+base mesh after 19:28:12: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+branch fixtures before 19:28:12: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+branch fixtures after 19:28:43: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+branch mesh before 19:28:43: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 
+branch mesh after 19:29:03: Now drawing from 'AC Power'  -InternalBattery-0 (id=24117347) 100%; charged; 0:00 remaining present: true 

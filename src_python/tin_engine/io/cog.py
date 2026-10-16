@@ -1,16 +1,19 @@
-"""Decode only the blocks a window needs (increment 23a-1).
+"""Decode only the blocks a window needs.
 
-`docs/increments/23-basin-scale.md`, "Windowed source reads (23a-1)". A
-GeoTIFF's full-resolution page is stored as blocks, tiles or strips; a window
+A GeoTIFF's full-resolution page is stored as blocks, tiles or strips; a window
 of it needs only the blocks it meets. Where those blocks' bytes come from is a
 `BlockSource`: an open file (`LocalTiffBlocks`, here) or the tile cache
 (`io/repository.py`'s `CachedBlocks`). This module never opens a file.
 
 Every block is decoded into its own slice of one preallocated array, so the
-thread count cannot change a value (decided 7, W2). A block a source lacks is
-refused before any block is decoded (decided 6), and a sparse block (byte
-count 0, which tifffile would fill with 0, a valid elevation) is refused
-(decided 5): a DEM's NoData must be stored, not implied.
+thread count cannot change a value. A block a source lacks is refused before
+any block is decoded, and a sparse block (byte count 0, which tifffile would
+fill with 0, a valid elevation) is refused: a DEM's NoData must be stored, not
+implied.
+
+`decode_class_window` reads a raster of class numbers
+(`uint8`, `PixelIsArea`): the same blocks, but an empty block is a run of 0,
+no data by MapBiomas's convention, and the window's corner is the cell's.
 """
 
 from __future__ import annotations
@@ -23,8 +26,8 @@ from typing import Any, BinaryIO, Protocol
 import numpy as np
 import tifffile
 
-from .geotiff import _stage
-from .models import DemTile, GeoTiffError, IndexWindow, RasterMeta
+from .geotiff import _stage, to_metres
+from .models import ClassWindow, DemTile, GeoTiffError, IndexWindow, RasterMeta
 
 
 class BlockSource(Protocol):
@@ -52,21 +55,31 @@ class CacheError(ValueError):
 
 class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the suite
     """`missing` of the `needed` blocks are not in the cache at `where`;
-    `needed` is 0 when the source itself is not there."""
+    `needed` is 0 when the source itself is not there. `box`, when given, is
+    the node box of the window that needs them, in the source's CRS."""
 
-    def __init__(self, missing: int, needed: int, where: str) -> None:
-        self.missing, self.needed, self.where = missing, needed, where
+    def __init__(
+        self,
+        missing: int,
+        needed: int,
+        where: str,
+        *,
+        box: tuple[float, float, float, float] | None = None,
+    ) -> None:
+        self.missing, self.needed, self.where, self.box = missing, needed, where, box
         if needed == 0:
             text = f"{where} is not in the cache"
         else:
             text = f"{where}: {missing:,} of the {needed:,} blocks needed are not in the cache"
+        if box is not None:
+            text += f" for the window {' '.join(f'{v:.15g}' for v in box)} in the source's CRS"
         super().__init__(text)
 
 
 class LocalTiffBlocks:
     """Blocks read from an open GeoTIFF stream; it lacks none.
 
-    `seek` and `read` share one stream, so they run under a lock (decided 8):
+    `seek` and `read` share one stream, so they run under a lock:
     a read is short against a decode, and `os.pread` would exclude `BytesIO`.
     """
 
@@ -101,25 +114,13 @@ def blocks_meeting(page: tifffile.TiffPage, window: IndexWindow) -> tuple[int, .
     )
 
 
-def window_meta(meta: RasterMeta, window: IndexWindow) -> RasterMeta:
-    """`meta` for `window` of its grid: the corner moved by whole cells."""
-    return meta.model_copy(
-        update={
-            "x_min": meta.x_min + window.col0 * meta.delta_x,
-            "y_max": meta.y_max - window.row0 * meta.delta_y,
-            "rows": window.rows,
-            "cols": window.cols,
-        }
-    )
-
-
 def decode_window(
     source: BlockSource,
     meta: RasterMeta,
     dtype: np.dtype[Any],
     window: IndexWindow,
     *,
-    threads: int = 4,
+    threads: int = 1,
 ) -> DemTile:
     """`window` of the page `source` holds, decoded and cast to `dtype`.
 
@@ -127,6 +128,10 @@ def decode_window(
     outside the raster, or empty, is a `ValueError` (a caller's bug). A block
     `source` lacks is `NotCached`, before any block is read; a sparse or
     undecodable block is a `GeoTiffError` naming `source.where` and the block.
+
+    `threads` decoding workers, one by default (the count is the caller's,
+    and no module but `resources.py` reads the machine); the count changes no
+    value.
     """
     w, page = window, source.page
     ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
@@ -142,12 +147,74 @@ def decode_window(
                 "a DEM's NoData must be stored, not implied"
             )
     out: np.ndarray[Any, np.dtype[Any]] = np.empty((w.rows, w.cols), dtype=dtype)
+    _decode_into(source, w, indices, out, threads)
+    to_metres(out, meta)  # heights in metres
+    # The public constructor, which copies `out`: `DemTile`'s private no-copy
+    # route is kept to `assemble` and `resample`, and a test in test_mosaic.py
+    # greps the package for its name, so it is not named here either. The copy
+    # holds a window's heights twice while it is made.
+    return DemTile(meta=meta.windowed(w), array=out)
+
+
+def decode_class_window(
+    source: BlockSource, meta: RasterMeta, window: IndexWindow, *, threads: int = 1
+) -> ClassWindow:
+    """`window` of the class raster `source` holds, as `uint8`.
+
+    `meta` is the page's, as `read_page` gives it, with the upper-left node
+    half a cell inside the raster; the window's corner is moved back out to
+    the cell's. A block `source` lacks is `NotCached` before any block is
+    read; an empty block (byte count 0) is cells of `meta.nodata`. Every
+    no-data cell comes out as 0, the class rasputin writes for no data; so a
+    raster whose no-data is not 0 and which stores a 0 in the window is
+    refused, since that 0 would be read as no data without a word.
+    """
+    w, page = window, source.page
+    ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
+    if min(w.row0, w.col0, *ends) < 0 or min(w.rows, w.cols) < 1:
+        raise ValueError(f"{w} is not a non-empty window of {meta.rows} x {meta.cols} cells")
+    if page.dtype != np.uint8:
+        raise GeoTiffError(f"{source.where}: classes must be uint8, the file holds {page.dtype}")
+    indices = blocks_meeting(page, w)
+    if absent := source.missing(indices):
+        raise NotCached(len(absent), len(indices), source.where)
+    fill = int(meta.nodata or 0)
+    out = np.full((w.rows, w.cols), fill, dtype=np.uint8)
+    stored = [i for i in indices if page.databytecounts[i] > 0]
+    _decode_into(source, w, stored, out, threads)
+    if fill:
+        if (out == 0).any():
+            raise GeoTiffError(
+                f"{source.where}: class 0 means no data in rasputin's output; this raster's "
+                f"no-data is {fill} and it holds class 0"
+            )
+        out[out == fill] = 0
+    x, y = meta.node_xy(w.row0, w.col0)
+    return ClassWindow(
+        x_min=x - meta.delta_x / 2,
+        y_max=y + meta.delta_y / 2,
+        delta_x=meta.delta_x,
+        delta_y=meta.delta_y,
+        array=out,
+    )
+
+
+def _decode_into(
+    source: BlockSource,
+    w: IndexWindow,
+    indices: Sequence[int],
+    out: np.ndarray[Any, np.dtype[Any]],
+    threads: int,
+) -> None:
+    """Decode each of `indices` into its own slice of `out`, `w`'s canvas, on
+    `threads` workers; none is sparse."""
+    page = source.page
 
     def put(index: int) -> None:
         data = source.block(index)
         with _stage(f"{source.where}, block {index}"):
             segment, (_, _, r0, c0, _), _ = page.decode(data, index)
-        assert segment is not None  # a sparse block was refused above
+        assert segment is not None  # a sparse block was refused or skipped by the caller
         rows = slice(max(r0, w.row0), min(r0 + segment.shape[1], w.row0 + w.rows))
         cols = slice(max(c0, w.col0), min(c0 + segment.shape[2], w.col0 + w.cols))
         block = segment[0, rows.start - r0 : rows.stop - r0, cols.start - c0 : cols.stop - c0, 0]
@@ -157,10 +224,6 @@ def decode_window(
 
     with ThreadPoolExecutor(threads) as pool:
         list(pool.map(put, indices))
-    # The public constructor's copy, not the canvas's no-copy route: M15
-    # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
-    # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
-    return DemTile(meta=window_meta(meta, w), array=out)
 
 
 __all__ = [
@@ -170,6 +233,6 @@ __all__ = [
     "NotCached",
     "block_grid",
     "blocks_meeting",
+    "decode_class_window",
     "decode_window",
-    "window_meta",
 ]

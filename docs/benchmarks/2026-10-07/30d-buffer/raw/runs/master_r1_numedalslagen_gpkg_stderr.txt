@@ -1,0 +1,10 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-30d2/pkg/tin_engine/__init__.py
+_core from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/perf-30d2/pkg/tin_engine/_core.cpython-314-darwin.so
+patches none pieces 1000
+features: 1611 kept (271 cut at the domain outline), 6504 outside the domain, 0 empty
+lines: 288045 vertices read, 149930 after joining shared edges and adding crossings
+DEM: 16 files, 15667 columns x 17882 rows
+land cover: 1860 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+1290807 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 10 m).
+launch: app wall 12.405 s
+exit 0

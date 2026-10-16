@@ -23,6 +23,11 @@ AMENDED FOR OLA'S 1 MM THRESHOLD (2026-09-28, "Ignore below 1mm"). A seam
 counts only nodes where |a - b| >= 0.001; the midline rule does not look at
 the threshold (`TestSeamThreshold`; `TestM8Overlaps`' one-ulp test inverted).
 
+AMENDED FOR 30c (`docs/increments/30c-dem-read-speed.md`, section 7). With a
+needed region, the seam report tests the region only on the nodes it could
+count (R2), and its edge cases count as before (P1):
+`TestSeamRegionOnCountedNodes`.
+
 HOW THIS FILE GOES RED. `tin_engine.mosaic` and `tin_engine.io.repository`
 are imported in module-scoped fixtures, as `test_bench.py` loads its tool, so
 while they are missing each test fails on its own with `ModuleNotFoundError`
@@ -78,18 +83,23 @@ def mz() -> ModuleType:
 
 @pytest.fixture(scope="module")
 def footprint() -> Any:
-    return importlib.import_module("tin_engine.io.repository").TileFootprint
+    return importlib.import_module("tin_engine.io.models").TileFootprint
 
 
 @pytest.fixture
 def plan(mz: ModuleType, footprint: Any) -> Any:
-    """`plan(tiles, box=None, needed=None)`: plan a dict of tiles; `box` is a 4-tuple."""
+    """`plan(tiles, box=None, needed=None, memory_budget=None)`: plan a dict of
+    tiles; `box` is a 4-tuple; the budget is passed only when given (38)."""
 
     def run(
-        tiles: dict[str, DemTile], box: tuple[float, ...] | None = None, needed: Any = None
+        tiles: dict[str, DemTile],
+        box: tuple[float, ...] | None = None,
+        needed: Any = None,
+        memory_budget: int | None = None,
     ) -> Any:
         bounds = None if box is None else bounds_of(mz, box)
-        return mz.plan_mosaic(footprints(footprint, tiles), bounds, needed)
+        extra = {} if memory_budget is None else {"memory_budget": memory_budget}
+        return mz.plan_mosaic(footprints(footprint, tiles), bounds, needed, **extra)
 
     return run
 
@@ -339,6 +349,56 @@ class TestM2LatticeGrouping:
         tiles["far.tif"] = whole(rows=3, cols=3, x_min=X0 + 1000 * DX, epsg=25832)
         result = plan(tiles, (500012.0, 6599987.0, 500033.0, 6599996.0))
         assert [p.name for p in result.tiles] == ["nw.tif"]
+
+
+class TestMixedGridError:
+    """Increment 29, PR 4 ("The batch"): the mixed-lattice refusal is told by
+    type, not by message. `MixedGridError(MosaicError)` carries `tiles`, the
+    two names `_covering` passes to `_mixed`, in the message's order; the
+    message is unchanged. It covers every difference `_mixed` words, so two
+    tiles that differ only in spacing raise it too: `mixed_grid` means "tiles
+    on two grids", not "half-cell-shifted tiles".
+    """
+
+    MESSAGE = re.compile(
+        r"^the request selects tiles on two lattices, (\S+) and (\S+): \2 .+; "
+        r"tiles are not resampled onto one another, but a --bbox inside one lattice is meshed$"
+    )
+
+    def raised(self, mz: ModuleType, call: Any) -> Any:
+        with pytest.raises(mz.MixedGridError) as info:
+            call()
+        return info.value
+
+    def test_it_is_a_mosaic_error(self, mz: ModuleType) -> None:
+        assert issubclass(mz.MixedGridError, mz.MosaicError)
+
+    def test_a_half_cell_offset_raises_it_with_both_names(self, mz: ModuleType, plan: Any) -> None:
+        tiles = TestM2LatticeGrouping.repository()
+        exc = self.raised(mz, lambda: plan(tiles, (500100.0, 6599955.0, 500130.0, 6599965.0)))
+        found = self.MESSAGE.match(str(exc))
+        assert found is not None, str(exc)
+        assert tuple(exc.tiles) == found.groups()
+        assert set(exc.tiles) == {"se.tif", "odd.tif"}
+        assert "0.5 cell" in str(exc)
+
+    def test_two_tiles_that_differ_only_in_spacing_raise_it(
+        self, mz: ModuleType, plan: Any
+    ) -> None:
+        source = whole()
+        tiles = {
+            "nw.tif": piece(source, 0, 5, 0, 7),
+            "ne.tif": piece(source, 0, 5, 6, 13, delta_x=12.5),
+        }
+        exc = self.raised(mz, lambda: plan(tiles))
+        assert set(exc.tiles) == {"nw.tif", "ne.tif"}
+        assert "spacing" in str(exc)
+
+    def test_other_refusals_are_not_it(self, mz: ModuleType, plan: Any) -> None:
+        """A box that meets no tile is a plain `MosaicError`."""
+        with pytest.raises(mz.MosaicError) as info:
+            plan({"nw.tif": whole()}, (0.0, 0.0, 10.0, 10.0))
+        assert not isinstance(info.value, mz.MixedGridError)
 
 
 class TestB1LatticeByCoverage:
@@ -599,29 +659,44 @@ class TestM4Bounds:
         refused(lambda: plan(tiles, (500120.0, 6599980.0, 500200.0, 6599990.0)))
 
 
-class TestM5NoMemoryCap:
-    """M5, inverted by increment 23c (DC11; B15, ruled (a) on 2026-10-02): the
-    refusal at half of physical memory is deleted, so a window over half of a
-    patched `physical_memory` is planned, not refused. `physical_memory` may go
-    with it (`23-basin-scale.md`, B15), so it is patched with `raising=False`
-    and its own test, which pinned the machine's figure, is gone."""
+class TestM5MemoryCap:
+    """M5, changed for 15a (R7) and again for increment 38 (section 4.3): the
+    cap is the memory budget, `plan_mosaic(..., memory_budget=)`, None being
+    half the machine's memory (`Resources.fallback()`; the machine read is
+    `test_resources.py`'s). The refusal names `--memory-budget` and `--bbox`."""
 
     NODES = 9 * 13
 
-    @pytest.mark.parametrize("memory", [2 * NODES * 4, 2 * NODES * 4 - 1, 8])
-    def test_planned_over_half_of_physical_memory(
-        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch, memory: int
+    @pytest.mark.parametrize(("budget", "accepted"), [(NODES * 4, True), (NODES * 4 - 1, False)])
+    def test_the_boundary_at_four_bytes_a_node(
+        self, mz: ModuleType, plan: Any, refused: Any, budget: int, accepted: bool
     ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory, raising=False)
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        if accepted:
+            assert plan(tiles, memory_budget=budget).meta.rows == 9
+        else:
+            refused(lambda: plan(tiles, memory_budget=budget), "--bbox", "--memory-budget")
+
+    def test_one_byte_refuses_the_lattice_naming_the_option_and_the_figures(
+        self, plan: Any, refused: Any
+    ) -> None:
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        message = refused(lambda: plan(tiles, memory_budget=1), "--memory-budget", "9 x 13")
+        names_number(message, self.NODES * 4)
+        names_number(message, 1)
+
+    def test_without_a_budget_the_lattice_is_planned(self, plan: Any) -> None:
+        """None is the fallback, half the machine's memory: 468 bytes pass."""
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         assert plan(tiles).meta.rows == 9
 
-    @pytest.mark.parametrize("memory", [2 * NODES * 8, 2 * NODES * 8 - 1])
-    def test_planned_when_a_selected_tile_decodes_to_float64(
-        self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch, memory: int
+    @pytest.mark.parametrize(("budget", "accepted"), [(NODES * 8, True), (NODES * 8 - 1, False)])
+    def test_the_boundary_at_eight_bytes_a_node_when_a_selected_tile_decodes_to_float64(
+        self, mz: ModuleType, footprint: Any, refused: Any, budget: int, accepted: bool
     ) -> None:
-        """S2's float64 window, once refused one byte under the boundary."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory, raising=False)
+        """S2: the cap counts the planned decoded dtype, `np.result_type` of the
+        selected footprints' `dtype`. One float64 tile makes the canvas float64
+        (R5), so the window costs 8 bytes a node, not 4."""
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -629,13 +704,16 @@ class TestM5NoMemoryCap:
             else footprint(name=name, meta=tile.meta)
             for name, tile in tiles.items()
         ]
-        assert mz.plan_mosaic(prints, None, None).meta.rows == 9
+        call = lambda: mz.plan_mosaic(prints, None, None, memory_budget=budget)  # noqa: E731
+        if accepted:
+            assert call().meta.rows == 9
+        else:
+            refused(call, "--bbox", "float64")
 
     def test_a_float64_tile_outside_the_window_does_not_count(
-        self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch
+        self, mz: ModuleType, footprint: Any
     ) -> None:
         """Only the selected tiles decode, so only their dtypes size the canvas."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4, raising=False)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -644,7 +722,8 @@ class TestM5NoMemoryCap:
             for name, tile in tiles.items()
         ]
         box = bounds_of(mz, (500012.0, 6599987.0, 500033.0, 6599996.0))  # 4 x 4, nw alone
-        assert [p.name for p in mz.plan_mosaic(prints, box, None).tiles] == ["nw.tif"]
+        planned = mz.plan_mosaic(prints, box, None, memory_budget=16 * 4)
+        assert [p.name for p in planned.tiles] == ["nw.tif"]
 
     def test_a_footprints_dtype_defaults_to_float32(self, footprint: Any) -> None:
         """S2: `TileFootprint` gains an optional decoded `dtype`, float32 unless given."""
@@ -653,12 +732,10 @@ class TestM5NoMemoryCap:
         given = footprint(name="a.tif", meta=tile.meta, dtype=np.dtype(np.float64))
         assert np.dtype(given.dtype) == np.float64
 
-    def test_the_cap_is_on_the_window_not_the_union(
-        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4, raising=False)
+    def test_the_cap_is_on_the_window_not_the_union(self, plan: Any) -> None:
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
-        assert plan(tiles, (500012.0, 6599987.0, 500033.0, 6599996.0)).meta.cols == 4
+        box = (500012.0, 6599987.0, 500033.0, 6599996.0)
+        assert plan(tiles, box, memory_budget=16 * 4).meta.cols == 4
 
 
 class TestM6PlanOrderIndependence:
@@ -1459,6 +1536,124 @@ class TestSeamThreshold:
             assert result.seams == (), names
 
 
+class TestSeamRegionOnCountedNodes:
+    """30c (`docs/increments/30c-dem-read-speed.md`, sections 3.2 and 7): with
+    a needed region, the seam report tests the region only on nodes it could
+    count (valid in both, gap at least `SEAM_THRESHOLD`), and counts the same
+    nodes as testing every overlap node first did (R2, P1).
+
+    Two tiles on one grid, so the overlap is the whole grid, and a needed
+    region with a hole: its bounding box is the grid, so the hole's nodes are
+    in the overlap but not needed. Point-registered, dx 10, dy 5, so node
+    (r, c) is at exactly (X0 + 10 c, Y0 - 5 r), and the hole's west edge,
+    x = X0 + 60, runs through column 6's nodes."""
+
+    ROWS, COLS = 6, 9
+    #: Rows 2 and 3 of columns 7 and 8 are in the hole's interior; column 6
+    #: (x = X0 + 60) and rows 1 and 4 (y = Y0 - 5, Y0 - 20) are on its edge.
+    HOLE = (X0 + 60.0, Y0 - 20.0, X0 + 100.0, Y0 - 5.0)
+
+    @classmethod
+    def needed(cls) -> Any:
+        grown = shapely.box(X0 - 5.0, Y0 - 5.0 * cls.ROWS, X0 + 10.0 * cls.COLS, Y0 + 5.0)
+        return grown.difference(shapely.box(*cls.HOLE))
+
+    @classmethod
+    def same_grid(cls, plants: dict[tuple[int, int], tuple[float, float]], **kw: Any) -> Any:
+        """`a.tif` and `b.tif`, equal on one grid but where `plants` gives
+        `(a, b)` at node (r, c)."""
+        source = whole(rows=cls.ROWS, cols=cls.COLS, **kw)
+        arrays = {name: np.asarray(source.array).copy() for name in ("a.tif", "b.tif")}
+        for (r, c), pair in plants.items():
+            for name, value in zip(("a.tif", "b.tif"), pair, strict=True):
+                arrays[name][r, c] = value
+        return {
+            name: piece(source, 0, cls.ROWS, 0, cls.COLS, array=a) for name, a in arrays.items()
+        }
+
+    @staticmethod
+    def oracle(tiles: dict[str, DemTile], needed: Any) -> list[tuple[str, str, int, float, float]]:
+        """The report as the code before 30c computed it: every overlap node
+        tested against `needed`, then valid in both (NaN and the sentinel are
+        NoData, +-inf is data), then the float64 gap at least the threshold."""
+        a, b = (np.asarray(tiles[n].array, dtype=np.float64) for n in ("a.tif", "b.tif"))
+        m = tiles["a.tif"].meta
+        r, c = np.indices(a.shape)
+        inside = shapely.intersects_xy(needed, m.x_min + c * m.delta_x, m.y_max - r * m.delta_y)
+        valid = ~np.isnan(a) & ~np.isnan(b)
+        if m.nodata is not None:
+            valid &= (a != m.nodata) & (b != m.nodata)
+        with np.errstate(invalid="ignore"):  # inf - inf is NaN, and not counted
+            gaps = np.abs(a - b)[inside & valid]
+        gaps = gaps[gaps >= 0.001]
+        if not gaps.size:
+            return []
+        return [("a.tif", "b.tif", int(gaps.size), float(gaps.max()), float(np.median(gaps)))]
+
+    def test_r2_the_region_is_tested_only_on_nodes_that_could_count(
+        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """R2: four nodes disagree by 2 or more, three needed and one in the
+        hole; the other 50 overlap nodes agree. The region is asked about 4
+        points, not 54, and the seam counts the three."""
+        plants = {(1, 1): (12.0, 10.0), (3, 2): (13.0, 10.0), (5, 4): (15.0, 10.0)}
+        plants[2, 7] = (17.0, 10.0)  # in the hole
+        tiles, needed = self.same_grid(plants), self.needed()
+        assert not shapely.intersects_xy(needed, X0 + 70.0, Y0 - 10.0)  # (2, 7) is not needed
+        planned = plan(tiles, None, needed)  # before the spy: planning tests the region too
+        assert planned.meta.rows * planned.meta.cols == self.ROWS * self.COLS
+        asked: list[int] = []
+        real = mz.shapely.intersects_xy
+
+        def spy(geometry: Any, x: Any, y: Any = None, **kw: Any) -> Any:
+            asked.append(int(np.broadcast(np.asarray(x), np.asarray(y)).size))
+            return real(geometry, x, y, **kw)
+
+        monkeypatch.setattr(mz.shapely, "intersects_xy", spy)
+        result = mz.assemble(planned, Loads(tiles), needed)
+        assert sum(asked) == len(plants)
+        assert seams(result) == [("a.tif", "b.tif", 3, 5.0, 3.0)]
+        assert seams(result) == self.oracle(tiles, needed)
+
+    #: (a, b) planted at a node, and whether the report counts it.
+    EDGE_CASES: ClassVar[dict[str, tuple[tuple[int, int], tuple[float, float], bool]]] = {
+        "on_the_hole_edge": ((2, 6), (1.0, 0.0), True),  # the region is closed
+        "in_the_hole": ((2, 7), (9.0, 0.0), False),
+        "exactly_the_threshold": ((1, 1), (0.001, 0.0), True),
+        "just_below_it": ((1, 2), (float(np.nextafter(0.001, 0.0)), 0.0), False),
+        "nan_on_one_side": ((2, 2), (np.nan, 0.0), False),
+        "the_sentinel_on_one_side": ((2, 3), (0.0, SENTINEL), False),
+        "inf_against_finite": ((3, 1), (np.inf, 0.0), True),  # inf is data
+        "inf_on_both_sides": ((3, 2), (np.inf, np.inf), False),  # inf - inf is NaN
+    }
+
+    # The report's own `inf - inf` warns; the test neither needs nor forbids that.
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in subtract:RuntimeWarning")
+    @pytest.mark.parametrize(
+        ("extra", "expected"),
+        [
+            pytest.param({}, (3, np.inf, 1.0), id="odd_count"),
+            pytest.param({(4, 3): (2.0, 0.0)}, (4, np.inf, 1.5), id="even_count"),
+        ],
+    )
+    def test_p1_edge_cases_under_a_needed_region(
+        self,
+        mz: ModuleType,
+        plan: Any,
+        extra: dict[tuple[int, int], tuple[float, float]],
+        expected: tuple[int, float, float],
+    ) -> None:
+        """P1: counted are the edge node (1), the threshold (0.001) and inf
+        against 0 (inf), plus 2 in the even case; the median of an even count
+        is the mean of the middle two, (1 + 2) / 2."""
+        plants = {node: pair for node, pair, _ in self.EDGE_CASES.values()} | extra
+        tiles = self.same_grid(plants, dtype=np.float64, nodata=SENTINEL)
+        needed = self.needed()
+        result = mz.assemble(plan(tiles, None, needed), Loads(tiles), needed)
+        assert seams(result) == [("a.tif", "b.tif", *expected)]
+        assert seams(result) == self.oracle(tiles, needed)
+
+
 class TestM9SplitAndRestitch:
     """M9 and I5: a grid cut into tiles reassembles to itself, meta and array."""
 
@@ -1605,4 +1800,5 @@ def test_the_plan_never_loads(mz: ModuleType, footprint: Any) -> None:
     """I6 as a type fact: `plan_mosaic` takes footprints, and no `load`."""
     import inspect
 
-    assert list(inspect.signature(mz.plan_mosaic).parameters) == ["footprints", "bounds", "needed"]
+    parameters = ["footprints", "bounds", "needed", "memory_budget"]  # 38: the cap
+    assert list(inspect.signature(mz.plan_mosaic).parameters) == parameters

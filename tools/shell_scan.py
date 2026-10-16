@@ -15,8 +15,10 @@ then judge the line as text, as before h4.
 from __future__ import annotations
 
 import ast
+import os
 import re
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 
 @dataclass
@@ -59,10 +61,12 @@ WRITER_ARGS = {
     "mkdir": {"-m"},
 }
 COPIERS = {"cp": {"-t", "-S"}, "ln": {"-t", "-S"}, "install": {"-m", "-o", "-g", "-t", "-S"}}
+COPIERS["mv"] = WRITER_ARGS.pop("mv")  # h16 G8: read as a copier that also names its sources
 PYTHON = re.compile(r"python(3(\.\d+)?)?")
+#: Shells that take a program with -c: /etc/shells on macOS, plus common ones elsewhere (h16 G7).
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh", "rbash", "fish", "mksh", "ash", "yash"}
 #: Interpreter -> the option letter that introduces its program text.
-PROGRAM_FLAG = {"perl": "e", "ruby": "e", "node": "e", "sh": "c", "bash": "c", "zsh": "c"}
-SHELLS = {"sh", "bash", "zsh"}
+PROGRAM_FLAG = {"perl": "e", "ruby": "e", "node": "e"} | dict.fromkeys(SHELLS, "c")
 PLAIN_PARAMETER = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 PARAMETER = re.compile(r"\$[\w@*#?$!-]?\w*")
 EXPANSION = re.compile(r"\$(\{[^}]*\}|\([^)]*\)|[\w@*#?$!-]+)|`[^`]*`")
@@ -351,14 +355,19 @@ def writer_targets(name: str, args: list[str]) -> tuple[list[str], bool]:
     """(the files a writer names, whether it also writes files it does not name)."""
     if name in WRITER_ARGS:
         return operands(args, WRITER_ARGS[name]), False
-    if name in COPIERS:
-        found = operands(args, COPIERS[name])
+    if name in COPIERS:  # h16 G8: a target directory, by option or by a name with no extension
+        args = [word for arg in args for word in target_option(arg)]
+        found, into = operands(args, COPIERS[name]), [b for a, b in pairwise(args) if a == "-t"]
+        kept = found if name == "mv" else []  # mv also removes its sources
+        if into:
+            return kept + [f"{into[-1].rstrip('/')}/{base(source)}" for source in found], False
         if len(found) < 2:
             return found, False
         dest = found[-1]
+        inside = [f"{dest.rstrip('/')}/{base(source)}" for source in found[:-1]]
         if dest in (".", "..") or dest.endswith("/"):  # into a directory: the sources' names
-            return [f"{dest.rstrip('/')}/{base(source)}" for source in found[:-1]], False
-        return [dest], False
+            return kept[:-1] + inside, False
+        return [*kept[:-1], dest, *(inside if not os.path.splitext(dest)[1] else [])], False
     if name == "sed" and any(a.startswith(("-i", "--in-place")) for a in args):
         return sed_files(args), False
     if name == "dd":
@@ -374,6 +383,13 @@ def writer_targets(name: str, args: list[str]) -> tuple[list[str], bool]:
             return operands(rest, {"-b", "-B", "--source", "-s"}), False
         return [], sub in ("apply", "am")
     return [], False
+
+
+def target_option(arg: str) -> list[str]:
+    """GNU's `-tDIR`, `--target-directory DIR` and `--target-directory=DIR`, as `-t DIR`."""
+    if arg.startswith("--target-directory"):
+        return ["-t", *arg.split("=", 1)[1:]]
+    return ["-t", arg[2:]] if arg.startswith("-t") and len(arg) > 2 else [arg]
 
 
 def sed_files(args: list[str]) -> list[str]:

@@ -7,9 +7,10 @@ with Ola's Q6 (b) (the legacy GML, read with the `clc18_kode` map).
 Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 
 - `ClassMap(name, attribute, classes, otherwise, notice)`, frozen, extra
-  fields forbidden. `CLASS_MAPS` maps `property`, `corine`, `corine-water`
-  and `clc18_kode` to the built-in maps. `clc18_kode` is `corine` keyed on
-  the Norwegian GML's attribute. Every CORINE map's `notice` names the
+  fields forbidden. `property`, `corine`, `corine-water` and `clc18_kode` are
+  the built-in maps (increment 41: loaded by `class_maps.load`, through
+  `feature_fixtures.class_map`, no longer `CLASS_MAPS`). `clc18_kode` is
+  `corine` keyed on the Norwegian GML's attribute. Every CORINE map's `notice` names the
   Copernicus Land Monitoring Service and says the data were modified;
   `property`'s is empty.
 - `FeatureSource(path, class_map, layer=None, crs=None)` and
@@ -32,10 +33,17 @@ Committed red at `e99c8ea` (amended at `3990449` and `972312c`):
 `tin_engine.feature_input` did not exist yet, and because it is imported lazily
 each test failed on its own. It landed in `5079da8` and the suite has been
 green since.
+
+Increment 30b (`docs/increments/30b-clip-speed.md`, section 7) added the
+classes at the end: `TestUntouched` (R1, R2) and `TestLinework` for the two
+helpers it introduced, `_untouched` and `_linework`, committed red before
+either existed; and `TestTheClipStaysTheSame` (pins P1-P5), green before
+the change.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -54,9 +62,11 @@ from shapely.geometry import (
     MultiPolygon,
     Point,
     Polygon,
+    mapping,
 )
 
 import feature_fixtures as ff
+from crs_fixtures import axes_swapped, refuse_point_moves
 from feature_fixtures import (
     CROSSING,
     UTM33,
@@ -81,6 +91,9 @@ LAEA = "EPSG:3035"
 WATER_CODES = ("511", "512", "521", "522", "523")
 BOX = domain_of(square(0, 0, 300, 300))
 INNER = square(100, 100, 200, 200)
+#: `INNER` as a GeoJSON geometry, and a `crs` member naming the DEM's CRS.
+GEOMETRY = json.loads(json.dumps(mapping(INNER)))
+MEMBER = {"type": "name", "properties": {"name": UTM33}}
 
 
 @pytest.fixture(scope="module")
@@ -102,28 +115,31 @@ def lines_of(fs: Any) -> list[LineString]:
 # --------------------------------------------------------------- class maps
 
 
+BUILT_IN = ("property", "corine", "corine-water", "clc18_kode")
+
+
 class TestClassMaps:
-    def test_the_built_in_maps(self, fi: ModuleType) -> None:
-        assert set(fi.CLASS_MAPS) == {"property", "corine", "corine-water", "clc18_kode"}
-        assert {name: m.attribute for name, m in fi.CLASS_MAPS.items()} == {
+    def test_the_built_in_maps(self) -> None:
+        maps = {name: ff.class_map(name) for name in BUILT_IN}
+        assert {name: m.attribute for name, m in maps.items()} == {
             "property": "property",
             "corine": "Code_18",
             "corine-water": "Code_18",
             "clc18_kode": "clc18_kode",
         }
-        assert all(m.name == name for name, m in fi.CLASS_MAPS.items())
+        assert all(m.name == name for name, m in maps.items())
 
     def test_the_corine_maps_carry_the_attribution(self, fi: ModuleType) -> None:
         """R10 and "Test data": a mesh built from CORINE says so, and says the
         data were modified."""
         for name in ("corine", "corine-water", "clc18_kode"):
-            notice = fi.CLASS_MAPS[name].notice
+            notice = ff.class_map(name).notice
             assert "Copernicus Land Monitoring Service" in notice, name
             assert "modified" in notice.lower(), name
-        assert fi.CLASS_MAPS["property"].notice == ""
+        assert ff.class_map("property").notice == ""
 
     def test_a_class_map_is_frozen_and_strict(self, fi: ModuleType) -> None:
-        corine = fi.CLASS_MAPS["corine"]
+        corine = ff.class_map("corine")
         with pytest.raises((TypeError, ValueError)):
             corine.attribute = "other"
         with pytest.raises(ValueError):
@@ -463,6 +479,24 @@ class TestCrs:
         (line,) = lines_of(one(tmp_path, INNER))
         assert set(line.coords) == set(INNER.exterior.coords)
 
+    def test_the_dems_epsg_code_by_definition_is_not_moved(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Audit PR B, red test 9: a source spelt as the WKT of the DEM's
+        EPSG:25833, without its ID and axes swapped, is in the DEM's CRS (`crs.same_crs`), so its
+        geometries are those of the source spelt `EPSG:25833`, and no point
+        moves, neither for the source region nor for the features."""
+        leaving = LineString([at(150, 150), at(400, 170)])  # clipped at the domain
+        features = [Feat(fid, g, {"property": "road"}) for fid, g in (("a", INNER), ("b", leaving))]
+        by_code = open_one(write_geojson(tmp_path / "code.geojson", features), BOX)
+        spelt = write_geojson(tmp_path / "proj.geojson", features, crs=axes_swapped(25833))
+        refuse_point_moves(monkeypatch)
+        by_proj = open_one(spelt, BOX)
+        assert [f.fid for f in by_proj.features] == [f.fid for f in by_code.features]
+        assert [line.coords[:] for line in lines_of(by_proj)] == [
+            line.coords[:] for line in lines_of(by_code)
+        ]
+
     def test_a_given_crs_agreeing_with_the_files_is_accepted(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
         assert len(open_one(path, BOX, crs="EPSG:25833").features) == 1
@@ -520,8 +554,8 @@ class TestCrs:
         laea = moved(Polygon([at(100, 100), at(200, 100), at(150, 150), at(100, 200)]), UTM33, LAEA)
         marker = laea.exterior.coords[2]  # in the source CRS
 
-        def fake(src: Any, dst: Any) -> Any:
-            move = real(src, dst)
+        def fake(src: Any, dst: Any, *, threads: int = 1) -> Any:
+            move = real(src, dst, threads=threads)
             if CRS.from_user_input(dst) != CRS.from_user_input(UTM33):
                 return move
 
@@ -543,6 +577,193 @@ class TestCrs:
 
 
 # --------------------------------------------------------- region and clip
+
+
+class TestOneGeojsonRule:
+    """Audit PR C (`docs/increments/python-audit.md`, section 12, red test 2):
+    `read_source`'s GeoJSON branch reads through `io.geojson.read_collection`
+    with RFC 7946's default, and a refusal reaches the existing handler as
+    `<file name>: <words>`. Each row here differs from the code before it."""
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        return fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+
+    @staticmethod
+    def written(tmp_path: Path, doc: object) -> Path:
+        path = tmp_path / "f.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def collection(**members: Any) -> dict[str, Any]:
+        feature = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        return {"type": "FeatureCollection", "features": [feature]} | members
+
+    @pytest.mark.parametrize(
+        ("member", "says"),
+        [
+            (None, "the crs member is null; the file must name its CRS"),
+            ({}, "the crs member has no name; it must name the CRS"),
+        ],
+        ids=["null", "empty_object"],
+    )
+    def test_a_member_naming_nothing_is_refused_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType, member: Any, says: str
+    ) -> None:
+        """Before: both read as EPSG:4326, as if the member were absent."""
+        path = self.written(tmp_path, self.collection(crs=member))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == f"f.geojson: {says}"
+
+    def test_a_feature_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused as not a FeatureCollection. Its fid is its position."""
+        doc = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        read = self.rows(fi, self.written(tmp_path, doc | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, "road", UTM33)
+        assert geometry.equals(INNER)
+
+    def test_a_bare_geometry_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused. One feature with no properties, so no class value."""
+        read = self.rows(fi, self.written(tmp_path, GEOMETRY | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, None, UTM33)
+        assert geometry.equals(INNER)
+
+    def test_features_that_are_not_a_list_are_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: `"features": {}` read as no features."""
+        path = self.written(tmp_path, self.collection(crs=MEMBER, features={}))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == (
+            "f.geojson: no features list; the file is not a FeatureCollection"
+        )
+
+    def test_a_numeric_name_is_read_as_its_digits(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: the int 4326 reached `FeatureSet(crs=...)`, whose field is
+        `tuple[str, ...]`, and pydantic refused it."""
+        member = {"type": "name", "properties": {"name": 4326}}
+        read = self.rows(fi, self.written(tmp_path, self.collection(crs=member)))
+        assert read.crs == "4326"
+        assert isinstance(read.crs, str)
+
+    def test_a_numeric_name_opens_as_a_feature_set(self, tmp_path: Path) -> None:
+        """The same file through `open_features`: its `crs` is the text."""
+        lonlat = moved(INNER, UTM33, "EPSG:4326")
+        feature = {"type": "Feature", "properties": {"property": "road"}}
+        doc = {
+            "type": "FeatureCollection",
+            "crs": {"type": "name", "properties": {"name": 4326}},
+            "features": [feature | {"geometry": mapping(lonlat)}],
+        }
+        fs = open_one(self.written(tmp_path, doc), BOX)
+        assert fs.crs == ("4326",)
+        assert len(fs.features) == 1
+
+
+#: Every empty JSON value but `null` (`docs/increments/python-audit.md`,
+#: section 12, the ruling after code review round 2).
+EMPTY_NOT_NULL = [
+    pytest.param("", id="empty_string"),
+    pytest.param(0, id="zero"),
+    pytest.param(False, id="false"),
+    pytest.param([], id="empty_list"),
+    pytest.param({}, id="empty_object"),
+]
+
+
+class TestAnEmptyGeometryIsNull:
+    """Audit PR C, section 12's ruling after code review round 2: `read_source`
+    treats every empty `geometry` as `null`. Before, `""`, `0`, `false`, `[]`
+    and `{}` crashed `--features` and `catchment --lakes` with an
+    `AttributeError` (`'str' object has no attribute 'is_empty'`). Each test
+    compares with the same file whose `geometry` is `null`, so it pins no
+    outcome of its own: only that the two read alike."""
+
+    @staticmethod
+    def written(tmp_path: Path, geometry: Any, shape: str) -> Path:
+        """A top-level `Feature`, or a collection whose first feature has
+        `geometry` and whose second is `INNER`; both with a `crs` member."""
+        feature = {"type": "Feature", "properties": {"property": "water"}, "geometry": geometry}
+        if shape == "feature":
+            doc = feature | {"crs": MEMBER}
+        else:
+            kept = feature | {"geometry": GEOMETRY}
+            doc = {"type": "FeatureCollection", "crs": MEMBER, "features": [feature, kept]}
+        path = tmp_path / f"{shape}-{json.dumps(geometry)}.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        read = fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+        return read.crs, read.rows
+
+    @staticmethod
+    def opened(path: Path) -> Any:
+        fs = open_one(path, BOX)
+        return ([f.fid for f in fs.features], fs.outside, fs.clipped, fs.empty, fs.crs, fs.counts)
+
+    @staticmethod
+    def lakes(fi: ModuleType, path: Path) -> Any:
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        return lakes, crs
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_read_source_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        null = self.rows(fi, self.written(tmp_path, None, shape))
+        assert self.rows(fi, self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_features_reads_it_as_null(self, tmp_path: Path, empty: Any, shape: str) -> None:
+        """`--features`, through `open_features`."""
+        null = self.opened(self.written(tmp_path, None, shape))
+        assert self.opened(self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_catchment_lakes_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        """`catchment --lakes`, through `read_lake_polygons`."""
+        null = self.lakes(fi, self.written(tmp_path, None, shape))
+        assert self.lakes(fi, self.written(tmp_path, empty, shape)) == null
+
+
+class TestRenamedAndMoved:
+    """Audit PR C, red tests 5 and 7: the any-source lake reader is named by
+    what it reads, and `TerrainFeature` lives in `features` (layer 0), which
+    `feature_input` imports it back from."""
+
+    def test_read_lake_polygons_replaces_read_lakes(self, fi: ModuleType) -> None:
+        assert callable(getattr(fi, "read_lake_polygons", None))
+        assert not hasattr(fi, "read_lakes")
+
+    def test_read_lake_polygons_skips_what_is_not_a_polygon(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """Increment 22's behaviour, unchanged by the rename."""
+        features = [
+            Feat("lake", INNER, {"property": "water"}),
+            Feat("shore", LineString([at(0, 0), at(300, 0)]), {"property": "road"}),
+        ]
+        path = write_geojson(tmp_path / "l.geojson", features)
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        assert crs == UTM33
+        (lake,) = lakes
+        assert lake.equals(INNER)
+
+    def test_terrain_feature_is_one_class(self, fi: ModuleType) -> None:
+        import tin_engine.features as features
+
+        assert features.TerrainFeature is fi.TerrainFeature
+        assert fi.TerrainFeature.__module__ == "tin_engine.features"
 
 
 class TestClip:
@@ -1020,3 +1241,615 @@ class TestManySources:
         fs = fi.open_features(self.two_source_request(tmp_path, fi), BOX, UTM33)
         assert fs.crs == (UTM33, UTM33)
         assert fs.layers == (None, None)
+
+
+# ------------------------------------ 30b: the features clip made fast
+
+#: R1 and R2's offset: `docs/increments/30b-probes/geos_cases.py`'s, whole
+#: metres, so every coordinate below is exactly representable.
+U0 = (500_000.0, 6_600_000.0)
+
+
+def u(x: float, y: float) -> tuple[float, float]:
+    return (U0[0] + x, U0[1] + y)
+
+
+#: A square with an extra vertex at (100, 50) on its east side, and a square
+#: with a hole (40..60)²: `geos_cases.py`'s two domains.
+EXTRA = Polygon([u(0, 0), u(100, 0), u(100, 50), u(100, 100), u(0, 100)])
+HOLED = Polygon(
+    [u(0, 0), u(100, 0), u(100, 100), u(0, 100)],
+    [[u(40, 40), u(60, 40), u(60, 60), u(40, 60)]],
+)
+
+#: R1: `geos_cases.py`'s 14 cases, then two the domain does not cover, then
+#: increment 35's five (section 3.2, 5 test 3 and its review): lines whose
+#: ends lie on the outline or a hole. `True` exactly where
+#: `shapely.intersection(line, domain)` gives the line back unchanged
+#: (shapely 2.1.2, GEOS 3.13.1, 30b; shapely 2.2.0, GEOS 3.14.1, 35).
+UNTOUCHED_CASES = [
+    pytest.param(EXTRA, [u(10, 10), u(20, 30), u(50, 20)], True, id="plain-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 10), u(30, 30), u(10, 30), u(10, 10)], True,
+                 id="closed-ring-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(20, 10), u(30, 10)], True, id="collinear-middle-vertex"),
+    pytest.param(EXTRA, [u(10, 10), u(20, 30), u(20, 30), u(50, 20)], False,
+                 id="repeated-vertex"),
+    pytest.param(EXTRA, [u(0, 10), u(30, 10), u(30, 30), u(0, 30), u(0, 10)], False,
+                 id="closed-ring-touching-the-outline-at-its-start"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 10), u(30, 30), u(0, 20), u(10, 10)], False,
+                 id="closed-ring-touching-the-outline-mid-ring"),
+    pytest.param(EXTRA, [u(50, 50), u(100, 40), u(100, 60), u(60, 70)], False,
+                 id="domain-vertex-on-the-line"),
+    pytest.param(EXTRA, [u(100, 10), u(100, 90)], False, id="along-the-outline"),
+    pytest.param(EXTRA, [u(100, 10), u(100, 90), u(50, 90)], False, id="along-then-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 50), u(50, 10), u(10, 50)], False, id="self-crossing"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 10), u(30, 30), u(10, 10), u(10, 50)], False,
+                 id="self-touching-at-a-vertex"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 10), u(30, 10)], False, id="doubling-back"),
+    pytest.param(HOLED, [u(10, 10), u(40, 50), u(10, 90)], False, id="touching-a-hole"),
+    pytest.param(EXTRA, [u(10, 10), u(10, 10)], False, id="zero-length"),
+    pytest.param(EXTRA, [u(50, 50), u(150, 50)], False, id="partly-outside"),
+    pytest.param(EXTRA, [u(200, 10), u(250, 30)], False, id="wholly-outside"),
+    # Increment 35: an end may lie on the outline; the interior may not touch it.
+    pytest.param(EXTRA, [u(0, 10), u(30, 30), u(100, 20)], True, id="ends-on-the-outline"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 30), u(100, 20)], True, id="one-end-on-the-outline"),
+    pytest.param(HOLED, [u(10, 10), u(30, 30), u(40, 50)], True, id="end-on-a-hole"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 30), u(100, 50)], True, id="end-on-a-domain-vertex"),
+    pytest.param(EXTRA, [u(0, 10), u(100, 50), u(0, 90)], False,
+                 id="ends-on-the-outline-through-a-domain-vertex"),
+]  # fmt: skip
+
+
+class TestUntouched:
+    """30b, section 7, R1 and R2, widened by increment 35, section 3.2:
+    `_untouched(line, domain) -> bool`, True exactly when the line has two
+    vertices or more, repeats no vertex in a row, is simple, and its interior
+    lies in the domain's interior with its ends in the domain's closure
+    (`relate_pattern(domain, line, "T**F**FF*")`; 30b asked
+    `contains_properly`, which refused an end on the outline). Where it is
+    True, the clip keeps the chain as it is instead of intersecting it with
+    the domain, so it must be True only where that intersection would give the
+    chain back unchanged. Called, as `_take` calls it, with the domain
+    prepared."""
+
+    @pytest.mark.parametrize(("domain", "coords", "expected"), UNTOUCHED_CASES)
+    def test_r1_case_by_case(
+        self, fi: ModuleType, domain: Polygon, coords: list[tuple[float, float]], expected: bool
+    ) -> None:
+        shapely.prepare(domain)
+        line = LineString(coords)
+        before = (shapely.to_wkb(line), shapely.to_wkb(domain))
+        assert fi._untouched(line, domain) is expected
+        assert (shapely.to_wkb(line), shapely.to_wkb(domain)) == before  # pure (3.4)
+
+    @pytest.mark.parametrize(
+        ("domain", "coords"),
+        [pytest.param(*p.values[:2], id=p.id) for p in UNTOUCHED_CASES if p.values[2]],
+    )
+    def test_r2_every_true_row_is_what_geos_gives_back(
+        self, fi: ModuleType, domain: Polygon, coords: list[tuple[float, float]]
+    ) -> None:
+        """Increment 35, test 3's oracle, on every True row of the table (the
+        35 rows included): GEOS's own `intersection(line, domain)` is one
+        `LineString` with the line's bytes. This is what makes skipping the
+        intersection safe, and it runs on every GEOS CI has (section 8)."""
+        shapely.prepare(domain)
+        line = LineString(coords)
+        assert fi._untouched(line, domain)
+        parts = shapely.get_parts(shapely.intersection(line, domain))
+        assert len(parts) == 1 and isinstance(parts[0], LineString), [p.wkt for p in parts]
+        assert shapely.to_wkb(parts[0]) == shapely.to_wkb(line)
+
+    def test_r2_where_it_is_true_geos_gives_the_line_back_unchanged(self, fi: ModuleType) -> None:
+        """The oracle is GEOS's own intersection, so this is the CI guard
+        against a GEOS that reorients, restarts or re-vertexes a line lying
+        in the interior (section 10). 400 seeded lines of 2 to 5 vertices
+        near a 48-vertex domain (integer vertices) with a square hole; by
+        index, a fifth each: plain, rounded to a 10 m lattice, a closed
+        triangle (either orientation), one vertex repeated, one vertex moved
+        onto a domain vertex. At this seed 91 are untouched: 55 open, 19
+        counter-clockwise rings, 17 clockwise. The bounds below are a tenth
+        of the set and one of each shape, so it cannot pass vacuously."""
+        t = np.linspace(0.0, 2.0 * np.pi, 48, endpoint=False)
+        r = 400.0 + 60.0 * np.sin(5.0 * t)
+        outer = np.round(np.column_stack([r * np.cos(t), r * np.sin(t)])) + U0
+        hole = np.array([(-60.0, -60.0), (-60.0, 60.0), (60.0, 60.0), (60.0, -60.0)]) + U0
+        domain = Polygon(outer, [hole])
+        assert domain.is_valid
+        shapely.prepare(domain)
+        rng = np.random.default_rng(302)
+        seen = {"open": 0, "ccw": 0, "cw": 0}
+        for i in range(400):
+            kind = i % 5
+            n = 3 if kind == 2 else int(rng.integers(2, 6))
+            xy = rng.uniform(-470.0, 470.0, 2) + np.cumsum(rng.normal(0.0, 40.0, (n, 2)), axis=0)
+            if kind == 1:
+                xy = np.round(xy / 10.0) * 10.0
+            elif kind == 2:
+                xy = np.vstack([xy, xy[:1]])
+            elif kind == 3:
+                j = int(rng.integers(len(xy)))
+                xy = np.insert(xy, j, xy[j], axis=0)
+            elif kind == 4:
+                xy[int(rng.integers(len(xy)))] = outer[int(rng.integers(len(outer)))] - U0
+            line = LineString(xy + U0)
+            if not fi._untouched(line, domain):
+                continue
+            parts = shapely.get_parts(shapely.intersection(line, domain))
+            assert len(parts) == 1 and isinstance(parts[0], LineString), (i, line.wkt)
+            assert shapely.to_wkb(parts[0]) == shapely.to_wkb(line), (i, line.wkt)
+            shape = "open" if not line.is_closed else "ccw" if shapely.is_ccw(line) else "cw"
+            seen[shape] += 1
+        assert sum(seen.values()) >= 40, seen
+        assert min(seen.values()) >= 1, seen
+
+
+#: 16b R5's region for `_linework`'s test, in the source CRS.
+SMALL = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+
+class TestLinework:
+    """30b, section 3.2: `_linework(geometry)`, what the whole-feature test
+    tests against the region: every ring of a polygon, holes included, as
+    lines, or a line itself. Not a red test the design lists; kept by
+    ruling 4 in section 7 of docs/increments/30b-clip-speed.md."""
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param(Polygon([(1, 1), (4, 1), (4, 4)]), id="polygon"),
+            pytest.param(
+                Polygon([(20, 20), (30, 20), (30, 30), (20, 30)], [[(3, 3), (7, 3), (7, 7)]]),
+                id="hole-outside-its-shell",
+            ),
+            pytest.param(
+                MultiPolygon(
+                    [
+                        Polygon([(1, 1), (4, 1), (4, 4)], [[(2, 1.5), (3.5, 1.5), (3.5, 3)]]),
+                        Polygon([(6, 6), (9, 6), (9, 9)]),
+                    ]
+                ),
+                id="multipolygon",
+            ),
+            pytest.param(LineString([(-5, 5), (15, 5)]), id="line-with-both-ends-outside"),
+            pytest.param(LineString([(2, 2), (8, 2), (8, 8), (2, 2)]), id="closed-line"),
+            pytest.param(
+                MultiLineString([[(-5, 5), (15, 5)], [(2, 2), (8, 8)]]), id="multilinestring"
+            ),
+        ],
+    )
+    def test_every_ring_or_line_in_order(self, fi: ModuleType, geometry: Any) -> None:
+        got = [list(p.coords) for p in shapely.get_parts(fi._linework(geometry))]
+        assert got == [list(line.coords) for line in ff.boundary_lines(geometry)]
+
+    def test_it_meets_the_region_where_the_polygon_s_envelope_does_not(
+        self, fi: ModuleType
+    ) -> None:
+        """Section 1: the prepared test on the polygon drops a hole outside
+        its shell's envelope; on the linework it does not."""
+        shapely.prepare(SMALL)
+        invalid = Polygon([(20, 20), (30, 20), (30, 30), (20, 30)], [[(3, 3), (7, 3), (7, 7)]])
+        assert not SMALL.intersects(invalid)
+        assert SMALL.intersects(fi._linework(invalid))
+
+
+#: P5's L-shaped shell: it misses the region (`BOX` grown by 100 m), but its
+#: envelope overlaps the region's.
+ELL = [at(500, -200), at(600, -200), at(600, 600), at(-200, 600), at(-200, 500), at(500, 500)]
+#: P1: `BOX` with an extra vertex at (300, 150) on its east side.
+EAST_VERTEX = domain_of(Polygon([at(0, 0), at(300, 0), at(300, 150), at(300, 300), at(0, 300)]))
+
+
+def pieces_in(chain: LineString, domain: Polygon) -> list[list[tuple[float, float]]]:
+    """The oracle: the lines of positive length `shapely.intersection` gives."""
+    parts = shapely.get_parts(shapely.intersection(chain, domain))
+    return [list(p.coords) for p in parts if isinstance(p, LineString) and p.length > 0]
+
+
+class TestTheClipStaysTheSame:
+    """30b, section 7, pins P1-P5: green before the change and after it. The
+    change skips work (the whole feature, an edge's segment test, a chain's
+    intersection); these pin that no skip changes what is kept."""
+
+    @pytest.mark.parametrize(
+        ("domain", "geometry"),
+        [
+            pytest.param(
+                BOX,
+                Polygon([at(250, 200), at(200, 150), at(250, 100), at(300, 150)]),
+                id="ring-touching-the-outline-at-one-vertex",
+            ),
+            pytest.param(
+                EAST_VERTEX,
+                LineString([at(300, 50), at(300, 250)]),
+                id="line-along-the-outline",
+            ),
+            pytest.param(
+                BOX,
+                Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)]),
+                id="self-crossing-ring",
+            ),
+            pytest.param(
+                BOX,
+                Polygon([at(100, 100), at(200, 100), at(200, 100), at(200, 200), at(100, 200)]),
+                id="ring-with-a-repeated-vertex",
+            ),
+        ],
+    )
+    def test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it(
+        self, tmp_path: Path, domain: Any, geometry: Any
+    ) -> None:
+        """The domain covers each chain, yet GEOS's intersection does not
+        give it back whole; the feature's lines are those pieces, vertex by
+        vertex. A rule that skipped the intersection whenever the domain
+        covers the chain (section 3.5) fails here. GEOS gives a chain back
+        whole when it touches the outline only at its own start vertex, or
+        runs along a side with no domain vertex in between, so the touch is
+        mid-ring and the line passes `EAST_VERTEX`'s (300, 150)."""
+        (chain,) = ff.boundary_lines(geometry)
+        expected = pieces_in(chain, domain.polygon)
+        assert domain.polygon.covers(chain) and expected != [list(chain.coords)]
+        fs = one(tmp_path, geometry, domain=domain)
+        assert [list(line.coords) for line in lines_of(fs)] == expected
+
+    @pytest.mark.parametrize(
+        "where",
+        [
+            pytest.param(square(50_000, 50_000, 50_100, 50_100), id="far-outside-the-region"),
+            pytest.param(INNER, id="inside"),
+        ],
+    )
+    def test_p2_a_value_the_map_lacks_is_refused_wherever_the_feature_lies(
+        self, tmp_path: Path, fi: ModuleType, where: Polygon
+    ) -> None:
+        """Section 3.2: the refusal checks come before the whole-feature
+        test, so a feature missing the region is still refused."""
+        strict = fi.ClassMap(
+            name="strict", attribute="property", classes={"road": ("road",)}, otherwise="refuse"
+        )
+        path = write_geojson(tmp_path / "f.geojson", [Feat("far-9", where, {"property": "ice"})])
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=strict),))
+        with pytest.raises(fi.FeatureError, match=r"far-9.*'ice'.*strict"):
+            fi.open_features(request, BOX, UTM33)
+
+    def test_p3_features_missing_the_region_are_counted_outside(self, tmp_path: Path) -> None:
+        """The region is `BOX` grown by 100 m, so 150 m east of it is out."""
+        features = [
+            Feat("east", square(450, 0, 500, 50), {"property": "road"}),
+            Feat("west", LineString([at(-2_000, 150), at(-1_500, 150)]), {"property": "road"}),
+            Feat("in", INNER, {"property": "road"}),
+            Feat("far", square(50_000, 50_000, 50_100, 50_100), {"property": "road"}),
+        ]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", features), BOX)
+        assert [f.fid for f in fs.features] == ["in"]
+        assert (fs.outside, fs.clipped, fs.empty) == (3, 0, 0)
+
+    @pytest.mark.parametrize(
+        ("edge", "kept"),
+        [
+            pytest.param([(-5, 5), (15, 5)], True, id="both-ends-outside-crossing"),
+            pytest.param([(10, 5), (20, 5)], True, id="one-end-on-the-boundary"),
+            pytest.param([(9.5, 11), (11, 9.5)], False, id="both-ends-outside-passing-a-corner"),
+        ],
+    )
+    def test_p4_an_edge_is_kept_by_the_edge_not_by_its_ends(
+        self, fi: ModuleType, edge: list[tuple[float, float]], kept: bool
+    ) -> None:
+        """Section 3.1: an edge with an end in the region is kept without
+        the segment test; the others still get it. The corner miss is about
+        0.35 from (10, 10)."""
+        assert chains(fi, LineString(edge)) == ([edge] if kept else [])
+
+    @pytest.mark.parametrize(
+        ("geometry", "expected"),
+        [
+            pytest.param(
+                Polygon(
+                    square(2_000, 2_000, 2_100, 2_100).exterior.coords, [INNER.exterior.coords]
+                ),
+                [list(INNER.exterior.coords)],
+                id="hole-inside-shell-s-envelope-misses-the-region-s",
+            ),
+            pytest.param(
+                Polygon(ELL, [INNER.exterior.coords]),
+                [list(INNER.exterior.coords)],
+                id="hole-inside-shell-s-envelope-overlaps-the-region-s",
+            ),
+            pytest.param(
+                LineString([at(-500, 150), at(800, 150)]),
+                [[at(0, 150), at(300, 150)]],
+                id="line-with-both-ends-outside-the-region",
+            ),
+        ],
+    )
+    def test_p5_the_whole_feature_test_keeps_what_the_pre_clip_keeps(
+        self, tmp_path: Path, geometry: Any, expected: list[list[tuple[float, float]]]
+    ) -> None:
+        """`clip_bytes.py`'s three `probe::` cases. Each shell misses the
+        region and is dropped; its hole lies in the domain and is kept whole.
+        The line's ends are outside the region; its piece in the domain is
+        kept. A whole-feature test on the polygon (it reads only the shell's
+        envelope) loses the first; one on every feature's boundary (a line's
+        is its two ends) loses the third."""
+        fs = one(tmp_path, geometry)
+        assert len(fs.features) == 1 and fs.outside == 0
+        assert [list(line.coords) for line in lines_of(fs)] == expected
+
+
+# ------------------------------------ increment 35: the clean-up step, faster
+
+#: The CLI's clean-up defaults (`test_cli_features_cleanup.py`): repair 1 m,
+#: merge on, band 50 m, outline rule 5 m.
+CLEANUP = {"repair_m": 1.0, "merge_same_class": True, "tolerance_m": 50.0, "outline_snap_m": 5.0}
+
+
+def cleanup_request(fi: ModuleType, path: Path, map_name: str = "corine") -> Any:
+    return fi.FeatureRequest(sources=(ff.source(path, map_name),), **CLEANUP)
+
+
+def counting_reprojector(fi: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """`fi.reprojector` wrapped around the real one; the list gets the point
+    count of every `apply` call."""
+    import tin_engine.crs as crs_module
+
+    calls: list[int] = []
+    real = crs_module.reprojector
+
+    def fake(src: Any, dst: Any, *, threads: int = 1) -> Any:
+        move = real(src, dst, threads=threads)
+
+        def apply(xy: Any) -> np.ndarray:
+            calls.append(len(np.asarray(xy, dtype=np.float64).reshape(-1, 2)))
+            return move(xy)
+
+        return apply
+
+    monkeypatch.setattr(fi, "reprojector", fake)
+    return calls
+
+
+class TestOneTransformPerSource:
+    """Increment 35, section 3.1 (a) and test 2: `_take` moves a source's
+    cover polygons in one `shapely.transform` over all of them after the loop,
+    not one call per polygon, so the threads of 3.1 (b) have an array worth
+    splitting; the per-polygon `_finite` refusal keeps its text and its fid."""
+
+    #: Three squares tiling `BOX`, in EPSG:3035, five coordinates each.
+    TILES = (square(0, 0, 150, 150), square(150, 0, 300, 150), square(0, 150, 300, 300))
+
+    def source(self, tmp_path: Path, *extra: Feat) -> Path:
+        feats = [
+            Feat(i + 1, moved(p, UTM33, LAEA), {"Code_18": c})
+            for i, (p, c) in enumerate(zip(self.TILES, ("311", "312", "512"), strict=True))
+        ]
+        return write_geojson(tmp_path / "cover.geojson", [*feats, *extra], crs=LAEA)
+
+    def test_one_apply_call_carries_every_cover_vertex(
+        self, tmp_path: Path, fi: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = counting_reprojector(fi, monkeypatch)
+        fs = fi.open_features(cleanup_request(fi, self.source(tmp_path)), BOX, UTM33)
+        assert len(fs.features) == 3 and fs.outside == 0
+        assert calls == [sum(shapely.get_num_coordinates(p) for p in self.TILES)]  # one call, 15
+
+    def test_a_vertex_with_no_image_is_refused_naming_its_fid(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """x = 1e300 in EPSG:3035 has no image (PROJ gives `inf`); the batch
+        must still name the one polygon, not the first or the source."""
+        xy = list(moved(self.TILES[0], UTM33, LAEA).exterior.coords)[:-1]
+        xy[1] = (1e300, xy[1][1])
+        path = self.source(tmp_path, Feat("lost", Polygon(xy), {"Code_18": "311"}))
+        with pytest.raises(
+            fi.FeatureError, match=r"^cover\.geojson: feature lost has a vertex with no image"
+        ):
+            fi.open_features(cleanup_request(fi, path), BOX, UTM33)
+
+
+class TestClippedCount:
+    """Increment 35, section 3.3 and test 4: `_add` asks `covers` only for the
+    chains `_untouched` did not pass (a chain in the domain's closure is
+    covered), and `clipped` counts the same features as before."""
+
+    INSIDE = LineString([at(50, 50), at(100, 80)])
+    ALSO_INSIDE = LineString([at(10, 10), at(20, 20)])
+    CROSSING = LineString([at(150, 150), at(400, 150)])  # `BOX` ends at x = 300
+    ALONG = LineString([at(300, 50), at(300, 250)])  # on `BOX`'s east side, no vertex between
+
+    @pytest.fixture
+    def covers_calls(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
+        """Every `covers` call, by method (`dom.covers(g)`) or by function
+        (`shapely.covers(dom, g)`); the method does not go through the
+        function for a scalar, so both are wrapped."""
+        from shapely.geometry.base import BaseGeometry
+
+        calls: list[tuple[Any, Any]] = []
+        method, function = BaseGeometry.covers, shapely.covers
+
+        def by_method(self: Any, other: Any) -> Any:
+            calls.append((self, other))
+            return method(self, other)
+
+        def by_function(a: Any, b: Any, **kw: Any) -> Any:
+            calls.append((a, b))
+            return function(a, b, **kw)
+
+        monkeypatch.setattr(BaseGeometry, "covers", by_method)
+        monkeypatch.setattr(shapely, "covers", by_function)
+        return calls
+
+    def tally(self, fi: ModuleType) -> Any:
+        return fi._Tally(BOX, CRS.from_user_input(UTM33), V)
+
+    def test_one_untouched_and_one_crossing_chain_is_one_clipped_feature(
+        self, fi: ModuleType, covers_calls: list[tuple[Any, Any]]
+    ) -> None:
+        tally = self.tally(fi)
+        tally._add("f", V.mask("road"), [self.INSIDE, self.CROSSING], None, None)
+        assert tally.clipped == 1 and len(tally.features) == 1
+        (feature,) = tally.features
+        assert [list(line.coords) for line in feature.lines] == [
+            list(self.INSIDE.coords),
+            [at(150, 150), at(300, 150)],
+        ]
+        assert len(covers_calls) == 1  # the crossing chain only
+        assert shapely.equals(covers_calls[0][1], self.CROSSING)
+
+    def test_two_untouched_chains_ask_covers_nothing(
+        self, fi: ModuleType, covers_calls: list[tuple[Any, Any]]
+    ) -> None:
+        tally = self.tally(fi)
+        tally._add("f", V.mask("road"), [self.INSIDE, self.ALSO_INSIDE], None, None)
+        assert tally.clipped == 0 and len(tally.features) == 1
+        assert covers_calls == []
+
+    def test_a_covered_chain_the_rule_refused_is_not_clipped(
+        self, fi: ModuleType, covers_calls: list[tuple[Any, Any]]
+    ) -> None:
+        """A chain along the outline: `_untouched` is False (its interior
+        touches the boundary), yet the domain covers it and GEOS gives it
+        back whole, so it is kept and not clipped. This pins that `clipped`
+        is still decided by `covers` where the rule did not pass, not by the
+        rule's flag alone (mutant M3), which the two tests above cannot tell
+        apart by the count."""
+        tally = self.tally(fi)
+        assert not fi._untouched(self.ALONG, BOX.polygon)
+        tally._add("f", V.mask("road"), [self.ALONG], None, None)
+        assert tally.clipped == 0 and len(tally.features) == 1
+        (feature,) = tally.features
+        assert [list(line.coords) for line in feature.lines] == [list(self.ALONG.coords)]
+        assert len(covers_calls) == 1 and shapely.equals(covers_calls[0][1], self.ALONG)
+
+
+def outline_segments(outline: Polygon) -> np.ndarray:
+    rims = [shapely.get_coordinates(r) for r in shapely.get_rings(outline)]
+    return shapely.linestrings(np.concatenate([np.stack([r[:-1], r[1:]], axis=1) for r in rims]))
+
+
+def cut_on_the_outline(fi: ModuleType, polygon: Any, outline: Polygon) -> list[LineString]:
+    """32, section 15.2, without a tree: every ring of `polygon` cut where an
+    edge has both ends within `IN_LINE` of one outline segment, by the full
+    distance matrix of ring points against outline segments."""
+    segments = outline_segments(outline)
+    out: list[LineString] = []
+    for ring in shapely.get_rings(shapely.get_parts(polygon)):
+        xy = shapely.get_coordinates(ring)
+        near = shapely.distance(shapely.points(xy)[:, None], segments[None, :]) <= fi.IN_LINE
+        on = (near[:-1] & near[1:]).any(axis=1)
+        out += fi._chains(xy[:-1], on.tolist())
+    return out
+
+
+class TestOneOutlineTreePerCleanup:
+    """Increment 35, section 3.4 and test 5: `_clean` builds the outline's
+    segment `STRtree` once and hands it to `_outline_lines` for every polygon,
+    instead of each call building its own. The CORINE extract over the
+    quarter-circle domain (536 outline vertices; `TestPreClip`'s pairing)
+    reaches `_outline_lines` with 8 polygons under the CLI's defaults."""
+
+    @pytest.fixture
+    def run(
+        self, fi: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> tuple[Any, Any, list[list[str]], list[tuple[Any, tuple[LineString, ...]]]]:
+        """(`FeatureSet`, domain, the `feature_input.py` functions on the
+        stack of each `STRtree` built under `_clean`, nearest first, every
+        `_outline_lines` call's polygon and result)."""
+        import inspect
+
+        built: list[list[str]] = []
+        real_tree = shapely.STRtree
+
+        class SpiedTree(real_tree):  # type: ignore[misc, valid-type]
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                frames = [
+                    f.function
+                    for f in inspect.stack()
+                    if Path(f.filename).name == "feature_input.py"
+                ]
+                if "_clean" in frames:
+                    built.append(frames)
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(shapely, "STRtree", SpiedTree)
+        calls: list[tuple[Any, tuple[LineString, ...]]] = []
+        real_lines = fi._outline_lines
+
+        def spied_lines(*args: Any) -> tuple[LineString, ...]:
+            result = real_lines(*args)
+            calls.append((args[0], result))
+            return result
+
+        monkeypatch.setattr(fi, "_outline_lines", spied_lines)
+        domain = domain_of(Polygon(quarter_circle()))
+        fs = fi.open_features(cleanup_request(fi, EXTRACT), domain, UTM33)
+        return fs, domain, built, calls
+
+    def test_the_tree_is_built_once_under_clean_not_once_per_polygon(self, run: Any) -> None:
+        """`built` holds, per tree built under `_clean`, the `feature_input.py`
+        functions on the stack, nearest first. The outline rule's own tree
+        (`_Outline.__init__`, under `snap_to_outline`) is not this one."""
+        _, _, built, calls = run
+        assert len(calls) == 8, len(calls)
+        ours = [frames for frames in built if "snap_to_outline" not in frames]
+        assert len(ours) == 1, ours
+        assert "_outline_lines" not in ours[0], ours
+
+    def test_the_lines_are_those_of_a_fresh_cut(self, fi: ModuleType, run: Any) -> None:
+        _, domain, _, calls = run
+        assert sum(len(lines) for _, lines in calls) == 86  # not vacuous
+        for polygon, lines in calls:
+            expected = cut_on_the_outline(fi, polygon, domain.polygon)
+            assert [shapely.to_wkb(g) for g in lines] == [shapely.to_wkb(g) for g in expected]
+
+
+def untouched_30b(line: Any, domain: Polygon) -> bool:
+    """30b's `_untouched`, verbatim
+    (`src_python/tin_engine/feature_input.py@c4130194:244-254` at `c7dba32e`)."""
+    xy = shapely.get_coordinates(line)
+    return (
+        len(xy) >= 2
+        and not (xy[1:] == xy[:-1]).all(axis=1).any()
+        and bool(shapely.contains_properly(domain, line))
+        and bool(shapely.is_simple(line))
+    )
+
+
+def single_call_reprojector(src: Any, dst: Any, *, threads: int = 1) -> Any:
+    """`crs.reprojector` before 35, verbatim: one `transform` call. `threads`
+    is accepted as the call sites pass it (38) and unused: one call, no pool."""
+    del threads
+    import tin_engine.crs as crs_module
+
+    transformer = Transformer.from_crs(
+        crs_module.parse_crs(src), crs_module.parse_crs(dst), always_xy=True
+    )
+
+    def apply(xy: Any) -> np.ndarray:
+        points = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
+        x, y = transformer.transform(points[:, 0], points[:, 1])
+        return np.column_stack([np.asarray(x, np.float64), np.asarray(y, np.float64)])
+
+    return apply
+
+
+class TestTheSetIsUnchanged:
+    """Increment 35, test 6: the four changes skip work; none changes what
+    `open_features` gives back. The CORINE extract over the quarter circle,
+    once as built and once with 30b's `_untouched` and the one-call
+    reprojector put back: the same features, line for line."""
+
+    def test_as_built_equals_the_old_rules(
+        self, fi: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        domain = domain_of(Polygon(quarter_circle()))
+        new = fi.open_features(cleanup_request(fi, EXTRACT), domain, UTM33)
+        with monkeypatch.context() as m:
+            m.setattr(fi, "_untouched", untouched_30b)
+            m.setattr(fi, "reprojector", single_call_reprojector)
+            old = fi.open_features(cleanup_request(fi, EXTRACT), domain, UTM33)
+        assert len(new.features) == len(old.features) == 8
+        for a, b in zip(new.features, old.features, strict=True):
+            assert (a.fid, a.mask) == (b.fid, b.mask)
+            assert [shapely.to_wkb(g) for g in a.lines] == [shapely.to_wkb(g) for g in b.lines]
+        assert (new.clipped, new.outside, new.empty) == (old.clipped, old.outside, old.empty)
+        assert new.cover_vertices == old.cover_vertices

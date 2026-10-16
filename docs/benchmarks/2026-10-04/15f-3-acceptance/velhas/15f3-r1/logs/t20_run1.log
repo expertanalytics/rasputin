@@ -1,0 +1,24 @@
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/velhas/15f3-r1/t20.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/docs/benchmarks/2026-10-04/15f-3-acceptance/velhas/15f3-r1/logs/t20_run1.stats.md
+
+--- stderr
+276209 triangles. Every node of the original DEM inside the mesh is within 20 m of it (largest difference 20 m).
+BENCH {"refine_s": 0.22906095901271328, "app_s": 2.82159262499772, "max_error": 19.999762066340054, "rounds": 30, "inserted": 118273, "flips": 311670, "hardening": "libc++ fast"}
+        3.11 real        14.43 user         0.83 sys
+          2020245504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              228129  page reclaims
+                  70  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  50  voluntary context switches
+               15350  involuntary context switches
+        109434579721  instructions retired
+         44629768147  cycles elapsed
+          1998817296  peak memory footprint

@@ -34,9 +34,11 @@ Names the design leaves open, chosen here (the tests are their statement):
   is omitted (R4). Spacing prints once when dx == dy, else ``dx × dy``. File
   sizes are decimal: B, kB, MB, GB, one decimal above bytes.
 - ``Report(command, sizes, quality, phases, total, stats_seconds,
-  bounds_checks, threads=None, seams=())``. ``threads`` is the design's "Threads: 10 (hardware
-  concurrency)" sentence, which R1's list of Report fields does not carry;
-  printed only when not None. ``bounds_checks`` (increment 24, required) is the
+  bounds_checks, threads=None, seams=())``. ``threads`` is the count the run
+  used, printed as "Threads used: 10." (increment 38, Ola's ruling 4; it was
+  "Threads: 10 (hardware concurrency)", which named the machine, not the
+  run), which R1's list of Report fields does not carry; printed only when
+  not None. ``bounds_checks`` (increment 24, required) is the
   text after ``bounds checks: `` -- ``off`` or ``on (<mode>)`` -- and prints as
   its own paragraph between the command line and ``## Sizes``. A phase named ``"<parent>: ..."`` where
   ``<parent>`` is an earlier phase is a sub-row: listed, not added to the
@@ -47,6 +49,8 @@ from __future__ import annotations
 
 import importlib
 import math
+import subprocess
+import sys
 from types import ModuleType
 from typing import Any
 
@@ -241,7 +245,7 @@ bounds checks: on (libc++ fast)
 Wall clock, `time.perf_counter_ns` (Python) and `std::chrono::steady_clock`
 (inside `refine`), one run, no warm-up. Total is the `mesh` command body, from
 argument checks to the last file written; interpreter start-up and imports are
-not in it. Threads: 10 (hardware concurrency).
+not in it. Threads used: 10.
 
 | phase | seconds | share |
 |---|---|---|
@@ -329,16 +333,19 @@ def quarter(stats: ModuleType, quality: Any) -> Any:
 
 
 @pytest.fixture
-def fixture_report(stats: ModuleType, quality: Any) -> Any:
-    """A gallery fixture: no DEM, no domain, no refinement, nothing dropped."""
+def dem_report(stats: ModuleType, quality: Any) -> Any:
+    """A plain DEM run: no domain, no refinement, nothing dropped."""
     return stats.Report(
-        command="rasputin mesh catchment --flat --out c.ply --stats c.md",
+        command="rasputin mesh --dem c.tif --out c.ply --out-edges c-edges.ply --stats c.md",
         sizes=stats.Sizes(
             output_vertices=40,
             output_triangles=60,
             constraint_edges=30,
             files=(("c.ply", 2048), ("c-edges.ply", 999)),
+            dem_nodes=(5, 8),
+            dem_spacing=(10.0, 10.0),
         ),
+        threads=1,
         quality=quality,
         phases=(("start mesh: build", 0.002), ("write: encode", 0.001)),
         total=0.004,
@@ -353,19 +360,15 @@ class TestRender:
     def test_the_golden_report(self, stats: ModuleType, quarter: Any) -> None:
         assert stats.render(quarter) == GOLDEN
 
-    def test_rows_that_do_not_apply_are_omitted(
-        self, stats: ModuleType, fixture_report: Any
-    ) -> None:
-        text = stats.render(fixture_report)
+    def test_rows_that_do_not_apply_are_omitted(self, stats: ModuleType, dem_report: Any) -> None:
+        text = stats.render(dem_report)
         for absent in (
             "## Refinement",
             "## Inputs",
             "## Result",
-            "DEM nodes",
             "domain vertices",
             "start vertices",
             "without data dropped",
-            "Threads:",
             "Sub-rows",
         ):
             assert absent not in text, absent
@@ -374,11 +377,19 @@ class TestRender:
         assert "| c.ply | 2.0 kB |" in text
         assert "| c-edges.ply | 999 B |" in text
 
+    def test_t12_the_threads_row_is_the_count_used(self, stats: ModuleType, quarter: Any) -> None:
+        """Increment 38, T12: "Threads used: N." and never the machine's figure."""
+        import dataclasses
+
+        text = stats.render(dataclasses.replace(quarter, threads=3))
+        assert "Threads used: 3." in text
+        assert "hardware concurrency" not in text and "Threads: " not in text
+
     def test_other_is_total_minus_the_top_level_rows(
-        self, stats: ModuleType, fixture_report: Any
+        self, stats: ModuleType, dem_report: Any
     ) -> None:
         # "start mesh: build" has no "start mesh" row, so it is top level.
-        text = stats.render(fixture_report)
+        text = stats.render(dem_report)
         assert "| other | 0.001 | 25.0 % |" in text
         assert "| **total** | **0.004** | **100 %** |" in text
 
@@ -424,18 +435,40 @@ class TestBoundsChecksLine:
         ],
     )
     def test_one_line_before_the_first_section(
-        self, stats: ModuleType, fixture_report: Any, field: str, line: str
+        self, stats: ModuleType, dem_report: Any, field: str, line: str
     ) -> None:
         import dataclasses
 
-        lines = stats.render(dataclasses.replace(fixture_report, bounds_checks=field)).splitlines()
+        lines = stats.render(dataclasses.replace(dem_report, bounds_checks=field)).splitlines()
         first_section = next(i for i, text in enumerate(lines) if text.startswith("## "))
         assert [t for t in lines if t.startswith("bounds checks")] == [line]
         assert lines.index(line) < first_section
 
-    def test_the_field_is_required(self, stats: ModuleType, fixture_report: Any) -> None:
+    def test_the_field_is_required(self, stats: ModuleType, dem_report: Any) -> None:
         import dataclasses
 
         fields = {f.name: f for f in dataclasses.fields(stats.Report)}
         assert "bounds_checks" in fields
         assert fields["bounds_checks"].default is dataclasses.MISSING
+
+
+class TestImportsWithoutTheExtension:
+    """C++ audit PR B (`docs/increments/cpp-audit.md` section 7.4): the module
+    docstring says ``stats`` is testable without the extension.
+
+    Red while ``tin_engine/__init__.py`` imports ``_core``; green once the
+    package root imports only ``importlib.metadata``.
+    """
+
+    def test_stats_imports_with_core_blocked(self) -> None:
+        program = (
+            "import sys\n"
+            'sys.modules["tin_engine._core"] = None\n'
+            "import tin_engine.stats\n"
+            'print("imported", tin_engine.stats.__name__)\n'
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", program], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "imported tin_engine.stats"

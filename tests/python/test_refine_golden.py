@@ -33,16 +33,16 @@ import numpy as np
 import pytest
 
 import tin_engine.cli as cli
+from cli_helpers import geojson, invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
-from test_cli_mesh_dem import invoke
-from test_cli_mesh_domain import geojson, quarter_circle
+from test_cli_mesh_domain import quarter_circle
 from tin_engine import _core
 from tin_engine._core import ChainRole
 from tin_engine.chains import start_chains
 from tin_engine.cli import DEFAULT_SNAP_SPACING, ROLES, _constraint_arrays, _engine
-from tin_engine.domain import read_domain
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import refine_start_stride, subsample
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.raster import to_core
 
@@ -135,7 +135,7 @@ def _cli_outcome(
     args = ["--dem", str(KARTVERKET), "--tolerance", "1", "--out", str(tmp_path / "x.vtk")]
     if case == "quarter_circle":
         args += ["--domain", str(geojson(tmp_path / "quarter.geojson", quarter_circle()))]
-    code, output = invoke(*args, *extra)
+    code, output = invoke("mesh", *args, *extra)
     assert code == 0, output
     (out,) = seen
     return out
@@ -201,6 +201,8 @@ def test_the_cli_default_flags_digest_is_unchanged_by_node_sampling(
 @needs_codecs
 def test_the_kartverket_stride_vtk_is_unchanged_by_node_sampling(tmp_path: Path) -> None:
     out = tmp_path / "x.vtk"
-    code, output = invoke("--dem", str(KARTVERKET), "--out", str(out))
+    # `--ascii` since increment 31 made binary the default: the hash was
+    # recorded from the text file, and a hash of it still pins the same mesh.
+    code, output = invoke("mesh", "--dem", str(KARTVERKET), "--ascii", "--out", str(out))
     assert code == 0, output
     assert hashlib.sha256(out.read_bytes()).hexdigest() == GOLDEN_STRIDE_VTK

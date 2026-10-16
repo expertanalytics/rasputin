@@ -328,8 +328,8 @@ profile's figures, not measurements.
   writes, which still holds. TSan sees a correctly synchronised atomic.
 - **Exceptions.** `for_each_chunk` promises that the exception of the
   lowest-index chunk that threw is rethrown, "fixed by the chunking, not by
-  thread timing" (`include/terrain/parallel_util/chunks.hpp:10-13`, tested at
-  `tests/cpp/unit/test_refinement_chunks.cpp:79`). Dynamic scheduling keeps
+  thread timing" (`include/terrain/parallel_util/chunks.hpp@44fa7f5:10-13`, tested at
+  `tests/cpp/unit/test_refinement_chunks.cpp@44fa7f5:79`). Dynamic scheduling keeps
   that contract: each block records its exception by block index, and the
   lowest block index that threw is rethrown after the join. Every block is
   still run, as today, so which blocks throw does not depend on timing.
@@ -954,7 +954,7 @@ suites:
   1, 2, 7 and all threads", and T16 for off-node rings) compares thread
   counts with each other, not with a stored mesh. So do
   `prop_refinement_quality.cpp:233` and
-  `prop_refinement_constraint_feet.cpp:587`, which join the same contract. **Under L1 it stays as it
+  `tests/cpp/property/prop_refinement_constraint_feet.cpp@ed125121:587`, which join the same contract. **Under L1 it stays as it
   is and becomes 21d's determinism test.** Under L2 or L3 it would have to be
   weakened or dropped, which is a concrete cost of those levels.
 - **18's T3 golden digests** (`tests/python/test_refine_golden.py`) say that
