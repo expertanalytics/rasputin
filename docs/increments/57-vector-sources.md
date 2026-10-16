@@ -415,7 +415,7 @@ caller never named), `resolve()`, then
 with the option, and `name` goes because the body never read it. It stays in
 `plugin_api`; the change is a promised name changing, so the release that
 carries it says so (`docs/plugins.md` table). No plugin caller is known:
-`rasputin-radiation` has none (`grep -rn destination`); the private package
+`rasputin-radiation` is a copy of the core, not a plugin: it imports nothing from `plugin_api` (`grep -rn plugin_api`); the private package
 is not on this machine, so it is assumed to have none.
 
 **`--out-parent` is removed** from `mesh`, `catchment` and
@@ -495,7 +495,7 @@ general guidance only (no dataset, country or resolution):
 
 ```
 sources also lists vector datasets (polygons, lines, points) with their path, layer, geometry, feature count, attributes and, for land cover, the class values. Each source's fits names the tools and arguments it can be given to, with the class map to pass as features_map; what the features are is in its description. Pass its path to those arguments, its layer as features_layer or lakes_layer, and the fit's class map as features_map.
-Output folders are created as needed, inside the output root that sources reports as out_root; a path outside it, through .. or a link too, is refused.
+Output folders are created as needed, inside the output root that sources reports as out_root; give output paths in full: a path outside it, through .. or a link too, is refused.
 ```
 
 `READ_ONLY`, `RunResult` and the schema derivation are unchanged; the tool
@@ -562,7 +562,9 @@ counterpart is T7.
 - A fence for shell users: `--out-parent` is gone, and `RASPUTIN_MCP_OUT_ROOT`
   fences nothing in the CLI (section 4.6).
 - Relative output paths taken from the root (running the child in it): a
-  relative input path would then change meaning.
+  relative input path would then change meaning, and the server's sidecars,
+  `_read` and `_outputs` resolve against its own working directory
+  (`mcp/server.py`:176-211).
 - Hard links and a symlink swapped in after the check (section 4.6).
 
 ## 7. Tests
@@ -767,3 +769,4 @@ the fixture helpers).
 
 - **Design review, round 1, 2026-10-16.** Commit `46edf5b6`, 0 counted lines, @reviewer: CHANGES REQUESTED, applied by @architect: catalogue keys in the seven vector options dropped (section 4.5; the listing gives `path`, `layer` and each fit's `class_map`; old T7 cut); `source_fits.py` folded into `source_report.py`; section 4.2 names the two widened `Literal`s; T5 and the `Fit` docstring call a fit a header-level necessary condition. Held: one catalogue, readers reused, fits per option, the `rasputin.sources` group, the CORINE figures, both folder defaults.
 - **Design review, round 2, 2026-10-16.** Commit `8f440523`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 6 credit bullet ("a vector key" becomes "a vector file the catalogue lists is passed"). Held: only `RemoteSource.values` and `SourceReport.values` widen; `check_values` refuses a features key for `--dem` and `--land-cover` before the path is used.
+- **Design review, round 3, 2026-10-16.** Commit `28547032`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `rasputin-radiation` is a copy, not a plugin; instructions say to give output paths in full; relative paths stay against the server's working directory (sidecars and output reading depend on it). Held: Typer keeps `writable` and `allow_dash` on a `Path` option with the same schema; only `fetch` writes the cache. Open to Ola: holding `fetch --cache` inside the root.
