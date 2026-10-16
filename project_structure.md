@@ -303,17 +303,6 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   stations, series version, start year; its names
                            #   only check the extraction from the PDF (29)
   _core.pyi                # type stubs for the compiled extension
-  viz/                     # CDT -> SVG renderer; never imports _core
-    __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
-    protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
-    scene.py               # build_scene(pslg, mesh=None, ...) -> Scene
-    style.py               # SvgStyle: frozen Pydantic V2. Canvas geometry,
-                           #   plus PropertyStroke — the bit -> CSS-token draw
-                           #   precedence, which is structure, not taste, and
-                           #   carries positions rather than feature names
-    svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
-    fixtures.py            # the synthetic gallery, declarative; drawn by
-                           #   `rasputin draw`, hidden from --help
   io/                      # all file decoding AND encoding lives here. A
                            #   document built outside cli.py and serialised
                            #   there by one standard-library call is printing,
@@ -640,7 +629,7 @@ Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-c
 
 ### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. Nothing is re-exported: `src_python/tin_engine/__init__.py` holds only `installed_version` (`__all__`), so the package imports without the extension; the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root and `viz/` never imports the extension. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. Nothing is re-exported: `src_python/tin_engine/__init__.py` holds only `installed_version` (`__all__`), so the package imports without the extension; the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
 
 As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
 
@@ -675,7 +664,7 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 ## Python API surface
 
-The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command, hidden from `--help` and from the MCP tools, drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. `cli.py` is the single composition root: the core's commands are defined there (plugins add theirs through `plugins.py`), and it joins the readers under `io/`, the engine and the writers -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. It is also where an output path is resolved and refused, through `cli_kit.destination`, before anything is written.
 
 The catchment file's bytes come from `io/geojson.py`'s `catchment_geojson`, which opens nothing; `rasputin catchment` and `rasputin station-catchments` both call it, and `cli.py` keeps only the write.
 

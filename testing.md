@@ -66,7 +66,7 @@ Used for: integration tests, performance baselines, visual-regression spot-check
 
 ## Invariant catalog [partly live]
 
-These are the "water tight" properties — they must hold on every input regardless of tier. Sections marked **[live]** describe modules that exist and are enforced by the suites under `tests/cpp/` — or, for the Python `viz` section, under `tests/python/`; **[planned]** sections describe modules that do not exist yet. Property tests run them against generators that produce random inputs in each module's domain.
+These are the "water tight" properties — they must hold on every input regardless of tier. Sections marked **[live]** describe modules that exist and are enforced by the suites under `tests/cpp/`; **[planned]** sections describe modules that do not exist yet. Property tests run them against generators that produce random inputs in each module's domain.
 
 ### `predicates` [live]
 
@@ -126,7 +126,7 @@ for the obvious reading still passed.
 - Every **in-domain** constraint edge appears as an edge of one or two output triangles, and is flagged in the constrained-edge mask of each. A breakline outside the outer ring or inside a hole is legal in a `Pslg` and appears in no interior triangle — measured, and pinned by its own fixture.
 - **Delaunay with respect to visibility**, which is the only form true of a CDT: for every interior non-constrained edge `(a,b)` with apexes `c,d`, either `incircle(a,b,c,d) != Inside` **or** the open segment `cd` crosses at least one constraint edge. The plain incircle form this catalog previously stated is false for a constrained triangulation and would fail on correct output.
 - Every output triangle is counterclockwise under `DefaultKernel` — which is the strongest true statement, and what the property suite asserts. It implies no zero-area triangle, stated exactly rather than "below epsilon": this project has no epsilon.
-- Bit `e` of a triangle's constrained-edge mask is set iff edge `(v[e], v[(e+1)%3])` is a constraint. CGAL's opposite-vertex convention is a rotation of this one, and the two agree on **exactly** the masks `0b000` and `0b111` — so every triangle with one or two constrained edges distinguishes them, and only a triangle with zero or three **fails** to. (An earlier revision of this line had the complement, claiming only a one-bit mask distinguishes them. Re-runnable: `python3 -c "A=lambda m:{(e,(e+1)%3) for e in range(3) if m>>e&1}; B=lambda m:{((e+1)%3,(e+2)%3) for e in range(3) if m>>e&1}; print([m for m in range(8) if A(m)==B(m)])"` prints `[0, 7]`.) A one-bit mask is still the sharpest case and the one `tests/python/test_viz_scene.py` builds its fixture from, because under it the rotated read lands on a *different single* edge rather than on an overlapping pair.
+- Bit `e` of a triangle's constrained-edge mask is set iff edge `(v[e], v[(e+1)%3])` is a constraint. CGAL's opposite-vertex convention is a rotation of this one, and the two agree on **exactly** the masks `0b000` and `0b111` — so every triangle with one or two constrained edges distinguishes them, and only a triangle with zero or three **fails** to. (An earlier revision of this line had the complement, claiming only a one-bit mask distinguishes them. Re-runnable: `python3 -c "A=lambda m:{(e,(e+1)%3) for e in range(3) if m>>e&1}; B=lambda m:{((e+1)%3,(e+2)%3) for e in range(3) if m>>e&1}; print([m for m in range(8) if A(m)==B(m)])"` prints `[0, 7]`.) A one-bit mask is still the sharpest case and the one `tests/cpp/unit/test_cdt_constrained_edges.cpp` builds its mask fixtures from, because under it the rotated read lands on a *different single* edge rather than on an overlapping pair.
 - No outcome carries a mesh with a non-`Ok` status, and none carries an empty mesh with `Ok`. The second is the silent mode: "forgot to add the outline" triangulates successfully to zero interior triangles.
 - `triangles == 2n - b - 2 + 2h` for `n` referenced vertices, `b` on any boundary ring and `h` disjoint holes — meaningful only because the wrapper returns in-domain triangles (`forEachTriangle`, not the hole or convex-hull variants). Rings that touch break the formula: a corner-touching hole predicts 6 against a measured 5, so that fixture carries an explicit count.
 
@@ -174,38 +174,6 @@ for the obvious reading still passed.
 - Output graph is a tree (or forest, if multiple outlets).
 - Strahler order is monotonic non-decreasing from headwater to outlet.
 - A confluence of two order-`k` streams produces an order-`k+1` segment downstream.
-
-### `viz` [live]
-
-The only Python section of this catalog, and the only one whose module is pure
-computation over data handed across the pybind11 boundary rather than C++.
-`tests/python/test_viz_scene.py` **[live]** is increment 6b-i's sole
-invariant-critical suite (`docs/increments/06-cdt-viewer.md`, "What is worth
-testing"); it runs against hand-built fakes of `MeshLike`/`PslgLike` with no
-compiled extension in the process, which is what `viz/`'s protocol boundary
-buys. `tests/python/test_viz_svg.py` and `tests/python/test_cli_draw.py` are
-6b-ii's and now **[live]** — ordinary rather than invariant-critical, because a
-renderer's failure mode is a wrong-looking picture and a person catches that
-instantly. What they pin is structure and arithmetic: that the document parses
-as XML, that element counts equal the scene's primitive counts, that the
-viewport flips y and preserves one scale, that a `class` token puts each edge in
-the right stroke class, that no failure presentation is a blank page, and that
-every gallery fixture is the shape its design row claims. `test_cli_draw.py`
-adds the composition root's own obligations — the role mapping, `closed_roles`,
-passthrough of the engine's words, the `--labels` refusal and path validation.
-
-Invariants over `build_scene` — all `[live]`:
-
-- Bit `e` of a triangle's mask names the edge `(v[e], v[(e+1)%3])`, matching `indexed_mesh.hpp`. The mutant this suite exists for is the rotation to CGAL's opposite-vertex convention, which draws a plausible picture with every constraint stroke on the wrong edge; see the `cdt` section above for why a one-bit mask is the sharpest fixture for it.
-- Every undirected edge is emitted exactly once, with endpoints canonically ordered `a < b`, and in a deterministic order. An interior edge shared by two triangles is neither drawn twice nor double-classified, and a mask bit set on only one of the two incident triangles survives.
-- The scene **records** mask-versus-chain disagreement rather than reconciling it: a masked edge matching no chain, and a chain edge in no mask, each produce their own finding and are each still drawn. These are two independently derived answers to "this edge is a constraint", which is the only reason their agreement means anything.
-- The role join is the input's verdict and stays separate from the mask's: an edge in two chains takes the first chain's role, and its river bit is the OR over every contributing chain.
-- Ring closure is the caller's policy, not the scene's (`closed_roles`); a chain of fewer than three vertices is never closed, and a one-vertex chain is never closed into a self-loop, which would violate the `a < b` ordering above.
-- Classification is total: a populated mesh, `Ok` with zero triangles, a missing mesh, and a non-`Ok` status each map to their own kind, and a non-`Ok` status wins over a mesh that — per the `cdt` section — cannot accompany it.
-- No drawable mesh means no findings, and the roles are kept regardless: the PSLG-only picture is drawn in role colours, and there is no mask for the chains to disagree with.
-- The bbox contains every vertex, pads a zero-extent axis about its own centre while leaving a healthy axis alone, and reports that it padded. Non-finite coordinates are refused with `ValueError` rather than poisoning the bounds silently.
-- The vertices and bbox are the **mesh's** when a mesh is drawn, so a backend-introduced vertex is inside the picture; they fall back to the input PSLG's only when there is no mesh.
-- `viz.scene` imports no compiled extension and no first-party module but `viz.protocols` — pinned by a test that parses that module, because it is what keeps the suite runnable without a build.
 
 ## Frameworks [partly live]
 
@@ -354,14 +322,5 @@ deleted as out of scope.
   pixel-scale interpretation, GeoKey decoding and CRS construction all have to
   be covered here.
 - **Visual aesthetics** of the output mesh beyond the perceptual-diff regression on tier-3 fixtures.
-- **`viz/svg.py`'s stylesheet.** No colour, stroke width or dash array is
-  asserted anywhere, and a **golden-file SVG comparison is rejected outright**
-  (`docs/increments/06-cdt-viewer.md`, "What is worth testing"): it would pin the
-  stylesheet, fail on every cosmetic improvement, and detect only the class of
-  defect a person sees instantly. What *is* asserted is the `class` token on each
-  element — which stroke class an edge belongs to is structure, and it is the
-  only way to check that role colouring reaches the right edges without naming a
-  colour. Written down because filling this gap is the first thing someone will
-  propose.
 
 These are out of scope and would inflate the suite without buying confidence in rasputin's own code.

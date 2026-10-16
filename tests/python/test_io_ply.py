@@ -30,9 +30,8 @@ TWO THINGS THIS SUITE DELIBERATELY DOES NOT ASSERT.
    ruling 2 forbids the claim until a person has opened a file and said so in
    the record (`PRINCIPLES.md` A1, A4). What the suite asserts is what the
    bytes are.
-2. `cli._destination`'s refusals. They are increment 6b-ii's and are covered in
-   `test_cli_draw.py`; re-testing them here would pin one boundary in two
-   places.
+2. `cli_kit.destination`'s refusals. They are covered in `test_cli_kit.py`;
+   re-testing them here would pin one boundary in two places.
 
 THE PROPERTY NAMES ARE THIS SUITE'S CHOICE, NOT THE DESIGN'S. The design fixes
 the element types and the coordinate width and says nothing about spelling. The
@@ -54,8 +53,8 @@ from plyread import element_bytes, parse_header, read_ply, vertex_array
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.io.ply import write_ply
 
-#: A millimetre-resolved easting at UTM 33N magnitudes -- `viz.fixtures.ORIGIN`
-#: is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
+#: A millimetre-resolved easting at UTM 33N magnitudes -- the road-crosses-river
+#: shape's origin is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
 #: `TestDoublePrecision` proves the probe can fail before trusting it (A3).
 EASTING = 430_000.001
 

@@ -57,7 +57,7 @@ def test_every_third_party_import_is_declared() -> None:
     core = requirement_names(project["dependencies"])
     with_mcp = core | requirement_names(project["optional-dependencies"]["mcp"])
     files = sorted(PACKAGE.rglob("*.py"))
-    assert len(files) >= 70, f"only {len(files)} files under {PACKAGE}: is the walk rooted right?"
+    assert len(files) >= 60, f"only {len(files)} files under {PACKAGE}: is the walk rooted right?"
     offenders = [
         f"{path.relative_to(PACKAGE)}:{line} {name}"
         for path in files

@@ -7,8 +7,7 @@ the failure mode is a named `AttributeError` on the symbol that is missing and
 pytest still collects the file. A collection error would hide the next real
 problem behind an import.
 
-Scope is 6a only: the bindings, the stubs and `viz/protocols.py`. The renderer,
-the fixtures and `rasputin draw` are 6b and appear nowhere here.
+Scope is the bindings and the stubs.
 
 AMENDED AT INCREMENT 5c, when `triangulate` stopped taking a `Pslg`. Every
 triangulation below now goes through `node()` first, and the entry point's
@@ -579,7 +578,7 @@ class TestMeshArrays:
         # triangulate.hpp semantic obligation 1 and indexed_mesh.hpp guarantee
         # 4: index k means the same point on both sides. 6b's role join is
         # built entirely on this, and as of 5c the side that has to match is
-        # the NODED graph's -- `cli.py` draws the scene from that graph, so a
+        # the NODED graph's -- `cli.py` joins feature masks on that graph, so a
         # mesh whose indices agreed with the pre-noding `Pslg` instead would
         # put every edge in the wrong place.
         n = noded_breakline.vertices.shape[0]

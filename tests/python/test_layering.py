@@ -50,10 +50,6 @@ LAYERS: tuple[dict[str, str], ...] = (
         "geodesy": "crs io.models",  # 40: metres near a point, geodesic areas
         "gauge": "hydrography",
         "reference": "io.models",
-        "viz": "viz.scene viz.style viz.svg",
-        "viz.fixtures": "", "viz.protocols": "", "viz.style": "",
-        "viz.scene": "viz.protocols",
-        "viz.svg": "viz.scene viz.style",
     },
     {  # L2: io/ codecs, and the one module that opens a connection
         "io": "io.ply io.vtk_legacy",
@@ -104,8 +100,7 @@ LAYERS: tuple[dict[str, str], ...] = (
                " io.geojson io.geopackage_write io.models io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover"
                " mcp.server mosaic palettes plugins raster resources run_record source_report"
-               " sources stats target_grid tin_engine tolerance_field viz.fixtures viz.protocols"
-               " viz.scene viz.style viz.svg",
+               " sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's

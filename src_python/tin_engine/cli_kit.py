@@ -8,7 +8,6 @@ commands use, so a plugin's commands behave as the core's do.
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 from typing import Annotated
 
@@ -31,7 +30,7 @@ THREADS = Annotated[
 ]
 
 
-def destination(out: Path | None, out_parent: Path | None, name: str, hint: str = "--out") -> Path:
+def destination(out: Path, out_parent: Path | None, name: str, hint: str = "--out") -> Path:
     """Where to write, having refused every path this process should not touch; a
     refusal names the option, ``hint``.
 
@@ -46,10 +45,6 @@ def destination(out: Path | None, out_parent: Path | None, name: str, hint: str 
     directory is resolved by ``resolve()`` and then judged by containment, which
     is the right answer for ``--out-parent`` and is all this boundary claims.
     """
-    if out is None:
-        # "The common case is show me this now": a fresh directory of its own,
-        # so a second run cannot overwrite the picture still open in a browser.
-        return Path(tempfile.mkdtemp(prefix="rasputin-")) / f"{name}.svg"
     if out.is_symlink():
         raise typer.BadParameter(f"{out} is a symlink; refusing to follow it", param_hint=hint)
     target = out.resolve()

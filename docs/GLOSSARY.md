@@ -46,10 +46,6 @@ failing suite and touches no production file; the green commit makes it pass and
 touches no test file. `docs/increments/README.md` states the rule and why the
 trace matters.
 
-**Finding.** In the renderer: a defect the scene builder detected in the mesh or
-the constraint set, drawn as a red dashed overlay. A finding on a picture is the
-*correct* output for defective input, not a bug in the drawing.
-
 ## Geometry
 
 **PSLG.** Planar straight-line graph: the validated constraint set handed to the
