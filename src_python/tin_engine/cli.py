@@ -904,10 +904,12 @@ def mesh(
     """Mesh a DEM into a TIN and write it as .vtk, .ply or .gpkg, chosen by the suffix of --out.
 
     The DEM is one GeoTIFF, several, a directory of tiles, or a cached catalogue
-    source; --bbox or --domain cuts it. Without --tolerance every --stride-th DEM
-    node is triangulated; with it the mesh is refined until every triangle is
-    within that many metres of the DEM. --features adds polygons and lines as
-    constraint edges, and --land-cover each class's share of every triangle.
+    source (the package's or one of $RASPUTIN_DATA/sources.toml); --bbox or
+    --domain cuts it. Without --tolerance every --stride-th DEM node is
+    triangulated; with it the mesh is refined until every triangle is within
+    that many metres of the DEM. --features adds polygons and lines as
+    constraint edges; a class map with codes, or --land-cover, gives every
+    triangle a land_cover_code, coloured by rasputin palette.
 
     .vtk is one file for ParaView. .ply is the surface for QGIS, with the
     constraint lines in a second file given by --out-edges. .gpkg is a GeoPackage
