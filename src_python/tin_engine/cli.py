@@ -2705,7 +2705,8 @@ def catchment(
         result = delineate(request, repository, res)
     except NotCached as exc:
         fetch = "" if exc.box is None else " ".join(repr(v).removesuffix(".0") for v in exc.box)
-        hint = f"; run: rasputin fetch {dem[0]} --bbox {fetch}" if fetch else ""
+        given = f" --cache {cache}" if cache else ""
+        hint = f"; run: rasputin fetch {dem[0]} --bbox {fetch}{given}" if fetch else ""
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
