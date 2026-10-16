@@ -87,7 +87,7 @@ plugins use today, and grows on request.
 | `frame_factors` | Meridian convergence and point scale of a projected CRS |
 | `site_of` | Where a point of a projected CRS lies on the globe |
 
-Each name's docstring is its full contract.
+Where a name has a docstring, it is the full contract.
 
 ## C++
 
@@ -125,6 +125,7 @@ To read a DEM in C++, bind your own raster view from
 
 ```cpp
 #include <rasputin_bindings/numpy_raster.hpp>
+#include <pybind11/stl.h>  // std::optional, for nodata
 
 struct MyRasterTag;  // in your own source, never in a header you share
 using MyRasterView = TaggedRasterView<MyRasterTag>;

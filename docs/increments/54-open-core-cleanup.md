@@ -1,6 +1,6 @@
 # Increment 54: the open core reads as one tool
 
-**Status: designed** (`@architect`, 2026-10-16), one public PR, branch
+**Status: built** (branch `worktree-open-core-cleanup`; code review round 1 approved with wordings) (`@architect`, 2026-10-16), one public PR, branch
 `worktree-open-core-cleanup`. Design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked
@@ -327,3 +327,4 @@ One PR. Commit order on the branch: the red suite; fix 1 alone (the
 ## Review
 
 - **Design review, round 1, 2026-10-16.** Commit `4fe7a3cd`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS (the `None` cases listed by name, as mypy strict does not report unreachable code; the `--flat` count is 70 on 69 lines, four of them writer strings), applied by the main session.
+- **Code review, round 1, 2026-10-16.** Range `9a7c312d..3f902ff2`, -86 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `pybind11/stl.h` in the binding example (needed for `std::optional`); "where a name has a docstring"; status. Accepted: fix 1's commit holds only docstrings and comments (`--same-code` counts `help=` strings as code); the `--features` refusal text stands. Correction: the red commit's "33 of 8257" counted 11 older tests turned red by the scratch fix; full suite on `3f902ff2`: 8241 passed, 0 failed.
