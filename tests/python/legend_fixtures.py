@@ -1,10 +1,10 @@
-"""Class-map files written by hand for increment 41's suites.
+"""Legend files written by hand for increment 41's suites.
 
 `docs/increments/41-class-maps-as-data.md`, section 4 (the file) and section 7
 (the red suite). `coded_map` is the smallest coded map section 4 allows plus
 the keys its example shows (`notice`, `preset`, `unlisted`); `uncoded_map` the
 shape of today's `property` map. Every refusal test changes one line of one
-of these, and `test_class_maps.TestTheBaseFilesLoad` shows both load as
+of these, and `test_legends.TestTheBaseFilesLoad` shows both load as
 written, so a refusal is the change's and nothing else's.
 """
 
