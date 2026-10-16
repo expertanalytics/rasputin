@@ -627,7 +627,8 @@ def refine_seam(
     """The seam pass for the seam edge ``(a, b)``: check points inserted by a
     one-dimensional greedy until each is within ``tolerance``. The same output
     for either order of the ends. A bad tolerance, ``a == b`` or an end outside
-    the node rectangle is a ``ValueError``. Releases the GIL."""
+    the node rectangle is a ``ValueError``. Releases the GIL. No command calls
+    it yet."""
 
 @final
 class UpstreamOutcome:

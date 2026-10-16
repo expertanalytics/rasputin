@@ -1,8 +1,10 @@
 """What a plugin may import from ``tin_engine``: re-exports only.
 
 A plugin package imports the core through this module and nothing else; every
-other module of ``tin_engine`` is free to change. A name here is the core's own
-object, never a copy or a wrapper.
+other module of ``tin_engine`` may change in any commit. A name here is the
+core's own object, never a copy or a wrapper, and it is promised: removed or
+changed only in a release that says so. The list is what plugins use today and
+grows on request.
 """
 
 from tin_engine.cli_kit import THREADS, cli_resources, destination, words

@@ -11,7 +11,7 @@ from -0.0.
 One record alone is a seam edge on the outline, which has one piece.
 
 This module imports nothing first-party but `io/models.py`, and never
-`_core`.
+`_core`. No command writes a cut run yet.
 """
 
 from __future__ import annotations
