@@ -688,7 +688,7 @@ package directory holding `sources.toml`.
     parameter.
   - **T8b recognition, pure** (`test_mcp_schema.py`): on a toy app, `writes`
     returns a writable option's value, each item of a repeatable one and a
-    writable positional argument's; skips an unset one, `-` on a parameter
+    writable positional argument's, and the default of one left unset (a plugin's default outside the root is refused like a given path); skips one whose value is None, `-` on a parameter
     that allows a dash, and a path parameter not marked writable. On
     `cli.app`, the set of (tool, argument) with a writable path equals the
     table of section 4.6 (a drift guard: the list is the test's, not the
@@ -770,3 +770,4 @@ the fixture helpers).
 - **Design review, round 1, 2026-10-16.** Commit `46edf5b6`, 0 counted lines, @reviewer: CHANGES REQUESTED, applied by @architect: catalogue keys in the seven vector options dropped (section 4.5; the listing gives `path`, `layer` and each fit's `class_map`; old T7 cut); `source_fits.py` folded into `source_report.py`; section 4.2 names the two widened `Literal`s; T5 and the `Fit` docstring call a fit a header-level necessary condition. Held: one catalogue, readers reused, fits per option, the `rasputin.sources` group, the CORINE figures, both folder defaults.
 - **Design review, round 2, 2026-10-16.** Commit `8f440523`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 6 credit bullet ("a vector key" becomes "a vector file the catalogue lists is passed"). Held: only `RemoteSource.values` and `SourceReport.values` widen; `check_values` refuses a features key for `--dem` and `--land-cover` before the path is used.
 - **Design review, round 3, 2026-10-16.** Commit `28547032`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `rasputin-radiation` is a copy, not a plugin; instructions say to give output paths in full; relative paths stay against the server's working directory (sidecars and output reading depend on it). Held: Typer keeps `writable` and `allow_dash` on a `Path` option with the same schema; only `fetch` writes the cache. Open to Ola: holding `fetch --cache` inside the root.
+- **Code review, round 1, 2026-10-16.** Range `da133bce..9f634f94`, 342 counted lines, @reviewer: CHANGES REQUESTED: `DerivedCommand.writes` skipped a writable option left unset, so a plugin's default outside the root was written unchecked (fixed: red `dd11957f`); README states the default tile cache as the guard's one exception (`095ffa1b`). Held: `..`, symlinks, `-`, `fetch --cache`, refusal before any child; fits per option; `--out-parent` gone. `DemInput.label` goes in a follow-up (two plugin-visible signatures).
