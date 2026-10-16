@@ -1,6 +1,6 @@
 # Increment 57: vector datasets in the catalogue, the options each fits, output folders made
 
-**Status: built, code review approved** (branch `worktree-vector-sources`, from master `a0a1ad45`): code green at `08cb70c2` except the output folders, whose design (section 4.6) is revised to Ola's ruling on `--out-parent`: the guard moves into the MCP server.
+**Status: built, code review approved** (branch `worktree-vector-sources`, from master `a0a1ad45`): green at `8648c039`, 340 counted lines; the output-folder guard is in the MCP server, as Ola ruled on `--out-parent`.
 
 ## 1. What Ola asked, and what failed
 
