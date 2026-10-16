@@ -1,6 +1,8 @@
 # Increment 58: "class map" becomes "legend"
 
-**Status: designed** (`@architect`, 2026-10-16), not yet reviewed. Short path
+**Status: built, awaiting code review** (`@architect` design, 2026-10-16;
+design review round 1 approved with wordings; red `a002d924`, green
+`f9587095`, prose in the docs commit). Short path
 (`docs/increments/README.md`, *Small changes*): about 0 net production lines,
 no C++ file, nothing under *Acceptance*. One public PR, branch
 `worktree-legend`, cut from increment 57's head `ed0d313d`; it merges after 57.
