@@ -18,7 +18,6 @@ import numpy as np
 import shapely
 from pydantic import BaseModel, ConfigDict
 
-from tin_engine.cli_kit import words
 from tin_engine.crs import crs_label, parse_crs, reprojector
 from tin_engine.dem_input import repository_for
 from tin_engine.geodesy import LocalFrame
@@ -134,7 +133,7 @@ def _one(entry: RemoteSource, cache: Path | None, box: Box | None) -> SourceRepo
             tiles = repository.footprints()
             found = {"tiles": len(tiles), **_figures(entry, tiles, box)}
         except (OSError, ValueError) as exc:
-            found["problem"] = words(exc) if isinstance(exc, ValueError) else str(exc)
+            found["problem"] = str(exc)
     named = entry.model_dump(include=set(_FROM_ENTRY))
     return SourceReport.model_validate({**found, **named, "present": present, "path": where})
 
@@ -156,7 +155,7 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
     try:
         entries = catalogue(user).sources
     except ValueError as exc:
-        entries, problem = catalogue(None).sources, words(exc)
+        entries, problem = catalogue(None).sources, str(exc)
     register = user or (looked[0] if looked else None)
     sources = report(entries, cache, box)
     notes = []
