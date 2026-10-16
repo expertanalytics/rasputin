@@ -1,6 +1,6 @@
 # Increment 57: vector datasets in the catalogue, the options each fits, output folders made
 
-**Status: designed** (branch `worktree-vector-sources`, from master `a0a1ad45`); not reviewed.
+**Status: designed** (branch `worktree-vector-sources`, from master `a0a1ad45`); revised to design review round 1.
 
 ## 1. What Ola asked, and what failed
 
@@ -26,10 +26,13 @@ The causes, checked against the code at `a0a1ad45`:
    directory of them" (`src_python/tin_engine/sources.py`, `class RemoteSource`);
    `source_report._one` reads every local entry with `repository_for`, a
    GeoTIFF reader.
-2. **Every vector option takes a path only.** `mesh --features` is
-   `list[Path]`, `catchment --lakes` and `--rivers` are `Path`, and
+2. **Nothing tells an agent which option takes a file.** `mesh --features`
+   is `list[Path]`, `catchment --lakes` and `--rivers` are `Path`, and
    `station-catchments --stations`, `--rivers`, `--lakes`, `--reference` are
    `Path` (`cli.py`, `def mesh`, `def catchment`, `def station_catchments`).
+   A path is enough (MCP passes it as a string); what is missing is the
+   listing of the file and of the options it fits. The options stay as they
+   are.
 3. **A missing output folder is refused.** `cli_kit.destination` ends with
    `if not target.parent.is_dir(): raise typer.BadParameter(f"{target.parent}
    is not an existing directory")`; every writer of `mesh`, `catchment` and
@@ -107,23 +110,25 @@ user's sources.toml  ─┼─> sources.catalogue(user_file, plugin_files)
 plugin sources.toml  ─┘     Catalogue(sources, origins, refused)
  (entry point group               │
   rasputin.sources)               │ Mapping[id, RemoteSource]
-        ┌─────────────────────────┼───────────────────────────────┐
-        v                         v                               v
- cli: --dem KEY             cli `sources`                  cli: --features, --lakes,
- (_dem_sources, as 55)      source_report.listing          --rivers, --stations,
-                              raster: repository_for         --reference KEY
-                              vector: io/geopackage,          (_vector_source)
-                                      io/geojson headers         │
-                              facts ──> source_fits.fits       path (+ layer,
-                              (pure)                           class map default)
-                                                                 v
-                                                      the existing readers, unchanged
+        ┌─────────────────────────┤
+        v                         v
+ cli: --dem KEY             cli `sources`
+ (_dem_sources, as 55)      source_report.listing
+                              raster: repository_for
+                              vector: io/geopackage, io/geojson headers
+                              facts ──> source_report.fits (pure)
+                                 │
+                                 v
+                 each source's path, layer and fits (with class_map)
+                                 │  the agent passes the path
+                                 v
+      --features, --lakes, --rivers, --stations, --reference PATH:
+      the existing options and readers, unchanged
 ```
 
 No second registry: a vector dataset is one more `kind = "local"` entry of the
-same catalogue, read by the existing readers. One new module,
-`source_fits.py`, holds the pure rules of section 4.4, so they are tested
-without a file.
+same catalogue, read by the existing readers. No new module: the pure rules of
+section 4.4 are a function in `source_report.py`, tested without a file.
 
 ### 4.2 A vector entry in the catalogue (`sources.py`)
 
@@ -139,7 +144,7 @@ description = "Lake polygons, 1:50 000, ..."
 kind = "local"
 path = "~/data/landcover.gpkg"
 layer = "landcover"            # a GeoPackage with more than one features table
-class_map = "corine"           # optional: the default --features-map for this source
+class_map = "corine"           # optional: the map the file is coded in; its fits name only it
 credit = "..."
 licence_note = "..."
 description = "Land-cover polygons, minimum mapping unit 25 ha, ..."
@@ -163,9 +168,14 @@ Changes to `RemoteSource`:
   - `layer`: only with a `.gpkg` path.
   - `.gml` is not a vector suffix here: a GML file has no header to list, and
     `--features` still takes one as a path.
-- `check_values` is unchanged and now also refuses a features key given to
-  `--dem` ("--dem takes a source of heights; my-lakes holds features") and a
-  heights key given to a vector option.
+- Two `Literal`s widen to `["heights", "classes", "features"]`:
+  `RemoteSource.values` (above) and `SourceReport.values`
+  (`source_report.py`). `check_values`' body and its `wanted` parameter
+  (heights or classes) stay as they are: with `RemoteSource.values` widened,
+  `_dem_sources`' existing call refuses a features key given to `--dem` in
+  its existing words ("--dem takes a source of heights; my-lakes holds
+  features"), and `_class_source`'s refuses one given to `--land-cover`.
+  No caller asks for features: the vector options take paths.
 
 The catalogue's relative paths are resolved by one helper,
 `_beside(file, value) = file.parent / Path(value).expanduser()`, used for
@@ -185,7 +195,7 @@ class ClassField(BaseModel):        # frozen
     values: tuple[str, ...]         # its distinct values, sorted as text, at most CLASS_VALUES
     distinct: int                   # how many distinct values there are
 
-class Fit(BaseModel):               # frozen; defined in source_fits.py
+class Fit(BaseModel):               # frozen
     command: str                    # "mesh", "catchment", "station-catchments"
     option: str                     # "--dem", "--features", "--lakes", ...
     tool: str                       # the MCP tool: "station_catchments"
@@ -243,7 +253,7 @@ bounded in 0.24 s, `lakes.geojson` (7.9 MB, 81 polygons) in 0.11 s. A GeoJSON
 is read whole, so a far larger one makes `sources` slower in proportion: a
 stated limitation; no cap.
 
-### 4.4 Which options a source fits (`source_fits.py`, pure)
+### 4.4 Which options a source fits (`source_report.fits`, pure)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -260,7 +270,7 @@ def fits(facts: Facts, maps: Mapping[str, ClassMap]) -> tuple[Fit, ...]: ...
 ```
 
 `maps` is every shipped map plus `property` (`class_maps.load` over
-`shipped_names()`), passed in by `source_report`; `fits` reads no file. Each
+`shipped_names()`), passed in by `listing`; `fits` reads no file. Each
 rule restates the acceptance condition of the reader the option calls, cited
 here, so the derivation is from what the entry is and names no dataset:
 
@@ -276,8 +286,11 @@ here, so the derivation is from what the entry is and names no dataset:
 | `station-catchments --stations` | GeoJSON, `crs_stated`, geometry exactly `{Point}`, attribute `station` | `read_stations` |
 | `station-catchments --reference` | GeoJSON, `crs_stated`, geometry within `{Polygon, MultiPolygon}`, attribute `station` | `read_references` |
 
-A fit says the option's reader accepts the file; what the features mean (lakes
-or land cover) is in the description, and the agent judges it. So a land-cover
+A fit is a necessary condition read from the header, not a promise: the
+reader may still refuse rows the header does not show (a missing or repeated
+`objectid`, a repeated `station`, a polygon with no area). The `Fit`
+docstring says so in those words. What the features mean (lakes or land
+cover) is in the description, and the agent judges it. So a land-cover
 GeoPackage also fits `catchment --lakes`: stated in the `Fit` docstring and the
 instructions, not filtered by a guess. The `tool` and `argument` of a fit are
 the MCP spellings, derived as `mcp/schema.py` derives them (`-` to `_`, no
@@ -285,31 +298,14 @@ leading dashes). An entry whose file was not read (missing, or a `problem`)
 has no vector fits; a remote heights entry not yet cached still fits `--dem`
 (the run says what to fetch).
 
-### 4.5 Keys in the vector options (`cli.py`)
+### 4.5 The vector options take paths (unchanged)
 
-One helper beside `_dem_sources`:
-
-```python
-def _vector_source(
-    value: str, known: Mapping[str, RemoteSource], option: str
-) -> tuple[Path, RemoteSource | None]:
-    """A vector option's value: a catalogue key of features is its file, with
-    the entry; anything else is a path, so ./my-lakes is a file."""
-```
-
-A key of heights or classes is refused through `check_values(entry,
-"features", option)`. Options changed from `Path` to `str` (help gains "or a
-source from rasputin sources"):
-
-- `mesh --features` (`list[str]`): for a key at position N, the Nth
-  `--features-layer` defaults to `entry.layer` and the Nth `--features-map` to
-  `entry.class_map`, else `property`, as for a path today. No map is chosen
-  for the agent: the fits list the maps that apply.
-- `catchment --lakes` (`--lakes-layer` defaults to `entry.layer`), `--rivers`.
-- `station-catchments --stations`, `--rivers`, `--lakes`, `--reference`.
-
-The readers are unchanged; each is given the entry's path. A run's record and
-messages name the file as today.
+Dropped in design review round 1: catalogue keys in the seven vector
+options. The listing already gives each source's `path`, its `layer` and,
+per fit, the `class_map`; an agent passes the path as a string, with the
+layer as `--features-layer` or `--lakes-layer` and the fit's `class_map` as
+`--features-map`. `cli.py`'s vector options, their help and the MCP tool
+schemas are unchanged.
 
 ### 4.6 Output folders are created (`cli_kit.destination`)
 
@@ -318,8 +314,8 @@ of `target.parent` (`mkdir(parents=True, exist_ok=True)`); an `OSError` there
 (a file in the way, no permission) is a `typer.BadParameter` naming the
 folder and the option. With `--out-parent`:
 
-- `--out-parent` must be an existing directory, else refused naming
-  `--out-parent`. It is the boundary the caller drew; creating it would turn a
+- Default, while Ola's question is open: `--out-parent` must be an existing
+  directory, else refused naming `--out-parent`. It is the boundary the caller drew; creating it would turn a
   typo into a new tree.
 - The containment check runs before any folder is made, on the resolved path,
   so only folders under the permitted parent are created, and a refused path
@@ -330,7 +326,7 @@ So every writer that goes through `destination` gains it, a plugin's too
 (today it writes with no check). `station-catchments --out-dir` already makes
 its own last folder; `destination` now makes its parents.
 
-Accepted cost: the folders are made when the path is checked, before the run,
+Default, while Ola's question is open (accepted cost): the folders are made when the path is checked, before the run,
 so a run that fails later leaves an empty folder. Deferring the creation to
 each writer would put it in every writer, plugins included.
 
@@ -401,13 +397,12 @@ the form `plugins._refuse` uses; the listing carries them in a new
 general guidance only (no dataset, country or resolution):
 
 ```
-sources also lists vector datasets (polygons, lines, points) with their geometry, feature count, attributes and, for land cover, the class values. Each source's fits names the tools and arguments it can be given to, with the class map to pass as features_map; what the features are is in its description. Pass a source's id to those arguments as you pass it to dem.
+sources also lists vector datasets (polygons, lines, points) with their path, layer, geometry, feature count, attributes and, for land cover, the class values. Each source's fits names the tools and arguments it can be given to, with the class map to pass as features_map; what the features are is in its description. Pass its path to those arguments, its layer as features_layer or lakes_layer, and the fit's class map as features_map.
 Output folders are created as needed, inside out_parent when it is given.
 ```
 
-`READ_ONLY`, `RunResult` and the schema derivation are unchanged; the tool
-schemas change only in the help text of the options of section 4.5 (the
-snapshots are regenerated).
+`READ_ONLY`, `RunResult`, the schema derivation and the tool schemas are
+unchanged (the snapshots too).
 
 ### 4.10 Docs
 
@@ -416,8 +411,8 @@ snapshots are regenerated).
   folders.
 - `docs/plugins.md`: a section "Ship datasets", the entry point group, the
   package holding `sources.toml`, and the clash rule.
-- `project_structure.md`: `source_fits.py`; `sources.py` holds vector entries
-  and plugin files; `source_report.py` reads vector headers.
+- `project_structure.md`: `sources.py` holds vector entries and plugin
+  files; `source_report.py` reads vector headers and derives the fits.
 - `data/sources.toml`'s header comment: the third place entries come from.
 
 ### 4.11 Repeating Ola's Codex test without a shell
@@ -433,15 +428,13 @@ false`, start a fresh session, ask Codex first to list its tools (the run is
 void if a shell tool is listed), then repeat the original task; pass when it
 finds the DEM, lakes and land cover through `sources` and runs catchment then
 mesh with an output folder that does not exist yet. The automated
-counterpart is T8.
+counterpart is T7.
 
 ## 5. Deleted
 
 - `destination`'s refusal "is not an existing directory", replaced by the
   creation of the folders (section 4.6).
 - `palette`'s unchecked `out.write_text`, replaced by `destination`.
-- The `Path` typing of the seven vector options, replaced by `str` and
-  `_vector_source`.
 - `listing`'s rule `register = user or looked[0]`, replaced by section 4.8.1.
 
 ## 6. Left out
@@ -452,6 +445,7 @@ counterpart is T8.
 - A source's credit in the catchment file or the mesh record when it comes
   from a vector key: the class map's notice already reaches the mesh record,
   as today; carrying vector credits is its own change.
+- Catalogue keys in the vector options (section 4.5): the path is passed.
 - Footprints finer than the extent box; feature counts inside `--bbox`.
 - Telling lakes from land cover in `fits`: the description says it.
 - `station-catchments --only`, `--reference` beyond the key: unchanged.
@@ -498,8 +492,8 @@ package directory holding `sources.toml`.
   with no `values` loads as features; each refusal of section 4.2 names its
   field; `layer` refused off a `.gpkg`; `~/x.gpkg` in `path`, and
   `~/m.toml` in `class_map`, expand under a monkeypatched `HOME`; a relative
-  path is still taken from the file's directory; `check_values` refuses a
-  features key for `--dem` with the words of section 4.2.
+  path is still taken from the file's directory; `mesh --dem <features key>`
+  is refused with `check_values`' words of section 4.2.
 - **T2 plugin files**: `plugin_source_files` finds the fake distribution's
   file; its entries list with `origin` "plugin fakeplug"; a plugin id equal to
   a package id, a user id or an earlier plugin's skips that plugin's whole file
@@ -513,7 +507,7 @@ package directory holding `sources.toml`.
   set, those bounds; with neither, None; `distinct_values` gives ("311",
   "512"), 2, and with `limit=1`, ("311",), 2; `collection_summary` of the lake
   file gives {"Polygon"}, 1, ("name",), the lake box, crs member present.
-- **T4 fits, pure** (`source_fits.py`): a table test over `Facts`, one row per
+- **T4 fits, pure** (`source_report.fits`): a table test over `Facts`, one row per
   rule of section 4.4 and one row per exclusion (a `.gpkg` for `--rivers`; a
   GeoJSON with no `crs` member for `--stations`; `MultiLineString` for
   `--rivers`; a geographic DEM for `station-catchments --dem`; an entry
@@ -522,10 +516,13 @@ package directory holding `sources.toml`.
   argument names for that command and option.
 - **T5 fits agree with the readers**: for each fixture file (fixture V's two,
   plus `nve`-style stations, rivers and reference GeoJSON written by the
-  existing station fixtures, and one GeoJSON without a `crs` member), the
-  reader each option calls accepts the file exactly when the listing names
-  that fit. This is the guard against drift between section 4.4 and the
-  readers.
+  existing station fixtures, and one GeoJSON without a `crs` member): where
+  the listing names no fit, the option's reader refuses the file; where it
+  names one, the reader accepts that fixture. A fit is a header-level
+  necessary condition, so the test does not claim the converse for every
+  file: the readers also refuse a missing or repeated `objectid`, a repeated
+  `station`, a polygon with no area, which no header shows. This is the
+  guard against drift between section 4.4 and the readers.
 - **T6 the listing** (`rasputin sources --bbox 15.15 59.33 15.20 59.38` over
   fixture V and L registered in the test's user file): the figures of fixture
   V above; the landcover entry's `classes` one `ClassField` ("Code_18",
@@ -536,45 +533,38 @@ package directory holding `sources.toml`.
   `origin` "user", the shipped ones "package"; the `note` sentence on vector
   extents present. The landcover entry without `layer`: `problem` names both
   tables, the other entries unaffected.
-- **T7 keys in the options**: `catchment --lakes <lakes key>`: 766 nodes;
-  `mesh --features <landcover key> --features-map corine`: 1083 triangles,
-  codes 311:1004 and 512:79 (the entry's `layer` used); the same with the
-  entry's `class_map = "corine"` and no `--features-map`: the same counts; a
-  heights key for `--lakes` and a features key for `--dem` refused with
-  `check_values`' words; `station-catchments` with keys for `--stations`,
-  `--rivers` and `--lakes` resolves them (the refusal, if any, is not "cannot
-  read <key>").
-- **T8 acceptance over MCP only** (`build_server(cli.app)` with the production
+- **T7 acceptance over MCP only** (`build_server(cli.app)` with the production
   child, in process; `HOME` a temp directory whose
   `.config/rasputin/sources.toml` registers fixture L, the lake file and the
   land-cover GeoPackage under ids that name nothing real; `RASPUTIN_DATA` and
   `XDG_CONFIG_HOME` unset). After that setup the test acts only through tool
   calls: `sources` with `bbox` (15.15 59.33 15.20 59.38); it takes the DEM
-  id from the entry fitting `catchment` `dem` with `box_covered` 1.0, the
-  lake id and the land-cover id and its `class_map` from their `fits`;
-  `catchment` with `dem=[dem id]`, `seed`, `seed_crs`, `lakes=<lake id>`,
+  id from the entry fitting `catchment` `dem` with `box_covered` 1.0, and
+  the lake source's `path` and the land-cover source's `path`, `layer` and
+  fit `class_map` from the entries whose `fits` name `lakes` and `features`;
+  `catchment` with `dem=[dem id]`, `seed`, `seed_crs`, `lakes=<lake path>`,
   `out` in `<tmp>/new/deeper/c.geojson` (absent): exit 0, the output listed;
   `mesh` with `dem=[dem id]`, `domain` the catchment's output path taken from
-  the tool result, `tolerance` 5, `features=[land-cover id]`,
-  `features_map=[the fit's class_map]`, `out` in `<tmp>/meshes/run1/m.gpkg`
+  the tool result, `tolerance` 5, `features=[land-cover path]`,
+  `features_layer=[its layer]`, `features_map=[the fit's class_map]`, `out` in `<tmp>/meshes/run1/m.gpkg`
   (absent): exit 0, the run record (structured data) naming layer
   `landcover` and map `corine`. The oracle may then read the files: 766
   nodes, 1083 triangles, codes 311:1004 and 512:79.
-- **T9 output folders**: `destination` creates a missing chain under no
+- **T8 output folders**: `destination` creates a missing chain under no
   `out_parent` and under an existing one; a path outside `out_parent` is
   refused and creates nothing (asserted by listing `tmp_path` before and
   after); a missing `--out-parent` is refused naming `--out-parent`; a file in
   the way is refused naming the folder; `palette corine --out <absent>/p.json`
   writes. 56's `test_a_missing_directory_is_a_refusal_naming_it` becomes the
   creation test.
-- **T10 the review ideas**: `register_at` is the XDG file with
+- **T9 the review ideas**: `register_at` is the XDG file with
   `RASPUTIN_DATA` set and its file present, and the `note` says so; the
   fetch hints of `mesh` (missing cache with `--domain` and `--cache` holding a
   space) and `catchment` (fixture C of 55, its seed block row skipped, a
   cache path with a space) parse back with `shlex.split` to the same values.
-- **T11 instructions**: the initialise result contains "fits" and "Output
-  folders are created as needed", and no source id.
-- Updated, not new: `test_mcp_schema.py`'s snapshots. 55's `register_at`
+- **T10 instructions**: the initialise result contains "fits", "Pass its
+  path" and "Output folders are created as needed", and no source id.
+- Unchanged: `test_mcp_schema.py`'s snapshots. 55's `register_at`
   assertions (`test_cli_sources.py`, `test_mcp_datasets.py`) all run with
   the XDG file as the only candidate, so they hold unchanged.
 
@@ -588,19 +578,24 @@ Net production lines (`CLAUDE.md` §2; TOML and docs not counted):
 | --- | --- |
 | `sources.py`: features value, `layer`, before-validator, rules, `_beside`, plugin files, `catalogue` with origins and refusals | 70 |
 | `io/geopackage.py` `layer_summary`, `distinct_values`; `io/geojson.py` `collection_summary` | 45 |
-| `source_report.py`: vector branch, `_lonlat` split, `ClassField`, new fields, `register_at`, notes, plugin problems | 75 |
-| `source_fits.py` (new): `Facts`, `Fit`, `fits` | 55 |
-| `cli.py`: `_vector_source`, seven options, layer and map defaults, quoted hints, refusals on stderr, palette | 55 |
+| `source_report.py`: vector branch, `_lonlat` split, `ClassField`, new fields, `register_at`, notes, plugin problems; `Facts`, `Fit`, `fits` | 125 |
+| `cli.py`: plugin files to `_known_sources`, refusals on stderr, quoted hints, palette through `destination` | 15 |
 | `cli_kit.destination`; `mcp/server.py` instructions | 12 |
-| **Total** | **about 310**; worst case 430 |
+| **Total** | **about 270**; worst case 370 |
+
+Round 1 of the design review cut about 40 lines: `_vector_source` and the
+seven options' retyping (section 4.5), and a module's overhead.
 
 One PR, the full path (over 50 lines). It touches no refine or mesh code
 (`include/terrain/`), so no `@perf` acceptance run.
 
 ## 9. Files
 
-`src_python/tin_engine/sources.py`, `source_report.py`, `source_fits.py`
-(new), `io/geopackage.py`, `io/geojson.py`, `cli.py`, `cli_kit.py`,
+`src_python/tin_engine/sources.py`, `source_report.py`, `io/geopackage.py`, `io/geojson.py`, `cli.py`, `cli_kit.py`,
 `mcp/server.py`, `data/sources.toml` (comment); `README.md`, `docs/plugins.md`,
-`project_structure.md`, `ROADMAP.md`; tests under `tests/python/` (T1 to T11,
-the fixture helpers, the snapshot update).
+`project_structure.md`, `ROADMAP.md`; tests under `tests/python/` (T1 to T10,
+the fixture helpers).
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `46edf5b6`, 0 counted lines, @reviewer: CHANGES REQUESTED, applied by @architect: catalogue keys in the seven vector options dropped (section 4.5; the listing gives `path`, `layer` and each fit's `class_map`; old T7 cut); `source_fits.py` folded into `source_report.py`; section 4.2 names the two widened `Literal`s; T5 and the `Fit` docstring call a fit a header-level necessary condition. Held: one catalogue, readers reused, fits per option, the `rasputin.sources` group, the CORINE figures, both folder defaults.
