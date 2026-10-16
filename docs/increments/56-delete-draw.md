@@ -1,6 +1,6 @@
 # Increment 56: delete `rasputin draw` and the drawing package
 
-**Status: designed** (`@architect`, 2026-10-16), one public PR, branch
+**Status: designed, design review round 1 approved with wordings** (`@architect`, 2026-10-16), one public PR, branch
 `worktree-delete-draw`.
 
 ## 1. What Ola asked
@@ -53,7 +53,7 @@ Run at `c5d4be39`, the branch's base:
 | `tests/python/test_cli_help.py` T4 | `draw --list` runs while hidden | replaced by the absence test |
 | `tests/python/test_layering.py` | the `viz` rows and `viz.*` in the `cli` row | rows deleted |
 | comments in `test_features.py`, `test_core_noding.py`, `test_core_cdt.py`, `test_io_ply.py`, `test_mcp_schema.py`, `tests/cpp/unit/test_noding_node.cpp`, `tests/cpp/unit/test_cdt_detria_backend.cpp` | prose naming `viz` or `rasputin draw road-crosses-river` | reworded to "the road-crosses-river shape" or cut |
-| `testing.md` (`### viz`, the stylesheet exclusion), `project_structure.md` (the `viz/` tree, the binding and API paragraphs) | prose | the `viz` section and lines deleted; the binding paragraph says `cli.py` is the composition root |
+| `testing.md` (`### viz`, the stylesheet exclusion, and the `cdt` section's line 129, which names `test_viz_scene.py` as the suite that builds the one-bit fixture; cite `tests/cpp/unit/test_cdt_constrained_edges.cpp` or cut the clause), `project_structure.md` (the `viz/` tree, the binding and API paragraphs) | prose | the `viz` section and lines deleted; the binding paragraph says `cli.py` is the composition root |
 
 **The "seven test files that load the shapes" are not gallery users.**
 `test_cli_mesh_features.py` defines its own `GALLERY`, a list of GeoJSON
@@ -127,7 +127,7 @@ gallery shapes and `draw`'s options. The engine refusals the gallery showed
   fixture (`rough_dem(16)`, 17 x 21 nodes near `(500_000, 6_600_000)`):
   `0`, `-1`, `nan`, `-inf` exit 2, the output names `snap-spacing`, and no
   `--out` file exists; `--snap-spacing=1e-12` exits non-zero and the output
-  names `CoordinateOutOfRange` (the value reaches the engine). Measured on
+  names `CoordinateOutOfRange` (the value reaches the engine), and the first word of `_core.describe(NodeStatus.CoordinateOutOfRange)` is in the output. Measured on
   master `9a7c312d`: exit 2 and "snap-spacing must be finite and positive" for
   the first four; exit 2 and "has no mesh to write: CoordinateOutOfRange" for
   1e-12; 0.5 exits 0 with 640 triangles.
@@ -156,9 +156,12 @@ strict refuses `None` once the parameter is `Path`.
 ## 6. The green step
 
 `@developer`: delete `src_python/tin_engine/viz/`; in `cli.py` delete the rows
-of section 3, reword the module docstring and the comments on `ROLES`,
-`CORE_CLOSED_ROLES`, `DEFAULT_SNAP_SPACING`, `_engine` and `_band` so none
-names the gallery, `viz` or `svg.py`; delete the `pyproject.toml` entry; drop
+of section 3, reword every docstring and comment in `cli.py` that names the gallery, a
+fixture, `draw`, `viz` or `svg.py`. That includes `_Run` ('the fixture path'),
+`_snap_spacing` ('before anything is drawn'), `_chain_masks` ('as viz.scene
+does'), and `_constraint_arrays`, whose 'never from viz.scene' paragraph is
+deleted. Check: `grep -n -i -E 'viz|svg|gallery|fixture'
+src_python/tin_engine/cli.py` prints nothing; delete the `pyproject.toml` entry; drop
 `destination`'s `None` branch and type `out: Path`; reword `features.py` and
 the two C++ comments. No test file. The prose files of section 3 change in the
 same PR (they are not production code; any persona with the write right).
@@ -194,3 +197,7 @@ takes increment 55's side and then deletes the `viz` names again.
 
 Short path: no. The change touches two C++ files (comments) and is far from
 small in lines moved, though negative in count.
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `a01d67c8`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `testing.md`'s `cdt` line naming `test_viz_scene.py`; every `cli.py` docstring naming the gallery, fixtures, `draw`, `viz` or `svg.py`, with a grep check; T2 keeps the engine's own words in the output. Held: users table complete; the seven test files use `test_cli_mesh_features.GALLERY`; the temporary-.svg option has no plugin or doc user (default yes taken, Ola at lunch).
