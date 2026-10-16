@@ -478,13 +478,13 @@ class TestT8bWritesFromAToyApp:
 
 class TestT8bWritesOnTheRealApp:
     def test_the_writable_paths_are_section_4_6s_table(self) -> None:
-        import click
-
+        # Read the attribute, not the class: Typer ships its own click copy,
+        # whose path type is no subclass of `click.Path`.
         marked = {
             (name, p.name)
             for name, d in derived(app).items()
             for p in d.command.params
-            if isinstance(p.type, click.Path) and p.type.writable
+            if getattr(p.type, "writable", False)
         }
         assert marked == WRITABLE
 
