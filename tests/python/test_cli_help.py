@@ -41,7 +41,7 @@ COLUMNS = 200
 PANELS = [
     ("Meshing", ["mesh", "palette"]),
     ("Catchments", ["catchment", "station-catchments"]),
-    ("Data", ["fetch", "fetch-stations"]),
+    ("Data", ["fetch", "fetch-stations", "sources"]),
     ("Other", ["version", "mcp"]),
 ]
 

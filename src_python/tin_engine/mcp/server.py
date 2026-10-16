@@ -58,13 +58,24 @@ MIME_TYPES = {
     ".md": "text/markdown",
 }
 #: Shown to the model at initialize.
-INSTRUCTIONS = """\
+INSTRUCTIONS = (
+    "Call sources first: it lists the elevation and land-cover sources this machine knows, "
+    "local ones read in place and remote ones read from a cache, each with its coverage as a "
+    "longitude/latitude box, cell size in metres, CRS, height unit, tile count, description "
+    "and credit. Give it bbox (west south east north, degrees) to see what share of your area "
+    "each source covers.\nChoose a source by its coverage of your area, its cell size and "
+    "what its description says the heights represent.\nPass the chosen source's id as dem to "
+    "mesh, catchment and station_catchments. A local source needs no fetch. A remote source "
+    "is read from the cache: fetch the area first; a run that lacks data says what to fetch."
+    "\nsources also says which sources file and cache it read, and where a local dataset "
+    "would be registered.\n"
+    """\
 Paths are on the machine this server runs on, as for the rasputin command line.
 mesh writes a mesh file at out and returns its run record; the mesh itself never travels here.
 Write a .gpkg to inspect a mesh with GIS tools; .vtk is for ParaView.
-A catalogue DEM source must be fetched first: run fetch over the domain, then mesh.
 A refusal's words say what to change; the exit code is the command's.
 A cancelled mesh may leave an unreadable .vtk or .ply at out; rerun before reading it."""
+)
 
 
 class _Progress:
@@ -162,12 +173,15 @@ async def _outputs(stdout: list[str], hidden: list[Path]) -> list[str]:
     taken = [await AsyncPath(p).resolve() for p in hidden]
     outputs = []
     for line in stdout:
-        if (
-            line.strip()
-            and await AsyncPath(line).exists()
-            and (await AsyncPath(line).resolve() not in taken)
-        ):
-            outputs.append(line)
+        try:  # a line that cannot name a file (too long, say) raises before 3.14
+            if (
+                line.strip()
+                and await AsyncPath(line).exists()
+                and (await AsyncPath(line).resolve() not in taken)
+            ):
+                outputs.append(line)
+        except OSError:
+            continue
     return outputs
 
 

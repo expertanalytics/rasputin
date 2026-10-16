@@ -238,7 +238,7 @@ class TestArgvRoundTrip:
 
 # ---------------------------------------------------------------- T3
 
-#: The seven commands an agent is offered, as tool names, in the order of
+#: The eight commands an agent is offered, as tool names, in the order of
 #: `rasputin --help` (`mcp` is the server). Their parameter
 #: counts are not pinned: the test below holds each schema's properties equal
 #: to the command's own click parameters, which implies the count, and a
@@ -246,7 +246,7 @@ class TestArgvRoundTrip:
 #: saying anything about the schema.
 TOOL_NAMES = [
     "mesh", "palette", "catchment", "station_catchments",
-    "fetch", "fetch_stations", "version",
+    "fetch", "fetch_stations", "sources", "version",
 ]  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -377,6 +377,10 @@ class TestTheRealApp:
         version = tools["version"].annotations
         assert version is not None
         assert (version.read_only_hint, version.idempotent_hint) == (True, True)
+        listing = tools["sources"].annotations
+        assert listing is not None
+        assert (listing.read_only_hint, listing.idempotent_hint) == (True, True)
+        assert listing.open_world_hint is False
         for name in ("fetch", "fetch_stations"):
             annotations = tools[name].annotations
             assert annotations is not None and annotations.open_world_hint is True, name

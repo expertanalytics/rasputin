@@ -228,6 +228,7 @@ def _header(
             raise FetchError(f"{url}: no complete header in the first {MAX_HEADER // MIB} MiB")
         size *= 2
     meta, _, page = parsed
+    assert source.crs is not None, f"{source.id} is a local source"
     if not same_crs(meta.crs, source.crs):
         raise FetchError(
             f"{object_id}: the header's CRS is {meta.crs}; the catalogue's {source.id} "
@@ -251,6 +252,7 @@ async def _tiles(
     assert source.tile_list_url is not None and source.tile_spacing is not None
     text = await asyncio.to_thread(client.get_text, source.tile_list_url)
     listed = set(text.split())
+    assert source.crs is not None, f"{source.id} is a local source"
     epsg = parse_crs(source.crs).to_epsg()
     assert epsg is not None
     nominal = RasterMeta(
