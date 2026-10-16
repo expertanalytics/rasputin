@@ -173,12 +173,15 @@ async def _outputs(stdout: list[str], hidden: list[Path]) -> list[str]:
     taken = [await AsyncPath(p).resolve() for p in hidden]
     outputs = []
     for line in stdout:
-        if (
-            line.strip()
-            and await AsyncPath(line).exists()
-            and (await AsyncPath(line).resolve() not in taken)
-        ):
-            outputs.append(line)
+        try:  # a line that cannot name a file (too long, say) raises before 3.14
+            if (
+                line.strip()
+                and await AsyncPath(line).exists()
+                and (await AsyncPath(line).resolve() not in taken)
+            ):
+                outputs.append(line)
+        except OSError:
+            continue
     return outputs
 
 
