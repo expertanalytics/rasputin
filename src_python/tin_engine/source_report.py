@@ -33,6 +33,7 @@ from tin_engine.io.geopackage import distinct_values, layer_info, layer_summary
 from tin_engine.io.models import TileFootprint
 from tin_engine.io.repository import CacheRepository, open_geopackage, read_json
 from tin_engine.sources import (
+    OUT_ROOT_VARIABLE,
     RemoteSource,
     ZUnit,
     catalogue,
@@ -133,6 +134,7 @@ class CatalogueReport(BaseModel):
     register_at: str | None
     user_file_problem: str | None
     cache: str | None
+    out_root: str | None
     note: str | None
     sources: tuple[SourceReport, ...]
     plugin_problems: tuple[str, ...]
@@ -377,6 +379,7 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
         register_at=None if register is None else str(register),
         user_file_problem=problem,
         cache=None if cache is None else str(cache),
+        out_root=environ.get(OUT_ROOT_VARIABLE),
         note=" ".join(notes) or None,
         sources=sources,
         plugin_problems=found.refused,

@@ -30,32 +30,25 @@ THREADS = Annotated[
 ]
 
 
-def destination(out: Path, out_parent: Path | None, name: str, hint: str = "--out") -> Path:
-    """Where to write, having refused every path this process should not touch; a
-    refusal names the option, ``hint``.
+def destination(out: Path, hint: str = "--out") -> Path:
+    """Where to write ``out``, its missing folders made; a refusal names the
+    option, ``hint``.
 
-    A hostile boundary, per the python skill. ``resolve()`` first, so that
-    ``..`` cannot smuggle a write out of an explicitly permitted parent; refuse
-    a symlinked ``--out`` rather than following it, because a link pointing back
-    *inside* the permitted parent passes containment and still overwrites a file
-    the user never named; and turn a missing directory into a message rather
-    than a traceback.
-
-    The symlink check is on the **final component only**: a symlinked parent
-    directory is resolved by ``resolve()`` and then judged by containment, which
-    is the right answer for ``--out-parent`` and is all this boundary claims.
+    A symlinked final part is refused rather than followed: a link that points
+    elsewhere inside an allowed folder still overwrites a file the caller never
+    named. The path is then resolved, so ``..`` makes the folder it reaches, not
+    the one it spells. It fences nothing: a caller that must keep writes inside
+    a folder checks that before calling.
     """
     if out.is_symlink():
         raise typer.BadParameter(f"{out} is a symlink; refusing to follow it", param_hint=hint)
     target = out.resolve()
-    if out_parent is not None:
-        permitted = out_parent.resolve()
-        if not target.is_relative_to(permitted):
-            raise typer.BadParameter(
-                f"{target} is outside the permitted parent {permitted}", param_hint=hint
-            )
-    if not target.parent.is_dir():
-        raise typer.BadParameter(f"{target.parent} is not an existing directory", param_hint=hint)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"cannot make the folder {target.parent}: {exc.strerror}", param_hint=hint
+        ) from exc
     return target
 
 

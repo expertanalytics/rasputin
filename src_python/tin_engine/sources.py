@@ -44,6 +44,9 @@ _URL_FIELDS = {"one-cog": set(), "cog-tiles": {"name"}, "one-cog-per-year": {"ye
 VECTOR_SUFFIXES = (".gpkg", ".geojson", ".json")
 #: The entry point group whose value names a package holding a `sources.toml`.
 SOURCE_GROUP = "rasputin.sources"
+#: The MCP server's output root, set in its children's environment; the listing
+#: reports it and nothing is fenced by it.
+OUT_ROOT_VARIABLE = "RASPUTIN_MCP_OUT_ROOT"
 _REMOTE_FIELDS = ("url", "url_template", "tile_list_url", "tile_name", "tile_spacing", "years")
 
 
@@ -399,6 +402,7 @@ def notice(source: RemoteSource | StationSource, credits: Sequence[str] = ()) ->
 
 
 __all__ = [
+    "OUT_ROOT_VARIABLE",
     "SOURCES",
     "SOURCE_GROUP",
     "STATION_SOURCES",
