@@ -132,3 +132,30 @@ def run_rasputin(
 def lines_naming(text: str, word: str) -> list[str]:
     """The lines of ``text``, escapes stripped, that contain ``word``."""
     return [line for line in plain(text).splitlines() if word in line]
+
+
+def write_source_plugin(
+    root: Path,
+    *,
+    dist: str = "fakeplug",
+    package: str = "fakeplug_data",
+    sources: str | None = None,
+    value: str | None = None,
+    init: str = "",
+) -> Path:
+    """One distribution under ``root`` with one ``rasputin.sources`` entry
+    point ``<dist> = <value>`` (default: ``package``), and the package
+    directory holding ``__init__.py`` (body ``init``) and, unless ``sources``
+    is None, ``sources.toml``. Returns ``root``, the directory to put on the path."""
+    root.mkdir(parents=True, exist_ok=True)
+    directory = root / package
+    directory.mkdir()
+    (directory / "__init__.py").write_text(init)
+    if sources is not None:
+        (directory / "sources.toml").write_text(sources, encoding="utf-8")
+    info = root / f"{dist}-0.1.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {dist}\nVersion: 0.1\n")
+    entry = package if value is None else value
+    (info / "entry_points.txt").write_text(f"[rasputin.sources]\n{dist} = {entry}\n")
+    return root

@@ -60,6 +60,8 @@ TILE_FIELDS = ("tile_name", "tile_spacing")
 #: Fields every entry gained with local sources; `description` is checked
 #: non-empty in `test_source_places.py`, `path` is None on every remote kind.
 LOCAL_FIELDS = ("path", "description")
+#: The field every entry gained with vector sources: None on every shipped one.
+VECTOR_FIELDS = ("layer",)
 USER_ID = "my-x"
 
 
@@ -150,10 +152,11 @@ class TestT1TheShippedCatalogue:
         self, sources: ModuleType, snapshot: dict[str, Any], key: str
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
-        added = TILE_FIELDS + LOCAL_FIELDS
+        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS
         rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
         assert dumped["path"] is None
+        assert dumped.get("layer") is None
 
     def test_glo30_gains_its_tile_name_and_spacing(self, sources: ModuleType) -> None:
         glo30 = sources.SOURCES["glo30"]
