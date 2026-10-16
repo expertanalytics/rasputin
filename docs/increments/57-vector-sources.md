@@ -1,6 +1,6 @@
 # Increment 57: vector datasets in the catalogue, the options each fits, output folders made
 
-**Status: in progress** (branch `worktree-vector-sources`, from master `a0a1ad45`): code green at `08cb70c2` except the output folders, whose design (section 4.6) is revised to Ola's ruling on `--out-parent`: the guard moves into the MCP server.
+**Status: built, code review approved** (branch `worktree-vector-sources`, from master `a0a1ad45`): code green at `08cb70c2` except the output folders, whose design (section 4.6) is revised to Ola's ruling on `--out-parent`: the guard moves into the MCP server.
 
 ## 1. What Ola asked, and what failed
 
@@ -339,10 +339,11 @@ Click's `Path.writable`, which Typer passes through). `DerivedCommand` gains
 
 ```python
 def writes(self, arguments: BaseModel) -> list[tuple[str, str]]:
-    """(argument, path) for each value the caller set on a parameter whose type
-    is a writable path, options and positional arguments alike, every item of
-    a repeatable one; "-" is skipped where the parameter allows a dash
-    (stdout, not a file)."""
+    """(argument, path) for each value, given or default, of a parameter whose
+    type is a writable path, options and positional arguments alike, every item
+    of a repeatable one; a default is checked because the command writes there
+    all the same. "-" is skipped where the parameter allows a dash (stdout, not
+    a file)."""
 ```
 
 derived from `command.params`, as `argv` is: no list per tool. Typer ignores
@@ -771,3 +772,4 @@ the fixture helpers).
 - **Design review, round 2, 2026-10-16.** Commit `8f440523`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 6 credit bullet ("a vector key" becomes "a vector file the catalogue lists is passed"). Held: only `RemoteSource.values` and `SourceReport.values` widen; `check_values` refuses a features key for `--dem` and `--land-cover` before the path is used.
 - **Design review, round 3, 2026-10-16.** Commit `28547032`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `rasputin-radiation` is a copy, not a plugin; instructions say to give output paths in full; relative paths stay against the server's working directory (sidecars and output reading depend on it). Held: Typer keeps `writable` and `allow_dash` on a `Path` option with the same schema; only `fetch` writes the cache. Open to Ola: holding `fetch --cache` inside the root.
 - **Code review, round 1, 2026-10-16.** Range `da133bce..9f634f94`, 342 counted lines, @reviewer: CHANGES REQUESTED: `DerivedCommand.writes` skipped a writable option left unset, so a plugin's default outside the root was written unchecked (fixed: red `dd11957f`); README states the default tile cache as the guard's one exception (`095ffa1b`). Held: `..`, symlinks, `-`, `fetch --cache`, refusal before any child; fits per option; `--out-parent` gone. `DemInput.label` goes in a follow-up (two plugin-visible signatures).
+- **Code review, round 2, 2026-10-16.** Range `9f634f94..8648c039`, 340 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the design sketch's `writes` docstring (defaults checked). Held: the hole is closed for repeatable and positional parameters; all nine core writable parameters default to None, so no core call is newly refused. Idea for later: a plugin default computed at run time could differ from the one checked.
