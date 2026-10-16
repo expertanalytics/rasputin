@@ -17,11 +17,13 @@ from importlib.metadata import entry_points
 
 import typer
 from typer.main import get_command_name
-from typer.models import CommandInfo
+from typer.models import CommandInfo, DefaultPlaceholder
 
 from tin_engine import cli
 
 GROUP = "rasputin.commands"
+#: The help panel of a plugin command that names none, after the core's panels.
+PLUGINS = "Plugins"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +69,9 @@ def _name(info: CommandInfo) -> str:
 
 def application(plugins: Sequence[Plugin] | None = None) -> typer.Typer:
     """A new app: the core's commands, then each plugin's (``None`` means
-    `discover`). ``cli.app`` is never changed. Each refusal is one line on stderr."""
+    `discover`). ``cli.app`` is never changed, nor a plugin's app: a plugin
+    command that names no help panel is shown, as a copy, under *Plugins*.
+    Each refusal is one line on stderr."""
     app = copy.copy(cli.app)
     app.registered_commands = list(cli.app.registered_commands)
     app.registered_groups = list(cli.app.registered_groups)
@@ -83,7 +87,11 @@ def application(plugins: Sequence[Plugin] | None = None) -> typer.Typer:
                 _refuse(f"plugin {plugin.dist}: command {name} skipped, {by} has one")
                 continue
             owner[name] = plugin.dist
+            if isinstance(info.rich_help_panel, DefaultPlaceholder | None):
+                info = copy.copy(info)
+                info.rich_help_panel = PLUGINS
             app.registered_commands.append(info)
+
     return app
 
 

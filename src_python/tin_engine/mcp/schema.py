@@ -127,7 +127,8 @@ class DerivedCommand:
 
 
 def derive(app: typer.Typer) -> list[DerivedCommand]:
-    """One `DerivedCommand` per command of ``app``, in its order, the server's own excluded."""
+    """One `DerivedCommand` per shown command of ``app``, in its order, the server's own
+    excluded."""
     root: Any = typer.main.get_command(app)
     return [
         DerivedCommand(
@@ -138,5 +139,5 @@ def derive(app: typer.Typer) -> list[DerivedCommand]:
             ),
         )
         for name, command in root.commands.items()
-        if name != SERVER_COMMAND
+        if name != SERVER_COMMAND and not command.hidden
     ]

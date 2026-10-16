@@ -114,7 +114,6 @@ from tin_engine.io.geopackage_write import (
     write_styles,
     write_triangles,
 )
-from tin_engine.io.mesh_checks import checked_ascii
 from tin_engine.io.models import (
     BY_NAME,
     UNITS,
@@ -150,7 +149,6 @@ from tin_engine.run_record import (
     as_json,
     escaped_ascii,
     file_fields,
-    flat_record,
     ordinal,
     plural,
     refined_record,
@@ -167,11 +165,15 @@ from tin_engine.viz.scene import build_scene
 from tin_engine.viz.style import PropertyStroke, SvgStyle
 from tin_engine.viz.svg import render_svg
 
-app = typer.Typer(
-    name="rasputin",
-    help="Parallel TIN engine for terrain meshing.",
-    no_args_is_help=True,
+#: What rasputin does, in one sentence: the root help and `pyproject.toml` say it.
+DESCRIPTION: Final = (
+    "Rasputin turns a digital elevation model (DEM) into a triangle mesh of the terrain "
+    "that stays within a height tolerance you choose."
 )
+#: The panels of `rasputin --help`, in the order it shows them.
+MESHING, CATCHMENTS, DATA, OTHER = "Meshing", "Catchments", "Data", "Other"
+
+app = typer.Typer(name="rasputin", help=DESCRIPTION, no_args_is_help=True)
 
 #: The one refusal when no cache directory can be found.
 NO_CACHE: Final = (
@@ -279,7 +281,6 @@ OPTION_TOPS = (
 )
 
 
-@app.callback()
 def main() -> None:
     """Keep Typer in sub-command mode.
 
@@ -293,7 +294,6 @@ def bounds_checks() -> str:
     return "off" if hardening == "none" else f"on ({hardening})"
 
 
-@app.command()
 def version() -> None:
     """Print the installed rasputin version, then whether it is bounds-checked."""
     typer.echo(installed_version())
@@ -312,11 +312,13 @@ INSTALL_MCP = 'pip install "rasputin[mcp]"'
 _INSTALL_MCP_HELP = INSTALL_MCP.replace("[", r"\[") if app.rich_markup_mode else INSTALL_MCP
 
 
-@app.command(
-    help="Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
-    "\n\nOne tool per command, each call run as ``python -m tin_engine`` (increment 37). "
-    f"Needs the ``mcp`` extra: ``{_INSTALL_MCP_HELP}``."
+MCP_HELP: Final = (
+    "Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
+    "\n\nOne tool per command, each call run in a process of its own. "
+    f"Needs the mcp extra: {_INSTALL_MCP_HELP}"
 )
+
+
 def mcp(
     jobs: Annotated[
         int, typer.Option("--jobs", min=1, help="Tool calls run at once; one beyond this waits.")
@@ -422,9 +424,7 @@ def _engine(
     )
 
 
-def _triangulated(
-    fixture: Fixture, delaunay: bool, spacing: float, clock: PhaseClock | None = None
-) -> Attempt:
+def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
     """Run the engine on a fixture and reduce what it said to one record.
 
     ``status`` and ``message`` are plain text for the header band. THREE distinct
@@ -443,7 +443,7 @@ def _triangulated(
         ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
         for c, chain in enumerate(fixture.chains)
     ]
-    run = _engine(fixture.vertices, chains, delaunay, spacing, clock)
+    run = _engine(fixture.vertices, chains, delaunay, spacing)
     if run.noded is None:
         return Attempt(
             source=fixture,
@@ -488,7 +488,6 @@ def _snap_spacing(value: float) -> float:
     return value
 
 
-@app.command()
 def draw(
     name: Annotated[str | None, typer.Argument(help="Gallery fixture to draw.")] = None,
     list_: Annotated[bool, typer.Option("--list", help="List the gallery and exit.")] = False,
@@ -635,24 +634,20 @@ def _constraint_arrays(
     )
 
 
-@app.command()
 def mesh(
     out: Annotated[
         Path,
         typer.Option("--out", help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS."),
     ],
-    name: Annotated[
-        str | None, typer.Argument(help="Gallery fixture to write; or give --dem instead.")
-    ] = None,
     dem: Annotated[
-        list[str] | None,
+        list[str],
         typer.Option(
             "--dem",
             help="A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a "
             f"cached catalogue source ({', '.join(SOURCES)}): mesh its extent with z "
             "sampled from it. A file named like a source is written as a path: ./glo30.",
         ),
-    ] = None,
+    ],
     cache: Annotated[
         Path | None,
         typer.Option(
@@ -665,17 +660,14 @@ def mesh(
         typer.Option(
             "--bbox",
             metavar="BOX",
-            help="With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, "
-            "or in --out-crs's when given, snapped outward to its nodes.",
+            help="Mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, or in --out-crs's when "
+            "given, snapped outward to the DEM's nodes.",
         ),
     ] = None,
     stride: Annotated[
         int | None,
-        typer.Option("--stride", help="With --dem, every Nth DEM node. Default: <= 256 a side."),
+        typer.Option("--stride", help="Every Nth DEM node. Default: <= 256 a side."),
     ] = None,
-    flat: Annotated[
-        bool, typer.Option("--flat", help="There is no elevation source; write z = 0.")
-    ] = False,
     out_edges: Annotated[
         Path | None,
         typer.Option("--out-edges", help="With .ply, also write the constraint edges as a PLY."),
@@ -684,9 +676,6 @@ def mesh(
         Path | None,
         typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
     ] = None,
-    crs: Annotated[
-        str, typer.Option("--crs", help="Free text recorded as a header comment. Not validated.")
-    ] = "",
     binary: Annotated[
         bool,
         typer.Option(
@@ -709,7 +698,7 @@ def mesh(
         float | None,
         typer.Option(
             "--tolerance",
-            help="With --dem, refine until every triangle is within this many metres "
+            help="Refine until every triangle is within this many metres "
             "of the DEM; --stride then sets the start grid. Default: no refinement.",
         ),
     ] = None,
@@ -752,7 +741,7 @@ def mesh(
         Path | None,
         typer.Option(
             "--domain",
-            help="With --dem and --tolerance, mesh only this polygon (.geojson, .json or "
+            help="With --tolerance, mesh only this polygon (.geojson, .json or "
             ".wkt), starting from its boundary alone.",
         ),
     ] = None,
@@ -767,7 +756,7 @@ def mesh(
         str | None,
         typer.Option(
             "--out-crs",
-            help="With --dem, mesh in this CRS: a DEM in another CRS (required for a "
+            help="Mesh in this CRS: a DEM in another CRS (required for a "
             "geographic one) is resampled onto a square grid here, and with --tolerance "
             "checked against its own nodes. --bbox is then in this CRS.",
         ),
@@ -788,7 +777,8 @@ def mesh(
             "--start-quality-gain",
             help="With --tolerance, add such a node only if it raises the smallest angle "
             "around it by at least this many degrees and, unless --no-constraint-feet, "
-            "split a line it lies beyond; negative adds every node, as before. "
+            "split a line it lies beyond; negative adds every node, with no line split "
+            "even with constraint feet. "
             "At most 10. Default: 0.",
         ),
     ] = None,
@@ -796,8 +786,8 @@ def mesh(
         bool,
         typer.Option(
             "--no-constraint-feet",
-            help="With --tolerance, insert a DEM node close to a constraint segment as "
-            "before, instead of its foot on the segment.",
+            help="With --tolerance, insert a DEM node close to a constraint segment "
+            "itself, instead of its foot on the segment.",
         ),
     ] = False,
     features: Annotated[
@@ -871,7 +861,7 @@ def mesh(
         str | None,
         typer.Option(
             "--land-cover",
-            help="With --dem, the exact share of each land-cover class in every triangle, "
+            help="The exact share of each land-cover class in every triangle, "
             "from a cached catalogue source of classes "
             f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}) or a uint8 "
             "GeoTIFF, in the mesh file.",
@@ -926,18 +916,12 @@ def mesh(
     """
     clock = PhaseClock()
     res = _resources(threads, memory_budget)
-    dem_run: _DemMesh | None = None
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
     table: ClassFractions | None = None
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
-    if (name is None) == (not dem):
-        raise typer.BadParameter(
-            "give a gallery fixture name or --dem PATH, exactly one of the two",
-            param_hint="--dem",
-        )
     feature_paths = features or []
     feature_crss = features_crs or []
     feature_layers = features_layer or []
@@ -968,9 +952,9 @@ def mesh(
         vocabulary = run_vocabulary(maps)
     except ValueError as exc:
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-map") from exc
-    known = _known_sources(os.environ) if dem or land_cover else SOURCES
+    known = _known_sources(os.environ)
     classes = _class_source(
-        land_cover, land_cover_year, land_cover_map, bool(dem), cache_root(cache, os.environ), known
+        land_cover, land_cover_year, land_cover_map, cache_root(cache, os.environ), known
     )
     if classes is not None:
         for coded_map in (m for m in maps if m.codes):
@@ -988,20 +972,12 @@ def mesh(
         if metres is not None and not (math.isfinite(metres) and 0 <= metres < top):
             under = "" if top == math.inf else f" and under {top:g}"
             raise typer.BadParameter(f"must be finite, >= 0{under}, got {metres}", param_hint=flag)
-    if not dem and (domain is not None or domain_crs is not None):
-        raise typer.BadParameter("applies only with --dem", param_hint="--domain")
-    if not dem and bbox is not None:
-        raise typer.BadParameter("applies only with --dem", param_hint="--bbox")
     if domain is None and domain_crs is not None:
         raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
-    lines = _tolerance_lines(
-        bool(dem), tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp
-    )
-    steep = _tolerance_slope(bool(dem), tolerance, tolerance_slope)
+    lines = _tolerance_lines(tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp)
+    steep = _tolerance_slope(tolerance, tolerance_slope)
     if domain is not None and bbox is not None:
         raise typer.BadParameter("--bbox and --domain exclude each other", param_hint="--bbox")
-    if name is not None and name not in GALLERY:
-        raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
     if out.suffix not in MESH_SUFFIXES:
         raise typer.BadParameter(
             f"{out} has no known suffix; use {' or '.join(MESH_SUFFIXES)}", param_hint="--out"
@@ -1020,236 +996,200 @@ def mesh(
         )
 
     unstated = False  # heights read as metres without a word from anyone
-    if dem:
-        if flat:
-            raise typer.BadParameter("--dem samples z from the DEM", param_hint="--flat")
-        if crs:
-            raise typer.BadParameter("--dem records the DEM's own CRS", param_hint="--crs")
-        if stride is not None and stride < 1:
-            raise typer.BadParameter(
-                f"must be a positive integer, got {stride}", param_hint="--stride"
-            )
-        if tolerance is not None and not (math.isfinite(tolerance) and tolerance >= 0):
-            raise typer.BadParameter(
-                f"must be finite and >= 0, got {tolerance}", param_hint="--tolerance"
-            )
-        if domain is not None and stride is not None:
-            raise typer.BadParameter(
-                "a domain is meshed from its boundary alone, not a stride grid",
-                param_hint="--stride",
-            )
-        if domain is not None and tolerance is None:
-            raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
-        if start_min_angle is not None and not (
-            math.isfinite(start_min_angle) and 0 <= start_min_angle <= 35
-        ):
-            raise typer.BadParameter(
-                f"must be finite, >= 0 and <= 35, got {start_min_angle}",
-                param_hint="--start-min-angle",
-            )
-        if start_min_angle is not None and tolerance is None:
-            raise typer.BadParameter(
-                "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
-            )
-        if start_quality_gain is not None and not (
-            math.isfinite(start_quality_gain) and start_quality_gain <= 10
-        ):
-            raise typer.BadParameter(
-                f"must be finite and <= 10, got {start_quality_gain}",
-                param_hint="--start-quality-gain",
-            )
-        if start_quality_gain is not None and tolerance is None:
-            raise typer.BadParameter(
-                "--start-quality-gain needs --tolerance", param_hint="--start-quality-gain"
-            )
-        if no_constraint_feet and tolerance is None:
-            raise typer.BadParameter(
-                "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
-            )
-        paths, cached = _dem_sources(dem, cache_root(cache, os.environ), known)
-        caller = _z_unit(z_unit) or (known[cached.source].z_unit if cached else None)
-        given = None
-        if domain is not None:
-            with clock.phase("domain read"):
-                try:
-                    given = read_domain(domain, domain_crs)
-                except DomainError as exc:
-                    raise typer.BadParameter(str(exc), param_hint="--domain") from exc
-        try:
-            opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
-        except NotCached as exc:
-            area = f"--domain {domain}" if domain is not None else ""
-            if bbox is not None:
-                area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
-            frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
-            flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
-            run = f"rasputin fetch {dem[0]} {flags}".rstrip()
-            raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
-        # What is read later comes out of `opened`, which then goes, so the
-        # tile's one reference is the holder `_dem_mesh` empties.
-        label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
-        dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
-        held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
-        # The clean-up scale is the coarsest coded map's accuracy (CORINE's
-        # 100 m without one), never finer than a DEM cell.
-        cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
-        del opened
-        accuracy = max((m.accuracy_m for m in maps if m.codes), default=100.0)
-        derived = derived_cleanup(accuracy, cell).model_dump()
-        cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
-        cleanup["merge_same_class"] = features_merge_same_class
-        found = None
-        sources: tuple[FeatureSource, ...] = ()
-        if feature_paths and dem_domain is not None:
-            sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
-            found = _open_features(
-                sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
-            )
-        # 15 degrees with land cover simplified, unless given.
-        simplified = (
-            found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
+    if stride is not None and stride < 1:
+        raise typer.BadParameter(f"must be a positive integer, got {stride}", param_hint="--stride")
+    if tolerance is not None and not (math.isfinite(tolerance) and tolerance >= 0):
+        raise typer.BadParameter(
+            f"must be finite and >= 0, got {tolerance}", param_hint="--tolerance"
         )
-        angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
-        angle = angle if start_min_angle is None else start_min_angle
-        dem_run = _dem_mesh(
-            held,
-            ", ".join(map(str, dem)),
-            stride,
-            delaunay,
-            snap_spacing,
-            tolerance,
-            clock,
-            dem_domain,
-            domain.name if domain is not None else "",
-            angle,
-            not no_constraint_feet,
-            found,
-            grid,
-            checks,
-            DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
-            lines,
-            steep,
-            res.threads,
-            vocabulary,
+    if domain is not None and stride is not None:
+        raise typer.BadParameter(
+            "a domain is meshed from its boundary alone, not a stride grid",
+            param_hint="--stride",
         )
-        surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
-        names = [t.name for t in plan.tiles]
-        size = f"{meta.cols} columns x {meta.rows} rows"
-        if len(names) > 1:
-            typer.echo(f"DEM: {len(names)} files, {size}", err=True)
-        unstated = meta.vertical_unit_assumed and caller is None
-        source = cached.source if cached is not None else escaped_ascii("; ".join(names))
-        values |= {
-            "crs": dem_crs,
-            "dem_source": source,
-            "dem_vertical_unit": _z_words(meta, z_unit, caller),
-        }
-        if meta.file_crs is not None:  # a DEM in feet, read as its metre twin
-            feet = BY_NAME[cast(ZUnit, parse_crs(meta.file_crs).axis_info[0].unit_name)][3]
-            values["dem_file_crs"] = (
-                f"{meta.file_crs}, in {feet}; read as {source_crs or dem_crs}, the same "
-                "projection in metres"
+    if domain is not None and tolerance is None:
+        raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
+    if start_min_angle is not None and not (
+        math.isfinite(start_min_angle) and 0 <= start_min_angle <= 35
+    ):
+        raise typer.BadParameter(
+            f"must be finite, >= 0 and <= 35, got {start_min_angle}",
+            param_hint="--start-min-angle",
+        )
+    if start_min_angle is not None and tolerance is None:
+        raise typer.BadParameter(
+            "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
+        )
+    if start_quality_gain is not None and not (
+        math.isfinite(start_quality_gain) and start_quality_gain <= 10
+    ):
+        raise typer.BadParameter(
+            f"must be finite and <= 10, got {start_quality_gain}",
+            param_hint="--start-quality-gain",
+        )
+    if start_quality_gain is not None and tolerance is None:
+        raise typer.BadParameter(
+            "--start-quality-gain needs --tolerance", param_hint="--start-quality-gain"
+        )
+    if no_constraint_feet and tolerance is None:
+        raise typer.BadParameter(
+            "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
+        )
+    paths, cached = _dem_sources(dem, cache_root(cache, os.environ), known)
+    caller = _z_unit(z_unit) or (known[cached.source].z_unit if cached else None)
+    given = None
+    if domain is not None:
+        with clock.phase("domain read"):
+            try:
+                given = read_domain(domain, domain_crs)
+            except DomainError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+    try:
+        opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
+    except NotCached as exc:
+        area = f"--domain {domain}" if domain is not None else ""
+        if bbox is not None:
+            area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
+        frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
+        flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
+        run = f"rasputin fetch {dem[0]} {flags}".rstrip()
+        raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
+    # What is read later comes out of `opened`, which then goes, so the
+    # tile's one reference is the holder `_dem_mesh` empties.
+    label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
+    dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
+    held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
+    # The clean-up scale is the coarsest coded map's accuracy (CORINE's
+    # 100 m without one), never finer than a DEM cell.
+    cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
+    del opened
+    accuracy = max((m.accuracy_m for m in maps if m.codes), default=100.0)
+    derived = derived_cleanup(accuracy, cell).model_dump()
+    cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
+    cleanup["merge_same_class"] = features_merge_same_class
+    found = None
+    sources: tuple[FeatureSource, ...] = ()
+    if feature_paths and dem_domain is not None:
+        sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
+        found = _open_features(
+            sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
+        )
+    # 15 degrees with land cover simplified, unless given.
+    simplified = (
+        found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
+    )
+    angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
+    angle = angle if start_min_angle is None else start_min_angle
+    dem_run = _dem_mesh(
+        held,
+        ", ".join(map(str, dem)),
+        stride,
+        delaunay,
+        snap_spacing,
+        tolerance,
+        clock,
+        dem_domain,
+        domain.name if domain is not None else "",
+        angle,
+        not no_constraint_feet,
+        found,
+        grid,
+        checks,
+        DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
+        lines,
+        steep,
+        res.threads,
+        vocabulary,
+    )
+    surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
+    names = [t.name for t in plan.tiles]
+    size = f"{meta.cols} columns x {meta.rows} rows"
+    if len(names) > 1:
+        typer.echo(f"DEM: {len(names)} files, {size}", err=True)
+    unstated = meta.vertical_unit_assumed and caller is None
+    source = cached.source if cached is not None else escaped_ascii("; ".join(names))
+    values |= {
+        "crs": dem_crs,
+        "dem_source": source,
+        "dem_vertical_unit": _z_words(meta, z_unit, caller),
+    }
+    if meta.file_crs is not None:  # a DEM in feet, read as its metre twin
+        feet = BY_NAME[cast(ZUnit, parse_crs(meta.file_crs).axis_info[0].unit_name)][3]
+        values["dem_file_crs"] = (
+            f"{meta.file_crs}, in {feet}; read as {source_crs or dem_crs}, the same "
+            "projection in metres"
+        )
+    if grid is None:
+        dx, dy = meta.delta_x, meta.delta_y
+        apart = f"{dx:g} m" if dx == dy else f"{dx:g} m x {dy:g} m"
+        values["dem_grid"] = f"{size}, {apart} apart"
+    else:  # resampled onto a square grid in --out-crs
+        how = transform_description(source_crs, dem_crs)
+        values |= {"dem_crs": source_crs, "dem_transform": how}
+        values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
+    if cached is not None:  # the notes the source asks to travel with it
+        remote = known[cached.source]
+        values["dem_credit"] = escaped_ascii(remote.credit)
+        values["licence_note"] = escaped_ascii(remote.licence_note)
+        values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
+    if cached is not None or len(paths) > 1 or paths[0].is_dir():  # the files used
+        seams = opened_seams
+        values["dem_tiles"] = escaped_ascii("; ".join(names))
+        values["dem_seams"] = escaped_ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
+    if given is not None:
+        how = transform_label(given.crs, dem_crs)
+        values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
+    if found is not None and sources and dem_run.feature_counts is not None:
+        # One entry per source, joined. Lines and their vertices are a
+        # property of the merged PSLG, not of a source, so every entry
+        # carries the run totals; the per-source part is the name, layer,
+        # map and feature count (found.counts[i]).
+        chains, feature_vertices = dem_run.feature_counts
+        totals = f"{plural(chains, 'line', 'lines')}, "
+        totals += plural(feature_vertices, "vertex", "vertices")
+        texts, crs_texts, transforms, notices = [], [], [], []
+        for i, src in enumerate(sources):
+            layer = f" layer {found.layers[i]}" if found.layers[i] else ""
+            counted = plural(found.counts[i], "feature", "features")
+            texts.append(
+                f"{src.path.name}{layer}, class map {src.class_map.name}: {counted}, {totals}"
             )
-        if grid is None:
-            dx, dy = meta.delta_x, meta.delta_y
-            apart = f"{dx:g} m" if dx == dy else f"{dx:g} m x {dy:g} m"
-            values["dem_grid"] = f"{size}, {apart} apart"
-        else:  # resampled onto a square grid in --out-crs
-            how = transform_description(source_crs, dem_crs)
-            values |= {"dem_crs": source_crs, "dem_transform": how}
-            values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
-        if cached is not None:  # the notes the source asks to travel with it
-            remote = known[cached.source]
-            values["dem_credit"] = escaped_ascii(remote.credit)
-            values["licence_note"] = escaped_ascii(remote.licence_note)
-            values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
-        if cached is not None or len(paths) > 1 or paths[0].is_dir():  # the files used
-            seams = opened_seams
-            values["dem_tiles"] = escaped_ascii("; ".join(names))
-            values["dem_seams"] = escaped_ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
-        if given is not None:
-            how = transform_label(given.crs, dem_crs)
-            values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
-        if found is not None and sources and dem_run.feature_counts is not None:
-            # One entry per source, joined. Lines and their vertices are a
-            # property of the merged PSLG, not of a source, so every entry
-            # carries the run totals; the per-source part is the name, layer,
-            # map and feature count (found.counts[i]).
-            chains, feature_vertices = dem_run.feature_counts
-            totals = f"{plural(chains, 'line', 'lines')}, "
-            totals += plural(feature_vertices, "vertex", "vertices")
-            texts, crs_texts, transforms, notices = [], [], [], []
-            for i, src in enumerate(sources):
-                layer = f" layer {found.layers[i]}" if found.layers[i] else ""
-                counted = plural(found.counts[i], "feature", "features")
-                texts.append(
-                    f"{src.path.name}{layer}, class map {src.class_map.name}: {counted}, {totals}"
-                )
-                own = found.crs[i]
-                crs_texts.append(crs_label(own))
-                transforms.append(transform_label(own, dem_crs))
-                if src.class_map.notice and src.class_map.notice not in notices:
-                    notices.append(src.class_map.notice)
-            values["features"] = escaped_ascii("; ".join(texts))
-            values["features_crs"] = "; ".join(crs_texts)
-            values["features_transform"] = "; ".join(transforms)
-            values["features_notice"] = "; ".join(notices) or None
-            licences = dict.fromkeys(s.class_map.licence for s in sources if s.class_map.licence)
-            values["features_licence"] = escaped_ascii("; ".join(licences)) or None
-            values |= {f"features_{k}": v for k, v in cleanup.items()}
-            values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
-            if found.cover_vertices is not None:
-                before, after = found.cover_vertices
-                values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
-                values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
-            # Labelling runs iff a source carries codes (one code system per
-            # mesh is enforced in _feature_sources). Every coded source's
-            # polygons are labelled together over the merged FeatureSet.
-            coded = next((s.class_map for s in sources if s.class_map.codes), None)
-            if coded is not None:
-                codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
-                values["land_cover_codes"] = codes_text
-                palette = coded.palette
-                cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
-        if classes is not None:
-            table, codes, more = _class_fractions(
-                classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
-            )
-            codes_text = str(more["land_cover_codes"])
-            if classes.class_map is not None:  # names and colours for the .gpkg
-                palette = classes.class_map.palette
-            values |= more
-        build = stride_record if tolerance is None else refined_record
-        record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
-    else:
-        assert name is not None
-        if stride is not None:
-            raise typer.BadParameter("applies only with --dem", param_hint="--stride")
-        if tolerance is not None:
-            raise typer.BadParameter("applies only with --dem", param_hint="--tolerance")
-        if start_min_angle is not None:
-            raise typer.BadParameter("applies only with --dem", param_hint="--start-min-angle")
-        if start_quality_gain is not None:
-            raise typer.BadParameter("applies only with --dem", param_hint="--start-quality-gain")
-        if no_constraint_feet:
-            raise typer.BadParameter("applies only with --dem", param_hint="--no-constraint-feet")
-        if not flat:
-            raise typer.BadParameter(
-                "a gallery fixture has no elevation source, so z has none; pass --flat "
-                "to write z = 0 and say so in the file, or mesh a DEM with --dem"
-            )
-        label = name
-        surface_mesh = _fixture_mesh(name, delaunay, snap_spacing, clock)
-        record = flat_record(triangles=len(surface_mesh.triangles), crs=crs)
-        # --crs is unvalidated free text, so the gate's refusals
-        # are refusals a person meets by typing, not internal invariants. Turn
-        # the gate's ValueError into the usage error it is, in the one place
-        # that knows the text came from the command line.
-        try:
-            for comment in field_comments(file_fields(record)):
-                checked_ascii(comment, "comment")
-        except ValueError as exc:
-            raise typer.BadParameter(str(exc), param_hint="--crs") from exc
+            own = found.crs[i]
+            crs_texts.append(crs_label(own))
+            transforms.append(transform_label(own, dem_crs))
+            if src.class_map.notice and src.class_map.notice not in notices:
+                notices.append(src.class_map.notice)
+        values["features"] = escaped_ascii("; ".join(texts))
+        values["features_crs"] = "; ".join(crs_texts)
+        values["features_transform"] = "; ".join(transforms)
+        values["features_notice"] = "; ".join(notices) or None
+        licences = dict.fromkeys(s.class_map.licence for s in sources if s.class_map.licence)
+        values["features_licence"] = escaped_ascii("; ".join(licences)) or None
+        values |= {f"features_{k}": v for k, v in cleanup.items()}
+        values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
+        if found.cover_vertices is not None:
+            before, after = found.cover_vertices
+            values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
+            values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
+        # Labelling runs iff a source carries codes (one code system per
+        # mesh is enforced in _feature_sources). Every coded source's
+        # polygons are labelled together over the merged FeatureSet.
+        coded = next((s.class_map for s in sources if s.class_map.codes), None)
+        if coded is not None:
+            codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
+            values["land_cover_codes"] = codes_text
+            palette = coded.palette
+            cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
+    if classes is not None:
+        table, codes, more = _class_fractions(
+            classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
+        )
+        codes_text = str(more["land_cover_codes"])
+        if classes.class_map is not None:  # names and colours for the .gpkg
+            palette = classes.class_map.palette
+        values |= more
+    build = stride_record if tolerance is None else refined_record
+    record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
     vertices = surface_mesh.vertices
     surface = _destination(out, out_parent, label)
@@ -1324,8 +1264,9 @@ def mesh(
             target.write_bytes(data)
         typer.echo(f"{target}")
     if stats is not None:
-        used = res.threads if dem_run is not None else None
-        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams, record, used)
+        _write_report(
+            clock, report_target, surface_mesh, dem_run, targets, seams, record, res.threads
+        )
     if record_target is not None:  # after the mesh and the report
         record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
         typer.echo(f"{record_target}")
@@ -1389,7 +1330,6 @@ def _class_source(
     value: str | None,
     year: int | None,
     map_value: str | None,
-    has_dem: bool,
     root: Path | None,
     known: Mapping[str, RemoteSource],
 ) -> _ClassSource | None:
@@ -1402,11 +1342,6 @@ def _class_source(
             if given is not None:
                 raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
-    if not has_dem:
-        raise typer.BadParameter(
-            "needs --dem: the shares are cut in the DEM's coordinate system",
-            param_hint="--land-cover",
-        )
     source, path, chosen = known.get(value), None, None
     if source is not None:
         try:
@@ -1545,7 +1480,6 @@ def _land_cover(
     return labels.codes, text + "0 = in no polygon, and every constraint line"
 
 
-@app.command()
 def palette(
     name: Annotated[
         str,
@@ -1616,29 +1550,29 @@ def _write_report(
     clock: PhaseClock,
     target: Path | None,
     trimmed: Trimmed,
-    dem_run: _DemMesh | None,
+    dem_run: _DemMesh,
     files: list[Path],
     seams: tuple[Seam, ...],
     record: RunRecord,
-    threads: int | None = None,
+    threads: int,
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
     The total stops here; the quality pass is timed on its own line.
-    ``threads`` is the count the run used, None on a fixture run."""
+    ``threads`` is the count the run used."""
     total = clock.elapsed()
     t0 = time.perf_counter_ns()
-    meta = dem_run.meta if dem_run else None
+    meta = dem_run.meta
     sizes = Sizes(
         output_vertices=len(trimmed.vertices),
         output_triangles=len(trimmed.triangles),
         constraint_edges=len(trimmed.edges),
         files=[(f.name, f.stat().st_size) for f in files],
-        dem_nodes=(meta.rows, meta.cols) if meta else None,
-        dem_spacing=(meta.delta_x, meta.delta_y) if meta else None,
-        domain_vertices=dem_run.domain_vertices if dem_run else None,
-        domain_holes=dem_run.domain_holes if dem_run else None,
-        start_vertices=dem_run.start_vertices if dem_run else None,
-        start_triangles=dem_run.start_triangles if dem_run else None,
+        dem_nodes=(meta.rows, meta.cols),
+        dem_spacing=(meta.delta_x, meta.delta_y),
+        domain_vertices=dem_run.domain_vertices,
+        domain_holes=dem_run.domain_holes,
+        start_vertices=dem_run.start_vertices,
+        start_triangles=dem_run.start_triangles,
         resampled=any(e.name == "resampled_grid" for e in record.entries),
     )
     rows = [((e.wording, e.value, e.name), e.in_inputs) for e in record.entries]
@@ -1665,26 +1599,6 @@ def _write_report(
     typer.echo(f"{target}")
 
 
-def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) -> Trimmed:
-    """A gallery fixture's mesh at z = 0, with its constraint edges."""
-    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=spacing, clock=clock)
-    if attempt.mesh is None or not isinstance(attempt.source, NodedPslg):
-        raise typer.BadParameter(
-            f"{name} has no mesh to write: {attempt.status}. {attempt.message}"
-        )
-    flat_vertices = np.asarray(attempt.mesh.vertices)
-    with clock.phase("start mesh: constraint edges"):
-        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
-    return Trimmed(
-        vertices=np.column_stack([flat_vertices, np.zeros(len(flat_vertices))]),
-        triangles=np.asarray(attempt.mesh.triangles, dtype=np.uint32),
-        edges=edges,
-        edge_masks=masks,
-        dropped=0,
-    )
-
-
-@app.command()
 def fetch(
     source: Annotated[str, typer.Argument(help=f"A catalogue source: {', '.join(SOURCES)}.")],
     domain: Annotated[
@@ -1786,7 +1700,6 @@ def fetch(
         typer.echo(f"no tile (sea): {', '.join(report.no_tile)}")
 
 
-@app.command()
 def fetch_stations(
     source: Annotated[str, typer.Argument(help=f"A station list: {', '.join(STATION_SOURCES)}.")],
     out_dir: Annotated[Path, typer.Option("--out-dir", help="Where to write the files.")],
@@ -2011,7 +1924,6 @@ def _open_features(
 
 
 def _tolerance_lines(
-    dem: bool,
     far: float | None,
     near: tuple[Path, float] | None,
     crs: str | None,
@@ -2029,8 +1941,6 @@ def _tolerance_lines(
             )
         return None
     hint = "--tolerance-near"
-    if not dem:
-        raise typer.BadParameter("applies only with --dem", param_hint=hint)
     if far is None:
         raise typer.BadParameter("--tolerance-near needs --tolerance", param_hint=hint)
     if ramp is None:
@@ -2050,15 +1960,13 @@ def _tolerance_lines(
 
 
 def _tolerance_slope(
-    dem: bool, far: float | None, given: tuple[float, float, float] | None
+    far: float | None, given: tuple[float, float, float] | None
 ) -> ToleranceSlope | None:
     """The slope-tolerance flag checked in its order, as one spec;
     None without it, and when N equals --tolerance (then stderr says so)."""
     if given is None:
         return None
     hint = "--tolerance-slope"
-    if not dem:
-        raise typer.BadParameter("applies only with --dem", param_hint=hint)
     if far is None:
         raise typer.BadParameter("--tolerance-slope needs --tolerance", param_hint=hint)
     n, start, end = given
@@ -2458,7 +2366,6 @@ def _placement_report(
 CATCHMENT_SUFFIXES = (".geojson", ".json")
 
 
-@app.command()
 def catchment(
     out: Annotated[
         Path, typer.Option("--out", help="Where to write the polygon: .geojson or .json.")
@@ -2505,7 +2412,7 @@ def catchment(
         typer.Option(
             "--rivers",
             help="River lines (GeoJSON, in any CRS): the seed is a gauge, placed on the "
-            "nearest line and on the DEM's flow path along it (increment 29).",
+            "nearest line and on the DEM's flow path along it.",
         ),
     ] = None,
     map_radius: Annotated[
@@ -2733,7 +2640,6 @@ def _read_beside[T](
     return content
 
 
-@app.command()
 def station_catchments(
     dem: Annotated[
         list[Path],
@@ -2881,3 +2787,16 @@ def station_catchments(
     if summary.known_refusals.line is not None:
         typer.echo(summary.known_refusals.line, err=True)
     typer.echo(f"{target}")
+
+
+app.callback()(main)
+for panel, commands in (
+    (MESHING, (mesh, palette)),
+    (CATCHMENTS, (catchment, station_catchments)),
+    (DATA, (fetch, fetch_stations)),
+    (OTHER, (version,)),
+):
+    for command in commands:
+        app.command(rich_help_panel=panel)(command)
+app.command(rich_help_panel=OTHER, help=MCP_HELP)(mcp)
+app.command(hidden=True)(draw)

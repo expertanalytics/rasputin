@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "rasputin"
 version = "0.2.0.dev0"
-description = "Parallel TIN engine for terrain meshing — CGAL-free, GDAL-free, pure C++20 core with async Python bindings."
+description = "Rasputin turns a digital elevation model (DEM) into a triangle mesh of the terrain that stays within a height tolerance you choose."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
@@ -167,6 +167,7 @@ paths = [
     "src_python/tin_engine/catchment.py",
     "src_python/tin_engine/catchment_batch.py",
     "src_python/tin_engine/catchment_core.py",
+    "src_python/tin_engine/cli.py",
     "src_python/tin_engine/cli_kit.py",
     "src_python/tin_engine/crs.py",
     "src_python/tin_engine/dem_input.py",
