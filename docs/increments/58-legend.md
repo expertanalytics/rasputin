@@ -73,6 +73,7 @@ more and do not change. The brief's narrower pattern
 | `rasputin palette` argument help "A class map: ..." | "A legend: ..." |
 | run record, `features` entry wording "Each features file: layer, class map, features, lines, vertices" and value "`x.gpkg`, class map corine: ..." | "layer, legend, ..." and "legend corine" |
 | errors "class map file X cannot be read", "unknown class map X", "class map X: ...", "... is not in the map X" | "legend file X cannot be read", "unknown legend X", "legend X: ...", "... is not in the legend X" |
+| `--features-map` help "The Nth --features' map from attributes to edge bits: ..., or a class-map file (.toml)" | "The Nth --features' legend: ..., or a legend file (.toml)" |
 | shipped legends folder `tin_engine/data/class_maps/` | `tin_engine/data/legends/` (file names unchanged: `corine.toml`, `corine-water.toml`, `clc18_kode.toml`, `mapbiomas-c11.toml`) |
 
 The legend file's own keys (`name`, `attribute`, `code_system`, `edges`, ...)
@@ -100,7 +101,9 @@ change.
 - `mcp/server.py` `INSTRUCTIONS`: "the class map to pass as features_map" →
   "the legend to pass as features_legend" (twice).
 - Docstrings and comments in `palettes.py`, `legends.py`, `feature_input.py`,
-  `sources.py`, `source_report.py`, `cli.py` say "legend".
+  `sources.py`, `source_report.py`, `cli.py` say "legend", including a bare
+  "map" that means the legend (`cli.py` lines 252, 784, 902, 985, 1760;
+  `feature_input.py` lines 71, 564).
 - The three CORINE `.toml` headers point at `docs/increments/41-...`; the
   pointer stays (it is a history record's file name, section 5).
 - `data/sources.toml`, MapBiomas entry: `class_map` → `legend`.
@@ -155,6 +158,8 @@ Each case was checked against the code at `ed0d313d`:
   → "a legend may coarsen it"); `docs/research/nmd-landcover.md` heading
   "Class mapping" → "Matching NMD's classes to CORINE's" (it means a
   correspondence between two class systems, not our file).
+- `docs/research/lagan-slivers.md` line 71 (`--features-map corine` →
+  `--features-legend corine`).
 
 `@architect` writes these after green, in a docs commit, as in increment 56.
 
@@ -265,3 +270,7 @@ and the tests do not count.
 4. `_ClassSource`, `load`, the legend names and the legend file keys keep
    their names.
 5. Short path: one `@reviewer` round over design, red and green.
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `60700288`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `lagan-slivers.md` line 71; the `--features-map` help row; bare "map" meaning the legend in `cli.py` and `feature_input.py`. Held: 390 lines in 48 files; strict models refuse old keys and arguments; old mesh files read; no alias or hint survives. Not blocking: about 15 more counted lines (locals `maps`, `feature_maps`, `map_value`, `coded_map`); the guard could also match tracked file paths.
