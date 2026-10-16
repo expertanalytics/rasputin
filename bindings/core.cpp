@@ -138,11 +138,10 @@ template <typename T>
                                         {static_cast<py::ssize_t>(sizeof(EdgeProperties))});
 }
 
-// The four accessors of viz/protocols.py's PslgLike, bound once for both graph
-// types. NOT ~25 lines saved: PslgLike is a structural contract with three
-// implementations, and a member added to one hand-written block and forgotten
-// on the other is a drift the protocol suite catches only for whichever type it
-// happens to name. One template makes the two bindings the same object.
+// The four shared accessors (vertices, chains, chain_indices, indices_of),
+// bound once for both graph types. A member added to one hand-written block and
+// forgotten on the other would be a drift between two types Python reads the
+// same way; one template makes the two bindings the same object.
 //
 // The return is deliberately NOT [[nodiscard]], where 05c-noder-wiring.md's
 // sketch of this signature had it: Pslg chains nothing onto it, so the

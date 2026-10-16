@@ -9,15 +9,8 @@ constant in the source.
 
 **This module imports nothing first-party and never imports the compiled
 extension**, so it is constructible and testable with no extension in the
-process. It is emphatically *not* a module ``tin_engine.viz`` may reach for:
-``tests/python/test_layering.py`` pins that ``style.py`` and
-``fixtures.py`` import no first-party module at all, and ``viz/`` needs no
-vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
-``cli.py``, the composition root, is the only module that imports both this
-one and ``viz.style``. (It is *not* "the one module that names both a bit and a
-feature", as this docstring said until increment 7's review round:
-:data:`DEFAULT_VOCABULARY` below names nine of each, and ``cli.py`` names no
-bit literal -- it looks one up through ``_BIT_OF[name]``.)
+process. ``cli.py``, the composition root, names no bit literal: it looks bits
+up by name in a vocabulary.
 
 The risk this module exists to narrow is a producer and a consumer disagreeing
 about which bit means "river". Nothing in C++ can see that: it merges opaque
@@ -36,21 +29,11 @@ mechanisms, in descending strength:
    than dropping it. Dropping is the silent loss; this is the only moment the
    system can see it.
 
-The name pattern ``^[a-z][a-z0-9_]*$`` keeps a vocabulary name usable as a CSS
-class token, and is defence in depth. It is **not** what closes the injection
-hole, and this docstring said it was: ``viz/svg.py``'s ``_edge_classes``
-(``src_python/tin_engine/viz/svg.py@7f66079e:166``) joins at most one
-``style.PropertyStroke.token`` with up to three other classes -- the
-``constrained``/``unconstrained`` and ``finding`` literals, and the
-enum-derived ``role-*`` (``src_python/tin_engine/viz/svg.py@1a8fffaf:177-184``)
--- which ``_edges`` then interpolates into a ``class="..."`` attribute unescaped
-(``src_python/tin_engine/viz/svg.py@1a8fffaf:225``) --
-never an :class:`EdgeProperty` name, because ``viz/`` cannot import this
-module. The only bridge is ``cli.py``, which constructs a ``PropertyStroke``
-from a name and so re-validates through ``style.py``'s own, deliberately wider
-``^[a-z][a-z0-9_-]*$`` (a CSS class may carry a hyphen; a feature name may
-not). A quote-carrying name dies there whatever this pattern says. The boundary
-is documented where it is enforced, in ``viz/style.py``.
+The name pattern ``^[a-z][a-z0-9_]*$`` is what keeps a name safe in the files
+that carry it. The PLY header writes ``feature_bit {bit} {name}``,
+space-separated, so a space would split a name; the GeoPackage writer puts each
+used name, quoted but not escaped, into a ``CREATE TABLE`` statement as a
+column, so the pattern is what keeps a quote out of that SQL.
 
 See ``docs/increments/07-edge-properties.md``.
 """
@@ -172,7 +155,7 @@ class EdgeVocabulary(BaseModel):
 
 # A DEFAULT, NOT A SCHEMA. Any caller may supply its own vocabulary; the
 # fingerprint is what makes two of them comparable. Bit 0 is ``river`` so that
-# today's one-bit data and the ``river`` gallery fixture keep meaning what they
+# today's one-bit data keeps meaning what it
 # meant -- a migration convenience, and it will be read as a specification if
 # this sentence is not here.
 DEFAULT_VOCABULARY = EdgeVocabulary(
