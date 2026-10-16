@@ -1,7 +1,10 @@
 # The remote sources `rasputin fetch` copies ([source.<id>]) and the station
 # lists `rasputin fetch-stations` copies ([station.<id>]). A table's key is the
-# entry's id. Your own sources go in $RASPUTIN_DATA/sources.toml, in the same
-# [source.<id>] form, under ids of their own.
+# entry's id. Your own sources, local datasets among them (kind = "local",
+# path), go in your sources file in the same [source.<id>] form, under ids of
+# their own: $RASPUTIN_DATA/sources.toml if it exists, else
+# $XDG_CONFIG_HOME/rasputin/sources.toml, else ~/.config/rasputin/sources.toml.
+# `rasputin sources` says which file it read.
 
 [source.anadem-v1]
 kind = "one-cog"
@@ -15,6 +18,8 @@ licence_note = "CC BY 4.0 (Creative Commons Attribution 4.0 International)"
 cite = [
     "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321",
 ]
+# Quoted from the abstract of Laipelt et al. (2024), cited above.
+description = "A digital terrain model for South America, made by removing vegetation bias in the Copernicus DEM GLO-30 \"using machine learning, Global Ecosystem Dynamics Investigation (GEDI) elevation data, and multispectral remote sensing products\"."
 
 [source.glo30]
 kind = "cog-tiles"
@@ -31,6 +36,8 @@ z_unit = "metre"
 # The licence's Art. 6(b) notice for adapted data, verbatim but "(c)" for the sign.
 credit = "produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
 # Art. 6(c): this sentence goes with any distribution of the data, modified or not.
+# Quoted from the readme of the bucket (copernicus-dem-30m.s3.amazonaws.com/readme.html).
+description = "\"The Copernicus DEM is a Digital Surface Model (DSM) which represents the surface of the Earth including buildings, infrastructure and vegetation.\" \"GLO-30 Public provides limited worldwide coverage at 30 meters\"; 1 arc-second cells."
 licence_note = 'Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30"'
 
 [source.mapbiomas-c11]
@@ -51,6 +58,8 @@ cite = [
     "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
 ]
 class_map = "mapbiomas-c11"
+# Quoted from the abstract of Souza et al. (2020), cited above.
+description = "Annual land use and land cover classes of Brazil, \"the most comprehensive and detailed mapping for the country at a 30 m pixel resolution\"; one map per year."
 
 [station.nve-hrd]
 service_url = "https://kart.nve.no/enterprise/rest/services"

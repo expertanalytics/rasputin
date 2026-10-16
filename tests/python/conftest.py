@@ -132,3 +132,17 @@ def _own_xdg_cache(
     the variable (and ``HOME``) itself.
     """
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("xdg-cache")))
+
+
+@pytest.fixture(autouse=True)
+def _own_xdg_config(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every test gets its own empty ``XDG_CONFIG_HOME``.
+
+    The user's sources file is looked for in ``$XDG_CONFIG_HOME/rasputin``,
+    else ``~/.config/rasputin``: without this, a test would read the real
+    sources file in the home directory, and its result would depend on the
+    machine. Made outside the test's own ``tmp_path``, as the cache is.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))

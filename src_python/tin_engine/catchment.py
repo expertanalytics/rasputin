@@ -278,7 +278,8 @@ def _grow[T](
                 f"memory budget of {budget} bytes (set with --memory-budget; half the "
                 "machine's memory when it is not set)"
             )
-        tile = assemble(plan, repository.load).tile
+        repository.check(plan)
+        tile = assemble(plan, repository.load, load_window=repository.load_window).tile
         t0 = time.perf_counter()
         out, kept = flood(tile)
         seconds = time.perf_counter() - t0

@@ -469,13 +469,24 @@ class TestW8CacheRoot:
         assert KEY in output and "--dem" in output, output
         assert not (tmp_path / "m.vtk").exists()
 
-    def test_only_cli_reads_rasputin_data(self) -> None:
-        readers = sorted(
-            str(path.relative_to(PACKAGE))
-            for path in PACKAGE.rglob("*.py")
-            if "RASPUTIN_DATA" in path.read_text()
+    def test_only_sources_reads_rasputin_data(self) -> None:
+        """One module reads the variable (`sources.data_root`, which the cache
+        and the user's sources file both go through). A read names the variable
+        as a whole string literal, `environ.get("RASPUTIN_DATA")`; help text and
+        docstrings that mention `$RASPUTIN_DATA/cache` are not reads."""
+        assert rasputin_data_readers(PACKAGE) == ["sources.py"]
+
+
+def rasputin_data_readers(package: Path) -> list[str]:
+    """The modules under `package` holding the string literal "RASPUTIN_DATA"."""
+    return sorted(
+        str(path.relative_to(package))
+        for path in package.rglob("*.py")
+        if any(
+            isinstance(node, ast.Constant) and node.value == "RASPUTIN_DATA"
+            for node in ast.walk(ast.parse(path.read_text()))
         )
-        assert readers == ["cli.py"]
+    )
 
 
 class TestTheCatalogue:

@@ -241,8 +241,11 @@ the `codecs` extra. A `rasputin fetch dtm10` is possible, since both routes
 are plain HTTP: `docs/research/2026-10-11-dtm10-fetcher.md`.
 
 The project's own runs keep data in a directory next to the clone, for example
-`../rasputin_data/DTM10_UTM33_20260925/`. Nothing reads a fixed location: every
-path is given on the command line.
+`../rasputin_data/DTM10_UTM33_20260925/`. Nothing reads a fixed data location:
+every path is given on the command line, or registered under a name of your
+own in your sources file (`kind = "local"`; README, *Connect an agent*), so
+that `--dem NAME` and an agent find it. `rasputin sources` lists what is
+registered.
 
 ### Norway: NVE's reference gauging stations
 

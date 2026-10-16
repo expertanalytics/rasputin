@@ -126,8 +126,14 @@ command = "/path/to/venv/bin/rasputin"
 args = ["mcp"]
 ```
 
-The agent sees one tool per rasputin command (`mesh`, `catchment`, `fetch`,
-`fetch_stations`, ...; the names use underscores), each with the command's
+Those two fields are all a client needs. An `env` table is optional: with
+`env = { RASPUTIN_DATA = "/path/to/data" }` the server reads the cache in
+`/path/to/data/cache`, and a `/path/to/data/sources.toml`, if one exists, as
+your sources file; without it, the cache is in `~/.cache/rasputin` (or
+`$XDG_CACHE_HOME/rasputin`).
+
+The agent sees one tool per rasputin command (`sources`, `mesh`, `catchment`,
+`fetch`, `fetch_stations`, ...; the names use underscores), each with the command's
 options as its input schema, help text included, so an option added to the
 CLI is a new tool argument with no further work. A call returns the exit code,
 stdout and stderr, each output file as a `file://` link and, for `mesh`, the
@@ -139,6 +145,32 @@ call kills the run. One call runs at a time unless `--jobs N` says more. One
 caveat: a `mesh` cancelled while writing a `.vtk` or `.ply` can leave a
 truncated file under the asked name, so rerun before reading it; a `.gpkg`
 goes through a `.part` file and a rename, so it cannot.
+
+`sources` is the one to call first, and the server tells the agent so: it lists
+every elevation and land-cover source the machine knows, local and remote,
+with its coverage as a longitude/latitude box, cell size in metres, CRS,
+height unit, description and credit, read from the files' headers (with
+`bbox`, the share of an area each covers). The agent passes the chosen
+source's id as `dem` to `mesh`, `catchment` or `station_catchments`.
+
+Data already on the machine is registered by name in your sources file,
+`~/.config/rasputin/sources.toml` (or `$XDG_CONFIG_HOME/rasputin/sources.toml`;
+a `$RASPUTIN_DATA/sources.toml`, if one exists, is read instead). One table per
+dataset:
+
+```toml
+[source.my-terrain]
+kind = "local"
+path = "/data/terrain-10m"    # a directory of GeoTIFF tiles, or one GeoTIFF
+credit = "© The data's owner"
+licence_note = "CC BY 4.0"
+description = "Bare-ground terrain model, 10 m cells."
+```
+
+A relative `path` is taken from the file's directory. The CRS, cell size and
+coverage come from the GeoTIFFs themselves; `z_unit = "metre"` names the
+height unit for files that do not state it. `rasputin sources` on the
+command line shows the same listing, and says which sources file it read.
 
 ## Add a command of your own
 

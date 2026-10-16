@@ -1,7 +1,9 @@
-"""The catalogue of remote sources `rasputin fetch` and `rasputin fetch-stations` copy.
+"""The catalogue of sources: remote ones `rasputin fetch` and `rasputin fetch-stations`
+copy, and local ones read in place.
 
 The entries are data: `tin_engine/data/sources.toml` ships them, read here at
-import, and `catalogue` adds the user's own from a `sources.toml` in the data root.
+import, and `catalogue` adds the user's own from their sources file, which
+`user_source_file` finds (local datasets are registered there).
 `SOURCES` holds the rasters `rasputin fetch` copies into the tile cache: two
 DEMs (ANADEM and GLO-30) and one land-cover raster (MapBiomas, one COG per
 year). This module imports no NumPy, pyproj or `tin_engine.fetch`, so the mesh
@@ -32,6 +34,7 @@ from tin_engine.toml_data import parse, validate
 ZUnit = Literal["metre", "foot", "US survey foot"]
 #: The fields each kind's `url_template` takes, and needs.
 _URL_FIELDS = {"one-cog": set(), "cog-tiles": {"name"}, "one-cog-per-year": {"year"}}
+_REMOTE_FIELDS = ("url", "url_template", "tile_list_url", "tile_name", "tile_spacing", "years")
 
 
 class Dated(Protocol):
@@ -54,15 +57,19 @@ def _fields(name: str, template: str | None, allowed: set[str], *, needed: bool 
 
 class RemoteSource(BaseModel):
     """One source: one COG (`url`), one COG per tile (`url_template` and the
-    `tile_list_url` saying which tiles exist), or one COG per year
-    (`url_template` with `{year}`, `years`). `crs` is the one expected,
-    checked against each header; `credit` goes into every mesh made from it.
+    `tile_list_url` saying which tiles exist), one COG per year
+    (`url_template` with `{year}`, `years`), or a local GeoTIFF or directory
+    of them (`path`, read in place; its CRS is the files' own). A remote
+    source's `crs` is the one expected, checked against each header; `credit`
+    goes into every mesh made from it.
     An unknown key is refused, so a misspelt one in a file is not ignored."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    kind: Literal["one-cog", "cog-tiles", "one-cog-per-year"]
+    kind: Literal["local", "one-cog", "cog-tiles", "one-cog-per-year"]
+    #: A local source's GeoTIFF, or directory of GeoTIFFs.
+    path: Path | None = None
     url: str | None = None
     url_template: str | None = None
     tile_list_url: str | None = None
@@ -75,7 +82,7 @@ class RemoteSource(BaseModel):
     years: tuple[int, ...] = ()
     #: What the cells hold: heights for a DEM, land-cover class numbers for MapBiomas.
     values: Literal["heights", "classes"] = "heights"
-    crs: str
+    crs: str | None = None
     #: The no-data value the source states; None when it states none.
     nodata: float | None = None
     credit: str
@@ -86,9 +93,23 @@ class RemoteSource(BaseModel):
     class_map: str = ""
     #: The height unit the catalogue states for files that do not.
     z_unit: ZUnit | None = None
+    #: What the cells represent, and the resolution and region, as the distributor states them.
+    description: str = ""
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
+        if self.kind == "local":
+            for field in (*_REMOTE_FIELDS, "crs"):
+                if getattr(self, field) not in (None, ()):
+                    raise ValueError(f"{field}: refused for a local source, read in place")
+            if self.path is None:
+                raise ValueError("path: needed for a local source")
+            if self.values == "classes":
+                raise ValueError("values: a local class raster is given to --land-cover as a file")
+            return self
+        for field, needed in (("path", False), ("crs", True)):
+            if needed != (getattr(self, field) is not None):
+                raise ValueError(f"{field}: {'needed' if needed else 'refused'} for {self.kind}")
         if self.kind == "one-cog-per-year" and not self.years:
             raise ValueError("years: a one-cog-per-year source needs its years")
         tiled = self.kind == "cog-tiles"
@@ -202,12 +223,43 @@ STATION_SOURCES: Mapping[str, StationSource] = MappingProxyType(
 )
 
 
+def data_root(environ: Mapping[str, str]) -> Path | None:
+    """The data root, ``$RASPUTIN_DATA``, or None when it is unset or empty:
+    the one reader of the variable."""
+    data = environ.get("RASPUTIN_DATA")
+    return Path(data) if data else None
+
+
+def xdg_base(environ: Mapping[str, str], variable: str, under_home: str) -> Path | None:
+    """The XDG Base Directory rule: ``$variable``, else ``$HOME/under_home``;
+    an empty or relative value is ignored, and None when neither is usable."""
+    for value in (environ.get(variable), f"{environ.get('HOME') or '.'}/{under_home}"):
+        if (path := Path(value or ".")).is_absolute():
+            return path
+    return None
+
+
+def user_source_candidates(environ: Mapping[str, str]) -> tuple[Path, ...]:
+    """The places the user's sources file is looked for, in order:
+    ``$RASPUTIN_DATA/sources.toml``, then ``rasputin/sources.toml`` in the
+    XDG configuration directory. Pure in `environ`."""
+    root, config = data_root(environ), xdg_base(environ, "XDG_CONFIG_HOME", ".config")
+    places = (root, config / "rasputin" if config else None)
+    return tuple(place / "sources.toml" for place in places if place is not None)
+
+
+def user_source_file(environ: Mapping[str, str]) -> Path | None:
+    """The first candidate that is a file: one file only, never merged."""
+    return next((p for p in user_source_candidates(environ) if p.is_file()), None)
+
+
 def catalogue(user_file: Path | None) -> Catalogue:
     """The shipped entries plus the `[source.<id>]` tables of `user_file`, if
-    it exists. A relative `class_map` path in it is taken from the file's
-    directory. Refused, as a `ValueError` naming the file: anything
-    `RemoteSource` refuses, a station table (fetching a station list follows
-    one service's layout, which is code), and an id the package already has."""
+    it exists. A relative `class_map` or `path` in it is taken from the file's
+    directory; whether a `path` exists is the reader's to find out. Refused,
+    as a `ValueError` naming the file: anything `RemoteSource` refuses, a
+    station table (fetching a station list follows one service's layout,
+    which is code), and an id the package already has."""
     found = dict(SOURCES)
     if user_file is None or not user_file.is_file():
         return Catalogue(MappingProxyType(found), STATION_SOURCES)
@@ -222,6 +274,8 @@ def catalogue(user_file: Path | None) -> Catalogue:
         given = str(table.get("class_map", ""))
         if given.endswith(".toml") or "/" in given or os.sep in given:
             table["class_map"] = str(user_file.parent / given)
+        if "path" in table:
+            table["path"] = str(user_file.parent / str(table["path"]))
     for key, entry in _entries(tables.source, "source", RemoteSource, label).items():
         if key in found:
             raise ValueError(
@@ -252,5 +306,9 @@ __all__ = [
     "StationSource",
     "catalogue",
     "check_values",
+    "data_root",
     "notice",
+    "user_source_candidates",
+    "user_source_file",
+    "xdg_base",
 ]
