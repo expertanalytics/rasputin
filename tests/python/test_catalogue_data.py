@@ -24,10 +24,11 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   `sources.toml` twice (both files have that name) and the id.
 - A user entry's relative `class_map` resolves to the path of the file
   beside the user file (compared after `Path.resolve()`).
-- `cli.data_root` treats an empty `RASPUTIN_DATA` as unset, as `cache_root`
+- `sources.data_root` treats an empty `RASPUTIN_DATA` as unset, as `cache_root`
   does today.
 - Every shipped entry other than `glo30` has `tile_name` and `tile_spacing`
-  None; T1 compares the rest of each dump with the snapshot.
+  None; T1 compares the rest of each dump with the snapshot, less `path`
+  (None on every shipped entry) and `description`, which came later.
 """
 
 from __future__ import annotations
@@ -56,6 +57,9 @@ GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
 #: 10" and 1" in degrees, each rounded up in the fifth significant digit.
 GLO30_TILE_SPACING = (0.0027778, 0.00027778)
 TILE_FIELDS = ("tile_name", "tile_spacing")
+#: Fields every entry gained with local sources; `description` is checked
+#: non-empty in `test_source_places.py`, `path` is None on every remote kind.
+LOCAL_FIELDS = ("path", "description")
 USER_ID = "my-x"
 
 
@@ -142,12 +146,14 @@ class TestT1TheShippedCatalogue:
         assert sorted(sources.STATION_SOURCES) == sorted(STATIONS)
 
     @pytest.mark.parametrize("key", SHIPPED)
-    def test_each_source_dumps_as_on_master_but_the_tile_fields(
+    def test_each_source_dumps_as_on_master_but_the_added_fields(
         self, sources: ModuleType, snapshot: dict[str, Any], key: str
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
-        rest = {k: v for k, v in dumped.items() if k not in TILE_FIELDS}
+        added = TILE_FIELDS + LOCAL_FIELDS
+        rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
+        assert dumped["path"] is None
 
     def test_glo30_gains_its_tile_name_and_spacing(self, sources: ModuleType) -> None:
         glo30 = sources.SOURCES["glo30"]

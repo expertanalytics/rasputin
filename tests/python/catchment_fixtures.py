@@ -98,11 +98,11 @@ class MemoryRepository:
         return self.tiles[name]
 
     def load_window(self, name: str, window: IndexWindow) -> DemTile:
-        """The window's slice of the tile, placed as a reader places it; recorded
-        in `loads` as a whole load is."""
-        self.loads.append(name)
+        """The window's slice of the tile, placed as a reader places it. It reads
+        through `load`, so it is recorded in `loads` once, and a subclass that
+        overrides `load` (to fail, or to record the thread) sees windowed reads too."""
         w = window
-        return piece(self.tiles[name], w.row0, w.row0 + w.rows, w.col0, w.col0 + w.cols)
+        return piece(self.load(name), w.row0, w.row0 + w.rows, w.col0, w.col0 + w.cols)
 
     def check(self, plan: MosaicPlan) -> None:
         """Memory lacks no tile it lists."""

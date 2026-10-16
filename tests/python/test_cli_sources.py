@@ -22,7 +22,7 @@ import pytest
 
 import batch_fixtures as bf
 from catchment_fixtures import EPSG
-from cli_helpers import USAGE, invoke, plain, runner
+from cli_helpers import USAGE, invoke, plain, runner, squashed
 from cog_fixtures import write_cache
 from dataset_fixtures import (
     CACHED,
@@ -133,11 +133,38 @@ class TestT6CachedKeyInCatchment:
         assert re.search(r"\d+ of the \d+ blocks needed are not in the cache", output), output
         assert "in the source's CRS" in output, output
         hint = re.search(
-            rf"run: rasputin fetch {CACHED} --bbox (\S+) (\S+) (\S+) (\S+?)\.?$", output.strip()
+            rf"run: rasputin fetch {CACHED} --bbox (\S+) (\S+) (\S+) (\S+?)(?: --cache .*)?\.?$",
+            output.strip(),
         )
         assert hint, output
         x0, y0, x1, y1 = map(float, hint.groups())
         assert x0 <= SEED[0] <= x1 and y0 <= SEED[1] <= y1, (hint.groups(), SEED)
+
+    def test_the_fetch_hint_names_the_cache_it_was_given(self, cache: Path, tmp_path: Path) -> None:
+        """An agent that follows the hint must fetch into the cache the run
+        read, or the rerun fails again: the hint carries `--cache PATH`, last."""
+        write_cache(cache, CACHED, {"dem": cached_bytes()}, skip={"dem": block_row(SEED_BLOCK_ROW)})
+        code, output = self.catchment(cache, tmp_path / "c.geojson")
+        assert code == USAGE, output
+        hint = squashed(output).partition("run:rasputinfetch")[2]
+        assert hint, output
+        assert hint.removesuffix(".").endswith(squashed(f"--cache {cache}")), output
+
+    def test_without_cache_the_fetch_hint_names_none(self, config: Path, tmp_path: Path) -> None:
+        """No `--cache` given: the run read the default cache, which a fetch
+        in the same environment also writes, so the hint adds no `--cache`."""
+        write_sources(config, {CACHED: cached_entry()})
+        default = Path(os.environ["XDG_CACHE_HOME"]) / "rasputin"
+        write_cache(
+            default, CACHED, {"dem": cached_bytes()}, skip={"dem": block_row(SEED_BLOCK_ROW)}
+        )
+        code, output = invoke(
+            "catchment", "--dem", CACHED, *seed_args(), "--out", str(tmp_path / "c.geojson")
+        )
+        assert code == USAGE, output
+        hint = squashed(output).partition("run:rasputinfetch")[2]
+        assert hint.startswith(f"{CACHED}--bbox"), output
+        assert "--cache" not in hint, output
 
     def test_station_catchments_resolves_the_cached_key(self, cache: Path, tmp_path: Path) -> None:
         """The key reaches the cache: whatever the run says of these stations
