@@ -16,12 +16,12 @@
 //
 // THE TWO FIXTURES THAT MATTER MOST ARE THE FIRST TWO, and not the degenerate
 // ones. The user's case is a road crossing a river, or entering a forest;
-// `rasputin draw road-crosses-river` drew zero triangles before 5b, for exactly the
-// crossing fixture below, and the road-along-a-river fixture is the one input
+// the road-crosses-river shape meshed to zero triangles before 5b, for exactly
+// the crossing fixture below, and the road-along-a-river fixture is the one input
 // the whole property-set apparatus exists for.
 //
 // Every coordinate is either derived through grid.world() or is one of the
-// gallery fixture's own numbers. The arithmetic of each degenerate fixture was
+// road-crosses-river shape's own numbers. The arithmetic of each degenerate fixture was
 // checked against the shipped 5a predicates before it was written down, and each
 // case restates the check it passed as its own REQUIRE, so the fixture cannot
 // quietly stop being the case it claims to be.
@@ -144,7 +144,7 @@ TEST_CASE("a default-constructed NodeOutcome from the driver's own type is NotRu
 
 // ---------------------------------------------------------------------------
 // THE CROSSING. The increment's reason for existing, and the exact input
-// `rasputin draw road-crosses-river` rendered with zero triangles before 5b.
+// the road-crosses-river shape, which meshed to zero triangles before 5b.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -154,7 +154,7 @@ constexpr double kOriginY = 6900000.0;
 
 [[nodiscard]] Point2 utm(double x, double y) { return Point2{kOriginX + x, kOriginY + y}; }
 
-// The `road-crosses-river` gallery fixture: a 700 m square with two breaklines crossing
+// The road-crosses-river shape: a 700 m square with two breaklines crossing
 // at local (350, 350), a point neither chain names.
 [[nodiscard]] Pslg crossing_pslg() {
     PslgBuilder b;

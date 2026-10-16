@@ -1,15 +1,16 @@
-"""`rasputin mesh --dem`: the writers' side of the command, and the chain-mask join.
+"""`rasputin mesh --dem`: the writers' side of the command, the chain-mask join,
+`--snap-spacing`, and the role map.
 
 Every refusal asserts what it *says*, because `exit_code != 0` alone would
 pass against a missing option.
 
 The edge file's oracle is the surface file's faces (an edge of one triangle is
 on the outline), or the features given, never the writer's own record. The
-chain-mask join is `cli._triangulated`'s, which `draw` still runs on the
-gallery; it is tested against an independent rebuild from the chains.
+chain-mask join is checked on a road crossing a river, built here and run
+through `cli._engine`, against an independent rebuild from the chains.
 
-`cli._destination`'s refusals (traversal, symlinks, a missing parent) are
-covered in `test_cli_draw.py`; `--out` and `--out-edges` are asserted to go
+`cli_kit.destination`'s refusals (traversal, symlinks, a missing parent) are
+covered in `test_cli_kit.py`; `--out` and `--out-edges` are asserted to go
 through it, and nothing more.
 
 Not asserted, and not assertable here: that QGIS or ParaView opens either file.
@@ -24,6 +25,7 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
+import tin_engine._core as core
 import tin_engine.cli as cli
 from cli_helpers import (
     SQUARE,
@@ -37,21 +39,39 @@ from cli_helpers import (
 from plyread import element_bytes, parse_header, read_ply
 from tin_engine.cli import app
 from tin_engine.features import DEFAULT_VOCABULARY
-from tin_engine.viz.fixtures import GALLERY
 
-#: A gallery fixture that triangulates cleanly.
-FIXTURE = "catchment"
+#: The road-crosses-river shape: a square outline with a road and a river
+#: crossing at its centre, at UTM 33N magnitudes so the default snap spacing
+#: (1 mm) is the one a real run uses. The noder adds the crossing at
+#: (350, 350); the chains carry feature bits 2 (road) and 1 (river).
+ORIGIN = np.array([430_000.0, 6_900_000.0])
+CROSSING_VERTICES = ORIGIN + np.array(
+    [(0, 0), (700, 0), (700, 700), (0, 700), (100, 100), (600, 600), (100, 600), (600, 100)],
+    dtype=float,
+)
+CROSSING_CHAINS = [
+    ([0, 1, 2, 3], core.ChainRole.Outer, 0),
+    ([4, 5], core.ChainRole.Breakline, 2),
+    ([6, 7], core.ChainRole.Breakline, 1),
+]
 
-#: A fixture whose constraints carry feature bits, so the edge file's scalar
-#: has something other than 0 to carry. Increment 8 renamed it from `not-noded`.
-FEATURED = "road-crosses-river"
+#: Fine enough that a UTM easting overflows the snap lattice (the largest grid
+#: index is 2**51, so the representable coordinate at spacing s is about
+#: s * 2.25e15): only the value given on the command line can make the noder
+#: answer `CoordinateOutOfRange`.
+OVERFLOWING_SNAP_SPACING = 1e-12
 
 
 @pytest.fixture
-def attempt(request: pytest.FixtureRequest) -> cli.Attempt:
-    """What the engine makes of a fixture, through the command's own pipeline."""
-    name = getattr(request, "param", FIXTURE)
-    return cli._triangulated(GALLERY[name], delaunay=True, spacing=cli.DEFAULT_SNAP_SPACING)
+def crossing_graph() -> core.NodedPslg:
+    """The road-crosses-river shape, noded and triangulated by the command's engine."""
+    run = cli._engine(
+        CROSSING_VERTICES, CROSSING_CHAINS, delaunay=True, spacing=cli.DEFAULT_SNAP_SPACING
+    )
+    assert run.ok, (run.status, run.message)
+    assert run.noded is not None
+    assert len(np.asarray(run.noded.vertices)) == 9, "the crossing was not noded"
+    return run.noded
 
 
 bumpy = rough_dem(16)
@@ -187,10 +207,10 @@ class TestTheChainMaskJoin:
     back.
     """
 
-    @pytest.mark.parametrize("attempt", [FEATURED], indirect=True)
-    def test_every_pair_carries_the_mask_its_chains_gave_it(self, attempt: cli.Attempt) -> None:
-        pslg = attempt.source
-        assert pslg is not None
+    def test_every_pair_carries_the_mask_its_chains_gave_it(
+        self, crossing_graph: core.NodedPslg
+    ) -> None:
+        pslg = crossing_graph
         properties = np.asarray(pslg.edge_properties)
 
         expected: dict[tuple[int, int], int] = {}
@@ -208,7 +228,7 @@ class TestTheChainMaskJoin:
             at += len(edges)
 
         assert cli._chain_masks(pslg) == expected
-        assert set(expected.values()) > {0}, "the fixture must carry real bits"
+        assert set(expected.values()) == {0, 1, 2}, "the shape must carry both bits"
 
 
 class TestTheFeatureScalar:
@@ -271,3 +291,55 @@ class TestTheAsciiFlag:
         assert result.exit_code == 0, plain(result.output)
         assert parse_header(surface.read_bytes()).fmt == "ascii"
         assert parse_header(edges.read_bytes()).fmt == "ascii"
+
+
+class TestSnapSpacing:
+    """Two refusal channels for `--snap-spacing`, neither removable for the other.
+
+    The command refuses a non-finite or non-positive value as a usage error
+    before anything is read. A value it accepts reaches the noder, whose own
+    refusal comes back in the engine's words.
+    """
+
+    @pytest.mark.parametrize("value", ["0", "-1", "nan", "-inf"])
+    def test_a_non_positive_or_non_finite_spacing_is_a_usage_error(
+        self, value: str, tmp_path: Path, bumpy: Path
+    ) -> None:
+        target = tmp_path / "refused.ply"
+        result = runner.invoke(
+            app, ["mesh", "--dem", str(bumpy), f"--snap-spacing={value}", "--out", str(target)]
+        )
+        message = plain(result.output)
+        assert result.exit_code == 2, message
+        assert "snap-spacing" in message, f"the refusal does not name the option: {message!r}"
+        assert not target.exists(), "a usage error wrote a file"
+
+    def test_the_spacing_reaches_the_engine(self, tmp_path: Path, bumpy: Path) -> None:
+        # A command that accepted the option and passed the default on would
+        # mesh this DEM; only the real argument makes the noder refuse.
+        target = tmp_path / "overflow.ply"
+        result = runner.invoke(
+            app,
+            [
+                "mesh",
+                "--dem",
+                str(bumpy),
+                f"--snap-spacing={OVERFLOWING_SNAP_SPACING}",
+                "--out",
+                str(target),
+            ],
+        )
+        message = plain(result.output)
+        assert result.exit_code != 0, message
+        assert "CoordinateOutOfRange" in message
+        assert core.describe(core.NodeStatus.CoordinateOutOfRange) in message
+        assert not target.exists()
+
+
+class TestTheRoleMap:
+    def test_the_cli_maps_every_role_the_enum_has_and_nothing_else(self) -> None:
+        # Total both ways: a role the enum gains and `ROLES` lacks is an input
+        # vocabulary that silently cannot express it. `__members__`, because a
+        # pybind11 enum type is not iterable.
+        assert set(cli.ROLES.values()) == set(core.ChainRole.__members__.values())
+        assert len(cli.ROLES) == len(core.ChainRole.__members__)

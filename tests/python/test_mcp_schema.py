@@ -239,7 +239,7 @@ class TestArgvRoundTrip:
 # ---------------------------------------------------------------- T3
 
 #: The seven commands an agent is offered, as tool names, in the order of
-#: `rasputin --help` (`draw` is hidden, `mcp` is the server). Their parameter
+#: `rasputin --help` (`mcp` is the server). Their parameter
 #: counts are not pinned: the test below holds each schema's properties equal
 #: to the command's own click parameters, which implies the count, and a
 #: pinned count would turn red on every merge that adds a CLI option without

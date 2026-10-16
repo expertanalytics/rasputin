@@ -31,9 +31,8 @@ to the binding layer is a lifetime or a reinterpret:
 * the GIL is released around `node()`, which is licensed by `node.hpp:5-11`'s
   purity claim and by nothing else, so the purity is measured here too.
 
-What this file does **not** own: the CLI's presentation of a refusal
-(`test_cli_draw.py`), the structural join onto `viz/protocols.py`
-(`test_viz_protocols.py`), and `triangulate`'s own surface (`test_core_cdt.py`,
+What this file does **not** own: the CLI's refusal of `--snap-spacing`
+(`test_cli_mesh.py`), and `triangulate`'s own surface (`test_core_cdt.py`,
 which pins that it no longer accepts a `Pslg` at all).
 """
 
@@ -356,7 +355,7 @@ class TestNodeRefusalsAreData:
         self, crossing_pslg: Any, spacing: float
     ) -> None:
         # The C++ half of the two refusal channels the design keeps apart: the
-        # CLI refuses `--snap-spacing` as a usage error before drawing
+        # CLI refuses `--snap-spacing` as a usage error before reading
         # anything, and the library refuses it as a precondition for callers
         # that are not the CLI. Neither is removable in favour of the other.
         outcome = _core.node(crossing_pslg, spacing)
@@ -414,8 +413,7 @@ class TestNodeRefusalsAreData:
 
 
 class TestNodedPslgShape:
-    """`PslgLike` is a structural contract with three implementations --
-    `Pslg`, `NodedPslg` and `viz.fixtures.Fixture`. The four shared accessors
+    """`Pslg` and `NodedPslg` share four accessors. They
     are bound by one function template precisely so that a member cannot be
     added to one and forgotten on the other."""
 
@@ -493,8 +491,8 @@ class TestEdgeProperties:
         assert noded_crossing.edge_properties.shape == (expected_edge_count(noded_crossing),)
 
     def test_carries_both_input_features_after_the_split(self, noded_crossing: Any) -> None:
-        # The picture the increment exists to draw: a road and a river, in two
-        # colours, meeting at a constructed node. Both bits must survive, and
+        # The road-crosses-river shape: a road and a river meeting at a
+        # constructed node. Both bits must survive, and
         # neither may be smeared over the other.
         masks = [int(m) for m in noded_crossing.edge_properties]
         assert sum(1 for m in masks if m & ROAD) >= 2

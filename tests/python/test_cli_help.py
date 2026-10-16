@@ -241,16 +241,6 @@ class TestGroupingAndOrder:
     def test_the_panels_and_their_commands(self) -> None:
         assert panels(rendered(cli.app)) == PANELS
 
-    def test_draw_is_hidden_and_still_runs(self) -> None:
-        assert "draw" not in {n for _, names in panels(rendered(cli.app)) for n in names}
-        code, output = invoke("draw", "--list")
-        assert code == 0, output
-        assert "catchment" in output, "the gallery is listed"
-
-    def test_no_tool_is_offered_for_draw(self, mcp_schema: ModuleType) -> None:
-        tools = [d.tool_name for d in mcp_schema.derive(cli.app)]
-        assert "draw" not in tools and "mesh" in tools, tools
-
     def test_a_plugin_without_a_panel_goes_under_plugins_after_the_core(self) -> None:
         plugin = hello_app()
         (info,) = plugin.registered_commands
@@ -266,6 +256,33 @@ class TestGroupingAndOrder:
         shown = dict(panels(rendered(app)))
         assert shown.get("Snow") == ["hello"], shown
         assert "Plugins" not in shown, shown
+
+
+class TestNoDrawingCommand:
+    """`rasputin draw` and its drawing package are gone, not hidden."""
+
+    def test_draw_is_no_such_command(self) -> None:
+        # Not `cli_helpers.invoke`, which refuses a name that is not a command.
+        result = CliRunner().invoke(cli.app, ["draw", "--help"])
+        output = plain(result.output)
+        assert result.exit_code == USAGE, output
+        assert "No such command 'draw'" in output, output
+
+    def test_the_drawing_package_is_not_importable(self) -> None:
+        assert importlib.util.find_spec("tin_engine.viz") is None
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Attempt",
+            "_triangulated",
+            "FIXTURE_CLOSED_ROLES",
+            "PROPERTY_STROKES",
+            "DEFAULT_LABEL_LIMIT",
+        ],
+    )
+    def test_the_cli_keeps_no_drawing_name(self, name: str) -> None:
+        assert not hasattr(cli, name), name
 
 
 # ---------------------------------------------------------------- T5
