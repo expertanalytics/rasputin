@@ -26,11 +26,18 @@ from pathlib import Path, PurePath
 
 #: Markdown files the build or the suites read, so changing one is a code change.
 #: `README.md`: pyproject.toml's `readme`, so `pip install -e`. `CLAUDE.md`:
-#: test_spawn_rule_text.py and test_session_state.py. The two `docs/` files:
-#: test_session_state.py copies them. The T5 hook in tests/python/conftest.py
-#: fails the suite on a read of any other prose file.
+#: test_spawn_rule_text.py and test_session_state.py. `docs/increments/README.md`
+#: and `docs/PRINCIPLES.md`: test_session_state.py copies them. `docs/plugins.md`:
+#: test_cli_help.py's T6 checks that it names every plugin_api export. The T5 hook
+#: in tests/python/conftest.py fails the suite on a read of any other prose file.
 NOT_PROSE: frozenset[str] = frozenset(
-    {"README.md", "CLAUDE.md", "docs/increments/README.md", "docs/PRINCIPLES.md"}
+    {
+        "README.md",
+        "CLAUDE.md",
+        "docs/increments/README.md",
+        "docs/PRINCIPLES.md",
+        "docs/plugins.md",
+    }
 )
 
 

@@ -204,3 +204,42 @@ def polygon_file(outer: Ring, holes: tuple[Ring, ...] = ()) -> Callable[[Path], 
         return geojson(tmp_path / "square.geojson", outer, holes)
 
     return fixture
+
+
+# A road and a river crossing inside `SQUARE`, every vertex off-node: the
+# constraint edges of a featured run carry the road and the river bits.
+ROAD: Ring = [(TIE_X + 40.3, TIE_Y - 40.1), (TIE_X + 160.7, TIE_Y - 40.3)]
+RIVER: Ring = [(TIE_X + 100.1, TIE_Y - 65.2), (TIE_X + 100.3, TIE_Y - 15.4)]
+
+
+def crossing_lines() -> Callable[[Path], Path]:
+    """A fixture: ``crossing.geojson``, `ROAD` (property ``road``) and `RIVER`
+    (``river``), in UTM33."""
+
+    @pytest.fixture
+    def fixture(tmp_path: Path) -> Path:
+        doc = {
+            "type": "FeatureCollection",
+            "crs": {"type": "name", "properties": {"name": UTM33}},
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": line},
+                    "properties": {"property": kind},
+                }
+                for kind, line in (("road", ROAD), ("river", RIVER))
+            ],
+        }
+        path = tmp_path / "crossing.geojson"
+        path.write_text(json.dumps(doc))
+        return path
+
+    return fixture
+
+
+def featured_args(tif: Path, domain: Path, features: Path) -> tuple[str, ...]:
+    """A ``mesh`` run whose constraint edges carry feature bits: `features` in `domain`."""
+    return (
+        *("--dem", str(tif), "--domain", str(domain)),
+        *("--tolerance", "1", "--features", str(features)),
+    )

@@ -70,7 +70,6 @@ WORDING = {
     "licence_note": "Licence",
     "cite": "Please cite",
     "nodata_vertices_removed": "Vertices removed on NoData",
-    "heights": "Heights",
     "land_cover_source": "Land-cover classes: the source and the year",
     "land_cover_credit": "Credit for the land-cover classes",
     "land_cover_licence_note": "Licence of the land-cover classes",
@@ -122,7 +121,6 @@ INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])
 #: D2's mesh-file fields, and the CORINE notice kept by Ola's ruling.
 #: ``land_cover_codes`` is in the file too, but the writers put it there.
 IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("features_notice") + 1])
-FLAT_HEIGHTS = "none: every z is 0 (--flat)"
 SEAMS_AGREE = "none: the tiles agree where they overlap"
 
 
@@ -206,11 +204,6 @@ def stride_record(*, triangles: int, **values: Value) -> RunRecord:
     return _record(triangles, values)
 
 
-def flat_record(*, triangles: int, crs: str | None = None) -> RunRecord:
-    """A gallery fixture written with ``--flat``: z is not real, and says so."""
-    return _record(triangles, {"crs": crs or None, "heights": FLAT_HEIGHTS})
-
-
 def file_fields(record: RunRecord) -> list[tuple[str, str]]:
     """The ``.vtk`` FieldData and the ``.ply`` comments, ``(name, value)``."""
     return [(e.name, e.value) for e in record.entries if e.in_file]
@@ -246,8 +239,6 @@ def summary(record: RunRecord) -> str:
             f"{plural(n, 'vertex', 'vertices')} on NoData cells "
             f"{'was removed with its' if n == 1 else 'were removed with their'} triangles."
         )
-    if "heights" in by:
-        said.append("The heights are not real: every z is 0 (--flat).")
     share = by.get("max_error_slope_share_of_tolerance")
     steep = f"{100 * float(share.value):.4g} % of" if share is not None else ""
     # 34, 4.3: the weight 1 / t is rounded, so up to 1 + 1e-12 is within.

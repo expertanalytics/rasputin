@@ -101,7 +101,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "cli": "_core catchment catchment_batch chains class_maps cli_kit crs dem_input domain"
                " edge_strip elevation feature_input features fetch.http fetch.nve fetch.plan"
                " fetch.run final_check gauge grid_domain hydrography io.cog io.domain_file"
-               " io.geojson io.geopackage_write io.mesh_checks io.models io.ply io.repository"
+               " io.geojson io.geopackage_write io.models io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover"
                " mcp.server mosaic palettes plugins raster resources run_record source_report"
                " sources stats target_grid tin_engine tolerance_field viz.fixtures viz.protocols"

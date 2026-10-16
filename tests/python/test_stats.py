@@ -333,16 +333,19 @@ def quarter(stats: ModuleType, quality: Any) -> Any:
 
 
 @pytest.fixture
-def fixture_report(stats: ModuleType, quality: Any) -> Any:
-    """A gallery fixture: no DEM, no domain, no refinement, nothing dropped."""
+def dem_report(stats: ModuleType, quality: Any) -> Any:
+    """A plain DEM run: no domain, no refinement, nothing dropped."""
     return stats.Report(
-        command="rasputin mesh catchment --flat --out c.ply --stats c.md",
+        command="rasputin mesh --dem c.tif --out c.ply --out-edges c-edges.ply --stats c.md",
         sizes=stats.Sizes(
             output_vertices=40,
             output_triangles=60,
             constraint_edges=30,
             files=(("c.ply", 2048), ("c-edges.ply", 999)),
+            dem_nodes=(5, 8),
+            dem_spacing=(10.0, 10.0),
         ),
+        threads=1,
         quality=quality,
         phases=(("start mesh: build", 0.002), ("write: encode", 0.001)),
         total=0.004,
@@ -357,19 +360,15 @@ class TestRender:
     def test_the_golden_report(self, stats: ModuleType, quarter: Any) -> None:
         assert stats.render(quarter) == GOLDEN
 
-    def test_rows_that_do_not_apply_are_omitted(
-        self, stats: ModuleType, fixture_report: Any
-    ) -> None:
-        text = stats.render(fixture_report)
+    def test_rows_that_do_not_apply_are_omitted(self, stats: ModuleType, dem_report: Any) -> None:
+        text = stats.render(dem_report)
         for absent in (
             "## Refinement",
             "## Inputs",
             "## Result",
-            "DEM nodes",
             "domain vertices",
             "start vertices",
             "without data dropped",
-            "Threads",
             "Sub-rows",
         ):
             assert absent not in text, absent
@@ -387,10 +386,10 @@ class TestRender:
         assert "hardware concurrency" not in text and "Threads: " not in text
 
     def test_other_is_total_minus_the_top_level_rows(
-        self, stats: ModuleType, fixture_report: Any
+        self, stats: ModuleType, dem_report: Any
     ) -> None:
         # "start mesh: build" has no "start mesh" row, so it is top level.
-        text = stats.render(fixture_report)
+        text = stats.render(dem_report)
         assert "| other | 0.001 | 25.0 % |" in text
         assert "| **total** | **0.004** | **100 %** |" in text
 
@@ -436,16 +435,16 @@ class TestBoundsChecksLine:
         ],
     )
     def test_one_line_before_the_first_section(
-        self, stats: ModuleType, fixture_report: Any, field: str, line: str
+        self, stats: ModuleType, dem_report: Any, field: str, line: str
     ) -> None:
         import dataclasses
 
-        lines = stats.render(dataclasses.replace(fixture_report, bounds_checks=field)).splitlines()
+        lines = stats.render(dataclasses.replace(dem_report, bounds_checks=field)).splitlines()
         first_section = next(i for i, text in enumerate(lines) if text.startswith("## "))
         assert [t for t in lines if t.startswith("bounds checks")] == [line]
         assert lines.index(line) < first_section
 
-    def test_the_field_is_required(self, stats: ModuleType, fixture_report: Any) -> None:
+    def test_the_field_is_required(self, stats: ModuleType, dem_report: Any) -> None:
         import dataclasses
 
         fields = {f.name: f for f in dataclasses.fields(stats.Report)}

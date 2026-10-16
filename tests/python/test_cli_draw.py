@@ -170,10 +170,17 @@ def core_verdict(name: str, spacing: float = DEFAULT_SNAP_SPACING) -> tuple[bool
 
 
 class TestCommandSurface:
-    def test_the_command_is_registered(self) -> None:
+    def test_the_command_is_registered_callable_and_hidden(self) -> None:
+        # `draw` is a developer's bench: registered and callable by name,
+        # but absent from the root help a user reads.
+        names = {
+            info.name or info.callback.__name__ for info in app.registered_commands if info.callback
+        }
+        assert "draw" in names
+        assert invoke("--list").exit_code == 0
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "draw" in plain(result.output)
+        assert not re.search(r"\bdraw\b", plain(result.output)), "root --help lists draw"
 
     def test_list_names_every_fixture(self) -> None:
         result = invoke("--list")

@@ -172,6 +172,14 @@ coverage come from the GeoTIFFs themselves; `z_unit = "metre"` names the
 height unit for files that do not state it. `rasputin sources` on the
 command line shows the same listing, and says which sources file it read.
 
+## Add a command of your own
+
+An installed Python package can add commands to `rasputin`, and they appear
+in `--help` and as MCP tools like the built-in ones. It may also build a C++
+extension module against rasputin's installed headers.
+[docs/plugins.md](docs/plugins.md) says what such a plugin declares, which
+names it may import, and which headers it may include.
+
 ## How it is built
 
 - **A C++20 core** (`include/terrain/`, `src/`): exact geometric predicates,

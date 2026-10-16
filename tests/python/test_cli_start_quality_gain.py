@@ -268,16 +268,6 @@ class TestRefusals:
         assert "--tolerance" in output
         assert not target.exists()
 
-    def test_without_dem(self, tmp_path: Path) -> None:
-        target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "mesh", "catchment", "--flat", "--start-quality-gain", "0", "--out", str(target)
-        )
-        assert code == USAGE, output
-        assert "No such option" not in output
-        assert "--start-quality-gain" in output
-        assert not target.exists()
-
 
 # ---------------------------------------------------------------- the report
 

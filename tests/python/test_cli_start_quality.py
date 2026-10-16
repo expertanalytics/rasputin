@@ -183,20 +183,6 @@ class TestRefusals:
         assert "No such option" not in output  # refused for its value, not unknown
         assert "--start-min-angle" in output
 
-    def test_without_dem(self, tmp_path: Path) -> None:
-        code, output = invoke(
-            "mesh",
-            "catchment",
-            "--flat",
-            "--start-min-angle",
-            "25",
-            "--out",
-            str(tmp_path / "x.vtk"),
-        )
-        assert code == USAGE, output
-        assert "No such option" not in output  # refused for its value, not unknown
-        assert "--start-min-angle" in output
-
 
 class TestReport:
     """R11, as increment 25 words it: ``--stats`` carries the two counts and a

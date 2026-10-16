@@ -191,17 +191,6 @@ class TestRefusals:
         assert "--no-constraint-feet needs --tolerance" in output
         assert not target.exists()
 
-    def test_without_dem(self, tmp_path: Path) -> None:
-        target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "mesh", "catchment", "--flat", "--no-constraint-feet", "--out", str(target)
-        )
-        assert code == USAGE, output
-        assert "No such option" not in output  # refused for its use, not unknown
-        assert "applies only with --dem" in output
-        assert "--no-constraint-feet" in output
-        assert not target.exists()
-
 
 class TestReport:
     """R9, as increment 25 words it: ``--stats`` carries the outcome's counts."""

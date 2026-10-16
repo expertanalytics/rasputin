@@ -1,6 +1,6 @@
 # Increment 51: open core, the snow and radiation code moved to a private package
 
-**Status: P1 merged** (#270, `3663448f`); P2 built on `worktree-open-core-p2`, code review round 1 approved with wordings.
+**Status: P1 merged** (#270, `3663448f`); **P2 merged** (#271, `9a7c312d`). The private package's PRs (Q0, Q1) are tracked in the private repository.
 
 ## 1. What Ola asked
 
