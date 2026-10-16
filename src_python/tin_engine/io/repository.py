@@ -346,7 +346,8 @@ class CacheRepository:
             indices = blocks_meeting(blocks.page, placement.source)
             needed, missing = needed + len(indices), missing + len(blocks.missing(indices))
         if missing:
-            raise NotCached(missing, needed, f"{self._source} ({self._directory})")
+            where = f"{self._source} ({self._directory})"
+            raise NotCached(missing, needed, where, box=plan.meta.node_box())
 
     def _page(self, name: str) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]:
         self.footprints()

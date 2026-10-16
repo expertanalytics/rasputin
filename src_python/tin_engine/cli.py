@@ -187,7 +187,16 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.sources import SOURCES, STATION_SOURCES, RemoteSource, catalogue, check_values
+from tin_engine.sources import (
+    SOURCES,
+    STATION_SOURCES,
+    RemoteSource,
+    catalogue,
+    check_values,
+    data_root,
+    user_source_file,
+    xdg_base,
+)
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
@@ -210,6 +219,14 @@ NO_CACHE: Final = (
 )
 CACHE_DEFAULT: Final = (
     "Default: $RASPUTIN_DATA/cache, else $XDG_CACHE_HOME/rasputin, else ~/.cache/rasputin."
+)
+CACHE = Annotated[
+    Path | None,
+    typer.Option("--cache", help=f"The tile cache a catalogue --dem is read from. {CACHE_DEFAULT}"),
+]
+DEM_HELP: Final = (
+    "A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a source from "
+    "rasputin sources"
 )
 
 MEMORY_BUDGET = Annotated[
@@ -690,18 +707,11 @@ def mesh(
         list[str] | None,
         typer.Option(
             "--dem",
-            help="A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a "
-            f"cached catalogue source ({', '.join(SOURCES)}): mesh its extent with z "
-            "sampled from it. A file named like a source is written as a path: ./glo30.",
+            help=f"{DEM_HELP}: mesh its extent with z sampled from it. A file named like a "
+            "source is written as a path: ./glo30.",
         ),
     ] = None,
-    cache: Annotated[
-        Path | None,
-        typer.Option(
-            "--cache",
-            help=f"The tile cache a catalogue --dem is read from. {CACHE_DEFAULT}",
-        ),
-    ] = None,
+    cache: CACHE = None,
     bbox: Annotated[
         tuple[float, float, float, float] | None,
         typer.Option(
@@ -1003,7 +1013,7 @@ def mesh(
     the source's credit, licence note and citation as fields.
     ``--land-cover FILE`` reads the classes from a ``uint8`` GeoTIFF instead,
     and ``--land-cover-map`` names and colours them in a ``.gpkg``. A catalogue
-    source is the package's or an entry of $RASPUTIN_DATA/sources.toml.
+    source is the package's or one in your sources file (see rasputin sources).
 
     What the run did is one record (increment 25, ``tin_engine.run_record``):
     the file carries the fields a user of the mesh needs, ``--stats`` and
@@ -1151,8 +1161,8 @@ def mesh(
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
-        paths, cached = _dem_sources(dem, cache_root(cache, os.environ), known)
-        caller = _z_unit(z_unit) or (known[cached.source].z_unit if cached else None)
+        paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
+        caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
         given = None
         if domain is not None:
             with clock.phase("domain read"):
@@ -1243,11 +1253,10 @@ def mesh(
             how = transform_description(source_crs, dem_crs)
             values |= {"dem_crs": source_crs, "dem_transform": how}
             values["resampled_grid"] = f"{grid.spacing:g} m square grid in {dem_crs}, {size}"
-        if cached is not None:  # B16 (a): the notes the source asks to travel with it
-            remote = known[cached.source]
-            values["dem_credit"] = escaped_ascii(remote.credit)
-            values["licence_note"] = escaped_ascii(remote.licence_note)
-            values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
+        if entry is not None:  # the notes the source asks to travel with it
+            values["dem_credit"] = escaped_ascii(entry.credit)
+            values["licence_note"] = escaped_ascii(entry.licence_note)
+            values["cite"] = escaped_ascii("; ".join(entry.cite)) or None
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             seams = opened_seams
             values["dem_tiles"] = escaped_ascii("; ".join(names))
@@ -1807,7 +1816,7 @@ def fetch(
 ) -> None:
     """Copy what a mesh of the domain reads from a remote source into the tile
     cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline.
-    A source is the package's or an entry of $RASPUTIN_DATA/sources.toml."""
+    A source is the package's or one in your sources file (see rasputin sources)."""
     import asyncio
 
     from tin_engine.fetch.http import FetchError, RangeClient
@@ -1818,6 +1827,8 @@ def fetch(
     known = _known_sources(os.environ)
     if source not in known:
         raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(known)})")
+    if known[source].kind == "local":
+        raise typer.BadParameter(f"{source} is a local source, read in place; it needs no fetch")
     if year is not None:  # 26a: refused here, before any request
         try:
             known[source].url_for(year)
@@ -1905,12 +1916,30 @@ def fetch_stations(
     typer.echo(f"{source}: {len(files)} files written to {out_dir}", err=True)
 
 
-def data_root(environ: Mapping[str, str]) -> Path | None:
-    """The data root, ``$RASPUTIN_DATA``, or None when it is unset or empty:
-    the one reader of the variable. The cache and the user's catalogue file
-    lie in it."""
-    data = environ.get("RASPUTIN_DATA")
-    return Path(data) if data else None
+@app.command()
+def sources(
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option(
+            "--bbox",
+            metavar="BOX",
+            help="WEST SOUTH EAST NORTH in degrees (WGS 84): report the share of it each "
+            "source covers. A point is a box with WEST = EAST and SOUTH = NORTH.",
+        ),
+    ] = None,
+    cache: Annotated[
+        Path | None, typer.Option("--cache", help=f"The tile cache read. {CACHE_DEFAULT}")
+    ] = None,
+) -> None:
+    """List the sources this machine knows, local and remote, as one line of
+    JSON: each with its coverage (a longitude/latitude box), cell size in
+    metres, CRS, height unit, tile count, description and credit, read from
+    the headers; and the sources file and cache read."""
+    from tin_engine.source_report import listing
+
+    if bbox is not None and (bbox[0] > bbox[2] or bbox[1] > bbox[3]):
+        raise typer.BadParameter("WEST must not exceed EAST, nor SOUTH NORTH", param_hint="--bbox")
+    typer.echo(listing(os.environ, cache_root(cache, os.environ), bbox).model_dump_json())
 
 
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
@@ -1922,30 +1951,28 @@ def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
         return option
     if (root := data_root(environ)) is not None:
         return root / "cache"
-    for name, under in (("XDG_CACHE_HOME", "rasputin"), ("HOME", ".cache/rasputin")):
-        if (value := Path(environ.get(name) or ".")).is_absolute():
-            return value / under
-    return None
+    base = xdg_base(environ, "XDG_CACHE_HOME", ".cache")
+    return None if base is None else base / "rasputin"
 
 
 def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
-    """The catalogue's sources with the user's from ``$RASPUTIN_DATA/sources.toml``;
-    a file it refuses is a usage error naming it."""
-    root = data_root(environ)
+    """The catalogue's sources with the user's from their sources file
+    (`user_source_file`); a file it refuses is a usage error naming it."""
     try:
-        return catalogue(root / "sources.toml" if root else None).sources
+        return catalogue(user_source_file(environ)).sources
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
 
 def _dem_sources(
     dem: list[str], root: Path | None, known: Mapping[str, RemoteSource]
-) -> tuple[tuple[Path, ...], CachedSource | None]:
-    """``--dem`` as given: one catalogue key alone is that cached source
-    (23a-1); anything else is a path, so ``./glo30`` is a file."""
+) -> tuple[tuple[Path, ...], CachedSource | None, RemoteSource | None]:
+    """``--dem`` as given, with the catalogue entry when it names one: one key
+    alone is that source, a local one as its path, a remote one as its cache;
+    anything else is a path, so ``./glo30`` is a file."""
     keys = [d for d in dem if d in known]
     if not keys:
-        return tuple(Path(d) for d in dem), None
+        return tuple(Path(d) for d in dem), None, None
     if len(dem) > 1:
         raise typer.BadParameter(
             f"{keys[0]} is a catalogue source; give it alone, not with other --dem",
@@ -1955,12 +1982,31 @@ def _dem_sources(
         check_values(known[keys[0]], "heights", "--dem")  # 26a: a class source is not a DEM
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
+    entry = known[keys[0]]
+    if entry.path is not None:
+        return (entry.path,), None, entry
     if root is None:
         raise typer.BadParameter(
             NO_CACHE,
             param_hint="--dem",
         )
-    return (), CachedSource(source=keys[0], cache=root)
+    return (), CachedSource(source=keys[0], cache=root), entry
+
+
+def _dem_repository(
+    dem: list[str], cache: Path | None, res: Resources, z_unit: ZSpelling | None
+) -> DemRepository:
+    """``--dem`` of the catchment commands as a repository, by path or by
+    source name; the height unit is ``--z-unit``, else the source's."""
+    known = _known_sources(os.environ)
+    paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
+    caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
+    try:
+        return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)[0]
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+        ) from exc
 
 
 def _open_dem(
@@ -2546,10 +2592,7 @@ def catchment(
     out: Annotated[
         Path, typer.Option("--out", help="Where to write the polygon: .geojson or .json.")
     ],
-    dem: Annotated[
-        list[Path],
-        typer.Option("--dem", help="A GeoTIFF DEM, several (repeat --dem), or one directory."),
-    ],
+    dem: Annotated[list[str], typer.Option("--dem", help=f"{DEM_HELP}.")],
     seed: Annotated[
         tuple[float, float],
         typer.Option("--seed", metavar="X Y", help="A point in the lake, in --seed-crs."),
@@ -2607,6 +2650,7 @@ def catchment(
             help="How much river above the gauge is burnt into the DEM. Default 1000.",
         ),
     ] = None,
+    cache: CACHE = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -2640,8 +2684,8 @@ def catchment(
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
     res = _resources(threads, memory_budget)
+    repository = _dem_repository(dem, cache, res, z_unit)
     try:
-        repository, _ = repository_for(tuple(dem), threads=res.threads, z_unit=_z_unit(z_unit))
         placement: tuple[Placement, str | None] | None = None
         if rivers is not None:
             batch = BatchRequest(
@@ -2659,6 +2703,10 @@ def catchment(
                 outline_tolerance=outline_tolerance,
             )
         result = delineate(request, repository, res)
+    except NotCached as exc:
+        fetch = "" if exc.box is None else " ".join(repr(v).removesuffix(".0") for v in exc.box)
+        hint = f"; run: rasputin fetch {dem[0]} --bbox {fetch}" if fetch else ""
+        raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:
@@ -2816,10 +2864,7 @@ def _read_beside[T](
 
 @app.command()
 def station_catchments(
-    dem: Annotated[
-        list[Path],
-        typer.Option("--dem", help="A GeoTIFF DEM, several (repeat --dem), or one directory."),
-    ],
+    dem: Annotated[list[str], typer.Option("--dem", help=f"{DEM_HELP}.")],
     stations: Annotated[
         Path, typer.Option("--stations", help="The stations (GeoJSON points, with a crs member).")
     ],
@@ -2870,6 +2915,7 @@ def station_catchments(
         Path | None,
         typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
     ] = None,
+    cache: CACHE = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -2903,13 +2949,14 @@ def station_catchments(
     if lakes is not None:
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
     res = _resources(threads, memory_budget)
+    repository = _dem_repository(dem, cache, res, z_unit)
     try:
-        repository, _ = repository_for(tuple(dem), threads=res.threads, z_unit=_z_unit(z_unit))
+        geographic = repository.footprints()[0].meta.geographic
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
-    if repository.footprints()[0].meta.geographic:  # increment 40, 5.7
+    if geographic:  # increment 40, 5.7
         raise typer.BadParameter(
             "station-catchments needs a DEM in metres (a projected CRS); for a DEM in "
             "degrees, run catchment for each station",

@@ -27,7 +27,7 @@ SERVER_COMMAND = "mcp"
 SCALARS: dict[str, type] = {"str": str, "int": int, "float": float, "boolean": bool, "path": str}
 #: MCP's tool annotations (hints to the client) by tool name: `version` only
 #: reads, the fetches reach the network; every tool is non-destructive.
-READ_ONLY = frozenset({"version"})
+READ_ONLY = frozenset({"version", "sources"})
 OPEN_WORLD = frozenset({"fetch", "fetch_stations"})
 
 
