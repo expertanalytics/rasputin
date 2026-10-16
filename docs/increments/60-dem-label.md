@@ -1,7 +1,8 @@
 # Increment 60: delete the DEM's run name (`DemInput.label`)
 
-**Status: designed** (`@architect`, 2026-10-16, on `ed0d313d`, increment 57's
-head; merges after 57). Short path: Python only, under 50 net lines. One public
+**Status: built, awaiting code review** (designed by `@architect`, 2026-10-16,
+on `ed0d313d`, increment 57's head; red `fa56cf9a`, green `81838dcf`, -3
+counted lines; merges after 57). Short path: Python only, under 50 net lines. One public
 PR, branch `worktree-dem-label`.
 
 ## 1. What Ola asked
