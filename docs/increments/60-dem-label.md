@@ -94,3 +94,7 @@ Checked by `python3 tools/count_loc.py <base> <head>` at review.
 
 The dated scripts in `docs/` (above). The private plugin's `[0]`, done at its
 next pin bump.
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `8a24e3ae`, 0 counted lines, @reviewer: APPROVED. Every producer and reader found; five test lines; the private plugin's `repository_for(paths)[0]` fails loudly (no `__getitem__`; mypy flags it) when its pin moves.
