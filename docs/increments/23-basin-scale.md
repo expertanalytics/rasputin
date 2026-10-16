@@ -5,7 +5,7 @@ Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b (#162, 247 lines)
 and 23c-1 (#164, 154 lines) approved and merging; 23c-2 (about 265 estimated)
 green at 478 net lines, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
-in review; 23c-3 (about 185, each piece's memory its own) next; 23d
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (about 185, each piece's memory its own) next; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -116,7 +116,8 @@ changes the design, the section named does the rework.
   run of the two outlines; once the DEM-derived ones work, the BHO ones are
   abandoned. Ola: "Go back, we choose option c: a, then b. When b works, we
   can abandon a."
-- **B14: one parameter, `--memory-budget`, replaces `N_MIN`, `N_MAX` and
+- **B14: one parameter, `--memory-budget` (renamed `--piece-budget` on
+  2026-10-17, R2 of "23c-2 meets master"), replaces `N_MIN`, `N_MAX` and
   the per-piece memory cap.** Default 16 GB, fixed, not read from the
   machine. A domain is cut only when its estimated memory at the requested
   tolerance exceeds the budget; pieces are sized to fit it; no hard upper
@@ -803,9 +804,8 @@ The main session's reasoning, item by item.
 
 - **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
   constant: never the machine's memory, so the mesh does not depend on the
-  machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
-  pieces do not fit the machine runs out of memory. 15a R7's refusal at
-  half of physical memory goes too (B15, ruled (a)).
+  machine (K5). No upper limit on it, on `--pieces` or on a piece. 15a R7's refusal at
+  half of physical memory goes too (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master").
 - **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
   sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
   0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
@@ -1022,7 +1022,8 @@ thresholds are under "@perf acceptance", 23g).
   the running pieces' estimates (`dx · dy · b(T)`) fit under
   `--memory-budget`, and always starts one when none is running. It can
   delay a piece, never change or refuse one. 15a R7's refusal at half of
-  physical memory is deleted (B15, ruled (a)).
+  physical memory is deleted (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master"); the runner's sum is
+  held under master's `--memory-budget` (R3).
 
 ## Windowed source reads (23a-1)
 
@@ -1646,7 +1647,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap (15a R7) goes (B15, ruled (a)). 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) goes (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master"). 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1873,7 +1874,7 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
 | | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
-| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a)) | 0 | | |
+| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a); superseded 2026-10-17, they stay) | 0 | | |
 | | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
@@ -2106,7 +2107,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   and large values (neither the count nor the cut is the machine's).
 - **DC1, K1**: a domain under the budget, and a larger one with a budget
   above its estimate, write the same bytes as today's path.
-- **DC11, no machine refusal** (B15, ruled (a)): a mosaic
+- **DC11, no machine refusal** (B15, ruled (a); rewritten 2026-10-17 as
+  "the cap does not cut, the budget does not cap", item 4 of `@tester`'s
+  rewrite under "23c-2 meets master"; the text below is the old one): a mosaic
   over half of a patched `physical_memory` is planned, not refused; 15a's M5
   refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
   (pinned behaviour B15 changes); the same for 22's catchment refusal in
@@ -3193,6 +3196,105 @@ equality and DC4's control hold.
     nothing. No question for Ola: the refusal is temporary, it is worded as
     such, and it has the same cause as `--stats`.
 
+### 23c-2 meets master: the piece budget renamed, the memory cap kept (2026-10-17)
+
+The branch's merge base is `47991efc` (2026-10-04); `@developer`'s trial merge of
+master `da133bce` found three design conflicts, all from increment 38
+(`38-threads-and-memory.md`, sections 4.3 and 4.6): both increments add a
+`--memory-budget` to `mesh`; 38 kept the mosaic and flood caps that B15 (a)
+deleted, as a refusal over that option's value; and 38 deleted `decompose.py`,
+which nothing imported on master. Ruled by Ola, 2026-10-17, on the main
+session's two proposals ("Go for it, both sounds reasonable"):
+
+- **R1. `--memory-budget` is master's: the machine's memory cap.** A size with
+  K, M, G or T (1024-based), default half of the machine's memory, a
+  container's limit counting as the machine's; it caps every DEM window a run
+  assembles (mosaic canvas and catchment flood), as 38 section 4.3 states.
+- **R2. The piece size is `--piece-budget`**: the estimated bytes one piece
+  may take, which decides whether and how the run is cut (the rule under
+  "Choosing the cuts", with `B = --piece-budget`). Default `16G` (2^34
+  bytes), a constant, never read from the machine, so the cut and the mesh
+  stay the same on every machine (K5). Everything this file says of
+  `--memory-budget` as the partition's `B` (B14, "The partition", "The memory
+  estimate", the index, Invariants, DC0, pins 7 and 8, B17) now reads
+  `--piece-budget`. "Budget" keeps B14's word; "piece" says it is not the
+  machine's.
+- **R3. B15 (a) is superseded: the caps stay**, at `--memory-budget`, worded
+  as 38 has them. Consequence for 23c-2, which still assembles the whole
+  window before cutting it: a cut run whose window is over `--memory-budget`
+  is refused before any piece is refined, naming the option and the figure.
+  23c-3 (each piece's window its own) checks each piece's window instead; 23d's
+  runner admits pieces while their estimates' sum fits `--memory-budget` (the
+  machine's figure, which delays a piece and never changes one, so K5 holds).
+
+Decided here:
+
+- **D1. One grammar for both sizes.** `--piece-budget` is parsed by master's
+  `resources.parse_bytes` (`8G`, `512M`, a plain number; 0 refused). 23c-2's
+  `decompose.parse_memory_budget` and its wider B17 grammar (`16GB`, `16GiB`,
+  `16B`) are deleted: two parsers for two size options on one command would
+  disagree on `16GB`. B17's ruling, human-readable sizes, holds.
+- **D2. `decompose.py` comes back as 23c-2's own file**, the merge keeping the
+  branch's version (master deleted a module nothing used; 23c-2 uses it). Not
+  folded elsewhere: it is a pure rule (layer L1, no first-party import), and
+  `basin_run.py` imports `_core`; `resources.py` is the one module that reads
+  the machine, which the partition must never do. `DEFAULT_MEMORY_BUDGET`
+  becomes `DEFAULT_PIECE_BUDGET`; `partition()`'s keyword `memory_budget`
+  becomes `piece_budget`; `PartitionRecord.memory_budget` in the index becomes
+  `piece_budget` (no index has been written by a released build).
+- **D3. Layers** (`tests/python/test_layering.py` on master, where only layer
+  L3 imports `_core`): `decompose` in L1 with an empty row; `pieces` and
+  `basin_run` in L3 (both import `_core`, `pieces` under `TYPE_CHECKING`, which
+  counts); `cli`'s row gains `basin_run decompose io.mesh_index` and whatever
+  else the merged `cli.py` imports.
+- **D4. Threads.** Every `_core` call on a cut run that takes `threads` (each
+  piece's `refine` and `refine_points`, through the paths the uncut run uses)
+  gets `res.threads`, by 38's rule; `refine_seam` takes no count.
+
+**`@developer`'s merge:**
+
+1. `git merge origin/master`; keep master's side of `mosaic.py`,
+   `catchment.py`, `catchment_batch.py`, `resources.py`, and of
+   `15-dem-mosaic.md`'s R7 rows (drop 23c-2's "the cap is deleted" text).
+2. Keep the branch's `decompose.py`; apply D1 and D2's renames; `cli.py`
+   keeps master's `--memory-budget` and `res = _resources(...)`, and adds
+   `--piece-budget` (metavar `BYTES`; help: "The estimated memory one piece
+   of a cut mesh may take; a domain estimated over it is cut into pieces. A
+   number of bytes, or with K, M, G or T (16G). Default 16G, the same on
+   every machine."), refused as a usage error naming `--piece-budget`
+   without `--dem`, `--tolerance` and `--domain` (pin 8), and below one
+   node's bytes (pin 7).
+3. Apply D4; restore `project_structure.md`'s `decompose.py` row beside 38's
+   `resources.py` row (README and INSTALL name no cut today).
+4. Measure with `python3 tools/count_loc.py origin/master HEAD`. The restored
+   `decompose.py` counts again (master deleted it) and the caps' removal no
+   longer subtracts: about 540 net, under 700.
+
+**`@tester`'s rewrite (red before the merge's code, as usual):**
+
+1. `test_catchment.py`, `test_dem_input.py`, `test_mosaic.py`: take master's
+   versions; 23c-2's inversions (old DC11) go.
+2. Restore `tests/python/test_decompose_partition.py`; delete master's
+   `test_t11_decompose_is_gone` and T11's mention in `test_resources.py`'s
+   docstring; add D3's rows to `test_layering.py`.
+3. Every `--memory-budget` or `memory_budget` that means the piece size
+   (found by `grep -l "memory.budget" tests/python/*.py`: `pieces_fixtures.py`,
+   `test_cli_mesh_pieces.py`, `_budget.py`, `_settled.py`,
+   `test_decompose_memory_budget.py`, `test_decompose_partition.py`,
+   `test_mesh_index_conformity.py`) becomes `--piece-budget`, `piece_budget`. The `parse_memory_budget` table goes
+   (`test_resources.py` covers `parse_bytes`); the CLI cases stay: `16G`
+   and `17179869184` give the same pieces and `piece_budget` 17179869184; two
+   refusals exit 2 naming `--piece-budget` and write nothing; `16GB` is
+   refused.
+4. **DC11, rewritten: the cap does not cut, the budget does not cap.** (a) A
+   cut run gives the same piece files under `--memory-budget` values of the
+   window's size and ten times it, and with `resources.machine_memory`
+   patched small and large (DC0's `mosaic.physical_memory` patch,
+   `test_decompose_partition.py:259`, becomes this one);
+   (b) a cut run whose window is over `--memory-budget` exits 2 naming
+   `--memory-budget` and writes nothing; (c) an uncut run is unchanged by
+   `--piece-budget` (K1).
+
 **B17 and B18** are under "New questions, after the rulings", each with Ola's ruling.
 
 ## Questions for Ola
@@ -3397,7 +3499,9 @@ each refuses on a small machine what a larger one meshes.
 - (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
   until 23e windows the catchment flood.
 
-**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a").
+**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a"). **Superseded by
+Ola, 2026-10-17:** increment 38's caps at `--memory-budget` stay (R3 of
+"23c-2 meets master").
 
 **B16. What a mesh made from a catalogue source says about its licence.**
 Asked 2026-10-02 (23a-2). Today the mesh file's `elevation_source` carries
