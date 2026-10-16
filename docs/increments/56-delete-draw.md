@@ -1,6 +1,6 @@
 # Increment 56: delete `rasputin draw` and the drawing package
 
-**Status: designed, design review round 1 approved with wordings** (`@architect`, 2026-10-16), one public PR, branch
+**Status: built, awaiting code review** (`@architect`, 2026-10-16): design review round 1 approved with wordings; red `f0cb6d96`, green `216563e8`, -720 counted lines; prose follows in the docs commit. One public PR, branch
 `worktree-delete-draw`.
 
 ## 1. What Ola asked
