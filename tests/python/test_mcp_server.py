@@ -91,7 +91,7 @@ class TestValidationBeforeTheChild:
     ) -> None:
         argv_file = tmp_path / "argv.json"
         server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
-        result = await call(server, "mesh", {})
+        result = await call(server, "mesh", {"dem": ["d.tif"]})
         assert result.is_error
         assert structured(result) == {"exit_code": None, "error": "out: Field required"}
         assert "out: Field required" in text_block(result)
@@ -101,16 +101,20 @@ class TestValidationBeforeTheChild:
         ("arguments", "error_prefix"),
         [
             pytest.param(
-                {"out": "a.vtk", "tolerance": "ten"},
+                {"dem": ["d.tif"], "out": "a.vtk", "tolerance": "ten"},
                 "tolerance: Input should be a valid number",
                 id="wrong type",
             ),
             pytest.param(
-                {"out": "a.vtk", "bogus": 1},
+                {"dem": ["d.tif"], "out": "a.vtk", "bogus": 1},
                 "bogus: Extra inputs are not permitted",
                 id="unknown key",
             ),
-            pytest.param({"out": "a.vtk", "bbox": [1.0, 2.0, 3.0]}, "bbox: ", id="bbox of three"),
+            pytest.param(
+                {"dem": ["d.tif"], "out": "a.vtk", "bbox": [1.0, 2.0, 3.0]},
+                "bbox: ",
+                id="bbox of three",
+            ),
         ],
     )
     async def test_refused_naming_the_field_and_the_child_never_runs(
@@ -130,7 +134,11 @@ class TestValidationBeforeTheChild:
     ) -> None:
         argv_file = tmp_path / "argv.json"
         server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
-        await call(server, "mesh", {"out": str(out_dir / "a.vtk"), "out_parent": str(out_dir)})
+        await call(
+            server,
+            "mesh",
+            mesh_arguments(Path("d.tif"), out_dir / "a.vtk", out_parent=str(out_dir)),
+        )
         argv = json.loads(argv_file.read_text())
         assert argv[0] == "mesh"
         assert option_value(argv, "--out") == str(out_dir / "a.vtk")
@@ -146,7 +154,7 @@ class TestValidationBeforeTheChild:
     ) -> None:
         argv_file = tmp_path / "argv.json"
         server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
-        await call(server, "mesh", {"out": str(out_dir / "a.vtk"), "stats": "-"})
+        await call(server, "mesh", mesh_arguments(Path("d.tif"), out_dir / "a.vtk", stats="-"))
         argv = json.loads(argv_file.read_text())
         stats = Path(option_value(argv, "--stats"))
         assert stats.parent == out_dir
@@ -160,7 +168,9 @@ class TestValidationBeforeTheChild:
         argv_file = tmp_path / "argv.json"
         server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
         keep = out_dir / "keep.json"
-        await call(server, "mesh", {"out": str(out_dir / "a.vtk"), "record_path": str(keep)})
+        await call(
+            server, "mesh", mesh_arguments(Path("d.tif"), out_dir / "a.vtk", record_path=str(keep))
+        )
         argv = json.loads(argv_file.read_text())
         assert argv.count("--record") == 1
         assert option_value(argv, "--record") == str(keep)
@@ -169,7 +179,7 @@ class TestValidationBeforeTheChild:
 # ---------------------------------------------------------------- T5
 
 REFUSAL = [
-    "Usage: rasputin mesh [OPTIONS] [NAME]",
+    "Usage: rasputin mesh [OPTIONS]",
     "Try 'rasputin mesh --help' for help.",
     "",
     "Error: Invalid value for --dem: cannot read /nonexistent.tif: No such file or directory",

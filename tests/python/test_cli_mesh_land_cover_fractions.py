@@ -320,17 +320,6 @@ class TestRefusals:
         assert "--land-cover" in output and "corine" in output, output
         assert not target.exists()
 
-    def test_without_a_dem_it_is_refused(self, classes: Any, tmp_path: Path, cache: Path) -> None:
-        target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "mesh", "catchment", "--flat", "--land-cover", KEY, "--cache", str(cache),
-            "--out", str(target),
-        )  # fmt: skip
-        assert code == USAGE, output
-        assert "No such option" not in output, output
-        assert "--dem" in output and "--land-cover" in output, output
-        assert not target.exists()
-
     def test_an_unknown_key_is_a_usage_error_naming_the_catalogue(
         self, classes: Any, tmp_path: Path, dem: Path, domain: Path, cache: Path
     ) -> None:

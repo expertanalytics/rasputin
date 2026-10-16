@@ -53,11 +53,15 @@ WAITING = re.compile(r"^waiting for a running job, [0-9.]+ s$")
 
 
 def tool_names(app: Any) -> list[str]:
-    """The expected tool list: the CLI's commands, in its order, ``-`` as ``_``."""
+    """The expected tool list: the CLI's shown commands, in its order, ``-`` as ``_``."""
     import typer
 
     commands = typer.main.get_command(app).commands
-    return [name.replace("-", "_") for name in commands if name != SERVER_COMMAND]
+    return [
+        name.replace("-", "_")
+        for name, command in commands.items()
+        if name != SERVER_COMMAND and not command.hidden
+    ]
 
 
 def fake_child(tmp_path: Path, **spec: Any) -> list[str]:

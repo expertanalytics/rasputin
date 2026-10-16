@@ -260,15 +260,6 @@ class TestRefusals:
         )
         assert "--tolerance-near needs --tolerance-ramp" not in out
 
-    def test_without_dem(self, tmp_path: Path, line: Path) -> None:
-        refused(
-            tmp_path,
-            "mesh",
-            *("catchment", "--flat", "--tolerance-near", str(line), "1"),
-            *("--tolerance-ramp", "0", "40"),
-            says=("applies only with --dem", "--tolerance-near"),
-        )
-
     def test_a_crs_without_lines(self, tmp_path: Path, bumpy: Path, box: Path, line: Path) -> None:
         """Section 9.1: as --domain-crs without --domain."""
         args = ramp_args(bumpy, box, line, "--tolerance", "20", "--tolerance-near-crs", "EPSG:4326")

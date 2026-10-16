@@ -197,14 +197,6 @@ class TestRefusals:
         assert "--tolerance" in output
         assert not out.exists()
 
-    def test_tolerance_with_a_fixture(self, tmp_path: Path) -> None:
-        out = tmp_path / "x.vtk"
-        code, output = invoke("mesh", "catchment", "--tolerance", "1", "--out", str(out))
-        assert code == USAGE, output
-        assert "No such option" not in output, output
-        assert "--tolerance" in output
-        assert not out.exists()
-
 
 class TestWithoutTolerance:
     """U1 (a): increment 12's output, byte for byte."""

@@ -34,10 +34,14 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from cli_helpers import runner
+from cli_helpers import SQUARE, crossing_lines, featured_args, polygon_file, rough_dem, runner
 
 vtk = pytest.importorskip("vtk")
 numpy_support = pytest.importorskip("vtk.util.numpy_support")
+
+bumpy = rough_dem(16)
+square = polygon_file(SQUARE)
+crossing = crossing_lines()
 
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary  # noqa: E402
 
@@ -271,25 +275,28 @@ class TestEmptyCases:
 
 
 class TestThroughTheCommand:
-    """`rasputin mesh road-crosses-river --flat --out x.vtk`, opened by ParaView's reader."""
-
-    FEATURED = "road-crosses-river"
+    """`rasputin mesh` with a road crossing a river, opened by ParaView's reader."""
 
     @pytest.fixture
-    def written(self, tmp_path: Path, binary: bool) -> Path:
+    def written(
+        self, tmp_path: Path, binary: bool, bumpy: Path, square: Path, crossing: Path
+    ) -> Path:
         from tin_engine.cli import app
 
         out = tmp_path / "rr.vtk"
-        args = ["mesh", self.FEATURED, "--flat", "--crs", "EPSG:25833", "--out", str(out)]
+        args = ["mesh", *featured_args(bumpy, square, crossing), "--out", str(out)]
         result = runner.invoke(app, [*args, "--binary" if binary else "--ascii"])
         assert result.exit_code == 0, result.output
         return out
 
-    def test_it_is_the_fixtures_mesh_with_its_constraints(self, written: Path) -> None:
+    def test_it_is_the_files_mesh_with_its_constraints(self, written: Path) -> None:
+        from vtkread import read_vtk
+
+        parsed = read_vtk(written.read_bytes())
         poly = read_back(written, "vtkPDataSetReader")
-        assert poly.GetNumberOfPoints() == 9  # type: ignore[attr-defined]
-        assert poly.GetNumberOfPolys() == 12  # type: ignore[attr-defined]
-        assert poly.GetNumberOfLines() == 8  # type: ignore[attr-defined]
+        assert poly.GetNumberOfPoints() == len(parsed.points) > 0  # type: ignore[attr-defined]
+        assert poly.GetNumberOfPolys() == len(parsed.polygons) > 0  # type: ignore[attr-defined]
+        assert poly.GetNumberOfLines() == len(parsed.lines) > 0  # type: ignore[attr-defined]
 
     def test_the_river_and_road_arrays_come_through(self, written: Path) -> None:
         poly = read_back(written, "vtkPDataSetReader")
@@ -299,11 +306,9 @@ class TestThroughTheCommand:
         assert not river[lines:].any() and not road[lines:].any()
 
     def test_the_metadata_comes_through(self, written: Path) -> None:
-        """Increment 25 (D2): a ``--flat`` run writes ``crs`` and ``heights``,
-        and no ``elevation_source`` any more."""
+        """A DEM run writes the DEM's ``crs``, and no ``elevation_source``."""
         poly = read_back(written, "vtkPDataSetReader")
         assert strings(poly, "crs") == ["EPSG:25833"]
-        assert strings(poly, "heights") == ["none: every z is 0 (--flat)"]
         assert poly.GetFieldData().GetAbstractArray("elevation_source") is None  # type: ignore[attr-defined]
         assert strings(poly, "feature_vocabulary") == [DEFAULT_VOCABULARY.fingerprint()]
 

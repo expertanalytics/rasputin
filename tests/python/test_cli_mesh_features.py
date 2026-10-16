@@ -219,14 +219,6 @@ class TestUsage:
         assert code == USAGE and flag in output and "No such option" not in output, output
         assert not target.exists()
 
-    def test_a_gallery_fixture_with_features_is_refused(
-        self, tmp_path: Path, gallery: Path
-    ) -> None:
-        code, output = invoke(
-            "mesh", "river", "--flat", "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
-        )
-        assert code == USAGE and "--features" in output and "No such option" not in output, output
-
     def test_an_unknown_suffix_is_refused_naming_it(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:

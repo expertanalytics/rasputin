@@ -420,9 +420,6 @@ class TestC5Usage:
         write_tiles(other, {"a.tif": whole(3, 4, array=terrain(3, 4))})
         self.refused(tmp_path, "--dem", str(mosaic_dir), "--dem", str(other), says=("--dem",))
 
-    def test_bbox_without_dem(self, tmp_path: Path) -> None:
-        self.refused(tmp_path, "catchment", "--bbox", "0", "0", "1", "1", says=("--bbox",))
-
     @pytest.mark.parametrize(
         "box", [("1", "0", "0", "1"), ("0", "0", "nan", "1")], ids=["inverted", "nan"]
     )  # fmt: skip

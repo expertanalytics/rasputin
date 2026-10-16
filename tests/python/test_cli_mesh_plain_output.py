@@ -336,22 +336,6 @@ class TestTheOtherPaths:
             "nodata_vertices_removed",
         }
 
-    @pytest.mark.parametrize("suffix", [".vtk", ".ply"])
-    @pytest.mark.parametrize("crs", [(), ("--crs", "EPSG:25833")], ids=["no-crs", "crs"])
-    def test_flat(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str, crs: tuple[str, ...]
-    ) -> None:
-        out = tmp_path / f"c{suffix}"
-        mesh(monkeypatch, "catchment", "--flat", *crs, "--out", str(out))
-        if suffix == ".vtk":
-            fields = vtk_fields(read_vtk(out.read_bytes()))
-        else:
-            fields = ply_fields(parse_header(out.read_bytes()).comments)
-        expected = {"heights": "none: every z is 0 (--flat)"}
-        if crs:
-            expected["crs"] = "EPSG:25833"
-        assert fields == expected
-
     def test_tiles(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         source = whole(9, 13, array=terrain(9, 13))
         write_tiles(tmp_path / "tiles", quadrants(source, row_cut=4, col_cut=6, overlap=1))
@@ -410,7 +394,6 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
             *("--dem", str(holed), "--domain", str(square), "--tolerance", "1"),
             *("--features", str(corine), "--features-map", "corine"),
         ],
-        "flat": ["catchment", "--flat"],
         "reprojected": [
             *("--dem", str(VELHAS / "anadem_velhas.tif")),
             *("--domain", str(VELHAS / "catchment.geojson")),
@@ -419,7 +402,7 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
     }
 
 
-KINDS = ("refined", "strided", "tiles", "features", "flat", "reprojected")
+KINDS = ("refined", "strided", "tiles", "features", "reprojected")
 
 
 class TestStderr:
@@ -592,16 +575,13 @@ class TestRecord:
         lines = result.stdout.splitlines()
         assert [Path(p).resolve() for p in lines] == [out.resolve(), md.resolve(), rec.resolve()]
 
-    @pytest.mark.parametrize("kind", ["strided", "flat"])
-    def test_the_no_tolerance_and_flat_paths_write_a_record(
-        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+    def test_the_no_tolerance_path_writes_a_record(
+        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        args = run_kinds(tmp_path, holed)[kind]
+        args = run_kinds(tmp_path, holed)["strided"]
         _, _, _, rec = record_run(monkeypatch, tmp_path, *args)
         obj = json.loads(rec.read_text(encoding="ascii"))
         assert "tolerance_m" not in obj and "max_error_m" not in obj
-        if kind == "flat":
-            assert obj["heights"] == "none: every z is 0 (--flat)"
 
     def test_without_the_flag_nothing_is_written(
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
