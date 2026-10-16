@@ -442,9 +442,7 @@ counterpart is T7.
 - Local class rasters by key (`kind = "local"`, `values = "classes"`): still
   refused with the pointer to `--land-cover PATH`.
 - GML entries; layers of other formats (Shapefile, FlatGeobuf): no reader.
-- A source's credit in the catchment file or the mesh record when it comes
-  from a vector key: the class map's notice already reaches the mesh record,
-  as today; carrying vector credits is its own change.
+- A source's credit in the catchment file or the mesh record when a vector file the catalogue lists is passed: the class map's notice already reaches the mesh record, as today; carrying vector credits is its own change.
 - Catalogue keys in the vector options (section 4.5): the path is passed.
 - Footprints finer than the extent box; feature counts inside `--bbox`.
 - Telling lakes from land cover in `fits`: the description says it.
@@ -599,3 +597,4 @@ the fixture helpers).
 ## Review
 
 - **Design review, round 1, 2026-10-16.** Commit `46edf5b6`, 0 counted lines, @reviewer: CHANGES REQUESTED, applied by @architect: catalogue keys in the seven vector options dropped (section 4.5; the listing gives `path`, `layer` and each fit's `class_map`; old T7 cut); `source_fits.py` folded into `source_report.py`; section 4.2 names the two widened `Literal`s; T5 and the `Fit` docstring call a fit a header-level necessary condition. Held: one catalogue, readers reused, fits per option, the `rasputin.sources` group, the CORINE figures, both folder defaults.
+- **Design review, round 2, 2026-10-16.** Commit `8f440523`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: section 6 credit bullet ("a vector key" becomes "a vector file the catalogue lists is passed"). Held: only `RemoteSource.values` and `SourceReport.values` widen; `check_values` refuses a features key for `--dem` and `--land-cover` before the path is used.
