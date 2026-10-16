@@ -1,6 +1,6 @@
 # Increment 55: an agent finds the local elevation data and passes it by name
 
-**Status: built** (branch `worktree-mcp-datasets`, green at `8024f89d`; code review round 1 approved with wordings); design review round 1 APPROVED WITH WORDINGS, applied by the main session.
+**Status: built** (branch `worktree-mcp-datasets`, green at `7725c63b` with master merged in; code review rounds 1 and 2 approved with wordings); design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked, and why it failed
 
@@ -557,3 +557,4 @@ updates).
 
 - **Design review, round 1, 2026-10-16.** Commit `8a29e876`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `local` (repeats `kind`), `RunResult.data`/`JSON_STDOUT` and the `Origin`/`Place`/`cache_place` origin tracking dropped; T5 selects from the listing before use; the CRS narrowing at three reads. Held: no second registry; the windowed cache read is needed (`CacheRepository.load` reads whole tiles); the SDK passes HOME by default.
 - **Code review, round 1, 2026-10-16.** Range `9a7c312d..7fe02783`, 240 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the CRS narrowing names `_header` and `_tiles`; `problem` is the message as raised; README's `env` note names the sources file too. Held: no second registry, no Norway or machine specifics, windowed catchment read; unquoted hint path not blocking (as mesh's; MCP passes a list). Field check: Ola's Codex run on the branch build with only command and args found `dtm10-norway` through `sources` and ran catchment then mesh by key.
+- **Code review, round 2, 2026-10-16.** Range `7fa580e1..7725c63b` (merge of master `c5d4be39`, increment 54), 239 counted lines against `c5d4be39`, @reviewer: APPROVED WITH WORDINGS, applied by the main session: ROADMAP row 54 marked merged (#272), row 55's green commit updated. Held: no gallery path, master's panels with `sources` after fetch-stations, `--dem KEY` on three commands, local refusal in fetch, both README sections, eight MCP tools with draw hidden. Full suite on `7725c63b`: exit 0, 8306 passed.
