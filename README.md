@@ -126,8 +126,9 @@ command = "/path/to/venv/bin/rasputin"
 args = ["mcp", "--out-root", "/path/to/outputs"]
 ```
 
-Those two fields are all a client needs. Every file a tool call writes must
-lie inside the output root, `--out-root`, else the call is refused: a path
+Those two fields are all a client needs. Every file a tool call writes, except
+the tile cache `fetch` fills when no `cache` is given, must lie inside the
+output root, `--out-root`, else the call is refused: a path
 that leads out through `..` or a symbolic link is refused too. Missing folders
 inside the root are made as needed, the root among them. Without
 `--out-root` the root is `~/rasputin-output`. The tools that take an input
