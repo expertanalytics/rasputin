@@ -1,6 +1,6 @@
 # Increment 56: delete `rasputin draw` and the drawing package
 
-**Status: built, awaiting code review** (`@architect`, 2026-10-16): design review round 1 approved with wordings; red `f0cb6d96`, green `216563e8`, -720 counted lines; prose follows in the docs commit. One public PR, branch
+**Status: built, code review approved (rounds 1 and 2)** (`@architect`, 2026-10-16): design review round 1 approved with wordings; red `f0cb6d96`, green `216563e8`, -720 counted lines; prose follows in the docs commit. One public PR, branch
 `worktree-delete-draw`.
 
 ## 1. What Ola asked
@@ -201,3 +201,5 @@ small in lines moved, though negative in count.
 ## Review
 
 - **Design review, round 1, 2026-10-16.** Commit `a01d67c8`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `testing.md`'s `cdt` line naming `test_viz_scene.py`; every `cli.py` docstring naming the gallery, fixtures, `draw`, `viz` or `svg.py`, with a grep check; T2 keeps the engine's own words in the output. Held: users table complete; the seven test files use `test_cli_mesh_features.GALLERY`; the temporary-.svg option has no plugin or doc user (default yes taken, Ola at lunch).
+- **Code review, round 1, 2026-10-16.** Range `c5d4be39..1eea42a9`, -720 counted lines, @reviewer: CHANGES REQUESTED: merge master `a0a1ad45` (#273) first; row 9 "dropped". Held: nothing names viz or draw; the moved tests guard kept code; C++ edits comments only; the temporary-.svg branch had no other user; the 70 to 60 file floor (67 files, 68 after the merge).
+- **Code review, round 2, 2026-10-16.** Merge `2c0beb7a`, -720 counted lines against `a0a1ad45`, @reviewer: APPROVED. Full suite exit 0 (7880 passed). Conflict resolutions as ruled; nothing from #273 lost.
