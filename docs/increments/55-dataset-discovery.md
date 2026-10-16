@@ -1,6 +1,6 @@
 # Increment 55: an agent finds the local elevation data and passes it by name
 
-**Status: designed** (branch `worktree-mcp-datasets`), not yet reviewed.
+**Status: designed** (branch `worktree-mcp-datasets`), design review round 1 APPROVED WITH WORDINGS, applied by the main session.
 
 ## 1. What Ola asked, and why it failed
 
@@ -173,7 +173,7 @@ Rules in `_consistent`, each a `ValueError` naming the field:
   own, read from their headers; one source of truth); `values = "classes"`
   refused ("a local class raster is given to --land-cover as a file").
 - any other kind: `path` refused, `crs` needed (as today, so `fetch/run.py`
-  narrows it with one assertion where it compares the header's CRS).
+  narrows it at each of its three reads (`_header`, `_tiles`, `_region`)).
 - `catalogue()` resolves a relative `path` from the sources file's directory,
   as it already does for `class_map`. It does not check that the path
   exists: the listing reports a missing path as that source's problem, and a
@@ -228,24 +228,15 @@ Interface, in `sources.py` (pure: an environment mapping in, no NumPy, no
 pyproj):
 
 ```python
-Origin = Literal["--cache", "RASPUTIN_DATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "HOME"]
-
-@dataclass(frozen=True, slots=True)
-class Place:
-    path: Path
-    origin: Origin          # the variable or option the path came from
-
-def user_source_candidates(environ: Mapping[str, str]) -> tuple[Place, ...]:
+def user_source_candidates(environ: Mapping[str, str]) -> tuple[Path, ...]:
     """The places looked at, in order: at most two."""
 
-def user_source_file(environ: Mapping[str, str]) -> Place | None:
+def user_source_file(environ: Mapping[str, str]) -> Path | None:
     """The first candidate that is a file."""
 ```
 
-`cli.cache_root` keeps its signature and becomes a one-line wrapper over a
-new `cli.cache_place(option, environ) -> Place | None` that also says where
-the path came from. `cli._known_sources` reads `user_source_file(environ)`.
-`cli.data_root` stays, now used by `cache_place` and
+`cli.cache_root` is unchanged. `cli._known_sources` reads `user_source_file(environ)`.
+`cli.data_root` stays, now used by `cache_root` and
 `user_source_candidates` only.
 
 ### 4.4 `--dem KEY` everywhere (`cli.py`)
@@ -292,7 +283,7 @@ values, and a class source, are refused as today.
 rasputin sources [--bbox WEST SOUTH EAST NORTH] [--cache PATH]
 ```
 
-Prints one JSON document on stdout (indented). It is a tool through the
+Prints one JSON document on stdout on one line, so the tool result's `stdout` holds it as one string. It is a tool through the
 existing derivation, named `sources`, read-only in its MCP annotations.
 `--bbox` is in degrees, WGS 84 longitude and latitude; a point is a box with
 west equal to east and south equal to north. Exit 0 whenever the document is
@@ -307,7 +298,6 @@ class SourceReport(BaseModel):            # frozen
     id: str
     kind: str                             # "local", "one-cog", "cog-tiles", "one-cog-per-year"
     values: Literal["heights", "classes"]
-    local: bool
     path: str | None                      # the files (local) or the cache directory (remote)
     present: bool                         # local: the path exists; remote: a cache manifest exists
     tiles: int                            # files read (local) or cached objects (remote)
@@ -327,12 +317,10 @@ class SourceReport(BaseModel):            # frozen
 
 class CatalogueReport(BaseModel):
     user_file: str | None                 # the sources file read
-    user_file_from: Origin | None
     looked_at: tuple[str, ...]            # every candidate path, in order
     register_at: str | None               # where to add a local source: the file read, else the first candidate
     user_file_problem: str | None         # a refused file: its error; the package's sources are still listed
     cache: str | None
-    cache_from: Origin | None
     note: str | None                      # see below
     sources: tuple[SourceReport, ...]     # package then user, in file order
 
@@ -377,16 +365,11 @@ What each figure is, all from the headers through the existing readers:
 
 The CLI command is thin: it builds the catalogue (catching the user file's
 `ValueError` into `user_file_problem` and listing the package's sources),
-calls `report`, fills the places, and prints `model_dump_json(indent=2)`.
+calls `report`, fills the places, and prints `model_dump_json()`.
 
 ### 4.6 The MCP side
 
-- `mcp/schema.py`: `READ_ONLY` gains `"sources"`. `RunResult` gains
-  `data: Any = None`; a new `JSON_STDOUT = frozenset({"sources"})` names the
-  tools whose stdout is one JSON document. `server._call` sets
-  `data = json.loads("\n".join(stdout))` for them, so the agent gets the
-  listing as structured content, not as text lines. The output schema of
-  every tool gains the optional `data` field.
+- `mcp/schema.py`: `READ_ONLY` gains `"sources"`; `RunResult` and the output schemas are unchanged.
 - `INSTRUCTIONS` in `mcp/server.py`: the line "A catalogue DEM source must be
   fetched first: run fetch over the domain, then mesh." is deleted, and
   these lines lead:
@@ -477,24 +460,22 @@ the real `~/.config/rasputin`.
   with `path`, is refused; `description` defaults to "".
 - **T2 places** (pure, environment mappings): the candidate order of section
   4.3, the existence rule ("set" but missing falls through), relative
-  `XDG_CONFIG_HOME` and `HOME` ignored, `cache_place` origins for each of the
-  four routes; `cache_root` unchanged for the existing table of cases.
+  `XDG_CONFIG_HOME` and `HOME` ignored, `cache_root` unchanged for the existing table of cases.
 - **T3 discovery through MCP** (in process, `mcp_driver.call` on
   `build_server(cli.app)` with the production child): `HOME` set to a temp
   directory holding `.config/rasputin/sources.toml` that registers fixture L,
   `RASPUTIN_DATA` and `XDG_CONFIG_HOME` deleted. `sources` returns
-  `structured_content["data"]` with: the local entry, `local` true,
-  `present` true, `tiles` 4, `crs` "EPSG:25833", `crs_name` naming UTM zone
+  `json.loads(structured_content["stdout"][0])` with: the local entry, `present` true, `tiles` 4, `crs` "EPSG:25833", `crs_name` naming UTM zone
   33N, `cell_m` (100.0, 100.0), `z_unit` "metre" with `z_unit_from`
   "catalogue", the coverage box of fixture L to 1e-6, its description and
-  credit; `user_file_from` "HOME"; the shipped sources listed with
+  credit; `user_file` under the temp home; the shipped sources listed with
   `present` false and their descriptions; the tool's annotations read-only.
 - **T4 choice from the listing**: with `bbox` (15.15 59.33 15.20 59.38), the
   local entry has `box_covered` 1.0 and every uncached remote source None;
   with (15.2 59.3 15.6 59.4), 0.3748; with (16 60 16.1 60.1), 0.0. A second
   local entry, fixture L written as one 200 m file (every second node), lists
   `cell_m` (200.0, 200.0), so the two are told apart by cell size alone.
-- **T5 use by key**: through MCP, `catchment` with `dem=["<key>"]`, the seed
+- **T5 selection then use**: `sources` with bbox (15.15 59.33 15.20 59.38) over T4's two local entries; the test takes the id with `box_covered` 1.0 and the smallest `cell_m`, asserts it is the 100 m entry, then calls `catchment` with `dem=[that id]`, the seed
   and the lake of fixture L: exit 0, the GeoJSON's `nodes` 766; then `mesh`
   with `dem=["<key>"]`, `domain` that file and `tolerance` 5: exit 0, and the
   run record's `dem_credit` is the entry's credit. `fetch` with the local key
@@ -519,8 +500,7 @@ the real `~/.config/rasputin`.
   through `StdioServerParameters` with `env={"HOME": <temp home>, "PATH":
   os.environ["PATH"]}` (what the SDK passes by default, less the user's own
   home), `sources` lists fixture L's entry. This is the Codex condition.
-- Updated, not new: `test_mcp_schema.py`'s snapshots (the new tool, `data` in
-  the output schema), `test_catalogue_data.py`'s check of the help text
+- Updated, not new: `test_mcp_schema.py`'s snapshots (the new tool), `test_catalogue_data.py`'s check of the help text
   naming `$RASPUTIN_DATA/sources.toml`, and `catchment_fixtures.MemoryRepository`,
   which gains `load_window` (a slice, recorded in `loads` as `load` is) and a
   `check` that passes.
@@ -546,10 +526,10 @@ Net production lines (`CLAUDE.md` §2; TOML and docs not counted):
 | Part | Lines |
 | --- | --- |
 | `sources.py`: local kind, `path`, `description`, rules, places | 45 |
-| `cli.py`: `_dem_sources` entry, mesh credit, catchment and station-catchments keys and `--cache`, NotCached message, fetch refusal, `cache_place`, `sources` command | 85 |
+| `cli.py`: `_dem_sources` entry, mesh credit, catchment and station-catchments keys and `--cache`, NotCached message, fetch refusal, `sources` command | 85 |
 | `catchment.py` check and window; `io/cog.py` `NotCached` box; `fetch/run.py` assertion | 15 |
 | `source_report.py` | 140 |
-| `mcp/schema.py`, `mcp/server.py` | 12 |
+| `mcp/schema.py`, `mcp/server.py` | 4 |
 | **Total** | **about 300**; worst case 400 |
 
 One PR, the full path (over 50 lines). It touches no refine or mesh code, so
@@ -562,3 +542,7 @@ no `@perf` acceptance run.
 `data/sources.toml`; `README.md`, `project_structure.md`, `ROADMAP.md`;
 tests under `tests/python/` (T1 to T9, `conftest.py`, the snapshot and helper
 updates).
+
+## Review
+
+- **Design review, round 1, 2026-10-16.** Commit `8a29e876`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `local` (repeats `kind`), `RunResult.data`/`JSON_STDOUT` and the `Origin`/`Place`/`cache_place` origin tracking dropped; T5 selects from the listing before use; the CRS narrowing at three reads. Held: no second registry; the windowed cache read is needed (`CacheRepository.load` reads whole tiles); the SDK passes HOME by default.
