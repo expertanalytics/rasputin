@@ -238,7 +238,7 @@ class TestArgvRoundTrip:
 
 # ---------------------------------------------------------------- T3
 
-#: Section 1's eight commands as tool names. Their parameter counts are not
+#: Section 1's eight commands and `sources` as tool names. Their parameter counts are not
 #: pinned: the test below holds each schema's properties equal to the command's
 #: own click parameters, which implies the count, and a pinned count would turn
 #: red on every master merge that adds a CLI option (as `mesh` 34 -> 36 did when
@@ -246,7 +246,7 @@ class TestArgvRoundTrip:
 #: the schema.
 TOOL_NAMES = {
     "mesh", "draw", "fetch", "catchment", "station_catchments",
-    "fetch_stations", "palette", "version",
+    "fetch_stations", "palette", "version", "sources",
 }  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -375,6 +375,10 @@ class TestTheRealApp:
         version = tools["version"].annotations
         assert version is not None
         assert (version.read_only_hint, version.idempotent_hint) == (True, True)
+        listing = tools["sources"].annotations
+        assert listing is not None
+        assert (listing.read_only_hint, listing.idempotent_hint) == (True, True)
+        assert listing.open_world_hint is False
         for name in ("fetch", "fetch_stations"):
             annotations = tools[name].annotations
             assert annotations is not None and annotations.open_world_hint is True, name

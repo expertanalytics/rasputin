@@ -365,8 +365,11 @@ class TestT3DataRoot:
 
     @pytest.mark.parametrize("command", ["fetch", "mesh"])
     def test_the_help_names_the_user_file(self, command: str) -> None:
+        """The user's file is found in more than one place, so the help points
+        at the listing that names the one read, not at one variable."""
         text = plain(runner.invoke(app, [command, "--help"]).output)
-        assert squashed("$RASPUTIN_DATA/sources.toml") in squashed(text), text
+        assert squashed("your sources file (see rasputin sources)") in squashed(text), text
+        assert squashed("$RASPUTIN_DATA/sources.toml") not in squashed(text), text
 
 
 class TestT3ThroughTheCli:

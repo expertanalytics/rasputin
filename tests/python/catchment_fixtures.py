@@ -30,11 +30,12 @@ import numpy.typing as npt
 import shapely
 from shapely.geometry import Polygon, box
 
-from mosaic_fixtures import whole
+from mosaic_fixtures import piece, whole
 from tin_engine.io.models import DemTile
 
 if TYPE_CHECKING:
-    from tin_engine.io.models import TileFootprint
+    from tin_engine.io.models import IndexWindow, TileFootprint
+    from tin_engine.mosaic import MosaicPlan
 
 X0 = 500_000.0
 Y0 = 6_600_000.0
@@ -95,6 +96,16 @@ class MemoryRepository:
     def load(self, name: str) -> DemTile:
         self.loads.append(name)
         return self.tiles[name]
+
+    def load_window(self, name: str, window: IndexWindow) -> DemTile:
+        """The window's slice of the tile, placed as a reader places it; recorded
+        in `loads` as a whole load is."""
+        self.loads.append(name)
+        w = window
+        return piece(self.tiles[name], w.row0, w.row0 + w.rows, w.col0, w.col0 + w.cols)
+
+    def check(self, plan: MosaicPlan) -> None:
+        """Memory lacks no tile it lists."""
 
 
 def node_grid(tile: DemTile) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
