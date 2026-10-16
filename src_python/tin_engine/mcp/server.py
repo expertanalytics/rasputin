@@ -69,6 +69,12 @@ INSTRUCTIONS = (
     "is read from the cache: fetch the area first; a run that lacks data says what to fetch."
     "\nsources also says which sources file and cache it read, and where a local dataset "
     "would be registered.\n"
+    "sources also lists vector datasets (polygons, lines, points) with their path, layer, "
+    "geometry, feature count, attributes and, for land cover, the class values. Each source's "
+    "fits names the tools and arguments it can be given to, with the class map to pass as "
+    "features_map; what the features are is in its description. Pass its path to those "
+    "arguments, its layer as features_layer or lakes_layer, and the fit's class map as "
+    "features_map.\n"
     """\
 Paths are on the machine this server runs on, as for the rasputin command line.
 mesh writes a mesh file at out and returns its run record; the mesh itself never travels here.

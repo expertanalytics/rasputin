@@ -16,7 +16,7 @@ import sqlite3
 import struct
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import shapely
 from shapely.geometry.base import BaseGeometry
@@ -175,3 +175,53 @@ def query_features(
                 f"layer {layer.table!r} row {fid}: srs_id {srs_id}, the layer's is {layer.srs_id}"
             )
         yield RawFeature(fid=fid, geometry=geometry, value=value)
+
+
+@dataclass(frozen=True, slots=True)
+class LayerSummary:
+    """A layer's header: its declared geometry type name, feature count,
+    columns less the key and the geometry, and extent in its CRS (None
+    when neither the R-tree nor `gpkg_contents` states one)."""
+
+    geometry: str
+    features: int
+    attributes: tuple[str, ...]
+    extent: Box | None
+
+
+def layer_summary(conn: sqlite3.Connection, layer: GpkgLayer) -> LayerSummary:
+    """The header of ``layer``: the extent from its R-tree when it has one,
+    else `gpkg_contents`' bounds when all four are set."""
+    (geometry,) = conn.execute(
+        "SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?",
+        (layer.table,),
+    ).fetchone()
+    table = _q(layer.table)
+    (features,) = conn.execute(f"SELECT count(*) FROM {table}").fetchone()
+    names = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
+    if layer.rtree is not None:
+        query = f"SELECT min(minx), min(miny), max(maxx), max(maxy) FROM {_q(layer.rtree)}"
+        bounds = conn.execute(query).fetchone()
+    else:
+        bounds = conn.execute(
+            "SELECT min_x, min_y, max_x, max_y FROM gpkg_contents WHERE table_name = ?",
+            (layer.table,),
+        ).fetchone()
+    return LayerSummary(
+        geometry=str(geometry),
+        features=features,
+        attributes=tuple(n for n in names if n not in (layer.pk, layer.column)),
+        extent=None if None in bounds else cast(Box, tuple(map(float, bounds))),
+    )
+
+
+def distinct_values(
+    conn: sqlite3.Connection, layer: GpkgLayer, column: str, limit: int
+) -> tuple[tuple[str, ...], int]:
+    """The distinct values of ``column`` as text, sorted, at most ``limit``
+    of them, and how many there are; a null is no value."""
+    rows = conn.execute(
+        f"SELECT DISTINCT CAST({_q(column)} AS TEXT) AS v FROM {_q(layer.table)} "
+        "WHERE v IS NOT NULL ORDER BY v"
+    ).fetchall()
+    return tuple(v for (v,) in rows[:limit]), len(rows)

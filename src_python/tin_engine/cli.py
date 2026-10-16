@@ -161,6 +161,7 @@ from tin_engine.sources import (
     catalogue,
     check_values,
     data_root,
+    plugin_source_files,
     user_source_file,
     xdg_base,
 )
@@ -868,12 +869,13 @@ def mesh(
     try:
         opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
     except NotCached as exc:
-        area = f"--domain {domain}" if domain is not None else ""
+        area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
         if bbox is not None:
             area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
         frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
-        flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
-        run = f"rasputin fetch {dem[0]} {flags}".rstrip()
+        store = f"--cache {shlex.quote(str(cache))}" if cache else ""
+        flags = " ".join(filter(None, (area, frame, store)))
+        run = f"rasputin fetch {shlex.quote(dem[0])} {flags}".rstrip()
         raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
     # What is read later comes out of `opened`, which then goes, so the
     # tile's one reference is the holder `_dem_mesh` empties.
@@ -1241,9 +1243,9 @@ def _class_fractions(
             words = [
                 f"rasputin fetch {source.id}",
                 f"--year {year}" if year is not None else "",
-                f"--domain {domain}" if domain is not None else "",
+                f"--domain {shlex.quote(str(domain))}" if domain is not None else "",
                 f"--out-crs {shlex.quote(out_crs)}" if out_crs else "",
-                f"--cache {cache}" if cache else "",
+                f"--cache {shlex.quote(str(cache))}" if cache else "",
             ]
             run = " ".join(filter(None, words))
             raise typer.BadParameter(
@@ -1601,11 +1603,15 @@ def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
 
 def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
     """The catalogue's sources with the user's from their sources file
-    (`user_source_file`); a file it refuses is a usage error naming it."""
+    (`user_source_file`) and the plugins'; a user file it refuses is a usage
+    error naming it, a plugin file skipped a line on stderr."""
     try:
-        return catalogue(user_source_file(environ)).sources
+        found = catalogue(user_source_file(environ), plugin_source_files())
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
+    for line in found.refused:
+        typer.echo(f"rasputin: {line}", err=True)
+    return found.sources
 
 
 def _dem_sources(
@@ -2343,8 +2349,9 @@ def catchment(
         result = delineate(request, repository, res)
     except NotCached as exc:
         fetch = "" if exc.box is None else " ".join(repr(v).removesuffix(".0") for v in exc.box)
-        given = f" --cache {cache}" if cache else ""
-        hint = f"; run: rasputin fetch {dem[0]} --bbox {fetch}{given}" if fetch else ""
+        given = f" --cache {shlex.quote(str(cache))}" if cache else ""
+        key = shlex.quote(dem[0])
+        hint = f"; run: rasputin fetch {key} --bbox {fetch}{given}" if fetch else ""
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc

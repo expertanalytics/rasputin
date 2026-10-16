@@ -18,10 +18,13 @@ writing to their caller.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
-from shapely.geometry import Polygon
+import shapely
+from shapely.geometry import Polygon, shape
 
 from tin_engine.crs import parse_crs
 
@@ -60,6 +63,40 @@ def read_collection(doc: object, *, default_crs: str | None) -> tuple[list[dict[
     return list(features), crs
 
 
+@dataclass(frozen=True, slots=True)
+class CollectionSummary:
+    """A GeoJSON object's header, as `rasputin sources` lists it: the
+    geometry type names present, the feature count, the attribute names in
+    first-seen order, the bounds in its CRS (None with no geometry), whether
+    it has a `crs` member, and the CRS a reader taking RFC 7946's default
+    reads it in."""
+
+    geometry: frozenset[str]
+    features: int
+    attributes: tuple[str, ...]
+    extent: tuple[float, float, float, float] | None
+    crs_stated: bool
+    crs: str
+    rows: list[dict[str, Any]]
+
+
+def collection_summary(doc: object) -> CollectionSummary:
+    """The header of one parsed GeoJSON object; refused as `read_collection` refuses."""
+    rows, crs = read_collection(doc, default_crs=RFC7946_CRS)
+    geometries = [f["geometry"] for f in rows if isinstance(f.get("geometry"), dict)]
+    attributes = dict.fromkeys(k for f in rows for k in (f.get("properties") or {}))
+    x0, y0, x1, y1 = map(float, shapely.total_bounds([shape(g) for g in geometries]))
+    return CollectionSummary(
+        geometry=frozenset(str(g.get("type")) for g in geometries),
+        features=len(rows),
+        attributes=tuple(attributes),
+        extent=None if math.isnan(x0) else (x0, y0, x1, y1),
+        crs_stated=isinstance(doc, dict) and "crs" in doc,
+        crs=crs,
+        rows=rows,
+    )
+
+
 def feature_collection(crs: str, features: list[dict[str, Any]]) -> dict[str, Any]:
     """{"type": "FeatureCollection", "crs": <named crs>, "features": features}."""
     return {
@@ -84,7 +121,9 @@ def catchment_geojson(polygon: Polygon, crs: str, properties: Mapping[str, objec
 __all__ = [
     "GEOJSON_SUFFIXES",
     "RFC7946_CRS",
+    "CollectionSummary",
     "catchment_geojson",
+    "collection_summary",
     "feature_collection",
     "read_collection",
 ]
