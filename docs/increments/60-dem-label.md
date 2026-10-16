@@ -39,8 +39,8 @@ Producers, all in `src_python/tin_engine/dem_input.py`: the field
 unpacks it and passes it on; `_open_reprojected`'s `label` parameter.
 
 Production readers of the label: none. Callers of `repository_for` that
-discard it with `[0]`: `cli.py:1671` (`_dem_repository`) and
-`source_report.py:321`.
+discard it with `[0]`: `src_python/tin_engine/cli.py@ed0d313d:1671`
+(`_dem_repository`) and `src_python/tin_engine/source_report.py@ed0d313d:321`.
 
 Test readers: `tests/python/test_dem_input.py:127,136,144` and
 `tests/python/test_cli_mesh_cache.py:254`, each `assert ... .label ...`.
@@ -48,8 +48,8 @@ One more test line builds the pair: `tests/python/test_dem_input_domain.py:671`,
 whose stand-in `repository_for` returns `(InMemory(tiles), "memory")`.
 
 Outside the package: the private plugin `rasputin-lsm` calls
-`repository_for(paths)[0]` once (`src/rasputin_lsm/cli.py:117` on
-`private/master`). It pins rasputin at a commit, so nothing breaks until the
+`repository_for(paths)[0]` once (its module `rasputin_lsm.cli`, line 117,
+on `private/master`). It pins rasputin at a commit, so nothing breaks until the
 pin moves; the pin bump drops the `[0]`. Dated scripts under `docs/benchmarks/`
 and `docs/increments/perf-audit-probes/` unpack the pair; they record what ran
 at their commits and are left as they are.
