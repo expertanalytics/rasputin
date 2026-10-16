@@ -61,6 +61,16 @@ def scribble(out: Annotated[Path, typer.Option("--out", writable=True)]) -> None
     out.write_text("a line\\n")
 """
 
+
+def scribble_defaulting_to(default: Path) -> str:
+    """`SCRIBBLE` with ``--out`` optional, defaulting to ``default``: a call that
+    leaves ``out`` unset writes there."""
+    return SCRIBBLE.replace(
+        'typer.Option("--out", writable=True)])',
+        f'typer.Option("--out", writable=True)] = Path({str(default)!r}))',
+    )
+
+
 #: A plugin whose module cannot be imported.
 IMPORT_ERROR = 'raise ImportError("fakeplug is broken on purpose")\n'
 

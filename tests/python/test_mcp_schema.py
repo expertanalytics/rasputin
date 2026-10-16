@@ -458,19 +458,24 @@ class TestT8bWritesFromAToyApp:
             ("report", "r.md"), ("dashless", "d.md"), ("kept", "k.out"),
         ]  # fmt: skip
 
-    def test_an_unset_output_is_skipped_even_with_a_default(self) -> None:
+    def test_an_unset_output_with_a_default_is_its_default(self) -> None:
+        # The child writes to the default when the caller leaves it unset, so
+        # the default is an output; an unset one defaulting to None is not.
         save = derived(writing_app())["save"]
-        assert writes_of(save, {"target": "t.txt"}) == [("target", "t.txt")]
+        assert writes_of(save, {"target": "t.txt"}) == [
+            ("target", "t.txt"),
+            ("kept", "default.out"),
+        ]
 
     def test_a_dash_is_skipped_only_where_the_parameter_allows_one(self) -> None:
         save = derived(writing_app())["save"]
         got = writes_of(save, {"target": "t.txt", "report": "-", "dashless": "-"})
-        assert got == [("target", "t.txt"), ("dashless", "-")]
+        assert got == [("target", "t.txt"), ("dashless", "-"), ("kept", "default.out")]
 
     def test_a_path_not_marked_writable_and_a_string_are_not_outputs(self) -> None:
         save = derived(writing_app())["save"]
         got = writes_of(save, {"target": "t.txt", "read": "in.tif", "text": "words"})
-        assert got == [("target", "t.txt")]
+        assert got == [("target", "t.txt"), ("kept", "default.out")]
 
     def test_a_command_with_no_output_writes_nothing(self) -> None:
         assert writes_of(derived(writing_app())["other"], {}) == []
