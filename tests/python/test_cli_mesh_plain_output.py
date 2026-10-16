@@ -17,8 +17,7 @@ Readers come from `recordread.py` (`file_field`, `stats_row`, `stats_names`,
 
 PINNED HERE, where D5 is silent: `--record`'s refusals are usage errors
 (exit 2) naming `--record`, as `--stats`'s are; its path is echoed on stdout
-on its own line after the mesh and `--stats` paths; `PATH` outside
-`--out-parent` is refused like any other output.
+on its own line after the mesh and `--stats` paths.
 
 External input: none new. `--record` writes a file and reads nothing, so
 `tester.md` section 3C does not apply.
@@ -648,17 +647,6 @@ class TestRecordRefusals:
                          "--record", "-")  # fmt: skip
         assert "--record" in output, output
         self.assert_nothing_written(tmp_path, before)
-
-    def test_outside_out_parent(
-        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        inside = tmp_path / "inside"
-        inside.mkdir()
-        before = {p.name for p in tmp_path.iterdir()}
-        refused(monkeypatch, "--dem", str(holed), "--out-parent", str(inside),
-                "--out", str(inside / "x.vtk"), "--record", str(tmp_path / "x.json"))  # fmt: skip
-        self.assert_nothing_written(tmp_path, before)
-        assert list(inside.iterdir()) == []
 
     @pytest.mark.parametrize("value", ["-1", "nan"])
     def test_a_refused_run_writes_no_record(

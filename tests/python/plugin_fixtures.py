@@ -44,6 +44,23 @@ def mesh() -> None:
     typer.echo("plugin mesh ran")
 """
 
+#: A plugin whose one command writes a line to a ``writable=True`` ``--out``, by
+#: itself, without `cli_kit.destination`: the MCP server's output root is its
+#: only fence.
+SCRIBBLE = """\
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+app = typer.Typer()
+
+
+@app.command()
+def scribble(out: Annotated[Path, typer.Option("--out", writable=True)]) -> None:
+    out.write_text("a line\\n")
+"""
+
 #: A plugin whose module cannot be imported.
 IMPORT_ERROR = 'raise ImportError("fakeplug is broken on purpose")\n'
 

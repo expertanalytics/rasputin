@@ -175,20 +175,6 @@ class TestStatsToAFile:
         rows = table(section(md.read_text(encoding="utf-8"), "Sizes"))
         assert "s.ply" in rows and "e.ply" in rows
 
-    def test_out_parent_applies_to_the_report(self, tmp_path: Path, bumpy: Path) -> None:
-        out, md = tmp_path / "x.vtk", tmp_path / "x.md"
-        mesh(
-            "--dem",
-            str(bumpy),
-            "--out",
-            str(out),
-            "--stats",
-            str(md),
-            "--out-parent",
-            str(tmp_path),
-        )
-        assert md.is_file()
-
     def test_the_stderr_summary_is_unchanged(self, tmp_path: Path, bumpy: Path) -> None:
         plain_run = mesh("--dem", str(bumpy), "--tolerance", "1", "--out", str(tmp_path / "a.vtk"))
         stats_run = mesh(
@@ -343,24 +329,6 @@ class TestRefusals:
         )
         assert code == USAGE, output
         assert "--stats" in output and "overwrite" in output
-        assert self.nothing_written(tmp_path) == []
-
-    def test_stats_outside_out_parent(self, tmp_path: Path, bumpy: Path) -> None:
-        inside = tmp_path / "inside"
-        inside.mkdir()
-        code, output = invoke(
-            "mesh",
-            "--dem",
-            str(bumpy),
-            "--out",
-            str(inside / "x.vtk"),
-            "--out-parent",
-            str(inside),
-            "--stats",
-            str(tmp_path / "x.md"),
-        )
-        assert code == USAGE, output
-        assert "outside the permitted parent" in output
         assert self.nothing_written(tmp_path) == []
 
     def test_stats_through_a_symlink(self, tmp_path: Path, bumpy: Path) -> None:
