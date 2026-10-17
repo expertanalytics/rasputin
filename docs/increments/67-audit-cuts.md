@@ -324,3 +324,4 @@ All three are far under the limit. In the diff, P1 is mostly test deletions
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `55acdec4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the history check runs at the prose-only commit; three test cuts finished (a whole test and two docstrings); `pyproject.toml` is not governed. The scanner question: Ola ruled delete. Idea kept: a later sweep of 2771 history labels in `tests/python`.
+- **Code review, round 1 (P1), 2026-10-17.** Range `df923398..eee5b2ab`, +13 counted lines (estimate -2 to +10; `source_report.py` +12, keyword arguments wrap), @reviewer: APPROVED. `c3e57c43` changes no code; the prose reads as plain prose; deletions match 4.4; 7883 passed with an empty config folder. Suggestions for the test sweep: `test_station_set.py`'s name-only test; a terse comment at `feature_input.py:691`.
