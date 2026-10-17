@@ -43,7 +43,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
-#include <optional>
 #include <set>
 #include <span>
 #include <sstream>
@@ -72,27 +71,6 @@ using quality_fixtures::Start;
 namespace cfo = constraint_foot_oracles;
 
 namespace {
-
-// RED-STEP SCAFFOLDING, removed after green: the three fields do not exist on
-// master, and reading them directly would stop the whole file compiling, so
-// T1's and T5's oracle counts could not be seen failing on either CI leg. A
-// missing field reads as empty, which no assertion accepts.
-template <class O>
-std::optional<std::size_t> flat_as_written(const O& o) {
-    if constexpr (requires { o.flat_as_written; }) return o.flat_as_written;
-    else return std::nullopt;
-}
-template <class O>
-std::optional<std::size_t> flips_as_written(const O& o) {
-    if constexpr (requires { o.flips_as_written; }) return o.flips_as_written;
-    else return std::nullopt;
-}
-template <class O>
-std::optional<std::size_t> illegal_as_written(const O& o) {
-    if constexpr (requires { o.illegal_as_written; }) return o.illegal_as_written;
-    else return std::nullopt;
-}
-constexpr std::optional<std::size_t> kOne{1};
 
 // The oracle, on the written doubles (see the head of the file).
 std::size_t written_violations(const PointRefineOutcome& out) {
@@ -230,8 +208,6 @@ struct Tally {
     }
 };
 
-std::size_t as_count(std::optional<std::size_t> v) { return v ? *v : 1; }  // missing: counted as a failure
-
 // Both oracles and the three counts over all 100 outlines.
 struct Sweep {
     Tally delaunay, over, not_ccw, flat, flips_written, illegal;
@@ -269,9 +245,9 @@ Sweep sweep(bool feet) {
         // for the two evaluation orders, on |z| <= 5 m (W1's z range).
         const double worst = cfo::node_findings(dem, new_triangles(out, phase1), kTol).worst;
         if (out.max_error + 1e-9 < worst) s.max_error_short.emplace_back(k, worst - out.max_error);
-        s.flat.add(k, as_count(flat_as_written(out)));
-        s.flips_written.add(k, as_count(flips_as_written(out)));
-        s.illegal.add(k, as_count(illegal_as_written(out)));
+        s.flat.add(k, out.flat_as_written);
+        s.flips_written.add(k, out.flips_as_written);
+        s.illegal.add(k, out.illegal_as_written);
     }
     return s;
 }
@@ -282,19 +258,17 @@ Sweep sweep(bool feet) {
 
 TEST_CASE("T1: with constraint feet on, every W1 outline's output is Delaunay as written, none flat, none left illegal",
           "[refine_points][written_delaunay][T1]") {
-    // Master: 19 edges in 12 outlines (k = 0, 3, 10, 36, 43, 52, 53, 66, 74,
-    // 77, 84, 93), macOS arm64, measured by @architect with the bindings.
     const auto s = sweep(true);
     {
         INFO("Delaunay as written: " << s.delaunay.names());
         CHECK(s.delaunay.total == 0);
     }
     {
-        INFO("flat_as_written (missing field counts 1 per outline): " << s.flat.names());
+        INFO("flat_as_written: " << s.flat.names());
         CHECK(s.flat.total == 0);
     }
     {
-        INFO("illegal_as_written (missing field counts 1 per outline): " << s.illegal.names());
+        INFO("illegal_as_written: " << s.illegal.names());
         CHECK(s.illegal.total == 0);
     }
     {
@@ -312,11 +286,11 @@ TEST_CASE("T2: with constraint feet off, the check swaps nothing and the output 
     // round differently).
     const auto s = sweep(false);
     {
-        INFO("flips_as_written (missing field counts 1 per outline): " << s.flips_written.names());
+        INFO("flips_as_written: " << s.flips_written.names());
         CHECK(s.flips_written.total == 0);
     }
     {
-        INFO("illegal_as_written (missing field counts 1 per outline): " << s.illegal.names());
+        INFO("illegal_as_written: " << s.illegal.names());
         CHECK(s.illegal.total == 0);
     }
     {
@@ -360,7 +334,7 @@ TEST_CASE("T3: a triangle collinear as written and counter-clockwise on the grid
                                    std::span<const std::array<std::uint32_t, 2>>{edges},
                                    std::span<const std::uint32_t>{masks}, o);
     REQUIRE(out.ok());
-    CHECK(flat_as_written(out) == kOne);
+    CHECK(out.flat_as_written == 1);
     CHECK(out.vertices == std::vector<Point2>{a, b, c, d});
     CHECK(normalised(out.triangles) == normalised(tris));
 }
@@ -397,8 +371,8 @@ TEST_CASE("T5: a triangle flat as written does not stop the pass on the rest of 
     for (const int k : {0, 10}) {
         CAPTURE(k);
         const auto out = w1_run(dem, w1_start(k, &piece), true);
-        CHECK(flat_as_written(out) == kOne);
-        CHECK(flips_as_written(out).value_or(0) > 0);  // a missing field fails
+        CHECK(out.flat_as_written == 1);
+        CHECK(out.flips_as_written > 0);
         CHECK(written_violations(out) == 0);
         CHECK(cfo::node_findings(dem, out, kTol).over == 0);
     }
