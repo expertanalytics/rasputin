@@ -668,7 +668,7 @@ def test_a_red_fast_gate_runs_the_rest_skips_pytest_and_commits_nothing(setup: S
     outcome = setup.start(table=MergeTable(red={"ruff_check"}))
     assert outcome.code == 4, outcome.text
     assert gates_called(outcome) == list(FAST_GATES)
-    assert gate_output("ruff_check", True) in outcome.text, "the gate's output, unchanged"
+    assert gate_output("ruff_check", red=True) in outcome.text, "the gate's output, unchanged"
     assert head(setup.wt) == setup.old_head
     assert setup.merge_head.exists()
     assert "commit" not in outcome.recorder.git_subs()

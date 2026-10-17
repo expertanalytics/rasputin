@@ -1,8 +1,10 @@
-"""Land-cover legends as TOML data files, and the clean-up distances they imply (41).
+"""Land-cover legends as TOML data files, and the clean-up distances they imply.
 
-`docs/increments/41-class-maps-as-data.md`. A legend file is read with
-`tomllib`, checked by a strict Pydantic model, and turned into the frozen
-:class:`~tin_engine.feature_input.Legend` the feature reader takes. The
+`docs/increments/41-class-maps-as-data.md`, *4. The class-map file*.
+
+A legend file is read with `tomllib`, checked by a strict Pydantic model, and
+turned into the frozen :class:`~tin_engine.feature_input.Legend` the feature
+reader takes. The
 shipped legends live in ``tin_engine/data/legends/``; ``property``, the
 identity legend over the vocabulary's names, is built here, not shipped.
 """

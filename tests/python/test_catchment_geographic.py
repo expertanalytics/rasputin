@@ -286,7 +286,7 @@ def test_grow_starts_from_base_and_doubles_both_sides(
     margins = spy(monkeypatch, api, "_joined", 2)
     budget = Resources.fallback().memory_budget
     repo = split(tile)
-    api._grow(repo.footprints(), repo, bounds, flood, False, budget, base=base)
+    api._grow(repo.footprints(), repo, bounds, flood, burnt=False, budget=budget, base=base)
     assert len(margins) >= 5 and len(margins) % 2 == 1, margins
     assert all(tuple(g) == base for g in margins[0::2]), margins
     doubled = [(2.0**k * base[0], 2.0**k * base[1]) for k in range(1, len(margins) // 2 + 1)]

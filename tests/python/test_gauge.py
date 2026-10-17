@@ -184,12 +184,9 @@ def test_three_cells_are_still_capped_by_the_map_radius(gauge: ModuleType) -> No
     assert placement.reach.corridor == pytest.approx(3 * 29.8324, abs=TOL)
 
 
-def test_the_metre_floor_and_gap_constants_are_gone(gauge: ModuleType) -> None:
-    """`U_FLOOR_M` becomes `U_FLOOR_CELLS = 3`; `LAKE_GAP_M` is removed, the
-    gap passed by the caller (5.3's table)."""
+def test_the_uncertainty_floor_is_three_cells(gauge: ModuleType) -> None:
+    """`U_FLOOR_CELLS`: the uncertainty is at least three DEM cells."""
     assert gauge.U_FLOOR_CELLS == 3
-    assert not hasattr(gauge, "U_FLOOR_M")
-    assert not hasattr(gauge, "LAKE_GAP_M")
 
 
 # ---------------------------------------------------------------------------

@@ -1,24 +1,25 @@
-"""Terrain features: polygons and lines read, mapped to bits, and clipped (16b-1).
+"""Terrain features: polygons and lines read, mapped to bits, and clipped.
 
-`docs/increments/16b-terrain-polygons.md` R1, R4-R7. A source is a GeoJSON
-``FeatureCollection``, a GeoPackage layer or OGR's GML2, by suffix. Each
-feature's attribute goes through a :class:`Legend` to vocabulary names and so
-to a mask; its rings and lines are pre-clipped to a region around the domain
-(R5), moved into the DEM's CRS vertex by vertex, and clipped to the domain as
-linework (R6); land cover with the band on (32) is cut by the domain as areas.
-What comes out is frozen data in the DEM's CRS.
+`docs/increments/16b-terrain-polygons.md`, *The blueprint: data flow and boundaries*.
 
-**The pre-clip keeps whole edges** (R5, Ola 2026-09-28): an edge is kept when
-it lies within its widening ``w(e)`` of the region, and dropped whole
-otherwise, so every kept edge reaches the engine between its own two vertices.
-``w(e)`` bounds how far the edge's straight line in the DEM's CRS strays from
-its straight line in the source's, so a dropped edge misses the domain (I4).
+A source is a GeoJSON ``FeatureCollection``, a GeoPackage layer or OGR's GML2,
+by suffix. Each feature's attribute goes through a :class:`Legend` to
+vocabulary names and so to a mask; its rings and lines are pre-clipped to a
+region around the domain, moved into the DEM's CRS vertex by vertex, and
+clipped to the domain as linework; land cover with the simplification band on
+is cut by the domain as areas. What comes out is frozen data in the DEM's CRS.
+
+**The pre-clip keeps whole edges**: an edge is kept when it lies within its
+widening ``w(e)`` of the region, and dropped whole otherwise, so every kept
+edge reaches the engine between its own two vertices. ``w(e)`` bounds how far
+the edge's straight line in the DEM's CRS strays from its straight line in the
+source's, so a dropped edge misses the domain.
 The bound is claimed only for a geographic source over a Transverse Mercator
 DEM; any other pair is moved first and pre-clipped in the DEM's CRS with
 ``w = 0``, which is exact.
 
 Blocking (sqlite3, GEOS): an async caller runs :func:`open_features` in
-``asyncio.to_thread``. ``_core`` only through :func:`simplify_borders` (32).
+``asyncio.to_thread``. ``_core`` only through :func:`simplify_borders`.
 """
 
 from __future__ import annotations
@@ -51,11 +52,11 @@ from tin_engine.io.repository import open_geopackage, read_json
 
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
-#: R5: the region is the domain plus this many metres in the DEM's CRS, or two
+#: The read region is the domain plus this many metres in the DEM's CRS, or two
 #: DEM cells when that is more, its boundary densified to this
 #: spacing before it is moved.
 MARGIN, DENSIFY = 100.0, 1_000.0
-#: WGS 84's smallest and largest radii of curvature, metres (R5, "Long edges").
+#: WGS 84's smallest and largest radii of curvature, metres, for ``w(e)``.
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
 Widening = Callable[[tuple[float, float], tuple[float, float]], float]
 
@@ -65,12 +66,12 @@ class FeatureError(ValueError):
 
 
 class Legend(BaseModel):
-    """An attribute's values to vocabulary names (R4). ``otherwise`` is what an
+    """An attribute's values to vocabulary names. ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
     ``codes``, when not empty, names the code system the values are integer
-    codes of; such a legend labels triangles (16c, R5). ``palette`` colours and
-    names those codes (36). A class whose names are None is dropped; the rest come
-    from a legend file (41, `tin_engine.legends`)."""
+    codes of; such a legend labels triangles. ``palette`` colours and names
+    those codes. A class whose names are None is dropped; the rest come from a
+    legend file (`tin_engine.legends`)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -102,13 +103,14 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-    #: 20c-3's land-cover stage, all off by default (the CLI's are 1, on, 50, 5):
-    #: the repair's tolerance, the same-class merge, the simplification and D.
+    #: The land-cover stage, all off by default (the CLI's are 1, on, 50, 5):
+    #: the repair's tolerance, the same-class merge, the simplification and the
+    #: outline snap distance D.
     repair_m: float = 0.0
     merge_same_class: bool = False
     tolerance_m: float = 0.0
     outline_snap_m: float = 0.0
-    #: 38: threads for moving a source's vertices into the DEM's CRS.
+    #: Threads for moving a source's vertices into the DEM's CRS.
     threads: int = 1
 
 
@@ -116,11 +118,11 @@ class FeatureSet(BaseModel):
     """The features in source order; ``outside`` counts those clipped away,
     ``clipped`` those kept that crossed the domain's boundary, ``empty`` empty
     geometries skipped, ``scanned`` the GeoPackage layers read without an
-    R-tree index (R3). ``crs``, ``layers`` and ``counts`` are per source
-    (a layer for a GeoPackage only; ``counts`` the features kept from each,
-    16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
+    R-tree index. ``crs``, ``layers`` and ``counts`` are per source
+    (a layer for a GeoPackage only; ``counts`` the features kept from each);
+    ``clip_seconds`` is the time spent after reading, for the
     ``features clip`` row, ``cleanup_seconds`` the land-cover stage's share of
-    it (20c-3), ``cover_vertices`` the land cover's vertices after the clip to
+    it, ``cover_vertices`` the land cover's vertices after the clip to
     the read region and after the stage (None: no stage ran), and
     ``area_changed`` the area the outline rule gave another polygon, m²."""
 
@@ -143,9 +145,9 @@ class FeatureSet(BaseModel):
 def source_region(
     domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | CRS, *, cell: float = 0.0
 ) -> Polygon:
-    """R5: the domain's convex hull, in the DEM's CRS, buffered by 100 m or two
-    DEM cells of side `cell`, whichever is more (the hull of the domain
-    buffered, to the arc's chord; 30d), densified to 1 km, moved into
+    """The read region: the domain's convex hull, in the DEM's CRS, buffered by
+    100 m or two DEM cells of side `cell`, whichever is more (the hull of the
+    domain buffered, to the arc's chord), densified to 1 km, moved into
     ``source_crs``; the convex hull of those points."""
     margin = max(MARGIN, 2 * cell)
     ring = shapely.segmentize(shapely.convex_hull(domain.polygon).buffer(margin).exterior, DENSIFY)
@@ -160,7 +162,7 @@ def source_region(
 def pre_clip(
     geometry: BaseGeometry, region: Polygon, widening: Widening | None = None
 ) -> tuple[LineString, ...]:
-    """R5: whole edges within ``widening(a, b)`` (0 if None) of ``region``, as
+    """Whole edges within ``widening(a, b)`` (0 if None) of ``region``, as
     chains of the original vertices: a polygon's exterior's, then each hole's.
     A ring with no edge dropped stays closed with its start vertex."""
     shapely.prepare(region)
@@ -219,9 +221,9 @@ def _linework(geometry: BaseGeometry) -> BaseGeometry:
 def _untouched(line: BaseGeometry, domain: Polygon) -> bool:
     """True when ``intersection(line, domain)`` gives ``line`` back unchanged:
     two or more vertices, no repeated one, simple, its interior in the
-    domain's interior and its ends in the closure (30b, section 3.4, widened
-    by 35, section 3.2: the DE-9IM pattern is ``covers`` plus "the outline
-    meets no interior point of the line", so the overlay adds no node).
+    domain's interior and its ends in the closure (the DE-9IM pattern is
+    ``covers`` plus "the outline meets no interior point of the line", so the
+    overlay adds no node).
     ``domain`` first, so its prepared form is used."""
     xy = shapely.get_coordinates(line)
     return (
@@ -346,12 +348,12 @@ class _Tally:
             code = _code(legend, value, f"{name}: feature {fid}") if legend.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
-            if polygonal and code is not None and self.cleanup is not None:  # 20c-3: whole
-                cover.append((fid, mask, code, geometry))  # moved after the loop (35)
+            if polygonal and code is not None and self.cleanup is not None:  # cleaned whole
+                cover.append((fid, mask, code, geometry))  # moved after the loop
                 self.seconds += time.perf_counter() - t0
                 continue
             if move is not None and bound is not None and bound[1](geometry):
-                # Pre-clipped where its edges are straight, then moved (R5).
+                # Pre-clipped where its edges are straight, then moved.
                 chains = pre_clip(geometry, bound[2], bound[0])
                 kept = [shapely.transform(c, move) for c in chains]
                 polygon = shapely.transform(geometry, move) if polygonal else None
@@ -367,7 +369,7 @@ class _Tally:
             self.seconds += time.perf_counter() - t0
         if cover and self.cleanup is not None:
             t0 = time.perf_counter()
-            if move is not None:  # 35, 3.1 (a): every cover polygon in one transform call
+            if move is not None:  # every cover polygon in one transform call
                 moved_all = shapely.transform(np.array([g for *_, g in cover], dtype=object), move)
                 cover = [(*c[:3], g) for c, g in zip(cover, moved_all, strict=True)]
             for fid, *_, g in cover:
@@ -396,11 +398,11 @@ class _Tally:
         if lines:
             self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
             # A dropped edge lies outside, so a pre-clipped chain is not covered;
-            # an untouched chain lies in the closure, so it is (35, 3.3).
+            # an untouched chain lies in the closure, so it is.
             self.clipped += not all(u or dom.covers(g) for u, g in zip(whole, kept, strict=True))
         elif polygon is not None and polygon.intersects(self.inner):
             # No boundary crosses the domain, and a point of it is inside: it
-            # covers the domain, and labels it (R5). Kept, not clipped.
+            # covers the domain, and labels it. Kept, not clipped.
             self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
         else:
             self.outside += 1
@@ -408,9 +410,9 @@ class _Tally:
     def _clean(
         self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
     ) -> None:
-        """20c-3: one source's land cover clipped to the read region, then
-        repaired, merged by class and put to the outline, as asked; with the
-        band on (32, section 15.2) then clipped to the domain, simplified
+        """One source's land cover clipped to the read region, then repaired,
+        merged by class and put to the outline, as asked; with the band on
+        then clipped to the domain, simplified
         within the band at the repair distance's clearance, and its lines cut
         where they lie on the outline. Its lines and label polygons then go
         the usual way."""
@@ -436,14 +438,14 @@ class _Tally:
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
         lines_of, polygons = snapped.lines, snapped.polygons
-        if ask.tolerance_m > 0:  # 32: area kept inside the domain
+        if ask.tolerance_m > 0:  # the band on: area kept inside the domain
             dom = self.domain.polygon
             inside = [
                 Polygon() if (c := _polygonal(shapely.intersection(g, dom))) is None else c
                 for g in polygons
             ]
             polygons = simplify_borders(inside, ask.tolerance_m, ask.repair_m).polygons
-            tree = _outline_tree(dom)  # once per clean-up, not once per polygon (35, 3.4)
+            tree = _outline_tree(dom)  # once per clean-up, not once per polygon
             lines_of = tuple(_outline_lines(g, tree) for g in polygons)
         after = sum(int(shapely.get_num_coordinates(line)) for ls in lines_of for line in ls)
         old = self.cover_vertices or (0, 0)
@@ -485,7 +487,7 @@ def read_source(
     box_for: Callable[[str], tuple[float, float, float, float]],
     crs: str | None = None,
 ) -> SourceRows:
-    """One source's features, unclipped, in its own CRS, by suffix (R1).
+    """One source's features, unclipped, in its own CRS, by suffix.
 
     ``attribute`` None reads a GeoPackage's primary key. ``box_for(own CRS)``
     is the box a GeoPackage's R-tree is queried with. ``crs``, when given,
@@ -512,7 +514,7 @@ def read_source(
                 raise FeatureError(f"{path.name}: no geometry names its srsName; give its CRS")
             own = _own(path, crs, doc.crs or str(crs))
             return SourceRows(
-                own, None, False, [(f.fid, f.geometry, f.value) for f in doc.features]
+                own, None, scanned=False, rows=[(f.fid, f.geometry, f.value) for f in doc.features]
             )
         features, text = read_collection(read_json(path), default_crs=RFC7946_CRS)
         try:  # a malformed feature's structure raises any of these
@@ -523,7 +525,7 @@ def read_source(
             values = [(k, g, p.get(attribute)) for k, g, p in rows]
         except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
             raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
-        return SourceRows(_own(path, crs, text), None, False, values)
+        return SourceRows(_own(path, crs, text), None, scanned=False, rows=values)
     except FeatureError:
         raise
     except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
@@ -541,7 +543,7 @@ def _own(path: Path, given: str | None, text: str) -> str:
 def read_lake_polygons(
     path: Path, layer: str | None, point: tuple[float, float], point_crs: str
 ) -> tuple[tuple[BaseGeometry, ...], str]:
-    """Increment 22: every polygon or multipolygon of a lake source near
+    """Every polygon or multipolygon of a lake source near
     ``point`` (in ``point_crs``), in the source's own CRS, with its CRS text.
     A GeoPackage is queried with the point's box; lines and points are skipped."""
 
@@ -563,8 +565,8 @@ def _finite(geometry: BaseGeometry) -> bool:
 
 
 def _code(legend: Legend, value: Any, what: str) -> int:
-    """R5: a class code is an integer in 1 .. 2**31 - 1, or a text the legend's
-    ``string_codes`` turn into one (41); anything else is refused."""
+    """A class code is an integer in 1 .. 2**31 - 1, or a text the legend's
+    ``string_codes`` turn into one; anything else is refused."""
     try:
         text = "0" if isinstance(value, list) else str(value)
         code = legend.string_codes.get(text) or int(text)
@@ -577,7 +579,7 @@ def _code(legend: Legend, value: Any, what: str) -> int:
 
 
 def _mask(legend: Legend, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:
-    """R4: the mask ``value`` maps to, None for ``drop``; a list is a union."""
+    """The mask ``value`` maps to, None for ``drop``; a list is a union."""
     names: list[str] = []
     for item in value if isinstance(value, list) else [value]:
         key = None if item is None else str(item)
@@ -600,7 +602,7 @@ def _mask(legend: Legend, vocabulary: EdgeVocabulary, value: Any, what: str) -> 
 def _bound(
     dem: CRS, region: Polygon
 ) -> tuple[Widening, Callable[[BaseGeometry], bool], Polygon] | None:
-    """R5, "Long edges": for a Transverse Mercator DEM, ``w(e)`` in degrees, the
+    """For a Transverse Mercator DEM, ``w(e)`` in degrees, the
     test of where it applies, and the region in the source CRS; else None."""
     op = dem.coordinate_operation
     if op is None or op.method_name != "Transverse Mercator":
@@ -644,7 +646,7 @@ IN_LINE = 1e-6
 
 
 def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: float) -> OutlineSnap:
-    """Ola's outline rule (20c-3, M6 (c)) at D = ``distance``: every part of a
+    """The outline rule at D = ``distance``: every part of a
     border within D of ``outline`` (every ring of it) goes onto it, and the
     stretches then on it are dropped from the linework. No buffer, no snap:
     the outline's segments are found in an ``STRtree``. D = 0 gives each
@@ -682,11 +684,11 @@ def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: fl
                     shell if shell.is_valid else shapely.make_valid(shell, method="structure")
                 )
         new: BaseGeometry | None = polygon
-        if len(same) < len(qs):  # ruling T2: only the rebuilt parts are unioned
+        if len(same) < len(qs):  # only the rebuilt parts are unioned
             new = rebuilt[0] if len(rebuilt) == 1 else shapely.union_all(rebuilt)
             whole = [*same, *shapely.get_parts(shapely.get_parts(new))]  # make_valid nests
             new = _polygonal(shapely.geometrycollections(whole))
-            if new is not None and not new.is_valid:  # argued, not proven: today's union
+            if new is not None and not new.is_valid:  # argued, not proven: fall back
                 new = _polygonal(shapely.union_all([*same, *rebuilt]))
         out_lines.append(tuple(lines))
         out_polys.append(Polygon() if new is None else new)
@@ -697,10 +699,10 @@ def snap_to_outline(polygons: list[BaseGeometry], outline: Polygon, distance: fl
 def _loops(
     old: npt.NDArray[np.float64], new: npt.NDArray[np.float64], on: list[bool], index: list[int]
 ) -> list[BaseGeometry]:
-    """The regions one ring's rule changed (ruling T2): between two consecutive
+    """The regions one ring's rule changed: between two consecutive
     kept input vertices whose stretch changed, the loop of the old stretch and
     the new one; with no kept input vertex, the symmetric difference of the old
-    and the new polygon (ruling P1)."""
+    and the new polygon."""
     n, m = len(old) - 1, len(new)
     at = [(a, i) for a, i in enumerate(index) if i >= 0]
     if not at:
@@ -729,10 +731,10 @@ def _outline_tree(outline: Polygon) -> tuple[npt.NDArray[Any], shapely.STRtree]:
 def _outline_lines(
     polygon: BaseGeometry, outline: tuple[npt.NDArray[Any], shapely.STRtree]
 ) -> tuple[LineString, ...]:
-    """32, section 15.2: every ring of ``polygon`` cut where an edge lies on
+    """Every ring of ``polygon`` cut where an edge lies on
     the outline (one outline segment within ``IN_LINE`` of both its ends),
     those edges dropped, as :func:`snap_to_outline`'s lines. ``outline`` is
-    :func:`_outline_tree`'s pair, built once per clean-up (35, 3.4)."""
+    :func:`_outline_tree`'s pair, built once per clean-up."""
     segments, tree = outline
     out: list[LineString] = []
     for ring in shapely.get_rings(shapely.get_parts(polygon)):
@@ -848,7 +850,7 @@ class _Outline:
         the direction of its lexicographically last end. So both polygons
         sharing it get the same, and an edge the read region shortens keeps
         its cuts (to rounding). A multiple within D/2 of either end is dropped
-        (ruling T1), so no piece is shorter than D/2."""
+        so no piece is shorter than D/2."""
         flip = tuple(b) < tuple(a)
         lo, hi = (b, a) if flip else (a, b)
         u = (hi - lo) / math.hypot(*(hi - lo))

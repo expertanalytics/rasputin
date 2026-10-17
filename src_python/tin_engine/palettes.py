@@ -1,10 +1,9 @@
 """A ParaView preset from a legend's palette.
 
-Increment 16c (`docs/increments/16c-landcover-labels.md`, R4). The palettes
-themselves are data since increment 41: each coded legend file in
+The palettes themselves are data: each coded legend file in
 ``tin_engine/data/legends/`` carries its classes' labels and colours.
 CORINE's are natural colours after Patterson and Kelso (2004), not the
-official CLC legend; they are taste, and Ola's to change (16c, Default D6).
+official CLC legend; they are a choice of taste, open to change.
 """
 
 from __future__ import annotations

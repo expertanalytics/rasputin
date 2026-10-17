@@ -139,7 +139,9 @@ def run_engine(started: Any) -> Noded:
         ([int(i) for i in indices], cli.ROLES[role], int(mask))
         for indices, role, mask in started.chains
     ]
-    run = cli._engine(np.asarray(started.vertices, dtype=np.float64), chains, True, SNAP)
+    run = cli._engine(
+        np.asarray(started.vertices, dtype=np.float64), chains, delaunay=True, spacing=SNAP
+    )
     assert run.noded is not None and run.mesh is not None, f"{run.status}: {run.message}"
     xy = np.asarray(run.noded.vertices)
 

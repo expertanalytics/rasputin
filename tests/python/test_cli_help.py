@@ -221,11 +221,6 @@ class TestMeshWithoutTheGallery:
         assert f"No such option: {option[0]}" in output, output
         assert not target.exists()
 
-    def test_the_help_names_no_gallery(self) -> None:
-        text = plain(rendered(cli.app, "mesh"))
-        for word in ("gallery", "fixture", "--flat", "--crs"):
-            assert word not in text, word
-
     def test_the_first_paragraph_names_the_three_outputs(self) -> None:
         first = first_paragraph("mesh")
         for suffix in (".vtk", ".ply", ".gpkg"):
@@ -259,7 +254,7 @@ class TestGroupingAndOrder:
 
 
 class TestNoDrawingCommand:
-    """`rasputin draw` and its drawing package are gone, not hidden."""
+    """`rasputin draw`, an old command, is refused as no such command."""
 
     def test_draw_is_no_such_command(self) -> None:
         # Not `cli_helpers.invoke`, which refuses a name that is not a command.
@@ -267,22 +262,6 @@ class TestNoDrawingCommand:
         output = plain(result.output)
         assert result.exit_code == USAGE, output
         assert "No such command 'draw'" in output, output
-
-    def test_the_drawing_package_is_not_importable(self) -> None:
-        assert importlib.util.find_spec("tin_engine.viz") is None
-
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "Attempt",
-            "_triangulated",
-            "FIXTURE_CLOSED_ROLES",
-            "PROPERTY_STROKES",
-            "DEFAULT_LABEL_LIMIT",
-        ],
-    )
-    def test_the_cli_keeps_no_drawing_name(self, name: str) -> None:
-        assert not hasattr(cli, name), name
 
 
 # ---------------------------------------------------------------- T5

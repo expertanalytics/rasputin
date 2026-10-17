@@ -1,16 +1,16 @@
-"""Exact land-cover class fractions per triangle (increment 26b).
+"""Exact land-cover class fractions per triangle.
 
-`docs/increments/26-land-cover.md`, 1.1 "What is computed, and in which
-coordinates", 1.2 and section 6. Every mesh vertex is moved once to the class
-raster's longitude and latitude (`crs.reprojector`, the one place a transformer
-is built) and then to the raster's index space, where every cell is a unit
-square; the triangles are cut into chunks, each chunk's class window read from
-the repository and handed with the triangle corners to `_core.class_areas`, whose
-exact areas become fractions. The cutoff and the ledger are increment 26c's;
-this module writes the exact fractions.
+`docs/increments/26-land-cover.md`, *1. Class fractions per triangle*.
 
-Not `land_cover.py`: 16c's `landcover.py` labels triangles from polygons and is
-not replaced. Blocking; the C++ call releases the GIL, so an API worker runs
+Every mesh vertex is moved once to the class raster's longitude and latitude
+(`crs.reprojector`, the one place a transformer is built) and then to the
+raster's index space, where every cell is a unit square; the triangles are cut
+into chunks, each chunk's class window read from the repository and handed
+with the triangle corners to `_core.class_areas`, whose exact areas become
+fractions. The fractions are written exact: no cutoff drops small classes.
+
+Not `land_cover.py`: `landcover.py` labels triangles from polygons and is a
+separate path. Blocking; the C++ call releases the GIL, so an API worker runs
 `assign` in `asyncio.to_thread`.
 """
 
