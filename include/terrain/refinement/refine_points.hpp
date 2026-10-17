@@ -22,8 +22,12 @@
 // Split (serial, triangle-index order), as refine: split_inside, or split_edge
 // for a point on an edge, skipped this round when the neighbour across it was
 // already touched; legalise_around follows. The start is legalised once first,
-// as refine does. Terminates: each insertion is a stored point not yet a
-// vertex, and the store is finite.
+// as refine does. Terminates: a round after a swap pass on the written points
+// either inserts a stored point not yet a vertex (a finite set), or ends with
+// a check that finds no illegal edge, or breaks when the swapped mesh will not
+// rebuild on the grid (docs/increments/65-delaunay-as-written.md, step 6).
+// The last swap check decides on the written (rounded world) points, not on
+// the grid.
 //
 // Coincident points. A stored point equal to a start vertex is a corner of
 // every triangle holding it, so it is never scanned nor inserted. After the
