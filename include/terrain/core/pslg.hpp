@@ -30,7 +30,7 @@
 // outer ring, that vertices are distinct, or that every vertex is referenced.
 // THEREFORE A VALID PSLG IS NOT A VALID CDT INPUT. It is a valid *noder* input:
 // it asserts everything that can be decided without constructing a point, and
-// nothing that cannot. Increment 5's NodedPslg carries the rest.
+// nothing that cannot. NodedPslg carries the rest.
 //
 // Pslg owns all three buffers and is immutable after construction. There is no
 // mutator, no non-const accessor, no lazy cache and no mutable member, which is
@@ -178,9 +178,8 @@ private:
 // has no producer in this project and no consumer either. The CDT wrapper was
 // expected to need one, because detria's addOutline and addHole take a span
 // that bounds a region; measured against the vendored header, an OPEN span is
-// closed by detria itself, so indices_of(c) goes straight in. Increment 4
-// deleted the closed_index_buffer_size that existed to size the scratch buffer
-// for the caller that is now never going to be written.
+// closed by detria itself, so indices_of(c) goes straight in, and no scratch
+// buffer for a closed span is sized anywhere.
 //
 // So the rule survives in its stronger form: no closing index is materialised
 // anywhere in the project, and there is therefore no accessor whose result

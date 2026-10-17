@@ -4,14 +4,13 @@
 // with every crossing and every hot-pixel incidence resolved into a node.
 //
 // A NodedPslg exists only if it passed NodedPslgBuilder's verification, so every
-// module above this one -- the CDT wrapper at 5c, refinement later -- may rely on
+// module above this one -- the CDT wrapper, refinement -- may rely on
 // the guarantees below WITHOUT re-checking. The private constructor with a single
 // friend is what makes that true rather than hoped for, exactly as core/pslg.hpp
 // does it.
 //
 // On top of Pslg's guarantees 1-8 and 10 (9 is replaced by
-// node_of_input_vertex), and numbered as docs/increments/05b-noder-driver.md
-// numbers them:
+// node_of_input_vertex), numbered on from them:
 //  11. Every coordinate is grid().world(g) for some GridPoint within
 //      kMaxGridIndex. Checkable bitwise: grid().snapped(v) == v.
 //  12. No two vertices are equal.
@@ -104,7 +103,7 @@ public:
     }
 
     // Directed, and (k + 1) % n unconditionally, so edge(c, edge_count(c) - 1) is
-    // the closing edge of a ring and the last segment of a breakline. Same ruling
+    // the closing edge of a ring and the last segment of a breakline. Same rule
     // and same reasoning as core/pslg.hpp's edge().
     [[nodiscard]] Segment2 edge(std::size_t c, std::size_t k) const noexcept {
         assert(k < edge_count(c));

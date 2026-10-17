@@ -18,7 +18,7 @@ namespace terrain::raster {
 // any of the four corners is NoData. The legacy returned a value in all three
 // cases -- reading out of bounds in the second.
 //
-// One exception to the four corners (increment 27): a point that is a DEM node
+// One exception to the four corners: a point that is a DEM node
 // bit for bit (RasterGeometry::node_at) reads that node and nothing else. Its
 // other three corners have weight zero, so a NoData among them does not refuse
 // it; the node itself being NoData or NaN does. Every other point, one ulp off

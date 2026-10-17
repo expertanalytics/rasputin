@@ -48,7 +48,7 @@ public:
     [[nodiscard]] constexpr std::size_t cols() const noexcept { return cols_; }
     [[nodiscard]] constexpr std::size_t rows() const noexcept { return rows_; }
 
-    // All six fields, exactly (the edge strip's refusal, 15f-edge-strip.md L2).
+    // All six fields, exactly (the edge strip refuses a raster on another geometry).
     friend constexpr bool operator==(const RasterGeometry&, const RasterGeometry&) = default;
 
     [[nodiscard]] constexpr double x_max() const noexcept {
@@ -93,7 +93,7 @@ public:
     // whose node() gives p back exactly. nullopt also for a non-finite p and
     // outside the node rectangle (cell_of's test). The clamp-and-round is
     // written as refine's lattice_position writes it (refine.hpp), so the two
-    // say "node" at the same points (increment 27, S5). One ulp off a node is
+    // say "node" at the same points. One ulp off a node is
     // not a node: there is no tolerance band.
     [[nodiscard]] std::optional<CellIndex> node_at(const Point2& p) const noexcept {
         if (!cell_of(p))

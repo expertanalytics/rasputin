@@ -1,13 +1,11 @@
 #pragma once
 
-// A triangle mesh over the DEM's lattice, with neighbour links
-// (docs/increments/14-adaptive-refinement.md, R3 and R4). Every vertex that
-// refinement inserts is a DEM node, a foot on a constraint segment
-// (docs/increments/20b-min-insertion-distance.md, R4) or a check point of the
-// final check (docs/increments/15c-geographic-dem.md, D5); a start vertex may lie
-// anywhere in the node rectangle (docs/increments/16-domain-polygon.md, R2).
+// A triangle mesh over the DEM's lattice, with neighbour links. Every vertex
+// that refinement inserts is a DEM node, a foot on a constraint segment or a
+// check point of the final check; a start vertex may lie anywhere in the node
+// rectangle.
 //
-// A flat triangle array, not a tree: R3's edge split changes two triangles at
+// A flat triangle array, not a tree: an edge split changes two triangles at
 // once, and only adjacency can find the second. A split reuses the parent's
 // slot for its first child and appends the rest, so the array stays dense and
 // is the output as it stands -- there is no flatten step.
@@ -27,7 +25,7 @@
 // and mask on both halves of a split edge, and gives new interior edges
 // neither: constraints gain Steiner points but never move.
 //
-// Frozen edges (docs/increments/23-basin-scale.md, N1). An edge is frozen when
+// Frozen edges. An edge is frozen when
 // its mask meets the mesh's frozen mask (0 after build, so none is): a seam,
 // whose vertices the seam pass placed. Nothing may insert a vertex on it, and
 // split_edge asserts so; flips never touch it, since it is constrained.
@@ -145,8 +143,8 @@ public:
         }
         // Adjacency from one flat table of directed edges (to, triangle),
         // grouped by origin vertex, not from a hash map: a node-based
-        // container allocates once per edge, this table once per array
-        // (docs/increments/15f-edge-strip.md, A2). Each group is sorted by
+        // container allocates once per edge, this table once per array.
+        // Each group is sorted by
         // `to`, so an edge used twice sits next to its twin, and the neighbour
         // across a -> b is a binary search for a in b's group: O(d log d) per
         // vertex of degree d, so a wide fan stays cheap.
@@ -207,7 +205,7 @@ public:
     // children are (v0, v1, p) in t's slot, then (v1, v2, p) and (v2, v0, p)
     // appended. t's edges are unchanged, so no neighbour sees a new vertex.
     // Returns p's vertex index. p may be off-node (the final check inserts check
-    // points, docs/increments/15c-geographic-dem.md, D5); a LatticeVertex
+    // points); a LatticeVertex
     // converts to it exactly.
     std::uint32_t split_inside(std::uint32_t t, MeshVertex p) {
         const auto q = add_vertex(p);
@@ -228,7 +226,7 @@ public:
     // t's slot and (p, b, c) is appended; u's (b, a, d) becomes (b, p, d) in
     // u's slot and (p, a, d) appended. Returns p's vertex index.
     std::uint32_t split_edge(std::uint32_t t, unsigned e, MeshVertex p) {
-        assert(!is_frozen(t, e));  // a frozen edge is never split (N1, FE6)
+        assert(!is_frozen(t, e));  // a frozen edge is never split
         const auto q = add_vertex(p);
         const auto a = triangles_[t][e], b = triangles_[t][(e + 1) % 3],
                    c = triangles_[t][(e + 2) % 3];
@@ -257,7 +255,7 @@ public:
     }
 
     // Flip t's edge e, which must have a neighbour u and a strictly convex
-    // quad (increment 14b, R4). With t = (a, b, c), e the edge (a, b) and
+    // quad. With t = (a, b, c), e the edge (a, b) and
     // u = (b, a, d): t's slot becomes (c, a, d) and u's (c, d, b). c is at
     // index 0 of both, so an inserted c is opposite edge 1 in both. The four
     // outer sides keep their neighbour, bit and mask; the new diagonal c-d

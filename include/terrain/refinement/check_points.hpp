@@ -1,7 +1,6 @@
 #pragma once
 
-// The check-point store of the final check (docs/increments/15c-geographic-dem.md,
-// D4): points given as world (x, y) in the target CRS with a float z, filed by
+// The check-point store of the final check: points given as world (x, y) in the target CRS with a float z, filed by
 // lattice cell of the target grid, and read back by cell row and column range.
 //
 // Numbers only: the grid is a RasterGeometry, and no CRS, path or raster value
@@ -20,7 +19,7 @@
 // point to the next cell's corner (offset 0), so every point lies in the closed
 // cell it is filed in.
 //
-// Storage (increment 15e, fix 4): each row is a list of fixed chunks of kChunk
+// Storage: each row is a list of fixed chunks of kChunk
 // points, carved from slabs of kSlab chunks and freed only with the store, so
 // adding never moves a stored point and the footprint is 16 B per point plus
 // at most one part-filled chunk per row. Point i of a row is

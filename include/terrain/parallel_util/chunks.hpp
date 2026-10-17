@@ -1,8 +1,7 @@
 #pragma once
 
 // Dynamic-block parallel for over std::jthread, the one the refinement scan
-// uses (docs/increments/21-parallel-refine.md, QW1; the static-chunk variant of
-// docs/increments/14-adaptive-refinement.md, R7, it replaced is gone).
+// uses.
 //
 // [0, n) is cut into blocks of `block` items, block k being
 // [k*b, min(n, (k+1)*b)), and workers take block indices from one shared atomic
@@ -10,8 +9,8 @@
 // end) is called exactly once per block, and every thread is joined before this
 // returns. The counter is the only shared write: whether fn is race-free is
 // fn's business, and the refinement scan makes it so by writing only its own
-// slots; which thread runs a block cannot change what fn writes, so 14 R7's "no
-// shared result writes" holds.
+// slots; which thread runs a block cannot change what fn writes, so no result
+// is written by two threads.
 //
 // No pool. Threads are created per call and joined at its end, so no state
 // outlives a call. threads == 0 means hardware_concurrency, or 1 if that is 0.
@@ -32,7 +31,7 @@ namespace terrain::parallel_util {
 struct BlockSchedule {
     std::size_t block = 0;  // items per block; 0: default_block(n, threads)
     // Rounds of fewer items run inline. From a thread sweep on the 1 m
-    // benchmark (docs/increments/21-parallel-refine.md, "21a: inline_below").
+    // benchmark.
     std::size_t inline_below = 256;
 };
 

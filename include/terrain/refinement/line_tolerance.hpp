@@ -1,10 +1,9 @@
 #pragma once
 
-// A vertical tolerance that varies with distance to named lines
-// (docs/increments/33-feature-tolerance.md, sections 3 and 4.2, pins in 9.1).
+// A vertical tolerance that varies with distance to named lines.
 //
 // A tolerance policy says what each triangle is allowed. UniformTolerance is
-// today's single number. LineTolerance is the ramp t(d) of section 3 at the
+// the single number. LineTolerance is the ramp t(d) at the
 // triangle's distance d(T) to a set of segments: the smallest distance from
 // any point of the closed triangle to any segment, less the margin the lines
 // were simplified by. t never decreases with d and d(T) <= d(n) for every
@@ -15,7 +14,7 @@
 // pure function of one triangle and one segment, so the result does not
 // depend on the thread count or on the index's visiting order.
 //
-// The search (4.2): noding::BroadPhase is queried with the triangle's box
+// The search: noding::BroadPhase is queried with the triangle's box
 // grown by g = E/16, E/8, E/4, E/2, E, E + margin. Every segment within g of
 // the triangle has its box in the grown box, so once the best found is at
 // most g it is the minimum. With nothing within E + margin the distance is

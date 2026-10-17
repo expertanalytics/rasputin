@@ -11,8 +11,7 @@
 #include <vector>
 
 // The Priority-Flood both `upstream` and `accumulate` run, in one place so the
-// two cannot drift (docs/increments/29-nve-reference-catchments.md,
-// "Accumulation, from the same flood (C++)"; Barnes, Lehman and Mulla 2014a).
+// two cannot drift (Barnes, Lehman and Mulla 2014a).
 namespace terrain::hydrology::detail {
 
 enum : std::uint8_t { kUnreached = 0, kIn = 1, kOut = 2, kNoData = 3 };
