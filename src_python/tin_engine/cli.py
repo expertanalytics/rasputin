@@ -1668,7 +1668,7 @@ def _dem_repository(
     paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
     caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
     try:
-        return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)[0]
+        return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"

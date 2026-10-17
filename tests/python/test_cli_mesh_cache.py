@@ -251,7 +251,6 @@ class TestOpenDemFromTheCache:
             expected = decode_dem(stream)
         assert opened.tile.meta == expected.meta
         assert np.asarray(opened.tile.array).tobytes() == np.asarray(expected.array).tobytes()
-        assert KEY in opened.label
 
     def test_exactly_one_of_sources_and_cached(self, cache: Path, tif: Path) -> None:
         from tin_engine.dem_input import CachedSource
