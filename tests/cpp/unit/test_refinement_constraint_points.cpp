@@ -53,9 +53,22 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+// A failed position check prints both positions to 17 digits, not "{?}".
+template <>
+struct Catch::StringMaker<terrain::mesh::MeshVertex> {
+    static std::string convert(const terrain::mesh::MeshVertex& v) {
+        std::ostringstream os;
+        os << std::setprecision(17) << "(" << v.col << ", " << v.row << ")";
+        return os.str();
+    }
+};
 
 using terrain::Point2;
 using terrain::mesh::MeshVertex;
@@ -990,6 +1003,99 @@ TEST_CASE("CC7: a column and a row crossing with the same t, an ulp from a node,
     REQUIRE(pts.size() == 3);
     CHECK(pts[1].at == MeshVertex{1.0, 1.0});
     CHECK(pts[1].s == tc);
+}
+
+// ---------------------------------------------------------------------------
+// C5, increment 66 (docs/increments/66-coincident-written-vertices.md, R2): a
+// crossing is its rounded node N only when N lies within the coincidence
+// radius of the crossing itself, never because N is that near the edge's
+// line. Two edges almost parallel to column 5, e = 2^-35 lattice units off
+// it, where node (5, 4) is within the radius of the line but far from the
+// crossing. Every figure is exact in binary except B's column t (0.2), so
+// positions and s are compared with ==, s against t as the generator forms it.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr double kE = 0x1p-35;  // about 2.9e-11 lattice units
+
+// The premise both fixtures share: node (5, 4) is off the line through a and
+// b but within the coincidence radius of it, so a line test would snap to it.
+void require_node_near_line(const RasterGeometry& g, MeshVertex a, MeshVertex b) {
+    const MeshVertex node{5.0, 4.0};
+    const double dc = b.col - a.col, dr = b.row - a.row;
+    const double line_distance =
+        std::abs(dc * (node.row - a.row) - dr * (node.col - a.col)) / std::hypot(dc, dr);
+    INFO("node (5, 4) is " << line_distance << " from the line");
+    REQUIRE(terrain::mesh::orient_sign(a, b, node) != 0);
+    REQUIRE(line_distance > 4e-11);
+    REQUIRE(line_distance < terrain::refinement::detail::coincidence_radius(g));
+}
+
+}  // namespace
+
+TEST_CASE("C5: a crossing whose node is near the line but past the edge's end stays where it is",
+          "[constraint_points][coincident][C5]") {
+    // A. Rows 3.6875 to 3.9375: one crossing, column 5 at t = 0.5, row 3.8125.
+    // Node (5, 4) is 4.366e-11 from the line but past P1 (sigma 1.25) and
+    // 0.1875 from the crossing; snapped to it, the point would leave the edge.
+    const auto g = unit_frame(16, 8);
+    const auto d = dem_on(g);
+    const std::vector<Point2> v{unit(5.0 - kE, 3.6875), unit(5.0 + kE, 3.9375)};
+    const MeshVertex a = lattice(g, v[0]), b = lattice(g, v[1]);
+    REQUIRE(a == MeshVertex{5.0 - kE, 3.6875});
+    REQUIRE(b == MeshVertex{5.0 + kE, 3.9375});
+    require_node_near_line(g, a, b);
+    const double dc = b.col - a.col, dr = b.row - a.row;
+    REQUIRE(((5.0 - a.col) * dc + (4.0 - a.row) * dr) / (dc * dc + dr * dr) == 1.25);
+
+    const auto st = generate(d, v, {{0, 1}});
+    const auto pts = st.on_edge(0);
+    check_invariant(st, 0, a, b);
+    CHECK(st.duplicates() == 0);
+    REQUIRE(pts.size() == 3);
+    CHECK(pts[0].at == MeshVertex{5.0 - kE / 2, 3.75});
+    CHECK(pts[0].s == 0.25);
+    CHECK(pts[1].at == MeshVertex{5.0, 3.8125});
+    CHECK(pts[1].s == 0.5);
+    CHECK(pts[2].at == MeshVertex{5.0 + kE / 2, 3.875});
+    CHECK(pts[2].s == 0.75);
+    for (const auto& p : pts)
+        CHECK(p.at.row <= b.row);
+}
+
+TEST_CASE("C5: a node inside the edge but far from a crossing is not that crossing; the near one is",
+          "[constraint_points][coincident][C5]") {
+    // B. Rows 3.6875 to 4.3125: column 5 is crossed at t = 0.2, row 3.8125,
+    // 0.1875 from node (5, 4); row 4 at t = 0.5, col 5 + 1.5e, 4.366e-11 from
+    // it. Only the row crossing is the node. A line test snaps both there and
+    // drops one; a line test with 0 < sigma < 1 too (the node's sigma is 0.5).
+    const auto g = unit_frame(16, 8);
+    const auto d = dem_on(g);
+    const std::vector<Point2> v{unit(5.0 - kE, 3.6875), unit(5.0 + 4 * kE, 4.3125)};
+    const MeshVertex a = lattice(g, v[0]), b = lattice(g, v[1]);
+    REQUIRE(a == MeshVertex{5.0 - kE, 3.6875});
+    REQUIRE(b == MeshVertex{5.0 + 4 * kE, 4.3125});
+    require_node_near_line(g, a, b);
+    const double t_column = (5.0 - a.col) / (b.col - a.col);  // 0.2, rounded
+    REQUIRE(a.row + t_column * (b.row - a.row) == 3.8125);
+    REQUIRE(a.col + 0.5 * (b.col - a.col) == 5.0 + 1.5 * kE);
+
+    const auto st = generate(d, v, {{0, 1}});
+    const auto pts = st.on_edge(0);
+    check_invariant(st, 0, a, b);
+    CHECK(st.duplicates() == 0);
+    REQUIRE(pts.size() == 5);
+    CHECK(pts[0].at == MeshVertex{5.0 - kE / 2, 3.75});
+    CHECK(pts[0].s == t_column / 2);
+    CHECK(pts[1].at == MeshVertex{5.0, 3.8125});  // the column crossing, unsnapped
+    CHECK(pts[1].s == t_column);
+    CHECK(pts[2].at == MeshVertex{5.0, 3.90625});
+    CHECK(pts[2].s == (t_column + 0.5) / 2);
+    CHECK(pts[3].at == MeshVertex{5.0, 4.0});  // the row crossing, snapped to its node
+    CHECK(pts[3].s == 0.5);
+    CHECK(pts[4].at == MeshVertex{5.0 + 2 * kE, 4.15625});
+    CHECK(pts[4].s == 0.75);
 }
 
 TEST_CASE("CC8: a degenerate edge {i, i} is refused", "[constraint_points][CC8]") {
