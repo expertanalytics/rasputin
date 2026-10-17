@@ -2086,6 +2086,8 @@ def _dem_mesh(
             "line_points_refused_max_error_m": final.strip_refused_max_error,
             "line_points_inserted": final.strip_inserted,
             "line_points_duplicate": strip.duplicates,
+            "triangles_flat_as_written": final.flat_as_written,
+            "edges_not_delaunay_as_written": final.illegal_as_written,
         }
         with clock.phase("trim"):
             trimmed = trim(

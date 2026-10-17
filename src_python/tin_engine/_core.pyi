@@ -526,6 +526,15 @@ class PointRefineOutcome(RefineOutcome):
     @property
     def feet_fallback(self) -> int:
         """Points put onto a line at their foot and later added where they were."""
+    @property
+    def flat_as_written(self) -> int:
+        """Triangles flat or turned over as written, left out of the last swap check."""
+    @property
+    def flips_as_written(self) -> int:
+        """Edge swaps decided on the written coordinates, a subset of ``flips``."""
+    @property
+    def illegal_as_written(self) -> int:
+        """Edges not Delaunay as written that could not be swapped."""
 
 @final
 class ConstraintCheckPoints:

@@ -1119,7 +1119,13 @@ the check points that coincide with a start vertex, and the edge strip's figures
         .def_readonly("nodes_inserted", &PointRefineOutcome::nodes_inserted,
                       "refine_strip: DEM nodes its rescan inserted; 0 in refine_points.")
         .def_readonly("feet_fallback", &PointRefineOutcome::feet_fallback,
-                      "Points put onto a constraint at their foot and later inserted as themselves.");
+                      "Points put onto a constraint at their foot and later inserted as themselves.")
+        .def_readonly("flat_as_written", &PointRefineOutcome::flat_as_written,
+                      "Triangles flat or turned over at the written coordinates, left out of the last swap check.")
+        .def_readonly("flips_as_written", &PointRefineOutcome::flips_as_written,
+                      "Edge swaps decided on the written coordinates, a subset of flips.")
+        .def_readonly("illegal_as_written", &PointRefineOutcome::illegal_as_written,
+                      "Edges failing the empty-circle test at the written coordinates and left so.");
 
     py::class_<ConstraintCheckPoints>(m, "ConstraintCheckPoints", R"doc(
 The edge strip's check points, filed by constraint edge and by the parameter

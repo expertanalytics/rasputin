@@ -126,6 +126,9 @@ struct PointRefineOutcome : RefineOutcome {
     std::size_t on_frozen = 0;          // stored points on a frozen edge, each once (N6)
     double on_frozen_max_error = 0.0;   // their largest error, edges with two valid ends only
     std::size_t feet_fallback = 0;      // 20c R4.5: footed points later inserted as themselves
+    std::size_t flat_as_written = 0;    // 65: triangles flat or turned over as written, out of the last check
+    std::size_t flips_as_written = 0;   // 65: the as-written passes' flips, a subset of `flips`
+    std::size_t illegal_as_written = 0; // 65: edges illegal as written and left so (step 6)
 };
 
 namespace detail {
@@ -378,6 +381,94 @@ template <class Store, class R, TolerancePolicy P>
         return r;
     };
 
+    // 65: the loop swaps on the grid frame and writes other doubles. Where it
+    // would break, the edges with a corner not an exact translate of its grid
+    // point are tested on the written points; if one is illegal, the mesh is
+    // legalised as written (flat triangles left out) and the loop rescans
+    // what the pass wrote (docs/increments/65-delaunay-as-written.md, steps).
+    const auto written_at = [&](std::size_t i) {
+        const mesh::MeshVertex v = m.vertices()[i];
+        return i < n0 ? start.vertices()[i] : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()};
+    };
+    const auto as_written = [&](std::vector<char>& touched) {
+        const auto exact_sum = [](double a, double b, double s) {
+            const double bb = s - a;
+            return a + b == s && (a - (s - bb)) + (b - bb) == 0.0;
+        };
+        const std::size_t nv = m.vertices().size(), nt = m.triangle_count();
+        std::vector<mesh::MeshVertex> wv(nv);
+        std::vector<char> faithful(nv), kind(nt, 0);  // kind: 0 faithful corners, 1 candidate, 2 flat
+        for (std::size_t i = 0; i < nv; ++i) {
+            const mesh::MeshVertex v = m.vertices()[i];
+            const Point2 w = written_at(i), f = frame.at(v);
+            wv[i] = mesh::MeshVertex{w.x, -w.y};
+            faithful[i] = std::fma(v.col, g.delta_x(), -f.x) == 0.0 && std::fma(v.row, g.delta_y(), f.y) == 0.0
+                          && exact_sum(g.x_min(), f.x, w.x) && exact_sum(g.y_max(), f.y, w.y);
+        }
+        out.flat_as_written = 0;
+        for (std::uint32_t t = 0; t < nt; ++t) {
+            const auto& tri = m.triangles()[t];
+            if (faithful[tri[0]] == 0 || faithful[tri[1]] == 0 || faithful[tri[2]] == 0)
+                kind[t] = mesh::orient_sign(wv[tri[0]], wv[tri[1]], wv[tri[2]]) > 0 ? 1 : 2;
+            out.flat_as_written += kind[t] == 2 ? 1 : 0;
+        }
+        const mesh::LatticeFrame unit{1.0, 1.0};  // integer path off: the exact kernel on the written doubles
+        std::size_t illegal = 0;
+        for (std::uint32_t t = 0; t < nt; ++t)
+            for (unsigned k = 0; k < 3 && kind[t] == 1; ++k) {
+                const auto u = m.neighbours(t)[k];
+                if (u == mesh::kNoNeighbour || m.is_constrained(t, k) || kind[u] == 2 || (kind[u] == 1 && u < t))
+                    continue;
+                const auto& tri = m.triangles()[t];
+                const auto& ut = m.triangles()[u];
+                const unsigned j = ut[0] == tri[(k + 1) % 3] ? 0 : ut[1] == tri[(k + 1) % 3] ? 1 : 2;
+                illegal += mesh::detail::quad_flips<pred::DefaultKernel>(
+                    wv[tri[k]], wv[tri[(k + 1) % 3]], wv[tri[(k + 2) % 3]], wv[ut[(j + 2) % 3]], unit);
+            }
+        if (illegal == 0)
+            return false;
+        std::vector<TriangleIndices> tris(m.triangles().begin(), m.triangles().end()), ctris;
+        std::vector<std::uint8_t> bits(nt, 0), cbits;
+        std::vector<std::array<std::uint32_t, 3>> masks(nt), cmasks;
+        std::vector<std::uint32_t> slot;  // copy slot -> loop slot
+        const auto sides = [](const mesh::LatticeMesh& x, std::uint32_t t) {
+            std::uint8_t b = 0;
+            for (unsigned k = 0; k < 3; ++k)
+                b = static_cast<std::uint8_t>(b | (x.is_constrained(t, k) ? 1u << k : 0u));
+            return std::pair{b, std::array<std::uint32_t, 3>{x.mask(t, 0), x.mask(t, 1), x.mask(t, 2)}};
+        };
+        for (std::uint32_t t = 0; t < nt; ++t) {
+            std::tie(bits[t], masks[t]) = sides(m, t);
+            if (kind[t] != 2) {
+                slot.push_back(t);
+                ctris.push_back(tris[t]);
+                cbits.push_back(bits[t]);
+                cmasks.push_back(masks[t]);
+            }
+        }
+        auto copy = mesh::LatticeMesh::build(std::move(wv), std::move(ctris), std::move(cbits), std::move(cmasks));
+        std::size_t flips = 0;
+        if (copy)
+            flips = mesh::legalise_all<pred::DefaultKernel>(*copy, unit,
+                                                            [&](std::uint32_t s) { touched[slot[s]] = 1; });
+        for (std::uint32_t c = 0; copy && c < slot.size(); ++c) {
+            tris[slot[c]] = copy->triangles()[c];
+            std::tie(bits[slot[c]], masks[slot[c]]) = sides(*copy, c);
+        }
+        std::vector<mesh::MeshVertex> lattice(m.vertices().begin(), m.vertices().end());
+        auto grid = copy ? mesh::LatticeMesh::build(std::move(lattice), std::move(tris), std::move(bits), std::move(masks))
+                         : std::nullopt;
+        if (!grid) {  // step 6: a swapped triangle not counter-clockwise on the grid; the loop's mesh stays
+            out.illegal_as_written = illegal;
+            return false;
+        }
+        m = std::move(*grid);
+        m.set_frozen_mask(options.frozen_mask);
+        out.flips += flips;
+        out.flips_as_written += flips;
+        return true;
+    };
+
     using clock = std::chrono::steady_clock;
     const auto since = [](clock::time_point t0) {
         return std::chrono::duration<double>(clock::now() - t0).count();
@@ -501,6 +592,8 @@ template <class Store, class R, TolerancePolicy P>
             if (foot)
                 footed.insert({r.point->col, r.point->row});
         }
+        if (!any)
+            any = as_written(touched);
         out.split_seconds += since(t0);
         if (!any)
             break;
@@ -579,8 +672,7 @@ template <class Store, class R, TolerancePolicy P>
                 if (const auto nz = vertex_z(*dem, n))
                     coincide(i, *nz);
         }
-        out.vertices.push_back(i < n0 ? start.vertices()[i]
-                                      : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()});
+        out.vertices.push_back(written_at(i));
         out.z.push_back(std::isnan(zt[i]) ? 0.0 : zt[i]);
         out.valid.push_back(std::isnan(zt[i]) ? 0 : 1);
     }
