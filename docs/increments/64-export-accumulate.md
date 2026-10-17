@@ -48,3 +48,7 @@ a plugin may import only `tin_engine.plugin_api`, which lacks them.
 ## 5. Left out, and the estimate
 
 Left out: a private binding. About 2 counted lines (`CLAUDE.md` §2); no C++, nothing under *Acceptance*.
+
+## Review
+
+- **Design review, round 1, 2026-10-17.** Commit `f5b46020`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the `accumulate` row in docs/plugins.md says which neighbour a node drains to and that the call releases the GIL. Held: the wrapper, not the binding, is the boundary; dtypes, codes, read-only views and the ValueError match the code.
