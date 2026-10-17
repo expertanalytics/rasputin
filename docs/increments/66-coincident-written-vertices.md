@@ -165,11 +165,14 @@ point there (C5 below: an edge from row 3.6875 to 3.9375 got a point at row
   unsnapped crossing is as close to that end.
 - It cannot be contracted: one subtraction is zero and the other exact
   (Sterbenz), and `hypot` is a call, so FMA does not change it.
-- It cannot change what the first version left alone. N's distance to the
-  line is at most its distance to a point on the line, so every crossing it
-  snaps the first version snapped too. The prototype's R2 (section 5) was
-  the line test and fired 0 times on every quick-check case, so this one
-  fires 0 times there too, and those meshes stay byte-identical.
+- It snaps nothing the first version left alone, up to rounding. N's
+  distance to the line is at most its distance to a point on the line, and
+  the stored crossing is on the line to within its rounding (under 4e-12
+  lattice units at 3e4), so every crossing it snaps the first version snapped
+  too, save a node within that margin above the radius. The prototype's R2
+  (section 5) was the line test and fired 0 times on every quick-check case,
+  so this one is expected to fire 0 times there too; `@perf`'s acceptance
+  hashes check it.
 - It still catches every crossing the defect needs snapped. Each such
   crossing writes onto, or into one row with, its node, so it lies within
   ulps of it: section 1's are 2.1e-12 (k = 82, the row crossing), 1.7e-11
@@ -339,7 +342,8 @@ the off setting being the tree as is):
   quarter and velhas (same sha256).
 
 The prototype's R2 was the line test (the first version). The amended
-point test snaps a subset of what it snapped (section 3, R2), so the
+point test snaps a subset of what it snapped, up to the crossing's rounding
+(section 3, R2), so the
 quick-check figures carry over; W1's carry over where every firing was
 within the radius of its crossing, which C2 and C4 check.
 
@@ -403,3 +407,4 @@ about 0 net. Tests are not counted.
 - **Design review, round 2, 2026-10-17.** Commit `95c8b19b`, 0 counted lines, @reviewer: APPROVED. All four round-1 items fixed; the R1-fired flag (not `!edge`) keeps today's output; the probe under docs/ builds and matches C1 and C2's master figures. Probe pointer to section 3 fixed by the main session; probe includes and argc left as they are (a docs probe, not built by CI).
 - **Code review, round 1, 2026-10-17.** Range `ecdaecd2..6441ed57`, 10 counted lines, @reviewer: CHANGES REQUESTED. R2 tests the rounded node's distance to the edge's line, not that its projection falls inside the edge (`near_constraint`'s 0 < sigma < 1): on an edge nearly parallel to a grid line the snapped point lands past the edge's end (probe: edge from row 3.7 to 3.95, crossing stored at row 4). Fix: snap only within the radius of the crossing, or add the sigma test; @architect amends R2, @tester adds the edge, @developer fixes. Held: the `!edge` flag mutant killed by the pytest hash test is enough; CC7's lost case cannot occur outside the radius; `<=` is right. Wordings: section 2 still places `near_constraint` in `strip_scan.hpp`; the `line_distance` comment holds for clang's default contraction, not GCC's `-ffp-contract=fast`.
 - **R2 fix and master merge, 2026-10-17.** `80d3e2ce` (R2 snaps only within the radius of the crossing; C5 red before, green after; ctest 1042/1042 in Release, `-ffp-contract=off` and asan/ubsan). Correction to that commit's message: its pytest was 7843 passed and 50 errors, all from Ola's user `sources.toml` in a format the branch did not yet know (137 passed with an empty config folder). Master merge `d7d7e163` (#277-#282, no conflicts): pytest 8100 passed, ctest 1042/1042. 6 net counted lines.
+- **Code review, round 2, 2026-10-17.** Range `acbf6271..edd6f02d`, 6 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session (the subset claim holds up to the crossing's rounding). Round 1's finding closed by C5; no fresh mutant needed ("R2 removed" still killed by C2, C4, CC7; the first R2 and the sigma variant killed by C5). `@perf` next.
