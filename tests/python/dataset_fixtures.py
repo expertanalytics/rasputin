@@ -37,7 +37,8 @@ from test_cli_mesh_mosaic import write_tiles
 LOCAL = "bowl-100m"
 COARSE = "bowl-200m"
 CACHED = "bowl-cached"
-SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11")
+#: The package's entries: three rasters and two vector layers fetched from a map service.
+SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11", "nve-lakes", "clc2018")
 
 CREDIT = "Bowl terrain, a test fixture of rasputin"
 LICENCE = "Test fixture only"

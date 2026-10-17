@@ -55,6 +55,8 @@ from vtkread import read_vtk
 SNAPSHOT = Path(__file__).parent / "data" / "catalogue_b1353075.json"
 SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11")
 STATIONS = ("nve-hrd",)
+#: The entries added after the snapshot: vector layers fetched from a map service.
+FEATURE_LAYERS = ("nve-lakes", "clc2018")
 GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
 #: 10" and 1" in degrees, each rounded up in the fifth significant digit.
 GLO30_TILE_SPACING = (0.0027778, 0.00027778)
@@ -64,6 +66,8 @@ TILE_FIELDS = ("tile_name", "tile_spacing")
 LOCAL_FIELDS = ("path", "description")
 #: The field every entry gained with vector sources: None on every shipped one.
 VECTOR_FIELDS = ("layer",)
+#: The field the map-service kind added: the attributes asked of the layer.
+FEATURE_FIELDS = ("fields",)
 USER_ID = "my-x"
 
 
@@ -146,7 +150,7 @@ def changed(base: dict[str, Any], *drop: str, **update: Any) -> dict[str, Any]:
 
 class TestT1TheShippedCatalogue:
     def test_the_shipped_keys(self, sources: ModuleType) -> None:
-        assert sorted(sources.SOURCES) == sorted(SHIPPED)
+        assert sorted(sources.SOURCES) == sorted([*SHIPPED, *FEATURE_LAYERS])
         assert sorted(sources.STATION_SOURCES) == sorted(STATIONS)
 
     @pytest.mark.parametrize("key", SHIPPED)
@@ -154,7 +158,7 @@ class TestT1TheShippedCatalogue:
         self, sources: ModuleType, snapshot: dict[str, Any], key: str
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
-        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS
+        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS + FEATURE_FIELDS
         rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
         assert dumped["path"] is None
@@ -320,7 +324,7 @@ class TestT3UserEntries:
     def test_a_user_entry_joins_the_shipped_ones(self, sources: ModuleType, tmp_path: Path) -> None:
         user = write(tmp_path / "sources.toml", {f"source.{USER_ID}": ONE_COG})
         got = sources.catalogue(user)
-        assert sorted(got.sources) == sorted([*SHIPPED, USER_ID])
+        assert sorted(got.sources) == sorted([*SHIPPED, *FEATURE_LAYERS, USER_ID])
         assert got.sources[USER_ID].crs == "EPSG:25833"
         assert got.sources[USER_ID].nodata is None
         assert sorted(got.stations) == sorted(STATIONS)
