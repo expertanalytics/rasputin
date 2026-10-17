@@ -451,11 +451,13 @@ TEST_CASE("CC3: a diagonal through nodes: each node once, exactly; the merges co
         check_structure(st, 0, {0.5, 0.5}, {3.5, 1.5}, kCols, kRows);
     }
     SECTION("a hair from the nodes: both crossings of each kept, none at a node") {
-        // P1 moved one ulp of y (about 1.9e-10 rows): the line misses every
-        // node, by far more than rounding, so nothing is snapped or merged.
-        const Point2 p1 = world(3.5, 3.5);
-        const std::vector<Point2> v{world(0.5, 0.5),
-                                    {p1.x, std::nextafter(p1.y, -std::numeric_limits<double>::infinity())}};
+        // P1 moved 16 ulps of y (about 3e-9 rows): the line misses every node
+        // by at least about 3.5e-10 rows, at (1, 1), more than three times the
+        // coincidence radius (its 1e-10 floor here; increment 66, R2), so
+        // nothing is snapped or merged.
+        Point2 p1 = world(3.5, 3.5);
+        for (int i = 0; i < 16; ++i) p1.y = std::nextafter(p1.y, -std::numeric_limits<double>::infinity());
+        const std::vector<Point2> v{world(0.5, 0.5), p1};
         const auto st = generate(d, v, {{0, 1}});
         const auto pts = st.on_edge(0);
         CHECK(pts.size() == 13);
@@ -956,15 +958,16 @@ TEST_CASE("CC7: a seeded sweep of ends 1 to 4 ulps either side of grid lines kee
     }
 }
 
-TEST_CASE("CC7: a column and a row crossing with the same t, at different positions, keep one",
+TEST_CASE("CC7: a column and a row crossing with the same t, an ulp from a node, are that node, kept once",
           "[constraint_points][CC7]") {
     // (0.40625, 0.40625) to (1.578125, 1.578125 - 1 ulp): the line misses the
-    // node (1, 1) by an ulp, so neither crossing is snapped. Column 1 is
-    // crossed at (1, 0.99999999999999989) and row 1 at (1, 1), and both t
-    // round to the same double. The lower position wins the tie; the other is
-    // dropped by t and counted. Found by search: on a diagonal the two t
-    // expressions are mirror images, which is where they can round together;
-    // this edge passes near one node only, so nothing else is dropped.
+    // node (1, 1) by an ulp. Column 1 is crossed at (1, 0.99999999999999989)
+    // and row 1 at (1, 1), and both t round to the same double. Found by
+    // search: on a diagonal the two t expressions are mirror images, which is
+    // where they can round together; this edge passes near one node only, so
+    // nothing else is dropped. Increment 66, R2: the node is within the
+    // coincidence radius of the line, so both crossings are that node, and
+    // the second is dropped and counted.
     constexpr std::size_t cols = 16, rows = 8;
     const auto g = unit_frame(cols, rows);
     const auto d = dem_on(g);
@@ -985,10 +988,8 @@ TEST_CASE("CC7: a column and a row crossing with the same t, at different positi
     check_invariant(st, 0, a, b);
     CHECK(st.duplicates() == 1);
     REQUIRE(pts.size() == 3);
-    CHECK(pts[1].at == on_column);
+    CHECK(pts[1].at == MeshVertex{1.0, 1.0});
     CHECK(pts[1].s == tc);
-    CHECK_FALSE(pts[0].at == MeshVertex{1.0, 1.0});
-    CHECK_FALSE(pts[2].at == MeshVertex{1.0, 1.0});
 }
 
 TEST_CASE("CC8: a degenerate edge {i, i} is refused", "[constraint_points][CC8]") {

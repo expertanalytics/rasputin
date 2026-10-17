@@ -22,8 +22,17 @@
 //
 // Platforms: fixture W1's z values are small integers and its vertices are
 // decimetres, so the input is the same everywhere; the output can differ by
-// rounding (FMA contraction on arm64, none on x86-64 without -march), which
-// is why T1 asserts per outline and T2 does not assert flat_as_written.
+// rounding (FMA contraction on arm64, none on x86-64 without -march). Every
+// figure of C1-C4 was measured the same on macOS arm64 with contraction on
+// and with -ffp-contract=off (increment 66, section 4, "Platforms"). T1
+// asserts per outline; feet-off flat_as_written is asserted by C1
+// (increment 66).
+//
+// Increment 66 (docs/increments/66-coincident-written-vertices.md, section
+// 4): no two vertices written at one point, and none flat as written. C1-C4,
+// tagged [coincident]. "Coincident": the output vertices whose written point
+// is bit-equal to an earlier vertex's. INVARIANT-CRITICAL: mutation targets
+// R1 removed, R1 moved after the foot search, R2 removed.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -42,6 +51,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -158,12 +168,14 @@ Start w1_start(int k, const Piece* extra = nullptr) {
 }
 
 // The CLI's chain: refine (phase 1), constraint_check_points on its output,
-// refine_strip; tolerance 0.5, one thread, feet as given on both stages.
-// `phase1`, if given, gets phase 1's triangles (T4).
-PointRefineOutcome w1_run(const Raster<float>& dem, const Start& s, bool feet,
+// refine_strip; one thread, tolerance and feet as given on both stages.
+// `phase1`, if given, gets phase 1's triangles (T4). refine_strip's outcome
+// is returned as it is, refused or not (C2 counts a refused run); w1_run
+// below requires it ok.
+PointRefineOutcome w1_try(const Raster<float>& dem, const Start& s, bool feet, double tol,
                           std::vector<TriangleIndices>* phase1 = nullptr) {
     RefineOptions o;
-    o.tolerance = kTol;
+    o.tolerance = tol;
     o.threads = 1;
     o.constraint_feet = feet;
     auto r = refine(dem, s.mesh, std::span<const std::array<std::uint32_t, 2>>{s.edges},
@@ -174,12 +186,18 @@ PointRefineOutcome w1_run(const Raster<float>& dem, const Start& s, bool feet,
     const IndexedMesh2 mesh{std::move(r.vertices), std::move(r.triangles), std::vector<std::uint8_t>(nt, 0)};
     const auto strip = constraint_check_points(dem, mesh.vertices(), std::span<const std::array<std::uint32_t, 2>>{r.edges});
     PointRefineOptions po;
-    po.tolerance = kTol;
+    po.tolerance = tol;
     po.threads = 1;
     po.constraint_feet = feet;
-    auto out = refine_strip(dem, strip, mesh, std::span<const double>{r.z}, std::span<const std::uint8_t>{r.valid},
-                            std::span<const std::array<std::uint32_t, 2>>{r.edges},
-                            std::span<const std::uint32_t>{r.masks}, po);
+    return refine_strip(dem, strip, mesh, std::span<const double>{r.z}, std::span<const std::uint8_t>{r.valid},
+                        std::span<const std::array<std::uint32_t, 2>>{r.edges},
+                        std::span<const std::uint32_t>{r.masks}, po);
+}
+
+PointRefineOutcome w1_run(const Raster<float>& dem, const Start& s, bool feet, double tol,
+                          std::vector<TriangleIndices>* phase1 = nullptr) {
+    auto out = w1_try(dem, s, feet, tol, phase1);
+    INFO("refine_strip refused: " << out.message);
     REQUIRE(out.ok());
     return out;
 }
@@ -238,7 +256,7 @@ Sweep sweep(bool feet) {
     for (int k = 0; k < kOutlines; ++k) {
         CAPTURE(k);
         std::vector<TriangleIndices> phase1;
-        const auto out = w1_run(dem, w1_start(k), feet, &phase1);
+        const auto out = w1_run(dem, w1_start(k), feet, kTol, &phase1);
         s.delaunay.add(k, written_violations(out));
         const auto nf = cfo::node_findings(dem, out, kTol);
         s.over.add(k, nf.over);
@@ -284,8 +302,7 @@ TEST_CASE("T1: with constraint feet on, every W1 outline's output is Delaunay as
 TEST_CASE("T2: with constraint feet off, the check swaps nothing and the output is Delaunay as written",
           "[refine_points][written_delaunay][T2]") {
     // Pins K1 (a run that needs no fix is bit-identical): no pass runs.
-    // flat_as_written is not asserted (2 on k = 82 on macOS arm64; Linux may
-    // round differently).
+    // Feet-off flat_as_written is asserted by C1 (increment 66).
     const auto s = sweep(false);
     {
         INFO("flips_as_written: " << s.flips_written.names());
@@ -372,10 +389,164 @@ TEST_CASE("T5: a triangle flat as written does not stop the pass on the rest of 
     const auto dem = w1_dem();
     for (const int k : {0, 10}) {
         CAPTURE(k);
-        const auto out = w1_run(dem, w1_start(k, &piece), true);
+        const auto out = w1_run(dem, w1_start(k, &piece), true, kTol);
         CHECK(out.flat_as_written == 1);
         CHECK(out.flips_as_written > 0);
         CHECK(written_violations(out) == 0);
         CHECK(cfo::node_findings(dem, out, kTol).over == 0);
     }
+}
+
+// ================================================================== increment 66
+
+namespace {
+
+// The output vertices whose written point is bit-equal to an earlier
+// vertex's; a point written three times counts 2.
+std::size_t coincident(const std::vector<Point2>& vertices) {
+    std::set<std::pair<double, double>> seen;
+    std::size_t n = 0;
+    for (const auto& v : vertices)
+        n += seen.insert({v.x, v.y}).second ? 0 : 1;
+    return n;
+}
+
+// Outline k = 82's edge from vertex 1 to vertex 2 passes, in exact decimals,
+// through the DEM node (col 9, row 4), written (500090.0, 6599960.0), z -3.
+constexpr int kK82 = 82;
+constexpr Point2 kNode94{500090.0, 6599960.0};
+constexpr double kNode94Z = -3.0;
+
+}  // namespace
+
+// ------------------------------------------------------------------ C1
+
+TEST_CASE("C1: at tolerance 0.5, no W1 outline has two vertices written at one point or a triangle flat as written",
+          "[refine_points][written_delaunay][coincident][C1]") {
+    const auto dem = w1_dem();
+    for (const bool feet : {true, false}) {
+        CAPTURE(feet);
+        Tally pairs, flat, delaunay, over;
+        for (int k = 0; k < kOutlines; ++k) {
+            CAPTURE(k);
+            const auto out = w1_run(dem, w1_start(k), feet, kTol);
+            pairs.add(k, coincident(out.vertices));
+            flat.add(k, out.flat_as_written);
+            delaunay.add(k, written_violations(out));
+            over.add(k, cfo::node_findings(dem, out, kTol).over);
+        }
+        {
+            INFO("coincident vertices: " << pairs.names());
+            CHECK(pairs.total == 0);
+        }
+        {
+            INFO("flat_as_written: " << flat.names());
+            CHECK(flat.total == 0);
+        }
+        {
+            INFO("Delaunay as written: " << delaunay.names());
+            CHECK(delaunay.total == 0);
+        }
+        {
+            INFO("tolerance oracle, (node, triangle) pairs over " << kTol << " m: " << over.names());
+            CHECK(over.total == 0);
+        }
+    }
+}
+
+// ------------------------------------------------------------------ C2
+
+TEST_CASE("C2: at tolerance 0, the ten W1 outlines that fail on master run, with no coincident vertex and none flat",
+          "[refine_points][written_delaunay][coincident][C2]") {
+    // The other 2990 outlines of 0..2999 are 0 on master and stay 0 (probed
+    // by the design, not asserted here).
+    const auto dem = w1_dem();
+    for (const bool feet : {true, false}) {
+        CAPTURE(feet);
+        std::ostringstream failing;
+        std::size_t bad = 0, delaunay = 0, over = 0;
+        for (const int k : {82, 1172, 1437, 1457, 1922, 2137, 2157, 2622, 2852, 2922}) {
+            const auto out = w1_try(dem, w1_start(k), feet, 0.0);
+            if (!out.ok()) {
+                ++bad;
+                failing << " k = " << k << " refused (" << out.message << ");";
+                continue;
+            }
+            const std::size_t pairs = coincident(out.vertices);
+            if (pairs != 0 || out.flat_as_written != 0) {
+                ++bad;
+                failing << " k = " << k << " (coincident " << pairs << ", flat " << out.flat_as_written << ");";
+            }
+            delaunay += written_violations(out);
+            // node_findings' own slack, 1e-9 * max|z| (5 m on W1), makes
+            // tolerance 0 checkable.
+            over += cfo::node_findings(dem, out, 0.0).over;
+        }
+        INFO("outlines refused, with a coincident vertex or flat:" << failing.str());
+        CHECK(bad == 0);
+        CHECK(delaunay == 0);
+        CHECK(over == 0);
+    }
+}
+
+// ------------------------------------------------------------------ C3
+
+TEST_CASE("C3: phase 1 inserts the DEM node a hair off a constraint on the constraint, not its foot",
+          "[refine][coincident][C3]") {
+    const auto dem = w1_dem();
+    const Start s = w1_start(kK82);
+    RefineOptions o;
+    o.tolerance = kTol;
+    o.threads = 1;
+    o.constraint_feet = true;
+    const auto r = refine(dem, s.mesh, std::span<const std::array<std::uint32_t, 2>>{s.edges},
+                          std::span<const std::uint32_t>{s.masks}, o);
+    REQUIRE(r.ok());
+    // The vertex nearest the node; 1e-6 m on 10 m cells, coordinates near
+    // 6.6e6 m (an ulp there is 9.3e-10 m), checked on W1 only.
+    std::size_t near = r.vertices.size();
+    double best = 1e-6;
+    for (std::size_t i = 0; i < r.vertices.size(); ++i) {
+        const double d = std::hypot(r.vertices[i].x - kNode94.x, r.vertices[i].y - kNode94.y);
+        if (d < best) {
+            best = d;
+            near = i;
+        }
+    }
+    REQUIRE(near < r.vertices.size());
+    CAPTURE(r.vertices[near].x, r.vertices[near].y, r.z[near]);
+    CHECK(r.vertices[near] == kNode94);
+    CHECK(r.z[near] == kNode94Z);
+    const auto ends = std::count_if(r.edges.begin(), r.edges.end(),
+                                    [&](const auto& e) { return e[0] == near || e[1] == near; });
+    CHECK(ends == 2);
+}
+
+// ------------------------------------------------------------------ C4
+
+TEST_CASE("C4: a crossing whose node lies within the coincidence radius of the edge is that node",
+          "[constraint_points][coincident][C4]") {
+    const auto dem = w1_dem();
+    const std::vector<Point2> ends{Point2{500094.6, 6599920.9}, Point2{500088.6, 6599971.9}};
+    const std::vector<std::array<std::uint32_t, 2>> edge{{0, 1}};
+    const auto strip = constraint_check_points(dem, std::span<const Point2>{ends},
+                                               std::span<const std::array<std::uint32_t, 2>>{edge});
+    REQUIRE(strip.edge_count() == 1);
+    // Points within 1e-6 lattice units of (9, 4): far wider than the
+    // coincidence radius (1e-10 on a 12 x 12 grid), far narrower than a cell.
+    std::vector<terrain::refinement::ConstraintPoint> there;
+    std::ostringstream at;
+    at.precision(17);
+    for (const auto& p : strip.on_edge(0))
+        if (std::hypot(p.at.col - 9.0, p.at.row - 4.0) < 1e-6) {
+            there.push_back(p);
+            at << " (" << p.at.col << ", " << p.at.row << ")";
+        }
+    INFO("points near (9, 4):" << at.str());
+    REQUIRE(there.size() == 1);
+    CHECK(there[0].at.col == 9.0);
+    CHECK(there[0].at.row == 4.0);
+    CHECK(there[0].z == kNode94Z);
+    CHECK(strip.size() == 11);
+    CHECK(strip.duplicates() == 1);
 }
