@@ -182,7 +182,7 @@ def main() -> int:
 
     if event.get("tool_name") != "Bash":
         return 0
-    blocks = []
+    blocks, conflicts, skips = [], [], []
     for root in committed_trees(event):
         if root in (NOT_READ, NO_SCAN):
             blocks.append(f"NOT CHECKED: {root}, so the gates ran in the session's directory, "
@@ -190,26 +190,42 @@ def main() -> int:
         elif isinstance(root, str):
             blocks.append(f"NOT CHECKED: git ran in `{root}`, which this hook cannot resolve "
                           "to a work tree; run the gates there yourself.")
-        elif failures := run_gates(root):
-            blocks.append(f"Gates in {root}:\n" + "\n\n".join(failures))
+        elif paths := list(dict.fromkeys(
+                line.split("\t", 1)[-1] for line in git(root, "ls-files", "-u").splitlines())):
+            conflicts.append(
+                f"A git operation stopped on conflicts in {root}: {len(paths)} paths are unmerged "
+                f"({', '.join(paths[:3])}). No gates ran there. Any commit made before it stopped "
+                "(an earlier pick of a rebase or cherry-pick, or an earlier command on the same "
+                "line) is not checked either; the gates run on the next commit there.")
+        elif lines := run_gates(root):
+            if all(line.startswith("Skipped in ") for line in lines):
+                skips += lines  # a gate script this tree lacks is not red
+            else:
+                blocks.append(f"Gates in {root}:\n" + "\n\n".join(lines))
 
-    if not blocks:
+    if skips:
+        print("\n".join(skips))
+    if not blocks and not conflicts:
         return 0
-
-    print(
-        "The commit is in, and below are the gates that are red or the trees this hook did "
-        "not check. Fix and amend -- do not push or open a PR on this.\n\n" + "\n\n".join(blocks)
-        + "\n\nThis is not the full set: mypy and ctest need a build, and CI "
-          "decides. Run `gh pr checks <pr>` before calling anything merge-ready.",
-        file=sys.stderr,
-    )
+    text = "\n\n".join(conflicts)
+    if blocks:
+        text = ("The commit is in, and below are the gates that are red or the trees this hook "
+                "did not check. Fix and amend -- do not push or open a PR on this.\n\n"
+                + "\n\n".join(blocks + conflicts)
+                + "\n\nThis is not the full set: mypy and ctest need a build, and CI "
+                  "decides. Run `gh pr checks <pr>` before calling anything merge-ready.")
+    print(text, file=sys.stderr)
     return 2  # 2 feeds stderr back to the agent.
 
 
 def run_gates(root: Path) -> list[str]:
-    """Each gate that failed or could not run in `root`, with its own output."""
+    """Each gate that failed or could not run in `root`, with its own output, and a
+    `Skipped in` line for each gate script that is not in `root`."""
     failures = []
     for gate in gates(root):
+        if gate[1].startswith("tools/") and not (root / gate[1]).is_file():
+            failures.append(f"Skipped in {root}: {gate[1]} is not in this tree.")
+            continue
         try:
             done = subprocess.run(gate, cwd=root, capture_output=True, text=True, timeout=180)
         except (OSError, subprocess.TimeoutExpired) as exc:
