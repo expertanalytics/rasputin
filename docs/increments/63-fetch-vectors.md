@@ -259,7 +259,9 @@ class LayerFacts(BaseModel):          # frozen; from <url>?f=json
     epsg: int                         # extent.spatialReference.latestWkid, else wkid
 
 def layer_facts(source: RemoteSource, get_text) -> LayerFacts: ...
-def box_in_source(request: FetchRequest, source: RemoteSource) -> Bounds: ...   # pure
+# `fetch/plan.source_box` is split: its frame, domain bounds, `transform_bounds` and ±180°/pole refusal become
+# `box_in_crs(request, crs) -> Bounds`. `source_box` adds the raster margin and two-cell growth to it, and the
+# features fetch calls `box_in_crs` without growth.
 def chunks(ids: Sequence[int], size: int) -> list[list[int]]: ...               # pure
 def fetch_features(request, source, get_text, cache: FeatureCache) -> FeatureReport: ...
 ```
@@ -342,11 +344,11 @@ of at most 500 ids, plus the layer and id requests).
   (`SELECT <id_field> FROM features`). `put_manifest` takes either manifest.
   `NOTICE.txt` through `put_notice(notice(source, (credit,)))`, the credit
   with the first fetch's date.
+- The `CacheWriter` docstring's 'Every file is written as `<name>.part` and renamed' gains the exception: `features.gpkg` is written in place by SQLite transactions, whose journal guards a crash.
 - **`io/geopackage_write.py` gains** `create_features_table(conn, name,
   srs_id, kind, pk, columns: Sequence[tuple[str, str]])` (columns
   `TEXT`, `REAL` or `INTEGER` from the esri field types; others refused),
-  `geometry_blob(geometry, srs_id) -> bytes` (the section 2.1.3 header with
-  the XY envelope, then `shapely.to_wkb(..., flavor="iso", byte_order=1)`),
+  the blob code of `write_land_cover` (`shapely.bounds`, the `<2sBBi4d` header, ISO WKB) moves into `multipolygon_blobs(geometries, srs_id) -> (blobs, boxes)`, called by `write_land_cover` and `insert_features`. `build_rtree` is split into `create_rtree(conn, table)` (the virtual table and its `gpkg_extensions` row) and a fill that takes row ids. `create_features_table` calls `register_layer`;
   and `insert_features(conn, name, rows)` writing rows and their R-tree
   entries (id = the primary key). The R-tree table is created empty with
   the table (the `build_rtree` statement, without its bulk fill) and
@@ -397,7 +399,7 @@ No test reaches the network: `get_text` is a fake serving recorded answers
    `values = "features"`; each refusal of section 5.2 by its field name
    (`fields` missing, `fields` on a `one-cog`, `layer`, `z_unit`, `path`,
    `years` on the new kind).
-2. **Pure helpers.** `box_in_source` with the same CRS (unchanged box) and
+2. **Pure helpers.** `box_in_crs` with the same CRS (unchanged box) and
    with EPSG:4326 to EPSG:25833 (outward); `chunks` (7 ids, size 3 →
    3, 3, 1).
 3. **Layer check.** Refusals: a line layer; a CRS mismatch; a field the
@@ -441,13 +443,13 @@ Invariant-critical suite: none (no topology or predicate); no mutation round.
 
 | File | Net lines (estimate) |
 | --- | --- |
-| `fetch/features.py` (new) | 150 |
+| `fetch/features.py` (new) | 140 |
 | `io/repository.py` (manifest, `features()`, refusal) | 45 |
-| `io/geopackage_write.py` (table, blob, insert) | 45 |
+| `io/geopackage_write.py` (table, blob, insert) | 35 |
 | `sources.py` (kind, `fields`, rules) | 25 |
 | `source_report.py` (`_one`, `_vector` path) | 15 |
 | `cli.py` (branch, report line, help) | 30 |
-| **Total** | **about 310**, one PR |
+| **Total** | **about 295**, one PR |
 
 `data/sources.toml` is not counted (`CLAUDE.md` §2). No new dependency:
 `sqlite3` and `json` are the standard library, `shapely` and `pyproj` are in
@@ -486,3 +488,7 @@ answers (to verify).
    used as it is, with no version named in its credit? Default: yes, and the
    CORINE class map's notice (which says "version 2020_20u1") stays as it
    is until the version is known.
+
+## Review
+
+- **Design review, round 1, 2026-10-17.** Commit `fe0259c4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `fetch/plan.source_box` split into `box_in_crs`; the `write_land_cover` blob code and `build_rtree` reused; the `CacheWriter` docstring exception; about 295 lines. Held: no second registry, no user file written; service facts (record limits, CRSs, fields); licence duties in NOTICE.txt. Idea: drop `ID` from the clc2018 fields. Open with Ola: shipping the two entries; the CORINE version.
