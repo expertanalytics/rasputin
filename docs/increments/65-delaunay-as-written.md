@@ -113,7 +113,7 @@ In `point_loop`, where the loop now breaks (`if (!any) break;`):
    exact translation of its grid triangle, so it is counter-clockwise as
    written; an edge whose quad has four faithful corners gets, as written,
    the circle answer the loop gave it (the exact tests are invariant under an
-   exact translation), and the loop leaves every edge legal in its frame, so
+   exact translation), and the loop leaves every edge legal in its frame (the start by `legalise_all`, each insertion by `legalise_around`; Lawson's argument needs every triangle counter-clockwise in the frame, which only a triangle with an unfaithful corner can break, so T1 and T2 count with the full oracle, not the filter), so
    it is legal. Only a triangle with an unfaithful
    corner is a candidate. Every node of a grid whose `col dx` and
    `x_min + col dx` (and the same for rows) are exact is faithful (the tile: 0 unfaithful of 236,724 vertices).
@@ -275,7 +275,7 @@ power state recorded, evidence in `docs/benchmarks/<date>/65-delaunay-as-written
   defect and goes back to `@developer`; a changed hash with a base count
   above 0 is the fix, and is recorded so.
 - **Time:** within `bench.py`'s threshold (5 %) at every thread count; the
-  estimate above is under 0.5 %.
+  estimate above is under 0.5 %. A run whose check does find an illegal edge pays the copy, about 10 to 20 % per pass, as timed above.
 
 ## 6. Size
 
@@ -295,3 +295,4 @@ Tests are not counted.
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `37bea375`, @reviewer: CHANGES REQUESTED. Asked for a timed estimate of the pass on the quick check's cases, a flat triangle left out rather than stopping the pass, `flat_as_written == 0` in T1, and the fixture's `x0`, `y0` and step 1's vertex defined; answered in this revision.
+- **Design review, round 2, 2026-10-17.** Commit `625956e1`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: why the filter is sound (the loop leaves every edge legal on the grid; T1 and T2 use the full oracle); the cost when a pass does run. Held: T3 and T5 orientations recomputed; timing shares.
