@@ -20,6 +20,21 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   Copernicus GLO-30 tiles a mesh of that domain reads into a tile cache, so
   `rasputin mesh --dem glo30` then runs offline; `anadem-v1` (South America)
   likewise.
+- **Lakes and land cover from the network.**
+  `rasputin fetch nve-lakes --bbox XMIN YMIN XMAX YMAX` copies the lake
+  polygons of NVE's lake database (Innsjødatabasen) meeting the box, and
+  `rasputin fetch clc2018 --bbox ...` the CORINE Land Cover 2018 polygons
+  from the European Environment Agency's map service; no account is needed.
+  The box is in the source's CRS (EPSG:25833 and EPSG:3035), or in
+  `--out-crs`; `--domain FILE` takes a polygon's box instead. Each lands as
+  one GeoPackage in the tile cache, and `rasputin sources` then lists it with
+  its path and the options it fits (`mesh --features` with `--features-map
+  corine`, `catchment --lakes`). A rerun asks only for polygons not yet
+  cached. The credits go into a `NOTICE.txt` beside the file: NVE's data is
+  under the Norwegian licence for open government data (NLOD 1.0), which
+  asks you to name NVE and the licence; CORINE is the EU Copernicus Land
+  Monitoring Service's, free and open, asking you to name the source, say
+  that it was modified (cut to a box) and not suggest EU endorsement.
 - **A domain.** Mesh only the inside of a polygon, such as a catchment
   (GeoJSON or WKT, in any CRS that pyproj reads).
 - **Features as constraints.** Lakes, land-cover borders, roads and rivers

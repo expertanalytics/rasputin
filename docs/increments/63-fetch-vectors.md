@@ -1,6 +1,6 @@
 # Increment 63: `rasputin fetch` downloads lake polygons and land cover for a box
 
-**Status: designed** (branch `worktree-fetch-vectors`, from master `3cb6d416`); not yet reviewed.
+**Status: built, awaiting code review** (branch `worktree-fetch-vectors`, from master `3cb6d416`; design review round 1 approved with wordings; red `95068260` and `83dbe0a0`, green `435f9b74`, HTTP-200 refusal tests `df557a0b`; full suite 8095 passed, exit 0; 369 counted lines against about 295, section 7). Ola's two questions (section 8) stay open, defaults taken.
 
 ## 1. What Ola asked
 
@@ -455,6 +455,33 @@ Invariant-critical suite: none (no topology or predicate); no mutation round.
 `sqlite3` and `json` are the standard library, `shapely` and `pyproj` are in
 the core stack; `tools/check_prohibited_deps.py` stays green. No C++ is
 touched, and no refine or mesh code, so no `@perf` acceptance run.
+
+As built (`python3 tools/count_loc.py 2605b28b df557a0b`): 369 counted
+lines, 74 over the estimate, under 700. By file: `fetch/features.py` 205
+(estimated 140), `fetch/plan.py` 29 (not estimated: the split of
+`source_box` into `box_in_crs`, and `region_sha256` moved there from
+`fetch/run.py`, which nets 0), `io/geopackage_write.py` 50 (35),
+`io/repository.py` 47 (45), `sources.py` 21 (25), `cli.py` 13 (30),
+`source_report.py` 4 (15). Of `features.py`'s excess, about 20 lines are the
+formatter spreading the two request dictionaries one key per line (the ids
+query, lines 179 to 194, and the chunk query, lines 240 to 249: 26 lines
+that packed would be about 6); the rest is the HTTP-200 refusal check
+(`_answer`) and the report helper, which the estimate left out.
+
+**Pinned by `@tester`, confirmed:** a chunk the service refuses with an
+HTTP-200 body holding an `error` member is halved exactly as one refused
+with an HTTP error. `_answer` turns that body into a `FetchError` with the
+service's message, and `take` halves on any `FetchError` from `_answer`
+(`src_python/tin_engine/fetch/features.py@df557a0b:79`,
+`src_python/tin_engine/fetch/features.py@df557a0b:252`). The answer checks
+of `_rows` (ids, CRS, geometry) run after that `try`, so a wrong answer is
+never halved: it stops the fetch, as section 5.3 rules. Not covered: a
+200 answer that is not JSON at all (an HTML page) is not halved; it stops
+the fetch at the first such chunk with the JSON parser's own message
+("Expecting value: line 1 column 1 (char 0)"), which names neither the
+source nor the URL (probed on the fake layer: one chunk asked,
+`JSONDecodeError`, a `ValueError` that `cli.fetch` prints as an error). A
+question for code review, not a design change.
 
 Assessment: data (the catalogue entry, `FetchRequest`) stays apart from
 execution (`fetch_features`); the fetch holds no state beyond the cache it
