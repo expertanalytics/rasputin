@@ -18,7 +18,8 @@
 // edge. This header includes no <unordered_map> and no <unordered_set>.
 //
 // This is not a coordinate dedup. Coordinate keys need a snap grid, which
-// belongs to the noder. These keys are vertex INDICES: exact integers, no
+// belongs to the noder, and a tolerance to snap with. These keys are vertex
+// INDICES: exact integers, no
 // tolerance question.
 //
 // THIS WORKS ONLY BECAUSE THE BACKEND NEVER SPLITS A CONSTRAINT EDGE. detria

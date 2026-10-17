@@ -1,6 +1,7 @@
 #pragma once
 
-// The check-point store of the final check: points given as world (x, y) in the target CRS with a float z, filed by
+// The check-point store of the final check: points given as world (x, y) in
+// the target CRS with a float z, filed by
 // lattice cell of the target grid, and read back by cell row and column range.
 //
 // Numbers only: the grid is a RasterGeometry, and no CRS, path or raster value

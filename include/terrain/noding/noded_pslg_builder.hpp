@@ -5,7 +5,8 @@
 // WHY THIS IS A TYPE RATHER THAN A PASS INSIDE node<K>'s LOOP. A verification
 // pass reachable only through the noder only ever sees inputs the noder
 // produced, so a verifier that agrees with its producer would never be run
-// against a broken input. As a separate type with a public entry point it
+// against a broken input, and its agreement would show nothing. As a separate
+// type with a public entry point it
 // can be handed a hand-built candidate with a live T-junction in it and be
 // REQUIRED to refuse, which is what
 // tests/cpp/unit/test_noding_noded_pslg_builder.cpp does and what no property

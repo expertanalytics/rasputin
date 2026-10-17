@@ -1,6 +1,7 @@
 #pragma once
 
-// A triangle's DEM node set as row spans: for each lattice row the triangle's closed interior meets, the
+// A triangle's DEM node set as row spans: for each lattice row the
+// triangle's closed interior meets, the
 // inclusive column interval [c0, c1] of its nodes, vertices excluded. The union
 // of the spans is exactly the set a box walk finds with three exact orientation
 // tests per node, so a caller walks contiguous memory instead of testing.

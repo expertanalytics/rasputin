@@ -1,7 +1,8 @@
 #pragma once
 
 // Dynamic-block parallel for over std::jthread, the one the refinement scan
-// uses.
+// uses. Blocks are taken dynamically, so a slow block does not hold up the
+// rest.
 //
 // [0, n) is cut into blocks of `block` items, block k being
 // [k*b, min(n, (k+1)*b)), and workers take block indices from one shared atomic

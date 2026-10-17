@@ -10,7 +10,8 @@
 // does it.
 //
 // On top of Pslg's guarantees 1-8 and 10 (9 is replaced by
-// node_of_input_vertex), numbered on from them:
+// node_of_input_vertex), and numbered on from Pslg's, so one number names one
+// guarantee across both types:
 //  11. Every coordinate is grid().world(g) for some GridPoint within
 //      kMaxGridIndex. Checkable bitwise: grid().snapped(v) == v.
 //  12. No two vertices are equal.

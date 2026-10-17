@@ -1,7 +1,8 @@
 #pragma once
 
 // The final check: greedy insertion against stored check points, starting
-// from phase 1's mesh. refine.hpp's loop with a different scanner.
+// from phase 1's mesh. refine.hpp's loop with a different scanner, kept in a
+// function of its own (detail::point_loop).
 //
 // The store's geometry() is the frame and the buckets, nothing more: phase 2
 // reads no raster value. A start vertex keeps the z it is given (NaN where it

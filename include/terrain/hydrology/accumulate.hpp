@@ -11,7 +11,8 @@
 
 namespace terrain::hydrology {
 
-// How many nodes drain through each node, from the flood `upstream` runs.
+// How many nodes drain through each node, from the same flood `upstream`
+// runs (flood.hpp), so the two agree node for node.
 // For every node c with data, count[c] and the two bits of
 // reach[c] equal upstream(z, {c})'s nodes_in, touches_edge and touches_nodata.
 struct AccumulateOutcome {

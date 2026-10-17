@@ -1,9 +1,11 @@
 #pragma once
 
-// A triangle mesh over the DEM's lattice, with neighbour links. Every vertex
-// that refinement inserts is a DEM node, a foot on a constraint segment or a
-// check point of the final check; a start vertex may lie anywhere in the node
-// rectangle.
+// A triangle mesh over the DEM's lattice, with neighbour links.
+//
+// Every vertex that refinement inserts is a DEM node, a foot on a
+// constraint segment or a check point of the final check (an off-node
+// point). A start vertex may lie anywhere in the node rectangle, on a node
+// or off it.
 //
 // A flat triangle array, not a tree: an edge split changes two triangles at
 // once, and only adjacency can find the second. A split reuses the parent's
