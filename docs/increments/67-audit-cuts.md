@@ -126,11 +126,11 @@ Deleted whole:
 - `test_cli_help.py:224` `test_the_help_names_no_gallery`, `:271`
   `test_the_drawing_package_is_not_importable`, and `:284`
   `test_the_cli_keeps_no_drawing_name` (5 cases);
-- `test_reference.py:546` `test_no_product_source_names_the_old_overlap_fields`;
+- `tests/python/test_reference.py@df923398:546` `test_no_product_source_names_the_old_overlap_fields`;
 - `test_domain.py:301` `test_the_must_match_rule_is_gone`;
 - `test_io_gml.py:228` `test_a_document_has_no_completeness_flag`;
-- `test_resources.py:287` `test_t11_decompose_is_gone`;
-- `test_legend_name.py:1-148`: the repository scanner
+- `tests/python/test_resources.py@df923398:287` `test_t11_decompose_is_gone`;
+- `tests/python/test_legend_name.py@df923398:1-148`: the repository scanner
   (`test_no_old_spelling_outside_the_history_records`, `:106`) and its six
   self-tests (`TestTheRules`, `:113-148`). The file keeps its three refusal
   tests (`:151-169`) and a one-line docstring saying what they check.
@@ -154,7 +154,7 @@ Kept, with the reason:
 - the old commands and options are refused with a usage error, which a user's
   old script meets: `test_cli_help.py:215` (`--flat`, `--crs`), `:264`
   (`draw`), `test_mcp_vector_sources.py:325` (`--out-parent`),
-  `test_legend_name.py:151-169`;
+  `tests/python/test_legend_name.py@df923398:151-169`;
 - a signature plugins call: `test_cli_kit.py:36`;
 - boundary rules: `test_core_noding.py:474,555` (bindings left out on
   purpose), `:862` (no composite entry point on `_core`),
