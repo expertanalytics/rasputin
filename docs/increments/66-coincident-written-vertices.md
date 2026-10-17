@@ -242,3 +242,7 @@ to `refine.hpp` about 0 net. Tests are not counted.
   byte-for-byte; T3 pins the node.
 - A counter for R1 or R2 in the outcome or the run record: not needed by any
   test, and Ola's run record has no reader for it.
+
+## Review
+
+- **Design review, round 1, 2026-10-17.** Commit `0ea809cb`, 0 counted lines, @reviewer: CHANGES REQUESTED. No timed estimate (`tools/bench_quick.py` on the quick-check cases); the 4 outlines R1 alone leaves flat are not named, nor how 1457, 2157 and 2852 come out flat with no coincident pair; T1 and T4 shown to fail only on macOS arm64 (FMA rounding); test names T1-T4 collide with increment 65's, and two comments there (lines 26, 287) become false. Suggestions: R1 on a void triangle; the probe figures are reproducible only through the mutants.
