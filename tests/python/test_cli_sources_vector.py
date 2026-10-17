@@ -189,7 +189,11 @@ class TestT6VectorListing:
         note = listing()["note"]
         assert isinstance(note, str) and "extent" in note, note
 
-    def test_no_note_on_extents_without_a_vector_source(self, config: Path, tmp_path: Path) -> None:
+    def test_no_note_on_extents_without_a_vector_source_read(
+        self, config: Path, tmp_path: Path
+    ) -> None:
+        """The package's own vector entries (`nve-lakes`, `clc2018`) are listed
+        but not fetched, so no listed coverage is an extent box: no note."""
         write_sources(config, {LOCAL: local_entry(write_local(tmp_path / "tiles"))})
         note = listing()["note"] or ""
         assert "extent" not in note, note

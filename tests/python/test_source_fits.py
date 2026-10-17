@@ -256,7 +256,8 @@ def listed(tmp_path: Path) -> dict[str, tuple[Path, str | None, set[Fit]]]:
         "stations": (bf.write_stations(tmp_path / "stations.geojson"), None),
         "rivers": (bf.write_rivers(tmp_path / "rivers.geojson"), None),
         "reference": (bf.write_references(tmp_path / "reference.geojson"), None),
-        "nve-lakes": (bf.write_lakes(tmp_path / "nve-lakes.geojson"), None),
+        # Not "nve-lakes": that id is the package's map-service entry.
+        "hrd-lakes": (bf.write_lakes(tmp_path / "nve-lakes.geojson"), None),
         "lakes-no-crs": (without_crs(lakes), None),
     }
     user = write_sources(
