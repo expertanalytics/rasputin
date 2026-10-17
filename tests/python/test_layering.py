@@ -108,8 +108,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's
-        "plugin_api": "cli_kit crs dem_input io.geotiff_write io.models io.vtk_read raster"
-                      " resources run_record",  # 51: what a plugin may import
+        "plugin_api": "catchment_core cli_kit crs dem_input io.geotiff_write io.models"
+                      " io.vtk_read raster resources run_record",  # 51: what a plugin may import
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
         "mcp.server": "mcp.schema sources tin_engine",  # 57: the output root's variable
     },
