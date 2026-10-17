@@ -114,7 +114,7 @@ plugins use today, and grows on request.
 | `plural` | `"1 tile"`, `"2 tiles"` |
 | `DemRequest` | Which DEM to read: a directory, files or a cached source, and an optional box or domain |
 | `open_dem` | Lists, plans and decodes a `DemRequest` into one grid |
-| `repository_for` | The tile repository over a directory, files or a cached source |
+| `repository_for` | The tile repository over a directory, files or a cached source. It no longer returns the run's name beside it, and the `DemInput` that `open_dem` returns no longer has `label` |
 | `DemTile` | One decoded tile: its `RasterMeta` and a read-only 2-D array |
 | `RasterMeta` | A tile's node grid: origin, spacing, size, CRS, nodata |
 | `Bounds` | A box in a DEM's CRS |

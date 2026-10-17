@@ -17,6 +17,7 @@ imported in fixtures; each test fails on its own with `ModuleNotFoundError`.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import io
 from pathlib import Path
@@ -124,7 +125,6 @@ class TestOpenDem:
         assert opened.tile.meta == expected.meta
         assert same_array(opened.tile.array, expected.array)
         assert [p.name for p in opened.plan.tiles] == ["one.tif"]
-        assert opened.label == "one"
 
     def test_a_directory_is_stitched(
         self, di: ModuleType, mosaic_dir: Path, source: DemTile
@@ -133,7 +133,6 @@ class TestOpenDem:
         assert opened.tile.meta == source.meta
         assert same_array(opened.tile.array, source.array)
         assert [p.name for p in opened.plan.tiles] == ["ne.tif", "nw.tif", "se.tif", "sw.tif"]
-        assert opened.label == "tiles"
 
     def test_explicit_files_equal_the_directory(self, di: ModuleType, mosaic_dir: Path) -> None:
         files = sorted(mosaic_dir.glob("*.tif"), reverse=True)
@@ -141,7 +140,6 @@ class TestOpenDem:
         by_dir = di.open_dem(request(di, mosaic_dir))
         assert by_files.tile.meta == by_dir.tile.meta
         assert same_array(by_files.tile.array, by_dir.tile.array)
-        assert by_files.label == files[0].stem
 
     def test_bounds_cut_the_window(self, di: ModuleType, mosaic_dir: Path, source: DemTile) -> None:
         opened = di.open_dem(
@@ -168,6 +166,22 @@ class TestOpenDem:
         with pytest.raises(mz.MosaicError, match="--bbox") as info:
             di.open_dem(request(di, path), resources=Resources(threads=1, memory_budget=8))
         assert "--memory-budget" in str(info.value)
+
+
+class TestNoRunName:
+    """`open_dem` and `repository_for` name no run: the result is the data alone."""
+
+    def test_dem_input_has_no_label(self, di: ModuleType) -> None:
+        assert "label" not in {field.name for field in dataclasses.fields(di.DemInput)}
+
+    def test_repository_for_returns_the_repository_alone(
+        self, di: ModuleType, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "one.tif"
+        path.write_bytes(micro_tiff().getvalue())
+        repository = di.repository_for((path,))
+        assert not isinstance(repository, tuple)
+        assert [footprint.name for footprint in repository.footprints()] == ["one.tif"]
 
 
 class TestDemRequest:

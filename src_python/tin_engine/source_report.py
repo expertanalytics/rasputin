@@ -318,7 +318,7 @@ def _one(
                 found = _vector(entry, box, maps)
             else:
                 if entry.path is not None:
-                    repository = repository_for((entry.path,), z_unit=entry.read_unit)[0]
+                    repository = repository_for((entry.path,), z_unit=entry.read_unit)
                 else:
                     assert cache is not None
                     repository = CacheRepository(cache, entry.id, z_unit=entry.read_unit)

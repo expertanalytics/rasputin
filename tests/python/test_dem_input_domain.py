@@ -668,7 +668,7 @@ class InMemory(MemoryRepository):
 
 def in_memory(monkeypatch: pytest.MonkeyPatch, di: ModuleType, tiles: dict[str, Any]) -> None:
     """`open_dem` reads `tiles` from memory, whatever its sources say."""
-    monkeypatch.setattr(di, "repository_for", lambda *_: (InMemory(tiles), "memory"))
+    monkeypatch.setattr(di, "repository_for", lambda *_: InMemory(tiles))
 
 
 def relabelled(tile: Any, **fields: Any) -> Any:

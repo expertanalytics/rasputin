@@ -137,7 +137,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   check overlaps and coverage, stitch; no files (15a);
                            #   imports only io.models first-party
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   label, domain in the DEM's CRS) (15a, 15b);
+                           #   domain in the DEM's CRS) (15a, 15b);
                            #   takes a DemRepository and TileFootprints, and
                            #   the union of the tiles' node_box
   domain.py                # DomainPolygon (one polygon in its own CRS) and its
