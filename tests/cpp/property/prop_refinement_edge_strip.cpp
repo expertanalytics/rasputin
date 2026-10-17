@@ -1005,10 +1005,15 @@ TEST_CASE("ES15: a DEM node within ulps of an end is skipped, so no sliver hides
     // coincident output vertices, E2 by node_findings (its 1e-9 relative
     // slack covers L14's exception), the Delaunay oracle.
     const UlpRun r = ulp_run(a, b, apex, tol);
+    // Node (17, 9) is never inserted as a DEM node. Since increment 66 (R2)
+    // the strip's crossing of column 17, within ulps of it, is that node, so
+    // a vertex there is the strip point, on the chain.
     const Lat skipped{17.0, 9.0}, on_line{15.0, 8.0};
+    std::set<std::uint32_t> ends;
+    for (const auto& e : r.out.edges) ends.insert({e[0], e[1]});
     double zmax = 1.0;
-    for (std::size_t i = 0; i < r.out.vertices.size(); ++i) {
-        CHECK_FALSE(lat(g, r.out.vertices[i]) == skipped);
+    for (std::uint32_t i = 0; i < r.out.vertices.size(); ++i) {
+        if (lat(g, r.out.vertices[i]) == skipped) CHECK(ends.contains(i));
         if (r.out.valid[i]) zmax = std::max(zmax, std::abs(r.out.z[i]));
     }
     CHECK(r.out.coincident >= 1);
