@@ -1,7 +1,7 @@
 # Increment 66: no two vertices written at one point
 
-**Status: designed, design review APPROVED (round 2); R2's test amended
-after code review round 1** (`@architect`, 2026-10-17, on `ecdaecd2`, revised
+**Status: built, code review APPROVED (round 2), `@perf` ACCEPTED
+(`5eee02e8`), 2026-10-17** (`@architect`, 2026-10-17, on `ecdaecd2`, revised
 on `a3cb7f40`, R2 amended on `acbf6271`; branch
 `worktree-coincident-vertices`, based on increment 65's head; 65 merged as
 #278, so master is merged in before the push). Full
