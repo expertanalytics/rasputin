@@ -409,7 +409,7 @@ def _typed(value: Any) -> Any:
 # value, or a function of the reader's right geometry giving it).
 NOT_A_GEOMETRY: list[tuple[str, Any]] = [
     ("7", 7), ('"Point"', "Point"), ("[1, 2]", [1, 2]),
-    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(False)),
+    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(value=False)),
     ("type []", _typed([])), ("type {}", _typed({})),
 ]  # fmt: skip
 

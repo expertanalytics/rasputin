@@ -31,7 +31,7 @@ from importscan import first_party_imports
 # fmt: off
 LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
-        "io.models": "", "features": "", "run_record": "", "stats": "",
+        "io.models": "", "features": "", "run_record": "", "stats": "run_record",
         "sources": "toml_data",  # 44: the catalogue read from TOML
         "palettes": "", "hydrography": "", "tin_engine": "",
         "toml_data": "",  # 44: the shared TOML reader; tomllib and Pydantic only

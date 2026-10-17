@@ -101,7 +101,7 @@ class TestVtkFieldData:
     def test_the_names_are_reserved(self) -> None:
         for name in NAMES:
             with pytest.raises(ValueError, match=name):
-                vtk_with(False, class_fractions=table(), fields=(*FIELDS, (name, "x")))
+                vtk_with(binary=False, class_fractions=table(), fields=(*FIELDS, (name, "x")))
 
     def test_a_table_for_another_triangle_count_is_refused(self) -> None:
         short = table(
@@ -110,7 +110,7 @@ class TestVtkFieldData:
             fractions=FRACTIONS[:5],
         )
         with pytest.raises(ValueError):
-            vtk_with(False, class_fractions=short)
+            vtk_with(binary=False, class_fractions=short)
 
 
 class TestPlyFaceLists:
@@ -150,7 +150,7 @@ class TestPlyFaceLists:
         assert_array_equal(np.stack(list(face["vertex_indices"])), TRIANGLES)
 
     def test_without_a_table_the_face_has_indices_and_code_only(self) -> None:
-        header = parse_header(self.surface(True, face_fractions=None))
+        header = parse_header(self.surface(ascii=True, face_fractions=None))
         assert [p.name for p in header.element("face").properties] == [
             "vertex_indices", "land_cover_code",
         ]  # fmt: skip
@@ -161,7 +161,7 @@ class TestPlyFaceLists:
 
     def test_a_table_for_another_face_count_is_refused(self) -> None:
         with pytest.raises(ValueError):
-            self.surface(True, faces=TRIANGLES[:3], face_codes=CODES[:3])
+            self.surface(ascii=True, faces=TRIANGLES[:3], face_codes=CODES[:3])
 
     def test_a_face_of_256_classes_is_refused_as_the_lists_count_is_a_uchar(self) -> None:
         """`list uchar ...` counts to 255; a row of every uint8 class (the
@@ -172,4 +172,4 @@ class TestPlyFaceLists:
             fractions=np.concatenate([np.full(256, 1 / 256), [1.0, 1.0, 1.0]]).astype(np.float32),
         )
         with pytest.raises(ValueError, match="255"):
-            self.surface(True, face_fractions=crowded)
+            self.surface(ascii=True, face_fractions=crowded)

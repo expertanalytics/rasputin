@@ -135,7 +135,9 @@ def outline_start(view: Any) -> tuple[Any, npt.NDArray[np.uint32], npt.NDArray[n
     """The node rectangle's outline as the start mesh, with its constraint arrays."""
     x1, y1 = X0 + (N - 1) * D, Y0 - (N - 1) * D
     xy = np.array([(X0, y1), (x1, y1), (x1, Y0), (X0, Y0)])
-    built = _engine(xy, [([0, 1, 2, 3], ChainRole.Outer, 0)], True, DEFAULT_SNAP_SPACING)
+    built = _engine(
+        xy, [([0, 1, 2, 3], ChainRole.Outer, 0)], delaunay=True, spacing=DEFAULT_SNAP_SPACING
+    )
     assert built.mesh is not None and built.noded is not None, built.message
     edges, masks = _constraint_arrays(built.mesh, built.noded)
     return built.mesh, edges, masks
