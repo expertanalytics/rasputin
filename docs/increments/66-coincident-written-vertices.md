@@ -1,8 +1,10 @@
 # Increment 66: no two vertices written at one point
 
-**Status: designed, design review APPROVED (round 2)** (`@architect`,
-2026-10-17, on `ecdaecd2`, revised on `a3cb7f40`, branch
-`worktree-coincident-vertices`, its own PR after increment 65 merges). Full
+**Status: designed, design review APPROVED (round 2); R2's test amended
+after code review round 1** (`@architect`, 2026-10-17, on `ecdaecd2`, revised
+on `a3cb7f40`, R2 amended on `acbf6271`; branch
+`worktree-coincident-vertices`, based on increment 65's head; 65 merged as
+#278, so master is merged in before the push). Full
 path: it changes C++ refine code, so `@perf`'s acceptance run applies. Ola
 ruled zero-area slivers bugs (relayed by the main session, 2026-10-17).
 
@@ -76,8 +78,9 @@ computational geometry", FOCS 1986; J. Hershberger, "Stable snap rounding",
 tolerance of a segment becomes a vertex of that segment. The repository
 already applies it in the last stage: L12 of increment 15f
 (`docs/increments/15f-edge-strip.md`, L12 and L16: a point Inside but within
-the coincidence radius of a constrained edge goes in on it,
-`near_constraint` in `strip_scan.hpp`). This increment applies the same rule,
+the coincidence radius of a constrained edge goes in on it:
+`near_constraint`, in `strip_scan.hpp` before this increment, in
+`refine.hpp`'s `detail` namespace after it). This increment applies the same rule,
 with the same radius, at the two places it is missing: phase 1's split and
 the strip generator's crossings. No departure from the method; no novelty
 claimed.
@@ -135,10 +138,45 @@ data. `carved` counts the insertion as today. Not exercised by W1 (no
 no-data cells); the prototype counted 0 void firings there.
 
 **R2. The strip generator (`constraint_check_points`,
-`constraint_points.hpp`).** A crossing whose rounded node lies within
-`coincidence_radius(g)` of the edge's line (the same distance as
-`near_constraint`: Euclidean in (col, row)) is that node; today only a node
-exactly on the line is (`orient_sign == 0`, which stays as the first test).
+`constraint_points.hpp`).** A crossing whose rounded node N lies within
+`coincidence_radius(g)` of the crossing itself is N: the test is
+`std::hypot(at.col - N.col, at.row - N.row) <= radius`, with `at` the
+crossing as clamped (Euclidean in (col, row), as `near_constraint`). Today
+only a node exactly on the line is (`orient_sign == 0`, which stays as the
+first test).
+
+*Why the crossing and not the line (amended after code review round 1).*
+The first version tested N's distance to the edge's line. On an edge almost
+parallel to a grid line, N can lie within the radius of the line but past
+the edge's end, or far along it from the crossing; the snap then moved the
+point there (C5 below: an edge from row 3.6875 to 3.9375 got a point at row
+4). The two fixes offered were the point test above, or the line test plus
+`near_constraint`'s 0 < sigma < 1. The point test is chosen:
+
+- It moves a point by at most the radius. A point's `s` is its crossing's
+  t, and the strip's error is taken at `s` (`strip_scan.hpp`'s `along`,
+  `seam.hpp`); the sigma test keeps a snap that moves the point by up to half
+  a cell along the edge with `s` unchanged (C5 B: the node at s = 0.2 where
+  its parameter is 0.5), so its error would be read at the wrong place.
+- It is snap rounding's own criterion: N within the radius of a point of
+  the segment is within the radius of the segment (a hot pixel, section 2).
+  N can lie past an end only when that end is itself within the radius of N,
+  the case L14 already handles (a node within ulps of an end); the
+  unsnapped crossing is as close to that end.
+- It cannot be contracted: one subtraction is zero and the other exact
+  (Sterbenz), and `hypot` is a call, so FMA does not change it.
+- It cannot change what the first version left alone. N's distance to the
+  line is at most its distance to a point on the line, so every crossing it
+  snaps the first version snapped too. The prototype's R2 (section 5) was
+  the line test and fired 0 times on every quick-check case, so this one
+  fires 0 times there too, and those meshes stay byte-identical.
+- It still catches every crossing the defect needs snapped. Each such
+  crossing writes onto, or into one row with, its node, so it lies within
+  ulps of it: section 1's are 2.1e-12 (k = 82, the row crossing), 1.7e-11
+  (k = 82, the column crossing) and 1.2e-11 (k = 1457, 2157, 2852) lattice
+  units from the node, inside the radius (1e-10 on W1). Assumed, not run
+  (no C++ build in this amendment): `@developer`'s green run of C2 and C4
+  checks it; C2 failing on any outline goes back to `@architect`.
 Two crossings that snap to one node are then one point (the existing
 "same position as the entry before" drop), and so is the midpoint between
 them. On W1 k = 82's edge, the store goes from 13 points to 11, one more
@@ -155,9 +193,13 @@ node, neither inserted by phase 1, both write at the node).
 `strip_fits` move from `strip_scan.hpp` to `refine.hpp`'s `detail`
 namespace (`strip_scan.hpp` and `constraint_points.hpp` both include
 `refine.hpp`; the reverse would be a cycle). The distance expression is
-factored into one `detail::line_distance(a, b, p)` that `near_constraint`
-and the generator both call, so the compiler cannot contract two copies
-differently (`near_constraint`'s comment names that hazard). No new header.
+not factored out: with R2's point test, `near_constraint` is its only user,
+so the `detail::line_distance` of the first version is folded back into
+`near_constraint` as the expression it was, and its comment ("one copy, so
+near_constraint and the generator cannot be contracted differently") goes
+with it. That comment held for clang's default contraction, which fuses
+only within one expression, not for GCC's `-ffp-contract=fast`, which may
+fuse across statements and differently at each inlined call. No new header.
 
 **Rejected:** dropping a strip point that writes onto an existing vertex.
 Vertex 7 would stay a hair off the constraint and lie on it as written, so a
@@ -186,8 +228,8 @@ feet as the test says on both stages). `w1_run` gains a tolerance parameter
 refused run.
 
 **Names.** That file already holds increment 65's T1-T5, so this
-increment's tests are **C1-C4** ("C" for coincident), tagged
-`[coincident]`. Two comments of increment 65 in it become false and
+increment's tests are **C1-C5** ("C" for coincident), tagged
+`[coincident]`; C5 goes in `tests/cpp/unit/test_refinement_constraint_points.cpp`. Two comments of increment 65 in it become false and
 `@tester` rewrites them in the red commit: line 26 ("which is why T1 asserts
 per outline and T2 does not assert flat_as_written") and line 287
 ("flat_as_written is not asserted (2 on k = 82 on macOS arm64; Linux may
@@ -243,10 +285,37 @@ three times counts 2. "Flat": `out.flat_as_written`.
   `duplicates() == 1`. Master: three points there (col 9.0000000000020552
   row 4; col 9.0000000000010267 row 3.9999999999912665, the midpoint; col 9
   row 3.9999999999825331), `size() == 13`, `duplicates() == 0`.
+- **C5 (red against `6441ed57`, the first R2).** A passes on master, B not (master leaves row 4's crossing unsnapped). R2
+  snaps only within the radius of the crossing (code review round 1). In
+  `test_refinement_constraint_points.cpp`, `unit_frame(16, 8)` and
+  `dem_on(g)` as CC7 uses them, so lattice (col, row) equals the given
+  doubles; one edge (0, 1); e = 2^-35 (about 2.9e-11). Every figure below is
+  exact in binary, so compare with `==`; measured by a Python model of the
+  generator (`acbf6271`'s expressions) and checked against FMA: the only
+  inexact step, B's t = 0.2, rounds the same fused or not.
+  - **A, past the end** (@reviewer's edge, rebuilt from its description,
+    since the review recorded no coordinates): P0 `unit(5 - e, 3.6875)`, P1
+    `unit(5 + e, 3.9375)`. Premise, asserted with `REQUIRE`: `orient_sign`
+    of node (5, 4) is not 0, and its distance to the line, written out in
+    the test, is 4.366e-11, below `coincidence_radius(g)` (1e-10); the
+    node's sigma is 1.25. One crossing, column 5 at t = 0.5, row 3.8125.
+    Expected: `size() == 3`, `duplicates() == 0`, `pts[1].at ==
+    MeshVertex{5.0, 3.8125}`, `pts[1].s == 0.5`, `pts[2].at.row == 3.875`,
+    and no point's row above 3.9375 (P1's). First R2: `pts[1].at == (5, 4)`
+    and `pts[2].at.row == 3.96875`, both past P1.
+  - **B, inside the edge, far from the crossing**: P0 `unit(5 - e, 3.6875)`,
+    P1 `unit(5 + 4e, 4.3125)`. Column 5 is crossed at t = 0.2, row 3.8125
+    (0.1875 from node (5, 4)); row 4 at t = 0.5, col 5 + 1.5e (4.366e-11
+    from the node). Expected: `size() == 5`, `duplicates() == 0`, points at
+    (5 - e/2, 3.75) s 0.1, (5, 3.8125) s 0.2, (5, 3.90625) s 0.35, (5, 4)
+    s 0.5 and (5 + 2e, 4.15625) s 0.75 (the last midpoint is between the
+    node and P1). First R2, and the sigma variant:
+    `size() == 3`, `duplicates() == 1`, the node at s = 0.2.
 
 Invariant-critical suite (mutation targets): R1 removed (killed by C2 feet
 on, C3); R1 moved after the foot search (C2 feet on, C3); R2 removed (C2,
-C4). C1 kills neither
+C4); R2 on the line distance, the first version (C5 A and B); R2 on the line
+distance with the sigma test, the other fix offered (C5 B). C1 kills neither
 single-rule removal (each rule alone fixes k = 82 at 0.5); it pins the
 reported defect.
 
@@ -268,6 +337,11 @@ the off setting being the tree as is):
   `.vtk` (`--binary`) has the same sha256 with both rules as without. The
   probe's build without the rules reproduces the worktree's own `_core` on
   quarter and velhas (same sha256).
+
+The prototype's R2 was the line test (the first version). The amended
+point test snaps a subset of what it snapped (section 3, R2), so the
+quick-check figures carry over; W1's carry over where every firing was
+within the radius of its crossing, which C2 and C4 check.
 
 **Reproducing it.** The probe driver is kept as
 `docs/increments/66-probes/probe.cpp` (build lines in its head); it prints
@@ -307,12 +381,12 @@ power state recorded, evidence in
 
 ## 6. Size
 
-About 20 net counted lines (the prototype's diff, less its switches and
+About 16 net counted lines (the prototype's diff, less its switches and
 counters): R1 about 9 in `refine.hpp` (the test, and a flag that R1 fired
 guarding the foot search; not `!edge`, which would also skip the foot
 search for a node found on an edge, `r.where != Inside`, and change
-today's output), R2 about 4 in `constraint_points.hpp`, `line_distance`
-about 4, the move of three functions from `strip_scan.hpp` to `refine.hpp`
+today's output), R2 about 4 in `constraint_points.hpp` (no `line_distance`: folded back,
+section 3), the move of three functions from `strip_scan.hpp` to `refine.hpp`
 about 0 net. Tests are not counted.
 
 ## 7. Left out
