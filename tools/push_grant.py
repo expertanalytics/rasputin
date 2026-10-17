@@ -282,7 +282,9 @@ def checks(view: Any, head: str) -> str | None:
         return f"the pull request's head is {str(view['headRefOid'])[:7]}, not {head[:7]}"
     if not isinstance(rollup, list) or not rollup:
         return "no checks reported" if rollup == [] else UNREAD
-    for item in (i if isinstance(i, dict) else {} for i in rollup):
+    for item in rollup:
+        if not isinstance(item, dict):
+            return UNREAD
         if item.get("__typename") == "StatusContext":
             green = item.get("state") == "SUCCESS"
         else:
@@ -291,7 +293,7 @@ def checks(view: Any, head: str) -> str | None:
         if not green:
             name = item.get("name") or item.get("context")
             seen = item.get("state") or item.get("conclusion") or item.get("status")
-            return f"check {name} is {seen}"
+            return f"check {name} is {seen}" if name and seen else UNREAD
     if not any("SUCCESS" in (i.get("state"), i.get("conclusion")) for i in rollup):
         return "no check succeeded: every check was skipped or neutral"
     return None
@@ -361,7 +363,8 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         isinstance(u, dict) and (u.get("window"), u.get("branch"), u.get("act"), u.get("head"))
         == (since, act.branch, act.kind, head) for u in jsonl(state / "grants-used.jsonl")
     ):  # fmt: skip
-        return refused(f"head {head[:7]} was {act.kind}d already in this window", head)
+        done = "enqueued" if act.kind == "enqueue" else "merged"
+        return refused(f"head {head[:7]} was {done} already in this window", head)
     if act.kind == "merge" and (why := checks(pr_view(where, act.branch), head) or ""):
         return refused(why, head)
     line = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "window": since,

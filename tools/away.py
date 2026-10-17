@@ -87,7 +87,10 @@ def grant_lines(root: Path, state: Path, flag: dict[str, Any] | None) -> list[st
             lines.append(f"  {name}: not used; the branch does not exist")
             continue
         remote, why = push_grant.home(root, head)
-        reason = why or push_grant.reviewed(root, head, records, remote)
+        if why:
+            lines.append(f"  {name}: not used; head {head[:7]} not judged ({why})")
+            continue
+        reason = push_grant.reviewed(root, head, records, remote)
         lines.append(f"  {name}: not used; head {head[:7]} reviewed: "
                      + ("yes" if reason is None else f"no ({reason})"))  # fmt: skip
     return lines

@@ -192,7 +192,6 @@ def main() -> int:
                           "to a work tree; run the gates there yourself.")
         elif paths := list(dict.fromkeys(
                 line.split("\t", 1)[-1] for line in git(root, "ls-files", "-u").splitlines())):
-            # A merge, cherry-pick, revert, rebase or pull stopped there: the tree is half-made.
             conflicts.append(
                 f"A git operation stopped on conflicts in {root}: {len(paths)} paths are unmerged "
                 f"({', '.join(paths[:3])}). No gates ran there. Any commit made before it stopped "
