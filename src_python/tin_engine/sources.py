@@ -48,6 +48,8 @@ SOURCE_GROUP = "rasputin.sources"
 #: reports it and nothing is fenced by it.
 OUT_ROOT_VARIABLE = "RASPUTIN_MCP_OUT_ROOT"
 _REMOTE_FIELDS = ("url", "url_template", "tile_list_url", "tile_name", "tile_spacing", "years")
+#: The fields an `arcgis-features` entry refuses: its `url` is the layer, its `fields` the columns.
+_LAYER_REFUSED = (*_REMOTE_FIELDS[1:], "path", "layer", "nodata", "z_unit")
 
 
 class Dated(Protocol):
@@ -73,7 +75,9 @@ class RemoteSource(BaseModel):
     `tile_list_url` saying which tiles exist), one COG per year
     (`url_template` with `{year}`, `years`), or a local GeoTIFF or directory
     of them (`path`, read in place; its CRS is the files' own), or a local
-    vector file, which holds features (`layer`: the GeoPackage's). A remote
+    vector file, which holds features (`layer`: the GeoPackage's), or the
+    polygons of an ArcGIS map-service layer (`url`, `fields`), fetched by box
+    into a GeoPackage in the cache. A remote
     source's `crs` is the one expected, checked against each header; `credit`
     goes into every mesh made from it.
     An unknown key is refused, so a misspelt one in a file is not ignored."""
@@ -81,7 +85,7 @@ class RemoteSource(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    kind: Literal["local", "one-cog", "cog-tiles", "one-cog-per-year"]
+    kind: Literal["local", "one-cog", "cog-tiles", "one-cog-per-year", "arcgis-features"]
     #: A local source's GeoTIFF, or directory of GeoTIFFs.
     path: Path | None = None
     url: str | None = None
@@ -97,6 +101,8 @@ class RemoteSource(BaseModel):
     #: What the cells hold: heights for a DEM, land-cover class numbers for
     #: MapBiomas; a vector file holds features.
     values: Literal["heights", "classes", "features"] = "heights"
+    #: The attributes an `arcgis-features` layer is asked for and kept; its id field is the key.
+    fields: tuple[str, ...] = ()
     #: The layer of a GeoPackage with more than one features table.
     layer: str | None = None
     crs: str | None = None
@@ -106,8 +112,8 @@ class RemoteSource(BaseModel):
     licence_note: str
     #: The works the distributor asks to cite; `notice` and the mesh file carry them.
     cite: tuple[str, ...] = ()
-    #: The class map (`tin_engine.class_maps`) that names and colours its classes.
-    class_map: str = ""
+    #: The legend (`tin_engine.legends`) that names and colours its classes.
+    legend: str = ""
     #: The height unit the catalogue states for files that do not.
     z_unit: ZUnit | None = None
     #: What the cells represent, and the resolution and region, as the distributor states them.
@@ -116,13 +122,20 @@ class RemoteSource(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _features_by_suffix(cls, data: Any) -> Any:
-        """A vector path stating no `values` holds features: the file says what it is."""
-        if isinstance(data, dict) and "values" not in data and _vector(data.get("path")):
+        """A vector path or a map-service layer stating no `values` holds
+        features: the file or the kind says what it is."""
+        if not isinstance(data, dict) or "values" in data:
+            return data
+        if _vector(data.get("path")) or data.get("kind") == "arcgis-features":
             return {**data, "values": "features"}
         return data
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
+        if self.fields and self.kind != "arcgis-features":
+            raise ValueError(f"fields: refused for {self.kind}")
+        if self.kind == "arcgis-features":
+            return self._layer_consistent()
         suffix = "" if self.path is None else self.path.suffix.lower()
         if self.layer is not None and suffix != ".gpkg":
             raise ValueError("layer: only a .gpkg path has layers")
@@ -159,6 +172,20 @@ class RemoteSource(BaseModel):
         _fields("credit", self.credit, {"date", "url"})
         if self.values == "classes" and self.z_unit is not None:
             raise ValueError("z_unit: class numbers are not heights")
+        return self
+
+    def _layer_consistent(self) -> Self:
+        for field in ("url", "crs", "fields"):
+            if not getattr(self, field):
+                raise ValueError(f"{field}: needed for {self.kind}")
+        if len(set(self.fields)) != len(self.fields):
+            raise ValueError("fields: a field is named twice")
+        for field in _LAYER_REFUSED:
+            if getattr(self, field) not in (None, ()):
+                raise ValueError(f"{field}: refused for {self.kind}")
+        if self.values != "features":
+            raise ValueError(f"values: {self.kind} holds features")
+        _fields("credit", self.credit, {"date", "url"})
         return self
 
     @property
@@ -336,7 +363,7 @@ def _beside(file: Path, value: str) -> Path:
 
 
 def _read(file: Path) -> dict[str, RemoteSource]:
-    """The `[source.<id>]` tables of a catalogue file; a relative `class_map`
+    """The `[source.<id>]` tables of a catalogue file; a relative `legend`
     or `path` is taken from the file's directory. Refused, as a `ValueError`
     naming the file: anything `RemoteSource` refuses, and a station table
     (fetching a station list follows one service's layout, which is code)."""
@@ -348,9 +375,9 @@ def _read(file: Path) -> dict[str, RemoteSource]:
     for key in tables.station:
         raise ValueError(f"{label}: station.{key}: station lists are not added from a file")
     for table in tables.source.values():
-        given = str(table.get("class_map", ""))
+        given = str(table.get("legend", ""))
         if given.endswith(".toml") or "/" in given or os.sep in given:
-            table["class_map"] = str(_beside(file, given))
+            table["legend"] = str(_beside(file, given))
         if "path" in table:
             table["path"] = str(_beside(file, str(table["path"])))
     return _entries(tables.source, "source", RemoteSource, label)

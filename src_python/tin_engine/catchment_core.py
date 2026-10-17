@@ -27,7 +27,18 @@ def upstream(tile: DemTile, seed: npt.NDArray[np.uint8]) -> UpstreamOutcome:
 
 
 def accumulate(tile: DemTile) -> AccumulateOutcome:
-    """The flow accumulation over ``tile``."""
+    """Each node's drainage over ``tile``, by the Priority-Flood that fills its pits.
+
+    Runs on the node grid alone: spacing and CRS are unused. A node drains to
+    the neighbour that flooded it, its lowest filled neighbour, ties first in,
+    first out; not D8's steepest descent. ``.count`` (uint32, rows x cols) is 0
+    on NoData, else the number of nodes draining through the node, itself
+    included. ``.flow_to`` (uint8) is that neighbour,
+    ``3*(dr+1)+(dc+1)`` with ``dr``, ``dc`` its row and column minus the
+    node's; 255 for an outlet or NoData. Both are read-only. A tile of 2^32
+    nodes or more raises ``ValueError``. Releases the GIL. The result's type
+    and its other attributes are not promised.
+    """
     return _core.accumulate(to_core_lattice(tile))
 
 

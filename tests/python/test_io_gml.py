@@ -3,7 +3,7 @@
 `docs/increments/16b-terrain-polygons.md`, "Ruled by Ola", Q6 (b): the 30 MB
 `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml` stays and 16b
 reads it "as a second real fixture: a small GML2 reader (standard-library XML,
-no GDAL, about 40 lines) and a class map for `clc18_kode`".
+no GDAL, about 40 lines) and a legend for `clc18_kode`".
 
 **What the file was, and its repair.** OGR wrote it as GML2
 (`gml:coordinates`, `x,y` pairs, EPSG:4326 longitude first). As committed in

@@ -5,15 +5,17 @@
 
 Extracts `git archive <rev>` into `<dir>` (missing or empty, outside this
 repository and outside the main checkout that holds it), copies the built
-`_core` from this worktree's `.venv` into the copy's package, and prints one
+extensions (`*.so`) of each package in the copy's source roots (`src_python`,
+`src`) from this worktree's `.venv` into the copy's package, and prints one
 line: the command that runs `pytest` on the copy with the worktree's
 interpreter. To run some tests only, replace the `tests/python/` it ends with
 by their paths.
 
 The command sets `PYTHONPATH` to a generated `sitecustomize.py` in
-`<dir>/.scratch_copy/` and to `<dir>/src_python`. The sitecustomize drops the
-editable finder at every interpreter start, after the `.pth` file installed
-it, so `tin_engine` is imported from the copy in pytest's process and in any
+`<dir>/.scratch_copy/` and to the copy's source roots. The sitecustomize drops
+the editable finder at every interpreter start, after the `.pth` file installed
+it, and the worktree's source roots a `.pth` file put on `sys.path`, so the
+packages are imported from the copy in pytest's process and in any
 Python process a test starts. It cannot reach a child whose environment
 replaces `PYTHONPATH`, such as one built from scratch
 (`tests/python/test_io_geotiff.py:1275`): that child imports the worktree's
@@ -36,11 +38,16 @@ ROOT = Path(__file__).resolve().parent.parent
 #: As in count_loc.py: no user or system config, no replace refs.
 GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_NO_REPLACE_OBJECTS": "1"}  # fmt: skip
-CXX = ("include", "src", "bindings", "CMakeLists.txt")
-#: Run at every interpreter start by way of `PYTHONPATH`: drop the editable finder.
+#: The C++ an extension is built from; the private `src/` holds Python only.
+CXX = ("*.cpp", "*.hpp", "*.h", "*CMakeLists.txt", ":(exclude)tests/")
+SOURCE_ROOTS = ("src_python", "src")
+#: Run at every interpreter start by way of `PYTHONPATH`, after a `DROP = [...]` line naming
+#: the worktree's source roots: drop the editable finders and those `sys.path` entries only
+#: (dropping everything under the worktree would drop the venv's site-packages too).
 SITECUSTOMIZE = (
-    "import sys\n"
+    "import os, sys\n"
     'sys.meta_path[:] = [f for f in sys.meta_path if "editable" not in repr(f).lower()]\n'
+    "sys.path[:] = [p for p in sys.path if not p or os.path.realpath(p) not in DROP]\n"
 )
 PROGRAM = "import sys, pytest; sys.exit(pytest.main(sys.argv[1:]))"
 
@@ -83,23 +90,28 @@ def copy(rev: str, target: Path) -> str:
         first = (archive.stderr.decode(errors="replace").strip().splitlines() or ["failed"])[0]
         raise RuntimeError(f"git archive {rev}: {first}")
     _extract(archive.stdout, target)
-    cores = sorted(ROOT.glob(".venv/lib/python3.*/site-packages/tin_engine/_core*.so"))
-    package = target / "src_python" / "tin_engine"
-    if not cores:
-        print(f"scratch_copy: no built _core in {ROOT}/.venv; suites needing it will fail",
-              file=sys.stderr)  # fmt: skip
-    for core in cores:
-        package.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(core, package / core.name)
+    roots = [target / name for name in SOURCE_ROOTS if (target / name).is_dir()]
+    packages = [p for r in roots for p in sorted(r.iterdir()) if (p / "__init__.py").is_file()]
+    built = [(so, package / so.relative_to(installed)) for package in packages
+             for installed in sorted(ROOT.glob(f".venv/lib/python3.*/site-packages/{package.name}"))
+             for so in sorted(installed.rglob("*.so"))]  # fmt: skip
+    if not built:
+        names = ", ".join(p.name for p in packages) or "no package"
+        print(f"scratch_copy: no built extension of {names} in {ROOT}/.venv; suites needing it "
+              "will fail", file=sys.stderr)  # fmt: skip
+    for so, place in built:
+        place.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(so, place)
     same = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", rev, "HEAD", "--", *CXX],
                           capture_output=True, env=GIT_ENV, check=False)  # fmt: skip
-    if cores and same.returncode != 0:
-        print(f"scratch_copy: the copied _core was built from HEAD, whose C++ differs from {rev}",
-              file=sys.stderr)  # fmt: skip
+    if built and same.returncode != 0:
+        print(f"scratch_copy: the copied extensions were built from HEAD, whose C++ differs from "
+              f"{rev}", file=sys.stderr)  # fmt: skip
     site = target / ".scratch_copy"
     site.mkdir()
-    (site / "sitecustomize.py").write_text(SITECUSTOMIZE)
-    path = f"{site}{os.pathsep}{target / 'src_python'}"
+    drop = [str((ROOT / name).resolve()) for name in SOURCE_ROOTS]
+    (site / "sitecustomize.py").write_text(f"DROP = {drop!r}\n{SITECUSTOMIZE}")
+    path = os.pathsep.join(map(str, [site, *roots]))
     python = ROOT / ".venv" / "bin" / "python"
     quoted = (shlex.quote(str(target)), shlex.quote(path), shlex.quote(str(python)),
               shlex.quote(PROGRAM))  # fmt: skip

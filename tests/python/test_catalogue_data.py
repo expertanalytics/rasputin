@@ -5,7 +5,9 @@ T1 (the shipped catalogue unchanged), T2 (file refusals), T3 (user entries)
 and T6 (tile names). The oracle for T1 is a snapshot of every shipped entry's
 `model_dump(mode="json")` and `notice()` text, taken from the Python entries
 at `b1353075` (the merge base) before they moved into TOML:
-`tests/python/data/catalogue_b1353075.json`.
+`tests/python/data/catalogue_b1353075.json`. The snapshot's keys are spelled
+as the model spells its fields now (a renamed field is renamed there too);
+its values are the entries' values at that commit.
 
 User files are written by this suite under `tmp_path`; T2's is named
 `my-sources.toml`, so a refusal that names "the file" is told apart from one
@@ -22,7 +24,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   ...); a TOML syntax error carries "line N".
 - A user id equal to a shipped one is refused with a message naming
   `sources.toml` twice (both files have that name) and the id.
-- A user entry's relative `class_map` resolves to the path of the file
+- A user entry's relative `legend` resolves to the path of the file
   beside the user file (compared after `Path.resolve()`).
 - `sources.data_root` treats an empty `RASPUTIN_DATA` as unset, as `cache_root`
   does today.
@@ -53,6 +55,8 @@ from vtkread import read_vtk
 SNAPSHOT = Path(__file__).parent / "data" / "catalogue_b1353075.json"
 SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11")
 STATIONS = ("nve-hrd",)
+#: The entries added after the snapshot: vector layers fetched from a map service.
+FEATURE_LAYERS = ("nve-lakes", "clc2018")
 GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
 #: 10" and 1" in degrees, each rounded up in the fifth significant digit.
 GLO30_TILE_SPACING = (0.0027778, 0.00027778)
@@ -62,6 +66,8 @@ TILE_FIELDS = ("tile_name", "tile_spacing")
 LOCAL_FIELDS = ("path", "description")
 #: The field every entry gained with vector sources: None on every shipped one.
 VECTOR_FIELDS = ("layer",)
+#: The field the map-service kind added: the attributes asked of the layer.
+FEATURE_FIELDS = ("fields",)
 USER_ID = "my-x"
 
 
@@ -144,7 +150,7 @@ def changed(base: dict[str, Any], *drop: str, **update: Any) -> dict[str, Any]:
 
 class TestT1TheShippedCatalogue:
     def test_the_shipped_keys(self, sources: ModuleType) -> None:
-        assert sorted(sources.SOURCES) == sorted(SHIPPED)
+        assert sorted(sources.SOURCES) == sorted([*SHIPPED, *FEATURE_LAYERS])
         assert sorted(sources.STATION_SOURCES) == sorted(STATIONS)
 
     @pytest.mark.parametrize("key", SHIPPED)
@@ -152,7 +158,7 @@ class TestT1TheShippedCatalogue:
         self, sources: ModuleType, snapshot: dict[str, Any], key: str
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
-        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS
+        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS + FEATURE_FIELDS
         rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
         assert dumped["path"] is None
@@ -318,7 +324,7 @@ class TestT3UserEntries:
     def test_a_user_entry_joins_the_shipped_ones(self, sources: ModuleType, tmp_path: Path) -> None:
         user = write(tmp_path / "sources.toml", {f"source.{USER_ID}": ONE_COG})
         got = sources.catalogue(user)
-        assert sorted(got.sources) == sorted([*SHIPPED, USER_ID])
+        assert sorted(got.sources) == sorted([*SHIPPED, *FEATURE_LAYERS, USER_ID])
         assert got.sources[USER_ID].crs == "EPSG:25833"
         assert got.sources[USER_ID].nodata is None
         assert sorted(got.stations) == sorted(STATIONS)
@@ -351,15 +357,15 @@ class TestT3UserEntries:
         message = str(caught.value)
         assert user.name in message and "station" in message, message
 
-    def test_a_relative_class_map_is_beside_the_user_file(
+    def test_a_relative_legend_is_beside_the_user_file(
         self, sources: ModuleType, tmp_path: Path
     ) -> None:
         user = write(
             tmp_path / "root" / "sources.toml",
-            {f"source.{USER_ID}": changed(PER_YEAR, class_map="maps/x.toml")},
+            {f"source.{USER_ID}": changed(PER_YEAR, legend="maps/x.toml")},
         )
         got = sources.catalogue(user).sources[USER_ID]
-        assert Path(got.class_map).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
+        assert Path(got.legend).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
 
 
 class TestT3DataRoot:

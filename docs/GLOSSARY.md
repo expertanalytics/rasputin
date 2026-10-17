@@ -209,3 +209,15 @@ grid or with a NoData corner; a cell's bound is
 When `G` is 0 (flat, or no valid cell), `ε` is the cap `m / 2`, including at
 tolerance 0. Within `ε` of `N`, height changes by at most about `tol`, which is
 the scale refinement resolves (Ola).
+
+## Land cover
+
+**Legend.** A TOML file that says how to read one land-cover source: the
+attribute that holds its classes, each class's code, label and colour, the
+source's positional accuracy, its notice and licence, and, which a
+cartographic legend lacks, the edge names each class's borders carry in the
+mesh. Shipped ones are in `src_python/tin_engine/data/legends/`; one is chosen
+with `--features-legend` or `--land-cover-legend`, by name or path, or by a
+sources-file `legend` key. `property` is the one legend that is not a file: it
+reads each feature's `property` attribute as its edge name. Read by
+`tin_engine/legends.py`; `docs/increments/58-legend.md`.

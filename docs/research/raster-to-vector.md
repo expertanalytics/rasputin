@@ -594,7 +594,7 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
    *Answered in part.* Ola: "We need to keep high resolution on vegetation
    types and crop farming types in Brazil." The default is MapBiomas's full
    legend, crop types included, with fractions stored sparsely per
-   triangle; a class map may coarsen it. The year is an option, defaulting
+   triangle; a legend may coarsen it. The year is an option, defaulting
    to the latest year in the collection (Ola: "yes, year as an option,
    default latest"). Which collection is not yet ruled on.
 

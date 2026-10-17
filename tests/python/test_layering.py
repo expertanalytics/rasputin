@@ -61,7 +61,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.geotiff": "crs io.models",
         "io.mesh_index": "io.models",
         "io.ply": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
-        "io.repository": "io.cog io.geotiff io.models mosaic",
+        # 63: the features cache, a GeoPackage
+        "io.repository": "io.cog io.geotiff io.geopackage_write io.models mosaic",
         "io.rivers": "hydrography io.station_set",
         "io.station_set": "hydrography io.geojson io.repository",
         "io.vtk_legacy": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
@@ -89,24 +90,26 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
+        "fetch.features": "crs fetch.http fetch.plan io.geopackage_write io.repository sources"
+                          " tin_engine",  # 63: an ArcGIS layer's polygons into the cache
         "tolerance_field": "crs feature_input",
-        "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
-        "source_report": "class_maps crs dem_input feature_input geodesy io.geojson io.geopackage"
+        "legends": "feature_input features toml_data",  # 41: legend files to Legend
+        "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains class_maps cli_kit crs dem_input domain"
-               " edge_strip elevation feature_input features fetch.http fetch.nve fetch.plan"
-               " fetch.run final_check gauge grid_domain hydrography io.cog io.domain_file"
-               " io.geojson io.geopackage_write io.models io.ply io.repository"
-               " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover"
+        "cli": "_core catchment catchment_batch chains legends cli_kit crs dem_input domain"
+               " edge_strip elevation feature_input features fetch.features fetch.http fetch.nve"
+               " fetch.plan fetch.run final_check gauge grid_domain hydrography io.cog"
+               " io.domain_file io.geojson io.geopackage_write io.models io.ply io.repository"
+               " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
                " mcp.server mosaic palettes plugins raster resources run_record source_report"
                " sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's
-        "plugin_api": "cli_kit crs dem_input io.geotiff_write io.models io.vtk_read raster"
-                      " resources run_record",  # 51: what a plugin may import
+        "plugin_api": "catchment_core cli_kit crs dem_input io.geotiff_write io.models"
+                      " io.vtk_read raster resources run_record",  # 51: what a plugin may import
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
         "mcp.server": "mcp.schema sources tin_engine",  # 57: the output root's variable
     },
