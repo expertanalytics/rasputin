@@ -539,6 +539,21 @@ class TestAnswerChecks:
         assert "clc2018" in said and "the layer changed" not in said, said
         assert 12 not in stored_ids(tmp_path, "clc2018")
 
+    def test_a_chunk_answered_with_an_html_page_names_the_source_and_url_unhalved(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        """A 200 page that is not JSON is not the map service's answer, so
+        halving the chunk would only ask the same page again."""
+        fake = FakeLayer(CORINE, max_records=4, html_chunks=True)
+        with pytest.raises(FetchError) as caught:
+            run(features, fake, tmp_path)
+        said = message(caught)
+        assert fake.chunks_asked() == [[3, 7, 11, 12]]
+        assert "the answer is not JSON, so not the map service's" in said, said
+        assert "clc2018" in said and fake.urls[-1] in said, said
+        assert "is refused" not in said, said
+        assert stored_ids(tmp_path, "clc2018") == set()
+
     def test_a_year_is_refused(self, features: ModuleType, tmp_path: Path) -> None:
         fake = FakeLayer(NVE)
         with pytest.raises(FetchError, match="has no years"):

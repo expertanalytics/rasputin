@@ -195,6 +195,10 @@ REFUSAL: Mapping[str, Any] = {
 }
 
 
+#: A maintenance page as a proxy serves it, in an HTTP 200 body: not JSON at all.
+MAINTENANCE = "<!DOCTYPE html><html><body><h1>Down for maintenance</h1></body></html>"
+
+
 @dataclass
 class FakeLayer:
     """The service of one layer; every knob below is off by default."""
@@ -225,6 +229,8 @@ class FakeLayer:
     ids_refused: bool = False
     #: Answer the chunks `refuse` picks with `REFUSAL`, HTTP 200, instead of an HTTP error.
     refuse_in_body: bool = False
+    #: Answer every chunk request with `MAINTENANCE`, HTTP 200, as a proxy in front may.
+    html_chunks: bool = False
     urls: list[str] = field(default_factory=list)
     served: int = 0
 
@@ -240,6 +246,9 @@ class FakeLayer:
             text = json.dumps(REFUSAL if self.ids_refused else self._ids(query, url))
         elif base == self.data.url + "/query" and "objectIds" in query:
             ids = [int(v) for v in query["objectIds"].split(",")]
+            if self.html_chunks:
+                self.served += len(MAINTENANCE.encode())
+                return MAINTENANCE
             if self.refuse(ids) and not self.refuse_in_body:
                 raise FetchError(f"{url}: HTTP 500, after 4 tries")
             refused = self.refuse(ids) and self.refuse_in_body
