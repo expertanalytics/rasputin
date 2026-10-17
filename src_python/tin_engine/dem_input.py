@@ -98,16 +98,14 @@ class DemRequest(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class DemInput:
-    """The tile to mesh, the plan it was assembled by, a name for the run (the
-    directory's name, or the stem of the first file as given), the domain in
-    the DEM's CRS (None without one), and the mosaic's disagreeing seams,
-    reported rather than refused. On the reprojected path `tile` is the target
+    """The tile to mesh, the plan it was assembled by, the domain in the DEM's
+    CRS (None without one), and the mosaic's disagreeing seams, reported
+    rather than refused. On the reprojected path `tile` is the target
     grid's, `domain` is in the target CRS, and `checks` yields the source's
     nodes there for the final check, with the grid and the DEM's CRS."""
 
     tile: DemTile
     plan: MosaicPlan
-    label: str
     domain: DomainPolygon | None = None
     seams: tuple[Seam, ...] = ()
     checks: Iterator[Block] | None = None
@@ -121,18 +119,17 @@ def repository_for(
     cached: CachedSource | None = None,
     threads: int = 1,
     z_unit: ZUnit | None = None,
-) -> tuple[TiffDemRepository | CacheRepository, str]:
+) -> TiffDemRepository | CacheRepository:
     """The repository over one directory of tiles, over the files given, or
-    over a cached source, and the run's name: the directory's name, the first
-    file's stem, or the source's key; `threads` decode its blocks.
+    over a cached source; `threads` decode its blocks.
     `z_unit` is the caller's height unit."""
     keys: dict[str, Any] = {"nodata": nodata, "threads": threads, "z_unit": z_unit}
     if cached is not None:
-        return CacheRepository(cached.cache, cached.source, **keys), cached.source
+        return CacheRepository(cached.cache, cached.source, **keys)
     first = sources[0]
     if first.is_dir():
-        return TiffDemRepository.from_directory(first, **keys), first.resolve().name
-    return TiffDemRepository(sources, **keys), first.stem
+        return TiffDemRepository.from_directory(first, **keys)
+    return TiffDemRepository(sources, **keys)
 
 
 def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInput:
@@ -141,12 +138,12 @@ def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInpu
     `resources` is the thread count for the decoders and the pools and
     the memory budget for the canvas; None is `Resources.fallback()`."""
     res = Resources.fallback() if resources is None else resources
-    repository, label = repository_for(
+    repository = repository_for(
         request.sources, request.nodata, request.cached, res.threads, request.z_unit
     )
     footprints = repository.footprints()
     if footprints and _reprojected(request, [f.meta for f in footprints]):
-        return _open_reprojected(request, repository, footprints, label, res)
+        return _open_reprojected(request, repository, footprints, res)
     if request.domain is None or not footprints:
         plan = plan_mosaic(footprints, request.bounds, None, memory_budget=res.memory_budget)
         domain = grown = None
@@ -157,7 +154,7 @@ def open_dem(request: DemRequest, resources: Resources | None = None) -> DemInpu
     # depend on it.
     repository.check(plan)
     mosaic = assemble(plan, repository.load, grown, load_window=repository.load_window)
-    return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
+    return DemInput(tile=mosaic.tile, plan=plan, domain=domain, seams=mosaic.seams)
 
 
 class OutCrsRequiredError(ValueError):
@@ -208,7 +205,6 @@ def _open_reprojected(
     request: DemRequest,
     repository: DemRepository,
     footprints: Sequence[TileFootprint],
-    label: str,
     res: Resources,
 ) -> DemInput:
     """The reprojected path: the target grid around the domain (or box) in
@@ -236,7 +232,6 @@ def _open_reprojected(
     return DemInput(
         tile=resample(grid, source, threads),
         plan=plan,
-        label=label,
         domain=domain if request.domain is not None else None,
         seams=mosaic.seams,
         checks=check_point_blocks(grid, source, domain, threads),
