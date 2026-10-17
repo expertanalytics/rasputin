@@ -774,6 +774,25 @@ def test_h22_7_json_without_the_keys_cannot_be_read(found: Any) -> None:
     assert push_grant.checks(found, H) == UNREAD
 
 
+MALFORMED = {
+    "item-a-string": ["CI result"],
+    "item-null": [None],
+    "item-a-list-beside-a-green-run": [{"__typename": "CheckRun", "name": "ok",
+                                        "status": "COMPLETED", "conclusion": "SUCCESS"}, []],
+    "red-checkrun-without-a-name": [{"__typename": "CheckRun", "status": "COMPLETED",
+                                     "conclusion": "FAILURE"}],
+    "red-checkrun-without-a-state": [{"__typename": "CheckRun", "name": "lint"}],
+    "red-statuscontext-without-a-context": [{"__typename": "StatusContext", "state": "FAILURE"}],
+    "red-statuscontext-without-a-state": [{"__typename": "StatusContext", "context": "ci/x"}],
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("rollup", MALFORMED.values(), ids=MALFORMED.keys())
+def test_h22_7_a_malformed_check_item_cannot_be_read(rollup: list[Any]) -> None:
+    """Review round 1 follow-up: never "check None is None"."""
+    assert push_grant.checks(view(H, statusCheckRollup=rollup), H) == UNREAD
+
+
 def private_merge(private: PrivateGranted) -> str:
     return f"gh pr merge prv -R {P} --merge --match-head-commit {private.prv}"
 
@@ -833,3 +852,17 @@ def test_h22_8_a_second_private_merge_of_the_same_head_is_refused(
     second = judged(private, private_merge(private))
     assert second is not None and not second.passed, second
     assert [line["act"] for line in used_lines(private)] == ["merge"]
+    assert second.why == f"head {private.prv[:7]} was merged already in this window", second.why
+
+
+def test_h22_8_a_second_enqueue_of_the_same_head_is_refused(
+    private: PrivateGranted, runner: Runner
+) -> None:
+    command = f"gh pr merge pub --match-head-commit {private.pub}"
+    first = judged(private, command)
+    assert first is not None and first.passed, first
+    second = judged(private, command)
+    assert second is not None and not second.passed, second
+    assert second.why == f"head {private.pub[:7]} was enqueued already in this window", second.why
+    assert [line["act"] for line in used_lines(private)] == ["enqueue"]
+    assert runner.ran("gh") == [], "an enqueue read the pull request's checks"

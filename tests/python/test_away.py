@@ -1040,6 +1040,7 @@ def test_7_back_reports_this_windows_granted_acts_and_each_unused_grant(
     assert good == f"  good: not used; head {head[:7]} reviewed: yes"
     assert bad.startswith(f"  bad: not used; head {late[:7]} reviewed: no ("), bad
     assert "tools/b.py" in bad, bad
+    assert "not judged" not in bad, "a review reason was reported as an unjudged head"
 
 
 def test_7_back_with_no_grants_says_none(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -1092,3 +1093,23 @@ def test_h22_back_names_a_private_merge(tmp_path: Path, capsys: pytest.CaptureFi
     built, _, _, done = private_back_lines(tmp_path, capsys)
     assert done.startswith("  done: "), done
     assert f"merged {built.prv[:7]} at 19:40 UTC" in done, done
+
+
+def test_h22_back_says_not_judged_when_the_branchs_repository_cannot_be_told(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Review round 1 follow-up: with refs/remotes/private/master deleted, home()
+    gives a reason; `--back` reports the head as not judged, never as unreviewed."""
+    built = PrivateGranted(tmp_path / "repo")
+    built.delete_private_ref()
+    write_flag(built.repo, {"since": iso(NOW), "until": iso(NOW + timedelta(hours=8)),
+                            "set_by": "away", "keep_awake_pid": None,
+                            "grants": ["prv", "pub"]})  # fmt: skip
+    missing = ("the private remote is set up but refs/remotes/private/master is missing, so "
+               "it cannot be told whether this branch holds private commits; run git fetch "
+               "private")  # fmt: skip
+    lines = back_lines(built.repo, capsys, BACK_AT)
+    at = lines.index("Push grants (2):")
+    prv, pub = lines[at + 1 : at + 3]
+    assert prv == f"  prv: not used; head {built.prv[:7]} not judged ({missing})", prv
+    assert pub == f"  pub: not used; head {built.pub[:7]} not judged ({missing})", pub
