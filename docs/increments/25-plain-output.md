@@ -229,7 +229,7 @@ DEM's nodes (the final check's figure), which fixes the inventory's defect.
 *Default taken while Ola was away:* **the nodes that sit on a vertex are
 included.** Two kinds of DEM node are not compared by refinement: on the
 reprojected path, an original-DEM node equal to a start vertex, whose height
-can differ from the vertex's by any amount (`refine_points.hpp:28-31`, and
+can differ from the vertex's by any amount (`refine_points.hpp:32-35`, and
 15c's note on these points); after 15f-3, on both paths, a node within
 rounding of a vertex it is not (15f's L14 and L16). The run counts both and
 gives their largest difference (`coincident`, `coincident_max_error`). So
