@@ -1,10 +1,15 @@
 # Increment 66: no two vertices written at one point
 
-**Status: designed, not reviewed** (`@architect`, 2026-10-17, on `ecdaecd2`,
-branch `worktree-coincident-vertices`, its own PR after increment 65
-merges). Full path: it changes C++ refine code, so `@perf`'s acceptance run
-applies. Ola ruled zero-area slivers bugs (relayed by the main session,
-2026-10-17).
+**Status: designed, revised after design review round 1** (`@architect`,
+2026-10-17, on `ecdaecd2`, revised on `a3cb7f40`, branch
+`worktree-coincident-vertices`, its own PR after increment 65 merges). Full
+path: it changes C++ refine code, so `@perf`'s acceptance run applies. Ola
+ruled zero-area slivers bugs (relayed by the main session, 2026-10-17).
+
+**Scope.** Every outline of section 1's probe with a coincident vertex, a
+flat triangle or a refused run is in scope, the 4 with flat triangles and
+no coincident vertex as written included (section 1, "Flat with no
+coincident pair"), by that ruling. Test C2 asserts all 10.
 
 ## 1. The defect
 
@@ -44,7 +49,24 @@ outlines. With the default feet on, the CLI fails on those inputs.
 off, tolerances 1, 0.5, 0.1, 0.05, 0.01, 0.001, 1e-6 and 0. At every
 tolerance above 0, only k = 82 with feet off has coincident vertices or flat
 triangles. At tolerance 0 there are more, from both mechanisms, with feet on
-and off (section 4, T2).
+and off (section 4, C2).
+
+**Flat with no coincident pair** (k = 1457, 2157 and 2852 at tolerance 0,
+feet on and off; printed by the probe's detail mode, section 5). The edge
+crosses grid row R and grid column C within about 1e-11 lattice units of
+the node (C, R), and neither crossing is that node (the node is not exactly
+on the edge). The strip stores the row crossing, at row exactly R, and the
+column crossing or the midpoint, at row R plus or minus about 1e-11. As
+written, y = y0 - 10 row rounds both to the same double (an ulp of y near
+6.6e6 m is 9.3e-10 m, coarser than the 1e-10 m between them), while x stays
+2 ulps apart (an ulp of x near 5e5 m is 5.8e-11 m). So the two points are
+distinct but share the row's y exactly, and a triangle with a third vertex
+on the same grid row is flat. k = 1457: vertices at col 8.99999999998836
+and col 9 on row 6, third vertex the node (8, 6). k = 2852: the same on row
+7 near col 9, third vertex (8, 7). k = 2157: that on row 7, and three
+points on row 3 near col 10 (col 9.99999999998836, its midpoint
+9.99999999999418, and 10). R2 snaps every such crossing to the node, so
+the near points become one.
 
 ## 2. Prior art: legacy and literature
 
@@ -74,11 +96,16 @@ or overlapped.
 ## 3. Design
 
 One rule, snap rounding at the coincidence radius, in two places. Neither
-alone is enough (probe, section 5): phase 1's rule alone leaves 4 outlines
-with flat triangles at tolerance 0; the generator's rule alone leaves the 3
-refused runs at tolerance 0 with feet on. Both together: 0 coincident
-vertices, 0 flat triangles and 0 refused runs on all 3000 outlines, both feet
-settings, every tolerance probed.
+alone is enough (probe, section 5). Phase 1's rule alone leaves 4 outlines
+with flat triangles at tolerance 0, feet on and off: k = 1457 (flat 1),
+2157 (flat 2), 2622 (flat 1, and 1 coincident vertex) and 2852 (flat 1),
+all four in C2's list; 1457, 2157 and 2852 are the "flat with no coincident
+pair" case of section 1, and in 2622 two strip points write onto node
+(8, 6), neither of them the node. The generator's rule alone leaves the 3
+refused runs at tolerance 0 with feet on (k = 82, 1172, 2922). Both
+together: 0 coincident vertices, 0 flat triangles and 0 refused runs on all
+3000 outlines, both feet settings, every tolerance probed (1, 0.5, 0.1,
+0.001, 1e-6 and 0 rerun on `a3cb7f40`).
 
 **The radius.** `coincidence_radius(g)` as it is (L16):
 max(1e-10, 64 ulp(M)) lattice units, M = max(cols, rows) - 1. Scale assumed:
@@ -99,7 +126,13 @@ the constraint already); this is `point_loop`'s order (L12 before the foot,
 `refine_points.hpp`). If `strip_fits` refuses, nothing changes: the foot
 search and `split_inside` run as today. The split goes through the existing
 `split_edge` path (touched and skip rule, seeds, `legalise_around`).
-Frozen edges are excluded by `near_constraint` already.
+Frozen edges are excluded by `near_constraint` already. R1 also applies
+when t is void (`r.is_void`, a vertex without data): the foot search skips
+a void triangle because a foot's z is bilinear over valid cells, but R1
+inserts the node itself with its own z, exactly as `split_inside` would,
+only on the edge; the hazard it removes is geometric and does not depend on
+data. `carved` counts the insertion as today. Not exercised by W1 (no
+no-data cells); the prototype counted 0 void firings there.
 
 **R2. The strip generator (`constraint_check_points`,
 `constraint_points.hpp`).** A crossing whose rounded node lies within
@@ -149,8 +182,27 @@ Added to `tests/cpp/property/prop_refinement_written_delaunay.cpp`, which
 holds fixture W1 and its chain (`w1_run`: `refine`, then
 `constraint_check_points` on its output, then `refine_strip`; one thread;
 feet as the test says on both stages). `w1_run` gains a tolerance parameter
-(today fixed at 0.5) and must not `REQUIRE(out.ok())` for T2, which counts a
+(today fixed at 0.5) and must not `REQUIRE(out.ok())` for C2, which counts a
 refused run.
+
+**Names.** That file already holds increment 65's T1-T5, so this
+increment's tests are **C1-C4** ("C" for coincident), tagged
+`[coincident]`. Two comments of increment 65 in it become false and
+`@tester` rewrites them in the red commit: line 26 ("which is why T1 asserts
+per outline and T2 does not assert flat_as_written") and line 287
+("flat_as_written is not asserted (2 on k = 82 on macOS arm64; Linux may
+round differently)"). Both become: feet-off `flat_as_written` is asserted
+by C1 (increment 66); the platform note becomes the measurement below.
+
+**Platforms.** The figures below were measured on macOS arm64 (Apple clang,
+`-O2`, FMA contraction on: 253 fused multiply-add instructions in the probe
+binary) and again with `-ffp-contract=off` (2 left, the ones in the
+predicate library), which is what x86-64 without `-march` compiles to (no
+FMA instructions exist there). Every figure of C1-C4 and of the probe was
+the same in both builds, on master and with the prototype. Still, `@tester`
+confirms from the red CI run that C1, C2 and C4 fail on both CI legs
+(ubuntu-latest and macos-latest); a leg where one passes on master goes
+back to `@architect` before green.
 
 **Fixture W1** (as increment 65, section 4). Geometry `x_min 500000,
 y_max 6600000, dx = dy = 10`, 12 x 12 nodes; z at (row r, col c) =
@@ -160,31 +212,31 @@ i * 104729) % (hi - lo)`: `(x0 + h(0,50,300)/10, y0 - h(1,700,1050)/10)`,
 `(x0 + h(2,800,1050)/10, y0 - h(3,750,1050)/10)`,
 `(x0 + h(4,700,1050)/10, y0 - h(5,50,300)/10)`,
 `(x0 + h(6,50,400)/10, y0 - h(7,50,300)/10)`; start the fan `{0,1,2},
-{0,2,3}`, edges `(i, i+1)` mask 1. Measured (probe, macOS arm64): 3000
-outlines, both feet settings, tolerance 0, in 0.94 s at `-O2`.
+{0,2,3}`, edges `(i, i+1)` mask 1. Measured (probe, macOS arm64, Apple M1
+Max): 3000 outlines, both feet settings, tolerance 0, in 0.94 s at `-O2`.
 
-"Coincident" below: two output vertices with bit-equal written points
-(`out.vertices`). "Flat": `out.flat_as_written`.
+"Coincident" below: the number of output vertices whose written point
+(`out.vertices`) is bit-equal to an earlier vertex's, so a point written
+three times counts 2. "Flat": `out.flat_as_written`.
 
-- **T1 (red).** Tolerance 0.5, k = 0..99, feet on and off: 0 coincident and
+- **C1 (red).** Tolerance 0.5, k = 0..99, feet on and off: 0 coincident and
   `flat_as_written == 0` on every outline. Master: k = 82 feet off, 1
   coincident pair, flat 2. The message names k.
-- **T2 (red).** Tolerance 0, feet on and off, k in {82, 1172, 1437, 1457,
+- **C2 (red).** Tolerance 0, feet on and off, k in {82, 1172, 1437, 1457,
   1922, 2137, 2157, 2622, 2852, 2922}: `refine_strip` returns ok, 0
-  coincident, `flat_as_written == 0`. Master, as (pairs, flat): feet off
+  coincident, `flat_as_written == 0`. Master, as (coincident, flat): feet off
   82 (2, 3), 1172 (1, 3), 1437 (2, 3), 1457 (0, 1), 1922 (2, 3), 2137 (1, 3),
   2157 (0, 2), 2622 (1, 1), 2852 (0, 1), 2922 (1, 3); feet on, refused on
   82, 1172, 2922, and 1437 (2, 3), 1457 (0, 1), 1922 (2, 3), 2137 (1, 3),
   2157 (0, 2), 2622 (1, 1), 2852 (0, 1). The other 2990 outlines of 0..2999
-  are 0 on master and stay 0 (probed, not asserted). Linux may round
-  differently: the aggregate must be > 0 on master on both CI legs, which
-  `@tester` confirms from the red CI run.
-- **T3 (red).** R1, the node and not its foot: k = 82, tolerance 0.5, feet
+  are 0 on master and stay 0 (probed, not asserted). The message names
+  each failing k with its two figures.
+- **C3 (red).** R1, the node and not its foot: k = 82, tolerance 0.5, feet
   on. Phase 1's output (`refine` alone) has a vertex at world
   (500090.0, 6599960.0) with `z == -3.0` exactly (the node's value) that is
   an end of two of `out.edges`. Master: that vertex is the foot, z
   -2.9999999999949942.
-- **T4 (red).** R2 alone, no refine: `constraint_check_points` on W1's DEM
+- **C4 (red).** R2 alone, no refine: `constraint_check_points` on W1's DEM
   with the two vertices (500094.6, 6599920.9), (500088.6, 6599971.9) and the
   edge (0, 1): exactly one point within 1e-6 lattice units of (9, 4), and it
   is `at == (9.0, 4.0)` bit for bit, `z == -3.0`; `size() == 11`,
@@ -192,9 +244,9 @@ outlines, both feet settings, tolerance 0, in 0.94 s at `-O2`.
   row 4; col 9.0000000000010267 row 3.9999999999912665, the midpoint; col 9
   row 3.9999999999825331), `size() == 13`, `duplicates() == 0`.
 
-Invariant-critical suite (mutation targets): R1 removed (killed by T2 feet
-on, T3); R1 moved after the foot search (T2 feet on, T3); R2 removed (T2,
-T4). T1 kills neither
+Invariant-critical suite (mutation targets): R1 removed (killed by C2 feet
+on, C3); R1 moved after the foot search (C2 feet on, C3); R2 removed (C2,
+C4). C1 kills neither
 single-rule removal (each rule alone fixes k = 82 at 0.5); it pins the
 reported defect.
 
@@ -206,14 +258,39 @@ the off setting being the tree as is):
 
 - W1, k = 0..2999 (section 4's figures). R1 fires 6 times in the 3000
   outlines at every tolerance from 0 to 0.5, feet on or off (4 times at 1);
-  `strip_fits` refused none. R2 fires 14 times at 0.5 and at 0 with R1 on
-  (26 with feet off and 17 with feet on, R1 off).
+  `strip_fits` refused none; none on a void triangle (W1 has none). R2
+  fires 14 times at 0.5 and at 0 with R1 on (26 with feet off and 17 with
+  feet on, R1 off). Rerun on 2026-10-17 on `a3cb7f40` with a fresh
+  prototype: the same counts.
 - Every quick-check case (`docs/benchmarks/quick/cases.toml`: tile, quarter,
   numedalslagen, lagan, geilo-al-ramp, romsdal-slope, velhas), feet on and
   off, through the CLI: R1 and R2 each fired 0 times, and every output
   `.vtk` (`--binary`) has the same sha256 with both rules as without. The
   probe's build without the rules reproduces the worktree's own `_core` on
   quarter and velhas (same sha256).
+
+**Reproducing it.** The probe driver is kept as
+`docs/increments/66-probes/probe.cpp` (build lines in its head); it prints
+the coincident, flat and refused figures per outline, and with a fifth
+argument each flat triangle's vertices (section 1's "Flat with no
+coincident pair"). Built against the tree as is, it gives the master
+figures. The shipped code has no switch for either rule, so the
+single-rule figures (section 3) are reproducible only by building the
+probe against the mutants "R1 removed" and "R2 removed" (section 4); the
+firing counts above came from counters in the throwaway prototype and are
+not reproducible from the tree.
+
+**Timed estimate** (2026-10-17, Apple M1 Max, AC power before, between and
+after; `tools/bench_quick.py run`, default flags, all eight quick-check
+cases). The tree `a3cb7f40` was timed first and stored as a temporary
+baseline (`--save-baseline`, the stored file restored from git afterwards),
+then the prototype (a scratch copy with R1 and R2 on, removed afterwards)
+was judged against it: verdict **NO CHANGE**, no case slower beyond the
+tool's band, no `MESH CHANGED` line, so all eight outputs are
+byte-identical. The tree's medians, total seconds: tile 0.421, tile one
+thread 0.733, quarter 0.372, numedalslagen 9.008, lagan 14.742,
+geilo-al-ramp 0.340, romsdal-slope 3.627, velhas 0.127. Expected cost of
+the added steps: none measurable on these cases.
 
 `tools/bench.py run` on the default DEM, both domains, against the previous
 increment's merge commit (back to back with `--tree` on `NO BASELINE`),
@@ -230,16 +307,19 @@ power state recorded, evidence in
 
 ## 6. Size
 
-About 15 net counted lines: R1 about 5 in `refine.hpp` (the test, the
-`!edge` guard on the foot search), R2 about 3 in `constraint_points.hpp`,
-`line_distance` about 5, the move of three functions from `strip_scan.hpp`
-to `refine.hpp` about 0 net. Tests are not counted.
+About 20 net counted lines (the prototype's diff, less its switches and
+counters): R1 about 9 in `refine.hpp` (the test, and a flag that R1 fired
+guarding the foot search; not `!edge`, which would also skip the foot
+search for a node found on an edge, `r.where != Inside`, and change
+today's output), R2 about 4 in `constraint_points.hpp`, `line_distance`
+about 4, the move of three functions from `strip_scan.hpp` to `refine.hpp`
+about 0 net. Tests are not counted.
 
 ## 7. Left out
 
 - Feet-on output changes where R1 fires (6 insertions in W1's 3000
   outlines at 0.5, one of them on k = 82): the node goes in instead of its foot. Not pinned
-  byte-for-byte; T3 pins the node.
+  byte-for-byte; C3 pins the node.
 - A counter for R1 or R2 in the outcome or the run record: not needed by any
   test, and Ola's run record has no reader for it.
 
