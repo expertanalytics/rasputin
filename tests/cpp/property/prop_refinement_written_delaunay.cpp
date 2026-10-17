@@ -33,6 +33,20 @@
 // tagged [coincident]. "Coincident": the output vertices whose written point
 // is bit-equal to an earlier vertex's. INVARIANT-CRITICAL: mutation targets
 // R1 removed, R1 moved after the foot search, R2 removed.
+// Kill record (planted in a scratch copy of the green commit 20253257, the
+// test file touched and its object seen rebuilt each time; ctest 1040 tests):
+// - "R1 removed" (refine.hpp, the near_constraint branch before the foot
+//   search deleted): killed by C2 and C3.
+// - "R1 moved after the foot search" (refine.hpp, the same test run only when
+//   no foot was found): killed by C2 and C3.
+// - "R2 removed" (constraint_points.hpp, the coincidence-radius test beside
+//   orient_sign deleted): killed by C2, C4 and CC7
+//   (test_refinement_constraint_points.cpp).
+// - "the R1-fired flag replaced by !edge" (refine.hpp, the foot search also
+//   skipped for a node found on an edge): survives ctest; killed by the
+//   Python test test_cli_start_quality_gain.py::
+//   test_minus_1_is_20c1s_mesh_on_the_box[gallery] (the mesh topology hash
+//   changes; it passes with the flag restored), the only one of 7911 to fail.
 
 #include <catch2/catch_test_macros.hpp>
 
