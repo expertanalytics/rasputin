@@ -7,7 +7,7 @@ question B:
   are; piece files are `<j>-<i>-<k>.<ext>` in `<out>.pieces/`; a rerun over
   an existing directory deletes its `index.json` first and writes the new one
   last, so a rerun that fails (a truncated DEM) leaves no `index.json`.
-- 8: `--pieces` or `--memory-budget` without `--domain` is a usage error
+- 8: `--pieces` or `--piece-budget` without `--domain` is a usage error
   naming `--domain`, and no file is written.
 - 14: a partition line through a water ring given by `--features`: the ring
   does not divide pieces, its crossings with the seam are vertices of both
@@ -30,9 +30,9 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import pieces_fixtures as pf
+from cli_helpers import USAGE
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
-from test_cli_mesh_dem import USAGE
 
 SENTINEL = -32767.0
 
@@ -112,7 +112,7 @@ class TestTheOutputDirectory:
 # ------------------------------------------------------------------ item 8
 
 
-@pytest.mark.parametrize("option", [("--pieces", "4"), ("--memory-budget", "4096")])
+@pytest.mark.parametrize("option", [("--pieces", "4"), ("--piece-budget", "4096")])
 def test_cutting_needs_a_domain(tmp_path: Path, option: tuple[str, str]) -> None:
     dem, _, _ = scene(tmp_path)
     done = pf.run(tmp_path / "run", *args(dem, None, *option))

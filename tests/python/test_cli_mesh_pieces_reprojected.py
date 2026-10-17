@@ -23,13 +23,10 @@ Each index entry's `counts` carries `on_frozen`, the piece's phase 2 count
 of source nodes on a frozen edge (confirmed under "Settled after 23c's red step (65e3990)",
 item 11).
 
-Split under "23c-2 stopped at dbbe1c6", ruling 2, which stands (point 10
-(a) withdrew point 9): DC10's cases run at `--start-min-angle 0`. At the
-default start quality, increment 20's start-quality pass, which reads no
-raster, can put a vertex on a NoData node in a piece's skinny seam fans;
-trim removes it, and what the check then sees is a rounding effect (B18).
-Those two cases are `xfail(strict=True)` naming increment 20's fix, so they
-report themselves once it is merged here.
+Split under "23c-2 stopped at dbbe1c6", ruling 2: DC10's cases run at
+`--start-min-angle 0`, and the tolerance and validity cases run again at the
+default start quality, whose pass skips NoData nodes (increment 20, "Fix: the
+start-quality pass skips NoData nodes").
 """
 
 from __future__ import annotations
@@ -42,6 +39,7 @@ import pytest
 from shapely.geometry import Polygon
 
 import pieces_fixtures as pf
+from cli_helpers import geojson
 from geographic_fixtures import (
     ANADEM_STEP,
     LAT0,
@@ -53,7 +51,7 @@ from geographic_fixtures import (
     project_ring,
     source_check,
 )
-from test_cli_mesh_geographic import DOMAIN_RC, TARGET, lonlat_ring, tile_array, write_geojson
+from test_cli_mesh_geographic import DOMAIN_RC, TARGET, lonlat_ring, tile_array
 
 H = 30.0
 TOLERANCE = 1.0
@@ -63,7 +61,7 @@ def cut_reprojected(where: Path, *extra: str) -> pf.Cut:
     dem = where / "anadem_like.tif"
     dem.write_bytes(geographic_tile_tiff(tile_array()).getvalue())
     ring = project_ring("EPSG:4326", "EPSG:4674", lonlat_ring(DOMAIN_RC))
-    domain = write_geojson(where / "domain.geojson", ring, "EPSG:4674")
+    domain = geojson(where / "domain.geojson", ring, crs="EPSG:4674")
     return pf.cut(
         where / "run",
         *("--dem", str(dem), "--domain", str(domain)),
@@ -136,14 +134,7 @@ def test_conformity_a_valid_union_and_constrained_delaunay(done: pf.Cut) -> None
 
 # ------------------------------------------------------------------ at the default start quality
 
-QUALITY_FIX = (
-    "increment 20's start-quality pass can place a vertex on a NoData node; fixed by "
-    '"Fix: the start-quality pass skips NoData nodes" in 20-start-quality.md '
-    "(23-basin-scale.md, '23c-2 stopped at dbbe1c6', points 2 and 10 (a))"
-)
 
-
-@pytest.mark.xfail(strict=True, reason=QUALITY_FIX)
 def test_at_the_default_start_quality_no_source_node_over_tolerance(with_quality: pf.Cut) -> None:
     u = pf.union(with_quality.pieces)
     array = tile_array().ravel().astype(np.float64)
@@ -154,7 +145,6 @@ def test_at_the_default_start_quality_no_source_node_over_tolerance(with_quality
     assert (found.over_interior, found.over_strip) == (0, 0), found
 
 
-@pytest.mark.xfail(strict=True, reason=QUALITY_FIX)
 def test_at_the_default_start_quality_a_valid_union(with_quality: pf.Cut) -> None:
     u = pf.union(with_quality.pieces)
     assert pf.validity_problems(u, target_domain(), with_quality.noded) == []

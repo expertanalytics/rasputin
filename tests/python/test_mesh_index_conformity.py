@@ -140,7 +140,7 @@ def an_index() -> dict[str, Any]:
         "vocabulary": "0" * 64,
         "partition": {
             "pieces": 4,
-            "memory_budget": 2**34,
+            "piece_budget": 2**34,
             "bytes_per_node": 267,
             "nx": 2,
             "ny": 1,

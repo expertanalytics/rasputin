@@ -30,9 +30,9 @@ from pydantic import ValidationError
 from shapely.geometry import Polygon
 
 import pieces_fixtures as pf
+from cli_helpers import USAGE
 from geographic_fixtures import project_ring
 from geotiff_fixtures import micro_tiff
-from test_cli_mesh_dem import USAGE
 
 WGS84 = "EPSG:4326"
 UTM = "EPSG:25833"

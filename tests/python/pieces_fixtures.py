@@ -30,7 +30,7 @@ code with `tin_engine`:
 What these readers pin, confirmed under "Settled after 23c's red step (65e3990)" (items 2-4):
 pieces go to the one directory `<out name>.pieces` beside `--out` (found here
 by its suffix); `index.json` there holds `crs`, `tolerance`, a `partition`
-object (`pieces`, `memory_budget`, `bytes_per_node`, `nx`, `ny`, `dx`, `dy`,
+object (`pieces`, `piece_budget`, `bytes_per_node`, `nx`, `ny`, `dx`, `dy`,
 `cols`, `rows`, and the lattice: `row0`, `col0`, `spacing`, `origin`) and a
 `pieces` list whose entries carry `id` (`[j, i, k]`),
 `file` (relative to the directory), `sha256` and `counts`; a piece file names
@@ -56,9 +56,9 @@ import numpy.typing as npt
 import shapely
 from shapely.geometry import Polygon
 
+from cli_helpers import invoke
 from geographic_fixtures import SourceCheck, source_check
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
-from test_cli_mesh_dem import invoke
 from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
 Ring = list[tuple[float, float]]
@@ -215,7 +215,7 @@ def run(where: Path, *args: str, out_name: str = "x.vtk") -> Cut:
     where.mkdir(parents=True, exist_ok=True)
     out = where / out_name
     with node_spy() as seen:
-        code, output = invoke(*args, "--out", str(out))
+        code, output = invoke("mesh", *args, "--out", str(out))
     done = Cut(code=code, output=output, out=out, dir=pieces_dir(out))
     if len(seen) == 1 and seen[0].ok():
         done.noded = noded_outline(seen[0])

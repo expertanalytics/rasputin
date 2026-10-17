@@ -1,4 +1,4 @@
-"""`rasputin mesh ... --pieces P --memory-budget B`: increment 23c end to end.
+"""`rasputin mesh ... --pieces P --piece-budget B`: increment 23c end to end.
 
 `docs/increments/23-basin-scale.md`, "Choosing the cuts", "The seam
 protocol", "Output", K1-K6 and K9, and "Tests @tester can write red", 23c:
@@ -11,11 +11,11 @@ quality each on and off, and at two tolerances; each oracle has a control
 that fails it on a wrong mesh.
 
 What this file pins, as ruled under "Settled after 23c's red step (65e3990)" (items 2, 3, 7, 8, 9)
-and "23c-2 stopped at dbbe1c6" (points 1 and 11):
+"23c-2 stopped at dbbe1c6" (points 1 and 11) and "23c-2 meets master" (R2, D1):
 
-- `--pieces` and `--memory-budget` are `mesh` options; the budget is a size
-  (point 11's grammar, default `16G`, 2**34 bytes; tested in
-  `test_decompose_memory_budget.py` and `test_cli_mesh_pieces_budget.py`);
+- `--pieces` and `--piece-budget` are `mesh` options; the budget is a size
+  in `resources.parse_bytes`'s grammar, default `16G`, 2**34 bytes (tested
+  in `test_resources.py` and `test_cli_mesh_pieces_budget.py`);
   both need `--dem` and `--tolerance`; `--pieces 0` and a budget under one
   node's `b(T)` are usage errors naming the option.
 - A cut run writes `<out name>.pieces/` beside `--out`, holding
@@ -42,12 +42,12 @@ import pytest
 from shapely.geometry import Polygon
 
 import pieces_fixtures as pf
+from cli_helpers import USAGE
 from pieces_fixtures import Cut, Union
-from test_cli_mesh_dem import USAGE
 from tin_engine import _core
 
 DOMAIN = Polygon(pf.SQUARE)
-GIB = 1 << 30
+PIECE_BUDGET = 1 << 34  # 16G, --piece-budget's default
 
 
 @pytest.fixture(scope="module")
@@ -87,13 +87,13 @@ class TestOptions:
         self, tmp_path: Path, scene: Any, value: str
     ) -> None:
         """b(1 m) is 267 bytes: a budget below it cannot hold a cell of one node."""
-        done = pf.run(tmp_path, *base(scene), "--memory-budget", value)
+        done = pf.run(tmp_path, *base(scene), "--piece-budget", value)
         assert done.code == USAGE, done.output
         assert "No such option" not in done.output
-        assert "--memory-budget" in done.output
+        assert "--piece-budget" in done.output
         assert done.dir is None
 
-    @pytest.mark.parametrize("option", [("--pieces", "4"), ("--memory-budget", "4096")])
+    @pytest.mark.parametrize("option", [("--pieces", "4"), ("--piece-budget", "4096")])
     def test_needs_a_tolerance(self, tmp_path: Path, scene: Any, option: tuple[str, str]) -> None:
         dem, _, _ = scene
         done = pf.run(tmp_path, "--dem", str(dem), *option)
@@ -103,10 +103,10 @@ class TestOptions:
         assert done.dir is None
 
     def test_needs_a_dem(self, tmp_path: Path) -> None:
-        done = pf.run(tmp_path, "square", "--flat", "--pieces", "4")
+        done = pf.run(tmp_path, "--pieces", "4")
         assert done.code == USAGE, done.output
         assert "No such option" not in done.output
-        assert "--dem" in done.output
+        assert "Missing option '--dem'" in done.output
 
     def test_the_help_names_both(self) -> None:
         from typer.testing import CliRunner
@@ -115,7 +115,7 @@ class TestOptions:
 
         text = CliRunner().invoke(app, ["mesh", "--help"], env={"COLUMNS": "200"}).output
         assert "--pieces" in text
-        assert "--memory-budget" in text
+        assert "--piece-budget" in text
 
 
 # ------------------------------------------------------------------ DC1, K1
@@ -132,7 +132,7 @@ class TestUncutIsTodaysMesh:
             tmp_path / "same",
             *base(scene),
             "--binary",
-            *("--pieces", "1", "--memory-budget", str(1 << 40)),
+            *("--pieces", "1", "--piece-budget", str(1 << 40)),
         )
         assert same.code == 0, same.output
         assert same.out.read_bytes() == today.out.read_bytes()
@@ -147,12 +147,12 @@ class TestUncutIsTodaysMesh:
         assert int(part["bytes_per_node"]) == 267  # b(1 m)
 
         today = pf.run(tmp_path / "today", *base(scene))
-        whole = pf.run(tmp_path / "whole", *base(scene), "--memory-budget", str(budget))
+        whole = pf.run(tmp_path / "whole", *base(scene), "--piece-budget", str(budget))
         assert whole.code == 0, whole.output
         assert whole.dir is None
         assert whole.out.read_bytes() == today.out.read_bytes()
 
-        split = pf.cut(tmp_path / "split", *base(scene), "--memory-budget", str(budget - 1))
+        split = pf.cut(tmp_path / "split", *base(scene), "--piece-budget", str(budget - 1))
         assert int(split.index["partition"]["nx"]) * int(split.index["partition"]["ny"]) > 1
 
 
@@ -179,7 +179,7 @@ class TestTheOutput:
         assert index["tolerance"] == 1.0
         part = index["partition"]
         assert part["pieces"] == 4
-        assert part["memory_budget"] == 16 * GIB
+        assert part["piece_budget"] == PIECE_BUDGET
         assert part["bytes_per_node"] == 267
         assert (part["nx"], part["ny"]) == (2, 2)
         for key in ("dx", "dy", "cols", "rows"):
