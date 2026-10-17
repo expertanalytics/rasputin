@@ -1,6 +1,6 @@
 # Harness h22: the private remote under a push grant, two false reds after a commit, and scratch copies of the private package
 
-Status: **design**, 2026-10-17, on `worktree-h22-harness-fixes` off master
+Status: **built**, 2026-10-17, on `worktree-h22-harness-fixes` off master
 `db12c3e1`. One PR, by day: every production file it changes is governed.
 Implements three fixes Ola approved on 2026-10-17 as items 4 to 6 of the
 night's queue, each from a failure seen that night.
@@ -467,3 +467,4 @@ Ola's prompts for the governed files and the rule file.
 - **Design review, round 2, 2026-10-17.** Commit `892c4de8`, 0 counted lines, @reviewer: CHANGES REQUESTED. The six rows of 4.3 fail closed and the `remote.private.url` anchor needs a prompt to remove; one hole: "set up" is read as `git config --get` exit 0, so a read error (exit 128 from a malformed `~/.gitconfig`) counts as not set and fails open. Exit 1 means not set; any other exit or a timeout refuses; that call gets a timeout inside the hook budget.
 - **Design review, round 3, 2026-10-17.** Commit `b32c527b`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the hook-time sum is 70 s (two `git --list-cmds` calls, `guard_push.py` line 138). Idea taken for the red step: a monkeypatched `TimeoutExpired` on the config call tests the timeout reason.
 - **Code review, round 1, 2026-10-17.** Range `2c5d2e5e..e07de130`, 107 counted lines, @reviewer: APPROVED. Every refusal of 4.2-4.4 is in the code, fails closed and has a test. Before merge: section 10's text in `.claude/REQUIRED-READING.md`. Taken as fixes (Ola asked about machine-written code): `was {act.kind}d already` written out; the hook comment that repeats its message cut; a malformed check item gives the could-not-be-read reason; `reviewed: no (<reason>)` becomes `not judged (<reason>)` when the reason is not the review.
+- **Code review, round 2, 2026-10-17.** Range `a6c522dc..93ace88f`, 113 counted lines, @reviewer: APPROVED WITH WORDINGS (status built, here and in ROADMAP), applied by the main session. Rule text matches section 10 and the code; a malformed check item refuses; `not judged` is report-only.
