@@ -5,7 +5,7 @@
 // flat triangle (flat_as_written) or a refused run, and the totals. With a
 // fifth argument it also prints each flat triangle's vertices.
 //
-// Build from the repository root (the single-rule figures of section 5 come
+// Build from the repository root (the single-rule figures of section 3 come
 // from building it against the mutants "R1 removed" and "R2 removed"):
 //   c++ -std=c++20 -O2 -Iinclude -Ilib/detria -c src/predicates/detria_exact.cpp -o /tmp/d.o
 //   c++ -std=c++20 -O2 -Iinclude docs/increments/66-probes/probe.cpp /tmp/d.o -o /tmp/probe

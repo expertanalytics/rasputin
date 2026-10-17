@@ -1,6 +1,6 @@
 # Increment 66: no two vertices written at one point
 
-**Status: designed, revised after design review round 1** (`@architect`,
+**Status: designed, design review APPROVED (round 2)** (`@architect`,
 2026-10-17, on `ecdaecd2`, revised on `a3cb7f40`, branch
 `worktree-coincident-vertices`, its own PR after increment 65 merges). Full
 path: it changes C++ refine code, so `@perf`'s acceptance run applies. Ola
@@ -326,3 +326,4 @@ about 0 net. Tests are not counted.
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `0ea809cb`, 0 counted lines, @reviewer: CHANGES REQUESTED. No timed estimate (`tools/bench_quick.py` on the quick-check cases); the 4 outlines R1 alone leaves flat are not named, nor how 1457, 2157 and 2852 come out flat with no coincident pair; T1 and T4 shown to fail only on macOS arm64 (FMA rounding); test names T1-T4 collide with increment 65's, and two comments there (lines 26, 287) become false. Suggestions: R1 on a void triangle; the probe figures are reproducible only through the mutants.
+- **Design review, round 2, 2026-10-17.** Commit `95c8b19b`, 0 counted lines, @reviewer: APPROVED. All four round-1 items fixed; the R1-fired flag (not `!edge`) keeps today's output; the probe under docs/ builds and matches C1 and C2's master figures. Probe pointer to section 3 fixed by the main session; probe includes and argc left as they are (a docs probe, not built by CI).
