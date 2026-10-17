@@ -1,6 +1,6 @@
 # Increment 64: `plugin_api` exports the flow accumulation
 
-**Status: designed** (`@architect`, 2026-10-17). Short path; one public PR,
+**Status: built, code review approved** (`@architect`, 2026-10-17). Short path; one public PR,
 branch `worktree-export-accumulate`. 61 to 63 are taken (`git ls-tree` over
 every ref of both remotes after `git fetch --all`; `ls` in every worktree).
 
@@ -41,7 +41,7 @@ a plugin may import only `tin_engine.plugin_api`, which lacks them.
   no `plugin_api.accumulate`. No fixture (names and identity
   only); `tests/python/test_core_accumulate.py` already pins behaviour.
 - `tests/python/test_layering.py`: `catchment_core` in `plugin_api`'s row.
-  This permits the import; it is not a red pin.
+  The row is checked both ways (`test_each_module_imports_exactly_its_row`): red now, since `plugin_api` does not import `catchment_core` yet.
 - T6 (`tests/python/test_cli_help.py`, `TestThePluginsPage`) stays green: the
   table row above lands with this design.
 
@@ -52,3 +52,4 @@ Left out: a private binding. About 2 counted lines (`CLAUDE.md` §2); no C++, no
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `f5b46020`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the `accumulate` row in docs/plugins.md says which neighbour a node drains to and that the call releases the GIL. Held: the wrapper, not the binding, is the boundary; dtypes, codes, read-only views and the ValueError match the code.
+- **Code review, round 1, 2026-10-17.** Range `48af0683..d5bc01ac` (red `1c438fa9`, green `d5bc01ac`), 2 counted lines, @reviewer: CHANGES REQUESTED, one wording (the layering row is checked both ways), applied by the main session.
