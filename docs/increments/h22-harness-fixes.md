@@ -75,9 +75,11 @@ formatter-clean"; "After-commit hook: keep the cause when two faults meet";
 | 3 | `tools/scratch_copy.py` for the private layout: `src/`, the `_lsm` extension, the `.pth` path entry | `tools/scratch_copy.py` |
 
 Not in scope: `guard_push.py` (its reasons for the new forms are already
-`PUSH` and `PR`, which `judge` accepts; checked by reading
-`PUBLISHES` lines 61-63), `record_review.py` (section 4.3), and the private
-repository's own copy of the harness (section 9).
+`PUSH` and `PR`, which `judge` accepts; checked by reading `publishes()` in
+`.claude/hooks/guard_push.py`, lines 267-285: `git push` gives `PUSH`
+whatever the remote, and `gh pr create` and `gh pr merge` give `PR` whatever
+`-R` names), `record_review.py` (section 4.1), and the private repository's
+own copy of the harness (section 9).
 
 ## 4. Fix 1: the private forms in `tools/push_grant.py`
 
@@ -146,21 +148,43 @@ The `grants-used.jsonl` line gains `"remote"`.
 
 ### 4.3 A branch's own repository
 
-`home(repo, head) -> "origin" | "private"`: `"private"` when `head` holds a
-private-only commit, else `"origin"`. Computed as two counts:
-`git rev-list --count refs/remotes/private/master ^refs/remotes/origin/master`
-(N) and the same with `^<head>` added (M); private when M < N. When
-`refs/remotes/private/master` does not exist (a clone without the private
-remote, CI), every head is `"origin"`.
+`home(repo, head) -> tuple[str, str]`: `(remote, "")` with remote
+`"origin"` or `"private"`, or `("", reason)` when the branch's repository
+cannot be told. The check fails closed: whenever the private remote is set
+up, a head counts as public only when the private side was read and the
+head holds none of it.
 
-In `judge`, after the head is resolved and before the review: when
-`home(where, head) != act.remote`, refuse with
+Two counts: `git rev-list --count refs/remotes/private/master
+^refs/remotes/origin/master` (N) and the same with `^<head>` added (M).
+Whether the private remote is set up is `git config --get
+remote.private.url` exiting 0. That anchor cannot be removed under a grant
+without a prompt: `git remote remove`/`rm` and `git config` writes ask
+(`git_why` in `guard_push.py`, `REMOTE_WRITES` and the `config` branch), and
+`.git/config` is governed (`GOVERNED_SUFFIXES` in `guard_governance.py`). The
+ref is not such an anchor: `git branch -dr private/master` deletes it with no
+prompt. So the ref's absence is never read as "no private history":
+
+| `remote.private.url` | `refs/remotes/private/master` | Result |
+|---|---|---|
+| set | present, N > 0 | `"private"` when M < N, else `"origin"` |
+| set | missing | `("", "the private remote is set up but refs/remotes/private/master is missing, so it cannot be told whether this branch holds private commits; run git fetch private")` |
+| set | present, N = 0 | `("", "refs/remotes/private/master holds no commit that origin/master lacks, so it cannot be told whether this branch holds private commits; run git fetch private")` |
+| not set | missing | `"origin"` (a clone without the private remote, CI) |
+| not set | present, N > 0 | as the first row (a ref left behind; it is still read) |
+| not set | present, N = 0 | `"origin"` |
+
+`rev-list` exiting non-zero for any other reason (a damaged ref, a timeout of
+10 s) is `("", "the private and public histories could not be compared")`.
+
+In `judge`, after the head is resolved and before the review: a reason from
+`home` refuses every form, origin and private alike, with that reason.
+Otherwise, when the remote differs from `act.remote`, refuse with
 
 - `head <h7> holds commits of private/master, so it goes only to the private repository` (an origin form on a private branch: the leak refusal), or
 - `head <h7> holds no commit of private/master, so it goes only to origin` (a private form on a public branch).
 
-A private form where `refs/remotes/private/master` is absent is refused:
-`there is no refs/remotes/private/master here`.
+A private form in a clone without the private remote (the fourth row) is
+refused by the second sentence.
 
 Known limit, stated, not fixed: a branch forked before the split
 (`a058bb6b`) and never merged with `private/master` counts as `"origin"`
@@ -184,12 +208,23 @@ state,baseRefName,headRefOid,statusCheckRollup`, run with a 20 s timeout
 (the call took 0.74 s; one PR, one page). Refused, each with its own words:
 
 1. gh exits non-zero, times out, or prints JSON without those keys: `the pull request's checks could not be read`.
-2. `state` is not `OPEN`; `baseRefName` is not `master`; `headRefOid` is not the head.
+2. Three conditions, each with its own reason: `state` is not `OPEN` (`the pull request is <state>, not open`); `baseRefName` is not `master` (`the pull request is into <base>, not master`); `headRefOid` is not the head (`the pull request's head is <h7>, not <h7>`).
 3. `statusCheckRollup` is empty: `no checks reported`.
 4. Any `CheckRun` whose `status` is not `COMPLETED`, or whose `conclusion` is not `SUCCESS`, `SKIPPED` or `NEUTRAL`; any `StatusContext` whose `state` is not `SUCCESS`. The reason names the first such check.
 5. No item is a success (all skipped or neutral).
 
 `--match-head-commit` still pins the head at the forge, as in h20 §1.
+
+The hook's time. `.claude/settings.json` gives `guard_push.py` no `timeout`
+(read 2026-10-17), so Claude Code's default for a command hook applies: 600 s
+(code.claude.com/docs/en/hooks, *Common fields*, read 2026-10-17). The 20 s
+`gh` call, `home`'s two `rev-list` calls (10 s each, new here) and the
+guard's own `git --list-cmds` (10 s, `guard_push.py` line 141) add to at most
+50 s, well inside it; `push_grant.py`'s other git calls have no timeout today
+and are local reads. The same page says a timed-out `PreToolUse`
+hook does not block the call, which then goes through the normal permission
+flow; so the 20 s cap is what keeps the guard from ever reaching that limit,
+and no `timeout` is added to the settings.
 
 ## 5. Fix 2: `.claude/hooks/gates_after_commit.py`
 
@@ -200,7 +235,10 @@ In `main`, for each resolved tree (a `Path`), before `run_gates`:
 pull stopped on conflicts there. Then no gate runs in that tree, and its block
 is
 
-> No commit was made in `<tree>`: `<n>` paths are unmerged (`<first three, comma-separated>`), so a git operation stopped on conflicts. No gates ran there. A commit made earlier on the same command line is not checked either.
+> A git operation stopped on conflicts in `<tree>`: `<n>` paths are unmerged (`<first three, comma-separated>`). No gates ran there. Any commit made before it stopped (an earlier pick of a rebase or cherry-pick, or an earlier command on the same line) is not checked either; the gates run on the next commit there.
+
+The wording does not say no commit was made: a rebase or a range
+cherry-pick that stops on its second commit has committed the first.
 
 The opening "The commit is in, and below are ..." is printed only when at
 least one block is a gate block or a `NOT CHECKED` block; a run whose only
@@ -216,6 +254,15 @@ gates are never skipped. When a tree's only lines are skips, the hook prints
 them on stdout and exits 0: a skip is not red. When there are failures too,
 the skip lines go in that tree's block. Today `lsm-melt-out/tools` lacks
 `check_detria_boundary.py` and has the other two scripts.
+
+A gate script the commit itself deleted is skipped the same way, exit 0.
+That is accepted, for two reasons. Every gate script is under
+`tools/check_`, a governed prefix (`GOVERNED_PREFIXES` in
+`guard_governance.py`), so deleting one already needed Ola's prompt. And CI
+runs each gate by name from `.github/workflows/main.yaml` (`python
+tools/check_detria_boundary.py` and the others), so on a public branch the
+missing script fails CI. The skip line says which script was missing, so the
+deletion is visible at commit time too.
 
 ## 6. Fix 3: `tools/scratch_copy.py`
 
@@ -271,8 +318,10 @@ All `harness`-marked, real git in `tmp_path`, no network.
 **Fixture A (push grant)**: a repository with `refs/remotes/origin/master` at
 M1 and `refs/remotes/private/master` at P1, both children of M0 (N = 1
 private-only commit); branch `pub` = M1 + one code commit; branch `prv` =
-P1 + one code commit; a flag granting both; a `reviews.jsonl` approving each
-head. `checks` is fed dicts, never gh.
+P1 + one code commit; `remote.private.url` set to a path in `tmp_path` that
+is never fetched (so N = 1 is read from the ref, with no network); a flag
+granting both; a `reviews.jsonl` approving each head. `checks` is fed dicts,
+never gh.
 
 `tests/python/test_push_grant.py`:
 
@@ -280,18 +329,31 @@ head. `checks` is fed dicts, never gh.
    `-C /abs`, `--repo`, `--repo=`, and the merge's options in two orders.
 2. Each refusal of 4.2 items 1 to 3, one parametrised case each (about 18):
    `granted_act` returns None.
-3. The public merge with `-R expertanalytics/rasputin` returns None.
-4. `home`: `prv` is private (M = 0 < N = 1), `pub` is origin (M = 1), and
-   with the private ref deleted both are origin.
-5. `judge`: private push of `prv` passes and logs `"remote": "private"`;
-   origin push of `prv` is refused with the leak sentence; private push of
-   `pub` is refused; a private form with no private ref is refused.
+3. The public merge with `-R expertanalytics/rasputin` returns None, and so
+   does `gh pr create -R expertanalytics/rasputin --head pub`.
+4. `home`, one case per row of the 4.3 table that the fixture can reach:
+   (a) `prv` is `"private"` (M = 0 < N = 1) and `pub` is `"origin"` (M = 1);
+   (b) URL set, ref deleted (`git branch -dr private/master`): both get the
+   missing-ref reason; (c) URL set, ref moved to M0 (`git update-ref`, so
+   N = 0): both get the N = 0 reason; (d) URL unset and ref deleted: both are
+   `"origin"`.
+5. `judge`: (a) private push of `prv` passes and logs `"remote": "private"`;
+   (b) origin push of `prv` is refused with the leak sentence; (c) private
+   push of `pub` is refused with the second sentence; (d) the leak case of
+   design review round 1: origin push of `prv` with the ref deleted, URL set,
+   is refused with the missing-ref reason; (e) the same with the ref at M0
+   (N = 0) is refused with the N = 0 reason; (f) a private push of `prv` in a
+   clone with no URL and no ref is refused.
 6. The walk: on `prv`, a code commit after the review is refused; a clean
    merge of `private/master` after the review passes; a clean merge of
    `origin/master` into `prv` is refused (not its master).
-7. `checks`: green passes; each of 4.4 items 2 to 5 is refused with its own
-   reason; a `StatusContext` with `PENDING` is refused; a gh failure
-   (stubbed runner exits 1, times out, prints `[]`) is item 1.
+7. `checks`, one parametrised case per condition, each asserting its own
+   reason: green passes; `state` `MERGED`; `baseRefName` `main`;
+   `headRefOid` another sha (the three of 4.4 item 2, each alone on an
+   otherwise green view); an empty rollup (item 3); a `CheckRun` `IN_PROGRESS`,
+   a `CheckRun` `FAILURE`, a `StatusContext` `PENDING` (item 4); all
+   `SKIPPED` (item 5); and item 1 three ways: the stubbed runner exits 1,
+   times out, prints `[]`.
 8. A second private merge of the same head in one window is refused.
 
 `tests/python/test_away.py`: `--back` on a granted `prv` reports the review
@@ -306,9 +368,10 @@ whose gate stubs append `<gate> <cwd>` to a log when run):
    is not in this tree.` line, stderr empty.
 10. The same with a red ruff stub: exit 2, the ruff block and the skip line,
     no detria entry.
-11. A conflicting `git merge` in a worktree: exit 2, `No commit was made`,
-    nothing appended to the stubs' log, no `The commit is in`.
-12. A cherry-pick that stops on a conflict: as 11.
+11. A conflicting `git merge` in a worktree: exit 2, `stopped on
+    conflicts`, nothing appended to the stubs' log, no `The commit is in`.
+12. A cherry-pick of a two-commit range whose second commit conflicts (the
+    first is committed): as 11.
 13. `git commit -qm a && git merge <conflicting>`: as 11, with the sentence
     on an earlier commit.
 14. A clean merge still runs the gates (regression).
@@ -369,11 +432,11 @@ Net production lines (`CLAUDE.md` §2), estimates:
 
 | File | Fix | Estimate |
 |---|---|---|
-| `tools/push_grant.py` (forms, `home`, `checks`, the remote through the walk) | 1 | about 80 |
+| `tools/push_grant.py` (forms, `home` with its fail-closed rows, `checks` with a reason per condition, the remote through the walk) | 1 | about 95 |
 | `tools/away.py` | 1 | about 5 |
 | `.claude/hooks/gates_after_commit.py` | 2 | about 25 |
 | `tools/scratch_copy.py` | 3 | about 20 |
-| Total | | about 130 |
+| Total | | about 145 |
 
 One PR, full path (over 50 lines): design review, red, green, code review,
 Ola's prompts for the governed files and the rule file.
