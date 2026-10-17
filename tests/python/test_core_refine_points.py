@@ -85,7 +85,12 @@ class Phase1:
         # Counter-clockwise in world: down the west side first.
         ring = ring[::-1]
         xy = world(np.array([c for _, c in ring], float), np.array([r for r, _ in ring], float))
-        run = _engine(xy, [([*range(len(ring))], ChainRole.Outer, 0)], True, DEFAULT_SNAP_SPACING)
+        run = _engine(
+            xy,
+            [([*range(len(ring))], ChainRole.Outer, 0)],
+            delaunay=True,
+            spacing=DEFAULT_SNAP_SPACING,
+        )
         assert run.mesh is not None and run.noded is not None, run.message
         edges, masks = _constraint_arrays(run.mesh, run.noded)
         view = _core.raster_view(dem, x_min=X_MIN, y_max=Y_MAX, delta_x=float(H), delta_y=float(H))

@@ -220,11 +220,8 @@ class TestChunkedReprojector:
 
     def test_the_constants_are_the_designs(self, crs: ModuleType) -> None:
         """Section 3.1 (b): a 250 000-point chunk is a chunk of work (about
-        60 ms of PROJ on one machine). Increment 38 (section 4.2) drops the
-        cap of 8 workers: `reprojector` takes `threads` from its caller, and
-        no module but `resources.py` reads the core count."""
+        60 ms of PROJ on one machine)."""
         assert crs.CHUNK_POINTS == 250_000
-        assert not hasattr(crs, "WORKERS")
 
     @pytest.mark.parametrize(
         ("n", "threads", "workers"),

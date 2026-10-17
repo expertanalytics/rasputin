@@ -1,5 +1,6 @@
-"""Land-cover borders simplified within a band, each polygon keeping its area
-(increment 32, ``docs/increments/32-landcover-simplify.md``, section 6).
+"""Land-cover borders simplified within a band, each polygon keeping its area.
+
+The design: `docs/increments/32-landcover-simplify.md`, *6. The blueprint*.
 
 Polygons to flat rings for :func:`tin_engine._core.simplify_borders` and back,
 with the same polygons, parts and holes in the same order. No I/O.

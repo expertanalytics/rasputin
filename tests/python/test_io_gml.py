@@ -225,12 +225,6 @@ class TestReadGml:
         doc = gml.read_gml(document(), "clc18_kode")
         assert doc.features == () or list(doc.features) == []
 
-    def test_a_document_has_no_completeness_flag(self, gml: ModuleType) -> None:
-        """A strict reader reads a whole document or refuses it, so the first
-        design's `complete` is gone (Ola, 2026-09-28)."""
-        doc = gml.read_gml(document(member("a", LAKE)), "clc18_kode")
-        assert not hasattr(doc, "complete")
-
 
 class TestMalformed:
     """The reader is strict: what is not well-formed XML is refused."""

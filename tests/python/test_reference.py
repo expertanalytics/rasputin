@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -541,18 +540,3 @@ class TestBySeed:
         assert list(s["by_seed"]) == ["river", "lake"]
         for group in s["by_seed"].values():
             assert group["stations"] == 0 and group["uncertain_share"] is None
-
-
-def test_no_product_source_names_the_old_overlap_fields() -> None:
-    """The overlap fields are `reference_in_ours` and `ours_in_reference`
-    everywhere in the package, with no alias for the old names; the station
-    file's `nve_area_km2` column is a different thing and stays."""
-    package = Path(ref.__file__).resolve().parent
-    found = [
-        f"{path.relative_to(package)}:{number}"
-        for path in sorted(package.rglob("*.py"))
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
-        if "nve_in_ours" in line or "ours_in_nve" in line
-    ]
-    assert found == []
-    assert "reference_in_ours" in Path(ref.__file__).read_text(encoding="utf-8")

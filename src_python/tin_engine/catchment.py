@@ -247,7 +247,9 @@ def delineate(
         return upstream(tile, seed), seed
 
     bounds = Bounds(x_min=x0 - mx, y_min=y0 - my, x_max=x1 + mx, y_max=y1 + my)
-    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False, budget, base=base)
+    m, out, seed, windows = _grow(
+        footprints, repository, bounds, flood, burnt=False, budget=budget, base=base
+    )
     fine = _outline(dem_crs, lake, point, out, m, seed, tuple(windows))
     return _reduced(fine, dem_crs, request.outline_tolerance)
 
@@ -356,7 +358,7 @@ def _gauged(
 
     placed = _burnt_flood(reach, lambda p: int(p.placed), frame)
     m, out, (burnt, path, seed), windows = _grow(
-        footprints, repository, bounds, placed, True, budget, base=base
+        footprints, repository, bounds, placed, burnt=True, budget=budget, base=base
     )
     try:
         again = Bounds.of(m.node_box()), _burnt_flood(reach, at_u, frame), True, budget

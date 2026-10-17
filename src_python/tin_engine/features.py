@@ -1,6 +1,6 @@
 """The edge-property vocabulary (which bit of an edge's property word means what), and
-:class:`TerrainFeature`, one feature's mask and lines (moved from ``feature_input``
-by audit PR C, so ``chains`` imports it from layer 0).
+:class:`TerrainFeature`, one feature's mask and lines. Both are layer 0, so
+``chains`` imports them without reaching ``feature_input``.
 
 The C++ core carries a per-edge set of 32 opaque bits and never spells a feature
 name. The names live here, at the boundary, exactly as CRS metadata does -- and
@@ -35,7 +35,7 @@ space-separated, so a space would split a name; the GeoPackage writer puts each
 used name, quoted but not escaped, into a ``CREATE TABLE`` statement as a
 column, so the pattern is what keeps a quote out of that SQL.
 
-See ``docs/increments/07-edge-properties.md``.
+The design: `docs/increments/07-edge-properties.md`, *The boundary model*.
 """
 
 from __future__ import annotations
@@ -167,7 +167,7 @@ DEFAULT_VOCABULARY = EdgeVocabulary(
         EdgeProperty(name="contour", bit=4),
         EdgeProperty(name="wall", bit=5),
         EdgeProperty(name="ditch", bit=6),
-        # Increment 16b (Q3, Ola 2026-09-28): a land-cover boundary, and water.
+        # A land-cover boundary, and water.
         EdgeProperty(name="land_cover", bit=7),
         EdgeProperty(name="water", bit=8),
     )
@@ -185,7 +185,7 @@ PIECE_VOCABULARY = EdgeVocabulary(
 class TerrainFeature(BaseModel):
     """One feature: its fid, mask, and clipped lines in the DEM's CRS; a
     closed line (first point repeated) is an unclipped ring. Under a coded
-    map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
+    map it also keeps its class ``code`` and, if polygonal, its
     ``polygon`` moved into the DEM's CRS by the transform its lines took."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
