@@ -49,7 +49,7 @@ the land-cover stage ran with the band above 0 and no ``--start-min-angle``
 was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
 digest per platform, and the simplifier never called).
 PINNED for increment 32: "the land-cover stage ran" is a ``--features`` file
-with coded polygons under a class map with codes (``corine``); features with
+with coded polygons under a legend with codes (``corine``); features with
 no class codes (``gallery``) keep 25 at any band.
 
 Increment 32's fix (section 15.2's order; 15.3, test 22; 15.4's wording):
@@ -62,7 +62,7 @@ Test 14's band-0 digest is unchanged. RED at the commit that added them
 simplifier, and the help and record said "repaired, clipped border".
 
 Increment 41 (``docs/increments/41-class-maps-as-data.md``, section 5.3):
-the three distances' help ends "Default: from the class map's positional
+the three distances' help ends "Default: from the legend's positional
 accuracy and the DEM cell (CORINE: N)."; ``BAND_HELP`` follows it.
 
 RED at the commit that added increment 32's tests (``44f25968``): the default
@@ -102,7 +102,7 @@ OUTLINE_DEFAULT = 5.0  # ruling 6
 BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accuracy
 #: Increment 32, test 14: SHA-256 of the points (float64, little-endian, (N, 3))
 #: then the triangles (int64, little-endian, (T, 3)) read back from the .vtk of
-#: ``run`` with ``--features corine --features-map corine --features-tolerance
+#: ``run`` with ``--features corine --features-legend corine --features-tolerance
 #: 0``, one per (``sys.platform``, ``platform.machine()``). A recorded digest
 #: pins a platform as well as a behaviour (``test_cli_mesh_domain_crs.py``'s
 #: preamble): the same shapely 2.2.0 (GEOS 3.14.1) and numpy 2.5.3 give this
@@ -126,7 +126,7 @@ BAND_HELP = (
     "the repair and the outline rule, each class keeping its area; the simplification can "
     "bring a border back within the outline-snap distance of the outline, but not closer "
     "than the repair distance. 0 is off. "
-    "Default: from the class map's positional accuracy and the DEM cell (CORINE: 50)."
+    "Default: from the legend's positional accuracy and the DEM cell (CORINE: 50)."
 )
 BAND_WORDING = (
     "Land-cover borders simplified, each at most this far from its border after the repair "
@@ -236,7 +236,7 @@ def switches(request: Any) -> tuple[float, bool, float, float]:
 
 
 class TestDefaults:
-    def test_a_land_cover_map(
+    def test_a_land_cover_legend(
         self,
         tmp_path: Path,
         bumpy: Path,
@@ -249,7 +249,7 @@ class TestDefaults:
         no simplification, ruling 1 (b)): the band is on at 50 m."""
         spy = Spy(monkeypatch)
         report, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-map", "corine"
+            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
         )
         (request,) = spy.requests
         assert switches(request) == (REPAIR_DEFAULT, True, BAND_DEFAULT, OUTLINE_DEFAULT)
@@ -269,7 +269,7 @@ class TestDefaults:
         on a land-cover run and in the record's table. Red on ``1e011cec``
         ("... that changed class, m2")."""
         report, _, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-map", "corine"
+            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
         )
         assert "land_cover_area_moved_m2" in stats_names(report)
         assert AREA_WORDING in report
@@ -316,7 +316,7 @@ class TestGiven:
             square,
             "--features",
             str(corine),
-            "--features-map",
+            "--features-legend",
             "corine",
             "--features-repair",
             "0.1",
@@ -336,7 +336,7 @@ class TestGiven:
     def test_the_merge_row_says_on_or_off(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        args = ("--features", str(corine), "--features-map", "corine")
+        args = ("--features", str(corine), "--features-legend", "corine")
         (tmp_path / "on").mkdir()
         (tmp_path / "off").mkdir()
         on, _, _ = run(tmp_path / "on", bumpy, square, *args)
@@ -351,7 +351,7 @@ class TestGiven:
         of the ``--stats`` file ``run`` writes (ruling G1); the rows are found
         by their cells, in order."""
         report, _, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-map", "corine"
+            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
         )
         clip = re.search(r"\|\s*features clip\s*\|", report)
         sub = re.search(r"\|\s*features clip: clean-up\s*\|", report)
@@ -403,7 +403,7 @@ class TestTheBand:
             return real(polygons, band, *args, **kwargs)
 
         monkeypatch.setattr(feature_input, "simplify_borders", spy)
-        corine_flags = ("--features", str(corine), "--features-map", "corine")
+        corine_flags = ("--features", str(corine), "--features-legend", "corine")
         report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--features-tolerance", "0")
         assert calls == []
         assert record["features_tolerance_m"] == 0.0
@@ -431,7 +431,7 @@ class TestTheBand:
             square,
             "--features",
             str(corine),
-            "--features-map",
+            "--features-legend",
             "corine",
             "--features-tolerance",
             "0",
@@ -462,7 +462,7 @@ class TestTheBand:
         extra: tuple[str, ...],
         angle: float,
     ) -> None:
-        given = {"corine": ("--features", str(corine), "--features-map", "corine")}
+        given = {"corine": ("--features", str(corine), "--features-legend", "corine")}
         given["gallery"] = ("--features", str(gallery))
         report, record, _ = run(tmp_path, bumpy, square, *given.get(features or "", ()), *extra)
         assert record["start_min_angle_deg"] == angle
@@ -505,7 +505,7 @@ class TestTheFixOrder:
                 square,
                 "--features",
                 str(corine),
-                "--features-map",
+                "--features-legend",
                 "corine",
                 *extra,
             )
@@ -585,7 +585,7 @@ def test_a_bad_value_is_refused(
         "1",
         "--features",
         str(corine),
-        "--features-map",
+        "--features-legend",
         "corine",
         f"{flag}={value}",
         "--out",

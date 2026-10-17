@@ -31,7 +31,7 @@ WORDING = {
     "domain": "The domain file and shape",
     "domain_crs": "The domain's coordinate system",
     "domain_transform": "Conversion from the domain's coordinate system",
-    "features": "Each features file: layer, class map, features, lines, vertices",
+    "features": "Each features file: layer, legend, features, lines, vertices",
     "features_crs": "Each features file's coordinate system",
     "features_transform": "Conversion from each features file's coordinate system",
     "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
@@ -97,6 +97,13 @@ WORDING = {
     "line_check_dem_nodes_inserted": "DEM nodes the line check added",
     "line_points_duplicate": "Points along lines dropped as duplicates",
     "dem_nodes_outside_mesh": "Self-check: DEM nodes with data left outside the mesh",
+    "triangles_flat_as_written": (
+        "Triangles flat or turned over at the written coordinates; their edges were left "
+        "out of the last edge-swap check"
+    ),
+    "edges_not_delaunay_as_written": (
+        "Edges that fail the empty-circle test at the written coordinates and could not be swapped"
+    ),
     "refinement_rounds": "Refinement passes",
     "points_inserted": "Points added",
     "points_inserted_on_nodata": "Of them, into triangles with a NoData corner",

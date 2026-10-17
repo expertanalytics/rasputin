@@ -93,16 +93,16 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.features": "crs fetch.http fetch.plan io.geopackage_write io.repository sources"
                           " tin_engine",  # 63: an ArcGIS layer's polygons into the cache
         "tolerance_field": "crs feature_input",
-        "class_maps": "feature_input features toml_data",  # 41: class-map files to ClassMap
-        "source_report": "class_maps crs dem_input feature_input geodesy io.geojson io.geopackage"
+        "legends": "feature_input features toml_data",  # 41: legend files to Legend
+        "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains class_maps cli_kit crs dem_input domain"
+        "cli": "_core catchment catchment_batch chains legends cli_kit crs dem_input domain"
                " edge_strip elevation feature_input features fetch.features fetch.http fetch.nve"
                " fetch.plan fetch.run final_check gauge grid_domain hydrography io.cog"
                " io.domain_file io.geojson io.geopackage_write io.models io.ply io.repository"
-               " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover"
+               " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
                " mcp.server mosaic palettes plugins raster resources run_record source_report"
                " sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins

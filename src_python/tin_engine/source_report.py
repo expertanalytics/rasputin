@@ -23,15 +23,15 @@ import numpy as np
 import shapely
 from pydantic import BaseModel, ConfigDict
 
-from tin_engine.class_maps import load, shipped_names
 from tin_engine.crs import crs_label, parse_crs, reprojector
 from tin_engine.dem_input import repository_for
-from tin_engine.feature_input import ClassMap
+from tin_engine.feature_input import Legend
 from tin_engine.geodesy import LocalFrame
 from tin_engine.io.geojson import collection_summary
 from tin_engine.io.geopackage import distinct_values, layer_info, layer_summary
 from tin_engine.io.models import TileFootprint
 from tin_engine.io.repository import CacheRepository, open_geopackage, read_json
+from tin_engine.legends import load, shipped_names
 from tin_engine.sources import (
     OUT_ROOT_VARIABLE,
     RemoteSource,
@@ -59,7 +59,7 @@ _POLYGONS = frozenset({"Polygon", "MultiPolygon"})
 
 
 class ClassField(BaseModel):
-    """A coded class map's attribute as the file spells it, its distinct
+    """A coded legend's attribute as the file spells it, its distinct
     values sorted as text (at most `CLASS_VALUES`), and how many there are."""
 
     model_config = ConfigDict(frozen=True)
@@ -72,7 +72,7 @@ class ClassField(BaseModel):
 class Fit(BaseModel):
     """An option a source can be given to: the command line's `command` and
     `option`, the MCP server's `tool` and `argument`, and with `--features`
-    the class map to pass as `--features-map`. A necessary condition read
+    the legend to pass as `--features-legend`. A necessary condition read
     from the header, not a promise: the reader may still refuse rows the
     header does not show (a missing or repeated `objectid`, a repeated
     `station`, a polygon with no area). What the features mean is the
@@ -84,7 +84,7 @@ class Fit(BaseModel):
     option: str
     tool: str
     argument: str
-    class_map: str | None = None
+    legend: str | None = None
 
 
 class SourceReport(BaseModel):
@@ -115,7 +115,7 @@ class SourceReport(BaseModel):
     origin: str
     #: A vector source's header: its GeoJSON type names ("Geometry" for a
     #: GeoPackage column declared generic), feature count, attribute names in
-    #: file order, and the values of each coded attribute that fits a class map.
+    #: file order, and the values of each coded attribute that fits a legend.
     layer: str | None = None
     geometry: tuple[str, ...] = ()
     features: int | None = None
@@ -145,7 +145,7 @@ class Facts:
     """What `fits` judges a source by: what it holds; for heights whether the
     CRS is projected (None when unknown); for features the file's suffix,
     geometry type names, attributes, whether it states its CRS (a GeoPackage
-    always does), and the entry's class map ("" when none)."""
+    always does), and the entry's legend ("" when none)."""
 
     values: Literal["heights", "classes", "features"]
     projected: bool | None
@@ -153,20 +153,20 @@ class Facts:
     geometry: frozenset[str]
     attributes: tuple[str, ...]
     crs_stated: bool
-    class_map: str
+    legend: str
 
 
-def _fit(command: str, option: str, class_map: str | None = None) -> Fit:
+def _fit(command: str, option: str, legend: str | None = None) -> Fit:
     """A fit, its MCP spelling derived as `mcp/schema.py` derives it."""
     tool, argument = command.replace("-", "_"), option.lstrip("-").replace("-", "_")
-    return Fit(command=command, option=option, tool=tool, argument=argument, class_map=class_map)
+    return Fit(command=command, option=option, tool=tool, argument=argument, legend=legend)
 
 
-def fits(facts: Facts, maps: Mapping[str, ClassMap]) -> tuple[Fit, ...]:
+def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
     """The options a source fits, each the acceptance condition of the reader
     the option calls: a DEM's for `--dem` (not `station-catchments`' for
     one in degrees), a class raster's for `--land-cover`; for features,
-    `--features` under each of `maps` (only the entry's when it names one)
+    `--features` under each of `legends` (only the entry's when it names one)
     whose attribute the file has (a GeoPackage's column case-insensitively,
     a GeoJSON property exactly), `catchment --lakes` for any polygons, and
     the GeoJSON readers, which need a `crs` member, by geometry and attribute.
@@ -180,8 +180,8 @@ def fits(facts: Facts, maps: Mapping[str, ClassMap]) -> tuple[Fit, ...]:
     names, shapes = {fold(a) for a in facts.attributes}, facts.geometry
     found = [
         _fit("mesh", "--features", name)
-        for name, cmap in maps.items()
-        if facts.class_map in ("", name) and fold(cmap.attribute) in names
+        for name, legend in legends.items()
+        if facts.legend in ("", name) and fold(legend.attribute) in names
     ]
     if shapes & (_POLYGONS | {"Geometry"}):
         found.append(_fit("catchment", "--lakes"))
@@ -244,10 +244,10 @@ def _figures(
 
 
 def _vector(
-    path: Path, entry: RemoteSource, box: Box | None, maps: Mapping[str, ClassMap]
+    path: Path, entry: RemoteSource, box: Box | None, legends: Mapping[str, Legend]
 ) -> dict[str, Any]:
     """The header figures of a vector source's file `path`, its fits, and the
-    values of each coded attribute a fitting class map reads; its coverage is
+    values of each coded attribute a fitting legend reads; its coverage is
     the extent box, not the features."""
     suffix, coded = path.suffix.lower(), {}
     if suffix == ".gpkg":
@@ -255,18 +255,18 @@ def _vector(
             layer = layer_info(conn, entry.layer)
             got = layer_summary(conn, layer)
             shapes = frozenset({_TYPES.get(got.geometry.upper(), got.geometry)})
-            facts = Facts("features", None, suffix, shapes, got.attributes, True, entry.class_map)
-            found = fits(facts, maps)
-            for a in _coded(found, maps, got.attributes):
+            facts = Facts("features", None, suffix, shapes, got.attributes, True, entry.legend)
+            found = fits(facts, legends)
+            for a in _coded(found, legends, got.attributes):
                 coded[a] = distinct_values(conn, layer, a, CLASS_VALUES)
         crs, extent, count = layer.crs, got.extent, got.features
     else:
         doc = collection_summary(read_json(path))
         facts = Facts(
-            "features", None, suffix, doc.geometry, doc.attributes, doc.crs_stated, entry.class_map
+            "features", None, suffix, doc.geometry, doc.attributes, doc.crs_stated, entry.legend
         )
-        found = fits(facts, maps)
-        for a in _coded(found, maps, doc.attributes):
+        found = fits(facts, legends)
+        for a in _coded(found, legends, doc.attributes):
             given = [(f.get("properties") or {}).get(a) for f in doc.rows]
             seen = sorted({str(v) for v in given if v is not None})
             coded[a] = (tuple(seen[:CLASS_VALUES]), len(seen))
@@ -285,13 +285,11 @@ def _vector(
 
 
 def _coded(
-    found: tuple[Fit, ...], maps: Mapping[str, ClassMap], attributes: tuple[str, ...]
+    found: tuple[Fit, ...], legends: Mapping[str, Legend], attributes: tuple[str, ...]
 ) -> list[str]:
-    """The attributes, as the file spells them, that a fitting coded class map reads."""
+    """The attributes, as the file spells them, that a fitting coded legend reads."""
     read = {
-        maps[f.class_map].attribute.lower()
-        for f in found
-        if f.class_map and maps[f.class_map].codes
+        legends[f.legend].attribute.lower() for f in found if f.legend and legends[f.legend].codes
     }
     return [a for a in attributes if a.lower() in read]
 
@@ -301,7 +299,7 @@ def _one(
     origin: str,
     cache: Path | None,
     box: Box | None,
-    maps: Mapping[str, ClassMap],
+    legends: Mapping[str, Legend],
 ) -> SourceReport:
     """`entry` with what its files or its cache say, and the options it fits;
     a read that fails is its `problem`, and a vector file not read fits none."""
@@ -319,7 +317,7 @@ def _one(
         try:
             if entry.values == "features":
                 assert where is not None
-                found = _vector(where, entry, box, maps)
+                found = _vector(where, entry, box, legends)
             else:
                 if entry.path is not None:
                     repository = repository_for((entry.path,), z_unit=entry.read_unit)
@@ -332,8 +330,8 @@ def _one(
         except (OSError, ValueError, sqlite3.Error) as exc:
             found["problem"] = str(exc)
     if entry.values != "features":
-        facts = Facts(entry.values, projected, "", frozenset(), (), False, entry.class_map)
-        found["fits"] = fits(facts, maps)
+        facts = Facts(entry.values, projected, "", frozenset(), (), False, entry.legend)
+        found["fits"] = fits(facts, legends)
     named = entry.model_dump(include=set(_FROM_ENTRY))
     return SourceReport.model_validate(
         {**found, **named, "present": present, "path": where, "origin": origin}
@@ -357,9 +355,9 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
         found, problem = catalogue(None, plugins), str(exc)
     # The XDG file when there is one: what a server started with only HOME reads.
     register = looked[-1] if looked else None
-    maps = {name: load(name) for name in (*shipped_names(), "property")}
+    legends = {name: load(name) for name in (*shipped_names(), "property")}
     sources = tuple(
-        _one(entry, found.origins[key], cache, box, maps) for key, entry in found.sources.items()
+        _one(entry, found.origins[key], cache, box, legends) for key, entry in found.sources.items()
     )
     notes = []
     if user is None:

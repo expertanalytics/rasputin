@@ -276,6 +276,12 @@ add_terrain_backend_test(test_refinement_constraint_feet
                          property/prop_refinement_constraint_feet.cpp)
 target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
 
+# The refined mesh is Delaunay where it is written, increment 65
+# (docs/increments/65-delaunay-as-written.md, section 4). INVARIANT-CRITICAL:
+# T1, T3, T4 and T5 carry the mutation targets. One thread, so not in the
+# TSan job.
+add_terrain_backend_test(prop_refinement_written_delaunay property/prop_refinement_written_delaunay.cpp)
+
 # Parallel refine quick wins, increment 21a (docs/increments/21-parallel-refine.md,
 # section 3 and "Pinned by the red suite (21a)"). Bit-identical: 14's T6 and
 # 18's golden digests are the output oracle and stay as they are.

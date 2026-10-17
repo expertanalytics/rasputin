@@ -112,8 +112,8 @@ class RemoteSource(BaseModel):
     licence_note: str
     #: The works the distributor asks to cite; `notice` and the mesh file carry them.
     cite: tuple[str, ...] = ()
-    #: The class map (`tin_engine.class_maps`) that names and colours its classes.
-    class_map: str = ""
+    #: The legend (`tin_engine.legends`) that names and colours its classes.
+    legend: str = ""
     #: The height unit the catalogue states for files that do not.
     z_unit: ZUnit | None = None
     #: What the cells represent, and the resolution and region, as the distributor states them.
@@ -363,7 +363,7 @@ def _beside(file: Path, value: str) -> Path:
 
 
 def _read(file: Path) -> dict[str, RemoteSource]:
-    """The `[source.<id>]` tables of a catalogue file; a relative `class_map`
+    """The `[source.<id>]` tables of a catalogue file; a relative `legend`
     or `path` is taken from the file's directory. Refused, as a `ValueError`
     naming the file: anything `RemoteSource` refuses, and a station table
     (fetching a station list follows one service's layout, which is code)."""
@@ -375,9 +375,9 @@ def _read(file: Path) -> dict[str, RemoteSource]:
     for key in tables.station:
         raise ValueError(f"{label}: station.{key}: station lists are not added from a file")
     for table in tables.source.values():
-        given = str(table.get("class_map", ""))
+        given = str(table.get("legend", ""))
         if given.endswith(".toml") or "/" in given or os.sep in given:
-            table["class_map"] = str(_beside(file, given))
+            table["legend"] = str(_beside(file, given))
         if "path" in table:
             table["path"] = str(_beside(file, str(table["path"])))
     return _entries(tables.source, "source", RemoteSource, label)

@@ -5,7 +5,9 @@ T1 (the shipped catalogue unchanged), T2 (file refusals), T3 (user entries)
 and T6 (tile names). The oracle for T1 is a snapshot of every shipped entry's
 `model_dump(mode="json")` and `notice()` text, taken from the Python entries
 at `b1353075` (the merge base) before they moved into TOML:
-`tests/python/data/catalogue_b1353075.json`.
+`tests/python/data/catalogue_b1353075.json`. The snapshot's keys are spelled
+as the model spells its fields now (a renamed field is renamed there too);
+its values are the entries' values at that commit.
 
 User files are written by this suite under `tmp_path`; T2's is named
 `my-sources.toml`, so a refusal that names "the file" is told apart from one
@@ -22,7 +24,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   ...); a TOML syntax error carries "line N".
 - A user id equal to a shipped one is refused with a message naming
   `sources.toml` twice (both files have that name) and the id.
-- A user entry's relative `class_map` resolves to the path of the file
+- A user entry's relative `legend` resolves to the path of the file
   beside the user file (compared after `Path.resolve()`).
 - `sources.data_root` treats an empty `RASPUTIN_DATA` as unset, as `cache_root`
   does today.
@@ -355,15 +357,15 @@ class TestT3UserEntries:
         message = str(caught.value)
         assert user.name in message and "station" in message, message
 
-    def test_a_relative_class_map_is_beside_the_user_file(
+    def test_a_relative_legend_is_beside_the_user_file(
         self, sources: ModuleType, tmp_path: Path
     ) -> None:
         user = write(
             tmp_path / "root" / "sources.toml",
-            {f"source.{USER_ID}": changed(PER_YEAR, class_map="maps/x.toml")},
+            {f"source.{USER_ID}": changed(PER_YEAR, legend="maps/x.toml")},
         )
         got = sources.catalogue(user).sources[USER_ID]
-        assert Path(got.class_map).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
+        assert Path(got.legend).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
 
 
 class TestT3DataRoot:

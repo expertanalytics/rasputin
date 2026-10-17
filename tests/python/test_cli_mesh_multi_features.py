@@ -15,7 +15,7 @@ same way the single-source ones do.
 
 This suite is RED before any production code: `--features` and its paired
 options are single-valued (`Path | None` / `str | None`: `mesh`'s `features`
-to `features_map` parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
+to their paired-option parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
 after 16e they are `list[...]`, `src_python/tin_engine/cli.py@390b516:660-685`), so
 a second `--features` overrides the first rather than adding a source, and
 `_feature_sources` does not exist. The suite fails because the new multi-source
@@ -103,11 +103,11 @@ def parcel_src(tmp_path: Path) -> Path:
 
 
 def two_sources(a: Path, b: Path, *, a_map: str = "property", b_map: str = "property") -> list[str]:
-    """`--features a --features-map <a_map> --features b --features-map <b_map>`,
+    """`--features a --features-legend <a_map> --features b --features-legend <b_map>`,
     each map written next to its source (R1: no broadcast)."""
     return [
-        "--features", str(a), "--features-map", a_map,
-        "--features", str(b), "--features-map", b_map,
+        "--features", str(a), "--features-legend", a_map,
+        "--features", str(b), "--features-legend", b_map,
     ]  # fmt: skip
 
 
@@ -158,8 +158,8 @@ class TestTwoSources:
         text = stats_row(report(tmp_path), "features")
         entries = [e.strip() for e in text.split(";")]
         assert len(entries) == 2, text
-        assert FEATURES_FIELD.fullmatch(entries[0])["map"] == "corine", entries  # type: ignore[index]
-        assert FEATURES_FIELD.fullmatch(entries[1])["map"] == "property", entries  # type: ignore[index]
+        assert FEATURES_FIELD.fullmatch(entries[0])["legend"] == "corine", entries  # type: ignore[index]
+        assert FEATURES_FIELD.fullmatch(entries[1])["legend"] == "property", entries  # type: ignore[index]
 
 
 # --------------------------------------------------- R7 case 2: positional pairing
@@ -172,17 +172,17 @@ class TestPositionalPairing:
     def test_one_map_two_sources_defaults_the_second(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
     ) -> None:
-        """`--features a --features b --features-map corine`: `a` gets `corine`,
+        """`--features a --features b --features-legend corine`: `a` gets `corine`,
         `b` takes the default `property` (the shorter list defaults)."""
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
             "--features", str(corine_src), "--features", str(parcel_src),
-            "--features-map", "corine",
+            "--features-legend", "corine",
         )  # fmt: skip
         entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries
-        assert FEATURES_FIELD.fullmatch(entries[0])["map"] == "corine", entries  # type: ignore[index]
-        assert FEATURES_FIELD.fullmatch(entries[1])["map"] == "property", entries  # type: ignore[index]
+        assert FEATURES_FIELD.fullmatch(entries[0])["legend"] == "corine", entries  # type: ignore[index]
+        assert FEATURES_FIELD.fullmatch(entries[1])["legend"] == "property", entries  # type: ignore[index]
         # `corine` applied to the parcel would refuse its `wall` value; a clean
         # run proves `b` took `property`.
         _, masks = edges(vtk)
@@ -214,13 +214,19 @@ class TestPositionalPairing:
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
     ) -> None:
         """The regression guard: a single `--features` with a single
-        `--features-map` still means one source with that map."""
+        `--features-legend` still means one source with that map."""
         _vtk, _ = meshed(
-            tmp_path, bumpy, plain_square, "--features", str(corine_src), "--features-map", "corine"
+            tmp_path,
+            bumpy,
+            plain_square,
+            "--features",
+            str(corine_src),
+            "--features-legend",
+            "corine",
         )
         text = stats_row(report(tmp_path), "features")
         assert ";" not in text, text
-        assert FEATURES_FIELD.fullmatch(text)["map"] == "corine", text  # type: ignore[index]
+        assert FEATURES_FIELD.fullmatch(text)["legend"] == "corine", text  # type: ignore[index]
 
 
 # ------------------------------------------------ R7 case 3: the same file twice
@@ -245,8 +251,8 @@ class TestSameFileTwice:
         )
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(gpkg), "--features-layer", "forest", "--features-map", "corine",
-            "--features", str(gpkg), "--features-layer", "lake", "--features-map", "corine",
+            "--features", str(gpkg), "--features-layer", "forest", "--features-legend", "corine",
+            "--features", str(gpkg), "--features-layer", "lake", "--features-legend", "corine",
         )  # fmt: skip
         _, masks = edges(vtk)
         found = set(masks.tolist())
@@ -259,8 +265,8 @@ class TestSameFileTwice:
         `corine-water`; both are the same code system (allowed under D1)."""
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-map", "corine",
-            "--features", str(corine_src), "--features-map", "corine-water",
+            "--features", str(corine_src), "--features-legend", "corine",
+            "--features", str(corine_src), "--features-legend", "corine-water",
         )  # fmt: skip
         entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries
@@ -285,8 +291,8 @@ class TestCrossSourceMerge:
         right = write_geojson(tmp_path / "right.geojson", [coded("r", RIGHT, "311")])
         return meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(left), "--features-map", "corine",
-            "--features", str(right), "--features-map", "corine",
+            "--features", str(left), "--features-legend", "corine",
+            "--features", str(right), "--features-legend", "corine",
         )[0]  # fmt: skip
 
     def test_the_shared_seam_carries_both_masks(
@@ -331,14 +337,15 @@ class TestDegeneracy:
     def test_a_map_longer_than_features_is_refused(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
     ) -> None:
-        """Two `--features-map`, one `--features`: refused naming the flag and
+        """Two `--features-legend`, one `--features`: refused naming the flag and
         the counts (R3, the one length rule)."""
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-map", "corine", "--features-map", "property",
+            "--features", str(corine_src),
+            "--features-legend", "corine", "--features-legend", "property",
         )  # fmt: skip
         assert code == USAGE, output
-        assert "--features-map" in output and "No such option" not in output, output
+        assert "--features-legend" in output and "No such option" not in output, output
         assert re.search(r"\b2\b.*\b1\b", output), output
         assert not target.exists()
 
@@ -359,8 +366,8 @@ class TestDegeneracy:
     ) -> None:
         """A paired option with no `--features` at all: the same length rule
         with M = 0 (generalises the old "applies only with --features")."""
-        code, output, target = mesh(tmp_path, bumpy, plain_square, "--features-map", "corine")
-        assert code == USAGE and "--features-map" in output, output
+        code, output, target = mesh(tmp_path, bumpy, plain_square, "--features-legend", "corine")
+        assert code == USAGE and "--features-legend" in output, output
         assert "No such option" not in output, output
         assert not target.exists()
 
@@ -382,8 +389,8 @@ class TestDegeneracy:
     ) -> None:
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-map", "corine",
-            "--features", str(parcel_src), "--features-map", "nosuch",
+            "--features", str(corine_src), "--features-legend", "corine",
+            "--features", str(parcel_src), "--features-legend", "nosuch",
         )  # fmt: skip
         assert code == USAGE, output
         assert "nosuch" in output and "2" in output, output
@@ -405,7 +412,8 @@ class TestDegeneracy:
         )
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(gpkg), "--features-layer", "corine2018", "--features-map", "corine",
+            "--features", str(gpkg), "--features-layer", "corine2018",
+            "--features-legend", "corine",
             "--features", str(parcel_src), "--features-layer", "x",
         )  # fmt: skip
         assert code == USAGE, output
@@ -420,7 +428,7 @@ class TestDegeneracy:
         the missing entries, no error (R3)."""
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-map", "corine",
+            "--features", str(corine_src), "--features-legend", "corine",
             "--features", str(parcel_src),
         )  # fmt: skip
         assert code == 0, output
@@ -458,8 +466,8 @@ class TestCodeSystems:
         b = write_geojson(tmp_path / "b.geojson", [coded("l", LAKE, "512")])
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-map", "corine",
-            "--features", str(b), "--features-map", "corine-water",
+            "--features", str(a), "--features-legend", "corine",
+            "--features", str(b), "--features-legend", "corine-water",
         )  # fmt: skip
         assert code == 0, output
         vtk = read_vtk(target.read_bytes())
@@ -486,8 +494,8 @@ class TestRecordPerSource:
         b = write_geojson(tmp_path / "b.geojson", [coded("l", LAKE, "512")])
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-map", "corine",
-            "--features", str(b), "--features-map", "corine-water",
+            "--features", str(a), "--features-legend", "corine",
+            "--features", str(b), "--features-legend", "corine-water",
         )  # fmt: skip
         # Both sources are present (two file entries), and the shared notice is
         # named once, not per source.
@@ -507,8 +515,8 @@ class TestRecordPerSource:
         b = write_geojson(tmp_path / "b.geojson", [prop("w", WALL, "wall")])
         _vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-map", "corine",
-            "--features", str(b), "--features-map", "property",
+            "--features", str(a), "--features-legend", "corine",
+            "--features", str(b), "--features-legend", "property",
         )  # fmt: skip
         entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries

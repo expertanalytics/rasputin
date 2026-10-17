@@ -8,13 +8,13 @@ committed tile with the committed extract), with Ola's Q6 (b) (the legacy GML).
 Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 
 - Flags `--features PATH`, `--features-crs TEXT`, `--features-layer NAME`,
-  `--features-map NAME` (default `property`). Each of the last three without
+  `--features-legend NAME` (default `property`). Each of the last three without
   `--features` is a usage error naming itself; `--features` without
   `--domain` is a usage error naming `--features`; so is any `FeatureError`,
   and no file is written.
 - The `--stats` row `features` (increment 25 moved it out of the mesh file,
   `docs/increments/25-plain-output.md` D2 and D4), in the design's words:
-  `<file name>[ layer <layer>], class map <map>: <n> features, <c> lines, <v>
+  `<file name>[ layer <layer>], legend <legend>: <n> features, <c> lines, <v>
   vertices`, where `n` is `len(FeatureSet.features)`, `c` the number of
   feature chains and `v` the number of feature vertices `start_chains` hands
   the engine (its vertices less the domain's). The layer is written for a
@@ -97,7 +97,7 @@ from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 V = DEFAULT_VOCABULARY
 SNAP = 1e-3
 FEATURES_FIELD = re.compile(
-    r"(?P<name>.+?)(?: layer (?P<layer>[^,:]+))?, class map (?P<map>[a-z0-9-_]+): "
+    r"(?P<name>.+?)(?: layer (?P<layer>[^,:]+))?, legend (?P<legend>[a-z0-9-_]+): "
     r"(?P<n>\d+) features?, (?P<c>\d+) lines?, (?P<v>\d+) vert(?:ex|ices)"
 )
 
@@ -210,7 +210,11 @@ class TestUsage:
 
     @pytest.mark.parametrize(
         ("flag", "value"),
-        [("--features-crs", "EPSG:25833"), ("--features-layer", "x"), ("--features-map", "corine")],
+        [
+            ("--features-crs", "EPSG:25833"),
+            ("--features-layer", "x"),
+            ("--features-legend", "corine"),
+        ],
     )
     def test_a_features_option_without_features_is_refused(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, flag: str, value: str
@@ -242,7 +246,7 @@ class TestUsage:
         self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
     ) -> None:
         code, output, _ = mesh(
-            tmp_path, bumpy, plain_square, "--features", str(gallery), "--features-map", "nosuch"
+            tmp_path, bumpy, plain_square, "--features", str(gallery), "--features-legend", "nosuch"
         )
         assert code == USAGE and "nosuch" in output and "No such option" not in output, output
 
@@ -278,7 +282,7 @@ class TestRecord:
         match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
         assert match, stats_row(stats, "features")
         assert match["name"] == "gallery.geojson" and match["layer"] is None
-        assert match["map"] == "property"
+        assert match["legend"] == "property"
         domain = domain_of(Polygon(SQUARE))
         fs = ff.open_one(gallery, domain)
         started = ff.start(domain, fs.features)
@@ -333,15 +337,17 @@ class TestRecord:
     def test_the_corine_notice(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
         path = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
         vtk, _ = meshed(
-            tmp_path, bumpy, plain_square, "--features", str(path), "--features-map", "corine"
+            tmp_path, bumpy, plain_square, "--features", str(path), "--features-legend", "corine"
         )
         assert "Copernicus Land Monitoring Service" in text_field(vtk, "features_notice")
-        assert FEATURES_FIELD.fullmatch(stats_row(report(tmp_path), "features"))["map"] == "corine"  # type: ignore[index]
+        assert (
+            FEATURES_FIELD.fullmatch(stats_row(report(tmp_path), "features"))["legend"] == "corine"
+        )  # type: ignore[index]
 
     def test_the_ply_comments(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
         """D2: the `.ply` carries what the `.vtk` does: the notice, not `features`."""
         path = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
-        args = ("--features", str(path), "--features-map", "corine")
+        args = ("--features", str(path), "--features-legend", "corine")
         code, output, target = mesh(tmp_path, bumpy, plain_square, *args, out="x.ply")
         assert code == 0, output
         header, _ = read_ply(target.read_bytes())
@@ -604,7 +610,7 @@ def _max_error(tile: Any, points: np.ndarray, triangles: np.ndarray, domain: Pol
 
 class TestCommittedExtract:
     """Acceptance 16b-1/2 in CI: the quarter circle on the committed tile with
-    the committed extract, `--features-map corine`, at 10 m (M5's reference:
+    the committed extract, `--features-legend corine`, at 10 m (M5's reference:
     about 54 840 triangles). I7: the tolerance holds, every node covered.
 
     Increment 16c adds I1, I2, I3 and I5 on the same run (the `test_16c_`
@@ -622,7 +628,7 @@ class TestCommittedExtract:
             domain,
             "--features",
             str(EXTRACT),
-            "--features-map",
+            "--features-legend",
             "corine",
             tolerance="10",
         )
@@ -642,7 +648,7 @@ class TestCommittedExtract:
         match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
         assert match, stats_row(stats, "features")
         assert match["name"] == EXTRACT.name and match["layer"] == "U2018_CLC2018_V2020_20u1"
-        assert match["map"] == "corine" and int(match["n"]) > 0
+        assert match["legend"] == "corine" and int(match["n"]) > 0
         assert stats_row(stats, "features_crs") == "EPSG:3035"
         assert stats_row(stats, "features_transform") == transform_description(
             "EPSG:3035", "EPSG:25833"
@@ -672,7 +678,7 @@ class TestCommittedExtract:
             domain,
             "--features",
             str(reversed_path),
-            "--features-map",
+            "--features-legend",
             "corine",
             out="again.vtk",
             tolerance="10",
@@ -693,7 +699,7 @@ class TestCommittedExtract:
             domain,
             "--features",
             str(EXTRACT),
-            "--features-map",
+            "--features-legend",
             "corine",
             "--features-tolerance",
             "0",
@@ -740,7 +746,7 @@ class TestCommittedExtract:
             domain,
             "--features",
             str(LEGACY_GML),
-            "--features-map",
+            "--features-legend",
             "clc18_kode",
             tolerance="10",
         )
@@ -791,7 +797,7 @@ def test_olas_geopackages_over_the_dtm10_archive(tmp_path: Path, gpkg: Path, lay
         str(gpkg),
         "--features-layer",
         layer,
-        "--features-map",
+        "--features-legend",
         "corine",
         tolerance="10",
     )

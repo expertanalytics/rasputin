@@ -195,7 +195,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   TerrainFeature: one feature's mask and lines
                            #   (moved from feature_input, audit PR C)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
-                           #   read, mapped to masks by a ClassMap, pre-clipped,
+                           #   read, mapped to masks by a Legend, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
                            #   as linework -> FeatureSet (16b); opens .gml
                            #   itself, reads GeoJSON through io/repository's
@@ -257,20 +257,20 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
-  class_maps.py            # class maps as data (41): load(name | path |
+  legends.py               # legends as data (41): load(name | path |
                            #   'property') reads a TOML file through toml_data into
-                           #   a ClassMap; derived_cleanup(accuracy, cell):
+                           #   a Legend; derived_cleanup(accuracy, cell):
                            #   repair, simplify, snap from the larger of the
                            #   source's accuracy and the DEM cell; imports
                            #   feature_input and features
-  data/class_maps/         # the shipped maps: corine, corine-water,
+  data/legends/            # the shipped legends: corine, corine-water,
                            #   clc18_kode, mapbiomas-c11 (.toml; codes,
                            #   labels, colours, water, edges, notice,
                            #   positional accuracy)
   palettes.py              # paraview_preset(table, name): a ParaView preset
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
-                           #   itself is data/class_maps/corine.toml (41)
+                           #   itself is data/legends/corine.toml (41)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core

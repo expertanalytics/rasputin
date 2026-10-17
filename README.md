@@ -28,7 +28,7 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   The box is in the source's CRS (EPSG:25833 and EPSG:3035), or in
   `--out-crs`; `--domain FILE` takes a polygon's box instead. Each lands as
   one GeoPackage in the tile cache, and `rasputin sources` then lists it with
-  its path and the options it fits (`mesh --features` with `--features-map
+  its path and the options it fits (`mesh --features` with `--features-legend
   corine`, `catchment --lakes`). A rerun asks only for polygons not yet
   cached. The credits go into a `NOTICE.txt` beside the file: NVE's data is
   under the Norwegian licence for open government data (NLOD 1.0), which
@@ -40,7 +40,7 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
 - **Features as constraints.** Lakes, land-cover borders, roads and rivers
   (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
   crosses them.
-- **Land-cover labels, cleaned up.** With a CORINE class map, every triangle
+- **Land-cover labels, cleaned up.** With a CORINE legend, every triangle
   gets the class of the polygon it lies in. First the borders are repaired
   (`--features-repair`), merged between neighbours of one class, snapped onto
   the domain outline where they nearly touch it, and simplified to
@@ -83,7 +83,7 @@ rasputin mesh \
 rasputin mesh \
     --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif \
     --domain docs/benchmarks/2026-09-26/quarter.geojson \
-    --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-map corine \
+    --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-legend corine \
     --tolerance 5 \
     --out quarter_landcover.vtk
 
@@ -102,7 +102,7 @@ every option.
 
 - **`.vtk`** (legacy VTK, one file) is for [ParaView](https://www.paraview.org).
   It holds the triangles, the constraint edges with their feature bits and,
-  with a class map, the cell array `land_cover_code`. To colour by land cover,
+  with a legend, the cell array `land_cover_code`. To colour by land cover,
   import `corine.json` in ParaView's Colour Map Editor (Choose Preset, Import)
   and colour by `land_cover_code`.
 - **`.ply`** is for QGIS and other mesh tools. The surface goes to `--out`,
@@ -177,7 +177,7 @@ The listing also names vector datasets (polygons, lines, points) with their
 path, layer, geometry types, feature count, attributes and, for land cover,
 the class values, and it reports the output root as `out_root`. Each source's
 `fits` names the tools and arguments it can be given to (`mesh` `features`
-with the class map to pass, `catchment` `lakes`, `station_catchments`
+with the legend to pass, `catchment` `lakes`, `station_catchments`
 `stations`, ...), read from the file's header; the agent passes a vector
 source's path, not its id.
 
@@ -196,7 +196,7 @@ description = "Bare-ground terrain model, 10 m cells."
 ```
 
 A vector dataset is a `.gpkg`, `.geojson` or `.json` path; `layer` names the
-table of a GeoPackage that holds more than one, and `class_map` the class map
+table of a GeoPackage that holds more than one, and `legend` the legend
 a land-cover file is coded in:
 
 ```toml
@@ -211,7 +211,7 @@ description = "Lake polygons, 1:50 000."
 kind = "local"
 path = "~/data/landcover.gpkg"
 layer = "landcover"
-class_map = "corine"
+legend = "corine"
 credit = "© The data's owner"
 licence_note = "CC BY 4.0"
 description = "Land-cover polygons, minimum mapping unit 25 ha."
