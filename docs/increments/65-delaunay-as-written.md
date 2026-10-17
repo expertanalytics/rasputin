@@ -1,7 +1,7 @@
 # Increment 65: the refined mesh is Delaunay where it is written
 
-**Status: designed, revised to design review round 1** (`@architect`,
-2026-10-17, on `db12c3e1`). Full path: it changes C++ refine code, so
+**Status: built, code review APPROVED (round 2), `@perf` ACCEPTED
+(`7e7f73e9`), 2026-10-17; designed by `@architect` on `db12c3e1`). Full path: it changes C++ refine code, so
 `@perf`'s acceptance run applies. One public PR, branch
 `worktree-refine-world`.
 
@@ -302,3 +302,4 @@ bits, masks and slot map copied both ways.
 - **Design review, round 2, 2026-10-17.** Commit `625956e1`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: why the filter is sound (the loop leaves every edge legal on the grid; T1 and T2 use the full oracle); the cost when a pass does run. Held: T3 and T5 orientations recomputed; timing shares.
 - **Code review, round 1, 2026-10-17.** Range `4be422aa..23f0a2dc`, 107 counted lines, @reviewer: CHANGES REQUESTED. The file head of `refine_points.hpp` still said each insertion is a new vertex, which no longer covers the pass; no pytest read the two new run-record fields. Wordings applied by the main session (size actual, refused copy build). Kill record: M4 (step 7 removed) survives all tests, 3000 outlines probed; kept as the guard that `max_error` describes the written mesh.
 - **Code review, round 2, 2026-10-17.** Range `23f0a2dc..1dc3d674`, 107 counted lines, @reviewer: APPROVED. Both round-1 fixes checked (header termination argument, `TestWrittenDelaunayFields`); only comments changed in C++. CI waits for the push; @perf next.
+- **@perf acceptance, 2026-10-17.** Commit `7e7f73e9`, `docs/benchmarks/2026-10-17/65-delaunay-as-written/`: ACCEPTED. Mesh sha256 unchanged on tile and quarter (base db12c3e1, head 5d36b15d), 0 Delaunay violations both sides; time within the 5 % band at every thread count (median -0.4 %).
