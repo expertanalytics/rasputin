@@ -243,14 +243,15 @@ def _figures(
     }
 
 
-def _vector(entry: RemoteSource, box: Box | None, maps: Mapping[str, ClassMap]) -> dict[str, Any]:
-    """The header figures of a vector source, its fits, and the values of
-    each coded attribute a fitting class map reads; its coverage is the
-    extent box, not the features."""
-    assert entry.path is not None
-    suffix, coded = entry.path.suffix.lower(), {}
+def _vector(
+    path: Path, entry: RemoteSource, box: Box | None, maps: Mapping[str, ClassMap]
+) -> dict[str, Any]:
+    """The header figures of a vector source's file `path`, its fits, and the
+    values of each coded attribute a fitting class map reads; its coverage is
+    the extent box, not the features."""
+    suffix, coded = path.suffix.lower(), {}
     if suffix == ".gpkg":
-        with closing(open_geopackage(entry.path)) as conn:
+        with closing(open_geopackage(path)) as conn:
             layer = layer_info(conn, entry.layer)
             got = layer_summary(conn, layer)
             shapes = frozenset({_TYPES.get(got.geometry.upper(), got.geometry)})
@@ -260,7 +261,7 @@ def _vector(entry: RemoteSource, box: Box | None, maps: Mapping[str, ClassMap]) 
                 coded[a] = distinct_values(conn, layer, a, CLASS_VALUES)
         crs, extent, count = layer.crs, got.extent, got.features
     else:
-        doc = collection_summary(read_json(entry.path))
+        doc = collection_summary(read_json(path))
         facts = Facts(
             "features", None, suffix, doc.geometry, doc.attributes, doc.crs_stated, entry.class_map
         )
@@ -312,10 +313,13 @@ def _one(
     else:
         where = None if cache is None else cache / entry.id
         present = where is not None and (where / "manifest.json").is_file()
+        if where is not None and entry.kind == "arcgis-features":
+            where = where / "features.gpkg"
     if entry.path is not None or present:
         try:
             if entry.values == "features":
-                found = _vector(entry, box, maps)
+                assert where is not None
+                found = _vector(where, entry, box, maps)
             else:
                 if entry.path is not None:
                     repository = repository_for((entry.path,), z_unit=entry.read_unit)[0]
@@ -371,7 +375,7 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
             "A remote source's figures describe its cached objects, which may hold only "
             "the part fetched."
         )
-    if any(s.values == "features" for s in sources):
+    if any(s.values == "features" and s.present for s in sources):
         notes.append("A vector source's coverage is its layer's extent box, not its features.")
     return CatalogueReport(
         user_file=None if user is None else str(user),

@@ -1462,7 +1462,9 @@ def fetch(
     refresh: Annotated[
         bool, typer.Option("--refresh", help="Discard the source's cache and fetch anew.")
     ] = False,
-    connections: Annotated[int, typer.Option("--connections", min=1)] = 8,
+    connections: Annotated[
+        int, typer.Option("--connections", min=1, help="Parallel requests, for byte-range sources.")
+    ] = 8,
     year: Annotated[
         int | None,
         typer.Option(
@@ -1473,10 +1475,13 @@ def fetch(
     """Copy what a mesh of a domain reads from a remote source into the tile cache.
 
     Then rasputin mesh --dem SOURCE runs offline. A source is the package's or
-    one in your sources file (see rasputin sources).
+    one in your sources file (see rasputin sources). A source of map-service
+    features is cached as one GeoPackage, which rasputin sources lists by path
+    for the vector options.
     """
     import asyncio
 
+    from tin_engine.fetch.features import fetch_features
     from tin_engine.fetch.http import FetchError, RangeClient
     from tin_engine.fetch.plan import FetchRequest
     from tin_engine.fetch.run import fetch as run
@@ -1520,14 +1525,24 @@ def fetch(
             typer.echo(f"{done:,} of {total:,} bytes", err=True)
 
     client, writer = RangeClient(), CacheWriter(root, source)
+    head = "would fetch" if dry_run else "fetched"
     try:
-        report = asyncio.run(run(request, known[source], client, writer, progress=progress))
+        if known[source].kind == "arcgis-features":
+            got = fetch_features(request, known[source], client.get_text, writer)
+        else:
+            report = asyncio.run(run(request, known[source], client, writer, progress=progress))
     except (FetchError, CacheError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+    if known[source].kind == "arcgis-features":
+        typer.echo(
+            f"{source}: {got.in_box:,} features in the box, {got.present:,} present, {head} "
+            f"{got.fetched:,} in {got.requests:,} requests, {got.bytes:,} bytes, "
+            f"{got.seconds:.1f} s into {writer.directory}"
+        )
+        return
     for plan in report.plans:
         typer.echo(f"{plan.object_id}: {len(plan.blocks):,} blocks, {plan.bytes:,} bytes to fetch")
-    head = "would fetch" if dry_run else "fetched"
     typer.echo(
         f"{source}: {report.objects} objects, {report.needed:,} blocks needed, "
         f"{report.present:,} present, {head} {report.fetched:,} ({report.empty} empty) in "

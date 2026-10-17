@@ -12,8 +12,10 @@ window meets (`load_window`). Choosing and stitching tiles is
 `CacheRepository` reads what `rasputin fetch` copied to `<cache>/<source>/`,
 offline: DEM tiles, a land-cover class raster (`load_class_window`,
 `class_strips`: the cells a box meets, in strips) and the day each object was
-first fetched (`CachedObject.fetched`). `CacheWriter` is the one writer of that
-directory; the mesh path only reads it.
+first fetched (`CachedObject.fetched`). A source of map-service features is
+cached as one GeoPackage, `features.gpkg`, which the vector readers take by
+path. `CacheWriter` is the one writer of that directory; the mesh path only
+reads it.
 
 Other files opened here for other modules: `open_geopackage` (SQLite cannot
 read a Python stream, so a GeoPackage is read through a read-only connection,
@@ -35,8 +37,9 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import closing
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
@@ -50,6 +53,7 @@ from .cog import (
     decode_class_window,
     decode_window,
 )
+from .geopackage_write import create_features_table, create_geopackage
 from .geotiff import decode_dem, read_header, read_page
 from .models import (
     Bounds,
@@ -58,6 +62,7 @@ from .models import (
     GeoTiffError,
     IndexWindow,
     RasterMeta,
+    SrsEntry,
     TileFootprint,
     ZUnit,
 )
@@ -225,6 +230,27 @@ class CacheManifest(BaseModel):
     requests: tuple[CachedRequest, ...] = ()
 
 
+class FeatureManifest(BaseModel):
+    """`<cache>/<source>/manifest.json` of a map-service layer: what
+    `features.gpkg` is a copy of (its key `id_field`, its columns `fields`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str
+    kind: Literal["arcgis-features"] = "arcgis-features"
+    url: str
+    crs: str
+    id_field: str
+    fields: tuple[str, ...]
+    rasputin_version: str
+    first_fetched: datetime.date
+    requests: tuple[CachedRequest, ...] = ()
+
+
+#: The features table of a cached map-service layer, in `features.gpkg`.
+FEATURES = "features"
+
+
 class CachedBlocks:
     """One cached object's blocks: `blocks/<row>/<col>.bin` under `directory`.
 
@@ -275,7 +301,12 @@ class CacheRepository:
             path = self._directory / "manifest.json"
             if not path.is_file():
                 raise NotCached(0, 0, f"{self._source} ({self._directory})")
-            manifest = CacheManifest.model_validate_json(path.read_bytes())
+            data = path.read_bytes()
+            if json.loads(data).get("kind") == "arcgis-features":
+                raise CacheError(
+                    f"{self._source} holds features; pass its features.gpkg to a vector option"
+                )
+            manifest = CacheManifest.model_validate_json(data)
             if manifest.source != self._source:
                 raise CacheError(f"{path} is the manifest of {manifest.source}, not {self._source}")
             for name, entry in sorted(manifest.objects.items()):
@@ -366,7 +397,9 @@ class CacheWriter:
     there is no stale lock) and clears stray `.part` files. Every file is
     written as `<name>.part` and renamed, so a crash never leaves half a file
     under the real name; only the manifest is fsynced, since a fetch writes
-    thousands of block files."""
+    thousands of block files. The exception is `features.gpkg`: created as a
+    `.part` and renamed, then written in place by SQLite transactions, whose
+    journal guards a crash."""
 
     def __init__(self, root: Path, source: str) -> None:
         self.directory, self.source = Path(root) / source, source
@@ -392,8 +425,42 @@ class CacheWriter:
             self._lock = None
 
     def manifest(self) -> CacheManifest | None:
+        return self._manifest(CacheManifest)
+
+    def feature_manifest(self) -> FeatureManifest | None:
+        return self._manifest(FeatureManifest)
+
+    def _manifest[M: BaseModel](self, model: type[M]) -> M | None:
         path = self.directory / "manifest.json"
-        return CacheManifest.model_validate_json(path.read_bytes()) if path.is_file() else None
+        return model.model_validate_json(path.read_bytes()) if path.is_file() else None
+
+    def feature_ids(self, pk: str) -> set[int]:
+        """The keys `features.gpkg` holds; none when it is absent. Reads without the lock."""
+        path = self.directory / "features.gpkg"
+        if not path.is_file():
+            return set()
+        with closing(open_geopackage(path)) as conn:
+            return {int(k) for (k,) in conn.execute(f'SELECT "{pk}" FROM {FEATURES}')}
+
+    def features(
+        self, srs: SrsEntry, pk: str, columns: Sequence[tuple[str, str]]
+    ) -> sqlite3.Connection:
+        """A writable connection to `features.gpkg`, created with an empty
+        `MULTIPOLYGON` table keyed by `pk` on first use; journalled, so a crash
+        keeps every committed transaction. The caller closes it."""
+        assert self._lock is not None, "a CacheWriter writes only inside `with`"
+        path = self.directory / "features.gpkg"
+        if not path.is_file():
+            part = path.with_name(path.name + ".part")
+            with closing(create_sqlite(part)) as conn:
+                create_geopackage(conn, srs)
+                create_features_table(conn, FEATURES, srs.srs_id, "MULTIPOLYGON", pk, columns)
+                conn.commit()
+            os.replace(part, path)
+        conn = create_sqlite(path)
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
 
     def present(self, object_id: str, page: tifffile.TiffPage, indices: Sequence[int]) -> set[int]:
         """Those of `indices` whose block file is there with its byte count."""
@@ -407,7 +474,7 @@ class CacheWriter:
         directory = self.directory / object_id
         self._put(CachedBlocks(directory, page, object_id)._path(index), data)
 
-    def put_manifest(self, manifest: CacheManifest) -> None:
+    def put_manifest(self, manifest: CacheManifest | FeatureManifest) -> None:
         self._put(self.directory / "manifest.json", manifest.model_dump_json().encode(), sync=True)
 
     def put_notice(self, text: str) -> None:
@@ -476,6 +543,7 @@ __all__ = [
     "CachedObject",
     "CachedRequest",
     "DemRepository",
+    "FeatureManifest",
     "NotCached",
     "TiffDemRepository",
     "open_geopackage",
