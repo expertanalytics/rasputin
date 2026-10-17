@@ -11,6 +11,7 @@ is grown. The missing blocks become byte ranges, runs with gaps of at most
 
 from __future__ import annotations
 
+import hashlib
 import io
 import math
 from collections.abc import Collection, Sequence
@@ -19,6 +20,7 @@ from typing import Any
 import numpy as np
 import tifffile
 from pydantic import BaseModel, ConfigDict, model_validator
+from pyproj import CRS
 
 from tin_engine.crs import parse_crs, same_crs, transform_bounds
 from tin_engine.domain import DomainPolygon
@@ -109,16 +111,40 @@ def parse_prefix(
     return meta, dtype, page
 
 
-def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
-    """The box whose blocks are fetched, in the source CRS (`meta.crs`)."""
-    source = parse_crs(meta.crs)
+def _frame_box(request: FetchRequest, source: CRS) -> tuple[CRS, tuple[float, float, float, float]]:
+    """The frame (`out_crs`, else `source`) and the request's box, or its domain's bounds, in it."""
     frame = parse_crs(request.out_crs) if request.out_crs else source
     if request.domain is not None:
         x0, y0, x1, y1 = request.domain.to_crs(frame).polygon.bounds
-    else:
-        assert request.box is not None
-        b = request.box
-        x0, y0, x1, y1 = b.x_min, b.y_min, b.x_max, b.y_max
+        return frame, (x0, y0, x1, y1)
+    assert request.box is not None
+    b = request.box
+    return frame, (b.x_min, b.y_min, b.x_max, b.y_max)
+
+
+def _checked(box: tuple[float, float, float, float], source: CRS) -> Bounds:
+    """`box` as `Bounds`, refused when it crosses ±180° or a pole or has no image."""
+    if not all(map(math.isfinite, box)) or (
+        source.is_geographic and (box[0] < -180 or box[2] > 180 or box[1] < -90 or box[3] > 90)
+    ):
+        raise FetchError(f"the box {box} crosses ±180° or a pole, or has no image in the source")
+    return Bounds(x_min=box[0], y_min=box[1], x_max=box[2], y_max=box[3])
+
+
+def box_in_crs(request: FetchRequest, crs: str) -> Bounds:
+    """The request's box (or its domain's bounds) moved into `crs` with
+    `transform_bounds` (densified, outward), with no growth."""
+    source = parse_crs(crs)
+    frame, box = _frame_box(request, source)
+    return _checked(
+        box if same_crs(frame, source) else transform_bounds(frame, source, box), source
+    )
+
+
+def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
+    """The box whose blocks are fetched, in the source CRS (`meta.crs`)."""
+    source = parse_crs(meta.crs)
+    frame, (x0, y0, x1, y1) = _frame_box(request, source)
     if same_crs(frame, source):
         grow = request.margin * meta.delta_y
     else:
@@ -131,11 +157,20 @@ def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
         x1 + grow + 2 * meta.delta_x,
         y1 + grow + 2 * meta.delta_y,
     )
-    if not all(map(math.isfinite, box)) or (
-        source.is_geographic and (box[0] < -180 or box[2] > 180 or box[1] < -90 or box[3] > 90)
-    ):
-        raise FetchError(f"the box {box} crosses ±180° or a pole, or has no image in the source")
-    return Bounds(x_min=box[0], y_min=box[1], x_max=box[2], y_max=box[3])
+    return _checked(box, source)
+
+
+def region_sha256(request: FetchRequest, crs: str | None) -> str:
+    """The sha256 of the region as given: the domain's WKB and CRS, or the
+    box's four numbers and its CRS (`out_crs`, else `crs`), so equal requests
+    on one day are logged once in the manifest."""
+    if request.domain is not None:
+        data: Any = request.domain.polygon.wkb + request.domain.crs.encode()
+    else:
+        assert request.box is not None
+        b = request.box
+        data = repr((b.x_min, b.y_min, b.x_max, b.y_max, request.out_crs or crs)).encode()
+    return hashlib.sha256(data).hexdigest()
 
 
 def plan_object(
@@ -189,4 +224,13 @@ def coalesce(spans: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
     return tuple(out)
 
 
-__all__ = ["FetchRequest", "ObjectPlan", "coalesce", "parse_prefix", "plan_object", "source_box"]
+__all__ = [
+    "FetchRequest",
+    "ObjectPlan",
+    "box_in_crs",
+    "coalesce",
+    "parse_prefix",
+    "plan_object",
+    "region_sha256",
+    "source_box",
+]

@@ -64,6 +64,26 @@ legend = "mapbiomas-c11"
 # Quoted from the abstract of Souza et al. (2020), cited above.
 description = "Annual land use and land cover classes of Brazil, \"the most comprehensive and detailed mapping for the country at a 30 m pixel resolution\"; one map per year."
 
+[source.nve-lakes]
+kind = "arcgis-features"
+url = "https://kart.nve.no/enterprise/rest/services/Innsjodatabase2/MapServer/5"
+crs = "EPSG:25833"
+# The lake layer's fields asked; municipality, reservoir and globalid fields are never collected.
+fields = ["vatnlnr", "navn", "areal_km2"]
+credit = "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Norges vassdrags- og energidirektorat (NVE). Kilde: NVE, Innsjødatabasen, {url}, hentet {date}; lagret som GeoPackage av rasputin."
+licence_note = "Norsk lisens for offentlige data (NLOD) 1.0, https://data.norge.no/nlod/no/1.0. NVE accepts no liability for damage or injuries due to errors in data and incorrect use of data."
+description = "NVE's lake database: \"Innsjødatabasen til NVE inneholder informasjon om vann og innsjøer.\" Lakes larger than 2500 m² have a national number (vatnlnr); scale 1:20 000 (Geonorge)."
+
+[source.clc2018]
+kind = "arcgis-features"
+url = "https://image.discomap.eea.europa.eu/arcgis/rest/services/Corine/CLC2018_LAEA/MapServer/0"
+crs = "EPSG:3035"
+fields = ["ID", "Code_18"]
+legend = "corine"
+credit = "CORINE Land Cover 2018 (vector/raster 100 m), Europe, 6-yearly. European Union's Copernicus Land Monitoring Service information, the European Environment Agency's map service {url} (accessed on {date}). Modified: the polygons meeting a box, stored as a GeoPackage by rasputin. Not endorsed by the European Union."
+licence_note = "Copernicus Land Monitoring Service: full, open and free access (Commission Delegated Regulation (EU) No 1159/2013). Name the source, state any modification, and do not imply endorsement by the European Union."
+description = "Land cover of Europe in 2018 in the 44 classes of the 3-level CORINE nomenclature (Code_18); \"minimum mapping unit (MMU) for status layers is 25 hectares\", \"minimum width of linear elements is 100 metres\" (the service's description)."
+
 [station.nve-hrd]
 service_url = "https://kart.nve.no/enterprise/rest/services"
 list_file = "nve_hrd_2025.csv"

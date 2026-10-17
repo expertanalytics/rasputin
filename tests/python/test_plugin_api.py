@@ -25,6 +25,7 @@ PROMISED: dict[str, tuple[str, ...]] = {
     "resources": ("Resources",),
     "run_record": ("plural",),
     "cli_kit": ("destination", "cli_resources", "words", "THREADS"),
+    "catchment_core": ("accumulate",),
 }
 
 NAMES = [(home, name) for home, names in PROMISED.items() for name in names]

@@ -24,7 +24,6 @@ import math
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
 
 import tifffile
 from pydantic import BaseModel, ConfigDict
@@ -32,7 +31,14 @@ from pydantic import BaseModel, ConfigDict
 from tin_engine import installed_version
 from tin_engine.crs import parse_crs, same_crs
 from tin_engine.fetch.http import FetchError, RangeClient
-from tin_engine.fetch.plan import FetchRequest, ObjectPlan, parse_prefix, plan_object, source_box
+from tin_engine.fetch.plan import (
+    FetchRequest,
+    ObjectPlan,
+    parse_prefix,
+    plan_object,
+    region_sha256,
+    source_box,
+)
 from tin_engine.io.models import Bounds, RasterMeta
 from tin_engine.io.repository import CachedObject, CachedRequest, CacheManifest, CacheWriter
 from tin_engine.sources import RemoteSource, notice
@@ -194,7 +200,9 @@ async def _run(
     failed = [r for r in await asyncio.gather(*jobs, return_exceptions=True) if r is not None]
     if failed:
         raise failed[0]
-    asked = CachedRequest(region_sha256=_region(request, source), date=datetime.date.today())
+    asked = CachedRequest(
+        region_sha256=region_sha256(request, source.crs), date=datetime.date.today()
+    )
     if asked not in manifest.requests:
         writer.put_manifest(manifest.model_copy(update={"requests": (*manifest.requests, asked)}))
     return report.model_copy(update={"seconds": time.perf_counter() - t0})
@@ -267,19 +275,6 @@ async def _tiles(
         for lon in range(math.floor(box.x_min), math.ceil(box.x_max))
     ]
     return box, [n for n in names if n in listed], sorted(n for n in names if n not in listed)
-
-
-def _region(request: FetchRequest, source: RemoteSource) -> str:
-    """The sha256 of the region as given: the domain's WKB and CRS, or the
-    box's four numbers and its CRS, so equal requests on one day are logged
-    once in the manifest."""
-    if request.domain is not None:
-        data: Any = request.domain.polygon.wkb + request.domain.crs.encode()
-    else:
-        assert request.box is not None
-        b = request.box
-        data = repr((b.x_min, b.y_min, b.x_max, b.y_max, request.out_crs or source.crs)).encode()
-    return hashlib.sha256(data).hexdigest()
 
 
 __all__ = ["FetchReport", "fetch"]
