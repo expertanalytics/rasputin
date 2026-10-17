@@ -38,6 +38,7 @@ import pytest
 
 from harness_fixtures import (
     Granted,
+    PrivateGranted,
     Tool,
     add_worktree,
     clean_env,
@@ -1039,8 +1040,76 @@ def test_7_back_reports_this_windows_granted_acts_and_each_unused_grant(
     assert good == f"  good: not used; head {head[:7]} reviewed: yes"
     assert bad.startswith(f"  bad: not used; head {late[:7]} reviewed: no ("), bad
     assert "tools/b.py" in bad, bad
+    assert "not judged" not in bad, "a review reason was reported as an unjudged head"
 
 
 def test_7_back_with_no_grants_says_none(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     flag_on(repo, now=NOW)
     assert "Push grants: (none)" in back_lines(repo, capsys, BACK_AT)
+
+
+# ---------------------------------------------------------------- h22 §7
+#
+# docs/increments/h22-harness-fixes.md §4.4: `--back` judges a private
+# branch's review against private/master, and names a private merge.
+
+
+def private_back_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[PrivateGranted, str, str, str]:
+    """Fixture A with prv merged with a newer private/master after its review, a
+    flag granting prv and `done`, and a logged private merge of `done`; returns
+    (fixture, prv's head, prv's report line, done's report line)."""
+    built = PrivateGranted(tmp_path / "repo")
+    repo = built.repo
+    git(repo, "checkout", "-q", "-b", "scratch-private", "refs/remotes/private/master")
+    p2 = commit_file(repo, "src/p2.py", "p = 2\n", "P2 on private/master")
+    git(repo, "update-ref", "refs/remotes/private/master", p2)
+    git(repo, "checkout", "-q", "prv")
+    git(repo, "branch", "-q", "-D", "scratch-private")
+    git(repo, "merge", "-q", "--no-ff", "--no-edit", "refs/remotes/private/master")
+    write_flag(repo, {"since": iso(NOW), "until": iso(NOW + timedelta(hours=8)),
+                      "set_by": "away", "keep_awake_pid": None,
+                      "grants": ["prv", "done"]})  # fmt: skip
+    merged = {"at": "2026-09-30T19:40:00+00:00", "window": iso(NOW), "branch": "done",
+              "act": "merge", "head": built.prv, "remote": "private",
+              "review": [built.prv, "2026-09-30T18:30:00+00:00"]}  # fmt: skip
+    grants_used_path(repo).write_text(json.dumps(merged) + "\n")
+    lines = back_lines(repo, capsys, BACK_AT)
+    at = lines.index("Push grants (2):")
+    return built, built.head("prv"), lines[at + 1], lines[at + 2]
+
+
+def test_h22_back_reviews_a_private_branch_against_private_master(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A clean merge of private/master after the review passes against private/master;
+    against origin/master it would not be a master merge."""
+    _, head, prv, _ = private_back_lines(tmp_path, capsys)
+    assert prv == f"  prv: not used; head {head[:7]} reviewed: yes", prv
+
+
+def test_h22_back_names_a_private_merge(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    built, _, _, done = private_back_lines(tmp_path, capsys)
+    assert done.startswith("  done: "), done
+    assert f"merged {built.prv[:7]} at 19:40 UTC" in done, done
+
+
+def test_h22_back_says_not_judged_when_the_branchs_repository_cannot_be_told(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Review round 1 follow-up: with refs/remotes/private/master deleted, home()
+    gives a reason; `--back` reports the head as not judged, never as unreviewed."""
+    built = PrivateGranted(tmp_path / "repo")
+    built.delete_private_ref()
+    write_flag(built.repo, {"since": iso(NOW), "until": iso(NOW + timedelta(hours=8)),
+                            "set_by": "away", "keep_awake_pid": None,
+                            "grants": ["prv", "pub"]})  # fmt: skip
+    missing = ("the private remote is set up but refs/remotes/private/master is missing, so "
+               "it cannot be told whether this branch holds private commits; run git fetch "
+               "private")  # fmt: skip
+    lines = back_lines(built.repo, capsys, BACK_AT)
+    at = lines.index("Push grants (2):")
+    prv, pub = lines[at + 1 : at + 3]
+    assert prv == f"  prv: not used; head {built.prv[:7]} not judged ({missing})", prv
+    assert pub == f"  pub: not used; head {built.pub[:7]} not judged ({missing})", pub

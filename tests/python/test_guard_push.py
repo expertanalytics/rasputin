@@ -1108,8 +1108,8 @@ def test_10_a_granted_reviewed_branch_is_pushed_opened_and_enqueued(granted: Gra
     assert len(used) == 3
     assert len({line["act"] for line in used}) == 3
     for line in used:
-        assert set(line) == {"at", "window", "branch", "act", "head", "review"}
-        assert (line["branch"], line["head"]) == ("feat", head)
+        assert set(line) == {"at", "window", "branch", "act", "head", "review", "remote"}
+        assert (line["branch"], line["head"], line["remote"]) == ("feat", head, "origin")
         assert line["window"] == iso(granted.since)
         assert line["review"][0] == granted.x
     assert queue_lines(granted.repo) == []

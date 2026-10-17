@@ -30,7 +30,7 @@ Two rules here are architecture rather than hygiene:
   header writes ``feature_bit {bit} {name}``, space-separated
   (`src_python/tin_engine/io/ply.py:123`), and the GeoPackage writer puts each
   name, quoted but not escaped, into a ``CREATE TABLE`` statement as a column
-  (`src_python/tin_engine/io/geopackage_write.py:321`). A space would split
+  (`src_python/tin_engine/io/geopackage_write.py@90d812d8:345`). A space would split
   the header line and a quote would end the SQL identifier, so
   ``^[a-z][a-z0-9_]*$`` is the gate, and a vocabulary read from a
   configuration file is untrusted input: every case below stays.
