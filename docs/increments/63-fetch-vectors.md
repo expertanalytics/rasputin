@@ -475,13 +475,12 @@ service's message, and `take` halves on any `FetchError` from `_answer`
 (`src_python/tin_engine/fetch/features.py@df557a0b:79`,
 `src_python/tin_engine/fetch/features.py@df557a0b:252`). The answer checks
 of `_rows` (ids, CRS, geometry) run after that `try`, so a wrong answer is
-never halved: it stops the fetch, as section 5.3 rules. Not covered: a
-200 answer that is not JSON at all (an HTML page) is not halved; it stops
-the fetch at the first such chunk with the JSON parser's own message
-("Expecting value: line 1 column 1 (char 0)"), which names neither the
-source nor the URL (probed on the fake layer: one chunk asked,
-`JSONDecodeError`, a `ValueError` that `cli.fetch` prints as an error). A
-question for code review, not a design change.
+never halved: it stops the fetch, as section 5.3 rules. A 200 answer that
+is not JSON at all (an HTML page) is not halved either: `_answer` turns it
+into a FetchError naming the source, the layer and the asked URL ("the
+answer is not JSON, so not the map service's"), raised before the chunk
+would be halved, for the layer description, the ids query and every chunk
+(code review round 1; red `69586d86`, green `d00be6a9`).
 
 Assessment: data (the catalogue entry, `FetchRequest`) stays apart from
 execution (`fetch_features`); the fetch holds no state beyond the cache it
@@ -519,3 +518,4 @@ answers (to verify).
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `fe0259c4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: `fetch/plan.source_box` split into `box_in_crs`; the `write_land_cover` blob code and `build_rtree` reused; the `CacheWriter` docstring exception; about 295 lines. Held: no second registry, no user file written; service facts (record limits, CRSs, fields); licence duties in NOTICE.txt. Idea: drop `ID` from the clc2018 fields. Open with Ola: shipping the two entries; the CORINE version.
+- **Code review, round 1, 2026-10-17.** Range `2605b28b..90d812d8`, 369 counted lines, @reviewer: CHANGES REQUESTED: an HTML answer gave the bare parser message (fixed: red `69586d86`, green `d00be6a9`, one request, no halving); a test citation that moved (pinned); ROADMAP conflict with master (master merged as `6fe73cc2`). Held: size explained, reuse clean. Cuts: the lowercase `oidFieldContainsHashValue` check dropped; `LayerFacts.geometry` kept (a test pins it). Now 376 counted lines.
