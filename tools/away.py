@@ -75,7 +75,8 @@ def grant_lines(root: Path, state: Path, flag: dict[str, Any] | None) -> list[st
         acts = [u for u in used if u.get("branch") == name]
         if acts:
             done = [{"push": f"pushed {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}",
-                     "enqueue": f"enqueued {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}"}
+                     "enqueue": f"enqueued {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}",
+                     "merge": f"merged {str(u.get('head'))[:7]} at {hhmm(u.get('at'))}"}
                     .get(str(u.get("act")), "PR opened") for u in acts]  # fmt: skip
             review = acts[-1].get("review") or ["", ""]
             lines.append(f"  {name}: {'; '.join(done)} (review of {str(review[0])[:7]}, "
@@ -85,7 +86,8 @@ def grant_lines(root: Path, state: Path, flag: dict[str, Any] | None) -> list[st
         if head is None:
             lines.append(f"  {name}: not used; the branch does not exist")
             continue
-        reason = push_grant.reviewed(root, head, records)
+        remote, why = push_grant.home(root, head)
+        reason = why or push_grant.reviewed(root, head, records, remote)
         lines.append(f"  {name}: not used; head {head[:7]} reviewed: "
                      + ("yes" if reason is None else f"no ({reason})"))  # fmt: skip
     return lines
