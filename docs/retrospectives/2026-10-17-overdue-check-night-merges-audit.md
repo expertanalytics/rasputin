@@ -273,7 +273,7 @@ and `test_plugin_api.py`.
 - **The mannered register is old, not new.** Phrases like "the whole
   point" or "blesses exactly the disagreement" occur 9 times in
   `src_python`, `include` and `tools`. All predate 2026-10-14 (e.g.
-  `features.py:139-151`, from 2026-09-18); none were added since.
+  `src_python/tin_engine/features.py:139-151`, from 2026-09-18); none were added since.
 - **The new Python modules are clean under the history gate.**
   `source_report.py` and `toml_data.py` give no hits. Docstrings are 12 %
   of the documented functions' lines.
@@ -303,7 +303,7 @@ and `test_plugin_api.py`.
 Two patterns from the brief did not show: names that narrate history (none
 in the new code, beyond the C++ "65:" labels in B), and long docstrings.
 Only 9 functions have a docstring of 8 lines or more that is at least half
-their code: `cli.py:430` `_chain_masks`, `features.py:110`, `:139`,
+their code: `cli.py:430` `_chain_masks`, `src_python/tin_engine/features.py:110`, `:139`,
 `feature_input.py:115`, `io/models.py:306`, `.claude/hooks/guard_push.py@e5b9b044:243`,
 `cli_kit.py:33`, `cli.py:411`, `:388`. Most are older; trim them as files
 are touched.
