@@ -172,7 +172,9 @@ def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
     the GeoJSON readers, which need a `crs` member, by geometry and attribute.
     Reads no file."""
     if facts.values == "heights":
-        commands = ("mesh", "catchment") + ("station-catchments",) * (facts.projected is not False)
+        commands: tuple[str, ...] = ("mesh", "catchment")
+        if facts.projected is not False:
+            commands += ("station-catchments",)
         return tuple(_fit(c, "--dem") for c in commands)
     if facts.values == "classes":
         return (_fit("mesh", "--land-cover"),)
@@ -254,7 +256,15 @@ def _vector(entry: RemoteSource, box: Box | None, legends: Mapping[str, Legend])
             layer = layer_info(conn, entry.layer)
             got = layer_summary(conn, layer)
             shapes = frozenset({_TYPES.get(got.geometry.upper(), got.geometry)})
-            facts = Facts("features", None, suffix, shapes, got.attributes, True, entry.legend)
+            facts = Facts(
+                "features",
+                None,
+                suffix,
+                shapes,
+                got.attributes,
+                crs_stated=True,
+                legend=entry.legend,
+            )
             found = fits(facts, legends)
             for a in _coded(found, legends, got.attributes):
                 coded[a] = distinct_values(conn, layer, a, CLASS_VALUES)
@@ -326,7 +336,9 @@ def _one(
         except (OSError, ValueError, sqlite3.Error) as exc:
             found["problem"] = str(exc)
     if entry.values != "features":
-        facts = Facts(entry.values, projected, "", frozenset(), (), False, entry.legend)
+        facts = Facts(
+            entry.values, projected, "", frozenset(), (), crs_stated=False, legend=entry.legend
+        )
         found["fits"] = fits(facts, legends)
     named = entry.model_dump(include=set(_FROM_ENTRY))
     return SourceReport.model_validate(

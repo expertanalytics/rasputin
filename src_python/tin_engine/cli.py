@@ -29,7 +29,7 @@ import typer
 from pydantic import ValidationError
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine import edge_strip, final_check, installed_version
+from tin_engine import cli_kit, edge_strip, final_check, installed_version
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
@@ -63,9 +63,6 @@ from tin_engine.catchment_batch import (
 )
 from tin_engine.chains import start_chains
 from tin_engine.cli_kit import THREADS
-from tin_engine.cli_kit import cli_resources as _resources
-from tin_engine.cli_kit import destination as _destination
-from tin_engine.cli_kit import words as _words
 from tin_engine.crs import (
     crs_label,
     parse_crs,
@@ -754,7 +751,7 @@ def mesh(
     --record write it in full. A refused run exits non-zero and writes no file.
     """
     clock = PhaseClock()
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
     table: ClassFractions | None = None
@@ -1031,14 +1028,14 @@ def mesh(
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
     vertices = surface_mesh.vertices
-    surface = _destination(out)
+    surface = cli_kit.destination(out)
     targets = [surface]
     if out_edges is not None:
         # Resolved, because two spellings of one path are still one file. Both
         # writes succeed, the second overwrites the first, the command echoes
         # two paths and exits 0 -- the caller has lost the surface they asked
         # for and nothing said so.
-        constraints = _destination(out_edges, "--out-edges")
+        constraints = cli_kit.destination(out_edges, "--out-edges")
         if constraints == surface:
             raise typer.BadParameter(
                 f"--out and --out-edges both resolve to {surface}; "
@@ -1279,7 +1276,7 @@ def _class_fractions(
                 threads=threads,
             )
         except (ValueError, NotCached) as exc:
-            raise typer.BadParameter(_words(exc), param_hint="--land-cover") from exc
+            raise typer.BadParameter(cli_kit.words(exc), param_hint="--land-cover") from exc
     typer.echo(
         f"land cover: {len(assigned.table.classes)} class shares over "
         f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
@@ -1345,7 +1342,7 @@ def palette(
     if out is None:
         typer.echo(text, nl=False)
         return
-    _destination(out).write_text(text)
+    cli_kit.destination(out).write_text(text)
     typer.echo(f"{out}")
 
 
@@ -1354,7 +1351,7 @@ def _report_target(stats: Path | None, meshes: list[Path]) -> Path | None:
     checked before any mesh file is written."""
     if stats is None or stats == Path("-"):
         return None
-    target = _destination(stats, "--stats")
+    target = cli_kit.destination(stats, "--stats")
     if target in meshes:
         raise typer.BadParameter(
             f"resolves to {target}; the report would overwrite the mesh", param_hint="--stats"
@@ -1369,7 +1366,7 @@ def _record_target(record: Path | None, taken: list[Path | None]) -> Path | None
         return None
     if record == Path("-"):
         raise typer.BadParameter("standard output is --stats -'s", param_hint="--record")
-    target = _destination(record, "--record")
+    target = cli_kit.destination(record, "--record")
     if target in taken:
         raise typer.BadParameter(
             f"resolves to {target}, which this run also writes", param_hint="--record"
@@ -1511,7 +1508,7 @@ def fetch(
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
-        raise typer.BadParameter(_words(exc)) from exc
+        raise typer.BadParameter(cli_kit.words(exc)) from exc
     tenths = [0]
 
     def progress(done: int, total: int) -> None:
@@ -1671,7 +1668,7 @@ def _dem_repository(
         return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
-            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+            cli_kit.words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
 
 
@@ -1695,7 +1692,7 @@ def _open_dem(
             else Bounds(**dict(zip(("x_min", "y_min", "x_max", "y_max"), bbox, strict=True)))
         )
     except ValidationError as exc:
-        raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint="--bbox") from exc
     try:
         with clock.phase("decode"):
             request = DemRequest(
@@ -1722,7 +1719,7 @@ def _open_dem(
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
-        raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint="--dem") from exc
 
 
 def _z_unit(option: ZSpelling | None) -> ZUnit | None:
@@ -2337,12 +2334,12 @@ def catchment(
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
-    target = _destination(out)
+    target = cli_kit.destination(out)
     try:
         found = None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     repository = _dem_repository(dem, cache, res, z_unit)
     try:
         placement: tuple[Placement, str | None] | None = None
@@ -2372,7 +2369,7 @@ def catchment(
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:
         hint = "--lakes" if isinstance(exc, LakeError) else "--dem"
-        raise typer.BadParameter(_words(exc), param_hint=hint) from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint=hint) from exc
     degrees = result.meta.geographic
     for k, w in enumerate(result.windows, 1):
         b = w.bounds
@@ -2591,7 +2588,7 @@ def station_catchments(
         math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
     ):
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
-    target = _destination(out_dir, "--out-dir")
+    target = cli_kit.destination(out_dir, "--out-dir")
     try:
         station_list, stations_crs = read_stations(stations)
     except (OSError, ValueError) as exc:
@@ -2608,13 +2605,13 @@ def station_catchments(
     lake_list = None
     if lakes is not None:
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     repository = _dem_repository(dem, cache, res, z_unit)
     try:
         geographic = repository.footprints()[0].meta.geographic
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
-            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+            cli_kit.words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
     if geographic:
         raise typer.BadParameter(
@@ -2657,7 +2654,7 @@ def station_catchments(
                 f"cannot read {exc.filename}: {exc}", param_hint="--dem"
             ) from exc
         except ValueError as exc:
-            typer.echo(f"Error: {_words(exc)}", err=True)
+            typer.echo(f"Error: {cli_kit.words(exc)}", err=True)
             raise typer.Exit(1) from exc
     dump = {**summary.model_dump(mode="json"), "river_copies_dropped": dropped}
     with _writing(target / "summary.json"):

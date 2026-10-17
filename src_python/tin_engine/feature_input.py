@@ -514,7 +514,7 @@ def read_source(
                 raise FeatureError(f"{path.name}: no geometry names its srsName; give its CRS")
             own = _own(path, crs, doc.crs or str(crs))
             return SourceRows(
-                own, None, False, [(f.fid, f.geometry, f.value) for f in doc.features]
+                own, None, scanned=False, rows=[(f.fid, f.geometry, f.value) for f in doc.features]
             )
         features, text = read_collection(read_json(path), default_crs=RFC7946_CRS)
         try:  # a malformed feature's structure raises any of these
@@ -525,7 +525,7 @@ def read_source(
             values = [(k, g, p.get(attribute)) for k, g, p in rows]
         except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
             raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
-        return SourceRows(_own(path, crs, text), None, False, values)
+        return SourceRows(_own(path, crs, text), None, scanned=False, rows=values)
     except FeatureError:
         raise
     except (OSError, ValueError, KeyError, sqlite3.Error) as exc:

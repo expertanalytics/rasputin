@@ -20,6 +20,8 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+from tin_engine.run_record import plural
+
 Phases = Sequence[tuple[str, float]]
 
 
@@ -172,9 +174,8 @@ def _sizes(s: Sizes) -> list[str]:
     item = "resampled grid nodes" if s.resampled else "DEM nodes"
     rows.append((item, f"{s.dem_nodes[0]} × {s.dem_nodes[1]} ({spacing} m)"))
     if s.domain_vertices is not None:
-        holes = s.domain_holes or 0
-        plural = "" if holes == 1 else "s"
-        rows.append(("domain vertices", f"{s.domain_vertices} (1 ring, {holes} hole{plural})"))
+        holes = plural(s.domain_holes or 0, "hole", "holes")
+        rows.append(("domain vertices", f"{s.domain_vertices} (1 ring, {holes})"))
     counts = (
         ("start vertices", s.start_vertices),
         ("start triangles", s.start_triangles),

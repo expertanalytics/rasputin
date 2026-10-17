@@ -374,7 +374,9 @@ def _covering(chosen: list[_Lattice], bounds: Bounds | None, needed: Any) -> lis
         if window is None:
             continue
         tiles = tuple(_placement(p, *window) for p in lattice.placed if p.meets(*window))
-        if not _uncovered(_grid(m, lattice.reference, window, False), tiles, needed):
+        if not _uncovered(
+            _grid(m, lattice.reference, window, vertical_unit_assumed=False), tiles, needed
+        ):
             covering.append(lattice)
     if not covering:
         a, b = chosen[0].selected[0].footprint, chosen[1].selected[0].footprint

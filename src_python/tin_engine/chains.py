@@ -49,7 +49,7 @@ def start_chains(
         count += len(xy)
 
     for k, ring in enumerate((domain.polygon.exterior, *domain.polygon.interiors)):
-        add(shapely.get_coordinates(ring)[:-1], "outer" if k == 0 else "hole", 0, False)
+        add(shapely.get_coordinates(ring)[:-1], "outer" if k == 0 else "hole", 0, closed=False)
     for feature in features:
         vocabulary.names(feature.mask)
         for line in feature.lines:
