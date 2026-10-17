@@ -1,6 +1,6 @@
 # Harness h23: duties owed, computed from git and the away log
 
-Status: **design**, 2026-10-17, on `worktree-h23-duties` off master
+Status: **designed, design review APPROVED (round 2)**, 2026-10-17, on `worktree-h23-duties` off master
 `81ea2f73`. One PR. Every production file is governed (`tools/`,
 `.claude/settings.json`), so the green step and the settings change wait for
 Ola, by day.
@@ -90,9 +90,9 @@ nothing. Four git calls and one file read, in all.
   retrospective agenda `next.md` (`1b60375f`, by the main session for Ola)
   and the rule-file sweep (`403e2c9e`, which added
   `2026-09-30-rule-file-history.md` beside rule edits) would each have
-  cleared every duty. Since 2026-09-30 every commit that adds a file there
+  cleared every duty. Since 2026-10-01 every commit that adds a file there
   carries the suffix (`git log --branches origin/master --diff-filter=A
-  --since=2026-09-30 --format=%s -- 'docs/retrospectives/*.md' | grep -v
+  --since=2026-10-01 --format=%s -- 'docs/retrospectives/*.md' | grep -v
   '(@orchestrator)$'` prints nothing); the older ones without it are all
   earlier than any R that matters. `origin/master` beside the local
   branches, because a check merged and its local branch deleted is still a
@@ -339,10 +339,11 @@ the 5 s timeout with margin.
 4. A check is a commit by `@orchestrator`, known by its subject suffix. A
    check written by another persona, or with the suffix left off, clears
    nothing; an `@orchestrator` commit that adds a non-check `.md` there
-   clears duties. The first has not happened since 2026-09-30 (the command
+   clears duties. The first has not happened since 2026-10-01 (the command
    in section 2); the second is not checked, and is the price of keeping no
    state.
 
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `d72cd744`, 0 counted lines, @reviewer: CHANGES REQUESTED. B1: any new file under `docs/retrospectives/` counts as a check, and non-check files exist there (`next.md`, the rule-file sweep); count only commits whose subject ends `(@orchestrator)`, with a test case. Held: an unmerged check clears D1/D2 because D4 lists the branch; hook claims match the docs; 0.10 s measured; "none owed" is not noise; the 3-day gap would have been flagged from #268 on. Suggestions: D4 out of the per-turn hook; check-recording PRs that touch only ROADMAP and an increment file should not owe a check; read `origin/master` too; four git calls, not three.
+- **Design review, round 2, 2026-10-17.** Commit `b22e5041`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the evidence command starts 2026-10-01 (a bare `--since` date takes the current time of day). The untested pin is minor (only `next.md`, already on master). Idea for the build: leave `next.md` out of the check query by name. The build waits for Ola (governed files; the status-line question).
