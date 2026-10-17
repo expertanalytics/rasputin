@@ -4,7 +4,8 @@
 // counted and left out of it, and nothing changes where nothing was wrong.
 // INVARIANT-CRITICAL: mutation targets T1 (the check removed), T3 (the count
 // removed), T5 (skip the check when any triangle is flat), T4 (break after
-// the pass, step 7 removed).
+// the pass, step 7 removed). No W1 outline makes T4 fail under the last: the
+// pass swaps nearly cocircular quads, whose planes stay within the tolerance.
 //
 // Interface (section 3, "Interfaces"): PointRefineOutcome::flat_as_written,
 // flips_as_written (a subset of flips) and illegal_as_written, std::size_t.
