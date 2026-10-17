@@ -81,8 +81,8 @@ Files: `src_python/tin_engine/` and `tests/python/` only. No C++, so no build.
   (*Docstrings and Comments*): say what the code does and why, with no labels.
   A pointer to a design file stays only where the derivation is too long to
   repeat: at most one per module docstring, in the form `` `<path>.md`, *<heading>* ``.
-  Prose only. Check with
-  `python3 tools/check_code_history.py --same-code <P1 base>`, which must
+  Prose only, in a commit of its own made first. Check, at that commit:
+  `python3 tools/check_code_history.py --same-code <that commit>^`, which must
   print nothing.
 - **C**: `from tin_engine import cli_kit` replaces the three aliased imports,
   and the call sites become `cli_kit.cli_resources(...)`,
@@ -139,11 +139,15 @@ The absence lines deleted from tests that check something else as well:
 
 - `test_core_refine.py:186`;
 - `test_crs.py:227`, with its docstring sentence;
-- `test_feature_input.py:744`;
+- `test_feature_input.py:744`, and delete the whole test
+  `test_read_lake_polygons_replaces_read_lakes`: what is left checks only that a
+  name exists, which the next test calls anyway;
 - `test_gauge.py:191-192`, with the test renamed for what is left (the
   `U_FLOOR_CELLS` value);
-- `test_io_geojson.py:151-154`, the `domain` import and its loop;
-- `test_station_set.py:244,246`.
+- `test_io_geojson.py:151-154`, the `domain` import and its loop, and the
+  docstring 'Moved here from `domain.py`…' goes;
+- `test_station_set.py:244,246`, and the docstring 'Audit PR C, red test 5: no
+  alias keeps the old name' goes.
 
 Kept, with the reason:
 
@@ -262,8 +266,9 @@ run, with the power state recorded.
 
 ## 6. P3: the gates and rule files (waits for Ola's prompt)
 
-Every file here is governed (`tools/`, `pyproject.toml`, `.claude/hooks/`,
-`.claude/agents/`). After P1 and P2 the tree is already clean, so each gate goes
+Every file here is governed except `pyproject.toml` (`tools/check_*` and the
+listed tools, `.claude/hooks/`, `.claude/agents/`; see
+`.claude/hooks/guard_governance.py@4ad42e45:58-84`). After P1 and P2 the tree is already clean, so each gate goes
 in green.
 
 1. **A's gate**: `[tool.check_code_history].paths` becomes `src_python/tin_engine`,
@@ -288,7 +293,8 @@ in green.
 
 - *`test_legend_name.py`'s scanner.* When Ola approved increment 58 he said
   "Keep the guard tight"; today he approved the audit, which lists the
-  scanner for deletion. Default: delete it, in its own commit (4.1 item 4), and
+  scanner for deletion. Ola ruled (2026-10-17): "We don't keep tests that are
+  not relevant anymore." Delete it, in its own commit (4.1 item 4), and
   keep the three refusal tests. Reverting that one commit keeps it.
 
 ## 8. Size
@@ -314,3 +320,7 @@ All three are far under the limit. In the diff, P1 is mostly test deletions
   the same lines (`git diff` of 63's `cli.py` has no alias line).
 - P2 waits for 66 (section 5). `worktree-23c` changes `refine_points.hpp`
   around the same loop; its own writer merges P2 in when it next merges master.
+
+## Review
+
+- **Design review, round 1, 2026-10-17.** Commit `55acdec4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the history check runs at the prose-only commit; three test cuts finished (a whole test and two docstrings); `pyproject.toml` is not governed. The scanner question: Ola ruled delete. Idea kept: a later sweep of 2771 history labels in `tests/python`.
