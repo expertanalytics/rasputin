@@ -358,13 +358,6 @@ inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, 
     return std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
 }
 
-// The distance of p from the line through a and b, (col, row) Euclidean. One
-// copy, so near_constraint and the generator cannot be contracted differently.
-[[nodiscard]] inline double line_distance(mesh::MeshVertex a, mesh::MeshVertex b, mesh::MeshVertex p) {
-    const double dc = b.col - a.col, dr = b.row - a.row;
-    return std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(dc * dc + dr * dr);
-}
-
 // L12: the constrained edge of t whose line p lies within `radius` lattice
 // units of, (col, row) Euclidean, with p's projection strictly inside it; the
 // nearest, ties to the lower edge index. Never a frozen edge (23b, N7): the
@@ -378,7 +371,7 @@ inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::
         const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3);
         const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;
         const double sigma = ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2;
-        const double d = line_distance(a, b, p);
+        const double d = std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(len2);
         if (m.is_constrained(t, e) && !m.is_frozen(t, e) && sigma > 0.0 && sigma < 1.0 && (d < best_d || (!best && d == best_d))) {
             best = e;
             best_d = d;

@@ -10,7 +10,7 @@
 // integer column and row lines strictly between the ends are computed at the
 // parameter t along P0 -> P1, on the line exactly, clamped to the node
 // rectangle; a crossing whose rounded position is a node on the edge (exact
-// orient_sign) or within detail::coincidence_radius of its line
+// orient_sign) or within detail::coincidence_radius of the crossing
 // (docs/increments/66-coincident-written-vertices.md, R2) is that node. Sorted by t, then position, a point at the same
 // position as the entry before it, or a t not strictly between that entry's
 // and 1, is dropped and counted in `duplicates`. Midpoints are taken over the
@@ -122,7 +122,7 @@ template <raster::RasterSource R>
         auto cross = [&](double t, double col, double row) {
             mesh::MeshVertex at{std::clamp(col, 0.0, cmax), std::clamp(row, 0.0, rmax)};
             const mesh::MeshVertex node{std::round(at.col), std::round(at.row)};
-            if (mesh::orient_sign(a, b, node) == 0 || detail::line_distance(a, b, node) <= radius)
+            if (mesh::orient_sign(a, b, node) == 0 || std::hypot(at.col - node.col, at.row - node.row) <= radius)
                 at = node;
             cuts.push_back({t, at});
         };
