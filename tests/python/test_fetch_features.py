@@ -504,6 +504,41 @@ class TestAnswerChecks:
         assert "exceededTransferLimit" in message(caught), message(caught)
         assert fake.chunks_asked() == []
 
+    def test_an_ids_query_refused_in_an_http_200_body_names_the_services_words(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        fake = FakeLayer(NVE, ids_refused=True)
+        with pytest.raises(FetchError) as caught:
+            run(features, fake, tmp_path)
+        said = message(caught)
+        assert "the service refused the request" in said, said
+        assert "Unable to complete operation." in said, said
+        assert "Unable to perform query operation." in said, said
+        assert "nve-lakes" in said and "the layer changed" not in said, said
+        assert fake.chunks_asked() == []
+        assert stored_ids(tmp_path, "nve-lakes") == set()
+
+    def test_a_chunk_refused_in_an_http_200_body_is_halved_like_an_http_error(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        fake = FakeLayer(CORINE, max_records=4, refuse=holds(11, 12), refuse_in_body=True)
+        run(features, fake, tmp_path)
+        assert fake.chunks_asked() == [[3, 7, 11, 12], [3, 7], [11, 12], [11], [12]]
+        assert stored_ids(tmp_path, "clc2018") == set(IDS)
+
+    def test_one_id_refused_in_an_http_200_body_names_it_and_the_services_words(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        fake = FakeLayer(CORINE, max_records=4, refuse=holds(12), refuse_in_body=True)
+        with pytest.raises(FetchError) as caught:
+            run(features, fake, tmp_path)
+        said = message(caught)
+        assert [12] in fake.chunks_asked()
+        assert "feature 12 is refused" in said, said
+        assert "Unable to complete operation." in said, said
+        assert "clc2018" in said and "the layer changed" not in said, said
+        assert 12 not in stored_ids(tmp_path, "clc2018")
+
     def test_a_year_is_refused(self, features: ModuleType, tmp_path: Path) -> None:
         fake = FakeLayer(NVE)
         with pytest.raises(FetchError, match="has no years"):

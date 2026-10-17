@@ -185,6 +185,16 @@ CORINE = LayerData(
 )
 
 
+#: An ArcGIS refusal as it comes, in an HTTP 200 body; its words are the service's.
+REFUSAL: Mapping[str, Any] = {
+    "error": {
+        "code": 400,
+        "message": "Unable to complete operation.",
+        "details": ["Unable to perform query operation."],
+    }
+}
+
+
 @dataclass
 class FakeLayer:
     """The service of one layer; every knob below is off by default."""
@@ -211,6 +221,10 @@ class FakeLayer:
     raw_geometry: Mapping[int, Any] = field(default_factory=dict)
     #: Flag the ids answer `exceededTransferLimit`.
     exceeded: bool = False
+    #: Answer the ids query with `REFUSAL`, HTTP 200, as ArcGIS refuses some queries.
+    ids_refused: bool = False
+    #: Answer the chunks `refuse` picks with `REFUSAL`, HTTP 200, instead of an HTTP error.
+    refuse_in_body: bool = False
     urls: list[str] = field(default_factory=list)
     served: int = 0
 
@@ -223,12 +237,13 @@ class FakeLayer:
             assert query.get("f") == "json", url
             text = json.dumps(self._layer())
         elif base == self.data.url + "/query" and query.get("returnIdsOnly") == "true":
-            text = json.dumps(self._ids(query, url))
+            text = json.dumps(REFUSAL if self.ids_refused else self._ids(query, url))
         elif base == self.data.url + "/query" and "objectIds" in query:
             ids = [int(v) for v in query["objectIds"].split(",")]
-            if self.refuse(ids):
+            if self.refuse(ids) and not self.refuse_in_body:
                 raise FetchError(f"{url}: HTTP 500, after 4 tries")
-            text = json.dumps(self._features(query, ids, url))
+            refused = self.refuse(ids) and self.refuse_in_body
+            text = json.dumps(REFUSAL if refused else self._features(query, ids, url))
         else:
             raise AssertionError(f"the fake serves no such request: {url}")
         self.served += len(text.encode())
