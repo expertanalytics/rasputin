@@ -7,6 +7,7 @@ changed only in a release that says so. The list is what plugins use today and
 grows on request.
 """
 
+from tin_engine.catchment_core import accumulate
 from tin_engine.cli_kit import THREADS, cli_resources, destination, words
 from tin_engine.crs import frame_factors, parse_crs, reprojector, same_crs, site_of
 from tin_engine.dem_input import DemRequest, open_dem, repository_for
@@ -24,6 +25,7 @@ __all__ = [
     "DemTile",
     "RasterMeta",
     "Resources",
+    "accumulate",
     "cli_resources",
     "core_args",
     "destination",
