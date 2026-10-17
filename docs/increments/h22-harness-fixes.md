@@ -377,3 +377,4 @@ Net production lines (`CLAUDE.md` §2), estimates:
 
 One PR, full path (over 50 lines): design review, red, green, code review,
 Ola's prompts for the governed files and the rule file.
+- **Design review, round 1, 2026-10-17.** Commit `949a6b2b`, 0 counted lines, @reviewer: CHANGES REQUESTED. The leak check fails open: with `refs/remotes/private/master` deleted (no prompt needed) or counting no private-only commits, every head counts as public, so a granted `git push origin` of an `lsm-*` branch would publish private history; refuse the origin forms then, with a test each. Suggestions: refuse `gh pr create -R expertanalytics/rasputin` in test 3; test 7 per condition; a rebase or cherry-pick stopped partway did make commits; a gate deleted by the commit; the guard hook timeout against the 20 s `gh` call.
