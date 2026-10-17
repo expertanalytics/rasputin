@@ -119,6 +119,7 @@ plugins use today, and grows on request.
 | `RasterMeta` | A tile's node grid: origin, spacing, size, CRS, nodata |
 | `Bounds` | A box in a DEM's CRS |
 | `core_args` | A tile's array and grid scalars, checked, for a `raster_view` function (see the raster tag rule below) |
+| `accumulate` | `accumulate(tile)`: each node's drainage over a `DemTile`, from the flood that fills its pits. `.count` (uint32, rows × cols): 0 on NoData, else the nodes draining through the node, itself included. `.flow_to` (uint8): the neighbour drained to, `3*(dr+1)+(dc+1)`, with `dr`, `dc` its row and column minus the node's; 255 for an outlet or NoData. Both read-only. 2^32 nodes or more is a `ValueError` |
 | `encode_geotiff` | A 2-D grid as the bytes of a float32 GeoTIFF |
 | `read_mesh` | The bytes of a binary `.vtk` that `rasputin mesh` wrote, as arrays |
 | `parse_crs` | Any CRS text pyproj reads, or a `ValueError` naming it |
