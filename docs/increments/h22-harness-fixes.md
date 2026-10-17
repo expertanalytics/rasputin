@@ -156,8 +156,23 @@ head holds none of it.
 
 Two counts: `git rev-list --count refs/remotes/private/master
 ^refs/remotes/origin/master` (N) and the same with `^<head>` added (M).
-Whether the private remote is set up is `git config --get
-remote.private.url` exiting 0. That anchor cannot be removed under a grant
+Whether the private remote is set up is read from `git config --get
+remote.private.url`, run with a 10 s timeout, by its exit status, three ways
+(git 2.55.0, measured 2026-10-17: a key that is there exits 0, a key that is
+not exits 1, a `GIT_CONFIG_GLOBAL` file holding `[broken` exits 128 with
+`fatal: bad config line 1`):
+
+- exit 0: set;
+- exit 1: not set;
+- any other exit, or the timeout: `home` refuses, with `("", "git config
+  could not be read (it exited <code>), so it cannot be told whether the
+  private remote is set up; fix the file git names")`, or for the timeout
+  `("", "git config did not answer within 10 s, so it cannot be told whether
+  the private remote is set up")`. The `rev-list` counts are not run.
+
+A read error is therefore never taken for "not set": a malformed
+`~/.gitconfig` is not a governed file, so without this it would turn every
+head public. That anchor cannot be removed under a grant
 without a prompt: `git remote remove`/`rm` and `git config` writes ask
 (`git_why` in `guard_push.py`, `REMOTE_WRITES` and the `config` branch), and
 `.git/config` is governed (`GOVERNED_SUFFIXES` in `guard_governance.py`). The
@@ -166,6 +181,7 @@ prompt. So the ref's absence is never read as "no private history":
 
 | `remote.private.url` | `refs/remotes/private/master` | Result |
 |---|---|---|
+| unreadable (exit other than 0 or 1, or timeout) | not read | the config reason above |
 | set | present, N > 0 | `"private"` when M < N, else `"origin"` |
 | set | missing | `("", "the private remote is set up but refs/remotes/private/master is missing, so it cannot be told whether this branch holds private commits; run git fetch private")` |
 | set | present, N = 0 | `("", "refs/remotes/private/master holds no commit that origin/master lacks, so it cannot be told whether this branch holds private commits; run git fetch private")` |
@@ -218,9 +234,9 @@ state,baseRefName,headRefOid,statusCheckRollup`, run with a 20 s timeout
 The hook's time. `.claude/settings.json` gives `guard_push.py` no `timeout`
 (read 2026-10-17), so Claude Code's default for a command hook applies: 600 s
 (code.claude.com/docs/en/hooks, *Common fields*, read 2026-10-17). The 20 s
-`gh` call, `home`'s two `rev-list` calls (10 s each, new here) and the
-guard's own `git --list-cmds` (10 s, `guard_push.py` line 141) add to at most
-50 s, well inside it; `push_grant.py`'s other git calls have no timeout today
+`gh` call, `home`'s `git config --get` and two `rev-list` calls (10 s each,
+new here) and the guard's own `git --list-cmds` (10 s, `guard_push.py` line
+141) add to at most 60 s, well inside it; `push_grant.py`'s other git calls have no timeout today
 and are local reads. The same page says a timed-out `PreToolUse`
 hook does not block the call, which then goes through the normal permission
 flow; so the 20 s cap is what keeps the guard from ever reaching that limit,
@@ -336,14 +352,18 @@ never gh.
    (b) URL set, ref deleted (`git branch -dr private/master`): both get the
    missing-ref reason; (c) URL set, ref moved to M0 (`git update-ref`, so
    N = 0): both get the N = 0 reason; (d) URL unset and ref deleted: both are
-   `"origin"`.
+   `"origin"`; (e) URL set, ref present, and `GIT_CONFIG_GLOBAL` (set with
+   `monkeypatch.setenv`, which `home`'s git inherits) naming a `tmp_path` file
+   holding `[broken`: both get the config reason with `exited 128`, the
+   measured exit (4.3), and no `rev-list` is reached.
 5. `judge`: (a) private push of `prv` passes and logs `"remote": "private"`;
    (b) origin push of `prv` is refused with the leak sentence; (c) private
    push of `pub` is refused with the second sentence; (d) the leak case of
    design review round 1: origin push of `prv` with the ref deleted, URL set,
    is refused with the missing-ref reason; (e) the same with the ref at M0
    (N = 0) is refused with the N = 0 reason; (f) a private push of `prv` in a
-   clone with no URL and no ref is refused.
+   clone with no URL and no ref is refused; (g) origin push of `prv` with the
+   malformed `GIT_CONFIG_GLOBAL` of 4(e) is refused with the config reason.
 6. The walk: on `prv`, a code commit after the review is refused; a clean
    merge of `private/master` after the review passes; a clean merge of
    `origin/master` into `prv` is refused (not its master).
@@ -432,11 +452,11 @@ Net production lines (`CLAUDE.md` §2), estimates:
 
 | File | Fix | Estimate |
 |---|---|---|
-| `tools/push_grant.py` (forms, `home` with its fail-closed rows, `checks` with a reason per condition, the remote through the walk) | 1 | about 95 |
+| `tools/push_grant.py` (forms, `home` with its fail-closed rows, `checks` with a reason per condition, the remote through the walk) | 1 | about 100 |
 | `tools/away.py` | 1 | about 5 |
 | `.claude/hooks/gates_after_commit.py` | 2 | about 25 |
 | `tools/scratch_copy.py` | 3 | about 20 |
-| Total | | about 145 |
+| Total | | about 150 |
 
 One PR, full path (over 50 lines): design review, red, green, code review,
 Ola's prompts for the governed files and the rule file.
