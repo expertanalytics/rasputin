@@ -97,6 +97,13 @@ WORDING = {
     "line_check_dem_nodes_inserted": "DEM nodes the line check added",
     "line_points_duplicate": "Points along lines dropped as duplicates",
     "dem_nodes_outside_mesh": "Self-check: DEM nodes with data left outside the mesh",
+    "triangles_flat_as_written": (
+        "Triangles flat or turned over at the written coordinates; their edges were left "
+        "out of the last edge-swap check"
+    ),
+    "edges_not_delaunay_as_written": (
+        "Edges that fail the empty-circle test at the written coordinates and could not be swapped"
+    ),
     "refinement_rounds": "Refinement passes",
     "points_inserted": "Points added",
     "points_inserted_on_nodata": "Of them, into triangles with a NoData corner",
