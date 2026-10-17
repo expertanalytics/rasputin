@@ -1,6 +1,6 @@
 # 2026-10-17 overdue check: the night of 16 to 17 October, the merges #269 to #278, a code audit for machine-written oddities, and why my checks stopped
 
-Recorded by `@orchestrator` on 2026-10-17 at about 11:30 UTC, on
+Recorded by `@orchestrator` on 2026-10-17 at about 09:30 UTC, on
 `worktree-retro-1017` off master `e5b9b044`. **Times are UTC**; Oslo is
 UTC+2. Every rule or harness change below is a proposal; Ola decides.
 
@@ -11,7 +11,7 @@ session: why did `@orchestrator` never propose a check on its own cadence?
 
 Sources: `<git-common-dir>/harness/windows.jsonl`, `queue-2026-10-16.jsonl`,
 `queue-2026-10-17.jsonl`, `grants-used.jsonl` and `reviews.jsonl` (read
-only); `.claude/current-task/session.md` as of 11:05; the main session's
+only); `.claude/current-task/session.md` as of about 09:05; the main session's
 transcript `~/.claude/projects/-Users-skavhaug-projects-rasputin/dd80fd6d-….jsonl`,
 cited as `T:<line>`; `TZ=UTC git log --all` for the window; `gh pr list`;
 `python3 tools/count_loc.py`, `tools/check_code_history.py`,
