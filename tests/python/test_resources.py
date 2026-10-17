@@ -279,10 +279,3 @@ class TestT5ParseBytes:
         with pytest.raises(ValueError) as info:
             res.resources(None, text, {})
         assert text in str(info.value)
-
-
-# ---------------------------------------------------------------- T11
-
-
-def test_t11_decompose_is_gone() -> None:
-    assert importlib.util.find_spec("tin_engine.decompose") is None

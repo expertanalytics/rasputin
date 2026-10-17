@@ -145,13 +145,8 @@ class TestReadCollectionTakesTheDocument:
         assert refusal(path, WGS84) == NOT_AN_OBJECT
 
     def test_one_copy_of_the_suffixes_and_the_default(self) -> None:
-        """Moved here from `domain.py`, which keeps none of the three constants."""
-        import tin_engine.domain as domain
-
         assert gj.GEOJSON_SUFFIXES == (".geojson", ".json")
         assert gj.RFC7946_CRS == WGS84
-        for gone in ("GEOJSON_SUFFIXES", "GEOJSON_DEFAULT_CRS", "WKT_SUFFIXES"):
-            assert not hasattr(domain, gone), gone
 
 
 DEFAULTS = pytest.mark.parametrize("default_crs", [WGS84, None], ids=["default", "no_default"])

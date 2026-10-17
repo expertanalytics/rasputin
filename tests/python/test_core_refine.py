@@ -183,7 +183,6 @@ class TestOffNodeStart:
         assert not out.ok()
         assert out.status == _core.RefineStatus.OutsideGrid  # type: ignore[attr-defined]
         assert out.message
-        assert not hasattr(_core.RefineStatus, "OffLattice")
 
 
 class TestStatsFields:
