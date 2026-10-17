@@ -75,8 +75,15 @@ class FeatureReport(BaseModel):
 
 def _answer(get_text: GetText, url: str, where: str) -> Any:
     """The JSON of `url`. ArcGIS answers some refusals with HTTP 200 and an
-    `error` member; that is a `FetchError` with the service's own message."""
-    doc = json.loads(get_text(url))
+    `error` member; that is a `FetchError` with the service's own message.
+    A 200 answer that is not JSON (a proxy's page) is a `FetchError` caused
+    by the `JSONDecodeError`, which halving a chunk does not catch."""
+    try:
+        doc = json.loads(get_text(url))
+    except json.JSONDecodeError as exc:
+        raise FetchError(
+            f"{where}: {url}: the answer is not JSON, so not the map service's"
+        ) from exc
     if isinstance(doc, dict) and "error" in doc:
         error = doc["error"] if isinstance(doc["error"], dict) else {"message": doc["error"]}
         said = "; ".join(str(m) for m in (error.get("message"), *(error.get("details") or ())) if m)
@@ -98,7 +105,7 @@ def layer_facts(source: RemoteSource, get_text: GetText) -> LayerFacts:
             f"{where}: a {doc.get('geometryType')} layer; only polygon layers are fetched"
         )
     unique = doc.get("uniqueIdInfo") or {}
-    if unique.get("OIDFieldContainsHashValue") or unique.get("oidFieldContainsHashValue"):
+    if unique.get("OIDFieldContainsHashValue"):
         raise FetchError(f"{where}: its ids are hash values (OIDFieldContainsHashValue)")
     fields = {str(f["name"]): str(f["type"]) for f in doc.get("fields") or ()}
     ids = [n for n, t in fields.items() if t == "esriFieldTypeOID"]
@@ -250,6 +257,8 @@ def fetch_features(
                 try:
                     doc = _answer(get, link, where)
                 except FetchError as exc:
+                    if isinstance(exc.__cause__, json.JSONDecodeError):
+                        raise
                     if len(ids) == 1:
                         raise FetchError(f"{where}: feature {ids[0]} is refused: {exc}") from exc
                     for half in (ids[: len(ids) // 2], ids[len(ids) // 2 :]):
