@@ -68,7 +68,7 @@ described in "How it was measured"; none is an estimate unless it says so.
   --out-crs EPSG:3006 --domain
   ../rasputin_data/sweden_smhi_svar/lagan_mouth_svar2022_3006.geojson
   --features ../rasputin_data/sweden_corine/lagan_clc2018_3035.geojson
-  --features-crs EPSG:3035 --features-map corine --tolerance 10 --binary`.
+  --features-crs EPSG:3035 --features-legend corine --tolerance 10 --binary`.
 - Re-run at master `ed12512` (the main checkout's `.venv`, its installed
   `_core` built 2026-10-05): the same 863 897 triangles, the same 1 598
   slivers. All runs below are at `ed12512`; the first table's on AC power.

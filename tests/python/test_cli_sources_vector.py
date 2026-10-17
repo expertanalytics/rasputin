@@ -218,12 +218,12 @@ class TestT6VectorListing:
         assert gone["present"] is False
         assert gone["fits"] == []
 
-    def test_the_cover_with_its_class_map_fits_that_map_alone(
+    def test_the_cover_with_its_legend_fits_that_map_alone(
         self, config: Path, tmp_path: Path
     ) -> None:
         _lakes, cover = fixture_v(tmp_path / "v")
         write_sources(config, {
-            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, class_map="corine")
+            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, legend="corine")
         })  # fmt: skip
         found = by_id(listing())[COVER_ID]
         assert fits_of(found) == {("mesh", "--features", "corine"), ("catchment", "--lakes", None)}

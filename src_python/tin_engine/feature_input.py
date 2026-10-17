@@ -2,7 +2,7 @@
 
 `docs/increments/16b-terrain-polygons.md` R1, R4-R7. A source is a GeoJSON
 ``FeatureCollection``, a GeoPackage layer or OGR's GML2, by suffix. Each
-feature's attribute goes through a :class:`ClassMap` to vocabulary names and so
+feature's attribute goes through a :class:`Legend` to vocabulary names and so
 to a mask; its rings and lines are pre-clipped to a region around the domain
 (R5), moved into the DEM's CRS vertex by vertex, and clipped to the domain as
 linework (R6); land cover with the band on (32) is cut by the domain as areas.
@@ -64,13 +64,13 @@ class FeatureError(ValueError):
     """A source or feature refused, naming the file and, for a feature, its fid."""
 
 
-class ClassMap(BaseModel):
+class Legend(BaseModel):
     """An attribute's values to vocabulary names (R4). ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
     ``codes``, when not empty, names the code system the values are integer
-    codes of; such a map labels triangles (16c, R5). ``palette`` colours and
-    names those codes (36). A class mapped to None is dropped; the rest come
-    from a class-map file (41, `tin_engine.class_maps`)."""
+    codes of; such a legend labels triangles (16c, R5). ``palette`` colours and
+    names those codes (36). A class whose names are None is dropped; the rest come
+    from a legend file (41, `tin_engine.legends`)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -92,7 +92,7 @@ class FeatureSource(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: Path
-    class_map: ClassMap
+    legend: Legend
     layer: str | None = None
     crs: str | None = None
 
@@ -240,12 +240,14 @@ def open_features(
     for a DEM cell of `cell`. Raises :class:`FeatureError` on any refusal."""
     vocabulary = request.vocabulary
     for source in request.sources:
-        cmap = source.class_map
-        named = [n for names in cmap.classes.values() for n in names or ()]
+        legend = source.legend
+        named = [n for names in legend.classes.values() for n in names or ()]
         try:
-            vocabulary.mask(*named, *(() if isinstance(cmap.otherwise, str) else cmap.otherwise))
+            vocabulary.mask(
+                *named, *(() if isinstance(legend.otherwise, str) else legend.otherwise)
+            )
         except ValueError as exc:
-            raise FeatureError(f"class map {cmap.name}: {exc}") from exc
+            raise FeatureError(f"legend {legend.name}: {exc}") from exc
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary, request.threads)
     tally.cell = cell
     switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
@@ -303,7 +305,7 @@ class _Tally:
         read = read_source(
             source.path,
             source.layer,
-            source.class_map.attribute,
+            source.legend.attribute,
             lambda own: self.region(own).bounds,
             source.crs,
         )
@@ -318,7 +320,7 @@ class _Tally:
         return read.crs, read.layer
 
     def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
-        name, cmap = source.path.name, source.class_map
+        name, legend = source.path.name, source.legend
         src = parse_crs(own)
         move = None if same_crs(src, self.dem) else reprojector(src, self.dem, threads=self.threads)
         bound, region = None, self.region(self.dem)
@@ -338,10 +340,10 @@ class _Tally:
                 raise FeatureError(
                     f"{name}: feature {fid} is a {geometry.geom_type}; input is polygons and lines"
                 )
-            mask = _mask(cmap, self.vocabulary, value, f"{name}: feature {fid}")
+            mask = _mask(legend, self.vocabulary, value, f"{name}: feature {fid}")
             if mask is None:
                 continue
-            code = _code(cmap, value, f"{name}: feature {fid}") if cmap.codes else None
+            code = _code(legend, value, f"{name}: feature {fid}") if legend.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
             if polygonal and code is not None and self.cleanup is not None:  # 20c-3: whole
@@ -560,12 +562,12 @@ def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 
 
-def _code(cmap: ClassMap, value: Any, what: str) -> int:
-    """R5: a class code is an integer in 1 .. 2**31 - 1, or a text the map's
+def _code(legend: Legend, value: Any, what: str) -> int:
+    """R5: a class code is an integer in 1 .. 2**31 - 1, or a text the legend's
     ``string_codes`` turn into one (41); anything else is refused."""
     try:
         text = "0" if isinstance(value, list) else str(value)
-        code = cmap.string_codes.get(text) or int(text)
+        code = legend.string_codes.get(text) or int(text)
     except ValueError:
         code = 0
     if not 1 <= code < 2**31:
@@ -574,22 +576,24 @@ def _code(cmap: ClassMap, value: Any, what: str) -> int:
     return code
 
 
-def _mask(cmap: ClassMap, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:
+def _mask(legend: Legend, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:
     """R4: the mask ``value`` maps to, None for ``drop``; a list is a union."""
     names: list[str] = []
     for item in value if isinstance(value, list) else [value]:
         key = None if item is None else str(item)
-        if key is not None and key in cmap.classes:
-            listed = cmap.classes[key]
+        if key is not None and key in legend.classes:
+            listed = legend.classes[key]
             if listed is None:
                 return None
             names += listed
-        elif cmap.otherwise == "drop":
+        elif legend.otherwise == "drop":
             return None
-        elif cmap.otherwise == "refuse":
-            raise FeatureError(f"{what}: {cmap.attribute} {item!r} is not in the map {cmap.name}")
+        elif legend.otherwise == "refuse":
+            raise FeatureError(
+                f"{what}: {legend.attribute} {item!r} is not in the legend {legend.name}"
+            )
         else:
-            names += cmap.otherwise
+            names += legend.otherwise
     return vocabulary.mask(*names)
 
 

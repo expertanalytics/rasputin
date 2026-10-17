@@ -359,7 +359,7 @@ class TestTheOtherPaths:
         corine = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(monkeypatch, "--dem", str(tif), "--domain", str(square), "--tolerance", "1",
-             "--features", str(corine), "--features-map", "corine",
+             "--features", str(corine), "--features-legend", "corine",
              "--out", str(out), "--stats", str(md))  # fmt: skip
         fields = vtk_fields(read_vtk(out.read_bytes()))
         assert set(fields) == {
@@ -391,7 +391,7 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
         "tiles": ["--dem", str(tmp_path / "tiles"), "--tolerance", "1"],
         "features": [
             *("--dem", str(holed), "--domain", str(square), "--tolerance", "1"),
-            *("--features", str(corine), "--features-map", "corine"),
+            *("--features", str(corine), "--features-legend", "corine"),
         ],
         "reprojected": [
             *("--dem", str(VELHAS / "anadem_velhas.tif")),
