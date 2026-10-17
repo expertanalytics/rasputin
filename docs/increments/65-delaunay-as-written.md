@@ -140,7 +140,8 @@ In `point_loop`, where the loop now breaks (`if (!any) break;`):
    loop mesh from its own grid vertices (`LatticeMesh::build`) and set the
    frozen mask again. If `build` refuses (a swapped triangle not
    counter-clockwise on the grid), keep the mesh before the pass, store step
-   4's count in `out.illegal_as_written`, and break.
+   4's count in `out.illegal_as_written`, and break. A refused build of the
+   copy is handled the same way.
 7. **Rescan.** Mark every slot the pass wrote as touched and written,
    `rebuild_active`, and continue the loop: it rescans those triangles and
    inserts where they exceed the tolerance; its next end runs steps 1 to 4
@@ -284,6 +285,9 @@ rebuild in `refine_points.hpp` (about 45, replacing `0d422717`'s 24), three
 fields, three bindings, three stub lines, two CLI lines, two wording lines.
 Tests are not counted.
 
+Actual: 107 counted lines (refine_points.hpp 86); the estimate left out the
+bits, masks and slot map copied both ways.
+
 ## 7. Left out
 
 - The coincident written vertices of outline 82 (section 1): counted and
@@ -296,3 +300,4 @@ Tests are not counted.
 
 - **Design review, round 1, 2026-10-17.** Commit `37bea375`, @reviewer: CHANGES REQUESTED. Asked for a timed estimate of the pass on the quick check's cases, a flat triangle left out rather than stopping the pass, `flat_as_written == 0` in T1, and the fixture's `x0`, `y0` and step 1's vertex defined; answered in this revision.
 - **Design review, round 2, 2026-10-17.** Commit `625956e1`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: why the filter is sound (the loop leaves every edge legal on the grid; T1 and T2 use the full oracle); the cost when a pass does run. Held: T3 and T5 orientations recomputed; timing shares.
+- **Code review, round 1, 2026-10-17.** Range `4be422aa..23f0a2dc`, 107 counted lines, @reviewer: CHANGES REQUESTED. The file head of `refine_points.hpp` still said each insertion is a new vertex, which no longer covers the pass; no pytest read the two new run-record fields. Wordings applied by the main session (size actual, refused copy build). Kill record: M4 (step 7 removed) survives all tests, 3000 outlines probed; kept as the guard that `max_error` describes the written mesh.
