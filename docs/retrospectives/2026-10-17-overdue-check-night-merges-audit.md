@@ -134,7 +134,7 @@ because Ola came back. This is the second night in a row with none.
 
 | # | Time | Who | Act | Verdict |
 |---|---|---|---|---|
-| 1 | 23:25:54 | main session | `gh pr create --head worktree-legend … --body "…"` | **False positive by meaning.** The grant covered `worktree-legend`, but `tools/push_grant.py:42-44` accepts `--body-file`, not `--body`. The PR waited 7 h 31 min, to 06:56 (#277). Told to Ola at 23:27 (`T:21096`); no `GUARD FALSE POSITIVE` line. |
+| 1 | 23:25:54 | main session | `gh pr create --head worktree-legend … --body "…"` | **False positive by meaning.** The grant covered `worktree-legend`, but `tools/push_grant.py@df923398:42-44` accepts `--body-file`, not `--body`. The PR waited 7 h 31 min, to 06:56 (#277). Told to Ola at 23:27 (`T:21096`); no `GUARD FALSE POSITIVE` line. |
 | 2 | 23:49:13 | main session | `git pull --ff-only origin master` in the main checkout, to reinstall `.venv` | Correct by the rule (writes a ref). Not retried: `git reflog master` shows the next move at 07:01, attended. |
 | 3 | 01:38:32 | `@developer` (63) | a heredoc that runs `tools/count_loc.py` against a temporary tree commit | **False positive**: it reads the tool; the guard saw the path in text it could not parse. |
 | 4 | 03:42:00 | main session | a `bash -c` loop of `git merge-tree` over branch pairs | **False positive** (a permission prompt, refused while away). Recorded. The check `CLAUDE.md` §3 *Conflicts before a push question* asks for could not run as one line; one plain `git merge-tree` per pair would have. |
@@ -273,13 +273,13 @@ and `test_plugin_api.py`.
 - **The mannered register is old, not new.** Phrases like "the whole
   point" or "blesses exactly the disagreement" occur 9 times in
   `src_python`, `include` and `tools`. All predate 2026-10-14 (e.g.
-  `src_python/tin_engine/features.py:139-151`, from 2026-09-18); none were added since.
+  `src_python/tin_engine/features.py@df923398:139-151`, from 2026-09-18); none were added since.
 - **The new Python modules are clean under the history gate.**
   `source_report.py` and `toml_data.py` give no hits. Docstrings are 12 %
   of the documented functions' lines.
 - **No defensive code that nothing reaches.** Three broad `except
   Exception` were added, each with a reason: a broken plugin is reported
-  (`plugins.py:52`, `sources.py:326`), and a hook never blocks
+  (`src_python/tin_engine/plugins.py@df923398:52`, `src_python/tin_engine/sources.py@df923398:326`), and a hook never blocks
   (`.claude/hooks/record_review.py@e5b9b044:43`). The `assert x is not None` lines narrow types
   for mypy.
 - **Tests test behaviour.** One private import (`_core`, the extension).
@@ -294,7 +294,7 @@ and `test_plugin_api.py`.
 | A | History in docstrings, **outside the gate's scope** | 14 modules not in `[tool.check_code_history].paths`: `feature_input.py` (42 hits), `stats.py` (16), `run_record.py` (13), `chains.py` (9), `palettes.py` (8, "since increment 41" at `src_python/tin_engine/palettes.py@61755c04:3-7`) … | 116 hits; 4 on lines touched since 2026-10-14 (`src_python/tin_engine/feature_input.py@61755c04:71`, `:566` "R5:", `src_python/tin_engine/legends.py@61755c04:3`, `src_python/tin_engine/palettes.py@61755c04:4`) | Make the gate cover all of `src_python/tin_engine` minus an exclusion list. A new module now escapes it by default. Sweep the 116 (comments only, no counted lines). | Yes: `check_code_history.py`, run with these paths, finds all 116. |
 | B | History labels in **C++ comments** | `include/`, `bindings/`: "65:" on new fields at `include/terrain/refinement/refine_points.hpp@61755c04:133-135` and `:388`; "step 6" at `:28`, `:465`; pointers into `docs/increments/` in 29 files | about 156 comment lines (regex: `//.*(\b[0-9]{2}[a-z]?:\|\b[RNDQB][0-9]+\|step [0-9]\|docs/increments/)`) | Extend the gate to `//` comments in `.hpp` and `.cpp`, then sweep. | Yes, with the extension. |
 | C | **A legacy alias kept and pinned by a test** | `src_python/tin_engine/cli.py@61755c04:66-68` imports `cli_kit` helpers under their old names (`_destination`, `_resources`, `_words`); `tests/python/test_plugin_api.py@61755c04:49-52` asserts the old names exist | 3 aliases, 1 parametrised test | Use the new names in `cli.py`; delete the test. Ola's rule of 2026-10-16: no aliases. | No lint rule sees a rename alias. |
-| D | **Absence tests**: tests that pin that deleted things stay deleted | `test_cli_help.py:224, 264, 271, 284`; `tests/python/test_open_core.py@61755c04:66`; `tests/python/test_mcp_vector_sources.py@61755c04:325`; `tests/python/test_reference.py@61755c04:546`; all of `test_legend_name.py` (169 lines: a repository scanner for old spellings, with 6 self-tests) | about 12 tests plus the 169-line file | Keep the ones that test behaviour (old options are refused: `tests/python/test_legend_name.py@61755c04:151-169`). Delete the scanners and the "not importable" checks, or give absence tests a lifetime. Code kept for code deleted. | None. A rule for `@tester`. |
+| D | **Absence tests**: tests that pin that deleted things stay deleted | `tests/python/test_cli_help.py@df923398:224`, `:264`, `:271`, `:284`; `tests/python/test_open_core.py@61755c04:66`; `tests/python/test_mcp_vector_sources.py@61755c04:325`; `tests/python/test_reference.py@61755c04:546`; all of `test_legend_name.py` (169 lines: a repository scanner for old spellings, with 6 self-tests) | about 12 tests plus the 169-line file | Keep the ones that test behaviour (old options are refused: `tests/python/test_legend_name.py@61755c04:151-169`). Delete the scanners and the "not importable" checks, or give absence tests a lifetime. Code kept for code deleted. | None. A rule for `@tester`. |
 | E | **A word built from a variable**, beside a helper that does it | `src_python/tin_engine/stats.py@61755c04:176-177` builds `"hole{plural}"`; `run_record.plural` exists and is exported | 1 | Use `plural(holes, "hole", "holes")`. | None. |
 | F | **Duplicated helpers** | a `git`/`_git` runner in 9 files: `tools/check_code_history.py`, `check_citations.py`, `merge_master.py`, `session_state.py`, `brief.py`, `count_loc.py`, `rule_sizes.py`, `push_grant.py`, `.claude/hooks/gates_after_commit.py` | 9 | One helper in `tools/harness_mode.py`. Low priority: tools, not product. | None in the toolchain. |
 | G | **Positional booleans and `None`** | `src_python/tin_engine/source_report.py@61755c04:257` `Facts("features", None, suffix, shapes, got.attributes, True, entry.legend)`, `:264`, `:329`; `src_python/tin_engine/source_report.py@61755c04:175` multiplies a tuple by a boolean | 15 hits across `src_python`, `tools`, hooks | Keyword arguments; an `if` for `:175`. | **Yes: ruff `FBT003`** (`ruff check --select FBT003` finds 15 today). |
