@@ -288,3 +288,7 @@ the 5 s timeout with margin.
    reaches subagents too: noise, not harm.
 3. Commit dates are trusted: a commit with a forged or skewed committer date
    moves R.
+
+## Review
+
+- **Design review, round 1, 2026-10-17.** Commit `d72cd744`, 0 counted lines, @reviewer: CHANGES REQUESTED. B1: any new file under `docs/retrospectives/` counts as a check, and non-check files exist there (`next.md`, the rule-file sweep); count only commits whose subject ends `(@orchestrator)`, with a test case. Held: an unmerged check clears D1/D2 because D4 lists the branch; hook claims match the docs; 0.10 s measured; "none owed" is not noise; the 3-day gap would have been flagged from #268 on. Suggestions: D4 out of the per-turn hook; check-recording PRs that touch only ROADMAP and an increment file should not owe a check; read `origin/master` too; four git calls, not three.
