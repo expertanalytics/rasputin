@@ -235,8 +235,8 @@ The hook's time. `.claude/settings.json` gives `guard_push.py` no `timeout`
 (read 2026-10-17), so Claude Code's default for a command hook applies: 600 s
 (code.claude.com/docs/en/hooks, *Common fields*, read 2026-10-17). The 20 s
 `gh` call, `home`'s `git config --get` and two `rev-list` calls (10 s each,
-new here) and the guard's own `git --list-cmds` (10 s, `guard_push.py` line
-141) add to at most 60 s, well inside it; `push_grant.py`'s other git calls have no timeout today
+new here) and the guard's own two `git --list-cmds` calls (10 s each, `guard_push.py`
+line 138) add to at most 70 s, well inside it; `push_grant.py`'s other git calls have no timeout today
 and are local reads. The same page says a timed-out `PreToolUse`
 hook does not block the call, which then goes through the normal permission
 flow; so the 20 s cap is what keeps the guard from ever reaching that limit,
@@ -465,3 +465,4 @@ Ola's prompts for the governed files and the rule file.
 
 - **Design review, round 1, 2026-10-17.** Commit `949a6b2b`, 0 counted lines, @reviewer: CHANGES REQUESTED. The leak check fails open: with `refs/remotes/private/master` deleted (no prompt needed) or counting no private-only commits, every head counts as public, so a granted `git push origin` of an `lsm-*` branch would publish private history; refuse the origin forms then, with a test each. Suggestions: refuse `gh pr create -R expertanalytics/rasputin` in test 3; test 7 per condition; a rebase or cherry-pick stopped partway did make commits; a gate deleted by the commit; the guard hook timeout against the 20 s `gh` call.
 - **Design review, round 2, 2026-10-17.** Commit `892c4de8`, 0 counted lines, @reviewer: CHANGES REQUESTED. The six rows of 4.3 fail closed and the `remote.private.url` anchor needs a prompt to remove; one hole: "set up" is read as `git config --get` exit 0, so a read error (exit 128 from a malformed `~/.gitconfig`) counts as not set and fails open. Exit 1 means not set; any other exit or a timeout refuses; that call gets a timeout inside the hook budget.
+- **Design review, round 3, 2026-10-17.** Commit `b32c527b`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the hook-time sum is 70 s (two `git --list-cmds` calls, `guard_push.py` line 138). Idea taken for the red step: a monkeypatched `TimeoutExpired` on the config call tests the timeout reason.
