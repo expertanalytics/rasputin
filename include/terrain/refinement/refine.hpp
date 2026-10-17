@@ -38,7 +38,10 @@
 // by its foot F on that edge, once per node; N may still go in later if its
 // error stays above tolerance (R5). When F is on a neighbour's edge, N's
 // triangle stays active. The quality start foots too (20c R2), counted in
-// quality_feet. An inserted off-node vertex is output at
+// quality_feet. Before any foot, a node Inside its triangle but within the
+// coincidence radius of a constrained edge of it is split onto that edge at its
+// own position, where strip_fits allows (docs/increments/66-coincident-written-
+// vertices.md, R1); no foot is searched for it. An inserted off-node vertex is output at
 // (x_min + col dx, y_max - row dy) with vertex_z.
 //
 // Frozen edges (docs/increments/23-basin-scale.md, "Refine with the seam
@@ -320,6 +323,70 @@ template <TolerancePolicy P, class Error>
     return *std::max_element(part.begin(), part.end());
 }
 
+// foot_fits, and the split's new edges q-c (and q-d) locally Delaunay. A point
+// a hair off its sub-edge near an end can lie outside t's circle, and
+// legalise_around tests only the edges opposite q.
+inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, mesh::MeshVertex f,
+                       const mesh::LatticeFrame& fr) {
+    using K = pred::DefaultKernel;
+    if (!mesh::detail::foot_fits(m, t, e, f))
+        return false;
+    // Whether edge (p, q) of the counter-clockwise (p, q, r) must flip, s across it (lawson.hpp's must_flip).
+    const auto flips = [&](mesh::MeshVertex p, mesh::MeshVertex q, mesh::MeshVertex r, mesh::MeshVertex s) {
+        const Point2 a = fr.at(p), b = fr.at(q), c = fr.at(r), d = fr.at(s);
+        if (K::orient2d(a, b, c) == pred::Orientation::CounterClockwise)
+            return K::incircle(a, b, c, d) == pred::Incircle::Inside;
+        return K::orient2d(b, a, d) == pred::Orientation::CounterClockwise
+            && K::incircle(b, a, d, c) == pred::Incircle::Inside;
+    };
+    const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3), c = m.corner(t, (e + 2) % 3);
+    if (flips(f, c, a, b))
+        return false;
+    const std::uint32_t u = m.neighbours(t)[e];
+    if (u == mesh::kNoNeighbour)
+        return true;
+    unsigned k = 0;
+    while (m.neighbours(u)[k] != t)
+        ++k;
+    return !flips(f, m.corner(u, (k + 2) % 3), b, a);
+}
+
+// L16: the coincidence radius of L12 and L14, max(1e-10, 64 ulp(M)) lattice
+// units, M = max(cols, rows) - 1 the largest lattice coordinate.
+[[nodiscard]] inline double coincidence_radius(const raster::RasterGeometry& g) {
+    const auto m = static_cast<double>(std::max(g.cols(), g.rows()) - 1);
+    return std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
+}
+
+// The distance of p from the line through a and b, (col, row) Euclidean. One
+// copy, so near_constraint and the generator cannot be contracted differently.
+[[nodiscard]] inline double line_distance(mesh::MeshVertex a, mesh::MeshVertex b, mesh::MeshVertex p) {
+    const double dc = b.col - a.col, dr = b.row - a.row;
+    return std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(dc * dc + dr * dr);
+}
+
+// L12: the constrained edge of t whose line p lies within `radius` lattice
+// units of, (col, row) Euclidean, with p's projection strictly inside it; the
+// nearest, ties to the lower edge index. Never a frozen edge (23b, N7): the
+// scans already skip a point this near one, but by a copy of this expression
+// that the compiler may contract differently, so the edge is excluded here too.
+inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p,
+                                               double radius) {
+    std::optional<unsigned> best;
+    double best_d = radius;
+    for (unsigned e = 0; e < 3; ++e) {
+        const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3);
+        const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;
+        const double sigma = ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2;
+        const double d = line_distance(a, b, p);
+        if (m.is_constrained(t, e) && !m.is_frozen(t, e) && sigma > 0.0 && sigma < 1.0 && (d < best_d || (!best && d == best_d))) {
+            best = e;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
 template <TolerancePolicy P>
 [[nodiscard]] bool bad_policy(const P& policy) {
     return !std::isfinite(policy.lowest()) || policy.lowest() < 0.0;
@@ -343,6 +410,7 @@ template <raster::RasterSource R, TolerancePolicy P>
     m.set_frozen_mask(options.frozen_mask);
 
     const auto frame = mesh::lattice_frame(g.delta_x(), g.delta_y(), g.rows(), g.cols());
+    const double radius = detail::coincidence_radius(g);
     RefineOutcome out;
     using clock = std::chrono::steady_clock;
     const auto since = [](clock::time_point t0) {
@@ -441,13 +509,18 @@ template <raster::RasterSource R, TolerancePolicy P>
             std::optional<unsigned> edge;
             if (r.where != NodeLocation::Inside)
                 edge = static_cast<unsigned>(r.where) - 1;
+            // R1 (66): a node within the coincidence radius of a constrained edge goes in on it, unfooted.
+            else if (const auto e = detail::near_constraint(m, t, *r.node, radius);
+                     e && detail::strip_fits(m, t, *e, *r.node, frame))
+                edge = e;
+            const bool snapped = r.where == NodeLocation::Inside && edge;
             mesh::MeshVertex p = *r.node;
             std::uint32_t owner = t;
             std::size_t refused = 0;
             std::optional<mesh::FootSearch> foot;
             // eps <= cap, so a search to cap that finds nothing is the eps search's answer;
             // eps (DEM reads) is computed only when an edge is within cap.
-            auto s = options.constraint_feet && !r.is_void && mesh::foot_reachable(m, t)
+            auto s = !snapped && options.constraint_feet && !r.is_void && mesh::foot_reachable(m, t)
                          ? mesh::constraint_foot(m, t, p, foot_cap, frame)
                          : mesh::FootSearch{};
             if (s.status != mesh::FootStatus::None && !footed.contains({r.node->row, r.node->col})) {
