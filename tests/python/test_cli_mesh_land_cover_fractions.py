@@ -313,7 +313,7 @@ class TestRefusals:
         )
         code, output, target = mesh(
             tmp_path, dem, domain, cache,
-            *("--features", str(path), "--features-map", "corine", "--land-cover", KEY),
+            *("--features", str(path), "--features-legend", "corine", "--land-cover", KEY),
         )  # fmt: skip
         assert code == USAGE, output
         assert "No such option" not in output, output

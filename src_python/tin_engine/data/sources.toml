@@ -60,7 +60,7 @@ licence_note = "CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 Intern
 cite = [
     "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
 ]
-class_map = "mapbiomas-c11"
+legend = "mapbiomas-c11"
 # Quoted from the abstract of Souza et al. (2020), cited above.
 description = "Annual land use and land cover classes of Brazil, \"the most comprehensive and detailed mapping for the country at a 30 m pixel resolution\"; one map per year."
 

@@ -2,7 +2,7 @@
 
 `docs/increments/16b-terrain-polygons.md`, "Tests for @tester": I1 (bits from
 the input), I2 (the clip keeps input vertices exact) and I5 (ring shape), with
-the oracle built from the input features and the class map, on synthetic
+the oracle built from the input features and the legend, on synthetic
 partitions and on the committed CORINE extract, through the real `_engine`
 (`build_pslg` -> `node` -> `triangulate`). The oracle is
 `feature_fixtures.expected_masks`: for every noded constraint edge, the union
@@ -17,7 +17,7 @@ mutants below were run against the real code by @reviewer on 2026-09-28, at
 1. area clipping instead of line clipping (the domain boundary gets bits);
 2. a doubled shared edge keeping only one side's bit (a Python-side merge
    that keeps the first chain's mask, "no union");
-3. a wrong class-map entry (`corine`'s `52x` treated as land only; `511`
+3. a wrong legend entry (`corine`'s `52x` treated as land only; `511`
    missing);
 4. read order not by primary key (the `ORDER BY` dropped);
 5. a clipped ring closed by repeating its first index;
@@ -25,7 +25,7 @@ mutants below were run against the real code by @reviewer on 2026-09-28, at
 
 Result: 1, 2, 4, 5, 6 and the `52x` half of 3 were killed by this suite. The
 `511 missing` half of 3 survived this suite (the CORINE extract has no `511`
-row) and was killed by `test_feature_input.py::TestClassMaps`
+row) and was killed by `test_feature_input.py::TestLegends`
 (`test_corine_water_codes_are_land_cover_and_water`, parametrised over the
 water codes).
 

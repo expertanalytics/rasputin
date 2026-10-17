@@ -62,8 +62,6 @@ from tin_engine.catchment_batch import (
     seed_for,
 )
 from tin_engine.chains import start_chains
-from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
-from tin_engine.class_maps import load as load_class_map
 from tin_engine.cli_kit import THREADS
 from tin_engine.cli_kit import cli_resources as _resources
 from tin_engine.cli_kit import destination as _destination
@@ -88,11 +86,11 @@ from tin_engine.dem_input import (
 from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
-    ClassMap,
     FeatureError,
     FeatureRequest,
     FeatureSet,
     FeatureSource,
+    Legend,
     open_features,
     read_lake_polygons,
 )
@@ -137,6 +135,8 @@ from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
+from tin_engine.legends import derived_cleanup, run_vocabulary, shipped_names
+from tin_engine.legends import load as load_legend
 from tin_engine.mosaic import Seam
 from tin_engine.palettes import paraview_preset
 from tin_engine.raster import to_core
@@ -249,8 +249,8 @@ DEFAULT_START_QUALITY_GAIN = 0.0
 #: The four land-cover flags have their own help panel, so the long
 #: --[no-]features-merge-same-class does not narrow the main one's names.
 CLEAN_UP = "Land-cover clean-up"
-#: The three clean-up distances default to values derived from the map.
-DERIVED = "Default: from the class map's positional accuracy and the DEM cell (CORINE: {})."
+#: The three clean-up distances default to values derived from the legend.
+DERIVED = "Default: from the legend's positional accuracy and the DEM cell (CORINE: {})."
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
     ("--features-repair", math.inf),
@@ -628,9 +628,9 @@ def mesh(
         typer.Option(
             "--features",
             help="With --domain, polygons and lines as constraints (.geojson, .json, .gpkg "
-            "or .gml), clipped to the domain, each edge carrying its class map's bits. "
+            "or .gml), clipped to the domain, each edge carrying its legend's bits. "
             "Repeatable: each --features is one source, paired by position with the Nth "
-            "of --features-crs, --features-layer and --features-map.",
+            "of --features-crs, --features-layer and --features-legend.",
         ),
     ] = None,
     features_crs: Annotated[
@@ -641,12 +641,12 @@ def mesh(
         list[str] | None,
         typer.Option("--features-layer", help="The Nth --features GeoPackage's features table."),
     ] = None,
-    features_map: Annotated[
+    features_legend: Annotated[
         list[str] | None,
         typer.Option(
-            "--features-map",
-            help="The Nth --features' map from attributes to edge bits: "
-            f"{', '.join([*shipped_names(), 'property'])}, or a class-map file (.toml). "
+            "--features-legend",
+            help="The Nth --features' legend: "
+            f"{', '.join([*shipped_names(), 'property'])}, or a legend file (.toml). "
             "Default: property.",
         ),
     ] = None,
@@ -707,12 +707,12 @@ def mesh(
             help="With --land-cover, the year of the classes. Default: the source's last year.",
         ),
     ] = None,
-    land_cover_map: Annotated[
+    land_cover_legend: Annotated[
         str | None,
         typer.Option(
-            "--land-cover-map",
-            help="With --land-cover, a class map with codes naming its classes in a .gpkg, as "
-            "--features-map. Default: the source's.",
+            "--land-cover-legend",
+            help="With --land-cover, a legend with codes naming its classes in a .gpkg, as "
+            "--features-legend. Default: the source's.",
         ),
     ] = None,
     threads: THREADS = None,
@@ -745,7 +745,7 @@ def mesh(
     --domain cuts it. Without --tolerance every --stride-th DEM node is
     triangulated; with it the mesh is refined until every triangle is within
     that many metres of the DEM. --features adds polygons and lines as
-    constraint edges; a class map with codes, or --land-cover, gives every
+    constraint edges; a legend with codes, or --land-cover, gives every
     triangle a land_cover_code, coloured by rasputin palette.
 
     .vtk is one file for ParaView. .ply is the surface for QGIS, with the
@@ -764,14 +764,14 @@ def mesh(
     feature_paths = features or []
     feature_crss = features_crs or []
     feature_layers = features_layer or []
-    feature_maps = features_map or []
+    feature_legends = features_legend or []
     # One length rule per paired option. A list longer than --features is
     # refused naming the offending flag and the counts (none given with --features
     # absent included); a shorter list takes per-source defaults.
     for flag, value in (
         ("--features-crs", feature_crss),
         ("--features-layer", feature_layers),
-        ("--features-map", feature_maps),
+        ("--features-legend", feature_legends),
     ):
         if len(value) > len(feature_paths):
             raise typer.BadParameter(
@@ -781,25 +781,27 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
-    # Every map is read here, before the DEM, so every file error comes first.
-    maps: list[ClassMap] = []
+    # Every legend is read here, before the DEM, so every file error comes first.
+    legends: list[Legend] = []
     where = "--features"
     try:
         for i, path in enumerate(feature_paths):
             where = f"--features {i + 1} ({path.name})"
-            maps.append(load_class_map(feature_maps[i] if i < len(feature_maps) else "property"))
-        vocabulary = run_vocabulary(maps)
+            legends.append(
+                load_legend(feature_legends[i] if i < len(feature_legends) else "property")
+            )
+        vocabulary = run_vocabulary(legends)
     except ValueError as exc:
-        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-map") from exc
+        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
     classes = _class_source(
-        land_cover, land_cover_year, land_cover_map, cache_root(cache, os.environ), known
+        land_cover, land_cover_year, land_cover_legend, cache_root(cache, os.environ), known
     )
     if classes is not None:
-        for coded_map in (m for m in maps if m.codes):
+        for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
-                f"one mesh has one land_cover_code system, and --features-map {coded_map.name} "
-                "already gives every triangle a code",
+                "one mesh has one land_cover_code system, and --features-legend "
+                f"{coded_legend.name} already gives every triangle a code",
                 param_hint="--land-cover",
             )
     overrides = {
@@ -899,18 +901,18 @@ def mesh(
     plan, grid, source_crs = opened.plan, opened.grid, opened.source_crs
     dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
     held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
-    # The clean-up scale is the coarsest coded map's accuracy (CORINE's
+    # The clean-up scale is the coarsest coded legend's accuracy (CORINE's
     # 100 m without one), never finer than a DEM cell.
     cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
     del opened
-    accuracy = max((m.accuracy_m for m in maps if m.codes), default=100.0)
+    accuracy = max((m.accuracy_m for m in legends if m.codes), default=100.0)
     derived = derived_cleanup(accuracy, cell).model_dump()
     cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
     cleanup["merge_same_class"] = features_merge_same_class
     found = None
     sources: tuple[FeatureSource, ...] = ()
     if feature_paths and dem_domain is not None:
-        sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
+        sources = _feature_sources(feature_paths, feature_crss, feature_layers, legends)
         found = _open_features(
             sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
         )
@@ -982,7 +984,7 @@ def mesh(
         # One entry per source, joined. Lines and their vertices are a
         # property of the merged PSLG, not of a source, so every entry
         # carries the run totals; the per-source part is the name, layer,
-        # map and feature count (found.counts[i]).
+        # legend and feature count (found.counts[i]).
         chains, feature_vertices = dem_run.feature_counts
         totals = f"{plural(chains, 'line', 'lines')}, "
         totals += plural(feature_vertices, "vertex", "vertices")
@@ -990,19 +992,17 @@ def mesh(
         for i, src in enumerate(sources):
             layer = f" layer {found.layers[i]}" if found.layers[i] else ""
             counted = plural(found.counts[i], "feature", "features")
-            texts.append(
-                f"{src.path.name}{layer}, class map {src.class_map.name}: {counted}, {totals}"
-            )
+            texts.append(f"{src.path.name}{layer}, legend {src.legend.name}: {counted}, {totals}")
             own = found.crs[i]
             crs_texts.append(crs_label(own))
             transforms.append(transform_label(own, dem_crs))
-            if src.class_map.notice and src.class_map.notice not in notices:
-                notices.append(src.class_map.notice)
+            if src.legend.notice and src.legend.notice not in notices:
+                notices.append(src.legend.notice)
         values["features"] = escaped_ascii("; ".join(texts))
         values["features_crs"] = "; ".join(crs_texts)
         values["features_transform"] = "; ".join(transforms)
         values["features_notice"] = "; ".join(notices) or None
-        licences = dict.fromkeys(s.class_map.licence for s in sources if s.class_map.licence)
+        licences = dict.fromkeys(s.legend.licence for s in sources if s.legend.licence)
         values["features_licence"] = escaped_ascii("; ".join(licences)) or None
         values |= {f"features_{k}": v for k, v in cleanup.items()}
         values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
@@ -1013,7 +1013,7 @@ def mesh(
         # Labelling runs iff a source carries codes (one code system per
         # mesh is enforced in _feature_sources). Every coded source's
         # polygons are labelled together over the merged FeatureSet.
-        coded = next((s.class_map for s in sources if s.class_map.codes), None)
+        coded = next((s.legend for s in sources if s.legend.codes), None)
         if coded is not None:
             codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
             values["land_cover_codes"] = codes_text
@@ -1024,8 +1024,8 @@ def mesh(
             classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
         )
         codes_text = str(more["land_cover_codes"])
-        if classes.class_map is not None:  # names and colours for the .gpkg
-            palette = classes.class_map.palette
+        if classes.legend is not None:  # names and colours for the .gpkg
+            palette = classes.legend.palette
         values |= more
     build = stride_record if tolerance is None else refined_record
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
@@ -1155,29 +1155,29 @@ def _write_geopackage(
 @dataclass(frozen=True, slots=True)
 class _ClassSource:
     """``--land-cover`` as checked: a catalogue entry with its year (None for a
-    source without years) and cache root, or a file; and the class map that
+    source without years) and cache root, or a file; and the legend that
     names its classes, if any."""
 
     source: RemoteSource | None
     year: int | None
     root: Path | None
     path: Path | None
-    class_map: ClassMap | None
+    legend: Legend | None
 
 
 def _class_source(
     value: str | None,
     year: int | None,
-    map_value: str | None,
+    legend_value: str | None,
     root: Path | None,
     known: Mapping[str, RemoteSource],
 ) -> _ClassSource | None:
-    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-map`` checked
+    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-legend`` checked
     before any work: a catalogue key is that cached source, anything else a
     file, whose header is read here. Every refusal is a usage error naming
     the option."""
     if value is None:
-        for given, flag in ((year, "--land-cover-year"), (map_value, "--land-cover-map")):
+        for given, flag in ((year, "--land-cover-year"), (legend_value, "--land-cover-legend")):
             if given is not None:
                 raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
@@ -1211,17 +1211,17 @@ def _class_source(
             TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
         except (OSError, ValueError) as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
-    name = map_value or (source.class_map if source is not None else "")
+    name = legend_value or (source.legend if source is not None else "")
     try:
-        class_map = load_class_map(name) if name else None
+        legend = load_legend(name) if name else None
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--land-cover-map") from exc
-    if class_map is not None and not class_map.codes:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
+    if legend is not None and not legend.codes:
         raise typer.BadParameter(
             f"{name} names no class codes; a land-cover raster holds codes",
-            param_hint="--land-cover-map",
+            param_hint="--land-cover-legend",
         )
-    return _ClassSource(source, chosen, None if path else root, path, class_map)
+    return _ClassSource(source, chosen, None if path else root, path, legend)
 
 
 def _class_fractions(
@@ -1301,7 +1301,7 @@ def _class_fractions(
 
 
 def _land_cover(
-    trimmed: Trimmed, found: FeatureSet, cmap: ClassMap, spacing: float, clock: PhaseClock
+    trimmed: Trimmed, found: FeatureSet, legend: Legend, spacing: float, clock: PhaseClock
 ) -> tuple[npt.NDArray[np.int32], str]:
     """A code per triangle from the coded polygons, timed as the phase
     ``land cover``, with its stderr line; the codes and their text."""
@@ -1315,14 +1315,14 @@ def _land_cover(
         f"{labels.thin} too narrow to label with certainty",
         err=True,
     )
-    text = f"{cmap.codes}, attribute {cmap.attribute}, map {cmap.name}; "
+    text = f"{legend.codes}, attribute {legend.attribute}, legend {legend.name}; "
     return labels.codes, text + "0 = in no polygon, and every constraint line"
 
 
 def palette(
     name: Annotated[
         str,
-        typer.Argument(help=f"A class map: {', '.join(shipped_names())}, or a .toml file."),
+        typer.Argument(help=f"A legend: {', '.join(shipped_names())}, or a .toml file."),
     ],
     out: Annotated[
         Path | None,
@@ -1336,12 +1336,12 @@ def palette(
     preset does not.
     """
     try:
-        cmap = load_class_map(name)
+        legend = load_legend(name)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    if cmap.palette is None:
+    if legend.palette is None:
         raise typer.BadParameter(f"{name} has no classes to colour")
-    text = json.dumps(paraview_preset(cmap.palette, cmap.preset), indent=1) + "\n"
+    text = json.dumps(paraview_preset(legend.palette, legend.preset), indent=1) + "\n"
     if out is None:
         typer.echo(text, nl=False)
         return
@@ -1741,7 +1741,7 @@ def _z_words(meta: RasterMeta, option: str | None, caller: ZUnit | None) -> str:
 
 
 def _feature_sources(
-    paths: list[Path], crss: list[str], layers: list[str], maps: list[ClassMap]
+    paths: list[Path], crss: list[str], layers: list[str], legends: list[Legend]
 ) -> tuple[FeatureSource, ...]:
     """The repeatable ``--features`` flags as one source per path, paired
     by position; a shorter paired list defaults its missing entries. A flag that
@@ -1756,16 +1756,16 @@ def _feature_sources(
                 param_hint="--features-layer",
             )
         crs = crss[i] if i < len(crss) else None
-        built.append(FeatureSource(path=path, class_map=maps[i], layer=layer, crs=crs))
-    # One mesh has one land_cover_code system. Two sources whose maps name
+        built.append(FeatureSource(path=path, legend=legends[i], layer=layer, crs=crs))
+    # One mesh has one land_cover_code system. Two sources whose legends name
     # different code systems (any file can name its own) are refused before
     # any meshing.
-    systems = {s.class_map.codes for s in built if s.class_map.codes}
+    systems = {s.legend.codes for s in built if s.legend.codes}
     if len(systems) > 1:
         raise typer.BadParameter(
             f"sources carry different code systems ({', '.join(sorted(systems))}); "
             "one mesh has one land_cover_code system",
-            param_hint="--features-map",
+            param_hint="--features-legend",
         )
     return tuple(built)
 
@@ -2086,6 +2086,8 @@ def _dem_mesh(
             "line_points_refused_max_error_m": final.strip_refused_max_error,
             "line_points_inserted": final.strip_inserted,
             "line_points_duplicate": strip.duplicates,
+            "triangles_flat_as_written": final.flat_as_written,
+            "edges_not_delaunay_as_written": final.illegal_as_written,
         }
         with clock.phase("trim"):
             trimmed = trim(

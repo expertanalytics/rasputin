@@ -158,7 +158,7 @@ polygons, and tolerances set the resolution. The options:
 source for increment 26's machinery, not a new pipeline. A alone is not
 recommended for catchments the size of Lagan.
 
-## Class mapping
+## Matching NMD's classes to CORINE's
 
 NMD's classes do not map one-to-one onto CORINE's 44 (CORINE has
 agricultural mosaics, NMD splits forest by species and by wetland; NMD's 42,
