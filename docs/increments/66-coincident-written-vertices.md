@@ -1,80 +1,244 @@
 # Increment 66: no two vertices written at one point
 
-**Status: draft, not reviewed** (`@architect`, 2026-10-17, on `37bea375`).
-After increment 65, whose `flat_as_written` count it uses. Full path: it
-changes C++ refine code, so `@perf`'s acceptance run applies. Ola ruled
-zero-area slivers bugs (relayed by the main session, 2026-10-17).
+**Status: designed, not reviewed** (`@architect`, 2026-10-17, on `ecdaecd2`,
+branch `worktree-coincident-vertices`, its own PR after increment 65
+merges). Full path: it changes C++ refine code, so `@perf`'s acceptance run
+applies. Ola ruled zero-area slivers bugs (relayed by the main session,
+2026-10-17).
 
 ## 1. The defect
 
 Fixture W1 of increment 65 (`docs/increments/65-delaunay-as-written.md`,
-section 4), outline k = 82, constraint feet **off** (`--no-constraint-feet`;
-the CLI's default is on). Measured on master's `_core` (built 2026-10-16)
-with the Python bindings, 2026-10-17:
+section 4; repeated in section 4 below), outline k = 82, constraint feet
+**off** (`--no-constraint-feet`; the CLI's default is on), tolerance 0.5:
 
-- The outline's edge from (500094.6, 6599920.9) to (500088.6, 6599971.9)
-  passes, in exact decimals, through the DEM node (col 9, row 4) at
-  (500090.0, 6599960.0); as doubles it misses it by a rounding.
-- `refine` (phase 1) inserts that node as vertex 7, off the constraint (no
-  output constraint edge has it as an end): phase 1 has no rule for a node
-  a hair off a constrained edge.
-- `constraint_check_points` puts the edge's crossing of grid row 4 a
-  rounding from col 9; `refine_strip` inserts it as vertex 49 on the
-  constraint. Both write as (500090.0, 6599960.0), with z -3.0 and
-  -2.99999999999589.
-- Two output triangles, (49, 7, 11) and (49, 2, 7), have zero area as
-  written (increment 65's prototype: `flat_as_written == 2` on k = 82, 0 on
-  the other 99 outlines; with feet on, 0 on all 100; why feet on avoids it
-  is not yet traced).
+- The outline's edge from vertex 1 (500094.6, 6599920.9) to vertex 2
+  (500088.6, 6599971.9) passes, in exact decimals, through the DEM node
+  (col 9, row 4) at (500090.0, 6599960.0); as doubles it misses it by a
+  rounding.
+- `refine` (phase 1) inserts that node as vertex 7, Inside a triangle, off
+  the constraint: phase 1 has no rule for a node a hair off a constrained
+  edge.
+- `constraint_check_points` on phase 1's edges puts the edge's crossing of
+  grid row 4 at col 9.0000000000020552 and its crossing of grid column 9 at
+  row 3.9999999999825331 (lattice units), and a midpoint between the two: it
+  snaps a crossing to a node only when the node is exactly on the edge
+  (`orient_sign == 0`). `refine_strip` inserts the row crossing as vertex 49,
+  on the constraint. Vertices 7 and 49 both write as (500090.0, 6599960.0),
+  z -3.0 and -2.99999999999589.
+- Two output triangles, (49, 7, 11) and (49, 2, 7), have zero area as written
+  (`flat_as_written == 2`).
+
+**Why feet on avoids it at this tolerance.** Traced on the probe (section
+5): with feet on, phase 1 replaces the node by its foot F on the edge
+(`mesh::constraint_foot`), so the edge is split at F (phase 1's edges 1-7 and
+7-2, vertex 7 = F, z -2.9999999999949942, the bilinear value at F), and the
+strip has no crossing strictly inside a sub-edge near F. So yes: the foot
+rule is the reason. It does not hold at tolerance 0: there the node itself
+also goes in later (its error at F is about 1e-14, above 0), F and the node
+write to one point, and `refine_strip` refuses phase 1's output ("a start
+triangle is not counter-clockwise") on k = 82, 1172 and 2922 of 3000
+outlines. With the default feet on, the CLI fails on those inputs.
+
+**The wider probe** (section 5): W1 with outlines k = 0..2999, feet on and
+off, tolerances 1, 0.5, 0.1, 0.05, 0.01, 0.001, 1e-6 and 0. At every
+tolerance above 0, only k = 82 with feet off has coincident vertices or flat
+triangles. At tolerance 0 there are more, from both mechanisms, with feet on
+and off (section 4, T2).
 
 ## 2. Prior art: legacy and literature
 
-*Literature.* Snap rounding (J. Hershberger, "Stable snap rounding",
-*CGTA* 46, 2013; D. H. Greene and F. F. Yao, "Finite-resolution
-computational geometry", FOCS 1986) states the discipline: a vertex within
-the rounding tolerance of a segment becomes a vertex of that segment. The
-repository already applies it in the last stage: L12 of increment 15f (a
-point Inside but within `coincidence_radius` of a constrained edge goes in
-on it, `near_constraint` in `strip_scan.hpp`). No novelty claimed.
+*Literature.* Snap rounding (D. H. Greene and F. F. Yao, "Finite-resolution
+computational geometry", FOCS 1986; J. Hershberger, "Stable snap rounding",
+*CGTA* 46, 2013) states the discipline: a grid point within the rounding
+tolerance of a segment becomes a vertex of that segment. The repository
+already applies it in the last stage: L12 of increment 15f
+(`docs/increments/15f-edge-strip.md`, L12 and L16: a point Inside but within
+the coincidence radius of a constrained edge goes in on it,
+`near_constraint` in `strip_scan.hpp`). This increment applies the same rule,
+with the same radius, at the two places it is missing: phase 1's split and
+the strip generator's crossings. No departure from the method; no novelty
+claimed.
 
-*Legacy.* Not yet checked (`git grep -n <pattern> legacy-archive -- legacy`
-is the design's first command).
+*Legacy.* Nothing to carry; the legacy tree (CGAL) has no coincidence or
+snapping rule of its own:
 
-## 3. Design (draft)
+```
+$ git grep -l -i -E 'coincid|duplicate_vert|snap' legacy-archive -- legacy
+(no output, exit 1)
+```
 
-**Choice.** Phase 1 takes L12: in `refine` (`refine.hpp`'s split), a node
-Inside a triangle and within `coincidence_radius(g)` of one of its
-constrained edges goes in on that edge (`split_edge` at the node, guarded by
-`strip_fits` as in `point_loop`); the constraint then passes through the
-node, and the strip generator, run after, puts no crossing a rounding from
-it. With feet on, k = 82 has no flat triangle; whether the foot rule is the
-reason is the design's to check.
+*Ideas file.* No entry of `../rasputin_scratch/ideas/ideas.md` is taken up
+or overlapped.
 
-Rejected: dropping a strip point that writes onto an existing vertex. Vertex
-7 would stay a hair off the constraint and lie on it as written, so a
-triangle along the constraint would be flat as written instead.
+## 3. Design
 
-To settle in the design: the threshold (`coincidence_radius`, as L12, or the
-written-point equality of increment 65's step 2); whether `refine_points`
-(the geographic path) needs the same for its start; the probe set (W1 both
-feet settings, the quick-check cases' `flat_as_written`, which increment 65's
-prototype measured at 0 on all seven).
+One rule, snap rounding at the coincidence radius, in two places. Neither
+alone is enough (probe, section 5): phase 1's rule alone leaves 4 outlines
+with flat triangles at tolerance 0; the generator's rule alone leaves the 3
+refused runs at tolerance 0 with feet on. Both together: 0 coincident
+vertices, 0 flat triangles and 0 refused runs on all 3000 outlines, both feet
+settings, every tolerance probed.
 
-## 4. Tests (draft)
+**The radius.** `coincidence_radius(g)` as it is (L16):
+max(1e-10, 64 ulp(M)) lattice units, M = max(cols, rows) - 1. Scale assumed:
+lattice coordinates up to about 3e4 (a 30 m basin; there 64 ulp is about
+2.3e-10). Checked at: W1 (12 x 12 nodes, where it is 1e-10) and the seven
+quick-check cases (section 5). The written-point equality of increment 65's
+step 2 was the other candidate; rejected, because it depends on the output
+frame and the decision is taken on the grid, and because one radius for every
+"a hair off a constraint" decision keeps the stages consistent.
 
-- **T1 (red).** W1, all 100 outlines, feet on and off: no two output
-  vertices with equal written points, and `flat_as_written == 0`. Master:
-  k = 82 with feet off fails (vertices 7 and 49).
-- **T2.** Feet on: every output byte as before this increment on W1
-  (the rule changes nothing where the foot rule already put the node on the
-  edge).
+**R1. Phase 1 (`refine`, `refine.hpp`'s serial phase).** When the worst node
+N of triangle t is Inside t (`r.where == NodeLocation::Inside`) and
+`near_constraint(m, t, N, coincidence_radius(g))` names an edge e, and
+`strip_fits(m, t, e, N, frame)` holds, N goes in by `split_edge(t, e, N)`
+at its own position, with its own z (it is a DEM node). This is tested
+**before** the foot search, and when it applies no foot is searched (N is on
+the constraint already); this is `point_loop`'s order (L12 before the foot,
+`refine_points.hpp`). If `strip_fits` refuses, nothing changes: the foot
+search and `split_inside` run as today. The split goes through the existing
+`split_edge` path (touched and skip rule, seeds, `legalise_around`).
+Frozen edges are excluded by `near_constraint` already.
 
-## 5. Acceptance
+**R2. The strip generator (`constraint_check_points`,
+`constraint_points.hpp`).** A crossing whose rounded node lies within
+`coincidence_radius(g)` of the edge's line (the same distance as
+`near_constraint`: Euclidean in (col, row)) is that node; today only a node
+exactly on the line is (`orient_sign == 0`, which stays as the first test).
+Two crossings that snap to one node are then one point (the existing
+"same position as the entry before" drop), and so is the midpoint between
+them. On W1 k = 82's edge, the store goes from 13 points to 11, one more
+duplicate, and the point at the node is exactly (9, 4) with z -3.0. R2 also
+reaches the frozen seam's check points (`seam.hpp` calls the generator);
+same rule, same reason.
 
-`@perf`'s run on the default DEM, both domains; expected hash unchanged
-(both run with feet on, and 65's prototype found no flat triangle on
-either).
+**Order of the two.** With R1, the node is an end of two sub-edges, so the
+generator has no crossing strictly inside them there; R2 covers the nodes
+phase 1 did not insert (the tolerance-0 cases where two crossings near a
+node, neither inserted by phase 1, both write at the node).
+
+**Sharing the code.** `coincidence_radius`, `near_constraint` and
+`strip_fits` move from `strip_scan.hpp` to `refine.hpp`'s `detail`
+namespace (`strip_scan.hpp` and `constraint_points.hpp` both include
+`refine.hpp`; the reverse would be a cycle). The distance expression is
+factored into one `detail::line_distance(a, b, p)` that `near_constraint`
+and the generator both call, so the compiler cannot contract two copies
+differently (`near_constraint`'s comment names that hazard). No new header.
+
+**Rejected:** dropping a strip point that writes onto an existing vertex.
+Vertex 7 would stay a hair off the constraint and lie on it as written, so a
+triangle along the constraint would be flat as written instead. Also
+rejected: R1 after the foot search (keeps feet-on output byte-identical on
+W1), because it leaves the three refused runs at tolerance 0 with feet on.
+
+**Interfaces.** None change: no new option, field, binding or CLI text.
+`refine_points` needs nothing: its only caller (`final_check.run`) passes
+phase 1's output, which R1 fixes, and a strip, so its own L12 is on; its
+strip comes from the generator, which R2 fixes.
+
+**Locality, threads, robustness.** Both rules are local (one triangle and
+its neighbour, one crossing). R1 runs in the serial phase, R2 in the
+generator; no state outside the call, the output is still independent of the
+thread count. The radius is a decade inside the oracles' `kOnEdge` (1e-9),
+as L12 ruled.
+
+## 4. Tests (red first, `@tester`)
+
+Added to `tests/cpp/property/prop_refinement_written_delaunay.cpp`, which
+holds fixture W1 and its chain (`w1_run`: `refine`, then
+`constraint_check_points` on its output, then `refine_strip`; one thread;
+feet as the test says on both stages). `w1_run` gains a tolerance parameter
+(today fixed at 0.5) and must not `REQUIRE(out.ok())` for T2, which counts a
+refused run.
+
+**Fixture W1** (as increment 65, section 4). Geometry `x_min 500000,
+y_max 6600000, dx = dy = 10`, 12 x 12 nodes; z at (row r, col c) =
+`float((r * 7 + c * 13) % 11 - 5)`. Outline k, four world vertices in
+decimetres from the corner, `h(i, lo, hi) = lo + (k * (2i + 7) * 7919 +
+i * 104729) % (hi - lo)`: `(x0 + h(0,50,300)/10, y0 - h(1,700,1050)/10)`,
+`(x0 + h(2,800,1050)/10, y0 - h(3,750,1050)/10)`,
+`(x0 + h(4,700,1050)/10, y0 - h(5,50,300)/10)`,
+`(x0 + h(6,50,400)/10, y0 - h(7,50,300)/10)`; start the fan `{0,1,2},
+{0,2,3}`, edges `(i, i+1)` mask 1. Measured (probe, macOS arm64): 3000
+outlines, both feet settings, tolerance 0, in 0.94 s at `-O2`.
+
+"Coincident" below: two output vertices with bit-equal written points
+(`out.vertices`). "Flat": `out.flat_as_written`.
+
+- **T1 (red).** Tolerance 0.5, k = 0..99, feet on and off: 0 coincident and
+  `flat_as_written == 0` on every outline. Master: k = 82 feet off, 1
+  coincident pair, flat 2. The message names k.
+- **T2 (red).** Tolerance 0, feet on and off, k in {82, 1172, 1437, 1457,
+  1922, 2137, 2157, 2622, 2852, 2922}: `refine_strip` returns ok, 0
+  coincident, `flat_as_written == 0`. Master, as (pairs, flat): feet off
+  82 (2, 3), 1172 (1, 3), 1437 (2, 3), 1457 (0, 1), 1922 (2, 3), 2137 (1, 3),
+  2157 (0, 2), 2622 (1, 1), 2852 (0, 1), 2922 (1, 3); feet on, refused on
+  82, 1172, 2922, and 1437 (2, 3), 1457 (0, 1), 1922 (2, 3), 2137 (1, 3),
+  2157 (0, 2), 2622 (1, 1), 2852 (0, 1). The other 2990 outlines of 0..2999
+  are 0 on master and stay 0 (probed, not asserted). Linux may round
+  differently: the aggregate must be > 0 on master on both CI legs, which
+  `@tester` confirms from the red CI run.
+- **T3 (red).** R1, the node and not its foot: k = 82, tolerance 0.5, feet
+  on. Phase 1's output (`refine` alone) has a vertex at world
+  (500090.0, 6599960.0) with `z == -3.0` exactly (the node's value) that is
+  an end of two of `out.edges`. Master: that vertex is the foot, z
+  -2.9999999999949942.
+- **T4 (red).** R2 alone, no refine: `constraint_check_points` on W1's DEM
+  with the two vertices (500094.6, 6599920.9), (500088.6, 6599971.9) and the
+  edge (0, 1): exactly one point within 1e-6 lattice units of (9, 4), and it
+  is `at == (9.0, 4.0)` bit for bit, `z == -3.0`; `size() == 11`,
+  `duplicates() == 1`. Master: three points there (col 9.0000000000020552
+  row 4; col 9.0000000000010267 row 3.9999999999912665, the midpoint; col 9
+  row 3.9999999999825331), `size() == 13`, `duplicates() == 0`.
+
+Invariant-critical suite (mutation targets): R1 removed (killed by T2 feet
+on, T3); R1 moved after the foot search (T2 feet on, T3); R2 removed (T2,
+T4). T1 kills neither
+single-rule removal (each rule alone fixes k = 82 at 0.5); it pins the
+reported defect.
+
+## 5. Acceptance (`@perf`) and the probe
+
+**The probe** (2026-10-17, Apple M1 Max, a throwaway copy of `ecdaecd2` in a
+scratch directory, removed afterwards; R1 and R2 behind run-time switches,
+the off setting being the tree as is):
+
+- W1, k = 0..2999 (section 4's figures). R1 fires 6 times in the 3000
+  outlines at every tolerance from 0 to 0.5, feet on or off (4 times at 1);
+  `strip_fits` refused none. R2 fires 14 times at 0.5 and at 0 with R1 on
+  (26 with feet off and 17 with feet on, R1 off).
+- Every quick-check case (`docs/benchmarks/quick/cases.toml`: tile, quarter,
+  numedalslagen, lagan, geilo-al-ramp, romsdal-slope, velhas), feet on and
+  off, through the CLI: R1 and R2 each fired 0 times, and every output
+  `.vtk` (`--binary`) has the same sha256 with both rules as without. The
+  probe's build without the rules reproduces the worktree's own `_core` on
+  quarter and velhas (same sha256).
+
+`tools/bench.py run` on the default DEM, both domains, against the previous
+increment's merge commit (back to back with `--tree` on `NO BASELINE`),
+power state recorded, evidence in
+`docs/benchmarks/<date>/66-coincident-written-vertices/`.
+
+- **Expected hash: unchanged on both `tile` and `quarter`** (the probe:
+  neither rule changes either output, feet on or off). A changed hash is a
+  defect and goes back to `@developer`.
+- **Time:** within `bench.py`'s threshold (5 %) at every thread count. R1
+  adds one `near_constraint` test (three edges, a few flops) per Inside
+  insertion in the serial phase; R2 one distance per crossing whose rounded
+  node is not on the line.
 
 ## 6. Size
 
-About 10 net counted lines in `refine.hpp`; to be measured.
+About 15 net counted lines: R1 about 5 in `refine.hpp` (the test, the
+`!edge` guard on the foot search), R2 about 3 in `constraint_points.hpp`,
+`line_distance` about 5, the move of three functions from `strip_scan.hpp`
+to `refine.hpp` about 0 net. Tests are not counted.
+
+## 7. Left out
+
+- Feet-on output changes where R1 fires (6 insertions in W1's 3000
+  outlines at 0.5, one of them on k = 82): the node goes in instead of its foot. Not pinned
+  byte-for-byte; T3 pins the node.
+- A counter for R1 or R2 in the outcome or the run record: not needed by any
+  test, and Ola's run record has no reader for it.
