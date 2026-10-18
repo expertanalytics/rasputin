@@ -2,8 +2,9 @@
 
 Status: **designed**, 2026-10-18, on `worktree-h24-harness-fixes` off master
 `1806288c`. Five PRs (section 4). Ola, 2026-10-18 07:04 UTC: "yes, start the
-harness design". Items 2 and 3 wait on Ola's answer to `@orchestrator`'s
-questions (default yes); everything else has his yes or needs none.
+harness design". Items 2 and 3: Ola, 2026-10-18, "yes to both"; everything
+else has his yes or needs none. Revised for design review round 1 (items 1,
+5, 6, 13 and sections 4 and 6).
 
 Sources: `docs/retrospectives/2026-10-18-merges-284-285.md` (sections 3, 5
 and 7), `docs/retrospectives/2026-10-17-overdue-check-night-merges-audit.md`
@@ -34,9 +35,10 @@ Tooling; no novelty claimed.
   long-lived request that fetches data in response to source events." And
   the shorthand: such an operation "may be represented in a short-hand form
   which omits the query keyword and operation name". So a document whose
-  only operation starts with `{` or `query` reads; the guard passes only
-  that. Departure: the spec allows `mutation` as a field name; the guard
-  asks on the word anywhere, which fails closed.
+  operations all start with `{` or `query` reads; the guard passes only
+  that. Departure: the spec allows `mutation` as a field name or inside a
+  string; the guard asks on the letters anywhere in the text, comments and
+  strings included, which fails closed.
 - `gh api` manual (cli.github.com/manual/gh_api): "The default HTTP request
   method is `GET` normally and `POST` if any parameters were added"; "`-f/
   --raw-field` … static string parameters"; for `-F/--field`, "if the value
@@ -46,8 +48,10 @@ Tooling; no novelty claimed.
   from file specified by `--input`". So a GraphQL read is a POST, which is
   why today's rule (a field means a write) refuses it; and a query from a
   file or `--input` cannot be read by the guard, so those still ask.
-- Python, `open()`: mode defaults to `'r'`, "open for reading". Item 5's
-  Python exemption rests on it.
+- Python, `open()`: mode defaults to `'r'`, "open for reading"; and
+  "A custom opener can be used by passing a callable as *opener*" (`help(open)`),
+  so it runs any code, with the file name as its argument. Item 5's
+  Python exemption rests on the first and refuses the second.
 
 *Legacy.* Nothing: the legacy tree is the old meshing product, with no harness.
 
@@ -85,22 +89,40 @@ figures), whether the files are governed, and the size in counted lines
 its evidence commit always follows the verdict, and `changes`
 (`tools/push_grant.py@1806288c:227`) allows only prose after a review. Two
 increments in one day could not be pushed under a grant: 66 (`5eee02e8`)
-and 67 part 2 (`d1188d5c`). Each commit adds 13 files, all under
-`docs/benchmarks/2026-10-17/`, and changes nothing else
-(`git show --name-status --format= <sha>`: 13 lines, all `A`).
+and 67 part 2 (`d1188d5c`). Each commit adds 13 files and changes nothing
+else, `5eee02e8` under `docs/benchmarks/2026-10-17/`, `d1188d5c` under
+`docs/benchmarks/2026-10-18/` (`git show --name-status --format= <sha>`: 13
+lines each, all `A`; 4 of the 26 are `run.json`).
 
 *Change.* In `changes`, a path also passes when it matches
 `BENCH = re.compile(r"docs/benchmarks/\d{4}-\d{2}-\d{2}/.+")` and the commit
 adds it (`git diff --name-only --no-renames --diff-filter=A -z base commit`,
 one more git call). Added only, so earlier evidence cannot be edited; dated
-only, so `docs/benchmarks/quick/` and other files `tools/bench_quick.py` and
-`tools/bench.py` read stay code. Nothing runs the dated folders' scripts:
-`testpaths = ["tests/python"]` and ruff excludes `docs/benchmarks`
-(`pyproject.toml:109`, `:134`), and CI still runs on them.
+only, so `docs/benchmarks/quick/` (`tools/bench_quick.py@1806288c:32`) stays
+code. Nothing runs the dated folders' scripts: `testpaths =
+["tests/python"]` and ruff excludes `docs/benchmarks` (`pyproject.toml@1806288c:109`,
+`:134`), and CI still runs on them.
+
+*What `tools/bench.py` reads there.* Two things. `DEFAULT_QUARTER`
+(`tools/bench.py@1806288c:46`) is an existing file under
+`docs/benchmarks/2026-09-26/`; add-only means no commit under the grant can
+change it. And `find_baseline` (`tools/bench.py@1806288c:410-428`) takes the
+newest `run.json` at any depth under `docs/benchmarks` (`rglob("run.json")`)
+that is older than the new run, comparable with it, and whose commit is an
+ancestor of the new run's. So an added `run.json` becomes the baseline of
+later `bench.py` runs on commits that descend from it: a forged one could
+hide a regression in a later increment. Item 1 accepts this and does not
+exclude `run.json`: every `@perf` evidence commit carries one (4 of the 26
+files above), so excluding it would leave item 1 useless; the same commit's
+`README.md` carries the same figures and already passes as prose today; and
+add-only keeps every existing baseline as it was. The risk is to a later
+measurement, which `@perf` reads and `@reviewer` checks then, not to the
+remote or to a rule.
 
 *Tests* (`tests/python/test_push_grant.py`, in the existing `built` repo
 fixture style): a commit after the approved review that adds three files
 (`.tsv`, `.json`, `.py`) under `docs/benchmarks/2026-10-17/x/` passes; one
+that adds a `run.json` there passes (the accepted risk above); one
 that edits an existing file there is refused naming it; one that adds
 `docs/benchmarks/quick/new.json` is refused; one that adds a dated file and
 also changes `tools/x.py` is refused naming `tools/x.py`.
@@ -109,8 +131,8 @@ also changes `tools/x.py` is refused naming `tools/x.py`.
 
 ### Item 2. A grant refusal for a line that is not one bare command says so
 
-*Waiting on Ola* (`@orchestrator`'s question, retrospective 2026-10-18
-section 7.3; default yes).
+*Decided*: yes (Ola, 2026-10-18, "yes to both"; `@orchestrator`'s question,
+retrospective 2026-10-18 section 7.3).
 
 *Why.* At 00:22:54 the main session wrote a PR body and ran `gh pr create`
 for granted branch `worktree-pytest-home` in one line (`S=… && cat >
@@ -145,7 +167,8 @@ granted: the plain refusal, no `NOT_BARE`; `git push origin $SHA:refs/heads/<gra
 
 ### Item 3. A fix that lives under `tests/` is `@tester`'s green step
 
-*Waiting on Ola* (retrospective 2026-10-18 section 7.4; default yes).
+*Decided*: yes (Ola, 2026-10-18, "yes to both"; retrospective 2026-10-18
+section 7.4).
 
 *Why.* 68's whole fix was `tests/python/conftest.py`; `tools/brief.py` gives
 `tests/` to `@tester` alone, so the design's "green by `@developer`" had no
@@ -193,41 +216,111 @@ gives `('deny', [], '')`; with `.claude/settings.json` it gives an ask; and
 "gh api with a writing method changes the forge".
 
 **5a. `gh api graphql` reads** (`.claude/hooks/guard_push.py`, `segment_why`).
-A `gh api` line passes as a read when all hold: the endpoint is exactly
-`graphql`; the method is absent or `POST`; there is no `--input`; every
-field is `-f`/`--raw-field`, or `-F`/`--field` with a value not starting
-with `@`; exactly one field is `query`; and `read_query(text)` holds: with
-`#` comments removed, the text starts with `{` or with the word `query`, and
-the words `mutation` and `subscription` appear nowhere. Otherwise the
-present rule applies. Tests: the 23:03:56 read
-(`query='{ repository(owner:"expertanalytics", name:"rasputin") { pullRequest(number:285) { userContentEdits(first:5) { nodes { editedAt } } } } }'`)
-passes; `query='query($n:Int!){…}' -F n=285` passes; asks for: `mutation {
-addComment(…) }`, `query { a } mutation { b }`, `-F query=@q.graphql`,
-`--input q.json`, `-X PUT`, a second `-f query=`, and REST `gh api
-repos/a/b/issues -f title=x` (unchanged).
+The guard reads the words before the shell expands them, so a `$` or a
+backtick hides what gh will receive. A `gh api` segment passes as a read
+only when all of these hold; otherwise the present rule applies (a field
+means a write, so it asks):
+
+- no word of the segment holds `$` or a backtick (so `query($n:Int!)` asks:
+  a query with variables cannot be told from one with an expansion);
+- the first word after `api` is `graphql`, and every later word is a flag
+  from `-f`, `--raw-field`, `-F`, `--field`, `-X`, `--method`, `-q`,
+  `--jq`, each followed by its value as a separate word. Any other word asks:
+  a second plain word, `--input`, `-H`, `--hostname`, `--paginate`, a flag
+  with its value glued on;
+- the method, if given, is `POST`;
+- the fields are exactly one `query` and at most one `operationName`, no
+  others (no variables); a `-F` value does not start with `@`;
+- `read_query(text)` holds for the `query` value: after leading whitespace
+  it starts with `{` or the word `query`, and the letters `mutation` and
+  `subscription` appear nowhere in the text as given. Nothing is stripped
+  first: a `#` inside a string is not a comment, so a document with a
+  leading comment asks.
+
+Tests (`tests/python/test_guard_push.py`, `segment_why` on split words).
+Passes: the 23:03:56 read
+(`query='{ repository(owner:"expertanalytics", name:"rasputin") { pullRequest(number:285) { userContentEdits(first:5) { nodes { editedAt } } } } }'`);
+`query='query A { viewer { login } }' -f operationName=A`; `-X POST` with
+`{ viewer { login } }`. Asks, each a write or unreadable:
+
+- the review's three: `query='query A { a(x:"#") } mutation B { addComment(…) }' -f operationName=B`;
+  `-f query="query A {a} $M" -f operationName=B` (the word holds `$M`),
+  and `gh api graphql $X -f query='{ a }'`; `gh api graphql repos/a/b/issues -f query='{ a }'`
+  (a second plain word);
+- `query='query($n:Int!){ a }' -F n=285` (a `$`), `mutation { addComment(…) }`,
+  `query { a } mutation { b }`, `subscription { a }`, `-F query=@q.graphql`,
+  `--input q.json`, `-X PUT`, a second `-f query=`, `-f n=1` beside a
+  query, `-H 'X-HTTP-Method-Override: PUT'`, and REST `gh api repos/a/b/issues
+  -f title=x` (unchanged).
 
 **5b. Python reads** (`tools/shell_scan.py`, `candidates`). A string
-literal is not a write candidate when its parent node is one of:
-`open(<lit>)` or `io.open(<lit>)` with no mode, or a literal mode in `r`,
-`rb`, `rt`; or `Path(<lit>)` / `pathlib.Path(<lit>)` that is directly the
-receiver of a called `.read_text` or `.read_bytes`. The exemption holds only
-when the program never binds the names `open` or `io`, and binds `Path`
-only by `from pathlib import Path`. Every other literal stays a candidate,
-so a path built with `/`, kept in a variable, or passed to anything else is
-judged as today. Tests: `json.load(open("<abs>/.git/harness/unattended.json"))`
-passes, by `-c` and by heredoc (`python3 - <<'X'`); `Path("<abs>/.git/harness/q.jsonl").read_text()`
-passes; `open(".claude/settings.json").read()` passes the governance guard;
-still denied or asked: `open(p, "w")`, `open(p, "a")`, `open(p, mode)`,
-`Path(p).write_text("x")`, `Path(p).open("w")`, `p = Path(lit); p.read_text()`
-(the literal's parent is the assignment's call, not a read), `Path(".git/harness") / "q"`,
-`shutil.copy(lit, lit)`, and a program with `def open(p): …` before
-`open(lit)`.
+literal is not a write candidate when it sits in one of three exact shapes
+and the whole program meets four conditions. `OPEN` below is `open(LIT)` or
+`open(LIT, M)`, `LIT` a string literal, `M` a string literal in `r`, `rb`,
+`rt`, and no keywords but `encoding` and `errors`, each a string literal
+(so no `opener`, and no `mode=`).
 
-*Governed* (both files). About 15 lines (5a) + 20 lines (5b).
+- Shapes: `json.load(OPEN)` with no other argument; `OPEN.read()` or
+  `OPEN.readlines()` with no argument; `Path(LIT).read_text()` or
+  `.read_bytes()` (or `pathlib.Path(LIT)…`), `Path` with that one argument,
+  the read with no arguments but literal `encoding` and `errors`. The file
+  or path object is never named, so nothing later can reach it
+  (`open(LIT).name` reused by a later `open(…, "w")` stays a candidate).
+- Imports: only `import json`, `import pathlib` and `from pathlib import
+  Path`, none with `as`; no other import and no `import *`. One allowlist
+  shuts out `sys`, `inspect`, `gc`, `ctypes`, `importlib` and `builtins`
+  together, where a list of forbidden modules would keep growing.
+- No rebinding: the names `open`, `json`, `pathlib` and `Path` are bound
+  nowhere else: no assignment or `del` target (plain, augmented, annotated,
+  walrus, `for`, `with … as`, `except … as`, comprehension), no function
+  parameter, `def`, `class`, `global` or `nonlocal` of them.
+- No patching or reflection: no assignment, augmented assignment or `del`
+  whose target is an attribute or a subscript (`builtins.open = …`,
+  `Path.read_text = …`); none of the names `setattr`, `delattr`, `getattr`,
+  `vars`, `locals`, `globals`, `exec`, `eval`, `compile`, `breakpoint`,
+  `__import__`, `__builtins__`, `builtins`; and no name or attribute that
+  starts with `_` (the routes to the literal object through `__code__`,
+  frames or `__class__`).
+
+If any condition fails, every literal is a candidate, as today. The literal
+then flows only into the read and is gone: no argument runs code, nothing
+replaces `open`, `json.load` or `Path.read_text`, and nothing reaches the
+literal through code objects. The scanner stays a tripwire: a path built
+from pieces is no candidate today, and the exemption leaves that as it is.
+Reads written as `for line in open(LIT)` or `with open(LIT) as f` stay
+candidates; write `open(LIT).readlines()`.
+
+Tests (`tests/python/test_guard_targets.py` for `candidates`,
+`tests/python/test_guard_governance.py` for the governance guard; `H` is
+the absolute path of the harness folder's `unattended.json`, `W` any
+function). Not candidates:
+`import json; print(json.load(open(H)))` by `-c` and by heredoc
+(`python3 - <<'X'`); `from pathlib import Path; print(Path(H).read_text())`;
+`print(len(open(H, "r", encoding="utf-8").readlines()))`;
+`open(".claude/settings.json").read()` passes the governance guard.
+Still candidates, each its own test:
+
+- the review's four: `n = open(H).name; open(n, "w").write("x")`;
+  `open(H, opener=W).read()`; `import builtins; builtins.open = W;
+  print(open(H).read())`, and `from pathlib import Path; Path.read_text = W;
+  Path(H).read_text()`, and `setattr(Path, "read_text", W)` before the
+  read; `import shutil as json; json.load(open(H))`, `from x import Path;
+  Path(H).read_text()`, `from os import *; print(open(H).read())`, and
+  `json = W; json.load(open(H))`;
+- the reflection route: `print(open(H).read()); (lambda: 0).__code__`, and
+  `import sys; print(open(H).read())`;
+- unchanged: `open(p, "w")`, `open(p, "a")`, `open(p, mode)`,
+  `open(H, mode="r").read()`, `Path(p).write_text("x")`, `Path(p).open("w")`,
+  `p = Path(LIT); p.read_text()`, `f = open(H); f.read()`,
+  `for l in open(H): print(l)`, the harness folder's path joined with `/`,
+  `shutil.copy(LIT, LIT)`, and a program with `def open(p): …` before
+  `open(H).read()`.
+
+*Governed* (both files). About 20 lines (5a) + 35 lines (5b).
 
 ### Item 6. Briefs name a wait that personas can run
 
-*Why.* `.claude/briefs/common.md:12` says "Wait for a background run with the
+*Why.* `.claude/briefs/common.md@1806288c:12` says "Wait for a background run with the
 Monitor tool, never `sleep`"; no persona's `tools:` line has Monitor
 (`grep -n '^tools:' .claude/agents/*.md`). Personas waited with `tail -f`,
 which never exits (8 left over, up to 2 days old, on 2026-10-17), and
@@ -235,9 +328,11 @@ which never exits (8 left over, up to 2 days old, on 2026-10-17), and
 
 *Change.* The sentence becomes: "Wait for a background run by its exit
 file: start it with Bash `run_in_background` as `<cmd> > <log> 2>&1; echo $?
-> <log>.exit`, then wait in one Bash call of at most 10 minutes, `for i in
+> <log>.exit`, then wait in one Bash call with `timeout: 600000`, `for i in
 $(seq 55); do test -e <log>.exit && break; sleep 10; done`, repeated as
-needed; never `tail -f`, never a wait on a process id." The exit file is
+needed; never `tail -f`, never a wait on a process id." The timeout is
+needed: the Bash tool's default is 120 s, and the loop runs up to 550 s,
+under the tool's 600 s maximum. The exit file is
 written only when the command ends, so it cannot report done early. A
 bounded loop with `sleep` runs in a persona's Bash (checked by this design's
 own run). About +40 words; `.claude/briefs/common.md` is counted by
@@ -458,14 +553,28 @@ a test file, which only `@tester` writes. One test,
 - a function: `str(inspect.signature(obj))`, which holds the parameters,
   their kinds and defaults, and the return annotation. The modules use
   `from __future__ import annotations`, so annotations are the source text
-  (`-> 'Path'`), stable across Python versions. The return shape is part of
-  the promise this way: `repository_for`'s `-> 'tuple[…]'` against
-  `-> 'TiffDemRepository'` fails.
-- a class (the Pydantic models and `Resources`): the same, of the class,
-  which is its constructor's keyword fields.
-- anything else: `THREADS` is an `Annotated[...]` alias (its
-  `inspect.signature` is a meaningless `(*args, **kwargs)`), recorded as
-  its origin type and the `param_decls` of the Typer option in its metadata.
+  (`-> 'Path'`). The return shape is part of the promise this way:
+  `repository_for`'s `-> 'tuple[…]'` against `-> 'TiffDemRepository …'`
+  fails. Same text on CI's three Pythons: the 15 functions' `def` lines,
+  bodies cut, run through `str(inspect.signature(…))` under 3.12.12,
+  3.13.15 and 3.14.7 (`uv run --no-project --python <v>`), print the same
+  15 lines as the main checkout's `.venv`, byte for byte (`diff`, empty).
+- a class: all five (`Bounds`, `DemRequest`, `DemTile`, `RasterMeta`,
+  `Resources`) are Pydantic models, and their `inspect.signature` is not
+  source text: it prints `tin_engine.io.models.Bounds` and
+  `_PydanticGeneralMetadata(...)`, which Pydantic may change. So a class is
+  recorded as its fields from `model_fields`, in order, joined by `, `: the
+  name alone when required, `name=<repr of the default>` otherwise (no
+  field uses a default factory), e.g. `RasterMeta`'s `…, epsg, crs='',
+  geographic=False, …, z_unit='metre', file_crs=None`. A renamed, added,
+  dropped or newly required field, or a changed default, fails; a changed
+  field type does not (a limit, said in the test's docstring).
+- `THREADS`, an `Annotated[...]` alias (its `inspect.signature` is a
+  meaningless `(*args, **kwargs)`): recorded as its type, `str` of the first
+  `Annotated` argument (`int | None`, the same under all three Pythons), and
+  the Typer option's flag, `min` and `metavar`: `int | None, --threads,
+  min=0, metavar=N`. Typer stores the flag as the option's `default`, and
+  its `param_decls` is empty (`()`), so `param_decls` is not the field to read.
 
 A missing or extra key in `SIGNATURES` fails too, so a name added to
 `__all__` needs its record in the same commit. The failure message gives the
@@ -482,7 +591,8 @@ changes the signature says so in its design.
 *Fixture, measured* on the main checkout's `.venv` at 07:20 UTC (master
 `91ce6262`): 21 names in `__all__`: 15 functions, 5 classes, and `THREADS`;
 `destination` reads
-`(out: 'Path', hint: 'str' = '--out') -> 'Path'`. *Probe able to fail:* the
+`(out: 'Path', hint: 'str' = '--out') -> 'Path'`. The record type is `SIGNATURES: dict[str, str]`
+for all 21. *Probe able to fail:* the
 suite run on a scratch copy of `cea32bad` (`tools/scratch_copy.py
 cea32bad <dir>`, the old public pin) fails on exactly `destination` and
 `repository_for`, recorded in this file.
@@ -493,22 +603,25 @@ the probe above stands in for the red step.
 
 ## 4. The PRs
 
-Total about 135 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
+Total about 155 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
 eligibility, not by size.
 
 | PR | Items | Files | Counted lines | Risk | When |
 |---|---|---|---|---|---|
-| A, guards | 1, 2, 5 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py`, item 2's sentence | about 52 | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
+| A, guards | 1, 2, 5 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py`, item 2's sentence | about 72 | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
 | B, reports | 4, 8, 9 | `tools/session_state.py`, `tools/away.py`, item 8's sentences | about 80 | none to the boundary: they print | by day, as A |
 | C, rule text | 3, 6, 10, 11, 12 | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
 | D, scratch copy | 7 | `tools/scratch_copy.py` | about 3 | none | short path; not governed, so a night fallback |
 | E, plugin signatures | 13 | `tests/python/test_plugin_api.py` | 0 | none | `@tester` alone, then `@reviewer`; not governed, so a night fallback |
 
-Order: C first (no build steps; A and B then branch from it, so their
-sentences sit on the cut text). A and B are independent and can run as the
-two writers. If Ola says no to item 2, A drops its 12 lines and sentence; if
-no to item 3, C drops its sentence and C6 keeps "a green commit with no test
-file".
+Order: none needed among A, B and C. No sentence A or B adds falls inside
+a span C cuts: item 2's sentence goes in the *Unattended mode* paragraph and
+item 8's in the `session.md` bullet and that paragraph, while C1 cuts the
+"Active in" paragraph, C2 the *Claims* gate recipe, and C3 to C6 other
+files. All three edit `.claude/REQUIRED-READING.md`, in different
+paragraphs; whichever lands second or third merges master first
+(`tools/merge_master.py`). A and B are independent and can run as the two
+writers; C needs no writer beyond its prose. D and E go any time.
 
 ## 5. Live checks, after green
 
@@ -537,3 +650,15 @@ the 10,000-character cap item 4 warns about. Both change `tools/session_state.py
 in different functions; whichever lands second merges master first
 (`tools/merge_master.py`). Item 8's fallback warning is a check before a
 window; h23's morning-check line is a check after it.
+
+They also meet in two rule files (h23's design, section 6, "Prose in the
+same PR", on `worktree-h23-duties` at `2843188f`). h23 names its hook and
+status line in `.claude/REQUIRED-READING.md` *The harness*, the "Active in"
+paragraph that cut C1 rewrites; and it adds a sentence to `CLAUDE.md` §3's
+*When to spawn `@orchestrator`* bullet, in the same section where cut C3
+shortens the step list and item 11 adds a bullet under *The main session
+dispatches*. Whichever of h23 and PR C lands second merges master and
+writes its sentence onto the other's text: if C is second, its C1 text
+keeps h23's hook clause in the same short form as the others ("…;
+`<h23's hook>` …"); if h23 is second, it adds its clause to C1's text.
+Both are prose, so the merge is a wording step, not a design change.
