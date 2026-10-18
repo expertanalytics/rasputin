@@ -5,7 +5,8 @@ Status: **designed**, 2026-10-18, on `worktree-h24-harness-fixes` off master
 harness design". Items 2 and 3: Ola, 2026-10-18, "yes to both"; everything
 else has his yes or needs none. Revised for design review round 1 (items 1,
 5, 6, 13 and sections 4 and 6), and for PR A's code review round 1 on
-`188089f1` (items 2 and 5, new item 14, sections 4 and 5).
+`188089f1` (items 2 and 5, new item 14, sections 4 and 5), and for design
+review round 3 on `a4c19f4e` (items 5 and 14).
 
 Sources: `docs/retrospectives/2026-10-18-merges-284-285.md` (sections 3, 5
 and 7), `docs/retrospectives/2026-10-17-overdue-check-night-merges-audit.md`
@@ -332,15 +333,22 @@ through the whole hook, all red on `3c227e08`). Two more conditions:
 
 - **5a: the line expands nothing.** `graphql_read` gains a third argument,
   `raw`, the raw command text, and passes only when `raw` matches, whole,
-  `EXPANDS_NOTHING = re.compile(r"[ \t|]*(?:(?:[A-Za-z0-9_./=-]|'[^']*')+[ \t|]*)*")`
-  and no word starts with `=` (`re.search(r"(^|[ \t|])=", raw)` refuses; zsh
-  expands `=cmd` to a path). So every character outside single quotes is a
-  letter, digit, `_ . / = -`, a blank or a pipe: no brace, glob, tilde, `$`,
-  backtick, double quote, backslash, `;` or `&` anywhere in the line, and the
-  scanner's words are then exactly what gh receives. This is the review's
-  rule (plain `[A-Za-z0-9_.=-]` or single-quoted), widened by `/` (a path to
-  `gh` or in a pipe) and the pipe (`| jq …`, `| head`), neither of which
-  the shell expands. It reads the raw text the hook already has:
+  `EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")`, and
+  no word of the gh segment starts with `=` (`any(w.startswith("=") for w in
+  words)`; zsh expands `=cmd` to a path, also when written `''=ls`, whose
+  word is `=ls`). So every character outside single quotes is a letter,
+  digit, `_ . / = -`, a blank or a pipe: no brace, glob, tilde, `$`,
+  backtick, double quote, backslash, redirect, `;` or `&` anywhere in the
+  line, and the scanner's words are then exactly what gh receives. This is
+  the review's rule (plain `[A-Za-z0-9_.=-]` or single-quoted), widened by
+  `/` (a path to `gh` or in a pipe) and the pipe (`| jq …`, `| head`),
+  neither of which the shell expands. *Linear time:* each step of the
+  pattern takes one character or one whole quoted string, and `'` is not in
+  the character class, so there is one way to match any prefix and no
+  backtracking. (Design review round 3: `a4c19f4e`'s pattern nested two
+  repeats; on a failing line its time grew about fourfold per two
+  characters, 5.8 s at 36 characters, and a hook that times out lets the
+  call through.) It reads the raw text the hook already has:
   `segment_why(words, text)` receives the whole line from `main`
   (`.claude/hooks/guard_push.py@3c227e08:360`), and the call at `:261`
   passes `text or shlex.join(words)`. The fallback keeps the existing
@@ -352,36 +360,52 @@ through the whole hook, all red on `3c227e08`). Two more conditions:
   line, not the gh segment: the scanner keeps no word spans, and matching a
   word to a quoted copy of it elsewhere on the line would let
   `echo '{x,-X,PUT}'; gh api graphql … -q {x,-X,PUT}` through. Cost: a read
-  behind `cd /x &&`, `;` or in double quotes asks, as on master.
-- **5b: no exemption when the program text holds `$` or a backtick.** In
-  `candidates` (`tools/shell_scan.py@3c227e08:454`), `exempt = set()` when
-  `substituted(program)`, a new two-line helper `substituted(text) -> bool`
-  (`text` is not None and holds `$` or a backtick), shared with item 14. It
-  needs no new reading of the raw line: the program text keeps every `$`
-  and backtick construct as written, since `_Scan.dollar` returns
-  `text[start : self.at]` (`:233`) and a heredoc body is kept line for line.
-  It cannot tell a single-quoted `-c` (where the shell expands nothing)
-  from a double-quoted one: both lose the exemption, which is master's
-  behaviour for every literal, so nothing asks that did not ask on master.
-  Telling them apart would mean tracking, per word and per heredoc
-  delimiter, whether the shell substitutes (about 10 more lines); left out
-  unless such a false positive is reported.
+  behind `cd /x &&`, `;`, a redirect or in double quotes asks, as on master.
+- **5b: no exemption when the shell rewrites the program.** In `candidates`
+  (`tools/shell_scan.py@3c227e08:454`), `exempt = set()` when the simple
+  command is `unknown`, which item 14 sets exactly when the shell may
+  rewrite the program: a `-c`/`-e` program holding `$` or a backtick (new
+  two-line helper `substituted(text) -> bool`), or a heredoc program whose
+  delimiter is unquoted and whose body holds `$`, a backtick or a backslash.
+  The program text needs no new reading of the raw line for `$` and
+  backticks: it keeps them as written, since `_Scan.dollar` returns
+  `text[start : self.at]` (`:233`) and a heredoc body is kept line for
+  line. The backslash matters only in a heredoc: in an unquoted one the
+  shell turns `\\` into `\` before Python reads it, while the scanner keeps
+  the body as written, so `x = 'a\\'; y = 1 #'; open(…,'w').write('X')`
+  shows the scanner a comment where Python runs a write (design review
+  round 3; also on master). In a double-quoted `-c` the scanner already
+  removes the escapes as the shell does (`_Scan.quoted`). A `-c` program is
+  not told single- from double-quoted: one holding `$` loses the exemption
+  either way, master's behaviour for every literal. A quoted heredoc
+  (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) expands nothing and keeps the exemption,
+  `$` and backslashes included.
 
-Measured, both fixes and item 14 applied to a scratch copy of `3c227e08`
-(`tools/scratch_copy.py`; the patch is 7 counted lines): `pytest -m harness
---no-cov` 2530 passed, 14 skipped (the scratch copy is no git work tree), 0
-failed, so the 9 red tests pass and every earlier test, the word-level 5a
-and 5b ones included, still does. Extra probes through `segment_why` with
-the line: `gh api graphql -f query='{ a }' | head -5` and `… --jq .data |
-jq -r '.x'` pass; `echo '{x,-X,PUT}'; gh api graphql -f query='{ a }' -q
-{x,-X,PUT}`, `-q =x`, `-q ~`, `query="{ a }"` and `cd /x && gh api graphql
--f query='{ a }'` ask. Through `judge_bash`, `python3 -c 'print(open(".claude/settings.json").read().count("$"))'`
-asks (silent on `3c227e08`, asks on master): the accepted cost above.
+Tests added by round 3 (`tests/python/test_guard_push.py`): through
+`segment_why` with the line as text, `gh api graphql -f query='{ a }' -q
+''=ls` names the forge; and a failing line of at least 60 characters,
+`gh api graphql -f query='{ a }' --jq .data.repository.id > /tmp/out.json`
+(72), names the forge in under 1 s, timed around the call (on `a4c19f4e`'s
+pattern a 36-character failing line took 5.8 s; on the new one, under
+0.001 s). 5b's backslash tests are item 14's.
+
+Measured, both fixes and item 14 as revised here, applied to a scratch copy
+of `3c227e08` (`tools/scratch_copy.py`): `pytest -m harness --no-cov`
+2530 passed, 14 skipped (the scratch copy is no git work tree), 0 failed:
+the 9 red tests pass and every earlier test, the word-level 5a and 5b ones
+included, still does. Extra probes through `segment_why` with the line:
+`gh api graphql -f query='{ a }' | head -5` and `… --jq .data | jq -r '.x'`
+pass; `echo '{x,-X,PUT}'; gh api graphql -f query='{ a }' -q {x,-X,PUT}`,
+`-q =x`, `-q ''=ls`, `-q ~`, `query="{ a }"`, `cd /x && gh api graphql -f
+query='{ a }'` and the 72-character redirect line ask. Through `judge_bash`,
+`python3 -c 'print(open(".claude/settings.json").read().count("$"))'` asks
+(silent on `3c227e08`, asks on master): the accepted cost above; the same
+read by quoted heredoc stays silent.
 
 *Governed* (both files). Green `188089f1`: 98 counted lines
 (`python3 tools/count_loc.py 61d3ce4b 188089f1`: `guard_push.py` 21,
 `push_grant.py` 20, `shell_scan.py` 57), against the 72 estimated. The round-1
-fix adds about 3 (5a) and 0 (5b, one changed line).
+and round-3 fix adds about 3 (5a) and 0 (5b, one changed line).
 
 ### Item 6. Briefs name a wait that personas can run
 
@@ -694,9 +718,17 @@ it as unknowable, in two places:
   `'.claude/settings.json$(cat q)'` asks naming it.
 - The simple command is marked `unknown` ("writes files it does not name")
   when it is an interpreter, not a shell (a shell's program is parsed as
-  commands already), and `substituted(program)`: set in `classify` after
-  `interpreter(…)` (`:323`) and in `finish_heredoc` after
-  `simple.program = simple.heredoc` (`:303`). The governance guard then does
+  commands already), and the shell may rewrite its program. For a `-c`/`-e`
+  program: `substituted(program)`, set in `classify` after `interpreter(…)`
+  (`:323`). For a heredoc program: its delimiter is unquoted and the body
+  holds `$`, a backtick or a backslash (item 5b says why the backslash), set
+  in `finish_heredoc` after `simple.program = simple.heredoc` (`:303`).
+  Whether the delimiter is quoted is read from the raw text in `redirect`:
+  `start, target = self.at, self.word()`, and the delimiter expands when
+  `self.text[start : self.at]` holds no `'`, `"` or `\` (the shell's rule:
+  any quoting of the delimiter turns expansion off). That flag rides as a
+  third element of the `heredocs` and `pending` tuples into
+  `finish_heredoc(simple, expands)`. The governance guard then does
   what it does for any unreadable target
   (`.claude/hooks/guard_governance.py@3c227e08:158`, `:168`): denies when the
   line names `.git/harness`, and otherwise, when no candidate matched, judges
@@ -720,17 +752,28 @@ unquoted heredoc, modes off and on: denied with the always-denied text,
 nothing queued; ``python3 -c "print(open('.claude/settings.json`cat q`').read())"``
 and the `$(cat q)` form: ask, naming `.claude/settings.json`;
 `python3 -c "open('$(echo CLAUDE.md)','w').write('x')"`: asks naming
-`CLAUDE.md`. Still silent: `python3 -c 'print("a $ b")'`,
+`CLAUDE.md`. The backslash (design review round 3; `B(t)` is the body
+`x = 'a\\'; y = 1 #'; open('t','w').write('X')`): `python3 - <<EOF`
+with `B(CLAUDE.md)` asks naming `CLAUDE.md`; with `B(<H>)`, modes off and
+on, denied, nothing queued; `python3 - <<'EOF'` with `B(CLAUDE.md)` stays
+silent (quoted: Python too reads the write as a comment). Still silent:
+`python3 -c 'print("a $ b")'`,
 `python3 -c 'print("see CLAUDE.md for rules")'` (a prose literal, nothing
-substituted), and `python3 -c 'print(open("/x/notes.txt").read().count("$"))'`.
+substituted), `python3 -c 'print(open("/x/notes.txt").read().count("$"))'`,
+and by quoted heredoc `import json; print("\n".join(json.load(open(H))))`
+and `print(open(H).read().count("$"))` (the read exemption holds).
 In `tests/python/test_guard_targets.py`: `parse` of a double-quoted `-c`
 program holding `$(cat q)` gives the `python3` simple with `unknown` True
 (False on `3c227e08`); of `bash -c "echo $(cat q)"`, four simples, none
-`unknown`. Each line above was run, through `judge_bash` or `parse`, on the
-patched scratch copy, with the result stated.
+`unknown`; of `python3 - <<EOF` with `B(notes/plain.txt)`, `unknown` True,
+and of the same with `<<'EOF'`, `<<"EOF"` and `<<\EOF`, False. Each line
+above was run, through `judge_bash` or `parse`, on the patched scratch copy,
+with the result stated; all of the round-3 heredoc lines are silent on
+`3c227e08`.
 
-*Governed* (`tools/shell_scan.py`). About 4 counted lines (the 2-line helper
-is shared with 5b; 2 lines set `unknown`), and 1 changed line in `candidates`.
+*Governed* (`tools/shell_scan.py`). About 5 counted lines (the 2-line helper
+is shared with 5b; 2 lines set `unknown`; 1 in `redirect`), and about 8
+changed lines (`candidates`, and the heredoc tuples' types and unpacking).
 In PR A, beside item 5b: same file, same green step.
 
 ## 4. The PRs
@@ -740,7 +783,7 @@ eligibility, not by size.
 
 | PR | Items | Files | Counted lines | Risk | When |
 |---|---|---|---|---|---|
-| A, guards | 1, 2, 5, 14 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 105 (98 in green `188089f1`, about 7 more for the round-1 fix and item 14) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
+| A, guards | 1, 2, 5, 14 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 106 (98 in green `188089f1`, about 8 more for the review fixes and item 14) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
 | B, reports | 4, 8, 9 | `tools/session_state.py`, `tools/away.py`, item 8's sentences | about 80 | none to the boundary: they print | by day, as A |
 | C, rule text | 2's sentence, 3, 6, 10, 11, 12, the review-line wording below | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
 | D, scratch copy | 7 | `tools/scratch_copy.py` | about 3 | none | short path; not governed, so a night fallback |
