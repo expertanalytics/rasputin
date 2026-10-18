@@ -15,7 +15,8 @@ D1-D5. The end-to-end tests are in `test_cli_mesh_pieces_memory.py` and
   held part gets the whole grid's bits there; `grid_meta` is the meta
   `resample` gives; `check_point_blocks(..., within=)` yields exactly the
   whole run's points that lie in `within`, each block judged on its whole
-  outline (the clipped-outline case, `BLOCK` patched to 8).
+  outline (the clipped-outline case, `BLOCK` patched to 8); a reprojected
+  `load_piece` holds the whole run's tile and check points to the last bit.
 - D5: `basin_run.MARGIN` is 1 and `piece_windows` gives 23c-2's windows;
   `cut_partition` takes the cells and returns their partition.
 """
@@ -370,6 +371,65 @@ class TestCheckPointsWithin:
         block = sorted(self.node_points(m, (16, 16, 8, 8)))
         assert shapely.MultiPoint(block).convex_hull.buffer(H).intersects(domain.polygon)
         assert source.array[23, 23] != NODATA
+
+
+#: DC10's reprojected scene at `--pieces 4`: the target grid is 47 x 47 nodes
+#: and these are its four piece windows, in the run window's indices.
+DC10_PIECES = (
+    IndexWindow(row0=0, col0=0, rows=26, cols=26),
+    IndexWindow(row0=0, col0=23, rows=26, cols=24),
+    IndexWindow(row0=23, col0=0, rows=24, cols=26),
+    IndexWindow(row0=23, col0=23, rows=24, cols=24),
+)
+
+
+@pytest.mark.parametrize("block", [512, 8])
+def test_a_reprojected_piece_holds_the_whole_runs_bits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, block: int
+) -> None:
+    """D3 through `load_piece`: each piece's resampled tile is the whole
+    grid's cut to its window, and its check points inside its sub-grid's node
+    rectangle (what its store keeps) are the whole run's there, positions and
+    values to the last bit. A piece that judged its source on its own corner
+    (`x_min + c0 dx`, then `+ c dx`) moves some check points by rounding and,
+    at `BLOCK` 8, outlines its blocks from another origin."""
+    from tin_engine import dem_input
+    from tin_engine import target_grid as tg
+    from tin_engine.io.domain_file import read_domain
+
+    monkeypatch.setattr(tg, "BLOCK", block)
+    args = ps.reprojected_scene(tmp_path)
+    flags = ("--dem", "--domain", "--out-crs")
+    dem, domain, target = (args[args.index(flag) + 1] for flag in flags)
+    request = dem_input.DemRequest(
+        sources=(Path(dem),), domain=read_domain(Path(domain)), target_crs=target
+    )
+    res = Resources.fallback()
+    plan = dem_input.plan_dem(request, res)
+    assert plan.grid is not None and (plan.grid.rows, plan.grid.cols) == (47, 47)
+    whole = dem_input.assemble_dem(plan, res)
+    assert whole.checks is not None
+    run_blocks = list(whole.checks)
+
+    def inside(blocks: list[Any], box: tuple[float, ...]) -> dict[tuple[float, float], float]:
+        x0, y0, x1, y1 = box
+        return {
+            (x, y): v
+            for xy, z in blocks
+            for (x, y), v in zip(xy.tolist(), z.tolist(), strict=True)
+            if x0 <= x <= x1 and y0 <= y <= y1
+        }
+
+    for w in DC10_PIECES:
+        piece = dem_input.piece_plan(plan, w)
+        got = dem_input.load_piece(plan, piece, res)
+        assert got.grid is not None and got.checks is not None
+        cut = whole.tile.array[w.row0 : w.row0 + w.rows, w.col0 : w.col0 + w.cols]
+        assert same_bits(np.ascontiguousarray(got.tile.array), np.ascontiguousarray(cut)), w
+        box = got.grid.node_box()
+        mine, expected = inside(list(got.checks), box), inside(run_blocks, box)
+        assert len(expected) > 500, "too few check points to judge"
+        assert mine == expected, (w, len(set(mine) ^ set(expected)))
 
 
 # ------------------------------------------------------------------ D5
