@@ -512,7 +512,7 @@ allowed_origins=[<public origin>, "http://127.0.0.1:*", "http://localhost:*",
 - The server logs to stderr through `logging`, as logger
   `tin_engine.mcp.http`. Per call, one line: UTC time, user, tool, exit
   code, seconds, output bytes. Per download, one line: UTC time, user, the
-  first 12 hex of the sha256, status, bytes.
+  first 12 hex of the sha256 and the status.
 - Never logged: the `Authorization` header, a token, a signature, a full
   link, argument values.
 - At start: the users' names, the public URL, and the read roots.
@@ -771,3 +771,4 @@ from tools/scratch_copy.py f1f37db2, removed after:
 - M6 workspace.py _judge: "named or resolved.exists()" -> exists(): KILLED
   (3, other user missing file, missing absolute)
 ```
+- **Code review, round 1, 2026-10-18.** Range `cb713c87..ac4e7d7c`, 534 counted lines (estimate about 355, worst case 510; accepted: no split point named, no dead code), @reviewer: APPROVED WITH WORDINGS, applied by the main session (ROADMAP row 69; the download log line has no byte count). T1-T12 and layering 290 of 290 on the reviewer's own run; the security boundary holds in the code. Follow-ups, not taken here: put `--` before positional values (or refuse read values starting with `-`) so a future plugin command cannot pass a flag as a value; do not print the user part of a bad token pair (a reversed pair would print the token); T11 could include the `mcp` loggers.
