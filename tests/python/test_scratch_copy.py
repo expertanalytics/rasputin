@@ -207,9 +207,41 @@ def test_from_a_worktree_a_directory_inside_the_main_checkout_is_refused(
     outside the worktree but inside the main checkout that holds it passed."""
     worktree = repo / ".claude/worktrees/w"
     git(repo, "worktree", "add", "-q", "--detach", str(worktree), "HEAD")
+    # h24 item 7: a worktree with no `.venv` is refused for that; give this one
+    # the repository's, so the refusal tested is the main-checkout one.
+    (worktree / ".venv").symlink_to(repo / ".venv")
     target = repo / where
     refused(run_copy(worktree, "HEAD", str(target)), says="inside")
     assert not target.exists() or not any(target.iterdir())
+
+
+def test_h24_7_a_worktree_with_no_venv_is_refused_before_anything_is_extracted(
+    tmp_path: Path,
+) -> None:
+    """h24 item 7: with no `<ROOT>/.venv/bin/python` the tool warned and still
+    printed a command naming that missing interpreter. Now: exit 2, one stderr
+    line naming the fix, and the target not created."""
+    root = tmp_path.resolve() / "novenv"
+    root.mkdir()
+    git(root, "init", "-q", "-b", "master")
+    git(root, "config", "user.email", "t@example.invalid")
+    git(root, "config", "user.name", "T")
+    source = REAL / SCRIPT
+    if source.exists():
+        (root / "tools").mkdir()
+        shutil.copy2(source, root / SCRIPT)
+    write(root, "src_python/tin_engine/__init__.py", "")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "base")
+    assert not (root / ".venv").exists()
+    target = tmp_path / "copy"
+    result = run_copy(root, "HEAD", str(target))
+    says = (f"scratch_copy: {root} has no .venv; make one with this worktree's install "
+            "before copying")  # fmt: skip
+    refused(result, says=says)
+    assert result.stderr.strip() == says, result.stderr
+    assert result.stdout.strip() == "", f"a command was printed: {result.stdout!r}"
+    assert not target.exists(), sorted(str(p) for p in target.rglob("*"))
 
 
 def test_an_empty_directory_is_accepted(repo: Path, tmp_path: Path) -> None:
