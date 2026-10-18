@@ -12,7 +12,9 @@ commands are added under labels of their own. Every guard case runs by day
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import shlex
 from pathlib import Path
 from types import ModuleType
 
@@ -481,3 +483,90 @@ def test_a_move_into_a_directory_named_without_a_slash_names_both_readings() -> 
     found, unnamed = shell_scan.writer_targets("mv", ["a", "b", "tools"])
     assert {"a", "b", "tools", "tools/a", "tools/b"} <= set(found), found
     assert unnamed is False
+
+
+# ---------------------------------------------------------------- h24 item 5b
+#
+# docs/increments/h24-harness-fixes.md §3 item 5b: a Python string literal
+# that only flows into a read (`json.load(open(LIT))`, `open(LIT).read()`,
+# `Path(LIT).read_text()`, ...) is not a write candidate, provided the whole
+# program imports only json and pathlib, rebinds none of the names the read
+# relies on, and patches or reflects on nothing. Otherwise every literal is a
+# candidate, as before. Each program runs through `parse` as Python's `-c`
+# text; the first shape also as a heredoc.
+
+#: The harness folder's `unattended.json`, as an absolute path.
+H = "/x/.git/harness/unattended.json"
+#: A function the program defines itself: no import, no rebinding of a read name.
+W = "def W(*args, **kwargs):\n    return 0\n"
+
+
+def candidates_of(program: str, heredoc: bool = False) -> list[str]:
+    """`candidates` of a Python program that parses, so the AST rules judge it, not the regex."""
+    ast.parse(program)
+    line = f"python3 - <<'X'\n{program}\nX" if heredoc else f"python3 -c {shlex.quote(program)}"
+    simples = shell_scan.parse(line)
+    assert simples is not None and len(simples) == 1, simples
+    assert simples[0].program is not None and simples[0].program.strip() == program.strip()
+    found: list[str] = shell_scan.candidates(simples[0])
+    return found
+
+
+READS: dict[str, tuple[str, bool]] = {
+    "json-load-by-c": (f"import json; print(json.load(open({H!r})))", False),
+    "json-load-by-heredoc": (f"import json\nprint(json.load(open({H!r})))", True),
+    "path-read-text": (f"from pathlib import Path; print(Path({H!r}).read_text())", False),
+    "open-r-encoding-readlines": (
+        f'print(len(open({H!r}, "r", encoding="utf-8").readlines()))', False),
+    "open-rb-read": (f'print(open({H!r}, "rb").read())', False),
+    "pathlib-path-read-bytes": (f"import pathlib; print(pathlib.Path({H!r}).read_bytes())", False),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("program", "heredoc"), READS.values(), ids=READS.keys())
+def test_h24_5b_a_literal_only_read_is_not_a_candidate(program: str, heredoc: bool) -> None:
+    assert H not in candidates_of(program, heredoc)
+
+
+STILL_CANDIDATES: dict[str, str] = {
+    # The design review's writes, each its own case.
+    "reused-name": f'n = open({H!r}).name; open(n, "w").write("x")',
+    "opener": f"{W}print(open({H!r}, opener=W).read())",
+    "builtins-open-patched": f"{W}import builtins; builtins.open = W; print(open({H!r}).read())",
+    "path-read-text-patched": (
+        f"{W}from pathlib import Path; Path.read_text = W; print(Path({H!r}).read_text())"),
+    "setattr-before-the-read": (
+        f'{W}from pathlib import Path; setattr(Path, "read_text", W); '
+        f"print(Path({H!r}).read_text())"),
+    "import-as-json": f"import shutil as json; json.load(open({H!r}))",
+    "path-from-elsewhere": f"from x import Path; Path({H!r}).read_text()",
+    "star-import": f"from os import *; print(open({H!r}).read())",
+    "json-rebound": f"{W}import json; json = W; json.load(open({H!r}))",
+    # The reflection route, and an import outside the allowlist.
+    "code-object": f"print(open({H!r}).read()); (lambda: 0).__code__",
+    "import-sys": f"import sys; print(open({H!r}).read())",
+    # Unchanged: writes, unread modes, named file objects, and built paths.
+    "open-w": f'open({H!r}, "w")',
+    "open-a": f'open({H!r}, "a")',
+    "open-mode-variable": f'mode = "r"; open({H!r}, mode)',
+    "mode-keyword": f'open({H!r}, mode="r").read()',
+    "path-write-text": f'from pathlib import Path; Path({H!r}).write_text("x")',
+    "path-open-w": f'from pathlib import Path; Path({H!r}).open("w")',
+    "named-path": f"from pathlib import Path; p = Path({H!r}); p.read_text()",
+    "named-file": f"f = open({H!r}); f.read()",
+    "for-loop-over-open": f"for l in open({H!r}): print(l)",
+    "with-open-as": f"with open({H!r}) as f: print(f.read())",
+    "shutil-copy": f'import shutil; shutil.copy("a.json", {H!r})',
+    "open-redefined": f"def open(p):\n    return 0\nopen({H!r}).read()",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("program", STILL_CANDIDATES.values(), ids=STILL_CANDIDATES.keys())
+def test_h24_5b_a_literal_outside_the_exempt_reads_stays_a_candidate(program: str) -> None:
+    assert H in candidates_of(program)
+
+
+def test_h24_5b_the_harness_folder_joined_with_slash_stays_a_candidate() -> None:
+    folder = H.rsplit("/", 1)[0]
+    program = f'from pathlib import Path; print((Path({folder!r}) / "unattended.json").read_text())'
+    assert folder in candidates_of(program)

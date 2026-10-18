@@ -1200,3 +1200,130 @@ def test_17_a_directory_the_shell_would_expand_is_denied(
 def test_18_a_grants_log_that_cannot_be_written_denies(granted: Granted) -> None:
     grants_used_path(granted.repo).mkdir(parents=True)
     denied(granted.repo, f"git push origin {granted.head}:refs/heads/feat")
+
+
+# ---------------------------------------------------------------- h24 item 2
+#
+# docs/increments/h24-harness-fixes.md §3 item 2: a granted act written in a
+# line that is not one bare command is refused, as before, but the refusal
+# says so (NOT_BARE), so the session can rerun the command alone. The words
+# only choose the refusal's text; the rerun is judged by the grant as today.
+
+NOT_BARE = (
+    "the grant takes only one bare command, every word written out "
+    "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone"
+)
+
+#: The 00:22:54 line of 2026-10-18 (body cut to one line), for `feat`.
+PR_BODY_THEN_CREATE = (
+    "S=/abs/scratchpad && cat > $S/pr68.md <<'EOF'\n"
+    "One line of body.\n"
+    "EOF\n"
+    "gh pr create --head feat --title 'T' --body-file $S/pr68.md"
+)
+BARE_CREATE = "gh pr create --head feat --title 'T' --body-file /abs/pr.md"
+
+
+def test_h24_2_a_granted_act_in_a_line_of_several_commands_says_not_bare(
+    granted: Granted,
+) -> None:
+    why = denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert f"{GRANT_CLAUSE} {NOT_BARE}" in why, why
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_h24_2_the_same_line_for_a_branch_not_granted_is_the_plain_refusal(
+    granted: Granted,
+) -> None:
+    flag_granting(granted.repo, ["other"])
+    why = denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert GH_PR in why, why
+    assert NOT_BARE not in why and "granted branch" not in why, why
+
+
+def test_h24_2_a_push_naming_its_sha_by_a_variable_says_not_bare(granted: Granted) -> None:
+    why = denied(granted.repo, "git push origin $SHA:refs/heads/feat")
+    assert f"{GRANT_CLAUSE} {NOT_BARE}" in why, why
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_h24_2_the_bare_command_rerun_after_a_not_bare_refusal_passes(granted: Granted) -> None:
+    """The rerun the refusal asks for: one bare command, judged by the grant as before."""
+    denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert guard(granted.repo, BARE_CREATE) is None
+    [line] = jsonl(grants_used_path(granted.repo))
+    assert (line["branch"], line["act"], line["head"]) == ("feat", "pull request", granted.head)
+
+
+# ---------------------------------------------------------------- h24 item 5a
+#
+# docs/increments/h24-harness-fixes.md §3 item 5a: a `gh api graphql` segment
+# whose one `query` field reads (starts with `{` or `query`, and holds the
+# letters `mutation` and `subscription` nowhere) passes; anything the guard
+# cannot read word for word keeps today's rule, where a field means a write.
+# `segment_why` runs on the words as the shell would split them, before
+# expansion, so `$X` is the word the guard sees.
+
+#: The 23:03:56 read of 2026-10-17.
+PR_EDITS = (
+    'query={ repository(owner:"expertanalytics", name:"rasputin") '
+    "{ pullRequest(number:285) { userContentEdits(first:5) { nodes { editedAt } } } } }"
+)
+GRAPHQL = ["gh", "api", "graphql"]
+
+GRAPHQL_READS: dict[str, list[str]] = {
+    "the-23-03-56-read": [*GRAPHQL, "-f", PR_EDITS],
+    "shorthand": [*GRAPHQL, "-f", "query={ viewer { login } }"],
+    "named-with-operation-name": [*GRAPHQL, "-f", "query=query A { viewer { login } }",
+                                  "-f", "operationName=A"],
+    "method-post": [*GRAPHQL, "-X", "POST", "-f", "query={ viewer { login } }"],
+    "raw-field-and-jq": [*GRAPHQL, "--raw-field", "query={ viewer { login } }",
+                         "--jq", ".data.viewer.login"],
+}  # fmt: skip
+
+GRAPHQL_ASKED: dict[str, list[str]] = {
+    # The design review's writes: a `#` inside a string is no comment, an
+    # expansion hides what gh receives, and a second plain word is unread.
+    "hash-in-a-string-then-a-mutation": [
+        *GRAPHQL, "-f", 'query=query A { a(x:"#") } mutation B { addComment(input:{}) { c } }',
+        "-f", "operationName=B"],
+    "an-expansion-inside-the-query": [*GRAPHQL, "-f", "query=query A {a} $M",
+                                      "-f", "operationName=B"],
+    "an-expansion-as-a-word": [*GRAPHQL, "$X", "-f", "query={ a }"],
+    "a-second-plain-word": [*GRAPHQL, "repos/a/b/issues", "-f", "query={ a }"],
+    # Each a write, or a query the guard cannot read.
+    "variables": [*GRAPHQL, "-f", "query=query($n:Int!){ a }", "-F", "n=285"],
+    "mutation": [*GRAPHQL, "-f", "query=mutation { addComment(input:{}) { c } }"],
+    "query-then-mutation": [*GRAPHQL, "-f", "query=query { a } mutation { b }"],
+    "subscription": [*GRAPHQL, "-f", "query=subscription { a }"],
+    "query-from-a-file": [*GRAPHQL, "-F", "query=@q.graphql"],
+    "input-file": [*GRAPHQL, "--input", "q.json"],
+    "method-put": [*GRAPHQL, "-X", "PUT", "-f", "query={ a }"],
+    "two-queries": [*GRAPHQL, "-f", "query={ a }", "-f", "query={ b }"],
+    "a-variable-beside-the-query": [*GRAPHQL, "-f", "query={ a }", "-f", "n=1"],
+    "method-override-header": [*GRAPHQL, "-H", "X-HTTP-Method-Override: PUT",
+                               "-f", "query={ a }"],
+    "paginate": [*GRAPHQL, "--paginate", "-f", "query={ a }"],
+    "a-flag-with-its-value-glued": [*GRAPHQL, "--raw-field=query={ a }"],
+    "a-backtick": [*GRAPHQL, "-f", "query={ a(x:`id`) }"],
+    "a-leading-comment": [*GRAPHQL, "-f", "query=# c\n{ a }"],
+    "rest-with-a-field": ["gh", "api", "repos/a/b/issues", "-f", "title=x"],
+}  # fmt: skip
+
+
+@pytest.fixture
+def guard_push_hook(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.setattr(sys, "path", [*sys.path])  # the hook appends tools/ on import
+    return load_guard_push()
+
+
+@pytest.mark.parametrize("words", GRAPHQL_READS.values(), ids=GRAPHQL_READS.keys())
+def test_h24_5a_a_graphql_read_passes(guard_push_hook: ModuleType, words: list[str]) -> None:
+    assert guard_push_hook.segment_why(words) is None
+
+
+@pytest.mark.parametrize("words", GRAPHQL_ASKED.values(), ids=GRAPHQL_ASKED.keys())
+def test_h24_5a_a_graphql_write_or_unreadable_query_asks(
+    guard_push_hook: ModuleType, words: list[str]
+) -> None:
+    assert guard_push_hook.segment_why(words) == GH_API

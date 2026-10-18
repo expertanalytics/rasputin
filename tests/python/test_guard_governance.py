@@ -598,3 +598,57 @@ def test_a_dot_segment_path_under_a_scratchpad_is_not_governed(
 )
 def test_governed_judges_the_normalised_path_too(path: str, expected: bool) -> None:
     assert load_hook("guard_governance").governed(path) is expected
+
+
+# ---------------------------------------------------------------- h24 item 5b
+#
+# docs/increments/h24-harness-fixes.md §3 item 5b, at the governance guard: a
+# Python program that only reads a governed file, or the harness state, by
+# one of the exempt shapes writes nothing, so the guard is silent. A literal
+# that can reach a write still counts, as before.
+
+SETTINGS_READ = "python3 -c 'print(open(\".claude/settings.json\").read())'"
+SETTINGS_REUSED = 'python3 -c \'n = open(".claude/settings.json").name; open(n, "w").write("x")\''
+
+
+def state_read(repo: Path) -> str:
+    """Section 3 item 5's reproduction: a json.load of the flag, by its absolute path."""
+    flag = repo / ".git" / "harness" / "unattended.json"
+    return f"python3 -c 'import json; print(json.load(open(\"{flag}\")))'"
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_read_of_a_governed_file_is_silent(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, SETTINGS_READ)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_json_load_of_the_harness_state_is_silent(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, state_read(repo))
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+def test_h24_5b_a_governed_name_reused_for_a_write_still_asks(repo: Path) -> None:
+    set_mode(repo, "off")
+    event = bash_event(repo, SETTINGS_REUSED)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None, "the write through a reused name passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert "This changes a file that states rules: " in reason
+    assert ".claude/settings.json" in reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_read_of_the_harness_state_with_an_opener_is_denied(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    program = f'def W(*a):\n    return 0\nprint(open("{flag}", opener=W).read())'
+    event = bash_event(repo, f"python3 -c '{program}'")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
