@@ -652,3 +652,82 @@ def test_h24_5b_a_read_of_the_harness_state_with_an_opener_is_denied(repo: Path,
     event = bash_event(repo, f"python3 -c '{program}'")
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
     assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h24 item 5b, code review 1
+#
+# The scanner reads the program text before the shell expands it. In a
+# double-quoted `-c` or an unquoted heredoc, `$(<q)` is replaced
+# by the shell first: with q holding `','w').write('WRITTEN'))#`, the read
+# `open('<path>$(<q)').read()` runs as `open('<path>','w').write(...)`. The fix
+# proposed in review: no exemption when the program text holds `$` or a
+# backtick. Single-quoted `-c` text and a quoted heredoc are not expanded.
+
+#: The file the expansion reads; its text turns the read into a write.
+SPLICE = "','w').write('WRITTEN'))#"
+
+
+def expanding_reads(target: str) -> dict[str, str]:
+    """A read of `target` whose program text the shell rewrites before Python sees it."""
+    return {
+        "double-quoted-c": f"python3 -c \"print(open('{target}$(<q)').read())\"",
+        "unquoted-heredoc": f"python3 - <<EOF\nprint(open('{target}$(<q)').read())\nEOF",
+    }
+
+
+def quoted_reads(target: str) -> dict[str, str]:
+    """The same read with no expansion: single-quoted `-c` text and a quoted heredoc."""
+    program = f'print(open("{target}").read())'
+    return {
+        "single-quoted-c": f"python3 -c '{program}'",
+        "quoted-heredoc": f"python3 - <<'EOF'\n{program}\nEOF",
+    }
+
+
+EXPANSIONS = list(expanding_reads("T"))
+QUOTED = list(quoted_reads("T"))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("form", EXPANSIONS)
+def test_h24_5b_an_expanded_read_of_the_harness_state_is_denied(
+    repo: Path, mode: str, form: str
+) -> None:
+    set_mode(repo, mode)
+    (repo / "q").write_text(SPLICE)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, expanding_reads(str(flag))[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("form", EXPANSIONS)
+def test_h24_5b_an_expanded_read_of_a_governed_file_asks(repo: Path, form: str) -> None:
+    set_mode(repo, "off")
+    (repo / "q").write_text(SPLICE)
+    event = bash_event(repo, expanding_reads(".claude/settings.json")[form])
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None, "a read the shell turns into a write passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert f"{RULES}.claude/settings.json" in reason, reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("form", QUOTED)
+def test_h24_5b_an_unexpanded_read_of_the_harness_state_is_silent(
+    repo: Path, mode: str, form: str
+) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, quoted_reads(str(flag))[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("form", QUOTED)
+def test_h24_5b_an_unexpanded_read_of_a_governed_file_is_silent(repo: Path, form: str) -> None:
+    set_mode(repo, "off")
+    event = bash_event(repo, quoted_reads(".claude/settings.json")[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []

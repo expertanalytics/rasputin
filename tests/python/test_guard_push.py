@@ -1327,3 +1327,53 @@ def test_h24_5a_a_graphql_write_or_unreadable_query_asks(
     guard_push_hook: ModuleType, words: list[str]
 ) -> None:
     assert guard_push_hook.segment_why(words) == GH_API
+
+
+# ------------------------------------------------- h24 item 5a, code review 1
+#
+# The guard reads the words before the shell expands them. It refuses `$` and
+# a backtick, but brace expansion and a glob also change the words gh gets:
+# each line below passes as a read today, yet the shell hands gh a mutation,
+# a `-X PUT`, or the name of a file holding a mutation. The fix proposed in
+# review: a read only when every flag value is plain ([A-Za-z0-9_.=-]) or
+# single-quoted in the command text, so these run through the whole hook.
+
+#: A mutation the brace expansion turns into a second `-f query=` field.
+BRACED_MUTATION = (
+    '\'query=mutation { addComment(input:{subjectId:"X",body:"y"}) { clientMutationId } }\''
+)
+EXPANDED_WRITES: dict[str, str] = {
+    "braces-give-a-second-query": (
+        f"gh api graphql -f query='{{ a }}' -q {{.,-f,{BRACED_MUTATION}}}"
+    ),
+    "braces-give-a-put": "gh api graphql -f query='{ a }' -q {x,-X,PUT}",
+    "a-glob-names-a-mutation-file": "gh api graphql -f query={a}*",
+}
+#: The file the glob of "a-glob-names-a-mutation-file" matches in the working folder.
+GLOB_TARGET = "query={a}mutation{b}"
+
+GRAPHQL_READ_LINES: dict[str, str] = {
+    "single-quoted-query": "gh api graphql -f query='{ viewer { login } }'",
+    "whole-field-single-quoted": "gh api graphql -f 'query={ viewer { login } }'",
+    "plain-values": (
+        "gh api graphql -X POST -f 'query=query A { viewer { login } }' "
+        "-f operationName=A --jq .data.viewer.login"
+    ),
+}
+
+
+@pytest.mark.parametrize("command", EXPANDED_WRITES.values(), ids=EXPANDED_WRITES.keys())
+def test_h24_5a_a_graphql_line_the_shell_expands_asks(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    (repo / GLOB_TARGET).write_text("")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert GH_API in reason, reason
+
+
+@pytest.mark.parametrize("command", GRAPHQL_READ_LINES.values(), ids=GRAPHQL_READ_LINES.keys())
+def test_h24_5a_a_plain_or_single_quoted_graphql_read_passes(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
