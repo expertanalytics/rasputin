@@ -593,9 +593,7 @@ changes the signature says so in its design.
 `destination` reads
 `(out: 'Path', hint: 'str' = '--out') -> 'Path'`. The record type is `SIGNATURES: dict[str, str]`
 for all 21. *Probe able to fail:* the
-suite run on a scratch copy of `cea32bad` (`tools/scratch_copy.py
-cea32bad <dir>`, the old public pin) fails on exactly `destination` and
-`repository_for`, recorded in this file.
+suite run on a scratch copy of master with `destination`'s old `(out, out_parent, name, hint)` signature and `repository_for`'s old pair return put back fails on exactly `destination` and `repository_for` (`f0718855`'s message). `cea32bad` is a rasputin-lsm commit, which has no `plugin_api`.
 
 *Not governed* (`tests/` only). 0 counted lines; about 60 test lines. No
 red/green pair: the test pins today's behaviour and passes on arrival, so
@@ -667,3 +665,4 @@ Both are prose, so the merge is a wording step, not a design change.
 
 - **Design review, round 1, 2026-10-18.** On `808782fd`, @reviewer: CHANGES REQUESTED. The GraphQL read exemption let writes through (a `#` inside a string, shell `$` expansion, extra words); the Python read exemption let writes through (reusing an opened file's name, `opener=`, patching `open`, rebinding `json` or `Path`); item 13's class signatures were not stable text; four wordings. Revised in `92247dec` by a fresh `@architect`.
 - **Design review, round 2, 2026-10-18.** On `92247dec`, @reviewer: APPROVED. Every round-1 write is pinned by a test that it still asks; no new write passes. Items 2 and 3: Ola said yes the same day.
+- **Review, PR E (item 13), 2026-10-18.** On `f0718855` (`@tester` alone), 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the probe sentence named a private commit. The record matches on Python 3.12.12, 3.13.15 and 3.14.7; the design commits riding along are accepted.
