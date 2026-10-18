@@ -229,16 +229,22 @@ async def test_a_real_mesh_over_http_returns_a_vtk_link(real_server: HttpServer)
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 
 
+#: The loggers whose records are the server's: `tin_engine`'s, uvicorn's, and the MCP
+#: SDK's server side. Never `mcp.client`: that is the test's own client.
+SERVER_LOGGERS = ("tin_engine", "uvicorn", "mcp.server", "mcp.shared")
+#: A token no user holds, sent once so the refusal's records can be searched for it.
+WRONG_TOKEN = "w" * 20 + "rong-token-0123456"
+EVIL_ORIGIN = "https://evil.example"
+
+
 def is_the_servers(record: logging.LogRecord) -> bool:
-    """A record of the server's own loggers: `tin_engine`'s and uvicorn's.
+    """A record of the server's own loggers (`SERVER_LOGGERS`).
 
     The test client's `httpx2` logs its request line, link included; that line
     is the client's, and the server cannot keep it out (section 6.5 binds the
-    server's log).
+    server's log). The SDK's client loggers are left out for the same reason.
     """
-    return any(
-        record.name == n or record.name.startswith(f"{n}.") for n in ("tin_engine", "uvicorn")
-    )
+    return any(record.name == n or record.name.startswith(f"{n}.") for n in SERVER_LOGGERS)
 
 
 async def test_no_server_log_record_holds_a_token_a_signature_a_key_or_a_link(
@@ -255,13 +261,28 @@ async def test_no_server_log_record_holds_a_token_a_signature_a_key_or_a_link(
         (download,) = downloads(result)
         link = Link.parse(str(download["url"]))
         assert fetch(str(download["url"])) == source.read_bytes()
+        # Two refusals on paths where the SDK's server loggers write: the wrong
+        # token's, and the Origin check's, which logs the Origin it refused.
+        wrong = post(server, initialize(), {"Authorization": f"Bearer {WRONG_TOKEN}"})
+        assert wrong.status_code == 401
+        evil = post(server, initialize(), {**auth("ola"), "Origin": EVIL_ORIGIN})
+        assert evil.status_code == 403
     finally:
         for name in UVICORN_LOGGERS:
             logging.getLogger(name).removeHandler(caplog.handler)
     texts = [record.getMessage() for record in caplog.records if is_the_servers(record)]
     assert texts, "no record from the server's loggers was captured"
+    sdk = [
+        r.getMessage()
+        for r in caplog.records
+        if is_the_servers(r) and r.name.startswith("mcp.server")
+    ]
+    assert any(EVIL_ORIGIN in t for t in sdk), (
+        "no record from the SDK's server loggers: the widened filter saw nothing",
+        sorted({r.name for r in caplog.records}),
+    )
     for text in texts:
-        for token in TOKENS.values():
+        for token in (*TOKENS.values(), WRONG_TOKEN):
             assert token not in text, text
         assert link.sig not in text, text
         assert KEY.hex() not in text and repr(KEY) not in text, text

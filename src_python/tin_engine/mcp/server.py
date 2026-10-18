@@ -266,21 +266,22 @@ async def _call(
     delivery: Delivery | None,
 ) -> types.CallToolResult:
     """One validated call: the sidecars, the child, the shaped result."""
-    argv = tool.argv(arguments)
     sidecars: list[Path] = []
     record_file = stats_file = None
+    update: dict[str, str] = {}
     if tool.tool_name == "mesh":
         out, token = _at(scope, Path(getattr(arguments, "out"))), secrets.token_hex(4)  # noqa: B009
         if "record_path" in arguments.model_fields_set:
             record_file = _at(scope, Path(getattr(arguments, "record_path")))  # noqa: B009
         else:
             record_file = out.parent / f".{out.name}.record-{token}.json"
-            argv += ["--record", str(record_file)]
+            update["record_path"] = str(record_file)
             sidecars.append(record_file)
         if getattr(arguments, "stats", None) == "-":
             stats_file = out.parent / f".{out.name}.stats-{token}.md"
-            argv[argv.index("--stats") + 1] = str(stats_file)
+            update["stats"] = str(stats_file)
             sidecars.append(stats_file)
+    argv = tool.argv(arguments.model_copy(update=update))
     try:
         began = time.monotonic()
         code, stdout, stderr = await _run_child([*prefix, *argv], progress, scope)
