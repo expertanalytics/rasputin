@@ -744,3 +744,9 @@ takes up or overlaps:
    user may, but `fetch --refresh` is refused over HTTP, because it deletes
    that shared cache for every user.*
 
+
+## Review
+
+- **Design review, round 1, 2026-10-18.** On `a989cef7`, @reviewer: CHANGES REQUESTED: any file printed on stdout was stored and linked; a path into another user's folder passed before the file existed, and the check ran before the job slot; one link-check mutant could not be killed; the quota figure ignored that outputs are kept twice; `fetch --refresh` deletes the shared cache. Revised in `464a44c5` by a fresh `@architect`.
+- **Design review, round 2, 2026-10-18.** On `464a44c5`, @reviewer: CHANGES REQUESTED: paths inside CRS strings (`+init=/…`, `+nadgrids=`, WKT `PARAMETERFILE`, PROJJSON grids) passed the relative-value rule and told callers which files exist. Revised in `0b3541c7`.
+- **Design review, round 3, 2026-10-18.** On `0b3541c7`, @reviewer: APPROVED. Suggestions for green: `re.fullmatch` for the plain-path pattern; re-check input formats that name other files when uploads come.
