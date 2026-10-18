@@ -3771,8 +3771,7 @@ compare. The rules stay, held by review; the defect is under "Left out".
   23c-2, not made by this step): a projected DEM whose cell is not exact
   in binary (9.7 m, 9.9 m; any decimal fraction such as 0.1 m) cannot be
   cut, since two neighbours compute a shared node's position from
-  different corners. The run writes the piece files and refuses with exit
-  1. Whole-metre and power-of-two spacings, and every reprojected run, are
+  different corners. 23c-2 refuses with exit 1 and writes nothing; after this step's D6 the run leaves the piece files and no `index.json`. Whole-metre and power-of-two spacings, and every reprojected run, are
   not affected. 23c-3 keeps 23c-2's arithmetic (K6), so the fix is its own
   step; handed back.
 
@@ -4322,3 +4321,5 @@ C7  conformity failure exits 2: killed new (seam_paths)
 **23c-2, code review, round 5, 2026-10-18.** Range `6bd8299a..46610e1a`, 548 counted lines (tests and docs only this round), @reviewer: APPROVED WITH WORDINGS, applied by the main session: B6 is equivalent on default flags only; with `--tolerance-slope` the slope count reads the ring (idea: a test for `--tolerance-slope` on a cut run). The fan's unread flag arithmetic in `start_slice` goes in 23c-3.
 
 **23c-2, `@perf` acceptance, 2026-10-18.** `c3d3696d`, master `cb713c87` against head `4e140864`, same `_core` binary: bench mesh hashes unchanged (tile `11741a81…`, quarter `a60fb597…`), refine time -3.6 to +3.0 % across 1 to 20 threads; whole-process quarter time +0.6 to +1.8 %, in Python, not profiled. Velhas on ANADEM 10 m with `--pieces 64`: 51 pieces, every seam segment in exactly two pieces with identical z, 0 nodes over tolerance (control fails as it should), 0 constrained-Delaunay violations; 6.20 s, 1.64 GB: ACCEPTED.
+
+**23c-3, design review, rounds 1 and 2, 2026-10-18/19.** Round 1 on `7c4216d8`, @reviewer: CHANGES REQUESTED (lazy imports missed names the uncut run uses; the held source window broke `resample`'s type probe; four mutation targets unkillable on the fixtures; five wordings). Round 2 on `07046531` (a fresh `@architect`), @reviewer: APPROVED WITH WORDINGS, applied by the main session (what 23c-2 does on a 9.7 m DEM). The 9.7 m cut bug in 23c-2 does not block its merge: the cut refuses and writes nothing, and no current source is affected; its own step, before the basin run.
