@@ -263,12 +263,14 @@ discard the cache every user shares; give `--cache` inside your folder
 instead. Changing the sources takes a restart.
 
 Codex reads the token from an environment variable of its own, in
-`~/.codex/config.toml`:
+`~/.codex/config.toml`. Codex stops waiting for a tool after 60 seconds by
+default, which cuts off a long run, so raise `tool_timeout_sec`:
 
 ```toml
 [mcp_servers.rasputin]
 url = "https://rasputin.example.org/mcp"
 bearer_token_env_var = "RASPUTIN_TOKEN"
+tool_timeout_sec = 3600
 ```
 
 Claude Code takes it as a header:
