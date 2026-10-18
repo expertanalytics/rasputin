@@ -290,6 +290,9 @@ _INSTALL_MCP_HELP = INSTALL_MCP.replace("[", r"\[") if app.rich_markup_mode else
 MCP_HELP: Final = (
     "Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
     "\n\nOne tool per command, each call run in a process of its own. "
+    "With --http, over Streamable HTTP instead: each user's bearer token from "
+    "RASPUTIN_MCP_TOKENS (user=token pairs), calls run in <out-root>/<user>/work, and "
+    "each output comes back as a signed download link valid 1 hour; files are kept 7 days. "
     f"Needs the mcp extra: {_INSTALL_MCP_HELP}"
 )
 
@@ -307,16 +310,53 @@ def mcp(
             "missing folders inside it are made. Default: ~/rasputin-output.",
         ),
     ] = None,
+    http: Annotated[
+        bool, typer.Option("--http", help="Serve over Streamable HTTP, not stdin and stdout.")
+    ] = False,
+    host: Annotated[str, typer.Option("--host", help="With --http: the address to bind.")] = (
+        "127.0.0.1"
+    ),
+    port: Annotated[int, typer.Option("--port", help="With --http: the port to bind.")] = 8765,
+    public_url: Annotated[
+        str | None,
+        typer.Option(
+            "--public-url",
+            metavar="URL",
+            help="With --http: the address clients use, which links are built on; https "
+            "unless loopback. Default: http://<host>:<port>.",
+        ),
+    ] = None,
+    quota: Annotated[
+        str, typer.Option("--quota", help="With --http: each user's folder size, as 20G.")
+    ] = "20G",
 ) -> None:
     """Serve the commands to an agent over the Model Context Protocol (``--help`` says how)."""
     try:
+        from tin_engine.mcp import http as mcp_http
         from tin_engine.mcp import server
     except ImportError:
         typer.echo(f"Error: the mcp extra is not installed; run {INSTALL_MCP}", err=True)
         raise typer.Exit(2) from None
     from tin_engine import plugins  # the hook imports this module
 
-    asyncio.run(server.serve(plugins.served or plugins.application(), jobs, out_root))
+    served = plugins.served or plugins.application()
+    if not http:
+        asyncio.run(server.serve(served, jobs, out_root))
+        return
+    from tin_engine.resources import parse_bytes
+
+    try:
+        settings = mcp_http.HttpSettings(
+            host=host,
+            port=port,
+            public_url=public_url or f"http://{host}:{port}",
+            out_root=out_root or Path.home() / server.DEFAULT_OUT_ROOT,
+            quota=parse_bytes(quota),
+        )
+        mcp_http.serve_http(served, settings, mcp_http.tokens_from_env(os.environ), jobs=jobs)
+    except ValueError as exc:
+        typer.echo(f"Error: {cli_kit.words(exc)}", err=True)
+        raise typer.Exit(2) from None
 
 
 @dataclass(frozen=True, slots=True)
