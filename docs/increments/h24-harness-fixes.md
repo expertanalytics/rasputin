@@ -7,7 +7,8 @@ else has his yes or needs none. Revised for design review round 1 (items 1,
 5, 6, 13 and sections 4 and 6), and for PR A's code review round 1 on
 `188089f1` (items 2 and 5, new item 14, sections 4 and 5), and for design
 review round 3 on `a4c19f4e` (items 5 and 14), and for design review round
-4's idea on `28a67d39` (new item 15).
+4's idea on `28a67d39` (new item 15), and for item 15's red step
+`c80eb22c` (item 15's guard line) and Ola's yes to item 16.
 
 Sources: `docs/retrospectives/2026-10-18-merges-284-285.md` (sections 3, 5
 and 7), `docs/retrospectives/2026-10-17-overdue-check-night-merges-audit.md`
@@ -801,7 +802,8 @@ every stdin redirect of one command (its `MULTIOS` option, on by default):
 `zsh -c 'python3 <<< "print(1)" <<< "print(2)"'` prints 1 and 2, and a
 here-string beside a heredoc runs both; bash keeps only the last.
 
-*Change* (`tools/shell_scan.py` only; the guards are unchanged).
+*Change* (`tools/shell_scan.py`, and one line of
+`.claude/hooks/guard_governance.py`, the last bullet).
 
 - `redirect` takes `<<<` with the heredocs: it appends `(word, None,
   expands)`, the `None` in the `<<-` slot marking a here-string (so item 14's
@@ -825,6 +827,23 @@ here-string beside a heredoc runs both; bash keeps only the last.
   keeps as written, the word comes out of `word()` with the shell's escapes
   already resolved (`python3 <<< 'print("a\\nb")'` gives the program
   `print("a\\nb")`, as Python receives it).
+- The guard's text rule (added after the red step `c80eb22c`). A line the
+  scanner marks `unknown` and finds no governed write in falls to the text
+  rule (`.claude/hooks/guard_governance.py@c80eb22c:174`), which looks for
+  governed names only when the line matches `WRITES` (`:93-97`). `python3
+  -c` and `<<EOF` match it; `python3 <<<`, `bash <<<`, `perl -e` and
+  `ruby -e` do not, so `python3 <<< "open('$(echo CLAUDE.md)','w').write('x')"`
+  passes silently even with items 5, 14 and 15 applied (@tester's run; on
+  `c80eb22c` itself `WRITES.search` of the line is `None`, run 2026-10-18).
+  Line 174 becomes `hits = text_hits(command) if WRITES.search(command) or
+  (simples is not None and any(s.unknown for s in simples)) else []`: a line
+  the scanner could not read is judged by its text whatever its shape. This
+  is @tester's proposal, taken over adding `<<<` to `WRITES`, which would
+  leave `perl -e "…$(…)…"` and each later unknown form to be listed one by
+  one. Cost: an ask on a line that is `unknown` and names a governed file
+  without writing it, as item 14 already accepts for `-c`; a line naming no
+  governed file stays silent (`text_hits` is empty). The no-scanner arm
+  (`simples is None`) is unchanged.
 
 *A departure from the review's wording*: it asked that a single-quoted
 here-string be literal, `$` included. Here, as for `-c`, a `$` marks it
@@ -869,6 +888,11 @@ gives program `open('notes/a.txt','w').write('x')\n` and candidate
 with no program; `python3 -c 'print(1)' <<< "open('CLAUDE.md','w')"` keeps
 the program `print(1)`.
 
+Added by the red step `c80eb22c`: the four whole-hook lines holding `$` or a
+backtick (three with `CLAUDE.md` only in a comment, one
+`open('$(echo CLAUDE.md)','w')`) ask; they are the ones the guard line
+above is for.
+
 *Measured* on a scratch copy of `a9555a73` (`tools/scratch_copy.py`) with
 items 5, 14 and 15 as designed here applied by Edit: `pytest -m harness
 --no-cov` 2554 passed, 14 skipped (the copy is no git work tree), 0 failed;
@@ -877,9 +901,61 @@ above, 18 in a scratch test file: all pass on the patched copy; on an
 unpatched copy of `a9555a73`, 11 fail (every ask and deny but the heredoc
 one) and 7 pass (the silent ones and the heredoc beside a here-string).
 
-*Governed* (`tools/shell_scan.py`). About 4 counted lines (3 in `finish`, 1
-in `finish_heredoc`) and about 5 changed (`redirect`, the inline check, the
-append, the tuple types). In PR A, same green step as items 5b and 14.
+@tester's figure for `c80eb22c`'s red tests (its run, not repeated here):
+with items 5, 14 and 15 as first designed, 4 harness tests fail, the four
+above; with the guard line too, 2635 passed, 0 failed.
+
+*Governed* (`tools/shell_scan.py`, `.claude/hooks/guard_governance.py`).
+About 4 counted lines (3 in `finish`, 1 in `finish_heredoc`) and about 6
+changed (`redirect`, the inline check, the append, the tuple types, the
+guard's line 174). In PR A, same green step as items 5b and 14.
+
+### Item 16. A guard that fails refuses the command
+
+*Why.* Ola, 2026-10-18, "1 yes." to the question whether a guard that hangs
+or crashes should refuse the command instead of letting it through. Today
+both guards let it through: Claude Code carries out the action when a hook
+fails or times out unless the hook is set otherwise. Each guard already
+denies on an exception after reading its input (`main` in
+`guard_governance.py`), but not on what it cannot catch: a missing
+interpreter or file, an import-time error, a kill, or a hang.
+
+*The setting.* Claude Code's hooks reference
+(<https://code.claude.com/docs/en/hooks>, read 2026-10-18): set
+`"onFailure": "block"` on a `command` hook, "Whether the action that
+triggered the hook goes ahead when the hook fails: `"continue"` or
+`"block"`"; unset means continue. A failure is: the hook cannot start, exits
+with a code other than 0 or 2, times out, or prints output that does not
+parse. It needs Claude Code v2.1.295 or later; this machine runs 2.1.302
+(`claude --version`, 2026-10-18).
+
+*Change* (`.claude/settings.json` only). The `PreToolUse` entries for
+`guard_governance.py` (matcher `Edit|Write|NotebookEdit|Bash`) and
+`guard_push.py` (matcher `Bash`) each gain `"onFailure": "block"`. No
+`timeout` is set: the default stays 600 s, so a hang refuses after 10
+minutes, not at once; a shorter timeout would be a constant this design has
+not measured. The guards' code is unchanged; `guard_governance.py` still
+passes input that is not JSON (exit 0), which Claude Code never sends. Not
+covered: `guard_unattended.py`, `guard_spawn.py` and the other hooks (not
+asked; handed back as an idea).
+
+*Cost.* A guard broken on a branch refuses every call it matches: a broken
+`guard_governance.py` refuses every Edit, Write and Bash call, so the
+session cannot repair it. Ola then restores it from his own terminal
+(`git checkout -- .claude/hooks/guard_governance.py`) or turns hooks off
+with `/hooks`. Accepted: that is what refusing on failure means.
+
+*Test* (`tests/python/test_settings_wiring.py`, reading the real
+`.claude/settings.json`): the `guard-governance` and `guard-push` entries
+each carry `onFailure` equal to `"block"`. Planted check: with the key
+removed from either entry the test fails. The existing wiring tests stay
+green. Live check: section 5, item 6.
+
+*Governed* (`.claude/settings.json`). 0 counted lines (JSON is not
+counted), about 8 test lines. In PR A, the same green step as items 5, 14
+and 15: Ola is at the prompt for that governed step now, it hardens the two
+guards PR A changes, and its own PR would cost a second governed step, CI
+run and review for two lines.
 
 ## 4. The PRs
 
@@ -888,7 +964,7 @@ eligibility, not by size.
 
 | PR | Items | Files | Counted lines | Risk | When |
 |---|---|---|---|---|---|
-| A, guards | 1, 2, 5, 14, 15 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 110 (98 in green `188089f1`, about 8 more for the review fixes and item 14, about 4 for item 15) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
+| A, guards | 1, 2, 5, 14, 15, 16 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py`, `.claude/hooks/guard_governance.py` (item 15, one line), `.claude/settings.json` (item 16) | about 110 (98 in green `188089f1`, about 8 more for the review fixes and item 14, about 4 for item 15, 0 for item 16) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
 | B, reports | 4, 8, 9 | `tools/session_state.py`, `tools/away.py`, item 8's sentences | about 80 | none to the boundary: they print | by day, as A |
 | C, rule text | 2's sentence, 3, 6, 10, 11, 12, the review-line wording below | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
 | D, scratch copy | 7 | `tools/scratch_copy.py` | about 3 | none | short path; not governed, so a night fallback |
@@ -941,6 +1017,10 @@ quotes the format in each `@reviewer` brief.
    real harness state's path) is `('deny', [], '')`, and `segment_why` of
    `gh api graphql -f query='{ a }' -q {x,-X,PUT}`, given that line as its
    text, names the forge.
+6. Item 16: after PR A merges, in a throwaway worktree session, make that
+   worktree's `guard_push.py` exit 1 at its top and run `echo hi` through
+   Bash: the call is refused with Claude Code's hook-failure message. Ola
+   restores the file from his own terminal.
 
 ## 6. How h23 fits
 
