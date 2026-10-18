@@ -2,8 +2,10 @@
 
 **Status: designed** by `@architect`, 2026-10-18, on `cb713c87` (branch
 `worktree-mcp-http`). Ola took the six defaults this design starts from
-(section 1). Next: `@reviewer`'s design review, then `@tester`'s red suite
-(section 9). Questions for Ola: section 12, each with a default the design
+(section 1). Revised for `@reviewer`'s design review round 1 (changes
+requested: outputs filtered, read limit independent of existence, re-check
+after the job slot, `fetch --refresh` refused, quota figure). Next:
+`@reviewer`'s second design review, then `@tester`'s red suite (section 9). Questions for Ola: section 12, each with a default the design
 already follows.
 
 ## 1. What Ola asked
@@ -196,15 +198,19 @@ client (Codex, Claude Code)
 Starlette app from Server.streamable_http_app            [SDK]
   ├─ TransportSecurity: Host and Origin allow-list from --public-url
   ├─ BearerAuthBackend → StaticTokens.verify_token        [http.py]
-  │     → AccessToken(client_id=<user>) or None → 401
+  │     → AccessToken(client_id=<user>, token=<user>) or None → 401
   └─ call_tool(ctx, params)                               [server.py, as today]
         scope = scope_for(ctx)        CallScope: cwd, write root, read roots, user
-        validate → writes inside scope.write_root?        [workspace.py]
+        validate → refused flags (fetch --refresh)?       [workspace.py]
+                 → writes inside scope.write_root?        [workspace.py]
                  → reads inside scope.read_roots?         [workspace.py]
                  → quota (HTTP only)                      [store.py]
+        take the job slot, then run the same checks again
         child: python -m tin_engine <argv>, cwd = scope.cwd,
                env without RASPUTIN_MCP_TOKENS
-        outputs → delivery.deliver(scope, outputs)        [Delivery protocol]
+        outputs: stdout lines resolved against scope.cwd;
+                 HTTP keeps only regular files inside work/
+              → delivery.deliver(scope, outputs)        [Delivery protocol]
             stdio: file:// URIs (today's behaviour)
             http:  store.put → sha256 → links.sign → https URL
   GET /files/<user>/<sha256><suffix>?fn=&exp=&sig=        [http.py route]
@@ -223,16 +229,28 @@ What each module does and what it may not do:
   child and holds no state. `CallScope` is a frozen dataclass: `cwd: Path |
   None` (None means the child inherits the server's cwd, as stdio does
   today), `write_root: Path`, `read_roots: tuple[Path, ...] | None` (None
-  means no read limit, which is stdio), and `user: str | None`. One
-  function, `async refusal(scope, writes, reads) -> str | None`, gives the
-  first refusal in plain words. It absorbs `_outside_root`.
+  means no read limit, which is stdio), `user: str | None`, and `refused:
+  frozenset[tuple[str, str]]`, the (tool, argument) pairs that may not be
+  set on this transport (empty on stdio; `{("fetch", "refresh")}` over HTTP,
+  section 7). One function, `async refusal(scope, tool_name, arguments,
+  writes, reads) -> str | None`, gives the first refusal in plain words, where
+  `arguments` is the validated model's `model_dump()`. It absorbs
+  `_outside_root`.
 - **`server.py`** keeps the child, the progress and the shaping of results.
   `build_server` gains two injected parameters with stdio defaults:
   `scope_for: Callable[[ServerRequestContext], CallScope]` and `delivery:
   Delivery`. `Delivery` is a Protocol with one method, `async deliver(scope,
   outputs: list[Path]) -> list[Delivered]`. Stdio passes a fixed scope and
   the file-URI delivery, so nothing outside the module changes, and
-  increment 37's suite passes unchanged (T10).
+  increment 37's suite passes unchanged (T10). `call_tool` runs `refusal`
+  (and, over HTTP, the quota check) before waiting for the job slot, so a
+  refused call answers at once, and **again after taking the slot**, because
+  the tree can change while a call waits. `_outputs` gains the scope:
+  each stdout line is resolved as `(scope.cwd / line).resolve()`, not
+  against the server's cwd, and when `scope.read_roots` is not None (HTTP)
+  only a line that resolves to a regular file inside `scope.write_root` is
+  an output (section 5.4). On stdio the rule stays today's (anything that
+  exists).
 - **`store.py`** (new): `Store(user_dir)` with `put(path) -> Stored(sha256,
   size, path)` (hash, then copy to `store/<sha256><suffix>` unless that file
   exists, whose mtime is then touched; run in a worker thread), `usage() ->
@@ -282,14 +300,25 @@ first call arrives.
 
 Every value from `reads()` is resolved as the child would read it:
 `(scope.cwd / Path(value).expanduser()).resolve()`, following `..` and every
-link. If that path exists (`exists()` after `resolve`), it must lie under one
-of `scope.read_roots`; if not, the call is refused with the argument, the
-value as given and the place it resolves to. A value that names no file is
-passed through: `glo30`, `corine`, `EPSG:3006`, a layer name. The CLI then
-treats it as a name, or refuses it as a missing file. This rule needs no
-table of which parameters take paths. It holds for plugin commands as well,
-and for the `str` options that take either a name or a file (`--dem`,
-`--land-cover`, `--features-legend`, `palette`'s name).
+link. The call is refused, with the argument, the value as given and the
+place it resolves to, when that place is outside every one of
+`scope.read_roots` and either
+
+- the value contains `/` or starts with `~`, **whether or not the file
+  exists**; or
+- the value has neither, and the resolved place exists. A bare name resolves
+  inside `work/`, so this case is a link in `work/` pointing out, or `..`.
+
+So a bare value that names no file is passed through: `glo30`, `corine`,
+`EPSG:3006`, a layer name. The CLI then treats it as a name, or refuses it
+as a missing file. Any relative value without `..` resolves inside `work/`
+and is allowed whatever it holds (a URL such as `https://host/x` resolves to
+`work/https:/host/x`). Because a value with `/` is judged without asking
+whether it exists, `../kari/work/out.geojson` is refused before and after
+Kari's run writes it, and the answer tells no caller which server files
+exist. This rule needs no table of which parameters take paths. It holds for
+plugin commands as well, and for the `str` options that take either a name
+or a file (`--dem`, `--land-cover`, `--features-legend`, `palette`'s name).
 
 The read roots, computed once at start (a change to the sources file takes a
 restart, which the HTTP instructions say):
@@ -299,6 +328,10 @@ restart, which the HTTP instructions say):
   cache);
 - the `path` of every `kind = "local"` entry in the catalogue (the user's
   sources file and the plugins' files), each resolved.
+
+The server refuses to start when a shared root (the cache or a catalogue
+path) lies inside `--out-root` or contains it, since that root would open
+other users' folders.
 
 Stdio keeps no read limit (`read_roots=None`). Its user is on the same machine
 and passes paths of their own today; limiting them is not part of this step.
@@ -322,13 +355,18 @@ default cache is the server's and is shared (section 7).
   name, `mime_type` from `MIME_TYPES`, and `size`.
 - `record`, `stats`, `stdout` and `stderr` as today, inline.
 
+An output, over HTTP, is a stdout line that resolves against `scope.cwd` to a
+**regular file inside the user's `work/`** (`lstat` after `resolve`, less the
+sidecars). Nothing else is stored or linked: a line naming `/etc/hosts`, a
+catalogue file, `../kari/work/x`, or a directory is left in `stdout` only.
+
 ### 5.5 The download route
 
 `GET <public-url>/files/<user>/<name>?fn=<filename>&exp=<unix seconds>&sig=<hex>`.
 
 - `user` must be a configured user; `name` must match
-  `^[0-9a-f]{64}(\.[a-z0-9]{1,8})?$`; `fn` must match `^[A-Za-z0-9._-]{1,128}$`.
-  Otherwise **404**.
+  `^[0-9a-f]{64}(\.[a-z0-9]{1,8})?$`; `fn` must match `^[A-Za-z0-9._-]{1,128}$`;
+  `exp` must match `^[0-9]{1,12}$`. Otherwise **404**.
 - The signature is checked with `hmac.compare_digest`. Bad: **403**.
 - `exp` in the past: **410 Gone**.
 - The path is built only from the checked parts, as `<out-root>/<user>/store/<name>`.
@@ -346,7 +384,8 @@ shell (`curl -o mesh.gpkg <url>`) can fetch it.
 Links last 1 hour but stored outputs last 7 days, and a restart voids every
 link. So the HTTP server lists one tool beyond the commands, `download_link`,
 with one argument `path`. The path must resolve inside the caller's `work/`
-and be a regular file. The tool stores the file (so a re-made file gets a new
+and be a regular file. It gets the same quota check as a command (refused at
+or over the quota). The tool stores the file (so a re-made file gets a new
 sha256) and returns one `Download` and one `resource_link`. The caller's user
 is checked on each call, as the spec's *Stateful Tools* section asks. The
 tool is not listed on stdio. If a command is named `download-link`, the
@@ -392,7 +431,9 @@ the server is never served over HTTP without auth.
   shorter than 32 characters. 32 is a chosen floor:
   `secrets.token_urlsafe(32)` gives 43 characters, 256 bits. The refusal
   names the variable and the user, never a token.
-- Only the sha256 of each token is kept.
+- Only the sha256 of each token is kept. The `AccessToken` the verifier
+  returns carries the user name in both `client_id` and `token`, so the token
+  is not held in each request's scope.
 - `verify_token` hashes the presented token and compares it, with
   `hmac.compare_digest`, against **every** stored digest, without stopping
   at a match. The time taken therefore does not depend on which user
@@ -406,12 +447,19 @@ the server is never served over HTTP without auth.
 - Sweep and usage walk with `os.walk(followlinks=False)` and remove only
   regular files.
 
-**Limit (assumption):** the check and the child's open are separate moments,
-so a file that is swapped in between is not caught. Inside a user folder only
-the server and its children write, and no command makes a link (`git grep -n
-symlink src_python` finds only `cli_kit.py`'s refusal to follow one). Outside
-the user folders, a swap needs someone else on the server, which this design
-does not defend against.
+The read rule does not depend on whether a file exists (5.2), so a file
+written later, by any user, cannot turn a passed value into a read of
+another user's folder: a value that resolves there is refused already. The
+checks run again after the job slot is taken (section 4), so a link made
+while a call waits is caught.
+
+**Limit (assumption):** the second check and the child's open are still
+separate moments. A file swapped for a link in that gap is not caught. A
+user's calls write only in their own `work/` (5.3), so only that user's own
+other call (with `--jobs` above 1) or `fetch` into the cache could do it, and
+no command makes a link (`git grep -n symlink src_python` finds only
+`cli_kit.py`'s refusal to follow one). Someone else with a shell on the
+server is outside what this design defends against.
 
 ### 6.3 Host and Origin
 
@@ -443,8 +491,10 @@ allowed_origins=[<public origin>, "http://127.0.0.1:*", "http://localhost:*",
 
 ## 7. Degeneracy and edge policy
 
-- **Over quota:** when a user's folder holds at least `--quota` at a call's
-  start, the call is refused, in words that give usage, quota and the 7-day
+- **Over quota:** usage counts `work/` and `store/`, so an output is counted
+  twice (once as written, once stored). When a user's folder holds at least
+  `--quota` at a call's start, or at a `download_link` call, the call is
+  refused, in words that give usage, quota and the 7-day
   sweep. A call that starts under the quota may finish over it. A plain
   refusal follows from the rule; no mid-run kill.
 - **Sweep:** for the calling user, at server start and at each call's start.
@@ -459,14 +509,20 @@ allowed_origins=[<public origin>, "http://127.0.0.1:*", "http://localhost:*",
   outside any user's quota, and a user can fill the disk with large fetches.
   Accepted for a handful of trusted users and named here; the cache is the
   operator's.
+- **`fetch --refresh` over HTTP is refused** before the child starts:
+  "fetch: --refresh discards the shared tile cache for every user, so it is
+  refused over HTTP; give --cache inside your folder for a fresh copy".
+  `--refresh` deletes the source's cache (`src_python/tin_engine/cli.py@cb713c87:1460`),
+  which is every user's. `fetch-stations --refresh` is kept: its `--out-dir`
+  is a write, so it lies inside the caller's `work/`.
 - **Cancel:** the client closes the SSE stream (2026-07-28) or sends
   `notifications/cancelled` (earlier clients). The SDK cancels the handler,
   and `_run_child` kills the child, as on stdio. Nothing is stored.
 - **A cancelled or failed call** stores nothing and returns no link.
   Files it left in `work/` are swept like any other.
 - **An output the CLI names that is a directory** (a `station-catchments`
-  `out_dir`): each regular file the command printed is stored, as
-  `_outputs` finds them today. A directory itself is never stored.
+  `out_dir`): each regular file inside `work/` that the command printed is
+  stored. A directory itself is never stored.
 - **Server paths in `stdout`, `stderr` and `record`** are passed through as
   the CLI wrote them, so they name the server's folders. The users are
   colleagues, so this is accepted (section 8).
@@ -482,6 +538,13 @@ allowed_origins=[<public origin>, "http://127.0.0.1:*", "http://localhost:*",
 - **Rate limiting and per-user fairness:** beyond the jobs cap, none (trusted
   users).
 - **Revoking one link:** only expiry or a restart.
+- **Storing once:** each output is held twice, in `work/` and in `store/`.
+  A hard link would hold it once, but a later run that rewrites
+  `work/mesh.gpkg` in place would then change the bytes under a live link,
+  and its sha256 would no longer match. A move would take the file away
+  from later calls that read it (catchment's `.geojson` as mesh's
+  `--domain`). Copy-on-write clones are not portable. The cost is half the
+  quota (section 10).
 - **Rewriting server paths** in stdout, stderr and record: not done.
 - **`X-Accel-Buffering` for older clients:** the SDK sets it only for
   2026-07-28 clients. Behind nginx, turn buffering off in the proxy
@@ -500,8 +563,10 @@ served by uvicorn on a free loopback port in a thread, as in the probe
 not the point, the tests call the pure functions directly. **The
 invariant-critical suite is T3 and T4** (the read limit and the link). Its
 mutation targets are: `<` against `<=` on expiry, `compare_digest` replaced
-by `==` (checked by a test that wraps it), the read check skipped for tuple
-elements, and `resolve()` dropped.
+by `==` in `links.valid` (killed by T4's wrapper test), the read check skipped
+for tuple elements, `resolve()` dropped, and the `/`-or-`~` clause dropped
+(so the check asks only whether the file exists; killed by T3's missing-file
+case).
 
 - **T1 tokens from the environment** (`tokens_from_env`, pure). It parses
   two users. It refuses a missing or empty variable, `Ola=…` (capital),
@@ -519,18 +584,34 @@ elements, and `resolve()` dropped.
   roots (`/etc/hosts`); `../other-user/work/x.geojson`; `~/x` where `HOME`
   is a temporary folder holding `x`; a link inside `work/` pointing outside;
   a directory outside given as `--dem`; `tolerance_near` = `["/etc/hosts",
-  5]`; an item of repeatable `features` outside. Allowed: a relative file in
-  `work/`; a local catalogue source's path (a sources file written in the
-  test); a value naming no file (`glo30`, `EPSG:3006`). Over HTTP, a refused
-  call leaves the fake child uncalled. On stdio (`read_roots=None`),
+  5]`; an item of repeatable `features` outside; **`../kari/work/out.geojson`
+  when that file does not exist**, with the same refusal words (less the
+  value) as when it does; `/nonexistent/x.tif`; `..` as a bare value. Allowed:
+  a relative file in `work/`; a relative path naming no file
+  (`sub/new.geojson`); a local catalogue source's path (a sources file written
+  in the test); a bare value naming no file (`glo30`, `EPSG:3006`). Over HTTP,
+  a refused call leaves the fake child uncalled. **After the slot:** with
+  `--jobs 1`, a first call holds the slot (the fake child waits on a file the
+  test creates); a second call with `--domain in.geojson`, a regular file in
+  `work/`, passes the first check and waits; the test replaces `in.geojson`
+  by a link to `/etc/hosts` and releases the first call; the second call is
+  refused and the fake child is called once. `fetch` with `refresh=true` over
+  HTTP is refused, naming `--refresh`, and the fake child is not called; on
+  stdio it is not refused. On stdio (`read_roots=None`),
   `/etc/hosts` as `--domain` is not refused (today's behaviour kept).
 - **T4 links** (`links`, pure, with `now` passed). A signed link checks out
   at `now = expires - 1`. At `now = expires` it is expired (the check is
   `now < expires`). It fails with any one of user, name, filename or expiry
-  changed, and with another key. Over HTTP: a stored file downloads with the
+  changed, and with another key. With `links.hmac.compare_digest` wrapped to
+  record its calls (so `links` must call it through the `hmac` module), one
+  `valid` call calls it exactly once, with the presented `sig` as one
+  argument. Over HTTP: a stored file downloads with the
   stored bytes, `Content-Disposition` filename and MIME type. A `Range: bytes=0-9`
   request gets 206 and ten bytes. A changed `sig` gets 403, a past `exp`
-  410, a `name` of `../x` or `%2e%2e` 404, an unknown user 404. A stored file
+  410, an `exp` of `1e9`, `-1` or 13 digits 404, a `name` of `../x` or
+  `%2e%2e` 404, an unknown user 404. The `../x` request is sent raw with
+  `http.client` (`/files/ola/../x?...`), because the SDK's `httpx2` client
+  normalises it to `/files/x` before sending. A stored file
   removed by hand gets 404. A link replaced by a symlink in `store/` gets 404.
 - **T5 a call over HTTP end to end** (fake child writing `a.gpkg` of 2 MiB,
   over the client's 1 MiB event limit). `outputs` is `["a.gpkg"]`.
@@ -538,7 +619,9 @@ elements, and `resolve()` dropped.
   with the public URL and downloads the same bytes. The structured content is
   under 64 KiB. The file is at `<out-root>/<user>/work/a.gpkg` and
   `<out-root>/<user>/store/<sha>.gpkg`. A second identical call adds no
-  file to `store/`.
+  file to `store/`. A fake child that also prints `/etc/hosts`,
+  `../kari/work/x` (Kari's file made by the test) and a directory in `work/`
+  gets exactly one download, `a.gpkg`; the three lines stay in `stdout`.
 - **T6 two users apart.** Ola's and Kari's calls, made at the same time, write
   to their own `work/`. Kari's `download_link` on Ola's path is refused
   (outside her `work/`). Ola's session id sent with Kari's token is refused
@@ -575,17 +658,21 @@ elements, and `resolve()` dropped.
 ## 10. Estimate, speed, acceptance
 
 - **Counted lines**, by `python3 tools/count_loc.py`: `http.py` about 130,
-  `workspace.py` about 45, `store.py` about 45, `links.py` about 25,
-  `server.py` net about 40 (the scope and delivery seam, `download_link`,
-  `downloads`), `schema.py` about 15, `cli.py` about 30, `pyproject.toml` 0
-  (not counted). **About 330; worst case 480.** That fits **one PR**, under
+  `store.py` about 45, `links.py` about 25,
+  `server.py` net about 50 (the scope and delivery seam, the second check,
+  the output filter, `download_link`, `downloads`), `workspace.py` about 60
+  (refused flags, the `/`-or-`~` clause, the start-up root check),
+  `schema.py` about 15, `cli.py` about 30, `pyproject.toml` 0 (not counted).
+  **About 355; worst case 510.** That fits **one PR**, under
   the 700 of CLAUDE.md §2.
 - **No `@perf` run:** no refine or mesh code is touched. Storing adds about
   0.6 s per 780 MB output (section 3).
 - **Constants and their scale:**
   - Link life 3600 s, retention 7 days, quota 20 GiB (all Ola's). The quota
     assumes catchment-scale outputs. The largest checked is 779 MB, a
-    3.1-million-triangle GeoPackage, so 20 GiB holds about 25 of them. A
+    3.1-million-triangle GeoPackage. Each output counts twice (`work/` and
+    `store/`, section 8), so 20 GiB holds about 13 of them
+    (21,474,836,480 / (2 × 779,407,360) = 13.8). A
     basin-scale GeoPackage can exceed the quota alone, hence `--quota`.
   - Token floor of 32 characters (chosen).
   - Port 8765 (chosen).
@@ -622,6 +709,7 @@ takes up or overlaps:
    The next step adds a tool that takes a small text file (up to 1 MiB, the
    client's limit) into the user's folder.*
 2. **Who may run `fetch` over HTTP.** It downloads public elevation data into
-   the server's shared cache, outside any user's 20 GB. *Default: every user
-   may, as on stdio.*
+   the server's shared cache, outside any user's 20 GB. *Default: yes, every
+   user may, but `fetch --refresh` is refused over HTTP, because it deletes
+   that shared cache for every user.*
 
