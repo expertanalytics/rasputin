@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -24,6 +25,16 @@ VARIABLE = "RASPUTIN_MCP_TOKENS"
 #: Two tokens at the floor and above it: 32 and 43 characters.
 OLA = "A" * 32
 KARI = "kari-" + "b" * 38
+#: A reversed pair's left side: 32 hex digits starting with a letter, as `openssl rand
+#: -hex 16` gives about 6 times in 16, which passes the name check.
+HEX = "deadbeef" * 4
+#: A reversed pair's left side as `secrets.token_urlsafe` writes one: capitals, which
+#: fail the name check.
+URLSAFE = "Xq3vB9_kLm2-Rt7sWp4zYc8nHd5fGj1aEo6u"
+NAME_RULE = (
+    "the name is not a lowercase letter then up to 31 of a-z, 0-9, _ and - "
+    "(a pair is user=token, the name first)"
+)
 
 
 def digest(token: str) -> bytes:
@@ -59,24 +70,80 @@ class TestTokensFromTheEnvironment:
             http_module().tokens_from_env(environ)
 
     @pytest.mark.parametrize(
-        ("value", "user", "secret"),
+        ("value", "refusal", "hidden"),
         [
-            pytest.param(f"Ola={OLA}", "Ola", OLA, id="capital in the name"),
-            pytest.param(f"../x={OLA}", "../x", OLA, id="dots and slash in the name"),
-            pytest.param(f"ola={OLA} ola={KARI}", "ola", KARI, id="repeated name"),
-            pytest.param(f"ola={OLA} kari={OLA}", "kari", OLA, id="repeated token"),
-            pytest.param(f"ola={'s' * 31}", "ola", "s" * 31, id="31-character token"),
+            pytest.param(
+                f"Ola={OLA}", f"pair 1: {NAME_RULE}", ["Ola", OLA], id="capital in the name"
+            ),
+            pytest.param(
+                f"../x={OLA}",
+                f"pair 1: {NAME_RULE}",
+                ["../x", OLA],
+                id="dots and slash in the name",
+            ),
+            pytest.param(
+                f"ola={OLA} ola={KARI}",
+                "pair 2 repeats the name or the token of an earlier pair",
+                ["ola", KARI],
+                id="repeated name",
+            ),
+            pytest.param(
+                f"ola={OLA} kari={OLA}",
+                "pair 2 repeats the name or the token of an earlier pair",
+                ["kari", OLA],
+                id="repeated token",
+            ),
+            pytest.param(
+                f"ola={'s' * 31}",
+                "pair 1: the token is under 32 characters",
+                ["ola", "s" * 31],
+                id="31-character token",
+            ),
+            pytest.param(
+                f"ola={OLA} {KARI}", "pair 2 is not user=token", [KARI], id="no equals sign"
+            ),
+            pytest.param(
+                f"{HEX}=ola",
+                "pair 1: the token is under 32 characters",
+                [HEX, "ola"],
+                id="reversed, hex token",
+            ),
+            pytest.param(
+                f"{URLSAFE}=ola",
+                f"pair 1: {NAME_RULE}",
+                [URLSAFE, "ola"],
+                id="reversed, urlsafe token",
+            ),
+            pytest.param(
+                f"ola={OLA} Kari={KARI}",
+                f"pair 2: {NAME_RULE}",
+                ["Kari", KARI],
+                id="a bad pair after a good one",
+            ),
         ],
     )
-    def test_a_bad_pair_is_refused_naming_variable_and_user_never_the_token(
-        self, value: str, user: str, secret: str
+    def test_a_bad_pair_is_refused_naming_variable_and_position_never_either_side(
+        self, value: str, refusal: str, hidden: list[str]
     ) -> None:
         with pytest.raises(ValueError) as caught:
             http_module().tokens_from_env({VARIABLE: value})
         words = str(caught.value)
-        assert VARIABLE in words, words
-        assert user in words, words
-        assert secret not in words, f"the refusal shows a token: {words}"
+        for side in hidden:
+            assert not shows(side, words), f"the refusal shows {side!r}: {words}"
+        assert words == f"{VARIABLE}: {refusal}", words
+
+
+def shows(word: str, text: str) -> bool:
+    """Whether ``word`` is in ``text`` as a whole word: delimited by the text's ends, space,
+    or punctuation, so ``ola`` is not found inside an ordinary word."""
+    return re.search(rf"(?:^|[\s('\"=])({re.escape(word)})(?=$|[\s,.;:)'\"=])", text) is not None
+
+
+def test_shows_finds_whole_words_only() -> None:
+    assert (
+        shows("ola", "user ola repeats") and shows("ola", "x=ola") and shows("../x", "user ../x is")
+    )
+    assert not shows("ola", "a payolas list") and not shows("ola", "olaf")
 
 
 # ---------------------------------------------------------------- T2
