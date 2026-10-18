@@ -109,30 +109,29 @@ def _loopback(url: str) -> bool:
 def tokens_from_env(environ: Mapping[str, str]) -> dict[str, bytes]:
     """``user=token`` pairs from `TOKENS_VARIABLE`, as user to the token's sha256.
 
-    A `ValueError` naming the variable and the user, never the token, when the
-    variable is missing or empty, or a pair has a bad name, a repeated name, a
-    repeated token, or a token shorter than `TOKEN_FLOOR`.
+    A `ValueError` naming the variable and the pair's position, never either side of
+    the pair, when the variable is missing or empty, or a pair has a bad name, a
+    repeated name, a repeated token, or a token shorter than `TOKEN_FLOOR`.
     """
     found: dict[str, bytes] = {}
     pairs = environ.get(TOKENS_VARIABLE, "").split()
     if not pairs:
         raise ValueError(f"{TOKENS_VARIABLE} is missing or empty; set it to user=token pairs")
-    for pair in pairs:
+    for n, pair in enumerate(pairs, 1):
         user, equals, token = pair.partition("=")
+        at = f"{TOKENS_VARIABLE}: pair {n}"
         if not equals:
-            raise ValueError(f"{TOKENS_VARIABLE}: an entry is not user=token")
+            raise ValueError(f"{at} is not user=token")
         if not USER.fullmatch(user):
             raise ValueError(
-                f"{TOKENS_VARIABLE}: user {user} is not a lowercase letter then up to 31 of "
-                "a-z, 0-9, _ and -"
+                f"{at}: the name is not a lowercase letter then up to 31 of a-z, 0-9, _ and - "
+                "(a pair is user=token, the name first)"
             )
         digest = hashlib.sha256(token.encode()).digest()
         if user in found or digest in found.values():
-            raise ValueError(f"{TOKENS_VARIABLE}: user {user} repeats a name or a token")
+            raise ValueError(f"{at} repeats the name or the token of an earlier pair")
         if len(token) < TOKEN_FLOOR:
-            raise ValueError(
-                f"{TOKENS_VARIABLE}: the token of user {user} is under {TOKEN_FLOOR} characters"
-            )
+            raise ValueError(f"{at}: the token is under {TOKEN_FLOOR} characters")
         found[user] = digest
     return found
 
