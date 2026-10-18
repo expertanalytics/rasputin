@@ -17,6 +17,7 @@ import importlib.util
 import shlex
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -570,3 +571,47 @@ def test_h24_5b_the_harness_folder_joined_with_slash_stays_a_candidate() -> None
     folder = H.rsplit("/", 1)[0]
     program = f'from pathlib import Path; print((Path({folder!r}) / "unattended.json").read_text())'
     assert folder in candidates_of(program)
+
+
+# ---------------------------------------------------------------- h24 item 14
+#
+# docs/increments/h24-harness-fixes.md §3 item 14: an interpreter (not a
+# shell) whose program the shell may rewrite is `unknown`. For `-c` that is a
+# program holding `$` or a backtick; for a heredoc, an unquoted delimiter and a
+# body holding `$`, a backtick or a backslash. Any quoting of the delimiter
+# (`'EOF'`, `"EOF"`, `\EOF`) turns the shell's expansion off.
+
+
+def the_simple(line: str, name: str) -> Any:
+    simples = shell_scan.parse(line)
+    assert simples is not None, line
+    [simple] = [s for s in simples if s.argv[:1] == [name]]
+    return simple
+
+
+def test_h24_14_a_double_quoted_c_program_holding_a_substitution_is_unknown() -> None:
+    simple = the_simple("python3 -c \"print(open('a$(cat q)').read())\"", "python3")
+    assert simple.unknown is True
+
+
+def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_not_unknown() -> None:
+    simples = shell_scan.parse('bash -c "echo $(cat q)"')
+    assert simples is not None
+    assert len(simples) == 4, [s.argv for s in simples]
+    assert [s.argv for s in simples if s.unknown] == []
+
+
+#: Design review round 3's B(t), here with an ordinary target.
+BACKSLASH_BODY = r"x = 'a\\'; y = 1 #'; open('notes/plain.txt','w').write('X')"
+
+
+def test_h24_14_an_unquoted_heredoc_with_a_backslash_is_unknown() -> None:
+    simple = the_simple(f"python3 - <<EOF\n{BACKSLASH_BODY}\nEOF", "python3")
+    assert simple.unknown is True
+
+
+@pytest.mark.parametrize("opener", ["<<'EOF'", '<<"EOF"', "<<\\EOF"])
+def test_h24_14_a_quoted_heredoc_delimiter_keeps_the_program_readable(opener: str) -> None:
+    simple = the_simple(f"python3 - {opener}\n{BACKSLASH_BODY}\nEOF", "python3")
+    assert simple.program is not None and BACKSLASH_BODY in simple.program
+    assert simple.unknown is False

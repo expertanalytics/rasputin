@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -1377,3 +1378,45 @@ def test_h24_5a_a_graphql_line_the_shell_expands_asks(repo: Path, command: str) 
 def test_h24_5a_a_plain_or_single_quoted_graphql_read_passes(repo: Path, command: str) -> None:
     set_mode(repo, "off")
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+
+
+# ------------------------------------------------- h24 item 5a, design review 3
+#
+# `segment_why` gets the whole line as `text`, as `main` passes it, and the
+# words the scanner gives for the gh segment. zsh expands a word starting
+# with `=` to a path, also when written `''=ls`. A line holding a redirect
+# expands nothing gh sees but still fails the whole-line pattern, so it asks;
+# it must ask fast, since a hook that times out lets the call through.
+
+
+def gh_segment(hook: ModuleType, line: str) -> list[str]:
+    """The words of the line's one gh simple command, as `main` hands them on."""
+    simples = hook.shell_scan.parse(line)
+    assert simples is not None, line
+    [argv] = [s.argv for s in simples if s.argv[:1] == ["gh"]]
+    words: list[str] = argv
+    return words
+
+
+def test_h24_5a_a_word_starting_with_equals_after_quote_removal_asks(
+    guard_push_hook: ModuleType,
+) -> None:
+    line = "gh api graphql -f query='{ a }' -q ''=ls"
+    words = gh_segment(guard_push_hook, line)
+    assert words[-1] == "=ls", words
+    assert guard_push_hook.segment_why(words, line) == GH_API
+
+
+#: Design review round 3's failing line: 72 characters, ending in a redirect.
+#: On a backtracking pattern a 36-character failing line took 5.8 s.
+REDIRECT_LINE = "gh api graphql -f query='{ a }' --jq .data.repository.id > /tmp/out.json"
+
+
+def test_h24_5a_a_long_failing_line_asks_in_under_a_second(guard_push_hook: ModuleType) -> None:
+    assert len(REDIRECT_LINE) == 72
+    words = gh_segment(guard_push_hook, REDIRECT_LINE)
+    start = time.perf_counter()
+    why = guard_push_hook.segment_why(words, REDIRECT_LINE)
+    elapsed = time.perf_counter() - start
+    assert why == GH_API
+    assert elapsed < 1.0, f"segment_why took {elapsed:.3f} s on a 72-character line"
