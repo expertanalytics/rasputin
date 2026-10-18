@@ -3802,3 +3802,5 @@ C7  conformity failure exits 2: killed new (seam_paths)
 ```
 
 **23c-2, code review, round 5, 2026-10-18.** Range `6bd8299a..46610e1a`, 548 counted lines (tests and docs only this round), @reviewer: APPROVED WITH WORDINGS, applied by the main session: B6 is equivalent on default flags only; with `--tolerance-slope` the slope count reads the ring (idea: a test for `--tolerance-slope` on a cut run). The fan's unread flag arithmetic in `start_slice` goes in 23c-3.
+
+**23c-2, `@perf` acceptance, 2026-10-18.** `c3d3696d`, master `cb713c87` against head `4e140864`, same `_core` binary: bench mesh hashes unchanged (tile `11741a81…`, quarter `a60fb597…`), refine time -3.6 to +3.0 % across 1 to 20 threads; whole-process quarter time +0.6 to +1.8 %, in Python, not profiled. Velhas on ANADEM 10 m with `--pieces 64`: 51 pieces, every seam segment in exactly two pieces with identical z, 0 nodes over tolerance (control fails as it should), 0 constrained-Delaunay violations; 6.20 s, 1.64 GB: ACCEPTED.
