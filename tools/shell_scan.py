@@ -69,6 +69,11 @@ SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh", "rbash", "fish", "m
 PROGRAM_FLAG = {"perl": "e", "ruby": "e", "node": "e"} | dict.fromkeys(SHELLS, "c")
 PLAIN_PARAMETER = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 PARAMETER = re.compile(r"\$[\w@*#?$!-]?\w*")
+#: The names a read relies on, which an exempt program may not rebind.
+READ_NAMES = {"open", "json", "pathlib", "Path"}
+#: Names that patch, reflect or run code; an exempt program uses none of them.
+REFLECTION = {"setattr", "delattr", "getattr", "vars", "locals", "globals", "exec", "eval",
+              "compile", "breakpoint", "__import__", "__builtins__", "builtins"}  # fmt: skip
 EXPANSION = re.compile(r"\$(\{[^}]*\}|\([^)]*\)|[\w@*#?$!-]+)|`[^`]*`")
 
 
@@ -446,6 +451,7 @@ def candidates(simple: Simple) -> list[str]:
             tree = ast.parse(program)
         except (SyntaxError, ValueError):
             return re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
+        exempt = read_literals(tree)
         return [
             node.value
             for node in ast.walk(tree)
@@ -453,6 +459,77 @@ def candidates(simple: Simple) -> list[str]:
             and isinstance(node.value, str)
             and node.value
             and not any(c.isspace() for c in node.value)
+            and id(node) not in exempt
         ]
     tokens = re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
     return tokens + operands(simple.argv[1:], set())
+
+
+def literal(node: ast.expr, among: tuple[str, ...] = ()) -> bool:
+    """A string literal; one of `among` when that is given."""
+    found = isinstance(node, ast.Constant) and isinstance(node.value, str)
+    return found and (not among or getattr(node, "value", None) in among)
+
+
+def literal_keywords(call: ast.Call) -> bool:
+    """Every keyword is `encoding` or `errors`, given as a string literal."""
+    return all(k.arg in ("encoding", "errors") and literal(k.value) for k in call.keywords)
+
+
+def opened(node: ast.expr, name: str = "open") -> ast.expr | None:
+    """LIT of `open(LIT)` or `open(LIT, M)` with M a read mode (or `Path(LIT)`), else None."""
+    if not isinstance(node, ast.Call) or not node.args or not literal(node.args[0]):
+        return None
+    func, modes = node.func, node.args[1:]
+    if name == "open":
+        ok = len(modes) < 2 and all(literal(m, ("r", "rb", "rt")) for m in modes)
+        ok = ok and isinstance(func, ast.Name) and func.id == "open" and literal_keywords(node)
+    else:
+        named = isinstance(func, ast.Name) and func.id == "Path"
+        dotted = isinstance(func, ast.Attribute) and func.attr == "Path"
+        owner = getattr(func, "value", None)
+        dotted = dotted and isinstance(owner, ast.Name) and owner.id == "pathlib"
+        ok = not modes and not node.keywords and (named or dotted)
+    return node.args[0] if ok else None
+
+
+def read_of(node: ast.AST) -> ast.expr | None:
+    """The literal a call reads and nothing else reaches: the three exempt shapes."""
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return None
+    func, plain = node.func, not node.args and not node.keywords
+    if func.attr == "load" and isinstance(func.value, ast.Name) and func.value.id == "json":
+        return opened(node.args[0]) if len(node.args) == 1 and not node.keywords else None
+    if func.attr in ("read", "readlines") and plain:
+        return opened(func.value)
+    if func.attr in ("read_text", "read_bytes") and not node.args and literal_keywords(node):
+        return opened(func.value, "Path")
+    return None
+
+
+def guarded(node: ast.AST) -> bool:
+    """True when the node imports, rebinds, patches or reflects in a way a read cannot allow."""
+    if isinstance(node, ast.Import):
+        return any(a.name not in ("json", "pathlib") or a.asname for a in node.names)
+    if isinstance(node, ast.ImportFrom):
+        names = [(a.name, a.asname) for a in node.names]
+        return node.module != "pathlib" or node.level != 0 or names != [("Path", None)]
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        return bool(READ_NAMES & set(node.names))
+    if isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
+        return True
+    if isinstance(node, ast.Name):
+        stored = not isinstance(node.ctx, ast.Load) and node.id in READ_NAMES
+        return stored or node.id in REFLECTION or node.id.startswith("_")
+    if isinstance(node, ast.Attribute):
+        return node.attr.startswith("_")
+    bound = [getattr(node, "name", None), getattr(node, "rest", None), getattr(node, "arg", None)]
+    return not isinstance(node, ast.alias) and bool(READ_NAMES & set(bound))
+
+
+def read_literals(tree: ast.AST) -> set[int]:
+    """The ids of the literals that flow only into a read, or none when any node is guarded."""
+    nodes = list(ast.walk(tree))
+    if any(guarded(node) for node in nodes):
+        return set()
+    return {id(lit) for node in nodes if (lit := read_of(node)) is not None}
