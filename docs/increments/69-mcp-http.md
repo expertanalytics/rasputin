@@ -750,3 +750,22 @@ takes up or overlaps:
 - **Design review, round 1, 2026-10-18.** On `a989cef7`, @reviewer: CHANGES REQUESTED: any file printed on stdout was stored and linked; a path into another user's folder passed before the file existed, and the check ran before the job slot; one link-check mutant could not be killed; the quota figure ignored that outputs are kept twice; `fetch --refresh` deletes the shared cache. Revised in `464a44c5` by a fresh `@architect`.
 - **Design review, round 2, 2026-10-18.** On `464a44c5`, @reviewer: CHANGES REQUESTED: paths inside CRS strings (`+init=/…`, `+nadgrids=`, WKT `PARAMETERFILE`, PROJJSON grids) passed the relative-value rule and told callers which files exist. Revised in `0b3541c7`.
 - **Design review, round 3, 2026-10-18.** On `0b3541c7`, @reviewer: APPROVED. Suggestions for green: `re.fullmatch` for the plain-path pattern; re-check input formats that name other files when uploads come.
+- **Mutation round (T3, T4), 2026-10-18.** `@tester`, on green `f1f37db2`, with the test fixes `563e4353` (layering rows for the new modules; T11 limited to the server's loggers). Record copied from `563e4353`'s message by the main session:
+
+```text
+Mutation round, T3 and T4 (test_mcp_http_read_limit.py,
+test_mcp_http_links.py; unmutated 56 passed), each planted in a scratch copy
+from tools/scratch_copy.py f1f37db2, removed after:
+- M1 links.py valid: now < expires -> now <= expires: KILLED
+  (test_at_the_expiry_second_it_is_expired)
+- M2 links.py valid: hmac.compare_digest -> ==: KILLED
+  (test_the_signature_is_compared_once_through_hmac_compare_digest)
+- M3 workspace.py _judge: plain-path check dropped: KILLED (5, the
+  +init= cases present and missing, PROJJSON grid, the space)
+- M4 schema.py reads: tuple elements skipped: KILLED (2, reads unit test
+  and the tolerance_near refusal)
+- M5 workspace.py _place: resolve() dropped: KILLED (6, incl. other user,
+  bare .., link in work/, the after-the-slot swap)
+- M6 workspace.py _judge: "named or resolved.exists()" -> exists(): KILLED
+  (3, other user missing file, missing absolute)
+```
