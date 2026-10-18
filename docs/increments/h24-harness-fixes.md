@@ -6,7 +6,8 @@ harness design". Items 2 and 3: Ola, 2026-10-18, "yes to both"; everything
 else has his yes or needs none. Revised for design review round 1 (items 1,
 5, 6, 13 and sections 4 and 6), and for PR A's code review round 1 on
 `188089f1` (items 2 and 5, new item 14, sections 4 and 5), and for design
-review round 3 on `a4c19f4e` (items 5 and 14).
+review round 3 on `a4c19f4e` (items 5 and 14), and for design review round
+4's idea on `28a67d39` (new item 15).
 
 Sources: `docs/retrospectives/2026-10-18-merges-284-285.md` (sections 3, 5
 and 7), `docs/retrospectives/2026-10-17-overdue-check-night-merges-audit.md`
@@ -78,6 +79,8 @@ design approved, not built) overlaps items 8 and 9; section 6 says how they fit.
   checked); *Recap: items in flight and open ideas* (shares the recap's
   10,000-character cap with items 4 and 8); *Clear out stale worktrees*
   (item 11 is about processes and panel entries, not worktrees).
+- Item 15 takes up no entry; the nearest, *Push guard: PowerShell flags
+  beyond -c and -Command*, is dropped and stays so.
 
 ## 3. The items
 
@@ -776,14 +779,116 @@ is shared with 5b; 2 lines set `unknown`; 1 in `redirect`), and about 8
 changed lines (`candidates`, and the heredoc tuples' types and unpacking).
 In PR A, beside item 5b: same file, same green step.
 
+### Item 15. A here-string is the program of the interpreter or shell it feeds
+
+*Why.* Design review round 4 on `28a67d39`, on master too: `redirect`
+(`tools/shell_scan.py@a9555a73:243-249`) reads the word after `<<<` and drops
+it, so `python3 <<< "open('notes/a.txt','w').write('x')"` and `bash <<< "echo
+x > notes/a.txt"` give one simple, `python3` or `bash`, with no program, no
+writes, no candidates and `unknown` False. With `CLAUDE.md` or the harness
+state in place of `notes/a.txt`, both guards are silent (measured through
+`judge_bash` and the whole push hook on a scratch copy of `a9555a73`; `bash
+<<< 'git push origin x'` passes the push guard).
+
+*What the shell hands over.* The word, expanded, plus a newline, as the
+interpreter's stdin. Its quotes are removed and its escapes resolved exactly
+as the scanner's `word()` already does (`_Scan.word`, `_Scan.quoted`), and
+`$(…)`, `${…}`, `$x` and backticks are kept as written. No word splitting,
+no globbing, no brace expansion (checked in zsh and bash 2026-10-18: `cat <<<
+a*` and `cat <<< {a,b}` print themselves); a leading `~` or zsh's `=cmd`
+expands, but to a path, which no interpreter runs as a write. And zsh joins
+every stdin redirect of one command (its `MULTIOS` option, on by default):
+`zsh -c 'python3 <<< "print(1)" <<< "print(2)"'` prints 1 and 2, and a
+here-string beside a heredoc runs both; bash keeps only the last.
+
+*Change* (`tools/shell_scan.py` only; the guards are unchanged).
+
+- `redirect` takes `<<<` with the heredocs: it appends `(word, None,
+  expands)`, the `None` in the `<<-` slot marking a here-string (so item 14's
+  tuple becomes `tuple[str, bool | None, bool]`). `finish` sends heredocs to
+  `pending` as now (those whose slot is not `None`) and, after the simple is
+  added to `found` and a shell's `-c` program parsed, calls
+  `finish_heredoc(simple, word + "\n", substituted(word))` for each
+  here-string.
+- `finish_heredoc(simple, body, expands)` takes the body as an argument
+  (`read_heredocs` passes its joined lines) and appends, not replaces: a
+  shell parses each body as commands, as for a heredoc today; an interpreter
+  with no inline program (`interpreter(name, argv[1:])` gives no `-c`/`-e`
+  text; `-` and no script as today) gets `program = (program or "") + body`,
+  so every stdin body counts, zsh's way, and a write in any of them is a
+  candidate. The early return on `program is not None` goes; the inline
+  check takes its place. A `-c` program or a script keeps stdin as data, as
+  today.
+- `unknown`: a here-string is marked as a `-c` program is (item 14):
+  `substituted(word)`, `$` or a backtick, whatever the quoting. The
+  backslash is not a sign here: unlike a heredoc body, which the scanner
+  keeps as written, the word comes out of `word()` with the shell's escapes
+  already resolved (`python3 <<< 'print("a\\nb")'` gives the program
+  `print("a\\nb")`, as Python receives it).
+
+*A departure from the review's wording*: it asked that a single-quoted
+here-string be literal, `$` included. Here, as for `-c`, a `$` marks it
+unknown whatever the quoting: the scanner's word keeps `$` as written in
+both, telling them apart needs one more reading of the raw text, and the
+cost is an ask only on a line that also names a governed file (item 14's
+cost). The read exemption is unchanged: a single-quoted `json.load(open(H))`
+by here-string stays silent.
+
+Covered: every name the scanner treats as an interpreter or shell, since the
+change sits in `finish_heredoc`, which already tells them apart: `python`,
+`python3`, `python3.N`, `perl`, `ruby`, `node`, and the twelve `SHELLS`;
+after wrappers (`env python3 <<< …`), as `classify` strips them first.
+Not covered: what the program then reads from elsewhere (`python3 <<<
+'exec(open("q").read())'`), as for `-c`.
+
+*Tests.* Through the whole hook (`tests/python/test_guard_governance.py`, the
+`repo` fixture, `H` the harness state's absolute path), mode off unless
+named:
+
+- ask naming the file: `python3 <<< "open('CLAUDE.md','w').write('x')"`,
+  the same single-quoted with double quotes inside, `bash <<< "echo x >
+  CLAUDE.md"`, `zsh <<< 'echo x > .claude/settings.json'`, `perl <<<
+  'open(F, ">CLAUDE.md")'`, `env python3 <<< …`, and the zsh join
+  `python3 <<< 'print(1)' <<< "open('CLAUDE.md','w').write('x')"`;
+- denied with the always-denied text, nothing queued, modes off and on:
+  `python3 <<< "open('<H>','w').write('x')"` and `bash <<< 'echo x > <H>'`;
+- silent: `cat <<< x`, `cat <<< 'open("CLAUDE.md","w")'`, `grep -c x <<<
+  CLAUDE.md`, the review's two `notes/a.txt` writes (an ordinary file), and,
+  mode on, `python3 <<< 'import json; print(json.load(open("<H>")))'`;
+- unchanged, a heredoc beside a here-string: `python3 <<< 'print(1)' <<EOF`
+  with the body `open('CLAUDE.md','w').write('x')` asks.
+
+Through the whole push hook (`tests/python/test_guard_push.py`, `ASKED` and
+`PASSED`): `bash <<< 'git push origin x'` and `sh <<< "gh pr merge 1"` ask;
+`cat <<< 'git push origin x'` is silent. In
+`tests/python/test_guard_targets.py`, `parse`: the review's `python3` line
+gives program `open('notes/a.txt','w').write('x')\n` and candidate
+`notes/a.txt`; its `bash` line gives a second simple, `echo x`, writing
+`notes/a.txt`; `python3 <<< "print('$(cat q)')"` gives `unknown` True;
+`python3 <<< 'print("a\\nb")'` and `cat <<< x` give `unknown` False, `cat`
+with no program; `python3 -c 'print(1)' <<< "open('CLAUDE.md','w')"` keeps
+the program `print(1)`.
+
+*Measured* on a scratch copy of `a9555a73` (`tools/scratch_copy.py`) with
+items 5, 14 and 15 as designed here applied by Edit: `pytest -m harness
+--no-cov` 2554 passed, 14 skipped (the copy is no git work tree), 0 failed;
+the 23 red tests of `3c227e08` and `a9555a73` pass. The whole-hook cases
+above, 18 in a scratch test file: all pass on the patched copy; on an
+unpatched copy of `a9555a73`, 11 fail (every ask and deny but the heredoc
+one) and 7 pass (the silent ones and the heredoc beside a here-string).
+
+*Governed* (`tools/shell_scan.py`). About 4 counted lines (3 in `finish`, 1
+in `finish_heredoc`) and about 5 changed (`redirect`, the inline check, the
+append, the tuple types). In PR A, same green step as items 5b and 14.
+
 ## 4. The PRs
 
-Total about 190 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
+Total about 195 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
 eligibility, not by size.
 
 | PR | Items | Files | Counted lines | Risk | When |
 |---|---|---|---|---|---|
-| A, guards | 1, 2, 5, 14 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 106 (98 in green `188089f1`, about 8 more for the review fixes and item 14) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
+| A, guards | 1, 2, 5, 14, 15 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 110 (98 in green `188089f1`, about 8 more for the review fixes and item 14, about 4 for item 15) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
 | B, reports | 4, 8, 9 | `tools/session_state.py`, `tools/away.py`, item 8's sentences | about 80 | none to the boundary: they print | by day, as A |
 | C, rule text | 2's sentence, 3, 6, 10, 11, 12, the review-line wording below | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
 | D, scratch copy | 7 | `tools/scratch_copy.py` | about 3 | none | short path; not governed, so a night fallback |
