@@ -866,3 +866,7 @@ Both are prose, so the merge is a wording step, not a design change.
 
 - **Design review, round 1, 2026-10-18.** On `808782fd`, @reviewer: CHANGES REQUESTED. The GraphQL read exemption let writes through (a `#` inside a string, shell `$` expansion, extra words); the Python read exemption let writes through (reusing an opened file's name, `opener=`, patching `open`, rebinding `json` or `Path`); item 13's class signatures were not stable text; four wordings. Revised in `92247dec` by a fresh `@architect`.
 - **Design review, round 2, 2026-10-18.** On `92247dec`, @reviewer: APPROVED. Every round-1 write is pinned by a test that it still asks; no new write passes. Items 2 and 3: Ola said yes the same day.
+- **Code review, round 1 (PR A), 2026-10-18.** On `188089f1`, @reviewer: CHANGES REQUESTED: brace expansion and globs get a GraphQL write past 5a; `$(…)` in a double-quoted `-c` or an unquoted heredoc gets a write past 5b; item 2's sentence missing. Red for these: `3c227e08`.
+- **Design review, round 3 (PR A), 2026-10-18.** On `a4c19f4e` (5a and 5b revised, item 14 added), @reviewer: CHANGES REQUESTED: 5a's pattern backtracked exponentially on failing lines; `''=ls` passed the `=` check; a backslash in an unquoted heredoc hid a write. Revised in `28a67d39`.
+- **Design review, round 4 (PR A), 2026-10-18.** On `28a67d39`, @reviewer: APPROVED; the new pattern timed linear on failing lines up to 21,010 characters. Idea for its own item: a here-string (`<<<`) given to an interpreter is not read at all, on master too.
+
