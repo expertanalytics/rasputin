@@ -1,13 +1,15 @@
 # Increment 69: `rasputin mcp --http`, results returned as download links
 
-**Status: designed** by `@architect`, 2026-10-18, on `cb713c87` (branch
-`worktree-mcp-http`). Ola took the six defaults this design starts from
-(section 1). Revised for `@reviewer`'s design review round 1 (changes
-requested: outputs filtered, read limit independent of existence, re-check
-after the job slot, `fetch --refresh` refused, quota figure) and round 2
-(a value with `/` must be a plain path, section 5.2). Next: `@reviewer`'s
-third design review, then `@tester`'s red suite (section 9). Questions for Ola: section 12, each with a default the design
-already follows.
+**Status: built** on branch `worktree-mcp-http`: red `2cb61fd8`
+(`@tester`, T1-T12), green `f1f37db2` (`@developer`, 534 net production
+lines by `python3 tools/count_loc.py cb713c87 HEAD` against about 355 and the
+worst case 510), layering rows and T11 `563e4353` (`@tester`); mutation
+round on T3 and T4, six mutants, all killed (record at the end); README
+"Serving over HTTP" part by `@architect`. Next: `@reviewer`'s code review.
+Designed by `@architect`, 2026-10-18, on `cb713c87`; Ola took the six
+defaults this design starts from (section 1); design review rounds 1-3
+recorded at the end, round 3 approved. Questions for Ola: section 12, each
+with a default the design already follows.
 
 ## 1. What Ola asked
 
