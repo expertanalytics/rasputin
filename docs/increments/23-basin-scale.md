@@ -3719,3 +3719,81 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 
 
 **23c-2, code review, round 4, 2026-10-18.** Range `cb713c87..6bd8299a` after taking master (`5a511cdc` reverts the branch's own refine fix; master's "Delaunay as written" fix stands), 548 counted lines (estimate about 540; the growth from 478 is `decompose.py` counting again and the caps no longer removed), @reviewer: CHANGES REQUESTED: no mutant kill record yet for the invariant-critical tests DC2-DC4 and DC6 (`@tester`); `15-dem-mosaic.md` restored to master's copy; this Status line and ROADMAP row 23 corrected, by the main session. C++ equals master; the merge is faithful to both sides; the rulings hold.
+
+**23c-2, mutation round, 2026-10-18** (`@tester`, on `47d35248`; new tests `6ae2e209` and `69caf803`; record copied from `69caf803`'s message by the main session):
+
+```text
+Mutation round, 23c-2, invariant-critical tests DC2-DC4 and DC6, on
+47d35248. Each mutant planted alone in a scratch copy
+(tools/scratch_copy.py), the copy removed afterwards. Critical suites:
+test_cli_mesh_pieces.py (DC1-DC5), test_cli_mesh_pieces_equality.py
+(DC6), test_mesh_index_conformity.py (DC2). Other suites: the rest of
+test_cli_mesh_pieces_*.py and test_decompose_partition.py. "new" = killed
+only by this commit's tests or 6ae2e209's (test_pieces_slice.py).
+49 mutants: 43 killed, 6 survived (all argued equivalent below).
+
+pieces.py
+P1  rank in a cell never increments: killed (geometry)
+P2  ids not sorted: survived old suites; killed new (slice)
+P3  piece placed by a vertex, not the centroid: killed (critical)
+P4  seams do not split components: killed (critical)
+P5  slice in reversed triangle order: killed (DC6)
+P6  non-seam constraint edges dropped: killed (settled)
+P7  seam-pass points never reversed: killed new (slice, seam_paths)
+P8  shared seam vertex takes the last z (N17): killed new (slice)
+P9  seam heights never handed on: killed new (slice, seam_paths)
+P10 fan drops the other sides' flag bits: SURVIVED, equivalent
+P11 fan drops the seam side's flag bit: SURVIVED, equivalent
+P17 fan side bits on the wrong sub-triangles: SURVIVED, equivalent
+    (P10/P11/P17: refine never reads the start mesh's flags;
+    to_lattice in include/terrain/refinement/refine.hpp rebuilds every
+    bit from the edges list)
+P12 edge map not moved to the last fan triangle: killed (critical)
+P13 fan ignores triangle orientation: killed (critical)
+P14 seam sub-edges lose the seam bit: killed (critical)
+P15 seam record ignores validity: killed new (slice)
+P16 seam record drops the first end: killed new (slice)
+
+basin_run.py
+B1  one cell cut too (K1): killed (critical, caps)
+B2  extra x line at the window edge: killed (critical)
+B3  x lines ignore the window's first column: killed (critical)
+B4  y lines on the wrong side: killed (critical)
+B5  cell row from the wrong side: killed (critical)
+B6  piece window not grown by a node: SURVIVED, equivalent: a piece's
+    triangles lie within its cell's node range (its seams are the cell
+    lines), so no read reaches the extra ring, on DC10's path too
+B7  seam strip not grown by a node: SURVIVED, equivalent: a seam lies on
+    a lattice line, so its bilinear z reads only nodes on that line
+B8  seam pass at twice the tolerance: killed (critical)
+B9  K4 check removed: killed new (seam_paths)
+B10 seams not frozen: killed (critical)
+B11 seam heights not written over refine's z: killed new (seam_paths)
+B12 resampled grid not moved to the piece window: killed (reprojected)
+B13 index window ignores the window origin: killed new (seam_paths)
+B14 all-NoData cut not refused: killed (settled)
+B15 every constraint edge splits pieces: killed (settled)
+B16 seam strip box not ordered: killed new (seam_paths)
+B17 records from refine's z, not the written z: killed new (seam_paths)
+
+decompose.py
+D1  b(T) rounded down: killed (partition)
+D2  budget overshoot allowed: killed (partition)
+D3  grows the wrong axis: killed (partition hangs; 120 s timeout)
+D4  all cuts horizontal: killed (critical)
+D5  crossings not set back on the lattice line: SURVIVED, equivalent in
+    practice: GEOS returned the crossing exactly on the line in 80,000
+    probes (random convex polygons, both axes, UTM-scale offsets)
+D6  cell count not recomputed from dx, dy: killed (partition)
+D7  estimate rounded down: killed (critical)
+D8  two pieces asked gives one: killed (critical)
+
+cli.py
+C1  cut without a domain accepted: killed (settled)
+C2  stale index kept: killed (settled)
+C3  one-mesh options not refused on a cut: killed (settled)
+C4  partition lines without the seam bit: killed (critical)
+C5  resampled grid's lattice not used: killed (reprojected)
+C6  wrong digest in the index: killed (critical)
+C7  conformity failure exits 2: killed new (seam_paths)
+```
