@@ -3,7 +3,7 @@
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
 2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
-in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18, about 170 lines, under "23c-3: each piece's memory its own"; 23d
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18, about 190 lines, under "23c-3: each piece's memory its own"; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -3433,11 +3433,21 @@ cell, `dem_grid`, `dem_tiles`, the z unit, `resampled_grid`) comes from
   `cap=False`, and `assemble_dem` calls `check_canvas` first, before
   `repository.check` and any decode. The cap's refusal now comes after the
   plan's own (needed nodes in no tile, mixed height units) where it came
-  before them; a request that earns two refusals gets the other one first. One wording
-  moves: a domain run over the cap is refused naming the window it would
-  assemble (the last plan of `_domain_plan`'s loop), where it named the
-  first plan over the cap; the last is the larger, so whether it refuses
-  does not change.
+  before them; a request that earns two refusals gets the other one first.
+  A domain run changes in two more ways. It is judged on the window it
+  would assemble, the plan `_domain_plan` returns
+  (`src_python/tin_engine/dem_input.py@321bac56:261-267`), where today
+  every plan of that loop is judged and the first over the cap refuses.
+  The loop can move to a coarser lattice, whose window is smaller, so a run
+  refused today only for an earlier, finer plan now runs; a run that passes
+  today still passes, since its last plan was judged too. And the refusal
+  loses the prefix "the domain, in <CRS>, in the DEM's <CRS>:" that
+  `_domain_plan` adds (`:270`), because `check_canvas` runs in
+  `assemble_dem`, outside it: the cap is about memory, not about where the
+  domain lies. No test reads that prefix on a cap refusal (`git grep -n
+  "over the memory" tests` finds only
+  `tests/python/test_cli_mesh_pieces_caps.py@321bac56:112`,
+  which matches the bytes and the budget alone).
 
 **D3. `target_grid.py`: a held source window, and check points per piece.**
 
@@ -3449,6 +3459,14 @@ cell, `dem_grid`, `dem_tiles`, the z unit, `resampled_grid`) comes from
   gets today: the node's position is `(col0 + c)·h` with integer
   arithmetic, `index_of` uses the same meta, and the stencil reads the same
   values. Nothing is copied.
+- `SourceWindows` gains a `dtype` property, and `resample` takes the
+  canvas's type from it. Today it reads `source.window(0, 1, 0, 1)` for
+  the type (`src_python/tin_engine/target_grid.py@321bac56:192`), a read
+  at the run's origin that a `HeldWindows` refuses for every piece whose
+  source window does not start there. `TileWindows.dtype` is its tile's
+  array's type, `HeldWindows.dtype` its held tile's; the type is the same
+  as today's, so no value changes. Only these two classes implement the
+  protocol (`git grep -n "SourceWindows\|TileWindows" src_python tests`).
 - `grid_meta(grid, source_meta) -> RasterMeta`: the meta `resample` builds
   today, moved out so `plan_dem` can give the target grid's meta without
   resampling.
@@ -3522,7 +3540,7 @@ consequences, both decided here:
   that window's counts. Today every piece file repeats the run's report.
   This follows K6: a piece's file depends on its job only. `dem_tiles` stays
   the run's list (it comes from headers). Where no overlap disagrees, the
-  text is today's, so the byte identity of D9 holds there.
+  text is today's, so MP5's byte identity holds there.
 
 **D7. The fan's flag arithmetic goes** (round 5 of 23c-2's review).
 `start_slice` computes each fan triangle's constraint bits
@@ -3542,11 +3560,48 @@ found the uncut quarter's process time up 0.6 to 1.8 % on 23c-2, the binary
 identical, not profiled. Profiled here: three cProfile runs of the quarter
 on each side show no function slower at run time (the bytes are the same),
 and importing `tin_engine.cli` takes 8.0 ms longer (five paired runs:
-+4.4 to +13.3 ms; `python -X importtime`: `tin_engine.basin_run` 8.2 ms
-cumulative, of which `io.mesh_index` 3.2 ms and `pieces` 1.0 ms), about
-1.3 % of the quarter's 0.61 s. `cli.py` imports `basin_run`, `pieces` and
-`io.mesh_index` inside the function that runs a cut; `decompose` (0.7 ms)
-stays at the top, since option parsing uses it.
++4.4 to +13.3 ms; `python -X importtime`: `tin_engine.basin_run` 7.6 to
+8.2 ms cumulative, of which `io.mesh_index` 2.8 to 3.2 ms and `pieces`
+1.0 ms), about 1.3 % of the quarter's 0.61 s.
+
+The uncut run uses six names from `basin_run`: `How`, `Once`, `Refined`
+and `RunError` in every refine
+(`src_python/tin_engine/cli.py@321bac56:2106`, `:2207`, `:2215`, `:2373`,
+`:1015`), and `CutAsk` and `cut_partition` on every `--domain
+--tolerance` run, which the quarter benchmark is (`:959-964`): today one
+cell is told from many only inside `cut_partition`. So a lazy import alone
+saves nothing. The names move by role:
+
+- *A new module, `refine_job.py`*: `RunError`, `Once`, `How` and
+  `Refined`, moved out of `basin_run.py` unchanged (what one window's
+  refine takes and gives, cut or not). It imports `elevation`,
+  `run_record` and `target_grid`, which `cli.py` imports anyway, and
+  `_core` for `RefineOutcome`; `test_layering.py` gains its row in L3
+  (`_core elevation run_record target_grid`), `basin_run`'s row gains
+  `refine_job`, `cli`'s gains `refine_job`. No alias is left in
+  `basin_run`.
+- *One cell is told before `basin_run` is imported.* `cli.py` calls
+  `decompose.partition` (imported at the top already) on `DemPlan.meta`;
+  one cell is the uncut run, as today (K1). Only for more than one does it
+  import `basin_run` and call `cut_partition(meta, tolerance, cells, ask)`,
+  which takes the cells instead of computing them and never returns None;
+  `CutAsk` stays in `basin_run`, built only there.
+- *The cut-only uses in `cli.py` import inside their functions*:
+  `basin_run.cut_run` and `io.mesh_index.ConformityError` in `_dem_mesh`'s
+  cut branch, which now catches `ConformityError` itself (stderr
+  "Error: ...", exit 1, as today at `:1017-1019`): an `except` naming a
+  lazily imported class at the outer call would fail on any other error of
+  an uncut run. `MeshIndex`, `PieceCounts` and `PieceEntry` import in
+  `_write_piece` and the index write; `CutRun`, `Partitioned` and
+  `PieceEntry` as annotations come in under `TYPE_CHECKING`.
+
+Measured on a scratch copy of `321bac56` with exactly this split
+(`python -X importtime`, three runs): `tin_engine.refine_job` 1.5 ms
+cumulative against `basin_run`'s 7.6 to 7.8 ms, so about 6 ms of the 8
+go; and after an uncut `--domain --tolerance 1` run on the square scene,
+`sys.modules` holds none of `basin_run`, `pieces` and `io.mesh_index`,
+where `321bac56` holds all three. `@perf`'s bench decides whether the rest
+is noise.
 
 #### The memory model per piece
 
@@ -3557,9 +3612,10 @@ At any time a cut run holds:
   its labels (vectors, K9), the seam records (each seam vertex as a Python
   tuple, from both sides), the index entries, and the interpreter (72 MiB after importing
   `tin_engine.cli`, measured);
-- *for the piece being refined, and only it:* its tile, `(dx + 2)(dy + 2)`
-  nodes at the source's item size; on the reprojected path also its source
-  canvas and its check-point store (16 B per source node in its sub-grid);
+- *for the piece being refined, and only it:* its tile, at most `(dx + 3)(dy + 3)`
+  nodes at the source's item size (a cell's `dx + 1` nodes grown by
+  `MARGIN` on each side); on the reprojected path also its source
+  canvas and its check-point store (16 B per check point in its sub-grid);
   its slice, its refine and its trimmed mesh until `write` returns;
 - *transients:* one decode's peak inside `assemble` (two to three tiles'
   worth per placement, as `assemble`'s docstring measures), and the
@@ -3588,7 +3644,7 @@ Fixtures, measured on 23c-2's code (`321bac56`):
   run window 37 × 37 nodes from lattice node (2, 2), 5,476 bytes; cells of
   19 × 19 nodes; piece windows 21 × 21, 21 × 19, 19 × 21 and 19 × 19 nodes
   (largest 1,764 bytes). With `--pieces 16`: 4 × 4 cells of 10 × 10, piece
-  windows from 12 × 12 to 12 × 13.
+  windows from 8 × 8 to 13 × 13 nodes (8, 12 or 13 on each side).
 - *Four-tile scene*: the same DEM as `mosaic_fixtures.quadrants(row_cut=23,
   col_cut=23, overlap=1)` (`test_two_pieces_reading_different_tiles_agree_on_their_seam`'s),
   same domain, `--pieces 4`. 23c-2 decodes four windows, one per tile, in
@@ -3598,7 +3654,14 @@ Fixtures, measured on 23c-2's code (`321bac56`):
   piece window does (piece `0-0-0` stops at 22), so MP1 is red today.
 - *Reprojected scene*: DC10's (a 60 × 60 float32 geographic tile, `--out-crs
   EPSG:31983`, `--pieces 4`): target grid 47 × 47, source canvas 53 × 55,
-  2,235 check points, largest piece window 26 × 26 nodes.
+  2,235 check points, largest piece window 26 × 26 nodes. The canvas is
+  one check-point block at `BLOCK = 512`, so the outline test never skips
+  anything there. With `target_grid.BLOCK` patched to 8 (the
+  `check_point_blocks` loop reads it at call time,
+  `src_python/tin_engine/target_grid.py@321bac56:257`, `:276`): 49 blocks,
+  42 meet the domain, 2,174 check points; the four pieces' triangle and
+  vertex counts are the same as at 512 (1,617, 1,447, 1,319, 1,382
+  triangles).
 
 Tests:
 
@@ -3617,8 +3680,13 @@ Tests:
   tile array (and, reprojected, its source canvas) when `load_piece`
   returns, and on each piece's written mesh arrays when `write` returns:
   at each `load_piece` after the first, after `gc.collect()`, every earlier
-  piece's arrays are dead. Square scene, `--pieces 16`; reprojected scene.
-  Red today (`load_piece` does not exist).
+  piece's arrays are dead. Reprojected, also on the `xy` and `z` arrays of
+  every block `check_point_blocks` yields (a spy wrapping it): when a
+  piece's `write` returns, after `gc.collect()`, every block yielded so far
+  is dead, since the piece's store holds its points in C++. Square scene,
+  `--pieces 16`; reprojected scene at `BLOCK` 8. Red today (`load_piece`
+  does not exist, and `checks = list(how.checks)` holds every block for
+  the run, `src_python/tin_engine/basin_run.py@321bac56:194`).
 - **MP4, the cap per piece.** (a) Square scene, `--pieces 4`,
   `--memory-budget 5475` (the run window less one byte): runs, and writes
   the same piece files as without `--memory-budget`. (b)
@@ -3635,7 +3703,8 @@ Tests:
   are byte-identical between the double and the real run: square scene at
   `--pieces 4` and 16, with and without `--tolerance-slope 0.3 5 20`;
   four-tile scene (its overlaps agree, so `dem_seams` is the same text);
-  reprojected scene at `--start-min-angle 0` and at the default. The
+  reprojected scene at `--start-min-angle 0` and at the default, each at
+  `BLOCK` 512 and patched to 8 (the double sees the same patch). The
   invariant-critical test of this step (mutation targets below).
 - **DS1, a piece reports its own overlaps (D6).** The four-tile scene with
   `ne`'s overlap row raised by 1 m: the pieces whose windows hold that
@@ -3652,24 +3721,60 @@ Tests:
   at margin 3 in the last bit of an off-node z (D5). Red today (`MARGIN`
   does not exist).
 - **LZ1, an uncut run does not import the cut path (D8).** In a fresh
-  interpreter, `import tin_engine.cli` leaves `tin_engine.basin_run`,
-  `tin_engine.pieces` and `tin_engine.io.mesh_index` out of `sys.modules`.
-  Red today.
+  interpreter (a subprocess, so no other test's import counts), an uncut
+  `rasputin mesh` run of the square scene with `--domain` and `--tolerance
+  1` (one cell at the default `--piece-budget`, so it goes through the
+  one-cell test of D8) exits 0, and after it `sys.modules` holds none of
+  `tin_engine.basin_run`, `tin_engine.pieces` and
+  `tin_engine.io.mesh_index`. A bare `import tin_engine.cli` would not
+  do: the run calls the partition. Measured on `321bac56`: all three are
+  loaded after that run, so it is red today; on a scratch copy with D8's
+  split, none is.
 
 Amended by `@tester`, not new: `test_cli_mesh_pieces_caps.py` (MP4);
 `test_cli_mesh_pieces_seam_paths.py`, which patches `cli.cut_run`
 (it patches `basin_run.cut_run` after D8, with the new signature);
-`test_cli_mesh_pieces_settled.py`'s spy list, if a name moves. DC1-DC10,
+`test_cli_mesh_pieces_settled.py`'s spy list, if a name moves;
+`test_layering.py`'s rows (D8). DC1-DC10,
 `test_pieces_slice.py` and the uncut suites stay unedited.
 
 **Mutation targets** (for MP5 and MP1-MP3, the invariant-critical suite):
-the piece window without `MARGIN`; a piece re-planned with `plan_mosaic`
-instead of `restrict`; the strip's meta from the piece tile's corner plus
-an offset; `HeldWindows` presenting the piece's own meta; check-point
-blocks clipped before the outline test; the finished piece kept in a list;
-the run-level check-point list kept.
+the piece window without `MARGIN` (MP1, MP5); `HeldWindows` presenting the
+piece's own meta (MP5, reprojected); check-point blocks clipped to
+`within` before the outline test (MP5 at `BLOCK` 8: the clipped outline is
+smaller, so a block part outside the domain's image is skipped and the
+piece's `dem_nodes_checked` falls; whether any piece meets such a part is
+what the mutation round shows); the finished piece kept in a list (MP3);
+the run-level check-point list kept (MP3's block arrays).
+
+Two rules of D2 and D5 are not mutation targets, because no fixture on
+which 23c-2 runs can tell them apart: a piece re-planned with
+`plan_mosaic` instead of `restrict`, and the strip's meta from the piece
+tile's corner plus an offset. Both differ from today's formula only by
+where a float sum is rounded, `(x_min + a·h) + b·h` against
+`x_min + (a + b)·h`. On a spacing whose multiples are exact (whole metres,
+as every fixture's 10 m and the reprojected path's whole-metre or
+power-of-two spacing,
+`src_python/tin_engine/target_grid.py@321bac56:115-116`) the two are
+equal for any tie point: a tie point such as 500000.3 does not help, since
+adding exact multiples of 10 m within one binade rounds nothing (checked:
+no difference for any `a + b` below 60 at 500000.3, 500001.7 and
+6600000.3). On a spacing whose multiples round, 23c-2 itself refuses the
+square scene: at 9.7 m and at 9.9 m, `--pieces 4` exits 1 with "seam edge
+7 differs between pieces (0, 0, 0) and (0, 1, 0): the pieces do not
+conform" (measured on `321bac56`; 9.75 m runs), so K6 has no bytes to
+compare. The rules stay, held by review; the defect is under "Left out".
 
 #### Left out
+
+- **Cuts on a spacing whose multiples round** (found above, a defect of
+  23c-2, not made by this step): a projected DEM whose cell is not exact
+  in binary (9.7 m, 9.9 m; any decimal fraction such as 0.1 m) cannot be
+  cut, since two neighbours compute a shared node's position from
+  different corners. The run writes the piece files and refuses with exit
+  1. Whole-metre and power-of-two spacings, and every reprojected run, are
+  not affected. 23c-3 keeps 23c-2's arithmetic (K6), so the fix is its own
+  step; handed back.
 
 - **Parallel pieces, admission under `--memory-budget`, resume and the
   stitch**: 23d, as planned.
@@ -3696,14 +3801,16 @@ Counted against `worktree-23c`'s head, in `CLAUDE.md` §2's unit:
 |---|---|---:|
 | `dem_input.py` | `DemPlan`, `plan_dem`, `assemble_dem`, `PiecePlan`, `piece_plan`, `PieceDem`, `load_piece` (both paths) | 70 |
 | `mosaic.py` | `restrict`, `check_canvas` moved out, `cap` | 23 |
-| `target_grid.py` | `HeldWindows`, `grid_meta` moved out, `within` | 21 |
-| `basin_run.py` | `MARGIN`, `piece_windows`, `load` and `write`, strips from the piece tile | 30 |
+| `target_grid.py` | `HeldWindows`, `SourceWindows.dtype`, `grid_meta` moved out, `within` | 26 |
+| `basin_run.py` | `MARGIN`, `piece_windows`, `load` and `write`, strips from the piece tile, `cut_partition` given the cells | 28 |
+| `refine_job.py` | `RunError`, `Once`, `How`, `Refined` moved out of `basin_run.py` (the move nets the new module's header and imports) | 8 |
 | `pieces.py` | flag arithmetic deleted | -7 |
-| `cli.py` | plan before the cut, piece plans and caps, `_write_piece`, per-piece `dem_seams`, lazy imports | 33 |
-| **total** | | **170** |
+| `cli.py` | plan before the cut, piece plans and caps, `_write_piece`, per-piece `dem_seams`, one cell told first, lazy imports, `ConformityError` caught in the cut branch | 42 |
+| **total** | | **190** |
 
-At +39 % 236, at +60 % 272; under 700 either way. Point 7's figure was about
-185.
+At +39 % 264, at +60 % 304; under 700 either way. Point 7's figure was about
+185; round 1 of the design review moved it from 170 (D3's `dtype`, D8's
+split).
 
 **`@perf` applies** (the step drives refine and mesh code;
 `docs/increments/README.md`, "Acceptance"):
