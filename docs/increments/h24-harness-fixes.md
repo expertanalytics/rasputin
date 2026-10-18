@@ -662,3 +662,8 @@ writes its sentence onto the other's text: if C is second, its C1 text
 keeps h23's hook clause in the same short form as the others ("…;
 `<h23's hook>` …"); if h23 is second, it adds its clause to C1's text.
 Both are prose, so the merge is a wording step, not a design change.
+
+## Review
+
+- **Design review, round 1, 2026-10-18.** On `808782fd`, @reviewer: CHANGES REQUESTED. The GraphQL read exemption let writes through (a `#` inside a string, shell `$` expansion, extra words); the Python read exemption let writes through (reusing an opened file's name, `opener=`, patching `open`, rebinding `json` or `Path`); item 13's class signatures were not stable text; four wordings. Revised in `92247dec` by a fresh `@architect`.
+- **Design review, round 2, 2026-10-18.** On `92247dec`, @reviewer: APPROVED. Every round-1 write is pinned by a test that it still asks; no new write passes. Items 2 and 3: Ola said yes the same day.
