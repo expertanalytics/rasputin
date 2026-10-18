@@ -3524,8 +3524,8 @@ time.**
 
 **D6. Writing as each piece is done.** `_write_pieces`'s loop body
 (`src_python/tin_engine/cli.py@321bac56:1404`) becomes `_write_piece`, the
-`write` callable; the directory is made before the first piece. Two
-consequences, both decided here:
+`write` callable; the directory is made before the first piece. One
+consequence, decided here, and one note:
 
 - *A conformity failure leaves the piece files and no index.* K4 can only
   be checked after the last piece, by which time its files are written.
@@ -3534,13 +3534,15 @@ consequences, both decided here:
   do not conform and that no index was written. An all-NoData cut writes no
   piece file (as today, a piece without triangles has none) and is refused
   with no index.
-- *`dem_seams` in a piece file is that piece's own report.* The overlap
-  report needs decoded values, and a piece decodes only its window, so each
-  piece file reports the tile pairs that disagree inside its window, with
-  that window's counts. Today every piece file repeats the run's report.
-  This follows K6: a piece's file depends on its job only. `dem_tiles` stays
-  the run's list (it comes from headers). Where no overlap disagrees, the
-  text is today's, so MP5's byte identity holds there.
+- *The overlap report is per piece, and still reaches no file.* The report
+  needs decoded values, and a piece decodes only its window, so
+  `PieceDem.seams` holds the tile pairs that disagree inside that window,
+  with that window's counts. No piece file carries it: `dem_seams` is a
+  run-record entry (`src_python/tin_engine/cli.py@321bac56:1053`), and a
+  cut run refuses `--record` and `--stats` (`:969`), so on 23c-2 the run's
+  report reaches no output either. Nothing a cut run writes changes; where
+  the report should go for a cut run (stderr, or the index) is an open
+  idea, not this step's.
 
 **D7. The fan's flag arithmetic goes** (round 5 of 23c-2's review).
 `start_slice` computes each fan triangle's constraint bits
@@ -3702,24 +3704,29 @@ Tests:
   every piece every check-point block. Every piece file and `index.json`
   are byte-identical between the double and the real run: square scene at
   `--pieces 4` and 16, with and without `--tolerance-slope 0.3 5 20`;
-  four-tile scene (its overlaps agree, so `dem_seams` is the same text);
+  four-tile scene;
   reprojected scene at `--start-min-angle 0` and at the default, each at
   `BLOCK` 512 and patched to 8 (the double sees the same patch). The
   invariant-critical test of this step (mutation targets below).
 - **DS1, a piece reports its own overlaps (D6).** The four-tile scene with
   `ne`'s overlap row raised by 1 m: the pieces whose windows hold that
   overlap name `ne` and `nw` with their own windows' node counts; a piece
-  whose window holds none of it does not name them. `@tester` measures the
-  counts. Red today (every piece repeats the run's report).
+  whose window holds none of it does not name them. Read from each
+  `PieceDem.seams` through a spy on `load_piece`, since no file carries the
+  report (D6). `@tester` measures the counts. Red today (`load_piece` does
+  not exist; 23c-2 builds one run-wide report).
 - **SL1, the margin under `--tolerance-slope`** (round 5's idea; B6 is not
   equivalent there). Square scene, `--pieces 4`, `--tolerance-slope 0.3 5
   20`, `--start-min-angle 0`: each piece's `slope_nodes_tightened` is the
   same with `basin_run.MARGIN` patched to 3 as at 1 (measured: 317 of 338,
   276 of 300, 278 of 312, 254 of 272 for pieces `0-0-0`, `0-1-0`, `1-0-0`,
-  `1-1-0`); the control, `MARGIN` 0, differs on three pieces (318, 276, 276,
-  253), so the test can fail. Only the count is compared: whole files differ
-  at margin 3 in the last bit of an off-node z (D5). Red today (`MARGIN`
-  does not exist).
+  `1-1-0`), and the patch is checked to have reached the windows (each
+  piece window, read from the index, grows by two nodes on every inner side), so
+  a `piece_windows` that ignores `MARGIN` fails. There is no `MARGIN` 0
+  control: a window of the cell alone cannot hold the seam strip, which
+  reaches one node past the cell line, so a margin-0 run refuses (D5).
+  Only the count is compared: whole files differ at margin 3 in the last
+  bit of an off-node z (D5). Red today (`MARGIN` does not exist).
 - **LZ1, an uncut run does not import the cut path (D8).** In a fresh
   interpreter (a subprocess, so no other test's import counts), an uncut
   `rasputin mesh` run of the square scene with `--domain` and `--tolerance
@@ -3735,8 +3742,28 @@ Amended by `@tester`, not new: `test_cli_mesh_pieces_caps.py` (MP4);
 `test_cli_mesh_pieces_seam_paths.py`, which patches `cli.cut_run`
 (it patches `basin_run.cut_run` after D8, with the new signature);
 `test_cli_mesh_pieces_settled.py`'s spy list, if a name moves;
-`test_layering.py`'s rows (D8). DC1-DC10,
-`test_pieces_slice.py` and the uncut suites stay unedited.
+`test_layering.py`'s rows (D8); and every uncut test that patches
+`cli.open_dem`, which the CLI no longer calls (D1:
+`test_cli_mesh_domain_crs.py` and `test_cli_mesh_geographic.py`): the
+patch moves to `plan_dem` or `assemble_dem`, and what the test compares
+stays as it was. DC1-DC10, `test_pieces_slice.py` and the rest of the
+uncut suites stay unedited.
+
+**Interfaces settled after the red step** (`c8bf98c1`, pinned by
+`@tester` and taken into this design): `PieceDem` is a frozen dataclass
+with fields `tile`, `row0`, `col0`, `seams`, `grid` and `checks` (the last
+two None on the projected path); `PiecePlan.window` is the piece's window
+in the run window's indices; `DemPlan.domain` is the domain in the DEM's
+CRS; `cut_run` calls `load` once per piece, in index order, and hands
+`write` the finished `Piece` (with its `trimmed` mesh) before the next
+`load`; `restrict(plan, w)` keeps the plan's lattice and reference and
+shifts its lattice window by `w`'s corner, with `meta` equal to
+`plan.meta.windowed(w)`; the K4 refusal's stderr contains "no index".
+`HeldWindows` keeps D3's signature, `HeldWindows(meta, tile, row0, col0)`,
+which the tests use (`tests/python/test_piece_dem.py@c8bf98c1:205`): a
+form taking only the held tile and a window would have to rebuild the
+run's meta from the held tile's corner, the rounding D5 avoids, and would
+not know the run's rows and columns, which `resample`'s inside test reads.
 
 **Mutation targets** (for MP5 and MP1-MP3, the invariant-critical suite):
 the piece window without `MARGIN` (MP1, MP5); `HeldWindows` presenting the
