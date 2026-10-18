@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -66,6 +68,45 @@ def _load_tool() -> ModuleType | None:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+#: The package's user settings: removed for the whole session, so no test sees
+#: the machine's values. A user setting the package adds joins this list.
+#: ``RASPUTIN_INSTALL_TRAP`` is not one: it is a test control CI sets.
+USER_SETTINGS = ("RASPUTIN_DATA", "RASPUTIN_THREADS", "RASPUTIN_MCP_OUT_ROOT")
+
+#: The session's own home directory, made by `pytest_configure`.
+_session_home: list[Path] = []
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Give the session an empty home before collection and before any fixture.
+
+    Function-scoped fixtures run after fixtures of wider scope, so only a hook
+    this early keeps the user's home, sources file and settings away from a
+    module- or session-scoped fixture and from reads at import time. ``HOME``
+    and the four XDG directories point into one fresh temporary directory; the
+    XDG directories are not created, as for a new user. Imports nothing from
+    the package: the harness job runs without it.
+    """
+    root = Path(tempfile.mkdtemp(prefix="rasputin-test-home-"))
+    _session_home.append(root)
+    home = root / "home"
+    home.mkdir()
+    os.environ["HOME"] = str(home)
+    os.environ["XDG_CONFIG_HOME"] = str(home / ".config")
+    os.environ["XDG_CACHE_HOME"] = str(home / ".cache")
+    os.environ["XDG_DATA_HOME"] = str(home / ".local" / "share")
+    os.environ["XDG_STATE_HOME"] = str(home / ".local" / "state")
+    for name in USER_SETTINGS:
+        os.environ.pop(name, None)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove the session's home. The old values are not put back: the process
+    ends with the session, and no test runs pytest in-process."""
+    while _session_home:
+        shutil.rmtree(_session_home.pop(), ignore_errors=True)
 
 
 _verdict: list[str] = []
@@ -129,7 +170,8 @@ def _own_xdg_cache(
     would read or write the real cache in the home directory. The directory
     is made outside the test's own ``tmp_path``, so a test that lists its
     ``tmp_path`` sees nothing of it. A test that needs no cache at all deletes
-    the variable (and ``HOME``) itself.
+    the variable (and ``HOME``) itself. `pytest_configure` covers fixtures of
+    wider scope, which are set up before this one.
     """
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("xdg-cache")))
 
@@ -144,5 +186,7 @@ def _own_xdg_config(
     else ``~/.config/rasputin``: without this, a test would read the real
     sources file in the home directory, and its result would depend on the
     machine. Made outside the test's own ``tmp_path``, as the cache is.
+    `pytest_configure` covers fixtures of wider scope, which are set up before
+    this one.
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
