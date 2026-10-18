@@ -584,30 +584,8 @@ template <class Store, class R, TolerancePolicy P>
         out.z.push_back(std::isnan(zt[i]) ? 0.0 : zt[i]);
         out.valid.push_back(std::isnan(zt[i]) ? 0 : 1);
     }
-    // The loop decides incircle on (col * dx, -row * dy); the vertices go out
-    // as world points, a translation that rounds, so a near-cocircular quad
-    // (a foot and the grid lines through its node make two right angles) can
-    // be legal in the frame and not as written. One more Lawson pass on the
-    // written points, as (x, -y) under the unit frame, settles them there;
-    // a mesh with a triangle not counter-clockwise as written is left as is.
-    std::vector<mesh::MeshVertex> world;
-    for (const Point2 p : out.vertices)
-        world.emplace_back(p.x, -p.y);
-    std::vector<std::uint8_t> bits(m.triangle_count(), 0);
-    std::vector<std::array<std::uint32_t, 3>> edge_masks(m.triangle_count());
-    for (std::uint32_t t = 0; t < m.triangle_count(); ++t)
-        for (unsigned k = 0; k < 3; ++k) {
-            bits[t] |= static_cast<std::uint8_t>(m.is_constrained(t, k) ? 1u << k : 0u);
-            edge_masks[t][k] = m.mask(t, k);
-        }
-    auto written_mesh = mesh::LatticeMesh::build(std::move(world), {m.triangles().begin(), m.triangles().end()},
-                                                 std::move(bits), std::move(edge_masks));
-    const mesh::LatticeMesh& last = written_mesh ? *written_mesh : m;
-    if (written_mesh)
-        out.flips += mesh::legalise_all<pred::DefaultKernel>(*written_mesh, mesh::LatticeFrame{1.0, 1.0},
-                                                             [](std::uint32_t) {});
-    out.triangles.assign(last.triangles().begin(), last.triangles().end());
-    std::tie(out.edges, out.masks) = last.constraint_edges();
+    out.triangles.assign(m.triangles().begin(), m.triangles().end());
+    std::tie(out.edges, out.masks) = m.constraint_edges();
     return out;
 }
 
