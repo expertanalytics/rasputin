@@ -31,8 +31,19 @@ READ_ONLY = frozenset({"version", "sources"})
 OPEN_WORLD = frozenset({"fetch", "fetch_stations"})
 
 
+class Download(BaseModel):
+    """One stored output: its path in the caller's folder, its bytes, and a signed link
+    that opens it until ``expires`` (ISO 8601, UTC)."""
+
+    path: str
+    sha256: str
+    bytes: int
+    url: str
+    expires: str
+
+
 class RunResult(BaseModel):
-    """What a tool call returns when the command exits 0."""
+    """What a tool call returns when the command exits 0; ``downloads`` only over HTTP."""
 
     command: str
     exit_code: int
@@ -42,6 +53,7 @@ class RunResult(BaseModel):
     stderr: list[str]
     record: dict[str, Any] | None = None
     stats: str | None = None
+    downloads: list[Download] | None = None
 
 
 def _annotation(param_type: Any) -> tuple[Any, dict[str, Any]]:
@@ -138,6 +150,20 @@ class DerivedCommand:
             for item in value if param.multiple else [value]:
                 if not (item == "-" and param.type.allow_dash):
                     found.append((param.name, str(item)))
+        return found
+
+    def reads(self, arguments: BaseModel) -> list[tuple[str, str]]:
+        """(argument, value) for each string, given or default, of a parameter that is not a
+        writable path: every item of a repeatable one and every string of a tuple, since a
+        command may open any of them as a file."""
+        found: list[tuple[str, str]] = []
+        for param in self.command.params:
+            value = getattr(arguments, param.name)
+            if getattr(param.type, "writable", False) or value is None:
+                continue
+            for item in value if param.multiple else [value]:
+                parts = item if isinstance(item, tuple) else (item,)
+                found.extend((param.name, part) for part in parts if isinstance(part, str))
         return found
 
 
