@@ -27,6 +27,7 @@ pytest.importorskip("mcp")
 from geotiff_fixtures import micro_tiff
 from mcp_driver import Progress, wait_until_dead
 from mcp_http_driver import (
+    KEY,
     SESSION_REVISION,
     TOKENS,
     HttpServer,
@@ -228,7 +229,19 @@ async def test_a_real_mesh_over_http_returns_a_vtk_link(real_server: HttpServer)
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 
 
-async def test_no_log_record_holds_a_token_a_signature_or_a_link(
+def is_the_servers(record: logging.LogRecord) -> bool:
+    """A record of the server's own loggers: `tin_engine`'s and uvicorn's.
+
+    The test client's `httpx2` logs its request line, link included; that line
+    is the client's, and the server cannot keep it out (section 6.5 binds the
+    server's log).
+    """
+    return any(
+        record.name == n or record.name.startswith(f"{n}.") for n in ("tin_engine", "uvicorn")
+    )
+
+
+async def test_no_server_log_record_holds_a_token_a_signature_a_key_or_a_link(
     server: HttpServer, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
@@ -245,11 +258,13 @@ async def test_no_log_record_holds_a_token_a_signature_or_a_link(
     finally:
         for name in UVICORN_LOGGERS:
             logging.getLogger(name).removeHandler(caplog.handler)
-    texts = [record.getMessage() for record in caplog.records]
+    texts = [record.getMessage() for record in caplog.records if is_the_servers(record)]
+    assert texts, "no record from the server's loggers was captured"
     for text in texts:
         for token in TOKENS.values():
             assert token not in text, text
         assert link.sig not in text, text
+        assert KEY.hex() not in text and repr(KEY) not in text, text
         assert "?fn=" not in text, text
     ours = [r.getMessage() for r in caplog.records if r.name == "tin_engine.mcp.http"]
     assert any("ola" in t and "version" in t for t in ours), ours
