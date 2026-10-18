@@ -3,7 +3,7 @@
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
 2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
-in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18, about 190 lines, under "23c-3: each piece's memory its own"; 23d
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18 at about 190 lines, green at 199, 5 of 5 mutants killed, code review approved, @perf next, under "23c-3: each piece's memory its own"; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -3325,8 +3325,7 @@ Designed by `@architect` on `worktree-23c-3`, stacked on `worktree-23c`
 (23c-2, approved and accepted, at `321bac56`). It is the step point 3(b)
 above moved out of 23c-2: each piece reads only its own part of the DEM,
 writes its file when done, and frees it. It changes memory, not meshes: every
-piece file stays byte for byte what 23c-2 writes (K6), with one named
-exception (D6). The code read is `321bac56`; citations are pinned there.
+piece file stays byte for byte what 23c-2 writes (K6); only a failed run ends differently (D6). The code read is `321bac56`; citations are pinned there.
 
 **Prior art for this step.** *Literature:* nothing new beyond this file's
 section. The step builds what that section already takes from Isenburg et
@@ -3849,8 +3848,7 @@ split).
   uncut), peak RSS included, with point 10 (b)'s start-pass insertions per
   piece.
 - K6 on real data: at 10 m `--pieces 64`, `index.json`'s piece digests
-  equal 23c-2's (`worktree-23c` at `321bac56`) on the same inputs; ANADEM is
-  one source, so D6's exception does not arise.
+  equal 23c-2's (`worktree-23c` at `321bac56`) on the same inputs.
 - Memory follows the piece: peak RSS at 10 m for `--pieces 16`, 64 and 256,
   against 23c-2's 1.50 GB footprint at 64. The claim to test: it falls as
   pieces shrink, where 23c-2's does not; and at each tolerance it stays
@@ -4401,3 +4399,5 @@ test_cli_mesh_geographic.py (221 tests; baseline all green).
 Five targets, five killed: M1, M4, M5 by the MP suite; M3 by D3's witness
 test; M2 by this commit's test.
 ```
+
+**23c-3, code review, round 1, 2026-10-19.** Range `321bac56..fefdff59`, 199 counted lines for this step (estimate 190); the branch is 747 against master only because it carries 23c-2's 548, so the PR opens after 23c-2 merges. @reviewer: APPROVED WITH WORDINGS, applied by the main session. Peak memory is one piece, by reading; the uncut path loads none of the cut modules.
