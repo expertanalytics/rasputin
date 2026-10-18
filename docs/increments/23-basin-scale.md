@@ -4350,3 +4350,54 @@ C7  conformity failure exits 2: killed new (seam_paths)
 **23c-2, `@perf` acceptance, 2026-10-18.** `c3d3696d`, master `cb713c87` against head `4e140864`, same `_core` binary: bench mesh hashes unchanged (tile `11741a81…`, quarter `a60fb597…`), refine time -3.6 to +3.0 % across 1 to 20 threads; whole-process quarter time +0.6 to +1.8 %, in Python, not profiled. Velhas on ANADEM 10 m with `--pieces 64`: 51 pieces, every seam segment in exactly two pieces with identical z, 0 nodes over tolerance (control fails as it should), 0 constrained-Delaunay violations; 6.20 s, 1.64 GB: ACCEPTED.
 
 **23c-3, design review, rounds 1 and 2, 2026-10-18/19.** Round 1 on `7c4216d8`, @reviewer: CHANGES REQUESTED (lazy imports missed names the uncut run uses; the held source window broke `resample`'s type probe; four mutation targets unkillable on the fixtures; five wordings). Round 2 on `07046531` (a fresh `@architect`), @reviewer: APPROVED WITH WORDINGS, applied by the main session (what 23c-2 does on a 9.7 m DEM). The 9.7 m cut bug in 23c-2 does not block its merge: the cut refuses and writes nothing, and no current source is affected; its own step, before the basin run.
+
+**23c-3, mutation round, 2026-10-19** (`@tester`, on green `6ce067ee`; test fix `a14f7470`, new test `ff80b4c8`; all 5 targets killed; record copied from `ff80b4c8`'s message by the main session):
+
+```text
+test_piece_dem: a reprojected piece holds the whole run's bits (@tester)
+
+Adds test_a_reprojected_piece_holds_the_whole_runs_bits (BLOCK 512 and 8):
+through dem_input.load_piece on DC10's reprojected scene, each of the four
+piece windows of --pieces 4 gets the whole grid's resampled tile cut to its
+window, and its check points inside its sub-grid's node rectangle are the
+whole run's there, positions and values to the last bit (D3). It kills the
+mutant "HeldWindows presenting the piece's own meta", which MP5 and every
+other suite let through.
+
+Mutation round, 23c-3, invariant-critical tests MP1-MP3 and MP5, on
+6ce067ee (with a14f7470's test fix). Each mutant planted alone in a scratch
+copy (tools/scratch_copy.py), Python only, run against
+test_cli_mesh_pieces_bytes.py and test_cli_mesh_pieces_memory.py (MP), then
+every test_cli_mesh_pieces*.py, test_piece_dem.py, test_target_grid.py and
+test_cli_mesh_geographic.py (221 tests; baseline all green).
+
+- M1, the piece window without MARGIN (basin_run.piece_windows, cells not
+  grown): KILLED by MP1, MP2, MP3 (both), MP5 (all 9 cases), SL1, DS1;
+  also test_piece_windows_are_23c2s_cells_grown_by_one_node. The runs
+  refuse: the seam strip lies outside its piece.
+- M2, HeldWindows presenting the piece's own meta (dem_input.load_piece:
+  HeldWindows(mosaic.tile.meta, mosaic.tile, 0, 0), no `within`):
+  SURVIVED MP1-MP5 and all 221 tests. Not equivalent: 3 of 4 pieces get
+  check points moved in the last bit (50, 10 and 53 of about 600), and at
+  BLOCK 8 two pieces' point counts change (571 against 555, 543 against
+  568), all outside the domain or below what changes a byte of the output
+  on this scene. Now KILLED by this commit's test, at 512 and 8 (100
+  points differ in piece 0-1). (A first plant, TileWindows(mosaic.tile),
+  was killed by MP3 reprojected only through its spy, "a canvas unseen",
+  not by the invariant; replaced by the plant above.)
+- M3, check-point blocks clipped to `within` before the outline test
+  (target_grid.check_point_blocks): SURVIVED MP5 at BLOCK 8, and MP1-MP3:
+  on DC10's scene no piece meets a block part the clipped outline skips
+  inside its sub-grid. KILLED by test_piece_dem.py
+  TestCheckPointsWithin::test_yields_the_whole_runs_points_inside_within[w3]
+  (the witness node (23, 23)).
+- M4, the finished piece kept in a list (basin_run.cut_run, each Piece
+  appended to a run-level list before write): KILLED by
+  test_mp3_one_piece_alive_at_a_time_projected and _reprojected.
+- M5, the run-level check-point list kept (basin_run.cut_run, every block
+  of every piece appended to a run-level list as refine reads it): KILLED
+  by test_mp3_one_piece_alive_at_a_time_reprojected ("block arrays alive").
+
+Five targets, five killed: M1, M4, M5 by the MP suite; M3 by D3's witness
+test; M2 by this commit's test.
+```
