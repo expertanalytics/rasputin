@@ -4,8 +4,9 @@
 `worktree-mcp-http`). Ola took the six defaults this design starts from
 (section 1). Revised for `@reviewer`'s design review round 1 (changes
 requested: outputs filtered, read limit independent of existence, re-check
-after the job slot, `fetch --refresh` refused, quota figure). Next:
-`@reviewer`'s second design review, then `@tester`'s red suite (section 9). Questions for Ola: section 12, each with a default the design
+after the job slot, `fetch --refresh` refused, quota figure) and round 2
+(a value with `/` must be a plain path, section 5.2). Next: `@reviewer`'s
+third design review, then `@tester`'s red suite (section 9). Questions for Ola: section 12, each with a default the design
 already follows.
 
 ## 1. What Ola asked
@@ -230,8 +231,8 @@ What each module does and what it may not do:
   None` (None means the child inherits the server's cwd, as stdio does
   today), `write_root: Path`, `read_roots: tuple[Path, ...] | None` (None
   means no read limit, which is stdio), `user: str | None`, and `refused:
-  frozenset[tuple[str, str]]`, the (tool, argument) pairs that may not be
-  set on this transport (empty on stdio; `{("fetch", "refresh")}` over HTTP,
+  frozenset[tuple[str, str]]`, the (tool, argument) pairs that are refused
+  when set to true on this transport (empty on stdio; `{("fetch", "refresh")}` over HTTP,
   section 7). One function, `async refusal(scope, tool_name, arguments,
   writes, reads) -> str | None`, gives the first refusal in plain words, where
   `arguments` is the validated model's `model_dump()`. It absorbs
@@ -298,7 +299,22 @@ first call arrives.
 
 ### 5.2 The read limit (HTTP only)
 
-Every value from `reads()` is resolved as the child would read it:
+Every value from `reads()` is judged in two steps.
+
+**Form.** A value that contains `/` or starts with `~` must be a **plain
+path**, `^[A-Za-z0-9._~/-]+$`, or the call is refused ("not a plain file
+path"). Without this, a value can carry a path inside another syntax that
+the child opens: `+init=/etc/hosts:x` as `--out-crs` makes
+`pyproj.CRS.from_user_input` (reached through `parse_crs`,
+`src_python/tin_engine/crs.py@cb713c87:46`) open that file, and so would
+`+nadgrids=/x`, a WKT `PARAMETERFILE`, or a PROJJSON grid value. None of
+those is a plain path, so all are refused before anything reads them, and a
+missing file and a present one get the same refusal. The cost: over HTTP, a
+CRS given with a `/` in it (a PROJJSON with its `$schema` URL, say) is
+refused; give an EPSG code or a PROJ string instead. A file name in `work/`
+with a space or another character outside the class must be renamed.
+
+**Place.** Every value is then resolved as the child would read it:
 `(scope.cwd / Path(value).expanduser()).resolve()`, following `..` and every
 link. The call is refused, with the argument, the value as given and the
 place it resolves to, when that place is outside every one of
@@ -311,14 +327,24 @@ place it resolves to, when that place is outside every one of
 
 So a bare value that names no file is passed through: `glo30`, `corine`,
 `EPSG:3006`, a layer name. The CLI then treats it as a name, or refuses it
-as a missing file. Any relative value without `..` resolves inside `work/`
-and is allowed whatever it holds (a URL such as `https://host/x` resolves to
-`work/https:/host/x`). Because a value with `/` is judged without asking
-whether it exists, `../kari/work/out.geojson` is refused before and after
-Kari's run writes it, and the answer tells no caller which server files
-exist. This rule needs no table of which parameters take paths. It holds for
-plugin commands as well, and for the `str` options that take either a name
-or a file (`--dem`, `--land-cover`, `--features-legend`, `palette`'s name).
+as a missing file. Because a value with `/` is judged without asking whether
+it exists, `../kari/work/out.geojson` is refused before and after Kari's run
+writes it. This rule needs no table of which parameters take paths. It holds
+for plugin commands as well, and for the `str` options that take either a
+name or a file (`--dem`, `--land-cover`, `--features-legend`, `palette`'s
+name).
+
+**A bare value can still name a PROJ resource.** `+init=name:code` or
+`+nadgrids=name.tif`, with no `/`, makes PROJ look the name up in its own
+resource folders: pyproj's data folder (`pyproj.datadir.get_data_dir()`) and
+PROJ's user folder (`get_user_data_dir()`), as the server's environment sets
+them. Probe (pyproj in the main venv, 2026-10-18, run in a folder holding a
+file `myinit` with a `<foo>` entry): `+init=myinit:foo` fails ("cannot
+expand"), while `+init=./myinit:foo` reads it. So a bare name never reaches
+the working folder or any user's file. The `./` form contains `/` and is not
+a plain path, so it is refused by the form check. What a bare name can
+reveal is which PROJ resources the server has installed: public grids and
+init files. Accepted and named here.
 
 The read roots, computed once at start (a change to the sources file takes a
 restart, which the HTTP instructions say):
@@ -563,7 +589,8 @@ served by uvicorn on a free loopback port in a thread, as in the probe
 not the point, the tests call the pure functions directly. **The
 invariant-critical suite is T3 and T4** (the read limit and the link). Its
 mutation targets are: `<` against `<=` on expiry, `compare_digest` replaced
-by `==` in `links.valid` (killed by T4's wrapper test), the read check skipped
+by `==` in `links.valid` (killed by T4's wrapper test), the plain-path form
+check dropped (killed by T3's `+init=` case), the read check skipped
 for tuple elements, `resolve()` dropped, and the `/`-or-`~` clause dropped
 (so the check asks only whether the file exists; killed by T3's missing-file
 case).
@@ -586,7 +613,11 @@ case).
   a directory outside given as `--dem`; `tolerance_near` = `["/etc/hosts",
   5]`; an item of repeatable `features` outside; **`../kari/work/out.geojson`
   when that file does not exist**, with the same refusal words (less the
-  value) as when it does; `/nonexistent/x.tif`; `..` as a bare value. Allowed:
+  value) as when it does; `/nonexistent/x.tif`; `..` as a bare value; `--out-crs
+  "+init=/etc/hosts:x"`, refused as not a plain path, with the same words
+  when the named file does not exist; `--out-crs` as a PROJJSON whose
+  transformation has a grid parameter value `/etc/hosts`; `./in file.geojson`
+  (a space; the file exists in `work/`). Allowed:
   a relative file in `work/`; a relative path naming no file
   (`sub/new.geojson`); a local catalogue source's path (a sources file written
   in the test); a bare value naming no file (`glo30`, `EPSG:3006`). Over HTTP,
@@ -597,7 +628,7 @@ case).
   by a link to `/etc/hosts` and releases the first call; the second call is
   refused and the fake child is called once. `fetch` with `refresh=true` over
   HTTP is refused, naming `--refresh`, and the fake child is not called; on
-  stdio it is not refused. On stdio (`read_roots=None`),
+  stdio it is not refused, and `refresh=false` over HTTP is not refused. On stdio (`read_roots=None`),
   `/etc/hosts` as `--domain` is not refused (today's behaviour kept).
 - **T4 links** (`links`, pure, with `now` passed). A signed link checks out
   at `now = expires - 1`. At `now = expires` it is expired (the check is
