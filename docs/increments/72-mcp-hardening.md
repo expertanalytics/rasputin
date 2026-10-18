@@ -1,9 +1,9 @@
 # Increment 72: MCP over HTTP, hardening after increment 69
 
-**Status: designed** by `@architect`, 2026-10-18, on `cef9f3f0` (master,
+**Status: built, approved** (red 7249a49f, green bd6b7054, test fix 93bf4cb8, 2 counted lines); designed by `@architect`, 2026-10-18, on `cef9f3f0` (master,
 increment 69 merged as #290), branch `worktree-mcp-hardening`. **Short
 path** (`docs/increments/README.md`, *Small changes*): about 12 counted
-lines, no C++ file, no refine or mesh code. Next: `@tester`'s red step.
+lines, no C++ file, no refine or mesh code.
 Number 72 because 70 and 71 are held by designs on the worktrees
 `lsm-ddd-routing` and `lsm-route-memory`.
 
@@ -285,3 +285,7 @@ Read `../rasputin_scratch/ideas/ideas.md` on 2026-10-18. Overlaps:
   (`src_python/tin_engine/mcp/schema.py@cef9f3f0:66`, `is not None`).
 - "`--stats` swallows the next option as its path": related (flag-like
   values), not taken up (section 4).
+
+## Review
+
+- **Combined round (short path), 2026-10-19.** Range `cef9f3f0..93bf4cb8`, 2 counted lines (estimate about 8), @reviewer: APPROVED WITH WORDINGS, applied by the main session. Full suite 8362 passed against this branch's code; 360 probed argv cases parse back exactly; user names stay in the log by design. Idea for later (on master too): two optional positionals where only the second is set are read as the first; refuse such a call.
