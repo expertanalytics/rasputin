@@ -4,7 +4,8 @@ Status: **designed**, 2026-10-18, on `worktree-h24-harness-fixes` off master
 `1806288c`. Five PRs (section 4). Ola, 2026-10-18 07:04 UTC: "yes, start the
 harness design". Items 2 and 3: Ola, 2026-10-18, "yes to both"; everything
 else has his yes or needs none. Revised for design review round 1 (items 1,
-5, 6, 13 and sections 4 and 6).
+5, 6, 13 and sections 4 and 6), and for PR A's code review round 1 on
+`188089f1` (items 2 and 5, new item 14, sections 4 and 5).
 
 Sources: `docs/retrospectives/2026-10-18-merges-284-285.md` (sections 3, 5
 and 7), `docs/retrospectives/2026-10-17-overdue-check-night-merges-audit.md`
@@ -155,7 +156,14 @@ lets anything through; the rerun is judged by `granted_act` as today.
 *Rule* (`.claude/REQUIRED-READING.md`, *The harness*, its Unattended mode paragraph, after "do not retry
 it or work around it"): "except a refusal that says the grant takes only one
 bare command: run that command once more, alone and written out" (about +20
-words).
+words). **The sentence goes in PR C, the rule-text PR, not PR A.**
+`@developer`, who writes PR A's green step, cannot write a rule file
+(`tools/brief.py@1806288c:39-40` gives it code folders and build files,
+no Markdown; its green commit `188089f1` says so), and PR C already edits that file, by a writer who can.
+No order between A and C is needed: until C lands, an agent that meets the
+`NOT_BARE` refusal follows today's rule (no retry; an `ASK OLA:` line), which
+is today's behaviour; and an agent that does retry gains nothing unsafe,
+because the rerun is judged afresh by `granted_act`.
 
 *Tests:* the 00:22:54 line (body cut to one line), branch granted, mode on:
 refused, reason contains `NOT_BARE`; the same line with the branch not
@@ -163,7 +171,7 @@ granted: the plain refusal, no `NOT_BARE`; `git push origin $SHA:refs/heads/<gra
 (a variable): `NOT_BARE`; the bare `gh pr create --head <granted> --title 'T'
 --body-file /abs/pr.md` with an approved head: passes (regression).
 
-*Governed* (`tools/push_grant.py`, `.claude/REQUIRED-READING.md`). About 12 lines.
+*Governed* (`tools/push_grant.py`; the sentence, `.claude/REQUIRED-READING.md`, in PR C). About 12 lines.
 
 ### Item 3. A fix that lives under `tests/` is `@tester`'s green step
 
@@ -316,7 +324,64 @@ Still candidates, each its own test:
   `shutil.copy(LIT, LIT)`, and a program with `def open(p): …` before
   `open(H).read()`.
 
-*Governed* (both files). About 20 lines (5a) + 35 lines (5b).
+**Code review round 1 on `188089f1`: what the shell expands.** Both
+exemptions judge words the shell has not yet expanded, and the `$`/backtick
+check of 5a covers only two of the shell's expansions. The review found
+writes passing both; `@tester` pinned them in `3c227e08` (9 tests, all
+through the whole hook, all red on `3c227e08`). Two more conditions:
+
+- **5a: the line expands nothing.** `graphql_read` gains a third argument,
+  `raw`, the raw command text, and passes only when `raw` matches, whole,
+  `EXPANDS_NOTHING = re.compile(r"[ \t|]*(?:(?:[A-Za-z0-9_./=-]|'[^']*')+[ \t|]*)*")`
+  and no word starts with `=` (`re.search(r"(^|[ \t|])=", raw)` refuses; zsh
+  expands `=cmd` to a path). So every character outside single quotes is a
+  letter, digit, `_ . / = -`, a blank or a pipe: no brace, glob, tilde, `$`,
+  backtick, double quote, backslash, `;` or `&` anywhere in the line, and the
+  scanner's words are then exactly what gh receives. This is the review's
+  rule (plain `[A-Za-z0-9_.=-]` or single-quoted), widened by `/` (a path to
+  `gh` or in a pipe) and the pipe (`| jq …`, `| head`), neither of which
+  the shell expands. It reads the raw text the hook already has:
+  `segment_why(words, text)` receives the whole line from `main`
+  (`.claude/hooks/guard_push.py@3c227e08:360`), and the call at `:261`
+  passes `text or shlex.join(words)`. The fallback keeps the existing
+  word-level tests (`segment_why(words)`, `text` empty): `shlex.join`
+  single-quotes every word that holds a character outside its safe set, so
+  a split read like `query={ viewer { login } }` rejoins as
+  `'query={ viewer { login } }'` and still passes; in production `main`
+  always passes the line, never an empty one. The check is on the whole
+  line, not the gh segment: the scanner keeps no word spans, and matching a
+  word to a quoted copy of it elsewhere on the line would let
+  `echo '{x,-X,PUT}'; gh api graphql … -q {x,-X,PUT}` through. Cost: a read
+  behind `cd /x &&`, `;` or in double quotes asks, as on master.
+- **5b: no exemption when the program text holds `$` or a backtick.** In
+  `candidates` (`tools/shell_scan.py@3c227e08:454`), `exempt = set()` when
+  `substituted(program)`, a new two-line helper `substituted(text) -> bool`
+  (`text` is not None and holds `$` or a backtick), shared with item 14. It
+  needs no new reading of the raw line: the program text keeps every `$`
+  and backtick construct as written, since `_Scan.dollar` returns
+  `text[start : self.at]` (`:233`) and a heredoc body is kept line for line.
+  It cannot tell a single-quoted `-c` (where the shell expands nothing)
+  from a double-quoted one: both lose the exemption, which is master's
+  behaviour for every literal, so nothing asks that did not ask on master.
+  Telling them apart would mean tracking, per word and per heredoc
+  delimiter, whether the shell substitutes (about 10 more lines); left out
+  unless such a false positive is reported.
+
+Measured, both fixes and item 14 applied to a scratch copy of `3c227e08`
+(`tools/scratch_copy.py`; the patch is 7 counted lines): `pytest -m harness
+--no-cov` 2530 passed, 14 skipped (the scratch copy is no git work tree), 0
+failed, so the 9 red tests pass and every earlier test, the word-level 5a
+and 5b ones included, still does. Extra probes through `segment_why` with
+the line: `gh api graphql -f query='{ a }' | head -5` and `… --jq .data |
+jq -r '.x'` pass; `echo '{x,-X,PUT}'; gh api graphql -f query='{ a }' -q
+{x,-X,PUT}`, `-q =x`, `-q ~`, `query="{ a }"` and `cd /x && gh api graphql
+-f query='{ a }'` ask. Through `judge_bash`, `python3 -c 'print(open(".claude/settings.json").read().count("$"))'`
+asks (silent on `3c227e08`, asks on master): the accepted cost above.
+
+*Governed* (both files). Green `188089f1`: 98 counted lines
+(`python3 tools/count_loc.py 61d3ce4b 188089f1`: `guard_push.py` 21,
+`push_grant.py` 20, `shell_scan.py` 57), against the 72 estimated. The round-1
+fix adds about 3 (5a) and 0 (5b, one changed line).
 
 ### Item 6. Briefs name a wait that personas can run
 
@@ -493,8 +558,8 @@ resolved (`tools/./json.py`)", "not a write to a whole governed directory
 (`rm -r .claude/hooks`)", and "one plain command: no `&&`, `;`, pipe,
 substitution or interpreter program". Docstrings are not counted lines.
 
-With items 2, 3, 6, 8, 11 and 12 (+20, +30, +40, +45, +30, +10), the net is
-about **−55 words**. Measure on the branch with `python3 tools/rule_sizes.py`
+With items 2, 3, 6, 8, 11 and 12 (+20, +30, +40, +45, +30, +10) and section
+4's review-line wording (+12), the net is about **−43 words**. Measure on the branch with `python3 tools/rule_sizes.py`
 and record the figure in this file.
 
 *Governed* (all four rule files and both hooks). 0 lines.
@@ -601,27 +666,113 @@ cea32bad <dir>`, the old public pin) fails on exactly `destination` and
 red/green pair: the test pins today's behaviour and passes on arrival, so
 the probe above stands in for the red step.
 
+### Item 14. A Python program the shell rewrites is not readable
+
+*Why.* Found by `@tester` beside PR A's review (`3c227e08`, its "Left out"),
+on master too: a literal holding a space is skipped as prose
+(`tools/shell_scan.py@3c227e08:461`), so in a double-quoted `-c` or an
+unquoted heredoc, ``open('<harness path>`cat q`')`` or
+`open('.claude/settings.json$(cat q)')` gives no candidate, and the shell may
+splice any code into the program before Python reads it (q holding
+`','w').write('x'))#` turns the read into a write). Measured through
+`judge_bash` on a scratch copy of `3c227e08`: the backtick read of the
+harness state by `-c` and by unquoted heredoc, the backtick and the
+`$(cat q)` read of `.claude/settings.json`, and
+`python3 -c "open('$(echo CLAUDE.md)','w').write('x')"` all give None
+(silent).
+
+*Change* (`tools/shell_scan.py` only; the guards are unchanged). Where the
+program text holds `$` or a backtick (item 5's `substituted`), what the
+interpreter runs is decided by the shell at run time, so the scanner treats
+it as unknowable, in two places:
+
+- In `candidates`, a Python string literal for which `substituted` holds is a
+  candidate whatever spaces it holds (spaces mark prose only where nothing is
+  substituted). The guard already judges a candidate by its static form
+  (`static(t)`, and `static(t, ".git")` for the harness state), so
+  ``'<H>`cat q`'`` is judged as `<H>` and denied, and
+  `'.claude/settings.json$(cat q)'` asks naming it.
+- The simple command is marked `unknown` ("writes files it does not name")
+  when it is an interpreter, not a shell (a shell's program is parsed as
+  commands already), and `substituted(program)`: set in `classify` after
+  `interpreter(…)` (`:323`) and in `finish_heredoc` after
+  `simple.program = simple.heredoc` (`:303`). The governance guard then does
+  what it does for any unreadable target
+  (`.claude/hooks/guard_governance.py@3c227e08:158`, `:168`): denies when the
+  line names `.git/harness`, and otherwise, when no candidate matched, judges
+  the line by its text rule, which asks when the line names a governed
+  file. So `open('$(echo CLAUDE.md)','w')`, whose static form is empty, asks
+  naming `CLAUDE.md`. A splice that reads its path from a file and names no
+  governed file in the line still passes: the guard is a tripwire, as for a
+  write target that is wholly a variable.
+
+Ask or refuse: as for every other unreadable line, ask (deny for the harness
+state); refusing every program with a `$` would ask on each regex ending in
+`$`. The cost: an interpreter line whose program holds `$` or a backtick and
+whose text names a governed file asks even when that name is only prose or a
+comment. On master such a line passes; it is rare, and the ask names the
+file.
+
+*Tests* (`tests/python/test_guard_governance.py`, through the whole hook as in
+`3c227e08`; `H` the harness state's absolute path, q holding item 5b's
+`SPLICE`): ``python3 -c "print(open('<H>`cat q`').read())"`` and the same by
+unquoted heredoc, modes off and on: denied with the always-denied text,
+nothing queued; ``python3 -c "print(open('.claude/settings.json`cat q`').read())"``
+and the `$(cat q)` form: ask, naming `.claude/settings.json`;
+`python3 -c "open('$(echo CLAUDE.md)','w').write('x')"`: asks naming
+`CLAUDE.md`. Still silent: `python3 -c 'print("a $ b")'`,
+`python3 -c 'print("see CLAUDE.md for rules")'` (a prose literal, nothing
+substituted), and `python3 -c 'print(open("/x/notes.txt").read().count("$"))'`.
+In `tests/python/test_guard_targets.py`: `parse` of a double-quoted `-c`
+program holding `$(cat q)` gives the `python3` simple with `unknown` True
+(False on `3c227e08`); of `bash -c "echo $(cat q)"`, four simples, none
+`unknown`. Each line above was run, through `judge_bash` or `parse`, on the
+patched scratch copy, with the result stated.
+
+*Governed* (`tools/shell_scan.py`). About 4 counted lines (the 2-line helper
+is shared with 5b; 2 lines set `unknown`), and 1 changed line in `candidates`.
+In PR A, beside item 5b: same file, same green step.
+
 ## 4. The PRs
 
-Total about 155 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
+Total about 190 counted lines and about 60 test lines for item 13, far under 700; split by risk and by night
 eligibility, not by size.
 
 | PR | Items | Files | Counted lines | Risk | When |
 |---|---|---|---|---|---|
-| A, guards | 1, 2, 5 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py`, item 2's sentence | about 72 | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
+| A, guards | 1, 2, 5, 14 | `tools/push_grant.py`, `.claude/hooks/guard_push.py`, `tools/shell_scan.py` | about 105 (98 in green `188089f1`, about 7 more for the round-1 fix and item 14) | a guard that lets a write through; review probes it adversarially | by day; red can be written any time, green needs Ola at the prompt |
 | B, reports | 4, 8, 9 | `tools/session_state.py`, `tools/away.py`, item 8's sentences | about 80 | none to the boundary: they print | by day, as A |
-| C, rule text | 3, 6, 10, 11, 12 | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
+| C, rule text | 2's sentence, 3, 6, 10, 11, 12, the review-line wording below | four rule files, `.claude/briefs/common.md`, two hook docstrings | 0 | rule wording only | by day (governed); no red or green, `@reviewer` once |
 | D, scratch copy | 7 | `tools/scratch_copy.py` | about 3 | none | short path; not governed, so a night fallback |
 | E, plugin signatures | 13 | `tests/python/test_plugin_api.py` | 0 | none | `@tester` alone, then `@reviewer`; not governed, so a night fallback |
 
-Order: none needed among A, B and C. No sentence A or B adds falls inside
-a span C cuts: item 2's sentence goes in the *Unattended mode* paragraph and
-item 8's in the `session.md` bullet and that paragraph, while C1 cuts the
-"Active in" paragraph, C2 the *Claims* gate recipe, and C3 to C6 other
-files. All three edit `.claude/REQUIRED-READING.md`, in different
-paragraphs; whichever lands second or third merges master first
-(`tools/merge_master.py`). A and B are independent and can run as the two
-writers; C needs no writer beyond its prose. D and E go any time.
+Order: none needed among A, B and C (item 2 says why A does not wait for
+its sentence in C). No added sentence falls inside a span C cuts:
+item 2's sentence goes in the *Unattended mode* paragraph and item 8's in
+the `session.md` bullet and that paragraph, while C1 cuts the "Active in"
+paragraph, C2 the *Claims* gate recipe, and C3 to C6 other files. B and C
+edit `.claude/REQUIRED-READING.md`, in different paragraphs; A no longer
+does. Whichever lands later merges master first (`tools/merge_master.py`).
+A and B are independent and can run as the two writers; C needs no writer
+beyond its prose. D and E go any time.
+
+**The review line.** Every `@reviewer` handback on these PRs, design and code
+rounds alike, ends on one line written exactly
+`Review: <VERDICT> <full sha>`: `<VERDICT>` one of `APPROVED`,
+`APPROVED WITH WORDINGS`, `CHANGES REQUESTED`; the sha all 40 characters;
+nothing else on the line (no bold, no backticks, no list dash); and no
+other line starting `Review:`. The hook `record_review.py` keeps only such
+a line (`REVIEW`, `tools/push_grant.py@1806288c:39-41`), and the away-mode
+push grant reads only what it kept. The increment file's one-line record
+(`- **Code review, round 1, …** On <sha>, @reviewer: …`) is the main
+session's copy, written afterwards; a handback in that form is not recorded.
+On 2026-10-18 the main session counted 4 of 19 verdicts unrecorded for that
+reason (its count, not re-checked here). The rule already says this
+(`docs/increments/README.md` step 4, "ends with exactly one line
+`Review: <verdict> <sha>`"); PR C makes the wording exact there: `<sha>`
+becomes "the full 40-character sha", and "written plain, with nothing else
+on the line" is added (about +12 words). Until C lands, the main session
+quotes the format in each `@reviewer` brief.
 
 ## 5. Live checks, after green
 
@@ -637,6 +788,11 @@ writers; C needs no writer beyond its prose. D and E go any time.
    03:47:38 with this machine's transcripts gives an idle stretch from about
    00:32 to 03:47 (the retrospective's 3 h 15 min, section 7.2), and the
    call takes under 5 s (time it).
+5. Item 5's round-1 fix and item 14: on the main checkout after PR A merges,
+   `judge_bash` of ``python3 -c "print(open('<H>`cat q`').read())"`` (`H` the
+   real harness state's path) is `('deny', [], '')`, and `segment_why` of
+   `gh api graphql -f query='{ a }' -q {x,-X,PUT}`, given that line as its
+   text, names the forge.
 
 ## 6. How h23 fits
 
