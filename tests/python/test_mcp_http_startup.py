@@ -10,6 +10,7 @@ Origin go to a loopback server whose public URL is ``https://mcp.example.org``.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -70,9 +71,12 @@ class TestStartUpRefusals:
     def test_no_tokens_exits_2_naming_the_variable(self, run: Any) -> None:
         refused(run(tokens=None), VARIABLE)
 
-    def test_a_bad_token_exits_2_naming_the_user_not_the_token(self, run: Any) -> None:
+    def test_a_bad_token_exits_2_naming_the_pairs_position_neither_user_nor_token(
+        self, run: Any
+    ) -> None:
         result = run(tokens=f"ola={'s' * 31}")
-        refused(result, VARIABLE, "ola")
+        refused(result, VARIABLE, "pair 1")
+        assert re.search(r"\bola\b", result.output) is None, result.output
         assert "s" * 31 not in result.output
 
     def test_a_host_off_loopback_needs_a_public_url(self, run: Any) -> None:
