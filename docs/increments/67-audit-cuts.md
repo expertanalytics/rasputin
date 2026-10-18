@@ -1,7 +1,8 @@
 # Increment 67: the code-audit cuts
 
-**Status: designed** (`@architect`, 2026-10-17, on `df923398`; P1 merged as
-#283; P2's section revised on `9c80b7de`, 2026-10-18). Three pull
+**Status: P1 merged as #283; P2 built, approved, accepted** (`@architect`,
+2026-10-17, on `df923398`; P2's section revised on `9c80b7de`, 2026-10-18;
+P2 red `b1e467f9`, green `eba95909`, `@perf` `d1188d5c`). Three pull
 requests. P1 (Python and tests) and P2 (C++) touch no governed file and may run
 while Ola is away; P3 changes the gates and rule files and waits for his
 prompt. Each PR goes through the full path: design, red, green, test run,
@@ -343,3 +344,5 @@ files (the union of the three patterns of 5.1 on `9c80b7de`).
 - **Design review, round 1, 2026-10-17.** Commit `55acdec4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the history check runs at the prose-only commit; three test cuts finished (a whole test and two docstrings); `pyproject.toml` is not governed. The scanner question: Ola ruled delete. Idea kept: a later sweep of 2771 history labels in `tests/python`.
 - **Code review, round 1 (P1), 2026-10-17.** Range `df923398..eee5b2ab`, +13 counted lines (estimate -2 to +10; `source_report.py` +12, keyword arguments wrap), @reviewer: APPROVED. `c3e57c43` changes no code; the prose reads as plain prose; deletions match 4.4; 7883 passed with an empty config folder. Suggestions for the test sweep: `test_station_set.py`'s name-only test; a terse comment at `feature_input.py:691`.
 - **Design revision (P2), 2026-10-18.** `@architect` reran section 5 on `9c80b7de`, after 66 (#284): every C++ citation pinned; 66 made no P2 cut, left `refine_points.hpp` unchanged and added four history lines plus `L12`/`L14`/`L16`, which B now covers; B's red count 190 to 194; fixture and `to_lattice` lines moved; C1 to C4 join the guards. No cut added, no step changed; estimate unchanged.
+- **Code review, round 1 (P2), 2026-10-18.** Range `9c80b7de..eba95909`, +34 counted lines (estimate +15, range +5 to +30; all in `refine_points.hpp`: the new signatures and structs, and `written_at`, which replaces a lambda), @reviewer: APPROVED; the overrun accepted. The comment commits `d6cef7eb` and `f8cd6da6` change no code (comments stripped, code text equal in all 43 files); the split keeps behaviour; the 64 at-risk citations quote the same text at base and head.
+- **`@perf` acceptance (P2), 2026-10-18.** `d1188d5c`, base `9c80b7de` against head `eba95909`: all four mesh hashes unchanged, 0 Delaunay violations, 0 flat triangles as written; the 42 timing cells from -6.1 % to +2.4 %, median -0.4 %: ACCEPTED.
