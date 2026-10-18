@@ -1420,3 +1420,60 @@ def test_h24_5a_a_long_failing_line_asks_in_under_a_second(guard_push_hook: Modu
     elapsed = time.perf_counter() - start
     assert why == GH_API
     assert elapsed < 1.0, f"segment_why took {elapsed:.3f} s on a 72-character line"
+
+
+# ---------------------------------------------------------------- h24 item 15
+#
+# A here-string fed to a shell is the shell's program, parsed as commands, so a
+# publishing act inside it is judged like one on the line. zsh joins every
+# stdin redirect of one command, so a second here-string counts too.
+
+#: {command: the reason it must name}.
+HERE_STRING_ASKED: dict[str, str] = {
+    "bash <<< 'git push origin x'": PUSH,
+    'sh <<< "gh pr merge 1"': GH_PR,
+    "env bash <<< 'git push origin x'": PUSH,
+    "timeout 5 bash <<< 'git push origin x'": PUSH,
+    "zsh <<< 'echo a' <<< 'git push origin x'": PUSH,
+}
+
+HERE_STRING_PASSED = (
+    "cat <<< 'git push origin x'",
+    "bash <<< 'git status'",
+    "python3 -c 'print(1)' <<< 'git push origin x'",
+)
+
+
+@pytest.mark.parametrize("command", HERE_STRING_ASKED)
+def test_h24_15_a_publishing_act_in_a_shell_here_string_asks(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert HERE_STRING_ASKED[command] in reason, reason
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("command", HERE_STRING_ASKED)
+def test_h24_15_a_publishing_act_in_a_shell_here_string_is_queued_while_unattended(
+    repo: Path, command: str
+) -> None:
+    set_mode(repo, "on")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "deny"
+    assert HERE_STRING_ASKED[command] in reason, reason
+    [line] = queue_lines(repo)
+    assert (line["hook"], line["act"]) == ("guard_push", command)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", HERE_STRING_PASSED)
+def test_h24_15_a_here_string_that_is_data_or_reads_passes(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []

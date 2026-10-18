@@ -615,3 +615,134 @@ def test_h24_14_a_quoted_heredoc_delimiter_keeps_the_program_readable(opener: st
     simple = the_simple(f"python3 - {opener}\n{BACKSLASH_BODY}\nEOF", "python3")
     assert simple.program is not None and BACKSLASH_BODY in simple.program
     assert simple.unknown is False
+
+
+# ---------------------------------------------------------------- h24 item 15
+#
+# docs/increments/h24-harness-fixes.md §3 item 15: a here-string is its word,
+# quotes removed as `word()` removes them, plus a newline, handed to stdin. An
+# interpreter with no `-c`/`-e` text and no script runs it; a shell parses it
+# as commands. Every stdin body of one command counts (zsh's MULTIOS). `$` or a
+# backtick in the word marks the interpreter unknown whatever the quoting.
+
+#: Design review round 4's two writes of an ordinary file.
+PYTHON_WRITE = "open('notes/a.txt','w').write('x')"
+
+
+def test_h24_15_a_python_here_string_is_its_program() -> None:
+    simple = the_simple(f'python3 <<< "{PYTHON_WRITE}"', "python3")
+    assert simple.program == PYTHON_WRITE + "\n"
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+    assert simple.unknown is False
+
+
+def test_h24_15_a_shell_here_string_is_parsed_as_commands() -> None:
+    simples = shell_scan.parse('bash <<< "echo x > notes/a.txt"')
+    assert simples is not None
+    assert [(s.argv, s.writes) for s in simples] == [
+        (["bash"], []),
+        (["echo", "x"], ["notes/a.txt"]),
+    ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f'env python3 <<< "{PYTHON_WRITE}"',
+        f'env A=1 python3 <<< "{PYTHON_WRITE}"',
+        f'nice -n 5 python3 <<< "{PYTHON_WRITE}"',
+        f'timeout 5 python3 <<< "{PYTHON_WRITE}"',
+        f'python3 - <<< "{PYTHON_WRITE}"',
+    ],
+    ids=["env", "env-with-assignment", "nice", "timeout", "dash-script"],
+)
+def test_h24_15_a_here_string_after_a_wrapper_or_dash_is_the_program(line: str) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program == PYTHON_WRITE + "\n"
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+
+
+@pytest.mark.parametrize("line", ['env bash <<< "echo x > notes/a.txt"',
+                                  'timeout 5 bash <<< "echo x > notes/a.txt"'])  # fmt: skip
+def test_h24_15_a_shell_here_string_after_a_wrapper_is_parsed(line: str) -> None:
+    simples = shell_scan.parse(line)
+    assert simples is not None
+    assert (["echo", "x"], ["notes/a.txt"]) in [(s.argv, s.writes) for s in simples]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"python3 <<< 'print(1)' <<< \"{PYTHON_WRITE}\"",
+        f"python3 <<< \"{PYTHON_WRITE}\" <<< 'print(1)'",
+        f'python3 <<< "{PYTHON_WRITE}" <<EOF\nprint(1)\nEOF',
+        f"python3 <<< 'print(1)' <<EOF\n{PYTHON_WRITE}\nEOF",
+    ],
+    ids=["write-second", "write-first", "here-string-before-heredoc", "heredoc-write"],
+)
+def test_h24_15_every_stdin_body_of_one_command_is_in_its_program(line: str) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program is not None
+    assert "print(1)" in simple.program and PYTHON_WRITE in simple.program
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+
+
+def test_h24_15_two_shell_here_strings_are_both_parsed() -> None:
+    simples = shell_scan.parse("zsh <<< 'echo a' <<< 'echo x > notes/a.txt'")
+    assert simples is not None
+    found = [(s.argv, s.writes) for s in simples]
+    assert (["echo", "a"], []) in found and (["echo", "x"], ["notes/a.txt"]) in found
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "python3 <<< \"print('$(cat q)')\"",
+        "python3 <<< 'print(\"$(cat q)\")'",
+        "python3 <<< 'print(\"$HOME\")'",
+        "python3 <<< 'print(\"`cat q`\")'",
+        "python3 <<< \"print('`cat q`')\"",
+    ],
+    ids=["dollar-paren-double", "dollar-paren-single", "parameter-single", "backtick-single",
+         "backtick-double"],
+)  # fmt: skip
+def test_h24_15_a_here_string_holding_a_substitution_is_unknown(line: str) -> None:
+    assert the_simple(line, "python3").unknown is True
+
+
+def test_h24_15_a_substitution_in_a_second_here_string_is_unknown() -> None:
+    simple = the_simple("python3 <<< 'print(1)' <<< 'print(\"$HOME\")'", "python3")
+    assert simple.unknown is True
+
+
+def test_h24_15_a_shell_here_string_holding_a_substitution_is_parsed_not_unknown() -> None:
+    simples = shell_scan.parse('bash <<< "echo $(cat q)"')
+    assert simples is not None
+    assert ["echo", "$(cat q)"] in [s.argv for s in simples]
+    assert [s.argv for s in simples if s.unknown] == []
+
+
+def test_h24_15_a_backslash_in_a_here_string_is_not_a_sign_of_rewriting() -> None:
+    simple = the_simple("python3 <<< 'print(\"a\\\\nb\")'", "python3")
+    assert simple.program == 'print("a\\\\nb")\n'
+    assert simple.unknown is False
+
+
+def test_h24_15_a_here_string_to_a_non_interpreter_is_data() -> None:
+    simple = the_simple("cat <<< x", "cat")
+    assert simple.program is None
+    assert simple.unknown is False
+
+
+@pytest.mark.parametrize(
+    ("line", "program"),
+    [("python3 -c 'print(1)' <<< \"open('CLAUDE.md','w')\"", "print(1)"),
+     ("python3 run.py <<< \"open('CLAUDE.md','w')\"", None)],
+    ids=["c-program", "script"],
+)  # fmt: skip
+def test_h24_15_a_c_program_or_a_script_keeps_a_here_string_as_data(
+    line: str, program: str | None
+) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program == program
+    assert "CLAUDE.md" not in shell_scan.candidates(simple)
