@@ -1,7 +1,6 @@
 #pragma once
 
-// Land-cover borders simplified within a band, every face's area kept
-// (docs/increments/32-landcover-simplify.md, sections 6 to 8). The coverage is
+// Land-cover borders simplified within a band, every face's area kept. The coverage is
 // cut at its junctions into borders (de Berg, van Kreveld and Schirra 1998);
 // each border is simplified by area-preserving segment collapse (Kronenfeld et
 // al. 2020, as reduce_ring), so both neighbours of a border keep their area. A
@@ -10,8 +9,9 @@
 // swept region or on a new edge, and the anchored check holds: E has an anchor
 // F_E on the source border, F_A <= F_E <= F_D in order along it, |E - F_E| <=
 // band, and every source vertex between the anchors is within the band of its
-// new edge. That bounds the Hausdorff distance both ways (section 7). With a
-// clearance (section 15.2), E is placed at least that far from A and D, and a
+// new edge. That bounds the Hausdorff distance both ways
+// (`docs/increments/32-landcover-simplify.md`, *7. Guarantees and the checks that enforce them*).
+// With a clearance, E is placed at least that far from A and D, and a
 // collapse is refused if a vertex comes closer than it to a new edge it does
 // not end, or E to an edge other than A-B, B-C, C-D.
 //
@@ -50,7 +50,7 @@ struct BorderCounts {
     std::size_t junctions{}, borders{}, fixed_borders{};
     std::size_t collinear{}, collapses{};
     std::size_t rejected_crossing{}, rejected_side{};
-    std::size_t rejected_clearance{}, skipped_placements{}; // section 15.2
+    std::size_t rejected_clearance{}, skipped_placements{}; // the clearance's refusals
 };
 
 struct BorderOutcome {

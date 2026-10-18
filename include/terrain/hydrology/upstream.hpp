@@ -13,8 +13,7 @@
 namespace terrain::hydrology {
 
 // The catchment of a seed set: every DEM node whose drainage path over the
-// filled surface passes through a seed (docs/increments/22-auto-catchment.md,
-// "Flow and membership: one flood"; Barnes, Lehman and Mulla 2014a,
+// filled surface passes through a seed (Barnes, Lehman and Mulla 2014a,
 // Priority-Flood, labelling one catchment).
 struct UpstreamOutcome {
     std::vector<std::uint8_t> mask; // row-major, 1 in, 0 otherwise (out, NoData)

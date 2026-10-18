@@ -1,11 +1,10 @@
 #pragma once
 
-// One DEM row's columns [c0, c1] as contiguous segments, ascending
-// (docs/increments/18-row-span-scan.md, R6). A single grid is one segment of
+// One DEM row's columns [c0, c1] as contiguous segments, ascending. A single grid is one segment of
 // row(i), chosen at compile time; a source that cannot hand out a whole row
 // (a later multi-tile mosaic) provides row_segments(i, c0, c1, f) and is
 // forwarded to. Segments partition [c0, c1] and share the source's one
-// nodata() (Ola's C2), so a walker indexing by first_col + j visits the same
+// nodata(), so a walker indexing by first_col + j visits the same
 // cells in the same order however the row is cut.
 
 #include <terrain/raster/raster.hpp>

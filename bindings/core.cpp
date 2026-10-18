@@ -88,8 +88,8 @@ namespace {
 
 // A zero-copy numpy view over a core buffer: read-only, and anchored to the
 // Python object that owns the memory. Both halves are load-bearing. Without the
-// base object the view is a use-after-free the moment its owner is dropped
-// (06-cdt-viewer.md risk 4); without clearing the writeable flag, Python writes
+// base object the view is a use-after-free the moment its owner is dropped;
+// without clearing the writeable flag, Python writes
 // straight through into a type whose whole contract is immutability.
 template <typename T>
 [[nodiscard]] py::array_t<T> readonly_view(const py::object& owner, const T* data,
@@ -143,8 +143,7 @@ template <typename T>
 // forgotten on the other would be a drift between two types Python reads the
 // same way; one template makes the two bindings the same object.
 //
-// The return is deliberately NOT [[nodiscard]], where 05c-noder-wiring.md's
-// sketch of this signature had it: Pslg chains nothing onto it, so the
+// The return is deliberately NOT [[nodiscard]]: Pslg chains nothing onto it, so the
 // attribute would buy one -Wunused-result cast at the only call that correctly
 // ignores the value. The registration is the effect; the handle is a
 // convenience for the caller that adds accessors.
@@ -313,7 +312,7 @@ using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast
 using F64 = py::array_t<double, py::array::c_style | py::array::forcecast>;
 using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
 
-// A start mesh as refine_points and refine_strip take it (15f, D5): the arrays
+// A start mesh as refine_points and refine_strip take it: the arrays
 // checked, the triangles copied into a mesh, the spans into arrays it holds.
 struct StartMesh {
     F64 zs;
@@ -357,10 +356,10 @@ struct StartMesh {
     return s;
 }
 
-// Increments 33 and 34: run `f` with the field as the policy, or with today's
-// single tolerance when there is none, and with the slope beside it when there
-// is one. A field or slope built on another raster geometry is refused (33,
-// 9.1, B; 34, 4.5), before the caller releases the GIL.
+// Run `f` with the tolerance field as the policy, or with the single
+// tolerance when there is none, and with the slope beside it when there is
+// one. A field or slope built on another raster geometry is refused, before
+// the caller releases the GIL.
 template <class F>
 [[nodiscard]] auto with_policy(const LineTolerance* field, const SlopeTolerance* slope,
                                const terrain::raster::RasterGeometry& g, double tolerance, F&& f) {
@@ -394,13 +393,12 @@ PYBIND11_MODULE(_core, m) {
     m.doc() = "The C++20 constrained Delaunay triangulator and mesh\n"
             "refinement for the rasputin terrain engine.";
     // Which standard-library checks this build carries, as the library itself
-    // reports them (terrain/build_info.hpp; increment 24).
+    // reports them (terrain/build_info.hpp).
     m.attr("hardening") = std::string(terrain::stdlib_hardening());
 
     // ----------------------------------------------------------------------
-    // The CDT surface. docs/increments/06-cdt-viewer.md, "The binding
-    // surface", is exhaustive: an addition here is a design change needing a
-    // reason in an increment file, not a line in a PR (risk 3). Nothing below
+    // The CDT surface. It is kept small on purpose: an addition here is a
+    // design change, not a convenience. Nothing below
     // takes or returns a path, a file, a CRS, a raw span, a mutable view, a
     // detria type, an adjacency or a kernel parameter.
     // ----------------------------------------------------------------------
@@ -601,7 +599,7 @@ stays valid after every other reference to the mesh is dropped.
         // "forgot the outline" silent failure.
         .def_property_readonly("empty", &IndexedMesh2::empty, "True iff there are no triangles.");
 
-    // Increment 23c: a piece's start mesh is a slice of the start
+    // A piece's start mesh is a slice of the start
     // triangulation, so it must reach refine from arrays. Signed 64-bit reads,
     // so a negative index or a mask past uint8 is refused rather than wrapped.
     // Copies in O(N + T) and holds the GIL, as refine_points does for its own.

@@ -1,49 +1,49 @@
 #pragma once
 
-// The per-triangle scan: how far a triangle's plane is from the DEM
-// (docs/increments/14-adaptive-refinement.md, R2 and R6).
+// The per-triangle scan: how far a triangle's plane is from the DEM.
 //
 // A triangle's node set is every DEM node in the CLOSED triangle except its
 // three vertices. Membership is three exact orientation tests, so "on an
 // edge" is a zero orientation, not a tolerance: integer arithmetic when all
-// three vertices are nodes, as in 14b, and DefaultKernel on (col, -row) when
-// one is off-node (docs/increments/16-domain-polygon.md, R2). The set is not
+// three vertices are nodes, and DefaultKernel on (col, -row) when
+// one is off-node. The set is not
 // tested node by node: mesh::for_each_row_span yields it exactly as one column
-// interval per row, and each interval is walked as contiguous row segments
-// (docs/increments/18-row-span-scan.md, R1 and R6). NoData nodes are skipped.
+// interval per row, and each interval is walked as contiguous row segments.
+// NoData nodes are skipped.
 // Every vertex is in the node rectangle, so every span is inside the grid.
 //
 // A vertex's z is value_at for a node and bilinear at its fractional position
-// otherwise (R0), refused as raster::bilinear refuses; a vertex without one is
+// otherwise, refused as raster::bilinear refuses; a vertex without one is
 // a NoData vertex.
 //
 // For a triangle with three valid vertices the result is the largest
 // |z - plane| over the set, the node where it occurs, and where that node
 // lies. The plane at p is (o_bc z_a + o_ca z_b + o_ab z_c) / 2A, with integer
-// orientations among nodes (advanced exactly along a row) and today's double
-// expression per node otherwise, so the error is bit-identical to increment
-// 17's box walk (18's C1 (a)); only the error value comes out of it. The walk is row-major and only a strictly larger error
+// orientations among nodes (advanced exactly along a row) and one double
+// expression per node otherwise, so the error is bit-identical to a box walk
+// testing each node; only the error value comes out of it. The walk is
+// row-major and only a strictly larger error
 // replaces the best, so ties go to the smallest (row, col) whatever order the
 // triangles are scanned in.
 //
-// A triangle with a NoData vertex (a void triangle, R6) has no plane. Its
+// A triangle with a NoData vertex (a void triangle) has no plane. Its
 // result is instead the valid node nearest any NoData vertex, by squared
 // distance in the fractional frame with the same tie-break, which is where
 // the refinement loop carves it; `uncovered` counts the valid nodes in its set.
 //
-// A coincidence radius (docs/increments/15f-edge-strip.md, L14, L16). With
+// A coincidence radius. With
 // radius > 0, a node within `radius` lattice units of an off-node corner is
 // skipped as the corner itself is: never the argmax, never the carve point,
 // not counted. refine passes nothing (0) and is unchanged; only the edge
 // strip's loop passes one.
 //
-// Frozen edges (docs/increments/23-basin-scale.md, N3, N7, N19). A node on a
+// Frozen edges. A node on a
 // frozen edge of the triangle (exact orientation, not an end) is skipped as a
 // node within the coincidence radius is, and with radius > 0 so is a node
 // within `radius` of a frozen edge, its projection strictly inside: those
 // nodes are the seam pass's. Only a triangle with a frozen edge tests this.
 //
-// A slope (docs/increments/34-slope-tolerance.md, 4.3). Given one, the walk
+// A slope. Given one, the walk
 // also fills a SlopeScan: whether some node's error is above allowed(its
 // class), compared exactly, and the node with the largest (error *
 // weight(class), error), strictly larger replacing in the same row-major
@@ -80,8 +80,8 @@ struct ScanResult {
     std::size_t uncovered = 0;  // void only: valid nodes in the set
 };
 
-// The slope's ranking of candidates (34, 4.3): `over` rests on the exact
-// comparison alone, never on ratio > 1 (M1); `ratio` only chooses.
+// The slope's ranking of candidates: `over` rests on the exact
+// comparison alone, never on ratio > 1; `ratio` only chooses.
 struct SlopeRank {
     bool over = false;   // some error > allowed(class)
     double ratio = 0.0;  // the largest error * weight(class)

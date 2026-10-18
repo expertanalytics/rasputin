@@ -1,7 +1,7 @@
 #pragma once
 
-// A triangle's DEM node set as row spans (docs/increments/18-row-span-scan.md,
-// R1 to R1c): for each lattice row the triangle's closed interior meets, the
+// A triangle's DEM node set as row spans: for each lattice row the
+// triangle's closed interior meets, the
 // inclusive column interval [c0, c1] of its nodes, vertices excluded. The union
 // of the spans is exactly the set a box walk finds with three exact orientation
 // tests per node, so a caller walks contiguous memory instead of testing.
@@ -10,10 +10,10 @@
 // in c with slope b.row - a.row, so its exact sign is monotone along the row. A
 // rising edge gives a lower bound, a falling one an upper bound, and a
 // horizontal one either empties the row, leaves it alone, or lies on it
-// (flat_edge). Node-only triangles take the bound by exact integer division
-// (R1a). Otherwise a double estimate is corrected with the exact predicate,
-// normally one step each way (R1b). A node vertex on the row is always an end
-// of its interval and is removed there (R1c).
+// (flat_edge). Node-only triangles take the bound by exact integer division.
+// Otherwise a double estimate is corrected with the exact predicate,
+// normally one step each way. A node vertex on the row is always an end
+// of its interval and is removed there.
 //
 // Pure lattice geometry: it sees three vertices and no raster or frame.
 
@@ -45,7 +45,7 @@ struct RowSpan {
 // Calls f(RowSpan) once per non-empty row, rows ascending. v is counter-
 // clockwise. Every product below is of two differences bounded by the grid's
 // dimensions, and rows * cols < 2^48 for any DEM held in memory, so no int64
-// overflows (R1a).
+// overflows.
 template <std::invocable<RowSpan> F>
 void for_each_row_span(const std::array<MeshVertex, 3>& v, F&& f) {
     const bool nodes = v[0].is_node() && v[1].is_node() && v[2].is_node();

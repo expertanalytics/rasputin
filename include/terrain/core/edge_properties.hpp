@@ -30,8 +30,6 @@
 // legacy-archive tag's legacy/,
 // and land cover stays face-based. Widening to 64 is a one-line change to a
 // type nobody can pattern-match on, because it has no named members.
-//
-// See docs/increments/07-edge-properties.md for the rulings above.
 
 #include <cassert>
 #include <cstdint>
