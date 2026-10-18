@@ -63,7 +63,6 @@ class Slice:
 
     vertices: npt.NDArray[np.float64]
     triangles: npt.NDArray[np.uint32]
-    flags: npt.NDArray[np.uint8]
     edges: npt.NDArray[np.uint32]
     masks: npt.NDArray[np.uint32]
     chains: dict[int, list[int]]
@@ -97,7 +96,6 @@ def start_slice(
     pairs = edges.astype(np.int64)
     rows = np.flatnonzero(np.isin(key(pairs[:, 0], pairs[:, 1]), np.concatenate(held)))
     tris = np.searchsorted(used, tri).tolist()
-    bits = cons.tolist()
     xy = [(x, y) for x, y in vertices[used].tolist()]
     where = {frozenset((t[e], t[(e + 1) % 3])): k for k, t in enumerate(tris) for e in range(3)}
     out_edges: list[tuple[int, int]] = []
@@ -127,17 +125,13 @@ def start_slice(
         e = next(e for e in range(3) if {tris[t][e], tris[t][(e + 1) % 3]} == {a, b})
         run = chain if tris[t][e] == a else chain[::-1]
         c, last = tris[t][(e + 2) % 3], len(run) - 2
-        qc, cp = (bits[t] >> (e + 1) % 3) & 1, (bits[t] >> (e + 2) % 3) & 1
         subs = [[run[i], run[i + 1], c] for i in range(last + 1)]
-        sub_bits = [1 | (qc << 1) * (i == last) | (cp << 2) * (i == 0) for i in range(last + 1)]
-        tris[t], bits[t] = subs[0], sub_bits[0]
+        tris[t] = subs[0]
         tris += subs[1:]
-        bits += sub_bits[1:]
         where[frozenset((run[-1], c))] = len(tris) - 1 if last else t
     return Slice(
         vertices=np.array(xy, dtype=np.float64).reshape(-1, 2),
         triangles=np.array(tris, dtype=np.uint32).reshape(-1, 3),
-        flags=np.array(bits, dtype=np.uint8),
         edges=np.array(out_edges, dtype=np.uint32).reshape(-1, 2),
         masks=np.array(out_masks, dtype=np.uint32),
         chains=chains,
