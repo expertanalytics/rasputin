@@ -3760,9 +3760,12 @@ B2  extra x line at the window edge: killed (critical)
 B3  x lines ignore the window's first column: killed (critical)
 B4  y lines on the wrong side: killed (critical)
 B5  cell row from the wrong side: killed (critical)
-B6  piece window not grown by a node: SURVIVED, equivalent: a piece's
-    triangles lie within its cell's node range (its seams are the cell
-    lines), so no read reaches the extra ring, on DC10's path too
+B6  piece window not grown by a node: SURVIVED. Equivalent on default
+    flags: a piece's triangles lie within its cell's node range (its seams
+    are the cell lines), so no refine read reaches the extra ring, on DC10's
+    path too. Not equivalent with --tolerance-slope: the slope of a node on a
+    cell line reads the ring, and slope_nodes_tightened counts those nodes;
+    untested, outside DC2-DC6 (refine skips nodes on frozen seams)
 B7  seam strip not grown by a node: SURVIVED, equivalent: a seam lies on
     a lattice line, so its bilinear z reads only nodes on that line
 B8  seam pass at twice the tolerance: killed (critical)
@@ -3797,3 +3800,5 @@ C5  resampled grid's lattice not used: killed (reprojected)
 C6  wrong digest in the index: killed (critical)
 C7  conformity failure exits 2: killed new (seam_paths)
 ```
+
+**23c-2, code review, round 5, 2026-10-18.** Range `6bd8299a..46610e1a`, 548 counted lines (tests and docs only this round), @reviewer: APPROVED WITH WORDINGS, applied by the main session: B6 is equivalent on default flags only; with `--tolerance-slope` the slope count reads the ring (idea: a test for `--tolerance-slope` on a cut run). The fan's unread flag arithmetic in `start_slice` goes in 23c-3.
