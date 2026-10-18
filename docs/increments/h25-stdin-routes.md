@@ -1,31 +1,38 @@
 # Harness h25: programs a guard cannot see because they arrive on stdin
 
-Status: **designed**, 2026-10-19, on `worktree-h25-stdin-routes` off master
-`c5da0385`. One PR. Builds on h24 PR A (items 14, 15 and 16 of
-`docs/increments/h24-harness-fixes.md`, on `worktree-h24a-guards` at
-`be2ab149`, not yet merged): its red and green steps start after PR A merges,
-on a branch that has merged master (`tools/merge_master.py`).
+Status: **designed**, revised 2026-10-19 for design review round 1, on
+`worktree-h25-stdin-routes` off master `c5da0385`. One PR. Builds on h24 PR A
+(items 14, 15 and 16 of `docs/increments/h24-harness-fixes.md`, on
+`worktree-h24a-guards` at `be2ab149`, not yet merged): its red and green
+steps start after PR A merges, on a branch that has merged master
+(`tools/merge_master.py`).
 
 Source: `@reviewer`'s findings in h24's design review round 5 (h24's
 `## Review`, on `worktree-h24a-guards`): "`/dev/stdin` or `/dev/fd/0` as a
 script, a pipe into an interpreter or shell, `<(…)` as a script, `.
 /dev/stdin`, `python3 -m code` and `uv run python3` reading stdin; `python3 <
-file` stays a known blind spot."
+file` stays a known blind spot." Then this design's review round 1
+(CHANGES REQUESTED): the first design listed the routes one by one, and the
+review found more than a dozen it missed (section 3.1 lists them); and the
+push guard reads no interpreter program at all.
 
 Acceptance: the harness suites (`pytest -m harness --no-cov`, pass count
 read), the replay of section 5 rerun on the green commit, and `@reviewer`.
 No `@perf` run (no refine or mesh code).
 
 Words used here. **Scanner**: `tools/shell_scan.py`, which tells the guards
-what a shell line runs and writes. **Interpreter**: a name the scanner reads a
-program for (`python`, `python3`, `python3.N`, `perl`, `ruby`, `node`, and the
-twelve shells in `SHELLS`). **Unknown**: the scanner's mark on a command that
-writes files it does not name (`Simple.unknown`); with h24 item 15, the
-governance guard then judges the whole line by its text, asking when the line
-names a governed file. **Governed**: a file `guard_governance.py` asks about;
-`tools/shell_scan.py` and `.claude/hooks/guard_push.py` are both, so the green
-step needs Ola at the prompt. **Read** a program: give the guards its text,
-as the scanner does for `python3 -c`, a heredoc and (item 15) a here-string.
+what a shell line runs and writes. **Simple**: one simple command as the
+scanner returns it. **Interpreter**: a name the scanner reads a program for
+(`python`, `python3`, `python3.N`, `perl`, `ruby`, `node`), and **shell**:
+one of the twelve names in `SHELLS`. **Unknown**: the scanner's mark on a
+command that writes files it does not name (`Simple.unknown`); with h24 item
+15, the governance guard then judges the whole line by its text, asking when
+the line names a governed file. **Governed**: a file `guard_governance.py`
+asks about; `tools/shell_scan.py` and `.claude/hooks/guard_push.py` are both,
+so the green step needs Ola at the prompt. **Read** a program: give the guards
+its text, as the scanner does for `python3 -c`, a heredoc and (item 15) a
+here-string. **Text rule**: judging a line by the names (governance) or the
+`PUBLISHES` patterns (push) in its whole text.
 
 ## 1. Prior art: legacy and literature
 
@@ -35,29 +42,36 @@ Tooling; no novelty claimed.
 
 - POSIX.1-2024, Shell Command Language, 2.9.2 *Pipelines*: "The standard
   output of command1 shall be connected to the standard input of command2."
-  So a pipe hands the next command whatever the previous one prints; the
-  scanner sees the producer's words, never its output.
+  Its grammar (2.10.2) has `pipe_sequence '|' linebreak command`: a newline
+  may follow `|` and the pipeline goes on. A pipeline element may be a
+  compound command, whose every inner command reads the pipe.
+- bash(1), macOS bash 3.2: "-s If the -s option is present, or if no
+  arguments remain after option processing, then commands are read from the
+  standard input." So `bash -s foo` runs stdin, and a shell's options and
+  operands cannot be read safely to decide whether it reads stdin.
+- zshexpn(1), *Process Substitution*: "If =(...) is used instead of <(...),
+  then the file passed as an argument will be the name of a temporary file
+  containing the output of the list process."
 - Python, *Command line and environment* (docs.python.org/3/using/cmdline.html):
-  `-` is "Read commands from standard input (sys.stdin)"; with no interface
-  option "-i is implied"; `-i` is "Enter interactive mode after execution",
-  also "When a script is passed as first argument", and "Interactive mode
-  will start even when sys.stdin does not appear to be a terminal". So
-  `python3 -i x.py <<< S` runs `x.py`, then `S`.
+  `-` is "Read commands from standard input (sys.stdin)"; `-i` is "Enter
+  interactive mode after execution", "Interactive mode will start even when
+  sys.stdin does not appear to be a terminal". So `python3 -i -c pass <<< S`
+  runs `S`.
 - `uv help run` (uv 0.12.15): "When used with `-`, the input will be read
-  from stdin, and treated as a Python script." `uv run [OPTIONS] [COMMAND]`
-  runs `COMMAND`, so `uv run python -c S` is `python -c S`.
-- zsh's `MULTIOS` (on by default, as h24 item 15 found for two here-strings):
-  a pipe and a here-string both feed stdin. Checked 2026-10-19:
+  from stdin, and treated as a Python script."
+- zsh's `MULTIOS` (on by default): a pipe and a here-string both feed stdin.
   `zsh -c "echo 'print(1)' | python3 - <<< 'print(2)'"` prints 1 and 2; bash
   prints 2.
 
-Every route was run under zsh and bash on this machine on 2026-10-19 with a
-harmless `print` or `echo` and runs the text it is given: `python3
-/dev/stdin <<<`, `python3 /dev/fd/0 <<<`, `bash /dev/stdin <<<`, `printf … |
-python3`, `echo … | sh`, `python3 <(echo …)`, `. /dev/stdin <<<`, `echo … |
-python3 -m code`, `python3 -qi x.py <<<`, `python3 < <(echo …)`, `echo … |
-tee >(sh)`, `echo … | uv run --no-project -`; and `source <(echo …)` in zsh
-(macOS's bash 3.2 runs nothing for it).
+Run under zsh and bash on this machine on 2026-10-19 with a harmless
+`print`, each running the text it is fed: a newline after `|`;
+`| { true; python3; }`; `| bash -c python3`; `| bash -s foo` (bash parses
+the Python text and reports a syntax error); `python3 -i -c pass <<< S`;
+`exec 0< <(…); python3`; `f() { python3; }; … | f`;
+`python3 3< <(…) <&3`; `| xargs -I{} python3 -c {}`; in zsh,
+`python3 =(…)` and `coproc python3 -i` fed by `print -p`. macOS's bash 3.2
+has no `coproc`. The first design's routes were run the same way (its
+section 1, commit `d5e8c192`).
 
 *Legacy.* Nothing: the legacy tree is the old meshing product, with no harness.
 
@@ -67,218 +81,372 @@ $ git grep -l -i -e 'shell_scan' -e '/dev/stdin' -e 'guard_governance' -e 'here-
 ```
 
 *Earlier increments.* h4 (the scanner), h16 (wrappers and shells), h24 items
-14 and 15 (a program the shell rewrites is unknown; a here-string is read).
-This increment uses item 15's `finish_heredoc(simple, body, rewritten)` and
-its guard line ("a line the scanner marks unknown is judged by its text").
+14 and 15 (a program the shell rewrites is unknown; a here-string is read;
+"a line the scanner marks unknown is judged by its text").
 
 ## 2. The ideas file
 
 `../rasputin_scratch/ideas/ideas.md`, read 2026-10-19. Overlapping, left out:
-*Push guard: `watch git myalias` skips the unknown-command ask* (another
-route by which a program reaches a shell, through a string runner, not
-stdin); *Cap on runner and shell words per line in the push guard* (this
-design adds no shell word to `runs`). Dropped already: *PowerShell flags
-beyond -c*. Nothing taken up.
+*Push guard: `watch git myalias` skips the unknown-command ask* (a string
+runner, not stdin; this design's runner rule does see `watch python3`, but
+does not change how the push guard reads `watch`'s words); *Cap on runner and
+shell words per line in the push guard* (this design adds no shell word to
+`runs`). Nothing taken up.
 
 ## 3. The design
 
-### 3.1 One rule, three sources of stdin
+### 3.1 Why a broader rule, and why not the broadest
 
-A command **runs its stdin** when it is one of:
+The first design listed the ways a program reaches stdin (`-`,
+`/dev/stdin`, a pipe, `-m code`, `-i`, …) and reset its "piped" mark at every
+`;` and newline. Review round 1 ran each of these under zsh and bash; each
+runs its fed text and escaped that design:
 
-- an interpreter with no `-c`/`-e` program and a script operand that is
-  absent, `-`, `/dev/stdin` or `/dev/fd/0`;
-- Python running a console (`-m code`, `-m asyncio`, `-m pdb`) or with `-i`
-  in a leading option cluster (`-i`, `-qi`; Python's one-letter flags only,
-  so `-Wignore` is not `-i`);
-- `.` or `source` whose operand is `/dev/stdin` or `/dev/fd/0`.
+1. a newline after a pipe (`echo S |⏎python3`);
+2. a compound command after a pipe (`| { true; python3; }`, `| (true;
+   python3)`, `| if true; then python3; fi`);
+3. a shell's `-c` program inheriting fed stdin (`echo S | bash -c python3`,
+   `bash -c python3 <<< S`);
+4. words read as the script operand (`bash -s foo`, `bash -o errexit`,
+   `ruby -r json`, `sudo -E python3 -`);
+5. `python3 -i -c pass`;
+6. zsh's `=(…)` as a script;
+7. `python3 3< <(…) < /dev/fd/3` and `python3 3< <(…) <&3`;
+8. `xargs -I{} python3 -c {}`, `env -S 'python3 -'`, `| $SHELL`,
+   `//dev/stdin`, `exec 0< <(…); python3`;
 
-Where its stdin comes from decides what the scanner does:
+and, lower priority, `python3 -c 'exec(input())'`, `python3 -m cProfile
+/dev/stdin`, `arch -arm64 python3`. Its claim that `python3 < /dev/fd/N`
+was "the same gap as `python3 file`" was false: the descriptor is fed from
+the line.
 
-| Stdin is | Example | The scanner |
-|---|---|---|
-| a heredoc or here-string on the line | `python3 /dev/stdin <<'X'`, `. /dev/stdin <<< S` | **reads** it: the program of an interpreter, parsed as commands for a shell or `.` (item 15's path) |
-| another command's output | `printf S \| python3`, `echo S \| sh`, `python3 < <(echo S)`, `tee >(sh)`, `echo S \|& python3` | marks it **unknown** |
-| a file | `python3 < prog.py` | nothing (section 3.4) |
+So this design stops reading options to decide whether a command runs its
+stdin. It asks instead whether the command **could** run text (a *runner*)
+and whether its stdin or script **could** carry text the scanner did not
+read (a *feed*). Both are judged broadly; the one narrowing is a Python data
+reader (3.4), whose CLI is small and documented.
 
-And whatever stdin is, a script or `.`/`source` operand that is a process
-substitution (`python3 <(…)`, `source <(…)`) or `/dev/fd/N` with N not 0
-(`python3 /dev/fd/3 3< <(…)`) marks the command unknown: another command
-writes the program.
+The broadest form the review suggested, "any interpreter or shell anywhere
+on a line that also has a pipe, a redirect or a compound", was measured
+first: on the replay of section 5 it adds **5,785** governance asks out of
+67,715 past commands (8.5 %), because `python3 tools/check_citations.py |
+tail -5` names a governed tool and holds a pipe. A guard that asks on one
+command in twelve gets approved without being read. So the feed is judged on
+the runner's own stdin, which keeps the pipe *after* a runner from counting,
+and every other rule stays broad. With that, the added asks are 33
+governance and 22 push (section 5).
 
-Why unknown, not read, for another command's output: the producer's bytes
-are not its words. zsh's `echo` turns `\n` into a newline and bash's does
-not; `printf` has its formats; `cat f` prints a file. Reading them would need
-each producer's rules and still miss `cat` and `curl`. The text rule sees the
-same words the producer prints when they are on the line, which is the case
-the guards can judge at all. Both are tripwires, as h24 item 14 says.
+### 3.2 The rule
 
-### 3.2 Blueprint (`tools/shell_scan.py`)
+A simple is **unread** (new field `Simple.unread: bool`) when it is a runner
+and it is fed. An unread simple is also marked `unknown`, so the governance
+guard judges the line by its text (item 15's guard line), and the push guard
+applies its text rules to the whole line (3.5).
+
+**Runners.** A simple is a runner when any of these holds:
+
+- after wrappers, its command word is an interpreter or a shell, or `.`,
+  `source`, `eval`, `exec`, `coproc`, `parallel` (with no command, GNU
+  `parallel` runs its input lines);
+- its command word as written holds `$` or a backtick (`$SHELL`,
+  `$(which python3)`, `"$PY"`): it could be anything;
+- any whitespace-separated token of any of its words is an interpreter or
+  shell name, `uv` or `uvx`, unless the command word is one of `NO_RUN`
+  (below). This catches `sudo -E python3 -`, `env -S 'python3 -'`,
+  `arch -arm64 python3`, `uv run python3`, `xargs sh` and options whose
+  values the wrapper stripping misreads, without listing any of them;
+- it is `xargs` in replacement mode (a word holding `{}`, or starting `-I`,
+  `-J`, `-i` or `--replace`) or with an expansion in a word: its input can
+  become the command;
+- its command word is a function defined on the line (`f() …`,
+  `function f …`) or an alias defined on it (`alias f=…`).
+
+`NO_RUN` is the commands that run no program whatever their arguments, so an
+interpreter's name among their words is data (`grep -i python`): `grep`,
+`egrep`, `fgrep`, `rg`, `head`, `tail`, `cat`, `wc`, `sort`, `uniq`, `cut`,
+`tr`, `ls`, `echo`, `printf`, `diff`, `cmp`, `comm`, `basename`, `dirname`,
+`realpath`, `test`, `[`, `which`, `type`, `file`, `stat`, `du`, `df`, `tee`,
+`mkdir`, `rm`, `cp`, `mv`, `touch`. A list of what is safe, not of what is
+dangerous: a command missing from it is a runner when an interpreter's name
+is among its words, never the reverse.
+
+**Feeds.** A runner is fed when any of these holds:
+
+- **Piped.** It stands in a pipeline after `|` or `|&`. The scanner keeps a
+  piped state per level: set after `|`; kept across a newline that directly
+  follows the pipe (blanks, a comment or a backslash-newline between);
+  inherited by everything inside a compound command (`{ }`, `if … fi`,
+  `while`/`until`/`for`/`select … done`, `case … esac`), a subshell `( )`,
+  `$(…)`, backticks, and the `-c` program of a piped shell; set inside
+  `>(…)`. A `;`, `&`, `&&`, `||` or a newline resets it to the enclosing
+  compound's state, not to "not piped". So `echo S | if true; then python3;
+  fi` is fed, and `python3 x | tail; python3 y` is not.
+- **On its own command**: an input redirect `<`, `<&` or `<>`, from any
+  descriptor, whose target is not `/dev/null`; a process substitution as a
+  word or a redirect target (`<(…)`, `>(…)`, zsh's `=(…)`).
+- **On the line**, feeding every runner on it: an input redirect, a
+  process substitution, a heredoc or a here-string on a compound command,
+  a subshell or `exec` (`{ python3; } < <(…)`, `done <<< S`,
+  `exec 0< <(…)`); `coproc` (bash, zsh); zsh's `cmd |&` with nothing after
+  it (a coprocess); a heredoc or here-string on a runner whose command word
+  is not literally an interpreter or shell (`$SHELL <<< S`, `sudo -E
+  python3 - <<< S`); a heredoc or here-string on a shell that has any
+  argument (`bash -c python3 <<< S`, `bash -s foo <<< S`: the inner commands
+  or the shell's own reading take it), or whose body does not parse as
+  commands.
+
+**Reading a heredoc or here-string.** Item 15's gate ("an interpreter with
+no inline program and a script that is absent or `-`") is replaced: a body
+on an interpreter whose command word is literally its name is appended to
+its program **whatever its options and operands**, unless the command is a
+data reader (3.4). This reads `python3 -i -c pass <<< S`, `python3
+//dev/stdin <<< S`, `python3 -m cProfile /dev/stdin <<< S` and `python3 -c
+'exec(input())' <<< S` without knowing any of those options. A body on a
+literal shell, `.` or `source` is parsed as commands, as today, and every
+command in it counts as piped (it reads the rest of the body).
+
+**What it covers.** Every escape in 3.1 asks (section 4), and so do the
+first design's routes, `| uv run python3`, `uv run python3 - <<< S`,
+`f() { python3; }; … | f`, `coproc python3; echo S >&…`, `| parallel`, and
+`… | while read l; do eval "$l"; done`.
+
+### 3.3 Blueprint (`tools/shell_scan.py`)
 
 Data flow is unchanged: `parse` → `_Scan.run` → `finish` → `classify`, with
-heredoc bodies through `read_heredocs` → `finish_heredoc`. New, all pure:
+heredoc bodies through `read_heredocs` → `finish_heredoc`. All new code is
+pure and stdlib.
 
-- Constants: `STDIN_SCRIPTS = {None, "-", "/dev/stdin", "/dev/fd/0"}`;
-  `CONSOLES = {"code.py", "asyncio.py", "pdb.py"}` (as `interpreter` names a
-  `-m` module); `SOURCES = {".", "source"}`; `FED_SCRIPT`, a pattern for
-  `<(` or `/dev/fd/N` with N not 0.
-- `stdin_program(simple) -> bool`: the rule of 3.1. For an interpreter it
-  first checks `interpreter(name, argv[1:])` for an inline program (as item
-  15's inline check does), so a shell's `-c`, already parsed and cleared,
-  keeps stdin as data.
-- `interactive(args) -> bool`: `-i` in a leading Python option cluster,
-  stepping over `-W` and `-X` values.
-- `fed(simple, piped) -> bool`: the script or `.` operand matches
-  `FED_SCRIPT`, or `piped and stdin_program(simple)`.
-- `_Scan.run(close, piped=False)`: a local `piped`, true for the simple after
-  `|` or `|&` (not `||`), after a `<` redirect from `<(…)`, and for the first
-  simple inside `>(…)` (`word` calls `run(")", True)` for `>(` only). Reset
-  after `;`, `&&`, `||`, newline. A subshell `( … )` after a pipe gets it
-  (`echo S | (python3)`), and `{` is already dropped as a reserved word.
-- `_Scan.redirect` returns whether it fed stdin from a command; it accepts a
-  process substitution as a target (today `x < <(…)` is unreadable, judged as
-  text) and never records `>(…)` as a written file.
-- `finish(…, piped)`: `simple.unknown |= fed(simple, piped)` after `classify`.
-- `finish_heredoc`: its gate becomes `stdin_program(simple)`, and `.` and
-  `source` parse the body as a shell does. A piped command with a heredoc
-  gets both (zsh feeds both).
-- `uv run` is stripped like a wrapper, in `unwrap`: `uv_run(words after
-  "run")` skips options and their values up to the first interpreter word
-  (not the value of `-p`/`--python`), and maps uv's own `-` and `-m`/
-  `--module` to `python3 -` and `python3 -m`. A plain word that follows no
-  option ends the search: `uv run pytest`, `uv run ruff check python` keep
-  `uv` as argv[0], as today. This also reads `uv run python -c S`, silent
-  today (section 5).
+- Constants: `RUNNER_FIRST` (`.`, `source`, `eval`, `exec`, `coproc`,
+  `parallel`), `RUNNER_ANY` (the shells, `perl`, `ruby`, `node`, `uv`,
+  `uvx`; Python by `PYTHON`), `NO_RUN`, `OPENERS` (`{ if while until for
+  case select`), `CLOSERS` (`} fi done esac`), and for 3.4 `PLAIN_FLAGS`,
+  `DATA_MODULES`, `RUNS_CODE`.
+- `Simple` gains `unread: bool = False`; the scanner keeps per simple, as
+  private state, its words as written (before wrappers are stripped), its
+  piped state and whether its own command is fed.
+- `runner(simple) -> bool`, `data_reader(simple) -> bool`,
+  `data_program(text) -> bool`: the rules of 3.2 and 3.4.
+- `parse(command, piped=False)`: after the scan, marks every simple that is
+  a runner, fed (piped, on its own command, or the line), and not a data
+  reader: `unread = unknown = True`. A nested parse (a shell's `-c` program,
+  `eval`'s words, a heredoc body for a shell) passes the outer command's
+  piped state (`True` for a heredoc body).
+- `_Scan.run(close, inherit=False)`: the piped state and the compound stack
+  of 3.2, keyed on `OPENERS`/`CLOSERS` met in command position; subshells,
+  `$(…)`, backticks and process substitutions call it with the current
+  state (`>(…)` with `True`).
+- `_Scan.redirect`: accepts a process substitution as a target (today
+  `x < <(…)` is unreadable and judged as text, which needs `WRITES` to
+  match, so `python3 < <(…)` passes silently), never records `<(…)` or
+  `>(…)` as a written file, and notes an input redirect.
+- `finish`: notes a fed compound or `exec` for the whole line; records the
+  names of functions and aliases defined.
+- `finish_heredoc(simple, body, …)`: the reading rule of 3.2 in place of
+  item 15's gate; sets the line feeds of 3.2.
 
-### 3.3 The guards
+### 3.4 The one narrowing: a Python data reader
 
-- `guard_governance.py`: no change. Item 15's guard line already judges by
-  text any line with an unknown command, and the `.git/harness` backstop
-  denies a line that names the harness state and has an unknown command.
-- `guard_push.py` (`main`, about 3 lines): the push guard reads a shell's
-  program only through the scanner's nested simples, and never uses
-  `unknown`. When any simple is a shell or `.`/`source` marked unknown, its
-  reasons become the text rules' (`PUBLISHES` over the whole line), as for a
-  line the scanner cannot read: `echo 'git push origin x' | sh` asks. An
-  interpreter (`… | python3`) adds nothing to the push guard: it never reads
-  a Python program for `git push` (`python3 -c "os.system('git push')"`
-  passes today), and this design keeps that.
+Without it, 121 of the governance asks of the replay are `echo JSON |
+python3 .claude/hooks/guard_x.py` or `… | python3 -c 'import json,sys; …'`
+on a line that names a governed file: stdin is data there. A simple is a
+**data reader** when all hold:
 
-### 3.4 `python3 < file`, and what stays out
+- its command word is literally `python`, `python3` or `python3.N`, with no
+  wrapper before it;
+- its options are only clusters of the no-value flags `-B -E -I -O -P -q -s
+  -S -u -b -d -R -v -x`, or `-W`/`-X` with their value: never `-i`, `-m`,
+  `-` or a long option;
+- then either a script operand that is a plain path (no `$`, backtick, `<`,
+  `>`, `=`, parenthesis; not under `/dev/`; not starting `//`), or `-c PROG`
+  where `PROG` parses, imports only `DATA_MODULES` (`json sys re collections
+  csv math itertools statistics textwrap datetime string functools operator
+  unicodedata`), and uses no name or attribute in `RUNS_CODE` (the scanner's
+  `REFLECTION`, plus `input open pickle marshal os subprocess runpy code pdb
+  importlib ctypes shutil pathlib Path`) and no attribute starting `_`.
 
-`python3 < prog.py` is `python3 prog.py` by another spelling: the program is
-a file, which neither guard reads for any script. It is bounded the same
-way: the file must exist on disk before the line runs, and was written either
-earlier (a write the guards judged then: an Edit, a Write or a shell write,
-judged by its target, not its content) or in the same line (`echo S >
-p.py; python3 < p.py`, where the guards judge the write of `p.py` and not
-what it holds, as for `python3 p.py`). A guard that opened the file would read
-it before the line runs, not when Python does. So no change; the gap is the
-script gap, named in the docstring.
+Why this holds: Python runs text as code only through `exec`, `eval`,
+`compile`, an import of code (`importlib`, `runpy`, `pickle`, `code`,
+`pdb`) or a child process (`os`, `subprocess`, `ctypes`); a `-c` program
+that names none of them cannot run its stdin. A named script that runs its
+stdin is the script gap of 3.6, as for `python3 x.py` today. A data reader's
+heredoc stays data, as item 15 has it. `python3 -c 'exec(input())'`, `-i`,
+`-m` and `/dev/stdin` are never data readers.
 
-Also not covered, each as today: `cat f | sh` and `curl … | sh` (unknown,
-but the text rule finds no name in a file or a download); an interpreter or
-module that `exec`s stdin of its own accord (`python3 x.py`,
-`python3 -m mymod`): only the three known consoles count; `uv run x.py`,
-`uv run https://…`, `uvx`, `poetry run`, `pipenv run` (none in the replay's
-`run` commands but `uv`; 0 uses of the last two); `bash <&3` and other
-descriptor copies; `eval "$(…)"` and `bash -c "$(cat f)"` (not stdin; see
-*Ideas* in the handback).
+### 3.5 The push guard (`.claude/hooks/guard_push.py`, `main`)
 
-### 3.5 Cost in false asks
+Two additions, after `parse` and before `runs`:
 
-A new ask needs both: a command that runs its stdin from another command (or a
-fed script), and a governed name in the line's text, or a `git push`-shaped
-text beside a fed shell. The replay (section 5) found 0 verdict changes over
-67,534 past commands; agents write `python3 - <<'EOF'`, not pipes into
-interpreters. The likely false ask: `cat CLAUDE.md | python3 -` reading a
-rule file on stdin as a program. `cat CLAUDE.md | python3 -c S` (stdin as
-data) stays silent.
+- **An unread simple**: the reasons gain the text rules' (`PUBLISHES` over
+  the whole line), as for a line the scanner cannot read. `echo 'git push
+  origin x' | sh` and `… | { true; sh; }` ask. `unread`, not `unknown`:
+  `git apply x.patch; echo 'git push origin x'` stays silent.
+- **Every program the scanner reads.** Confirmed in review round 1 on h24
+  PR A's code too: the push guard reads a shell's program through the
+  nested simples but never an interpreter's, so `python3 -c
+  "os.system('git push origin x')"` passes. Now the `PUBLISHES` patterns run
+  over each simple's `program` (`-c`/`-e` text, a heredoc, a here-string)
+  that **starts a process**: for Python, its syntax tree names one of
+  `SPAWN_NAMES` (`subprocess system popen Popen run call check_call
+  check_output getoutput getstatusoutput pty spawn create_subprocess_exec
+  create_subprocess_shell __import__ getattr importlib ctypes runpy eval
+  exec compile fork forkpty posix_spawn posix_spawnp startfile`, or a name
+  starting `exec` or `spawn`); for Perl, Ruby, Node or Python that does not
+  parse, the pattern `\b(subprocess|system|popen|exec\w*|spawn\w*|fork|pty|child_process|open3|qx)\b`
+  or a backtick.
+
+*A departure from the review's wording*, which asked for the text rules
+over every program: that form adds 115 push asks on the replay; with "starts
+a process" it adds 22, every one a harness probe. A program that names `git
+push` without starting a process (an edit of a design file, a `print`)
+publishes nothing.
+
+### 3.6 What stays uncovered
+
+Each is bounded the same way: the text a runner gets is not on the line, so
+the text rule has nothing to find.
+
+- **Text from a file or the network**: `cat f | sh`, `curl … | sh`, `python3
+  < prog.py` (unread, but the file's names are not in the line), `eval
+  "$(…)"`, `bash -c "$(cat f)"`, `source f`.
+- **A named script that runs its stdin**: `echo S | python3 x.py` where
+  `x.py` execs it (a data reader), as `python3 x.py` is read for no script.
+- **Commands that run their input and are no runner here**: `awk
+  '{system($0)}'`, GNU `sed`'s `e` command, `find -exec`, and any program
+  not named an interpreter or shell (`osascript`, `lua`, `php`, `Rscript`).
+  Adding a name to `RUNNER_ANY` is one word; none appears in the replay.
+- **A program that builds the name** (`'CLA' + 'UDE.md'`): the text rule's
+  bound, as in h24 item 14.
+- **`uv run python -c S`** and other inline programs behind `uv run`: not a
+  stdin route; the program is not read today and is not read here (the first
+  design stripped `uv run`; dropped as unneeded for stdin, handed back as an
+  idea).
+- **The Bash tool's own stdin**: what a runner inherits with no feed on the
+  line is not the agent's to fill.
+
+### 3.7 Cost in false asks
+
+A new governance ask needs an unread runner and a governed name in the
+line's text, or a read heredoc naming a governed file. A new push ask needs
+an unread runner and a `PUBLISHES` match in the line, or a process-starting
+program that matches. Measured in section 5: 33 and 22 over 67,715 commands.
+Inspected by hand: the push asks are all harness probes (Python programs
+that build `git push` events and run the hooks). Of the governance asks,
+about half are guard probes piping events into `.claude/hooks/*.py` through
+a shell function, `$PY` or `sh -c`; the rest pipe a governed tool's output
+(`tools/check_citations.py`, `tools/session_state.py`) or a rule file into a
+Python program the data-reader rule does not exempt, or a heredoc that
+names a governed file into a Python script whose path is a variable.
 
 ## 4. Tests
 
 `H` is the harness state's absolute path; `W` is
 `open('CLAUDE.md','w').write('x')`. Every verdict below was measured on
-2026-10-19 on two scratch copies of `be2ab149` with h24 items 14 and 15
-applied as designed (`old`), and the same plus this design (`new`); "old"
-results are all silent unless stated.
+2026-10-19 on a prototype (section 5): `old` is `be2ab149`'s scanner and
+guards with item 15 as designed (here-strings read; the guard line), `new`
+the same plus this design. "old" results are all silent unless stated.
 
 Through the whole governance hook (`tests/python/test_guard_governance.py`,
 `repo` fixture), mode off unless named:
 
-- ask naming `CLAUDE.md` (read, so the reason is "it writes CLAUDE.md"):
-  `bash /dev/stdin <<< 'echo x > CLAUDE.md'`; `python3 /dev/stdin <<< "W"`;
-  `python3 /dev/fd/0 a b <<'X'` with body `W`; `. /dev/stdin <<< 'echo x >
-  CLAUDE.md'`; `python3 -m code <<< "W"`; `python3 -qi x.py <<< "W"`;
-  `uv run python3 - <<< "W"`; `uv run python -c "W"`; `uv run --with vtk
-  python -c "W"`; `uv run -p 3.12 python3 -c "W"`; `uv run -m code <<< "W"`;
-- ask naming `CLAUDE.md` (unknown, the text rule): `printf "W" | python3`;
-  `echo 'echo x > CLAUDE.md' | sh`; `cat <<'X' | python3 -` with body `W`;
-  `python3 <(echo "W")`; `source <(echo 'echo x > CLAUDE.md')`; `echo "W" |
-  python3 -m code`; `echo "W" | uv run -`; `python3 < <(echo "W")` (on old
-  unreadable and silent); `echo "W" | { python3; }`; `echo "W" | (python3)`;
-  `echo "W" |& python3`; `echo "W" | env python3`; `echo "W" | perl`; `echo
-  "W" | python3 -m pdb x.py`; `python3 /dev/fd/3 3< <(echo "W")`;
+- ask naming `CLAUDE.md`, the review's escapes: `echo "W" |⏎python3`;
+  `echo "W" | { true; python3; }`; `echo "W" | (true; python3)`; `echo "W" |
+  if true; then python3; fi`; `echo "W" | bash -c python3`; `bash -c python3
+  <<< "W"`; `echo 'echo x > CLAUDE.md' | bash -s foo`; `bash -s foo <<< 'echo
+  x > CLAUDE.md'`; `echo 'echo x > CLAUDE.md' | bash -o errexit`; `echo "W" |
+  sudo -E python3 -`; `python3 -i -c pass <<< "W"`; `echo "W" | python3 -i
+  -c pass`; `python3 =(echo "W")`; `python3 3< <(echo "W") < /dev/fd/3`;
+  `python3 3< <(echo "W") <&3`; `echo "W" | xargs -I{} python3 -c {}`;
+  `echo "W" | env -S 'python3 -'`; `echo 'echo x > CLAUDE.md' | $SHELL`;
+  `python3 //dev/stdin <<< "W"`; `exec 0< <(echo "W"); python3`; `echo "W" |
+  python3 -c 'exec(input())'`; `python3 -c 'exec(input())' <<< "W"`; `echo
+  "W" | python3 -m cProfile /dev/stdin`; `echo "W" | arch -arm64 python3`;
+- ask naming `CLAUDE.md`, further routes: `echo "W" |  # c⏎python3`;
+  `echo "W" | (python3)`; `echo "W" |& python3`; `echo "W" | python3 -m
+  code`; `echo "W" | uv run -`; `echo "W" | uv run python3`; `uv run python3
+  - <<< "W"`; `echo "W" | tee >(python3)`; `python3 <(echo "W")`; `source
+  <(echo 'echo x > CLAUDE.md')`; `echo 'echo x > CLAUDE.md' | while read l;
+  do eval "$l"; done`; `echo "W" | echo "$(python3)"`; `echo "W" | { cat; }
+  | python3`; `f() { python3; }; echo "W" | f`; `function g { sh; }; echo
+  'echo x > CLAUDE.md' | g`; `coproc python3; echo "W" >&"${COPROC[1]}"`;
+  `$SHELL <<< 'echo x > CLAUDE.md'`; `bash -c 'echo "W" | python3'`; `echo
+  "W" | sh -c 'cat | python3'`; `{ python3; } <<< "W"`; `{ python3; } <
+  <(echo "W")`; `( python3 ) < <(echo "W")`; `while read l; do python3;
+  done < <(echo "W")`; `echo 'echo x > CLAUDE.md' | parallel`; `cat
+  CLAUDE.md | python3 -c "import os,sys; os.system(sys.stdin.read())"`;
+  unchanged (asks on both): `echo "W" > >(python3)`;
 - denied with the always-denied text, nothing queued, modes off and on:
-  `echo "open('H','w').write('x')" | python3` and `bash /dev/stdin <<< 'echo
-  x > H'`;
-- silent, on both copies: `python3 < prog.py`; `echo "W" || python3`; `echo
-  "W" && python3`; `echo "W" | python3 x.py`; `git diff | python3
-  tools/count_loc.py`; `echo '{}' | python3 -m json.tool`; `cat CLAUDE.md |
-  python3 -c 'import sys; print(len(sys.stdin.read()))'`; `source
-  .venv/bin/activate`; `uv run pytest tests/python`; `uv run ruff check
-  python`; `printf 'print(1)' | python3`; `python3 -Wignore x.py <<< "W"`;
-  `while read l; do echo $l; done < <(ls CLAUDE.md)`.
+  `echo "open('H','w').write('x')" | python3`; `bash -s foo <<< 'echo x >
+  H'`; `{ python3; } < <(echo "open('H','w').write('x')")`;
+- silent, on both: `python3 < prog.py`; `echo x || python3`; `echo x &&
+  python3`; `echo "W" | python3 x.py` (a data reader); `git diff | python3
+  tools/count_loc.py`; `cat CLAUDE.md | python3 -c 'import sys;
+  print(len(sys.stdin.read()))'`; `python3 -c 'import json,sys;
+  print(json.load(sys.stdin))' < CLAUDE.md`; `python3 tools/x.py <<'EOF'`
+  with body `{"path": "CLAUDE.md"}`; `python3 x.py < /dev/null`; `diff
+  <(echo "W") x; python3 x.py`; `echo '{}' | python3 -m json.tool`;
+  `printf 'print(1)' | python3`; `source .venv/bin/activate`; `uv run pytest
+  tests/python`; `while read l; do echo $l; done < <(ls CLAUDE.md)`.
 
 Through the whole push hook (`tests/python/test_guard_push.py`, `ASKED` and
-`PASSED`): ask: `bash /dev/stdin <<< 'git push origin x'`, `source
-/dev/stdin <<< 'git push origin x'` (read), `echo 'git push origin x' | sh`,
-`bash <(echo 'git push origin x')`, `echo 'git push origin x' | tee >(sh)`
-(unknown, text rules); unchanged asks: `echo 'git push origin x' > >(sh)`,
-`bash < <(echo 'git push origin x')`, `bash -s < <(echo 'git push origin x')`
-(old: unreadable, text rules; new: read as fed). Passes: `echo 'git push
-origin x' | cat`, `echo 'git push origin x' | python3` (interpreter, 3.3).
+`PASSED`). Ask: `python3 -c "import os; os.system('git push origin x')"`;
+`python3 -c "import subprocess; subprocess.run(['git','push','origin','x'])"`;
+`perl -e 'system("git push origin x")'`; `bash -c python3 <<< "import os;
+os.system('git push origin x')"`; `echo 'git push origin x' | sh`; `echo
+'git push origin x' | bash -s`; `echo 'git push origin x' | { true; sh; }`;
+`sh <(echo 'git push origin x')`. Pass: `echo 'git push origin x' | cat`;
+`echo 'git push origin x' | python3 x.py`; `python3 -c "print('git push
+origin x')"`; `git apply x.patch; echo 'git push origin x'`.
 
-In `tests/python/test_guard_targets.py`, `parse`: `printf S | python3` gives
-`python3` with `unknown` True and `echo S | python3 x.py` False; `python3
-/dev/stdin <<< "W"` gives program `W\n` and candidate `CLAUDE.md`; `uv run
---with vtk python -c S` gives argv[0] `python`; `uv run pytest` keeps argv[0]
-`uv`; `echo x > >(sh)` has no write.
+In `tests/python/test_guard_targets.py`, `parse`: `echo S |⏎python3` gives
+`python3` with `unread` and `unknown` True; `python3 x | tail -1; python3 y`
+gives both `python3` simples `unread` False; `echo S | if true; then
+python3; fi` gives `python3` `unread` True; `grep -i python CLAUDE.md |
+head` gives no `unread`; `python3 -i -c pass <<< "W"` gives program
+`pass\nW\n` and candidate `CLAUDE.md`; `echo x > >(sh)` has no write.
 
-Existing suites stay green on the green commit (section 5 measured the
-prototype: no test changes result).
+Existing suites: the prototype was not run against them (section 5); the
+green step reports any existing test whose verdict changes, with the line.
 
 ## 5. Measured
 
-*Replay.* Every distinct Bash command in this machine's Claude Code
-transcripts (`~/.claude/projects/**/*.jsonl`, read with `json`, commands
-never printed except those matching the routes, a line with `key`, `token`,
-`secret`, `passw`, `authoriz` or `bearer` redacted): 67,534. Through both
-copies' `judge_bash` and the push hook's `main`: **0 verdicts changed**
-(governance asks 432, push asks 748, on both). The probe can fail: the route
-lines of section 4 change verdict on the same harness. `parse` output
-changed for 168 lines: 148 newly read programs (mostly `uv run python -c`,
-and `python3 /dev/stdin args <<'X'`, which agents use to pass arguments with
-a heredoc program), 16 newly unknown (all `uv run python -c "…$S…"`, item 14's
-rule reached through the new wrapper), 4 lines newly readable (`… < <(…)`).
-Each took about 13 s for the whole corpus per copy.
+*Prototype.* A scratch copy of `be2ab149`'s `tools/` and `.claude/hooks/`,
+with item 15 as designed (a here-string read, and the guard line) and this
+design behind a switch, so `old` and `new` are the same files. Item 14 is
+not in it: its asks are on lines with `$` in a program, which the replay's
+`old` count therefore misses, so the added asks below are an upper bound.
 
-*Suites.* `pytest -m harness --no-cov` (the main checkout's venv, run from
-each copy): `old` 2626 passed, 9 failed, 14 skipped; `new` the same, with the
-same 9 failures. They are PR A red tests the prototype does not meet (5a's
-review-round fixes, and item 14's judging by static form): PR A's green
-step, not this design. The 14 skips: a copy is no git work tree.
+*Replay.* Every distinct Bash command in this machine's Claude Code
+transcripts (`~/.claude/projects/**/*.jsonl`, read with `json`): 67,715.
+Through `judge_bash` and the push hook's `main` (its `emit` captured, no
+grant module), `old` against `new`. Commands holding `key`, `token`,
+`secret`, `passw`, `authoriz` or `bearer` were counted but never printed.
+
+| Rule | governance asks added | push asks added |
+|---|---|---|
+| any runner on a line with any pipe, redirect or process substitution | 5,785 | 241 |
+| fed on the runner's own stdin, no data reader | 121 | 60 |
+| **this design** (3.2 to 3.5) | **33** (4 redacted) | **22** (2 redacted) |
+| this design, push text rules over every program | 33 | 115 |
+
+Governance asks: `old` 438, `new` 471; push asks: `old` 748, `new` 770.
+No verdict went from ask to silent. The probe can fail: every route line of
+section 4 changes verdict on the same harness, and each silent line was run
+too. Each pass over the corpus took about 27 s.
+
+*Suites.* Not run on the prototype: the copy of the test tree into the
+scratchpad was refused by the governance guard in unattended mode (it
+writes copies of governed files through a shell variable), so the suites'
+figures come from the red and green steps.
 
 ## 6. Size and order
 
-`tools/shell_scan.py` about 40 counted lines (constants 4, `stdin_program` 9,
-`interactive` 6, `fed` 5, `uv_run` 9, `run`/`redirect`/`finish`/`unwrap`
-about 8, `finish_heredoc` net -2), `.claude/hooks/guard_push.py` about 3;
-total about 45, measured on the prototype diff (+55 -17 counted in the
-scanner, +3 in the push guard). Tests about 120 lines.
+`tools/shell_scan.py` about 90 counted lines: constants about 14, `runner`
+8, `data_reader` and `data_program` 25, the marking in `parse` 7, the piped
+state and compound stack in `run` 15, `word`/`dollar`/`redirect` 8,
+`finish` 6, `finish_heredoc` net 7. `.claude/hooks/guard_push.py` about 15
+(`spawns` and its two constants 11, `main` 4). Total about 105, from the
+prototype diff less its switches. Tests about 160 lines.
 
-Path: the full path despite the size (under the short path's 50): it is a
-guard, where review probes routes adversarially, and a design round costs
-less than a governed green step redone. Order: design review now; red after
-h24 PR A merges and this branch merges master; green by day with Ola at the
-prompt (both files governed). Not a night fallback.
+Path: full. Order: design review now; red after h24 PR A merges and this
+branch merges master; green by day with Ola at the prompt (both files
+governed). Not a night fallback.
