@@ -643,12 +643,9 @@ template <class Store, class R, TolerancePolicy P>
             const AsWrittenPass pass =
                 legalise_as_written(m, written_points(m, start, g, frame), options.frozen_mask, touched);
             out.flat_as_written = pass.flat;
-            if (pass.left_illegal)
-                out.illegal_as_written = *pass.left_illegal;
-            if (pass.changed) {
-                out.flips += pass.flips;
-                out.flips_as_written += pass.flips;
-            }
+            out.illegal_as_written = pass.left_illegal.value_or(out.illegal_as_written);
+            out.flips += pass.flips;  // 0 unless changed
+            out.flips_as_written += pass.flips;
             any = pass.changed;
         }
         out.split_seconds += since(t0);
