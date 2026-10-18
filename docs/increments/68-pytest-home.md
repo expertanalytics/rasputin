@@ -1,12 +1,12 @@
 # Increment 68: the test session never reads the user's config or home
 
-**Status: designed** (`@architect`, 2026-10-18, on `9c80b7de`). Short path:
+**Status: built, approved** (`@architect`, 2026-10-18, on `9c80b7de`; red `6054c389`, green `af9b8e4c`, both `@tester`). Short path:
 0 counted lines (every changed file is under `tests/`), no C++, nothing the
 *Acceptance* section covers. Touches no governed file: not `pyproject.toml`,
 not `.claude/`, not `tools/`.
 
 **Plan.** Short path (`docs/increments/README.md`, *Small changes: the short
-path*): `@tester` commits the red suite, `@developer` the green step, and one
+path*): `@tester` commits the red suite and the green step (its one file, `tests/python/conftest.py`, is outside `@developer`'s write limit), and one
 `@reviewer` round then judges the design, the red step and the green step
 together. Citations below are pinned to `9c80b7de` unless they name another
 commit.
@@ -194,3 +194,8 @@ coverage), as the harness collection test's inner runs are.
 
 0 counted lines (`python3 tools/count_loc.py` counts nothing under `tests/`).
 About 30 lines in `conftest.py` and 90 in the new test file.
+
+## 8. Review
+
+- **Design review, round 1, 2026-10-18.** On `bf5ee60e`, @reviewer: CHANGES REQUESTED (removing every `RASPUTIN_` variable also removed `RASPUTIN_INSTALL_TRAP`, so CI's install-trap tests would skip). Fixed in `4f731cb2`.
+- **Combined round (design, red, green), 2026-10-18.** Range `9c80b7de..af9b8e4c`, 0 counted lines (estimate 0), @reviewer: APPROVED WITH WORDINGS; the Plan line's wording applied by the main session. Green by `@tester` ruled acceptable: the red commit came first and the green commit leaves it untouched.
