@@ -2,9 +2,7 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b (#162, 247 lines)
-and 23c-1 (#164, 154 lines) approved and merging; 23c-2 (about 265 estimated)
-green at 478 net lines, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
+2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
 in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (about 185, each piece's memory its own) next; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
@@ -3718,3 +3716,6 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 **23c-2, code review, round 2, 2026-10-04.** Range `992d542..b5a73ec` (0732f7a test headers and DC10's xfail reason, b5a73ec status paragraph, ROADMAP row 23, point 7); whole PR `c3cf08f..b5a73ec`, stacked on 23c-1. Verdict: APPROVED. LOC: 478 net, unchanged (tests and docs only this round). All four blockers closed; citations resolve. Nit: the status paragraph gives 23c-1 as 154 lines; it is about 156. Not pushed; no CI.
 
 **23c-2, code review, round 3, 2026-10-04.** Range `8430c71..d24efbe` (a717d56 merge of 23c-1 with master's run record, fe42a3b merge of master at #160, af1f143 point 12, d24efbe the refusals' test). Verdict: APPROVED. LOC: 474 net (577 added, 103 removed) against 23c-1's tip merged with master. The merge keeps both behaviours: the uncut record's keys and values match master's inline block, and 15e's early drop of the tile survives; each piece's file fields come from `values | piece.values`; `feature_counts` excludes the seam chains; `basin_run.py` changed as described; the three refusals come before `where.mkdir` and are tested; citations resolve. Suggestion: raise the three refusals once the partition has more than one cell, before `cut_run`, so a usage error does not wait for every piece to refine. Not pushed; no CI.
+
+
+**23c-2, code review, round 4, 2026-10-18.** Range `cb713c87..6bd8299a` after taking master (`5a511cdc` reverts the branch's own refine fix; master's "Delaunay as written" fix stands), 548 counted lines (estimate about 540; the growth from 478 is `decompose.py` counting again and the caps no longer removed), @reviewer: CHANGES REQUESTED: no mutant kill record yet for the invariant-critical tests DC2-DC4 and DC6 (`@tester`); `15-dem-mosaic.md` restored to master's copy; this Status line and ROADMAP row 23 corrected, by the main session. C++ equals master; the merge is faithful to both sides; the rulings hold.
