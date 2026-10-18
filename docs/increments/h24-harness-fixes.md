@@ -840,8 +840,7 @@ here-string beside a heredoc runs both; bash keeps only the last.
   the scanner could not read is judged by its text whatever its shape. This
   is @tester's proposal, taken over adding `<<<` to `WRITES`, which would
   leave `perl -e "…$(…)…"` and each later unknown form to be listed one by
-  one. Cost: an ask on a line that is `unknown` and names a governed file
-  without writing it, as item 14 already accepts for `-c`; a line naming no
+  one. Cost: an ask on a line that is `unknown` and names a governed file without writing it, as item 14 already accepts for `-c`, and a read through `xargs sed` (`echo CLAUDE.md | xargs sed -n 1p`; 0 of 65,746 past transcript commands change verdict); a line naming no
   governed file stays silent (`text_hits` is empty). The no-scanner arm
   (`simples is None`) is unchanged.
 
@@ -925,8 +924,7 @@ interpreter or file, an import-time error, a kill, or a hang.
 `"onFailure": "block"` on a `command` hook, "Whether the action that
 triggered the hook goes ahead when the hook fails: `"continue"` or
 `"block"`"; unset means continue. A failure is: the hook cannot start, exits
-with a code other than 0 or 2, times out, or prints output that does not
-parse. It needs Claude Code v2.1.295 or later; this machine runs 2.1.302
+with a code other than 0 or 2, times out, or prints JSON that does not parse or fails the schema check (plain-text output is not a failure). It needs Claude Code v2.1.295 or later; this machine runs 2.1.302
 (`claude --version`, 2026-10-18).
 
 *Change* (`.claude/settings.json` only). The `PreToolUse` entries for
@@ -1055,3 +1053,4 @@ Both are prose, so the merge is a wording step, not a design change.
 - **Design review, round 3 (PR A), 2026-10-18.** On `a4c19f4e` (5a and 5b revised, item 14 added), @reviewer: CHANGES REQUESTED: 5a's pattern backtracked exponentially on failing lines; `''=ls` passed the `=` check; a backslash in an unquoted heredoc hid a write. Revised in `28a67d39`.
 - **Design review, round 4 (PR A), 2026-10-18.** On `28a67d39`, @reviewer: APPROVED; the new pattern timed linear on failing lines up to 21,010 characters. Idea for its own item: a here-string (`<<<`) given to an interpreter is not read at all, on master too.
 - **Design review, round 5 (PR A, item 15), 2026-10-18.** On `7e513d11`, @reviewer: APPROVED. Findings for a follow-up item, all silent on master too: `/dev/stdin` or `/dev/fd/0` as a script, a pipe into an interpreter or shell, `<(…)` as a script, `. /dev/stdin`, `python3 -m code` and `uv run python3` reading stdin; `python3 < file` stays a known blind spot.
+- **Design review, round 6 (PR A, items 15 and 16), 2026-10-18.** On `8e427319`, @reviewer: APPROVED WITH WORDINGS, applied by the main session (the `xargs sed` cost; what counts as a hook failure). 65,746 past Bash commands replayed through the old and new guard: 0 changed verdict. `onFailure` key and version checked against the hooks reference.
