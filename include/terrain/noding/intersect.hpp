@@ -16,7 +16,7 @@
 // grid point and every split point for a touch or an overlap is one of the four
 // endpoints. Construction happens once per crossing pair and nowhere else.
 //
-// This header includes no `core/pslg.hpp` and knows nothing of chains: 5a is
+// This header includes no `core/pslg.hpp` and knows nothing of chains: it is
 // everything whose correctness is a question about numbers.
 
 #include <terrain/core/point.hpp>
@@ -44,7 +44,7 @@ enum class SegmentRelation : std::uint8_t {
 // Exact and construction-free: signs from K, betweenness from closed
 // comparisons between coordinates the caller supplied. Total on every pair,
 // including degenerate (zero-length) segments, which get no special case --
-// segment.hpp's ruling, with its reason intact: "an explicit special case here
+// segment.hpp's rule, with its reason intact: "an explicit special case here
 // is how the degenerate answer gets subtly wrong".
 template <pred::GeometryKernel K>
 [[nodiscard]] SegmentRelation classify(const Segment2& s, const Segment2& t) {

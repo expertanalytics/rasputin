@@ -1,15 +1,15 @@
 """Test support for increment 16b: feature documents, domains, and the bit oracle.
 
 `docs/increments/16b-terrain-polygons.md`. The oracle here is built from the
-input features and the class map, never from the producer's records (05b,
+input features and the legend, never from the producer's records (05b,
 "Guarantee 15's oracle"): a noded constraint edge's expected mask is the union
 of the masks of every feature whose boundary, as given in the source and
 moved by pyproj directly, lies along that edge, within the noder's snap.
 
-`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.class_maps`
+`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.legends`
 are imported lazily, so a suite importing this module still collects before
-they exist. Increment 41: a class map is loaded by name (or path) through
-`class_maps.load`, no longer read from `feature_input.CLASS_MAPS`.
+they exist. Increment 41: a legend is loaded by name (or path) through
+`legends.load`, no longer read from a table in `feature_input`.
 """
 
 from __future__ import annotations
@@ -52,9 +52,9 @@ def chains_module() -> ModuleType:
     return importlib.import_module("tin_engine.chains")
 
 
-def class_map(name: str) -> Any:
-    """Increment 41: the class map a `--features-map` value names."""
-    return importlib.import_module("tin_engine.class_maps").load(name)
+def legend(name: str) -> Any:
+    """Increment 41: the legend a `--features-legend` value names."""
+    return importlib.import_module("tin_engine.legends").load(name)
 
 
 def at(x: float, y: float) -> tuple[float, float]:
@@ -101,7 +101,7 @@ def write_geojson(path: Path, features: Iterable[Feat], crs: str | None = UTM33)
 
 
 def source(path: Path, map_name: str = "property", **kwargs: Any) -> Any:
-    return feature_input().FeatureSource(path=path, class_map=class_map(map_name), **kwargs)
+    return feature_input().FeatureSource(path=path, legend=legend(map_name), **kwargs)
 
 
 def open_one(
@@ -139,7 +139,9 @@ def run_engine(started: Any) -> Noded:
         ([int(i) for i in indices], cli.ROLES[role], int(mask))
         for indices, role, mask in started.chains
     ]
-    run = cli._engine(np.asarray(started.vertices, dtype=np.float64), chains, True, SNAP)
+    run = cli._engine(
+        np.asarray(started.vertices, dtype=np.float64), chains, delaunay=True, spacing=SNAP
+    )
     assert run.noded is not None and run.mesh is not None, f"{run.status}: {run.message}"
     xy = np.asarray(run.noded.vertices)
 
@@ -187,7 +189,7 @@ def moved(geometry: BaseGeometry, src: str, dst: str = UTM33) -> BaseGeometry:
 @dataclass(frozen=True)
 class Truth:
     """A feature as the oracle sees it: its linework in the DEM's CRS, and the
-    mask its class map gives it."""
+    mask its legend gives it."""
 
     lines: BaseGeometry
     mask: int

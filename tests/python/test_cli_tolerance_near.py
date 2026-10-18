@@ -110,7 +110,9 @@ def start(n: int = 25) -> tuple[Any, ...]:
         + [(i, 0) for i in range(n - 1, 0, -4)]
     )[::-1]
     xy = world(np.array([c for _, c in ring], float), np.array([r for r, _ in ring], float))
-    built = _engine(xy, [([*range(len(ring))], ChainRole.Outer, 0)], True, DEFAULT_SNAP_SPACING)
+    built = _engine(
+        xy, [([*range(len(ring))], ChainRole.Outer, 0)], delaunay=True, spacing=DEFAULT_SNAP_SPACING
+    )
     assert built.mesh is not None and built.noded is not None, built.message
     edges, masks = _constraint_arrays(built.mesh, built.noded)
     view = _core.raster_view(dem, x_min=X_MIN, y_max=Y_MAX, delta_x=float(H), delta_y=float(H))

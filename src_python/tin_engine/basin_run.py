@@ -1,8 +1,8 @@
-"""A cut run, piece by piece (increment 23c).
+"""A cut run, piece by piece.
 
-`docs/increments/23-basin-scale.md`, "The subdomain model" and "The seam
-protocol": the window's partition (`cut_partition`), then each piece's slice
-of the one start triangulation, refined on its cell's window with the seams
+`docs/increments/23-basin-scale.md`, *The seam protocol*: the window's
+partition (`cut_partition`), then each piece's slice of the one start
+triangulation, refined on its cell's window with the seams
 frozen, and K4 over every piece's seam records (`cut_run`).
 
 `cli.py` parses options and hands this module a start mesh, a tile and its
@@ -40,7 +40,7 @@ class RunError(ValueError):
 
 
 class Once[T]:
-    """A value handed on once (15e, fix 3): `take` returns it and forgets it,
+    """A value handed on once: `take` returns it and forgets it,
     so the holder keeps nothing alive after; a second `take` is a bug."""
 
     def __init__(self, value: T) -> None:
@@ -55,8 +55,8 @@ class Once[T]:
 
 @dataclass(frozen=True, slots=True)
 class How:
-    """How a start mesh is refined (15c-2's phase 2 with ``grid`` and
-    ``checks``)."""
+    """How a start mesh is refined (with ``grid`` and ``checks``, the final
+    check against a resampled grid)."""
 
     dem: str
     tolerance: float
@@ -72,7 +72,7 @@ class Refined:
     final: RefineOutcome
     z: npt.NDArray[np.float64]
     trimmed: Trimmed
-    values: Mapping[str, Value]  # the run record's entries (increment 25)
+    values: Mapping[str, Value]  # the run record's entries
     on_frozen: int
 
 
@@ -125,8 +125,8 @@ class CutRun:
 
 
 def cut_partition(meta: RasterMeta, tolerance: float, ask: CutAsk) -> Partitioned | None:
-    """The window's partition ("The partition", 23c), or None for one cell,
-    which is today's run (K1). Line ``i`` is at the index's
+    """The window's partition (the design's "The partition"), or None for one
+    cell, which is today's run (K1). Line ``i`` is at the index's
     ``origin_x + (col0 + i dx) h``, line ``j`` at ``origin_y - (row0 + j dy) h``."""
     cells = partition(meta.cols, meta.rows, tolerance, pieces=ask.pieces, piece_budget=ask.budget)
     if cells.nx * cells.ny == 1:
@@ -167,7 +167,7 @@ def cut_run(
     clock: PhaseClock,
     refined: Refine,
 ) -> CutRun:
-    """23c, one piece after another: each piece's slice of the one start
+    """One piece after another: each piece's slice of the one start
     triangulation, its seam edges fanned at their seam-pass points, refined
     on its cell's window (grown by a node) with the seams frozen; then K4
     over the seam records of every piece (``ConformityError`` exits 1)."""

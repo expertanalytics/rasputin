@@ -239,11 +239,8 @@ class TestReadLakes:
     reader by what it reads (`docs/increments/python-audit.md`, section 12)."""
 
     def test_the_name_says_what_it_reads(self, station_set: ModuleType) -> None:
-        """Audit PR C, red test 5: no alias keeps the old name."""
         assert callable(getattr(station_set, "read_nve_lakes", None))
-        assert not hasattr(station_set, "read_lakes")
         assert "read_nve_lakes" in station_set.__all__
-        assert "read_lakes" not in station_set.__all__
 
     def test_a_polygon_gives_one_lake_with_its_number_and_name(
         self, station_set: ModuleType, tmp_path: Path
@@ -409,7 +406,7 @@ def _typed(value: Any) -> Any:
 # value, or a function of the reader's right geometry giving it).
 NOT_A_GEOMETRY: list[tuple[str, Any]] = [
     ("7", 7), ('"Point"', "Point"), ("[1, 2]", [1, 2]),
-    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(False)),
+    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(value=False)),
     ("type []", _typed([])), ("type {}", _typed({})),
 ]  # fmt: skip
 

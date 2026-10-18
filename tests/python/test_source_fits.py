@@ -7,7 +7,7 @@ names is a file the option's reader accepts, and a fit it does not name is
 a file the reader refuses).
 
 T5 reads the files through the readers the options call, never the CLI:
-`open_features` for `mesh --features` (with the fit's class map),
+`open_features` for `mesh --features` (with the fit's legend),
 `read_lake_polygons` for `catchment --lakes`, `read_segments` for either
 `--rivers`, `read_nve_lakes`, `read_stations` and `read_references` for
 `station-catchments`' others. "Refuses" is the reader's `ValueError`; for
@@ -20,6 +20,7 @@ converse is claimed for them only.
 
 from __future__ import annotations
 
+import importlib
 import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -31,9 +32,8 @@ from shapely.geometry import box
 import batch_fixtures as bf
 from catchment_fixtures import EPSG, lake_box
 from dataset_fixtures import write_sources
-from feature_fixtures import domain_of
+from feature_fixtures import domain_of, legend
 from tin_engine import source_report
-from tin_engine.class_maps import load, shipped_names
 from tin_engine.cli import app
 from tin_engine.feature_input import (
     FeatureRequest,
@@ -66,8 +66,9 @@ def fits_for(fields: dict[str, Any]) -> Any:
 
 
 def maps() -> dict[str, Any]:
-    """What `listing` passes: every shipped map plus `property`."""
-    return {name: load(name) for name in (*shipped_names(), "property")}
+    """What `listing` passes: every shipped legend plus `property`."""
+    shipped = importlib.import_module("tin_engine.legends").shipped_names()
+    return {name: legend(name) for name in (*shipped, "property")}
 
 
 def facts(
@@ -78,7 +79,7 @@ def facts(
     attributes: tuple[str, ...] = (),
     crs: bool = True,
     projected: bool | None = None,
-    class_map: str = "",
+    legend: str = "",
 ) -> dict[str, Any]:
     """`Facts`' fields; built in the test, so the module collects before `Facts` exists."""
     return dict(
@@ -88,7 +89,7 @@ def facts(
         geometry=frozenset(geometry),
         attributes=attributes,
         crs_stated=crs,
-        class_map=class_map,
+        legend=legend,
     )
 
 
@@ -115,10 +116,10 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
     "geojson attribute as the map spells it": (
         facts(geometry=POLY, attributes=("Code_18",)),
         features("corine", "corine-water") | {LAKES, SC_LAKES}),
-    "the entry's class map alone": (
-        gpkg(("Code_18",), class_map="corine"), features("corine") | {LAKES}),
-    "the entry's class map, its attribute absent": (
-        gpkg(("Code_18",), class_map="clc18_kode"), {LAKES}),
+    "the entry's legend alone": (
+        gpkg(("Code_18",), legend="corine"), features("corine") | {LAKES}),
+    "the entry's legend, its attribute absent": (
+        gpkg(("Code_18",), legend="clc18_kode"), {LAKES}),
     "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {LAKES}),
     "mapbiomas classes": (facts(geometry=POLY, attributes=("class",)),
                           features("mapbiomas-c11") | {LAKES, SC_LAKES}),
@@ -155,7 +156,7 @@ class TestT4Fits:
     @pytest.mark.parametrize(("given", "expected"), ROWS.values(), ids=ROWS.keys())
     def test_the_rules(self, given: dict[str, Any], expected: set[Fit]) -> None:
         got = fits_for(given)
-        listed = [(f.command, f.option, f.class_map) for f in got]
+        listed = [(f.command, f.option, f.legend) for f in got]
         assert len(listed) == len(set(listed)), listed  # each fit once
         assert set(listed) == expected
 
@@ -185,10 +186,10 @@ class TestT4Fits:
         assert ("station-catchments", "--dem", "station_catchments", "dem") in seen
         assert ("mesh", "--features", "mesh", "features") in seen
 
-    def test_only_a_features_fit_names_a_class_map(self) -> None:
+    def test_only_a_features_fit_names_a_legend(self) -> None:
         for row, _expected in ROWS.values():
             for fit in fits_for(row):
-                assert (fit.class_map is not None) == (fit.option == "--features"), fit
+                assert (fit.legend is not None) == (fit.option == "--features"), fit
 
 
 # ------------------------------------------------------------ T5
@@ -197,8 +198,8 @@ class TestT4Fits:
 INSIDE_POINT = lake_box().centroid.coords[0]
 
 
-def accepts_features(path: Path, layer: str | None, class_map: str) -> bool:
-    source = FeatureSource(path=path, class_map=load(class_map), layer=layer)
+def accepts_features(path: Path, layer: str | None, name: str) -> bool:
+    source = FeatureSource(path=path, legend=legend(name), layer=layer)
     domain = domain_of(box(495_000.0, 6_555_000.0, 525_000.0, 6_605_000.0))
     try:
         found = open_features(FeatureRequest(sources=(source,)), domain, EPSG)
@@ -256,7 +257,8 @@ def listed(tmp_path: Path) -> dict[str, tuple[Path, str | None, set[Fit]]]:
         "stations": (bf.write_stations(tmp_path / "stations.geojson"), None),
         "rivers": (bf.write_rivers(tmp_path / "rivers.geojson"), None),
         "reference": (bf.write_references(tmp_path / "reference.geojson"), None),
-        "nve-lakes": (bf.write_lakes(tmp_path / "nve-lakes.geojson"), None),
+        # Not "nve-lakes": that id is the package's map-service entry.
+        "hrd-lakes": (bf.write_lakes(tmp_path / "nve-lakes.geojson"), None),
         "lakes-no-crs": (without_crs(lakes), None),
     }
     user = write_sources(
@@ -270,7 +272,7 @@ def listed(tmp_path: Path) -> dict[str, tuple[Path, str | None, set[Fit]]]:
     for key, (path, layer) in files.items():
         entry = found[key]
         assert entry.problem is None, (key, entry.problem)
-        out[key] = (path, layer, {(f.command, f.option, f.class_map) for f in entry.fits})
+        out[key] = (path, layer, {(f.command, f.option, f.legend) for f in entry.fits})
     return out
 
 

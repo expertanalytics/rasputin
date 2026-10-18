@@ -1,7 +1,7 @@
-"""A cut run's pieces, sliced from its one start triangulation (increment 23c).
+"""A cut run's pieces, sliced from its one start triangulation.
 
-`docs/increments/23-basin-scale.md`, "The subdomain model" and "The seam
-protocol", steps 1, 3 and 5. A piece is a component of the start
+`docs/increments/23-basin-scale.md`, *The seam protocol*, steps 1, 3 and 5.
+A piece is a component of the start
 triangulation across every edge that is not a seam (`landcover.regions`
 with only the seams blocking); its id `(j, i, k)` is its cell's row and
 column and its rank in that cell by lowest start-triangle index, a function

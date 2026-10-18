@@ -1,8 +1,8 @@
 #pragma once
 
-// The final check (docs/increments/15c-geographic-dem.md, D5): greedy insertion
-// against stored check points, starting from phase 1's mesh. refine.hpp's loop
-// with a different scanner; refine.hpp itself is not edited (J1).
+// The final check: greedy insertion against stored check points, starting
+// from phase 1's mesh. refine.hpp's loop with a different scanner, kept in a
+// function of its own (detail::point_loop).
 //
 // The store's geometry() is the frame and the buckets, nothing more: phase 2
 // reads no raster value. A start vertex keeps the z it is given (NaN where it
@@ -22,51 +22,55 @@
 // Split (serial, triangle-index order), as refine: split_inside, or split_edge
 // for a point on an edge, skipped this round when the neighbour across it was
 // already touched; legalise_around follows. The start is legalised once first,
-// as refine does. Terminates: each insertion is a stored point not yet a
-// vertex, and the store is finite.
+// as refine does. Terminates: a round after a swap pass on the written points
+// either inserts a stored point not yet a vertex (a finite set), or ends with
+// a check that finds no illegal edge, or breaks when the swapped mesh will not
+// rebuild on the grid.
+// The last swap check decides on the written (rounded world) points, not on
+// the grid.
 //
 // Coincident points. A stored point equal to a start vertex is a corner of
 // every triangle holding it, so it is never scanned nor inserted. After the
 // loop each start vertex looks it up in its own cell; matches are counted in
 // `coincident`, their largest |z - vertex z| in `coincident_max_error`.
 //
-// The edge strip (docs/increments/15f-edge-strip.md, D4 and L1-L9). One loop,
+// The edge strip. One loop,
 // detail::point_loop, scans up to three sets per triangle: the store's points
 // (refine_points), the strip's points, and the DEM's nodes (refine_strip, only
-// in a slot this run has written, L3). Strip points are filed by constrained
-// sub-edge, not found by membership (F1): a triangle scans the strip sub-edges
+// in a slot this run has written). Strip points are filed by constrained
+// sub-edge, not found by membership: a triangle scans the strip sub-edges
 // it owns (lower vertex index to higher, or no triangle across), and the mesh
 // value there is linear in s between the sub-edge's ends. Across sets the
 // first void result wins, else the strictly largest error, ties to the earlier
 // set (source, strip, DEM). A strip point goes in by split_edge guarded by
 // strip_fits (foot_fits, and the split's new edges locally Delaunay); refused,
-// it is marked and never named again, and its triangle stays active (L1).
-// Every split of a strip sub-edge replaces its record by two (step 4); a point
+// it is marked and never named again, and its triangle stays active.
+// Every split of a strip sub-edge replaces its record by two; a point
 // of another set lands on the strip point at its exact position, if any, which
-// is then consumed (L5). After the loop every strip point is measured against
-// its final sub-edge (step 6).
+// is then consumed. After the loop every strip point is measured against
+// its final sub-edge.
 //
-// Frozen edges (docs/increments/23-basin-scale.md, N1, N2, N6, N7, N16). With
-// frozen_mask, a stored point on a frozen edge of its triangle (after L14's
+// Frozen edges. With
+// frozen_mask, a stored point on a frozen edge of its triangle (after the
 // corner test; with a strip, also one within r(g) of it, projection strictly
 // inside) is never named. It is counted once in `on_frozen`, by the triangle
-// that owns the edge when it lies exactly on it (15f D4's rule), with its
-// error against the edge's linear z at its projection. L12 never takes a
+// that owns the edge when it lies exactly on it (the strip's ownership rule), with its
+// error against the edge's linear z at its projection. near_constraint never takes a
 // frozen edge, the DEM rescan is refine's scan, and a frozen strip edge is a
 // programming error (std::logic_error).
 //
-// Constraint feet (docs/increments/20c-soft-quality.md, R4). With
-// constraint_feet, a source point or DEM node that L12 left Inside and that
+// Constraint feet. With
+// constraint_feet, a source point or DEM node that near_constraint left Inside and that
 // lies within delta_p of a constraint (mesh::constraint_foot) goes in as its
 // foot, once; if its error stays above the tolerance it goes in later as
 // itself (feet_fallback). Feet are counted in `inserted`.
 //
-// A tolerance policy (docs/increments/33-feature-tolerance.md, 4.4): each
+// A tolerance policy: each
 // triangle's error is compared with the policy's allowed error, asked only
 // between lowest() and highest(), as refine does; options.tolerance is not
 // read by the overloads that take one.
 //
-// A slope (docs/increments/34-slope-tolerance.md, 4.3): with Sloped<P> a
+// A slope: with Sloped<P> a
 // stored point or strip point is held to allowed(cell_class(its position)),
 // a rescanned DEM node to its own class's. Each triangle keeps a second
 // winner, the largest (error * weight, error) across the sets; when some
@@ -108,12 +112,12 @@ namespace terrain::refinement {
 struct PointRefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
-    std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
-    bool constraint_feet = false;   // 20c R4.6: a point near a constraint goes in as its foot first
+    std::uint32_t frozen_mask = 0;  // edges whose mask meets it are never split
+    bool constraint_feet = false;   // a point near a constraint goes in as its foot first
 };
 
 // RefineOutcome, with max_error over check points, plus the coincident points
-// and the edge strip's figures (15f-edge-strip.md, D4 "Outcome", L4, L6).
+// and the edge strip's figures.
 struct PointRefineOutcome : RefineOutcome {
     std::size_t coincident = 0;         // stored points equal to a start vertex
     double coincident_max_error = 0.0;  // their largest |z - vertex z|, valid vertices only
@@ -123,9 +127,12 @@ struct PointRefineOutcome : RefineOutcome {
     std::size_t strip_refused = 0;
     double strip_refused_max_error = 0.0;
     std::size_t nodes_inserted = 0;  // refine_strip: DEM nodes, a subset of `inserted`
-    std::size_t on_frozen = 0;          // stored points on a frozen edge, each once (N6)
+    std::size_t on_frozen = 0;          // stored points on a frozen edge, each once
     double on_frozen_max_error = 0.0;   // their largest error, edges with two valid ends only
-    std::size_t feet_fallback = 0;      // 20c R4.5: footed points later inserted as themselves
+    std::size_t feet_fallback = 0;      // footed points later inserted as themselves
+    std::size_t flat_as_written = 0;    // triangles flat or turned over as written, out of the last check
+    std::size_t flips_as_written = 0;   // the as-written passes' flips, a subset of `flips`
+    std::size_t illegal_as_written = 0; // edges illegal as written and left so (the swapped mesh did not rebuild on the grid)
 };
 
 namespace detail {
@@ -150,7 +157,7 @@ template <class Store, class S = NoSlope>
     };
     double nearest = std::numeric_limits<double>::infinity();
     auto visit = [&](MeshVertex p, float zf) {
-        for (unsigned k = 0; k < 3; ++k)  // a corner, or within `radius` of one (L14)
+        for (unsigned k = 0; k < 3; ++k)  // a corner, or within `radius` of one
             if (p == v[k] || (radius > 0.0 && std::hypot(p.col - v[k].col, p.row - v[k].row) <= radius))
                 return;
         for (unsigned k = 0; k < 3; ++k)
@@ -243,9 +250,140 @@ struct NoSet {};  // point_loop without a store, or without a DEM
     return out;
 }
 
-// The loop of refine_points and refine_strip (D4). `points` (a store) or `dem`
-// may be null, `strip` too; refusals (2) to (4) of L2, the tolerance being the
-// caller's.
+// The as-written swap pass. The loop swaps on the grid frame and writes other
+// doubles. Where it would break, the edges with a corner not an exact
+// translate of its grid point are tested on the written points; if one is
+// illegal, the mesh is legalised as written (flat triangles left out) and the
+// loop rescans what the pass wrote.
+enum class WrittenKind : std::uint8_t { Faithful, Candidate, Flat };
+
+struct WrittenPoints {
+    std::vector<mesh::MeshVertex> at;  // each vertex as written, (x, -y)
+    std::vector<char> faithful;        // 1 where the written point is an exact translate of its grid point
+};
+
+struct AsWrittenPass {
+    bool changed = false;                     // m was replaced by the legalised mesh
+    std::size_t flat = 0;                     // triangles flat or turned over as written
+    std::size_t flips = 0;                    // flips of the pass, when changed
+    std::optional<std::size_t> left_illegal;  // set when the result was refused on the grid; m unchanged
+};
+
+// a + b == s exactly: s is their rounded sum and the rounding error is zero.
+[[nodiscard]] inline bool exact_sum(double a, double b, double s) {
+    const double bb = s - a;
+    return a + b == s && (a - (s - bb)) + (b - bb) == 0.0;
+}
+
+// The constrained bits and masks of triangle t's three sides.
+[[nodiscard]] inline std::pair<std::uint8_t, std::array<std::uint32_t, 3>> constraint_sides(const mesh::LatticeMesh& x,
+                                                                                            std::uint32_t t) {
+    std::uint8_t b = 0;
+    for (unsigned k = 0; k < 3; ++k)
+        b = static_cast<std::uint8_t>(b | (x.is_constrained(t, k) ? 1u << k : 0u));
+    return {b, std::array<std::uint32_t, 3>{x.mask(t, 0), x.mask(t, 1), x.mask(t, 2)}};
+}
+
+// Vertex i as written: a start vertex as given, an inserted one at
+// (x_min + col dx, y_max - row dy).
+[[nodiscard]] inline Point2 written_at(const mesh::LatticeMesh& m, const IndexedMesh2& start,
+                                       const raster::RasterGeometry& g, std::size_t i) {
+    const mesh::MeshVertex v = m.vertices()[i];
+    return i < start.vertices().size() ? start.vertices()[i]
+                                       : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()};
+}
+
+[[nodiscard]] inline WrittenPoints written_points(const mesh::LatticeMesh& m, const IndexedMesh2& start,
+                                                  const raster::RasterGeometry& g, const mesh::LatticeFrame& frame) {
+    const std::size_t nv = m.vertices().size();
+    WrittenPoints w{std::vector<mesh::MeshVertex>(nv), std::vector<char>(nv)};
+    for (std::size_t i = 0; i < nv; ++i) {
+        const mesh::MeshVertex v = m.vertices()[i];
+        const Point2 p = written_at(m, start, g, i), f = frame.at(v);
+        w.at[i] = mesh::MeshVertex{p.x, -p.y};
+        w.faithful[i] = std::fma(v.col, g.delta_x(), -f.x) == 0.0 && std::fma(v.row, g.delta_y(), f.y) == 0.0
+                        && exact_sum(g.x_min(), f.x, p.x) && exact_sum(g.y_max(), f.y, p.y);
+    }
+    return w;
+}
+
+[[nodiscard]] inline std::vector<WrittenKind> written_kinds(const mesh::LatticeMesh& m, const WrittenPoints& w) {
+    std::vector<WrittenKind> kind(m.triangle_count(), WrittenKind::Faithful);
+    for (std::uint32_t t = 0; t < kind.size(); ++t) {
+        const auto& tri = m.triangles()[t];
+        if (w.faithful[tri[0]] == 0 || w.faithful[tri[1]] == 0 || w.faithful[tri[2]] == 0)
+            kind[t] = mesh::orient_sign(w.at[tri[0]], w.at[tri[1]], w.at[tri[2]]) > 0 ? WrittenKind::Candidate
+                                                                                    : WrittenKind::Flat;
+    }
+    return kind;
+}
+
+// Legalises m as written when an edge between candidates is illegal there;
+// every slot the pass writes is marked in `touched`, also when the result is
+// refused on the grid.
+[[nodiscard]] inline AsWrittenPass legalise_as_written(mesh::LatticeMesh& m, WrittenPoints w, std::uint32_t frozen_mask,
+                                                       std::vector<char>& touched) {
+    using enum WrittenKind;
+    const std::size_t nt = m.triangle_count();
+    const auto kind = written_kinds(m, w);
+    AsWrittenPass pass;
+    pass.flat = static_cast<std::size_t>(std::count(kind.begin(), kind.end(), Flat));
+    const mesh::LatticeFrame unit{1.0, 1.0};  // integer path off: the exact kernel on the written doubles
+    std::size_t illegal = 0;
+    for (std::uint32_t t = 0; t < nt; ++t)
+        for (unsigned k = 0; k < 3 && kind[t] == Candidate; ++k) {
+            const auto u = m.neighbours(t)[k];
+            if (u == mesh::kNoNeighbour || m.is_constrained(t, k) || kind[u] == Flat || (kind[u] == Candidate && u < t))
+                continue;
+            const auto& tri = m.triangles()[t];
+            const auto& ut = m.triangles()[u];
+            const unsigned j = ut[0] == tri[(k + 1) % 3] ? 0 : ut[1] == tri[(k + 1) % 3] ? 1 : 2;
+            illegal += mesh::detail::quad_flips<pred::DefaultKernel>(
+                w.at[tri[k]], w.at[tri[(k + 1) % 3]], w.at[tri[(k + 2) % 3]], w.at[ut[(j + 2) % 3]], unit);
+        }
+    if (illegal == 0)
+        return pass;
+    std::vector<TriangleIndices> tris(m.triangles().begin(), m.triangles().end()), kept_triangles;
+    std::vector<std::uint8_t> bits(nt, 0), kept_sides;
+    std::vector<std::array<std::uint32_t, 3>> masks(nt), kept_masks;
+    std::vector<std::uint32_t> loop_slot;  // copy slot -> loop slot
+    for (std::uint32_t t = 0; t < nt; ++t) {
+        std::tie(bits[t], masks[t]) = constraint_sides(m, t);
+        if (kind[t] != Flat) {
+            loop_slot.push_back(t);
+            kept_triangles.push_back(tris[t]);
+            kept_sides.push_back(bits[t]);
+            kept_masks.push_back(masks[t]);
+        }
+    }
+    auto copy = mesh::LatticeMesh::build(std::move(w.at), std::move(kept_triangles), std::move(kept_sides),
+                                         std::move(kept_masks));
+    std::size_t flips = 0;
+    if (copy)
+        flips = mesh::legalise_all<pred::DefaultKernel>(*copy, unit,
+                                                        [&](std::uint32_t s) { touched[loop_slot[s]] = 1; });
+    for (std::uint32_t c = 0; copy && c < loop_slot.size(); ++c) {
+        tris[loop_slot[c]] = copy->triangles()[c];
+        std::tie(bits[loop_slot[c]], masks[loop_slot[c]]) = constraint_sides(*copy, c);
+    }
+    std::vector<mesh::MeshVertex> lattice(m.vertices().begin(), m.vertices().end());
+    auto grid = copy ? mesh::LatticeMesh::build(std::move(lattice), std::move(tris), std::move(bits), std::move(masks))
+                     : std::nullopt;
+    if (!grid) {  // a swapped triangle not counter-clockwise on the grid; the loop's mesh stays
+        pass.left_illegal = illegal;
+        return pass;
+    }
+    m = std::move(*grid);
+    m.set_frozen_mask(frozen_mask);
+    pass.changed = true;
+    pass.flips = flips;
+    return pass;
+}
+
+// The loop of refine_points and refine_strip. `points` (a store) or `dem`
+// may be null, `strip` too. It refuses a strip on another geometry, a strip
+// edge that is not a constraint edge, and a frozen strip edge; the tolerance
+// check is the caller's.
 template <class Store, class R, TolerancePolicy P>
 [[nodiscard]] PointRefineOutcome point_loop(const std::string& name, const raster::RasterGeometry& g,
                                             const Store* points, const R* dem, const ConstraintCheckPoints* strip,
@@ -272,7 +410,7 @@ template <class Store, class R, TolerancePolicy P>
             subs[edge_key(p0, p1)] = SubEdge{k, p0, p1, 0.0, 1.0};
             offset.push_back(offset.back() + strip->on_edge(k).size());
         }
-        for (std::size_t i = 0; i < edges.size() && i < masks.size(); ++i)  // N16, after check (3)
+        for (std::size_t i = 0; i < edges.size() && i < masks.size(); ++i)  // after the constraint-edge check
             if ((masks[i] & options.frozen_mask) != 0 && subs.contains(edge_key(edges[i][0], edges[i][1])))
                 throw std::logic_error(name + ": strip edge (" + std::to_string(std::min(edges[i][0], edges[i][1]))
                                        + ", " + std::to_string(std::max(edges[i][0], edges[i][1])) + ") is frozen");
@@ -285,7 +423,7 @@ template <class Store, class R, TolerancePolicy P>
 
     PointRefineOutcome out;
     out.strip_points = strip ? strip->size() : 0;
-    const double radius = strip ? coincidence_radius(g) : 0.0;  // L14, L16; 0 keeps 15c's run
+    const double radius = strip ? coincidence_radius(g) : 0.0;  // 0 without a strip: exact coincidence only
     const std::size_t n0 = start.vertices().size();
     std::vector<double> zt(n0, std::numeric_limits<double>::quiet_NaN());
     for (std::size_t i = 0; i < n0 && i < z.size() && i < valid.size(); ++i)
@@ -293,7 +431,7 @@ template <class Store, class R, TolerancePolicy P>
             zt[i] = z[i];
 
     const auto frame = mesh::lattice_frame(g.delta_x(), g.delta_y(), g.rows(), g.cols());
-    std::vector<char> written(m.triangle_count(), 0), refused(offset.back(), 0);  // L3, L1
+    std::vector<char> written(m.triangle_count(), 0), refused(offset.back(), 0);  // slots written; strip points refused
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [&](std::uint32_t s) { written[s] = 1; });
     std::vector<PointScan> results;
     [[maybe_unused]] Allowed<P> allowed;
@@ -305,8 +443,8 @@ template <class Store, class R, TolerancePolicy P>
     for (std::uint32_t t = 0; t < active.size(); ++t)
         active[t] = t;
 
-    // 20c R4: feet on constraints, each point footed once (by exact position),
-    // delta_p half the smaller cell side. R4.3, the foot's z: with a raster,
+    // Feet on constraints, each point footed once (by exact position),
+    // delta_p half the smaller cell side. The foot's z: with a raster,
     // vertex_z; else linear in s between the strip points bracketing the foot
     // on its sub-edge (the sub-edge's end where there is none), or linear
     // between the edge's ends where it has no strip record. NaN refuses it.
@@ -339,7 +477,7 @@ template <class Store, class R, TolerancePolicy P>
         }
     };
 
-    // Source, strip, DEM, in that order (D4, "Combining").
+    // Source, strip, DEM, in that order.
     const auto scan_one = [&](std::uint32_t t, PointScan* s) {
         PointScan r;
         if constexpr (has_store) {
@@ -425,14 +563,14 @@ template <class Store, class R, TolerancePolicy P>
             std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
             std::size_t n_seeds = 3;
             std::uint32_t q = 0;
-            // L12: with a strip, a point Inside but a hair off a constrained edge goes in on it.
+            // With a strip, a point Inside but a hair off a constrained edge goes in on it.
             std::optional<unsigned> edge;
             if (r.where != NodeLocation::Inside)
                 edge = static_cast<unsigned>(r.where) - 1;
             else if (strip)
                 edge = near_constraint(m, t, *r.point, radius);
             const bool near = edge && r.where == NodeLocation::Inside;
-            // 20c R4: a source point or DEM node L12 left Inside, not yet footed, may go in as its foot.
+            // A source point or DEM node left Inside above, not yet footed, may go in as its foot.
             std::uint32_t owner = t;
             mesh::MeshVertex p = *r.point;
             double pz = r.z;
@@ -454,9 +592,9 @@ template <class Store, class R, TolerancePolicy P>
                     continue;
                 }
                 if ((r.set == PointSet::Strip || near) && !strip_fits(m, t, *edge, *r.point, frame)) {
-                    if (near) {  // L12: back to split_inside, nothing refused
+                    if (near) {  // back to split_inside, nothing refused
                         edge.reset();
-                    } else {  // L1
+                    } else {  // a strip point that does not fit: refused for good
                         refused[r.strip_index] = 1;
                         ++out.strip_refused;
                         skipped.push_back(t);
@@ -481,7 +619,7 @@ template <class Store, class R, TolerancePolicy P>
                 if (n_seeds == 4)
                     seeds[3] = u;
             }
-            if (owner != t)  // R4.2, as R3: t is unchanged and its point still a candidate
+            if (owner != t)  // t is unchanged and its point still a candidate
                 skipped.push_back(t);
             zt.push_back(pz);
             touched.resize(m.triangle_count(), 1);
@@ -500,6 +638,15 @@ template <class Store, class R, TolerancePolicy P>
             out.feet_refused += refused_feet;
             if (foot)
                 footed.insert({r.point->col, r.point->row});
+        }
+        if (!any) {
+            const AsWrittenPass pass =
+                legalise_as_written(m, written_points(m, start, g, frame), options.frozen_mask, touched);
+            out.flat_as_written = pass.flat;
+            out.illegal_as_written = pass.left_illegal.value_or(out.illegal_as_written);
+            out.flips += pass.flips;  // 0 unless changed
+            out.flips_as_written += pass.flips;
+            any = pass.changed;
         }
         out.split_seconds += since(t0);
         if (!any)
@@ -525,7 +672,7 @@ template <class Store, class R, TolerancePolicy P>
             out.max_slope_share = std::max(out.max_slope_share, s.ratio);
         out.slope_nodes = count_slope_nodes(m, *slope, options.threads);
     }
-    // Step 6: every strip point against its final sub-edge, refused ones apart.
+    // Every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
         if (std::isnan(zt[se.a]) || std::isnan(zt[se.b]))
             continue;
@@ -550,8 +697,8 @@ template <class Store, class R, TolerancePolicy P>
     }
     for (std::size_t i = 0; i < m.vertices().size(); ++i) {
         const mesh::MeshVertex v = m.vertices()[i];
-        // Coincident points: 15c's pass, a stored point equal to a start vertex;
-        // with a strip (L14), also any stored point or DEM node within the
+        // Coincident points: a stored point equal to a start vertex;
+        // with a strip, also any stored point or DEM node within the
         // radius of a vertex it is not, which the scan skipped. A stored point
         // within the radius of two vertices is counted twice, and a stored
         // point that is itself a vertex (inserted) is counted against a strip
@@ -579,8 +726,7 @@ template <class Store, class R, TolerancePolicy P>
                 if (const auto nz = vertex_z(*dem, n))
                     coincide(i, *nz);
         }
-        out.vertices.push_back(i < n0 ? start.vertices()[i]
-                                      : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()});
+        out.vertices.push_back(written_at(m, start, g, i));
         out.z.push_back(std::isnan(zt[i]) ? 0.0 : zt[i]);
         out.valid.push_back(std::isnan(zt[i]) ? 0 : 1);
     }
@@ -593,10 +739,10 @@ template <class Store, class R, TolerancePolicy P>
 
 // Store: CheckPoints, or a test double with geometry(), frozen() and for_each_in.
 // An unfrozen store is a programming error (std::logic_error), as add after
-// freeze is: RefineStatus has no value for it, and refine.hpp is not edited.
-// With a strip (the reprojected path), its points join the loop (D4); a strip
+// freeze is: RefineStatus has no value for it.
+// With a strip (the reprojected path), its points join the loop; a strip
 // on another geometry, or with an edge that is not a constraint edge of the
-// start, is std::logic_error (L2).
+// start, is std::logic_error.
 template <class Store, TolerancePolicy P>
 [[nodiscard]] PointRefineOutcome refine_points(const Store& points, const IndexedMesh2& start,
                                                std::span<const double> z, std::span<const std::uint8_t> valid,
@@ -624,9 +770,9 @@ template <class Store>
     return refine_points(points, start, z, valid, edges, masks, options, UniformTolerance{options.tolerance}, strip);
 }
 
-// The projected path (D4, F2): the strip's points, and the DEM's nodes in every
-// triangle the run has written (L3), with refine's own scan. Refusals as
-// refine_points', against dem.geometry() (L2).
+// The projected path: the strip's points, and the DEM's nodes in every
+// triangle the run has written, with refine's own scan. Refusals as
+// refine_points', against dem.geometry().
 template <raster::RasterSource R, TolerancePolicy P>
 [[nodiscard]] PointRefineOutcome refine_strip(const R& dem, const ConstraintCheckPoints& strip,
                                               const IndexedMesh2& start, std::span<const double> z,

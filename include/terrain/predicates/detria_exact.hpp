@@ -31,7 +31,7 @@ namespace terrain::pred {
 // floating-point expansion on the stack, compute their error bounds as
 // constexpr, and have no lazily initialised tables -- unlike Shewchuk's
 // original predicates.c, whose `exactinit()` globals were the reason the ports
-// that wrap it were rejected. See lib/detria/README.md.
+// that wrap it were rejected.
 struct DetriaExact {
     [[nodiscard]] static Orientation orient2d(const Point2& a, const Point2& b,
                                               const Point2& c) noexcept;

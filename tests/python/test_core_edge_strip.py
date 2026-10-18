@@ -118,7 +118,9 @@ class Start:
         self.view = view_of(self.dem)
         self.grid = Grid(X_MIN, Y_MAX, H, H, self.dem.astype(np.float64))
         xy = world([c for c, _ in self.RING], [r for _, r in self.RING])
-        run = _engine(xy, [([0, 1, 2, 3], ChainRole.Outer, 0)], True, DEFAULT_SNAP_SPACING)
+        run = _engine(
+            xy, [([0, 1, 2, 3], ChainRole.Outer, 0)], delaunay=True, spacing=DEFAULT_SNAP_SPACING
+        )
         assert run.mesh is not None and run.noded is not None, run.message
         edges, masks = _constraint_arrays(run.mesh, run.noded)
         out = _core.refine(self.view, run.mesh, edges, masks, tolerance=tolerance)

@@ -1,10 +1,12 @@
-"""Land-cover class maps as TOML data files, and the clean-up distances they imply (41).
+"""Land-cover legends as TOML data files, and the clean-up distances they imply.
 
-`docs/increments/41-class-maps-as-data.md`. A class-map file is read with
-`tomllib`, checked by a strict Pydantic model, and turned into the frozen
-:class:`~tin_engine.feature_input.ClassMap` the feature reader takes. The
-shipped maps live in ``tin_engine/data/class_maps/``; ``property``, the
-identity map over the vocabulary's names, is built here, not shipped.
+`docs/increments/41-class-maps-as-data.md`, *4. The class-map file*.
+
+A legend file is read with `tomllib`, checked by a strict Pydantic model, and
+turned into the frozen :class:`~tin_engine.feature_input.Legend` the feature
+reader takes. The
+shipped legends live in ``tin_engine/data/legends/``; ``property``, the
+identity legend over the vocabulary's names, is built here, not shipped.
 """
 
 from __future__ import annotations
@@ -17,13 +19,13 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from tin_engine.feature_input import ClassMap
+from tin_engine.feature_input import Legend
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.toml_data import parse
 
 Code = Annotated[int, Field(ge=1, lt=2**31)]
 Edges = list[str] | Literal["drop"]
-#: Bits 10 to 31 hold a map's extra edge names; bit 9 is the cut's `seam`.
+#: Bits 10 to 31 hold a legend's extra edge names; bit 9 is the cut's `seam`.
 FIRST_EXTRA_BIT, MAX_EXTRAS = 10, 22
 _CODED = {"code", "label", "colour", "water"}
 DEFAULT_NAMES = tuple(p.name for p in DEFAULT_VOCABULARY.properties)
@@ -85,7 +87,7 @@ class _File(_Strict):
             if wrong or needed - given:
                 bad = ", ".join(sorted(wrong)) or ", ".join(sorted(needed - given))
                 kind = "coded" if coded else "uncoded"
-                raise ValueError(f"class {i + 1}: {bad} wrong or missing in a {kind} map")
+                raise ValueError(f"class {i + 1}: {bad} wrong or missing in a {kind} legend")
         listed = [c.code for c in self.classes if c.code is not None]
         if len(set(listed)) < len(listed):
             raise ValueError("a class code is listed twice")
@@ -106,7 +108,7 @@ class _File(_Strict):
                     raise ValueError(f"edges name {name!r} is not in the vocabulary or its extras")
         return self
 
-    def class_map(self) -> ClassMap:
+    def legend(self) -> Legend:
         def edges(names: Edges) -> tuple[str, ...] | None:
             return None if names == "drop" else tuple(names)
 
@@ -129,7 +131,7 @@ class _File(_Strict):
             "drop": "drop",
             "refuse": "refuse",
         }[self.unlisted]
-        return ClassMap(
+        return Legend(
             name=self.name,
             attribute=self.attribute,
             classes=classes,
@@ -161,40 +163,40 @@ def derived_cleanup(accuracy_m: float, cell: float) -> CleanUpDistances:
 
 
 def _shipped() -> Any:
-    return resources.files("tin_engine") / "data" / "class_maps"
+    return resources.files("tin_engine") / "data" / "legends"
 
 
 def shipped_names() -> list[str]:
-    """The maps in the package, by name."""
+    """The legends in the package, by name."""
     return sorted(p.name[:-5] for p in _shipped().iterdir() if p.name.endswith(".toml"))
 
 
-def load(value: str) -> ClassMap:
-    """A ``--features-map`` value: a shipped name, ``property``, or a path (it
+def load(value: str) -> Legend:
+    """A ``--features-legend`` value: a shipped name, ``property``, or a path (it
     ends in ``.toml`` or holds a path separator). Every refusal is a
     ``ValueError`` naming the file."""
     if value == "property":
         classes = {n: (n,) for n in DEFAULT_NAMES}
-        return ClassMap(name="property", attribute="property", classes=classes)
+        return Legend(name="property", attribute="property", classes=classes)
     if value.endswith(".toml") or "/" in value or os.sep in value:
         path, shown = Path(value), value
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            raise ValueError(f"class map file {shown} cannot be read: {exc}") from exc
+            raise ValueError(f"legend file {shown} cannot be read: {exc}") from exc
     else:
         shown = f"{value}.toml"
         if value not in shipped_names():
             known = ", ".join([*shipped_names(), "property"])
-            raise ValueError(f"unknown class map {value}; use {known}, or a .toml file")
+            raise ValueError(f"unknown legend {value}; use {known}, or a .toml file")
         text = (_shipped() / shown).read_text(encoding="utf-8")
-    return parse(text, _File, f"class map file {shown}").class_map()
+    return parse(text, _File, f"legend file {shown}").legend()
 
 
-def run_vocabulary(maps: Iterable[ClassMap]) -> EdgeVocabulary:
-    """Section 6: the default vocabulary plus every map's extras, in order of
+def run_vocabulary(legends: Iterable[Legend]) -> EdgeVocabulary:
+    """Section 6: the default vocabulary plus every legend's extras, in order of
     first appearance, on bits 10 upward; the default itself with none."""
-    extras = list(dict.fromkeys(n for m in maps for n in m.extra_names))
+    extras = list(dict.fromkeys(n for m in legends for n in m.extra_names))
     if not extras:
         return DEFAULT_VOCABULARY
     if len(extras) > MAX_EXTRAS:

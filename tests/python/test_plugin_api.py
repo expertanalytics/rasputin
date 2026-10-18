@@ -25,13 +25,10 @@ PROMISED: dict[str, tuple[str, ...]] = {
     "resources": ("Resources",),
     "run_record": ("plural",),
     "cli_kit": ("destination", "cli_resources", "words", "THREADS"),
+    "catchment_core": ("accumulate",),
 }
 
 NAMES = [(home, name) for home, names in PROMISED.items() for name in names]
-
-#: The helpers that moved from ``cli`` to ``cli_kit``, under the names ``cli``
-#: still calls them by.
-MOVED = {"_destination": "destination", "_resources": "cli_resources", "_words": "words"}
 
 
 def test_all_is_exactly_the_promised_list() -> None:
@@ -44,12 +41,6 @@ def test_all_is_exactly_the_promised_list() -> None:
 def test_each_name_is_the_object_in_its_home_module(home: str, name: str) -> None:
     api = import_module("tin_engine.plugin_api")
     assert getattr(api, name) is getattr(import_module(f"tin_engine.{home}"), name)
-
-
-@pytest.mark.parametrize(("old", "new"), sorted(MOVED.items()))
-def test_cli_calls_the_moved_helpers_under_their_old_names(old: str, new: str) -> None:
-    cli, kit = import_module("tin_engine.cli"), import_module("tin_engine.cli_kit")
-    assert getattr(cli, old) is getattr(kit, new)
 
 
 def test_cli_shares_the_threads_option_with_cli_kit() -> None:

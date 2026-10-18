@@ -107,27 +107,27 @@ class TestT1VectorEntries:
                                    layer="landcover")  # fmt: skip
             assert ".gpkg" in message, message
 
-    def test_tilde_in_path_and_class_map_is_the_home(
+    def test_tilde_in_path_and_legend_is_the_home(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         home = tmp_path / "home"
         monkeypatch.setenv("HOME", str(home))
         user = write_sources(
             tmp_path / "conf" / "sources.toml",
-            {"mine": vector_entry(Path("~/x.gpkg"), LAKE_DESCRIPTION, class_map="~/m.toml")},
+            {"mine": vector_entry(Path("~/x.gpkg"), LAKE_DESCRIPTION, legend="~/m.toml")},
         )
         got = sources.catalogue(user).sources["mine"]
         assert got.path == home / "x.gpkg"
-        assert Path(got.class_map) == home / "m.toml"
+        assert Path(got.legend) == home / "m.toml"
 
     def test_a_relative_path_is_still_beside_the_file(self, tmp_path: Path) -> None:
         user = write_sources(
             tmp_path / "conf" / "sources.toml",
-            {"mine": vector_entry(Path("data/x.gpkg"), LAKE_DESCRIPTION, class_map="m.toml")},
+            {"mine": vector_entry(Path("data/x.gpkg"), LAKE_DESCRIPTION, legend="m.toml")},
         )
         got = sources.catalogue(user).sources["mine"]
         assert got.path == tmp_path / "conf" / "data" / "x.gpkg"
-        assert Path(got.class_map) == tmp_path / "conf" / "m.toml"
+        assert Path(got.legend) == tmp_path / "conf" / "m.toml"
 
     def test_an_absolute_path_wins_the_join(self, tmp_path: Path) -> None:
         user = write_sources(
@@ -310,8 +310,8 @@ class TestT2PluginFiles:
 
 
 def test_the_land_cover_geopackage_entry_holds_features(tmp_path: Path) -> None:
-    """A GeoPackage entry with its layer and class map, as section 4.2 writes it."""
+    """A GeoPackage entry with its layer and legend, as section 4.2 writes it."""
     path = landcover_gpkg(tmp_path / "landcover.gpkg")
-    got = entry(str(path), layer="landcover", class_map="corine")
-    assert (got.values, got.layer, got.class_map) == ("features", "landcover", "corine")
+    got = entry(str(path), layer="landcover", legend="corine")
+    assert (got.values, got.layer, got.legend) == ("features", "landcover", "corine")
     assert got.z_unit is None

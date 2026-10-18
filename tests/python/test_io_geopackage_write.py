@@ -18,7 +18,7 @@ Pinned beyond the design's text:
   `register_layer` and `build_rtree` are theirs to call.
 - `codes=None` with `palette=None` means no coded land cover: `code`,
   `land_cover` and `colour` are NULL on every row. `palette` is the code
-  table itself (`ClassMap.palette`'s type), not its name.
+  table itself (`Legend.palette`'s type), not its name.
 - `geometry_type_name` is the OGC name in capitals: `POLYGON`, `LINESTRING`.
 - `write_run(conn, rows)` takes `(name, wording, value, number)` tuples.
 - `srs_entry` never raises: text pyproj refuses gives the `-1` entry.
@@ -40,10 +40,10 @@ from numpy.testing import assert_allclose, assert_array_equal
 from pyproj import CRS
 from pyproj.enums import WktVersion
 
-from class_map_snapshot import CORINE_NATURAL
 from cli_helpers import invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from gpkg_fixtures import needs_rtree
+from legend_snapshot import CORINE_NATURAL
 from tin_engine.crs import srs_entry
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.io import geopackage_write

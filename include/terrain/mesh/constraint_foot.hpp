@@ -1,14 +1,13 @@
 #pragma once
 
-// The foot of a point on a nearby constraint edge
-// (docs/increments/20c-soft-quality.md, R1): the one geometric helper the
+// The foot of a point on a nearby constraint edge: the one geometric helper the
 // quality start, refinement and the final check ask before they insert a
 // point near a constraint. Each path answers the status in its own way.
 //
 // Search order, fixed so the result is a function of the mesh and p only:
 // t's edges in edge order, then, for each of t's unconstrained edges in edge
 // order, the neighbour's other two edges. Never across a constrained edge
-// (frozen or not), and never onto a frozen edge (23b, N5). "Closer than
+// (frozen or not), and never onto a frozen edge. "Closer than
 // delta" is strict, measured in the world frame f to the closed segment; an
 // edge p lies exactly on is skipped. The first edge found decides.
 //
@@ -37,7 +36,7 @@ struct FootSearch {
 namespace detail {
 
 // Every child of splitting t's edge e (and its neighbour's) at f is strictly
-// counter-clockwise (20b R2 step 4).
+// counter-clockwise.
 [[nodiscard]] inline bool foot_fits(const LatticeMesh& m, std::uint32_t t, unsigned e, MeshVertex f) {
     const MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3), c = m.corner(t, (e + 2) % 3);
     if (orient_sign(a, f, c) <= 0 || orient_sign(f, b, c) <= 0)
@@ -55,7 +54,7 @@ namespace detail {
 // The verdict of edge e of triangle o, or nothing when it is not a candidate:
 // p closer than `reach` to it, and NearEnd when the foot is within `end` of
 // an end. constraint_foot passes delta for both; the quality start's line
-// split (20c R8) any reach and half a cell.
+// split any reach and half a cell.
 [[nodiscard]] inline std::optional<FootSearch> foot_on(const LatticeMesh& m, std::uint32_t o, unsigned e,
                                                        MeshVertex p, double reach, double end,
                                                        const LatticeFrame& f) {

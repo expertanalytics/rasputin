@@ -451,3 +451,136 @@ def test_without_shell_scan_git_dirs_is_none_and_the_text_test_gates_cwd(repos: 
     assert "NOT CHECKED" in result.stderr, result.stderr
     assert result.returncode == 2
     assert sorted(repos.ran_in(repos.main)) == sorted([*CHECKS, "ruff", "ruff"])
+
+
+# =========================================================================== h22 fix 2
+#
+# docs/increments/h22-harness-fixes.md §5 and §7 tests 9-14: a gate whose
+# script is not in the tree is skipped with one line, and a tree with unmerged
+# paths runs no gate at all.
+
+DETRIA = "tools/check_detria_boundary.py"
+STOPPED = "stopped on conflicts"
+OPENING = "The commit is in"
+
+
+def skip_line(tree: Path) -> str:
+    return f"Skipped in {tree}: {DETRIA} is not in this tree."
+
+
+def without_detria(repos: Repos) -> None:
+    """The worktree's detria script deleted and committed (the hook runs after it)."""
+    git(repos.wt, "rm", "-q", DETRIA)
+    git(repos.wt, "commit", "-q", "-m", "no detria script here")
+    assert not (repos.wt / DETRIA).exists(), "premise"
+
+
+def red_ruff(repos: Repos, tree: Path) -> None:
+    ruff = tree / ".venv" / "bin" / "ruff"
+    ruff.write_text(f'#!/bin/sh\necho "ruff $(pwd -P)" >> {shlex.quote(str(repos.log))}\n'
+                    'echo "RUFF RED"\nexit 1\n')  # fmt: skip
+    ruff.chmod(0o755)
+
+
+def assert_conflict_block(result: subprocess.CompletedProcess[str], repos: Repos) -> None:
+    assert result.returncode == 2, f"exit {result.returncode}; stderr: {result.stderr}"
+    assert STOPPED in result.stderr, result.stderr
+    assert str(repos.wt) in result.stderr, result.stderr
+    assert "notes.txt" in result.stderr, result.stderr
+    assert repos.ran() == [], f"gates ran in a tree with unmerged paths: {repos.ran()}"
+    assert OPENING not in result.stderr, result.stderr
+
+
+def conflicting_branch(repos: Repos, name: str = "other") -> None:
+    """`name` off `work` changes notes.txt one way; `work` then changes it another."""
+    run_in(repos.wt, "checkout", "-q", "-b", name)
+    (repos.wt / "notes.txt").write_text(f"{name}\n")
+    run_in(repos.wt, "commit", "-q", "-am", f"{name} changes notes")
+    run_in(repos.wt, "checkout", "-q", "work")
+    (repos.wt / "notes.txt").write_text("work\n")
+    run_in(repos.wt, "commit", "-q", "-am", "work changes notes")
+
+
+def unmerged(tree: Path) -> str:
+    return git(tree, "ls-files", "-u")
+
+
+def fails(tree: Path, *args: str) -> None:
+    """Run a git command that is meant to stop on a conflict, and check that it did."""
+    done = subprocess.run(["git", "-C", str(tree), *args], capture_output=True, text=True,
+                          env=clean_env(), check=False)  # fmt: skip
+    assert done.returncode != 0, f"premise: git {' '.join(args)} did not stop: {done.stdout}"
+    assert unmerged(tree), "premise: no unmerged paths"
+
+
+def test_h22_9_a_gate_script_absent_from_the_tree_is_skipped_with_one_line(repos: Repos) -> None:
+    without_detria(repos)
+    result = repos.subagent(f"git -C {shlex.quote(str(repos.wt))} commit -q -m x")
+    assert result.returncode == 0, f"exit {result.returncode}; stderr: {result.stderr}"
+    assert result.stdout.strip().splitlines() == [skip_line(repos.wt)], result.stdout
+    assert result.stderr == ""
+    assert sorted(repos.ran_in(repos.wt)) == sorted(
+        ["check_prohibited_deps", "check_citations", "ruff", "ruff"])  # fmt: skip
+
+
+def test_h22_10_a_skip_beside_a_red_gate_goes_in_the_trees_block(repos: Repos) -> None:
+    without_detria(repos)
+    red_ruff(repos, repos.wt)
+    result = repos.subagent(f"git -C {shlex.quote(str(repos.wt))} commit -q -m x")
+    assert result.returncode == 2, f"exit {result.returncode}; stderr: {result.stderr}"
+    assert "RUFF RED" in result.stderr, result.stderr
+    assert skip_line(repos.wt) in result.stderr, result.stderr
+    assert "check_detria_boundary" not in repos.ran_in(repos.wt)
+
+
+def test_h22_11_a_conflicting_merge_runs_no_gate(repos: Repos) -> None:
+    conflicting_branch(repos)
+    fails(repos.wt, "merge", "--no-edit", "other")
+    assert_conflict_block(repos.subagent(f"git -C {shlex.quote(str(repos.wt))} merge other"),
+                          repos)  # fmt: skip
+
+
+def test_h22_12_a_cherry_pick_range_stopped_on_its_second_commit_runs_no_gate(
+    repos: Repos,
+) -> None:
+    run_in(repos.wt, "checkout", "-q", "-b", "side")
+    (repos.wt / "a.txt").write_text("a\n")
+    run_in(repos.wt, "add", "a.txt")
+    run_in(repos.wt, "commit", "-q", "-m", "side adds a.txt")
+    (repos.wt / "notes.txt").write_text("side\n")
+    run_in(repos.wt, "commit", "-q", "-am", "side changes notes")
+    run_in(repos.wt, "checkout", "-q", "work")
+    (repos.wt / "notes.txt").write_text("work\n")
+    run_in(repos.wt, "commit", "-q", "-am", "work changes notes")
+    fails(repos.wt, "cherry-pick", "work..side")
+    assert "side adds a.txt" in git(repos.wt, "log", "-1", "--format=%s"), (
+        "premise: the first pick was committed"
+    )
+    result = repos.subagent(f"git -C {shlex.quote(str(repos.wt))} cherry-pick work..side")
+    assert_conflict_block(result, repos)
+
+
+def test_h22_13_a_commit_then_a_conflicting_merge_on_one_line_runs_no_gate(
+    repos: Repos,
+) -> None:
+    conflicting_branch(repos)
+    (repos.wt / "b.txt").write_text("b\n")
+    run_in(repos.wt, "add", "b.txt")
+    run_in(repos.wt, "commit", "-qm", "a")
+    fails(repos.wt, "merge", "--no-edit", "other")
+    wt = shlex.quote(str(repos.wt))
+    result = repos.subagent(f"cd {wt} && git commit -qm a && git merge other")
+    assert_conflict_block(result, repos)
+    assert "an earlier command on the same line" in result.stderr, result.stderr
+    assert "is not checked either" in result.stderr, result.stderr
+
+
+def test_h22_14_a_clean_merge_still_runs_the_gates(repos: Repos) -> None:
+    run_in(repos.main, "checkout", "-q", "-b", "clean")
+    run_in(repos.main, "commit", "-q", "--allow-empty", "-m", "on clean")
+    run_in(repos.main, "checkout", "-q", "master")
+    run_in(repos.main, "merge", "-q", "--no-ff", "--no-edit", "clean")
+    assert unmerged(repos.main) == "", "premise"
+    result = repos.subagent(f"git -C {shlex.quote(str(repos.main))} merge clean")
+    assert result.returncode == 0, result.stderr
+    assert sorted(repos.ran_in(repos.main)) == sorted([*CHECKS, "ruff", "ruff"])

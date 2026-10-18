@@ -452,3 +452,57 @@ class Granted:
         else:
             assert not resolve, f"merge of {ref} was expected to conflict"
         return self.head
+
+
+# ---------------------------------------------------------------- h22
+
+PRIVATE_REPO = "expertanalytics/rasputin-private"
+
+
+class PrivateGranted:
+    """h22 §7's Fixture A: a public and a private master, a branch on each.
+
+    `m0` is the root commit. `refs/remotes/origin/master` is `m1` (a code commit
+    on `m0`) and `refs/remotes/private/master` is `p1` (another code commit on
+    `m0`), both by `git update-ref`, so N = 1 private-only commit. Branch `pub`
+    is `m1` plus a code commit, `prv` is `p1` plus a code commit; `pub` is
+    checked out. `remote.private.url` names a bare repository in `root`'s
+    parent that is never fetched, so N is read from the ref with no network.
+    The flag grants both branches; `reviews.jsonl` approves each head.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.repo = make_repo(root)
+        repo = self.repo
+        self.m0 = git(repo, "rev-parse", "master").strip()
+        self.m1 = commit_file(repo, "src/m.py", "m = 1\n", "M1: public master")
+        git(repo, "update-ref", "refs/remotes/origin/master", self.m1)
+        git(repo, "checkout", "-q", "-b", "private-side", self.m0)
+        self.p1 = commit_file(repo, "src/p.py", "p = 1\n", "P1: private master")
+        git(repo, "update-ref", "refs/remotes/private/master", self.p1)
+        git(repo, "checkout", "-q", "-b", "prv")
+        self.prv = commit_file(repo, "tools/x.py", "x = 'prv'\n", "a code commit on prv")
+        git(repo, "checkout", "-q", "-b", "pub", self.m1)
+        git(repo, "branch", "-q", "-D", "private-side")
+        self.pub = commit_file(repo, "tools/x.py", "x = 'pub'\n", "a code commit on pub")
+        self.url = root.parent / "private.git"
+        git(root.parent, "init", "-q", "--bare", str(self.url))
+        git(repo, "config", "remote.private.url", str(self.url))
+        write_reviews(repo, [review_record(self.pub), review_record(self.prv)])
+        self.since = flag_granting(repo, ["pub", "prv"])
+
+    def head(self, branch: str) -> str:
+        return git(self.repo, "rev-parse", f"refs/heads/{branch}").strip()
+
+    def records(self) -> list[dict[str, Any]]:
+        return jsonl(reviews_path(self.repo))
+
+    def unset_url(self) -> None:
+        git(self.repo, "config", "--unset", "remote.private.url")
+
+    def delete_private_ref(self) -> None:
+        git(self.repo, "branch", "-q", "-dr", "private/master")
+
+    def private_ref_at_m0(self) -> None:
+        """N = 0: private/master holds no commit origin/master lacks."""
+        git(self.repo, "update-ref", "refs/remotes/private/master", self.m0)

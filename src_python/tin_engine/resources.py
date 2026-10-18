@@ -1,8 +1,9 @@
-"""What a run may use of the machine (increment 38): the one module that reads it.
+"""What a run may use of the machine: the one module that reads it.
 
-`docs/increments/38-threads-and-memory.md`, sections 4.1 to 4.3. The core
-count, the physical memory and a container's cgroup limits are read here and
-nowhere else; `Resources` carries the resolved figures, never 0, never None,
+`docs/increments/38-threads-and-memory.md`, *4. The design*.
+
+The core count, the physical memory and a container's cgroup limits are read
+here and nowhere else; `Resources` carries the resolved figures, never 0, never None,
 and every pool and `_core` call takes the one integer it uses.
 
 The cgroup root is `/sys/fs/cgroup`, as a container runtime mounts the

@@ -31,7 +31,7 @@ import typer
 from pydantic import ValidationError
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine import edge_strip, final_check, installed_version
+from tin_engine import cli_kit, edge_strip, final_check, installed_version
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
@@ -75,12 +75,7 @@ from tin_engine.catchment_batch import (
     seed_for,
 )
 from tin_engine.chains import start_chains
-from tin_engine.class_maps import derived_cleanup, run_vocabulary, shipped_names
-from tin_engine.class_maps import load as load_class_map
 from tin_engine.cli_kit import THREADS
-from tin_engine.cli_kit import cli_resources as _resources
-from tin_engine.cli_kit import destination as _destination
-from tin_engine.cli_kit import words as _words
 from tin_engine.crs import (
     crs_label,
     parse_crs,
@@ -103,11 +98,11 @@ from tin_engine.dem_input import (
 from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
-    ClassMap,
     FeatureError,
     FeatureRequest,
     FeatureSet,
     FeatureSource,
+    Legend,
     open_features,
     read_lake_polygons,
 )
@@ -153,6 +148,8 @@ from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
+from tin_engine.legends import derived_cleanup, run_vocabulary, shipped_names
+from tin_engine.legends import load as load_legend
 from tin_engine.mosaic import Seam
 from tin_engine.palettes import paraview_preset
 from tin_engine.raster import to_core
@@ -265,8 +262,8 @@ DEFAULT_START_QUALITY_GAIN = 0.0
 #: The four land-cover flags have their own help panel, so the long
 #: --[no-]features-merge-same-class does not narrow the main one's names.
 CLEAN_UP = "Land-cover clean-up"
-#: The three clean-up distances default to values derived from the map.
-DERIVED = "Default: from the class map's positional accuracy and the DEM cell (CORINE: {})."
+#: The three clean-up distances default to values derived from the legend.
+DERIVED = "Default: from the legend's positional accuracy and the DEM cell (CORINE: {})."
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
     ("--features-repair", math.inf),
@@ -644,9 +641,9 @@ def mesh(
         typer.Option(
             "--features",
             help="With --domain, polygons and lines as constraints (.geojson, .json, .gpkg "
-            "or .gml), clipped to the domain, each edge carrying its class map's bits. "
+            "or .gml), clipped to the domain, each edge carrying its legend's bits. "
             "Repeatable: each --features is one source, paired by position with the Nth "
-            "of --features-crs, --features-layer and --features-map.",
+            "of --features-crs, --features-layer and --features-legend.",
         ),
     ] = None,
     features_crs: Annotated[
@@ -657,12 +654,12 @@ def mesh(
         list[str] | None,
         typer.Option("--features-layer", help="The Nth --features GeoPackage's features table."),
     ] = None,
-    features_map: Annotated[
+    features_legend: Annotated[
         list[str] | None,
         typer.Option(
-            "--features-map",
-            help="The Nth --features' map from attributes to edge bits: "
-            f"{', '.join([*shipped_names(), 'property'])}, or a class-map file (.toml). "
+            "--features-legend",
+            help="The Nth --features' legend: "
+            f"{', '.join([*shipped_names(), 'property'])}, or a legend file (.toml). "
             "Default: property.",
         ),
     ] = None,
@@ -723,12 +720,12 @@ def mesh(
             help="With --land-cover, the year of the classes. Default: the source's last year.",
         ),
     ] = None,
-    land_cover_map: Annotated[
+    land_cover_legend: Annotated[
         str | None,
         typer.Option(
-            "--land-cover-map",
-            help="With --land-cover, a class map with codes naming its classes in a .gpkg, as "
-            "--features-map. Default: the source's.",
+            "--land-cover-legend",
+            help="With --land-cover, a legend with codes naming its classes in a .gpkg, as "
+            "--features-legend. Default: the source's.",
         ),
     ] = None,
     threads: THREADS = None,
@@ -781,7 +778,7 @@ def mesh(
     --domain cuts it. Without --tolerance every --stride-th DEM node is
     triangulated; with it the mesh is refined until every triangle is within
     that many metres of the DEM. --features adds polygons and lines as
-    constraint edges; a class map with codes, or --land-cover, gives every
+    constraint edges; a legend with codes, or --land-cover, gives every
     triangle a land_cover_code, coloured by rasputin palette. --pieces and
     --piece-budget cut a --domain run into pieces, each its own file under
     <out>.pieces/ with an index.json, which agree bit for bit along every seam.
@@ -792,25 +789,25 @@ def mesh(
     --record write it in full. A refused run exits non-zero and writes no file.
     """
     clock = PhaseClock()
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
     table: ClassFractions | None = None
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
-    coded: ClassMap | None = None
+    coded: Legend | None = None
     feature_paths = features or []
     feature_crss = features_crs or []
     feature_layers = features_layer or []
-    feature_maps = features_map or []
+    feature_legends = features_legend or []
     # One length rule per paired option. A list longer than --features is
     # refused naming the offending flag and the counts (none given with --features
     # absent included); a shorter list takes per-source defaults.
     for flag, value in (
         ("--features-crs", feature_crss),
         ("--features-layer", feature_layers),
-        ("--features-map", feature_maps),
+        ("--features-legend", feature_legends),
     ):
         if len(value) > len(feature_paths):
             raise typer.BadParameter(
@@ -820,25 +817,27 @@ def mesh(
             )
     if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
-    # Every map is read here, before the DEM, so every file error comes first.
-    maps: list[ClassMap] = []
+    # Every legend is read here, before the DEM, so every file error comes first.
+    legends: list[Legend] = []
     where = "--features"
     try:
         for i, path in enumerate(feature_paths):
             where = f"--features {i + 1} ({path.name})"
-            maps.append(load_class_map(feature_maps[i] if i < len(feature_maps) else "property"))
-        vocabulary = run_vocabulary(maps)
+            legends.append(
+                load_legend(feature_legends[i] if i < len(feature_legends) else "property")
+            )
+        vocabulary = run_vocabulary(legends)
     except ValueError as exc:
-        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-map") from exc
+        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
     classes = _class_source(
-        land_cover, land_cover_year, land_cover_map, cache_root(cache, os.environ), known
+        land_cover, land_cover_year, land_cover_legend, cache_root(cache, os.environ), known
     )
     if classes is not None:
-        for coded_map in (m for m in maps if m.codes):
+        for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
-                f"one mesh has one land_cover_code system, and --features-map {coded_map.name} "
-                "already gives every triangle a code",
+                "one mesh has one land_cover_code system, and --features-legend "
+                f"{coded_legend.name} already gives every triangle a code",
                 param_hint="--land-cover",
             )
     overrides = {
@@ -926,7 +925,7 @@ def mesh(
             param_hint="--piece-budget",
         )
     # A cut run's index at this --out is stale now, whatever this run is.
-    Path(f"{_destination(out)}.pieces", "index.json").unlink(missing_ok=True)
+    Path(f"{cli_kit.destination(out)}.pieces", "index.json").unlink(missing_ok=True)
     paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
     caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
     given = None
@@ -952,7 +951,7 @@ def mesh(
     plan, grid, source_crs = opened.plan, opened.grid, opened.source_crs
     dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
     held, dem_crs = Once(opened.tile), opened.tile.meta.crs
-    # The clean-up scale is the coarsest coded map's accuracy (CORINE's
+    # The clean-up scale is the coarsest coded legend's accuracy (CORINE's
     # 100 m without one), never finer than a DEM cell.
     cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
     part = None
@@ -973,14 +972,14 @@ def mesh(
         for hint, given_option in asked:
             if given_option is not None:
                 raise typer.BadParameter("not written for a cut run yet", param_hint=hint)
-    accuracy = max((m.accuracy_m for m in maps if m.codes), default=100.0)
+    accuracy = max((m.accuracy_m for m in legends if m.codes), default=100.0)
     derived = derived_cleanup(accuracy, cell).model_dump()
     cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
     cleanup["merge_same_class"] = features_merge_same_class
     found = None
     sources: tuple[FeatureSource, ...] = ()
     if feature_paths and dem_domain is not None:
-        sources = _feature_sources(feature_paths, feature_crss, feature_layers, maps)
+        sources = _feature_sources(feature_paths, feature_crss, feature_layers, legends)
         found = _open_features(
             sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
         )
@@ -1059,7 +1058,7 @@ def mesh(
         # One entry per source, joined. Lines and their vertices are a
         # property of the merged PSLG, not of a source, so every entry
         # carries the run totals; the per-source part is the name, layer,
-        # map and feature count (found.counts[i]).
+        # legend and feature count (found.counts[i]).
         chains, feature_vertices = dem_run.feature_counts
         totals = f"{plural(chains, 'line', 'lines')}, "
         totals += plural(feature_vertices, "vertex", "vertices")
@@ -1067,19 +1066,17 @@ def mesh(
         for i, src in enumerate(sources):
             layer = f" layer {found.layers[i]}" if found.layers[i] else ""
             counted = plural(found.counts[i], "feature", "features")
-            texts.append(
-                f"{src.path.name}{layer}, class map {src.class_map.name}: {counted}, {totals}"
-            )
+            texts.append(f"{src.path.name}{layer}, legend {src.legend.name}: {counted}, {totals}")
             own = found.crs[i]
             crs_texts.append(crs_label(own))
             transforms.append(transform_label(own, dem_crs))
-            if src.class_map.notice and src.class_map.notice not in notices:
-                notices.append(src.class_map.notice)
+            if src.legend.notice and src.legend.notice not in notices:
+                notices.append(src.legend.notice)
         values["features"] = escaped_ascii("; ".join(texts))
         values["features_crs"] = "; ".join(crs_texts)
         values["features_transform"] = "; ".join(transforms)
         values["features_notice"] = "; ".join(notices) or None
-        licences = dict.fromkeys(s.class_map.licence for s in sources if s.class_map.licence)
+        licences = dict.fromkeys(s.legend.licence for s in sources if s.legend.licence)
         values["features_licence"] = escaped_ascii("; ".join(licences)) or None
         values |= {f"features_{k}": v for k, v in cleanup.items()}
         values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
@@ -1090,7 +1087,7 @@ def mesh(
         # Labelling runs iff a source carries codes (one code system per
         # mesh is enforced in _feature_sources). Every coded source's
         # polygons are labelled together over the merged FeatureSet.
-        coded = next((s.class_map for s in sources if s.class_map.codes), None)
+        coded = next((s.legend for s in sources if s.legend.codes), None)
         if coded is not None and dem_run.cut is None:
             codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
             values["land_cover_codes"] = codes_text
@@ -1101,12 +1098,12 @@ def mesh(
             classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
         )
         codes_text = str(more["land_cover_codes"])
-        if classes.class_map is not None:  # names and colours for the .gpkg
-            palette = classes.class_map.palette
+        if classes.legend is not None:  # names and colours for the .gpkg
+            palette = classes.legend.palette
         values |= more
     if dem_run.cut is not None:
         assert tolerance is not None
-        folder = Path(f"{_destination(out)}.pieces")
+        folder = Path(f"{cli_kit.destination(out)}.pieces")
         entries = _write_pieces(
             dem_run.cut, folder, out.suffix, values, found, coded, snap_spacing, clock,
             binary, res.threads, vocabulary,
@@ -1129,14 +1126,14 @@ def mesh(
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
     vertices = surface_mesh.vertices
-    surface = _destination(out)
+    surface = cli_kit.destination(out)
     targets = [surface]
     if out_edges is not None:
         # Resolved, because two spellings of one path are still one file. Both
         # writes succeed, the second overwrites the first, the command echoes
         # two paths and exits 0 -- the caller has lost the surface they asked
         # for and nothing said so.
-        constraints = _destination(out_edges, "--out-edges")
+        constraints = cli_kit.destination(out_edges, "--out-edges")
         if constraints == surface:
             raise typer.BadParameter(
                 f"--out and --out-edges both resolve to {surface}; "
@@ -1253,29 +1250,29 @@ def _write_geopackage(
 @dataclass(frozen=True, slots=True)
 class _ClassSource:
     """``--land-cover`` as checked: a catalogue entry with its year (None for a
-    source without years) and cache root, or a file; and the class map that
+    source without years) and cache root, or a file; and the legend that
     names its classes, if any."""
 
     source: RemoteSource | None
     year: int | None
     root: Path | None
     path: Path | None
-    class_map: ClassMap | None
+    legend: Legend | None
 
 
 def _class_source(
     value: str | None,
     year: int | None,
-    map_value: str | None,
+    legend_value: str | None,
     root: Path | None,
     known: Mapping[str, RemoteSource],
 ) -> _ClassSource | None:
-    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-map`` checked
+    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-legend`` checked
     before any work: a catalogue key is that cached source, anything else a
     file, whose header is read here. Every refusal is a usage error naming
     the option."""
     if value is None:
-        for given, flag in ((year, "--land-cover-year"), (map_value, "--land-cover-map")):
+        for given, flag in ((year, "--land-cover-year"), (legend_value, "--land-cover-legend")):
             if given is not None:
                 raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
@@ -1309,17 +1306,17 @@ def _class_source(
             TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
         except (OSError, ValueError) as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
-    name = map_value or (source.class_map if source is not None else "")
+    name = legend_value or (source.legend if source is not None else "")
     try:
-        class_map = load_class_map(name) if name else None
+        legend = load_legend(name) if name else None
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--land-cover-map") from exc
-    if class_map is not None and not class_map.codes:
+        raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
+    if legend is not None and not legend.codes:
         raise typer.BadParameter(
             f"{name} names no class codes; a land-cover raster holds codes",
-            param_hint="--land-cover-map",
+            param_hint="--land-cover-legend",
         )
-    return _ClassSource(source, chosen, None if path else root, path, class_map)
+    return _ClassSource(source, chosen, None if path else root, path, legend)
 
 
 def _class_fractions(
@@ -1377,7 +1374,7 @@ def _class_fractions(
                 threads=threads,
             )
         except (ValueError, NotCached) as exc:
-            raise typer.BadParameter(_words(exc), param_hint="--land-cover") from exc
+            raise typer.BadParameter(cli_kit.words(exc), param_hint="--land-cover") from exc
     typer.echo(
         f"land cover: {len(assigned.table.classes)} class shares over "
         f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
@@ -1410,7 +1407,7 @@ def _write_pieces(
     suffix: str,
     values: Mapping[str, Value],
     found: FeatureSet | None,
-    coded: ClassMap | None,
+    coded: Legend | None,
     spacing: float,
     clock: PhaseClock,
     binary: bool,
@@ -1454,7 +1451,7 @@ def _write_pieces(
 
 
 def _land_cover(
-    trimmed: Trimmed, found: FeatureSet, cmap: ClassMap, spacing: float, clock: PhaseClock
+    trimmed: Trimmed, found: FeatureSet, legend: Legend, spacing: float, clock: PhaseClock
 ) -> tuple[npt.NDArray[np.int32], str]:
     """A code per triangle from the coded polygons, timed as the phase
     ``land cover``, with its stderr line; the codes and their text."""
@@ -1468,14 +1465,14 @@ def _land_cover(
         f"{labels.thin} too narrow to label with certainty",
         err=True,
     )
-    text = f"{cmap.codes}, attribute {cmap.attribute}, map {cmap.name}; "
+    text = f"{legend.codes}, attribute {legend.attribute}, legend {legend.name}; "
     return labels.codes, text + "0 = in no polygon, and every constraint line"
 
 
 def palette(
     name: Annotated[
         str,
-        typer.Argument(help=f"A class map: {', '.join(shipped_names())}, or a .toml file."),
+        typer.Argument(help=f"A legend: {', '.join(shipped_names())}, or a .toml file."),
     ],
     out: Annotated[
         Path | None,
@@ -1489,16 +1486,16 @@ def palette(
     preset does not.
     """
     try:
-        cmap = load_class_map(name)
+        legend = load_legend(name)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    if cmap.palette is None:
+    if legend.palette is None:
         raise typer.BadParameter(f"{name} has no classes to colour")
-    text = json.dumps(paraview_preset(cmap.palette, cmap.preset), indent=1) + "\n"
+    text = json.dumps(paraview_preset(legend.palette, legend.preset), indent=1) + "\n"
     if out is None:
         typer.echo(text, nl=False)
         return
-    _destination(out).write_text(text)
+    cli_kit.destination(out).write_text(text)
     typer.echo(f"{out}")
 
 
@@ -1507,7 +1504,7 @@ def _report_target(stats: Path | None, meshes: list[Path]) -> Path | None:
     checked before any mesh file is written."""
     if stats is None or stats == Path("-"):
         return None
-    target = _destination(stats, "--stats")
+    target = cli_kit.destination(stats, "--stats")
     if target in meshes:
         raise typer.BadParameter(
             f"resolves to {target}; the report would overwrite the mesh", param_hint="--stats"
@@ -1522,7 +1519,7 @@ def _record_target(record: Path | None, taken: list[Path | None]) -> Path | None
         return None
     if record == Path("-"):
         raise typer.BadParameter("standard output is --stats -'s", param_hint="--record")
-    target = _destination(record, "--record")
+    target = cli_kit.destination(record, "--record")
     if target in taken:
         raise typer.BadParameter(
             f"resolves to {target}, which this run also writes", param_hint="--record"
@@ -1615,7 +1612,9 @@ def fetch(
     refresh: Annotated[
         bool, typer.Option("--refresh", help="Discard the source's cache and fetch anew.")
     ] = False,
-    connections: Annotated[int, typer.Option("--connections", min=1)] = 8,
+    connections: Annotated[
+        int, typer.Option("--connections", min=1, help="Parallel requests, for byte-range sources.")
+    ] = 8,
     year: Annotated[
         int | None,
         typer.Option(
@@ -1626,10 +1625,13 @@ def fetch(
     """Copy what a mesh of a domain reads from a remote source into the tile cache.
 
     Then rasputin mesh --dem SOURCE runs offline. A source is the package's or
-    one in your sources file (see rasputin sources).
+    one in your sources file (see rasputin sources). A source of map-service
+    features is cached as one GeoPackage, which rasputin sources lists by path
+    for the vector options.
     """
     import asyncio
 
+    from tin_engine.fetch.features import fetch_features
     from tin_engine.fetch.http import FetchError, RangeClient
     from tin_engine.fetch.plan import FetchRequest
     from tin_engine.fetch.run import fetch as run
@@ -1664,7 +1666,7 @@ def fetch(
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
-        raise typer.BadParameter(_words(exc)) from exc
+        raise typer.BadParameter(cli_kit.words(exc)) from exc
     tenths = [0]
 
     def progress(done: int, total: int) -> None:
@@ -1673,14 +1675,24 @@ def fetch(
             typer.echo(f"{done:,} of {total:,} bytes", err=True)
 
     client, writer = RangeClient(), CacheWriter(root, source)
+    head = "would fetch" if dry_run else "fetched"
     try:
-        report = asyncio.run(run(request, known[source], client, writer, progress=progress))
+        if known[source].kind == "arcgis-features":
+            got = fetch_features(request, known[source], client.get_text, writer)
+        else:
+            report = asyncio.run(run(request, known[source], client, writer, progress=progress))
     except (FetchError, CacheError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+    if known[source].kind == "arcgis-features":
+        typer.echo(
+            f"{source}: {got.in_box:,} features in the box, {got.present:,} present, {head} "
+            f"{got.fetched:,} in {got.requests:,} requests, {got.bytes:,} bytes, "
+            f"{got.seconds:.1f} s into {writer.directory}"
+        )
+        return
     for plan in report.plans:
         typer.echo(f"{plan.object_id}: {len(plan.blocks):,} blocks, {plan.bytes:,} bytes to fetch")
-    head = "would fetch" if dry_run else "fetched"
     typer.echo(
         f"{source}: {report.objects} objects, {report.needed:,} blocks needed, "
         f"{report.present:,} present, {head} {report.fetched:,} ({report.empty} empty) in "
@@ -1821,10 +1833,10 @@ def _dem_repository(
     paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
     caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
     try:
-        return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)[0]
+        return repository_for(paths, cached=cached, threads=res.threads, z_unit=caller)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
-            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+            cli_kit.words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
 
 
@@ -1848,7 +1860,7 @@ def _open_dem(
             else Bounds(**dict(zip(("x_min", "y_min", "x_max", "y_max"), bbox, strict=True)))
         )
     except ValidationError as exc:
-        raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint="--bbox") from exc
     try:
         with clock.phase("decode"):
             request = DemRequest(
@@ -1875,7 +1887,7 @@ def _open_dem(
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
-        raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint="--dem") from exc
 
 
 def _z_unit(option: ZSpelling | None) -> ZUnit | None:
@@ -1894,7 +1906,7 @@ def _z_words(meta: RasterMeta, option: str | None, caller: ZUnit | None) -> str:
 
 
 def _feature_sources(
-    paths: list[Path], crss: list[str], layers: list[str], maps: list[ClassMap]
+    paths: list[Path], crss: list[str], layers: list[str], legends: list[Legend]
 ) -> tuple[FeatureSource, ...]:
     """The repeatable ``--features`` flags as one source per path, paired
     by position; a shorter paired list defaults its missing entries. A flag that
@@ -1909,16 +1921,16 @@ def _feature_sources(
                 param_hint="--features-layer",
             )
         crs = crss[i] if i < len(crss) else None
-        built.append(FeatureSource(path=path, class_map=maps[i], layer=layer, crs=crs))
-    # One mesh has one land_cover_code system. Two sources whose maps name
+        built.append(FeatureSource(path=path, legend=legends[i], layer=layer, crs=crs))
+    # One mesh has one land_cover_code system. Two sources whose legends name
     # different code systems (any file can name its own) are refused before
     # any meshing.
-    systems = {s.class_map.codes for s in built if s.class_map.codes}
+    systems = {s.legend.codes for s in built if s.legend.codes}
     if len(systems) > 1:
         raise typer.BadParameter(
             f"sources carry different code systems ({', '.join(sorted(systems))}); "
             "one mesh has one land_cover_code system",
-            param_hint="--features-map",
+            param_hint="--features-legend",
         )
     return tuple(built)
 
@@ -2309,6 +2321,8 @@ def _refined(
         "line_points_refused_max_error_m": final.strip_refused_max_error,
         "line_points_inserted": final.strip_inserted,
         "line_points_duplicate": strip.duplicates,
+        "triangles_flat_as_written": final.flat_as_written,
+        "edges_not_delaunay_as_written": final.illegal_as_written,
     }
     z = np.asarray(final.z)
     if heights:
@@ -2549,12 +2563,12 @@ def catchment(
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
-    target = _destination(out)
+    target = cli_kit.destination(out)
     try:
         found = None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     repository = _dem_repository(dem, cache, res, z_unit)
     try:
         placement: tuple[Placement, str | None] | None = None
@@ -2584,7 +2598,7 @@ def catchment(
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:
         hint = "--lakes" if isinstance(exc, LakeError) else "--dem"
-        raise typer.BadParameter(_words(exc), param_hint=hint) from exc
+        raise typer.BadParameter(cli_kit.words(exc), param_hint=hint) from exc
     degrees = result.meta.geographic
     for k, w in enumerate(result.windows, 1):
         b = w.bounds
@@ -2803,7 +2817,7 @@ def station_catchments(
         math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
     ):
         raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
-    target = _destination(out_dir, "--out-dir")
+    target = cli_kit.destination(out_dir, "--out-dir")
     try:
         station_list, stations_crs = read_stations(stations)
     except (OSError, ValueError) as exc:
@@ -2820,13 +2834,13 @@ def station_catchments(
     lake_list = None
     if lakes is not None:
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
-    res = _resources(threads, memory_budget)
+    res = cli_kit.cli_resources(threads, memory_budget)
     repository = _dem_repository(dem, cache, res, z_unit)
     try:
         geographic = repository.footprints()[0].meta.geographic
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(
-            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+            cli_kit.words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
     if geographic:
         raise typer.BadParameter(
@@ -2869,7 +2883,7 @@ def station_catchments(
                 f"cannot read {exc.filename}: {exc}", param_hint="--dem"
             ) from exc
         except ValueError as exc:
-            typer.echo(f"Error: {_words(exc)}", err=True)
+            typer.echo(f"Error: {cli_kit.words(exc)}", err=True)
             raise typer.Exit(1) from exc
     dump = {**summary.model_dump(mode="json"), "river_copies_dropped": dropped}
     with _writing(target / "summary.json"):

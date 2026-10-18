@@ -68,7 +68,7 @@ copy of the numbers.
 tokens. It stays: the PLY header writes `feature_bit {bit} {name}`
 (`src_python/tin_engine/io/ply.py:123`), space-separated, and the GeoPackage writer puts each name, quoted but not
 escaped, into a `CREATE TABLE` statement as a column
-(`src_python/tin_engine/io/geopackage_write.py:321`), so the pattern is now
+(`src_python/tin_engine/io/geopackage_write.py@3cb6d416:321`), so the pattern is now
 what keeps a quote out of that SQL. The `features.py` docstring gives these
 reasons instead.
 

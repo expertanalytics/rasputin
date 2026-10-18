@@ -1,11 +1,10 @@
-"""The start mesh's chains: the domain's rings, then the features' lines (16b R2, R7).
+"""The start mesh's chains: the domain's rings, then the features' lines.
 
-Increment 16's R6 table as code. The domain's exterior is ``"outer"`` and each
-hole ``"hole"``, mask 0 (16 U5; this half moved here from ``cli._domain_chains``);
-then every feature line, in feature order, is a ``"breakline"`` with its
-feature's mask. A closed line (an unclipped ring) repeats its first index
-(increment 8, ruling 2). Shared edges go in twice: the noder merges them and
-unions their bits (R7).
+The domain's exterior is ``"outer"`` and each hole ``"hole"``, mask 0; then
+every feature line, in feature order, is a ``"breakline"`` with its feature's
+mask. A closed line (an unclipped ring) repeats its first index: a breakline
+does not close implicitly as a ring does. Shared edges go in twice: the noder merges
+them and unions their bits.
 
 Roles leave as strings; ``cli.py`` maps them onto ``ChainRole``. No ``_core``.
 """
@@ -50,7 +49,7 @@ def start_chains(
         count += len(xy)
 
     for k, ring in enumerate((domain.polygon.exterior, *domain.polygon.interiors)):
-        add(shapely.get_coordinates(ring)[:-1], "outer" if k == 0 else "hole", 0, False)
+        add(shapely.get_coordinates(ring)[:-1], "outer" if k == 0 else "hole", 0, closed=False)
     for feature in features:
         vocabulary.names(feature.mask)
         for line in feature.lines:

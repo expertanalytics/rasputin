@@ -1,11 +1,11 @@
-"""`tin_engine.class_maps`: land-cover class maps and palettes as data files (41).
+"""`tin_engine.legends`: land-cover legends and palettes as data files (41).
 
 `docs/increments/41-class-maps-as-data.md`, section 4 (the file, the loader,
 the shipped maps, MapBiomas, the option), section 5 (the derived clean-up
 distances), section 6 (the vocabulary) and section 7 (T1 to T12; the CLI
-halves are in `test_cli_class_maps.py`). Fixtures by hand
-(`class_map_fixtures`); master's CORINE objects from the snapshot
-(`class_map_snapshot`), so the shipped CORINE files are checked against what
+halves are in `test_cli_legends.py`). Fixtures by hand
+(`legend_fixtures`); master's CORINE objects from the snapshot
+(`legend_snapshot`), so the shipped CORINE files are checked against what
 the code held before they existed, not against themselves.
 
 The MapBiomas oracle is the Collection 11 legend CSV,
@@ -17,7 +17,7 @@ classes, `class_id,class_name_pt_br,class_name_en,hex_code`.
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- `class_maps.load(value: str) -> ClassMap`: a shipped name, `property`, or a
+- `legends.load(value: str) -> Legend`: a shipped name, `property`, or a
   path (section 4's rule: ends in `.toml` or holds a path separator). Every
   refusal is a `ValueError` (a `FeatureError` is one) whose message names the
   file (its name, at least) and, for a bad key or value, the key.
@@ -28,14 +28,14 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   included, as the design review found them); colours as in the CSV.
 - An uncoded map needs no `[edges]`, `notice` or `preset`; every map here
   states `unlisted`.
-- `ClassMap.extra_names` is a tuple of the map's `[vocabulary].extra`;
-  `ClassMap.accuracy_m` a float; `ClassMap.licence` `""` when absent.
-- `feature_input._mask(cmap, vocabulary, value, what)` keeps its signature.
+- `Legend.extra_names` is a tuple of the map's `[vocabulary].extra`;
+  `Legend.accuracy_m` a float; `Legend.licence` `""` when absent.
+- `feature_input._mask(the_legend, vocabulary, value, what)` keeps its signature.
 
-RED at the commit that adds this file: `tin_engine.class_maps` does not exist
-(`ModuleNotFoundError` in the `cm` fixture and in `feature_fixtures.class_map`),
-`tin_engine/data/class_maps/` does not exist, and the MapBiomas catalogue
-entry has no `class_map`.
+RED at the commit that adds this file: `tin_engine.legends` does not exist
+(`ModuleNotFoundError` in the `cm` fixture and in `feature_fixtures.legend`),
+`tin_engine/data/legends/` does not exist, and the MapBiomas catalogue
+entry has no `legend`.
 """
 
 from __future__ import annotations
@@ -53,16 +53,16 @@ import pytest
 from pydantic import ValidationError
 
 import feature_fixtures as ff
-from class_map_fixtures import basenames, coded_map, uncoded_map, write
-from class_map_snapshot import CORINE_MAPS, CORINE_NATURAL, DATA, PRESET_NAME, SNAPSHOT
 from feature_fixtures import Feat, domain_of, square, write_geojson
+from legend_fixtures import basenames, coded_map, uncoded_map, write
+from legend_snapshot import CORINE_MAPS, CORINE_NATURAL, DATA, PRESET_NAME, SNAPSHOT
 from tin_engine.features import DEFAULT_VOCABULARY
 
 SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11")
 #: T2's values, as the snapshot lists them.
 VALUES: list[Any] = [value for value, _ in SNAPSHOT["maps"]["corine"]["masks"]]
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
-#: The snapshot's domain and polygon for `opened` (see `class_map_snapshot`).
+#: The snapshot's domain and polygon for `opened` (see `legend_snapshot`).
 DOMAIN = domain_of(square(0, 0, 100, 100))
 INSIDE = square(10, 10, 50, 50)
 WEST, EAST = square(10, 10, 50, 50), square(50, 10, 90, 50)
@@ -74,18 +74,18 @@ MAPBIOMAS_NOTICE = (
 
 @pytest.fixture(scope="module")
 def cm() -> ModuleType:
-    return importlib.import_module("tin_engine.class_maps")
+    return importlib.import_module("tin_engine.legends")
 
 
 def shipped_dir() -> Any:
-    return resources.files("tin_engine") / "data" / "class_maps"
+    return resources.files("tin_engine") / "data" / "legends"
 
 
 def shipped_toml(name: str) -> dict[str, Any]:
     return tomllib.loads((shipped_dir() / f"{name}.toml").read_text(encoding="utf-8"))
 
 
-def legend() -> dict[int, tuple[str, str]]:
+def mapbiomas_csv() -> dict[int, tuple[str, str]]:
     """The Collection 11 legend CSV: code -> (English label, colour)."""
     with (DATA / "mapbiomas_c11_legend.csv").open(encoding="utf-8", newline="") as f:
         return {int(r["class_id"]): (r["class_name_en"], r["hex_code"]) for r in csv.DictReader(f)}
@@ -143,15 +143,15 @@ class TestCorineBehaviourUnchanged:
 
     @pytest.mark.parametrize("name", CORINE_MAPS)
     def test_t2_the_masks_of_the_designs_values(self, cm: ModuleType, name: str) -> None:
-        fi, cmap = ff.feature_input(), cm.load(name)
+        fi, the_legend = ff.feature_input(), cm.load(name)
         for value, mask in SNAPSHOT["maps"][name]["masks"]:
-            assert fi._mask(cmap, DEFAULT_VOCABULARY, value, "t2") == mask, value
+            assert fi._mask(the_legend, DEFAULT_VOCABULARY, value, "t2") == mask, value
 
     @pytest.mark.parametrize("name", CORINE_MAPS)
     def test_t2_the_mask_of_every_level_3_class(self, cm: ModuleType, name: str) -> None:
-        fi, cmap = ff.feature_input(), cm.load(name)
+        fi, the_legend = ff.feature_input(), cm.load(name)
         got = {
-            code: fi._mask(cmap, DEFAULT_VOCABULARY, code, "t2")
+            code: fi._mask(the_legend, DEFAULT_VOCABULARY, code, "t2")
             for code in SNAPSHOT["maps"][name]["every_class"]
         }
         assert got == SNAPSHOT["maps"][name]["every_class"]
@@ -175,12 +175,12 @@ class TestCorineBehaviourUnchanged:
     def test_t2_codes_and_masks_through_open_features(
         self, cm: ModuleType, tmp_path: Path, name: str
     ) -> None:
-        fi, cmap = ff.feature_input(), cm.load(name)
+        fi, the_legend = ff.feature_input(), cm.load(name)
         for i, (value, want) in enumerate(SNAPSHOT["maps"][name]["opened"]):
             path = write_geojson(
-                tmp_path / f"{i}.geojson", [Feat(1, INSIDE, {cmap.attribute: value})]
+                tmp_path / f"{i}.geojson", [Feat(1, INSIDE, {the_legend.attribute: value})]
             )
-            request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=cmap),))
+            request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=the_legend),))
             if want == "refused":
                 with pytest.raises(fi.FeatureError):
                     fi.open_features(request, DOMAIN, ff.UTM33)
@@ -410,28 +410,28 @@ class TestDerivedCleanup:
 
 def cover_source(tmp_path: Path, unlisted: str, *, bog: bool = True) -> Any:
     fi = ff.feature_input()
-    cmap = cm_load(write(tmp_path / f"cover-{unlisted}.toml", coded_map(
+    the_legend = cm_load(write(tmp_path / f"cover-{unlisted}.toml", coded_map(
         unlisted=unlisted, codes='Forest = 1\nLake = 2\n'
     )))  # fmt: skip
     features = [Feat("west", WEST, {"cover": "Forest"}), Feat("east", EAST, {"cover": "Lake"})]
     if bog:
         features.append(Feat("bog-7", square(20, 60, 40, 80), {"cover": "Bog"}))
     path = write_geojson(tmp_path / f"cover-{unlisted}.geojson", features)
-    return fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=cmap),))
+    return fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=the_legend),))
 
 
 def cm_load(path: Path) -> Any:
-    return importlib.import_module("tin_engine.class_maps").load(str(path))
+    return importlib.import_module("tin_engine.legends").load(str(path))
 
 
 class TestTextCodes:
     """T8 (B6): `[codes]` turns attribute text into class codes."""
 
     def test_t8_the_codes_table_is_kept(self, tmp_path: Path) -> None:
-        cmap = cm_load(write(tmp_path / "c.toml", coded_map(codes="Forest = 1\nLake = 2\n")))
-        assert dict(cmap.string_codes) == {"Forest": 1, "Lake": 2}
-        assert dict(cmap.classes)["Lake"] == ("land_cover", "water")
-        assert dict(cmap.classes)["Forest"] == ("land_cover",)
+        the_legend = cm_load(write(tmp_path / "c.toml", coded_map(codes="Forest = 1\nLake = 2\n")))
+        assert dict(the_legend.string_codes) == {"Forest": 1, "Lake": 2}
+        assert dict(the_legend.classes)["Lake"] == ("land_cover", "water")
+        assert dict(the_legend.classes)["Forest"] == ("land_cover",)
 
     def test_t8_text_values_carry_their_codes_and_the_lake_water(self, tmp_path: Path) -> None:
         fi = ff.feature_input()
@@ -456,9 +456,9 @@ class TestTextCodes:
 
     def test_t8_without_a_codes_table_a_text_is_refused_as_today(self, tmp_path: Path) -> None:
         fi = ff.feature_input()
-        cmap = cm_load(write(tmp_path / "plain.toml", coded_map(unlisted="land")))
+        the_legend = cm_load(write(tmp_path / "plain.toml", coded_map(unlisted="land")))
         path = write_geojson(tmp_path / "plain.geojson", [Feat("f", WEST, {"cover": "Forest"})])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=cmap),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=the_legend),))
         with pytest.raises(fi.FeatureError, match="Forest"):
             fi.open_features(request, DOMAIN, ff.UTM33)
 
@@ -507,8 +507,8 @@ class TestMapBiomas:
 
     def test_t10_every_class_is_the_legend_csvs(self, cm: ModuleType) -> None:
         palette = dict(cm.load("mapbiomas-c11").palette)
-        assert len(legend()) == 33
-        assert {code: v for code, v in palette.items() if code} == legend()
+        assert len(mapbiomas_csv()) == 33
+        assert {code: v for code, v in palette.items() if code} == mapbiomas_csv()
 
     def test_t10_no_class_water_and_the_notice(self, cm: ModuleType) -> None:
         got = cm.load("mapbiomas-c11")
@@ -526,7 +526,7 @@ class TestMapBiomas:
 
     def test_t10_the_catalogue_entry_names_the_map(self) -> None:
         sources = importlib.import_module("tin_engine.sources")
-        assert sources.SOURCES["mapbiomas-c11"].class_map == "mapbiomas-c11"
+        assert sources.SOURCES["mapbiomas-c11"].legend == "mapbiomas-c11"
 
 
 class TestLicence:

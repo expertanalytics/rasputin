@@ -1,8 +1,8 @@
-"""The partition of a run's window into cells, one piece job per cell (increment 23c).
+"""The partition of a run's window into cells, one piece job per cell.
 
-Pure arithmetic on the window: no DEM, no mesh, no machine. The rule is
-`docs/increments/23-basin-scale.md`, "The partition (23c; B2, B3 and B14 as
-ruled)", and the memory estimate is "The memory estimate and the defaults";
+Pure arithmetic on the window: no DEM, no mesh, no machine. The rule and the
+memory estimate are the design's,
+`docs/increments/23-basin-scale.md`, *The subdomain model*;
 `docs/increments/23-probes/partition.py` implements the same rule and its
 figures are the design's.
 
@@ -29,7 +29,7 @@ DEFAULT_PIECE_BUDGET = 2**34
 
 
 #: `b(T)`: bytes per window node at tolerance T (m), from the basin-piece
-#: sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`).
+#: sweep of the benchmark records.
 _BYTES_PER_NODE = (
     (0.0, 637),
     (1.0, 267),
@@ -104,7 +104,7 @@ def lines(
     polygon: Polygon, xs: Sequence[float], ys: Sequence[float]
 ) -> list[npt.NDArray[np.float64]]:
     """The vertical lines `x = xs[i]` and the horizontal `y = ys[j]` clipped to
-    `polygon` as linework (16b R6), each part an `(n, 2)` chain. A part's
+    `polygon` as linework, each part an `(n, 2)` chain. A part's
     constant coordinate is set back to the line's own value, so a crossing
     GEOS computes with the outline stays exactly on the lattice line; a line
     that only touches the polygon gives no part."""

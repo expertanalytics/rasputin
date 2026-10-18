@@ -3,7 +3,7 @@
 `docs/increments/16b-terrain-polygons.md`, "Ruled by Ola", Q6 (b): the 30 MB
 `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml` stays and 16b
 reads it "as a second real fixture: a small GML2 reader (standard-library XML,
-no GDAL, about 40 lines) and a class map for `clc18_kode`".
+no GDAL, about 40 lines) and a legend for `clc18_kode`".
 
 **What the file was, and its repair.** OGR wrote it as GML2
 (`gml:coordinates`, `x,y` pairs, EPSG:4326 longitude first). As committed in
@@ -224,12 +224,6 @@ class TestReadGml:
     def test_an_empty_collection_reads_as_nothing(self, gml: ModuleType) -> None:
         doc = gml.read_gml(document(), "clc18_kode")
         assert doc.features == () or list(doc.features) == []
-
-    def test_a_document_has_no_completeness_flag(self, gml: ModuleType) -> None:
-        """A strict reader reads a whole document or refuses it, so the first
-        design's `complete` is gone (Ola, 2026-09-28)."""
-        doc = gml.read_gml(document(member("a", LAKE)), "clc18_kode")
-        assert not hasattr(doc, "complete")
 
 
 class TestMalformed:

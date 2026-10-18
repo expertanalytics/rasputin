@@ -114,11 +114,12 @@ plugins use today, and grows on request.
 | `plural` | `"1 tile"`, `"2 tiles"` |
 | `DemRequest` | Which DEM to read: a directory, files or a cached source, and an optional box or domain |
 | `open_dem` | Lists, plans and decodes a `DemRequest` into one grid |
-| `repository_for` | The tile repository over a directory, files or a cached source |
+| `repository_for` | The tile repository over a directory, files or a cached source. It no longer returns the run's name beside it, and the `DemInput` that `open_dem` returns no longer has `label` |
 | `DemTile` | One decoded tile: its `RasterMeta` and a read-only 2-D array |
 | `RasterMeta` | A tile's node grid: origin, spacing, size, CRS, nodata |
 | `Bounds` | A box in a DEM's CRS |
 | `core_args` | A tile's array and grid scalars, checked, for a `raster_view` function (see the raster tag rule below) |
+| `accumulate` | `accumulate(tile)`: each node's drainage over a `DemTile`, by the Priority-Flood that fills its pits, on the node grid alone (spacing and CRS unused). A node drains to the neighbour that flooded it: its lowest filled neighbour, ties first in, first out; not D8's steepest descent. `.count` (uint32, rows × cols): 0 on NoData, else the nodes draining through the node, itself included. `.flow_to` (uint8): that neighbour, `3*(dr+1)+(dc+1)`, with `dr`, `dc` its row and column minus the node's; 255 for an outlet or NoData. Both read-only. 2^32 nodes or more is a `ValueError`. Releases the GIL. The result's type and other attributes are not promised |
 | `encode_geotiff` | A 2-D grid as the bytes of a float32 GeoTIFF |
 | `read_mesh` | The bytes of a binary `.vtk` that `rasputin mesh` wrote, as arrays |
 | `parse_crs` | Any CRS text pyproj reads, or a `ValueError` naming it |

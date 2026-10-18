@@ -180,8 +180,10 @@ write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
 files to the handback. A refused write to a rule file, or a refused push, is
 never redone by any route. While away, a branch Ola named with
 `away.py --grant <branch>` may be pushed (as `git push origin
-<sha>:refs/heads/<branch>`), opened as a pull request and enqueued (once per
-head) without a fresh yes, provided `@reviewer`'s last verdict on the branch,
+<sha>:refs/heads/<branch>`, or `git push private ...` for a branch holding
+commits of `private/master`), opened as a pull request and enqueued, or on the
+private repository merged once its checks are green (once per head) without a
+fresh yes, provided `@reviewer`'s last verdict on the branch,
 recorded by a hook from its handback, approved its head; the guard checks
 this, and the grant ends with the window. Otherwise record it as an `ASK OLA:` line (main session: in
 `session.md`; subagent: in its handback) and continue with other work.

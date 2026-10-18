@@ -1,6 +1,6 @@
 #pragma once
 
-// The edge strip's check points (docs/increments/15f-edge-strip.md, D2, D3):
+// The edge strip's check points:
 // where each constraint edge crosses a grid line, and the midpoint between
 // each two neighbouring crossings, the edge's ends counting as neighbours.
 //
@@ -10,7 +10,8 @@
 // integer column and row lines strictly between the ends are computed at the
 // parameter t along P0 -> P1, on the line exactly, clamped to the node
 // rectangle; a crossing whose rounded position is a node on the edge (exact
-// orient_sign) is that node. Sorted by t, then position, a point at the same
+// orient_sign) or within detail::coincidence_radius of the crossing is that
+// node. Sorted by t, then position, a point at the same
 // position as the entry before it, or a t not strictly between that entry's
 // and 1, is dropped and counted in `duplicates`. Midpoints are taken over the
 // list with the ends added, before any NoData drop; one that rounds onto a
@@ -103,6 +104,7 @@ template <raster::RasterSource R>
     };
     const double cmax = static_cast<double>(g.cols() - 1);
     const double rmax = static_cast<double>(g.rows() - 1);
+    const double radius = detail::coincidence_radius(g);
     struct Cut {
         double t;
         mesh::MeshVertex at;
@@ -120,7 +122,7 @@ template <raster::RasterSource R>
         auto cross = [&](double t, double col, double row) {
             mesh::MeshVertex at{std::clamp(col, 0.0, cmax), std::clamp(row, 0.0, rmax)};
             const mesh::MeshVertex node{std::round(at.col), std::round(at.row)};
-            if (mesh::orient_sign(a, b, node) == 0)
+            if (mesh::orient_sign(a, b, node) == 0 || std::hypot(at.col - node.col, at.row - node.row) <= radius)
                 at = node;
             cuts.push_back({t, at});
         };
@@ -136,7 +138,7 @@ template <raster::RasterSource R>
             return std::tie(x.t, x.at.col, x.at.row) < std::tie(y.t, y.at.col, y.at.row);
         });
         // The list from P0 to P1: t strictly inside (t_last, 1), and no two
-        // neighbours at one position (D2 step 5, I1-I3).
+        // neighbours at one position.
         std::vector<Cut> list{{0.0, a}};
         for (const Cut& c : cuts) {
             if (c.t <= list.back().t || c.t >= 1.0 || c.at == list.back().at)
@@ -156,7 +158,7 @@ template <raster::RasterSource R>
             const Cut& r = list[i + 1];
             if (i > 0)
                 keep(l.at, l.t);
-            // A midpoint that rounds onto a neighbour (step 6) is a duplicate.
+            // A midpoint that rounds onto a neighbour is a duplicate.
             const mesh::MeshVertex mid{(l.at.col + r.at.col) / 2, (l.at.row + r.at.row) / 2};
             const double s = (l.t + r.t) / 2;
             if (mid == l.at || mid == r.at || s == l.t || s == r.t)

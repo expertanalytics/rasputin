@@ -662,3 +662,35 @@ class TestSlopeFields:
 
     def test_nothing_about_steep_ground_without_the_flag(self, rr: ModuleType) -> None:
         assert "steep" not in rr.summary(projected(rr))
+
+
+# ---------------------------------------------------------------- increment 65, Delaunay as written
+
+
+class TestWrittenDelaunayFields:
+    """Increment 65, section 4: a mesh run's two counts at the written
+    coordinates, each with its plain label."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "triangles_flat_as_written": (
+            "Triangles flat or turned over at the written coordinates; their edges were left "
+            "out of the last edge-swap check"
+        ),
+        "edges_not_delaunay_as_written": (
+            "Edges that fail the empty-circle test at the written coordinates "
+            "and could not be swapped"
+        ),
+    }
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_a_mesh_run_carries_both_with_their_labels(self, rr: ModuleType) -> None:
+        record = projected(rr, triangles_flat_as_written=1, edges_not_delaunay_as_written=0)
+        got = rows(rr, record)
+        assert got["triangles_flat_as_written"] == (self.WORDING["triangles_flat_as_written"], "1")
+        assert got["edges_not_delaunay_as_written"] == (
+            self.WORDING["edges_not_delaunay_as_written"],
+            "0",
+        )

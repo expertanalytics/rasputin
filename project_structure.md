@@ -137,7 +137,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   check overlaps and coverage, stitch; no files (15a);
                            #   imports only io.models first-party
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   label, domain in the DEM's CRS) (15a, 15b);
+                           #   domain in the DEM's CRS) (15a, 15b);
                            #   takes a DemRepository and TileFootprints, and
                            #   the union of the tiles' node_box
   domain.py                # DomainPolygon (one polygon in its own CRS) and its
@@ -208,7 +208,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   refine cli.py hands it, K4); no Typer, refusals
                            #   are RunError (23c). index.json is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
-                           #   read, mapped to masks by a ClassMap, pre-clipped,
+                           #   read, mapped to masks by a Legend, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
                            #   as linework -> FeatureSet (16b); opens .gml
                            #   itself, reads GeoJSON through io/repository's
@@ -270,26 +270,28 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
-  class_maps.py            # class maps as data (41): load(name | path |
+  legends.py               # legends as data (41): load(name | path |
                            #   'property') reads a TOML file through toml_data into
-                           #   a ClassMap; derived_cleanup(accuracy, cell):
+                           #   a Legend; derived_cleanup(accuracy, cell):
                            #   repair, simplify, snap from the larger of the
                            #   source's accuracy and the DEM cell; imports
                            #   feature_input and features
-  data/class_maps/         # the shipped maps: corine, corine-water,
+  data/legends/            # the shipped legends: corine, corine-water,
                            #   clc18_kode, mapbiomas-c11 (.toml; codes,
                            #   labels, colours, water, edges, notice,
                            #   positional accuracy)
   palettes.py              # paraview_preset(table, name): a ParaView preset
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
-                           #   itself is data/class_maps/corine.toml (41)
+                           #   itself is data/legends/corine.toml (41)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
   sources.py               # the source catalogue: RemoteSource (ANADEM,
                            #   GLO-30; 23a-1, 23a-2; also kind "local", a path
-                           #   to GeoTIFFs on this machine, 55), StationSource
+                           #   to GeoTIFFs on this machine, 55; also kind
+                           #   "arcgis-features", a map-service polygon layer
+                           #   with a `fields` allow-list, 63), StationSource
                            #   (NVE's HRD, 29), notice(); the entries are
                            #   data/sources.toml plus the user's sources file,
                            #   added by `catalogue()`; data_root, xdg_base and
@@ -311,7 +313,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   dem_input.repository_for or the tile cache; a
                            #   vector source's layer, geometry, feature count,
                            #   attributes and class values through
-                           #   io/geopackage and io/geojson; fits(), pure: the
+                           #   io/geopackage and io/geojson (a fetched
+                           #   arcgis-features entry: its cached features.gpkg,
+                           #   63); fits(), pure: the
                            #   commands, options and MCP arguments each source
                            #   fits, restating the readers' rules; the MCP
                            #   output root (out_root);
@@ -327,13 +331,26 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   retries; `User-Agent: rasputin/<version>` (29);
                            #   query_url; the one module importing urllib
     plan.py                # FetchRequest -> the blocks meeting the domain's
-                           #   box, from headers alone; pure (23a-2)
+                           #   box, from headers alone; pure (23a-2);
+                           #   box_in_crs, the request's box in a CRS with no
+                           #   growth, which source_box grows for rasters and
+                           #   features.py takes as is; region_sha256 (63)
     run.py                 # fetch(): headers, plan, bounded async download;
                            #   client and cache writer injected (23a-2)
     nve.py                 # fetch_station_set(source, get_text) -> each file's
                            #   bytes (stations, references, rivers, lakes,
                            #   manifest last); field allow-lists; writes
                            #   nothing, cli.py writes the files (29)
+    features.py            # fetch_features(request, source, get_text, cache)
+                           #   for kind "arcgis-features": the layer's facts
+                           #   checked against the entry, the ids meeting the
+                           #   box (returnIdsOnly), the uncached ids asked by
+                           #   objectIds in chunks of at most 500, one at a
+                           #   time, a refused chunk halved (an HTTP error or
+                           #   an HTTP-200 `error` body alike); each answer
+                           #   checked, polygons stored as served into the
+                           #   cache's features.gpkg, one transaction per
+                           #   chunk; get_text injected (63)
   data/                    # package data, read by importlib.resources
     sources.toml           # the shipped catalogue
     nve_hrd_2025.csv       # NVE's 140 HRD stations, 2025 version: which
@@ -390,6 +407,15 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     geopackage.py          # GeoPackage layer_info / query_features over an
                            #   open sqlite3.Connection; frozen dataclasses,
                            #   opens nothing, knows no path (16b)
+    geopackage_write.py    # GeoPackage writing over an open connection, the
+                           #   mirror of geopackage.py: create_geopackage,
+                           #   register_layer, blobs (polygon, line,
+                           #   multipolygon), create_rtree and fill_rtree
+                           #   (build_rtree does both at once), the mesh's
+                           #   layers (write_triangles, write_lines,
+                           #   write_land_cover, ...); create_features_table and
+                           #   insert_features, the rows of a fetched layer with
+                           #   their R-tree entries (63); opens nothing
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,
                            #   standard library XML; opens nothing (16b)
     cog.py                 # decode_window: only the blocks a window meets,
@@ -416,6 +442,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   connection (16b); CacheRepository and
                            #   CachedBlocks read the tile cache (23a-1);
                            #   CacheWriter writes it under a lock (23a-2);
+                           #   FeatureManifest and CacheWriter.features, a
+                           #   journalled connection to a fetched layer's
+                           #   features.gpkg (63);
                            #   read_json, a JSON document, read-only (29);
                            #   read_text, UTF-8 text (audit PR C's WKT domain)
     mesh_index.py          # MeshIndex (a cut run's index.json, frozen,

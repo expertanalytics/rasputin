@@ -7,7 +7,7 @@
 // were accepted every ring would have two spellings and every off-by-one ring
 // bug would live in the gap between them.
 //
-// The ring is a *view*. Increment 3's PSLG owns one vertex buffer and one
+// The ring is a *view*. The PSLG owns one vertex buffer and one
 // flat index buffer, and hands the algorithms sub-spans of them; an owning ring
 // would force a gather-and-copy per ring, which is both an allocation per ring
 // and the exact setup for detria's use-after-free -- addOutline stores a span
@@ -69,7 +69,7 @@ inline void check_ring_closure(const Point2& first, const Point2& last) {
 }  // namespace detail
 
 // The zero-copy model: vertex(i) is vertices[chain[i]], with the chain slice
-// already sub-spanned by the caller. This is what increment 3 hands down.
+// already sub-spanned by the caller. This is what the PSLG hands down.
 class IndexedRing {
 public:
     IndexedRing(std::span<const Point2> vertices, std::span<const std::uint32_t> chain)

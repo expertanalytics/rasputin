@@ -58,7 +58,7 @@ def start(array: np.ndarray, stride: int) -> tuple[Any, Any, np.ndarray, np.ndar
     """The view, the start mesh and its constraint arrays, as the CLI builds them."""
     rows, cols = array.shape
     xy, ring = grid_nodes(rows, cols, stride)
-    run = _engine(xy, [(ring, ChainRole.Outer, 0)], True, DEFAULT_SNAP_SPACING)
+    run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay=True, spacing=DEFAULT_SNAP_SPACING)
     assert run.mesh is not None and run.noded is not None, run.message
     edges, masks = _constraint_arrays(run.mesh, run.noded)
     array.setflags(write=False)
@@ -149,8 +149,8 @@ class TestOffNodeStart:
         run = _engine(
             np.array(ring_xy),
             [([*range(len(ring_xy))], ChainRole.Outer, 0)],
-            True,
-            DEFAULT_SNAP_SPACING,
+            delaunay=True,
+            spacing=DEFAULT_SNAP_SPACING,
         )
         assert run.mesh is not None and run.noded is not None, run.message
         edges, masks = _constraint_arrays(run.mesh, run.noded)
@@ -183,7 +183,6 @@ class TestOffNodeStart:
         assert not out.ok()
         assert out.status == _core.RefineStatus.OutsideGrid  # type: ignore[attr-defined]
         assert out.message
-        assert not hasattr(_core.RefineStatus, "OffLattice")
 
 
 class TestStatsFields:

@@ -4,7 +4,7 @@
 // once, with node ids as indices into that sorted sequence.
 //
 // A sorted std::vector with a binary search, not a hash map, for the reasons
-// increment 4 gave for ConstraintEdgeSet and which apply unchanged: the key is
+// ConstraintEdgeSet gives, which apply unchanged: the key is
 // exact and small so hashing buys nothing; one allocation of known size beats a
 // rehashing container; the structure is read-only after construction and is
 // therefore shareable by every thread without synchronisation; and sorting
@@ -12,7 +12,7 @@
 // <unordered_set>, deliberately.
 //
 // NODE IDS ARE IN LEXICOGRAPHIC GRID ORDER, NOT FIRST-APPEARANCE ORDER, and
-// that is a ruling with a consequence. Lexicographic order is a function of the
+// that is a choice with a consequence. Lexicographic order is a function of the
 // SET of points and of nothing else -- not of input order, not of which thread
 // found a crossing first, not of the order the broad phase visited buckets in
 // -- so the node numbering, and therefore every downstream index in the mesh,

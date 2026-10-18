@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 import struct
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 from xml.sax.saxutils import escape
@@ -35,6 +35,21 @@ FIXED_TIME = "1970-01-01T00:00:00.000Z"
 UNNAMED_COLOUR = "#ff00ff"
 
 Palette = Mapping[int, tuple[str, str]]
+#: The column type of each esri field type a features table takes.
+_COLUMN_TYPES = {
+    "esriFieldTypeString": "TEXT",
+    "esriFieldTypeInteger": "INTEGER",
+    "esriFieldTypeSmallInteger": "INTEGER",
+    "esriFieldTypeBigInteger": "INTEGER",
+    "esriFieldTypeDouble": "REAL",
+    "esriFieldTypeSingle": "REAL",
+}
+#: A layer's ``gpkg_contents`` bounds grown to hold ``?1`` to ``?4``; NULL bounds are none yet.
+_GROW_BOUNDS = (
+    "UPDATE gpkg_contents SET min_x = min(coalesce(min_x, ?1), ?1), "
+    "min_y = min(coalesce(min_y, ?2), ?2), max_x = max(coalesce(max_x, ?3), ?3), "
+    "max_y = max(coalesce(max_y, ?4), ?4) WHERE table_name = ?5"
+)
 Float64 = npt.NDArray[np.float64]
 
 
@@ -191,12 +206,13 @@ def register_layer(
     name: str,
     kind: str,
     srs_id: int,
-    bounds: tuple[float, float, float, float],
+    bounds: Sequence[float | None],
     z: bool,
 ) -> None:
     """The ``gpkg_contents`` and ``gpkg_geometry_columns`` rows of a features
     table ``name`` whose geometry column ``geom`` holds ``kind`` (``POLYGON``,
-    ``LINESTRING``, ``MULTIPOLYGON``); ``bounds`` is ``min_x, min_y, max_x, max_y``."""
+    ``LINESTRING``, ``MULTIPOLYGON``); ``bounds`` is ``min_x, min_y, max_x, max_y``
+    (None for an empty table)."""
     conn.execute(
         "INSERT INTO gpkg_contents VALUES (?, 'features', ?, '', ?, ?, ?, ?, ?, ?)",
         (name, name, FIXED_TIME, *bounds, srs_id),
@@ -215,26 +231,34 @@ def _register_attributes(conn: sqlite3.Connection, name: str) -> None:
     )
 
 
-def build_rtree(conn: sqlite3.Connection, table: str, boxes: Float64, batch: int = 100_000) -> None:
-    """The R-tree of ``table``'s ``geom`` from ``boxes`` (``minx, maxx, miny,
-    maxy`` per row, in ``fid`` order), fed straight into the virtual table in
-    batches under a 256 MB page cache; registered as the write-only extension."""
-    rtree = f"rtree_{table}_geom"
-    conn.execute(f"CREATE VIRTUAL TABLE {rtree} USING rtree(id, minx, maxx, miny, maxy)")
-    (cache,) = conn.execute("PRAGMA cache_size").fetchone()
-    conn.execute("PRAGMA cache_size=-262144")
-    with _transaction(conn):
-        for start in range(0, len(boxes), batch):
-            chunk = boxes[start : start + batch]
-            ids = range(start + 1, start + len(chunk) + 1)
-            rows = zip(ids, *chunk.T.tolist(), strict=True)
-            conn.executemany(f"INSERT INTO {rtree} VALUES (?, ?, ?, ?, ?)", rows)
-    conn.execute(f"PRAGMA cache_size={cache}")
+def create_rtree(conn: sqlite3.Connection, table: str) -> None:
+    """The empty R-tree of ``table``'s ``geom``, registered as the write-only extension."""
+    conn.execute(f"CREATE VIRTUAL TABLE rtree_{table}_geom USING rtree(id, minx, maxx, miny, maxy)")
     conn.execute(
         "INSERT INTO gpkg_extensions VALUES (?, 'geom', 'gpkg_rtree_index', "
         "'http://www.geopackage.org/spec120/#extension_rtree', 'write-only')",
         (table,),
     )
+
+
+def fill_rtree(conn: sqlite3.Connection, table: str, ids: Iterable[int], boxes: Float64) -> None:
+    """R-tree rows of ``table`` for rows ``ids``, ``boxes`` ``minx, maxx, miny, maxy`` each."""
+    rows = zip(ids, *boxes.T.tolist(), strict=True)
+    conn.executemany(f"INSERT INTO rtree_{table}_geom VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def build_rtree(conn: sqlite3.Connection, table: str, boxes: Float64, batch: int = 100_000) -> None:
+    """The R-tree of ``table``'s ``geom`` from ``boxes`` (``minx, maxx, miny,
+    maxy`` per row, in ``fid`` order), fed straight into the virtual table in
+    batches under a 256 MB page cache; registered as the write-only extension."""
+    create_rtree(conn, table)
+    (cache,) = conn.execute("PRAGMA cache_size").fetchone()
+    conn.execute("PRAGMA cache_size=-262144")
+    with _transaction(conn):
+        for start in range(0, len(boxes), batch):
+            chunk = boxes[start : start + batch]
+            fill_rtree(conn, table, range(start + 1, start + len(chunk) + 1), chunk)
+    conn.execute(f"PRAGMA cache_size={cache}")
 
 
 def _looked_up(codes: Sequence[int], palette: Palette) -> tuple[list[str | None], list[str]]:
@@ -329,6 +353,63 @@ def write_lines(
     register_layer(conn, "lines", "LINESTRING", srs_id, _bounds(boxes), z=True)
 
 
+def multipolygon_blobs(
+    geometries: Sequence[BaseGeometry], srs_id: int
+) -> tuple[list[bytes], Float64]:
+    """2-D MultiPolygon blobs of polygons or multipolygons, a polygon wrapped
+    as a one-part multipolygon, and their envelopes ``minx, maxx, miny, maxy``,
+    as flag ``0b0011`` declares (12-128 section 2.1.3)."""
+    multi = [g if g.geom_type == "MultiPolygon" else shapely.MultiPolygon([g]) for g in geometries]
+    boxes = shapely.bounds(multi).reshape(-1, 4)[:, [0, 2, 1, 3]]
+    wkb = shapely.to_wkb(multi, byte_order=1, flavor="iso", output_dimension=2)
+    head = struct.Struct("<2sBBi4d")
+    blobs = [
+        head.pack(b"GP", 0, 0b0011, srs_id, *box) + bytes(w)
+        for box, w in zip(boxes, wkb, strict=True)
+    ]
+    return blobs, boxes
+
+
+def create_features_table(
+    conn: sqlite3.Connection,
+    name: str,
+    srs_id: int,
+    kind: str,
+    pk: str,
+    columns: Sequence[tuple[str, str]],
+) -> None:
+    """An empty features table ``name``: integer key ``pk``, ``geom`` of
+    ``kind``, and one column per ``(name, esri field type)``; registered and
+    with its empty R-tree. A field type with no column type is a `ValueError`."""
+    for column, esri in columns:
+        if esri not in _COLUMN_TYPES:
+            raise ValueError(f"{column}: the field type {esri} has no GeoPackage column type")
+    rest = "".join(f', "{c}" {_COLUMN_TYPES[t]}' for c, t in columns)
+    conn.execute(f'CREATE TABLE "{name}" ("{pk}" INTEGER PRIMARY KEY, geom {kind}{rest})')
+    register_layer(conn, name, kind, srs_id, (None,) * 4, z=False)
+    create_rtree(conn, name)
+
+
+def insert_features(
+    conn: sqlite3.Connection,
+    name: str,
+    srs_id: int,
+    rows: Sequence[tuple[int, BaseGeometry, Sequence[Any]]],
+) -> None:
+    """``(key, polygon, values)`` rows into the table ``name`` as
+    multipolygons, their R-tree entries keyed by ``key``, and the layer's
+    bounds grown to hold them: one transaction."""
+    if not rows:
+        return
+    blobs, boxes = multipolygon_blobs([g for _, g, _ in rows], srs_id)
+    marks = ", ".join("?" * (2 + len(rows[0][2])))
+    with _transaction(conn):
+        values = ((k, b, *v) for (k, _, v), b in zip(rows, blobs, strict=True))
+        conn.executemany(f'INSERT INTO "{name}" VALUES ({marks})', values)
+        fill_rtree(conn, name, [k for k, _, _ in rows], boxes)
+        conn.execute(_GROW_BOUNDS, (*_bounds(boxes), name))
+
+
 def write_land_cover(
     conn: sqlite3.Connection,
     polygons: Sequence[tuple[int, BaseGeometry]],
@@ -339,22 +420,15 @@ def write_land_cover(
     polygon)``, with its name, colour and plan area. The header envelope is
     ``minx, maxx, miny, maxy``, as flag ``0b0011`` declares (12-128 section
     2.1.3). Registered; no R-tree."""
-    multi = [g if g.geom_type == "MultiPolygon" else shapely.MultiPolygon([g]) for _, g in polygons]
-    bounds = shapely.bounds(multi).reshape(-1, 4)  # minx, miny, maxx, maxy
-    boxes = bounds[:, [0, 2, 1, 3]]
-    wkb = shapely.to_wkb(multi, byte_order=1, flavor="iso", output_dimension=2)
-    head = struct.Struct("<2sBBi4d")
-    blobs = [
-        head.pack(b"GP", 0, 0b0011, srs_id, *box) + bytes(w)
-        for box, w in zip(boxes, wkb, strict=True)
-    ]
+    blobs, boxes = multipolygon_blobs([g for _, g in polygons], srs_id)
     codes = [int(code) for code, _ in polygons]
     name, colour = _looked_up(codes, palette or {})
     conn.execute(
         "CREATE TABLE land_cover (fid INTEGER PRIMARY KEY, geom MULTIPOLYGON, code INTEGER, "
         "land_cover TEXT, colour TEXT, area_m2 REAL)"
     )
-    rows = zip(blobs, codes, name, colour, shapely.area(multi).tolist(), strict=True)
+    areas = shapely.area([g for _, g in polygons]).tolist()
+    rows = zip(blobs, codes, name, colour, areas, strict=True)
     with _transaction(conn):
         conn.executemany("INSERT INTO land_cover VALUES (NULL, ?, ?, ?, ?, ?)", rows)
     register_layer(conn, "land_cover", "MULTIPOLYGON", srs_id, _bounds(boxes), z=False)

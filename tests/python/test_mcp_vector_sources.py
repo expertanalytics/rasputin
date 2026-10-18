@@ -10,7 +10,7 @@ whose `~/.config/rasputin/sources.toml` registers fixture L, fixture V's lake
 file and its land-cover GeoPackage under ids that name nothing real;
 `RASPUTIN_DATA` and `XDG_CONFIG_HOME` are unset, as for a client that sets no
 `env`. After that setup the test acts only through tool calls: every path,
-layer, class map and id it passes, and the output root it writes in, is read
+layer, legend and id it passes, and the output root it writes in, is read
 off a tool result. Only the oracle at the end reads the files written.
 
 The server is built with no output root, so the default `<HOME>/rasputin-output`
@@ -70,7 +70,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         {
             LOCAL: local_entry(write_local(tmp_path / "data" / "bowl")),
             LAKES_ID: vector_entry(lakes, LAKE_DESCRIPTION),
-            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, class_map="corine"),
+            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, legend="corine"),
         },
     )
     monkeypatch.setenv("HOME", str(root))
@@ -124,7 +124,7 @@ async def test_t7_find_then_catchment_then_mesh_over_mcp_only(home: Path) -> Non
     polygons = fitting(document, "catchment", "lakes")
     (lakes,) = [s for s in polygons if "lake" in s["description"].lower()]
     (cover,) = fitting(document, "mesh", "features")
-    features_map = the_fit(cover, "mesh", "features")["class_map"]
+    features_legend = the_fit(cover, "mesh", "features")["legend"]
 
     outline = out_root / "new" / "deeper" / "c.geojson"
     assert not out_root.exists()
@@ -139,12 +139,12 @@ async def test_t7_find_then_catchment_then_mesh_over_mcp_only(home: Path) -> Non
     mesh = body_of(await call(server(), "mesh", {
         "dem": [dem["id"]], "domain": written, "tolerance": 5.0,
         "features": [cover["path"]], "features_layer": [cover["layer"]],
-        "features_map": [features_map], "out": str(out),
+        "features_legend": [features_legend], "out": str(out),
     }))  # fmt: skip
     record = mesh["record"]
     assert isinstance(record, dict), mesh
     said = json.dumps(record["features"])
-    assert "layer landcover" in said and "class map corine" in said, said
+    assert "layer landcover" in said and "legend corine" in said, said
 
     # The oracle: the files written, as measured.
     assert (dem["id"], lakes["id"], cover["id"]) == (LOCAL, LAKES_ID, COVER_ID)

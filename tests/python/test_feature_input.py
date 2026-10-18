@@ -1,19 +1,19 @@
-"""`tin_engine.feature_input`: sources, class maps, CRS, region and clip (16b-1).
+"""`tin_engine.feature_input`: sources, legends, CRS, region and clip (16b-1).
 
 `docs/increments/16b-terrain-polygons.md` R1, R4-R7, "Degeneracy policy" and
-"Tests for @tester" (class maps, CRS, region and pre-clip, clip degeneracies),
+"Tests for @tester" (legends, CRS, region and pre-clip, clip degeneracies),
 with Ola's Q6 (b) (the legacy GML, read with the `clc18_kode` map).
 
 Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 
-- `ClassMap(name, attribute, classes, otherwise, notice)`, frozen, extra
+- `Legend(name, attribute, classes, otherwise, notice)`, frozen, extra
   fields forbidden. `property`, `corine`, `corine-water` and `clc18_kode` are
-  the built-in maps (increment 41: loaded by `class_maps.load`, through
-  `feature_fixtures.class_map`, no longer `CLASS_MAPS`). `clc18_kode` is
+  the built-in maps (increment 41: loaded by `legends.load`, through
+  `feature_fixtures.legend`, no longer from a table in `feature_input`). `clc18_kode` is
   `corine` keyed on the Norwegian GML's attribute. Every CORINE map's `notice` names the
   Copernicus Land Monitoring Service and says the data were modified;
   `property`'s is empty.
-- `FeatureSource(path, class_map, layer=None, crs=None)` and
+- `FeatureSource(path, legend, layer=None, crs=None)` and
   `FeatureRequest(sources, vocabulary=DEFAULT_VOCABULARY)`, frozen.
 - `open_features(request, domain, dem_crs) -> FeatureSet`, `domain` already in
   the DEM's CRS. `FeatureSet.features` is a tuple of `TerrainFeature` (`fid`,
@@ -112,15 +112,15 @@ def lines_of(fs: Any) -> list[LineString]:
     return [line for f in fs.features for line in f.lines]
 
 
-# --------------------------------------------------------------- class maps
+# --------------------------------------------------------------- legends
 
 
 BUILT_IN = ("property", "corine", "corine-water", "clc18_kode")
 
 
-class TestClassMaps:
+class TestLegends:
     def test_the_built_in_maps(self) -> None:
-        maps = {name: ff.class_map(name) for name in BUILT_IN}
+        maps = {name: ff.legend(name) for name in BUILT_IN}
         assert {name: m.attribute for name, m in maps.items()} == {
             "property": "property",
             "corine": "Code_18",
@@ -133,17 +133,17 @@ class TestClassMaps:
         """R10 and "Test data": a mesh built from CORINE says so, and says the
         data were modified."""
         for name in ("corine", "corine-water", "clc18_kode"):
-            notice = ff.class_map(name).notice
+            notice = ff.legend(name).notice
             assert "Copernicus Land Monitoring Service" in notice, name
             assert "modified" in notice.lower(), name
-        assert ff.class_map("property").notice == ""
+        assert ff.legend("property").notice == ""
 
-    def test_a_class_map_is_frozen_and_strict(self, fi: ModuleType) -> None:
-        corine = ff.class_map("corine")
+    def test_a_legend_is_frozen_and_strict(self, fi: ModuleType) -> None:
+        corine = ff.legend("corine")
         with pytest.raises((TypeError, ValueError)):
             corine.attribute = "other"
         with pytest.raises(ValueError):
-            fi.ClassMap(name="x", attribute="a", classes={}, colour="red")
+            fi.Legend(name="x", attribute="a", classes={}, colour="red")
 
     def test_property_one_name(self, tmp_path: Path) -> None:
         fs = one(tmp_path, INNER, {"property": "road"})
@@ -211,20 +211,18 @@ class TestClassMaps:
         self, tmp_path: Path, fi: ModuleType
     ) -> None:
         """R4: checked when the run starts, even with no feature to map."""
-        bad = fi.ClassMap(
-            name="bad", attribute="kind", classes={"x": ("glacier",)}, otherwise="drop"
-        )
+        bad = fi.Legend(name="bad", attribute="kind", classes={"x": ("glacier",)}, otherwise="drop")
         path = write_geojson(tmp_path / "f.geojson", [])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=bad),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=bad),))
         with pytest.raises(fi.FeatureError, match="glacier"):
             fi.open_features(request, BOX, UTM33)
 
     def test_an_otherwise_name_the_vocabulary_lacks_is_refused_too(
         self, tmp_path: Path, fi: ModuleType
     ) -> None:
-        bad = fi.ClassMap(name="bad", attribute="kind", classes={}, otherwise=("glacier",))
+        bad = fi.Legend(name="bad", attribute="kind", classes={}, otherwise=("glacier",))
         path = write_geojson(tmp_path / "f.geojson", [])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=bad),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=bad),))
         with pytest.raises(fi.FeatureError, match="glacier"):
             fi.open_features(request, BOX, UTM33)
 
@@ -233,9 +231,9 @@ class TestClassMaps:
     ) -> None:
         mine = EdgeVocabulary(properties=(EdgeProperty(name="road", bit=9),))
         path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
-        own_map = fi.ClassMap(name="mine", attribute="property", classes={"road": ("road",)})
+        own_map = fi.Legend(name="mine", attribute="property", classes={"road": ("road",)})
         request = fi.FeatureRequest(
-            sources=(fi.FeatureSource(path=path, class_map=own_map),), vocabulary=mine
+            sources=(fi.FeatureSource(path=path, legend=own_map),), vocabulary=mine
         )
         fs = fi.open_features(request, BOX, UTM33)
         assert [f.mask for f in fs.features] == [1 << 9]
@@ -740,10 +738,6 @@ class TestRenamedAndMoved:
     """Audit PR C, red tests 5 and 7: the any-source lake reader is named by
     what it reads, and `TerrainFeature` lives in `features` (layer 0), which
     `feature_input` imports it back from."""
-
-    def test_read_lake_polygons_replaces_read_lakes(self, fi: ModuleType) -> None:
-        assert callable(getattr(fi, "read_lake_polygons", None))
-        assert not hasattr(fi, "read_lakes")
 
     def test_read_lake_polygons_skips_what_is_not_a_polygon(
         self, tmp_path: Path, fi: ModuleType
@@ -1504,11 +1498,11 @@ class TestTheClipStaysTheSame:
     ) -> None:
         """Section 3.2: the refusal checks come before the whole-feature
         test, so a feature missing the region is still refused."""
-        strict = fi.ClassMap(
+        strict = fi.Legend(
             name="strict", attribute="property", classes={"road": ("road",)}, otherwise="refuse"
         )
         path = write_geojson(tmp_path / "f.geojson", [Feat("far-9", where, {"property": "ice"})])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=strict),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=strict),))
         with pytest.raises(fi.FeatureError, match=r"far-9.*'ice'.*strict"):
             fi.open_features(request, BOX, UTM33)
 
