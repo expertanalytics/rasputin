@@ -301,20 +301,20 @@ class _Scan:
         return self.assigned.get(match.group(1) or match.group(2), match.group(0))
 
     def finish_heredoc(self, simple: Simple, body: str, rewritten: bool) -> None:
-        """A stdin body is the program of an interpreter reading stdin; a shell's is parsed.
+        """A stdin body is parsed by a shell, and is the program of an interpreter reading stdin.
 
-        Every body is appended, as zsh joins them all; `rewritten` marks a body the shell
-        may rewrite before the interpreter reads it, which makes the command unknown. An
-        inline `-c`/`-e` program or a script keeps stdin as data.
+        A shell parses every stdin body whatever its `-c` program, since that program may
+        read stdin as commands (`bash -c bash`). An interpreter's body is appended, as zsh
+        joins them all; `rewritten` marks a body the shell may rewrite before the
+        interpreter reads it, which makes the command unknown. An interpreter's inline
+        `-c`/`-e` program, or a script operand of either, keeps stdin as data.
         """
         name = base(simple.argv[0]) if simple.argv else ""
         if not (PYTHON.fullmatch(name) or name in PROGRAM_FLAG) or simple.script not in (None, "-"):
             return
-        if interpreter(name, simple.argv[1:])[0] is not None:
-            return
         if name in SHELLS:
             self.nested(body)
-        else:
+        elif interpreter(name, simple.argv[1:])[0] is None:
             simple.program = (simple.program or "") + body
             simple.unknown = simple.unknown or rewritten
 
