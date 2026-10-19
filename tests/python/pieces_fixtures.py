@@ -227,6 +227,13 @@ def cut(where: Path, *args: str, out_name: str = "x.vtk") -> Cut:
     done = run(where, *args, out_name=out_name)
     assert done.code == 0, done.output
     assert done.dir is not None, f"no <out>.pieces directory beside {done.out}"
+    return read_index_and_pieces(done)
+
+
+def read_index_and_pieces(done: Cut) -> Cut:
+    """A finished cut run's `index.json` and every piece file it lists, read
+    into `done`."""
+    assert done.dir is not None
     done.index = json.loads((done.dir / "index.json").read_text())
     for entry in done.index["pieces"]:
         piece_id = tuple(int(v) for v in entry["id"])
@@ -282,6 +289,35 @@ def off_lattice_seams(pieces: list[Piece], h: float = H) -> list[tuple[XYZ, XYZ]
             horizontal = a[1] == b[1] and float((TIE_Y - a[1]) / h).is_integer()
             if not (vertical or horizontal):
                 bad.append((a, b))
+    return bad
+
+
+#: How far a seam edge may lie from its lattice line at a spacing not exact
+#: in binary (CS1 of 23c-4): a chosen bound, a thousandth of the 1 mm snap,
+#: for lattices whose lines lie on the 1 mm grid; checked at 9.7 and 9.9 m
+#: on the 400 m square scene at UTM northings, where the distance measured
+#: on the design's prototype is 9.3e-10 m.
+NEAR_LATTICE = 1e-6
+
+
+def near_lattice_problems(pieces: list[Piece], h: float, near: float = NEAR_LATTICE) -> list[str]:
+    """Seam edges that are not vertical or horizontal to `near`, or not within
+    `near` of a lattice line `TIE + k h`: the lattice test at a spacing whose
+    lines `(x - TIE_X) / h` cannot give an exact integer."""
+
+    def off(v: float, tie: float) -> float:
+        k = round((v - tie) / h)
+        return abs(v - (tie + k * h))
+
+    bad = []
+    for piece in pieces:
+        for a, b in seam_edges(piece):
+            vertical = abs(a[0] - b[0]) <= near and max(off(a[0], TIE_X), off(b[0], TIE_X)) <= near
+            horizontal = (
+                abs(a[1] - b[1]) <= near and max(off(a[1], TIE_Y), off(b[1], TIE_Y)) <= near
+            )
+            if not (vertical or horizontal):
+                bad.append(f"seam edge {a}-{b} not within {near} m of a lattice line at {h} m")
     return bad
 
 
@@ -485,17 +521,25 @@ def triangle_set(points: npt.NDArray[np.float64], triangles: Any) -> set[frozens
     }
 
 
-def problems(done: Cut, array: np.ndarray, domain: Polygon, tolerance: float) -> list[str]:
-    """DC2-DC5 over one cut run (both section 3D oracles), as what is wrong."""
+def problems(
+    done: Cut, array: np.ndarray, domain: Polygon, tolerance: float, h: float = H,
+    near: bool = False,
+) -> list[str]:  # fmt: skip
+    """DC2-DC5 over one cut run (both section 3D oracles) at the run's spacing
+    `h`, as what is wrong. With `near`, seams are judged by
+    `near_lattice_problems` instead of an exact lattice index."""
     found = conformity_problems(done.pieces)
-    found += [f"seam edge off the lattice: {e}" for e in off_lattice_seams(done.pieces)]
+    if near:
+        found += near_lattice_problems(done.pieces, h)
+    else:
+        found += [f"seam edge off the lattice: {e}" for e in off_lattice_seams(done.pieces, h)]
     u = union(done.pieces)
     found += [f"two z at {k}" for k in u.z_conflicts]
     found += validity_problems(u, domain, done.noded)
     found += [f"triangles {p} overlap" for p in overlapping_pairs(u)]
     violations = delaunay_violations(u.points[:, :2], u.triangles, u.constrained)
     found += [f"not constrained Delaunay: {v}" for v in violations]
-    check = tolerance_check(u, array, domain, tolerance)
+    check = tolerance_check(u, array, domain, tolerance, h)
     if check.over or check.outside_mesh:
         found.append(f"tolerance: {check}")
     return found
