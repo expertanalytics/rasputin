@@ -85,7 +85,9 @@ this order, and the block below otherwise:
 | `event.get("agent_id")` is set | A subagent; `Stop` should not fire there at all, this is a second fence |
 | `"background_tasks" not in event` | The task registry was unreachable: running work cannot be ruled out |
 | `background_tasks` or `session_crons` non-empty | Something will wake the session: any entry of any type or status counts |
-| `harness_mode.read_mode(...)` is not `on` | Ola is present (`off`, expired), or the flag is `broken` |
+| `harness_mode.read_mode(harness_mode.state_dir(harness_mode.ROOT), datetime.now(UTC))` is not `on` | Ola is present (`off`, expired), or the flag is `broken` |
+
+This is the flag `harness_mode.settle` and `tools/away.py` read: the shared git common dir, so every worktree sees one flag. `stop_output` never calls `harness_mode.settle`, which would queue. The `harness_mode` import moves above the `act_of` check.
 
 `broken` passes on purpose: this hook nudges rather than protects, a broken
 flag already makes every other guard refuse, and Ola may well be at the
@@ -111,7 +113,7 @@ Unparseable stdin already exits 0 silently. The hook never exits 2. The
 `git rev-parse` inside `state_dir` is the only external call; the settings
 entry's timeout bounds it, and a timeout lets the stop through.
 
-The module docstring names the fourth event (docstrings are not counted).
+The module docstring's first line names four events. It says that Stop is refused once per turn only in mode `on` with nothing running. It also says a crash or a missing `harness_mode` lets a stop through, and a `broken` flag lets it through too. The test module's docstring says four hooks, not three (docstrings are not counted).
 
 Estimate: about 20 counted lines (`stop_output` about 12, the reason
 constant about 8 as a parenthesised string, one dispatch line in `settle`).
@@ -188,3 +190,6 @@ checkout); a slower run lets the stop through.
 - Reading `session.md` to let a stop through once its `NOW:` line says
   `idle:`: `stop_hook_active` and the continuation cap make it unneeded.
 - Refusing on a `broken` flag (section 2).
+
+## Review
+- **Design review, round 1, 2026-10-19.** On `f466d769`, 0 counted lines (estimate about 20), @reviewer: APPROVED WITH WORDINGS. Hook fields `stop_hook_active`, `agent_id`, `background_tasks`, `session_crons` checked against the Claude Code 2.1.303 hooks docs; no path traps the session; away flag read path and the docstring wordings applied by the main session.
