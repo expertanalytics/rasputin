@@ -115,7 +115,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c); encodes no mesh
                            #   file: picks the io/ writer by suffix and writes
-                           #   its bytes
+                           #   its bytes; `rasputin gml-to-gpkg SOURCE --out
+                           #   OUT [--crs TEXT]` converts a GML 3.2 file once
+                           #   through gml_import, written as OUT.part and
+                           #   renamed onto OUT when finished (73)
   plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
   plugin_api.py            # re-exports only: what a plugin may import
   cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins;
@@ -264,7 +267,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   source's accuracy and the DEM cell; imports
                            #   feature_input and features
   data/legends/            # the shipped legends: corine, corine-water,
-                           #   clc18_kode, mapbiomas-c11 (.toml; codes,
+                           #   clc18_kode, mapbiomas-c11, ar50 (.toml; codes,
                            #   labels, colours, water, edges, notice,
                            #   positional accuracy)
   palettes.py              # paraview_preset(table, name): a ParaView preset
@@ -286,7 +289,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   file from an environment mapping ($RASPUTIN_DATA,
                            #   else the XDG config directory; 55); a local
                            #   entry is GeoTIFFs or a vector file (.gpkg,
-                           #   .geojson, .json; values "features"); plugins'
+                           #   .geojson, .json; values "features"; a .gml
+                           #   is refused, its .gpkg from gml-to-gpkg taken,
+                           #   73); plugins'
                            #   sources.toml files come through the entry point
                            #   group rasputin.sources (plugin_source_files),
                            #   after the user's, never replacing an entry;
@@ -308,6 +313,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   output root (out_root);
                            #   imports pyproj and shapely, so kept out of
                            #   sources.py; imports nothing from cli.py
+  gml_import.py            # gml_to_geopackage(stream, conn, crs) -> GmlImport:
+                           #   the features io/gml's iter_gml32 decodes into
+                           #   one GeoPackage table of the feature type (gml_id,
+                           #   then the values as INTEGER or TEXT columns),
+                           #   1000 per transaction through io/geopackage_write;
+                           #   the CRS from the srsName or `crs`, east axis
+                           #   first, not reprojected; opens nothing (73)
   toml_data.py             # parse/validate: TOML into a strict Pydantic model,
                            #   refusals naming the file
   fetch/                   # copies remote data to disk; the only package that
@@ -404,7 +416,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   insert_features, the rows of a fetched layer with
                            #   their R-tree entries (63); opens nothing
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,
-                           #   standard library XML; opens nothing (16b)
+                           #   standard library XML; refuses a GML 3.2 file
+                           #   at its namespace declaration (16b);
+                           #   iter_gml32 -> Gml32Feature, one at a time: a
+                           #   GML 3.2 document's surfaces (Polygon, Surface,
+                           #   MultiSurface) and leaf values, streamed with
+                           #   iterparse; opens nothing (73)
     cog.py                 # decode_window: only the blocks a window meets,
                            #   from a BlockSource (an open file or the tile
                            #   cache), its meta `meta.windowed(window)`;

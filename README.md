@@ -39,7 +39,9 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   (GeoJSON or WKT, in any CRS that pyproj reads).
 - **Features as constraints.** Lakes, land-cover borders, roads and rivers
   (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
-  crosses them.
+  crosses them. A GML 3.2 file of surfaces, such as NIBIO's AR50 land-resource
+  map, is converted once with `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`;
+  the shipped `ar50` legend reads its land type (`arealtype`).
 - **Land-cover labels, cleaned up.** With a CORINE legend, every triangle
   gets the class of the polygon it lies in. First the borders are repaired
   (`--features-repair`), merged between neighbours of one class, snapped onto
