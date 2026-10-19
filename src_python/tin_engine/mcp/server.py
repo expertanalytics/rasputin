@@ -444,7 +444,10 @@ async def _upload(
         return _error(None, "give the file as text or as base64, one of the two.")
     data: bytes | None = None  # base64 too long to decode: refused by its size, near enough
     if "text" in arguments:
-        data = given.encode()
+        try:
+            data = given.encode()
+        except UnicodeEncodeError:  # a lone surrogate has no UTF-8 form
+            return _error(None, "text: holds a character with no UTF-8 form; send UTF-8 text.")
     elif len(given) <= UPLOAD_BASE64:
         try:
             data = base64.b64decode(given, validate=True)
@@ -459,7 +462,11 @@ async def _upload(
         )
     if (words := await delivery.admit(scope)) is not None:
         return _error(None, words)
-    place = await delivery.receive(scope, name, data)
+    try:
+        place = await delivery.receive(scope, name, data)
+    except ValueError as exc:  # its text names server paths: for the log, not the client
+        LOG.warning("upload user=%s refused by the store: %s", scope.user, exc)
+        return _error(None, "the server could not store the upload; ask its operator.")
     (download,) = await delivery.deliver(scope, [place])
     LOG.info("upload user=%s file=%s bytes=%d", scope.user, download.sha256[:12], download.bytes)
     return _linked_result(place, download)
