@@ -42,7 +42,7 @@ import pytest
 from shapely.geometry import Polygon
 
 import pieces_fixtures as pf
-from cli_helpers import USAGE
+from cli_helpers import USAGE, help_text
 from pieces_fixtures import Cut, Union
 from tin_engine import _core
 
@@ -109,11 +109,7 @@ class TestOptions:
         assert "Missing option '--dem'" in done.output
 
     def test_the_help_names_both(self) -> None:
-        from typer.testing import CliRunner
-
-        from tin_engine.cli import app
-
-        text = CliRunner().invoke(app, ["mesh", "--help"], env={"COLUMNS": "200"}).output
+        text = help_text("mesh")
         assert "--pieces" in text
         assert "--piece-budget" in text
 
