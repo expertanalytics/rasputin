@@ -59,6 +59,7 @@ import shapely
 from pyproj import Transformer
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Point, Polygon, box
 
+from gml32_fixtures import AR50_SAMPLE
 from gpkg_fixtures import LEGACY_GML
 
 REPO = Path(__file__).resolve().parents[2]
@@ -224,6 +225,26 @@ class TestReadGml:
     def test_an_empty_collection_reads_as_nothing(self, gml: ModuleType) -> None:
         doc = gml.read_gml(document(), "clc18_kode")
         assert doc.features == () or list(doc.features) == []
+
+
+class TestGml32Refused:
+    """`docs/increments/73-gml-vector-source.md`, section 4.1, test 7: a document
+    declaring the GML 3.2 namespace is refused before any tree is built."""
+
+    def test_fixture_a_is_refused_naming_the_converter(self, gml: ModuleType) -> None:
+        with AR50_SAMPLE.open("rb") as stream, pytest.raises(gml.GmlError) as caught:
+            gml.read_gml(stream, "arealtype")
+        assert "rasputin gml-to-gpkg" in str(caught.value)
+        assert "GML 3.2" in str(caught.value)
+
+    def test_the_refusal_comes_from_the_namespace_not_the_features(self, gml: ModuleType) -> None:
+        """No features at all: only the declaration marks it, so no member is read."""
+        text = (
+            b'<?xml version="1.0"?><gml:FeatureCollection'
+            b' xmlns:gml="http://www.opengis.net/gml/3.2"></gml:FeatureCollection>'
+        )
+        with pytest.raises(gml.GmlError, match="rasputin gml-to-gpkg"):
+            gml.read_gml(io.BytesIO(text), "a")
 
 
 class TestMalformed:

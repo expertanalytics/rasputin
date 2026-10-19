@@ -329,6 +329,7 @@ REAL_POSITIONALS = [
     pytest.param("fetch", "source", {}, id="fetch"),
     pytest.param("fetch_stations", "source", {"out_dir": "stations"}, id="fetch_stations"),
     pytest.param("palette", "name", {}, id="palette"),
+    pytest.param("gml_to_gpkg", "source", {"out": "x.gpkg"}, id="gml_to_gpkg"),
 ]
 
 
@@ -358,7 +359,7 @@ class TestR2TheRealPositionals:
 
 # ---------------------------------------------------------------- T3
 
-#: The eight commands an agent is offered, as tool names, in the order of
+#: The nine commands an agent is offered, as tool names, in the order of
 #: `rasputin --help` (`mcp` is the server). Their parameter
 #: counts are not pinned: the test below holds each schema's properties equal
 #: to the command's own click parameters, which implies the count, and a
@@ -366,7 +367,7 @@ class TestR2TheRealPositionals:
 #: saying anything about the schema.
 TOOL_NAMES = [
     "mesh", "palette", "catchment", "station_catchments",
-    "fetch", "fetch_stations", "sources", "version",
+    "fetch", "fetch_stations", "sources", "gml_to_gpkg", "version",
 ]  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -563,6 +564,7 @@ WRITABLE = {
     ("station_catchments", "out_dir"),
     ("fetch_stations", "out_dir"),
     ("fetch", "cache"),
+    ("gml_to_gpkg", "out"),
 }  # fmt: skip
 
 

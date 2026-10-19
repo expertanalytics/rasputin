@@ -1,0 +1,15 @@
+AR50 test data in this directory
+================================
+
+ar50_sample.gml is cut from NIBIO's AR50 land-resource map at 1:50 000 for
+Innlandet (34_25832_ar50_gml.gml, downloaded 2026-10-19): the file's first
+720 bytes, an XML comment carrying the credit below, six whole
+gml:featureMember elements copied byte for byte (the file's features 1 to 5
+and 12,843), and the closing root tag. Nothing inside a feature is changed.
+
+  Inneholder data under Norsk lisens for offentlige data (NLOD)
+  tilgjengeliggjort av NIBIO. Kilde: NIBIO, AR50 Arealressurskart 1:50 000,
+  Innlandet.
+
+Licence: Norsk lisens for offentlige data (NLOD) 1.0,
+https://data.norge.no/nlod/no/1.0.

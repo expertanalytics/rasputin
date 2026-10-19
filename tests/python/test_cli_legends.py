@@ -63,7 +63,7 @@ from tin_engine.cli import app
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from vtkread import read_vtk
 
-SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11")
+SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
 OPTIONS = ("features_repair", "features_tolerance", "features_outline_snap")
@@ -521,3 +521,63 @@ class TestLicenceInTheRecord:
             tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
         )
         assert "features_licence" not in record
+
+
+# ------------------------------------------------- the AR50 legend, tests 12, 13
+
+
+class TestAr50ThroughTheCli:
+    """Tests 12 and 13 of `docs/increments/73-gml-vector-source.md`: `rasputin
+    palette ar50`, and a mesh coded by `ar50`: forest (30) west, fresh water
+    (81) east. AR50's 2 m accuracy over the 10 m cell: s = max(2, 10) = 10."""
+
+    @pytest.fixture
+    def ar50(self, tmp_path: Path) -> Path:
+        return write_geojson(
+            tmp_path / "ar50.geojson",
+            [Feat(1, WEST, {"arealtype": 30}), Feat(2, EAST, {"arealtype": 81})],
+        )
+
+    def test_12_palette_ar50(self) -> None:
+        result = runner.invoke(app, ["palette", "ar50"])
+        assert result.exit_code == 0, result.output
+        (preset,) = json.loads(result.stdout)
+        assert preset["Name"] == "rasputin AR50 NIBIO"
+        assert len(preset["Annotations"]) == 2 * 10
+        assert "81 Freshwater" in preset["Annotations"]
+
+    def test_13_the_triangles_borders_and_record(
+        self, tmp_path: Path, bumpy: Path, square: Path, ar50: Path
+    ) -> None:
+        _, record, _ = run(
+            tmp_path, bumpy, square, "--features", str(ar50), "--features-legend", "ar50"
+        )
+        vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
+        codes = vtk.cell_array("land_cover_code").values
+        assert {30, 81} <= {int(c) for c in codes[len(vtk.lines) :]}
+        assert set(edges_at(vtk, rel(160.9, -60.2))) == {LAND_COVER | WATER}
+        assert set(edges_at(vtk, rel(40.3, -60.2))) == {LAND_COVER}
+        legend = importlib.import_module("tin_engine.legends").load("ar50")
+        assert record["features_notice"] == legend.notice
+        assert record["features_licence"] == legend.licence
+        assert recorded(record) == (0.1, 5.0, 0.5)
+
+    def test_13_the_gpkg_triangles_carry_ar50_names_and_colours(
+        self, tmp_path: Path, bumpy: Path, square: Path, ar50: Path
+    ) -> None:
+        import sqlite3
+        from contextlib import closing
+
+        target = tmp_path / "x.gpkg"
+        code, said = invoke(
+            "mesh",
+            *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
+            *("--out", str(target), "--features", str(ar50), "--features-legend", "ar50"),
+        )
+        assert code == 0, basenames(said)
+        palette = importlib.import_module("tin_engine.legends").load("ar50").palette
+        with closing(sqlite3.connect(target)) as conn:
+            rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
+        assert {30, 81} <= {r[0] for r in rows}
+        for found, name, colour in rows:
+            assert (name, colour) == palette[found], found

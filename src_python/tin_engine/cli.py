@@ -20,7 +20,7 @@ import shlex
 import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, Final, TextIO, cast
@@ -108,6 +108,7 @@ from tin_engine.feature_input import (
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
+from tin_engine.gml_import import gml_to_geopackage
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
@@ -1809,6 +1810,44 @@ def sources(
     typer.echo(listing(os.environ, cache_root(cache, os.environ), bbox).model_dump_json())
 
 
+def gml_to_gpkg(
+    source: Annotated[Path, typer.Argument(help="The GML 3.2 file to convert.")],
+    out: Annotated[
+        Path, typer.Option("--out", writable=True, help="The GeoPackage to write (.gpkg).")
+    ],
+    crs: Annotated[
+        str | None, typer.Option("--crs", help="The CRS, when the geometries name none.")
+    ] = None,
+) -> None:
+    """Convert a GML 3.2 file of surfaces to a GeoPackage, once, for --features and the catalogue.
+
+    One table of the file's feature type: a row per feature with a surface,
+    its gml:id and its plain values as columns, in the file's CRS. The file
+    is written as OUT.part and renamed onto OUT when finished.
+    """
+    if out.suffix.lower() != ".gpkg":
+        raise typer.BadParameter(f"{out} must end in .gpkg", param_hint="--out")
+    target = cli_kit.destination(out)
+    part = target.with_name(target.name + ".part")
+    part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
+    try:
+        with source.open("rb") as stream, closing(create_sqlite(part)) as conn:
+            done = gml_to_geopackage(stream, conn, crs=crs)
+    except (OSError, ValueError) as exc:
+        part.unlink(missing_ok=True)
+        raise typer.BadParameter(f"{source}: {exc}") from exc
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, target)
+    typer.echo(
+        f"{out}: {done.features} features of {done.layer} in {crs_label(done.crs)},"
+        f" {done.without_surface} without a surface; columns {', '.join(done.columns)}",
+        err=True,
+    )
+    typer.echo(f"{out}")
+
+
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
     """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
     ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
@@ -2939,7 +2978,7 @@ app.callback()(main)
 for panel, commands in (
     (MESHING, (mesh, palette)),
     (CATCHMENTS, (catchment, station_catchments)),
-    (DATA, (fetch, fetch_stations, sources)),
+    (DATA, (fetch, fetch_stations, sources, gml_to_gpkg)),
     (OTHER, (version,)),
 ):
     for command in commands:

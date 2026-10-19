@@ -82,12 +82,24 @@ class TestT1VectorEntries:
         )
         assert "kind" in message or "values" in message, message
 
-    @pytest.mark.parametrize("name", ["dem.tif", "lines.gml", "tiles"])
+    @pytest.mark.parametrize("name", ["dem.tif", "tiles"])
     def test_features_need_a_vector_path(self, name: str) -> None:
         refused_with(
             "values: features need a .gpkg, .geojson or .json path",
             kind="local", path=Path(f"/data/{name}"), values="features",
         )  # fmt: skip
+
+    @pytest.mark.parametrize("given", [{}, {"values": "features"}, {"values": "heights"},
+                                       {"values": "classes"}])  # fmt: skip
+    @pytest.mark.parametrize("name", ["lines.gml", "ar50.gml", "AR50.GML"])
+    def test_a_gml_path_is_refused_naming_the_converter(
+        self, name: str, given: dict[str, str]
+    ) -> None:
+        """`docs/increments/73-gml-vector-source.md`, section 4.4, test 8."""
+        message = refused_with(
+            "a .gml file is read after", kind="local", path=Path(f"/data/{name}"), **given
+        )
+        assert "rasputin gml-to-gpkg" in message and "register the .gpkg" in message, message
 
     def test_features_take_no_height_unit(self) -> None:
         message = refused_with("features hold no heights", kind="local",
