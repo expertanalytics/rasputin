@@ -228,6 +228,21 @@ CURVE_RING = (
 )
 
 
+TRIANGLE = "0 0 10 0 10 10 0 0"
+
+
+def dimensioned(on: str, dimension: str) -> str:
+    """The square as a ``gml:Polygon`` whose ``srsDimension`` is ``dimension``,
+    given ``on`` the geometry element or its ``gml:posList``; the positions
+    have that many numbers each when it is 3, else 2."""
+    positions = "0 0 5 10 0 6 10 10 7 0 10 8 0 0 5" if dimension == "3" else SQUARE
+    attribute = f' srsDimension="{dimension}"'
+    if on == "geometry":
+        return f"<gml:Polygon{attribute}>{rings(ring(positions))}</gml:Polygon>"
+    pos_list = f"<gml:posList{attribute}>{positions}</gml:posList>"
+    return f"<gml:Polygon>{rings(f'<gml:LinearRing>{pos_list}</gml:LinearRing>')}</gml:Polygon>"
+
+
 class TestRefusals:
     @pytest.mark.parametrize(
         ("geometry", "name"),
@@ -251,6 +266,71 @@ class TestRefusals:
     )  # fmt: skip
     def test_a_curve_or_point_geometry(self, gml: ModuleType, geometry: str, name: str) -> None:
         refused(gml, document(feature("f.curve", geometry)), "f.curve", "surfaces only", name)
+
+    @pytest.mark.parametrize(
+        ("geometry", "name"),
+        [
+            pytest.param(
+                f'<gml:CompositeSurface srsName="{URI_25832}"><gml:surfaceMember>'
+                f"{polygon(srs_name=None)}</gml:surfaceMember></gml:CompositeSurface>",
+                "gml:CompositeSurface", id="composite",
+            ),
+            pytest.param(
+                f'<gml:OrientableSurface srsName="{URI_25832}" orientation="-">'
+                f"<gml:baseSurface>{polygon(srs_name=None)}</gml:baseSurface>"
+                "</gml:OrientableSurface>",
+                "gml:OrientableSurface", id="orientable",
+            ),
+            pytest.param(
+                f'<gml:PolyhedralSurface srsName="{URI_25832}"><gml:patches>'
+                f"<gml:PolygonPatch>{rings(ring(SQUARE))}</gml:PolygonPatch>"
+                "</gml:patches></gml:PolyhedralSurface>",
+                "gml:PolyhedralSurface", id="polyhedral",
+            ),
+            pytest.param(
+                f'<gml:TriangulatedSurface srsName="{URI_25832}"><gml:patches>'
+                f"<gml:Triangle>{rings(ring(TRIANGLE))}</gml:Triangle>"
+                "</gml:patches></gml:TriangulatedSurface>",
+                "gml:TriangulatedSurface", id="triangulated",
+            ),
+            pytest.param(
+                f'<gml:Tin srsName="{URI_25832}"><gml:patches>'
+                f"<gml:Triangle>{rings(ring(TRIANGLE))}</gml:Triangle></gml:patches>"
+                "<gml:controlPoint><gml:posList>0 0 10 0 10 10</gml:posList>"
+                "</gml:controlPoint></gml:Tin>",
+                "gml:Tin", id="tin",
+            ),
+            pytest.param(
+                f'<gml:MultiSurface srsName="{URI_25832}"><gml:surfaceMember>'
+                f"<gml:CompositeSurface><gml:surfaceMember>{polygon(srs_name=None)}"
+                "</gml:surfaceMember></gml:CompositeSurface></gml:surfaceMember>"
+                "</gml:MultiSurface>",
+                "gml:CompositeSurface", id="composite-in-multisurface",
+            ),
+        ],
+    )  # fmt: skip
+    def test_a_surface_kind_not_read_is_refused_not_dropped(
+        self, gml: ModuleType, geometry: str, name: str
+    ) -> None:
+        """Code review round 1, finding 1: such a surface came back with no geometry."""
+        refused(gml, document(feature("f.kind", geometry)), "f.kind", name)
+
+    @pytest.mark.parametrize("bad", ["0", "1", "x", "-2", "2.5"])
+    @pytest.mark.parametrize("on", ["geometry", "posList"])
+    def test_an_srs_dimension_not_a_whole_number_of_two_or_more(
+        self, gml: ModuleType, bad: str, on: str
+    ) -> None:
+        """Code review round 1, finding 2: ``0`` raised ZeroDivisionError."""
+        refused(gml, document(feature("f.dim", dimensioned(on, bad))), "f.dim", "srsDimension")
+
+    @pytest.mark.parametrize("good", ["2", "3"])
+    @pytest.mark.parametrize("on", ["geometry", "posList"])
+    def test_an_srs_dimension_of_two_or_three_is_read(
+        self, gml: ModuleType, good: str, on: str
+    ) -> None:
+        found = one(gml, dimensioned(on, good))
+        assert found.geometry.area == 100.0
+        assert not found.geometry.has_z
 
     def test_two_surface_properties(self, gml: ModuleType) -> None:
         refused(gml, document(feature("f.two", polygon(), polygon(SQUARE_2))), "f.two")
