@@ -93,6 +93,7 @@ from geographic_fixtures import (
     source_check,
 )
 from geotiff_fixtures import KARTVERKET, needs_codecs
+from piece_spies import patch_everywhere
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_mosaic import same_mesh
 from test_cli_mesh_refine import file_field, stats_row
@@ -305,11 +306,11 @@ def test_the_target_tile_is_dropped_before_the_final_check(
     to the tile's array (a NumPy array takes one), read after a full
     `gc.collect()` on entry to the final check. Went red at 9879805 because
     `mesh()` held `opened`, and `_dem_mesh` its `tile` parameter, through the call."""
-    from tin_engine import cli
+    from tin_engine import cli, dem_input
 
     tiles: list[weakref.ref[np.ndarray]] = []
     dead_on_entry: list[bool] = []
-    real_open, real_run = cli.open_dem, cli.final_check.run
+    real_open, real_run = dem_input.assemble_dem, cli.final_check.run
 
     def opening(*args: Any, **kwargs: Any) -> Any:
         result = real_open(*args, **kwargs)
@@ -321,14 +322,16 @@ def test_the_target_tile_is_dropped_before_the_final_check(
         dead_on_entry.extend(ref() is None for ref in tiles)
         return real_run(*args, **kwargs)
 
-    monkeypatch.setattr(cli, "open_dem", opening)
+    # 23c-3, D1: the run assembles its plan with `assemble_dem`, which
+    # `open_dem` composes too, wherever it is called from.
+    patch_everywhere(monkeypatch, dem_input, "assemble_dem", opening)
     monkeypatch.setattr(cli.final_check, "run", checking)
     mesh_to_vtk(
         tmp_path,
         *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
         *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
     )
-    assert len(tiles) == 1, "open_dem was not called once"
+    assert len(tiles) == 1, "assemble_dem was not called once"
     assert dead_on_entry == [True], "the target tile is alive when the final check starts"
 
 

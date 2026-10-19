@@ -1,0 +1,89 @@
+=== master-r1 start 2026-10-18T23:40:29Z swap 6062.81 load { 3.02 2.84 3.01 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/master-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/master-r1
+NO BASELINE: no comparable stored run
+=== master-r1 exit 2 2026-10-18T23:43:26Z swap 6062.81 load { 3.45 3.03 3.04 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== base-r1 start 2026-10-18T23:43:26Z swap 6062.81 load { 3.45 3.03 3.04 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/base-r1
+ACCEPTED
+=== base-r1 exit 0 2026-10-18T23:46:23Z swap 6062.81 load { 3.04 3.12 3.07 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== head-r1 start 2026-10-18T23:46:23Z swap 6062.81 load { 3.04 3.12 3.07 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/head-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/head-r1
+REGRESSION: tile refine_s[t=0] 0.1906 -> 0.2382 (+24.9 %)
+REGRESSION: tile refine_s[t=1] 0.4814 -> 0.5200 (+8.0 %)
+REGRESSION: tile refine_s[t=2] 0.3096 -> 0.3516 (+13.6 %)
+REGRESSION: tile refine_s[t=3] 0.2568 -> 0.2974 (+15.8 %)
+REGRESSION: tile refine_s[t=4] 0.2330 -> 0.2774 (+19.0 %)
+REGRESSION: tile refine_s[t=5] 0.2158 -> 0.2658 (+23.1 %)
+REGRESSION: tile refine_s[t=6] 0.2050 -> 0.2566 (+25.2 %)
+REGRESSION: tile refine_s[t=7] 0.1962 -> 0.2466 (+25.7 %)
+REGRESSION: tile refine_s[t=8] 0.1905 -> 0.2429 (+27.5 %)
+REGRESSION: tile refine_s[t=9] 0.1912 -> 0.2489 (+30.2 %)
+REGRESSION: tile refine_s[t=10] 0.1906 -> 0.2386 (+25.1 %)
+REGRESSION: tile refine_s[t=11] 0.1908 -> 0.2476 (+29.8 %)
+REGRESSION: tile refine_s[t=12] 0.1898 -> 0.2426 (+27.8 %)
+REGRESSION: tile refine_s[t=13] 0.1916 -> 0.2400 (+25.2 %)
+REGRESSION: tile refine_s[t=14] 0.1911 -> 0.2505 (+31.1 %)
+REGRESSION: tile refine_s[t=15] 0.1876 -> 0.2394 (+27.6 %)
+REGRESSION: tile refine_s[t=16] 0.1882 -> 0.2474 (+31.5 %)
+REGRESSION: tile refine_s[t=17] 0.1923 -> 0.2483 (+29.1 %)
+REGRESSION: tile refine_s[t=18] 0.1910 -> 0.2387 (+24.9 %)
+REGRESSION: tile refine_s[t=19] 0.1923 -> 0.2495 (+29.7 %)
+REGRESSION: tile refine_s[t=20] 0.1930 -> 0.2412 (+25.0 %)
+=== head-r1 exit 1 2026-10-18T23:49:24Z swap 6062.81 load { 2.81 3.21 3.13 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== head-r2 start 2026-10-18T23:49:24Z swap 6062.81 load { 2.81 3.21 3.13 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/head-r2
+REGRESSION: tile refine_s[t=0] 0.1906 -> 0.2467 (+29.4 %)
+REGRESSION: tile refine_s[t=1] 0.4814 -> 0.5217 (+8.4 %)
+REGRESSION: tile refine_s[t=2] 0.3096 -> 0.3548 (+14.6 %)
+REGRESSION: tile refine_s[t=3] 0.2568 -> 0.2983 (+16.2 %)
+REGRESSION: tile refine_s[t=4] 0.2330 -> 0.2786 (+19.6 %)
+REGRESSION: tile refine_s[t=5] 0.2158 -> 0.2657 (+23.1 %)
+REGRESSION: tile refine_s[t=6] 0.2050 -> 0.2545 (+24.2 %)
+REGRESSION: tile refine_s[t=7] 0.1962 -> 0.2476 (+26.2 %)
+REGRESSION: tile refine_s[t=8] 0.1905 -> 0.2423 (+27.2 %)
+REGRESSION: tile refine_s[t=9] 0.1912 -> 0.2479 (+29.7 %)
+REGRESSION: tile refine_s[t=10] 0.1906 -> 0.2391 (+25.4 %)
+REGRESSION: tile refine_s[t=11] 0.1908 -> 0.2399 (+25.7 %)
+REGRESSION: tile refine_s[t=12] 0.1898 -> 0.2480 (+30.7 %)
+REGRESSION: tile refine_s[t=13] 0.1916 -> 0.2377 (+24.0 %)
+REGRESSION: tile refine_s[t=14] 0.1911 -> 0.2460 (+28.8 %)
+REGRESSION: tile refine_s[t=15] 0.1876 -> 0.2473 (+31.8 %)
+REGRESSION: tile refine_s[t=16] 0.1882 -> 0.2415 (+28.3 %)
+REGRESSION: tile refine_s[t=17] 0.1923 -> 0.2472 (+28.6 %)
+REGRESSION: tile refine_s[t=18] 0.1910 -> 0.2478 (+29.7 %)
+REGRESSION: tile refine_s[t=19] 0.1923 -> 0.2419 (+25.8 %)
+REGRESSION: tile refine_s[t=20] 0.1930 -> 0.2508 (+30.0 %)
+=== head-r2 exit 1 2026-10-18T23:52:01Z swap 6062.81 load { 4.62 3.43 3.20 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== base-r2 start 2026-10-18T23:52:01Z swap 6062.81 load { 4.62 3.43 3.20 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/base-r2
+ACCEPTED
+=== base-r2 exit 0 2026-10-18T23:54:34Z swap 6062.81 load { 3.26 3.41 3.23 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== master-r2 start 2026-10-18T23:54:34Z swap 6062.81 load { 3.26 3.41 3.23 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/master-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/master-r2
+ACCEPTED
+=== master-r2 exit 0 2026-10-18T23:57:05Z swap 6062.81 load { 2.97 3.35 3.24 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+ALLDONE

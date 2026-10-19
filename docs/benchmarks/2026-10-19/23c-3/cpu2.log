@@ -1,0 +1,252 @@
+--- 23:59:10
+ 15.3 /Applications/iTerm.app/Contents/MacOS/iTerm2
+ 12.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  7.0 /usr/libexec/trustd
+  6.3 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow
+  6.1 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd
+--- 23:59:25
+ 33.9 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 20.5 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 11.0 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.2 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.2 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 23:59:40
+ 71.9 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 11.6 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.8 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.1 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.7 claude
+--- 23:59:55
+ 52.0 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 43.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  8.3 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:00:10
+ 81.4 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  8.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.8 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.1 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.6 claude
+--- 00:00:25
+ 59.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 48.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  7.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:00:40
+ 20.6 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 11.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.9 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.6 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.3 claude
+--- 00:00:56
+ 63.8 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 32.0 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  5.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:01:11
+ 41.4 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  6.1 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.9 claude
+--- 00:01:26
+ 69.1 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 18.3 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+ 13.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.9 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:01:41
+ 42.7 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.2 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:01:56
+ 74.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 68.8 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 38.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  4.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:02:11
+ 66.5 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  9.4 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.8 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.0 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  0.8 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:02:26
+ 71.4 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+ 61.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 38.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  8.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  4.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:02:41
+ 61.0 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  6.1 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  3.9 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.5 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.3 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:02:56
+ 74.8 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 55.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 21.9 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  5.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  4.3 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+--- 00:03:11
+ 58.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  8.7 claude
+  8.4 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:03:26
+ 60.9 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 14.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  5.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.9 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:03:41
+ 60.6 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.6 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.6 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.2 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:03:56
+ 66.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 14.5 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+ 11.6 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.7 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+--- 00:04:11
+ 40.4 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  2.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+--- 00:04:26
+ 60.9 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  8.4 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  4.3 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:04:41
+ 49.6 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 17.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:04:56
+ 37.0 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  8.4 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  6.6 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  3.8 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:05:11
+ 26.3 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 23.5 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  8.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.6 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:05:26
+ 11.8 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  4.2 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.7 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.5 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:05:41
+ 63.6 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 23.4 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  5.0 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.5 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.3 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+--- 00:05:56
+ 55.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  5.1 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.1 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:06:11
+ 59.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 53.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 18.8 /opt/homebrew/opt/grafana/bin/grafana
+  4.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:06:27
+ 61.5 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.3 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.6 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  2.5 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+--- 00:06:42
+ 67.7 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 67.0 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.5 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.6 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:06:57
+ 55.3 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  3.6 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.7 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+--- 00:07:12
+ 71.2 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 56.2 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 11.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.5 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+--- 00:07:27
+ 57.1 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  6.9 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.3 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.0 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:07:42
+ 67.2 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+  6.8 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.4 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.1 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/Creative Cloud
+--- 00:07:57
+ 56.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  4.0 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  2.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.1 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.0 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:08:12
+ 81.6 /Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo
+ 42.4 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  3.5 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.5 /opt/homebrew/opt/grafana/bin/grafana
+  2.6 /Applications/iTerm.app/Contents/MacOS/iTerm2
+--- 00:08:27
+ 71.1 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  3.0 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.1 /Applications/Signal.app/Contents/Frameworks/Signal Helper (Renderer).app/Contents/MacOS/Signal Helper (Renderer)
+  1.7 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  0.6 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari
+--- 00:08:42
+ 79.9 (pidinfo)
+ 74.6 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  3.3 /System/Library/Frameworks/Contacts.framework/Support/contactsd
+  3.3 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  2.4 /usr/libexec/knowledge-agent
+--- 00:08:57
+ 80.5 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 54.6 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  6.0 claude
+  3.7 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+  3.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+--- 00:09:12
+ 23.8 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+  6.2 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  4.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  3.9 /Applications/Utilities/Adobe Creative Cloud Experience/CCXProcess/CCXProcess.app/Contents/MacOS/Creative Cloud Content Manager.node
+  3.4 /Applications/Xerox/Xerox Workplace Cloud Client.app/Contents/MacOS/Xerox Workplace Cloud Client
+--- 00:09:27
+ 92.4 /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/.venv/bin/python
+ 30.2 /System/Library/PrivateFrameworks/Stickers.framework/Support/stickersd
+ 20.5 /usr/libexec/mobileassetd
+ 12.7 /usr/libexec/dasd
+  7.6 /System/Library/PrivateFrameworks/ModelCatalogRuntime.framework/Versions/A/modelcatalogd

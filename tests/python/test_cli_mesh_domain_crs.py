@@ -12,7 +12,8 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
   says `none` (any case), and no transformer is made.
 - A domain already in the DEM's CRS meshes bit for bit as increment 16 meshed
   it, and no transformer is made. Relational, on the same machine: the run
-  equals, in every point, cell and array, the same run with `cli.open_dem`
+  equals, in every point, cell and array, the same run with
+  `dem_input.plan_dem` (23c-3, D1: the run plans before it assembles)
   replaced by 16's data flow (the whole file, and the domain object exactly as
   `read_domain` returned it, never through `DomainPolygon.to_crs`), and the
   domain `_dem_mesh` receives has the read vertices bit for bit. Since
@@ -74,11 +75,13 @@ import tin_engine.cli as cli
 from cli_helpers import HOLE, SQUARE, Ring, geojson, mesh_to_vtk, refused, rough_dem
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
+from piece_spies import patch_everywhere
 from recordread import sizes_row
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_mosaic import terrain, write_tiles
 from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
-from tin_engine.dem_input import DemInput, DemRequest, open_dem
+from tin_engine import dem_input
+from tin_engine.dem_input import DemRequest
 from tin_engine.domain import DomainPolygon
 from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geotiff import decode_dem
@@ -283,13 +286,17 @@ class TestTheSameCrs:
         return seen
 
     @staticmethod
-    def as_16_opened_it(request: DemRequest, resources: Resources | None = None) -> DemInput:
-        """16's data flow for one file and a domain: the whole file, opened as
+    def as_16_planned_it(plan_dem: Any) -> Any:
+        """16's data flow for one file and a domain: the whole file, planned as
         without a domain, and the domain object as `read_domain` returned it.
         Neither `DomainPolygon.to_crs` nor the window cut to the domain runs.
-        `resources` is `open_dem`'s second parameter (38), passed through."""
-        opened = open_dem(request.model_copy(update={"domain": None}), resources)
-        return dataclasses.replace(opened, domain=request.domain)
+        `resources` is passed through."""
+
+        def planned(request: DemRequest, resources: Resources | None = None) -> Any:
+            plan = plan_dem(request.model_copy(update={"domain": None}), resources)
+            return dataclasses.replace(plan, domain=request.domain)
+
+        return planned
 
     def assert_as_16(
         self,
@@ -301,7 +308,8 @@ class TestTheSameCrs:
     ) -> None:
         now = mesh_to_vtk(tmp_path, *args, out="now.vtk")
         with monkeypatch.context() as m:
-            m.setattr(cli, "open_dem", self.as_16_opened_it)
+            real = dem_input.plan_dem
+            patch_everywhere(m, dem_input, "plan_dem", self.as_16_planned_it(real))
             before = mesh_to_vtk(tmp_path, *args, out="before.vtk")
         assert len(handed_on) == 2, handed_on
         read = read_domain(domain)

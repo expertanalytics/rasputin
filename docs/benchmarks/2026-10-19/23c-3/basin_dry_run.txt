@@ -1,0 +1,2 @@
+anadem_v1_compressed_COG: 8,700 blocks, 12,285,556 bytes to fetch
+anadem-v1: 1 objects, 8,700 blocks needed, 8,600 present, would fetch 100 (0 empty) in 100 requests, 12,285,556 bytes, 3.1 s into /Users/skavhaug/.cache/rasputin/anadem-v1

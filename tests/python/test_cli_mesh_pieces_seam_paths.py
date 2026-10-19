@@ -15,6 +15,7 @@ Heights: the hills are 30-90 m (`pieces_fixtures.hills`), so a shift of
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,7 +25,7 @@ import numpy as np
 import pytest
 
 import pieces_fixtures as pf
-from tin_engine import basin_run, cli
+from tin_engine import basin_run
 
 DELTA = 1e-3  # m; see the module docstring for the scale
 
@@ -71,12 +72,17 @@ def test_the_direction_a_seam_edge_is_stored_in_does_not_reach_a_file(
     union is the same set of triangles, z included."""
     today = pf.cut(tmp_path / "as-noded", *cut_args(scene))
     original = basin_run.cut_run
+    called = []
 
-    def reversed_edges(tile: Any, start: Any, edges: np.ndarray, *rest: Any) -> Any:
-        return original(tile, start, np.ascontiguousarray(edges[:, ::-1]), *rest)
+    def reversed_edges(load: Any, start: Any, edges: np.ndarray, *rest: Any) -> Any:
+        called.append(1)
+        return original(load, start, np.ascontiguousarray(edges[:, ::-1]), *rest)
 
-    monkeypatch.setattr(cli, "cut_run", reversed_edges)
+    # `cli.py` imports the cut path inside the function that runs it (D8 of
+    # 23c-3), so the wrapper goes on `basin_run` itself.
+    monkeypatch.setattr(basin_run, "cut_run", reversed_edges)
     turned = pf.cut(tmp_path / "reversed", *cut_args(scene))
+    assert called == [1], "the wrapper did not reach the run"
     assert [p.id for p in turned.pieces] == [p.id for p in today.pieces]
     assert xyz_set(turned) == xyz_set(today)
     assert pf.conformity_problems(turned.pieces) == []
@@ -118,7 +124,7 @@ def test_a_seam_two_pieces_write_differently_fails_the_run(
 ) -> None:
     """K4: the second piece to compute a seam gets heights moved by DELTA,
     so the two pieces' seam records differ; the run exits 1 naming the
-    seam, and writes no index."""
+    seam, writes no index, and keeps the piece files written (23c-3, D6)."""
     original = basin_run.refine_seam
     calls: Counter[tuple[tuple[float, ...], tuple[float, ...]]] = Counter()
     inner = 0
@@ -137,7 +143,13 @@ def test_a_seam_two_pieces_write_differently_fails_the_run(
     assert done.code == 1, done.output
     assert "Error: seam edge " in done.output
     assert "the pieces do not conform" in done.output
-    assert done.dir is None or not (done.dir / "index.json").exists()
+    # 23c-3, D6: each piece is written when done, and K4 is judged after the
+    # last, so the piece files stay; no index says the run is unfinished.
+    assert done.dir is not None and not (done.dir / "index.json").exists()
+    assert sorted(p.name for p in done.dir.iterdir()) == [
+        "0-0-0.vtk", "0-1-0.vtk", "1-0-0.vtk", "1-1-0.vtk"
+    ]  # fmt: skip
+    assert re.search(r"\bno index", " ".join(done.output.split())), done.output
 
 
 def test_each_piece_window_in_the_index_holds_its_cell_and_its_vertices(tmp_path: Path) -> None:
