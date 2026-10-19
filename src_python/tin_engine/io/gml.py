@@ -16,7 +16,8 @@ writes EPSG:4326), a third coordinate dropped. A document declaring the GML
 `iter_gml32` keeps one ``gml:featureMember`` in memory at a time. A feature's
 geometry is a ``gml:Polygon``, ``gml:Surface`` or ``gml:MultiSurface`` of
 ``gml:posList`` rings, stored as served: not repaired, reoriented or
-validated. Curves, points, ``gml:pos`` rings and arcs are refused in words.
+validated. Curves, points, other surface kinds, ``gml:pos`` rings, arcs and an
+``srsDimension`` that is not a whole number of 2 or more are refused in words.
 """
 
 from __future__ import annotations
@@ -37,10 +38,12 @@ _GEOMETRIES = frozenset(
 GML32 = "{http://www.opengis.net/gml/3.2}"
 _NIL = "{http://www.w3.org/2001/XMLSchema-instance}nil"
 _SURFACES = frozenset(GML32 + n for n in ("Polygon", "Surface", "MultiSurface"))
-_OTHER_GEOMETRIES = frozenset(
+_NOT_READ = frozenset(
     GML32 + n
     for n in ("Point", "MultiPoint", "LineString", "Curve", "MultiCurve", "CompositeCurve",
-              "OrientableCurve", "LinearRing", "Ring", "MultiGeometry", "Solid", "MultiSolid")
+              "OrientableCurve", "LinearRing", "Ring", "MultiGeometry", "Solid", "MultiSolid",
+              "CompositeSurface", "OrientableSurface", "PolyhedralSurface",
+              "TriangulatedSurface", "Tin")
 )  # fmt: skip
 
 
@@ -181,7 +184,7 @@ def _feature(element: ET.Element) -> Gml32Feature:
             values[_name(prop)] = None if not text or prop.get(_NIL) in ("true", "1") else text
             continue
         for child in prop:
-            if child.tag in _OTHER_GEOMETRIES:
+            if child.tag in _NOT_READ:
                 raise GmlError(f"feature {gml_id}: surfaces only; gml:{_name(child)} is not read")
             if child.tag in _SURFACES:
                 found.append(child)
@@ -190,7 +193,7 @@ def _feature(element: ET.Element) -> Gml32Feature:
     geometry = srs_name = None
     if found:
         srs_name = found[0].get("srsName")
-        parts = _parts(found[0], gml_id, int(found[0].get("srsDimension", 2)))
+        parts = _parts(found[0], gml_id, _dimension(found[0], gml_id, 2))
         if found[0].tag == GML32 + "MultiSurface" or len(parts) > 1:
             geometry = MultiPolygon(parts)
         else:
@@ -229,10 +232,20 @@ def _only(node: ET.Element, want: str, gml_id: str) -> ET.Element:
     return children[0]
 
 
+def _dimension(element: ET.Element, gml_id: str, default: int) -> int:
+    """The ``srsDimension`` of ``element``, ``default`` when absent."""
+    text = element.get("srsDimension")
+    if text is None:
+        return default
+    if not (text.isascii() and text.isdigit() and int(text) >= 2):
+        raise GmlError(f"feature {gml_id}: srsDimension {text!r} is not a whole number >= 2")
+    return int(text)
+
+
 def _ring32(boundary: ET.Element, gml_id: str, dimension: int) -> np.ndarray:
     """The ``(x, y)`` positions of the one ``gml:LinearRing/gml:posList`` in ``boundary``."""
     pos_list = _only(_only(boundary, "LinearRing", gml_id), "posList", gml_id)
-    dimension = int(pos_list.get("srsDimension", dimension))
+    dimension = _dimension(pos_list, gml_id, dimension)
     try:
         numbers = np.array((pos_list.text or "").split(), dtype=np.float64)
     except ValueError as exc:
