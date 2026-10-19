@@ -3,7 +3,9 @@
 **Status: designed** by `@architect`, 2026-10-19, on `9ba6c5ec` (master,
 increment 72 merged as #294), branch `worktree-gml-vector`. Full path: about
 190 counted lines (section 8), no C++ file, no refine or mesh code, so no
-`@perf` acceptance run.
+`@perf` acceptance run. Amended the same day for Ola's "I want legend on
+AR50": a shipped `ar50` legend (section 4.5), a TOML data file, so no counted
+lines are added.
 
 Ola, 2026-10-19: "Add DOM10, start on the GML reader asap." The file is
 NIBIO's AR50 land-resource map for Innlandet,
@@ -22,6 +24,23 @@ The target is OGC GeoPackage 1.3 (OGC 12-128r18), which
 pull parser that drops each finished element (`xml.etree.ElementTree.iterparse`
 with the element cleared) is standard practice and the `geospatial-data-formats`
 skill's rule. No method is claimed, and no claim of novelty is made.
+
+*The legend's sources* (section 4.5), each downloaded 2026-10-19 and read
+with `pdftotext`:
+
+- Codes and their meaning: the schema above, `ArealressursArealtypeEnumerationType`
+  (English names), and NIBIO's product specification *SOSI
+  Produktspesifikasjon AR50, versjon 20220523*, section 5.1.9 (Norwegian
+  names), `https://register.geonorge.no/data/documents/produktspesifikasjoner_ar50_v3_produktspesifikasjon-nibio-ar50-20220523_.pdf`.
+- Colours: NIBIO's *Presentasjonsregler: Arealressurskart - AR50*, 12 June
+  2026, table "Arealtype (ARTYPE)",
+  `https://dokument.geonorge.no/tegneregler/ar50/20260615/presentasjonsregler-ar50.pdf`.
+- Positional accuracy: NIBIO's product sheet *Produktark AR50* (2017-03-15),
+  "Nøyaktighet (meter): 2 og dårligere",
+  `https://register.geonorge.no/data/documents/Produktark_AR50%20_v2_produktark-s-l-ar50-20170315_.pdf`;
+  the 2022 specification, section 7.1.3, gives no single figure: 2 m
+  (standard deviation) for the boundaries taken from AR5, Sentinel-2's 10 m
+  cells for those from AR-Fjell, and "hard to define" for those from N50.
 
 *Open readers checked.* OGR's GML driver (GDAL) reads this file, but GDAL and
 OGR are prohibited (`CLAUDE.md` section 2). `pygml` 0.3.2 (MIT, geopython;
@@ -270,6 +289,80 @@ refused at load with "a .gml file is read after `rasputin gml-to-gpkg`
 converts it; register the .gpkg". The shipped `sources.toml` header comment
 and the module docstring say the same in one sentence each.
 
+### 4.5 The AR50 legend
+
+A new shipped legend, `src_python/tin_engine/data/legends/ar50.toml`, built
+the way `corine.toml` is: a coded legend over `arealtype`, read by the
+existing `legends.load`. No Python changes: `shipped_names()` lists the
+directory, so `--features-legend ar50`, `rasputin palette ar50`, both helps
+and the catalogue's fits pick it up. The file, in full:
+
+```toml
+# NIBIO's AR50 land-resource map, land type (arealtype). Codes: SOSI AR50
+# 2022-05-23 (ar50.xsd, English names). Colours: NIBIO, Presentasjonsregler
+# AR50, 12 June 2026, except 99, which NIBIO leaves unfilled. Positional
+# accuracy: NIBIO's product sheet, "2 og dårligere". docs/increments/73-gml-vector-source.md, section 4.5.
+name = "ar50"
+attribute = "arealtype"
+code_system = "AR50 arealtype code"
+positional_accuracy_m = 2
+notice = "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
+licence = "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
+preset = "rasputin AR50 NIBIO"
+unlisted = "land"
+
+[edges]
+water = ["land_cover", "water"]
+land = ["land_cover"]
+
+[no_class]
+label = "No polygon; constraint lines"
+colour = "#3c3c3c"
+```
+
+then one `[[class]]` table per row, in this order:
+
+| `code` | `label` | `colour` | NIBIO's RGB | `water` |
+|---|---|---|---|---|
+| 10 | Developed area and traffic | `#e86474` | 232-100-116 | |
+| 20 | Agriculture | `#ffd16e` | 255-209-110 | |
+| 30 | Forest | `#9ecc73` | 158-204-115 | |
+| 50 | Open firm ground | `#d9d9d9` | 217-217-217 | |
+| 60 | Marsh | `#73dfff` | 115-223-255 | |
+| 70 | Snow and glacier | `#ffffff` | 255-255-255 | |
+| 81 | Freshwater | `#91e7ff` | 145-231-255 | true |
+| 82 | Ocean | `#d2ffff` | 210-255-255 | true |
+| 99 | Not surveyed | `#8c8c8c` | none (unfilled) | |
+
+- **Labels** are the schema's English names, ASCII as CORINE's are, since a
+  label goes into the GeoPackage triangles and the ParaView preset. One
+  departure: the schema calls 70 "Snowy glacier??"; its definition, "a mix of
+  snow and glacier ice that does not melt during the summer", and NIBIO's
+  Norwegian name "Snøisbre" read "Snow and glacier".
+- **Colours** are NIBIO's own, converted from RGB. NIBIO gives 99 no fill;
+  `#8c8c8c` is rasputin's choice, a grey darker than NIBIO's two greys (217
+  and 192) and lighter than the no-class `#3c3c3c`.
+- **Edges**: fresh water and ocean carry `land_cover` and `water` on their
+  borders, every other class `land_cover`, as in `corine`. A value outside
+  the nine (the schema's `other: ...` pattern) is coded as land, as `corine`'s
+  `unlisted = "land"` does.
+- **Positional accuracy, 2 m**, metres in the source's projected CRS. It is
+  the floor NIBIO's product sheet states ("2 and worse"), the AR5
+  boundaries' figure; the AR-Fjell and N50 parts are worse. It enters only
+  through `derived_cleanup`: s = max(2 m, cell). On a 10 m DEM (DTM10) the
+  cell decides, s = 10 m: repair 0.1 m, simplify 5 m, snap 0.5 m. The 2 m
+  takes effect only on a DEM finer than 2 m, where it gives repair 0.02 m,
+  simplify 1 m, snap 0.1 m. Checked on the suite's 10 m test scene only;
+  no run on the real file is part of this design. With CORINE in the same
+  run, the coarser 100 m wins, as today.
+- **Notice and licence** in English, ASCII, after NLOD's own attribution
+  sentence ("Contains data under the Norwegian licence for Open Government
+  Data (NLOD) distributed by [name of licensor]", data.norge.no); the
+  licence goes into the run record only, as for any legend.
+
+Only `arealtype` is coded. `treslag`, `skogbonitet`, `vegetasjonsdekke` and
+`jordbruk` stay columns of the GeoPackage (section 7).
+
 ## 5. The CRS: EPSG:25832 into a UTM 33 run
 
 Nothing new: `feature_input` already moves a projected source's vertices into
@@ -290,6 +383,7 @@ session once the PR merges, since it is Ola's data file) gains:
 [source.ar50-innlandet]
 kind = "local"
 path = "AR50_UTM32_Innlandet_20261019/ar50.gpkg"
+legend = "ar50"
 credit = "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av NIBIO. Kilde: NIBIO, AR50 Arealressurskart 1:50 000, Innlandet, lastet ned 2026-10-19; konvertert til GeoPackage av rasputin."
 licence_note = "Norsk lisens for offentlige data (NLOD) 1.0, https://data.norge.no/nlod/no/1.0."
 description = "NIBIO's land-resource map at 1:50 000 for Innlandet: land type (arealtype), tree type (treslag), forest site quality (skogbonitet), vegetation cover and agriculture subclasses, in EPSG:25832. Areas under 15 decares are merged into neighbours; NIBIO: for visualisation, not geometric analysis or area statistics below the tree line."
@@ -299,17 +393,16 @@ The licence is NLOD 1.0, as data.norge.no states for NIBIO's AR50 land-type
 dataset (its distributions' licence field: `NLOD_1_0`). `rasputin sources` then
 lists, from the GeoPackage's headers: CRS EPSG:25832, geometry MultiPolygon,
 287,730 features, the nine columns of section 4.2 as attributes, and the
-coverage box. `classes` stays empty until a coded legend names `arealtype`
-(section 7, question 1).
+coverage box; `classes` lists `arealtype` with its 8 values (section 2), and
+`fits` gives `mesh --features` with legend `ar50` (the entry names it, so
+no other legend is offered) and `catchment --lakes`.
 
 ## 7. Left out
 
-- **An AR50 legend file** (codes to labels, colours and edge names, which
-  would make `classes` list and let `--features-legend ar50` code triangles):
-  a coded legend needs `positional_accuracy_m`, which drives the clean-up
-  distances, and NIBIO's product sheet says only "2 and worse". A question
-  for Ola (handback), and its own short-path increment (TOML only, 0 counted
-  lines).
+- **Legends for the other coded columns** (`treslag`, `skogbonitet`,
+  `vegetasjonsdekke`, `jordbruk`): NIBIO publishes colours for them too, but
+  a mesh carries one class per triangle, and Ola asked for the land type.
+  Each would be one more TOML file.
 - **Reading from the `.zip`** Ola downloaded (536 MB): `zipfile` streams a
   member, so `SOURCE` could be a zip; not asked for.
 - **Nested properties** (`lokalId` inside `identifikasjon`): NIBIO's object
@@ -328,6 +421,7 @@ coverage box. `classes` stays empty until a coded legend names `arealtype`
 | `gml_import.py`: `GmlImport`, `gml_to_geopackage`, column typing, the CRS checks | about 70 |
 | `cli.py`: the command | about 35 |
 | `sources.py`: the `.gml` refusal | about 3 |
+| `data/legends/ar50.toml` (section 4.5) | 0 (TOML is not counted) |
 | Total | **about 190**, under the 700 of `CLAUDE.md` section 2 |
 
 Also, not counted: `project_structure.md` rows for `gml_import.py` and the
@@ -422,6 +516,42 @@ Tests:
 10. *MCP pins.* `TOOL_NAMES` gains `gml_to_gpkg` in `rasputin --help` order,
     `REAL_POSITIONALS` gains `("gml_to_gpkg", "source", {"out": "x.gpkg"})`,
     `WRITABLE` gains `("gml_to_gpkg", "out")`.
+
+**The legend's tests (section 4.5)** come as a second red commit on top of
+`b46b2a77`; they fail only because `ar50.toml` is absent (and, for test 14,
+because `gml_to_geopackage` is). Amended: `test_legends.py` and
+`test_cli_legends.py` (`SHIPPED` gains `ar50`, so the exact-set test of the
+package's legend files and the help and refusal listings ask for it),
+`test_cli_sources_vector.py`; any snapshot of the `--features-legend` or
+`palette` help the suite holds is updated in the same commit.
+
+11. *The file loads.* `legends.load("ar50")`: `name` `ar50`, `attribute`
+    `arealtype`, `codes` `AR50 arealtype code`, `accuracy_m` 2.0, `notice`
+    and `licence` the texts of section 4.5; `palette` exactly the ten
+    entries 0, 10, 20, 30, 50, 60, 70, 81, 82, 99 with the labels and
+    colours of the table (a transcription slip fails here; the reviewer
+    checks the table against NIBIO's PDF); `classes["81"]` and
+    `classes["82"]` are `("land_cover", "water")`, the other seven
+    `("land_cover",)`; `otherwise` `("land_cover",)`.
+12. *The palette command.* `rasputin palette ar50` exits 0; the preset's
+    `Name` is `rasputin AR50 NIBIO`, `Annotations` has 2 × 10 entries and
+    holds `"81 Freshwater"`.
+13. *A mesh coded by AR50.* On `rough_dem` (cell 10 m) and the square
+    domain of `test_cli_legends.py`, features WEST `{"arealtype": 30}` and
+    EAST `{"arealtype": 81}` (`write_geojson`, as test T10's MapBiomas run),
+    `--features-legend ar50`: the triangles' `land_cover_code` holds 30 and
+    81; the border of the EAST polygon carries `land_cover` and `water`
+    (`edges_at` at `rel(160.9, -60.2)`, as T8), the WEST side's
+    `land_cover` only; the record's `features_notice` and
+    `features_licence` are the legend's; the clean-up distances recorded
+    are 0.1, 5.0, 0.5 (s = max(2, 10) = 10). The same run with `--out
+    x.gpkg`: every triangle's `(land_cover, colour)` is `palette[code]`.
+14. *The catalogue lists the classes.* Fixture A converted with
+    `gml_to_geopackage` and registered as a local entry with `legend =
+    "ar50"`: `rasputin sources` gives `classes` `[{"attribute":
+    "arealtype", "values": ["30", "60"], "distinct": 2}]` (fixture A's
+    codes, section 9's table) and `fits` exactly `("mesh", "--features",
+    "ar50")` and `("catchment", "--lakes", None)`.
 
 ## Review
 
