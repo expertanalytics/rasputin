@@ -4774,3 +4774,30 @@ test; M2 by this commit's test.
 **23c-3, `@perf` acceptance, 2026-10-19.** `a4b87a4f`: bench hashes unchanged (K1), quarter process time -0.8 to +0.6 % against master (the cut imports are off the uncut path); the tile's flagged +28 % is the process environment's size, not the branch (32 environment sizes, the three trees agree). Piece files byte-identical to 23c-2's at 10 m (16, 64, 256 pieces) and 1 m (64). Peak memory at 10 m 407 / 155 / 111 MB against 23c-2's 1,733 / 1,689 / 1,733 MB; 1 m with 64 pieces 294 against 1,711 MB. Not met: the peak exceeds the largest piece's `dx·dy·b(T)` + 72 MiB by 31 to 255 MB on the reprojected path. Cost: decode 5.00 s against 1.31 s and the whole run 9.0 s against 4.9 s at 10 m with 64 pieces. ACCEPTED.
 
 **23c-4, design review, rounds 1 and 2, 2026-10-19.** Round 1 on `2bb1fe4b`, @reviewer: CHANGES REQUESTED (the cause at 9.7 m is the division and `floor`, not the snap; a crossing point that only one seam leaves; a wrong kill claim). Round 2 on `f5467699` (a fresh `@architect`), @reviewer: APPROVED WITH WORDINGS, applied by the main session: the bound becomes `min(0.75 · snap, h / 4)`, since `--snap-spacing` has no upper limit. NoData beside a seam at 9.9 m stays a pinned refusal (CS8); its fix needs C++ and is a later step.
+
+**23c-4, mutation round, 2026-10-19** (`@tester`, on green `6a312a88`, 31 counted lines; 8 of 8 killed, no test added; record copied from `61c2d7b9`'s message by the main session):
+
+```text
+23c-4 mutation round on 6a312a88: 8 of 8 mutants killed, no test added (@tester)
+
+Each mutant planted alone in a scratch copy of 6a312a88
+(tools/scratch_copy.py, session scratchpad, removed afterwards), run
+against test_cli_mesh_pieces_cell_size.py, ..._cell_size_bytes.py,
+test_pieces_slice.py and test_cli_mesh_pieces_seam_paths.py (49 tests).
+Unmutated copy: 49 passed, before and after the round.
+
+| mutant (where planted) | killed by | survives |
+|---|---|---|
+| E2 ceil: an end on a line takes ceil of its fractional index (basin_run.seam_box) | CS2 9.9m-4 and CS3 9.7m-16 (exit 2, "seam strip, rows 18-20, columns 0-21, is outside its piece"), CS3 corners, CS4 in both, CS8 (exit 2 not 1), unit box-into-a-moved-crossing | CS1 9.7m-4, CS7 |
+| E2 floor, the same with floor (seam_box) | CS1, CS2, CS3, CS7 (exit 2), CS3 corners, CS4 in all three, CS8, both box units | none |
+| E1 first design: a line index only along a seam leaving the end (line_rc, filtered by the run's seam edges; units see it unfiltered) | CS7 only (exit 2) | CS1, CS2, CS3 |
+| E3 dropped, corner_heights empty (basin_run.corner_heights) | CS2, CS3 (exit 1, seam disagreement), CS3 corners, CS4 9.9m-4 and 9.7m-16, CS9 units (4), amended test_seam_vertices_carry_the_seam_pass_heights | CS1, CS7 |
+| E3 bilinear _core.sample on the piece tile, not the node (corner_heights) | CS2 (exit 1), CS4 9.9m-4, unit a-corner-takes-its-node's-value | CS1, CS3, CS7 |
+| E3 NoData test dropped (corner_heights) | CS9 sentinel and NaN units | every CLI scene |
+| E4 dropped (pieces.start_slice) | CS4 9.9m-4 and 9.7m-16 | CS1-CS3, CS7 |
+| E1 bound without its h/4 cap, 0.75 snap alone (line_rc) | unit the-bound-shrinks-to-a-quarter-cell-under-a-large-snap | every CLI scene |
+
+Every row matches the design's table. The two kept only by units (NoData
+test dropped, the h/4 cap) are the design's own expectation for the first
+and a unit by design for the second; no survivor shows a missing test.
+```
