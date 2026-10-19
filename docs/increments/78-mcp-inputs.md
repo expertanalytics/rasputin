@@ -70,7 +70,7 @@ none claimed.
 call_tool(ctx, params)                              [server.py]
   validate → scope = scope_for(ctx)
   _inputs(scope, tool, arguments)                   NEW, before both checks
-     each write value that is a URI      → refusal
+     each write value that is a URI      → refusal (HTTP only)
      each read value: workspace.linked(scope, argument, value)
         None (not a URI, or stdio)       → unchanged
         refusal words                    → refused, child not run
@@ -88,7 +88,7 @@ upload(name, text | base64)                         NEW tool, HTTP only
 Module rules, beyond increment 69's:
 
 - **`workspace.py`**: `CallScope` gains `link_prefix: str | None = None`,
-  `<public-url>/files/` over HTTP, None on stdio. New pure
+  `public_url.rstrip('/') + '/files/'`, as `links.url` builds it, over HTTP, None on stdio. New pure
   `linked(scope, argument, value) -> Linked | str | None` and the frozen
   dataclass `Linked(text: str, place: Path)`. No I/O.
 - **`schema.py`**: `DerivedCommand.substitute(arguments, mapping) ->
@@ -138,8 +138,8 @@ A read value is **a URI** when it contains `://` or starts with `data:`
 
 The stored file keeps its suffix, which is how the CLI picks the format.
 `store/` is written only by the server (increment 69, 5.1), so no call can
-change the bytes a link names. A URI in a **write** value (`out="https://…"`)
-is refused: a link names a stored file, which no call writes.
+change the bytes a link names. Over HTTP, a URI in a **write** value (`out="https://…"`)
+is refused over HTTP: a link names a stored file, which no call writes.
 
 On **stdio**, `link_prefix` is None and `linked` returns None for every
 value: a link given there goes to the CLI as a string, as today. Stdio has
@@ -155,7 +155,7 @@ padded, `base64.b64decode(..., validate=True)`).
   leading dot, so neither `.`, `..` nor a hidden file. The suffix picks the
   format the CLI reads it as (`.geojson`, `.gpkg`, `.tif`, `.toml`).
 - **Size:** at most `UPLOAD_BYTES` = 2 MiB (2,097,152) after decoding,
-  checked on the encoded length before decoding. Scale: a catchment
+  checked before decoding (text: its UTF-8 length; base64: at most 2,796,204 characters) and again after decoding. Scale: a catchment
   polygon; checked against the 5,986 GeoJSON files of section 3. A body over
   4 MiB never reaches the tool (the SDK's 413).
 - **Quota:** `delivery.admit` first, as for a command, so a folder at or
@@ -204,7 +204,7 @@ In `tests/python/test_mcp_http_inputs.py`, `pytest.importorskip("mcp")`,
 through `mcp_fake_child.py` (its `argv_file` and `copy` keys) and
 `mcp_http_driver.py`. No kernel except T7. **Invariant-critical: T1 and
 T3**, mutation targets: `fullmatch` to `match` for `NAME` (killed by
-`<sha>.gpkg/../x`), the user check dropped (Kari's case), the prefix test
+`<sha>.gpkg/../x`, `<sha>0` (65 hex) and `<sha>.gpkg%2f..%2fx`), the user check dropped (Kari's case), the prefix test
 replaced by `"/files/" in value` (the look-alike host), the `lstat`
 regular-file test dropped (a symlink planted in `store/`), the leading-dot
 rule dropped (`..`).
@@ -213,7 +213,7 @@ rule dropped (`..`).
   sha of 64 hex). Accepted as `../store/<sha>.gpkg`: Ola's link; the same
   with `exp` in the past; with a changed `sig`; with no query. Refused as not
   this server's, each without touching the disk (the out-root does not
-  exist): another host, `https://mcp.example.org.evil/files/...`,
+  exist): a host of the same length, `https://mcp.example.com/files/ola/<sha>.gpkg`, `https://mcp.example.org.evil/files/...`,
   `https://mcp.example.org/filesx/ola/<sha>.gpkg`, `http://` for `https://`,
   `file:///etc/hosts`, `data:text/plain,x`, names `../x`, `%2e%2e`,
   uppercase hex, `<sha>.gpkg/../x`. Refused as another user's: Kari's link.
@@ -234,13 +234,13 @@ rule dropped (`..`).
   `uploads/x.geojson`, its sha256 is the bytes', the file is in
   `work/uploads/` and `store/`, the link downloads the same bytes. Base64
   of bytes 0 to 255: same round trip. Exactly 2,097,152 bytes of text
-  accepted; 2,097,153 refused, nothing written. Refused, nothing written:
+  accepted; 2,097,153 refused, nothing written. Base64 of 2,097,153 bytes refused; of 2,097,152 accepted. Refused, nothing written:
   both or neither content, names `..`, `.x`, `a/b`, `a b`, 129 characters,
   base64 `@@@`, a folder at the quota (`--quota 1M`, 1 MiB in `work/`).
   The same name twice with other bytes: `work/uploads/` holds the second,
   and each link downloads its own.
 - **T5 stdio unchanged.** No `upload` listed; a link given as `domain`
-  reaches the child unchanged; increment 37's and 69's MCP suites pass
+  reaches the child unchanged; `out` set to a URI is not refused by the new check; increment 37's and 69's MCP suites pass
   without edits.
 - **T6 start and log.** A plugin command named `upload` stops start. With
   `caplog` on `tin_engine.mcp.http`: an upload logs one line with the user
@@ -284,3 +284,7 @@ sharing (section 7).
 2. Should a later step add a plain HTTP upload for large files, for clients
    that have a shell? *Default: not now; uploads go through the tool, up to
    2 MiB.*
+
+## Review
+
+- **Design review, round 1, 2026-10-19.** On `87db2b97`, 0 counted lines (estimate about 125, at most 180), @reviewer: APPROVED WITH WORDINGS. Safety holds (no address fetched, read values only, relative paths, token-and-user check sound); SDK 4 MiB limit and TiffFile stream reading checked. Five wordings applied by the main session: the link prefix as `links.url` builds it; write-URI refusal HTTP only (and T5); base64 length bound plus T4 cases; two more `fullmatch` killers; a same-length look-alike host.
