@@ -193,7 +193,7 @@ def _feature(element: ET.Element) -> Gml32Feature:
     geometry = srs_name = None
     if found:
         srs_name = found[0].get("srsName")
-        parts = _parts(found[0], gml_id, _dimension(found[0], gml_id, 2))
+        parts = _parts(found[0], gml_id, 2)
         if found[0].tag == GML32 + "MultiSurface" or len(parts) > 1:
             geometry = MultiPolygon(parts)
         else:
@@ -204,6 +204,7 @@ def _feature(element: ET.Element) -> Gml32Feature:
 def _parts(element: ET.Element, gml_id: str, dimension: int) -> list[Polygon]:
     """The polygons of a ``gml:Polygon``, ``gml:Surface`` (its patches) or
     ``gml:MultiSurface`` (its members, a member surface's patches flattened)."""
+    dimension = _dimension(element, gml_id, dimension)
     if element.tag == GML32 + "Polygon":
         return [_polygon32(element, gml_id, dimension)]
     if element.tag == GML32 + "Surface":
@@ -244,8 +245,9 @@ def _dimension(element: ET.Element, gml_id: str, default: int) -> int:
 
 def _ring32(boundary: ET.Element, gml_id: str, dimension: int) -> np.ndarray:
     """The ``(x, y)`` positions of the one ``gml:LinearRing/gml:posList`` in ``boundary``."""
-    pos_list = _only(_only(boundary, "LinearRing", gml_id), "posList", gml_id)
-    dimension = _dimension(pos_list, gml_id, dimension)
+    ring = _only(boundary, "LinearRing", gml_id)
+    pos_list = _only(ring, "posList", gml_id)
+    dimension = _dimension(pos_list, gml_id, _dimension(ring, gml_id, dimension))
     try:
         numbers = np.array((pos_list.text or "").split(), dtype=np.float64)
     except ValueError as exc:
