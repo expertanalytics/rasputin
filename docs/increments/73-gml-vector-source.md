@@ -202,8 +202,7 @@ Rules, each a `GmlError` naming the `gml:id` where there is one:
   only; gml:LineString is not read"). A feature with no geometry is yielded
   with `geometry=None`.
 - **Rings.** A ring is a `gml:LinearRing` with one `gml:posList`. Its
-  dimension is the `srsDimension` of the `posList`, else of the geometry
-  element, else 2; the third coordinate onwards is dropped. A count not a
+  dimension is the `srsDimension` of the `posList`, else of its `gml:LinearRing`, else of the nearest enclosing `gml:Polygon`, `gml:Surface` or `gml:MultiSurface` that carries one, else 2; the third coordinate onwards is dropped. A count not a
   multiple of the dimension, fewer than four positions, or a coordinate that
   is not finite is refused. `gml:pos` and `gml:coordinates` inside a
   `LinearRing`, and `gml:Ring` (curve members, arcs), are refused naming the
@@ -560,3 +559,4 @@ package's legend files and the help and refusal listings ask for it),
 - **Design review, round 2 (the AR50 legend), 2026-10-19.** On `aaaabee5`, @reviewer: APPROVED WITH WORDINGS, applied by the main session (code 70's definition in the schema's words; the `data/legends/` row of `project_structure.md` gains `ar50`). Codes, labels and colours checked against the schema, the product specification and the drawing rules; the TOML loads with `legends.load` unchanged. Ola: English labels only.
 - **Code review, round 1, 2026-10-19.** Range `9ba6c5ec..45caeddb`, 228 counted lines (design about 190), @reviewer: CHANGES REQUESTED. (1) A surface given as `gml:CompositeSurface`, `gml:OrientableSurface` or `gml:PolyhedralSurface` comes back with no geometry and is dropped silently (the same inside a MultiSurface is refused): refuse CompositeSurface, OrientableSurface, PolyhedralSurface, TriangulatedSurface and Tin in words, with one refusal test. (2) A bad `srsDimension` (`0`: ZeroDivisionError as a traceback; `x`; `1`) is not refused cleanly: accept only a whole number of 2 or more, else a GmlError naming the feature. The design names no `@perf` run (no refine or mesh code). The developer's transaction assumption holds.
 - **Code review, round 2, 2026-10-19.** On `79255de1`, 237 counted lines, @reviewer: CHANGES REQUESTED. Finding 1 fixed. Finding 2 half fixed: `srsDimension` on a polygon inside a MultiSurface is not read, so a member polygon with `srsDimension="3"` and a bare posList is read as 2-D (area 32.5 instead of 50), and `"0"` there passes. Fix: `_parts` starts with `dimension = _dimension(element, gml_id, dimension)`, `_feature` passes a default of 2; two member tests.
+- **Code review, round 3, 2026-10-19.** On `e28faaf1` (master `b00c0965` merged in), 239 counted lines against `b00c0965`, @reviewer: APPROVED WITH WORDINGS, applied by the main session (the dimension rule names the LinearRing and the enclosing elements). Round 2's 15 cases probed again, all hold; the probe fails 5 of them on `79255de1`. `srsDimension` on a PolygonPatch cannot occur in GML 3.2.1.
