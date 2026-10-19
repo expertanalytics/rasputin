@@ -15,11 +15,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 import pieces_fixtures as pf
-from cli_helpers import USAGE
-from tin_engine.cli import app
+from cli_helpers import USAGE, help_text
 
 
 def scene(tmp_path: Path) -> tuple[str, ...]:
@@ -57,7 +55,6 @@ def test_refusals_write_nothing(tmp_path: Path, value: str) -> None:
 
 
 def test_the_help_shows_16g() -> None:
-    text = CliRunner().invoke(app, ["mesh", "--help"], env={"COLUMNS": "200"}).output
-    flat = " ".join(text.split())
+    flat = " ".join(help_text("mesh").split())
     assert "--piece-budget" in flat
     assert "Default 16G, the same on every machine" in flat

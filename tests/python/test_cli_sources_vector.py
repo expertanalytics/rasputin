@@ -312,3 +312,36 @@ class TestT9QuotedHints:
         assert got[:4] == ["rasputin", "fetch", CACHED, "--bbox"], got
         assert got[-2:] == ["--cache", str(cache)], got
         assert len(got) == 10, got  # four numbers between --bbox and --cache
+
+
+# ------------------------------------------------- the AR50 legend, test 14
+
+
+class TestAr50Listing:
+    """Test 14 of `docs/increments/73-gml-vector-source.md`: fixture A, converted
+    with `gml_to_geopackage` and registered with `legend = "ar50"`, lists
+    `arealtype`'s classes (fixture A holds 30 once and 60 five times) and fits
+    `--features` with `ar50` alone."""
+
+    @pytest.fixture
+    def ar50_entry(self, config: Path, tmp_path: Path) -> Path:
+        import importlib
+        from contextlib import closing
+
+        from gml32_fixtures import AR50_SAMPLE
+        from tin_engine.io.repository import create_sqlite
+
+        gml_import = importlib.import_module("tin_engine.gml_import")
+        target = tmp_path / "ar50.gpkg"
+        with AR50_SAMPLE.open("rb") as stream, closing(create_sqlite(target)) as conn:
+            gml_import.gml_to_geopackage(stream, conn)
+        write_sources(config, {"ar50-sample": vector_entry(target, "AR50", legend="ar50")})
+        return target
+
+    def test_14_the_classes_and_fits(self, ar50_entry: Path) -> None:
+        found = by_id(listing())["ar50-sample"]
+        assert found["problem"] is None, found
+        assert found["classes"] == [
+            {"attribute": "arealtype", "values": ["30", "60"], "distinct": 2}
+        ]
+        assert fits_of(found) == {("mesh", "--features", "ar50"), ("catchment", "--lakes", None)}

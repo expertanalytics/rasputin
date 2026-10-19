@@ -191,36 +191,38 @@ class TestArgvRoundTrip:
     @pytest.mark.parametrize(
         ("arguments", "argv"),
         [
-            pytest.param({"name": "a"}, ["make-thing", "a"], id="only set keys appear"),
+            pytest.param({"name": "a"}, ["make-thing", "--", "a"], id="only set keys appear"),
             pytest.param(
-                {"name": "a", "binary": False}, ["make-thing", "a", "--ascii"], id="false flag"
+                {"name": "a", "binary": False},
+                ["make-thing", "--ascii", "--", "a"],
+                id="false flag",
             ),
             pytest.param(
-                {"name": "a", "binary": True}, ["make-thing", "a", "--binary"], id="true flag"
+                {"name": "a", "binary": True}, ["make-thing", "--binary", "--", "a"], id="true flag"
             ),
             pytest.param(
                 {"name": "a", "box": [1.5, 2.5, 3.5, 4.5]},
-                ["make-thing", "a", "--box", "1.5", "2.5", "3.5", "4.5"],
+                ["make-thing", "--box", "1.5", "2.5", "3.5", "4.5", "--", "a"],
                 id="a tuple expands",
             ),
             pytest.param(
                 {"name": "a", "near": ["lines.geojson", 2.5]},
-                ["make-thing", "a", "--near", "lines.geojson", "2.5"],
+                ["make-thing", "--near", "lines.geojson", "2.5", "--", "a"],
                 id="a path-and-number tuple",
             ),
             pytest.param(
                 {"name": "a", "tag": ["x", "y"]},
-                ["make-thing", "a", "--tag", "x", "--tag", "y"],
+                ["make-thing", "--tag", "x", "--tag", "y", "--", "a"],
                 id="a list repeats the option",
             ),
             pytest.param(
                 {"mode": "slow", "count": 7, "name": "a"},
-                ["make-thing", "a", "--count", "7", "--mode", "slow"],
+                ["make-thing", "--count", "7", "--mode", "slow", "--", "a"],
                 id="the command's parameter order, not the caller's",
             ),
             pytest.param(
                 {"name": "a", "where": "there/x.vtk"},
-                ["make-thing", "a", "--where", "there/x.vtk"],
+                ["make-thing", "--where", "there/x.vtk", "--", "a"],
                 id="a path is passed as given",
             ),
         ],
@@ -236,9 +238,128 @@ class TestArgvRoundTrip:
         assert tool.argv(tool.model.model_validate({})) == ["plain"]
 
 
+# ---------------------------------------------------- 72, R1 and R2: positionals after --
+
+
+def positional_app() -> typer.Typer:
+    """A flag and an option that a flag-like positional value could pose as, and the three
+    shapes a positional can take: optional, two values, variadic."""
+    toy = typer.Typer()
+
+    @toy.command()
+    def pos(
+        first: Annotated[str | None, typer.Argument()] = None,
+        pair: Annotated[tuple[str, str] | None, typer.Argument()] = None,
+        rest: Annotated[list[str] | None, typer.Argument()] = None,
+        refresh: Annotated[bool, typer.Option("--refresh")] = False,
+        cache: Annotated[str | None, typer.Option("--cache")] = None,
+    ) -> None:
+        """Positionals of every shape."""
+
+    @toy.command()
+    def other() -> None:
+        """Keeps `pos` a subcommand."""
+
+    return toy
+
+
+def parsed_back(tool: Any, arguments: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """The argv the arguments give, and what click itself parses that argv to."""
+    argv: list[str] = tool.argv(tool.model.model_validate(arguments))
+    context = tool.command.make_context(argv[0], argv[1:])
+    return argv, context.params
+
+
+class TestR1PositionalsAfterTheDelimiter:
+    """`docs/increments/72-mcp-hardening.md`, section 1.1: options first, then ``--``, then
+    the positional values, so a value that starts with ``-`` stays a value."""
+
+    def test_a_flag_like_value_stays_the_positional_and_sets_no_flag(self) -> None:
+        argv, params = parsed_back(
+            derived(positional_app())["pos"], {"first": "--refresh", "refresh": False}
+        )
+        assert argv == ["pos", "--", "--refresh"]
+        assert params["first"] == "--refresh"
+        assert params["refresh"] is False
+
+    def test_a_two_value_positional_stays_a_tuple_and_sets_no_option(self) -> None:
+        argv, params = parsed_back(
+            derived(positional_app())["pos"], {"first": "f", "pair": ["--cache", "x"]}
+        )
+        assert argv == ["pos", "--", "f", "--cache", "x"]
+        assert params["pair"] == ("--cache", "x")
+        assert params["cache"] is None
+
+    def test_the_variadic_positional_is_a_list_of_strings_in_the_schema(self) -> None:
+        rest = derived(positional_app())["pos"].tool().input_schema["properties"]["rest"]
+        assert {"type": "array", "items": STRING} in rest["anyOf"], rest
+
+    def test_each_item_of_a_variadic_positional_is_one_word(self) -> None:
+        argv, params = parsed_back(
+            derived(positional_app())["pos"],
+            {"first": "f", "pair": ["p", "q"], "rest": ["-a", "b"]},
+        )
+        assert argv == ["pos", "--", "f", "p", "q", "-a", "b"]
+        assert tuple(params["rest"]) == ("-a", "b")
+        assert params["refresh"] is False and params["cache"] is None
+
+    def test_options_come_first_then_the_delimiter_then_the_positionals(self) -> None:
+        arguments = {
+            "rest": ["--refresh"], "cache": "--x", "first": "-f", "refresh": True,
+            "pair": ["--cache", "y"],
+        }  # fmt: skip
+        argv, params = parsed_back(derived(positional_app())["pos"], arguments)
+        assert argv == [
+            "pos", "--refresh", "--cache", "--x", "--", "-f", "--cache", "y", "--refresh",
+        ]  # fmt: skip
+        assert (params["first"], params["pair"], tuple(params["rest"])) == (
+            "-f", ("--cache", "y"), ("--refresh",),
+        )  # fmt: skip
+        assert (params["refresh"], params["cache"]) == (True, "--x")
+
+    def test_no_positional_set_no_delimiter(self) -> None:
+        argv, params = parsed_back(derived(positional_app())["pos"], {"refresh": True})
+        assert argv == ["pos", "--refresh"]
+        assert params["refresh"] is True and params["first"] is None
+
+
+#: The core app's positional of each command that has one, as the probe's
+#: parameter scan found them, and the options a call must set beside it.
+REAL_POSITIONALS = [
+    pytest.param("fetch", "source", {}, id="fetch"),
+    pytest.param("fetch_stations", "source", {"out_dir": "stations"}, id="fetch_stations"),
+    pytest.param("palette", "name", {}, id="palette"),
+    pytest.param("gml_to_gpkg", "source", {"out": "x.gpkg"}, id="gml_to_gpkg"),
+]
+
+
+class TestR2TheRealPositionals:
+    @pytest.mark.parametrize(("name", "positional", "required"), REAL_POSITIONALS)
+    def test_a_flag_like_value_is_the_positional_and_every_other_option_its_default(
+        self, name: str, positional: str, required: dict[str, Any]
+    ) -> None:
+        tool = derived(app)[name]
+        argv, params = parsed_back(tool, {positional: "--refresh", **required})
+        assert argv[-2:] == ["--", "--refresh"], argv
+        assert params[positional] == "--refresh"
+        context = tool.command.make_context(argv[0], argv[1:])
+        for param in tool.command.params:
+            if param.param_type_name == "option" and param.name not in required:
+                assert params[param.name] == param.get_default(context), (param.name, argv)
+
+    def test_the_scan_finds_these_positionals_and_no_others(self) -> None:
+        found = {
+            (name, p.name)
+            for name, d in derived(app).items()
+            for p in d.command.params
+            if p.param_type_name == "argument"
+        }
+        assert found == {(p.values[0], p.values[1]) for p in REAL_POSITIONALS}
+
+
 # ---------------------------------------------------------------- T3
 
-#: The eight commands an agent is offered, as tool names, in the order of
+#: The nine commands an agent is offered, as tool names, in the order of
 #: `rasputin --help` (`mcp` is the server). Their parameter
 #: counts are not pinned: the test below holds each schema's properties equal
 #: to the command's own click parameters, which implies the count, and a
@@ -246,7 +367,7 @@ class TestArgvRoundTrip:
 #: saying anything about the schema.
 TOOL_NAMES = [
     "mesh", "palette", "catchment", "station_catchments",
-    "fetch", "fetch_stations", "sources", "version",
+    "fetch", "fetch_stations", "sources", "gml_to_gpkg", "version",
 ]  # fmt: skip
 
 #: Section 3's snapshots of five `mesh` properties, without ``title``.
@@ -443,6 +564,7 @@ WRITABLE = {
     ("station_catchments", "out_dir"),
     ("fetch_stations", "out_dir"),
     ("fetch", "cache"),
+    ("gml_to_gpkg", "out"),
 }  # fmt: skip
 
 

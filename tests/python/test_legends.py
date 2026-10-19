@@ -58,7 +58,7 @@ from legend_fixtures import basenames, coded_map, uncoded_map, write
 from legend_snapshot import CORINE_MAPS, CORINE_NATURAL, DATA, PRESET_NAME, SNAPSHOT
 from tin_engine.features import DEFAULT_VOCABULARY
 
-SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11")
+SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 #: T2's values, as the snapshot lists them.
 VALUES: list[Any] = [value for value, _ in SNAPSHOT["maps"]["corine"]["masks"]]
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
@@ -105,8 +105,8 @@ def refused(cm: ModuleType, path: Path, *words: str) -> str:
 
 
 class TestShippedMaps:
-    def test_t12_the_four_files_are_package_data(self) -> None:
-        """T1 and T12: exactly the four, found through `importlib.resources`."""
+    def test_t12_the_shipped_files_are_package_data(self) -> None:
+        """T1 and T12: exactly the shipped ones, found through `importlib.resources`."""
         names = {p.name for p in shipped_dir().iterdir() if p.name.endswith(".toml")}
         assert names == {f"{name}.toml" for name in SHIPPED}
 
@@ -536,3 +536,63 @@ class TestLicence:
         path = write(tmp_path / "lic.toml", coded_map(licence="CC BY 4.0"))
         assert cm.load(str(path)).licence == "CC BY 4.0"
         assert all(cm.load(name).licence == "" for name in CORINE_MAPS)
+
+
+# ------------------------------------------------------- the AR50 legend
+
+
+#: `docs/increments/73-gml-vector-source.md`, section 4.5's table: code,
+#: label, colour, and NIBIO's RGB (None where NIBIO leaves the class unfilled).
+AR50_TABLE = (
+    (10, "Developed area and traffic", "#e86474", (232, 100, 116)),
+    (20, "Agriculture", "#ffd16e", (255, 209, 110)),
+    (30, "Forest", "#9ecc73", (158, 204, 115)),
+    (50, "Open firm ground", "#d9d9d9", (217, 217, 217)),
+    (60, "Marsh", "#73dfff", (115, 223, 255)),
+    (70, "Snow and glacier", "#ffffff", (255, 255, 255)),
+    (81, "Freshwater", "#91e7ff", (145, 231, 255)),
+    (82, "Ocean", "#d2ffff", (210, 255, 255)),
+    (99, "Not surveyed", "#8c8c8c", None),
+)
+AR50_NOTICE = (
+    "Contains data under the Norwegian licence for Open Government Data (NLOD) "
+    "distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
+)
+AR50_LICENCE = (
+    "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
+)
+
+
+class TestAr50:
+    """Test 11 of `docs/increments/73-gml-vector-source.md`: the shipped
+    `ar50` legend over AR50's land type, `arealtype`."""
+
+    def test_the_table_colours_are_nibios_rgb(self) -> None:
+        """The table's own check: each colour is its RGB in hex, so a slip
+        between the two columns fails here, not only in the file."""
+        for code, _, colour, rgb in AR50_TABLE:
+            if rgb is not None:
+                assert colour == "#{:02x}{:02x}{:02x}".format(*rgb), code
+
+    def test_the_header(self, cm: ModuleType) -> None:
+        got = cm.load("ar50")
+        assert (got.name, got.attribute, got.codes) == ("ar50", "arealtype", "AR50 arealtype code")
+        assert got.accuracy_m == 2.0
+        assert got.notice == AR50_NOTICE
+        assert got.licence == AR50_LICENCE
+        assert got.preset == "rasputin AR50 NIBIO"
+
+    def test_the_palette_is_exactly_the_tables(self, cm: ModuleType) -> None:
+        want = {0: ("No polygon; constraint lines", "#3c3c3c")}
+        want |= {code: (label, colour) for code, label, colour, _ in AR50_TABLE}
+        assert dict(cm.load("ar50").palette) == want
+
+    def test_fresh_water_and_ocean_carry_water_and_the_rest_land_cover(
+        self, cm: ModuleType
+    ) -> None:
+        got = cm.load("ar50")
+        land = ("land_cover",)
+        want = {str(code): land for code, *_ in AR50_TABLE}
+        want |= {"81": ("land_cover", "water"), "82": ("land_cover", "water")}
+        assert dict(got.classes) == want
+        assert got.otherwise == land

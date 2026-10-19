@@ -598,3 +598,370 @@ def test_a_dot_segment_path_under_a_scratchpad_is_not_governed(
 )
 def test_governed_judges_the_normalised_path_too(path: str, expected: bool) -> None:
     assert load_hook("guard_governance").governed(path) is expected
+
+
+# ---------------------------------------------------------------- h24 item 5b
+#
+# docs/increments/h24-harness-fixes.md §3 item 5b, at the governance guard: a
+# Python program that only reads a governed file, or the harness state, by
+# one of the exempt shapes writes nothing, so the guard is silent. A literal
+# that can reach a write still counts, as before.
+
+SETTINGS_READ = "python3 -c 'print(open(\".claude/settings.json\").read())'"
+SETTINGS_REUSED = 'python3 -c \'n = open(".claude/settings.json").name; open(n, "w").write("x")\''
+
+
+def state_read(repo: Path) -> str:
+    """Section 3 item 5's reproduction: a json.load of the flag, by its absolute path."""
+    flag = repo / ".git" / "harness" / "unattended.json"
+    return f"python3 -c 'import json; print(json.load(open(\"{flag}\")))'"
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_read_of_a_governed_file_is_silent(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, SETTINGS_READ)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_json_load_of_the_harness_state_is_silent(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, state_read(repo))
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+def test_h24_5b_a_governed_name_reused_for_a_write_still_asks(repo: Path) -> None:
+    set_mode(repo, "off")
+    event = bash_event(repo, SETTINGS_REUSED)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None, "the write through a reused name passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert "This changes a file that states rules: " in reason
+    assert ".claude/settings.json" in reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_5b_a_read_of_the_harness_state_with_an_opener_is_denied(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    program = f'def W(*a):\n    return 0\nprint(open("{flag}", opener=W).read())'
+    event = bash_event(repo, f"python3 -c '{program}'")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h24 item 5b, code review 1
+#
+# The scanner reads the program text before the shell expands it. In a
+# double-quoted `-c` or an unquoted heredoc, `$(<q)` is replaced
+# by the shell first: with q holding `','w').write('WRITTEN'))#`, the read
+# `open('<path>$(<q)').read()` runs as `open('<path>','w').write(...)`. The fix
+# proposed in review: no exemption when the program text holds `$` or a
+# backtick. Single-quoted `-c` text and a quoted heredoc are not expanded.
+
+#: The file the expansion reads; its text turns the read into a write.
+SPLICE = "','w').write('WRITTEN'))#"
+
+
+def expanding_reads(target: str) -> dict[str, str]:
+    """A read of `target` whose program text the shell rewrites before Python sees it."""
+    return {
+        "double-quoted-c": f"python3 -c \"print(open('{target}$(<q)').read())\"",
+        "unquoted-heredoc": f"python3 - <<EOF\nprint(open('{target}$(<q)').read())\nEOF",
+    }
+
+
+def quoted_reads(target: str) -> dict[str, str]:
+    """The same read with no expansion: single-quoted `-c` text and a quoted heredoc."""
+    program = f'print(open("{target}").read())'
+    return {
+        "single-quoted-c": f"python3 -c '{program}'",
+        "quoted-heredoc": f"python3 - <<'EOF'\n{program}\nEOF",
+    }
+
+
+EXPANSIONS = list(expanding_reads("T"))
+QUOTED = list(quoted_reads("T"))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("form", EXPANSIONS)
+def test_h24_5b_an_expanded_read_of_the_harness_state_is_denied(
+    repo: Path, mode: str, form: str
+) -> None:
+    set_mode(repo, mode)
+    (repo / "q").write_text(SPLICE)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, expanding_reads(str(flag))[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("form", EXPANSIONS)
+def test_h24_5b_an_expanded_read_of_a_governed_file_asks(repo: Path, form: str) -> None:
+    set_mode(repo, "off")
+    (repo / "q").write_text(SPLICE)
+    event = bash_event(repo, expanding_reads(".claude/settings.json")[form])
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None, "a read the shell turns into a write passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert f"{RULES}.claude/settings.json" in reason, reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("form", QUOTED)
+def test_h24_5b_an_unexpanded_read_of_the_harness_state_is_silent(
+    repo: Path, mode: str, form: str
+) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, quoted_reads(str(flag))[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("form", QUOTED)
+def test_h24_5b_an_unexpanded_read_of_a_governed_file_is_silent(repo: Path, form: str) -> None:
+    set_mode(repo, "off")
+    event = bash_event(repo, quoted_reads(".claude/settings.json")[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h24 item 14
+#
+# docs/increments/h24-harness-fixes.md §3 item 14: where the shell may rewrite
+# a Python program before Python reads it, the guard cannot know what runs. A
+# literal in a program holding `$` or a backtick is a candidate whatever its
+# spaces, judged by its static form; and the interpreter is `unknown`, so the
+# line falls to the deny rule (it names `.git/harness`) or the text rule (it
+# names a governed file). In an unquoted heredoc a backslash counts too: the
+# shell turns `\\` into `\`, so the scanner's comment is Python's write.
+
+
+def backtick_reads(target: str) -> dict[str, str]:
+    """A read of `target` with a backtick substitution spliced into the literal."""
+    return {
+        "double-quoted-c": f"python3 -c \"print(open('{target}`cat q`').read())\"",
+        "unquoted-heredoc": f"python3 - <<EOF\nprint(open('{target}`cat q`').read())\nEOF",
+    }
+
+
+BACKTICKS = list(backtick_reads("T"))
+
+
+def backslash_body(target: str) -> str:
+    """Design review round 3's B(t): as written a comment hides the write; after the
+    shell's `\\` -> `\\` in an unquoted heredoc, Python runs it."""
+    return rf"x = 'a\\'; y = 1 #'; open('{target}','w').write('X')"
+
+
+def heredoc(body: str, opener: str) -> str:
+    return f"python3 - {opener}\n{body}\nEOF"
+
+
+def asked_naming(repo: Path, command: str, name: str) -> None:
+    """The hook asks, by day, and names `name` in its reason."""
+    set_mode(repo, "off")
+    (repo / "q").write_text(SPLICE)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert RULES in reason and name in reason, reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("form", BACKTICKS)
+def test_h24_14_a_backtick_read_of_the_harness_state_is_denied(
+    repo: Path, mode: str, form: str
+) -> None:
+    set_mode(repo, mode)
+    (repo / "q").write_text(SPLICE)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, backtick_reads(str(flag))[form])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+SUBSTITUTED_GOVERNED: dict[str, tuple[str, str]] = {
+    "backtick-read-of-settings": (
+        "python3 -c \"print(open('.claude/settings.json`cat q`').read())\"",
+        ".claude/settings.json"),
+    "dollar-cat-read-of-settings": (
+        "python3 -c \"print(open('.claude/settings.json$(cat q)').read())\"",
+        ".claude/settings.json"),
+    "a-write-whose-path-is-all-substitution": (
+        "python3 -c \"open('$(echo CLAUDE.md)','w').write('x')\"", "CLAUDE.md"),
+    "backslash-in-an-unquoted-heredoc": (
+        heredoc(backslash_body("CLAUDE.md"), "<<EOF"), "CLAUDE.md"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("command", "name"), SUBSTITUTED_GOVERNED.values(), ids=SUBSTITUTED_GOVERNED.keys()
+)
+def test_h24_14_a_program_the_shell_rewrites_naming_a_governed_file_asks(
+    repo: Path, command: str, name: str
+) -> None:
+    asked_naming(repo, command, name)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_14_a_backslash_in_an_unquoted_heredoc_writing_the_harness_state_is_denied(
+    repo: Path, mode: str
+) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, heredoc(backslash_body(str(flag)), "<<EOF"))
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+def item_14_silent(flag: Path) -> dict[str, str]:
+    """Lines item 14 must leave silent: nothing substituted, or a quoted heredoc."""
+    return {
+        # Quoted: Python too reads the write as a comment.
+        "backslash-in-a-quoted-heredoc": heredoc(backslash_body("CLAUDE.md"), "<<'EOF'"),
+        "a-dollar-in-a-prose-literal": "python3 -c 'print(\"a $ b\")'",
+        "a-governed-name-in-prose": "python3 -c 'print(\"see CLAUDE.md for rules\")'",
+        "a-dollar-beside-a-plain-read": (
+            "python3 -c 'print(open(\"/x/notes.txt\").read().count(\"$\"))'"),
+        "a-json-read-by-quoted-heredoc": heredoc(
+            rf'import json; print("\n".join(json.load(open("{flag}"))))', "<<'EOF'"),
+        "a-dollar-read-by-quoted-heredoc": heredoc(
+            f'print(open("{flag}").read().count("$"))', "<<'EOF'"),
+    }  # fmt: skip
+
+
+ITEM_14_SILENT = list(item_14_silent(Path("/x")))
+
+
+@pytest.mark.parametrize("label", ITEM_14_SILENT)
+def test_h24_14_a_line_nothing_rewrites_or_that_only_reads_is_silent(
+    repo: Path, label: str
+) -> None:
+    set_mode(repo, "off")
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, item_14_silent(flag)[label])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h24 item 15
+#
+# docs/increments/h24-harness-fixes.md §3 item 15: the shell hands a
+# here-string (`<<< word`), plus a newline, to the command's stdin, so for an
+# interpreter or shell with no inline program it is the program. zsh joins
+# every stdin redirect of one command (MULTIOS), so each body counts. A
+# here-string holding `$` or a backtick is unknown whatever its quoting.
+
+#: A Python write of CLAUDE.md, double-quoted for the shell.
+WRITE_CLAUDE = "\"open('CLAUDE.md','w').write('x')\""
+
+HERE_STRING_ASKED: dict[str, tuple[str, str]] = {
+    "python3-double-quoted": (f"python3 <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "python3-single-quoted": ("python3 <<< 'open(\"CLAUDE.md\",\"w\").write(\"x\")'", "CLAUDE.md"),
+    "bash": ('bash <<< "echo x > CLAUDE.md"', "CLAUDE.md"),
+    "zsh": ("zsh <<< 'echo x > .claude/settings.json'", ".claude/settings.json"),
+    "perl": ("perl <<< 'open(F, \">CLAUDE.md\")'", "CLAUDE.md"),
+    "env": (f"env python3 <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "env-with-assignment": (f"env A=1 python3 <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "nice": (f"nice -n 5 python3 <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "timeout": (f"timeout 5 python3 <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "timeout-bash": ('timeout 5 bash <<< "echo x > CLAUDE.md"', "CLAUDE.md"),
+    # Two stdin redirects on one command: zsh runs both, so each counts.
+    "join-write-second": (f"python3 <<< 'print(1)' <<< {WRITE_CLAUDE}", "CLAUDE.md"),
+    "join-write-first": (f"python3 <<< {WRITE_CLAUDE} <<< 'print(2)'", "CLAUDE.md"),
+    "here-string-write-beside-a-heredoc": (
+        f"python3 <<< {WRITE_CLAUDE} <<EOF\nprint(1)\nEOF", "CLAUDE.md"),
+    # Unchanged: a heredoc's write beside a here-string still counts.
+    "heredoc-write-beside-a-here-string": (
+        "python3 <<< 'print(1)' <<EOF\nopen('CLAUDE.md','w').write('x')\nEOF", "CLAUDE.md"),
+    # `$` or a backtick: unknown whatever the quoting, so the line's text rule
+    # judges it; the governed name sits only in a comment, outside any literal.
+    "dollar-single-quoted": ("python3 <<< 'x = \"$y\"  # CLAUDE.md'", "CLAUDE.md"),
+    "dollar-double-quoted": ("python3 <<< \"x = '$(cat q)'  # CLAUDE.md\"", "CLAUDE.md"),
+    "backtick-single-quoted": ("python3 <<< 'x = \"`cat q`\"  # CLAUDE.md'", "CLAUDE.md"),
+    # Item 14's write whose path is all substitution, by here-string.
+    "a-write-whose-path-is-all-substitution": (
+        "python3 <<< \"open('$(echo CLAUDE.md)','w').write('x')\"", "CLAUDE.md"),
+    # A shell parses every stdin body whatever its -c program.
+    "shell-c-program-that-is-a-shell": (
+        "bash -c 'bash' <<'EOF'\necho x > CLAUDE.md\nEOF", "CLAUDE.md"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("command", "name"), HERE_STRING_ASKED.values(), ids=HERE_STRING_ASKED.keys()
+)
+def test_h24_15_a_here_string_program_naming_a_governed_file_asks(
+    repo: Path, command: str, name: str
+) -> None:
+    asked_naming(repo, command, name)
+    assert queue_lines(repo) == []
+
+
+def here_string_denied(flag: Path) -> dict[str, str]:
+    """Here-string programs that write, or may write, the harness state."""
+    return {
+        "python3-write": f"python3 <<< \"open('{flag}','w').write('x')\"",
+        "bash-write": f"bash <<< 'echo x > {flag}'",
+        "python3-backtick-read": f"python3 <<< \"print(open('{flag}`cat q`').read())\"",
+    }
+
+
+HERE_STRING_DENIED = list(here_string_denied(Path("/x")))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("label", HERE_STRING_DENIED)
+def test_h24_15_a_here_string_program_writing_the_harness_state_is_denied(
+    repo: Path, mode: str, label: str
+) -> None:
+    set_mode(repo, mode)
+    (repo / "q").write_text(SPLICE)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, here_string_denied(flag)[label])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+def here_string_silent(flag: Path) -> dict[str, str]:
+    """Here-strings item 15 must leave silent: data, an ordinary file, or a read."""
+    return {
+        "cat-plain": "cat <<< x",
+        "cat-of-a-python-write": "cat <<< 'open(\"CLAUDE.md\",\"w\")'",
+        "grep-of-a-governed-name": "grep -c x <<< CLAUDE.md",
+        "python3-writes-an-ordinary-file": "python3 <<< \"open('notes/a.txt','w').write('x')\"",
+        "bash-writes-an-ordinary-file": 'bash <<< "echo x > notes/a.txt"',
+        "two-here-strings-that-print": "python3 <<< 'print(1)' <<< 'print(2)'",
+        # A -c program keeps stdin as data.
+        "c-program-beside-a-here-string": "python3 -c 'print(1)' <<< \"open('CLAUDE.md','w')\"",
+        # An interpreter's inline program, or a script, keeps a heredoc as data.
+        "c-program-beside-a-heredoc": (
+            "python3 -c 'print(1)' <<'EOF'\nopen('CLAUDE.md','w').write('x')\nEOF"),
+        "shell-script-beside-a-heredoc": "bash script.sh <<'EOF'\necho x > CLAUDE.md\nEOF",
+        "json-read-of-the-harness-state": (
+            f"python3 <<< 'import json; print(json.load(open(\"{flag}\")))'"),
+    }  # fmt: skip
+
+
+HERE_STRING_SILENT = list(here_string_silent(Path("/x")))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("label", HERE_STRING_SILENT)
+def test_h24_15_a_here_string_that_writes_nothing_governed_is_silent(
+    repo: Path, mode: str, label: str
+) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, here_string_silent(flag)[label])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []

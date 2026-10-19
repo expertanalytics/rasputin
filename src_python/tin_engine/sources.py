@@ -13,7 +13,8 @@ URL into the credit, and `check_values` keeps classes out of `--dem` and
 heights out of `--land-cover`.
 
 A local entry may also be a vector file (`.gpkg`, `.geojson`, `.json`): it
-holds features, which the vector options take by path. A plugin distribution
+holds features, which the vector options take by path; a `.gml` file is
+refused, since it is read once `rasputin gml-to-gpkg` has converted it. A plugin distribution
 adds its own `sources.toml` through the entry point group `rasputin.sources`
 (`plugin_source_files`).
 
@@ -40,6 +41,7 @@ from tin_engine.toml_data import parse, validate
 ZUnit = Literal["metre", "foot", "US survey foot"]
 #: The fields each kind's `url_template` takes, and needs.
 _URL_FIELDS = {"one-cog": set(), "cog-tiles": {"name"}, "one-cog-per-year": {"year"}}
+_GML_REFUSAL = "a .gml file is read after `rasputin gml-to-gpkg` converts it; register the .gpkg"
 #: The suffixes of the files the lake and feature readers both take.
 VECTOR_SUFFIXES = (".gpkg", ".geojson", ".json")
 #: The entry point group whose value names a package holding a `sources.toml`.
@@ -137,6 +139,8 @@ class RemoteSource(BaseModel):
         if self.kind == "arcgis-features":
             return self._layer_consistent()
         suffix = "" if self.path is None else self.path.suffix.lower()
+        if suffix == ".gml":
+            raise ValueError(_GML_REFUSAL)
         if self.layer is not None and suffix != ".gpkg":
             raise ValueError("layer: only a .gpkg path has layers")
         if self.values == "features":

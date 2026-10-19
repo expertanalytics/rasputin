@@ -41,7 +41,7 @@ COLUMNS = 200
 PANELS = [
     ("Meshing", ["mesh", "palette"]),
     ("Catchments", ["catchment", "station-catchments"]),
-    ("Data", ["fetch", "fetch-stations", "sources"]),
+    ("Data", ["fetch", "fetch-stations", "sources", "gml-to-gpkg"]),
     ("Other", ["version", "mcp"]),
 ]
 

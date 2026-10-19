@@ -171,7 +171,8 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
     elif AWAY_TEXT.search(command) or (
             ".git/harness" in command and (WRITES.search(command) or STATE_WRITES.search(command))):
         return "deny", [], ""
-    hits = text_hits(command) if WRITES.search(command) else []
+    unread = simples is not None and any(s.unknown for s in simples)
+    hits = text_hits(command) if WRITES.search(command) or unread else []
     return ("ask", hits, CANNOT_READ) if hits else None
 
 

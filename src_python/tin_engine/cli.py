@@ -20,7 +20,7 @@ import shlex
 import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Final, TextIO, cast
@@ -101,6 +101,7 @@ from tin_engine.feature_input import (
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
+from tin_engine.gml_import import gml_to_geopackage
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
@@ -306,6 +307,9 @@ _INSTALL_MCP_HELP = INSTALL_MCP.replace("[", r"\[") if app.rich_markup_mode else
 MCP_HELP: Final = (
     "Serve the commands to an agent over the Model Context Protocol, on stdin and stdout."
     "\n\nOne tool per command, each call run in a process of its own. "
+    "With --http, over Streamable HTTP instead: each user's bearer token from "
+    "RASPUTIN_MCP_TOKENS (user=token pairs), calls run in <out-root>/<user>/work, and "
+    "each output comes back as a signed download link valid 1 hour; files are kept 7 days. "
     f"Needs the mcp extra: {_INSTALL_MCP_HELP}"
 )
 
@@ -323,16 +327,53 @@ def mcp(
             "missing folders inside it are made. Default: ~/rasputin-output.",
         ),
     ] = None,
+    http: Annotated[
+        bool, typer.Option("--http", help="Serve over Streamable HTTP, not stdin and stdout.")
+    ] = False,
+    host: Annotated[str, typer.Option("--host", help="With --http: the address to bind.")] = (
+        "127.0.0.1"
+    ),
+    port: Annotated[int, typer.Option("--port", help="With --http: the port to bind.")] = 8765,
+    public_url: Annotated[
+        str | None,
+        typer.Option(
+            "--public-url",
+            metavar="URL",
+            help="With --http: the address clients use, which links are built on; https "
+            "unless loopback. Default: http://<host>:<port>.",
+        ),
+    ] = None,
+    quota: Annotated[
+        str, typer.Option("--quota", help="With --http: each user's folder size, as 20G.")
+    ] = "20G",
 ) -> None:
     """Serve the commands to an agent over the Model Context Protocol (``--help`` says how)."""
     try:
+        from tin_engine.mcp import http as mcp_http
         from tin_engine.mcp import server
     except ImportError:
         typer.echo(f"Error: the mcp extra is not installed; run {INSTALL_MCP}", err=True)
         raise typer.Exit(2) from None
     from tin_engine import plugins  # the hook imports this module
 
-    asyncio.run(server.serve(plugins.served or plugins.application(), jobs, out_root))
+    served = plugins.served or plugins.application()
+    if not http:
+        asyncio.run(server.serve(served, jobs, out_root))
+        return
+    from tin_engine.resources import parse_bytes
+
+    try:
+        settings = mcp_http.HttpSettings(
+            host=host,
+            port=port,
+            public_url=public_url or f"http://{host}:{port}",
+            out_root=out_root or Path.home() / server.DEFAULT_OUT_ROOT,
+            quota=parse_bytes(quota),
+        )
+        mcp_http.serve_http(served, settings, mcp_http.tokens_from_env(os.environ), jobs=jobs)
+    except ValueError as exc:
+        typer.echo(f"Error: {cli_kit.words(exc)}", err=True)
+        raise typer.Exit(2) from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1793,6 +1834,44 @@ def sources(
     typer.echo(listing(os.environ, cache_root(cache, os.environ), bbox).model_dump_json())
 
 
+def gml_to_gpkg(
+    source: Annotated[Path, typer.Argument(help="The GML 3.2 file to convert.")],
+    out: Annotated[
+        Path, typer.Option("--out", writable=True, help="The GeoPackage to write (.gpkg).")
+    ],
+    crs: Annotated[
+        str | None, typer.Option("--crs", help="The CRS, when the geometries name none.")
+    ] = None,
+) -> None:
+    """Convert a GML 3.2 file of surfaces to a GeoPackage, once, for --features and the catalogue.
+
+    One table of the file's feature type: a row per feature with a surface,
+    its gml:id and its plain values as columns, in the file's CRS. The file
+    is written as OUT.part and renamed onto OUT when finished.
+    """
+    if out.suffix.lower() != ".gpkg":
+        raise typer.BadParameter(f"{out} must end in .gpkg", param_hint="--out")
+    target = cli_kit.destination(out)
+    part = target.with_name(target.name + ".part")
+    part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
+    try:
+        with source.open("rb") as stream, closing(create_sqlite(part)) as conn:
+            done = gml_to_geopackage(stream, conn, crs=crs)
+    except (OSError, ValueError) as exc:
+        part.unlink(missing_ok=True)
+        raise typer.BadParameter(f"{source}: {exc}") from exc
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, target)
+    typer.echo(
+        f"{out}: {done.features} features of {done.layer} in {crs_label(done.crs)},"
+        f" {done.without_surface} without a surface; columns {', '.join(done.columns)}",
+        err=True,
+    )
+    typer.echo(f"{out}")
+
+
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
     """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
     ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
@@ -2959,7 +3038,7 @@ app.callback()(main)
 for panel, commands in (
     (MESHING, (mesh, palette)),
     (CATCHMENTS, (catchment, station_catchments)),
-    (DATA, (fetch, fetch_stations, sources)),
+    (DATA, (fetch, fetch_stations, sources, gml_to_gpkg)),
     (OTHER, (version,)),
 ):
     for command in commands:

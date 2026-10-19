@@ -93,6 +93,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "catchment_batch": "catchment crs gauge geodesy hydrography io.repository reference"
                            " resources",
         "fetch": "",
+        "gml_import": "crs io.geopackage_write io.gml",  # 73: GML 3.2 into a GeoPackage
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
@@ -106,20 +107,23 @@ LAYERS: tuple[dict[str, str], ...] = (
     {  # L5: flags in, files and stderr out
         "cli": "_core basin_run catchment catchment_batch chains legends cli_kit crs dem_input"
                " domain decompose edge_strip elevation feature_input features fetch.features"
-               " fetch.http fetch.nve fetch.plan fetch.run final_check gauge grid_domain"
+               " fetch.http fetch.nve fetch.plan fetch.run final_check gauge gml_import grid_domain"
                " hydrography io.cog io.domain_file io.geojson io.geopackage_write io.mesh_index"
                " io.models io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " mcp.server mosaic palettes plugins raster refine_job resources run_record"
-               " source_report"
-               " sources stats target_grid tin_engine tolerance_field",
+               " mcp.http mcp.server mosaic palettes plugins raster refine_job resources"
+               " run_record source_report sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's
         "plugin_api": "catchment_core cli_kit crs dem_input io.geotiff_write io.models"
                       " io.vtk_read raster resources run_record",  # 51: what a plugin may import
         "mcp": "", "mcp.schema": "",  # 37: the MCP server over the commands
-        "mcp.server": "mcp.schema sources tin_engine",  # 57: the output root's variable
+        "mcp.server": "mcp.schema mcp.workspace sources tin_engine",  # 57: the output root's
+                                                                      # variable; 69: the scope
+        # 69: MCP over HTTP; only `mcp.http` imports Starlette or uvicorn
+        "mcp.http": "mcp.links mcp.schema mcp.server mcp.store mcp.workspace sources",
+        "mcp.links": "", "mcp.store": "", "mcp.workspace": "",
     },
 )
 # fmt: on
