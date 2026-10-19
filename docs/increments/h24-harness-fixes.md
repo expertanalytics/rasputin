@@ -811,14 +811,20 @@ here-string beside a heredoc runs both; bash keeps only the last.
   `finish_heredoc(simple, word + "\n", substituted(word))` for each
   here-string.
 - `finish_heredoc(simple, body, expands)` takes the body as an argument
-  (`read_heredocs` passes its joined lines) and appends, not replaces: a
-  shell parses each body as commands, as for a heredoc today; an interpreter
-  with no inline program (`interpreter(name, argv[1:])` gives no `-c`/`-e`
-  text; `-` and no script as today) gets `program = (program or "") + body`,
-  so every stdin body counts, zsh's way, and a write in any of them is a
-  candidate. The early return on `program is not None` goes; the inline
-  check takes its place. A `-c` program or a script keeps stdin as data, as
-  today.
+  (`read_heredocs` passes its joined lines) and appends, not replaces. With
+  no script operand (`-` or none, as today): a shell parses every stdin
+  body as commands, heredoc and here-string alike, whatever its `-c`
+  program, as master does for a heredoc (`finish` has already parsed the
+  `-c` program and cleared it, so `sh -c 'cat | sh' <<'EOF'` reads the
+  body); an interpreter with no inline program (`interpreter(name,
+  argv[1:])` gives no `-c`/`-e` text) gets `program = (program or "") +
+  body`, so every stdin body counts, zsh's way, and a write in any of them
+  is a candidate. The early return on `program is not None` goes; the
+  inline check takes its place, after the shell branch, never before it.
+  An interpreter's inline program keeps stdin as data, and a script,
+  a shell's or an interpreter's, keeps stdin as data, both as today
+  (master, 2026-10-19: `python3 -c 'print(1)' <<'EOF'` and `bash
+  script.sh <<'EOF'` with a write body pass both guards).
 - `unknown`: a here-string is marked as a `-c` program is (item 14):
   `substituted(word)`, `$` or a backtick, whatever the quoting. The
   backslash is not a sign here: unlike a heredoc body, which the scanner
@@ -876,7 +882,19 @@ named:
 
 Through the whole push hook (`tests/python/test_guard_push.py`, `ASKED` and
 `PASSED`): `bash <<< 'git push origin x'` and `sh <<< "gh pr merge 1"` ask;
-`cat <<< 'git push origin x'` is silent. In
+`cat <<< 'git push origin x'` is silent.
+
+Added after code review round 2, a shell with a `-c` program (each asks on
+master but the here-string, and passes on `565690b6`): push hook,
+`bash -c bash <<'EOF'` with the body `git push origin x`, `sh -c 'cat |
+sh' <<'EOF'` with the same body, and `bash -c bash <<< 'git push origin
+x'` ask; governance hook, `bash -c 'bash' <<'EOF'` with the body `echo x >
+CLAUDE.md` asks naming `CLAUDE.md`. Measured through both whole hooks on
+archives of master `9ba6c5ec`, of `565690b6`, and of `565690b6` with the
+shell branch moved ahead of the inline check: all four ask on the last.
+Not in PR A, silent on master too (same run): a brace group `{ bash; }`,
+a subshell `( bash )` or a function fed a heredoc, `pypy3` and `uv run
+python` or `uv run bash` reading one. In
 `tests/python/test_guard_targets.py`, `parse`: the review's `python3` line
 gives program `open('notes/a.txt','w').write('x')\n` and candidate
 `notes/a.txt`; its `bash` line gives a second simple, `echo x`, writing
@@ -905,7 +923,8 @@ above; with the guard line too, 2635 passed, 0 failed.
 *Governed* (`tools/shell_scan.py`, `.claude/hooks/guard_governance.py`).
 About 4 counted lines (3 in `finish`, 1 in `finish_heredoc`) and about 6
 changed (`redirect`, the inline check, the append, the tuple types, the
-guard's line 174). In PR A, same green step as items 5b and 14.
+guard's line 174); the round-2 fix moves the inline check under the shell
+branch, 0 net lines. In PR A, same green step as items 5b and 14.
 
 ### Item 16. A guard that fails refuses the command
 
