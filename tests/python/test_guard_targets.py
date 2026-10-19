@@ -12,9 +12,12 @@ commands are added under labels of their own. Every guard case runs by day
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import shlex
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -481,3 +484,265 @@ def test_a_move_into_a_directory_named_without_a_slash_names_both_readings() -> 
     found, unnamed = shell_scan.writer_targets("mv", ["a", "b", "tools"])
     assert {"a", "b", "tools", "tools/a", "tools/b"} <= set(found), found
     assert unnamed is False
+
+
+# ---------------------------------------------------------------- h24 item 5b
+#
+# docs/increments/h24-harness-fixes.md §3 item 5b: a Python string literal
+# that only flows into a read (`json.load(open(LIT))`, `open(LIT).read()`,
+# `Path(LIT).read_text()`, ...) is not a write candidate, provided the whole
+# program imports only json and pathlib, rebinds none of the names the read
+# relies on, and patches or reflects on nothing. Otherwise every literal is a
+# candidate, as before. Each program runs through `parse` as Python's `-c`
+# text; the first shape also as a heredoc.
+
+#: The harness folder's `unattended.json`, as an absolute path.
+H = "/x/.git/harness/unattended.json"
+#: A function the program defines itself: no import, no rebinding of a read name.
+W = "def W(*args, **kwargs):\n    return 0\n"
+
+
+def candidates_of(program: str, heredoc: bool = False) -> list[str]:
+    """`candidates` of a Python program that parses, so the AST rules judge it, not the regex."""
+    ast.parse(program)
+    line = f"python3 - <<'X'\n{program}\nX" if heredoc else f"python3 -c {shlex.quote(program)}"
+    simples = shell_scan.parse(line)
+    assert simples is not None and len(simples) == 1, simples
+    assert simples[0].program is not None and simples[0].program.strip() == program.strip()
+    found: list[str] = shell_scan.candidates(simples[0])
+    return found
+
+
+READS: dict[str, tuple[str, bool]] = {
+    "json-load-by-c": (f"import json; print(json.load(open({H!r})))", False),
+    "json-load-by-heredoc": (f"import json\nprint(json.load(open({H!r})))", True),
+    "path-read-text": (f"from pathlib import Path; print(Path({H!r}).read_text())", False),
+    "open-r-encoding-readlines": (
+        f'print(len(open({H!r}, "r", encoding="utf-8").readlines()))', False),
+    "open-rb-read": (f'print(open({H!r}, "rb").read())', False),
+    "pathlib-path-read-bytes": (f"import pathlib; print(pathlib.Path({H!r}).read_bytes())", False),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("program", "heredoc"), READS.values(), ids=READS.keys())
+def test_h24_5b_a_literal_only_read_is_not_a_candidate(program: str, heredoc: bool) -> None:
+    assert H not in candidates_of(program, heredoc)
+
+
+STILL_CANDIDATES: dict[str, str] = {
+    # The design review's writes, each its own case.
+    "reused-name": f'n = open({H!r}).name; open(n, "w").write("x")',
+    "opener": f"{W}print(open({H!r}, opener=W).read())",
+    "builtins-open-patched": f"{W}import builtins; builtins.open = W; print(open({H!r}).read())",
+    "path-read-text-patched": (
+        f"{W}from pathlib import Path; Path.read_text = W; print(Path({H!r}).read_text())"),
+    "setattr-before-the-read": (
+        f'{W}from pathlib import Path; setattr(Path, "read_text", W); '
+        f"print(Path({H!r}).read_text())"),
+    "import-as-json": f"import shutil as json; json.load(open({H!r}))",
+    "path-from-elsewhere": f"from x import Path; Path({H!r}).read_text()",
+    "star-import": f"from os import *; print(open({H!r}).read())",
+    "json-rebound": f"{W}import json; json = W; json.load(open({H!r}))",
+    # The reflection route, and an import outside the allowlist.
+    "code-object": f"print(open({H!r}).read()); (lambda: 0).__code__",
+    "import-sys": f"import sys; print(open({H!r}).read())",
+    # Unchanged: writes, unread modes, named file objects, and built paths.
+    "open-w": f'open({H!r}, "w")',
+    "open-a": f'open({H!r}, "a")',
+    "open-mode-variable": f'mode = "r"; open({H!r}, mode)',
+    "mode-keyword": f'open({H!r}, mode="r").read()',
+    "path-write-text": f'from pathlib import Path; Path({H!r}).write_text("x")',
+    "path-open-w": f'from pathlib import Path; Path({H!r}).open("w")',
+    "named-path": f"from pathlib import Path; p = Path({H!r}); p.read_text()",
+    "named-file": f"f = open({H!r}); f.read()",
+    "for-loop-over-open": f"for l in open({H!r}): print(l)",
+    "with-open-as": f"with open({H!r}) as f: print(f.read())",
+    "shutil-copy": f'import shutil; shutil.copy("a.json", {H!r})',
+    "open-redefined": f"def open(p):\n    return 0\nopen({H!r}).read()",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("program", STILL_CANDIDATES.values(), ids=STILL_CANDIDATES.keys())
+def test_h24_5b_a_literal_outside_the_exempt_reads_stays_a_candidate(program: str) -> None:
+    assert H in candidates_of(program)
+
+
+def test_h24_5b_the_harness_folder_joined_with_slash_stays_a_candidate() -> None:
+    folder = H.rsplit("/", 1)[0]
+    program = f'from pathlib import Path; print((Path({folder!r}) / "unattended.json").read_text())'
+    assert folder in candidates_of(program)
+
+
+# ---------------------------------------------------------------- h24 item 14
+#
+# docs/increments/h24-harness-fixes.md §3 item 14: an interpreter (not a
+# shell) whose program the shell may rewrite is `unknown`. For `-c` that is a
+# program holding `$` or a backtick; for a heredoc, an unquoted delimiter and a
+# body holding `$`, a backtick or a backslash. Any quoting of the delimiter
+# (`'EOF'`, `"EOF"`, `\EOF`) turns the shell's expansion off.
+
+
+def the_simple(line: str, name: str) -> Any:
+    simples = shell_scan.parse(line)
+    assert simples is not None, line
+    [simple] = [s for s in simples if s.argv[:1] == [name]]
+    return simple
+
+
+def test_h24_14_a_double_quoted_c_program_holding_a_substitution_is_unknown() -> None:
+    simple = the_simple("python3 -c \"print(open('a$(cat q)').read())\"", "python3")
+    assert simple.unknown is True
+
+
+def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_not_unknown() -> None:
+    simples = shell_scan.parse('bash -c "echo $(cat q)"')
+    assert simples is not None
+    assert len(simples) == 4, [s.argv for s in simples]
+    assert [s.argv for s in simples if s.unknown] == []
+
+
+#: Design review round 3's B(t), here with an ordinary target.
+BACKSLASH_BODY = r"x = 'a\\'; y = 1 #'; open('notes/plain.txt','w').write('X')"
+
+
+def test_h24_14_an_unquoted_heredoc_with_a_backslash_is_unknown() -> None:
+    simple = the_simple(f"python3 - <<EOF\n{BACKSLASH_BODY}\nEOF", "python3")
+    assert simple.unknown is True
+
+
+@pytest.mark.parametrize("opener", ["<<'EOF'", '<<"EOF"', "<<\\EOF"])
+def test_h24_14_a_quoted_heredoc_delimiter_keeps_the_program_readable(opener: str) -> None:
+    simple = the_simple(f"python3 - {opener}\n{BACKSLASH_BODY}\nEOF", "python3")
+    assert simple.program is not None and BACKSLASH_BODY in simple.program
+    assert simple.unknown is False
+
+
+# ---------------------------------------------------------------- h24 item 15
+#
+# docs/increments/h24-harness-fixes.md §3 item 15: a here-string is its word,
+# quotes removed as `word()` removes them, plus a newline, handed to stdin. An
+# interpreter with no `-c`/`-e` text and no script runs it; a shell parses it
+# as commands. Every stdin body of one command counts (zsh's MULTIOS). `$` or a
+# backtick in the word marks the interpreter unknown whatever the quoting.
+
+#: Design review round 4's two writes of an ordinary file.
+PYTHON_WRITE = "open('notes/a.txt','w').write('x')"
+
+
+def test_h24_15_a_python_here_string_is_its_program() -> None:
+    simple = the_simple(f'python3 <<< "{PYTHON_WRITE}"', "python3")
+    assert simple.program == PYTHON_WRITE + "\n"
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+    assert simple.unknown is False
+
+
+def test_h24_15_a_shell_here_string_is_parsed_as_commands() -> None:
+    simples = shell_scan.parse('bash <<< "echo x > notes/a.txt"')
+    assert simples is not None
+    assert [(s.argv, s.writes) for s in simples] == [
+        (["bash"], []),
+        (["echo", "x"], ["notes/a.txt"]),
+    ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f'env python3 <<< "{PYTHON_WRITE}"',
+        f'env A=1 python3 <<< "{PYTHON_WRITE}"',
+        f'nice -n 5 python3 <<< "{PYTHON_WRITE}"',
+        f'timeout 5 python3 <<< "{PYTHON_WRITE}"',
+        f'python3 - <<< "{PYTHON_WRITE}"',
+    ],
+    ids=["env", "env-with-assignment", "nice", "timeout", "dash-script"],
+)
+def test_h24_15_a_here_string_after_a_wrapper_or_dash_is_the_program(line: str) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program == PYTHON_WRITE + "\n"
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+
+
+@pytest.mark.parametrize("line", ['env bash <<< "echo x > notes/a.txt"',
+                                  'timeout 5 bash <<< "echo x > notes/a.txt"'])  # fmt: skip
+def test_h24_15_a_shell_here_string_after_a_wrapper_is_parsed(line: str) -> None:
+    simples = shell_scan.parse(line)
+    assert simples is not None
+    assert (["echo", "x"], ["notes/a.txt"]) in [(s.argv, s.writes) for s in simples]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"python3 <<< 'print(1)' <<< \"{PYTHON_WRITE}\"",
+        f"python3 <<< \"{PYTHON_WRITE}\" <<< 'print(1)'",
+        f'python3 <<< "{PYTHON_WRITE}" <<EOF\nprint(1)\nEOF',
+        f"python3 <<< 'print(1)' <<EOF\n{PYTHON_WRITE}\nEOF",
+    ],
+    ids=["write-second", "write-first", "here-string-before-heredoc", "heredoc-write"],
+)
+def test_h24_15_every_stdin_body_of_one_command_is_in_its_program(line: str) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program is not None
+    assert "print(1)" in simple.program and PYTHON_WRITE in simple.program
+    assert "notes/a.txt" in shell_scan.candidates(simple)
+
+
+def test_h24_15_two_shell_here_strings_are_both_parsed() -> None:
+    simples = shell_scan.parse("zsh <<< 'echo a' <<< 'echo x > notes/a.txt'")
+    assert simples is not None
+    found = [(s.argv, s.writes) for s in simples]
+    assert (["echo", "a"], []) in found and (["echo", "x"], ["notes/a.txt"]) in found
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "python3 <<< \"print('$(cat q)')\"",
+        "python3 <<< 'print(\"$(cat q)\")'",
+        "python3 <<< 'print(\"$HOME\")'",
+        "python3 <<< 'print(\"`cat q`\")'",
+        "python3 <<< \"print('`cat q`')\"",
+    ],
+    ids=["dollar-paren-double", "dollar-paren-single", "parameter-single", "backtick-single",
+         "backtick-double"],
+)  # fmt: skip
+def test_h24_15_a_here_string_holding_a_substitution_is_unknown(line: str) -> None:
+    assert the_simple(line, "python3").unknown is True
+
+
+def test_h24_15_a_substitution_in_a_second_here_string_is_unknown() -> None:
+    simple = the_simple("python3 <<< 'print(1)' <<< 'print(\"$HOME\")'", "python3")
+    assert simple.unknown is True
+
+
+def test_h24_15_a_shell_here_string_holding_a_substitution_is_parsed_not_unknown() -> None:
+    simples = shell_scan.parse('bash <<< "echo $(cat q)"')
+    assert simples is not None
+    assert ["echo", "$(cat q)"] in [s.argv for s in simples]
+    assert [s.argv for s in simples if s.unknown] == []
+
+
+def test_h24_15_a_backslash_in_a_here_string_is_not_a_sign_of_rewriting() -> None:
+    simple = the_simple("python3 <<< 'print(\"a\\\\nb\")'", "python3")
+    assert simple.program == 'print("a\\\\nb")\n'
+    assert simple.unknown is False
+
+
+def test_h24_15_a_here_string_to_a_non_interpreter_is_data() -> None:
+    simple = the_simple("cat <<< x", "cat")
+    assert simple.program is None
+    assert simple.unknown is False
+
+
+@pytest.mark.parametrize(
+    ("line", "program"),
+    [("python3 -c 'print(1)' <<< \"open('CLAUDE.md','w')\"", "print(1)"),
+     ("python3 run.py <<< \"open('CLAUDE.md','w')\"", None)],
+    ids=["c-program", "script"],
+)  # fmt: skip
+def test_h24_15_a_c_program_or_a_script_keeps_a_here_string_as_data(
+    line: str, program: str | None
+) -> None:
+    simple = the_simple(line, "python3")
+    assert simple.program == program
+    assert "CLAUDE.md" not in shell_scan.candidates(simple)
