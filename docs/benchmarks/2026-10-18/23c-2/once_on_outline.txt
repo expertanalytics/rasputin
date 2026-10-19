@@ -1,0 +1,4 @@
+/Users/skavhaug/projects/rasputin/.claude/worktrees/23c/docs/benchmarks/2026-10-18/23c-2/once_on_outline.py:22: DeprecationWarning: The 'shapely.ops.transform()' function is deprecated. Use 'shapely.transform()' or 'shapely.transform_coordseq()' instead. See https://shapely.readthedocs.io/en/latest/manual.html#shapely.ops.transform for more details.
+  ring = shapely.ops.transform(tr.transform, dom).boundary
+segments in one piece only: 7490; midpoint distance to the projected outline: max 0.000657 m; over 0.01 m: 0; over 1 m: 0
+segments in two pieces: 3305; in more than two: 0

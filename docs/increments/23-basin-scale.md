@@ -2,18 +2,9 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136); 23a-2 merged (#138); 23b merged (#162,
-merge commit `4f56551`; red
-`45045dc`, its open points settled under "Settled after 23b's red step
-(45045dc)"; green `3c464ec`, N18 in at `185081c`), 249 net production
-lines after the master merge (248 before it; the merged sum takes one
-more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
-`4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
-23c split in two:
-23c-1 (about 215 estimated, 156 built) merged (#164, merge commit
-`e56a2bf`), no `@perf` run needed, and 23c-2 (about 265) in progress on
-`worktree-23c`, not pushed, its state in that branch's copy of this file;
-23d onwards not implemented.** Written before `@tester`
+2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (about 185, each piece's memory its own) next; 23d
+onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
 with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
@@ -123,7 +114,8 @@ changes the design, the section named does the rework.
   run of the two outlines; once the DEM-derived ones work, the BHO ones are
   abandoned. Ola: "Go back, we choose option c: a, then b. When b works, we
   can abandon a."
-- **B14: one parameter, `--memory-budget`, replaces `N_MIN`, `N_MAX` and
+- **B14: one parameter, `--memory-budget` (renamed `--piece-budget` on
+  2026-10-17, R2 of "23c-2 meets master"), replaces `N_MIN`, `N_MAX` and
   the per-piece memory cap.** Default 16 GB, fixed, not read from the
   machine. A domain is cut only when its estimated memory at the requested
   tolerance exceeds the budget; pieces are sized to fit it; no hard upper
@@ -810,9 +802,8 @@ The main session's reasoning, item by item.
 
 - **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
   constant: never the machine's memory, so the mesh does not depend on the
-  machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
-  pieces do not fit the machine runs out of memory. 15a R7's refusal at
-  half of physical memory goes too (B15, ruled (a)).
+  machine (K5). No upper limit on it, on `--pieces` or on a piece. 15a R7's refusal at
+  half of physical memory goes too (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master").
 - **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
   sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
   0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
@@ -925,7 +916,8 @@ the thin triangles beside them) is repaired at stitching by B4's cleanup
      which is one-dimensional work.
 3. **The start slice, with fans** (Python, NumPy). A piece's start mesh is the
    start triangulation's triangles with its label, vertices renumbered in
-   first-use order, constraint edges and masks restricted to them. Each seam
+   the start triangulation's order (corrected after 23c-2, below),
+   constraint edges and masks restricted to them. Each seam
    edge `(a, b)` with seam-pass points `p1 … pk`, in triangle `(a, b, c)`,
    becomes `(a, p1, c), (p1, p2, c), …, (pk, b, c)`: index arithmetic, no
    geometry. Each fan triangle is counter-clockwise when every `pi` lies
@@ -1028,7 +1020,8 @@ thresholds are under "@perf acceptance", 23g).
   the running pieces' estimates (`dx · dy · b(T)`) fit under
   `--memory-budget`, and always starts one when none is running. It can
   delay a piece, never change or refuse one. 15a R7's refusal at half of
-  physical memory is deleted (B15, ruled (a)).
+  physical memory is deleted (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master"); the runner's sum is
+  held under master's `--memory-budget` (R3).
 
 ## Windowed source reads (23a-1)
 
@@ -1652,7 +1645,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap (15a R7) goes (B15, ruled (a)). 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) goes (B15, ruled (a)) (superseded 2026-10-17: the caps stay at master's `--memory-budget`; see "23c-2 meets master"). 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1879,7 +1872,7 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
 | | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
-| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a)) | 0 | | |
+| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a); superseded 2026-10-17, they stay) | 0 | | |
 | | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
@@ -2112,7 +2105,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   and large values (neither the count nor the cut is the machine's).
 - **DC1, K1**: a domain under the budget, and a larger one with a budget
   above its estimate, write the same bytes as today's path.
-- **DC11, no machine refusal** (B15, ruled (a)): a mosaic
+- **DC11, no machine refusal** (B15, ruled (a); rewritten 2026-10-17 as
+  "the cap does not cut, the budget does not cap", item 4 of `@tester`'s
+  rewrite under "23c-2 meets master"; the text below is the old one): a mosaic
   over half of a patched `physical_memory` is planned, not refused; 15a's M5
   refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
   (pinned behaviour B15 changes); the same for 22's catchment refusal in
@@ -2122,8 +2117,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   not the seam records or the index.
 - **DC3, a valid union**: in the union of the piece files (assembled in the
   test; the stitcher is 23d's) every edge not on the outline
-  is in exactly two triangles, the triangles' area sums to the domain's
-  (shapely) to 1e-9 relative, and no two triangles overlap (brute force on a
+  is in exactly two triangles, the triangles' area sums to the noded
+  outline's to 1e-9 relative and to the domain's within the noder's snap
+  (corrected after 23c-2, below), and no two triangles overlap (brute force on a
   small case).
 - **DC4, constrained Delaunay with the seams**: an exact incircle oracle
   (Python `fractions`, independent of refine's predicates) finds no violation
@@ -2868,6 +2864,19 @@ step's commits split along the same line (`edd8a29`, `d994a0e`, `db6a5c0`
 to 23c-1; the rest to 23c-2); how the branches are rebuilt is the main
 session's.
 
+### Two pins from the follow-up tests (b1a8baf)
+
+`tests/python/test_cli_mesh_pieces_settled.py` pins two choices this block
+left open. Both confirmed:
+
+- **Where the pieces are, on stderr** (item 2): the test asserts only that
+  the output contains the directory's name. That is enough: the wording is
+  `@developer`'s, and the directory's name is the fact a reader needs.
+- **`counts.triangles`** (items 11 and B) is the number of triangles written
+  to the piece file, after the triangles over NoData are dropped. That is
+  the number a reader of the file can check, and it is what makes an
+  all-NoData piece's entry read zero.
+
 ### Three points from 23c-1's green (3ffae13)
 
 Raised by `@developer`; ruled by `@architect`, 2026-10-04.
@@ -2911,7 +2920,404 @@ Raised by `@developer`; ruled by `@architect`, 2026-10-04.
    step 2, which says nothing about the cause. `@tester` (23c-1) adds the
    two cases to DC0's refusals; `@developer` the check.
 
-**B17 for Ola** is under "New questions, after the rulings".
+### 23c-2 stopped at dbbe1c6: two disagreements and the developer's choices
+
+Raised by `@developer` with 25 tests red (23 on DC3's area, 2 on DC10);
+ruled by `@architect`, 2026-10-04. K1 holds on 8 uncut scenes; DC6's
+equality and DC4's control hold.
+
+1. **The area checks: the tests were wrong, and so was this design.** A
+   partition line crosses a sloped outline edge at a point that is not on
+   the noder's 1 mm grid; the noder snaps it, by up to `SNAP · √2 / 2`
+   (0.71 mm), off the edge. That is the noder's contract for every
+   crossing (`05-noder.md`, guarantee 14(b)), features included, and the
+   cut must not get a special case: an exact crossing would be a vertex off
+   the grid, which is what 14(b) excludes. So the mesh is of the *noded*
+   outline, which the cut moves by at most 0.71 mm at each crossing. DC3's
+   "the domain's (shapely) to 1e-9" was the design's error (corrected in
+   place). `@tester` changes both checks to two:
+   - the union's area equals the noded outline's (the rings out of the
+     run's own `node` call, taken by the spy K9 already uses) to 1e-9
+     relative, which is the tight check, and the one that sees a lost or
+     doubled triangle;
+   - the noded outline against the domain: every one of its vertices within
+     `SNAP · √2 / 2 + 1e-9` of the domain's boundary, and the areas within
+     `SNAP · √2 / 2 · P` for the domain's perimeter `P` (moving one vertex
+     by `d` changes the area by at most `d` times half its two segments).
+   `test_the_union_has_the_uncut_area` (1e-12) takes the same bound against
+   the uncut mesh's area. No code change.
+2. **DC10: a defect of increment 20, fixed there; DC10 split meanwhile.**
+   *(Point 9 corrected this; point 10 withdrew point 9, so this ruling stands.)*
+   `mesh::improve` (`include/terrain/mesh/quality.hpp`) "knows no raster
+   and reads no height", so it can insert a NoData node; trim then drops
+   its triangles and leaves a hole. The uncut path has the same defect.
+   - **The fix** is its own small PR, recorded in `20-start-quality.md` as
+     "Fix: the start-quality pass skips NoData nodes", independent of 23c
+     in order: `improve` gains a validity callable
+     (`valid(LatticeVertex) -> bool`, a template parameter, so
+     `quality.hpp` still includes no raster header), `refine` passes one
+     over its `RasterView`, and a void node is skipped and counted
+     (`skipped_void`) before the walk. `@tester` first: an uncut red test
+     (a bad start triangle whose circumcentre's nearest node is NoData:
+     no vertex on a void node, no hole, the count is 1). It touches mesh
+     code, so `@perf` checks the benchmark hash (no NoData on that tile,
+     so it should not change).
+   - **Until it lands**, `@tester` splits DC10: the case at
+     `--start-min-angle 0` must pass (it tests the cut on the reprojected
+     path, which is DC10's subject), and the case at the default is
+     `xfail(strict=True)` naming the fix, so it flags itself once the fix
+     is in.
+3. **`@developer`'s choices.**
+   - (a) **The four lattice fields are required.** "Adding fields breaks
+     nothing" (23c-1's point 1) was wrong: 23c-1's hand-built index lacks
+     them. `@tester` adds them there; `@developer` drops the defaults.
+   - (b) **Overruled in scope, not in content.** Bounding memory by piece is
+     this increment's purpose, and the design put it in 23c, not 23d: the
+     23c rows "PieceJob, its windows (`TargetGrid` or mosaic plan)" and the
+     run's "write the piece file + its seam record, then free everything".
+     23d only adds parallelism, resume and the stitch. At 419 lines,
+     23c-2 cannot also take it under the ceiling with a margin, so **it
+     becomes 23c-3, before 23d**: each piece decodes only its source
+     window (23a-1's `decode_window`; on the reprojected path its
+     `TargetGrid`), writes its file and seam record when done, and frees
+     them. `@tester` (23c-3, red): a recording reader double shows no
+     decode outside a piece's window grown by the resampling margin, and
+     no two pieces' grids alive at once. 23c-2 merges as a correct cut
+     whose peak memory is still about the uncut run's, and says so in
+     `--help` and in ROADMAP.
+   - **And one thing 23c-2 must change:** the run (`_CutRun`, `_cut_run`,
+     the partition and window helpers) goes from `cli.py` to
+     `basin_run.py`, as designed. `cli.py` parses options and hands a
+     frozen request to the run, and the run must be testable without
+     Typer. This moves lines; it does not add them.
+   - (c) **Confirmed.** Slice vertices keep the start triangulation's
+     global order, not first-use order: both are functions of the input,
+     and the global order is the one 23d's stitcher numbers by (step 3
+     corrected in place). The strip is the design's. A vertex on several
+     seam edges takes z from the lowest-indexed one: all of them compute
+     it from the same nodes, so this only fixes which one is read. The
+     index's `source` as the credited tile names stands, in place of
+     the "`elevation_source` sentence" of item 3 above.
+   - (d) **Confirmed, one widened.** A cut needs square DEM cells (one
+     `spacing` in the index; the reprojected path is square by
+     construction); `--stats` and `--out-edges` are refused on a cut run
+     until 23d's stitched file gives them one mesh to describe. **The stale
+     `index.json` is deleted by every run that writes `--out`**, not only
+     `--domain` runs: an uncut run at the same `--out` makes the old pieces
+     stale just the same.
+   - (e) `@developer` updates `15-dem-mosaic.md`'s R7 rows in 23c-2 to
+     say the cap is deleted (23 B15).
+4. **LOC and the split.** 23c-2 is 419 against about 265 (+58 %), within
+   the +60 % this table allows for and under 700; the move to
+   `basin_run.py` is net zero, the area and DC10 changes are tests. The
+   split stands, with **23c-3** (per-piece windows and streaming writes,
+   about 110) added before 23d. Nine PRs in all.
+
+**23c-2 at green (38ab1a0): four more points**, ruled by `@architect`,
+2026-10-04.
+
+5. **The per-piece refine stays in `cli.py`, passed to
+   `basin_run.cut_run` as an argument. Confirmed.** That covers `_refined`,
+   `_refine_phases` and `_off_node`. `tools/bench.py` wraps `cli.refine`,
+   and three test files patch `cli.refine` and `cli.final_check`. Moving the
+   phases would have meant changing the benchmark tool and amending three
+   suites in a feature PR. Passing the refine in is the right seam: the run
+   stays a function of its request and its collaborators, testable without
+   Typer. The +23 lines (imports, `RunError`, a type alias, one
+   `try`/`except`) are the cost of that seam, so "net zero" in point 3(b)
+   was wrong. Where the refine phases should live is a separate question
+   for a later clean-up. It is not 23c's.
+6. **The stale-index delete runs after `--out` passes `_destination`.
+   Confirmed**, and better than 3(d) as written: the earlier placement
+   could delete a file outside `--out-parent`.
+7. **LOC: the split stands and nothing moves.** 442 net against about 265
+   is +67 %, past the planning margin of +60 % but under the 700 ceiling,
+   which is the rule. The margins are for planning, not limits. The
+   overrun is the run's seam (point 5), the refusals of 3(d), and an uncut
+   path refactored with no byte change. 23c-3's estimate is revised by the
+   same ratio, from about 110 to about **185**.
+8. **`@perf` before review: the README's rule now, the Velhas table at
+   23c-3.** 23c-2 drives refine, so `docs/increments/README.md`
+   "Acceptance" applies.
+   - **Now, before review:** `tools/bench.py` on the 1 m tile, process time
+     and the thread sweep against master's stored run on the same power
+     state. **The mesh hash must be unchanged.** The tile is one piece at
+     the default, and the uncut path was refactored, so this is K1 on real
+     data.
+   - **Also now, one smoke run on real data:** the Velhas piece on ANADEM
+     from the cache at 10 m, cut with `--pieces 64`. It must complete;
+     conformity must hold over the piece files; the independent check must
+     find 0 nodes and 0 source nodes over tolerance (its control still
+     failing); and there must be 0 constrained-Delaunay violations with
+     seams as constraints. Time and peak RSS are recorded but not judged.
+   - **At 23c-3:** the design's full 23c table (1 to 50 m, cut and uncut,
+     peak RSS included). Peak RSS means nothing until pieces hold only their
+     own windows. 23c-3 must also show its piece files byte-identical to
+     23c-2's on the same run, because it changes memory, not meshes (K6).
+   *At review (992d542): 478 net.* B17's size grammar (point 11) added the
+   36 lines over 442, still under 700.
+
+9. *(Withdrawn by point 10: the premise did not hold.)* **DC10's hole is 23c-2's defect, not increment 20's. Found and fixed
+   before review.** This corrects ruling 2 above. `@tester`'s red step for
+   increment 20's fix (`worktree-20-nodata`, `309b23f`) found no hole on
+   the uncut path. There, refine's carving (14 R6) surrounds the NoData
+   vertex with valid neighbours before trim removes it: 0 valid nodes
+   uncovered on the projected path, and 0 on DC10's scene run uncut. In a
+   piece the same vertex leaves a hole, so something on the cut path stops
+   the carving from closing around it. Candidates, none checked: a frozen
+   seam edge the carving would need to split; the piece's window cropping
+   the nodes it would insert; or the slice or fans changing the start
+   triangle's neighbours. Start vertices in NoData (16 R2) are carved the
+   same way, so the defect does not need the start pass, and increment
+   20's fix would only hide it. It is not a test-scene artefact unless the
+   reduction shows the scene breaks a stated precondition.
+   - **`@developer`** reduces it to the smallest case. The output is the
+     piece, the void vertex, and the carving step that does not happen.
+     Then fix it on the cut path. If the cause is a frozen seam, the
+     answer may be a design point (carving may not split a seam): bring it
+     back to `@architect` before changing C++.
+   - **`@tester`** adds a cut-path probe that does not use the start pass:
+     an off-node domain vertex in a NoData cell beside a seam, run with
+     `--start-min-angle 0`. The test requires every valid node inside the
+     domain to lie in a written triangle, and must be red before the fix.
+     It keeps the defect visible once increment 20's fix lands.
+   - **The strict `xfail`'s reason changes** now, to name this cut-path
+     defect, not increment 20's fix. 23c-2's fix removes the marker in a
+     `@tester` commit. Increment 20's fix is not merged into this branch
+     until then.
+
+10. **Point 9 was wrong; DC10's hole is increment 20's after all.**
+    `@developer` reduced it without changing code. Nothing on the cut
+    path blocks the carving.
+    - The pieces' start meshes have skinny fan triangles along the seams.
+      In piece (1, 0, 0) all 33 start triangles are under 25°, against 2
+      uncut, none of them under 25°. So the start-quality pass inserts 34
+      to 49 nodes per piece where the uncut run inserts none. One of them
+      lands on a NoData node, because the pass reads no raster.
+    - The carving then closes around it (3 carved, 0 nodes uncovered), the
+      frozen seam blocks nothing, and the window and slice play no part.
+      Trim removes the star as designed.
+    - The reported "hole" is effect (c) below, made visible by that vertex.
+
+    **Rulings:**
+    - (a) Point 9 is withdrawn, and ruling 2 stands as first written. The
+      strict `xfail`'s reason names increment 20's fix again
+      (`20-start-quality.md`, "Fix: the start-quality pass skips NoData
+      nodes"). The ordering note is moot: that fix may be merged into
+      this branch once it is on master, and the `xfail` then flags itself.
+      `@tester` changes the reason back. The cut-path probe point 9 asked
+      for is not required: carving works in pieces, so it could not be
+      red. If it is already written, it stays as a passing test of
+      carving in a piece.
+    - (b) **The start pass on fans: acceptable for 23c-2, no change.**
+      Fans are skinny by construction: the seam pass's points on one edge,
+      all joined to one apex. The pass applies to every start mesh
+      (R11), and its insertions are DEM nodes strictly inside the piece.
+      It skips nodes on frozen edges (N4), so the union argument (item 2:
+      insertions inside a piece never affect another) holds unchanged.
+      Running it before slicing would change nothing, because the fans
+      come after it. Skipping fan triangles would leave the seam's skinny
+      triangles to refine, and only 23g's cleanup can judge which costs
+      less. DC6 runs with `--start-min-angle 0` and
+      `--no-constraint-feet`, so it is not affected. Its claim is
+      "equal to one refine over the whole fanned start". With the pass on,
+      that equality would also need the pass's single queue to decide the
+      same inside each piece as over the whole. That is plausible (frozen
+      seams stop the walk), but not argued here. **No new test**: the
+      quality-off equality is the claim this design makes. `@perf`'s 23c-3
+      table adds the start pass's insertions per piece, so the cost is
+      measured before 23g's comparison.
+    - (c) **The micrometre offset on the reprojected path: increment 15c's,
+      and a question for Ola (B18).** A phase-2 vertex is inserted at its
+      source node's position as stored in the check-point store, which
+      rounds it (0.10 to 0.31 µm here, up to about 2 µm). Where that vertex
+      is on the edge of a carved hole, the exact source node can sit just
+      outside every triangle. The independent check then counts it as
+      uncovered. This happens on the uncut path too, at any NoData vertex.
+      It is a statement about 15c's guarantee (J2: every valid source node
+      within tolerance), so it belongs to 15c, as a follow-up in
+      `15c-geographic-dem.md`, and Ola rules on the wording first. Nothing
+      in 23c changes: with increment 20's fix, DC10's scene has no NoData
+      vertex.
+
+11. **Ola's rulings of 2026-10-04 on B17 and B18**, in Ola's words: "Accept
+    within a few micrometers, accept human readable formatting for
+    --memory-budget." Worked out by `@architect` the same day.
+    - **B17 (b): `--memory-budget` takes a size with a unit. In 23c-2.**
+      - The grammar: a whole number of digits, then an optional unit
+        straight after it, with no space. Units are `K`, `M`, `G` and `T`,
+        each optionally followed by `B` or `iB`, and **every one of them is
+        a power of 1024**. The design already reads "16 GB" as 16 GiB, and
+        one meaning per letter is easier to explain than two. Case does not
+        matter. A bare number, or one followed by `B` alone, is bytes. So
+        `16G`, `16g`, `16GB`, `16GiB` and `17179869184` all mean 2^34. The
+        default is shown as `16G` in `--help`, which says "units are powers
+        of 1024".
+      - Refused, as a usage error naming `--memory-budget`: an empty value,
+        a sign, a decimal point (`1.5G`; the message suggests `1536M`), a
+        space inside, a unit with no number, an unknown unit (`16X`, `16P`,
+        `16PB`), and anything else that does not match the grammar (`0x10`).
+        A value below one node's bytes is refused as before.
+      - Where: `tin_engine.decompose.parse_memory_budget(text) -> int`, pure,
+        raising `ValueError`; `cli.py` turns that into the usage error. The
+        index still records bytes (`partition.memory_budget`). About 12
+        lines.
+      - **`@tester`, red in 23c-2:** a table test of
+        `parse_memory_budget` covering every accepted form above with its
+        byte value (`512M` is 2^29, `1T` is 2^40, `1024K` is 2^20, `100B`
+        is 100) and every refusal above. Through the CLI: a cut run with
+        `--memory-budget 16G` writes `memory_budget` 17179869184 in the
+        index and the same piece files as the run given 17179869184; and
+        two of the refusals exit 2 naming the option, with nothing written.
+      - **@tester's choices at red (008b1d2), confirmed.**
+        - Digits are ASCII only. Fullwidth digits are refused, even though
+          Python's `int()` accepts them.
+        - Leading zeros are allowed (`016G` is 16 GiB), since the number is
+          decimal.
+        - `parse_memory_budget` refuses `0` and `0G` itself, since zero is
+          never a budget. The refusal of a budget under one node's bytes
+          stays where it is, in the CLI and `partition`, because it depends
+          on the tolerance.
+        - The extra refusals `16iB`, `16BB`, `16Gi`, `1e9`, `16_000` and
+          `16.0` all stand: none of them matches the grammar.
+        - **Leading or trailing whitespace is refused**, like a space inside:
+          the grammar allows nothing before the digits or after the unit.
+          `@tester` adds `" 16G"`, `"16G "` and `"\t16G"` to the refusals.
+    - **B18 (a): within a few micrometres. Increment 15c's, test and docs
+      only, in its own small PR off master.** J2 already states the
+      guarantee at the check point's *stored* position
+      (`15c-geographic-dem.md`, J2), and the store resolves 2^-24 of a cell
+      on each axis (`check_points.hpp`, "Packing"). So the product meets
+      J2 as written, and no production code changes. What changes is the
+      independent check, `geographic_fixtures.source_check`, which takes
+      the exact source node. It gets an allowance of `h · 2^-24` (1.8 µm at
+      30 m): a source node outside every triangle by no more than that is
+      judged in the nearest triangle, not counted as uncovered. J2 gains
+      one sentence saying how far a stored position can be from its source
+      node. **`@tester` writes that PR:** the oracle's own test, a
+      hand-built mesh with one source node `h · 2^-25` outside a triangle
+      (judged in it) and one 1 mm outside (still uncovered, the control),
+      plus the J2 sentence in `15c-geographic-dem.md`. No `@developer`, no
+      `@perf`. 23c-2 does not wait for it: once increment 20's fix is in,
+      DC10's scene has no NoData vertex.
+
+12. **`--record` on a cut run (from merging #157, the run record):
+    refused for now. Confirmed.** It is refused like `--stats` and
+    `--out-edges` under 3(d) ("not written for a cut run yet"), for the same
+    reason: a record describes one mesh, and a cut run has none until 23d's
+    stitched file. Each piece file's fields come from its own record (the
+    piece's counts and max error), which keeps K6: a piece's bytes depend
+    on its job only. The two alternatives were rejected:
+    - a record per piece beside its file repeats what the piece file
+      already carries;
+    - a run-level record in `index.json` would describe a mesh that does
+      not exist yet.
+    **23d** writes the run's record for the stitched file and lifts all
+    three refusals together. `@tester` adds one red test, if not already
+    there: `--record` with a cut exits 2 naming `--record`, and writes
+    nothing. No question for Ola: the refusal is temporary, it is worded as
+    such, and it has the same cause as `--stats`.
+
+### 23c-2 meets master: the piece budget renamed, the memory cap kept (2026-10-17)
+
+The branch's merge base is `47991efc` (2026-10-04); `@developer`'s trial merge of
+master `da133bce` found three design conflicts, all from increment 38
+(`38-threads-and-memory.md`, sections 4.3 and 4.6): both increments add a
+`--memory-budget` to `mesh`; 38 kept the mosaic and flood caps that B15 (a)
+deleted, as a refusal over that option's value; and 38 deleted `decompose.py`,
+which nothing imported on master. Ruled by Ola, 2026-10-17, on the main
+session's two proposals ("Go for it, both sounds reasonable"):
+
+- **R1. `--memory-budget` is master's: the machine's memory cap.** A size with
+  K, M, G or T (1024-based), default half of the machine's memory, a
+  container's limit counting as the machine's; it caps every DEM window a run
+  assembles (mosaic canvas and catchment flood), as 38 section 4.3 states.
+- **R2. The piece size is `--piece-budget`**: the estimated bytes one piece
+  may take, which decides whether and how the run is cut (the rule under
+  "Choosing the cuts", with `B = --piece-budget`). Default `16G` (2^34
+  bytes), a constant, never read from the machine, so the cut and the mesh
+  stay the same on every machine (K5). Everything this file says of
+  `--memory-budget` as the partition's `B` (B14, "The partition", "The memory
+  estimate", the index, Invariants, DC0, pins 7 and 8, B17) now reads
+  `--piece-budget`. "Budget" keeps B14's word; "piece" says it is not the
+  machine's.
+- **R3. B15 (a) is superseded: the caps stay**, at `--memory-budget`, worded
+  as 38 has them. Consequence for 23c-2, which still assembles the whole
+  window before cutting it: a cut run whose window is over `--memory-budget`
+  is refused before any piece is refined, naming the option and the figure.
+  23c-3 (each piece's window its own) checks each piece's window instead; 23d's
+  runner admits pieces while their estimates' sum fits `--memory-budget` (the
+  machine's figure, which delays a piece and never changes one, so K5 holds).
+
+Decided here:
+
+- **D1. One grammar for both sizes.** `--piece-budget` is parsed by master's
+  `resources.parse_bytes` (`8G`, `512M`, a plain number; 0 refused). 23c-2's
+  `decompose.parse_memory_budget` and its wider B17 grammar (`16GB`, `16GiB`,
+  `16B`) are deleted: two parsers for two size options on one command would
+  disagree on `16GB`. B17's ruling, human-readable sizes, holds.
+- **D2. `decompose.py` comes back as 23c-2's own file**, the merge keeping the
+  branch's version (master deleted a module nothing used; 23c-2 uses it). Not
+  folded elsewhere: it is a pure rule (layer L1, no first-party import), and
+  `basin_run.py` imports `_core`; `resources.py` is the one module that reads
+  the machine, which the partition must never do. `DEFAULT_MEMORY_BUDGET`
+  becomes `DEFAULT_PIECE_BUDGET`; `partition()`'s keyword `memory_budget`
+  becomes `piece_budget`; `PartitionRecord.memory_budget` in the index becomes
+  `piece_budget` (no index has been written by a released build).
+- **D3. Layers** (`tests/python/test_layering.py` on master, where only layer
+  L3 imports `_core`): `decompose` in L1 with an empty row; `pieces` and
+  `basin_run` in L3 (both import `_core`, `pieces` under `TYPE_CHECKING`, which
+  counts); `cli`'s row gains `basin_run decompose io.mesh_index` and whatever
+  else the merged `cli.py` imports.
+- **D4. Threads.** Every `_core` call on a cut run that takes `threads` (each
+  piece's `refine` and `refine_points`, through the paths the uncut run uses)
+  gets `res.threads`, by 38's rule; `refine_seam` takes no count.
+
+**`@developer`'s merge:**
+
+1. `git merge origin/master`; keep master's side of `mosaic.py`,
+   `catchment.py`, `catchment_batch.py`, `resources.py`, and of
+   `15-dem-mosaic.md`'s R7 rows (drop 23c-2's "the cap is deleted" text).
+2. Keep the branch's `decompose.py`; apply D1 and D2's renames; `cli.py`
+   keeps master's `--memory-budget` and `res = _resources(...)`, and adds
+   `--piece-budget` (metavar `BYTES`; help: "The estimated memory one piece
+   of a cut mesh may take; a domain estimated over it is cut into pieces. A
+   number of bytes, or with K, M, G or T (16G). Default 16G, the same on
+   every machine."), refused as a usage error naming `--piece-budget`
+   without `--dem`, `--tolerance` and `--domain` (pin 8), and below one
+   node's bytes (pin 7).
+3. Apply D4; restore `project_structure.md`'s `decompose.py` row beside 38's
+   `resources.py` row (README and INSTALL name no cut today).
+4. Measure with `python3 tools/count_loc.py origin/master HEAD`. The restored
+   `decompose.py` counts again (master deleted it) and the caps' removal no
+   longer subtracts: about 540 net, under 700.
+
+**`@tester`'s rewrite (red before the merge's code, as usual):**
+
+1. `test_catchment.py`, `test_dem_input.py`, `test_mosaic.py`: take master's
+   versions; 23c-2's inversions (old DC11) go.
+2. Restore `tests/python/test_decompose_partition.py`; delete master's
+   `test_t11_decompose_is_gone` and T11's mention in `test_resources.py`'s
+   docstring; add D3's rows to `test_layering.py`.
+3. Every `--memory-budget` or `memory_budget` that means the piece size
+   (found by `grep -l "memory.budget" tests/python/*.py`: `pieces_fixtures.py`,
+   `test_cli_mesh_pieces.py`, `_budget.py`, `_settled.py`,
+   `test_decompose_memory_budget.py`, `test_decompose_partition.py`,
+   `test_mesh_index_conformity.py`) becomes `--piece-budget`, `piece_budget`. The `parse_memory_budget` table goes
+   (`test_resources.py` covers `parse_bytes`); the CLI cases stay: `16G`
+   and `17179869184` give the same pieces and `piece_budget` 17179869184; two
+   refusals exit 2 naming `--piece-budget` and write nothing; `16GB` is
+   refused.
+4. **DC11, rewritten: the cap does not cut, the budget does not cap.** (a) A
+   cut run gives the same piece files under `--memory-budget` values of the
+   window's size and ten times it, and with `resources.machine_memory`
+   patched small and large (DC0's `mosaic.physical_memory` patch,
+   `test_decompose_partition.py:259`, becomes this one);
+   (b) a cut run whose window is over `--memory-budget` exits 2 naming
+   `--memory-budget` and writes nothing; (c) an uncut run is unchanged by
+   `--piece-budget` (K1).
+
+**B17 and B18** are under "New questions, after the rulings", each with Ola's ruling.
 
 ## Questions for Ola
 
@@ -3115,7 +3521,9 @@ each refuses on a small machine what a larger one meshes.
 - (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
   until 23e windows the catchment flood.
 
-**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a").
+**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a"). **Superseded by
+Ola, 2026-10-17:** increment 38's caps at `--memory-budget` stay (R3 of
+"23c-2 meets master").
 
 **B16. What a mesh made from a catalogue source says about its licence.**
 Asked 2026-10-02 (23a-2). Today the mesh file's `elevation_source` carries
@@ -3143,6 +3551,29 @@ tests take the option as a whole number of bytes, so 16 GiB is typed
 - (b) Also a size with a unit, `16G` or `16GiB`, read as powers of 1024
   (about 10 lines in `cli.py`, and one more red test). The index still
   records bytes. Can follow 23c without changing anything it writes.
+
+**Ruled by Ola, 2026-10-04: (b)** ("accept human readable formatting for
+--memory-budget"). The grammar is in point 11 of "23c-2 stopped at
+dbbe1c6", and it lands in 23c-2.
+
+**B18. Elevation points a couple of micrometres outside the mesh.** Asked
+2026-10-04 (23c-2's DC10, reduced by `@developer`). On the geographic-DEM
+path, the source DEM's points are checked one by one after meshing, and a
+point found off-tolerance gets a vertex at its own position. That position
+is stored with a small rounding, up to about 2 micrometres. Where such a
+vertex lies on the edge of a no-data hole, the original point can end up
+that far outside the mesh, and the check then counts it as not covered.
+- **(a) Accept it, and state the guarantee as "every valid source point is
+  in the mesh to within the store's rounding (a few micrometres) and within
+  tolerance".** Recommended, and the default if not ruled: the distance is
+  about a millionth of a cell, and the independent check gets the same
+  slack, stated.
+- (b) Store those positions exactly, so the vertex is exactly at the point.
+  This is a small change to 15c's check-point store, and it costs memory
+  per check point.
+
+**Ruled by Ola, 2026-10-04: (a)** ("accept within a few micrometers"). Where
+it is recorded and tested: point 11 of "23c-2 stopped at dbbe1c6".
 
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
@@ -3279,3 +3710,97 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 **Row 23 status fix, prose review, round 1, 2026-10-04.** Range `99093af..216513e` (one commit: ROADMAP row 23 and the status line of `23-basin-scale.md`). Verdict: CHANGES REQUESTED. LOC: 0 production lines (prose only; `ROADMAP.md` 1 line changed, `23-basin-scale.md` +7/-5). Checked and true: #162 MERGED at 2026-10-04T09:31:36Z, merge commit `4f56551`; #164 MERGED at 2026-10-04T14:23:36Z, merge commit `e56a2bf`; both are ancestors of HEAD, as are `91c7cb5` and `4541e38`. `check_citations.py --base origin/master` passes. Its 4 at-risk citations were re-read as quotations and hold: `23-basin-scale.md:3267,3271` are dated review records about the status paragraph as it was then, and `27-node-sampling.md:410,412` cite `ROADMAP.md:50`, which is still row 27 (the edit to row 23 adds no lines). Blocking: (1) the commit calls 23c-2 "implemented", but `worktree-23c`'s head `d9a93b6` is a red step that only adds tests (`test_cli_mesh_pieces_settled.py`, +49), and its message says "Red today", so the branch currently has failing tests and the round-3 approval `45e822d` no longer covers its head; (2) the 23c-2 sentence uses `worktree-23c` as its source but leaves out what that branch's own design already says (`b5a73ec`: 23c split in three, 23c-3 about 185 lines, nine PRs, 23c-2 built at 478 net lines), while the same edited sentences on master still say "split in two" and "eight PRs"; (3) `45e822d` and `d9a93b6` are on no remote branch, so a reader of master cannot resolve them. They go stale with the next commit on `worktree-23c`, which breaks the rule "write the rule and the command that resolves it, not the resolved value". Fix: on master, keep the 23b and 23c-1 merges, and for 23c-2 say only that it is in progress on `worktree-23c`, not pushed, and that its state is in that branch's copy of this file (no hashes, no review rounds). Not pushed; no CI run exists for this branch (`gh run list --branch worktree-row23-fix` is empty and there is no remote head).
 
 **Row 23 status fix, prose review, round 2, 2026-10-04.** Range `216513e..d61de61` (d61de61: the 23c-2 sentence in ROADMAP row 23 and in the status line of `23-basin-scale.md`, and round 1 recorded); whole branch `99093af..d61de61`. Verdict: APPROVED. LOC: 0 production lines (prose only; `ROADMAP.md` 1 line changed, `23-basin-scale.md` +8/-4 including the round-1 record). All three blockers from round 1 are closed. (1) 23c-2 is no longer called "implemented". It is now "in progress on `worktree-23c`, not pushed", which matches that branch's head `d9a93b6`, a red step that only adds tests. (2) For 23c-2's state, both texts now point to that branch's copy of this file and no longer restate it. "Split in two" and "eight PRs" stay as master's design until `worktree-23c` (where `b5a73ec` says split in three and nine PRs) merges. (3) The hashes found on no remote branch (`45e822d`, `d9a93b6`) and the review-round count are gone from both texts. Checked and true: #162 MERGED 2026-10-04T09:31:36Z, merge commit `4f56551`; #164 MERGED 2026-10-04T14:23:36Z, merge commit `e56a2bf`; `4f56551`, `e56a2bf`, `91c7cb5`, `4541e38`, `3c464ec`, `45045dc` and `185081c` are ancestors of HEAD; `docs/benchmarks/2026-10-04/23b-merged-acceptance.md` exists; `worktree-23c` is not on origin (`git ls-remote`); the branch contains origin/master `99093af`. The facts in the round-1 record hold (`b5a73ec` is on `worktree-23c` and says split in three, nine PRs and 478 net lines; `d9a93b6` adds only `test_cli_mesh_pieces_settled.py`, +49, and its message says "Red today"). `check_citations.py --base origin/master` passes (exit 0) and lists 6 at-risk citations. Each was re-read as a quotation and holds: `23-basin-scale.md:3267` and `:3271` are still dated 23b review records (rounds 6 and 8); `:3279`, the round-1 record, cites them as such and cites `ROADMAP.md:50` as row 27, which it still is (row 23 is line 51); `27-node-sampling.md:410,412` cite `ROADMAP.md:50` as the sampler row, which is now row 27. Not pushed; no CI.
+
+**23c-2, code review, round 1, 2026-10-04.** Range `c3cf08f..ede8d5b`, stacked on 23c-1. Verdict: CHANGES REQUESTED. LOC: 478 net (590 added, 112 removed) against about 265; under 700; point 7 accepted 442, and B17's grammar added 36. K1 holds by @perf's smoke (9b7a5b4) and DC1; citations resolve (`cli.py:1724`, `:1730`); the `--memory-budget` help, `project_structure.md` and `15-dem-mosaic.md`'s R7 rows match the code. Blocking: (1) "HOW THIS FILE GOES RED" and "PINNED HERE (handback …)" text in the nine `test_cli_mesh_pieces*.py` files and `test_decompose_memory_budget.py`; (2) DC10's strict xfail (`test_cli_mesh_pieces_reprojected.py:24-31`, `:138-142`) still names point 9's withdrawn cut-path defect and "a hole"; point 10 (a) has it name increment 20's fix; (3) this file's status paragraph (23b and 23c-1 are PRs #162 and #164; 23c-2 green at 478 lines with @perf's smoke; 23c-3 unmentioned); (4) ROADMAP row 23 still estimates 23c-3 at 110, not about 185. Not pushed; no CI.
+
+**23c-2, code review, round 2, 2026-10-04.** Range `992d542..b5a73ec` (0732f7a test headers and DC10's xfail reason, b5a73ec status paragraph, ROADMAP row 23, point 7); whole PR `c3cf08f..b5a73ec`, stacked on 23c-1. Verdict: APPROVED. LOC: 478 net, unchanged (tests and docs only this round). All four blockers closed; citations resolve. Nit: the status paragraph gives 23c-1 as 154 lines; it is about 156. Not pushed; no CI.
+
+**23c-2, code review, round 3, 2026-10-04.** Range `8430c71..d24efbe` (a717d56 merge of 23c-1 with master's run record, fe42a3b merge of master at #160, af1f143 point 12, d24efbe the refusals' test). Verdict: APPROVED. LOC: 474 net (577 added, 103 removed) against 23c-1's tip merged with master. The merge keeps both behaviours: the uncut record's keys and values match master's inline block, and 15e's early drop of the tile survives; each piece's file fields come from `values | piece.values`; `feature_counts` excludes the seam chains; `basin_run.py` changed as described; the three refusals come before `where.mkdir` and are tested; citations resolve. Suggestion: raise the three refusals once the partition has more than one cell, before `cut_run`, so a usage error does not wait for every piece to refine. Not pushed; no CI.
+
+
+**23c-2, code review, round 4, 2026-10-18.** Range `cb713c87..6bd8299a` after taking master (`5a511cdc` reverts the branch's own refine fix; master's "Delaunay as written" fix stands), 548 counted lines (estimate about 540; the growth from 478 is `decompose.py` counting again and the caps no longer removed), @reviewer: CHANGES REQUESTED: no mutant kill record yet for the invariant-critical tests DC2-DC4 and DC6 (`@tester`); `15-dem-mosaic.md` restored to master's copy; this Status line and ROADMAP row 23 corrected, by the main session. C++ equals master; the merge is faithful to both sides; the rulings hold.
+
+**23c-2, mutation round, 2026-10-18** (`@tester`, on `47d35248`; new tests `6ae2e209` and `69caf803`; record copied from `69caf803`'s message by the main session):
+
+```text
+Mutation round, 23c-2, invariant-critical tests DC2-DC4 and DC6, on
+47d35248. Each mutant planted alone in a scratch copy
+(tools/scratch_copy.py), the copy removed afterwards. Critical suites:
+test_cli_mesh_pieces.py (DC1-DC5), test_cli_mesh_pieces_equality.py
+(DC6), test_mesh_index_conformity.py (DC2). Other suites: the rest of
+test_cli_mesh_pieces_*.py and test_decompose_partition.py. "new" = killed
+only by this commit's tests or 6ae2e209's (test_pieces_slice.py).
+49 mutants: 43 killed, 6 survived (all argued equivalent below).
+
+pieces.py
+P1  rank in a cell never increments: killed (geometry)
+P2  ids not sorted: survived old suites; killed new (slice)
+P3  piece placed by a vertex, not the centroid: killed (critical)
+P4  seams do not split components: killed (critical)
+P5  slice in reversed triangle order: killed (DC6)
+P6  non-seam constraint edges dropped: killed (settled)
+P7  seam-pass points never reversed: killed new (slice, seam_paths)
+P8  shared seam vertex takes the last z (N17): killed new (slice)
+P9  seam heights never handed on: killed new (slice, seam_paths)
+P10 fan drops the other sides' flag bits: SURVIVED, equivalent
+P11 fan drops the seam side's flag bit: SURVIVED, equivalent
+P17 fan side bits on the wrong sub-triangles: SURVIVED, equivalent
+    (P10/P11/P17: refine never reads the start mesh's flags;
+    to_lattice in include/terrain/refinement/refine.hpp rebuilds every
+    bit from the edges list)
+P12 edge map not moved to the last fan triangle: killed (critical)
+P13 fan ignores triangle orientation: killed (critical)
+P14 seam sub-edges lose the seam bit: killed (critical)
+P15 seam record ignores validity: killed new (slice)
+P16 seam record drops the first end: killed new (slice)
+
+basin_run.py
+B1  one cell cut too (K1): killed (critical, caps)
+B2  extra x line at the window edge: killed (critical)
+B3  x lines ignore the window's first column: killed (critical)
+B4  y lines on the wrong side: killed (critical)
+B5  cell row from the wrong side: killed (critical)
+B6  piece window not grown by a node: SURVIVED. Equivalent on default
+    flags: a piece's triangles lie within its cell's node range (its seams
+    are the cell lines), so no refine read reaches the extra ring, on DC10's
+    path too. Not equivalent with --tolerance-slope: the slope of a node on a
+    cell line reads the ring, and slope_nodes_tightened counts those nodes;
+    untested, outside DC2-DC6 (refine skips nodes on frozen seams)
+B7  seam strip not grown by a node: SURVIVED, equivalent: a seam lies on
+    a lattice line, so its bilinear z reads only nodes on that line
+B8  seam pass at twice the tolerance: killed (critical)
+B9  K4 check removed: killed new (seam_paths)
+B10 seams not frozen: killed (critical)
+B11 seam heights not written over refine's z: killed new (seam_paths)
+B12 resampled grid not moved to the piece window: killed (reprojected)
+B13 index window ignores the window origin: killed new (seam_paths)
+B14 all-NoData cut not refused: killed (settled)
+B15 every constraint edge splits pieces: killed (settled)
+B16 seam strip box not ordered: killed new (seam_paths)
+B17 records from refine's z, not the written z: killed new (seam_paths)
+
+decompose.py
+D1  b(T) rounded down: killed (partition)
+D2  budget overshoot allowed: killed (partition)
+D3  grows the wrong axis: killed (partition hangs; 120 s timeout)
+D4  all cuts horizontal: killed (critical)
+D5  crossings not set back on the lattice line: SURVIVED, equivalent in
+    practice: GEOS returned the crossing exactly on the line in 80,000
+    probes (random convex polygons, both axes, UTM-scale offsets)
+D6  cell count not recomputed from dx, dy: killed (partition)
+D7  estimate rounded down: killed (critical)
+D8  two pieces asked gives one: killed (critical)
+
+cli.py
+C1  cut without a domain accepted: killed (settled)
+C2  stale index kept: killed (settled)
+C3  one-mesh options not refused on a cut: killed (settled)
+C4  partition lines without the seam bit: killed (critical)
+C5  resampled grid's lattice not used: killed (reprojected)
+C6  wrong digest in the index: killed (critical)
+C7  conformity failure exits 2: killed new (seam_paths)
+```
+
+**23c-2, code review, round 5, 2026-10-18.** Range `6bd8299a..46610e1a`, 548 counted lines (tests and docs only this round), @reviewer: APPROVED WITH WORDINGS, applied by the main session: B6 is equivalent on default flags only; with `--tolerance-slope` the slope count reads the ring (idea: a test for `--tolerance-slope` on a cut run). The fan's unread flag arithmetic in `start_slice` goes in 23c-3.
+
+**23c-2, `@perf` acceptance, 2026-10-18.** `c3d3696d`, master `cb713c87` against head `4e140864`, same `_core` binary: bench mesh hashes unchanged (tile `11741a81…`, quarter `a60fb597…`), refine time -3.6 to +3.0 % across 1 to 20 threads; whole-process quarter time +0.6 to +1.8 %, in Python, not profiled. Velhas on ANADEM 10 m with `--pieces 64`: 51 pieces, every seam segment in exactly two pieces with identical z, 0 nodes over tolerance (control fails as it should), 0 constrained-Delaunay violations; 6.20 s, 1.64 GB: ACCEPTED.

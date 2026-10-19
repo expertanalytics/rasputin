@@ -1,0 +1,33 @@
+=== base-r1 start 2026-10-18T11:36:14Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c/docs/benchmarks/2026-10-18/23c-2/2026-10-18/base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/m23c2/base-r1
+NO BASELINE: no comparable stored run
+=== base-r1 exit 2 2026-10-18T11:39:08Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+=== head-r1 start 2026-10-18T11:39:08Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c/docs/benchmarks/2026-10-18/23c-2/2026-10-18/head-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/m23c2/head-r1
+ACCEPTED
+=== head-r1 exit 0 2026-10-18T11:42:01Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+=== head-r2 start 2026-10-18T11:42:01Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c/docs/benchmarks/2026-10-18/23c-2/2026-10-18/head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/m23c2/head-r2
+ACCEPTED
+=== head-r2 exit 0 2026-10-18T11:44:30Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+=== base-r2 start 2026-10-18T11:44:31Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; finishing charge; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c/docs/benchmarks/2026-10-18/23c-2/2026-10-18/base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/m23c2/base-r2
+ACCEPTED
+=== base-r2 exit 0 2026-10-18T11:46:59Z swap 0.25
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+ALLDONE
