@@ -1,0 +1,9 @@
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 7168.00M  used = 6054.81M  free = 1113.19M  (encrypted)
+vm.loadavg: { 2.78 2.88 2.95 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+vm.swapusage: total = 7168.00M  used = 6038.81M  free = 1129.19M  (encrypted)
+vm.loadavg: { 2.57 2.74 2.85 }
+SWEEPDONE

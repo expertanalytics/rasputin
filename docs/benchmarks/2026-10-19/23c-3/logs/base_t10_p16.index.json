@@ -1,0 +1,286 @@
+{
+ "crs": "EPSG:31983",
+ "tolerance": 10.0,
+ "source": "anadem-v1, Ag\\xeancia Nacional de \\xc1guas e Saneamento B\\xe1sico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.; anadem_v1_compressed_COG",
+ "vocabulary": "58cacc7695301d2153902cec3457265f42ee49b4d736cb7a0602765fc65f4c12",
+ "partition": {
+  "pieces": 16,
+  "piece_budget": 17179869184,
+  "bytes_per_node": 37,
+  "nx": 3,
+  "ny": 5,
+  "dx": 1402,
+  "dy": 1470,
+  "cols": 4204,
+  "rows": 7346,
+  "row0": -265284,
+  "col0": 17819,
+  "spacing": 30.0,
+  "origin": [
+   0.0,
+   0.0
+  ]
+ },
+ "pieces": [
+  {
+   "id": [
+    0,
+    0,
+    0
+   ],
+   "file": "0-0-0.vtk",
+   "sha256": "7eeb9a0799ca17a21a8f9628ffb38de96561243df8cb067e2bb2d631dda2ff65",
+   "counts": {
+    "triangles": 22254,
+    "vertices": 11790,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -265284,
+    "col0": 17819,
+    "rows": 1472,
+    "cols": 1404
+   }
+  },
+  {
+   "id": [
+    0,
+    1,
+    0
+   ],
+   "file": "0-1-0.vtk",
+   "sha256": "932e1cadea489a5cab8ffc28b2389b343272a4ba9fe899c86a9a9483f904e00d",
+   "counts": {
+    "triangles": 24449,
+    "vertices": 12728,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -265284,
+    "col0": 19220,
+    "rows": 1472,
+    "cols": 1405
+   }
+  },
+  {
+   "id": [
+    1,
+    0,
+    0
+   ],
+   "file": "1-0-0.vtk",
+   "sha256": "135a753a145dbda62f94db24a81fb4424a3034d90f640c1dea61dadc90e540cb",
+   "counts": {
+    "triangles": 25632,
+    "vertices": 13213,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -263815,
+    "col0": 17819,
+    "rows": 1473,
+    "cols": 1404
+   }
+  },
+  {
+   "id": [
+    1,
+    1,
+    0
+   ],
+   "file": "1-1-0.vtk",
+   "sha256": "7879ae97c789c11bda35c0accdc932d09cbd64a1d912c9ee7c06d8375d459205",
+   "counts": {
+    "triangles": 63706,
+    "vertices": 32208,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -263815,
+    "col0": 19220,
+    "rows": 1473,
+    "cols": 1405
+   }
+  },
+  {
+   "id": [
+    1,
+    2,
+    0
+   ],
+   "file": "1-2-0.vtk",
+   "sha256": "0739d186fe0274aa48132e07d4a3003d13631d88f2464d24737521551632a233",
+   "counts": {
+    "triangles": 8059,
+    "vertices": 4274,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -263815,
+    "col0": 20622,
+    "rows": 1473,
+    "cols": 1401
+   }
+  },
+  {
+   "id": [
+    2,
+    0,
+    0
+   ],
+   "file": "2-0-0.vtk",
+   "sha256": "4f325080972f0657f10fcc3b1799a8c532ef7859a57d13a1ef9d78dc036a10eb",
+   "counts": {
+    "triangles": 6102,
+    "vertices": 3287,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -262345,
+    "col0": 17819,
+    "rows": 1473,
+    "cols": 1404
+   }
+  },
+  {
+   "id": [
+    2,
+    0,
+    1
+   ],
+   "file": "2-0-1.vtk",
+   "sha256": "6d0daf6d839f987b7da9067edef79b8cc94cf0634a035ea87e7cf67d9de856e7",
+   "counts": {
+    "triangles": 94,
+    "vertices": 66,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -262345,
+    "col0": 17819,
+    "rows": 1473,
+    "cols": 1404
+   }
+  },
+  {
+   "id": [
+    2,
+    1,
+    0
+   ],
+   "file": "2-1-0.vtk",
+   "sha256": "da460a49d6858accbef4267832a7983bd079b7aeb842bd51b7f98b955c290067",
+   "counts": {
+    "triangles": 82054,
+    "vertices": 41369,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -262345,
+    "col0": 19220,
+    "rows": 1473,
+    "cols": 1405
+   }
+  },
+  {
+   "id": [
+    2,
+    2,
+    0
+   ],
+   "file": "2-2-0.vtk",
+   "sha256": "c1d88d9b2c110c0a0ad3eaefd36d852f02393d2022ddfde89cc1cb40b2d29452",
+   "counts": {
+    "triangles": 81854,
+    "vertices": 41434,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -262345,
+    "col0": 20622,
+    "rows": 1473,
+    "cols": 1401
+   }
+  },
+  {
+   "id": [
+    3,
+    1,
+    0
+   ],
+   "file": "3-1-0.vtk",
+   "sha256": "2f4c8cc3883f8b05a72e0d3272e231660056ab91da4e32c08d872946f869b3bf",
+   "counts": {
+    "triangles": 81808,
+    "vertices": 41421,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -260875,
+    "col0": 19220,
+    "rows": 1473,
+    "cols": 1405
+   }
+  },
+  {
+   "id": [
+    3,
+    2,
+    0
+   ],
+   "file": "3-2-0.vtk",
+   "sha256": "8a4271f05f5b9f539a8e950306eefdb71bbe92d6c460349b9bce6cec37fd5525",
+   "counts": {
+    "triangles": 140597,
+    "vertices": 70755,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -260875,
+    "col0": 20622,
+    "rows": 1473,
+    "cols": 1401
+   }
+  },
+  {
+   "id": [
+    4,
+    1,
+    0
+   ],
+   "file": "4-1-0.vtk",
+   "sha256": "051dbba8d6b3b283bd52613414a04bb321f5770b511da83a5006776a009f1efd",
+   "counts": {
+    "triangles": 41390,
+    "vertices": 21077,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -259405,
+    "col0": 19220,
+    "rows": 1467,
+    "cols": 1405
+   }
+  },
+  {
+   "id": [
+    4,
+    2,
+    0
+   ],
+   "file": "4-2-0.vtk",
+   "sha256": "9baa483d001a31cb8a288e4a1160caab0a4aa188cf96859439ffcf5d0cfb5b08",
+   "counts": {
+    "triangles": 131356,
+    "vertices": 66280,
+    "on_frozen": 0
+   },
+   "window": {
+    "row0": -259405,
+    "col0": 20622,
+    "rows": 1467,
+    "cols": 1401
+   }
+  }
+ ]
+}
