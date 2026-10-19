@@ -193,3 +193,4 @@ checkout); a slower run lets the stop through.
 
 ## Review
 - **Design review, round 1, 2026-10-19.** On `f466d769`, 0 counted lines (estimate about 20), @reviewer: APPROVED WITH WORDINGS. Hook fields `stop_hook_active`, `agent_id`, `background_tasks`, `session_crons` checked against the Claude Code 2.1.303 hooks docs; no path traps the session; away flag read path and the docstring wordings applied by the main session.
+- **Code review, round 1, 2026-10-19.** On `203fbf90` (red `e484085e`), 23 counted lines (estimate about 20), @reviewer: APPROVED. Five pass cases in the design's order, reason text word for word, never exits 2; `stop_output(event, harness_mode)` taking the module as an argument accepted; single green commit touching only the hook; 37 tests pass, gates green.
