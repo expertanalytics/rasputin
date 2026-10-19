@@ -89,6 +89,9 @@ REPLACE_LISTS = {"-l", "--list"}
 GH_FIELDS = {"-f", "-F", "--field", "--raw-field", "--input"}
 #: The flags a `gh api graphql` read may carry, each with its value as the next word.
 GRAPHQL_FLAGS = {"-f", "--raw-field", "-F", "--field", "-X", "--method", "-q", "--jq"}
+#: A line the shell expands nothing in: outside single quotes only these characters.
+#: Each step takes one character or one whole quoted string, so it matches in linear time.
+EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")
 CURL_DATA = ("--data", "--form", "--json", "--upload-file")
 #: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
 FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
@@ -220,12 +223,16 @@ def read_query(text: str) -> bool:
     return opens and "mutation" not in text and "subscription" not in text
 
 
-def graphql_read(words: list[str], rest: list[str]) -> bool:
+def graphql_read(words: list[str], rest: list[str], raw: str) -> bool:
     """A `gh api graphql` call, every word read before expansion, whose one `query` reads.
 
-    Only the flags of GRAPHQL_FLAGS, each followed by its value; method POST if given;
-    fields exactly one `query` and at most one `operationName`, none read from a file.
+    The whole line `raw` expands nothing (EXPANDS_NOTHING, and no word opens with zsh's
+    `=cmd`), so the words are what gh receives. Only the flags of GRAPHQL_FLAGS, each
+    followed by its value; method POST if given; fields exactly one `query` and at most
+    one `operationName`, none read from a file.
     """
+    if EXPANDS_NOTHING.fullmatch(raw) is None or any(w.startswith("=") for w in words):
+        return False
     if any("$" in w or "`" in w for w in words) or rest[:1] != ["graphql"] or len(rest) % 2 == 0:
         return False
     fields: list[tuple[str, str]] = []
@@ -258,7 +265,8 @@ def segment_why(words: list[str], text: str = "") -> str | None:
         given = method(rest, "-X", "--method")
         fields = any(a.split("=")[0] in GH_FIELDS or a[:2] in ("-f", "-F") for a in rest)
         writes = (given is not None and given != "GET") or (given is None and fields)
-        if writes and not graphql_read(words, words[words.index("api") + 1 :]):
+        api = words[words.index("api") + 1 :]
+        if writes and not graphql_read(words, api, text or shlex.join(words)):
             return "gh api with a writing method changes the forge"
     if "curl" in words and any(FORGE_HOST in w for w in words):
         # `--expand-x` is `--x`; a short cluster has data letters before its `X`, its method after.

@@ -104,7 +104,8 @@ class _Scan:
     def __init__(self, text: str) -> None:
         self.text, self.at = text, 0
         self.found: list[Simple] = []
-        self.pending: list[tuple[Simple, str, bool]] = []  # heredocs: owner, delimiter, <<-
+        # heredocs: owner, delimiter, <<-, an unquoted delimiter
+        self.pending: list[tuple[Simple, str, bool, bool]] = []
         self.backtick = False
         self.assigned: dict[str, str] = {}  # NAME=value commands met so far on the line
 
@@ -112,7 +113,7 @@ class _Scan:
         """Read commands up to `close` (`)` or a backtick) or, at the top, the end."""
         words: list[str] = []
         writes: list[str] = []
-        heredocs: list[tuple[str, bool]] = []
+        heredocs: list[tuple[str, bool | None, bool]] = []
         while True:
             self.blanks()
             at, text = self.at, self.text
@@ -232,7 +233,7 @@ class _Scan:
             self.at = match.end()
         return text[start : self.at]
 
-    def redirect(self, writes: list[str], heredocs: list[tuple[str, bool]]) -> None:
+    def redirect(self, writes: list[str], heredocs: list[tuple[str, bool | None, bool]]) -> None:
         match = REDIRECT.match(self.text, self.at)
         assert match is not None
         self.at = match.end()
@@ -240,9 +241,10 @@ class _Scan:
         self.blanks()
         if self.at >= len(self.text) or self.text[self.at] in WORD_END:
             raise UnreadableError
-        target = self.word()
-        if op in ("<<", "<<-"):  # quoted or not: a body's expansions are not read here
-            heredocs.append((target, op == "<<-"))
+        start, target = self.at, self.word()
+        if op in ("<<", "<<-", "<<<"):  # a here-string (`<<<`) has None for `<<-`
+            expands = not any(c in self.text[start : self.at] for c in "'\"\\")
+            heredocs.append((target, None if op == "<<<" else op == "<<-", expands))
         elif op == ">&" and (target.isdigit() or target == "-"):
             return
         elif (op in (">", ">>", ">|", "<>", ">&") or prefix == "&") and not ignored(target):
@@ -251,7 +253,7 @@ class _Scan:
     def read_heredocs(self) -> None:
         """Consume the bodies of the heredocs opened on the line just ended."""
         text = self.text
-        for owner, delimiter, tabs in self.pending:
+        for owner, delimiter, tabs, expands in self.pending:
             body: list[str] = []
             while True:
                 if self.at >= len(text):
@@ -264,10 +266,13 @@ class _Scan:
                     break
                 body.append(line + "\n")
             owner.heredoc = "".join(body)
-            self.finish_heredoc(owner)
+            rewritten = expands and any(c in owner.heredoc for c in "$`\\")
+            self.finish_heredoc(owner, owner.heredoc, rewritten)
         self.pending = []
 
-    def finish(self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool]]) -> None:
+    def finish(
+        self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool | None, bool]]
+    ) -> None:
         if words and all(ASSIGNMENT.match(word) for word in words):  # `H=.git/harness;`
             self.assigned |= dict(word.split("=", 1) for word in words)
         while words and (words[0] in RESERVED or ASSIGNMENT.match(words[0])):
@@ -279,7 +284,7 @@ class _Scan:
         simple = classify(words, writes)
         # A variable assigned earlier on the line is read as its value: `$H/x`.
         simple.writes = [PLAIN_PARAMETER.sub(self.value, w) for w in simple.writes]
-        self.pending += [(simple, delimiter, tabs) for delimiter, tabs in heredocs]
+        self.pending += [(simple, d, tabs, x) for d, tabs, x in heredocs if tabs is not None]
         if simple.argv[:1] == ["eval"]:  # eval runs its words as a command line
             self.nested(" ".join(simple.argv[1:]))
             if not simple.writes:
@@ -288,19 +293,30 @@ class _Scan:
         if simple.argv and base(simple.argv[0]) in SHELLS and simple.program is not None:
             self.nested(simple.program)
             simple.program = None
+        for word, tabs, _ in heredocs:
+            if tabs is None:  # a here-string: the word and a newline, on stdin
+                self.finish_heredoc(simple, word + "\n", substituted(word))
 
     def value(self, match: re.Match[str]) -> str:
         return self.assigned.get(match.group(1) or match.group(2), match.group(0))
 
-    def finish_heredoc(self, simple: Simple) -> None:
-        """A heredoc is the program of an interpreter reading stdin; a shell's is parsed."""
-        if not simple.argv or simple.script not in (None, "-") or simple.program is not None:
+    def finish_heredoc(self, simple: Simple, body: str, rewritten: bool) -> None:
+        """A stdin body is the program of an interpreter reading stdin; a shell's is parsed.
+
+        Every body is appended, as zsh joins them all; `rewritten` marks a body the shell
+        may rewrite before the interpreter reads it, which makes the command unknown. An
+        inline `-c`/`-e` program or a script keeps stdin as data.
+        """
+        name = base(simple.argv[0]) if simple.argv else ""
+        if not (PYTHON.fullmatch(name) or name in PROGRAM_FLAG) or simple.script not in (None, "-"):
             return
-        name = base(simple.argv[0])
+        if interpreter(name, simple.argv[1:])[0] is not None:
+            return
         if name in SHELLS:
-            self.nested(simple.heredoc or "")
-        elif PYTHON.fullmatch(name) or name in PROGRAM_FLAG:
-            simple.program = simple.heredoc
+            self.nested(body)
+        else:
+            simple.program = (simple.program or "") + body
+            simple.unknown = simple.unknown or rewritten
 
     def nested(self, command: str) -> None:
         inner = parse(command)
@@ -321,7 +337,14 @@ def classify(words: list[str], writes: list[str]) -> Simple:
     simple.unknown = unknown or (stdin_args and name in {*WRITER_ARGS, *COPIERS, "sed"})
     if PYTHON.fullmatch(name) or name in PROGRAM_FLAG:
         simple.program, simple.script = interpreter(name, args)
+        rewritten = simple.program is not None and substituted(simple.program)
+        simple.unknown = simple.unknown or (name not in SHELLS and rewritten)
     return simple
+
+
+def substituted(text: str) -> bool:
+    """The shell may splice text into it: it holds `$` or a backtick."""
+    return "$" in text or "`" in text
 
 
 def unwrap(argv: list[str]) -> tuple[list[str], list[str], bool]:
@@ -451,14 +474,14 @@ def candidates(simple: Simple) -> list[str]:
             tree = ast.parse(program)
         except (SyntaxError, ValueError):
             return re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
-        exempt = read_literals(tree)
+        exempt = set() if simple.unknown else read_literals(tree)
         return [
             node.value
             for node in ast.walk(tree)
             if isinstance(node, ast.Constant)
             and isinstance(node.value, str)
             and node.value
-            and not any(c.isspace() for c in node.value)
+            and (substituted(node.value) or not any(c.isspace() for c in node.value))
             and id(node) not in exempt
         ]
     tokens = re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
