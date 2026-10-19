@@ -336,8 +336,8 @@ then one `[[class]]` table per row, in this order:
 
 - **Labels** are the schema's English names, ASCII as CORINE's are, since a
   label goes into the GeoPackage triangles and the ParaView preset. One
-  departure: the schema calls 70 "Snowy glacier??"; its definition, "a mix of
-  snow and glacier ice that does not melt during the summer", and NIBIO's
+  departure: the schema calls 70 "Snowy glacier??"; its definition, "mix of
+  snow and ice which does not melt during the summer", and NIBIO's
   Norwegian name "Snøisbre" read "Snow and glacier".
 - **Colours** are NIBIO's own, converted from RGB. NIBIO gives 99 no fill;
   `#8c8c8c` is rasputin's choice, a grey darker than NIBIO's two greys (217
@@ -425,7 +425,8 @@ no other legend is offered) and `catchment --lakes`.
 | Total | **about 190**, under the 700 of `CLAUDE.md` section 2 |
 
 Also, not counted: `project_structure.md` rows for `gml_import.py` and the
-new part of `io/gml.py`; the `sources.toml` comment; `test_layering.py` gains
+new part of `io/gml.py`; the `project_structure.md` row for `data/legends/`
+gains `ar50`; the `sources.toml` comment; `test_layering.py` gains
 `"gml_import": "crs io.geopackage_write io.gml io.repository"` at L4 (or
 without `io.repository` if the developer passes no helper from it) and
 `gml_import` in `cli`'s list; `io.gml` stays `""`.
@@ -556,3 +557,4 @@ package's legend files and the help and refusal listings ask for it),
 ## Review
 
 - **Design review, round 1, 2026-10-19.** On `79d333a2`, 0 counted lines (estimate about 190), @reviewer: APPROVED WITH WORDINGS, applied by the main session (the CRS fixed at the first feature with a surface; the conversion over HTTP is a CLI or stdio task). Probes re-run on AC power: 287,730 features, 27.7 s, peak 133 MiB, 832,618,496-byte GeoPackage; UTM 32 to 33 edge stray 12.2 and 13.0 mm.
+- **Design review, round 2 (the AR50 legend), 2026-10-19.** On `aaaabee5`, @reviewer: APPROVED WITH WORDINGS, applied by the main session (code 70's definition in the schema's words; the `data/legends/` row of `project_structure.md` gains `ar50`). Codes, labels and colours checked against the schema, the product specification and the drawing rules; the TOML loads with `legends.load` unchanged. Ola: English labels only.
