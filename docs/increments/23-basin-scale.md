@@ -4401,3 +4401,5 @@ test; M2 by this commit's test.
 ```
 
 **23c-3, code review, round 1, 2026-10-19.** Range `321bac56..fefdff59`, 199 counted lines for this step (estimate 190); the branch is 747 against master only because it carries 23c-2's 548, so the PR opens after 23c-2 merges. @reviewer: APPROVED WITH WORDINGS, applied by the main session. Peak memory is one piece, by reading; the uncut path loads none of the cut modules.
+
+**23c-3, `@perf` acceptance, 2026-10-19.** `a4b87a4f`: bench hashes unchanged (K1), quarter process time -0.8 to +0.6 % against master (the cut imports are off the uncut path); the tile's flagged +28 % is the process environment's size, not the branch (32 environment sizes, the three trees agree). Piece files byte-identical to 23c-2's at 10 m (16, 64, 256 pieces) and 1 m (64). Peak memory at 10 m 407 / 155 / 111 MB against 23c-2's 1,733 / 1,689 / 1,733 MB; 1 m with 64 pieces 294 against 1,711 MB. Not met: the peak exceeds the largest piece's `dx·dy·b(T)` + 72 MiB by 31 to 255 MB on the reprojected path. Cost: decode 5.00 s against 1.31 s and the whole run 9.0 s against 4.9 s at 10 m with 64 pieces. ACCEPTED.
