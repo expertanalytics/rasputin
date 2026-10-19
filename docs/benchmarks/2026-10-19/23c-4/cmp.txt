@@ -1,0 +1,12 @@
+p64 files base       52 head       52 differ 0 name-diff-lines        0
+p16 files base       14 head       14 differ 0 name-diff-lines        0
+p256 files base      155 head      155 differ 0 name-diff-lines        0
+base p64  8.88 real 12.73 user 1.66 sys  154698304 peak memory footprint 
+head p64  8.85 real 12.73 user 1.63 sys  155239000 peak memory footprint 
+base p16  5.55 real 13.23 user 1.69 sys  406881072 peak memory footprint 
+head p16  5.51 real 13.24 user 1.64 sys  406963016 peak memory footprint 
+base p256  9.44 real 12.38 user 1.91 sys  111133176 peak memory footprint 
+head p256  9.47 real 12.41 user 1.90 sys  111247864 peak memory footprint 
+p64 index.json identical to 23c-3 acceptance's
+p16 index.json identical to 23c-3 acceptance's
+p256 index.json identical to 23c-3 acceptance's
