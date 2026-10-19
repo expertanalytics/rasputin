@@ -243,6 +243,56 @@ def dimensioned(on: str, dimension: str) -> str:
     return f"<gml:Polygon>{rings(f'<gml:LinearRing>{pos_list}</gml:LinearRing>')}</gml:Polygon>"
 
 
+#: A 10 by 5 rectangle with a vertex mid-edge, in three dimensions: 18
+#: numbers, which read as two dimensions are nine other positions, so a
+#: reader that misses the dimension decodes a wrong ring instead of failing.
+RECTANGLE_3D = "0 0 1 5 0 2 10 0 3 10 5 4 0 5 5 0 0 1"
+RECTANGLE_XY = [(0.0, 0.0), (5.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+#: The same rectangle moved by (2, 2), as a hole of the 20 by 20 square.
+HOLE_3D = "2 2 1 7 2 2 12 2 3 12 7 4 2 7 5 2 2 1"
+HOLE_XY = [(x + 2.0, y + 2.0) for x, y in RECTANGLE_XY]
+OUTER_20 = "0 0 20 0 20 20 0 20 0 0"
+
+
+def dimension_inside(on: str, dimension: str) -> str:
+    """A surface whose ``srsDimension`` is ``dimension`` on the element ``on``
+    names, every ``gml:posList`` without one. Its ring there holds
+    `RECTANGLE_3D` (or `HOLE_3D`) when ``dimension`` is 3, else the 2-D
+    rectangle (or hole); the other rings are two-dimensional."""
+    three = dimension == "3"
+    rectangle = RECTANGLE_3D if three else " ".join(f"{x:g} {y:g}" for x, y in RECTANGLE_XY)
+    hole = HOLE_3D if three else " ".join(f"{x:g} {y:g}" for x, y in HOLE_XY)
+    attribute = f' srsDimension="{dimension}"'
+    bare = f"<gml:LinearRing><gml:posList>{rectangle}</gml:posList></gml:LinearRing>"
+    marked = f"<gml:LinearRing{attribute}><gml:posList>{rectangle}</gml:posList></gml:LinearRing>"
+    if on == "exterior LinearRing":
+        return f"<gml:Polygon>{rings(marked)}</gml:Polygon>"
+    if on == "interior LinearRing":
+        inner = f"<gml:LinearRing{attribute}><gml:posList>{hole}</gml:posList></gml:LinearRing>"
+        return f"<gml:Polygon>{rings(ring(OUTER_20), inner)}</gml:Polygon>"
+    if on == "MultiSurface":
+        member = f"<gml:Polygon>{rings(bare)}</gml:Polygon>"
+        return f"<gml:MultiSurface{attribute}><gml:surfaceMember>{member}</gml:surfaceMember></gml:MultiSurface>"  # noqa: E501
+    if on == "Polygon in a MultiSurface":
+        member = f"<gml:Polygon{attribute}>{rings(bare)}</gml:Polygon>"
+    else:  # "Surface in a MultiSurface"
+        patch = f"<gml:PolygonPatch>{rings(bare)}</gml:PolygonPatch>"
+        member = f"<gml:Surface{attribute}><gml:patches>{patch}</gml:patches></gml:Surface>"
+    return f"<gml:MultiSurface><gml:surfaceMember>{member}</gml:surfaceMember></gml:MultiSurface>"
+
+
+#: Every element of what the reader accepts that may carry ``srsDimension``
+#: (GML 3.2's SRSReferenceGroup: a geometry, or a ``gml:posList``), other than
+#: the outermost surface and the posList, which `dimensioned` covers.
+INNER_DIMENSION_ON = [
+    "MultiSurface",
+    "Polygon in a MultiSurface",
+    "Surface in a MultiSurface",
+    "exterior LinearRing",
+    "interior LinearRing",
+]
+
+
 class TestRefusals:
     @pytest.mark.parametrize(
         ("geometry", "name"),
@@ -312,7 +362,8 @@ class TestRefusals:
     def test_a_surface_kind_not_read_is_refused_not_dropped(
         self, gml: ModuleType, geometry: str, name: str
     ) -> None:
-        """Code review round 1, finding 1: such a surface came back with no geometry."""
+        """A surface kind the reader does not map is refused in words, at the
+        top or inside a MultiSurface, never yielded with no geometry."""
         refused(gml, document(feature("f.kind", geometry)), "f.kind", name)
 
     @pytest.mark.parametrize("bad", ["0", "1", "x", "-2", "2.5"])
@@ -320,7 +371,8 @@ class TestRefusals:
     def test_an_srs_dimension_not_a_whole_number_of_two_or_more(
         self, gml: ModuleType, bad: str, on: str
     ) -> None:
-        """Code review round 1, finding 2: ``0`` raised ZeroDivisionError."""
+        """A bad ``srsDimension`` on the geometry or its ``gml:posList`` is
+        refused naming the feature; ``0`` would otherwise divide by zero."""
         refused(gml, document(feature("f.dim", dimensioned(on, bad))), "f.dim", "srsDimension")
 
     @pytest.mark.parametrize("good", ["2", "3"])
@@ -331,6 +383,33 @@ class TestRefusals:
         found = one(gml, dimensioned(on, good))
         assert found.geometry.area == 100.0
         assert not found.geometry.has_z
+
+    @pytest.mark.parametrize("on", INNER_DIMENSION_ON)
+    def test_an_srs_dimension_of_three_inside_the_surface_is_read(
+        self, gml: ModuleType, on: str
+    ) -> None:
+        """``srsDimension="3"`` on any element between the outermost surface
+        and a bare ``gml:posList`` makes its positions three numbers each; the
+        height is dropped and the (x, y) points are the rectangle's."""
+        found = one(gml, dimension_inside(on, "3"))
+        (shape,) = getattr(found.geometry, "geoms", [found.geometry])
+        if on == "interior LinearRing":
+            assert shape.area == 350.0
+            assert [list(r.coords) for r in shape.interiors] == [HOLE_XY]
+        else:
+            assert shape.area == 50.0
+            assert list(shape.exterior.coords) == RECTANGLE_XY
+        assert not shape.has_z
+
+    @pytest.mark.parametrize("bad", ["0", "1", "x"])
+    @pytest.mark.parametrize("on", INNER_DIMENSION_ON)
+    def test_an_srs_dimension_inside_the_surface_not_a_whole_number_of_two_or_more(
+        self, gml: ModuleType, bad: str, on: str
+    ) -> None:
+        """A bad ``srsDimension`` is refused wherever in the surface it
+        stands, naming the feature; ``0`` would otherwise divide by zero."""
+        geometry = dimension_inside(on, bad)
+        refused(gml, document(feature("f.dim", geometry)), "f.dim", "srsDimension")
 
     def test_two_surface_properties(self, gml: ModuleType) -> None:
         refused(gml, document(feature("f.two", polygon(), polygon(SQUARE_2))), "f.two")
