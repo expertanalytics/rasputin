@@ -3971,8 +3971,8 @@ it as an integer, and never re-derived from its rounded coordinates.
 
 - **E1. The cut lines an end lies on** (`basin_run.py`, pure:
   `line_rc(cut, snap, x, y) -> (row | None, col | None)`). An end lies on
-  vertical cut line `k` (1-based, `cut.xs`) when `|x - xs[k]| <= 0.75 ·
-  snap`, and gets run-window column `k · dx`; a horizontal line likewise
+  vertical cut line `k` (1-based, `cut.xs`) when `|x - xs[k]|` is at most the
+  bound below, and gets run-window column `k · dx`; a horizontal line likewise
   gives row `k · dy`. **Every line it lies on**, whether or not a seam leaves
   the end along it: where the outline passes through the crossing of two
   cut lines and only one seam leaves it (CS7), the end still gets both
@@ -3986,13 +3986,17 @@ it as an integer, and never re-derived from its rounded coordinates.
   default 1 mm on the 400 m square scene at 9.4, 9.6, 9.7, 9.8, 9.9, 9.7003
   and 9.7005 m). The noder moves a vertex at most half a snap per axis, plus
   rounding, so every end on a line passes; at 9.7003 m the lines come back up
-  to 0.5 mm off and pass. Every other noded vertex is on the snap grid, so it
-  is at least half a snap from the line, and a whole snap where the line
-  itself is on the grid (every whole-metre lattice whose tie point is on the
-  1 mm grid): no such end changes, so whole-metre bytes are kept. A vertex
-  taken by mistake (a 1 mm point at exactly half a snap, possible only where
-  a line sits on a half-millimetre) is harmless: E2's box then still holds
-  it and stays inside both windows, for any bound under one cell.
+  to 0.5 mm off and pass. Every other noded vertex is on the snap grid, a
+  whole snap from the line where the line itself is on the grid (every
+  whole-metre lattice whose tie point is on the 1 mm grid): no such end
+  changes, so whole-metre bytes are kept. Where a line is off the grid, the
+  1 mm point on its far side can lie within 0.75 · snap too (a line 0.25 to
+  0.75 mm past a grid point), and a vertex there is taken by mistake. That is
+  harmless while the bound is under half a cell: E2's box still holds the
+  vertex and stays inside both windows, and E3 gives it the corner node's
+  value, the same in every piece. So the bound is `min(0.75 · snap, h / 4)`,
+  `h` the smaller of the run's two spacings; with the default snap it is
+  0.75 · snap.
 - **E2. The strip box** (`seam_box(cut, snap, a, b) -> (r0, r1, c0, c1)`,
   pure; the strip is still `strip(...)` of it, so it is still a function of
   the edge alone). Each end's row and column: E1's index where it has one,
@@ -4768,3 +4772,5 @@ test; M2 by this commit's test.
 **23c-3, code review, round 1, 2026-10-19.** Range `321bac56..fefdff59`, 199 counted lines for this step (estimate 190); the branch is 747 against master only because it carries 23c-2's 548, so the PR opens after 23c-2 merges. @reviewer: APPROVED WITH WORDINGS, applied by the main session. Peak memory is one piece, by reading; the uncut path loads none of the cut modules.
 
 **23c-3, `@perf` acceptance, 2026-10-19.** `a4b87a4f`: bench hashes unchanged (K1), quarter process time -0.8 to +0.6 % against master (the cut imports are off the uncut path); the tile's flagged +28 % is the process environment's size, not the branch (32 environment sizes, the three trees agree). Piece files byte-identical to 23c-2's at 10 m (16, 64, 256 pieces) and 1 m (64). Peak memory at 10 m 407 / 155 / 111 MB against 23c-2's 1,733 / 1,689 / 1,733 MB; 1 m with 64 pieces 294 against 1,711 MB. Not met: the peak exceeds the largest piece's `dx·dy·b(T)` + 72 MiB by 31 to 255 MB on the reprojected path. Cost: decode 5.00 s against 1.31 s and the whole run 9.0 s against 4.9 s at 10 m with 64 pieces. ACCEPTED.
+
+**23c-4, design review, rounds 1 and 2, 2026-10-19.** Round 1 on `2bb1fe4b`, @reviewer: CHANGES REQUESTED (the cause at 9.7 m is the division and `floor`, not the snap; a crossing point that only one seam leaves; a wrong kill claim). Round 2 on `f5467699` (a fresh `@architect`), @reviewer: APPROVED WITH WORDINGS, applied by the main session: the bound becomes `min(0.75 · snap, h / 4)`, since `--snap-spacing` has no upper limit. NoData beside a seam at 9.9 m stays a pinned refusal (CS8); its fix needs C++ and is a later step.
