@@ -119,6 +119,34 @@ def test_existing_wiring_is_kept(event: str, matcher: str | None, command: str) 
     assert (event, matcher, command) in wired_hooks()
 
 
+#: h24 item 16 (docs/increments/h24-harness-fixes.md): the two guards refuse on failure.
+REFUSE_ON_FAILURE = [
+    pytest.param("Edit|Write|NotebookEdit|Bash", GOVERNANCE, id="guard-governance"),
+    pytest.param("Bash", PUSH, id="guard-push"),
+]
+
+
+@pytest.mark.parametrize(("matcher", "command"), REFUSE_ON_FAILURE)
+def test_guard_refuses_the_command_when_it_fails(matcher: str, command: str) -> None:
+    """h24 item 16: the guard's command hook carries `"onFailure": "block"`.
+
+    Claude Code carries the action out when a hook fails (cannot start, exits
+    other than 0 or 2, times out, prints JSON that fails the schema) unless the
+    hook says `block`; unset means continue.
+    """
+    hooks = [
+        hook
+        for entry in settings()["hooks"]["PreToolUse"]
+        if entry.get("matcher") == matcher
+        for hook in entry.get("hooks", [])
+        if hook.get("type") == "command" and hook.get("command") == command
+    ]
+    assert len(hooks) == 1, f"PreToolUse (matcher {matcher!r}) runs {command} {len(hooks)} times"
+    assert hooks[0].get("onFailure") == "block", (
+        f"PreToolUse (matcher {matcher!r}) {command} has onFailure {hooks[0].get('onFailure')!r}"
+    )
+
+
 # -- by-path invocation -------------------------------------------------------
 
 
