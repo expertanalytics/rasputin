@@ -1,8 +1,7 @@
 #pragma once
 
 // Horn's slope of every DEM node as a class: half degrees, rounded up, 0 to
-// 180, and kNoDataClass for a NoData node
-// (docs/increments/34-slope-tolerance.md, sections 3 and 4.2).
+// 180, and kNoDataClass for a NoData node.
 //
 // A missing neighbour (outside the grid, or NoData) is filled so that a plane
 // reads its own slope: an edge neighbour by its reflection through the node,
@@ -14,7 +13,7 @@
 // The class is the count of half degrees whose tan^2 is at most gx^2 + gy^2,
 // plus one (0 for a flat node), from a table, with no atan per node. Each
 // tan^2 is lowered by a relative 1e-12 (about 1e-11 degrees), so a slope at a
-// class boundary, within rounding, takes the higher class (G5). Each byte is
+// class boundary, within rounding, takes the higher class. Each byte is
 // a function of the node's 3 by 3 neighbourhood only, so the result does not
 // depend on `threads`.
 

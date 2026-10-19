@@ -686,9 +686,7 @@ changes the signature says so in its design.
 `destination` reads
 `(out: 'Path', hint: 'str' = '--out') -> 'Path'`. The record type is `SIGNATURES: dict[str, str]`
 for all 21. *Probe able to fail:* the
-suite run on a scratch copy of `cea32bad` (`tools/scratch_copy.py
-cea32bad <dir>`, the old public pin) fails on exactly `destination` and
-`repository_for`, recorded in this file.
+suite run on a scratch copy of master with `destination`'s old `(out, out_parent, name, hint)` signature and `repository_for`'s old pair return put back fails on exactly `destination` and `repository_for` (`f0718855`'s message). `cea32bad` is a rasputin-lsm commit, which has no `plugin_api`.
 
 *Not governed* (`tests/` only). 0 counted lines; about 60 test lines. No
 red/green pair: the test pins today's behaviour and passes on arrival, so
@@ -1054,3 +1052,4 @@ Both are prose, so the merge is a wording step, not a design change.
 - **Design review, round 4 (PR A), 2026-10-18.** On `28a67d39`, @reviewer: APPROVED; the new pattern timed linear on failing lines up to 21,010 characters. Idea for its own item: a here-string (`<<<`) given to an interpreter is not read at all, on master too.
 - **Design review, round 5 (PR A, item 15), 2026-10-18.** On `7e513d11`, @reviewer: APPROVED. Findings for a follow-up item, all silent on master too: `/dev/stdin` or `/dev/fd/0` as a script, a pipe into an interpreter or shell, `<(…)` as a script, `. /dev/stdin`, `python3 -m code` and `uv run python3` reading stdin; `python3 < file` stays a known blind spot.
 - **Design review, round 6 (PR A, items 15 and 16), 2026-10-18.** On `8e427319`, @reviewer: APPROVED WITH WORDINGS, applied by the main session (the `xargs sed` cost; what counts as a hook failure). 65,746 past Bash commands replayed through the old and new guard: 0 changed verdict. `onFailure` key and version checked against the hooks reference.
+- **Review, PR E (item 13), 2026-10-18.** On `f0718855` (`@tester` alone), 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the probe sentence named a private commit. The record matches on Python 3.12.12, 3.13.15 and 3.14.7; the design commits riding along are accepted.

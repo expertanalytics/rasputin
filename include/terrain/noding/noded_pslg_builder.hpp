@@ -4,9 +4,9 @@
 //
 // WHY THIS IS A TYPE RATHER THAN A PASS INSIDE node<K>'s LOOP. A verification
 // pass reachable only through the noder only ever sees inputs the noder
-// produced, so a verifier that agrees with its producer is
-// .claude/REQUIRED-READING.md's "do not write X is verified by Y until Y has
-// been run against a broken X". As a separate type with a public entry point it
+// produced, so a verifier that agrees with its producer would never be run
+// against a broken input, and its agreement would show nothing. As a separate
+// type with a public entry point it
 // can be handed a hand-built candidate with a live T-junction in it and be
 // REQUIRED to refuse, which is what
 // tests/cpp/unit/test_noding_noded_pslg_builder.cpp does and what no property
@@ -43,7 +43,7 @@
 // edge_base(c) + k. That is checked, as part of 16's structural half.
 //
 // THE BUILDER IS NOT THE PSLG VALIDATOR. It does not ask for an outer chain, it
-// does not check ring winding and it does not re-run increment 3's stages: its
+// does not check ring winding and it does not re-run the PSLG validator's stages: its
 // input has already been through them. Ring re-validation after snapping is
 // node<K>'s, because the statuses it raises (RingCollapsed, NonSimpleRing) are
 // diagnoses about the spacing rather than claims about these arrays.
@@ -150,7 +150,7 @@ namespace detail {
 }  // namespace detail
 
 // The pair search behind guarantee 14: every pair of CLOSED boxes that
-// intersect, found by sort and sweep on x (increment 16b-0, R8). Kernel-free:
+// intersect, found by sort and sweep on x. Kernel-free:
 // it compares box bounds and nothing else, and what a pair MEANS is the
 // callbacks' business.
 //

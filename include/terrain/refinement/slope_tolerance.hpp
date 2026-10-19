@@ -1,9 +1,8 @@
 #pragma once
 
-// A vertical tolerance that follows the slope of the DEM at every node
-// (docs/increments/34-slope-tolerance.md, sections 3, 4.3 and 4.5).
+// A vertical tolerance that follows the slope of the DEM at every node.
 //
-// SlopeRamp is section 3's t(s): N from END degrees up, F up to START, linear
+// SlopeRamp is the ramp t(s): N from END degrees up, F up to START, linear
 // between; tested in that order, so a step (START = END) gives N from END up.
 // SlopeTolerance holds every node's class (raster::steepness) and two
 // 256-entry tables: allowed(c) = t(c / 2) for classes 0 to 180 and F for 181
@@ -123,7 +122,7 @@ private:
     std::array<double, 256> allowed_{}, weight_{};  // entry 255 (NoData): F
 };
 
-// A per-triangle policy with the per-node slope beside it (4.3). P may be a
+// A per-triangle policy with the per-node slope beside it. P may be a
 // const reference, so a caller need not copy a LineTolerance.
 template <TolerancePolicy P>
 struct Sloped {
@@ -153,7 +152,7 @@ struct SlopeNodes {
     std::size_t tightened = 0;  // of them, held to less than F by their slope
 };
 
-// Section 4.5: the valid nodes in the closed node sets of m's triangles, each
+// The valid nodes in the closed node sets of m's triangles, each
 // once: a node on an edge by the lower-index triangle of the two across it, a
 // vertex from the vertex list. Only a span's ends, and a row through a vertex
 // (where an edge may be horizontal), can hold a vertex or an edge node.

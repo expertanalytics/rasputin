@@ -1,6 +1,8 @@
 # Increment 67: the code-audit cuts
 
-**Status: designed** (`@architect`, 2026-10-17, on `df923398`). Three pull
+**Status: P1 merged as #283; P2 built, approved, accepted** (`@architect`,
+2026-10-17, on `df923398`; P2's section revised on `9c80b7de`, 2026-10-18;
+P2 red `b1e467f9`, green `eba95909`, `@perf` `d1188d5c`). Three pull
 requests. P1 (Python and tests) and P2 (C++) touch no governed file and may run
 while Ola is away; P3 changes the gates and rule files and waits for his
 prompt. Each PR goes through the full path: design, red, green, test run,
@@ -47,7 +49,7 @@ Every count below was rerun on `df923398`; where it differs from the audit
 | E, a word built by hand | `src_python/tin_engine/stats.py:176-177` | 1; `run_record.plural` gives the same words | P1 |
 | F, nine copies of a `git` runner | the audit's list | all in `tools/` and `.claude/hooks/`, which are governed | P3 |
 | G, positional booleans | `.venv/bin/ruff check --select FBT003 .` | 39: 8 in `src_python`, 16 in `tests`, 6 in `tools`, 1 in `.claude/hooks`, 8 in `docs/increments/*-probes`. Also `source_report.py:175` multiplies a tuple by a boolean, which no rule flags | P1 (src_python, tests); P3 (the rest, and the rule) |
-| H, the 78-line lambda | `include/terrain/refinement/refine_points.hpp:397-474` (`as_written`) | 1 | P2 |
+| H, the 78-line lambda | `include/terrain/refinement/refine_points.hpp@df923398:397-474` (`as_written`) | 1 | P2 |
 
 ## 4. P1: Python and tests (may run while Ola is away)
 
@@ -164,13 +166,13 @@ Kept, with the reason:
   branch merged by mistake (its module docstring). That can happen at any
   merge; it is not deleted code staying deleted.
 
-## 5. P2: C++ comments and the `as_written` function (may run while Ola is away, after 66 merges)
+## 5. P2: C++ comments and the `as_written` function (may run while Ola is away)
 
 Files: `include/`, `bindings/`, `src/`, `tests/cpp/`, and the B pin in
-`tests/python/`. It starts from master **after increment 66 has merged**.
-Increment 66 (`worktree-coincident-vertices`) changes `refine.hpp`,
-`constraint_points.hpp`, `strip_scan.hpp` and
-`prop_refinement_written_delaunay.cpp`, all of which P2 touches. P2 needs a C++
+`tests/python/`. It starts from master `9c80b7de`, which has increment 66
+(#284). Every count and line in this section was rerun there. 66 made none of
+P2's cuts: it left `refine_points.hpp` unchanged, so H stands as designed, and
+it added history comments that B now also covers (below). P2 needs a C++
 build and `@perf`, so it runs with no other C++ build or `@perf` run beside it.
 
 ### 5.1 B: the comment sweep
@@ -180,7 +182,8 @@ build and `@perf`, so it runs with no other C++ build or `@perf` run beside it.
   increment numbers or labels, no design-file IDs (including the `N`, `L`,
   `I` and `FE` series the gate's pattern lacks), no "step N" pointing into a
   design file, no `65:` line labels. A comment that numbers the steps of its
-  own algorithm (`intersect.hpp:171-173`) is not history and stays. At most
+  own algorithm (`include/terrain/noding/intersect.hpp@9c80b7de:171-173`) is
+  not history and stays. At most
   one design-file pointer per file, in the file's opening comment, in heading
   form (`` `<path>.md`, *<heading>* ``); `tools/check_citations.py` already
   checks C++ comments.
@@ -188,20 +191,31 @@ build and `@perf`, so it runs with no other C++ build or `@perf` run beside it.
   `RULES`, `SCIENTIFIC` and `HEADING_CITATION` from `tools/check_code_history.py`
   and applies them to the comment text of every `.hpp`, `.cpp` and `.h` under
   `include/`, `bindings/` and `src/`. It allows only one heading-form pointer
-  per file, in the file's opening comment. It must expect no hits; red today
-  on 190 lines. P3 moves this into the gate and deletes the test. The extra IDs
-  and the "step N" references are found by the audit's regex in section 3,
-  judged by `@reviewer`, not pinned: the gate's pattern would flag legitimate
-  Python text (P3).
+  per file, in the file's opening comment. It must expect no hits; red on
+  `9c80b7de` on 194 lines in 43 files (113 design IDs, 79 pointers, 50 labels,
+  29 increment numbers; 190 on `df923398`). The four new lines are 66's: two
+  pointers to `66-coincident-written-vertices.md` that are not in an opening
+  comment (`include/terrain/refinement/constraint_points.hpp@9c80b7de:14`,
+  `include/terrain/refinement/strip_scan.hpp@9c80b7de:9`), its R1 in
+  `include/terrain/refinement/refine.hpp@9c80b7de:44,505`, and the
+  `(23b, N7)` comment, which moved from `strip_scan.hpp` to `include/terrain/refinement/refine.hpp@9c80b7de:363`.
+  P3 moves this into the gate and deletes the test. The extra IDs and the
+  "step N" references are found by the audit's regex in section 3 (165 lines on
+  `9c80b7de`, 160 on `df923398`), judged by `@reviewer`, not pinned: the
+  gate's pattern would flag legitimate Python text (P3). Neither pattern sees
+  66's `L12`, `L14` and `L16` (`include/terrain/refinement/refine.hpp@9c80b7de:354,361`); the rule above
+  covers them, so `@developer` rewrites them too.
 - **Green** (`@developer`): comments only. `@reviewer` checks that only
   comments changed: with `//` and `/* */` comments stripped by a scratch
   script, base and head are the same text in every changed file.
-- `tests/cpp/` comments (394 hits by the audit's regex) are out of scope:
+- `tests/cpp/` comments (404 hits by the audit's regex on `9c80b7de`) are out of scope:
   the rule covers production code, as the Python gate does.
 
 ### 5.2 H: `as_written` as named functions
 
-`point_loop`'s lambda (`refine_points.hpp:397-474`) uses no template
+`point_loop`'s lambda
+(`include/terrain/refinement/refine_points.hpp@9c80b7de:397-474`, unchanged by
+66) uses no template
 parameter of `point_loop`, so it becomes non-template `inline` functions in
 `terrain::refinement::detail`, unit-testable without running the loop:
 
@@ -238,16 +252,17 @@ named helper. No other behaviour changes.
 
 - **Red** (`@tester`): a unit test file in `tests/cpp/unit/`, registered in
   `tests/cpp/CMakeLists.txt`, that fails to compile until the functions exist.
-  Fixture: T3's quad from `tests/cpp/property/prop_refinement_written_delaunay.cpp:310-340`
+  Fixture: T3's quad from `tests/cpp/property/prop_refinement_written_delaunay.cpp@9c80b7de:341-373`
   (`RasterGeometry{0.0, 30.0, 3.0, 3.0, 11, 11}`; A, B, C collinear as
   written, orientation exactly 0; counter-clockwise on the grid, about
   9.25e-20 as that test states). Fed through `detail::to_lattice`
-  (`refine.hpp:176`) as `refine_points` does, the expected result is what T3
+  (`include/terrain/refinement/refine.hpp@9c80b7de:179`) as `refine_points` does
+  (`include/terrain/refinement/refine_points.hpp@9c80b7de:287`), the expected result is what T3
   asserts through `refine_points`: one `Flat` triangle from `written_kinds`,
   and `flat == 1` from `legalise_as_written` with the mesh left as given. T3
   runs the whole loop, so `@tester` confirms these values against the current
   code, through a scratch copy of the lambda, before committing them. The T5
-  fixture (`:363-380`, multiples of 1/64 near (500000, 6600000)) may serve as
+  fixture (`:394-412`, multiples of 1/64 near (500000, 6600000)) may serve as
   a second case under the same check.
 - **Not invariant-critical**: no mutation round. It is a refactor guarded
   by the suites below.
@@ -255,7 +270,8 @@ named helper. No other behaviour changes.
 ### 5.3 What guards P2
 
 `cmake --build` with `-Werror` (exit status read before `ctest`); `ctest`,
-and among it `prop_refinement_written_delaunay.cpp` T1 to T5; `pytest`, among
+and among it `prop_refinement_written_delaunay.cpp` T1 to T5 and 66's C1 to
+C4; `pytest`, among
 it `test_refine_golden.py` (output hashes) and `test_core_refine_points.py`;
 and the B pin.
 
@@ -308,8 +324,8 @@ Counted lines (`CLAUDE.md` §2; comments, docstrings and `tests/` do not count):
 | P3 | about +20 (−10 to +50) | the C++ comment reader in `check_code_history.py` +40; F about −30 if done; `pyproject.toml` is not counted |
 
 All three are far under the limit. In the diff, P1 is mostly test deletions
-(about −300 lines under `tests/`), and P2 is about 230 comment lines in about
-45 files.
+(about −300 lines under `tests/`), and P2 is about 245 comment lines in 44
+files (the union of the three patterns of 5.1 on `9c80b7de`).
 
 ## 9. Order and conflicts
 
@@ -318,10 +334,15 @@ All three are far under the limit. In the diff, P1 is mostly test deletions
   master in (`tools/merge_master.py`); the conflict is in four call lines.
   P1 also touches `cli.py`, as 63 and 23c-2 (`worktree-23c`) do, but not
   the same lines (`git diff` of 63's `cli.py` has no alias line).
-- P2 waits for 66 (section 5). `worktree-23c` changes `refine_points.hpp`
-  around the same loop; its own writer merges P2 in when it next merges master.
+- 66 has merged (#284); P2 starts from `9c80b7de`. `worktree-23c` changes
+  `refine_points.hpp` in the loop body near the `as_written` call
+  (`git diff 9c80b7de...worktree-23c` has one hunk, at old line 584), not in the
+  lambda; its own writer merges P2 in when it next merges master.
 
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `55acdec4`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the history check runs at the prose-only commit; three test cuts finished (a whole test and two docstrings); `pyproject.toml` is not governed. The scanner question: Ola ruled delete. Idea kept: a later sweep of 2771 history labels in `tests/python`.
 - **Code review, round 1 (P1), 2026-10-17.** Range `df923398..eee5b2ab`, +13 counted lines (estimate -2 to +10; `source_report.py` +12, keyword arguments wrap), @reviewer: APPROVED. `c3e57c43` changes no code; the prose reads as plain prose; deletions match 4.4; 7883 passed with an empty config folder. Suggestions for the test sweep: `test_station_set.py`'s name-only test; a terse comment at `feature_input.py:691`.
+- **Design revision (P2), 2026-10-18.** `@architect` reran section 5 on `9c80b7de`, after 66 (#284): every C++ citation pinned; 66 made no P2 cut, left `refine_points.hpp` unchanged and added four history lines plus `L12`/`L14`/`L16`, which B now covers; B's red count 190 to 194; fixture and `to_lattice` lines moved; C1 to C4 join the guards. No cut added, no step changed; estimate unchanged.
+- **Code review, round 1 (P2), 2026-10-18.** Range `9c80b7de..eba95909`, +34 counted lines (estimate +15, range +5 to +30; all in `refine_points.hpp`: the new signatures and structs, and `written_at`, which replaces a lambda), @reviewer: APPROVED; the overrun accepted. The comment commits `d6cef7eb` and `f8cd6da6` change no code (comments stripped, code text equal in all 43 files); the split keeps behaviour; the 64 at-risk citations quote the same text at base and head.
+- **`@perf` acceptance (P2), 2026-10-18.** `d1188d5c`, base `9c80b7de` against head `eba95909`: all four mesh hashes unchanged, 0 Delaunay violations, 0 flat triangles as written; the 42 timing cells from -6.1 % to +2.4 %, median -0.4 %: ACCEPTED.

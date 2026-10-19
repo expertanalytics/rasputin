@@ -224,6 +224,62 @@ command line shows the same listing, and says which sources file it read.
 An installed plugin may add datasets of its own (`docs/plugins.md`, *Ship
 datasets*).
 
+### Serving over HTTP
+
+`rasputin mcp --http` serves the same tools over HTTP, for agents on other
+machines, from your own machine or one server. Results then come back as
+download links instead of file paths: each output file is copied into the
+user's store and named by its sha256, and the result carries a link to it,
+valid 1 hour (the `download_link` tool makes a fresh one). Small text, such as
+the run record and the `--stats` report, still comes back inline.
+
+Each user has a bearer token, given to the server in `RASPUTIN_MCP_TOKENS` as
+`user=token` pairs separated by spaces. A user name is a lowercase letter
+followed by up to 31 of `a-z`, `0-9`, `_` and `-`; a token has at least 32
+characters, and the server keeps only its hash. Make one with
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`:
+
+```sh
+export RASPUTIN_MCP_TOKENS="ola=<token> kari=<token>"
+rasputin mcp --http --out-root /srv/rasputin --public-url https://rasputin.example.org
+```
+
+The server listens on `--host` and `--port`, by default `127.0.0.1:8765`.
+Put TLS in front of it with a reverse proxy or a tunnel, and give the
+address clients use as `--public-url`: links are built on it, and it must be
+`https` unless it is loopback (a `--host` off loopback therefore needs one).
+Behind nginx, set `proxy_buffering off` so progress reaches the agent as
+it happens. Tokens are read at start, and links die with a restart.
+
+Each user gets a folder under `--out-root`, `<user>/work` for the calls and
+`<user>/store` for the stored outputs. Files in it are kept 7 days, and it
+may hold 20 GB (`--quota`), each output counting twice, once in each
+place. A call runs in `work`, so give paths relative to it. It reads only
+from the user's folder, the tile cache and the server's configured data
+sources; any other path is refused, whether or not the file exists. A value
+with `/` in it must be a plain path (letters, digits and `. _ ~ / -`), so
+give a CRS as an EPSG code. `fetch --refresh` is refused, since it would
+discard the cache every user shares; give `--cache` inside your folder
+instead. Changing the sources takes a restart.
+
+Codex reads the token from an environment variable of its own, in
+`~/.codex/config.toml`. Codex stops waiting for a tool after 60 seconds by
+default, which cuts off a long run, so raise `tool_timeout_sec`:
+
+```toml
+[mcp_servers.rasputin]
+url = "https://rasputin.example.org/mcp"
+bearer_token_env_var = "RASPUTIN_TOKEN"
+tool_timeout_sec = 3600
+```
+
+Claude Code takes it as a header:
+
+```sh
+claude mcp add --transport http rasputin https://rasputin.example.org/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
 ## Add a command of your own
 
 An installed Python package can add commands to `rasputin`, and they appear

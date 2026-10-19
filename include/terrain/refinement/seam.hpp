@@ -1,7 +1,7 @@
 #pragma once
 
-// The seam pass (docs/increments/23-basin-scale.md, "The seam protocol" step 2,
-// N8-N12): the vertices a frozen seam edge gets before either piece refines.
+// The seam pass: the vertices a frozen seam edge gets before either piece
+// refines (`docs/increments/23-basin-scale.md`, *The seam protocol*).
 //
 // The edge is ordered so a < b by (x, y), whichever order it was given in, and
 // handed to the edge strip's generator (constraint_points.hpp) as vertices
@@ -11,7 +11,7 @@
 //
 // One-dimensional greedy, Douglas-Peucker in the vertical. The polyline starts
 // as (a, b). A piece with an end that has no z has no lerp: while it holds a
-// check point, the one nearest its invalid end is inserted (N10; the points
+// check point, the one nearest its invalid end is inserted (the points
 // are sorted by s, so that is its first or last, and each invalid end costs at
 // most one). Then, while some check point on a valid piece is more than
 // `tolerance` from the lerp between the piece's ends (in s, as the strip's
@@ -22,7 +22,7 @@
 // An inserted point is output at (x_min + col dx, y_max - row dy) of its
 // lattice position, with the check point's own z and s. max_error is the
 // largest error left on a valid piece. Pure: two pieces that call it with one
-// raster and one edge get the same output bit for bit (K4).
+// raster and one edge get the same output bit for bit.
 
 #include <terrain/core/point.hpp>
 #include <terrain/raster/geometry.hpp>
@@ -87,7 +87,7 @@ template <raster::RasterSource R>
     };
     std::vector<char> in(pts.size(), 0);
     if (n > 0 && !out.z_a)
-        in.front() = 1;  // N10: the point nearest each invalid end
+        in.front() = 1;  // the point nearest each invalid end
     if (n > 0 && !out.z_b)
         in.back() = 1;
 

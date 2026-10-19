@@ -1,7 +1,6 @@
 #pragma once
 
-// Adaptive refinement of a start mesh against a DEM, to a sup-norm tolerance
-// (docs/increments/14-adaptive-refinement.md, R5 to R8).
+// Adaptive refinement of a start mesh against a DEM, to a sup-norm tolerance.
 //
 // Each round scans the active triangles in parallel (read-only, one result
 // slot per triangle), then splits the ones that did not converge serially, in
@@ -14,49 +13,47 @@
 // a valid DEM node that is not yet a vertex, and the lattice is finite, so
 // the loop terminates for every tolerance, 0 included.
 //
-// Delaunay insertion (docs/increments/14b-delaunay-insertion.md, R1 to R5).
+// Delaunay insertion.
 // The start mesh is legalised once, and each split is followed by Lawson
 // legalisation around the new vertex, in the serial phase. Every slot a split
 // or a flip writes is `touched` and rescanned next round; an unwritten slot
 // still holds the triangle its last scan measured, so its result stays exact.
 // The output is constrained Delaunay in the frame (col * dx, -(row * dy)).
 //
-// Off-node start vertices (docs/increments/16-domain-polygon.md, R2). A start
+// Off-node start vertices. A start
 // vertex may lie anywhere in the node rectangle; one that is a node bit for
 // bit is a node, as before, and any other gets fractional (col, row), computed
 // once here. It keeps its world point as given for the output, and its z is
-// bilinear there (R0), or it is invalid where bilinear refuses.
+// bilinear there, or it is invalid where bilinear refuses.
 //
-// A quality start (docs/increments/20-start-quality.md, R1). With
+// A quality start. With
 // min_angle_deg > 0, mesh::improve runs once after legalise_all and before the
 // first scan, and inserts DEM nodes until the start meets the angle or says why
 // not. Its nodes are counted in quality_inserted, not in inserted.
 //
-// Constraint feet (docs/increments/20b-min-insertion-distance.md, R2 to R6).
-// With constraint_feet, a worst node N closer than eps(N) to a constrained edge
-// of its triangle or of a neighbour (mesh::constraint_foot, 20c R3) is replaced
-// by its foot F on that edge, once per node; N may still go in later if its
-// error stays above tolerance (R5). When F is on a neighbour's edge, N's
-// triangle stays active. The quality start foots too (20c R2), counted in
+// Constraint feet. With constraint_feet, a worst node N closer than eps(N) to
+// a constrained edge of its triangle or of a neighbour (mesh::constraint_foot)
+// is replaced by its foot F on that edge, once per node; N may still go in
+// later if its error stays above tolerance. When F is on a neighbour's edge,
+// N's triangle stays active. The quality start foots too, counted in
 // quality_feet. Before any foot, a node Inside its triangle but within the
 // coincidence radius of a constrained edge of it is split onto that edge at its
-// own position, where strip_fits allows (docs/increments/66-coincident-written-
-// vertices.md, R1); no foot is searched for it. An inserted off-node vertex is output at
+// own position, where strip_fits allows; no foot is searched for it. An
+// inserted off-node vertex is output at
 // (x_min + col dx, y_max - row dy) with vertex_z.
 //
-// Frozen edges (docs/increments/23-basin-scale.md, "Refine with the seam
-// frozen", N1-N5). An edge whose mask meets frozen_mask gets no vertex: the
+// Frozen edges. An edge whose mask meets frozen_mask gets no vertex: the
 // scan skips the nodes on it, no foot is taken on it, and the quality pass
-// skips a node on it. frozen_mask 0 is the run as before, bit for bit (K1).
+// skips a node on it. frozen_mask 0 freezes nothing.
 //
-// A tolerance policy (docs/increments/33-feature-tolerance.md, 4.3 and 4.4).
+// A tolerance policy.
 // The overload taking one compares each triangle with the policy's allowed
 // error, and so does the foot's epsilon; options.tolerance is not read. The
 // scan asks at() only for an error between lowest() and highest(), and the
 // serial phase for a foot where the scan did not. UniformTolerance never asks
-// and keeps no per-slot vector, so the plain overload is today's run.
+// and keeps no per-slot vector, so the plain overload is the single-tolerance run.
 //
-// A slope (docs/increments/34-slope-tolerance.md, 4.3): with Sloped<P> a
+// A slope: with Sloped<P> a
 // triangle also splits when a node's error is above allowed(its class), the
 // SlopeScan's `over`, and then the node inserted is the slope's; the triangle
 // part is not asked about it (its slot holds -inf). The foot's epsilon takes
@@ -103,9 +100,9 @@ struct RefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
     double min_angle_deg = 0.0;  // the start-quality pass; 0 (or NaN) is off
-    bool constraint_feet = false;  // 20b R9: feet on constraint segments
-    std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
-    double min_gain_deg = -1.0;     // 20c R7 and R8 in the quality start; negative is off
+    bool constraint_feet = false;  // feet on constraint segments
+    std::uint32_t frozen_mask = 0;  // edges whose mask meets it are never split
+    double min_gain_deg = -1.0;     // the quality start's soft criterion and line split; negative is off
 };
 
 struct RefineOutcome {
@@ -128,15 +125,15 @@ struct RefineOutcome {
     std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
     std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
     std::size_t quality_skipped = 0;   // start-quality skips, every reason summed
-    std::size_t quality_feet = 0;      // start-quality feet (20c R2), in neither count above
-    std::size_t quality_no_gain = 0;   // 20c R7's refusals, in quality_skipped
-    std::size_t quality_line_splits = 0;  // 20c R8's splits, in no count above
+    std::size_t quality_feet = 0;      // start-quality feet, in neither count above
+    std::size_t quality_no_gain = 0;   // the soft criterion's refusals, in quality_skipped
+    std::size_t quality_line_splits = 0;  // the line split's splits, in no count above
     std::size_t feet = 0;              // feet inserted, a subset of `inserted`
-    std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
-    double max_slope_share = 0.0;      // 34: the largest error * weight(class); 0 without a slope
-    SlopeNodes slope_nodes;            // 34: 4.5's count; zero without a slope
+    std::size_t feet_refused = 0;      // a foot refused (a child not counter-clockwise), N inserted instead
+    double max_slope_share = 0.0;      // the largest error * weight(class); 0 without a slope
+    SlopeNodes slope_nodes;            // the slope's node counts; zero without a slope
 
-    // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
+    // Wall seconds on the calling thread, steady_clock.
     // for_each_block joins its workers before returning, so no worker reads a
     // clock. Not part of the determinism guarantee.
     double legalise_seconds = 0.0;  // the start mesh's legalise_all
@@ -225,7 +222,7 @@ namespace detail {
 // The next round's active set: every touched slot and every skipped one,
 // ascending and once each. `skipped` is ascending (filled while walking the
 // ascending `active`) and below touched.size(), so one linear merge with the
-// slot walk gives what collecting, sorting and deduplicating gave (21a, QW3).
+// slot walk gives what collecting, sorting and deduplicating would.
 inline void rebuild_active(std::span<const char> touched, std::span<const std::uint32_t> skipped,
                            std::vector<std::uint32_t>& active) {
     active.clear();
@@ -247,7 +244,7 @@ inline void rebuild_active(std::span<const char> touched, std::span<const std::u
     return std::min(g.delta_x(), g.delta_y()) / 2.0;
 }
 
-// R3: eps(n) = clamp(tol / G, floor, cap), G the largest bilinear slope bound
+// The foot's epsilon: eps(n) = clamp(tol / G, floor, cap), G the largest bilinear slope bound
 // over the valid cells sharing n; the cap where G is 0 (flat, or no cell).
 template <raster::RasterSource R>
 [[nodiscard]] double foot_epsilon(const R& dem, mesh::LatticeVertex n, double tol) {
@@ -270,7 +267,7 @@ template <raster::RasterSource R>
 }
 
 // A Hit of `found` that may go in: a z there, else counted in `refused`.
-// Anything but a Hit is nothing; NotCounterClockwise counts as refused (R5).
+// Anything but a Hit is nothing; NotCounterClockwise counts as refused.
 [[nodiscard]] inline std::optional<mesh::FootSearch> usable(const mesh::FootSearch& found, bool has_z,
                                                             std::size_t& refused) {
     if (found.status == mesh::FootStatus::Hit && has_z)
@@ -351,16 +348,17 @@ inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, 
     return !flips(f, m.corner(u, (k + 2) % 3), b, a);
 }
 
-// L16: the coincidence radius of L12 and L14, max(1e-10, 64 ulp(M)) lattice
-// units, M = max(cols, rows) - 1 the largest lattice coordinate.
+// The coincidence radius of near_constraint and the scans' corner test,
+// max(1e-10, 64 ulp(M)) lattice units, M = max(cols, rows) - 1 the largest
+// lattice coordinate.
 [[nodiscard]] inline double coincidence_radius(const raster::RasterGeometry& g) {
     const auto m = static_cast<double>(std::max(g.cols(), g.rows()) - 1);
     return std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
 }
 
-// L12: the constrained edge of t whose line p lies within `radius` lattice
+// The constrained edge of t whose line p lies within `radius` lattice
 // units of, (col, row) Euclidean, with p's projection strictly inside it; the
-// nearest, ties to the lower edge index. Never a frozen edge (23b, N7): the
+// nearest, ties to the lower edge index. Never a frozen edge: the
 // scans already skip a point this near one, but by a copy of this expression
 // that the compiler may contract differently, so the edge is excluded here too.
 inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p,
@@ -445,7 +443,7 @@ template <raster::RasterSource R, TolerancePolicy P>
         else
             return policy.lowest();
     };
-    std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+    std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col) of nodes already footed once
     const double foot_cap = detail::foot_cap(g);
     mesh::FlipStack flip_stack;  // one buffer for every legalise_around
     std::vector<std::uint32_t> active(m.triangle_count());
@@ -502,7 +500,7 @@ template <raster::RasterSource R, TolerancePolicy P>
             std::optional<unsigned> edge;
             if (r.where != NodeLocation::Inside)
                 edge = static_cast<unsigned>(r.where) - 1;
-            // R1 (66): a node within the coincidence radius of a constrained edge goes in on it, unfooted.
+            // A node within the coincidence radius of a constrained edge goes in on it, unfooted.
             else if (const auto e = detail::near_constraint(m, t, *r.node, radius);
                      e && detail::strip_fits(m, t, *e, *r.node, frame))
                 edge = e;
@@ -541,7 +539,7 @@ template <raster::RasterSource R, TolerancePolicy P>
                 if (n_seeds == 4)
                     seeds[3] = u;
             }
-            if (owner != t)  // R3: t is unchanged and unconverged; rescan it
+            if (owner != t)  // t is unchanged and unconverged; rescan it
                 skipped.push_back(t);
             touched.resize(m.triangle_count(), 1);
             touched[owner] = 1;

@@ -13,14 +13,14 @@
 // key is exact and small, so hashing buys nothing; one allocation of known size
 // beats a rehashing container; the structure is read-only after construction
 // and therefore shareable by every refinement thread without synchronisation,
-// per parallel_refinement.md, which also asks for contiguity by name. Sorting
+// with contiguous storage. Sorting
 // dedups for free, which matters because a breakline may legitimately repeat an
 // edge. This header includes no <unordered_map> and no <unordered_set>.
 //
-// This is not "dedup" in the sense increment 3 prohibited. That prohibition is
-// about COORDINATE keys, which need a snap grid that does not exist until
-// increment 5. These keys are vertex INDICES: exact integers, no tolerance
-// question.
+// This is not a coordinate dedup. Coordinate keys need a snap grid, which
+// belongs to the noder, and a tolerance to snap with. These keys are vertex
+// INDICES: exact integers, no
+// tolerance question.
 //
 // THIS WORKS ONLY BECAUSE THE BACKEND NEVER SPLITS A CONSTRAINT EDGE. detria
 // inserts no Steiner points -- a vertex lying exactly on a constraint is a hard
@@ -49,8 +49,8 @@ namespace terrain::cdt {
 //
 // THE HELPER IS STRUCTURAL AND THE ENTRY POINT IS NOT, deliberately: a
 // ChainedGraph-templated triangulate would restore Pslg as a legal argument and
-// undo increment 5c while leaving every test green. See
-// docs/increments/05c-noder-wiring.md. The concept lives here rather than in a
+// let un-noded input reach the backend while leaving every test green. The
+// concept lives here rather than in a
 // header of its own because it has exactly one consumer, and a shared header
 // invites a second.
 template <typename G>

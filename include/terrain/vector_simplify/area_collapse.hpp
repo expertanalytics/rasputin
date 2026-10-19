@@ -1,7 +1,7 @@
 #pragma once
 
 // Area-preserving segment collapse of a simple ring to a horizontal tolerance
-// (docs/increments/22-auto-catchment.md, "The reduction"; after Kronenfeld,
+// (`docs/increments/22-auto-catchment.md`, *The reduction*; after Kronenfeld,
 // Stanislawski, Buttenfield and Brockmeyer 2020, APSC). Each collapse replaces
 // the two vertices B, C of a chain A-B-C-D by one point E on the line where
 // A-E-D encloses the area A-B-C-D did, so the ring's area is kept up to

@@ -1,6 +1,6 @@
-// The one and only translation unit in this repository that includes
-// detria.hpp. See lib/detria/README.md for why that is a rule and how it is
-// enforced.
+// One of the two translation units in this repository that include
+// detria.hpp; why that is a rule and how it is enforced:
+// `lib/detria/README.md`, *One translation unit*.
 
 #include <terrain/predicates/detria_exact.hpp>
 
