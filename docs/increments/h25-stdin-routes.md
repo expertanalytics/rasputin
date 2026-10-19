@@ -1,11 +1,18 @@
 # Harness h25: programs a guard cannot see because they arrive on stdin
 
-Status: **designed**, revised 2026-10-19 for design review round 1, on
-`worktree-h25-stdin-routes` off master `c5da0385`. One PR. Builds on h24 PR A
-(items 14, 15 and 16 of `docs/increments/h24-harness-fixes.md`, on
-`worktree-h24a-guards` at `be2ab149`, not yet merged): its red and green
-steps start after PR A merges, on a branch that has merged master
-(`tools/merge_master.py`).
+Status: **designed**, revised 2026-10-20 for design review round 2, on
+`worktree-h25-stdin-routes` off master `c5da0385`. One PR. Designed against
+master's `.claude/hooks/` and `tools/shell_scan.py` with h24 PR A merged
+(#295: items 14, 15 and 16 of `docs/increments/h24-harness-fixes.md`); the red
+step starts on this branch after it merges master (`tools/merge_master.py`).
+
+**This is a tripwire, not a sandbox.** A guard that reads shell text cannot
+know every way text becomes a program; three review rounds each found new
+ones. This design catches the routes an agent writes by habit, at a false-ask
+cost the replay measures, and names what stays open (3.6). Those escapes are
+closed, if at all, by the OS-level backstop for away mode, a separate item
+not designed here (the agent's user unable to write governed files and the
+harness state, and no push credential, while Ola is away).
 
 Source: `@reviewer`'s findings in h24's design review round 5 (h24's
 `## Review`, on `worktree-h24a-guards`): "`/dev/stdin` or `/dev/fd/0` as a
@@ -14,7 +21,15 @@ script, a pipe into an interpreter or shell, `<(…)` as a script, `.
 file` stays a known blind spot." Then this design's review round 1
 (CHANGES REQUESTED): the first design listed the routes one by one, and the
 review found more than a dozen it missed (section 3.1 lists them); and the
-push guard reads no interpreter program at all.
+push guard reads no interpreter program at all. Then review round 2 (CHANGES
+REQUESTED on `a1007203`): the Python data-reader exemption was a blocklist
+and leaked (`sys.modules['posix']`, `__loader__`, `operator.methodcaller`,
+`string.Formatter`); a globbed or zsh `=sh` command name; stdin read into a
+variable and then `eval`'d; the push guard's spawn test missed a call named
+in a string, Ruby `%x`, and Perl or Ruby `open` of a pipe; `env
+-S"python3 -"` glued. Ola chose (2026-10-19): one more round, with an
+allowlist exemption, the guard stated to be a tripwire, and the backstop a
+separate item.
 
 Acceptance: the harness suites (`pytest -m harness --no-cov`, pass count
 read), the replay of section 5 rerun on the green commit, and `@reviewer`.
@@ -91,7 +106,9 @@ $ git grep -l -i -e 'shell_scan' -e '/dev/stdin' -e 'guard_governance' -e 'here-
 runner, not stdin; this design's runner rule does see `watch python3`, but
 does not change how the push guard reads `watch`'s words); *Cap on runner and
 shell words per line in the push guard* (this design adds no shell word to
-`runs`). Nothing taken up.
+`runs`); *Governed-file asks answered without a prompt in auto mode* (read
+again 2026-10-20: it is the h26 incident of 3.6, and it belongs to the
+backstop or a settings change, not to this scanner). Nothing taken up.
 
 ## 3. The design
 
@@ -151,10 +168,15 @@ applies its text rules to the whole line (3.5).
 - its command word as written holds `$` or a backtick (`$SHELL`,
   `$(which python3)`, `"$PY"`): it could be anything;
 - any whitespace-separated token of any of its words is an interpreter or
-  shell name, `uv` or `uvx`, unless the command word is one of `NO_RUN`
-  (below). This catches `sudo -E python3 -`, `env -S 'python3 -'`,
-  `arch -arm64 python3`, `uv run python3`, `xargs sh` and options whose
-  values the wrapper stripping misreads, without listing any of them;
+  shell name, `uv` or `uvx`, or ends in one after `-`, `=` or `/`
+  (`-Spython3`, `--with=python3`), unless the command word is one of `NO_RUN`
+  (below). This catches `sudo -E python3 -`, `env -S 'python3 -'`, `env
+  -S"python3 -"`, `arch -arm64 python3`, `uv run python3`, `xargs sh` and
+  options whose values the wrapper stripping misreads, without listing any of
+  them;
+- its command word as written holds a glob or brace character (`*`, `?`,
+  `[`, `{` not alone) or starts with `=` (zsh's `=sh` is the path of `sh`):
+  `| /bin/s?` and `| =sh` could be a shell;
 - it is `xargs` in replacement mode (a word holding `{}`, or starting `-I`,
   `-J`, `-i` or `--replace`) or with an expansion in a word: its input can
   become the command;
@@ -194,6 +216,13 @@ is among its words, never the reverse.
   argument (`bash -c python3 <<< S`, `bash -s foo <<< S`: the inner commands
   or the shell's own reading take it), or whose body does not parse as
   commands.
+- **Through a variable**: the runner is `eval`, `.` or `source`, or a shell
+  or interpreter with an inline `-c`/`-e` program, and those words hold an
+  expansion (`$` or a backtick). Stdin may have been read into the variable
+  first (`read -r l <<< S; eval "$l"`, `l=$(cat <<< S); eval "$l"`, zsh's
+  `echo S | read l; eval "$l"`), so the line's text is what there is to judge.
+  The scanner already marks such an interpreter program unknown (h24 item
+  14); this adds `unread`, which the push guard needs (3.5).
 
 **Reading a heredoc or here-string.** Item 15's gate ("an interpreter with
 no inline program and a script that is absent or `-`") is replaced: a body
@@ -220,7 +249,7 @@ pure and stdlib.
   `parallel`), `RUNNER_ANY` (the shells, `perl`, `ruby`, `node`, `uv`,
   `uvx`; Python by `PYTHON`), `NO_RUN`, `OPENERS` (`{ if while until for
   case select`), `CLOSERS` (`} fi done esac`), and for 3.4 `PLAIN_FLAGS`,
-  `DATA_MODULES`, `RUNS_CODE`.
+  `DATA_MODULES` (`json`, `sys`), `DATA_BUILTINS`, `DATA_METHODS`.
 - `Simple` gains `unread: bool = False`; the scanner keeps per simple, as
   private state, its words as written (before wrappers are stripped), its
   piped state and whether its own command is fed.
@@ -244,33 +273,61 @@ pure and stdlib.
 - `finish_heredoc(simple, body, …)`: the reading rule of 3.2 in place of
   item 15's gate; sets the line feeds of 3.2.
 
-### 3.4 The one narrowing: a Python data reader
+### 3.4 The one narrowing: a Python data reader, by allowlist
 
 Without it, 121 of the governance asks of the replay are `echo JSON |
 python3 .claude/hooks/guard_x.py` or `… | python3 -c 'import json,sys; …'`
-on a line that names a governed file: stdin is data there. A simple is a
-**data reader** when all hold:
+on a line that names a governed file: stdin is data there. Round 2 showed
+that a list of what is dangerous leaks: Python reaches `os` without naming
+it (`sys.modules['posix']`, `__loader__`, `operator.methodcaller`,
+`string.Formatter().get_field`), and a generator's frame reaches the
+builtins through public attributes (`g.gi_frame.f_builtins['exec']`, found
+in this round; the blocklist passes it too). So the exemption lists what is
+allowed, and anything else is not a data reader. A simple is a **data
+reader** when all hold:
 
 - its command word is literally `python`, `python3` or `python3.N`, with no
   wrapper before it;
-- its options are only clusters of the no-value flags `-B -E -I -O -P -q -s
-  -S -u -b -d -R -v -x`, or `-W`/`-X` with their value: never `-i`, `-m`,
-  `-` or a long option;
-- then either a script operand that is a plain path (no `$`, backtick, `<`,
-  `>`, `=`, parenthesis; not under `/dev/`; not starting `//`), or `-c PROG`
-  where `PROG` parses, imports only `DATA_MODULES` (`json sys re collections
-  csv math itertools statistics textwrap datetime string functools operator
-  unicodedata`), and uses no name or attribute in `RUNS_CODE` (the scanner's
-  `REFLECTION`, plus `input open pickle marshal os subprocess runpy code pdb
-  importlib ctypes shutil pathlib Path`) and no attribute starting `_`.
+- its options are only clusters of the no-value flags in `PLAIN_FLAGS` (`-B
+  -E -I -O -P -q -s -S -u -b -d -R -v -x`): no `-W` or `-X` (a warning
+  category is imported by name), never `-i`, `-m`, `-` or a long option;
+- then either a script operand that is a plain path (no `$`, backtick, glob
+  character, `<`, `>`, `=`, parenthesis; not under `/dev/`; not starting
+  `//`), or `-c PROG` where `PROG` parses and every node is allowed:
+  - imports: only `import json`, `import sys`, `import json, sys`, with no
+    `as`; no `from … import`;
+  - names: `json`, `sys`, a builtin in `DATA_BUILTINS` (`print len sorted
+    min max sum any all abs round int float str bool list dict set tuple
+    enumerate zip range map filter reversed isinstance repr iter next divmod
+    KeyError ValueError IndexError Exception`), or a name the program binds
+    itself (an assignment, a loop or comprehension target, a lambda
+    argument, an `except … as` name); never a name starting `_`, and `json`
+    and `sys` are never bound;
+  - attributes, read only (never assigned or deleted): on `sys`, `stdin
+    stdout stderr argv exit`; on `json`, `load loads dump dumps`; on
+    anything else, a method in `DATA_METHODS` (`read readline readlines
+    write strip lstrip rstrip split rsplit splitlines join replace
+    startswith endswith lower upper get items keys values append extend pop
+    sort count index find partition rpartition setdefault update format
+    ljust rjust isdigit`);
+  - no `def`, `class`, `global`, `nonlocal`, `await` or `yield`.
 
-Why this holds: Python runs text as code only through `exec`, `eval`,
-`compile`, an import of code (`importlib`, `runpy`, `pickle`, `code`,
-`pdb`) or a child process (`os`, `subprocess`, `ctypes`); a `-c` program
-that names none of them cannot run its stdin. A named script that runs its
-stdin is the script gap of 3.6, as for `python3 x.py` today. A data reader's
-heredoc stays data, as item 15 has it. `python3 -c 'exec(input())'`, `-i`,
-`-m` and `/dev/stdin` are never data readers.
+Why this holds as far as a tripwire needs: every value such a program can
+reach is a module attribute on the two lists, a builtin on the list, or what
+those return (strings, numbers, lists, dicts, files); the methods allowed on
+them return the same kinds. None of them runs text. Anything new a program
+needs (`re`, `collections`) is one word added to a list, after a reviewer
+checks what it reaches. A named script that runs its stdin is the script gap
+of 3.6, as for `python3 x.py` today. A data reader's heredoc stays data, as
+item 15 has it.
+
+*Measured* (section 5, on master's scanner): of the 442 distinct `-c`
+programs fed by a pipe or `<` in the corpus, the blocklist exempted 387 and
+the allowlist exempts 328; on lines that name a governed file, 51 and 46. So
+the allowlist costs about 5 more governance asks than the blocklist. The four
+round-2 programs and the generator-frame program pass the blocklist and fail
+the allowlist; `import json,sys; print(json.load(sys.stdin)['a'])` and
+`import sys; print(len(sys.stdin.read()))` pass both.
 
 ### 3.5 The push guard (`.claude/hooks/guard_push.py`, `main`)
 
@@ -285,20 +342,23 @@ Two additions, after `parse` and before `runs`:
   nested simples but never an interpreter's, so `python3 -c
   "os.system('git push origin x')"` passes. Now the `PUBLISHES` patterns run
   over each simple's `program` (`-c`/`-e` text, a heredoc, a here-string)
-  that **starts a process**: for Python, its syntax tree names one of
-  `SPAWN_NAMES` (`subprocess system popen Popen run call check_call
-  check_output getoutput getstatusoutput pty spawn create_subprocess_exec
-  create_subprocess_shell __import__ getattr importlib ctypes runpy eval
-  exec compile fork forkpty posix_spawn posix_spawnp startfile`, or a name
-  starting `exec` or `spawn`); for Perl, Ruby, Node or Python that does not
-  parse, the pattern `\b(subprocess|system|popen|exec\w*|spawn\w*|fork|pty|child_process|open3|qx)\b`
-  or a backtick.
+  that **may start a process**: one pattern, `SPAWN`, over the program's
+  whole text, strings and comments included, for every language:
+  `\b(subprocess|system|popen|exec\w*|spawn\w*|fork\w*|pty|posix|modules|import_module|importlib|__import__|runpy|ctypes|getattr|methodcaller|eval|compile|child_process|open3|qx|syscall)\b`
+  (case-insensitive), or `%x`, a backtick, or a quote next to a `|`
+  (Perl's and Ruby's `open(F, "|git push")`, `open(F, "git push |")`).
+  Matching inside strings catches a call named in one
+  (`methodcaller('system')`, `get_field('0.modules[posix].system')`); the
+  first design's syntax-tree test (`SPAWN_NAMES`) is dropped, since it read
+  only names and attributes.
 
 *A departure from the review's wording*, which asked for the text rules
-over every program: that form adds 115 push asks on the replay; with "starts
-a process" it adds 22, every one a harness probe. A program that names `git
-push` without starting a process (an edit of a design file, a `print`)
-publishes nothing.
+over every program: that form added 115 push asks on the replay. With
+`SPAWN` over the whole text the rule adds 56 (the syntax-tree test added 22;
+the difference is the price of reading strings): 36 of them are on lines
+naming `guard_push`, `.claude/hooks/` or the scanner (harness probes), 20
+were not inspected. A program that names `git push` and no way to start a
+process (a `print`, an edit of a design file) publishes nothing.
 
 ### 3.6 What stays uncovered
 
@@ -322,14 +382,32 @@ the text rule has nothing to find.
   idea).
 - **The Bash tool's own stdin**: what a runner inherits with no feed on the
   line is not the agent's to fill.
+- **A planted module**: `python3 -c` puts the working directory first on
+  `sys.path`, so a `json.py` written there earlier replaces `json` for a data
+  reader. Only `tools/` is governed for such names (h16).
+- **An ask answered without Ola.** On 2026-10-19 (h26 green step) a
+  `@developer` edited `.claude/hooks/guard_unattended.py` with `python3 -
+  <<'EOF' … open(p,'w').write(s) … EOF`. That is not a scanner gap: the
+  heredoc is read, the guard returned `ask` naming the file (its
+  `PreToolUse` output in the subagent's transcript, and master's
+  `judge_bash` on the same line today), and the command ran six seconds
+  later in a session whose permission mode was `auto`. Neither h25 nor the
+  allowlist touches that path: an ask that resolves without a prompt belongs
+  to the backstop, or to the ideas-file entry on asks in auto mode (section
+  2).
+
+These, and every route the review rounds have not found yet, are what the
+OS-level backstop for away mode is for (top of this file).
 
 ### 3.7 Cost in false asks
 
 A new governance ask needs an unread runner and a governed name in the
 line's text, or a read heredoc naming a governed file. A new push ask needs
 an unread runner and a `PUBLISHES` match in the line, or a process-starting
-program that matches. Measured in section 5: 33 and 22 over 67,715 commands.
-Inspected by hand: the push asks are all harness probes (Python programs
+program that matches. Measured in section 5 for round 1's rule: 33 and 22
+over 67,715 commands; this round adds about 5 governance asks (the
+allowlist, 3.4) and 34 push asks (`SPAWN` over strings, 3.5), so about 38
+and 56. Inspected by hand for round 1: the push asks were all harness probes (Python programs
 that build `git push` events and run the hooks). Of the governance asks,
 about half are guard probes piping events into `.claude/hooks/*.py` through
 a shell function, `$PY` or `sh -c`; the rest pipe a governed tool's output
@@ -374,6 +452,16 @@ Through the whole governance hook (`tests/python/test_guard_governance.py`,
   done < <(echo "W")`; `echo 'echo x > CLAUDE.md' | parallel`; `cat
   CLAUDE.md | python3 -c "import os,sys; os.system(sys.stdin.read())"`;
   unchanged (asks on both): `echo "W" > >(python3)`;
+- ask naming `CLAUDE.md`, review round 2 (not measured on a prototype; the
+  red step records each verdict): `echo "W" | python3 -c "import sys;
+  sys.modules['posix'].system(sys.stdin.read())"`, and the same with
+  `__loader__.load_module('posix')`, `operator.methodcaller('system', …)`,
+  `string.Formatter().get_field(…)` and `g=(x for x in [1]);
+  g.gi_frame.f_builtins['exec'](sys.stdin.read())`; `echo 'echo x >
+  CLAUDE.md' | /bin/s?`; `echo 'echo x > CLAUDE.md' | =sh` (zsh); `read -r l
+  <<< 'echo x > CLAUDE.md'; eval "$l"`; `l=$(cat <<< 'echo x > CLAUDE.md');
+  eval "$l"`; `echo "W" | env -S"python3 -"`; `echo "W" | python3 -W
+  ignore -c 'import sys; print(sys.stdin.read())'`;
 - denied with the always-denied text, nothing queued, modes off and on:
   `echo "open('H','w').write('x')" | python3`; `bash -s foo <<< 'echo x >
   H'`; `{ python3; } < <(echo "open('H','w').write('x')")`;
@@ -393,7 +481,10 @@ Through the whole push hook (`tests/python/test_guard_push.py`, `ASKED` and
 `perl -e 'system("git push origin x")'`; `bash -c python3 <<< "import os;
 os.system('git push origin x')"`; `echo 'git push origin x' | sh`; `echo
 'git push origin x' | bash -s`; `echo 'git push origin x' | { true; sh; }`;
-`sh <(echo 'git push origin x')`. Pass: `echo 'git push origin x' | cat`;
+`sh <(echo 'git push origin x')`; `python3 -c "import operator,sys;
+operator.methodcaller('system','git push origin x')(sys.modules['posix'])"`;
+`ruby -e '%x(git push origin x)'`; `perl -e 'open(F, "|git push origin
+x")'`; `read -r l <<< 'git push origin x'; eval "$l"`. Pass: `echo 'git push origin x' | cat`;
 `echo 'git push origin x' | python3 x.py`; `python3 -c "print('git push
 origin x')"`; `git apply x.patch; echo 'git push origin x'`.
 
@@ -438,15 +529,32 @@ scratchpad was refused by the governance guard in unattended mode (it
 writes copies of governed files through a shell variable), so the suites'
 figures come from the red and green steps.
 
+*Round 2 (2026-10-20).* Round 1's prototype is gone with its session's
+scratchpad, so this round measures only its two changes, on master's
+scanner and push guard (`origin/master` at `af9f5b52`, h24 PR A in), by a
+scratch script over the same transcripts, now 70,991 distinct commands:
+the data-reader test of 3.4, blocklist against allowlist, on every `-c`
+program of a `python3` fed by `|` or `<` (442 distinct, figures in 3.4);
+and the push guard's `SPAWN` rule over every program that matches a
+`PUBLISHES` pattern (94), counting lines master's push guard does not ask
+about already (56). The probe can fail: each round-2 program passes the
+blocklist and fails the allowlist, and two ordinary readers pass both;
+`SPAWN` matches `methodcaller('system', …)`, `%x(…)` and `open(F,
+'|…')` and not `print('git push origin x')`. The other round-2 rules
+(glob names, variables, `-S` glued) were not measured; the red step
+records their verdicts. Each pass took about 13 s.
+
 ## 6. Size and order
 
-`tools/shell_scan.py` about 90 counted lines: constants about 14, `runner`
-8, `data_reader` and `data_program` 25, the marking in `parse` 7, the piped
+`tools/shell_scan.py` about 100 counted lines: constants about 20 (the
+allowlists), `runner` 10 (glob names, glued options), `data_reader` and
+`data_program` 25, the marking in `parse` 7, the piped
 state and compound stack in `run` 15, `word`/`dollar`/`redirect` 8,
-`finish` 6, `finish_heredoc` net 7. `.claude/hooks/guard_push.py` about 15
-(`spawns` and its two constants 11, `main` 4). Total about 105, from the
-prototype diff less its switches. Tests about 160 lines.
+`finish` 6, `finish_heredoc` net 7, the variable feed 2.
+`.claude/hooks/guard_push.py` about 8 (`SPAWN` 4, `main` 4). Total about
+110, from round 1's prototype diff less its switches, with this round's
+changes estimated. Tests about 160 lines.
 
-Path: full. Order: design review now; red after h24 PR A merges and this
-branch merges master; green by day with Ola at the prompt (both files
+Path: full. Order: design review now; red after this branch merges master
+(h24 PR A is in); green by day with Ola at the prompt (both files
 governed). Not a night fallback.
