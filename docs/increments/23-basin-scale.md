@@ -3,7 +3,7 @@
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
 2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
-in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18 at about 190 lines, green at 199, 5 of 5 mutants killed, code review approved, @perf next, under "23c-3: each piece's memory its own"; 23c-4 (cuts on a cell size not exact in binary) designed 2026-10-19 at about 45 lines, under its own heading; 23d
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18 at about 190 lines, green at 199, 5 of 5 mutants killed, code review approved, @perf next, under "23c-3: each piece's memory its own"; 23c-4 (cuts on a cell size not exact in binary) designed 2026-10-19, revised for design review round 1 at about 38 lines, under its own heading; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -2492,7 +2492,7 @@ suites has to change.
   list**, a function of the input, the same in every piece, so K4 holds at
   corners too. (Not so at a cell corner, where no piece holds all four
   edges; it held because every corner was a node. 23c-4's E3 gives a corner
-  its z from its own strip.)
+  its lattice node's value.)
 - **N18. If 15f-3 lands first.** 15f-3 binds `refine_strip` and
   `refine_points(..., strip)`. Whichever of 15f-3 and 23b lands second adds
   `frozen_mask=0` as a keyword to the `refine_strip` binding and its stub,
@@ -3867,7 +3867,10 @@ split).
 
 Designed by `@architect` on `worktree-23c-cellsize`, stacked on
 `worktree-23c-3` at `bb5b2fcc`; the code read is `bb5b2fcc`, and citations
-are pinned there. It is the defect 23c-3's "Left out" names: a projected DEM
+are pinned there. Revised the same day for design review round 1 (changes
+requested): the cause of the exit 2 corrected, E1 extended to a corner only
+one seam leaves (CS7), E3 made the node's value, the kill record corrected,
+and a case that still refuses (NoData beside a seam) stated, with CS8. It is the defect 23c-3's "Left out" names: a projected DEM
 whose cell is a decimal fraction that binary cannot hold (9.7 m, 9.9 m)
 cannot be cut. Every whole-metre or power-of-two cut, and every reprojected
 cut, writes the same bytes as before (measured below).
@@ -3882,28 +3885,39 @@ patched to 2, so the strip fits, the run reaches the seam check and exits 1:
 "seam edge 7 differs between pieces (0, 0, 0) and (0, 1, 0)". 9.75 m and
 10 m run.
 
-**Where the two sides differ.** Not where the brief looked first. The
+**Where the two sides differ** (corrected in design review round 1; the
+probe prints each seam end's fractional index, on `bb5b2fcc`). The
 accumulated corners `(x + a·h) + b·h` are real (`@reviewer`: 384 of 1,600
 such sums differ from `x + (a + b)·h` at 9.7 m), but both pieces build each
 seam strip from the run's meta by one formula
 (`src_python/tin_engine/basin_run.py@bb5b2fcc:160`), so they agree on it bit
-for bit. Three things differ, all because a partition line after noding is
-not exactly a lattice line:
+for bit. Two things go wrong, both because a seam end's place on the
+lattice, an integer the partition knows, is re-derived from its rounded
+coordinates:
 
-1. **The noder moves the lines.** It snaps every vertex to `index · spacing`
-   on its 1 mm grid (`include/terrain/core/snap_grid.hpp@bb5b2fcc:120`).
-   On a whole-metre lattice with its tie point on the 1 mm grid, a lattice
-   line is such a point, and the noder keeps it. At 9.9 m the line
-   `y = 6599792.1` (one rounding from the reference, as `cut_partition` writes
-   it) comes back as `6599792.100000001`, one ulp (9.3e-10 m) off. At 9.7 m on
-   this scene the noder happens to keep the lines, and the strip frame's
-   accumulated corner puts the seam-pass points one ulp off them instead
-   (`500203.70000000007` against the line's `500203.7`).
-2. **The strip box overshoots** (the exit 2). The box is `floor`/`ceil` of
-   each end's fractional index (`:202-205`). A seam end one ulp past a
-   lattice line gives `19.000000000000004`, `ceil` 20, plus one: column 21,
-   outside a window that stops at the cell line plus `MARGIN`.
-3. **A cell corner takes its z from different strips** (the exit 1). A
+1. **The strip box misses by one node** (the exit 2). The box is
+   `floor`/`ceil` of each end's fractional index `(x - x_min) / h` in the
+   run window (`:202-205`), minus and plus one. That division rounds, so an
+   end on a cut line can land just under or just over the whole number:
+   - 9.7 m, 4 pieces: the noder keeps the vertical line exactly
+     (`500203.7`, as `cut_partition` writes it), but
+     `(500203.7 - 500019.4) / 9.7` is `18.999999999998803`. `floor` takes
+     18, the box starts at column 17, and the piece east of the line holds
+     columns from 18: the box **undershoots** ("rows 0-20, columns 17-20").
+   - 9.9 m, 4 pieces: the noder moves the horizontal line one ulp
+     (`6599792.1` comes back as `6599792.100000001`, 9.3e-10 m), and the
+     corner's column index is `19.000000000003528`. `ceil` takes 20, plus
+     one is column 21, past the window of piece (0, 0), which ends at column
+     20: the box **overshoots** ("rows 17-20, columns 0-21").
+
+   The noder moving a line is one cause (it snaps every vertex to
+   `llround(x / s) · s` on its 1 mm grid,
+   `include/terrain/core/snap_grid.hpp@bb5b2fcc:113`, and the 1 mm point
+   nearest a decimal line need not be the line's own double); the division
+   is the other, and it bites even where the noder keeps the line. The
+   largest error measured in a line end's index (9.7 and 9.9 m, 4 pieces)
+   is 3.8e-11 of a cell.
+2. **A cell corner takes its z from different strips** (the exit 1). A
    vertex at the end of several seam edges takes the z of the first of them
    in the piece's own edge order (`src_python/tin_engine/pieces.py@bb5b2fcc:121`,
    `heights.setdefault`). At a corner where two lines cross, each of the four
@@ -3916,14 +3930,14 @@ not exactly a lattice line:
    ... the same in every piece") was never true at a corner, since no piece
    holds all four edges; it held only because every corner was a node.
 
-**Why index-based frames are not the fix.** A scratch prototype gave
-`RasterGeometry` a lattice origin and an integer offset (a node at
-`origin + (first + c)·h`, one rounding, in C++ and in `RasterMeta`), the
-strips and piece tiles built from it, and the lines from the same origin. It
-made 9.7 m with 4 pieces run, and 9.9 m with 4 pieces still refused, because
-of point 1: no frame can put a vertex where the noder did not leave it. The
-prototype also touched `geometry.hpp`, the binding and `RasterMeta`. It is not
-taken (see "Left out").
+**Why index-based frames are not the fix.** A scratch prototype (by the
+first `@architect` of this step) gave `RasterGeometry` a lattice origin and
+an integer offset (a node at `origin + (first + c)·h`, one rounding, in C++
+and in `RasterMeta`), the strips and piece tiles built from it, and the lines
+from the same origin. It made 9.7 m with 4 pieces run, and 9.9 m with 4
+pieces still refused, because the noder had moved the line: no frame puts a
+vertex where the noder did not leave it. It also touched `geometry.hpp`, the
+binding and `RasterMeta`. It is not taken (see "Left out").
 
 **Prior art for this step.** *Literature:* the noder is snap rounding
 (Hobby, "Practical segment intersection with finite precision output", 1999;
@@ -3950,42 +3964,61 @@ legacy-archive:legacy/rasputin/web_visualize.py
 
 **Ideas file:** no entry is taken up or overlapped.
 
-#### What changes (Python only, `basin_run.py` and `pieces.py`)
+#### What changes (Python; `basin_run.py`, `pieces.py`, one argument in `cli.py`)
 
-Each seam vertex's position on the lattice is taken from the partition, which
-knows it as an integer, and never re-derived from its rounded coordinates.
+A seam end's place on the lattice is taken from the partition, which knows
+it as an integer, and never re-derived from its rounded coordinates.
 
-- **E1. Each seam vertex's line indices** (`basin_run.py`, a pure function,
-  `seam_lines(xy, seams, cut) -> SeamLines`). For each seam edge: if its ends
-  have the same x it lies on the vertical line nearest to that x in
-  `cut.xs`, and both ends get that line's run-window column, `k · dx` for line
-  `k` (1-based). A same y gives the nearest line in `cut.ys` and row `k · dy`.
-  The noder snaps both ends of a line's piece to the same coordinate, so a seam
-  edge is exactly axis-parallel, and the nearest line is unambiguous (lines are
-  `dx · h` apart; the noder moves a point by at most half its spacing per
-  axis). A **corner** is a vertex that gets both a column and a row. Computed
-  once per run, from the shared start triangulation, so every piece has the
-  same table.
-- **E2. The strip box from the indices** (`seam_box(meta, a, b, lines) ->
-  (r0, r1, c0, c1)`, pure; the strip is still `strip(...)` of it, so it is
-  still a function of the edge alone). Across the edge: the line's index,
-  minus and plus one. Along it: a corner end takes its other line's index;
-  any other end takes `floor` (the end nearer the run window's origin) or
-  `ceil` (the other) of its fractional index, as today; then minus and plus
-  one. Why no other end can overshoot: after noding a vertex that is not a
-  corner lies at least about a snap spacing from any corner on its line, so it
-  is never one ulp past a cell line. Where today's indices are exact integers
-  (every lattice whose lines the noder keeps), E2 gives today's box.
-- **E3. A corner's z from its own strip** (`corner_heights(dem, meta, lines,
-  xy, held) -> dict[int, float | None]`, for the corners the piece's
-  triangles use). The strip is rows `R - 1 .. R + 1` and columns
-  `C - 1 .. C + 1` around the corner's line indices `(R, C)`, inside every
-  window that holds the corner (each is its cell grown by `MARGIN`). If the
-  corner is a node of the run window (`meta.index_of` gives exactly `(R, C)`),
-  its z is that node's value, and none when it is NoData (`valid_mask` with
-  the meta's NoData, sentinel included), which is what `vertex_z` gives the
-  seam pass today. Otherwise it is `_core.sample` (bilinear) on the corner's
-  strip, none when the stencil is not valid. `start_slice` gains `fixed:
+- **E1. The cut lines an end lies on** (`basin_run.py`, pure:
+  `line_rc(cut, snap, x, y) -> (row | None, col | None)`). An end lies on
+  vertical cut line `k` (1-based, `cut.xs`) when `|x - xs[k]| <= 0.75 ·
+  snap`, and gets run-window column `k · dx`; a horizontal line likewise
+  gives row `k · dy`. **Every line it lies on**, whether or not a seam leaves
+  the end along it: where the outline passes through the crossing of two
+  cut lines and only one seam leaves it (CS7), the end still gets both
+  indices (round 1 of the design review found the first rule, a line only
+  along a seam edge, refuses there). `snap` is the run's `--snap-spacing`
+  (`_dem_mesh`'s `spacing`); `cut_run` gains it as one argument. Computed
+  from the end's coordinates and the partition alone, so every piece gets the
+  same answer.
+
+  *The bound 0.75 · snap* (relative to the snap spacing; checked at the
+  default 1 mm on the 400 m square scene at 9.4, 9.6, 9.7, 9.8, 9.9, 9.7003
+  and 9.7005 m). The noder moves a vertex at most half a snap per axis, plus
+  rounding, so every end on a line passes; at 9.7003 m the lines come back up
+  to 0.5 mm off and pass. Every other noded vertex is on the snap grid, so it
+  is at least half a snap from the line, and a whole snap where the line
+  itself is on the grid (every whole-metre lattice whose tie point is on the
+  1 mm grid): no such end changes, so whole-metre bytes are kept. A vertex
+  taken by mistake (a 1 mm point at exactly half a snap, possible only where
+  a line sits on a half-millimetre) is harmless: E2's box then still holds
+  it and stays inside both windows, for any bound under one cell.
+- **E2. The strip box** (`seam_box(cut, snap, a, b) -> (r0, r1, c0, c1)`,
+  pure; the strip is still `strip(...)` of it, so it is still a function of
+  the edge alone). Each end's row and column: E1's index where it has one,
+  its fractional index otherwise; then `floor` of the smaller and `ceil` of
+  the larger, minus and plus one, on each axis. Across a seam both ends have
+  the line's index, so the box is the line minus and plus one, inside both
+  neighbours' windows (each is its cell grown by `MARGIN`). Why an end on no
+  line cannot miss: it is more than 0.75 · snap (0.75 mm) from every cut
+  line, while the division errs by a few ulps of the coordinate (under
+  1e-8 m at UTM northings, at any cell size), so `floor` and `ceil` cannot
+  cross the line. Where today's indices are exact
+  integers (whole-metre and power-of-two lattices), E2 gives today's box.
+- **E3. A corner's z is its node's value** (`corner_heights(dem, cut, snap,
+  xy, ends) -> dict[int, float | None]`, for the seam ends the piece's
+  triangles use). A corner is an end E1 gives both a row `R` and a column
+  `C`; by construction it is lattice node `(R, C)` of the run window, within
+  0.75 · snap. Its z is that node's value in the piece's tile
+  (`tile.array[R - row0, C - col0]`; every window that holds the corner holds
+  the node), and none when it is NoData (`valid_mask` with the meta's NoData,
+  sentinel included). No interpolation: on a whole-metre lattice the corner
+  is the node bit for bit and this is the value the seam pass gives it today;
+  off by an ulp, interpolating would lose the height whenever a NoData node
+  is among the four around it (`_core.sample`'s rule). The node's value is at
+  most slope × 0.75 mm from the surface at the corner's true place.
+  (`@reviewer`'s round-1 suggestion; it also drops the strip and the
+  `sample` call the first E3 had.) `start_slice` gains `fixed:
   Mapping[int, float | None]`, keyed by start-triangulation vertex: a vertex
   in it takes that z (or none) before any seam edge's, which then cannot
   override it. N17's rule stays for every other vertex at the end of several
@@ -3997,62 +4030,87 @@ knows it as an integer, and never re-derived from its rounded coordinates.
   (`include/terrain/refinement/seam.hpp@bb5b2fcc:131`), which can be one
   ulp off the edge's own x; both pieces get the same points either way, but
   the seam polyline then bends by an ulp at each point (48 of the seam edges
-  of 9.7 m with 16 pieces are neither vertical nor horizontal without E4,
-  none with it). Its z is the seam pass's, computed one ulp away: rounding.
-  On a whole-metre lattice the coordinate is already the edge's, so E4 changes
-  no byte there.
+  of 9.7 m with 16 pieces, 8 of 9.9 m with 4, are neither vertical nor
+  horizontal without E4; none with it). Its z is the seam pass's, computed
+  one ulp away: rounding. On a whole-metre lattice the coordinate is already
+  the edge's, so E4 changes no byte there.
 
 No C++ changes, no new option, no change to the index, the record or any
 message. `strip`'s refusal stays: with E2 it would mean a bug.
 
-**What still holds only to rounding** (not changed here): inside a piece,
-a seam vertex one ulp off a lattice line is an off-node vertex to `refine`
-(its tile's corner is the run's plus whole cells), as an outline crossing is
-today. The seam protocol's step 5 already states that the guarantee then
-holds to rounding; the oracles (conformity, validity, overlap, Delaunay, the
-tolerance at every DEM node) pass on the prototype at 9.7 and 9.9 m, 4, 16
-and 25 pieces.
+**What still holds only to rounding, and one case that still refuses.**
+Inside a piece, a seam vertex one ulp off a lattice line is an off-node
+vertex to `refine` (its tile's corner is the run's plus whole cells), as an
+outline crossing is today; the seam protocol's step 5 already says the
+guarantee then holds to rounding. The oracles pass without NoData (below).
+**Beside NoData it does not hold** (found while revising, on the
+prototype): the two pieces' tiles are one rounding apart, so a seam vertex
+can be a node bit for bit in one piece's frame and an ulp off it in its
+neighbour's (at 9.9 m the seam's `500207.9` is column 1 of piece (0, 1, 0)'s
+tile bit for bit, while piece (0, 0, 0)'s column 19 is `500207.89999999997`).
+`refine` decides each vertex's data in its own frame, and off a
+node a NoData node among the four around it leaves the vertex without data.
+The pieces then disagree, and K4 refuses: exit 1, no `index.json`. Measured
+at 9.9 m with 4 pieces: one NoData node beside the vertical seam (lattice
+row 10, column 22), on it (row 10, column 21), at the corner (21, 21), or
+around it, each exits 1 with "seam edge 7 differs between pieces (0, 0, 0)
+and (0, 1, 0)". At 9.7 m with 4 pieces all of these cases run, as do
+9.7 m with 16 pieces (NoData beside the seam, around the corner) and 9.9 m
+with 16 (NoData on the seam). Taking a seam vertex's data from its seam
+height after `refine` was tried and is not taken: the run then exits 0, but `refine` had already
+inserted the DEM node an ulp from the vertex it judged empty, leaving zero-
+area triangles (8 under 1e-6 m² in piece (1, 0, 0)) and two Delaunay
+violations. A refusal is better than that mesh. The fix is under "Left out".
 
 #### Measured on the prototype
 
-A scratch copy of `bb5b2fcc`'s Python with E1-E4 written as above, the
-main checkout's `_core` (its C++ equals this branch's), square scene:
+A scratch copy of `bb5b2fcc`'s Python with E1-E4 as written above, the main
+checkout's `_core` (no C++ differs between this branch and master), the
+square scene unless named:
 
-- 9.7, 9.9, 9.8, 9.6 and 9.4 m with 4, 9 and 16 pieces: every run exits 0.
-  At 9.7 and 9.9 m with 4, 16 and 25 pieces, `pieces_fixtures`' conformity,
+- 9.4, 9.6, 9.7, 9.8, 9.9, 9.7003, 9.7005, 9.75 and 10 m, each with 4, 9,
+  16 and 25 pieces: all 36 runs exit 0, and `pieces_fixtures`' conformity,
   union z, validity, overlap, Delaunay and tolerance oracles (at the run's
-  spacing) find nothing; the seam edges' largest distance from their
-  lattice line (one rounding from the reference) is 9.3e-10 m.
-- **Bytes kept:** at 10 m and 9.75 m with 4, 9 and 16 pieces, every piece
-  file and `index.json` are byte-identical to `bb5b2fcc`'s (`diff -rq`);
-  DC10's reprojected scene, at the default and at `--start-min-angle 0`, the
-  same (sha256 of the four piece files and the index).
+  spacing) find nothing in any of them, and no seam edge is skewed. In
+  seven of them (9.7 and 9.9 m with 4 and 16, 9.7003 m with 9, 9.4 m with
+  25, 10 m with 16) no piece has two vertices within 1e-6 m. A seam edge's largest distance from its
+  lattice line (one rounding from the reference) is 9.3e-10 m, and 0.5 mm at
+  9.7003 and 9.7005 m, where the noder moves the lines.
+- **Bytes kept:** at 10 m with 4, 9 and 16 pieces, at 10 m with 4 and 16
+  and `--tolerance-slope 0.3 5 20`, at 9.75 m with 4 and 16, and on DC10's
+  reprojected scene at the default and at `--start-min-angle 0`, the
+  sha256 over every file of `<out>.pieces` (pieces and `index.json`) equals
+  `bb5b2fcc`'s.
 - The cut-run suites (`test_cli_mesh_pieces*.py`, `test_pieces_slice.py`,
   `test_piece_dem.py`): 148 pass, 1 fails,
   `test_seam_vertices_carry_the_seam_pass_heights`, which is amended (below).
-- Without E3 (the corner rule dropped): 9.9 m with 4 and 9 pieces and 9.7 m
-  with 9 and 16 exit 1 on a seam disagreement; 9.7 m with 4 still runs. So
-  CS1 alone does not hold E3; CS2 and CS3 do.
+- CS7's scene (below): exit 2 on `bb5b2fcc`, exit 2 under the first E1
+  (a line only along a seam leaving the end), exit 0 and clean oracles with
+  E1 as revised.
 
 #### Red tests (`@tester`)
 
 Fixtures, measured on the prototype (the partition is the same on
 `bb5b2fcc`): the square scene at 9.7 m, `--pieces 4`: run window 38 × 38
-nodes from lattice node (2, 2), 2 × 2 cells of `dx = dy = 19`; at 9.9 m,
-`--pieces 4`: 37 × 37 from (2, 2), the same cells; at 9.7 m, `--pieces 16`:
-4 × 4 cells of 10, nine corners. Triangle counts are not pinned.
+nodes from lattice node (2, 2), 2 × 2 cells of `dx = dy = 19`, so the cut
+lines are lattice column and row 21 (`500203.7`, `6599796.3`); at 9.9 m,
+`--pieces 4`: 37 × 37 from (2, 2), the same cells (`500207.9`,
+`6599792.1`); at 9.7 m, `--pieces 16`: 4 × 4 cells of 10, nine corners.
+Triangle counts are not pinned.
 
-- **CS1, 9.7 m with 4 pieces is cut** (the brief's case): exit 0, an
-  `index.json`, and `pieces_fixtures.problems`' checks at the run's spacing
-  find nothing, except `off_lattice_seams`, which tests
-  `(x - TIE_X) / h` for an exact integer and so reads every lattice line
-  at 9.7 m as off: replaced at a non-binary spacing by "every seam edge is
-  vertical or horizontal, within 1e-6 m of a lattice line `TIE + k·h`"
-  (1e-6 m: a chosen bound, a thousandth of the 1 mm snap, checked at
-  9.7 and 9.9 m on 400 m scenes, where the measured distance is 9.3e-10 m).
-  Red today (exit 2, the strip).
-- **CS2, 9.9 m with 4 pieces**, the same checks: the case the noder moves.
-  Red today (exit 2); also red under the index-based-frame prototype.
+- **CS1, 9.7 m with 4 pieces is cut** (the brief's case; the division
+  undershoots): exit 0, an `index.json`, and `pieces_fixtures.problems`'
+  checks at the run's spacing find nothing, except `off_lattice_seams`,
+  which tests `(x - TIE_X) / h` for an exact integer and so reads every
+  lattice line at 9.7 m as off: replaced at a non-binary spacing by "every
+  seam edge is vertical or horizontal, within 1e-6 m of a lattice line
+  `TIE + k·h`" (1e-6 m: a chosen bound, a thousandth of the 1 mm snap, for
+  spacings whose lines lie on the 1 mm grid; checked at 9.7 and 9.9 m on the
+  400 m scene, where the measured distance is 9.3e-10 m). Red today (exit 2,
+  "a seam strip, rows 0-20, columns 17-20, is outside its piece").
+- **CS2, 9.9 m with 4 pieces**, the same checks: the noder moves a line and
+  the box overshoots. Red today (exit 2, "rows 17-20, columns 0-21"); also
+  red under the index-based-frame prototype.
 - **CS3, 9.7 m with 16 pieces**, the same checks, and the four piece files
   that hold each of the nine corners write it with one z. Red today (exit
   2).
@@ -4071,6 +4129,28 @@ nodes from lattice node (2, 2), 2 × 2 cells of `dx = dy = 19`; at 9.9 m,
   leaves it without a height, and a vertex not in it keeps N17's rule (the
   existing `test_a_vertex_on_two_seams_takes_the_lower_edges_height`
   unedited).
+- **CS7, a corner only one seam leaves** (round 1's case; outlines traced
+  from the DEM, which run on lattice lines, make it likelier). 9.7 m, `--pieces
+  4`, the square scene's extent with two slots cut from the top edge so that
+  a spike points up to the crossing of the two cut lines: the ring, in
+  metres from the tie point, `(27.1, -28.7), (27.1, -372.3), (371.9, -372.3),
+  (371.9, -28.7), (263.7, -28.7), (223.7, -283.7), (203.7, -203.7), (183.7,
+  -283.7), (143.7, -28.7)`. The only seam that leaves the apex `(203.7,
+  -203.7)` is the vertical one below it, held by pieces (1, 0, 0) and (1, 1,
+  0); the partition and window are CS1's. The same checks as CS1 (the
+  validity oracle against this ring), and the apex is written in both
+  pieces with one z. Red today (exit 2) and under the first E1 (exit 2, "a
+  seam strip, rows 17-37, columns 18-20, is outside its piece").
+- **CS8, NoData beside a seam at 9.9 m still refuses** (pins the limit
+  above, so that no later change turns it into a mesh with zero-area
+  triangles; it flips when the follow-up lands). Square scene at 9.9 m,
+  `--pieces 4`, `hills()` with node (row 10, column 22) set to -32767 and
+  `nodata="-32767"`: exit 1, "seam edge 7 differs between pieces (0, 0, 0)
+  and (0, 1, 0)", no `index.json`. Red today only by its exit code (2, the
+  strip); a guard of a limit, not of a feature.
+- **CS9, `corner_heights`** (unit): on a tile with NoData (the sentinel, and
+  NaN) at a corner's node it gives `None`; on a valid node, that node's value
+  as a float; an end on one line only is not in the result.
 
 **Amended, not new:** `test_seam_vertices_carry_the_seam_pass_heights`
 (`tests/python/test_cli_mesh_pieces_seam_paths.py@bb5b2fcc:91`) moves the
@@ -4078,21 +4158,37 @@ seam pass's heights and expects every seam vertex to carry them; a corner
 now carries E3's height, so the test leaves corners out of `told` (or moves
 `corner_heights`' too) and still requires every other seam-pass vertex.
 
-**Mutation targets** (for CS1-CS5): E2's along-axis corner index replaced by
-`ceil` (CS1-CS3); E3 dropped (CS2, CS3; CS1 does not kill it, measured);
-E3's node branch replaced by `sample` everywhere (CS5, where a corner node
-has a NoData neighbour; whether the scenes have one is for `@tester` to
-measure, and if none does, CS5 gains a 10 m scene with a NoData node beside
-a corner); E4 dropped (CS4).
+**Mutation targets, and which test kills each** (each measured on the
+prototype; corrected in round 1, where the first record had CS1 killing the
+`ceil` mutant):
+
+| mutant | killed by | survives |
+|---|---|---|
+| E2: an end on a line takes `ceil` of its fractional index | CS2, CS3 (exit 2) | CS1, CS7 |
+| E2: the same with `floor` | CS1, CS2, CS3, CS7 (exit 2) | none |
+| E1: a line only along a seam leaving the end (the first design) | CS7 (exit 2) | CS1, CS2, CS3 |
+| E3 dropped (`corner_heights` empty) | CS2, CS3 (exit 1, seam disagreement) | CS1, CS7 |
+| E3 reads bilinear `sample` on the piece tile, not the node | CS2 (exit 1) | CS1, CS3, CS7, NoData around the corner at 9.7 m |
+| E3's NoData test dropped | CS9 (by construction; not run) | every CLI scene measured: NoData at the corner, sentinel or NaN, at 9.7 and 10 m (the corner is trimmed with its triangles in every piece either way) |
+| E4 dropped | CS4 (48 edges; 8 in CS2's files) | none |
 
 #### Left out
 
+- **NoData beside a seam at a spacing not exact in binary** (the case above;
+  CS8 pins the refusal). Two routes, neither measured: `refine` takes the
+  frozen seam vertices' heights and data as given instead of sampling them
+  in its own frame (a C++ change to `refine`'s inputs; then E3's and the seam
+  pass's heights decide, the same in every piece), or tiles whose frames
+  agree on every node. Its own step, after 23c-4; the affected DEMs are
+  projected ones with a decimal cell and voids or coastline beside a seam
+  (reprojected runs, whose cell is chosen, and whole-metre DEMs are not
+  affected).
 - **Index-based raster frames** (the prototype above): a lattice origin and
   an integer offset in `RasterGeometry` and `RasterMeta`, so a node of any
   window is computed as one rounding from the reference. It does not fix the
-  defect (point 1), and it would move a seam vertex inside its piece onto a
-  node only where the noder kept the line. Handed back as an idea, with the
-  prototype's finding.
+  box (the noder moves lines), and it would move a seam vertex inside its
+  piece onto a node only where the noder kept the line. Handed back as an
+  idea, with the prototype's finding, as one of the two routes above.
 - **Lines the noder keeps exactly.** Putting the partition lines on points
   that are both lattice lines and the noder's 1 mm points, bit for bit, is
   not possible in general (a tie point off the 1 mm grid, or a spacing such
@@ -4114,11 +4210,13 @@ a corner); E4 dropped (CS4).
 
 | module | what | est. |
 |---|---|---:|
-| `basin_run.py` | `SeamLines`, `seam_lines`, `seam_box`, `corner_heights`, the calls in `cut_run` | 38 |
-| `pieces.py` | `fixed`, the across coordinate on axis-parallel seams | 7 |
-| **total** | | **45** |
+| `basin_run.py` | `on_line`, `line_rc`, `seam_box`, `corner_heights`, `snap` and the calls in `cut_run`, the old box deleted | 28 |
+| `pieces.py` | `fixed`, the across coordinate on axis-parallel seams | 10 |
+| `cli.py` | `spacing` passed to `cut_run` (an edited line) | 0 |
+| **total** | | **38** |
 
-At +60 % 72. Under 50, but it is not the short path: `basin_run.py` drives
+The prototype's change, less its test switches, is about 36 lines. At +60 %
+61. Under 50, but it is not the short path: `basin_run.py` drives
 refine, which the "Acceptance" section covers, and the strip and corner rules
 are invariant-critical. The PR carries 23c-2 and 23c-3 until they merge.
 
