@@ -31,8 +31,19 @@ READ_ONLY = frozenset({"version", "sources"})
 OPEN_WORLD = frozenset({"fetch", "fetch_stations"})
 
 
+class Download(BaseModel):
+    """One stored output: its path in the caller's folder, its bytes, and a signed link
+    that opens it until ``expires`` (ISO 8601, UTC)."""
+
+    path: str
+    sha256: str
+    bytes: int
+    url: str
+    expires: str
+
+
 class RunResult(BaseModel):
-    """What a tool call returns when the command exits 0."""
+    """What a tool call returns when the command exits 0; ``downloads`` only over HTTP."""
 
     command: str
     exit_code: int
@@ -42,6 +53,7 @@ class RunResult(BaseModel):
     stderr: list[str]
     record: dict[str, Any] | None = None
     stats: str | None = None
+    downloads: list[Download] | None = None
 
 
 def _annotation(param_type: Any) -> tuple[Any, dict[str, Any]]:
@@ -67,7 +79,7 @@ def _fields(command: Any) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     for param in command.params:
         annotation, constraints = _annotation(param.type)
-        if param.multiple:
+        if _many(param):
             annotation = list[annotation]  # type: ignore[valid-type]
         if param.required:
             fields[param.name] = (annotation, Field(description=param.help or None, **constraints))
@@ -80,8 +92,13 @@ def _fields(command: Any) -> dict[str, Any]:
     return fields
 
 
+def _many(param: Any) -> bool:
+    """Whether the parameter takes a list: a repeatable option or a variadic positional."""
+    return bool(param.multiple) or param.nargs == -1
+
+
 def _words(value: Any) -> list[str]:
-    return [str(v) for v in value] if isinstance(value, tuple) else [str(value)]
+    return [str(v) for v in value] if isinstance(value, tuple | list) else [str(value)]
 
 
 @dataclass(frozen=True)
@@ -110,20 +127,22 @@ class DerivedCommand:
         )
 
     def argv(self, arguments: BaseModel) -> list[str]:
-        """The command line the arguments mean: only the keys the caller set, in the CLI's order."""
-        argv = [str(self.command.name)]
+        """The command line the arguments mean: only the keys the caller set, in the CLI's order,
+        options first, then ``--`` and the positional values, so a value that starts with
+        ``-`` is never read as an option."""
+        argv, positionals = [str(self.command.name)], []
         for param in self.command.params:
             value = getattr(arguments, param.name)
             if param.name not in arguments.model_fields_set or value is None:
                 continue
             if param.param_type_name == "argument":
-                argv.extend(_words(value))
+                positionals.extend(_words(value))
             elif getattr(param, "is_flag", False):
                 argv.extend([param.opts[0]] if value else param.secondary_opts[:1])
             else:
                 for item in value if param.multiple else [value]:
                     argv.extend([max(param.opts, key=len), *_words(item)])
-        return argv
+        return argv + (["--", *positionals] if positionals else [])
 
     def writes(self, arguments: BaseModel) -> list[tuple[str, str]]:
         """(argument, path) for each value, given or default, of a parameter whose type is
@@ -135,9 +154,23 @@ class DerivedCommand:
             value = getattr(arguments, param.name)
             if not getattr(param.type, "writable", False) or value is None:
                 continue
-            for item in value if param.multiple else [value]:
+            for item in value if _many(param) else [value]:
                 if not (item == "-" and param.type.allow_dash):
                     found.append((param.name, str(item)))
+        return found
+
+    def reads(self, arguments: BaseModel) -> list[tuple[str, str]]:
+        """(argument, value) for each string, given or default, of a parameter that is not a
+        writable path: every item of a repeatable one and every string of a tuple, since a
+        command may open any of them as a file."""
+        found: list[tuple[str, str]] = []
+        for param in self.command.params:
+            value = getattr(arguments, param.name)
+            if getattr(param.type, "writable", False) or value is None:
+                continue
+            for item in value if _many(param) else [value]:
+                parts = item if isinstance(item, tuple) else (item,)
+                found.extend((param.name, part) for part in parts if isinstance(part, str))
         return found
 
 

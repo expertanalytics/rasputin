@@ -51,6 +51,10 @@ FLAGS = ("draft", "merge")  # options that take no value
 VIEW = ("state", "baseRefName", "headRefOid", "statusCheckRollup")
 UNREAD = "the pull request's checks could not be read"
 UNSURE = "so it cannot be told whether this branch holds private commits; run git fetch private"
+#: `@perf`'s dated evidence folders; a file a commit adds there counts like prose.
+BENCH = re.compile(r"docs/benchmarks/\d{4}-\d{2}-\d{2}/.+", re.S)
+NOT_BARE = ("the grant takes only one bare command, every word written out "
+            "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone")  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -168,6 +172,24 @@ def granted_act(command: str) -> Act | None:
     return act if act is not None and unexpandable(command, argv) else None
 
 
+def loose_act(command: str, granted: tuple[str, ...]) -> tuple[str, str] | None:
+    """(branch, kind) of a push, pull request or merge in `command` naming a granted branch.
+
+    Loose on purpose: it only chooses the words of a refusal, never passes anything.
+    """
+    for simple in shell_scan.parse(command) or []:
+        argv = simple.argv
+        verb = argv[2] if argv[:2] == ["gh", "pr"] and len(argv) > 2 else ""
+        kind = {"create": "pull request", "merge": "enqueue"}.get(verb, "")
+        kind = "push" if argv[:1] == ["git"] and "push" in argv else kind
+        for word in argv[1:] if kind else []:
+            ref = word.rpartition(":")[2].removeprefix("refs/heads/")
+            named = [b for b in (word, word.removeprefix("--head="), ref) if b in granted]
+            if named:
+                return named[0], kind
+    return None
+
+
 def grants(flag: dict[str, Any]) -> tuple[str, ...]:
     """The flag's granted branches; anything but a list of strings grants nothing."""
     value = flag.get("grants")
@@ -225,7 +247,7 @@ def home(repo: Path | str, head: str) -> tuple[str, str]:
 
 
 def changes(repo: Path | str, commit: str, remote: str = "origin") -> str | None:
-    """What a commit after the review changes beyond prose, or None (§3.3 item 4)."""
+    """What a commit after the review changes beyond prose and added dated evidence, or None."""
     parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
     if len(parents) == 1:
         base = parents[0]
@@ -237,7 +259,9 @@ def changes(repo: Path | str, commit: str, remote: str = "origin") -> str | None
     else:
         return f"is neither a prose commit nor a merge of {remote}/master"
     paths = git(repo, "diff", "--name-only", "--no-renames", "-z", base, commit).split("\0")
-    code = [path for path in paths if path and not ci_changes.is_prose(path)]
+    added = git(repo, "diff", "--name-only", "--no-renames", "--diff-filter=A", "-z", base, commit)
+    evidence = {path for path in added.split("\0") if BENCH.fullmatch(path)}
+    code = [p for p in paths if p and not ci_changes.is_prose(p) and p not in evidence]
     return f"changes {code[0]}" if code else None
 
 
@@ -332,7 +356,10 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         return None
     flag = json.loads((state / "unattended.json").read_text())
     act = granted_act(command)
-    if act is None or act.branch not in grants(flag):
+    if act is None:
+        loose = loose_act(command, grants(flag))
+        return Grant(False, *loose, None, NOT_BARE) if loose else None
+    if act.branch not in grants(flag):
         return None
 
     def refused(why: str, head: str | None = None) -> Grant:

@@ -87,6 +87,11 @@ CONFIG_WRITE_VERBS = {"set", "unset", "rename-section", "remove-section", "edit"
 CONFIG_READS = {"--list", "-l", "get", "list"}
 REPLACE_LISTS = {"-l", "--list"}
 GH_FIELDS = {"-f", "-F", "--field", "--raw-field", "--input"}
+#: The flags a `gh api graphql` read may carry, each with its value as the next word.
+GRAPHQL_FLAGS = {"-f", "--raw-field", "-F", "--field", "-X", "--method", "-q", "--jq"}
+#: A line the shell expands nothing in: outside single quotes only these characters.
+#: Each step takes one character or one whole quoted string, so it matches in linear time.
+EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")
 CURL_DATA = ("--data", "--form", "--json", "--upload-file")
 #: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
 FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
@@ -211,6 +216,40 @@ def gh_words(words: list[str]) -> list[str] | None:
     return found
 
 
+def read_query(text: str) -> bool:
+    """A GraphQL document that only reads: it opens with `{` or `query`, and the letters
+    `mutation` and `subscription` appear nowhere, strings and comments included."""
+    opens = re.match(r"\s*(\{|query(?!\w))", text) is not None
+    return opens and "mutation" not in text and "subscription" not in text
+
+
+def graphql_read(words: list[str], rest: list[str], raw: str) -> bool:
+    """A `gh api graphql` call, every word read before expansion, whose one `query` reads.
+
+    The whole line `raw` expands nothing (EXPANDS_NOTHING, and no word opens with zsh's
+    `=cmd`), so the words are what gh receives. Only the flags of GRAPHQL_FLAGS, each
+    followed by its value; method POST if given; fields exactly one `query` and at most
+    one `operationName`, none read from a file.
+    """
+    if EXPANDS_NOTHING.fullmatch(raw) is None or any(w.startswith("=") for w in words):
+        return False
+    if any("$" in w or "`" in w for w in words) or rest[:1] != ["graphql"] or len(rest) % 2 == 0:
+        return False
+    fields: list[tuple[str, str]] = []
+    for flag, value in zip(rest[1::2], rest[2::2], strict=True):
+        name, equals, given = value.partition("=")
+        if flag not in GRAPHQL_FLAGS or (flag in ("-X", "--method") and value != "POST"):
+            return False
+        if flag in ("-f", "--raw-field", "-F", "--field"):
+            if not equals or (flag in ("-F", "--field") and given.startswith("@")):
+                return False
+            fields.append((name, given))
+    names = sorted(name for name, _ in fields)
+    if names not in (["query"], ["operationName", "query"]):
+        return False
+    return read_query(dict(fields)["query"])
+
+
 def segment_why(words: list[str], text: str = "") -> str | None:
     """The reason a segment writes a ref, a remote, git config or the forge, or None."""
     call = git_call(words)
@@ -225,7 +264,9 @@ def segment_why(words: list[str], text: str = "") -> str | None:
         rest = [re.sub(r"^-i+(?=[^-i])", "-", a) for a in words[words.index("api") + 1:]]
         given = method(rest, "-X", "--method")
         fields = any(a.split("=")[0] in GH_FIELDS or a[:2] in ("-f", "-F") for a in rest)
-        if (given is not None and given != "GET") or (given is None and fields):
+        writes = (given is not None and given != "GET") or (given is None and fields)
+        api = words[words.index("api") + 1 :]
+        if writes and not graphql_read(words, api, text or shlex.join(words)):
             return "gh api with a writing method changes the forge"
     if "curl" in words and any(FORGE_HOST in w for w in words):
         # `--expand-x` is `--x`; a short cluster has data letters before its `X`, its method after.
