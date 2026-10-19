@@ -136,6 +136,12 @@ All three are blocking (expat, GEOS, SQLite); an async caller runs
 The MCP server derives the new command as a tool automatically (every shown
 command is one); `--out` is marked `writable=True`, so the output root fences
 it, and `SOURCE` is judged by the HTTP read limit like every other input.
+Over HTTP that limit admits only the user's `work/`, the tile cache and the
+catalogue's local paths, and section 4.4 keeps a `.gml` out of the catalogue,
+so a remote caller can convert only a `.gml` already in its `work/`, which no
+tool puts there today: the conversion is a CLI or stdio task. Its output is
+printed on stdout, so over HTTP it is also stored and linked (AR50: 833 MB,
+counted twice against the quota).
 
 ### 4.1 `io/gml.py`: the GML 3.2 decoder
 
@@ -213,7 +219,7 @@ CHUNK = 1000
 def gml_to_geopackage(stream: IO[bytes], conn: sqlite3.Connection, *, crs: str | None = None) -> GmlImport: ...
 ```
 
-- **One table.** The first feature names the table (`type_name`) and its
+- **One table.** The first feature with a surface names the table (`type_name`) and its
   columns: `fid INTEGER PRIMARY KEY` (1, 2, ... in document order), `geom
   MULTIPOLYGON` (the writer wraps a `Polygon` as one part), `gml_id TEXT`,
   then one column per value of the first feature, in its order: `INTEGER`
@@ -225,16 +231,18 @@ def gml_to_geopackage(stream: IO[bytes], conn: sqlite3.Connection, *, crs: str |
   named `fid`, `geom` or `gml_id` is refused. The column types are passed as
   the esri names `create_features_table` takes
   (`esriFieldTypeInteger`, `esriFieldTypeString`).
-- **The CRS.** Every geometry's `srsName` must be the same text; a second one
-  is refused naming the feature and both names. With none anywhere, `crs` is
-  required ("no geometry names its srsName; give --crs"); with both, they must
-  be `same_crs`. The CRS must parse (`parse_crs`) and its first axis must
+- **The CRS.** The CRS is fixed at the first feature with a surface: its
+  geometry's `srsName`, else `crs`; with neither, the conversion is refused
+  there ("feature <gml_id> names no srsName; give --crs"). With both, they
+  must be `same_crs`. A later geometry with a `srsName` must give the same
+  text, or it is refused naming the feature and both names; a later geometry
+  with none takes the fixed CRS. The CRS must parse (`parse_crs`) and its first axis must
   point east: a CRS listed latitude first (EPSG:4326 as an OGC URI, where GML
   3.2 writes latitude, longitude) is refused, not swapped, since no fixture
   of such a file exists. The GeoPackage stores `crs.srs_entry` of it
   (EPSG:25832 for AR50). Nothing is reprojected here.
 - **Writes.** `create_geopackage` and `create_features_table` on the first
-  feature, then `insert_features` every `CHUNK` features and at the end
+  feature with a surface, then `insert_features` every `CHUNK` features and at the end
   (each a transaction; the R-tree and the layer bounds grow with them). A
   document with no feature with a surface is refused, so no empty layer is
   written.
@@ -414,3 +422,7 @@ Tests:
 10. *MCP pins.* `TOOL_NAMES` gains `gml_to_gpkg` in `rasputin --help` order,
     `REAL_POSITIONALS` gains `("gml_to_gpkg", "source", {"out": "x.gpkg"})`,
     `WRITABLE` gains `("gml_to_gpkg", "out")`.
+
+## Review
+
+- **Design review, round 1, 2026-10-19.** On `79d333a2`, 0 counted lines (estimate about 190), @reviewer: APPROVED WITH WORDINGS, applied by the main session (the CRS fixed at the first feature with a surface; the conversion over HTTP is a CLI or stdio task). Probes re-run on AC power: 287,730 features, 27.7 s, peak 133 MiB, 832,618,496-byte GeoPackage; UTM 32 to 33 edge stray 12.2 and 13.0 mm.
