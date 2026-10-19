@@ -11,13 +11,13 @@
       {
         "matcher": "Edit|Write|NotebookEdit|Bash",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_governance.py" }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_governance.py", "onFailure": "block" }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_push.py" }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_push.py", "onFailure": "block" }
         ]
       },
       {

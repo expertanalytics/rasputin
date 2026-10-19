@@ -17,16 +17,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 import shlex
 import signal
 import sys
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import anyio
 import mcp_types as types
@@ -39,10 +40,18 @@ from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel, ValidationError
 
 from tin_engine import installed_version
-from tin_engine.mcp.schema import DerivedCommand, RunResult, derive
+from tin_engine.mcp.schema import DerivedCommand, Download, RunResult, derive
+from tin_engine.mcp.workspace import CallScope, refusal
 from tin_engine.sources import OUT_ROOT_VARIABLE
 
-__all__ = ["DEFAULT_OUT_ROOT", "HEARTBEAT_SECONDS", "RunResult", "build_server", "serve"]
+__all__ = [
+    "DEFAULT_OUT_ROOT",
+    "HEARTBEAT_SECONDS",
+    "Delivery",
+    "RunResult",
+    "build_server",
+    "serve",
+]
 
 #: Seconds between heartbeats while the child prints nothing; read at every tick.
 HEARTBEAT_SECONDS = 5.0
@@ -52,6 +61,12 @@ CHILD = (sys.executable, "-m", "tin_engine")
 CHILD_ENV = {"TYPER_USE_RICH": "0", "NO_COLOR": "1", "TERM": "dumb"}
 #: The output root under the home folder when none is given: a chosen name.
 DEFAULT_OUT_ROOT = "rasputin-output"
+#: The users' bearer tokens over HTTP; never passed to a child.
+TOKENS_VARIABLE = "RASPUTIN_MCP_TOKENS"
+#: The tool, served over HTTP only, that stores a file of the caller's and links it.
+DOWNLOAD_LINK = "download_link"
+#: The HTTP transport's log: one line per call; stdio logs nothing.
+LOG = logging.getLogger("tin_engine.mcp.http")
 MIME_TYPES = {
     ".gpkg": "application/geopackage+sqlite3",
     ".vtk": "application/octet-stream",
@@ -96,6 +111,8 @@ class _Progress:
     def __init__(self, ctx: ServerRequestContext[Any]) -> None:
         self.began = time.monotonic()
         self.token = ctx.meta.get("progress_token") if ctx.meta else None
+        # over HTTP a notification reaches the client only on its request's stream
+        self.related = None if ctx.request_id is None else str(ctx.request_id)
         self.session = ctx.session
         self.last = -1.0
         self.lock = anyio.Lock()
@@ -108,7 +125,9 @@ class _Progress:
             return
         async with self.lock:  # one sender per call, so values leave in order
             self.last = max(round(self.elapsed(), 3), self.last + 0.001)
-            await self.session.send_progress_notification(self.token, self.last, None, message)
+            await self.session.send_progress_notification(
+                self.token, self.last, None, message, related_request_id=self.related
+            )
 
     @asynccontextmanager
     async def heartbeat(self, phrase: str) -> AsyncIterator[None]:
@@ -128,17 +147,30 @@ class _Progress:
                 task.cancel()
 
 
+class Delivery(Protocol):
+    """How a transport admits a call and hands back its outputs (stdio has none: file URIs)."""
+
+    async def admit(self, scope: CallScope) -> str | None:
+        """The refusal of a call before it runs (a quota, say), None when it may run."""
+
+    async def deliver(self, scope: CallScope, outputs: list[Path]) -> list[Download]:
+        """One `Download` per output, in order."""
+
+
 async def _run_child(
-    argv: Sequence[str], progress: _Progress, root: Path
+    argv: Sequence[str], progress: _Progress, scope: CallScope
 ) -> tuple[int, list[str], list[str]]:
-    """Run ``argv`` to the end, or kill it when cancelled; each stderr line is a notification.
-    The child's environment names the output root, which its ``sources`` listing reports."""
+    """Run ``argv`` in ``scope.cwd`` to the end, or kill it when cancelled; each stderr line
+    is a notification. The child's environment names the write root, which its ``sources``
+    listing reports, and holds no token."""
+    env = {k: v for k, v in os.environ.items() if k != TOKENS_VARIABLE}
     process = await asyncio.create_subprocess_exec(
         *argv,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={**os.environ, **CHILD_ENV, OUT_ROOT_VARIABLE: str(root)},
+        cwd=scope.cwd,
+        env={**env, **CHILD_ENV, OUT_ROOT_VARIABLE: str(scope.write_root)},
     )
     assert process.stdout is not None and process.stderr is not None  # both are PIPE
     stderr: list[str] = []
@@ -183,21 +215,46 @@ async def _read(path: Path | None) -> str | None:
     return await AsyncPath(path).read_text() if path and await AsyncPath(path).is_file() else None
 
 
-async def _outputs(stdout: list[str], hidden: list[Path]) -> list[str]:
-    """The stdout lines naming something that exists after the run, less the sidecars."""
+def _at(scope: CallScope, path: Path) -> Path:
+    return path if scope.cwd is None else scope.cwd / path
+
+
+async def _outputs(
+    stdout: list[str], hidden: list[Path], scope: CallScope
+) -> list[tuple[str, Path]]:
+    """Each output as (path shown, place): the stdout lines resolved from ``scope.cwd``, less
+    the sidecars, naming anything that exists; with a read limit, only a regular file
+    inside the write root, shown relative to it."""
     taken = [await AsyncPath(p).resolve() for p in hidden]
     outputs = []
     for line in stdout:
         try:  # a line that cannot name a file (too long, say) raises before 3.14
-            if (
-                line.strip()
-                and await AsyncPath(line).exists()
-                and (await AsyncPath(line).resolve() not in taken)
-            ):
-                outputs.append(line)
+            if not line.strip():
+                continue
+            place = Path(await AsyncPath(_at(scope, Path(line))).resolve())
+            if scope.read_roots is None:
+                kept = await AsyncPath(line).exists() and place not in taken
+            else:
+                inside = place.is_relative_to(scope.write_root)
+                kept = inside and await AsyncPath(place).is_file() and place not in taken
+            if kept:
+                shown = (
+                    line if scope.read_roots is None else str(place.relative_to(scope.write_root))
+                )
+                outputs.append((shown, place))
         except OSError:
             continue
     return outputs
+
+
+def _link(path: Path, uri: str, size: int | None = None) -> types.ResourceLink:
+    return types.ResourceLink(
+        type="resource_link",
+        name=path.name,
+        uri=uri,
+        mime_type=MIME_TYPES.get(path.suffix),
+        size=size,
+    )
 
 
 async def _call(
@@ -205,72 +262,99 @@ async def _call(
     arguments: BaseModel,
     prefix: Sequence[str],
     progress: _Progress,
-    root: Path,
+    scope: CallScope,
+    delivery: Delivery | None,
 ) -> types.CallToolResult:
     """One validated call: the sidecars, the child, the shaped result."""
-    argv = tool.argv(arguments)
     sidecars: list[Path] = []
     record_file = stats_file = None
+    update: dict[str, str] = {}
     if tool.tool_name == "mesh":
-        out, token = Path(getattr(arguments, "out")), secrets.token_hex(4)  # noqa: B009
+        out, token = _at(scope, Path(getattr(arguments, "out"))), secrets.token_hex(4)  # noqa: B009
         if "record_path" in arguments.model_fields_set:
-            record_file = Path(getattr(arguments, "record_path"))  # noqa: B009
+            record_file = _at(scope, Path(getattr(arguments, "record_path")))  # noqa: B009
         else:
             record_file = out.parent / f".{out.name}.record-{token}.json"
-            argv += ["--record", str(record_file)]
+            update["record_path"] = str(record_file)
             sidecars.append(record_file)
         if getattr(arguments, "stats", None) == "-":
             stats_file = out.parent / f".{out.name}.stats-{token}.md"
-            argv[argv.index("--stats") + 1] = str(stats_file)
+            update["stats"] = str(stats_file)
             sidecars.append(stats_file)
+    argv = tool.argv(arguments.model_copy(update=update))
     try:
         began = time.monotonic()
-        code, stdout, stderr = await _run_child([*prefix, *argv], progress, root)
+        code, stdout, stderr = await _run_child([*prefix, *argv], progress, scope)
         seconds = round(time.monotonic() - began, 3)
         if code != 0:
             return _error(code, _refusal(code, stderr), stderr)
         record = await _read(record_file)
+        outputs = await _outputs(stdout, sidecars, scope)
+        places, shown = [p for _, p in outputs], [Path(s) for s, _ in outputs]
+        downloads = None if delivery is None else await delivery.deliver(scope, places)
         result = RunResult(
             command=shlex.join(["rasputin", *argv]),
             exit_code=code,
             seconds=seconds,
-            outputs=await _outputs(stdout, sidecars),
+            outputs=[s for s, _ in outputs],
             stdout=stdout,
             stderr=stderr,
             record=json.loads(record) if record else None,
             stats=await _read(stats_file),
+            downloads=downloads,
         )
-        links = [
-            types.ResourceLink(
-                type="resource_link",
-                name=Path(p).name,
-                uri=(await AsyncPath(p).resolve()).as_uri(),
-                mime_type=MIME_TYPES.get(Path(p).suffix),
-            )
-            for p in result.outputs
-        ]
+        if downloads is None:
+            links = [_link(s, p.as_uri()) for s, p in zip(shown, places, strict=True)]
+        else:
+            links = [_link(s, d.url, d.bytes) for s, d in zip(shown, downloads, strict=True)]
     finally:
         with anyio.CancelScope(shield=True):
             for sidecar in sidecars:
                 await AsyncPath(sidecar).unlink(missing_ok=True)
-    body = result.model_dump()
+    body = result.model_dump(exclude={"downloads"} if delivery is None else None)
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=json.dumps(body)), *links],
         structured_content=body,
     )
 
 
-async def _outside_root(writes: list[tuple[str, str]], root: Path) -> str | None:
-    """The refusal of the first output path that resolves outside ``root``, None when all
-    are inside; ``..`` and every link, the last part included, are followed first."""
-    for argument, given in writes:
-        resolved = await AsyncPath(given).resolve()
-        if not Path(resolved).is_relative_to(root):
-            return (
-                f"{argument}: {given} resolves to {resolved}, outside the output root {root}; "
-                "write inside it (rasputin mcp --out-root sets the root)"
-            )
-    return None
+#: `DOWNLOAD_LINK` as a tool: one path in, one `Download` out.
+DOWNLOAD_TOOL = types.Tool(
+    name=DOWNLOAD_LINK,
+    description="A fresh download link to a file in your folder (a path as in a result's "
+    "outputs). Links last 1 hour; stored files are kept 7 days.",
+    input_schema={
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "A file in your folder."}},
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+    output_schema=Download.model_json_schema(),
+)
+
+
+async def _download_link(
+    scope: CallScope, arguments: dict[str, Any], delivery: Delivery
+) -> types.CallToolResult:
+    """A regular file inside the caller's write root, stored and linked afresh."""
+    given = arguments.get("path")
+    if not isinstance(given, str) or set(arguments) != {"path"}:
+        return _error(None, "path: give one path, of a file in your folder")
+    home = Path(await AsyncPath(given).expanduser())
+    place = Path(await AsyncPath(_at(scope, home)).resolve())
+    if not (place.is_relative_to(scope.write_root) and await AsyncPath(place).is_file()):
+        return _error(None, f"path: {given} is not a file inside your folder {scope.write_root}")
+    if (words := await delivery.admit(scope)) is not None:
+        return _error(None, words)
+    (download,) = await delivery.deliver(scope, [place])
+    body = download.model_dump()
+    return types.CallToolResult(
+        content=[
+            types.TextContent(type="text", text=json.dumps(body)),
+            _link(place, download.url, download.bytes),
+        ],
+        structured_content=body,
+    )
 
 
 def build_server(
@@ -279,22 +363,33 @@ def build_server(
     jobs: int = 1,
     child: Sequence[str] = CHILD,
     out_root: Path | None = None,
+    scope_for: Callable[[ServerRequestContext[Any]], CallScope] | None = None,
+    delivery: Delivery | None = None,
+    instructions: str = INSTRUCTIONS,
 ) -> Server[Any]:
     """The server over ``app``'s commands; ``child`` is the argv prefix a command is run with.
 
-    A call may write only inside ``out_root`` (default ``~/rasputin-output``), resolved
-    once here; neither is made nor checked until a call writes.
+    ``scope_for`` gives each call its scope; by default a call may write only inside
+    ``out_root`` (default ``~/rasputin-output``), resolved once here, neither made nor
+    checked until a call writes, and reads anything. With a ``delivery``, a call must be
+    admitted by it before and after taking a job slot, its outputs come back as its
+    downloads, and `DOWNLOAD_LINK` is a tool.
     """
     root = (out_root or Path.home() / DEFAULT_OUT_ROOT).expanduser().resolve()
+    stdio = CallScope(cwd=None, write_root=root, read_roots=None, user=None)
+    scope_of = scope_for or (lambda ctx: stdio)
     tools = {d.tool_name: d for d in derive(app)}
     semaphore, prefix = anyio.Semaphore(jobs), list(child)
+    extra = [] if delivery is None else [DOWNLOAD_TOOL]
 
     async def list_tools(ctx: ServerRequestContext[Any], params: Any) -> types.ListToolsResult:
-        return types.ListToolsResult(tools=[d.tool() for d in tools.values()])
+        return types.ListToolsResult(tools=[*(d.tool() for d in tools.values()), *extra])
 
     async def call_tool(
         ctx: ServerRequestContext[Any], params: types.CallToolRequestParams
     ) -> types.CallToolResult:
+        if delivery is not None and params.name == DOWNLOAD_LINK:
+            return await _download_link(scope_of(ctx), params.arguments or {}, delivery)
         tool = tools.get(params.name)
         if tool is None:
             raise MCPError(types.INVALID_PARAMS, f"Unknown tool: {params.name}")
@@ -302,25 +397,45 @@ def build_server(
             arguments = tool.model.model_validate(params.arguments or {})
         except ValidationError as exc:
             return _error(None, "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()))
-        refusal = await _outside_root(tool.writes(arguments), root)
-        if refusal is not None:
-            return _error(None, refusal)
+        scope = scope_of(ctx)
+
+        async def check() -> str | None:
+            given, writes, reads = (
+                arguments.model_dump(),
+                tool.writes(arguments),
+                tool.reads(arguments),
+            )
+            words = await refusal(scope, tool.tool_name, given, writes, reads)
+            return words if words or delivery is None else await delivery.admit(scope)
+
+        if (words := await check()) is not None:
+            return _error(None, words)
         progress = _Progress(ctx)
         try:
             async with progress.heartbeat("waiting for a running job"):
                 await semaphore.acquire()
             try:
+                if (words := await check()) is not None:  # the tree may change while waiting
+                    return _error(None, words)
                 async with progress.heartbeat("running"):
-                    return await _call(tool, arguments, prefix, progress, root)
+                    result = await _call(tool, arguments, prefix, progress, scope, delivery)
             finally:
                 semaphore.release()
         except Exception as exc:  # the server's own fault, in words
             return _error(None, f"{type(exc).__name__}: {exc}")
+        if scope.user is not None:
+            body = result.structured_content or {}
+            size = sum(d["bytes"] for d in body.get("downloads") or [])
+            LOG.info(
+                "call user=%s tool=%s exit=%s seconds=%s bytes=%d",
+                *(scope.user, tool.tool_name, body.get("exit_code"), body.get("seconds"), size),
+            )
+        return result
 
     return Server(
         "rasputin",
         version=installed_version(),
-        instructions=INSTRUCTIONS,
+        instructions=instructions,
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )

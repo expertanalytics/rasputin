@@ -866,3 +866,78 @@ def test_h22_8_a_second_enqueue_of_the_same_head_is_refused(
     assert second.why == f"head {private.pub[:7]} was enqueued already in this window", second.why
     assert [line["act"] for line in used_lines(private)] == ["enqueue"]
     assert runner.ran("gh") == [], "an enqueue read the pull request's checks"
+
+
+# ================================================================ h24 item 1
+#
+# docs/increments/h24-harness-fixes.md §3 item 1: `@perf` runs after the code
+# review, so its evidence commit always follows the verdict. A post-review
+# commit whose only changes beyond prose are files it *adds* under a dated
+# `docs/benchmarks/<YYYY-MM-DD>/` folder counts like prose. Each case runs on
+# the `built` fixture (review APPROVED at `x`, prose `rec` after it).
+# Pinned here beyond the design's words: a deleted dated file is refused like
+# an edited one (the design passes only what the commit adds), and the dated
+# folder is matched from the start of the path, so `tools/docs/benchmarks/…`
+# is code.
+
+DATED = "docs/benchmarks/2026-10-17/x"
+
+
+def commit_files(repo: Path, files: dict[str, str], message: str) -> str:
+    """Write each file (creating its directory), commit them together; the full sha."""
+    for relative, text in files.items():
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        git(repo, "add", relative)
+    git(repo, "commit", "-q", "-m", message)
+    return git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_h24_1_added_dated_benchmark_evidence_after_the_review_passes(built: Granted) -> None:
+    commit_files(built.repo, {f"{DATED}/times.tsv": "n\tt\n1\t2\n",
+                              f"{DATED}/summary.json": "{}\n",
+                              f"{DATED}/plot.py": "print(1)\n"},
+                 "@perf evidence")  # fmt: skip
+    assert judge(built) is None
+
+
+def test_h24_1_an_added_run_json_passes_the_accepted_risk(built: Granted) -> None:
+    """A forged run.json could become a later baseline; §3 item 1 accepts that."""
+    commit_file(built.repo, f"{DATED}/run.json", '{"wall": 1.0}\n', "@perf run record")
+    assert judge(built) is None
+
+
+def test_h24_1_an_edit_of_an_existing_dated_file_is_refused_naming_it(built: Granted) -> None:
+    path = f"{DATED}/summary.json"
+    commit_file(built.repo, path, "{}\n", "@perf evidence")
+    edit = commit_file(built.repo, path, '{"forged": true}\n', "edit the evidence")
+    refuses_naming(judge(built), edit, path, built.x)
+
+
+def test_h24_1_a_deleted_dated_file_is_refused_naming_it(built: Granted) -> None:
+    path = f"{DATED}/summary.json"
+    commit_file(built.repo, path, "{}\n", "@perf evidence")
+    git(built.repo, "rm", "-q", path)
+    git(built.repo, "commit", "-q", "-m", "drop the evidence")
+    drop = built.head
+    refuses_naming(judge(built), drop, path, built.x)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["docs/benchmarks/quick/new.json", "docs/benchmarks/2026-10-17-x/new.json",
+     "docs/benchmarks/new.json", "tools/docs/benchmarks/2026-10-17/new.py"],
+    ids=["quick", "not-a-date-folder", "undated", "not-at-the-start"],
+)  # fmt: skip
+def test_h24_1_an_added_file_outside_a_dated_folder_is_refused(built: Granted, path: str) -> None:
+    late = commit_file(built.repo, path, "{}\n", f"add {path}")
+    refuses_naming(judge(built), late, path, built.x)
+
+
+def test_h24_1_dated_evidence_with_a_code_change_is_refused_naming_the_code(
+    built: Granted,
+) -> None:
+    late = commit_files(built.repo, {f"{DATED}/run.json": "{}\n", "tools/x.py": "x = 9\n"},
+                        "evidence and a code change")  # fmt: skip
+    refuses_naming(judge(built), late, "tools/x.py", built.x)

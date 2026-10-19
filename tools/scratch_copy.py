@@ -79,6 +79,9 @@ def _extract(archive: bytes, target: Path) -> None:
 
 def copy(rev: str, target: Path) -> str:
     """Make the copy; return the command line to print. `RuntimeError` refuses."""
+    if not (ROOT / ".venv" / "bin" / "python").exists():
+        raise RuntimeError(f"{ROOT} has no .venv; make one with this worktree's install "
+                           "before copying")  # fmt: skip
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise RuntimeError(f"{target} exists and is not empty")
     for repo in (ROOT, _main_checkout()):

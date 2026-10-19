@@ -10,6 +10,18 @@ by `mcp_driver.fake_child`, says what to do, in this order:
     write ``sys.argv[2:]`` here as JSON (T4: what the server passed).
 ``pid_file``
     write this process's pid (T8: is it dead after a cancel?).
+``count_file``
+    append one line per run (did the child run, and how often?).
+``env_file``
+    write this process's environment here as JSON (what the server passed on).
+``wait_for``
+    poll every 20 ms until this path exists (a run that holds the job slot
+    until the test releases it).
+``mkdir``
+    directories to make, relative to the child's cwd (a printed directory).
+``copy``
+    ``[source, destination]`` pairs: copy the bytes, ``destination`` relative
+    to the child's cwd (the outputs a command writes).
 ``create_record``
     write ``{}`` to the ``--record`` path found in argv (T5: a sidecar the
     child did create, which the server must still remove).
@@ -48,6 +60,17 @@ def main() -> None:
         Path(spec["argv_file"]).write_text(json.dumps(argv))
     if "pid_file" in spec:
         Path(spec["pid_file"]).write_text(str(os.getpid()))
+    if "count_file" in spec:
+        with open(spec["count_file"], "a") as f:
+            f.write(f"{os.getpid()}\n")
+    if "env_file" in spec:
+        Path(spec["env_file"]).write_text(json.dumps(dict(os.environ)))
+    while "wait_for" in spec and not Path(spec["wait_for"]).exists():
+        time.sleep(0.02)
+    for directory in spec.get("mkdir", []):
+        Path(directory).mkdir(parents=True, exist_ok=True)
+    for source, destination in spec.get("copy", []):
+        Path(destination).write_bytes(Path(source).read_bytes())
     if spec.get("create_record") and "--record" in argv:
         Path(argv[argv.index("--record") + 1]).write_text("{}")
     for line in spec.get("stdout", []):
