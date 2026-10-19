@@ -37,14 +37,19 @@ from geotiff_fixtures import COLS, DELTA_X, DELTA_Y, ROWS, TIE_X, TIE_Y, micro_t
 from mcp_driver import call as stdio_call
 from mcp_driver import fake_child, option_value
 from mcp_http_driver import (
+    ACCEPT,
+    SESSION_REVISION,
     TOKENS,
     HttpServer,
     Link,
+    auth,
     call,
     client,
     downloads,
     error_text,
+    initialize,
     payload,
+    post,
     rasputin_server,
     sha256,
 )
@@ -603,6 +608,85 @@ async def test_t4_a_folder_at_the_quota_takes_no_upload(tmp_path: Path) -> None:
         words = error_text(result)
         assert words.startswith(f"your folder holds {MIB} bytes, at or over the quota"), words
         assert folder(small) == before
+
+
+def plain_refusal(result: Any, *paths: Path) -> str:
+    """The words of an upload refusal like the others: an error with plain words, naming
+    no server path and no Python exception."""
+    words = error_text(result)
+    assert words.strip(), result
+    for path in paths:
+        for spelled in {str(path), str(path.resolve())}:
+            assert spelled not in words, words
+    for leak in ("Traceback", "Error", "\ud800", "\\ud800", "surrogate", "codec"):
+        assert leak not in words, words
+    return words
+
+
+async def test_t4_an_uploads_folder_resolving_elsewhere_is_a_plain_refusal(
+    tmp_path: Path,
+) -> None:
+    """`Store.receive` raises `ValueError` when ``work/uploads`` resolves anywhere but
+    itself; the client sees a refusal without either path, and nothing is written."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    with rasputin_server(tmp_path / "srv") as moved:
+        moved.work("ola").mkdir(parents=True, exist_ok=True)
+        (moved.work("ola") / "uploads").symlink_to(elsewhere, target_is_directory=True)
+        before = folder(moved)
+        result = await upload(moved, name="x.geojson", text=GEOJSON_TEXT)
+        plain_refusal(result, tmp_path, moved.out_root, elsewhere)
+        assert folder(moved) == before
+        assert list(elsewhere.iterdir()) == []
+
+
+class Untouched:
+    """A `Delivery` that admits every call and fails the test if anything is written."""
+
+    async def admit(self, scope: Any) -> str | None:
+        return None
+
+    async def deliver(self, scope: Any, outputs: list[Path]) -> list[Any]:
+        raise AssertionError(f"delivered {outputs}")
+
+    async def receive(self, scope: Any, name: str, data: bytes) -> Path:
+        raise AssertionError(f"received {name}")
+
+
+async def test_t4_text_with_a_lone_surrogate_is_a_plain_refusal(out_root: Path) -> None:
+    """A lone surrogate (U+D800) has no UTF-8 form: refused in plain words, nothing written.
+    Called on `_upload` itself: over HTTP the SDK refuses the request as a parse error
+    before any tool runs (next test), so only this call reaches the encoding."""
+    arguments = {"name": "lone.txt", "text": "a\ud800b"}
+    result = await mcp_server._upload(http_scope(out_root), arguments, Untouched())
+    plain_refusal(result, out_root)
+
+
+@pytest.mark.parametrize(
+    "surrogate", [b"\\ud800", b"\xed\xa0\x80"], ids=["JSON escape", "raw bytes"]
+)
+def test_t4_over_http_a_lone_surrogate_is_a_parse_error(
+    server: HttpServer, surrogate: bytes
+) -> None:
+    opened = post(server, initialize(SESSION_REVISION), auth("ola"))
+    headers = {
+        **ACCEPT,
+        **auth("ola"),
+        "mcp-session-id": opened.headers["mcp-session-id"],
+        "mcp-protocol-version": SESSION_REVISION,
+    }
+    note = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+    assert post(server, note, headers).status_code == 202
+    arguments = {"name": "lone.txt", "text": "a@b"}
+    request = {"jsonrpc": "2.0", "id": 2, "method": "tools/call"}
+    request["params"] = {"name": "upload", "arguments": arguments}
+    body = json.dumps(request).encode().replace(b"@", surrogate)
+    before = folder(server)
+    response = httpx2.post(server.mcp, content=body, headers=headers, timeout=30)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == -32700, response.text
+    assert str(server.out_root) not in response.text
+    assert folder(server) == before
 
 
 # ---------------------------------------------------------------- T5 stdio unchanged
