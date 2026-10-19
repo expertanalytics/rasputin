@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -78,13 +78,17 @@ def start_slice(
     keep: npt.NDArray[np.bool_],
     seam: int,
     seam_pass: Callable[[int], SeamOutcome],
+    fixed: Mapping[int, float | None] | None = None,
 ) -> Slice:
     """The start triangles `keep` selects, in order, vertices renumbered in
     their global order (so the slice's order is the whole's, restricted), and
     each seam edge `(a, b)` of triangle `(a, b, c)` with seam-pass points
     `p1 .. pk` made `(a, p1, c), .., (pk, b, c)`; the first replaces the
     triangle, the rest go at the end, the seam edges taken in edge order.
-    A vertex at the end of several seam edges takes the z of the lowest (N17)."""
+    A vertex in `fixed` (keyed by start vertex) takes its z, or none; any
+    other at the end of several seam edges takes the z of the lowest (N17).
+    A seam-pass point on an axis-parallel seam edge takes the edge's across
+    coordinate, so the seam stays straight bit for bit (E4)."""
     tri, cons = triangles[keep], flags[keep].astype(np.int64)
     used = np.unique(tri)
     n = len(vertices)
@@ -101,7 +105,8 @@ def start_slice(
     out_edges: list[tuple[int, int]] = []
     out_masks: list[int] = []
     chains: dict[int, list[int]] = {}
-    heights: dict[int, float] = {}
+    pinned = {int(np.searchsorted(used, v)): z for v, z in (fixed or {}).items()}
+    heights = {v: z for v, z in pinned.items() if z is not None}
     for r in rows.tolist():
         a, b = (int(v) for v in np.searchsorted(used, pairs[r]))
         m = int(masks[r])
@@ -115,9 +120,10 @@ def start_slice(
         if tuple(found.a) != xy[a]:
             points, zs, ends = points[::-1], zs[::-1], ends[::-1]
         chain = chains[r] = [a, *range(len(xy), len(xy) + len(points)), b]
-        xy += [(x, y) for x, y in points]
+        (ax, ay), (bx, by) = xy[a], xy[b]
+        xy += [(ax if ax == bx else x, ay if ay == by else y) for x, y in points]
         for v, z in zip(chain, [ends[0], *zs, ends[1]], strict=True):
-            if z is not None:
+            if z is not None and v not in pinned:
                 heights.setdefault(v, z)
         out_edges += itertools.pairwise(chain)
         out_masks += [m] * (len(chain) - 1)

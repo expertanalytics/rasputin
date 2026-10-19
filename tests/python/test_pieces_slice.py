@@ -146,3 +146,44 @@ def test_piece_ids_are_sorted_whatever_the_creation_order() -> None:
     )  # fmt: skip
     assert ids == [(0, 0, 0), (1, 0, 0)]
     assert labels.tolist() == [1, 0]
+
+
+class TestFixedHeights:
+    """`start_slice`'s `fixed`, keyed by start-triangulation vertex: a vertex
+    in it takes that z, or none, over every seam edge's `z_a` / `z_b`; a
+    vertex not in it keeps N17's rule. It is how a corner where two cut lines
+    cross gets its node's height in every piece (`basin_run.corner_heights`)."""
+
+    @staticmethod
+    def sliced(keep: list[bool], fixed: dict[int, float | None]) -> Slice:
+        edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)], dtype=np.uint32)
+        masks = np.array([OUTLINE] * 4 + [SEAM], dtype=np.uint32)
+        return start_slice(
+            SQUARE_XY, SQUARE_TRIANGLES, SQUARE_FLAGS, edges, masks, np.array(keep), SEAM,
+            pass_of({4: DIAGONAL}), fixed=fixed,
+        )  # fmt: skip
+
+    def test_a_fixed_vertex_takes_its_height_over_the_seam_passs(self) -> None:
+        piece = self.sliced([True, False], {2: 99.0})
+        assert piece.z[piece.chains[4][-1]] == 99.0
+        assert sorted(piece.z.values()) == [10.0, 11.0, 13.0, 99.0]
+
+    def test_a_fixed_none_leaves_the_vertex_without_a_height(self) -> None:
+        piece = self.sliced([True, False], {0: None})
+        assert piece.chains[4][0] == 0
+        assert 0 not in piece.z
+        assert sorted(piece.z.values()) == [11.0, 13.0, 14.0]
+
+    def test_the_key_is_the_start_triangulations_vertex_not_the_slices(self) -> None:
+        """Keeping triangle (0, 2, 3) renumbers start vertex 2 to slice vertex 1;
+        `fixed` names it 2, and slice vertex 2 (start vertex 3, on no seam) gets
+        no height."""
+        piece = self.sliced([False, True], {2: 99.0})
+        assert piece.vertices[1].tolist() == [4.0, 4.0]
+        assert piece.z[1] == 99.0
+        assert 2 not in piece.z
+        assert sorted(piece.z.values()) == [10.0, 11.0, 13.0, 99.0]
+
+    def test_no_fixed_vertex_is_the_slice_without_it(self) -> None:
+        with_none = self.sliced([True, False], {})
+        assert with_none.z == square_slice((0, 2), pass_of({4: DIAGONAL})).z

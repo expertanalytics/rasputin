@@ -38,7 +38,7 @@ from tin_engine.io.mesh_index import (
     SeamRecord,
     check_conformity,
 )
-from tin_engine.io.models import DemTile, IndexWindow, RasterMeta
+from tin_engine.io.models import DemTile, IndexWindow, RasterMeta, valid_mask
 from tin_engine.pieces import piece_ids, seam_records, start_slice
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError
@@ -164,12 +164,54 @@ def strip(dem: Loaded, meta: RasterMeta, r0: int, r1: int, c0: int, c1: int) -> 
     return DemTile(meta=at, array=dem.tile.array[i0 : i1 + 1, j0 : j1 + 1])
 
 
+def line_rc(cut: Partitioned, snap: float, x: float, y: float) -> tuple[int | None, int | None]:
+    """The run-window row and column of the cut lines `(x, y)` lies on, each
+    None off every line: within `min(0.75 snap, h / 4)` of line `k` (1-based)
+    is row `k dy` or column `k dx`, from the partition, never from a division
+    of rounded coordinates (E1)."""
+    m, p = cut.meta, cut.record
+    near = min(0.75 * snap, min(m.delta_x, m.delta_y) / 4)
+    row = next(((k + 1) * p.dy for k, v in enumerate(cut.ys) if abs(y - v) <= near), None)
+    col = next(((k + 1) * p.dx for k, v in enumerate(cut.xs) if abs(x - v) <= near), None)
+    return row, col
+
+
+def seam_box(
+    cut: Partitioned, snap: float, a: tuple[float, float], b: tuple[float, float]
+) -> tuple[int, int, int, int]:
+    """Seam edge `a`-`b`'s strip, `(r0, r1, c0, c1)` in the run window: each
+    end's `line_rc` index where it has one, its fractional index otherwise;
+    `floor` of the smaller and `ceil` of the larger, minus and plus one (E2)."""
+    m, rows, cols = cut.meta, [], []
+    for x, y in (a, b):
+        row, col = line_rc(cut, snap, x, y)
+        rows.append((m.y_max - y) / m.delta_y if row is None else row)
+        cols.append((x - m.x_min) / m.delta_x if col is None else col)
+    f, c = math.floor, math.ceil
+    return f(min(rows)) - 1, c(max(rows)) + 1, f(min(cols)) - 1, c(max(cols)) + 1
+
+
+def corner_heights(
+    dem: Loaded, cut: Partitioned, snap: float, xy: npt.NDArray[np.float64], ends: Iterable[int]
+) -> dict[int, float | None]:
+    """Each of `ends` on two cut lines, a corner, with its lattice node's value
+    in the piece's tile, None on NoData; the same in every piece (E3)."""
+    out: dict[int, float | None] = {}
+    for v in ends:
+        r, c = line_rc(cut, snap, *xy[v].tolist())
+        if r is not None and c is not None:
+            z = dem.tile.array[r - dem.row0, c - dem.col0]
+            out[v] = float(z) if valid_mask(z, dem.tile.meta.nodata) else None
+    return out
+
+
 def cut_run(
     load: Callable[[IndexWindow], Loaded],
     start: IndexedMesh2,
     edges: npt.NDArray[np.uint32],
     masks: npt.NDArray[np.uint32],
     cut: Partitioned,
+    snap: float,
     how: How,
     clock: PhaseClock,
     refined: Refine,
@@ -199,13 +241,12 @@ def cut_run(
             """The seam pass on a strip that is a function of the edge alone: its
             box snapped outward to the lattice and grown by one node (step 2)."""
             (ax, ay), (bx, by) = xy[edges[r]].tolist()
-            c0, c1 = ((v - m.x_min) / m.delta_x for v in (min(ax, bx), max(ax, bx)))
-            r0, r1 = ((m.y_max - v) / m.delta_y for v in (max(ay, by), min(ay, by)))
-            f, c = math.floor, math.ceil
-            box = strip(dem, m, f(r0) - 1, c(r1) + 1, f(c0) - 1, c(c1) + 1)
+            box = strip(dem, m, *seam_box(cut, snap, (ax, ay), (bx, by)))
             return refine_seam(to_core(box), (ax, ay), (bx, by), tolerance=how.tolerance)
 
-        piece = start_slice(xy, tris, flags, edges, masks, labels == p, seam, seam_pass)
+        keep = labels == p
+        corners = corner_heights(dem, cut, snap, xy, np.intersect1d(seams, tris[keep]).tolist())
+        piece = start_slice(xy, tris, flags, edges, masks, keep, seam, seam_pass, fixed=corners)
         mine, held = replace(how, grid=dem.grid, checks=dem.checks), Once(dem.tile)
         # The constraints travel in `edges` and `masks`; refine reads no flag.
         zeros = np.zeros(len(piece.triangles), dtype=np.uint8)

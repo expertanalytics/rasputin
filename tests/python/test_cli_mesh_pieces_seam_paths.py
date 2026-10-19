@@ -93,7 +93,9 @@ def test_seam_vertices_carry_the_seam_pass_heights(
 ) -> None:
     """A seam vertex's z in a piece file is the seam pass's, written over
     refine's own: with the seam pass's heights moved by DELTA, every file
-    vertex at a seam-pass point has the moved height."""
+    vertex at a seam-pass point has the moved height, except a corner where
+    two cut lines cross, which carries its DEM node's own value (the same in
+    the four pieces that hold it, whatever strip each reads it from)."""
     original = basin_run.refine_seam
     told: dict[tuple[float, float], float] = {}
 
@@ -108,6 +110,9 @@ def test_seam_vertices_carry_the_seam_pass_heights(
 
     monkeypatch.setattr(basin_run, "refine_seam", moved)
     done = pf.cut(tmp_path / "run", *cut_args(scene))
+    xs, ys = pf.seam_lines(done.pieces)
+    corners = {xy for xy in told if xy[0] in xs and xy[1] in ys}
+    assert len(corners) == 1, corners  # four pieces: one crossing
     found = [
         (xy, float(p[2]), told[xy])
         for piece in done.pieces
@@ -115,7 +120,15 @@ def test_seam_vertices_carry_the_seam_pass_heights(
         if (xy := (float(p[0]), float(p[1]))) in told
     ]
     assert len({xy for xy, _, _ in found}) == len(told), "a seam-pass point missing from the files"
-    assert [f for f in found if f[1] != f[2]] == []
+    assert [f for f in found if f[0] not in corners and f[1] != f[2]] == []
+    hills = pf.hills()
+    at_corners = [
+        (xy, z, float(hills[round((pf.TIE_Y - xy[1]) / pf.H), round((xy[0] - pf.TIE_X) / pf.H)]))
+        for xy, z, _ in found
+        if xy in corners
+    ]
+    assert len(at_corners) == 4, at_corners  # the corner, in each of the four pieces
+    assert [c for c in at_corners if c[1] != c[2]] == []
     assert pf.conformity_problems(done.pieces) == []
 
 

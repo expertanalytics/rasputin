@@ -2342,7 +2342,9 @@ def _dem_mesh(
             def run_cut(
                 load: Callable[[IndexWindow], PieceDem], write: Callable[[Piece], PieceEntry]
             ) -> CutRun:
-                return cut_run(load, start, edges, masks, part, how, clock, refine_with, write)
+                return cut_run(
+                    load, start, edges, masks, part, spacing, how, clock, refine_with, write
+                )
 
             return _DemMesh(
                 _NO_MESH, meta, domain_vertices, domain_holes, None, None, values,
