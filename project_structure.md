@@ -169,8 +169,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   only, never imports _core
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
-                           #   mesh (15c-2); takes the edge strip, checked in
-                           #   the same loop (15f-3)
+                           #   mesh (15c-2), seams frozen in a cut run (23c);
+                           #   takes the edge strip, checked in the same loop
+                           #   (15f-3)
   edge_strip.py            # generate / run: the edge strip's two _core calls
                            #   (constraint_check_points, refine_strip) and
                            #   their clock rows; holds no geometry (15f-3)
@@ -187,6 +188,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   memory, cgroup limits; Resources (threads, a
                            #   memory budget), resolved once per command (38);
                            #   Pydantic and os only
+  decompose.py             # partition: the window cut into cells under
+                           #   --pieces and --piece-budget, b(T); lines: the
+                           #   partition lines clipped to the domain; pure,
+                           #   reads no machine (23c)
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core.
@@ -197,6 +202,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (bit 9), for a cut run's piece files (23c).
                            #   TerrainFeature: one feature's mask and lines
                            #   (moved from feature_input, audit PR C)
+  pieces.py                # piece_ids, start_slice, seam_records: a cut
+                           #   run's pieces from its one start triangulation,
+                           #   each seam edge fanned at its seam-pass points;
+                           #   numpy, never calls _core (23c)
+  basin_run.py             # cut_partition, cut_run: a cut run piece by piece
+                           #   (windows, seam pass, each piece refined by the
+                           #   refine cli.py hands it, K4); no Typer, refusals
+                           #   are RunError (23c). index.json is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a Legend, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain

@@ -1,0 +1,2 @@
+segments in one piece only: 7428; midpoint distance to the projected outline: max 0.000657 m; over 0.01 m: 0; over 1 m: 0
+segments in two pieces: 3305; in more than two: 0

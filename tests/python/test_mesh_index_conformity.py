@@ -20,7 +20,9 @@ and 0.0 differs from -0.0. One record alone is a seam along the outline
 
 `MeshIndex` drift (item 5, and point 2 of "Three points from 23c-1's green
 (3ffae13)"): piece ids are three strict non-negative integers, and `file` and
-`sha256` are null together or set together.
+`sha256` are null together or set together; the partition's lattice fields
+(`row0`, `col0`, `spacing`, `origin`) are required ("23c-2 stopped at
+dbbe1c6", 3 (a)).
 """
 
 from __future__ import annotations
@@ -138,7 +140,7 @@ def an_index() -> dict[str, Any]:
         "vocabulary": "0" * 64,
         "partition": {
             "pieces": 4,
-            "memory_budget": 2**34,
+            "piece_budget": 2**34,
             "bytes_per_node": 267,
             "nx": 2,
             "ny": 1,
@@ -146,6 +148,10 @@ def an_index() -> dict[str, Any]:
             "dy": 39,
             "cols": 39,
             "rows": 39,
+            "row0": -1,
+            "col0": 1,
+            "spacing": 10.0,
+            "origin": [500_000.0, 6_600_000.0],
         },
         "pieces": [
             {"id": [0, 0, 0], "file": "0-0-0.vtk", "sha256": "a" * 64, "counts": counts,
@@ -164,6 +170,18 @@ class TestMeshIndexDrift:
     def test_the_hand_built_index_validates(self, mi: ModuleType) -> None:
         index = mi.MeshIndex.model_validate(an_index())
         assert index.pieces[1].file is None and index.pieces[1].sha256 is None
+        part = index.partition
+        assert (part.row0, part.col0, part.spacing) == (-1, 1, 10.0)
+        assert tuple(part.origin) == (500_000.0, 6_600_000.0)
+
+    @pytest.mark.parametrize("key", ["row0", "col0", "spacing", "origin"])
+    def test_the_lattice_fields_are_required(self, mi: ModuleType, key: str) -> None:
+        """ "23c-2 stopped at dbbe1c6", 3 (a): an index without the lattice
+        cannot place its partition lines, so each of the four is required."""
+        doc = an_index()
+        del doc["partition"][key]
+        with pytest.raises(ValidationError):
+            mi.MeshIndex.model_validate(doc)
 
     @pytest.mark.parametrize(
         "piece_id",

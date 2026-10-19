@@ -37,7 +37,7 @@ class PartitionRecord(_Record):
     """The rule's inputs and its cells, as the partition rule gave them."""
 
     pieces: int = Field(ge=1)
-    memory_budget: int = Field(ge=1)
+    piece_budget: int = Field(ge=1)
     bytes_per_node: int = Field(ge=1)
     nx: int = Field(ge=1)
     ny: int = Field(ge=1)
@@ -45,6 +45,13 @@ class PartitionRecord(_Record):
     dy: int = Field(ge=1)
     cols: int = Field(ge=1)
     rows: int = Field(ge=1)
+    # Where the lines are: line i
+    # at x = origin_x + (col0 + i dx) spacing, line j at y = origin_y - (row0 +
+    # j dy) spacing, origin being lattice node (0, 0) in the index's crs.
+    row0: int
+    col0: int
+    spacing: float = Field(gt=0)
+    origin: tuple[float, float]
 
 
 class PieceWindow(IndexWindow):
