@@ -301,8 +301,10 @@ reader** when all hold:
     enumerate zip range map filter reversed isinstance repr iter next divmod
     KeyError ValueError IndexError Exception`), or a name the program binds
     itself (an assignment, a loop or comprehension target, a lambda
-    argument, an `except … as` name); never a name starting `_`, and `json`
-    and `sys` are never bound;
+    argument, an `except … as` name); never a name starting `_`; `json`,
+    `sys` and every name `builtins` defines are never bound (a binding in a
+    comprehension, a lambda or dead code leaves the builtin in place:
+    `[0 for exec in []]; exec(sys.stdin.read())` runs stdin);
   - attributes, read only (never assigned or deleted): on `sys`, `stdin
     stdout stderr argv exit`; on `json`, `load loads dump dumps`; on
     anything else, a method in `DATA_METHODS` (`read readline readlines
@@ -354,7 +356,7 @@ Two additions, after `parse` and before `runs`:
 
 *A departure from the review's wording*, which asked for the text rules
 over every program: that form added 115 push asks on the replay. With
-`SPAWN` over the whole text the rule adds 56 (the syntax-tree test added 22;
+`SPAWN` over the whole text the rule adds 56 (round 1's whole design, with the syntax-tree test, added 22 over 67,715 commands;
 the difference is the price of reading strings): 36 of them are on lines
 naming `guard_push`, `.claude/hooks/` or the scanner (harness probes), 20
 were not inspected. A program that names `git push` and no way to start a
@@ -457,7 +459,7 @@ Through the whole governance hook (`tests/python/test_guard_governance.py`,
   sys.modules['posix'].system(sys.stdin.read())"`, and the same with
   `__loader__.load_module('posix')`, `operator.methodcaller('system', …)`,
   `string.Formatter().get_field(…)` and `g=(x for x in [1]);
-  g.gi_frame.f_builtins['exec'](sys.stdin.read())`; `echo 'echo x >
+  g.gi_frame.f_builtins['exec'](sys.stdin.read())` and `[0 for exec in []]; exec(sys.stdin.read())`; `echo 'echo x >
   CLAUDE.md' | /bin/s?`; `echo 'echo x > CLAUDE.md' | =sh` (zsh); `read -r l
   <<< 'echo x > CLAUDE.md'; eval "$l"`; `l=$(cat <<< 'echo x > CLAUDE.md');
   eval "$l"`; `echo "W" | env -S"python3 -"`; `echo "W" | python3 -W
@@ -516,7 +518,7 @@ grant module), `old` against `new`. Commands holding `key`, `token`,
 |---|---|---|
 | any runner on a line with any pipe, redirect or process substitution | 5,785 | 241 |
 | fed on the runner's own stdin, no data reader | 121 | 60 |
-| **this design** (3.2 to 3.5) | **33** (4 redacted) | **22** (2 redacted) |
+| **round 1's design** (syntax-tree spawn test, blocklist reader) | **33** (4 redacted) | **22** (2 redacted) |
 | this design, push text rules over every program | 33 | 115 |
 
 Governance asks: `old` 438, `new` 471; push asks: `old` 748, `new` 770.
@@ -558,3 +560,4 @@ changes estimated. Tests about 160 lines.
 Path: full. Order: design review now; red after this branch merges master
 (h24 PR A is in); green by day with Ola at the prompt (both files
 governed). Not a night fallback.
+- **Design review, round 3, 2026-10-20.** On `4c84819e`, 0 counted lines (estimate about 110), @reviewer: APPROVED WITH WORDINGS. Judged as a tripwire: the allowlist closes round 2's leaks and the generator-frame route; glob, `=sh` and variable feeds ask; push pattern over strings and glued `-S` sound. One hole closed by wording: a builtin name bound only in a comprehension, lambda or dead code (`[0 for exec in []]; exec(sys.stdin.read())`). Four wordings applied by the main session.
