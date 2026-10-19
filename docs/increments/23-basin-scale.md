@@ -4803,3 +4803,5 @@ and a unit by design for the second; no survivor shows a missing test.
 ```
 
 **23c-4, code review, round 1, 2026-10-19.** Range `bb5b2fcc..0adf1f46`, 31 counted lines (estimate about 38); the stack is 778 against master, so this step gets its own PR after 23c-2 and 23c-3 merge. @reviewer: APPROVED WITH WORDINGS, applied by the main session. Bytes kept rests on the prototype: `@perf` confirms the bench hashes and the Velhas digests against `bb5b2fcc`.
+
+**23c-4, `@perf` acceptance, 2026-10-19.** `2e7e0d58`, head `e970bde4` against base `bb5b2fcc` back to back: bench hashes unchanged; Velhas at 10 m with 16, 64 and 256 pieces, every piece file and `index.json` byte-identical; 9.7 m and 9.9 m cuts with 4, 16 and 64 pieces on a 41 × 41 and a 201 × 201 scene, all refused before, now exit 0 with every check clean, 0.04 to 0.18 s each: ACCEPTED.
