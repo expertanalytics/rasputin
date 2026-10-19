@@ -891,6 +891,9 @@ HERE_STRING_ASKED: dict[str, tuple[str, str]] = {
     # Item 14's write whose path is all substitution, by here-string.
     "a-write-whose-path-is-all-substitution": (
         "python3 <<< \"open('$(echo CLAUDE.md)','w').write('x')\"", "CLAUDE.md"),
+    # A shell parses every stdin body whatever its -c program.
+    "shell-c-program-that-is-a-shell": (
+        "bash -c 'bash' <<'EOF'\necho x > CLAUDE.md\nEOF", "CLAUDE.md"),
 }  # fmt: skip
 
 
@@ -940,6 +943,10 @@ def here_string_silent(flag: Path) -> dict[str, str]:
         "two-here-strings-that-print": "python3 <<< 'print(1)' <<< 'print(2)'",
         # A -c program keeps stdin as data.
         "c-program-beside-a-here-string": "python3 -c 'print(1)' <<< \"open('CLAUDE.md','w')\"",
+        # An interpreter's inline program, or a script, keeps a heredoc as data.
+        "c-program-beside-a-heredoc": (
+            "python3 -c 'print(1)' <<'EOF'\nopen('CLAUDE.md','w').write('x')\nEOF"),
+        "shell-script-beside-a-heredoc": "bash script.sh <<'EOF'\necho x > CLAUDE.md\nEOF",
         "json-read-of-the-harness-state": (
             f"python3 <<< 'import json; print(json.load(open(\"{flag}\")))'"),
     }  # fmt: skip

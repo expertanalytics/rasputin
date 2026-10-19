@@ -1435,12 +1435,20 @@ HERE_STRING_ASKED: dict[str, str] = {
     "env bash <<< 'git push origin x'": PUSH,
     "timeout 5 bash <<< 'git push origin x'": PUSH,
     "zsh <<< 'echo a' <<< 'git push origin x'": PUSH,
+    # A shell parses every stdin body whatever its -c program: the -c program
+    # here is itself a shell reading stdin.
+    "bash -c bash <<'EOF'\ngit push origin x\nEOF": PUSH,
+    "sh -c 'cat | sh' <<'EOF'\ngit push origin x\nEOF": PUSH,
+    "bash -c bash <<< 'git push origin x'": PUSH,
 }
 
 HERE_STRING_PASSED = (
     "cat <<< 'git push origin x'",
     "bash <<< 'git status'",
     "python3 -c 'print(1)' <<< 'git push origin x'",
+    # An interpreter's inline program, or a script, keeps a heredoc as data.
+    "python3 -c 'print(1)' <<'EOF'\ngit push origin x\nEOF",
+    "bash script.sh <<'EOF'\ngit push origin x\nEOF",
 )
 
 
