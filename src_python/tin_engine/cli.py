@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import csv
 import datetime
+import functools
+import hashlib
 import json
 import math
 import os
@@ -18,10 +20,10 @@ import shlex
 import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
-from dataclasses import dataclass, field, fields
+from contextlib import closing, contextmanager
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, Final, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, Final, TextIO, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -72,12 +74,18 @@ from tin_engine.crs import (
     transform_description,
     transform_label,
 )
+from tin_engine.decompose import DEFAULT_PIECE_BUDGET, Partition, bytes_per_node, partition
+from tin_engine.decompose import lines as cut_lines
 from tin_engine.dem_input import (
     CachedSource,
-    DemInput,
+    DemPlan,
     DemRequest,
     OutCrsRequiredError,
-    open_dem,
+    PieceDem,
+    assemble_dem,
+    load_piece,
+    piece_plan,
+    plan_dem,
     repository_for,
 )
 from tin_engine.domain import DomainError, DomainPolygon
@@ -91,8 +99,9 @@ from tin_engine.feature_input import (
     open_features,
     read_lake_polygons,
 )
-from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary
+from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
+from tin_engine.gml_import import gml_to_geopackage
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
@@ -134,10 +143,11 @@ from tin_engine.land_cover_fractions import assign as assign_fractions
 from tin_engine.landcover import label_triangles
 from tin_engine.legends import derived_cleanup, run_vocabulary, shipped_names
 from tin_engine.legends import load as load_legend
-from tin_engine.mosaic import Seam
+from tin_engine.mosaic import Seam, check_canvas
 from tin_engine.palettes import paraview_preset
 from tin_engine.raster import to_core
-from tin_engine.resources import Resources
+from tin_engine.refine_job import How, Once, Refined, RunError
+from tin_engine.resources import Resources, parse_bytes
 from tin_engine.run_record import (
     SEAMS_AGREE,
     RunRecord,
@@ -165,6 +175,13 @@ from tin_engine.sources import (
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.tolerance_field import ToleranceLines, ToleranceSlope, line_segments
+
+if TYPE_CHECKING:  # the cut path's types; its modules load only for a cut run
+    from tin_engine.basin_run import CutRun, Partitioned, Piece
+    from tin_engine.io.mesh_index import PieceEntry
+
+#: A cut run, given how to load a piece's DEM and write a finished piece.
+type RunCut = Callable[[Callable[[IndexWindow], PieceDem], Callable[[Piece], PieceEntry]], CutRun]
 
 #: What rasputin does, in one sentence: the root help and `pyproject.toml` say it.
 DESCRIPTION: Final = (
@@ -755,6 +772,26 @@ def mesh(
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
+    pieces: Annotated[
+        int | None,
+        typer.Option(
+            "--pieces",
+            min=1,
+            metavar="N",
+            help="With --domain, cut the run on DEM lattice lines into about this many pieces, "
+            "written to <out>.pieces/ with index.json, and nothing at --out. Default: 1.",
+        ),
+    ] = None,
+    piece_budget: Annotated[
+        str | None,
+        typer.Option(
+            "--piece-budget",
+            metavar="BYTES",
+            help="The estimated memory one piece of a cut mesh may take; a domain estimated "
+            "over it is cut into pieces. A number of bytes, or with K, M, G or T (16G). "
+            "Default 16G, the same on every machine.",
+        ),
+    ] = None,
     stats: Annotated[
         Path | None,
         typer.Option(
@@ -783,7 +820,9 @@ def mesh(
     triangulated; with it the mesh is refined until every triangle is within
     that many metres of the DEM. --features adds polygons and lines as
     constraint edges; a legend with codes, or --land-cover, gives every
-    triangle a land_cover_code, coloured by rasputin palette.
+    triangle a land_cover_code, coloured by rasputin palette. --pieces and
+    --piece-budget cut a --domain run into pieces, each its own file under
+    <out>.pieces/ with an index.json, which agree bit for bit along every seam.
 
     .vtk is one file for ParaView. .ply is the surface for QGIS, with the
     constraint lines in a second file given by --out-edges. .gpkg is a GeoPackage
@@ -798,6 +837,7 @@ def mesh(
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
+    coded: Legend | None = None
     feature_paths = features or []
     feature_crss = features_crs or []
     feature_layers = features_layer or []
@@ -913,6 +953,20 @@ def mesh(
         raise typer.BadParameter(
             "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
         )
+    flag = "--pieces" if pieces is not None else "--piece-budget"
+    if (pieces, piece_budget) != (None, None) and (tolerance is None or domain is None):
+        raise typer.BadParameter("cutting needs --tolerance and --domain", param_hint=flag)
+    try:
+        budget = DEFAULT_PIECE_BUDGET if piece_budget is None else parse_bytes(piece_budget)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--piece-budget") from exc
+    if tolerance is not None and budget < (one := bytes_per_node(tolerance)):
+        raise typer.BadParameter(
+            f"{budget} bytes is under one node's {one} at this tolerance",
+            param_hint="--piece-budget",
+        )
+    # A cut run's index at this --out is stale now, whatever this run is.
+    Path(f"{cli_kit.destination(out)}.pieces", "index.json").unlink(missing_ok=True)
     paths, cached, entry = _dem_sources(dem, cache_root(cache, os.environ), known)
     caller = _z_unit(z_unit) or (entry.z_unit if entry else None)
     given = None
@@ -923,7 +977,40 @@ def mesh(
             except DomainError as exc:
                 raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     try:
-        opened = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
+        planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
+        meta, part, grid = planned.meta, None, planned.grid
+        if tolerance is not None and domain is not None:  # one cell is the uncut run
+            cells = partition(
+                meta.cols, meta.rows, tolerance, pieces=pieces or 1, piece_budget=budget
+            )
+            if cells.nx * cells.ny > 1:
+                part = _cut_partition(planned, tolerance, cells, pieces or 1, budget)
+        if part is not None:  # each of these describes one mesh, which a cut run has not
+            asked = (
+                ("--stats", stats), ("--out-edges", out_edges), ("--record", record_path),
+                ("--land-cover", land_cover), ("--out", out if out.suffix == ".gpkg" else None),
+            )  # fmt: skip
+            for hint, given_option in asked:
+                if given_option is not None:
+                    raise typer.BadParameter("not written for a cut run yet", param_hint=hint)
+            from tin_engine.basin_run import piece_windows
+
+            with _dem_refusals(paths):  # every piece within the cap before any is read
+                plans = {w: piece_plan(planned, w) for w in piece_windows(part).values()}
+                for p in sorted(
+                    plans.values(), key=lambda p: -p.mosaic.meta.rows * p.mosaic.meta.cols
+                ):
+                    check_canvas(p.mosaic, res.memory_budget)
+                planned.repository.check(planned.mosaic)
+            held: Once[DemTile] | RasterMeta = meta
+            checks, opened_seams = None, None
+        else:
+            with clock.phase("decode"), _dem_refusals(paths):
+                opened = assemble_dem(planned, res)
+            # What is read later comes out of `opened`, which then goes, so the
+            # tile's one reference is the holder `_dem_mesh` empties.
+            checks, opened_seams, held = opened.checks, opened.seams, Once(opened.tile)
+            del opened
     except NotCached as exc:
         area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
         if bbox is not None:
@@ -933,15 +1020,11 @@ def mesh(
         flags = " ".join(filter(None, (area, frame, store)))
         run = f"rasputin fetch {shlex.quote(dem[0])} {flags}".rstrip()
         raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
-    # What is read later comes out of `opened`, which then goes, so the
-    # tile's one reference is the holder `_dem_mesh` empties.
-    plan, grid, source_crs = opened.plan, opened.grid, opened.source_crs
-    dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
-    held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
+    plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
+    dem_crs = meta.crs
     # The clean-up scale is the coarsest coded legend's accuracy (CORINE's
     # 100 m without one), never finer than a DEM cell.
-    cell = max(opened.tile.meta.delta_x, abs(opened.tile.meta.delta_y))
-    del opened
+    cell = max(meta.delta_x, abs(meta.delta_y))
     accuracy = max((m.accuracy_m for m in legends if m.codes), default=100.0)
     derived = derived_cleanup(accuracy, cell).model_dump()
     cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
@@ -959,27 +1042,31 @@ def mesh(
     )
     angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
     angle = angle if start_min_angle is None else start_min_angle
-    dem_run = _dem_mesh(
-        held,
-        ", ".join(map(str, dem)),
-        stride,
-        delaunay,
-        snap_spacing,
-        tolerance,
-        clock,
-        dem_domain,
-        domain.name if domain is not None else "",
-        angle,
-        not no_constraint_feet,
-        found,
-        grid,
-        checks,
-        DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
-        lines,
-        steep,
-        res.threads,
-        vocabulary,
-    )
+    try:
+        dem_run = _dem_mesh(
+            held,
+            ", ".join(map(str, dem)),
+            stride,
+            delaunay,
+            snap_spacing,
+            tolerance,
+            clock,
+            dem_domain,
+            domain.name if domain is not None else "",
+            angle,
+            not no_constraint_feet,
+            found,
+            grid,
+            checks,
+            DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
+            lines,
+            steep,
+            res.threads,
+            vocabulary,
+            part,
+        )
+    except RunError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
     names = [t.name for t in plan.tiles]
     size = f"{meta.cols} columns x {meta.rows} rows"
@@ -1011,9 +1098,11 @@ def mesh(
         values["licence_note"] = escaped_ascii(entry.licence_note)
         values["cite"] = escaped_ascii("; ".join(entry.cite)) or None
     if cached is not None or len(paths) > 1 or paths[0].is_dir():  # the files used
-        seams = opened_seams
         values["dem_tiles"] = escaped_ascii("; ".join(names))
-        values["dem_seams"] = escaped_ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
+        if opened_seams is not None:  # a cut run's are per piece, and reach no file
+            seams = opened_seams
+            said = "; ".join(s.entry() for s in seams)
+            values["dem_seams"] = escaped_ascii(said) or SEAMS_AGREE
     if given is not None:
         how = transform_label(given.crs, dem_crs)
         values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
@@ -1051,7 +1140,7 @@ def mesh(
         # mesh is enforced in _feature_sources). Every coded source's
         # polygons are labelled together over the merged FeatureSet.
         coded = next((s.legend for s in sources if s.legend.codes), None)
-        if coded is not None:
+        if coded is not None and dem_run.cut is None:
             codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
             values["land_cover_codes"] = codes_text
             palette = coded.palette
@@ -1064,6 +1153,42 @@ def mesh(
         if classes.legend is not None:  # names and colours for the .gpkg
             palette = classes.legend.palette
         values |= more
+    if dem_run.cut is not None:
+        from tin_engine.io.mesh_index import ConformityError, MeshIndex
+
+        assert tolerance is not None and part is not None
+        folder = Path(f"{cli_kit.destination(out)}.pieces")
+        folder.mkdir(exist_ok=True)
+        write = functools.partial(
+            _write_piece, folder, out.suffix, values, found, coded, snap_spacing, clock,
+            binary, res.threads, vocabulary,
+        )  # fmt: skip
+
+        def load(window: IndexWindow) -> PieceDem:
+            with clock.phase("decode"), _dem_refusals(paths):
+                return load_piece(planned, plans[window], res)
+
+        try:
+            done = dem_run.cut(load, write)
+        except RunError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--dem") from exc
+        except ConformityError as exc:  # two pieces wrote one seam differently
+            typer.echo(f"Error: {exc}; the piece files are written, and no index", err=True)
+            raise typer.Exit(1) from exc
+        credited = escaped_ascii(", ".join(names))  # the credited tile names
+        if cached is not None and entry is not None:
+            credited = escaped_ascii(f"{cached.source}, {entry.credit}; {credited}")
+        index = MeshIndex(
+            crs=dem_crs, tolerance=tolerance, source=credited,
+            vocabulary=_piece_vocabulary(vocabulary).fingerprint(),
+            partition=done.record, pieces=tuple(done.entries),
+        )  # fmt: skip
+        part_file = folder / "index.json.part"  # written last, whole or not at all
+        part_file.write_text(index.model_dump_json(indent=1), encoding="utf-8")
+        part_file.replace(folder / "index.json")
+        typer.echo(f"{folder / 'index.json'}")
+        typer.echo(f"{len(index.pieces)} pieces and their index.json in {folder}", err=True)
+        return
     build = stride_record if tolerance is None else refined_record
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
@@ -1335,6 +1460,59 @@ def _class_fractions(
             "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
         }
     return assigned.table, assigned.codes, values
+
+
+def _piece_vocabulary(vocabulary: EdgeVocabulary) -> EdgeVocabulary:
+    """The run's vocabulary plus `seam`, for a cut run's piece files."""
+    seam = [p for p in PIECE_VOCABULARY.properties if p.name == "seam"]
+    return EdgeVocabulary(properties=(*vocabulary.properties, *seam))
+
+
+def _write_piece(
+    where: Path,
+    suffix: str,
+    values: Mapping[str, Value],
+    found: FeatureSet | None,
+    coded: Legend | None,
+    spacing: float,
+    clock: PhaseClock,
+    binary: bool,
+    threads: int,
+    vocabulary: EdgeVocabulary,
+    piece: Piece,
+) -> PieceEntry:
+    """``piece``, if it has triangles, as its own ``suffix`` file in ``where``,
+    its record the run's ``values`` and its own; its entry."""
+    from tin_engine.io.mesh_index import PieceCounts, PieceEntry
+
+    file, digest, made = None, None, piece.trimmed
+    if len(made.triangles):
+        codes, codes_text, figures = None, "", dict(values) | dict(piece.values)
+        if coded is not None and found is not None:
+            codes, codes_text = _land_cover(made, found, coded, spacing, clock)
+            figures["land_cover_codes"] = codes_text
+        told = refined_record(triangles=len(made.triangles), threads=threads, **figures)
+        typer.echo(f"piece {'-'.join(map(str, piece.id))}: {summary(told)}", err=True)
+        if suffix == ".vtk":
+            data = write_vtk(
+                made.vertices, triangles=made.triangles, edges=made.edges,
+                edge_masks=made.edge_masks, vocabulary=_piece_vocabulary(vocabulary),
+                fields=file_fields(told), binary=binary, triangle_codes=codes,
+                land_cover_codes=codes_text,
+            )  # fmt: skip
+        else:
+            coded_text = [f"land_cover_codes {codes_text}"] if codes_text else []
+            data = write_ply(
+                made.vertices, faces=made.triangles, ascii=not binary,
+                comments=[*field_comments(file_fields(told)), *coded_text], face_codes=codes,
+            )  # fmt: skip
+        file = "-".join(map(str, piece.id)) + suffix
+        digest = hashlib.sha256(data).hexdigest()
+        (where / file).write_bytes(data)
+    counts = PieceCounts(
+        triangles=len(made.triangles), vertices=len(made.vertices), on_frozen=piece.on_frozen
+    )
+    return PieceEntry(id=piece.id, file=file, sha256=digest, window=piece.window, counts=counts)
 
 
 def _land_cover(
@@ -1656,6 +1834,44 @@ def sources(
     typer.echo(listing(os.environ, cache_root(cache, os.environ), bbox).model_dump_json())
 
 
+def gml_to_gpkg(
+    source: Annotated[Path, typer.Argument(help="The GML 3.2 file to convert.")],
+    out: Annotated[
+        Path, typer.Option("--out", writable=True, help="The GeoPackage to write (.gpkg).")
+    ],
+    crs: Annotated[
+        str | None, typer.Option("--crs", help="The CRS, when the geometries name none.")
+    ] = None,
+) -> None:
+    """Convert a GML 3.2 file of surfaces to a GeoPackage, once, for --features and the catalogue.
+
+    One table of the file's feature type: a row per feature with a surface,
+    its gml:id and its plain values as columns, in the file's CRS. The file
+    is written as OUT.part and renamed onto OUT when finished.
+    """
+    if out.suffix.lower() != ".gpkg":
+        raise typer.BadParameter(f"{out} must end in .gpkg", param_hint="--out")
+    target = cli_kit.destination(out)
+    part = target.with_name(target.name + ".part")
+    part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
+    try:
+        with source.open("rb") as stream, closing(create_sqlite(part)) as conn:
+            done = gml_to_geopackage(stream, conn, crs=crs)
+    except (OSError, ValueError) as exc:
+        part.unlink(missing_ok=True)
+        raise typer.BadParameter(f"{source}: {exc}") from exc
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, target)
+    typer.echo(
+        f"{out}: {done.features} features of {done.layer} in {crs_label(done.crs)},"
+        f" {done.without_surface} without a surface; columns {', '.join(done.columns)}",
+        err=True,
+    )
+    typer.echo(f"{out}")
+
+
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
     """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
     ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
@@ -1736,10 +1952,10 @@ def _open_dem(
     target_crs: str | None = None,
     res: Resources | None = None,
     z_unit: ZUnit | None = None,
-) -> DemInput:
-    """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile; every
-    refusal, the reader's, the mosaic's or the domain's extent, is a usage
-    error in its own words."""
+) -> DemPlan:
+    """``--dem`` and ``--bbox`` or the read ``--domain`` planned, from headers;
+    every refusal, the reader's, the mosaic's or the domain's extent, is a
+    usage error in its own words."""
     try:
         bounds = (
             None
@@ -1748,17 +1964,23 @@ def _open_dem(
         )
     except ValidationError as exc:
         raise typer.BadParameter(cli_kit.words(exc), param_hint="--bbox") from exc
+    with clock.phase("decode"), _dem_refusals(dem):
+        request = DemRequest(
+            sources=dem,
+            cached=cached,
+            bounds=bounds,
+            domain=domain,
+            target_crs=target_crs,
+            z_unit=z_unit,
+        )
+        return plan_dem(request, res)
+
+
+@contextmanager
+def _dem_refusals(dem: tuple[Path, ...]) -> Iterator[None]:
+    """A refusal of the DEM's plan or read made a usage error in its own words."""
     try:
-        with clock.phase("decode"):
-            request = DemRequest(
-                sources=dem,
-                cached=cached,
-                bounds=bounds,
-                domain=domain,
-                target_crs=target_crs,
-                z_unit=z_unit,
-            )
-            return open_dem(request, res)
+        yield
     except NotCached:
         raise
     except OutCrsRequiredError as exc:  # one unwrapped line, outside the panel, to paste
@@ -1775,6 +1997,22 @@ def _open_dem(
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
         raise typer.BadParameter(cli_kit.words(exc), param_hint="--dem") from exc
+
+
+def _cut_partition(
+    planned: DemPlan, tolerance: float, cells: Partition, pieces: int, budget: int
+) -> Partitioned:
+    """The partition of a window of more than one cell, on its lattice."""
+    from tin_engine import basin_run
+
+    window, grid = planned.mosaic.window, planned.grid
+    ask = basin_run.CutAsk(pieces, budget, planned.mosaic.reference, window.row0, window.col0)
+    if grid is not None:  # node (R, K) of a resampled grid is at (K h, -R h)
+        ask = replace(ask, origin=(0.0, 0.0), row0=grid.row0, col0=grid.col0)
+    try:
+        return basin_run.cut_partition(planned.meta, tolerance, cells, ask)
+    except RunError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
 
 
 def _z_unit(option: ZSpelling | None) -> ZUnit | None:
@@ -1959,7 +2197,8 @@ def _line_field(
 class _DemMesh:
     """What ``_dem_mesh`` made: the mesh, then what ``--stats`` reports about
     the run (None where a row does not apply), and the record entries it knows
-    (``run_record``'s builder arguments)."""
+    (``run_record``'s builder arguments). A cut run's meshes are its pieces',
+    in ``cut``, and ``trimmed`` is then empty."""
 
     trimmed: Trimmed
     meta: RasterMeta
@@ -1969,24 +2208,27 @@ class _DemMesh:
     start_triangles: int | None
     values: Mapping[str, Value]
     feature_counts: tuple[int, int] | None = None
+    cut: RunCut | None = None
 
 
-class _Once[T]:
-    """A value handed on once: `take` returns it and forgets it,
-    so the holder keeps nothing alive after; a second `take` is a bug."""
+#: A cut run's `_DemMesh.trimmed`: its meshes are its pieces'.
+_NO_MESH = Trimmed(np.zeros((0, 3)), np.zeros((0, 3), np.uint32), np.zeros((0, 2), np.uint32),
+                   np.zeros(0, np.uint32), 0)  # fmt: skip
 
-    def __init__(self, value: T) -> None:
-        self._value: T | None = value
 
-    def take(self) -> T:
-        value, self._value = self._value, None
-        if value is None:  # explicit: `python -O` strips an assert
-            raise RuntimeError("_Once.take called twice")
-        return value
+@dataclass(frozen=True, slots=True)
+class _Tuning:
+    """What every refinement call of a run takes besides ``How``: the start's
+    quality gain, the line and slope tolerances, and the thread count."""
+
+    gain: float = -1.0
+    lines: ToleranceLines | None = None
+    steep: ToleranceSlope | None = None
+    threads: int = 0
 
 
 def _dem_mesh(
-    held: _Once[DemTile],
+    held: Once[DemTile] | RasterMeta,
     dem: str,
     stride: int | None,
     delaunay: bool,
@@ -2005,8 +2247,11 @@ def _dem_mesh(
     steep: ToleranceSlope | None = None,
     threads: int = 0,
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY,
+    cut: Partitioned | None = None,
 ) -> _DemMesh:
-    """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
+    """Subsample, triangulate, sample or refine, and trim ``held``'s tile
+    (with ``cut``, ``held`` is the window's grid alone, and the cut run is
+    returned to be run).
 
     Without ``tolerance``, z is sampled bilinearly at the stride grid. With it,
     the stride grid is the start mesh, refined against the DEM's nodes; with
@@ -2017,14 +2262,16 @@ def _dem_mesh(
     node's foot on a nearby constraint segment. With ``grid`` and its
     ``checks``, the refined mesh is checked against the source's nodes after
     the tile is dropped. ``lines`` and ``steep`` build the line and slope
-    tolerances on the tile's grid, passed to every refinement call.
+    tolerances on the tile's grid, passed to every refinement call. With
+    ``cut``, a partition of more than one cell, the start has the partition
+    lines too, and the run is cut into pieces.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
     engine's own words, and no file is written.
     """
-    tile = held.take()
-    meta = tile.meta
+    tile = held.take() if isinstance(held, Once) else None
+    meta = held if isinstance(held, RasterMeta) else cast(DemTile, tile).meta
     values: dict[str, Value] = {}
     domain_vertices = domain_holes = None
     feature_counts = None
@@ -2036,10 +2283,20 @@ def _dem_mesh(
         shape = f"{plural(domain_holes, 'hole', 'holes')}, {domain_vertices} vertices"
         values["domain"] = f"{domain_name}: 1 outline, {shape}"
         values["start_mesh"] = "the domain outline"
-        run = _engine(started.vertices, chains, delaunay, spacing, clock)
+        vertices = started.vertices
+        if cut is not None:  # the partition lines, as breaklines with the seam bit
+            seam = PIECE_VOCABULARY.mask("seam")
+            for xy in cut_lines(domain.polygon, cut.xs, cut.ys):
+                at = list(range(len(vertices), len(vertices) + len(xy)))
+                chains.append((at, ChainRole.Breakline, seam))
+                vertices = np.concatenate([vertices, xy])
+        run = _engine(vertices, chains, delaunay, spacing, clock)
         if features is not None:
             values["start_mesh"] = "the domain outline and the feature lines"
-            feature_counts = (len(chains) - len(rings), len(started.vertices) - domain_vertices)
+            feature_counts = (
+                len(started.chains) - len(rings),
+                len(started.vertices) - domain_vertices,
+            )
             noded = len(run.noded.vertices) if run.noded is not None else 0
             typer.echo(
                 f"lines: {len(started.vertices)} vertices read, {noded} after joining "
@@ -2062,6 +2319,7 @@ def _dem_mesh(
     refined = tolerance is not None
     if tolerance is None:
         mesh_xy = np.asarray(run.mesh.vertices)
+        assert tile is not None  # only a cut run comes without its tile
         with clock.phase("sample"):
             z, valid = sample(to_core(tile), mesh_xy)
         with clock.phase("trim"):
@@ -2074,114 +2332,30 @@ def _dem_mesh(
                 valid=valid,
             )
     else:
-        field = None
-        if lines is not None:
-            field, line_values = _line_field(lines, tile, tolerance)
-            values |= line_values
-        slope = None
-        if steep is not None:
-            with clock.phase("slope"):
-                ramp = (steep.near_m, tolerance, steep.start_deg, steep.end_deg)
-                slope = SlopeTolerance(to_core(tile), *ramp, threads=threads)
-        t0 = time.perf_counter_ns()
-        out = refine(
-            to_core(tile),
-            run.mesh,
-            edges,
-            masks,
-            tolerance=tolerance,
-            min_angle_deg=min_angle,
-            constraint_feet=feet,
-            min_gain_deg=gain,
-            field=field,
-            slope=slope,
-            threads=threads,
-        )
-        _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
-        if not out.ok():
-            raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
-        strip = edge_strip.generate(to_core(tile), out, clock)  # while the tile is held
-        if grid is None or checks is None:
-            final = edge_strip.run(
-                to_core(tile), strip, out, tolerance, clock, feet, field, slope, threads
-            )
-            del tile
-            # Refine's maximum and the strip run's make an upper bound.
-            max_error = max(out.max_error, final.max_error)
-            near_error = max(out.max_error_near, final.max_error_near)
-            share = max(out.max_slope_share, final.max_slope_share)
-            inside, tight = out.slope_nodes
-            values["line_check_dem_nodes_inserted"] = final.nodes_inserted
-        else:
-            del tile  # the final check runs without the target tile
-            final, n = final_check.run(
-                out, grid, checks, tolerance, clock, strip, feet, field, slope, threads
-            )
-            max_error, near_error = final.max_error, final.max_error_near
-            share = final.max_slope_share
-            inside, tight = final.slope_nodes
-            values |= {
-                "resampled_grid_max_error_m": out.max_error,
-                "dem_nodes_checked": n,
-                "dem_check_points_inserted": final.inserted,
-                "dem_check_rounds": final.rounds,
-            }
-        if not final.ok():
-            raise typer.BadParameter(f"{dem}: {final.message}", param_hint="--dem")
-        values |= {
-            "dem_nodes_at_vertices": final.coincident,
-            "dem_nodes_at_vertices_max_error_m": final.coincident_max_error,
-            "line_points_checked": strip.size,
-            "line_max_error_m": final.strip_max_error,
-            "line_points_on_nodata": strip.no_data,
-            "line_points_refused": final.strip_refused,
-            "line_points_refused_max_error_m": final.strip_refused_max_error,
-            "line_points_inserted": final.strip_inserted,
-            "line_points_duplicate": strip.duplicates,
-            "triangles_flat_as_written": final.flat_as_written,
-            "edges_not_delaunay_as_written": final.illegal_as_written,
-        }
-        with clock.phase("trim"):
-            trimmed = trim(
-                vertices=final.vertices,
-                triangles=final.triangles,
-                edges=final.edges,
-                edge_masks=final.masks,
-                z=final.z,
-                valid=final.valid,
-            )
-        values |= {
-            "start_min_angle_deg": min_angle,
-            "start_quality_gain_deg": gain,
-            "snap_to_lines": "on" if feet else "off",
-            "tolerance_m": tolerance,
-            "max_error_m": max_error,
-            "max_error_near_lines_m": near_error if field is not None else None,
-            "dem_nodes_outside_mesh": final.uncovered,
-            "refinement_rounds": out.rounds,
-            "points_inserted": out.inserted,
-            "points_inserted_on_nodata": out.carved,
-            "edge_flips": out.flips,
-            "start_quality_points_inserted": out.quality_inserted,
-            "start_quality_points_skipped": out.quality_skipped,
-            "start_quality_points_without_gain": out.quality_no_gain,
-            "start_quality_points_snapped_to_lines": out.quality_feet,
-            "start_quality_lines_split": out.quality_line_splits,
-            "points_snapped_to_lines": out.feet,
-            "snaps_refused": out.feet_refused,
-            "final_check_points_snapped_to_lines": final.feet,
-            "final_check_snapped_points_added_anyway": final.feet_fallback,
-            "start_vertices_between_dem_nodes": _off_node(np.asarray(run.mesh.vertices), meta),
-        }
-        if steep is not None:
-            values |= {
-                "tolerance_slope_m": steep.near_m,
-                "tolerance_slope_deg": f"{steep.start_deg:g} to {steep.end_deg:g}",
-                "slope_nodes_tightened": (
-                    f"{tight} of {inside} DEM nodes ({100 * tight / max(inside, 1):.1f} %)"
-                ),
-                "max_error_slope_share_of_tolerance": share,
-            }
+        how = How(dem, tolerance, min_angle, feet, grid, checks)
+        refine_with = functools.partial(_refined, tuning=_Tuning(gain, lines, steep, threads))
+        if cut is not None:
+            from tin_engine.basin_run import cut_run
+
+            start, part = run.mesh, cut
+
+            def run_cut(
+                load: Callable[[IndexWindow], PieceDem], write: Callable[[Piece], PieceEntry]
+            ) -> CutRun:
+                return cut_run(
+                    load, start, edges, masks, part, spacing, how, clock, refine_with, write
+                )
+
+            return _DemMesh(
+                _NO_MESH, meta, domain_vertices, domain_holes, None, None, values,
+                feature_counts, run_cut,
+            )  # fmt: skip
+        assert tile is not None
+        once = Once(tile)
+        del tile  # `_refined` drops the last reference before the final check
+        made = refine_with(once, run.mesh, edges, masks, how, clock)
+        trimmed = made.trimmed
+        values |= made.values
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
             f"{dem} has no data under any triangle; nothing to write", param_hint="--dem"
@@ -2197,6 +2371,145 @@ def _dem_mesh(
         values=values,
         feature_counts=feature_counts,
     )
+
+
+def _refined(
+    held: Once[DemTile],
+    start: IndexedMesh2,
+    edges: npt.NDArray[np.uint32],
+    masks: npt.NDArray[np.uint32],
+    how: How,
+    clock: PhaseClock,
+    frozen: int = 0,
+    heights: Mapping[int, float] | None = None,
+    *,
+    tuning: _Tuning,
+) -> Refined:
+    """Refine from ``start``, then the edge strip, or the final check with a
+    grid, which runs after the tile is dropped; then trim. No vertex goes on
+    an edge whose mask meets ``frozen``, and no strip point lies on one;
+    ``heights`` are a piece's seam records' z, written over the refined z of
+    those vertices."""
+    tile = held.take()
+    meta = tile.meta
+    tolerance, feet, threads = how.tolerance, how.feet, tuning.threads
+    values: dict[str, Value] = {}
+    field = None
+    if tuning.lines is not None:
+        field, line_values = _line_field(tuning.lines, tile, tolerance)
+        values |= line_values
+    slope, steep = None, tuning.steep
+    if steep is not None:
+        with clock.phase("slope"):
+            ramp = (steep.near_m, tolerance, steep.start_deg, steep.end_deg)
+            slope = SlopeTolerance(to_core(tile), *ramp, threads=threads)
+    t0 = time.perf_counter_ns()
+    out = refine(
+        to_core(tile),
+        start,
+        edges,
+        masks,
+        tolerance=tolerance,
+        min_angle_deg=how.min_angle,
+        constraint_feet=feet,
+        frozen_mask=frozen,
+        min_gain_deg=tuning.gain,
+        field=field,
+        slope=slope,
+        threads=threads,
+    )
+    _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
+    if not out.ok():
+        raise typer.BadParameter(f"{how.dem}: {out.message}", param_hint="--dem")
+    strip = edge_strip.generate(to_core(tile), out, clock, frozen)  # while the tile is held
+    if how.grid is None or how.checks is None:
+        final = edge_strip.run(
+            to_core(tile), strip, out, tolerance, clock, feet, field, slope, threads, frozen
+        )
+        del tile
+        # Refine's maximum and the strip run's make an upper bound.
+        max_error = max(out.max_error, final.max_error)
+        near_error = max(out.max_error_near, final.max_error_near)
+        share = max(out.max_slope_share, final.max_slope_share)
+        inside, tight = out.slope_nodes
+        values["line_check_dem_nodes_inserted"] = final.nodes_inserted
+    else:
+        del tile  # the final check runs without the target tile
+        final, n = final_check.run(
+            out, how.grid, how.checks, tolerance, clock, strip, feet, field, slope, threads,
+            frozen,
+        )  # fmt: skip
+        max_error, near_error = final.max_error, final.max_error_near
+        share = final.max_slope_share
+        inside, tight = final.slope_nodes
+        values |= {
+            "resampled_grid_max_error_m": out.max_error,
+            "dem_nodes_checked": n,
+            "dem_check_points_inserted": final.inserted,
+            "dem_check_rounds": final.rounds,
+        }
+    if not final.ok():
+        raise typer.BadParameter(f"{how.dem}: {final.message}", param_hint="--dem")
+    values |= {
+        "dem_nodes_at_vertices": final.coincident,
+        "dem_nodes_at_vertices_max_error_m": final.coincident_max_error,
+        "line_points_checked": strip.size,
+        "line_max_error_m": final.strip_max_error,
+        "line_points_on_nodata": strip.no_data,
+        "line_points_refused": final.strip_refused,
+        "line_points_refused_max_error_m": final.strip_refused_max_error,
+        "line_points_inserted": final.strip_inserted,
+        "line_points_duplicate": strip.duplicates,
+        "triangles_flat_as_written": final.flat_as_written,
+        "edges_not_delaunay_as_written": final.illegal_as_written,
+    }
+    z = np.asarray(final.z)
+    if heights:
+        z = z.copy()
+        z[list(heights)] = list(heights.values())
+    with clock.phase("trim"):
+        trimmed = trim(
+            vertices=final.vertices,
+            triangles=final.triangles,
+            edges=final.edges,
+            edge_masks=final.masks,
+            z=z,
+            valid=final.valid,
+        )
+    values |= {
+        "start_min_angle_deg": how.min_angle,
+        "start_quality_gain_deg": tuning.gain,
+        "snap_to_lines": "on" if feet else "off",
+        "tolerance_m": tolerance,
+        "max_error_m": max_error,
+        "max_error_near_lines_m": near_error if field is not None else None,
+        "dem_nodes_outside_mesh": final.uncovered,
+        "refinement_rounds": out.rounds,
+        "points_inserted": out.inserted,
+        "points_inserted_on_nodata": out.carved,
+        "edge_flips": out.flips,
+        "start_quality_points_inserted": out.quality_inserted,
+        "start_quality_points_skipped": out.quality_skipped,
+        "start_quality_points_without_gain": out.quality_no_gain,
+        "start_quality_points_snapped_to_lines": out.quality_feet,
+        "start_quality_lines_split": out.quality_line_splits,
+        "points_snapped_to_lines": out.feet,
+        "snaps_refused": out.feet_refused,
+        "final_check_points_snapped_to_lines": final.feet,
+        "final_check_snapped_points_added_anyway": final.feet_fallback,
+        "start_vertices_between_dem_nodes": _off_node(np.asarray(start.vertices), meta),
+        "nodata_vertices_removed": trimmed.dropped,
+    }
+    if steep is not None:
+        values |= {
+            "tolerance_slope_m": steep.near_m,
+            "tolerance_slope_deg": f"{steep.start_deg:g} to {steep.end_deg:g}",
+            "slope_nodes_tightened": (
+                f"{tight} of {inside} DEM nodes ({100 * tight / max(inside, 1):.1f} %)"
+            ),
+            "max_error_slope_share_of_tolerance": share,
+        }
+    return Refined(out, final, z, trimmed, values, final.on_frozen)
 
 
 def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> None:
@@ -2725,7 +3038,7 @@ app.callback()(main)
 for panel, commands in (
     (MESHING, (mesh, palette)),
     (CATCHMENTS, (catchment, station_catchments)),
-    (DATA, (fetch, fetch_stations, sources)),
+    (DATA, (fetch, fetch_stations, sources, gml_to_gpkg)),
     (OTHER, (version,)),
 ):
     for command in commands:

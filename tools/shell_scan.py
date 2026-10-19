@@ -69,6 +69,11 @@ SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh", "rbash", "fish", "m
 PROGRAM_FLAG = {"perl": "e", "ruby": "e", "node": "e"} | dict.fromkeys(SHELLS, "c")
 PLAIN_PARAMETER = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 PARAMETER = re.compile(r"\$[\w@*#?$!-]?\w*")
+#: The names a read relies on, which an exempt program may not rebind.
+READ_NAMES = {"open", "json", "pathlib", "Path"}
+#: Names that patch, reflect or run code; an exempt program uses none of them.
+REFLECTION = {"setattr", "delattr", "getattr", "vars", "locals", "globals", "exec", "eval",
+              "compile", "breakpoint", "__import__", "__builtins__", "builtins"}  # fmt: skip
 EXPANSION = re.compile(r"\$(\{[^}]*\}|\([^)]*\)|[\w@*#?$!-]+)|`[^`]*`")
 
 
@@ -99,7 +104,8 @@ class _Scan:
     def __init__(self, text: str) -> None:
         self.text, self.at = text, 0
         self.found: list[Simple] = []
-        self.pending: list[tuple[Simple, str, bool]] = []  # heredocs: owner, delimiter, <<-
+        # heredocs: owner, delimiter, <<-, an unquoted delimiter
+        self.pending: list[tuple[Simple, str, bool, bool]] = []
         self.backtick = False
         self.assigned: dict[str, str] = {}  # NAME=value commands met so far on the line
 
@@ -107,7 +113,7 @@ class _Scan:
         """Read commands up to `close` (`)` or a backtick) or, at the top, the end."""
         words: list[str] = []
         writes: list[str] = []
-        heredocs: list[tuple[str, bool]] = []
+        heredocs: list[tuple[str, bool | None, bool]] = []
         while True:
             self.blanks()
             at, text = self.at, self.text
@@ -227,7 +233,7 @@ class _Scan:
             self.at = match.end()
         return text[start : self.at]
 
-    def redirect(self, writes: list[str], heredocs: list[tuple[str, bool]]) -> None:
+    def redirect(self, writes: list[str], heredocs: list[tuple[str, bool | None, bool]]) -> None:
         match = REDIRECT.match(self.text, self.at)
         assert match is not None
         self.at = match.end()
@@ -235,9 +241,10 @@ class _Scan:
         self.blanks()
         if self.at >= len(self.text) or self.text[self.at] in WORD_END:
             raise UnreadableError
-        target = self.word()
-        if op in ("<<", "<<-"):  # quoted or not: a body's expansions are not read here
-            heredocs.append((target, op == "<<-"))
+        start, target = self.at, self.word()
+        if op in ("<<", "<<-", "<<<"):  # a here-string (`<<<`) has None for `<<-`
+            expands = not any(c in self.text[start : self.at] for c in "'\"\\")
+            heredocs.append((target, None if op == "<<<" else op == "<<-", expands))
         elif op == ">&" and (target.isdigit() or target == "-"):
             return
         elif (op in (">", ">>", ">|", "<>", ">&") or prefix == "&") and not ignored(target):
@@ -246,7 +253,7 @@ class _Scan:
     def read_heredocs(self) -> None:
         """Consume the bodies of the heredocs opened on the line just ended."""
         text = self.text
-        for owner, delimiter, tabs in self.pending:
+        for owner, delimiter, tabs, expands in self.pending:
             body: list[str] = []
             while True:
                 if self.at >= len(text):
@@ -259,10 +266,13 @@ class _Scan:
                     break
                 body.append(line + "\n")
             owner.heredoc = "".join(body)
-            self.finish_heredoc(owner)
+            rewritten = expands and any(c in owner.heredoc for c in "$`\\")
+            self.finish_heredoc(owner, owner.heredoc, rewritten)
         self.pending = []
 
-    def finish(self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool]]) -> None:
+    def finish(
+        self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool | None, bool]]
+    ) -> None:
         if words and all(ASSIGNMENT.match(word) for word in words):  # `H=.git/harness;`
             self.assigned |= dict(word.split("=", 1) for word in words)
         while words and (words[0] in RESERVED or ASSIGNMENT.match(words[0])):
@@ -274,7 +284,7 @@ class _Scan:
         simple = classify(words, writes)
         # A variable assigned earlier on the line is read as its value: `$H/x`.
         simple.writes = [PLAIN_PARAMETER.sub(self.value, w) for w in simple.writes]
-        self.pending += [(simple, delimiter, tabs) for delimiter, tabs in heredocs]
+        self.pending += [(simple, d, tabs, x) for d, tabs, x in heredocs if tabs is not None]
         if simple.argv[:1] == ["eval"]:  # eval runs its words as a command line
             self.nested(" ".join(simple.argv[1:]))
             if not simple.writes:
@@ -283,19 +293,30 @@ class _Scan:
         if simple.argv and base(simple.argv[0]) in SHELLS and simple.program is not None:
             self.nested(simple.program)
             simple.program = None
+        for word, tabs, _ in heredocs:
+            if tabs is None:  # a here-string: the word and a newline, on stdin
+                self.finish_heredoc(simple, word + "\n", substituted(word))
 
     def value(self, match: re.Match[str]) -> str:
         return self.assigned.get(match.group(1) or match.group(2), match.group(0))
 
-    def finish_heredoc(self, simple: Simple) -> None:
-        """A heredoc is the program of an interpreter reading stdin; a shell's is parsed."""
-        if not simple.argv or simple.script not in (None, "-") or simple.program is not None:
+    def finish_heredoc(self, simple: Simple, body: str, rewritten: bool) -> None:
+        """A stdin body is parsed by a shell, and is the program of an interpreter reading stdin.
+
+        A shell parses every stdin body whatever its `-c` program, since that program may
+        read stdin as commands (`bash -c bash`). An interpreter's body is appended, as zsh
+        joins them all; `rewritten` marks a body the shell may rewrite before the
+        interpreter reads it, which makes the command unknown. An interpreter's inline
+        `-c`/`-e` program, or a script operand of either, keeps stdin as data.
+        """
+        name = base(simple.argv[0]) if simple.argv else ""
+        if not (PYTHON.fullmatch(name) or name in PROGRAM_FLAG) or simple.script not in (None, "-"):
             return
-        name = base(simple.argv[0])
         if name in SHELLS:
-            self.nested(simple.heredoc or "")
-        elif PYTHON.fullmatch(name) or name in PROGRAM_FLAG:
-            simple.program = simple.heredoc
+            self.nested(body)
+        elif interpreter(name, simple.argv[1:])[0] is None:
+            simple.program = (simple.program or "") + body
+            simple.unknown = simple.unknown or rewritten
 
     def nested(self, command: str) -> None:
         inner = parse(command)
@@ -316,7 +337,14 @@ def classify(words: list[str], writes: list[str]) -> Simple:
     simple.unknown = unknown or (stdin_args and name in {*WRITER_ARGS, *COPIERS, "sed"})
     if PYTHON.fullmatch(name) or name in PROGRAM_FLAG:
         simple.program, simple.script = interpreter(name, args)
+        rewritten = simple.program is not None and substituted(simple.program)
+        simple.unknown = simple.unknown or (name not in SHELLS and rewritten)
     return simple
+
+
+def substituted(text: str) -> bool:
+    """The shell may splice text into it: it holds `$` or a backtick."""
+    return "$" in text or "`" in text
 
 
 def unwrap(argv: list[str]) -> tuple[list[str], list[str], bool]:
@@ -446,13 +474,85 @@ def candidates(simple: Simple) -> list[str]:
             tree = ast.parse(program)
         except (SyntaxError, ValueError):
             return re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
+        exempt = set() if simple.unknown else read_literals(tree)
         return [
             node.value
             for node in ast.walk(tree)
             if isinstance(node, ast.Constant)
             and isinstance(node.value, str)
             and node.value
-            and not any(c.isspace() for c in node.value)
+            and (substituted(node.value) or not any(c.isspace() for c in node.value))
+            and id(node) not in exempt
         ]
     tokens = re.findall(r"[^\s'\"(),;<>{}\[\]=]+", program)
     return tokens + operands(simple.argv[1:], set())
+
+
+def literal(node: ast.expr, among: tuple[str, ...] = ()) -> bool:
+    """A string literal; one of `among` when that is given."""
+    found = isinstance(node, ast.Constant) and isinstance(node.value, str)
+    return found and (not among or getattr(node, "value", None) in among)
+
+
+def literal_keywords(call: ast.Call) -> bool:
+    """Every keyword is `encoding` or `errors`, given as a string literal."""
+    return all(k.arg in ("encoding", "errors") and literal(k.value) for k in call.keywords)
+
+
+def opened(node: ast.expr, name: str = "open") -> ast.expr | None:
+    """LIT of `open(LIT)` or `open(LIT, M)` with M a read mode (or `Path(LIT)`), else None."""
+    if not isinstance(node, ast.Call) or not node.args or not literal(node.args[0]):
+        return None
+    func, modes = node.func, node.args[1:]
+    if name == "open":
+        ok = len(modes) < 2 and all(literal(m, ("r", "rb", "rt")) for m in modes)
+        ok = ok and isinstance(func, ast.Name) and func.id == "open" and literal_keywords(node)
+    else:
+        named = isinstance(func, ast.Name) and func.id == "Path"
+        dotted = isinstance(func, ast.Attribute) and func.attr == "Path"
+        owner = getattr(func, "value", None)
+        dotted = dotted and isinstance(owner, ast.Name) and owner.id == "pathlib"
+        ok = not modes and not node.keywords and (named or dotted)
+    return node.args[0] if ok else None
+
+
+def read_of(node: ast.AST) -> ast.expr | None:
+    """The literal a call reads and nothing else reaches: the three exempt shapes."""
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return None
+    func, plain = node.func, not node.args and not node.keywords
+    if func.attr == "load" and isinstance(func.value, ast.Name) and func.value.id == "json":
+        return opened(node.args[0]) if len(node.args) == 1 and not node.keywords else None
+    if func.attr in ("read", "readlines") and plain:
+        return opened(func.value)
+    if func.attr in ("read_text", "read_bytes") and not node.args and literal_keywords(node):
+        return opened(func.value, "Path")
+    return None
+
+
+def guarded(node: ast.AST) -> bool:
+    """True when the node imports, rebinds, patches or reflects in a way a read cannot allow."""
+    if isinstance(node, ast.Import):
+        return any(a.name not in ("json", "pathlib") or a.asname for a in node.names)
+    if isinstance(node, ast.ImportFrom):
+        names = [(a.name, a.asname) for a in node.names]
+        return node.module != "pathlib" or node.level != 0 or names != [("Path", None)]
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        return bool(READ_NAMES & set(node.names))
+    if isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
+        return True
+    if isinstance(node, ast.Name):
+        stored = not isinstance(node.ctx, ast.Load) and node.id in READ_NAMES
+        return stored or node.id in REFLECTION or node.id.startswith("_")
+    if isinstance(node, ast.Attribute):
+        return node.attr.startswith("_")
+    bound = [getattr(node, "name", None), getattr(node, "rest", None), getattr(node, "arg", None)]
+    return not isinstance(node, ast.alias) and bool(READ_NAMES & set(bound))
+
+
+def read_literals(tree: ast.AST) -> set[int]:
+    """The ids of the literals that flow only into a read, or none when any node is guarded."""
+    nodes = list(ast.walk(tree))
+    if any(guarded(node) for node in nodes):
+        return set()
+    return {id(lit) for node in nodes if (lit := read_of(node)) is not None}

@@ -50,6 +50,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "geodesy": "crs io.models",  # 40: metres near a point, geodesic areas
         "gauge": "hydrography",
         "reference": "io.models",
+        "decompose": "",  # 23c: the partition rule; reads no machine, imports nothing
     },
     {  # L2: io/ codecs, and the one module that opens a connection
         "io": "io.ply io.vtk_legacy",
@@ -75,6 +76,11 @@ LAYERS: tuple[dict[str, str], ...] = (
         "final_check": "_core stats target_grid",
         "catchment_core": "_core io.models raster",
         "border_simplify": "_core",  # 32: land-cover borders within a band
+        "pieces": "_core io.mesh_index landcover",  # 23c: a piece's files; _core for types
+        "basin_run": "_core decompose elevation features io.mesh_index io.models pieces raster"
+                     " refine_job run_record stats target_grid",  # 23c: the cut run
+        # 23c-3: what one window's refine takes and gives, cut or not
+        "refine_job": "_core elevation run_record target_grid",
         "land_cover_fractions": "_core crs io.models io.repository",  # 26b: class_areas
         "_core": "",
     },
@@ -87,6 +93,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "catchment_batch": "catchment crs gauge geodesy hydrography io.repository reference"
                            " resources",
         "fetch": "",
+        "gml_import": "crs io.geopackage_write io.gml",  # 73: GML 3.2 into a GeoPackage
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http io.geojson sources",
@@ -98,13 +105,14 @@ LAYERS: tuple[dict[str, str], ...] = (
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core catchment catchment_batch chains legends cli_kit crs dem_input domain"
-               " edge_strip elevation feature_input features fetch.features fetch.http fetch.nve"
-               " fetch.plan fetch.run final_check gauge grid_domain hydrography io.cog"
-               " io.domain_file io.geojson io.geopackage_write io.models io.ply io.repository"
+        "cli": "_core basin_run catchment catchment_batch chains legends cli_kit crs dem_input"
+               " domain decompose edge_strip elevation feature_input features fetch.features"
+               " fetch.http fetch.nve fetch.plan fetch.run final_check gauge gml_import grid_domain"
+               " hydrography io.cog io.domain_file io.geojson io.geopackage_write io.mesh_index"
+               " io.models io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " mcp.http mcp.server mosaic palettes plugins raster resources run_record"
-               " source_report sources stats target_grid tin_engine tolerance_field",
+               " mcp.http mcp.server mosaic palettes plugins raster refine_job resources"
+               " run_record source_report sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's

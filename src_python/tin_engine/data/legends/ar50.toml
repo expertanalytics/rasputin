@@ -1,0 +1,67 @@
+# NIBIO's AR50 land-resource map, land type (arealtype). Codes: SOSI AR50
+# 2022-05-23 (ar50.xsd, English names). Colours: NIBIO, Presentasjonsregler
+# AR50, 12 June 2026, except 99, which NIBIO leaves unfilled. Positional
+# accuracy: NIBIO's product sheet, "2 og dårligere". docs/increments/73-gml-vector-source.md, section 4.5.
+name = "ar50"
+attribute = "arealtype"
+code_system = "AR50 arealtype code"
+positional_accuracy_m = 2
+notice = "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
+licence = "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
+preset = "rasputin AR50 NIBIO"
+unlisted = "land"
+
+[edges]
+water = ["land_cover", "water"]
+land = ["land_cover"]
+
+[no_class]
+label = "No polygon; constraint lines"
+colour = "#3c3c3c"
+
+[[class]]
+code = 10
+label = "Developed area and traffic"
+colour = "#e86474"
+
+[[class]]
+code = 20
+label = "Agriculture"
+colour = "#ffd16e"
+
+[[class]]
+code = 30
+label = "Forest"
+colour = "#9ecc73"
+
+[[class]]
+code = 50
+label = "Open firm ground"
+colour = "#d9d9d9"
+
+[[class]]
+code = 60
+label = "Marsh"
+colour = "#73dfff"
+
+[[class]]
+code = 70
+label = "Snow and glacier"
+colour = "#ffffff"
+
+[[class]]
+code = 81
+label = "Freshwater"
+colour = "#91e7ff"
+water = true
+
+[[class]]
+code = 82
+label = "Ocean"
+colour = "#d2ffff"
+water = true
+
+[[class]]
+code = 99
+label = "Not surveyed"
+colour = "#8c8c8c"

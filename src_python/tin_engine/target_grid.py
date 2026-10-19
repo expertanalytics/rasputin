@@ -28,7 +28,7 @@ from shapely.prepared import prep
 from tin_engine.crs import parse_crs, reprojector
 from tin_engine.domain import DomainPolygon
 from tin_engine.grow import grow_mitred
-from tin_engine.io.models import Bounds, DemTile, RasterMeta, valid_mask
+from tin_engine.io.models import Bounds, DemTile, IndexWindow, RasterMeta, valid_mask
 
 #: Source nodes per check-point block side, a chosen value.
 BLOCK = 512
@@ -81,6 +81,9 @@ class SourceWindows(Protocol):
     @property
     def meta(self) -> RasterMeta: ...
 
+    @property
+    def dtype(self) -> np.dtype[Any]: ...
+
     def window(self, r0: int, r1: int, c0: int, c1: int) -> npt.NDArray[Any]: ...
 
 
@@ -94,8 +97,33 @@ class TileWindows:
     def meta(self) -> RasterMeta:
         return self._tile.meta
 
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return self._tile.array.dtype
+
     def window(self, r0: int, r1: int, c0: int, c1: int) -> npt.NDArray[Any]:
         return self._tile.array[r0:r1, c0:c1]
+
+
+class HeldWindows(TileWindows):
+    """`SourceWindows` over the part `tile` of a source whose grid is `meta`,
+    `tile`'s node (0, 0) being the source's `(row0, col0)`: windows in the
+    source's indices, no copy; a read outside the part raises `ValueError`."""
+
+    def __init__(self, meta: RasterMeta, tile: DemTile, row0: int, col0: int) -> None:
+        super().__init__(tile)
+        self._meta, self._row0, self._col0 = meta, row0, col0
+
+    @property
+    def meta(self) -> RasterMeta:
+        return self._meta
+
+    def window(self, r0: int, r1: int, c0: int, c1: int) -> npt.NDArray[Any]:
+        i0, i1, j0, j1 = r0 - self._row0, r1 - self._row0, c0 - self._col0, c1 - self._col0
+        held = self._tile.meta
+        if min(i0, j0) < 0 or i1 > held.rows or j1 > held.cols:
+            raise ValueError(f"rows {r0}-{r1}, columns {c0}-{c1} are outside the part held")
+        return self._tile.array[i0:i1, j0:j1]
 
 
 def default_spacing(meta: RasterMeta, at: tuple[float, float]) -> float:
@@ -133,10 +161,18 @@ def target_grid_for(
 
 
 def source_region(grid: TargetGrid, meta: RasterMeta, grown: Any) -> tuple[Bounds, Any]:
+    """The box the grid's nodes read in the DEM's CRS (`source_box`), and the
+    needed region: `grown` (in the target CRS) moved there and grown by a
+    source cell's diagonal."""
+    box, back = source_box(grid, meta), reprojector(grid.crs, meta.crs)
+    moved = shapely.transform(grown, back)
+    return box, moved.buffer(math.hypot(meta.delta_x, meta.delta_y), join_style="mitre")
+
+
+def source_box(grid: TargetGrid, meta: RasterMeta) -> Bounds:
     """The box the grid's nodes read in the DEM's CRS, grown by two source
-    cells, and the needed region: `grown` (in the target CRS) moved there and
-    grown by a source cell's diagonal. A box across +-180 degrees longitude, or
-    reaching a pole, is refused."""
+    cells. A box across +-180 degrees longitude, or reaching a pole, is
+    refused."""
     n = max(grid.rows, grid.cols)
     x0, y0, x1, y1 = grid.node_box()
     edge = np.linspace(0.0, 1.0, n + 1)
@@ -159,10 +195,7 @@ def source_region(grid: TargetGrid, meta: RasterMeta, grown: Any) -> tuple[Bound
         )
     gx, gy = 2 * meta.delta_x, 2 * meta.delta_y
     (bx0, by0), (bx1, by1) = image.min(axis=0), image.max(axis=0)
-    box = Bounds(x_min=bx0 - gx, y_min=by0 - gy, x_max=bx1 + gx, y_max=by1 + gy)
-    moved = shapely.transform(grown, back)
-    needed = moved.buffer(math.hypot(meta.delta_x, meta.delta_y), join_style="mitre")
-    return box, needed
+    return Bounds(x_min=bx0 - gx, y_min=by0 - gy, x_max=bx1 + gx, y_max=by1 + gy)
 
 
 def _pool[T](threads: int, work: Callable[[T], Any], items: Iterable[T]) -> Iterator[Any]:
@@ -189,7 +222,7 @@ def resample(
     rows_per = rows_per_block(grid.cols) if block_rows is None else block_rows
     m = source.meta
     fill = np.nan if m.nodata is None else m.nodata
-    canvas = np.empty((grid.rows, grid.cols), dtype=source.window(0, 1, 0, 1).dtype)
+    canvas = np.empty((grid.rows, grid.cols), dtype=source.dtype)
 
     def block(r0: int) -> None:
         r1 = min(r0 + rows_per, grid.rows)
@@ -214,9 +247,17 @@ def resample(
 
     for _ in _pool(threads, block, range(0, grid.rows, rows_per)):
         pass
+    # The canvas is adopted, not copied, to save a second grid-sized buffer:
+    # it is C-contiguous of the meta's shape and never handed out writable,
+    # the two conditions for adopting.
+    return DemTile._adopt(grid_meta(grid, m), canvas)
+
+
+def grid_meta(grid: TargetGrid, m: RasterMeta) -> RasterMeta:
+    """The meta of `grid` resampled from a source whose grid is `m`."""
     epsg = parse_crs(grid.crs).to_epsg(min_confidence=100)
     h = float(grid.spacing)
-    meta = RasterMeta(
+    return RasterMeta(
         x_min=grid.col0 * h,
         y_max=-grid.row0 * h,
         delta_x=h,
@@ -232,19 +273,21 @@ def resample(
         z_unit=m.z_unit,
         file_crs=m.file_crs,
     )
-    # The canvas is adopted, not copied, to save a second grid-sized buffer:
-    # it is C-contiguous of the meta's shape and never handed out writable,
-    # the two conditions for adopting.
-    return DemTile._adopt(meta, canvas)
 
 
 def check_point_blocks(
-    grid: TargetGrid, source: SourceWindows, domain: DomainPolygon, threads: int
+    grid: TargetGrid,
+    source: SourceWindows,
+    domain: DomainPolygon,
+    threads: int,
+    within: IndexWindow | None = None,
 ) -> Iterator[Block]:
     """The source's valid nodes in the target CRS, one block per 512 x 512
     source nodes, in row-major block order. A block whose outline's image
     misses the domain is skipped whole; non-finite images and points outside
-    the grid's node rectangle are dropped. `domain` is in the target CRS."""
+    the grid's node rectangle are dropped. `domain` is in the target CRS.
+    With `within`, source nodes outside it are dropped too: only the blocks
+    that meet it, each still judged on its whole outline, read cut to it."""
     m, h = source.meta, float(grid.spacing)
     # GEOS prepared geometries are not thread-safe, and `prep` prepares its
     # argument in place: each block prepares its own copy, as a shared one
@@ -266,6 +309,9 @@ def check_point_blocks(
         hull = shapely.MultiPoint(image).convex_hull.buffer(h) if len(image) else None
         if hull is None or not prep(shapely.from_wkb(wkb)).intersects(hull):
             return None
+        if within is not None:  # the outline above is the whole block's
+            r0, c0 = max(r0, within.row0), max(c0, within.col0)
+            r1, c1 = min(r1, within.row0 + within.rows), min(c1, within.col0 + within.cols)
         z = np.asarray(source.window(r0, r1, c0, c1))
         r, c = np.nonzero(valid_mask(z, m.nodata))
         xy = move(np.column_stack(m.node_xy(r0 + r, c0 + c)))
@@ -274,6 +320,10 @@ def check_point_blocks(
         return xy[keep], z[r[keep], c[keep]].astype(np.float32)
 
     origins = [(r, c) for r in range(0, m.rows, BLOCK) for c in range(0, m.cols, BLOCK)]
+    if within is not None:
+        w = within
+        origins = [(r, c) for r, c in origins if r < w.row0 + w.rows and r + BLOCK > w.row0
+                   and c < w.col0 + w.cols and c + BLOCK > w.col0]  # fmt: skip
     for found in _pool(threads, block, origins):
         if found is not None:
             yield found

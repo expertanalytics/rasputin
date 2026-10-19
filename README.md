@@ -39,7 +39,9 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   (GeoJSON or WKT, in any CRS that pyproj reads).
 - **Features as constraints.** Lakes, land-cover borders, roads and rivers
   (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
-  crosses them.
+  crosses them. A GML 3.2 file of surfaces, such as NIBIO's AR50 land-resource
+  map, is converted once with `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`;
+  the shipped `ar50` legend reads its land type (`arealtype`).
 - **Land-cover labels, cleaned up.** With a CORINE legend, every triangle
   gets the class of the polygon it lies in. First the borders are repaired
   (`--features-repair`), merged between neighbours of one class, snapped onto
@@ -263,12 +265,14 @@ discard the cache every user shares; give `--cache` inside your folder
 instead. Changing the sources takes a restart.
 
 Codex reads the token from an environment variable of its own, in
-`~/.codex/config.toml`:
+`~/.codex/config.toml`. Codex stops waiting for a tool after 60 seconds by
+default, which cuts off a long run, so raise `tool_timeout_sec`:
 
 ```toml
 [mcp_servers.rasputin]
 url = "https://rasputin.example.org/mcp"
 bearer_token_env_var = "RASPUTIN_TOKEN"
+tool_timeout_sec = 3600
 ```
 
 Claude Code takes it as a header:

@@ -115,7 +115,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c); encodes no mesh
                            #   file: picks the io/ writer by suffix and writes
-                           #   its bytes
+                           #   its bytes; `rasputin gml-to-gpkg SOURCE --out
+                           #   OUT [--crs TEXT]` converts a GML 3.2 file once
+                           #   through gml_import, written as OUT.part and
+                           #   renamed onto OUT when finished (73)
   plugins.py               # the rasputin.commands hook: discover(), application(), main(), the console script
   plugin_api.py            # re-exports only: what a plugin may import
   cli_kit.py               # THREADS, destination, cli_resources, words: CLI helpers shared with plugins;
@@ -166,8 +169,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   only, never imports _core
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
-                           #   mesh (15c-2); takes the edge strip, checked in
-                           #   the same loop (15f-3)
+                           #   mesh (15c-2), seams frozen in a cut run (23c);
+                           #   takes the edge strip, checked in the same loop
+                           #   (15f-3)
   edge_strip.py            # generate / run: the edge strip's two _core calls
                            #   (constraint_check_points, refine_strip) and
                            #   their clock rows; holds no geometry (15f-3)
@@ -184,6 +188,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   memory, cgroup limits; Resources (threads, a
                            #   memory budget), resolved once per command (38);
                            #   Pydantic and os only
+  decompose.py             # partition: the window cut into cells under
+                           #   --pieces and --piece-budget, b(T); lines: the
+                           #   partition lines clipped to the domain; pure,
+                           #   reads no machine (23c)
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core.
@@ -194,6 +202,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (bit 9), for a cut run's piece files (23c).
                            #   TerrainFeature: one feature's mask and lines
                            #   (moved from feature_input, audit PR C)
+  pieces.py                # piece_ids, start_slice, seam_records: a cut
+                           #   run's pieces from its one start triangulation,
+                           #   each seam edge fanned at its seam-pass points;
+                           #   numpy, never calls _core (23c)
+  basin_run.py             # cut_partition, cut_run: a cut run piece by piece
+                           #   (windows, seam pass, each piece refined by the
+                           #   refine cli.py hands it, K4); no Typer, refusals
+                           #   are RunError (23c). index.json is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a Legend, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
@@ -264,7 +280,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   source's accuracy and the DEM cell; imports
                            #   feature_input and features
   data/legends/            # the shipped legends: corine, corine-water,
-                           #   clc18_kode, mapbiomas-c11 (.toml; codes,
+                           #   clc18_kode, mapbiomas-c11, ar50 (.toml; codes,
                            #   labels, colours, water, edges, notice,
                            #   positional accuracy)
   palettes.py              # paraview_preset(table, name): a ParaView preset
@@ -286,7 +302,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   file from an environment mapping ($RASPUTIN_DATA,
                            #   else the XDG config directory; 55); a local
                            #   entry is GeoTIFFs or a vector file (.gpkg,
-                           #   .geojson, .json; values "features"); plugins'
+                           #   .geojson, .json; values "features"; a .gml
+                           #   is refused, its .gpkg from gml-to-gpkg taken,
+                           #   73); plugins'
                            #   sources.toml files come through the entry point
                            #   group rasputin.sources (plugin_source_files),
                            #   after the user's, never replacing an entry;
@@ -308,6 +326,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   output root (out_root);
                            #   imports pyproj and shapely, so kept out of
                            #   sources.py; imports nothing from cli.py
+  gml_import.py            # gml_to_geopackage(stream, conn, crs) -> GmlImport:
+                           #   the features io/gml's iter_gml32 decodes into
+                           #   one GeoPackage table of the feature type (gml_id,
+                           #   then the values as INTEGER or TEXT columns),
+                           #   1000 per transaction through io/geopackage_write;
+                           #   the CRS from the srsName or `crs`, east axis
+                           #   first, not reprojected; opens nothing (73)
   toml_data.py             # parse/validate: TOML into a strict Pydantic model,
                            #   refusals naming the file
   fetch/                   # copies remote data to disk; the only package that
@@ -404,7 +429,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   insert_features, the rows of a fetched layer with
                            #   their R-tree entries (63); opens nothing
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,
-                           #   standard library XML; opens nothing (16b)
+                           #   standard library XML; refuses a GML 3.2 file
+                           #   at its namespace declaration (16b);
+                           #   iter_gml32 -> Gml32Feature, one at a time: a
+                           #   GML 3.2 document's surfaces (Polygon, Surface,
+                           #   MultiSurface) and leaf values, streamed with
+                           #   iterparse; opens nothing (73)
     cog.py                 # decode_window: only the blocks a window meets,
                            #   from a BlockSource (an open file or the tile
                            #   cache), its meta `meta.windowed(window)`;

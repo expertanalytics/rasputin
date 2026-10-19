@@ -1,0 +1,32 @@
+piece 0-0-0: 22254 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9998 m).
+piece 0-1-0: 24449 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9984 m).
+piece 1-0-0: 25632 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9993 m).
+piece 1-1-0: 63706 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 10 m).
+piece 1-2-0: 8059 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9972 m).
+piece 2-0-0: 6102 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9984 m).
+piece 2-0-1: 94 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.5434 m).
+piece 2-1-0: 82054 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9995 m).
+piece 2-2-0: 81854 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9977 m).
+piece 3-1-0: 81808 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9992 m).
+piece 3-2-0: 140597 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9998 m).
+piece 4-1-0: 41390 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9997 m).
+piece 4-2-0: 131356 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9999 m).
+13 pieces and their index.json in /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/v/head_t10_p16_th1/velhas.vtk.pieces
+       13.25 real        11.82 user         1.42 sys
+           302727168  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              848324  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  18  voluntary context switches
+                 925  involuntary context switches
+        121979282561  instructions retired
+         42693830294  cycles elapsed
+           248742512  peak memory footprint

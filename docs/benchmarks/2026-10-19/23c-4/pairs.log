@@ -1,0 +1,25 @@
+=== head-r1 start 2026-10-19T02:42:01Z swap 6006.81 load { 3.10 3.16 3.05 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-cellsize/docs/benchmarks/2026-10-19/23c-4/2026-10-19/head-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/meshes/head-r1
+REGRESSION: quarter refine_s[t=12] 0.1658 -> 0.1744 (+5.2 %)
+=== head-r1 exit 1 2026-10-19T02:44:59Z swap 6006.81 load { 2.23 2.90 2.98 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== base-r1 start 2026-10-19T02:44:59Z swap 6006.81 load { 2.23 2.90 2.98 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-cellsize/docs/benchmarks/2026-10-19/23c-4/2026-10-19/base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/meshes/base-r1
+ACCEPTED
+=== base-r1 exit 0 2026-10-19T02:47:55Z swap 6006.81 load { 3.59 2.95 2.96 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== head-r2 start 2026-10-19T02:47:55Z swap 6006.81 load { 3.59 2.95 2.96 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-cellsize/docs/benchmarks/2026-10-19/23c-4/2026-10-19/head-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/meshes/head-r2
+ACCEPTED
+=== head-r2 exit 0 2026-10-19T02:50:28Z swap 6006.81 load { 3.84 3.63 3.25 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+ALLDONE
