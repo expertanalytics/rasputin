@@ -3,7 +3,7 @@
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
 2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b merged (#162, 249 lines) and 23c-1 merged (#164, 156 lines); 23c-2 (about 265 estimated) green at 478 net lines, 548 after taking master, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
-in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18 at about 190 lines, green at 199, 5 of 5 mutants killed, code review approved, @perf next, under "23c-3: each piece's memory its own"; 23c-4 (cuts on a cell size not exact in binary) designed 2026-10-19, revised for design review round 1 at about 38 lines, under its own heading; 23d
+in review; revised 2026-10-17 to take master ("23c-2 meets master": the piece size is `--piece-budget`, the memory caps stay); 23c-3 (each piece's memory its own) designed 2026-10-18 at about 190 lines, green at 199, 5 of 5 mutants killed, code review approved, @perf next, under "23c-3: each piece's memory its own"; 23c-4 (cuts on a cell size not exact in binary) designed 2026-10-19 at about 38 lines, green at 31, 8 of 8 mutants killed, code review approved, @perf next, under its own heading; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -4801,3 +4801,5 @@ Every row matches the design's table. The two kept only by units (NoData
 test dropped, the h/4 cap) are the design's own expectation for the first
 and a unit by design for the second; no survivor shows a missing test.
 ```
+
+**23c-4, code review, round 1, 2026-10-19.** Range `bb5b2fcc..0adf1f46`, 31 counted lines (estimate about 38); the stack is 778 against master, so this step gets its own PR after 23c-2 and 23c-3 merge. @reviewer: APPROVED WITH WORDINGS, applied by the main session. Bytes kept rests on the prototype: `@perf` confirms the bench hashes and the Velhas digests against `bb5b2fcc`.
