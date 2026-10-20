@@ -98,7 +98,7 @@ GRAPHQL_FLAGS = {"-f", "--raw-field", "-F", "--field", "-X", "--method", "-q", "
 EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")
 #: The prefixes of `--amend` git accepts (`--a` is ambiguous to git and fails).
 AMENDS = {"--am", "--ame", "--amen", "--amend"}
-CURL_DATA = ("--data","--form", "--json", "--upload-file")
+CURL_DATA = ("--data", "--form", "--json", "--upload-file")
 #: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
 FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
 FETCH_EXACT = ("core.sshcommand", "fetch.bundleuri")
