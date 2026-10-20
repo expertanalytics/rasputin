@@ -1,10 +1,13 @@
 # Harness h28: no away window over an open prompt; the main session hears the window
 
-Status: **designed**, 2026-10-20, on `worktree-h28-away-prompt` off master
-`d3e55b0a`. Full path (`docs/increments/README.md`): about 75 counted lines,
-over the short path's 50; no C++ file, no refine or mesh code. Every file it
+Status: **red, green and code review done**, 2026-10-20, on
+`worktree-h28-away-prompt` off master `d3e55b0a`; 126 counted lines. The
+live check (§5) follows the merge, because the hooks load only in a session
+started from master; its result goes in by a short prose follow-up. Full
+path (`docs/increments/README.md`): estimate about 75 counted lines, over
+the short path's 50; no C++ file, no refine or mesh code. Every file it
 changes is governed (`.claude/hooks/`, `tools/away.py`), so the red and green
-steps need Ola at the prompt, by day.
+steps needed Ola at the prompt, by day.
 
 Sources: Ola's yes of 2026-10-19 (`away.py` refuses to start while a
 permission prompt is open, plus a Mac notification), and proposal 3 of the
@@ -275,6 +278,11 @@ plus 1 h).
 14. `run` raising `OSError` or `TimeoutExpired`: returns, no exception;
     the script on bad stdin exits 0.
 
+`tests/python/test_settings_wiring.py` changes too: its expected set of
+hook scripts gains `notify_prompt.py`, and it needs one harmless event per
+new entry (a `PostToolUse` with no matcher, and a `Notification` of type
+`idle_prompt`, so no real banner shows).
+
 Not the invariant-critical suite of any increment: no mutation round.
 
 ## 7. Size
@@ -302,3 +310,5 @@ far off either way.
 ## Review
 
 - **Design review, round 1, 2026-10-20.** On `e78f7dae`, 0 counted lines (estimate about 75), @reviewer: APPROVED WITH WORDINGS. Hook events and fields checked against the reference (PermissionRequest has no tool_use_id; permission_prompt delay and keystroke deferral; PermissionDenied only in auto mode); rejected-call tool_result present in a real transcript; osascript text as arguments; cost about 42 ms + 8 ms per tool call. Three wordings applied by the main session.
+- **Code review, round 1, 2026-10-20.** On `bc40f9dc4d134dec2d1f7136b1852853e91a494a`, 126 counted lines (estimate about 75), @reviewer: CHANGES REQUESTED. Three tests in `tests/python/test_settings_wiring.py` failed after the two `.claude/settings.json` hook entries (added by the main session on Ola's yes, `bc40f9dc`): the new script missing from the expected set, and no harmless by-path event for the `PostToolUse` and `Notification` entries. The settings entries matched §5 exactly.
+- **Code review, round 2, 2026-10-20.** On `c49ae58493bbf7015e7d5e919d5fd303bfafe163` (@tester's fix `c49ae584`: the expected set and two harmless events, an `idle_prompt` `Notification` so no real banner shows), 126 counted lines, @reviewer: APPROVED.
