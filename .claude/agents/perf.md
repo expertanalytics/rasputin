@@ -65,6 +65,10 @@ figures only.
   Evidence left in `/tmp` or a scratchpad is lost with the session.
 * Large outputs (meshes) stay out of the repository; say where they were and
   how to regenerate them.
+* A plot comparing observed and modelled series has three lines: the observed
+  series, the best result merged so far, and the run under investigation,
+  unless Ola asks for more for that plot. Each variant gets its own plot.
+  Legend entries are plain words, never increment numbers or branch names.
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
