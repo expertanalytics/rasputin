@@ -69,6 +69,13 @@
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/record_review.py" }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_unattended.py", "timeout": 10 }
+        ]
+      }
     ]
   }
 }
