@@ -17,6 +17,7 @@ flag's `keep_awake_pid`. The default stopper is `stop_keep_awake(pid)`.
 from __future__ import annotations
 
 import errno
+import hashlib
 import io
 import json
 import os
@@ -1113,3 +1114,249 @@ def test_h22_back_says_not_judged_when_the_branchs_repository_cannot_be_told(
     prv, pub = lines[at + 1 : at + 3]
     assert prv == f"  prv: not used; head {built.prv[:7]} not judged ({missing})", prv
     assert pub == f"  pub: not used; head {built.pub[:7]} not judged ({missing})", pub
+
+
+# ---------------------------------------------------------------- h28 §2, §6 tests 5 to 11
+#
+# `away.py` refuses to enter while a recorded permission prompt has no
+# tool_result in its session's transcript. Every transcript here is a fake of
+# two to four lines under tmp_path, in the shape Claude Code writes: a
+# top-level `type` of `assistant` or `user`, and the blocks under
+# `message.content`.
+
+PROMPT_INPUT = {"command": "git push", "description": "Push the branch"}
+PROMPT_SESSION = "5e55102a-0000-4000-8000-000000000001"
+PROMPT_AT = NOW - timedelta(minutes=5)
+NOT_JSON = '{"type": "assistant", "tool_use" cut off'
+
+
+def input_sha(supplied: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(supplied, sort_keys=True).encode()).hexdigest()
+
+
+def tool_use(block_id: str, supplied: dict[str, Any] | None = None) -> dict[str, Any]:
+    block = {"type": "tool_use", "id": block_id, "name": "Bash",
+             "input": PROMPT_INPUT if supplied is None else supplied}  # fmt: skip
+    return {"type": "assistant", "message": {"role": "assistant", "content": [block]}}
+
+
+def tool_result(block_id: str, is_error: bool = False) -> dict[str, Any]:
+    text = "The user doesn't want to proceed with this tool use" if is_error else "pushed"
+    block = {"type": "tool_result", "tool_use_id": block_id, "content": text,
+             "is_error": is_error}  # fmt: skip
+    return {"type": "user", "message": {"role": "user", "content": [block]}}
+
+
+def unrelated() -> dict[str, Any]:
+    return {"type": "user", "message": {"role": "user", "content": "Push it, please."}}
+
+
+def write_transcript(path: Path, entries: list[dict[str, Any] | str]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [e if isinstance(e, str) else json.dumps(e) for e in entries]
+    path.write_text("".join(line + "\n" for line in lines))
+    return path
+
+
+def main_transcript(tmp_path: Path) -> Path:
+    return tmp_path / "projects" / f"{PROMPT_SESSION}.jsonl"
+
+
+def record_prompt(
+    repo: Path, transcript: Path, at: datetime = PROMPT_AT,
+    agent_id: str | None = None, agent_type: str | None = None,
+) -> None:  # fmt: skip
+    """One line of `prompts.jsonl`, as the permission hook writes it (h28 §2)."""
+    entry = {"at": iso(at), "session_id": PROMPT_SESSION, "agent_id": agent_id,
+             "agent_type": agent_type, "transcript_path": str(transcript), "tool_name": "Bash",
+             "input_sha": input_sha(PROMPT_INPUT), "act": "Bash: git push"}  # fmt: skip
+    state_dir(repo).mkdir(parents=True, exist_ok=True)
+    with (state_dir(repo) / "prompts.jsonl").open("a") as out:
+        out.write(json.dumps(entry) + "\n")
+
+
+class TtyOpener:
+    """`open_tty` that counts its calls and answers `y`."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self) -> FakeTty:
+        self.calls += 1
+        return FakeTty("y")
+
+
+@dataclass
+class Entered:
+    code: int
+    opener: TtyOpener
+    spawn: Recorder
+    err: str
+    out: str
+
+
+def enter_with_prompts(repo: Path, capsys: pytest.CaptureFixture[str], *extra: str) -> Entered:
+    opener, spawn = TtyOpener(), spawner()
+    capsys.readouterr()
+    code = run_main(["8h", *extra], root=repo, now=NOW, open_tty=opener, spawn=spawn,
+                    stop=Recorder())  # fmt: skip
+    captured = capsys.readouterr()
+    return Entered(code, opener, spawn, captured.err, captured.out)
+
+
+def assert_entered(repo: Path, entered: Entered) -> None:
+    assert entered.code == 0, entered.err
+    assert flag_path(repo).exists()
+    assert entered.opener.calls == 1
+
+
+def assert_refused(repo: Path, entered: Entered) -> None:
+    assert entered.code == 1, f"exit {entered.code}; stderr: {entered.err}"
+    assert "Bash: git push" in entered.err, entered.err
+    assert "--despite-prompts" in entered.err, entered.err
+    assert PROMPT_SESSION[:8] in entered.err, entered.err
+    assert not flag_path(repo).exists()
+    assert not (state_dir(repo) / "windows.jsonl").exists()
+    assert entered.opener.calls == 0, "the terminal was opened before the prompt check"
+    assert entered.spawn.calls == [], "a keep-awake was started"
+
+
+def test_h28_an_open_prompt_refuses_the_window_before_the_terminal(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transcript = write_transcript(main_transcript(tmp_path), [unrelated(), tool_use("toolu_1")])
+    record_prompt(repo, transcript)
+    assert_refused(repo, enter_with_prompts(repo, capsys))
+
+
+@pytest.mark.parametrize("is_error", [False, True], ids=["answered", "rejected"])
+def test_h28_a_prompt_whose_call_has_a_result_does_not_refuse(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], is_error: bool
+) -> None:
+    """A rejected prompt writes a tool_result with is_error true; it is not open.
+    A line that does not parse is skipped."""
+    transcript = write_transcript(
+        main_transcript(tmp_path),
+        [NOT_JSON, tool_use("toolu_1"), tool_result("toolu_1", is_error), unrelated()],
+    )
+    record_prompt(repo, transcript)
+    assert_entered(repo, enter_with_prompts(repo, capsys))
+
+
+def test_h28_a_missing_transcript_means_the_session_is_gone(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    record_prompt(repo, main_transcript(tmp_path))
+    assert_entered(repo, enter_with_prompts(repo, capsys))
+
+
+def test_h28_a_transcript_without_the_call_is_taken_as_lagging(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Only a tool_use with the same input counts; another command's answered call does not."""
+    other = {"command": "git status"}
+    transcript = write_transcript(
+        main_transcript(tmp_path),
+        [unrelated(), tool_use("toolu_9", other), tool_result("toolu_9")],
+    )
+    record_prompt(repo, transcript)
+    assert_refused(repo, enter_with_prompts(repo, capsys))
+
+
+@pytest.mark.parametrize(
+    ("answered", "refuses"), [("toolu_1", True), ("toolu_2", False)],
+    ids=["first-answered-last-open", "first-open-last-answered"],
+)  # fmt: skip
+def test_h28_the_last_matching_call_decides(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], answered: str, refuses: bool
+) -> None:
+    transcript = write_transcript(
+        main_transcript(tmp_path), [tool_use("toolu_1"), tool_use("toolu_2"), tool_result(answered)]
+    )
+    record_prompt(repo, transcript)
+    entered = enter_with_prompts(repo, capsys)
+    if refuses:
+        assert_refused(repo, entered)
+    else:
+        assert_entered(repo, entered)
+
+
+LAST_ENTER = NOW - timedelta(hours=1)
+
+
+@pytest.mark.parametrize(
+    ("at", "refuses"),
+    [(LAST_ENTER - timedelta(minutes=1), False), (LAST_ENTER, True),
+     (LAST_ENTER + timedelta(minutes=1), True)],
+    ids=["before-the-last-enter", "at-the-last-enter", "after-the-last-enter"],
+)  # fmt: skip
+def test_h28_only_prompts_since_the_last_window_start_count(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], at: datetime, refuses: bool
+) -> None:
+    windows_path = state_dir(repo) / "windows.jsonl"
+    windows_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        {"event": "enter", "since": iso(NOW - timedelta(hours=3)),
+         "until": iso(NOW - timedelta(hours=2)), "grants": []},
+        {"event": "enter", "since": iso(LAST_ENTER),
+         "until": iso(LAST_ENTER + timedelta(minutes=30)), "grants": []},
+        {"event": "back", "since": iso(LAST_ENTER),
+         "until": iso(LAST_ENTER + timedelta(minutes=20))},
+    ]  # fmt: skip
+    windows_path.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    transcript = write_transcript(main_transcript(tmp_path), [tool_use("toolu_1")])
+    record_prompt(repo, transcript, at=at)
+    entered = enter_with_prompts(repo, capsys)
+    if refuses:
+        assert entered.code == 1, entered.err
+        assert "Bash: git push" in entered.err, entered.err
+    else:
+        assert_entered(repo, entered)
+
+
+SUBAGENT_ID = "a1b2c3d4e5"
+
+
+def subagent_transcript(tmp_path: Path) -> Path:
+    main = main_transcript(tmp_path)
+    return main.with_suffix("") / "subagents" / f"agent-{SUBAGENT_ID}.jsonl"
+
+
+SUBAGENT_CASES = {
+    # (main transcript, subagent transcript or None for absent, refuses)
+    "result-only-in-subagent-file": ([unrelated()],
+                                     [tool_use("toolu_1"), tool_result("toolu_1")], False),
+    "result-in-neither": ([unrelated()], [tool_use("toolu_1")], True),
+    "subagent-file-wins-over-main": ([tool_use("toolu_1"), tool_result("toolu_1")],
+                                     [tool_use("toolu_1")], True),
+    "no-subagent-file-falls-back-to-main": ([tool_use("toolu_1"), tool_result("toolu_1")],
+                                            None, False),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("case", SUBAGENT_CASES.values(), ids=SUBAGENT_CASES.keys())
+def test_h28_a_subagents_prompt_is_judged_in_its_own_transcript(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], case: Any
+) -> None:
+    main_lines, sub_lines, refuses = case
+    transcript = write_transcript(main_transcript(tmp_path), main_lines)
+    if sub_lines is not None:
+        write_transcript(subagent_transcript(tmp_path), sub_lines)
+    record_prompt(repo, transcript, agent_id=SUBAGENT_ID, agent_type="tester")
+    entered = enter_with_prompts(repo, capsys)
+    if refuses:
+        assert_refused(repo, entered)
+        assert "tester" in entered.err, entered.err
+    else:
+        assert_entered(repo, entered)
+
+
+def test_h28_despite_prompts_enters_and_warns(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transcript = write_transcript(main_transcript(tmp_path), [tool_use("toolu_1")])
+    record_prompt(repo, transcript)
+    entered = enter_with_prompts(repo, capsys, "--despite-prompts")
+    assert_entered(repo, entered)
+    assert "Bash: git push" in entered.err + entered.out, (entered.err, entered.out)
+    assert [w["event"] for w in windows(repo)] == ["enter"]

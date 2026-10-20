@@ -1,4 +1,4 @@
-"""`.claude/hooks/guard_unattended.py`: the four hooks (h3 U1, T11; h26).
+"""`.claude/hooks/guard_unattended.py`: the five hooks (h3 U1, T11; h26; h28).
 
 The spec is `docs/increments/h3-unattended-u1.md` §3.7 and §4. When the mode is
 off the hook is silent for every event; when it is on or broken it queues the
@@ -14,7 +14,9 @@ reason, never queued; every other stop goes through.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +24,15 @@ import pytest
 
 from harness_fixtures import (
     GUARD_UNATTENDED,
+    SUBAGENT,
+    flag_granting,
     flag_on,
+    jsonl,
     make_repo,
     queue_lines,
     run_script,
     set_mode,
+    state_dir,
 )
 
 # h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
@@ -310,3 +316,128 @@ def test_an_idle_stop_goes_through_when_harness_mode_is_missing(repo: Path) -> N
     (repo / "tools" / "harness_mode.py").unlink()
     assert output(repo, stop_event(repo)) is None
     assert queue_lines(repo) == []
+
+
+# ------------------------------------------------ h28: the prompt record and the window note
+#
+# docs/increments/h28-away-prompt.md §2 and §4, tests 1 to 4 of §6. While Ola
+# is present, each permission prompt the hook lets open is written to
+# `prompts.jsonl`; while away, nothing is (the prompt is refused). In mode on,
+# the main session's first tool call per window gets a note naming the end of
+# the window and the granted branches.
+
+PROMPT_INPUT = {"command": "git push", "description": "Push the branch"}
+
+
+def prompts_lines(repo: Path) -> list[dict[str, Any]]:
+    return jsonl(state_dir(repo) / "prompts.jsonl")
+
+
+def recorded_permission_event(repo: Path, **who: Any) -> dict[str, Any]:
+    return {
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": PROMPT_INPUT,
+        "session_id": "5e55102a-0000-4000-8000-000000000001",
+        "transcript_path": str(repo / "transcripts" / "5e55102a.jsonl"),
+        "cwd": str(repo),
+        **who,
+    }
+
+
+def input_sha(supplied: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(supplied, sort_keys=True).encode()).hexdigest()
+
+
+@pytest.mark.parametrize("who", [{}, SUBAGENT], ids=["main-session", "subagent"])
+def test_an_attended_permission_prompt_is_recorded_once(repo: Path, who: dict[str, Any]) -> None:
+    event = recorded_permission_event(repo, **who)
+    assert output(repo, event) is None
+    [line] = prompts_lines(repo)
+    assert line["session_id"] == event["session_id"]
+    assert line["transcript_path"] == event["transcript_path"]
+    assert line["agent_id"] == who.get("agent_id")
+    assert line["agent_type"] == who.get("agent_type")
+    assert line["tool_name"] == "Bash"
+    assert line["input_sha"] == input_sha(PROMPT_INPUT)
+    assert line["act"] == "Bash: git push"
+    at = datetime.fromisoformat(line["at"])
+    assert at.tzinfo is not None, line["at"]
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["on", "broken"])
+def test_a_refused_permission_prompt_is_not_recorded(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    found = output(repo, recorded_permission_event(repo))
+    assert found is not None
+    assert found["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert not (state_dir(repo) / "prompts.jsonl").exists()
+    [queued] = queue_lines(repo)
+    assert queued["act"] == "Bash: git push"
+
+
+GRANTED = ["grant-alpha", "grant-beta"]
+
+
+def post_tool_event(repo: Path, session_id: str = "main-1", **extra: Any) -> dict[str, Any]:
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status"},
+        "tool_response": {"stdout": "", "stderr": "", "interrupted": False},
+        "session_id": session_id,
+        "transcript_path": str(repo / "transcripts" / f"{session_id}.jsonl"),
+        "cwd": str(repo),
+        **extra,
+    }
+
+
+def note_of(found: dict[str, Any] | None) -> str:
+    assert found is not None, "the hook gave the main session no note"
+    assert set(found) == {"hookSpecificOutput"}
+    specific = found["hookSpecificOutput"]
+    assert specific["hookEventName"] == "PostToolUse"
+    note: str = specific["additionalContext"]
+    return note
+
+
+def assert_window_note(note: str, until: datetime) -> None:
+    assert f"Unattended mode is on until {until:%Y-%m-%d %H:%M} UTC" in note, note
+    for name in GRANTED:
+        assert name in note, f"{name!r} missing from {note!r}"
+    assert "ASK OLA:" in note, note
+
+
+def test_the_main_session_hears_the_window_once_per_session_and_window(repo: Path) -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    since = flag_granting(repo, GRANTED, now)
+    until = since + timedelta(hours=1)
+    assert_window_note(note_of(output(repo, post_tool_event(repo))), until)
+    assert output(repo, post_tool_event(repo)) is None, "the same session heard it twice"
+    assert_window_note(note_of(output(repo, post_tool_event(repo, "main-2"))), until)
+    assert output(repo, post_tool_event(repo, "main-3", **SUBAGENT)) is None
+    # A new window (a new since) is heard again by a session that heard the last one.
+    later = flag_granting(repo, GRANTED, now - timedelta(minutes=1))
+    assert_window_note(note_of(output(repo, post_tool_event(repo))), later + timedelta(hours=1))
+    assert queue_lines(repo) == []
+
+
+def test_no_grants_are_named_as_none(repo: Path) -> None:
+    flag_granting(repo, [])
+    note = note_of(output(repo, post_tool_event(repo)))
+    assert "Granted branches: none" in note, note
+
+
+@pytest.mark.parametrize("mode", ["off", "expired"])
+def test_no_window_note_unless_the_mode_is_on(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    assert output(repo, post_tool_event(repo)) is None
+    assert not (state_dir(repo) / "noticed.jsonl").exists()
+
+
+def test_a_post_tool_use_without_harness_mode_prints_nothing(repo: Path) -> None:
+    flag_granting(repo, GRANTED)
+    (repo / "tools" / "harness_mode.py").unlink()
+    result = run_script(repo, GUARD_UNATTENDED, post_tool_event(repo))
+    assert (result.returncode, result.stdout) == (0, ""), result.stderr
