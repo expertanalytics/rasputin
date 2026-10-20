@@ -343,6 +343,48 @@ the 5 s timeout with margin.
    in section 2); the second is not checked, and is the price of keeping no
    state.
 
+## 9. Pinned in the red step
+
+The red step (`c621ce24`, `tests/python/test_duties.py`) settled seven
+choices this design left open. @architect's ruling on each, 2026-10-20;
+all seven stand, and no test changes. The green step and the review read
+them here.
+
+1. **The golden line's retrospective time is 06:40 UTC, not 09:40.** With
+   09:40 the away window that ended 06:45 is before R, so no morning check is
+   owed and section 3's line could not come out (section 3 says it shows the
+   form only). Every other character is section 3's.
+2. **`Merge.label` is the text shown**: `#N` from a subject
+   `Merge pull request #N`, else the short sha. `gather` takes the short sha
+   from `%h` in D1's format (`M %h %cI %s`), which matches
+   `git rev-parse --short`. `owed` takes merges newest first, as `git log`
+   gives them, and does not re-sort. `owed`, not `gather`, drops merges at
+   or before R (`--since` is a coarse first cut) and check-recording merges,
+   so `Merge.paths` carries every path.
+3. **Times are cut to the minute, not rounded, and shown in UTC** whatever
+   the offset they carry (06:45:45 prints as `06:45`). D3's date is the UTC
+   date.
+4. **With no `origin/master`, `gather` reads `master` in every query**: R,
+   D1, and D4's `--not` and `ls-tree`. It finds out with one
+   `git rev-parse --verify --quiet refs/remotes/origin/master`, so the count
+   is five git calls with D4 and three without.
+5. **A missing `windows.jsonl` means no away windows; a line that is not a
+   JSON object is skipped**, as `window_ends` skips a malformed event. An
+   unreadable file is a fault.
+6. **The fault message is cut at 120 characters, not counting the exception
+   name**: `Duties: unknown (RuntimeError: <first 120 characters>)`. Line
+   breaks in the message become spaces first, so the line stays one line.
+   `session_state.py` writes the same form itself when `import duties`
+   fails, since `render` is then not there.
+7. **Unpushed retrospective branches are listed by short name**
+   (`retro-a`), each once, sorted in `owed`. `%S` prints the short name
+   when the walk starts from `--branches` (checked 2026-10-20 on a scratch
+   repository); `gather` strips a leading `refs/heads/` if one appears.
+
+One more, not tested and ruled here so the green step has no choice to
+make: with no retrospective on record, D1 is owed when any merge is not
+check-recording, and `gather` runs D1's query without `--since`.
+
 ## Review
 
 - **Design review, round 1, 2026-10-17.** Commit `d72cd744`, 0 counted lines, @reviewer: CHANGES REQUESTED. B1: any new file under `docs/retrospectives/` counts as a check, and non-check files exist there (`next.md`, the rule-file sweep); count only commits whose subject ends `(@orchestrator)`, with a test case. Held: an unmerged check clears D1/D2 because D4 lists the branch; hook claims match the docs; 0.10 s measured; "none owed" is not noise; the 3-day gap would have been flagged from #268 on. Suggestions: D4 out of the per-turn hook; check-recording PRs that touch only ROADMAP and an increment file should not owe a check; read `origin/master` too; four git calls, not three.
