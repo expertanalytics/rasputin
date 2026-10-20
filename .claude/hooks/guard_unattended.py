@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""AskUserQuestion, PermissionRequest and ConfigChange: nobody is there to answer.
+"""AskUserQuestion, PermissionRequest, ConfigChange and Stop: nobody is there to answer.
 
 Spec: docs/increments/h3-unattended-u1.md §3.7. While Ola is at the keyboard
 this hook prints nothing, except a refusal when it crashes or the
 harness_mode module is missing. In unattended mode (on, or a flag that cannot be
 read) a question, a permission prompt or a configuration reload would wait for
 him and stall the run, so each is refused and queued instead.
+
+Stop (docs/increments/h26-away-stop.md §2): only in mode on, and only when
+nothing is running, a main-session stop is refused once per turn and never
+queued. A crash, a missing harness_mode or a broken flag lets a stop through.
 """
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -68,14 +73,41 @@ def main() -> int:
     return 0
 
 
+STOP_REASON = (
+    "Unattended mode is on until {until} and nothing is running: no agent, no background "
+    "command, no monitor, no scheduled wake-up. If this turn ends now, the session stays "
+    "idle until Ola returns. Before ending it: write any open question as an `ASK OLA:` "
+    "line in `.claude/current-task/session.md` and do not wait for the answer; start the "
+    "next item that needs no ruling (the `QUEUE:` line), or watch work that will finish, "
+    "for example `gh pr checks <pr> --watch` run in the background. If no such work "
+    "exists, set the `NOW:` line to `NOW: idle: <why>` and end the turn; this hook does "
+    "not refuse it a second time."
+)
+
+
+def stop_output(event: dict, harness_mode) -> dict | None:
+    """Refuse one idle stop of the main session while unattended mode is on."""
+    if event.get("stop_hook_active") is not False or event.get("agent_id"):
+        return None
+    if "background_tasks" not in event or event["background_tasks"] or event.get("session_crons"):
+        return None
+    mode = harness_mode.read_mode(harness_mode.state_dir(harness_mode.ROOT), datetime.now(UTC))
+    if mode.state != "on":
+        return None
+    until = f"{mode.until.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+    return {"decision": "block", "reason": STOP_REASON.format(until=until)}
+
+
 def settle(event: dict) -> dict | None:
     """The output for a parsed event, or None to let it through."""
-    found = act_of(event)
-    if found is None:
-        return None
     sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))  # the stdlib wins (h16 G4)
     import harness_mode
 
+    if event.get("hook_event_name") == "Stop":
+        return stop_output(event, harness_mode)
+    found = act_of(event)
+    if found is None:
+        return None
     act, why = found
     decision = harness_mode.settle(event, "guard_unattended", "ask", "", act, why)
     if decision.kind == "ask":  # attended: the normal question, prompt or reload

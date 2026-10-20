@@ -34,6 +34,10 @@ unknown-command ask, except under `parallel`. `env`, `timeout`, `xargs` and
 the other wrappers are stripped, so G2 applies to them. A quoted command
 string (`sh -c '…'`) is judged as its own line by the same rules, so
 `sh -c 'git myalias'` asks and `sh -c 'caffeinate git myalias'` passes.
+
+An amend whose HEAD is held by no remote-tracking ref or tag, on a bare
+one-command line, passes: nobody else can have that commit. Anything the
+guard cannot establish about such a line asks.
 """
 
 import functools
@@ -107,6 +111,8 @@ GRAPHQL_FLAGS = {"-f", "--raw-field", "-F", "--field", "-X", "--method", "-q", "
 #: A line the shell expands nothing in: outside single quotes only these characters.
 #: Each step takes one character or one whole quoted string, so it matches in linear time.
 EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")
+#: The prefixes of `--amend` git accepts (`--a` is ambiguous to git and fails).
+AMENDS = {"--am", "--ame", "--amen", "--amend"}
 CURL_DATA = ("--data", "--form", "--json", "--upload-file")
 #: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
 FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
@@ -328,7 +334,7 @@ def publishes(words: list[str]) -> list[str]:
         found += [PUSH] if sub == "push" else []
         found += [NO_VERIFY] if "--no-verify" in args else []
         if (sub in ("rebase", "filter-branch") or (sub == "reset" and "--hard" in args)
-                or (sub == "commit" and "--amend" in args)):
+                or (sub == "commit" and AMENDS & set(args))):
             found.append(HISTORY)
         if sub == "push" and any(a.startswith("--force") or a == "-f" for a in args):
             found.append(FORCE)
@@ -340,6 +346,39 @@ def publishes(words: list[str]) -> list[str]:
         if group == "release" or (group == "repo" and verb in ("create", "new", "delete", "edit")):
             found.append(RELEASE)
     return found
+
+
+def git_out(where: str, *args: str) -> str | None:
+    """The stripped output of `git -C where args`, or None on a non-zero exit."""
+    done = subprocess.run(["git", "-C", where, *args], capture_output=True, text=True,
+                          check=False, timeout=10)  # fmt: skip
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def unpushed_amend(command: str, cwd: str | None) -> bool:
+    """True when the line is one bare amend and its HEAD is held by no remote-tracking ref or tag.
+
+    Bare: one simple command whose argv is the line's own words, nothing the shell
+    expands, and no git option before `commit` but one absolute `-C`, so HEAD is the
+    one the amend replaces. Anything unknown, an exception included, is False.
+    """
+    try:
+        simples = shell_scan.parse(command) if shell_scan else None
+        if not simples or len(simples) != 1 or shlex.split(command) != simples[0].argv:
+            return False
+        argv = simples[0].argv
+        head, rest = (argv[1:3], argv[3:]) if argv[1:2] == ["-C"] else ([], argv[1:])
+        where = head[1] if head else cwd
+        if (EXPANDS_NOTHING.fullmatch(command) is None or argv[:1] != ["git"]
+                or rest[:1] != ["commit"] or not AMENDS & set(rest) or not isinstance(where, str)
+                or not where or (head and not Path(where).is_absolute())):  # fmt: skip
+            return False
+        sha = git_out(where, "rev-parse", "--verify", "-q", "HEAD^{commit}")
+        held = sha and git_out(where, "for-each-ref", "--contains", sha, "--count=1",
+                               "--format=%(refname)", "refs/remotes", "refs/tags")  # fmt: skip
+        return bool(sha) and held == ""
+    except Exception:
+        return False
 
 
 def emit(event: dict, verdict: str, reason: str, act: str, why: str) -> None:
@@ -388,7 +427,7 @@ def main() -> int:
             if why is not None and not (bare and why == UNKNOWN):  # a bare tail never gives G2's
                 reasons.append(why)
         reasons = list(dict.fromkeys(reasons))
-        if not reasons:
+        if not reasons or (reasons == [HISTORY] and unpushed_amend(command, event.get("cwd"))):
             return 0
         why = "; ".join(reasons)
         grant = push_grant.judge(event, command, reasons) if push_grant else None

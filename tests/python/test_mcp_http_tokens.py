@@ -200,7 +200,7 @@ class TestOverHttp:
         response = post(server, LIST, {"Authorization": "Bearer " + "c" * 40})
         assert response.status_code == 401
 
-    async def test_both_users_see_the_same_tools_download_link_included(
+    async def test_both_users_see_the_same_tools_download_link_and_upload_included(
         self, server: HttpServer
     ) -> None:
         seen = {}
@@ -208,4 +208,4 @@ class TestOverHttp:
             async with client(server, user) as c:
                 seen[user] = [t.name for t in (await c.list_tools()).tools]
         assert seen["ola"] == seen["kari"]
-        assert set(seen["ola"]) == {*tool_names(app), "download_link"}
+        assert set(seen["ola"]) == {*tool_names(app), "download_link", "upload"}

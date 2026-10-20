@@ -209,6 +209,17 @@ def harmless_event(repo: Path, event: str, matcher: str | None) -> dict[str, Any
             "stop_hook_active": False,
             "cwd": str(repo),
         }
+    if event == "Stop" and matcher is None:
+        # h26 section 2: the first pass case, already sent back once this turn,
+        # so the guard lets the stop through whatever the away flag says
+        return {
+            "hook_event_name": event,
+            "stop_hook_active": True,
+            "last_assistant_message": "Done.",
+            "background_tasks": [],
+            "session_crons": [],
+            "cwd": str(repo),
+        }
     if event == "PermissionRequest":
         return {
             "hook_event_name": event,

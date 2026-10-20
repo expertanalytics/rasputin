@@ -15,8 +15,10 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import NamedTuple
 
 import pytest
 
@@ -30,6 +32,7 @@ from harness_fixtures import (
     add_worktree,
     bash_event,
     clean_env,
+    commit_file,
     file_event,
     flag_granting,
     flag_path,
@@ -86,7 +89,8 @@ ASKED: dict[str, str | None] = {
     "gh pr update-branch 1": GH_PR,
     "gh pr update-branch --rebase 1": GH_PR,
     "gh pr merge --auto 1": GH_PR,
-    "git commit --amend": None,
+    # h27: `git commit --amend` moved to the pushed-HEAD rows below (an amend
+    # in this fixture, which has no remote, passes).
     "git rebase main": None,
 }
 
@@ -1695,3 +1699,214 @@ def test_h25_round2_stdin_route_or_redefined_python_naming_a_push_asks(
     kind, reason = found
     assert kind == ("deny" if mode == "on" else "ask")
     assert PUSH in reason, reason
+
+
+# ---------------------------------------------------------------- h27
+#
+# docs/increments/h27-unpushed-amend.md §3: an amend whose HEAD no
+# remote-tracking ref and no tag holds, on a bare one-command line, passes
+# silently in every mode; anything else asks by day and is refused and queued
+# while away. Each fixture pushes into a bare `origin` with git itself, so the
+# tracking ref is the one a real push leaves.
+
+HISTORY = "this rewrites history, which is destructive once anything is published"
+NO_VERIFY = "--no-verify disables git's own hooks"
+
+
+class Line(NamedTuple):
+    """A command and the event's cwd; None means the event has no `cwd` key."""
+
+    command: str
+    cwd: Path | None
+
+
+#: A case: given the pushed repository and tmp_path, it sets up and returns the line.
+Case = Callable[[Path, Path], Line]
+
+
+@pytest.fixture
+def pushed(tmp_path: Path) -> Path:
+    """`make_repo` with `master` pushed by `git push` into a bare `origin`."""
+    repo = make_repo(tmp_path / "repo")
+    git(tmp_path, "init", "-q", "--bare", "origin.git")
+    git(repo, "remote", "add", "origin", str(tmp_path / "origin.git"))
+    git(repo, "push", "-q", "origin", "master")
+    # §1: the push itself leaves the tracking ref; checked, not assumed.
+    assert git(repo, "rev-parse", "refs/remotes/origin/master") == git(repo, "rev-parse", "HEAD")
+    # The exemption needs a line the shell expands nothing in, paths included.
+    assert all(c.isalnum() or c in "/._-" for c in str(tmp_path)), tmp_path
+    return repo
+
+
+def local_commit(repo: Path) -> str:
+    return commit_file(repo, "notes.txt", "local work\n", "local work, never pushed")
+
+
+def plain_amend(repo: Path, tmp_path: Path) -> Line:
+    local_commit(repo)
+    return Line("git commit --amend --no-edit", repo)
+
+
+def amend_by_path(repo: Path, tmp_path: Path) -> Line:
+    """The refused form of 2026-10-19; cwd is not a repository, so `-C` must decide."""
+    local_commit(repo)
+    return Line(f"git -C {repo} commit --amend --no-edit -a", tmp_path)
+
+
+def amend_in_worktree(repo: Path, tmp_path: Path) -> Line:
+    """cwd is the main checkout, whose HEAD is pushed; the worktree's is not."""
+    tree = add_worktree(repo, tmp_path / "tree", "side")
+    local_commit(tree)
+    return Line(f"git -C {tree} commit --amend --no-edit", repo)
+
+
+def abbreviated(option: str) -> Case:
+    def case(repo: Path, tmp_path: Path) -> Line:
+        local_commit(repo)
+        return Line(f"git commit {option} --no-edit", repo)
+
+    return case
+
+
+H27_PASSED = {
+    "1-no-C": plain_amend,
+    "2-absolute-C-with-a": amend_by_path,
+    "3-worktree": amend_in_worktree,
+    "4-amen": abbreviated("--amen"),
+    "4-am": abbreviated("--am"),
+}
+
+
+def pushed_head(repo: Path, tmp_path: Path) -> Line:
+    return Line("git commit --amend --no-edit", repo)
+
+
+def pushed_head_by_path(repo: Path, tmp_path: Path) -> Line:
+    return Line(f"git -C {repo} commit --amend --no-edit -a", tmp_path)
+
+
+def tagged(repo: Path, tmp_path: Path) -> Line:
+    local_commit(repo)
+    git(repo, "tag", "t")
+    return Line("git commit --amend --no-edit", repo)
+
+
+def pushed_elsewhere(repo: Path, tmp_path: Path) -> Line:
+    local_commit(repo)
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/x")
+    assert git(repo, "rev-parse", "refs/remotes/origin/x") == git(repo, "rev-parse", "HEAD")
+    return Line("git commit --amend --no-edit", repo)
+
+
+def pushed_from_worktree(repo: Path, tmp_path: Path) -> Line:
+    """§2: worktrees share refs, so a push from the worktree is seen from anywhere."""
+    tree = add_worktree(repo, tmp_path / "tree", "side")
+    local_commit(tree)
+    git(tree, "push", "-q", "origin", "side")
+    return Line(f"git -C {tree} commit --amend --no-edit", repo)
+
+
+def no_head(repo: Path, tmp_path: Path) -> Line:
+    git(tmp_path, "init", "-q", "fresh")
+    return Line("git commit --amend --no-edit", tmp_path / "fresh")
+
+
+def no_head_by_path(repo: Path, tmp_path: Path) -> Line:
+    git(tmp_path, "init", "-q", "fresh")
+    return Line(f"git -C {tmp_path / 'fresh'} commit --amend --no-edit", repo)
+
+
+def not_bare(template: str, cwd: str = "repo") -> Case:
+    """An unpushed HEAD on a line that is not one bare command."""
+
+    def case(repo: Path, tmp_path: Path) -> Line:
+        local_commit(repo)
+        return Line(template.format(repo=repo), repo if cwd == "repo" else tmp_path)
+
+    return case
+
+
+def no_cwd(repo: Path, tmp_path: Path) -> Line:
+    local_commit(repo)
+    return Line("git commit --amend --no-edit", None)
+
+
+def pushed_head_abbreviated(option: str) -> Case:
+    def case(repo: Path, tmp_path: Path) -> Line:
+        return Line(f"git commit {option} --no-edit", repo)
+
+    return case
+
+
+H27_ASKED = {
+    "5-pushed-head": pushed_head,
+    "5-pushed-head-absolute-C": pushed_head_by_path,
+    "6-tagged": tagged,
+    "7-pushed-as-another-branch": pushed_elsewhere,
+    "7-pushed-from-a-worktree": pushed_from_worktree,
+    "8-no-head": no_head,
+    "8-no-head-absolute-C": no_head_by_path,
+    "9-cd-first": not_bare("cd {repo} && git commit --amend --no-edit"),
+    "9-GIT_DIR-assignment": not_bare("GIT_DIR={repo}/.git git commit --amend --no-edit"),
+    "9-config-override": not_bare("git -c a.b=c commit --amend --no-edit"),
+    # `repo` relative to cwd names the unpushed repository, so only the rule refuses it.
+    "9-relative-C": not_bare("git -C repo commit --amend --no-edit", cwd="parent"),
+    "9-double-quotes": not_bare('git commit --amend -m "x"'),
+    "9-no-verify": not_bare("git commit --amend --no-edit --no-verify"),
+    "10-no-cwd": no_cwd,
+    "11-amen-pushed": pushed_head_abbreviated("--amen"),
+    "11-am-pushed": pushed_head_abbreviated("--am"),
+}
+
+
+def judge(repo: Path, line: Line, mode: str) -> tuple[str, str] | None:
+    set_mode(repo, mode)
+    event = bash_event(repo, line.command)
+    if line.cwd is None:
+        del event["cwd"]
+    else:
+        event["cwd"] = str(line.cwd)
+    return pretool_decision(run_script(repo, GUARD_PUSH, event))
+
+
+@pytest.mark.parametrize("mode", ["off", "on", "expired"])
+@pytest.mark.parametrize("case", H27_PASSED.values(), ids=H27_PASSED.keys())
+def test_h27_an_amend_of_an_unpushed_head_passes_in_every_mode(
+    pushed: Path, tmp_path: Path, case: Case, mode: str
+) -> None:
+    line = case(pushed, tmp_path)
+    assert judge(pushed, line, mode) is None, line.command
+    assert queue_lines(pushed) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "expired"])
+@pytest.mark.parametrize("case", H27_ASKED.values(), ids=H27_ASKED.keys())
+def test_h27_an_amend_not_shown_unpushed_asks_while_attended(
+    pushed: Path, tmp_path: Path, case: Case, mode: str
+) -> None:
+    line = case(pushed, tmp_path)
+    found = judge(pushed, line, mode)
+    assert found is not None, f"{line.command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert reason.startswith("This reaches beyond the working tree: ")
+    assert HISTORY in reason
+    if "--no-verify" in line.command:
+        assert NO_VERIFY in reason
+    assert queue_lines(pushed) == []
+
+
+@pytest.mark.parametrize("case", H27_ASKED.values(), ids=H27_ASKED.keys())
+def test_h27_an_amend_not_shown_unpushed_is_refused_and_queued_while_away(
+    pushed: Path, tmp_path: Path, case: Case
+) -> None:
+    line = case(pushed, tmp_path)
+    found = judge(pushed, line, "on")
+    assert found is not None, f"{line.command!r} passed silently"
+    kind, reason = found
+    assert kind == "deny"
+    assert reason.startswith("Refused: unattended mode is on until ")
+    assert HISTORY in reason
+    [queued] = queue_lines(pushed)
+    assert (queued["hook"], queued["act"]) == ("guard_push", line.command)
+    assert HISTORY in queued["why"]

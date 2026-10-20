@@ -1,4 +1,4 @@
-"""`.claude/hooks/guard_unattended.py`: the three catch-all hooks (h3 U1, T11).
+"""`.claude/hooks/guard_unattended.py`: the four hooks (h3 U1, T11; h26).
 
 The spec is `docs/increments/h3-unattended-u1.md` §3.7 and §4. When the mode is
 off the hook is silent for every event; when it is on or broken it queues the
@@ -6,6 +6,10 @@ act and refuses it in the output shape each event takes. The two non-PreToolUse
 shapes were checked against the Claude Code `hooks` page (*PermissionRequest
 decision control*: `hookSpecificOutput.decision.behavior` and `message`;
 *ConfigChange decision control*: top-level `decision: "block"` and `reason`).
+
+The fourth hook, `Stop`, is `docs/increments/h26-away-stop.md` §2 and §4: in
+mode `on`, a main-session stop with nothing running is sent back once with a
+reason, never queued; every other stop goes through.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import pytest
 
 from harness_fixtures import (
     GUARD_UNATTENDED,
+    flag_on,
     make_repo,
     queue_lines,
     run_script,
@@ -222,4 +227,86 @@ def test_a_missing_harness_mode_refuses_in_the_events_shape(
     supplied = event(repo)
     reason = failure_reason(supplied["hook_event_name"], output(repo, supplied))
     assert reason.startswith(f"{FAILED_PREFIX}ModuleNotFoundError"), reason
+    assert queue_lines(repo) == []
+
+
+# ------------------------------------------------ h26: the Stop hook
+#
+# docs/increments/h26-away-stop.md §4. The idle event is the design's; each
+# pass case changes one field of it. A stop is never queued.
+
+
+#: A `stop_event` value that removes the key instead of setting it.
+DROP = object()
+
+
+def stop_event(repo: Path, **changed: Any) -> dict[str, Any]:
+    """The design's idle Stop event, with `changed` applied; a value of DROP removes the key."""
+    event: dict[str, Any] = {
+        "hook_event_name": "Stop",
+        "cwd": str(repo),
+        "stop_hook_active": False,
+        "last_assistant_message": "Done.",
+        "background_tasks": [],
+        "session_crons": [],
+    }
+    for key, value in changed.items():
+        if value is DROP:
+            event.pop(key)
+        else:
+            event[key] = value
+    return event
+
+
+def task(kind: str) -> dict[str, str]:
+    return {"id": "t1", "type": kind, "status": "running", "description": "x"}
+
+
+def test_an_idle_stop_while_away_is_blocked_once_with_the_reason(repo: Path) -> None:
+    until = flag_on(repo)
+    found = output(repo, stop_event(repo))
+    assert found is not None, "the hook let an idle stop through in mode on"
+    assert set(found) == {"decision", "reason"}
+    assert found["decision"] == "block"
+    reason = found["reason"]
+    assert f"Unattended mode is on until {until:%Y-%m-%d %H:%M} UTC" in reason, reason
+    for fragment in ("nothing is running", "ASK OLA:", "QUEUE:", "NOW: idle:"):
+        assert fragment in reason, f"{fragment!r} missing from {reason!r}"
+    assert queue_lines(repo) == []
+
+
+PASSING_STOPS = {
+    "already-sent-back": {"stop_hook_active": True},
+    "stop-hook-active-absent": {"stop_hook_active": DROP},
+    "subagent": {"agent_id": "a1"},
+    "task-registry-unreachable": {"background_tasks": DROP},
+    "shell-running": {"background_tasks": [task("shell")]},
+    "subagent-running": {"background_tasks": [task("subagent")]},
+    "monitor-running": {"background_tasks": [task("monitor")]},
+    "cron-scheduled": {
+        "session_crons": [{"id": "c1", "schedule": "*/5 * * * *", "prompt": "check"}]
+    },
+}
+
+
+@pytest.mark.parametrize("changed", PASSING_STOPS.values(), ids=PASSING_STOPS.keys())
+def test_a_stop_that_is_not_idle_or_already_sent_back_goes_through(
+    repo: Path, changed: dict[str, Any]
+) -> None:
+    flag_on(repo)
+    assert output(repo, stop_event(repo, **changed)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "expired", "broken"])
+def test_an_idle_stop_goes_through_unless_the_mode_is_on(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    assert output(repo, stop_event(repo)) is None
+    assert queue_lines(repo) == []
+
+
+def test_an_idle_stop_goes_through_when_harness_mode_is_missing(repo: Path) -> None:
+    flag_on(repo)
+    (repo / "tools" / "harness_mode.py").unlink()
+    assert output(repo, stop_event(repo)) is None
     assert queue_lines(repo) == []

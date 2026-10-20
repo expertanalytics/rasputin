@@ -264,6 +264,15 @@ give a CRS as an EPSG code. `fetch --refresh` is refused, since it would
 discard the cache every user shares; give `--cache` inside your folder
 instead. Changing the sources takes a restart.
 
+An input may also be a download link this server gave you, of any age, as
+long as its file is kept; an expired link still works as an input. The
+server opens no other address, and it reads only links to your own files.
+An output must be a path, never a link. A client with no shared folder sends
+a file of its own with the `upload` tool, as text or as base64, up to 2 MiB:
+it lands in `uploads/` of your folder, and the result gives both its path
+and its link, either of which a later call takes. A larger input must be one
+of the server's data sources.
+
 Codex reads the token from an environment variable of its own, in
 `~/.codex/config.toml`. Codex stops waiting for a tool after 60 seconds by
 default, which cuts off a long run, so raise `tool_timeout_sec`:

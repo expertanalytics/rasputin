@@ -71,6 +71,24 @@ class Store:
         """``path`` copied to ``store/<sha256><suffix>``; the work copy stays."""
         return await anyio.to_thread.run_sync(self._put, Path(path))
 
+    def _receive(self, name: str, data: bytes) -> Path:
+        folder = self.user_dir / "work" / "uploads"
+        folder.mkdir(parents=True, exist_ok=True)
+        if folder.resolve() != folder:
+            raise ValueError(f"{folder} resolves to {folder.resolve()}, not to itself")
+        partial, target = folder / f".part-{secrets.token_hex(8)}", folder / name
+        try:
+            partial.write_bytes(data)
+            os.replace(partial, target)
+        finally:
+            partial.unlink(missing_ok=True)
+        return target
+
+    async def receive(self, name: str, data: bytes) -> Path:
+        """``data`` written whole to ``work/uploads/<name>``, replacing an earlier file of
+        that name; a `ValueError` when that folder resolves anywhere but itself."""
+        return await anyio.to_thread.run_sync(self._receive, name, data)
+
     async def usage(self) -> int:
         """The bytes of the regular files under the user's folder."""
         found = await anyio.to_thread.run_sync(_regular, self.user_dir)
