@@ -1,8 +1,6 @@
 # Harness h25: programs a guard cannot see because they arrive on stdin
 
-Status: **red**, design revised 2026-10-20 for code review round 1 (data-reader
-paths resolved for `.` and `..`; `SPAWN`'s three marks only outside Python;
-`case … esac` moved to the known limits); red tests `646f2f58`; on
+Status: **code review approved; push next**; red tests `646f2f58`; on
 `worktree-h25-stdin-routes` off master `c5da0385`. One PR. Designed against
 master's `.claude/hooks/` and `tools/shell_scan.py` with h24 PR A merged
 (#295: items 14, 15 and 16 of `docs/increments/h24-harness-fixes.md`); the red
@@ -298,7 +296,7 @@ reader** when all hold:
   backtick, glob character, `<`, `>`, `=` or parenthesis, and does not start
   `//`; it is then resolved for `.` and `..` (`os.path.normpath`), refused if
   any `..` part remains (a relative path climbing out of the working
-  directory could reach `/dev/`), and refused if the result is under `/dev/`.
+  directory could reach `/dev/`), and refused if the result is under `/dev/` in any letter case (the macOS root ignores case: `/DEV/stdin` is stdin); a relative path is refused too on a line that runs `cd` or `pushd`.
   So `/./dev/stdin`, `/usr/../dev/stdin`, `/usr/lib/../../dev/fd/0` and
   `../../dev/stdin` run stdin and are no data reader (tests `646f2f58`).
   `PROG`'s nodes:
@@ -355,7 +353,7 @@ Two additions, after `parse` and before `runs`:
   that **may start a process**: one pattern, `SPAWN`, over the program's
   whole text, strings and comments included:
   `\b(subprocess|system|popen|exec\w*|spawn\w*|fork\w*|pty|posix|modules|import_module|importlib|__import__|runpy|ctypes|getattr|methodcaller|eval|compile|child_process|open3|qx|syscall)\b`
-  (case-insensitive), and, only for programs that are not Python, `%x`, a
+  (case-insensitive), and, only for programs that are not Python (a bare `python3` on a line with no `PATH=`, `function python3`, `python3()` or `python3=`), `%x`, a
   backtick, or a quote next to a `|` (Perl's and Ruby's `open(F, "|git
   push")`, `open(F, "git push |")`). Python has no `%x` or backtick
   command and no `open` of a pipe, and those three marks are common in the
@@ -369,9 +367,8 @@ Two additions, after `parse` and before `runs`:
 *A departure from the review's wording*, which asked for the text rules
 over every program: that form added 115 push asks on the replay. With
 `SPAWN` over the whole text the rule adds 56 (round 1's whole design, with the syntax-tree test, added 22 over 67,715 commands;
-the difference is the price of reading strings): 36 of them are on lines
-naming `guard_push`, `.claude/hooks/` or the scanner (harness probes), 20
-were not inspected. A program that names `git push` and no way to start a
+the difference is the price of reading strings): 49 of them are on lines
+naming the hooks or the scanner (harness probes). A program that names `git push` and no way to start a
 process publishes nothing: a `print`, or a Python edit of a design file.
 Code review round 1 found this false as first written: on `525677bb`, 30 of
 the push asks the replay added were Python programs editing Markdown, caught
@@ -401,6 +398,7 @@ the text rule has nothing to find.
 - **`case … esac`**: the scanner cannot read a case pattern's `)`, so
   `echo W | case x in x) python3;; esac` is not parsed, and a runner inside
   a case arm is not seen as piped.
+- **Other names for stdin, and a `python3` redefined another way**: a symlink to `/dev/stdin`, `/Volumes/Macintosh HD/dev/stdin`, `/proc/self/fd/0` (Linux), `builtin cd /dev`; bash `hash -p /usr/bin/ruby python3`, zsh `path=(…)` or `functions[python3]=…`.
 - **The Bash tool's own stdin**: what a runner inherits with no feed on the
   line is not the agent's to fill.
 - **A planted module**: `python3 -c` puts the working directory first on
@@ -426,12 +424,7 @@ A new governance ask needs an unread runner and a governed name in the
 line's text, or a read heredoc naming a governed file. A new push ask needs
 an unread runner and a `PUBLISHES` match in the line, or a process-starting
 program that matches. Measured in section 5 for round 1's rule: 33 and 22
-over 67,715 commands; this round adds about 5 governance asks (the
-allowlist, 3.4) and 34 push asks (`SPAWN` over strings, 3.5), so about 38
-and 56. Code review round 1 saw the push figure exceeded by 30 Python
-Markdown edits (3.5); with `SPAWN`'s three marks kept out of Python, its
-estimate is again close to 56. Both figures are to be measured by the
-replay on the green commit. Inspected by hand for round 1: the push asks were all harness probes (Python programs
+over 67,715 commands; measured on `d1cf66c0` over 72,050 commands against master: governance asks 506 to 598, push asks 908 to 996; none went from ask to silent. Inspected by hand for round 1: the push asks were all harness probes (Python programs
 that build `git push` events and run the hooks). Of the governance asks,
 about half are guard probes piping events into `.claude/hooks/*.py` through
 a shell function, `$PY` or `sh -c`; the rest pipe a governed tool's output
@@ -586,3 +579,5 @@ governed). Not a night fallback.
 
 - **Design review, round 3, 2026-10-20.** On `4c84819e`, 0 counted lines (estimate about 110), @reviewer: APPROVED WITH WORDINGS. Judged as a tripwire: the allowlist closes round 2's leaks and the generator-frame route; glob, `=sh` and variable feeds ask; push pattern over strings and glued `-S` sound. One hole closed by wording: a builtin name bound only in a comprehension, lambda or dead code (`[0 for exec in []]; exec(sys.stdin.read())`). Four wordings applied by the main session.
 - **Code review, round 1, 2026-10-20.** On `525677bb`, 147 counted lines (estimate about 110), @reviewer: CHANGES REQUESTED: `/./dev/stdin` and `..` paths escape the data reader; 30 extra push asks on Python edits of Markdown; `case … esac` claim false.
+- **Code review, round 2, 2026-10-20.** On `a332c518`, @reviewer: CHANGES REQUESTED: `/DEV` case, relative script after `cd`/`pushd`, redefined `python3` in the push guard.
+- **Code review, round 3, 2026-10-20.** On `d1cf66c0`, 159 counted lines (estimate about 110), @reviewer: APPROVED WITH WORDINGS; wordings applied in the commit that adds this line. Ola ruled: merge as a tripwire, no further rounds; the §3.6 limits stay known.
