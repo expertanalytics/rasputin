@@ -55,6 +55,9 @@ COPIED = (
     "tools/push_grant.py",
     "tools/ci_changes.py",
     ".claude/hooks/record_review.py",
+    # h23: the recap prints the duties line through this module
+    # (docs/increments/h23-duties.md §4).
+    "tools/duties.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

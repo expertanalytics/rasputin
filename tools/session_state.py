@@ -379,6 +379,14 @@ def print_recap(tasks: Path) -> None:
         print(header)
     print("== recap ==")
     print(f"Last landed: {last_landed(REPO)}")
+    try:  # a fault in the duties line costs that line, like the harness above
+        import duties
+
+        duty = duties.line(REPO, "recap")
+    except Exception as error:
+        duty = f"Duties: unknown ({type(error).__name__}: {str(error).replace(chr(10), ' ')[:120]})"
+    if duty:
+        print(duty)
     print("In flight:")
     flight = in_flight(REPO, default_base(REPO))
     for line in flight[:11]:
