@@ -34,8 +34,10 @@ read 2026-10-20 (Claude Code 2.1.304 installed, `claude --version`).
   when the hook fires inside a subagent.
 - *Notification*: the `permission_prompt` type fires when "Claude needs you
   to approve a tool use … and the prompt has waited about six seconds";
-  "each keystroke defers it"; "If you or a PermissionRequest hook answer
-  sooner, Claude Code doesn't run `permission_prompt`." Input: `message`,
+  "each keystroke defers it"; The reference ties "If you or a PermissionRequest hook answer sooner,
+  Claude Code doesn't run permission_prompt" to Agent SDK sessions; it also
+  says PermissionRequest runs "when it would otherwise auto-deny a call that
+  can't prompt" (such a call gets a tool_result, so it is not open). Input: `message`,
   optional `title`, `notification_type`. "Exit code and stderr are
   ignored."
 - *PermissionDenied* "only fires in auto mode: it doesn't run when you
@@ -113,6 +115,8 @@ def open_prompts(state: Path, since: datetime | None) -> list[dict[str, Any]]:
   transcript may lag). A missing transcript file means the session is gone:
   not open. Read each transcript once, only the lines that contain
   `"tool_use"` or `"tool_result"`, and skip lines that fail to parse.
+
+Known false refusals, each passed with --despite-prompts: an approved call still running (no result yet); a session ended with a prompt or call open; an input Claude Code changed between the hook and the transcript. The live check uses one Bash and one Edit prompt.
 
 **The refusal.** In `enter`, before the terminal is opened, unless
 `--despite-prompts` is given: if `open_prompts` returns any, print to
@@ -194,8 +198,9 @@ more for both (`since`, and `push_grant.grants(flag)` for the names); a
 flag that cannot be read then gives no note. A
 crash prints nothing (`refusal` returns `None` for `PostToolUse`), so the
 tool call is never affected. A new window (a new `since`) notes again.
-Cost: one Python start and one `git rev-parse` per tool call, in every
-session; mode `off` reads only the flag.
+Cost: one Python start and one git rev-parse per tool call, in every
+session, measured 2026-10-20 on this Mac at about 42 ms and 8 ms; a
+subagent's call stops before git; mode `off` reads only the flag.
 
 ## 5. Settings entries (Ola's edit) and the live check
 
@@ -293,3 +298,7 @@ far off either way.
   which do no harm, but it also arrives late for the record; the
   transcript check is the same either way.
 - A banner when `away.py` refuses: Ola is at that terminal.
+
+## Review
+
+- **Design review, round 1, 2026-10-20.** On `e78f7dae`, 0 counted lines (estimate about 75), @reviewer: APPROVED WITH WORDINGS. Hook events and fields checked against the reference (PermissionRequest has no tool_use_id; permission_prompt delay and keystroke deferral; PermissionDenied only in auto mode); rejected-call tool_result present in a real transcript; osascript text as arguments; cost about 42 ms + 8 ms per tool call. Three wordings applied by the main session.
