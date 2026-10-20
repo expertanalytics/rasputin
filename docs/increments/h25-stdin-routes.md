@@ -1,6 +1,8 @@
 # Harness h25: programs a guard cannot see because they arrive on stdin
 
-Status: **designed**, revised 2026-10-20 for design review round 2, on
+Status: **red**, design revised 2026-10-20 for code review round 1 (data-reader
+paths resolved for `.` and `..`; `SPAWN`'s three marks only outside Python;
+`case … esac` moved to the known limits); red tests `646f2f58`; on
 `worktree-h25-stdin-routes` off master `c5da0385`. One PR. Designed against
 master's `.claude/hooks/` and `tools/shell_scan.py` with h24 PR A merged
 (#295: items 14, 15 and 16 of `docs/increments/h24-harness-fixes.md`); the red
@@ -198,7 +200,7 @@ is among its words, never the reverse.
   piped state per level: set after `|`; kept across a newline that directly
   follows the pipe (blanks, a comment or a backslash-newline between);
   inherited by everything inside a compound command (`{ }`, `if … fi`,
-  `while`/`until`/`for`/`select … done`, `case … esac`), a subshell `( )`,
+  `while`/`until`/`for`/`select … done`), a subshell `( )`,
   `$(…)`, backticks, and the `-c` program of a piped shell; set inside
   `>(…)`. A `;`, `&`, `&&`, `||` or a newline resets it to the enclosing
   compound's state, not to "not piped". So `echo S | if true; then python3;
@@ -291,9 +293,15 @@ reader** when all hold:
 - its options are only clusters of the no-value flags in `PLAIN_FLAGS` (`-B
   -E -I -O -P -q -s -S -u -b -d -R -v -x`): no `-W` or `-X` (a warning
   category is imported by name), never `-i`, `-m`, `-` or a long option;
-- then either a script operand that is a plain path (no `$`, backtick, glob
-  character, `<`, `>`, `=`, parenthesis; not under `/dev/`; not starting
-  `//`), or `-c PROG` where `PROG` parses and every node is allowed:
+- then either a script operand that is a plain path, or `-c PROG` where
+  `PROG` parses and every node is allowed. A plain path holds no `$`,
+  backtick, glob character, `<`, `>`, `=` or parenthesis, and does not start
+  `//`; it is then resolved for `.` and `..` (`os.path.normpath`), refused if
+  any `..` part remains (a relative path climbing out of the working
+  directory could reach `/dev/`), and refused if the result is under `/dev/`.
+  So `/./dev/stdin`, `/usr/../dev/stdin`, `/usr/lib/../../dev/fd/0` and
+  `../../dev/stdin` run stdin and are no data reader (tests `646f2f58`).
+  `PROG`'s nodes:
   - imports: only `import json`, `import sys`, `import json, sys`, with no
     `as`; no `from … import`;
   - names: `json`, `sys`, a builtin in `DATA_BUILTINS` (`print len sorted
@@ -345,10 +353,14 @@ Two additions, after `parse` and before `runs`:
   "os.system('git push origin x')"` passes. Now the `PUBLISHES` patterns run
   over each simple's `program` (`-c`/`-e` text, a heredoc, a here-string)
   that **may start a process**: one pattern, `SPAWN`, over the program's
-  whole text, strings and comments included, for every language:
+  whole text, strings and comments included:
   `\b(subprocess|system|popen|exec\w*|spawn\w*|fork\w*|pty|posix|modules|import_module|importlib|__import__|runpy|ctypes|getattr|methodcaller|eval|compile|child_process|open3|qx|syscall)\b`
-  (case-insensitive), or `%x`, a backtick, or a quote next to a `|`
-  (Perl's and Ruby's `open(F, "|git push")`, `open(F, "git push |")`).
+  (case-insensitive), and, only for programs that are not Python, `%x`, a
+  backtick, or a quote next to a `|` (Perl's and Ruby's `open(F, "|git
+  push")`, `open(F, "git push |")`). Python has no `%x` or backtick
+  command and no `open` of a pipe, and those three marks are common in the
+  Markdown a Python program edits (a table row, a `'%x' % n` format, a code
+  span); a Python program is judged by the word part alone.
   Matching inside strings catches a call named in one
   (`methodcaller('system')`, `get_field('0.modules[posix].system')`); the
   first design's syntax-tree test (`SPAWN_NAMES`) is dropped, since it read
@@ -360,7 +372,11 @@ over every program: that form added 115 push asks on the replay. With
 the difference is the price of reading strings): 36 of them are on lines
 naming `guard_push`, `.claude/hooks/` or the scanner (harness probes), 20
 were not inspected. A program that names `git push` and no way to start a
-process (a `print`, an edit of a design file) publishes nothing.
+process publishes nothing: a `print`, or a Python edit of a design file.
+Code review round 1 found this false as first written: on `525677bb`, 30 of
+the push asks the replay added were Python programs editing Markdown, caught
+only by a backtick, `%x` or a quote next to `|`; hence the Python exception
+above (tests `646f2f58`; the same edits in Ruby and Perl still ask).
 
 ### 3.6 What stays uncovered
 
@@ -382,6 +398,9 @@ the text rule has nothing to find.
   stdin route; the program is not read today and is not read here (the first
   design stripped `uv run`; dropped as unneeded for stdin, handed back as an
   idea).
+- **`case … esac`**: the scanner cannot read a case pattern's `)`, so
+  `echo W | case x in x) python3;; esac` is not parsed, and a runner inside
+  a case arm is not seen as piped.
 - **The Bash tool's own stdin**: what a runner inherits with no feed on the
   line is not the agent's to fill.
 - **A planted module**: `python3 -c` puts the working directory first on
@@ -409,7 +428,10 @@ an unread runner and a `PUBLISHES` match in the line, or a process-starting
 program that matches. Measured in section 5 for round 1's rule: 33 and 22
 over 67,715 commands; this round adds about 5 governance asks (the
 allowlist, 3.4) and 34 push asks (`SPAWN` over strings, 3.5), so about 38
-and 56. Inspected by hand for round 1: the push asks were all harness probes (Python programs
+and 56. Code review round 1 saw the push figure exceeded by 30 Python
+Markdown edits (3.5); with `SPAWN`'s three marks kept out of Python, its
+estimate is again close to 56. Both figures are to be measured by the
+replay on the green commit. Inspected by hand for round 1: the push asks were all harness probes (Python programs
 that build `git push` events and run the hooks). Of the governance asks,
 about half are guard probes piping events into `.claude/hooks/*.py` through
 a shell function, `$PY` or `sh -c`; the rest pipe a governed tool's output
@@ -560,4 +582,7 @@ changes estimated. Tests about 160 lines.
 Path: full. Order: design review now; red after this branch merges master
 (h24 PR A is in); green by day with Ola at the prompt (both files
 governed). Not a night fallback.
+## Review
+
 - **Design review, round 3, 2026-10-20.** On `4c84819e`, 0 counted lines (estimate about 110), @reviewer: APPROVED WITH WORDINGS. Judged as a tripwire: the allowlist closes round 2's leaks and the generator-frame route; glob, `=sh` and variable feeds ask; push pattern over strings and glued `-S` sound. One hole closed by wording: a builtin name bound only in a comprehension, lambda or dead code (`[0 for exec in []]; exec(sys.stdin.read())`). Four wordings applied by the main session.
+- **Code review, round 1, 2026-10-20.** On `525677bb`, 147 counted lines (estimate about 110), @reviewer: CHANGES REQUESTED: `/./dev/stdin` and `..` paths escape the data reader; 30 extra push asks on Python edits of Markdown; `case … esac` claim false.
