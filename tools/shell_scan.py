@@ -10,11 +10,17 @@ parsed recursively; wrappers (`env`, `xargs`, `script -q F`, ...) are stripped.
 Stdlib only and pure: the hooks run under whichever `python3` is on PATH. It is
 a reader, not a shell: `None` means it could not read the line, and the guards
 then judge the line as text, as before h4.
+
+A command that could run text (a runner) whose stdin or script could carry text
+the reader did not read (it is fed) is `unread`, and so `unknown`: the guards
+judge its line by its text. A tripwire, not a sandbox; what stays open is in
+`docs/increments/h25-stdin-routes.md`, *3.6 What stays uncovered*.
 """
 
 from __future__ import annotations
 
 import ast
+import builtins
 import os
 import re
 from dataclasses import dataclass, field
@@ -35,6 +41,13 @@ class Simple:
     unknown: bool = False
     #: The body of its heredoc, whoever reads it; `program` only for an interpreter.
     heredoc: str | None = field(default=None, repr=False)
+    #: A runner fed text the reader did not read; it is then `unknown` too.
+    unread: bool = False
+    #: Its words before wrappers are stripped; whether it stands after a pipe; whether
+    #: its own command has an input redirect or a process substitution.
+    written: list[str] = field(default_factory=list, repr=False, compare=False)
+    piped: bool = field(default=False, repr=False, compare=False)
+    fed: bool = field(default=False, repr=False, compare=False)
 
 
 class UnreadableError(Exception):
@@ -75,6 +88,36 @@ READ_NAMES = {"open", "json", "pathlib", "Path"}
 REFLECTION = {"setattr", "delattr", "getattr", "vars", "locals", "globals", "exec", "eval",
               "compile", "breakpoint", "__import__", "__builtins__", "builtins"}  # fmt: skip
 EXPANSION = re.compile(r"\$(\{[^}]*\}|\([^)]*\)|[\w@*#?$!-]+)|`[^`]*`")
+#: Command words that run text: their own, and among any command's words (Python by PYTHON).
+RUNNER_FIRST = {".", "source", "eval", "exec", "coproc", "parallel"}
+RUNNER_ANY = {*SHELLS, "perl", "ruby", "node", "uv", "uvx"}
+#: A word token naming a runner, bare or after an option, `=` or `/` (`-Spython3`, `/bin/sh`).
+RUNNER_TOKEN = re.compile(rf"(?:-\w*|\S*[=/])?(?:{'|'.join(RUNNER_ANY)}|{PYTHON.pattern})")
+#: Commands that run no program whatever their arguments: a runner's name among them is data.
+NO_RUN = {"grep", "egrep", "fgrep", "rg", "head", "tail", "cat", "wc", "sort", "uniq", "cut", "tr",
+          "ls", "echo", "printf", "diff", "cmp", "comm", "basename", "dirname", "realpath", "test",
+          "[", "which", "type", "file", "stat", "du", "df", "tee", "mkdir", "rm", "cp", "mv",
+          "touch"}  # fmt: skip
+OPENERS = {"{", "if", "while", "until", "for", "case", "select"}
+CLOSERS = {"}", "fi", "done", "esac"}
+#: A command word that a glob, a brace or zsh's `=name` could turn into any program.
+PATTERN = re.compile(r"[*?\[{]|^=")
+#: The allowlist of a Python data reader: flags, modules and what a program may touch.
+PLAIN_FLAGS = set("BEIOPqsSubdRvx")
+PLAIN_PATH = re.compile(r"[^$`*?\[{<>=()]+")
+DATA_MODULES = {"sys": {"stdin", "stdout", "stderr", "argv", "exit"},
+                "json": {"load", "loads", "dump", "dumps"}}  # fmt: skip
+DATA_BUILTINS = {"print", "len", "sorted", "min", "max", "sum", "any", "all", "abs", "round",
+                 "int", "float", "str", "bool", "list", "dict", "set", "tuple", "enumerate", "zip",
+                 "range", "map", "filter", "reversed", "isinstance", "repr", "iter", "next",
+                 "divmod", "KeyError", "ValueError", "IndexError", "Exception"}  # fmt: skip
+DATA_METHODS = {"read", "readline", "readlines", "write", "strip", "lstrip", "rstrip", "split",
+                "rsplit", "splitlines", "join", "replace", "startswith", "endswith", "lower",
+                "upper", "get", "items", "keys", "values", "append", "extend", "pop", "sort",
+                "count", "index", "find", "partition", "rpartition", "setdefault", "update",
+                "format", "ljust", "rjust", "isdigit"}  # fmt: skip
+NOT_DATA = (ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Global,
+            ast.Nonlocal, ast.Await, ast.Yield, ast.YieldFrom)  # fmt: skip
 
 
 def base(word: str) -> str:
@@ -90,13 +133,21 @@ def ignored(target: str) -> bool:
     return target == "/dev/null" or target.startswith(("/dev/std", "/dev/fd/"))
 
 
-def parse(command: str) -> list[Simple] | None:
-    """The simple commands of `command`, in the order the reader meets them, or None."""
+def parse(command: str, piped: bool = False) -> list[Simple] | None:
+    """The simple commands of `command`, in the order the reader meets them, or None.
+
+    `piped`: the line reads a pipe, as a piped shell's `-c` program or a shell's heredoc does.
+    """
     scan = _Scan(command)
     try:
-        scan.run(None)
+        scan.run(None, piped)
     except UnreadableError:
         return None
+    feeders = [s for s in scan.heredoc_owners if runner(s, scan.defined)]
+    for simple in scan.found:
+        fed = simple.piped or simple.fed or scan.line_fed or bool(feeders) or by_variable(simple)
+        if fed and runner(simple, scan.defined) and not data_reader(simple):
+            simple.unread = simple.unknown = True
     return scan.found
 
 
@@ -108,9 +159,17 @@ class _Scan:
         self.pending: list[tuple[Simple, str, bool, bool]] = []
         self.backtick = False
         self.assigned: dict[str, str] = {}  # NAME=value commands met so far on the line
+        # Stdin state of the command being read: after a pipe; the piped state each open
+        # compound restores at `;` and newlines; an input redirect; a pipe with nothing after.
+        self.piped, self.stack, self.inputs, self.fresh = False, [False], False, False
+        self.line_fed = False  # a feed on a compound, `exec` or `coproc` reaches every runner
+        self.defined: set[str] = set()  # functions and aliases defined on the line
+        self.heredoc_owners: list[Simple] = []  # bodies on a command not literally a reader
 
-    def run(self, close: str | None) -> None:
+    def run(self, close: str | None, inherit: bool = False) -> None:
         """Read commands up to `close` (`)` or a backtick) or, at the top, the end."""
+        outer = self.piped, self.stack, self.inputs, self.fresh
+        self.piped, self.stack, self.inputs, self.fresh = inherit, [inherit], False, False
         words: list[str] = []
         writes: list[str] = []
         heredocs: list[tuple[str, bool | None, bool]] = []
@@ -124,31 +183,47 @@ class _Scan:
                 self.finish(words, writes, heredocs)
                 if close is None and self.pending:
                     raise UnreadableError
+                self.line_fed |= self.fresh  # zsh's trailing `|&` starts a coprocess
+                self.piped, self.stack, self.inputs, self.fresh = outer
                 return
             char = text[at]
+            fresh, self.fresh = self.fresh, False
             if REDIRECT.match(text, at):
                 if char in "<>" and text[at + 1 : at + 2] == "(":
                     words.append(self.word())  # process substitution
                     continue
                 self.redirect(writes, heredocs)
             elif char in "\n;&|":
-                self.at += 2 if text[at : at + 2] in ("&&", "||", ";;", "|&") else 1
+                sep = text[at : at + 2] if text[at : at + 2] in ("&&", "||", ";;", "|&") else char
+                self.at += len(sep)
                 self.finish(words, writes, heredocs)
                 words, writes, heredocs = [], [], []
+                if sep in ("|", "|&"):
+                    self.piped = self.fresh = True
+                elif char == "\n" and fresh:  # a newline right after a pipe continues it
+                    self.fresh = True
+                else:
+                    self.piped = self.stack[-1]
                 if char == "\n":
                     self.read_heredocs()
             elif char == "(":
                 self.at += 1
                 if words and text[self.at : self.at + 1] == ")":
                     self.at += 1  # a function definition, `f()`
+                    self.defined.add(words[-1])
                     continue
                 self.finish(words, writes, heredocs)
                 words, writes, heredocs = [], [], []
-                self.run(")")
+                self.run(")", self.piped)
             elif char == ")":
                 raise UnreadableError
             else:
-                words.append(self.word())
+                word, head = self.word(), all(w in RESERVED for w in words)
+                if head and word in OPENERS:
+                    self.stack = [*self.stack, self.piped]
+                elif head and word in CLOSERS and len(self.stack) > 1:
+                    self.stack = self.stack[:-1]
+                words.append(word)
 
     def blanks(self) -> None:
         text = self.text
@@ -166,9 +241,10 @@ class _Scan:
     def word(self) -> str:
         text, start = self.text, self.at
         out: list[str] = []
-        if text[self.at] in "<>":  # <(...) or >(...)
+        if text[self.at] in "<>=" and text[self.at + 1 : self.at + 2] == "(":  # <(…) >(…) =(…)
             self.at += 2
-            self.run(")")
+            self.run(")", self.piped or text[start] == ">")
+            self.inputs = True
             return text[start : self.at]
         while self.at < len(text):
             char = text[self.at]
@@ -216,11 +292,11 @@ class _Scan:
         text, start = self.text, self.at
         if text[start] == "`":
             self.at, outer, self.backtick = start + 1, self.backtick, True
-            self.run("`")
+            self.run("`", self.piped)
             self.backtick = outer
         elif text.startswith("$(", start):
             self.at = start + 2
-            self.run(")")
+            self.run(")", self.piped)
         elif text.startswith(("${", "$'"), start):
             close = "}" if text[start + 1] == "{" else "'"
             end = text.find(close, start + 2)
@@ -239,13 +315,16 @@ class _Scan:
         self.at = match.end()
         prefix, op = match.groups()
         self.blanks()
-        if self.at >= len(self.text) or self.text[self.at] in WORD_END:
+        substitution = self.text.startswith(("<(", ">("), self.at)  # never a file written
+        if self.at >= len(self.text) or (self.text[self.at] in WORD_END and not substitution):
             raise UnreadableError
         start, target = self.at, self.word()
+        if op in ("<", "<&", "<>") and target not in ("/dev/null", "-"):
+            self.inputs = True
         if op in ("<<", "<<-", "<<<"):  # a here-string (`<<<`) has None for `<<-`
             expands = not any(c in self.text[start : self.at] for c in "'\"\\")
             heredocs.append((target, None if op == "<<<" else op == "<<-", expands))
-        elif op == ">&" and (target.isdigit() or target == "-"):
+        elif substitution or (op == ">&" and (target.isdigit() or target == "-")):
             return
         elif (op in (">", ">>", ">|", "<>", ">&") or prefix == "&") and not ignored(target):
             writes.append(target)
@@ -273,25 +352,35 @@ class _Scan:
     def finish(
         self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool | None, bool]]
     ) -> None:
+        inputs, self.inputs = self.inputs, False
+        closed = not words or words[0] in CLOSERS  # a compound's or a subshell's redirects
         if words and all(ASSIGNMENT.match(word) for word in words):  # `H=.git/harness;`
             self.assigned |= dict(word.split("=", 1) for word in words)
         while words and (words[0] in RESERVED or ASSIGNMENT.match(words[0])):
             words = words[1:]
+        if words[:1] == ["function"] and len(words) > 1:
+            self.defined.add(words[1])
         if words and words[0] in LOOP_HEADERS:
             words = []
+        head = words[0] if words else ""
+        if ((closed or head == "exec") and (inputs or heredocs)) or head == "coproc":
+            self.line_fed = True
         if not words and not writes and not heredocs:
             return
         simple = classify(words, writes)
+        simple.written, simple.piped, simple.fed = words, self.piped, inputs
+        if simple.argv[:1] == ["alias"]:
+            self.defined |= {word.split("=", 1)[0] for word in simple.argv[1:] if "=" in word}
         # A variable assigned earlier on the line is read as its value: `$H/x`.
         simple.writes = [PLAIN_PARAMETER.sub(self.value, w) for w in simple.writes]
         self.pending += [(simple, d, tabs, x) for d, tabs, x in heredocs if tabs is not None]
         if simple.argv[:1] == ["eval"]:  # eval runs its words as a command line
-            self.nested(" ".join(simple.argv[1:]))
-            if not simple.writes:
+            self.nested(" ".join(simple.argv[1:]), self.piped)
+            if not simple.writes and not by_variable(simple):
                 return
         self.found.append(simple)
         if simple.argv and base(simple.argv[0]) in SHELLS and simple.program is not None:
-            self.nested(simple.program)
+            self.nested(simple.program, self.piped)
             simple.program = None
         for word, tabs, _ in heredocs:
             if tabs is None:  # a here-string: the word and a newline, on stdin
@@ -303,23 +392,28 @@ class _Scan:
     def finish_heredoc(self, simple: Simple, body: str, rewritten: bool) -> None:
         """A stdin body is parsed by a shell, and is the program of an interpreter reading stdin.
 
-        A shell parses every stdin body whatever its `-c` program, since that program may
-        read stdin as commands (`bash -c bash`). An interpreter's body is appended, as zsh
-        joins them all; `rewritten` marks a body the shell may rewrite before the
-        interpreter reads it, which makes the command unknown. An interpreter's inline
-        `-c`/`-e` program, or a script operand of either, keeps stdin as data.
+        Only for a command word that is literally an interpreter, a shell, `.` or `source`;
+        on any other command the body feeds every runner on the line, if it is a runner.
+        A shell's body is parsed as piped commands, whatever its `-c` program, since that
+        program may read stdin as commands (`bash -c bash`); a shell with any argument, or
+        a body that does not parse, feeds the line. An interpreter's body is appended
+        whatever its options, as zsh joins them all, unless it is a data reader;
+        `rewritten` marks a body the shell may rewrite first, which makes it unknown.
         """
-        name = base(simple.argv[0]) if simple.argv else ""
-        if not (PYTHON.fullmatch(name) or name in PROGRAM_FLAG) or simple.script not in (None, "-"):
-            return
-        if name in SHELLS:
-            self.nested(body)
-        elif interpreter(name, simple.argv[1:])[0] is None:
-            simple.program = (simple.program or "") + body
+        name = literal_name(simple)
+        if not (PYTHON.fullmatch(name) or name in PROGRAM_FLAG or name in (".", "source")):
+            self.heredoc_owners.append(simple)
+        elif name in SHELLS or name in (".", "source"):
+            inner = parse(body, True)
+            self.line_fed |= inner is None or len(simple.argv) > 1
+            self.found += inner or []
+        elif not data_reader(simple):
+            program = simple.program or ""
+            simple.program = program + ("\n" if program and program[-1] != "\n" else "") + body
             simple.unknown = simple.unknown or rewritten
 
-    def nested(self, command: str) -> None:
-        inner = parse(command)
+    def nested(self, command: str, piped: bool) -> None:
+        inner = parse(command, piped)
         if inner is None:
             raise UnreadableError
         self.found += inner
@@ -340,6 +434,92 @@ def classify(words: list[str], writes: list[str]) -> Simple:
         rewritten = simple.program is not None and substituted(simple.program)
         simple.unknown = simple.unknown or (name not in SHELLS and rewritten)
     return simple
+
+
+def literal_name(simple: Simple) -> str:
+    """The command word's name, after wrappers, when it holds no expansion or pattern; else ""."""
+    first = simple.argv[0] if simple.argv else ""
+    return "" if substituted(first) or PATTERN.search(first) else base(first)
+
+
+def runner(simple: Simple, defined: set[str]) -> bool:
+    """It could run text: a runner's name, a word that could be any program, or one defined."""
+    written, argv = simple.written, simple.argv
+    if not written:
+        return False
+    names = {base(written[0]), *(base(word) for word in argv[:1])}
+    if names & (RUNNER_FIRST | RUNNER_ANY | defined) or any(PYTHON.fullmatch(n) for n in names):
+        return True
+    heads = {written[0], *argv[:1]} - {"[", "[[", "{", "}"}
+    if any(substituted(word) or PATTERN.search(word) for word in heads):
+        return True
+    tokens = [token for word in written for token in word.split()]
+    if not (argv and base(argv[0]) in NO_RUN) and any(map(RUNNER_TOKEN.fullmatch, tokens)):
+        return True
+    xargs = any(base(word) == "xargs" for word in written)
+    replaces = ("{}" in w or w.startswith(("-I", "-J", "-i", "--replace")) for w in written)
+    return xargs and (any(replaces) or any(map(substituted, written)))
+
+
+def by_variable(simple: Simple) -> bool:
+    """Fed through a variable: `eval`, `.`, `source` or an inline program holding an expansion."""
+    name = base(simple.argv[0]) if simple.argv else ""
+    if name in ("eval", ".", "source"):
+        return any(map(substituted, simple.argv[1:]))
+    if PYTHON.fullmatch(name) or name in PROGRAM_FLAG:
+        program = interpreter(name, simple.argv[1:])[0]
+        return program is not None and substituted(program)
+    return False
+
+
+def data_reader(simple: Simple) -> bool:
+    """Plain `python3` with no-value flags and a plain script path or a data program."""
+    words = simple.written
+    if not words or not PYTHON.fullmatch(words[0]):
+        return False
+    at = 1
+    while at < len(words) and words[at].startswith("-"):
+        if words[at] == "-c":
+            return at + 1 < len(words) and data_program(words[at + 1])
+        if len(words[at]) < 2 or not set(words[at][1:]) <= PLAIN_FLAGS:
+            return False
+        at += 1
+    script = words[at] if at < len(words) else ""
+    return bool(PLAIN_PATH.fullmatch(script)) and not script.startswith(("/dev/", "//"))
+
+
+def data_program(text: str) -> bool:
+    """A Python program that only reads and writes data: every node is on the allowlist.
+
+    It imports only `json` and `sys`, names only those, the builtins of DATA_BUILTINS
+    and names it binds itself (never a builtin's, never one starting `_`), and reads
+    only the attributes of DATA_MODULES and the methods of DATA_METHODS.
+    """
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return False
+    nodes = list(ast.walk(tree))
+    bound = {n.id for n in nodes if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)}
+    bound |= {n.arg for n in nodes if isinstance(n, ast.arg)}
+    bound |= {n.name for n in nodes if isinstance(n, ast.ExceptHandler) and n.name}
+    if substituted(text) or bound & {*DATA_MODULES, *dir(builtins)}:
+        return False
+    allowed = {*DATA_MODULES, *DATA_BUILTINS, *bound}
+    for node in nodes:
+        if isinstance(node, NOT_DATA):
+            return False
+        names = node.names if isinstance(node, ast.Import) else []
+        if any(alias.name not in DATA_MODULES or alias.asname for alias in names):
+            return False
+        if isinstance(node, ast.Name) and (node.id.startswith("_") or node.id not in allowed):
+            return False
+        if isinstance(node, ast.Attribute):
+            owner = node.value.id if isinstance(node.value, ast.Name) else ""
+            readable = DATA_MODULES.get(owner, DATA_METHODS)
+            if not isinstance(node.ctx, ast.Load) or node.attr not in readable:
+                return False
+    return True
 
 
 def substituted(text: str) -> bool:

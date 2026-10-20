@@ -71,6 +71,12 @@ PUBLISHES = (
 )
 PUSH, PR, RELEASE, NO_VERIFY, HISTORY, FORCE = (why for _, why in PUBLISHES)
 UNKNOWN = "a git or gh alias, or a command the guard does not know; it cannot see what it runs"
+#: A program that may start a process, in any language, strings and comments included:
+#: a call named in a string (`methodcaller('system')`) starts one as well.
+SPAWN = re.compile(
+    r"\b(subprocess|system|popen|exec\w*|spawn\w*|fork\w*|pty|posix|modules|import_module|"
+    r"importlib|__import__|runpy|ctypes|getattr|methodcaller|eval|compile|child_process|open3|"
+    r"qx|syscall)\b|%x|`|['\"]\||\|['\"]", re.IGNORECASE)
 
 FORGE_HOST = "github.com"
 SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
@@ -361,8 +367,11 @@ def main() -> int:
         if simples is None:  # the text rules
             reasons = [why for pattern, why in PUBLISHES if pattern.search(command)]
             commands = [tokens(segment) for segment in SEGMENTS.split(command)]
-        else:
-            reasons, commands = [], [s.argv for s in simples]
+        else:  # a runner fed text the scanner did not read, and a program that may spawn
+            texts = [command] if any(s.unread for s in simples) else []
+            texts += [s.program for s in simples if s.program and SPAWN.search(s.program)]
+            reasons = [why for text in texts for pattern, why in PUBLISHES if pattern.search(text)]
+            commands = [s.argv for s in simples]
         for words, bare in [pair for argv in commands for pair in runs(argv)]:
             reasons += publishes(words)
             why = segment_why(words, command)
