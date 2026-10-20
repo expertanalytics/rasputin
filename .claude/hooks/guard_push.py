@@ -80,6 +80,13 @@ SPAWN = re.compile(
 #: Perl's, Ruby's and a shell's other ways to start one; Python has none of them.
 SPAWN_MARKS = re.compile(r"%x|`|['\"]\||\|['\"]")
 
+
+def python(word: str, command: str) -> bool:
+    """`word` runs Python: it names Python, and the line sets no PATH and defines no `word`."""
+    name = re.escape(word)
+    redefines = rf"\bPATH=|\bfunction\s+{name}\b|\b{name}\s*(\(\s*\)|=)"
+    return bool(shell_scan.PYTHON.fullmatch(word)) and not re.search(redefines, command)
+
 FORGE_HOST = "github.com"
 SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
 #: Options whose next token is their argument, not a positional (§3.5).
@@ -372,7 +379,7 @@ def main() -> int:
         else:  # a runner fed text the scanner did not read, and a program that may spawn
             texts = [command] if any(s.unread for s in simples) else []
             texts += [s.program for s in simples if s.program and (SPAWN.search(s.program) or (
-                not shell_scan.PYTHON.fullmatch(s.argv[0]) and SPAWN_MARKS.search(s.program)))]
+                not python(s.argv[0], command) and SPAWN_MARKS.search(s.program)))]
             reasons = [why for text in texts for pattern, why in PUBLISHES if pattern.search(text)]
             commands = [s.argv for s in simples]
         for words, bare in [pair for argv in commands for pair in runs(argv)]:

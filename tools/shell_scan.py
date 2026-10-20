@@ -144,9 +144,10 @@ def parse(command: str, piped: bool = False) -> list[Simple] | None:
     except UnreadableError:
         return None
     feeders = [s for s in scan.heredoc_owners if runner(s, scan.defined)]
+    moved = any(s.argv and base(s.argv[0]) in ("cd", "pushd") for s in scan.found)
     for simple in scan.found:
         fed = simple.piped or simple.fed or scan.line_fed or bool(feeders) or by_variable(simple)
-        if fed and runner(simple, scan.defined) and not data_reader(simple):
+        if fed and runner(simple, scan.defined) and not data_reader(simple, moved):
             simple.unread = simple.unknown = True
     return scan.found
 
@@ -472,8 +473,11 @@ def by_variable(simple: Simple) -> bool:
     return False
 
 
-def data_reader(simple: Simple) -> bool:
-    """Plain `python3` with no-value flags and a plain script path or a data program."""
+def data_reader(simple: Simple, moved: bool = False) -> bool:
+    """Plain `python3` with no-value flags and a plain script path or a data program.
+
+    `moved`: the line runs cd or pushd, so a relative script path could name anything.
+    """
     words = simple.written
     if not words or not PYTHON.fullmatch(words[0]):
         return False
@@ -488,7 +492,9 @@ def data_reader(simple: Simple) -> bool:
     if not PLAIN_PATH.fullmatch(script) or script.startswith("//"):
         return False
     path = os.path.normpath(script)  # `.` and `..` resolved: `/usr/../dev/stdin` is stdin
-    return ".." not in path.split("/") and not path.startswith("/dev/")
+    if ".." in path.split("/") or path.lower().startswith("/dev/"):  # macOS: `/DEV/` is `/dev/`
+        return False
+    return path.startswith("/") or not moved
 
 
 def data_program(text: str) -> bool:
