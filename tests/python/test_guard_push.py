@@ -708,11 +708,10 @@ G7_PASSED = (
     "caffeinate -i gh pr view 12",
     "watch -n5 'gh pr checks 185'",
     "watch -n5 gh pr checks 185",
-    # Pinned passes, the residual §6 keeps: an alias through a bare tail, and
-    # an interpreter program that runs git.
+    # Pinned passes, the residual §6 keeps: an alias through a bare tail. An
+    # interpreter program that runs git asks since h25 (test_h25_* below).
     "caffeinate -i git p origin",
     "caffeinate -i gh pm 12",
-    "python3 -c \"import subprocess; subprocess.run(['git', 'push'])\"",
 )
 
 
@@ -1482,6 +1481,65 @@ def test_h24_15_a_publishing_act_in_a_shell_here_string_is_queued_while_unattend
 def test_h24_15_a_here_string_that_is_data_or_reads_passes(
     repo: Path, mode: str, command: str
 ) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h25
+#
+# docs/increments/h25-stdin-routes.md §3.5: an unread runner (fed text the
+# scanner did not read) puts the whole line under the PUBLISHES text rules,
+# and a program the scanner reads that may start a process (SPAWN) is matched
+# against PUBLISHES, strings and comments included.
+
+H25_ASKED = (
+    "python3 -c \"import os; os.system('git push origin x')\"",
+    "python3 -c \"import subprocess; subprocess.run(['git','push','origin','x'])\"",
+    "python3 -c \"import subprocess; subprocess.run(['git', 'push'])\"",
+    "perl -e 'system(\"git push origin x\")'",
+    "bash -c python3 <<< \"import os; os.system('git push origin x')\"",
+    "echo 'git push origin x' | sh",
+    "echo 'git push origin x' | bash -s",
+    "echo 'git push origin x' | { true; sh; }",
+    "sh <(echo 'git push origin x')",
+    "python3 -c \"import operator,sys; "
+    "operator.methodcaller('system','git push origin x')(sys.modules['posix'])\"",
+    "ruby -e '%x(git push origin x)'",
+    "perl -e 'open(F, \"|git push origin x\")'",
+    "read -r l <<< 'git push origin x'; eval \"$l\"",
+)  # fmt: skip
+
+H25_PASSED = (
+    "echo 'git push origin x' | cat",
+    "echo 'git push origin x' | python3 x.py",
+    "python3 -c \"print('git push origin x')\"",
+    "git apply x.patch; echo 'git push origin x'",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_ASKED)
+def test_h25_a_fed_runner_or_a_spawning_program_naming_a_push_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert reason.startswith("This reaches beyond the working tree: ")
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_PASSED)
+def test_h25_a_push_named_as_data_or_printed_is_silent(repo: Path, mode: str, command: str) -> None:
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
