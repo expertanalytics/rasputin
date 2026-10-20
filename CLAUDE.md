@@ -72,6 +72,10 @@ the personas. Its rules:
   and the same against each branch queued or asked for ahead of it. When
   master conflicts, a writer merges it in first (`tools/merge_master.py`);
   when a branch ahead conflicts, the question names the files.
+* **Prose edits while writers are busy.** With both writer slots busy, the
+  main session may apply a reviewer's exact wording or merge append-only
+  blocks on a prose branch; it composes no text in a persona's file and
+  writes no code.
 * **Recap each round.** At every new round or increment, run
   `python3 tools/session_state.py` and open with its recap.
 * **Milestone updates.** After each milestone, give Ola a one-line log of
