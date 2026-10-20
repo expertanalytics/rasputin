@@ -485,7 +485,10 @@ def data_reader(simple: Simple) -> bool:
             return False
         at += 1
     script = words[at] if at < len(words) else ""
-    return bool(PLAIN_PATH.fullmatch(script)) and not script.startswith(("/dev/", "//"))
+    if not PLAIN_PATH.fullmatch(script) or script.startswith("//"):
+        return False
+    path = os.path.normpath(script)  # `.` and `..` resolved: `/usr/../dev/stdin` is stdin
+    return ".." not in path.split("/") and not path.startswith("/dev/")
 
 
 def data_program(text: str) -> bool:
