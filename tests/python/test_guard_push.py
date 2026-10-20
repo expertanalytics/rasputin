@@ -1637,3 +1637,61 @@ def test_h25_the_same_edit_in_perl_or_ruby_still_asks(repo: Path, mode: str, com
     kind, reason = found
     assert kind == ("deny" if mode == "on" else "ask")
     assert PUSH in reason, reason
+
+
+# ------------------------------------------------- h25 code review round 2
+#
+# §3.4, as in test_guard_governance.py: on macOS `/DEV/stdin` and `/Dev/fd/0`
+# are stdin (the root is case-insensitive), and a relative script on a line
+# that runs cd or pushd is resolved against a directory the guard cannot
+# know. Each was run for real on 2026-10-20 (zsh, bash); each feeds the
+# interpreter, so the whole line goes under the PUBLISHES rules.
+
+H25_STDIN_ROUTES_ROUND2: dict[str, str] = {
+    "case-dev-stdin": "echo 'git push origin x' | python3 /DEV/stdin",
+    "case-dev-fd-0": "echo 'git push origin x' | python3 /Dev/fd/0",
+    "cd-and": "cd /dev && echo 'git push origin x' | python3 stdin",
+    "cd-semicolon-fd": "cd /dev/fd; echo 'git push origin x' | python3 0",
+    "cd-variable": "D=/dev; cd \"$D\" && echo 'git push origin x' | python3 stdin",
+    "pushd-and": "pushd /dev && echo 'git push origin x' | python3 stdin",
+    "pushd-semicolon-fd": "pushd /dev/fd; echo 'git push origin x' | python3 0",
+}  # fmt: skip
+
+# §3.5 exempts Python from SPAWN's three marks (backtick, `%x`, a quote next
+# to `|`) because Python has no such route. The exemption must follow what
+# runs, not the word written: when the line redefines `python3` as a
+# function, an alias or through PATH, the body is Ruby's or Perl's and the
+# marks start a process. Each was run for real on 2026-10-20 with a harmless
+# command in place of the push: the function forms and the PATH prefix (a
+# directory whose `python3` is ruby) under zsh and bash; the alias with a
+# newline after it under bash with expand_aliases (an alias on the same line
+# as its use is not expanded, and is not pinned).
+
+H25_REDEFINED_PYTHON: dict[str, str] = {
+    "function-ruby-backtick": "python3() { ruby; }; python3 <<'EOF'\nputs `git push origin x`\nEOF",
+    "function-ruby-percent-x": (
+        "python3() { ruby; }; python3 <<'EOF'\nputs %x(git push origin x)\nEOF"),
+    "function-perl-quote-next-to-pipe": (
+        "python3() { perl; }; python3 <<'EOF'\nopen(F, \"|git push origin x\"); close F;\nEOF"),
+    "alias-ruby-backtick": "alias python3=ruby\npython3 <<'EOF'\nputs `git push origin x`\nEOF",
+    "function-keyword-perl-backtick": (
+        "function python3 { perl; }; python3 <<'EOF'\nprint `git push origin x`;\nEOF"),
+    "path-prefix-backtick": "PATH=/tmp:$PATH python3 <<'EOF'\nputs `git push origin x`\nEOF",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command",
+    [*H25_STDIN_ROUTES_ROUND2.values(), *H25_REDEFINED_PYTHON.values()],
+    ids=[*H25_STDIN_ROUTES_ROUND2.keys(), *H25_REDEFINED_PYTHON.keys()],
+)
+def test_h25_round2_stdin_route_or_redefined_python_naming_a_push_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason

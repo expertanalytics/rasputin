@@ -1159,3 +1159,58 @@ def test_h25_a_here_string_on_a_script_path_resolving_to_stdin_asks(
 ) -> None:
     asked_naming(repo, f'python3 {script} <<< "{W}"', "CLAUDE.md")
     assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 2
+#
+# docs/increments/h25-stdin-routes.md §3.4: a data reader's script operand is
+# "not under /dev/". Each line below runs its stdin as the script, checked on
+# macOS under zsh and bash with `print('ran')` on 2026-10-20:
+# - the macOS root is case-insensitive, so `/DEV/stdin` and `/Dev/fd/0` are
+#   /dev/stdin and /dev/fd/0 (devfs below it is not: `/dev/STDIN` and
+#   `/DEV/FD/0` fail, and are not pinned);
+# - a relative script on a line that changes directory resolves against a
+#   directory the guard cannot know (`cd "$D"`), so it counts as fed.
+
+H25_CASE_SCRIPTS = ("/DEV/stdin", "/Dev/fd/0")
+
+H25_CD_ROUTES: dict[str, str] = {
+    "cd-and": f'cd /dev && echo "{W}" | python3 stdin',
+    "cd-semicolon-fd": f'cd /dev/fd; echo "{W}" | python3 0',
+    "cd-newline": f'cd /dev\necho "{W}" | python3 stdin',
+    "cd-variable": f'D=/dev; cd "$D" && echo "{W}" | python3 stdin',
+    "pushd-and": f'pushd /dev && echo "{W}" | python3 stdin',
+    "pushd-semicolon-fd": f'pushd /dev/fd; echo "{W}" | python3 0',
+}  # fmt: skip
+
+#: The controls: a relative script with no cd or pushd on the line is a data
+#: reader as today, and a cd before a runner nothing feeds stays silent.
+H25_CD_CONTROLS: dict[str, str] = {
+    "relative-stdin-no-cd": f'echo "{W}" | python3 stdin',
+    "relative-0-no-cd": f'echo "{W}" | python3 0',
+    "cd-before-an-unfed-runner": "cd docs && python3 x.py",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("script", H25_CASE_SCRIPTS)
+def test_h25_a_piped_script_path_naming_dev_in_another_case_asks(repo: Path, script: str) -> None:
+    asked_naming(repo, f'echo "{W}" | python3 {script}', "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("command", H25_CD_ROUTES.values(), ids=H25_CD_ROUTES.keys())
+def test_h25_a_relative_script_on_a_line_that_changes_directory_asks(
+    repo: Path, command: str
+) -> None:
+    asked_naming(repo, command, "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_CD_CONTROLS.values(), ids=H25_CD_CONTROLS.keys())
+def test_h25_a_relative_script_with_no_directory_change_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
