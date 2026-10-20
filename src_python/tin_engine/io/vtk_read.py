@@ -71,7 +71,8 @@ def read_mesh(data: bytes) -> MeshArrays:
         name, _, count, kind = c.line()
         if kind == "string":
             values = [c.string() for _ in range(int(count))]
-            strings[name] = values[0]
+            if values:
+                strings[name] = values[0]
         else:
             c.take(int(count) * _SIZE[kind])
         c.take(1)
