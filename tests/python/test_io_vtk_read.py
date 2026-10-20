@@ -114,6 +114,18 @@ class TestRoundTrip:
         crs = "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs"
         assert vtk_read.read_mesh(mesh_bytes(fields=(("crs", crs),))).crs == crs
 
+    def test_a_mesh_written_with_an_empty_edge_vocabulary_reads_back(
+        self, vtk_read: ModuleType
+    ) -> None:
+        """An empty vocabulary is legal; the writer emits a zero-entry string array."""
+        data = mesh_bytes(vocabulary=EdgeVocabulary(properties=()))
+        assert b"feature_names 1 0 string" in data
+        mesh = vtk_read.read_mesh(data)
+        assert_array_equal(mesh.vertices, VERTICES)
+        assert_array_equal(mesh.triangles, TRIANGLES)
+        assert mesh.crs == CRS
+        assert mesh.land_cover_code is None
+
 
 class TestRefusals:
     def test_an_ascii_mesh_is_refused_saying_how_to_write_it(self, vtk_read: ModuleType) -> None:
