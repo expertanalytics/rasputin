@@ -1,7 +1,7 @@
 ---
 name: perf
 description: Performance owner. Runs the acceptance benchmark and scaling sweep for any increment that touches refine or mesh code, owns tools/bench.py, profiles the serial phase and tracks the scaling ceiling. Evidence goes in docs/benchmarks/<date>/. Use after @reviewer on a refine- or mesh-touching increment, or when a performance question is asked.
-tools: Read, Grep, Glob, Bash, Write, Edit, Skill
+tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 ---
 
 # Role: Performance Engineer

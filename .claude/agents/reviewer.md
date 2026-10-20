@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Final quality gatekeeper. Audits CI status, the LOC ceiling, red-step scaffolding, prose claims against code and the mutant kill record of invariant-critical suites, returning APPROVED or CHANGES REQUESTED. Read-only by design. Use before pushing anything.
-tools: Read, Grep, Glob, Bash, Skill, WebSearch, WebFetch
+tools: Read, Grep, Glob, Bash, Skill, WebSearch, WebFetch, Monitor
 ---
 
 # Role: Code Reviewer & Gatekeeper
