@@ -1,6 +1,6 @@
 # Increment 81: `read_mesh` returns the land-cover code of each triangle
 
-**Status: designed** (`@architect`, 2026-10-20, on `8fd1e118`, master),
+**Status: built, approved** (red 03df40e9, green 1f8cd59c, red f88d5cf7, fix bbd5198d, 31 counted lines); designed by `@architect`, 2026-10-20, on `8fd1e118`, master,
 branch `worktree-mesh-landcover`. **Short path**
 (`docs/increments/README.md`, *Small changes*): about 25 counted lines, no
 C++ file, no refine or mesh code.
@@ -134,3 +134,8 @@ legacy-archive:legacy/rasputin/writer.py:91:                w.add_cell_data(data
 
 *Ideas file.* No entry in the private ideas file takes up or overlaps this
 step.
+
+## Review
+
+- **Round 1 (short path), 2026-10-20.** Range `bd887652..1f8cd59c` (design, red 03df40e9, green 1f8cd59c), 30 counted lines (estimate about 25), @reviewer: CHANGES REQUESTED. A mesh written with an empty edge vocabulary raised IndexError on read; the plugins.md row for `read_mesh` was not updated. Red-step pins (exact refusal messages, test 5's fixture) and @developer's choices beyond the design accepted.
+- **Round 2 (short path), 2026-10-20.** Range `1f8cd59c..bbd5198d`, 31 counted lines in all (estimate about 25), @reviewer: APPROVED. An empty edge vocabulary now reads back (red f88d5cf7, fix bbd5198d); the plugins.md row names the two new fields.
