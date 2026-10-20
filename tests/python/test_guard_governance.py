@@ -894,6 +894,10 @@ HERE_STRING_ASKED: dict[str, tuple[str, str]] = {
     # A shell parses every stdin body whatever its -c program.
     "shell-c-program-that-is-a-shell": (
         "bash -c 'bash' <<'EOF'\necho x > CLAUDE.md\nEOF", "CLAUDE.md"),
+    # A heredoc on a shell that has any argument feeds what the script runs
+    # (docs/increments/h25-stdin-routes.md §3.2, line feeds).
+    "shell-script-beside-a-heredoc": (
+        "bash script.sh <<'EOF'\necho x > CLAUDE.md\nEOF", "CLAUDE.md"),
 }  # fmt: skip
 
 
@@ -943,10 +947,9 @@ def here_string_silent(flag: Path) -> dict[str, str]:
         "two-here-strings-that-print": "python3 <<< 'print(1)' <<< 'print(2)'",
         # A -c program keeps stdin as data.
         "c-program-beside-a-here-string": "python3 -c 'print(1)' <<< \"open('CLAUDE.md','w')\"",
-        # An interpreter's inline program, or a script, keeps a heredoc as data.
+        # A data reader's inline program keeps a heredoc as data.
         "c-program-beside-a-heredoc": (
             "python3 -c 'print(1)' <<'EOF'\nopen('CLAUDE.md','w').write('x')\nEOF"),
-        "shell-script-beside-a-heredoc": "bash script.sh <<'EOF'\necho x > CLAUDE.md\nEOF",
         "json-read-of-the-harness-state": (
             f"python3 <<< 'import json; print(json.load(open(\"{flag}\")))'"),
     }  # fmt: skip
@@ -964,4 +967,250 @@ def test_h24_15_a_here_string_that_writes_nothing_governed_is_silent(
     flag = repo / ".git" / "harness" / "unattended.json"
     event = bash_event(repo, here_string_silent(flag)[label])
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h25
+#
+# docs/increments/h25-stdin-routes.md §3.2: a runner (an interpreter, a shell,
+# or a command that could be one) whose stdin or script could carry text the
+# scanner did not read is unread, and so unknown: the line is judged by its
+# text. A Python data reader (§3.4, an allowlist) keeps its stdin as data.
+
+#: A Python write of CLAUDE.md, the program fed on stdin.
+W = "open('CLAUDE.md','w').write('x')"
+#: A shell write of CLAUDE.md, the commands fed on stdin.
+SH_W = "echo x > CLAUDE.md"
+#: A Python program a data reader may run: only json and sys, read only.
+READ_STDIN = "import sys; print(sys.stdin.read())"
+
+H25_REVIEW_ESCAPES = (
+    f'echo "{W}" |\npython3',
+    f'echo "{W}" | {{ true; python3; }}',
+    f'echo "{W}" | (true; python3)',
+    f'echo "{W}" | if true; then python3; fi',
+    f'echo "{W}" | bash -c python3',
+    f'bash -c python3 <<< "{W}"',
+    f"echo '{SH_W}' | bash -s foo",
+    f"bash -s foo <<< '{SH_W}'",
+    f"echo '{SH_W}' | bash -o errexit",
+    f'echo "{W}" | sudo -E python3 -',
+    f'python3 -i -c pass <<< "{W}"',
+    f'echo "{W}" | python3 -i -c pass',
+    f'python3 =(echo "{W}")',
+    f'python3 3< <(echo "{W}") < /dev/fd/3',
+    f'python3 3< <(echo "{W}") <&3',
+    f'echo "{W}" | xargs -I{{}} python3 -c {{}}',
+    f"echo \"{W}\" | env -S 'python3 -'",
+    f"echo '{SH_W}' | $SHELL",
+    f'python3 //dev/stdin <<< "{W}"',
+    f'exec 0< <(echo "{W}"); python3',
+    f"echo \"{W}\" | python3 -c 'exec(input())'",
+    f"python3 -c 'exec(input())' <<< \"{W}\"",
+    f'echo "{W}" | python3 -m cProfile /dev/stdin',
+    f'echo "{W}" | arch -arm64 python3',
+)
+
+H25_FURTHER_ROUTES = (
+    f'echo "{W}" |  # c\npython3',
+    f'echo "{W}" | (python3)',
+    f'echo "{W}" |& python3',
+    f'echo "{W}" | python3 -m code',
+    f'echo "{W}" | uv run -',
+    f'echo "{W}" | uv run python3',
+    f'uv run python3 - <<< "{W}"',
+    f'echo "{W}" | tee >(python3)',
+    f'python3 <(echo "{W}")',
+    f"source <(echo '{SH_W}')",
+    f"echo '{SH_W}' | while read l; do eval \"$l\"; done",
+    f'echo "{W}" | echo "$(python3)"',
+    f'echo "{W}" | {{ cat; }} | python3',
+    f'f() {{ python3; }}; echo "{W}" | f',
+    f"function g {{ sh; }}; echo '{SH_W}' | g",
+    f'coproc python3; echo "{W}" >&"${{COPROC[1]}}"',
+    f"$SHELL <<< '{SH_W}'",
+    f"bash -c 'echo \"{W}\" | python3'",
+    f"echo \"{W}\" | sh -c 'cat | python3'",
+    f'{{ python3; }} <<< "{W}"',
+    f'{{ python3; }} < <(echo "{W}")',
+    f'( python3 ) < <(echo "{W}")',
+    f'while read l; do python3; done < <(echo "{W}")',
+    f"echo '{SH_W}' | parallel",
+    'cat CLAUDE.md | python3 -c "import os,sys; os.system(sys.stdin.read())"',
+    # Asks today too: a process substitution on an output redirect.
+    f'echo "{W}" > >(python3)',
+)
+
+#: Python programs that run their stdin, each double-quoted for the shell.
+H25_ROUND2_PROGRAMS = (
+    "import sys; sys.modules['posix'].system(sys.stdin.read())",
+    "import sys; __loader__.load_module('posix').system(sys.stdin.read())",
+    "import operator,sys; operator.methodcaller('system', sys.stdin.read())(sys.modules['posix'])",
+    "import string,sys; string.Formatter().get_field('0.system', [sys.modules['posix']], {})[0]"
+    "(sys.stdin.read())",
+    "import sys; g=(x for x in [1]); g.gi_frame.f_builtins['exec'](sys.stdin.read())",
+    "import sys; [0 for exec in []]; exec(sys.stdin.read())",
+)
+
+#: Design review round 2's routes. Each program passes a list of what is
+#: dangerous and fails the allowlist of §3.4; a bound builtin name in a
+#: comprehension leaves the builtin in place.
+H25_ROUND2 = (
+    *(f'echo "{W}" | python3 -c "{program}"' for program in H25_ROUND2_PROGRAMS),
+    f"echo '{SH_W}' | /bin/s?",
+    f"echo '{SH_W}' | =sh",
+    f"read -r l <<< '{SH_W}'; eval \"$l\"",
+    f"l=$(cat <<< '{SH_W}'); eval \"$l\"",
+    f'echo "{W}" | env -S"python3 -"',
+    f"echo \"{W}\" | python3 -W ignore -c '{READ_STDIN}'",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("command", [*H25_REVIEW_ESCAPES, *H25_FURTHER_ROUTES, *H25_ROUND2])
+def test_h25_a_runner_fed_text_naming_a_governed_file_asks(repo: Path, command: str) -> None:
+    asked_naming(repo, command, "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+def h25_denied(flag: Path) -> dict[str, str]:
+    """Fed programs that write the harness state."""
+    write = f"open('{flag}','w').write('x')"
+    return {
+        "piped-python3": f'echo "{write}" | python3',
+        "shell-with-an-operand": f"bash -s foo <<< 'echo x > {flag}'",
+        "compound-fed-by-process-substitution": f'{{ python3; }} < <(echo "{write}")',
+    }
+
+
+H25_DENIED = list(h25_denied(Path("/x")))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("label", H25_DENIED)
+def test_h25_a_fed_runner_writing_the_harness_state_is_denied(
+    repo: Path, mode: str, label: str
+) -> None:
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, h25_denied(flag)[label])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+H25_SILENT: dict[str, str] = {
+    "stdin-from-a-file": "python3 < prog.py",
+    "after-or": "echo x || python3",
+    "after-and": "echo x && python3",
+    "named-script-is-a-data-reader": f'echo "{W}" | python3 x.py',
+    "governed-tool-as-a-data-reader": "git diff | python3 tools/count_loc.py",
+    "c-data-reader-of-a-governed-file": (
+        "cat CLAUDE.md | python3 -c 'import sys; print(len(sys.stdin.read()))'"),
+    "json-reader-fed-a-governed-file": (
+        "python3 -c 'import json,sys; print(json.load(sys.stdin))' < CLAUDE.md"),
+    "heredoc-to-a-named-script": "python3 tools/x.py <<'EOF'\n{\"path\": \"CLAUDE.md\"}\nEOF",
+    "stdin-from-dev-null": "python3 x.py < /dev/null",
+    "process-substitution-on-a-reader": f'diff <(echo "{W}") x; python3 x.py',
+    "json-tool-fed-data": "echo '{}' | python3 -m json.tool",
+    "piped-program-naming-nothing-governed": "printf 'print(1)' | python3",
+    "source-of-a-file": "source .venv/bin/activate",
+    "uv-run-of-a-tool": "uv run pytest tests/python",
+    "loop-fed-a-listing": "while read l; do echo $l; done < <(ls CLAUDE.md)",
+    # An interpreter's name among the words of a command that runs nothing.
+    "grep-for-an-interpreter-name": "grep -i python CLAUDE.md | head",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_SILENT.values(), ids=H25_SILENT.keys())
+def test_h25_data_on_stdin_or_a_runner_not_fed_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 1
+#
+# docs/increments/h25-stdin-routes.md §3.4: a data reader's script operand is
+# "not under /dev/", judged after `.` and `..` are resolved. A path that
+# reaches /dev/stdin through them runs stdin, as `python3 /dev/stdin` and
+# `python3 -` do (the first two, the controls), so the program is fed.
+
+H25_STDIN_SCRIPTS = (
+    "-",
+    "/dev/stdin",
+    "/./dev/stdin",
+    "../../../../../../../../dev/stdin",
+    "/usr/../dev/stdin",
+    "/usr/lib/../../dev/fd/0",
+)
+
+
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_piped_script_path_resolving_to_stdin_asks(repo: Path, script: str) -> None:
+    asked_naming(repo, f'echo "{W}" | python3 {script}', "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_here_string_on_a_script_path_resolving_to_stdin_asks(
+    repo: Path, script: str
+) -> None:
+    asked_naming(repo, f'python3 {script} <<< "{W}"', "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 2
+#
+# docs/increments/h25-stdin-routes.md §3.4: a data reader's script operand is
+# "not under /dev/". Each line below runs its stdin as the script, checked on
+# macOS under zsh and bash with `print('ran')` on 2026-10-20:
+# - the macOS root is case-insensitive, so `/DEV/stdin` and `/Dev/fd/0` are
+#   /dev/stdin and /dev/fd/0 (devfs below it is not: `/dev/STDIN` and
+#   `/DEV/FD/0` fail, and are not pinned);
+# - a relative script on a line that changes directory resolves against a
+#   directory the guard cannot know (`cd "$D"`), so it counts as fed.
+
+H25_CASE_SCRIPTS = ("/DEV/stdin", "/Dev/fd/0")
+
+H25_CD_ROUTES: dict[str, str] = {
+    "cd-and": f'cd /dev && echo "{W}" | python3 stdin',
+    "cd-semicolon-fd": f'cd /dev/fd; echo "{W}" | python3 0',
+    "cd-newline": f'cd /dev\necho "{W}" | python3 stdin',
+    "cd-variable": f'D=/dev; cd "$D" && echo "{W}" | python3 stdin',
+    "pushd-and": f'pushd /dev && echo "{W}" | python3 stdin',
+    "pushd-semicolon-fd": f'pushd /dev/fd; echo "{W}" | python3 0',
+}  # fmt: skip
+
+#: The controls: a relative script with no cd or pushd on the line is a data
+#: reader as today, and a cd before a runner nothing feeds stays silent.
+H25_CD_CONTROLS: dict[str, str] = {
+    "relative-stdin-no-cd": f'echo "{W}" | python3 stdin',
+    "relative-0-no-cd": f'echo "{W}" | python3 0',
+    "cd-before-an-unfed-runner": "cd docs && python3 x.py",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("script", H25_CASE_SCRIPTS)
+def test_h25_a_piped_script_path_naming_dev_in_another_case_asks(repo: Path, script: str) -> None:
+    asked_naming(repo, f'echo "{W}" | python3 {script}', "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("command", H25_CD_ROUTES.values(), ids=H25_CD_ROUTES.keys())
+def test_h25_a_relative_script_on_a_line_that_changes_directory_asks(
+    repo: Path, command: str
+) -> None:
+    asked_naming(repo, command, "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_CD_CONTROLS.values(), ids=H25_CD_CONTROLS.keys())
+def test_h25_a_relative_script_with_no_directory_change_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
     assert queue_lines(repo) == []

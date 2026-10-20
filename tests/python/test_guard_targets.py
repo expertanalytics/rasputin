@@ -594,11 +594,15 @@ def test_h24_14_a_double_quoted_c_program_holding_a_substitution_is_unknown() ->
     assert simple.unknown is True
 
 
-def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_not_unknown() -> None:
+def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_and_the_shell_unread() -> None:
+    # The program is still parsed, but a shell whose -c program holds an
+    # expansion is fed through a variable, so the shell itself is unread and
+    # unknown (docs/increments/h25-stdin-routes.md §3.2, "Through a variable").
     simples = shell_scan.parse('bash -c "echo $(cat q)"')
     assert simples is not None
     assert len(simples) == 4, [s.argv for s in simples]
-    assert [s.argv for s in simples if s.unknown] == []
+    assert [s.argv for s in simples if s.unknown] == [["bash", "-c", "echo $(cat q)"]]
+    assert [s.argv for s in simples if s.unread] == [["bash", "-c", "echo $(cat q)"]]
 
 
 #: Design review round 3's B(t), here with an ordinary target.
@@ -746,3 +750,129 @@ def test_h24_15_a_c_program_or_a_script_keeps_a_here_string_as_data(
     simple = the_simple(line, "python3")
     assert simple.program == program
     assert "CLAUDE.md" not in shell_scan.candidates(simple)
+
+
+# ---------------------------------------------------------------- h25
+#
+# docs/increments/h25-stdin-routes.md §3.2-3.4: a runner fed text the scanner
+# did not read is `unread`, and so `unknown`; a heredoc or here-string on a
+# literal interpreter is its program whatever its options, unless the command
+# is a data reader; a process substitution is never a written file.
+
+#: A Python write of CLAUDE.md, the program fed on stdin.
+H25_W = "open('CLAUDE.md','w').write('x')"
+
+
+def test_h25_a_runner_piped_across_a_newline_is_unread() -> None:
+    simple = the_simple("echo S |\npython3", "python3")
+    assert (simple.unread, simple.unknown) == (True, True)
+
+
+def test_h25_a_runner_after_a_pipe_and_a_semicolon_is_not_unread() -> None:
+    simples = shell_scan.parse("python3 x | tail -1; python3 y")
+    assert simples is not None
+    pythons = [s for s in simples if s.argv[:1] == ["python3"]]
+    assert len(pythons) == 2
+    assert [s.unread for s in pythons] == [False, False]
+
+
+def test_h25_a_runner_inside_a_piped_compound_is_unread() -> None:
+    assert the_simple("echo S | if true; then python3; fi", "python3").unread is True
+
+
+def test_h25_an_interpreter_name_among_a_readers_words_is_not_a_runner() -> None:
+    simples = shell_scan.parse("grep -i python CLAUDE.md | head")
+    assert simples is not None
+    assert [s.argv for s in simples if s.unread] == []
+
+
+def test_h25_a_here_string_is_read_whatever_the_interpreters_options() -> None:
+    simple = the_simple(f'python3 -i -c pass <<< "{H25_W}"', "python3")
+    assert simple.program == f"pass\n{H25_W}\n"
+    assert "CLAUDE.md" in shell_scan.candidates(simple)
+
+
+def test_h25_a_process_substitution_target_is_not_a_write() -> None:
+    simples = shell_scan.parse("echo x > >(sh)")
+    assert simples is not None
+    assert [s.writes for s in simples if s.writes] == []
+
+
+#: §3.4: programs a data reader may run, measured as passing the allowlist.
+DATA_PROGRAMS = (
+    "import json,sys; print(json.load(sys.stdin)['a'])",
+    "import sys; print(len(sys.stdin.read()))",
+    "print(1)",
+)
+
+#: §3.4: programs outside the allowlist, one rule each.
+NOT_DATA_PROGRAMS: dict[str, str] = {
+    "sys-modules": "import sys; sys.modules['posix'].system(sys.stdin.read())",
+    "loader": "import sys; __loader__.load_module('posix').system(sys.stdin.read())",
+    "methodcaller": "import operator; operator.methodcaller('system', 'x')",
+    "formatter": "import string; string.Formatter().get_field('0', [1], {})",
+    "generator-frame": "g=(x for x in [1]); g.gi_frame.f_builtins['exec']('print(1)')",
+    "builtin-bound-in-a-comprehension": "import sys; [0 for exec in []]; exec(sys.stdin.read())",
+    "builtin-bound-in-a-lambda": "import sys; f = lambda exec: 0; exec(sys.stdin.read())",
+    "builtin-bound-in-dead-code": "import sys\nif 0:\n    exec = print\nexec(sys.stdin.read())",
+    "exec-of-input": "exec(input())",
+    "import-as": "import json as j; print(j.dumps(1))",
+    "from-import": "from json import loads; print(loads('1'))",
+    "a-third-module": "import os; print(1)",
+    "underscore-name": "import sys; print(_)",
+    "attribute-assigned": "import sys; sys.stdout = 1",
+    "attribute-deleted": "import sys; del sys.argv",
+    "sys-attribute-off-the-list": "import sys; print(sys.path)",
+    "method-off-the-list": "x = 'a'; x.encode()",
+    "def": "def f():\n    return 1\nprint(f())",
+    "class": "class C:\n    pass",
+    "lambda-calling-a-builtin-off-the-list": "f = lambda: open('CLAUDE.md', 'w'); f()",
+    "syntax-error": "print(",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("program", DATA_PROGRAMS)
+def test_h25_a_program_on_the_allowlist_is_a_data_program(program: str) -> None:
+    assert shell_scan.data_program(program) is True
+
+
+@pytest.mark.parametrize("program", NOT_DATA_PROGRAMS.values(), ids=NOT_DATA_PROGRAMS.keys())
+def test_h25_a_program_off_the_allowlist_is_not_a_data_program(program: str) -> None:
+    assert shell_scan.data_program(program) is False
+
+
+#: §3.4: the command shapes around a data program; each is fed by a pipe.
+NOT_DATA_READERS: dict[str, str] = {
+    "a-wrapper-before-it": "echo S | env python3 x.py",
+    "w-option": "echo S | python3 -W ignore x.py",
+    "x-option": "echo S | python3 -X dev x.py",
+    "i-option": "echo S | python3 -i x.py",
+    "m-option": "echo S | python3 -m json.tool",
+    "dash-script": "echo S | python3 -",
+    "a-long-option": "echo S | python3 --check-hash-based-pycs always x.py",
+    "a-script-under-dev": "echo S | python3 /dev/stdin",
+    "a-script-starting-with-two-slashes": "echo S | python3 //dev/stdin",
+    "a-script-holding-a-dollar": "echo S | python3 $X",
+    "a-script-holding-a-glob": "echo S | python3 x*.py",
+}
+
+DATA_READERS: dict[str, str] = {
+    "a-plain-script": "echo S | python3 x.py",
+    "plain-flags-in-a-cluster": "echo S | python3 -BEs x.py",
+    "a-data-program": "echo S | python3 -u -c 'import sys; print(sys.stdin.read())'",
+    "python3-minor-version": "echo S | python3.12 tools/count_loc.py",
+}
+
+
+@pytest.mark.parametrize("line", NOT_DATA_READERS.values(), ids=NOT_DATA_READERS.keys())
+def test_h25_a_fed_python_outside_the_reader_shape_is_unread(line: str) -> None:
+    simples = shell_scan.parse(line)
+    assert simples is not None
+    assert [s.unread for s in simples if s.argv[:1] != ["echo"]] == [True]
+
+
+@pytest.mark.parametrize("line", DATA_READERS.values(), ids=DATA_READERS.keys())
+def test_h25_a_fed_data_reader_is_not_unread(line: str) -> None:
+    simples = shell_scan.parse(line)
+    assert simples is not None
+    assert [s.unread for s in simples] == [False, False]

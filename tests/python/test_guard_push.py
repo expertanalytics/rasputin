@@ -712,11 +712,10 @@ G7_PASSED = (
     "caffeinate -i gh pr view 12",
     "watch -n5 'gh pr checks 185'",
     "watch -n5 gh pr checks 185",
-    # Pinned passes, the residual §6 keeps: an alias through a bare tail, and
-    # an interpreter program that runs git.
+    # Pinned passes, the residual §6 keeps: an alias through a bare tail. An
+    # interpreter program that runs git asks since h25 (test_h25_* below).
     "caffeinate -i git p origin",
     "caffeinate -i gh pm 12",
-    "python3 -c \"import subprocess; subprocess.run(['git', 'push'])\"",
 )
 
 
@@ -1444,15 +1443,18 @@ HERE_STRING_ASKED: dict[str, str] = {
     "bash -c bash <<'EOF'\ngit push origin x\nEOF": PUSH,
     "sh -c 'cat | sh' <<'EOF'\ngit push origin x\nEOF": PUSH,
     "bash -c bash <<< 'git push origin x'": PUSH,
+    # A heredoc on a shell that has any argument feeds what the script runs,
+    # so the whole line is judged by its text
+    # (docs/increments/h25-stdin-routes.md §3.2, line feeds; §3.5).
+    "bash script.sh <<'EOF'\ngit push origin x\nEOF": PUSH,
 }
 
 HERE_STRING_PASSED = (
     "cat <<< 'git push origin x'",
     "bash <<< 'git status'",
     "python3 -c 'print(1)' <<< 'git push origin x'",
-    # An interpreter's inline program, or a script, keeps a heredoc as data.
+    # An interpreter's inline program keeps a heredoc as data.
     "python3 -c 'print(1)' <<'EOF'\ngit push origin x\nEOF",
-    "bash script.sh <<'EOF'\ngit push origin x\nEOF",
 )
 
 
@@ -1489,6 +1491,214 @@ def test_h24_15_a_here_string_that_is_data_or_reads_passes(
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h25
+#
+# docs/increments/h25-stdin-routes.md §3.5: an unread runner (fed text the
+# scanner did not read) puts the whole line under the PUBLISHES text rules,
+# and a program the scanner reads that may start a process (SPAWN) is matched
+# against PUBLISHES, strings and comments included.
+
+H25_ASKED = (
+    "python3 -c \"import os; os.system('git push origin x')\"",
+    "python3 -c \"import subprocess; subprocess.run(['git','push','origin','x'])\"",
+    "python3 -c \"import subprocess; subprocess.run(['git', 'push'])\"",
+    "perl -e 'system(\"git push origin x\")'",
+    "bash -c python3 <<< \"import os; os.system('git push origin x')\"",
+    "echo 'git push origin x' | sh",
+    "echo 'git push origin x' | bash -s",
+    "echo 'git push origin x' | { true; sh; }",
+    "sh <(echo 'git push origin x')",
+    "python3 -c \"import operator,sys; "
+    "operator.methodcaller('system','git push origin x')(sys.modules['posix'])\"",
+    "ruby -e '%x(git push origin x)'",
+    "perl -e 'open(F, \"|git push origin x\")'",
+    "read -r l <<< 'git push origin x'; eval \"$l\"",
+)  # fmt: skip
+
+H25_PASSED = (
+    "echo 'git push origin x' | cat",
+    "echo 'git push origin x' | python3 x.py",
+    "python3 -c \"print('git push origin x')\"",
+    "git apply x.patch; echo 'git push origin x'",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_ASKED)
+def test_h25_a_fed_runner_or_a_spawning_program_naming_a_push_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert reason.startswith("This reaches beyond the working tree: ")
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", H25_PASSED)
+def test_h25_a_push_named_as_data_or_printed_is_silent(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 1
+#
+# docs/increments/h25-stdin-routes.md §3.4: a script operand "not under
+# /dev/" is judged after `.` and `..` are resolved, so a path that reaches
+# /dev/stdin through them runs stdin as `python3 /dev/stdin` does: the
+# interpreter is fed, and the whole line goes under the PUBLISHES rules.
+
+#: Script operands that resolve to stdin; the first two are the controls.
+H25_STDIN_SCRIPTS = (
+    "-",
+    "/dev/stdin",
+    "/./dev/stdin",
+    "../../../../../../../../dev/stdin",
+    "/usr/../dev/stdin",
+    "/usr/lib/../../dev/fd/0",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_script_path_resolving_to_stdin_feeds_the_interpreter(
+    repo: Path, mode: str, script: str
+) -> None:
+    set_mode(repo, mode)
+    command = f"echo 'git push origin x' | python3 {script}"
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
+
+
+# §3.5: "A program that names `git push` and no way to start a process (a
+# `print`, an edit of a design file) publishes nothing." Python has no
+# backtick, `%x` or pipe-in-a-string route to a process, so those three
+# SPAWN alternatives are Perl's, Ruby's and a shell's; a Python program
+# editing Markdown that names `git push` is caught by them alone today.
+
+H25_PYTHON_MARKDOWN_EDITS: dict[str, str] = {
+    "c-table-row-quote-next-to-pipe": (
+        "python3 -c 'p = \"docs/x.md\"; s = open(p).read(); "
+        "open(p, \"w\").write(s + \"| git push origin x | publishes |\\n\")'"),
+    "heredoc-table-row-quote-next-to-pipe": (
+        "python3 - <<'EOF'\np = 'docs/x.md'\ns = open(p).read()\n"
+        "open(p, 'w').write(s + \"| git push origin x | publishes the branch |\\n\")\nEOF"),
+    "heredoc-percent-x-format": (
+        "python3 - <<'EOF'\np = 'docs/x.md'\n"
+        "open(p, 'a').write('After git push origin x, the head is %x.\\n' % 3054)\nEOF"),
+    "heredoc-backtick-and-table": (
+        "python3 <<'EOF'\nimport pathlib\np = pathlib.Path('docs/increments/x.md')\n"
+        "p.write_text(p.read_text() + '| `git push origin x` | asks |\\n')\nEOF"),
+}  # fmt: skip
+
+#: The same Markdown edits in languages where the backtick, `%x` or a quote
+#: next to `|` can start a process: they still ask.
+H25_OTHER_MARKDOWN_EDITS: dict[str, str] = {
+    "ruby-backtick": "ruby -e 'File.write(\"docs/x.md\", \"run `git push origin x`\")'",
+    "ruby-percent-x": "ruby -e 'File.write(\"docs/x.md\", %x(git push origin x))'",
+    "perl-quote-next-to-pipe": (
+        "perl -e 'open(F, \">>docs/x.md\"); print F \"| git push origin x |\\n\"'"),
+    "perl-heredoc-table-row": (
+        "perl <<'EOF'\nopen(F, '>>docs/x.md');\n"
+        "print F \"| git push origin x | publishes |\\n\";\nEOF"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command", H25_PYTHON_MARKDOWN_EDITS.values(), ids=H25_PYTHON_MARKDOWN_EDITS.keys()
+)
+def test_h25_a_python_markdown_edit_naming_a_push_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command", H25_OTHER_MARKDOWN_EDITS.values(), ids=H25_OTHER_MARKDOWN_EDITS.keys()
+)
+def test_h25_the_same_edit_in_perl_or_ruby_still_asks(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
+
+
+# ------------------------------------------------- h25 code review round 2
+#
+# §3.4, as in test_guard_governance.py: on macOS `/DEV/stdin` and `/Dev/fd/0`
+# are stdin (the root is case-insensitive), and a relative script on a line
+# that runs cd or pushd is resolved against a directory the guard cannot
+# know. Each was run for real on 2026-10-20 (zsh, bash); each feeds the
+# interpreter, so the whole line goes under the PUBLISHES rules.
+
+H25_STDIN_ROUTES_ROUND2: dict[str, str] = {
+    "case-dev-stdin": "echo 'git push origin x' | python3 /DEV/stdin",
+    "case-dev-fd-0": "echo 'git push origin x' | python3 /Dev/fd/0",
+    "cd-and": "cd /dev && echo 'git push origin x' | python3 stdin",
+    "cd-semicolon-fd": "cd /dev/fd; echo 'git push origin x' | python3 0",
+    "cd-variable": "D=/dev; cd \"$D\" && echo 'git push origin x' | python3 stdin",
+    "pushd-and": "pushd /dev && echo 'git push origin x' | python3 stdin",
+    "pushd-semicolon-fd": "pushd /dev/fd; echo 'git push origin x' | python3 0",
+}  # fmt: skip
+
+# §3.5 exempts Python from SPAWN's three marks (backtick, `%x`, a quote next
+# to `|`) because Python has no such route. The exemption must follow what
+# runs, not the word written: when the line redefines `python3` as a
+# function, an alias or through PATH, the body is Ruby's or Perl's and the
+# marks start a process. Each was run for real on 2026-10-20 with a harmless
+# command in place of the push: the function forms and the PATH prefix (a
+# directory whose `python3` is ruby) under zsh and bash; the alias with a
+# newline after it under bash with expand_aliases (an alias on the same line
+# as its use is not expanded, and is not pinned).
+
+H25_REDEFINED_PYTHON: dict[str, str] = {
+    "function-ruby-backtick": "python3() { ruby; }; python3 <<'EOF'\nputs `git push origin x`\nEOF",
+    "function-ruby-percent-x": (
+        "python3() { ruby; }; python3 <<'EOF'\nputs %x(git push origin x)\nEOF"),
+    "function-perl-quote-next-to-pipe": (
+        "python3() { perl; }; python3 <<'EOF'\nopen(F, \"|git push origin x\"); close F;\nEOF"),
+    "alias-ruby-backtick": "alias python3=ruby\npython3 <<'EOF'\nputs `git push origin x`\nEOF",
+    "function-keyword-perl-backtick": (
+        "function python3 { perl; }; python3 <<'EOF'\nprint `git push origin x`;\nEOF"),
+    "path-prefix-backtick": "PATH=/tmp:$PATH python3 <<'EOF'\nputs `git push origin x`\nEOF",
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command",
+    [*H25_STDIN_ROUTES_ROUND2.values(), *H25_REDEFINED_PYTHON.values()],
+    ids=[*H25_STDIN_ROUTES_ROUND2.keys(), *H25_REDEFINED_PYTHON.keys()],
+)
+def test_h25_round2_stdin_route_or_redefined_python_naming_a_push_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
 
 
 # ---------------------------------------------------------------- h27
