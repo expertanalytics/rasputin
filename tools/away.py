@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import errno
+import hashlib
 import io
 import json
 import math
@@ -36,8 +37,63 @@ import push_grant
 DURATION = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
 USAGE = (
     "usage: python3 tools/away.py <duration: 8h, 90m, 1h30m; at most 72h> "
-    "[--grant <branch>]... | --back"
+    "[--grant <branch>]... [--despite-prompts] | --back"
 )
+
+
+def calls(path: Path) -> tuple[list[tuple[Any, str, Any]], set[Any]]:
+    """(name, input hash, id) of each tool_use in a transcript, and the ids that got a result."""
+    uses: list[tuple[Any, str, Any]] = []
+    results: set[Any] = set()
+    with path.open(errors="replace") as lines:
+        for line in (x for x in lines if '"tool_use"' in x or '"tool_result"' in x):
+            try:
+                entry = json.loads(line)
+                content = entry["message"]["content"]
+            except (ValueError, TypeError, KeyError):
+                continue
+            for block in content if isinstance(content, list) else []:
+                if not isinstance(block, dict):
+                    continue
+                if entry.get("type") == "assistant" and block.get("type") == "tool_use":
+                    sha = hashlib.sha256(json.dumps(block.get("input"), sort_keys=True).encode())
+                    uses.append((block.get("name"), sha.hexdigest(), block.get("id")))
+                elif entry.get("type") == "user" and block.get("type") == "tool_result":
+                    results.add(block.get("tool_use_id"))
+    return uses, results
+
+
+def open_prompts(state: Path, since: datetime | None) -> list[dict[str, Any]]:
+    """Recorded prompts at or after `since` whose tool call has no result.
+
+    A missing transcript means the session is gone: not open. No matching call
+    in the transcript counts as open, since a transcript may lag.
+    """
+    found: list[dict[str, Any]] = []
+    scanned: dict[Path, tuple[list[tuple[Any, str, Any]], set[Any]]] = {}
+    for prompt in push_grant.jsonl(state / "prompts.jsonl"):
+        at = _moment(prompt.get("at")) if isinstance(prompt, dict) else None
+        if at is None or (since is not None and at < since):
+            continue
+        path = Path(str(prompt.get("transcript_path")))
+        own = path.with_suffix("") / "subagents" / f"agent-{prompt.get('agent_id')}.jsonl"
+        path = own if prompt.get("agent_id") and own.exists() else path
+        if not path.exists():
+            continue
+        if path not in scanned:
+            scanned[path] = calls(path)
+        uses, results = scanned[path]
+        key = (prompt.get("tool_name"), prompt.get("input_sha"))
+        ids = [i for name, sha, i in uses if (name, sha) == key]
+        if not ids or ids[-1] not in results:
+            found.append(prompt)
+    return found
+
+
+def last_enter(state: Path) -> datetime | None:
+    enters = [w for w in push_grant.jsonl(state / "windows.jsonl")
+              if isinstance(w, dict) and w.get("event") == "enter"]  # fmt: skip
+    return _moment(enters[-1].get("since")) if enters else None
 
 
 def grant_error(root: Path, name: str) -> str | None:
@@ -224,7 +280,19 @@ def enter(
     stop: Callable[[object], None],
     grants: list[str],
     existing: set[str],
+    despite: bool = False,
 ) -> int:
+    waiting = "; ".join(
+        f"session {str(p.get('session_id'))[:8]} ({p.get('agent_type') or 'main session'}), "
+        f"since {hhmm(p.get('at'))}: {p.get('act')}" for p in open_prompts(state, last_enter(state))
+    )  # fmt: skip
+    if waiting and despite:
+        print(f"away.py: entering despite an open permission prompt: {waiting}.", file=sys.stderr)
+    elif waiting:
+        print("away.py: a permission prompt is open and would wait unanswered all night. "
+              f"{waiting}. Answer it, then run away.py again. If that session is closed, "
+              "add --despite-prompts.", file=sys.stderr)  # fmt: skip
+        return 1
     try:
         tty = open_tty()
     except OSError as error:
@@ -386,6 +454,7 @@ def main(
     parser.add_argument("duration", nargs="?")
     parser.add_argument("--back", action="store_true")
     parser.add_argument("--grant", action="append", default=[])
+    parser.add_argument("--despite-prompts", action="store_true")
     args = parser.parse_args(argv)
     root = root or Path(__file__).resolve().parents[1]
     now = now or datetime.now(UTC)
@@ -423,6 +492,7 @@ def main(
         stop,
         args.grant,
         {name for name in args.grant if branch_head(root, name) is not None},
+        args.despite_prompts,
     )
 
 
