@@ -173,6 +173,19 @@ class DerivedCommand:
                 found.extend((param.name, part) for part in parts if isinstance(part, str))
         return found
 
+    def substitute(self, arguments: BaseModel, mapping: dict[str, str]) -> BaseModel:
+        """The arguments with every string equal to a key of ``mapping`` replaced by its
+        value, items of lists and tuples included; only the fields the caller set, so the
+        fields set and the argv order are kept."""
+        given = arguments.model_dump(exclude_unset=True)
+        return self.model.model_validate({k: _swap(v, mapping) for k, v in given.items()})
+
+
+def _swap(value: Any, mapping: dict[str, str]) -> Any:
+    if isinstance(value, tuple | list):
+        return type(value)(_swap(v, mapping) for v in value)
+    return mapping.get(value, value) if isinstance(value, str) else value
+
 
 def derive(app: typer.Typer) -> list[DerivedCommand]:
     """One `DerivedCommand` per shown command of ``app``, in its order, the server's own

@@ -54,10 +54,11 @@ from tin_engine.mcp.server import (
     LOG,
     MIME_TYPES,
     TOKENS_VARIABLE,
+    UPLOAD,
     build_server,
 )
 from tin_engine.mcp.store import Store
-from tin_engine.mcp.workspace import HTTP_REFUSED, CallScope, overlap
+from tin_engine.mcp.workspace import HTTP_REFUSED, NAME, USER, CallScope, overlap
 from tin_engine.sources import catalogue, data_root, plugin_source_files, user_source_file, xdg_base
 
 __all__ = ["HttpSettings", "StaticTokens", "build_app", "serve_http", "tokens_from_env"]
@@ -68,8 +69,6 @@ LINK_SECONDS = 3600
 KEEP_SECONDS = 7 * 86_400
 #: The shortest token accepted, a chosen floor: ``secrets.token_urlsafe(32)`` gives 43.
 TOKEN_FLOOR = 32
-USER = re.compile(r"[a-z][a-z0-9_-]{0,31}")
-NAME = re.compile(r"[0-9a-f]{64}(\.[a-z0-9]{1,8})?")
 FILENAME = re.compile(r"[A-Za-z0-9._-]{1,128}")
 EXPIRES = re.compile(r"[0-9]{1,12}")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -77,7 +76,9 @@ HTTP_INSTRUCTIONS = INSTRUCTIONS + (
     "\nOver HTTP: each call runs in your own folder; give paths relative to it, as a result's "
     "outputs are. A call reads only your folder and the server's data sources. Each output "
     "comes back as a download link valid 1 hour; download_link makes a fresh one. Files in "
-    "your folder are kept 7 days. A change to the server's sources takes a restart."
+    "your folder are kept 7 days. A change to the server's sources takes a restart. An input "
+    "may also be a download link this server gave you, of any age, while its file is kept. "
+    "upload sends a file of your own, up to 2 MiB, and returns its link."
 )
 
 
@@ -200,6 +201,9 @@ class _Delivery:
             )
         return found
 
+    async def receive(self, scope: CallScope, name: str, data: bytes) -> Path:
+        return await Store(scope.write_root.parent).receive(name, data)
+
 
 def build_app(
     app: typer.Typer,
@@ -211,11 +215,12 @@ def build_app(
 ) -> Starlette:
     """The Starlette app: ``/mcp`` behind the bearer check, and ``/files``.
 
-    A `ValueError` when a command is named ``download-link`` (the server's own
-    tool), or when a shared read root and the output root overlap.
+    A `ValueError` when a command is named ``download-link`` or ``upload`` (the
+    server's own tools), or when a shared read root and the output root overlap.
     """
-    if any(d.tool_name == DOWNLOAD_LINK for d in derive(app)):
-        raise ValueError("a command is named download-link, the name of the server's own tool")
+    for d in derive(app):
+        if d.tool_name in (DOWNLOAD_LINK, UPLOAD):
+            raise ValueError(f"a command is named {d.command.name}, a tool of the server's own")
     out_root = settings.out_root.expanduser().resolve()
     shared = _shared_roots(os.environ)
     if (words := overlap(out_root, shared)) is not None:
@@ -235,9 +240,10 @@ def build_app(
         return CallScope(
             cwd=work,
             write_root=work,
-            read_roots=(work, *shared),
+            read_roots=(work, out_root / access.client_id / "store", *shared),
             user=access.client_id,
             refused=frozenset(HTTP_REFUSED),
+            link_prefix=settings.public_url.rstrip("/") + "/files/",
         )
 
     async def download(request: Request) -> Response:

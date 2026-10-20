@@ -16,12 +16,15 @@ stdout is the wire, so nothing here prints.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
+import re
 import secrets
 import shlex
 import signal
+import stat
 import sys
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
@@ -41,7 +44,7 @@ from pydantic import BaseModel, ValidationError
 
 from tin_engine import installed_version
 from tin_engine.mcp.schema import DerivedCommand, Download, RunResult, derive
-from tin_engine.mcp.workspace import CallScope, refusal
+from tin_engine.mcp.workspace import CallScope, linked, refusal, uri
 from tin_engine.sources import OUT_ROOT_VARIABLE
 
 __all__ = [
@@ -65,6 +68,13 @@ DEFAULT_OUT_ROOT = "rasputin-output"
 TOKENS_VARIABLE = "RASPUTIN_MCP_TOKENS"
 #: The tool, served over HTTP only, that stores a file of the caller's and links it.
 DOWNLOAD_LINK = "download_link"
+#: The tool, served over HTTP only, that stores a file sent as a tool argument and links it;
+#: its limit is in bytes after decoding, a chosen scale (a catchment polygon), and the
+#: longest base64 that can decode to at most that many bytes.
+UPLOAD = "upload"
+UPLOAD_BYTES = 2 * 1024 * 1024
+UPLOAD_BASE64 = (UPLOAD_BYTES + 2) // 3 * 4
+UPLOAD_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}")
 #: The HTTP transport's log: one line per call; stdio logs nothing.
 LOG = logging.getLogger("tin_engine.mcp.http")
 MIME_TYPES = {
@@ -155,6 +165,9 @@ class Delivery(Protocol):
 
     async def deliver(self, scope: CallScope, outputs: list[Path]) -> list[Download]:
         """One `Download` per output, in order."""
+
+    async def receive(self, scope: CallScope, name: str, data: bytes) -> Path:
+        """``data`` written as the upload ``name`` in the caller's folder; its place."""
 
 
 async def _run_child(
@@ -333,6 +346,49 @@ DOWNLOAD_TOOL = types.Tool(
 )
 
 
+async def _inputs(scope: CallScope, tool: DerivedCommand, arguments: BaseModel) -> BaseModel | str:
+    """Over HTTP, the arguments with each link of the caller's own replaced by the stored
+    file's relative path, the file touched so it is kept; or the refusal in words: a URI as
+    an output, a URI not the caller's link, a stored file no longer kept."""
+    if scope.link_prefix is None:
+        return arguments
+    for argument, given in tool.writes(arguments):
+        if uri(given):
+            return (
+                f"{argument}: a link names a stored file, which no call writes; give a path "
+                "in your folder."
+            )
+    mapping = {}
+    for argument, given in tool.reads(arguments):
+        if isinstance(found := linked(scope, argument, given), str):
+            return found
+        if found is not None:
+            try:  # a link or a swept file is not kept; a kept one is touched, so stays kept
+                kept = stat.S_ISREG((await AsyncPath(found.place).lstat()).st_mode)
+                if kept:
+                    await anyio.to_thread.run_sync(os.utime, found.place)
+            except OSError:
+                kept = False
+            if not kept:
+                return (
+                    f"{argument}: the file this link names is no longer kept (files are kept "
+                    "7 days after their last use); upload it again, or rerun the call that made it."
+                )
+            mapping[given] = found.text
+    return tool.substitute(arguments, mapping) if mapping else arguments
+
+
+def _linked_result(place: Path, download: Download) -> types.CallToolResult:
+    body = download.model_dump()
+    return types.CallToolResult(
+        content=[
+            types.TextContent(type="text", text=json.dumps(body)),
+            _link(place, download.url, download.bytes),
+        ],
+        structured_content=body,
+    )
+
+
 async def _download_link(
     scope: CallScope, arguments: dict[str, Any], delivery: Delivery
 ) -> types.CallToolResult:
@@ -347,14 +403,73 @@ async def _download_link(
     if (words := await delivery.admit(scope)) is not None:
         return _error(None, words)
     (download,) = await delivery.deliver(scope, [place])
-    body = download.model_dump()
-    return types.CallToolResult(
-        content=[
-            types.TextContent(type="text", text=json.dumps(body)),
-            _link(place, download.url, download.bytes),
-        ],
-        structured_content=body,
-    )
+    return _linked_result(place, download)
+
+
+#: `UPLOAD` as a tool: a name and the content, one `Download` out.
+UPLOAD_TOOL = types.Tool(
+    name=UPLOAD,
+    description="Store a file of your own, sent as text or as base64, up to 2 MiB, in "
+    "uploads/ of your folder; returns its download link, which any tool takes as an input.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "The file name; its suffix is the format."},
+            "text": {"type": "string", "description": "The content as text (UTF-8)."},
+            "base64": {"type": "string", "description": "The content as padded base64."},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    output_schema=Download.model_json_schema(),
+    annotations=types.ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
+    ),
+)
+
+
+async def _upload(
+    scope: CallScope, arguments: dict[str, Any], delivery: Delivery
+) -> types.CallToolResult:
+    """The content checked (name, one of text or base64, size before and after decoding),
+    admitted, written to ``uploads/<name>``, stored and linked; nothing written when refused."""
+    name, given = arguments.get("name"), arguments.get("text", arguments.get("base64"))
+    if not isinstance(name, str) or not UPLOAD_NAME.fullmatch(name):
+        return _error(
+            None,
+            "name: give a file name of letters, digits, '.', '_' and '-', not starting with "
+            "'.', up to 128 characters.",
+        )
+    if not isinstance(given, str) or set(arguments) not in ({"name", "text"}, {"name", "base64"}):
+        return _error(None, "give the file as text or as base64, one of the two.")
+    data: bytes | None = None  # base64 too long to decode: refused by its size, near enough
+    if "text" in arguments:
+        try:
+            data = given.encode()
+        except UnicodeEncodeError:  # a lone surrogate has no UTF-8 form
+            return _error(None, "text: holds a character with no UTF-8 form; send UTF-8 text.")
+    elif len(given) <= UPLOAD_BASE64:
+        try:
+            data = base64.b64decode(given, validate=True)
+        except ValueError:
+            return _error(None, "base64: not valid base64 (A-Z, a-z, 0-9, + and /, padded with =).")
+    size = len(given) * 3 // 4 if data is None else len(data)
+    if data is None or size > UPLOAD_BYTES:
+        return _error(
+            None,
+            f"the file is {size} bytes, over the upload limit of {UPLOAD_BYTES} (2 MiB); a "
+            "larger input must be one of the server's data sources.",
+        )
+    if (words := await delivery.admit(scope)) is not None:
+        return _error(None, words)
+    try:
+        place = await delivery.receive(scope, name, data)
+    except ValueError as exc:  # its text names server paths: for the log, not the client
+        LOG.warning("upload user=%s refused by the store: %s", scope.user, exc)
+        return _error(None, "the server could not store the upload; ask its operator.")
+    (download,) = await delivery.deliver(scope, [place])
+    LOG.info("upload user=%s file=%s bytes=%d", scope.user, download.sha256[:12], download.bytes)
+    return _linked_result(place, download)
 
 
 def build_server(
@@ -380,7 +495,7 @@ def build_server(
     scope_of = scope_for or (lambda ctx: stdio)
     tools = {d.tool_name: d for d in derive(app)}
     semaphore, prefix = anyio.Semaphore(jobs), list(child)
-    extra = [] if delivery is None else [DOWNLOAD_TOOL]
+    extra = [] if delivery is None else [DOWNLOAD_TOOL, UPLOAD_TOOL]
 
     async def list_tools(ctx: ServerRequestContext[Any], params: Any) -> types.ListToolsResult:
         return types.ListToolsResult(tools=[*(d.tool() for d in tools.values()), *extra])
@@ -390,6 +505,8 @@ def build_server(
     ) -> types.CallToolResult:
         if delivery is not None and params.name == DOWNLOAD_LINK:
             return await _download_link(scope_of(ctx), params.arguments or {}, delivery)
+        if delivery is not None and params.name == UPLOAD:
+            return await _upload(scope_of(ctx), params.arguments or {}, delivery)
         tool = tools.get(params.name)
         if tool is None:
             raise MCPError(types.INVALID_PARAMS, f"Unknown tool: {params.name}")
@@ -398,6 +515,9 @@ def build_server(
         except ValidationError as exc:
             return _error(None, "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()))
         scope = scope_of(ctx)
+        if isinstance(inputs := await _inputs(scope, tool, arguments), str):
+            return _error(None, inputs)
+        arguments = inputs
 
         async def check() -> str | None:
             given, writes, reads = (

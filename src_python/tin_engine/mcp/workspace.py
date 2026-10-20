@@ -22,10 +22,13 @@ from typing import Any
 
 import anyio
 
-__all__ = ["HTTP_REFUSED", "CallScope", "overlap", "refusal"]
+__all__ = ["HTTP_REFUSED", "CallScope", "Linked", "linked", "overlap", "refusal", "uri"]
 
 #: The characters of a plain path: a value with ``/`` or a leading ``~`` must be one.
 PLAIN = re.compile(r"[A-Za-z0-9._~/-]+")
+#: A user's name, and a stored file's name (``<sha256><suffix>``), each matched in full.
+USER = re.compile(r"[a-z][a-z0-9_-]{0,31}")
+NAME = re.compile(r"[0-9a-f]{64}(\.[a-z0-9]{1,8})?")
 #: The (tool, flag) pairs refused over HTTP when true, with the reason.
 HTTP_REFUSED = {
     ("fetch", "refresh"): "--refresh discards the shared tile cache for every user, so it is "
@@ -43,6 +46,40 @@ class CallScope:
     read_roots: tuple[Path, ...] | None
     user: str | None
     refused: frozenset[tuple[str, str]] = frozenset()
+    link_prefix: str | None = None
+
+
+@dataclass(frozen=True)
+class Linked:
+    """A link of the caller's own as an input: ``text`` the stored file's path relative to
+    the working folder, which the child is given, and ``place`` the file itself."""
+
+    text: str
+    place: Path
+
+
+def uri(value: str) -> bool:
+    """Whether a value is an address rather than a path: it holds ``://`` or is a data URI."""
+    return "://" in value or value.lower().startswith("data:")
+
+
+def linked(scope: CallScope, argument: str, value: str) -> Linked | str | None:
+    """A URI value judged as a link this server made for the caller, as text alone: the
+    `Linked` stored file, or the refusal in words; None for a value that is no URI, and for
+    every value when the scope has no ``link_prefix``. The query (expiry, signature) is not
+    read: the caller is already known, and the file is their own."""
+    if scope.link_prefix is None or not uri(value):
+        return None
+    rest = value.removeprefix(scope.link_prefix) if value.startswith(scope.link_prefix) else ""
+    user, _, name = re.split(r"[?#]", rest, maxsplit=1)[0].partition("/")
+    if not (USER.fullmatch(user) and NAME.fullmatch(name)):
+        return (
+            f"{argument}: {value} is not a link this server made; the server opens no other "
+            "address. Send the file with the upload tool and pass the link it returns."
+        )
+    if user != scope.user:
+        return f"{argument}: this link names another user's file; a call reads only your own."
+    return Linked(f"../store/{name}", scope.write_root.parent / "store" / name)
 
 
 def _place(scope: CallScope, value: str) -> Path:
