@@ -594,11 +594,15 @@ def test_h24_14_a_double_quoted_c_program_holding_a_substitution_is_unknown() ->
     assert simple.unknown is True
 
 
-def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_not_unknown() -> None:
+def test_h24_14_a_shell_c_program_holding_a_substitution_is_parsed_and_the_shell_unread() -> None:
+    # The program is still parsed, but a shell whose -c program holds an
+    # expansion is fed through a variable, so the shell itself is unread and
+    # unknown (docs/increments/h25-stdin-routes.md §3.2, "Through a variable").
     simples = shell_scan.parse('bash -c "echo $(cat q)"')
     assert simples is not None
     assert len(simples) == 4, [s.argv for s in simples]
-    assert [s.argv for s in simples if s.unknown] == []
+    assert [s.argv for s in simples if s.unknown] == [["bash", "-c", "echo $(cat q)"]]
+    assert [s.argv for s in simples if s.unread] == [["bash", "-c", "echo $(cat q)"]]
 
 
 #: Design review round 3's B(t), here with an ordinary target.

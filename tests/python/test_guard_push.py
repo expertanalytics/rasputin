@@ -1439,15 +1439,18 @@ HERE_STRING_ASKED: dict[str, str] = {
     "bash -c bash <<'EOF'\ngit push origin x\nEOF": PUSH,
     "sh -c 'cat | sh' <<'EOF'\ngit push origin x\nEOF": PUSH,
     "bash -c bash <<< 'git push origin x'": PUSH,
+    # A heredoc on a shell that has any argument feeds what the script runs,
+    # so the whole line is judged by its text
+    # (docs/increments/h25-stdin-routes.md §3.2, line feeds; §3.5).
+    "bash script.sh <<'EOF'\ngit push origin x\nEOF": PUSH,
 }
 
 HERE_STRING_PASSED = (
     "cat <<< 'git push origin x'",
     "bash <<< 'git status'",
     "python3 -c 'print(1)' <<< 'git push origin x'",
-    # An interpreter's inline program, or a script, keeps a heredoc as data.
+    # An interpreter's inline program keeps a heredoc as data.
     "python3 -c 'print(1)' <<'EOF'\ngit push origin x\nEOF",
-    "bash script.sh <<'EOF'\ngit push origin x\nEOF",
 )
 
 
