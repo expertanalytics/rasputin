@@ -216,6 +216,25 @@ def harmless_event(repo: Path, event: str, matcher: str | None) -> dict[str, Any
             "tool_input": {"command": "ls", "description": "List files"},
             "cwd": str(repo),
         }
+    if event == "PostToolUse" and matcher is None:
+        # h28: the window note; the copy's flag is absent (mode off), so it notes nothing
+        return {
+            "hook_event_name": event,
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(repo / "notes.txt")},
+            "tool_response": {"type": "text"},
+            "session_id": "s1",
+            "cwd": str(repo),
+        }
+    if event == "Notification" and tools == {"permission_prompt"}:
+        # h28: notify_prompt.py writes no state, but a permission_prompt would show a
+        # real Mac banner; an idle_prompt makes it return before osascript
+        return {
+            "hook_event_name": event,
+            "notification_type": "idle_prompt",
+            "message": "Claude is waiting for your input",
+            "cwd": str(repo),
+        }
     if event == "ConfigChange":
         return {
             "hook_event_name": event,
@@ -232,7 +251,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_every_hook_script_is_covered_by_path() -> None:
-    """The six hooks under `.claude/hooks/` are all wired as bare paths.
+    """The seven hooks under `.claude/hooks/` are all wired as bare paths.
 
     Without this, a hook rewired with an interpreter prefix would drop out of
     the by-path test below unnoticed.
@@ -245,6 +264,7 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "guard_unattended.py",
         "guard_spawn.py",
         "record_review.py",
+        "notify_prompt.py",
     }
 
 
