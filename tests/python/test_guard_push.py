@@ -1546,3 +1546,94 @@ def test_h25_a_push_named_as_data_or_printed_is_silent(repo: Path, mode: str, co
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 1
+#
+# docs/increments/h25-stdin-routes.md §3.4: a script operand "not under
+# /dev/" is judged after `.` and `..` are resolved, so a path that reaches
+# /dev/stdin through them runs stdin as `python3 /dev/stdin` does: the
+# interpreter is fed, and the whole line goes under the PUBLISHES rules.
+
+#: Script operands that resolve to stdin; the first two are the controls.
+H25_STDIN_SCRIPTS = (
+    "-",
+    "/dev/stdin",
+    "/./dev/stdin",
+    "../../../../../../../../dev/stdin",
+    "/usr/../dev/stdin",
+    "/usr/lib/../../dev/fd/0",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_script_path_resolving_to_stdin_feeds_the_interpreter(
+    repo: Path, mode: str, script: str
+) -> None:
+    set_mode(repo, mode)
+    command = f"echo 'git push origin x' | python3 {script}"
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason
+
+
+# §3.5: "A program that names `git push` and no way to start a process (a
+# `print`, an edit of a design file) publishes nothing." Python has no
+# backtick, `%x` or pipe-in-a-string route to a process, so those three
+# SPAWN alternatives are Perl's, Ruby's and a shell's; a Python program
+# editing Markdown that names `git push` is caught by them alone today.
+
+H25_PYTHON_MARKDOWN_EDITS: dict[str, str] = {
+    "c-table-row-quote-next-to-pipe": (
+        "python3 -c 'p = \"docs/x.md\"; s = open(p).read(); "
+        "open(p, \"w\").write(s + \"| git push origin x | publishes |\\n\")'"),
+    "heredoc-table-row-quote-next-to-pipe": (
+        "python3 - <<'EOF'\np = 'docs/x.md'\ns = open(p).read()\n"
+        "open(p, 'w').write(s + \"| git push origin x | publishes the branch |\\n\")\nEOF"),
+    "heredoc-percent-x-format": (
+        "python3 - <<'EOF'\np = 'docs/x.md'\n"
+        "open(p, 'a').write('After git push origin x, the head is %x.\\n' % 3054)\nEOF"),
+    "heredoc-backtick-and-table": (
+        "python3 <<'EOF'\nimport pathlib\np = pathlib.Path('docs/increments/x.md')\n"
+        "p.write_text(p.read_text() + '| `git push origin x` | asks |\\n')\nEOF"),
+}  # fmt: skip
+
+#: The same Markdown edits in languages where the backtick, `%x` or a quote
+#: next to `|` can start a process: they still ask.
+H25_OTHER_MARKDOWN_EDITS: dict[str, str] = {
+    "ruby-backtick": "ruby -e 'File.write(\"docs/x.md\", \"run `git push origin x`\")'",
+    "ruby-percent-x": "ruby -e 'File.write(\"docs/x.md\", %x(git push origin x))'",
+    "perl-quote-next-to-pipe": (
+        "perl -e 'open(F, \">>docs/x.md\"); print F \"| git push origin x |\\n\"'"),
+    "perl-heredoc-table-row": (
+        "perl <<'EOF'\nopen(F, '>>docs/x.md');\n"
+        "print F \"| git push origin x | publishes |\\n\";\nEOF"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command", H25_PYTHON_MARKDOWN_EDITS.values(), ids=H25_PYTHON_MARKDOWN_EDITS.keys()
+)
+def test_h25_a_python_markdown_edit_naming_a_push_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command", H25_OTHER_MARKDOWN_EDITS.values(), ids=H25_OTHER_MARKDOWN_EDITS.keys()
+)
+def test_h25_the_same_edit_in_perl_or_ruby_still_asks(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason, reason

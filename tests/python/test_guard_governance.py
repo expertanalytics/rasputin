@@ -1128,3 +1128,34 @@ def test_h25_data_on_stdin_or_a_runner_not_fed_is_silent(
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ------------------------------------------------- h25 code review round 1
+#
+# docs/increments/h25-stdin-routes.md §3.4: a data reader's script operand is
+# "not under /dev/", judged after `.` and `..` are resolved. A path that
+# reaches /dev/stdin through them runs stdin, as `python3 /dev/stdin` and
+# `python3 -` do (the first two, the controls), so the program is fed.
+
+H25_STDIN_SCRIPTS = (
+    "-",
+    "/dev/stdin",
+    "/./dev/stdin",
+    "../../../../../../../../dev/stdin",
+    "/usr/../dev/stdin",
+    "/usr/lib/../../dev/fd/0",
+)
+
+
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_piped_script_path_resolving_to_stdin_asks(repo: Path, script: str) -> None:
+    asked_naming(repo, f'echo "{W}" | python3 {script}', "CLAUDE.md")
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("script", H25_STDIN_SCRIPTS)
+def test_h25_a_here_string_on_a_script_path_resolving_to_stdin_asks(
+    repo: Path, script: str
+) -> None:
+    asked_naming(repo, f'python3 {script} <<< "{W}"', "CLAUDE.md")
+    assert queue_lines(repo) == []
