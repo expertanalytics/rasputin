@@ -66,9 +66,10 @@ figures only.
 * Large outputs (meshes) stay out of the repository; say where they were and
   how to regenerate them.
 * A plot comparing observed and modelled series has three lines: the observed
-  series, the best result merged so far, and the run under investigation,
-  unless Ola asks for more for that plot. Each variant gets its own plot.
-  Legend entries are plain words, never increment numbers or branch names.
+  series, the best result so far, and the run under investigation, unless Ola
+  asks for more for that plot. Legend entries are plain words; when plain
+  words make the legend too long, the descriptions go in a caption at the base
+  of the plot, like a figure legend.
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
