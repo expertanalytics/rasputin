@@ -1,7 +1,6 @@
 #pragma once
 
-// The exact overlap of triangles with the cells of a class grid (increment
-// 26b, docs/increments/26-land-cover.md, 1.2 "The exact overlap", section 8).
+// The exact overlap of triangles with the cells of a class grid.
 //
 // Everything is in the grid's index space: x is the column and y the row, so
 // cell (r, c) is the unit square [c, c + 1] x [r, r + 1] and the window is

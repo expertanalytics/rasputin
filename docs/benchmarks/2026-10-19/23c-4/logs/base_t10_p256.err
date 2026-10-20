@@ -1,0 +1,173 @@
+piece 0-2-0: 1394 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9853 m).
+piece 0-3-0: 1242 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.8504 m).
+piece 0-4-0: 1256 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9787 m).
+piece 0-5-0: 194 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.6662 m).
+piece 1-0-0: 539 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9452 m).
+piece 1-1-0: 1565 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9646 m).
+piece 1-2-0: 1860 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9938 m).
+piece 1-3-0: 1553 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9971 m).
+piece 1-4-0: 1852 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9882 m).
+piece 1-5-0: 1584 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9984 m).
+piece 1-5-1: 25 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.5842 m).
+piece 2-0-0: 1108 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.983 m).
+piece 2-1-0: 1057 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9965 m).
+piece 2-2-0: 2128 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.999 m).
+piece 2-3-0: 2648 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9967 m).
+piece 2-4-0: 2503 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9887 m).
+piece 2-5-0: 4211 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9925 m).
+piece 2-6-0: 808 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9899 m).
+piece 3-0-0: 347 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.7777 m).
+piece 3-1-0: 169 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.365 m).
+piece 3-1-1: 835 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9871 m).
+piece 3-2-0: 1816 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9914 m).
+piece 3-3-0: 3193 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.986 m).
+piece 3-4-0: 3196 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9936 m).
+piece 3-5-0: 3982 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9991 m).
+piece 3-6-0: 2433 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9841 m).
+piece 4-1-0: 614 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9846 m).
+piece 4-2-0: 1073 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9888 m).
+piece 4-3-0: 3929 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9943 m).
+piece 4-4-0: 4307 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9978 m).
+piece 4-5-0: 3719 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9979 m).
+piece 4-6-0: 4244 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.993 m).
+piece 4-7-0: 23 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 7.7182 m).
+piece 4-7-1: 5 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 2.8329 m).
+piece 4-7-2: 37 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.4009 m).
+piece 4-7-3: 3 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 1.1382 m).
+piece 5-1-0: 714 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9712 m).
+piece 5-2-0: 1678 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9987 m).
+piece 5-3-0: 2189 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9572 m).
+piece 5-4-0: 5631 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9739 m).
+piece 5-5-0: 3910 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9988 m).
+piece 5-6-0: 4473 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9915 m).
+piece 5-7-0: 2969 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9855 m).
+piece 5-8-0: 256 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9155 m).
+piece 6-2-0: 2582 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9921 m).
+piece 6-3-0: 4074 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.994 m).
+piece 6-4-0: 3869 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9992 m).
+piece 6-5-0: 3604 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9755 m).
+piece 6-6-0: 4576 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9973 m).
+piece 6-7-0: 2838 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9772 m).
+piece 6-8-0: 1848 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9945 m).
+piece 7-2-0: 1433 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9353 m).
+piece 7-3-0: 6064 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.998 m).
+piece 7-4-0: 2729 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9912 m).
+piece 7-5-0: 4111 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9937 m).
+piece 7-6-0: 4513 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9938 m).
+piece 7-7-0: 4743 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.988 m).
+piece 7-8-0: 4349 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9824 m).
+piece 8-2-0: 2 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 1.9522 m).
+piece 8-2-1: 6 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 1.2715 m).
+piece 8-3-0: 4728 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9937 m).
+piece 8-4-0: 2483 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9989 m).
+piece 8-5-0: 4428 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9976 m).
+piece 8-6-0: 4576 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9997 m).
+piece 8-7-0: 4967 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9973 m).
+piece 8-8-0: 4148 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.996 m).
+piece 8-8-1: 67 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9905 m).
+piece 9-3-0: 3080 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9981 m).
+piece 9-4-0: 3261 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9979 m).
+piece 9-5-0: 4861 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9968 m).
+piece 9-6-0: 3747 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9944 m).
+piece 9-7-0: 4618 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9996 m).
+piece 9-8-0: 3959 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9948 m).
+piece 9-9-0: 2364 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9936 m).
+piece 9-10-0: 36 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.1922 m).
+piece 10-3-0: 1200 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9602 m).
+piece 10-4-0: 3284 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9997 m).
+piece 10-5-0: 4398 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9967 m).
+piece 10-6-0: 4470 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9956 m).
+piece 10-7-0: 5913 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9966 m).
+piece 10-8-0: 5829 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9979 m).
+piece 10-9-0: 7676 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9983 m).
+piece 10-10-0: 6510 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9838 m).
+piece 10-11-0: 223 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9778 m).
+piece 10-11-1: 1 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 0.099259 m).
+piece 11-3-0: 38 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.4123 m).
+piece 11-3-1: 113 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.8578 m).
+piece 11-4-0: 6059 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9956 m).
+piece 11-5-0: 6183 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9967 m).
+piece 11-6-0: 6598 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.997 m).
+piece 11-7-0: 5181 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9992 m).
+piece 11-8-0: 7016 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9973 m).
+piece 11-9-0: 10175 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9972 m).
+piece 11-10-0: 10460 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9945 m).
+piece 11-11-0: 3581 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9893 m).
+piece 12-4-0: 3282 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9899 m).
+piece 12-5-0: 9265 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9982 m).
+piece 12-6-0: 7093 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9964 m).
+piece 12-7-0: 4796 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9981 m).
+piece 12-8-0: 10522 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9996 m).
+piece 12-9-0: 10057 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9958 m).
+piece 12-10-0: 11064 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9973 m).
+piece 12-11-0: 2688 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9972 m).
+piece 13-4-0: 2327 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9773 m).
+piece 13-5-0: 8023 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9986 m).
+piece 13-6-0: 7597 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9944 m).
+piece 13-7-0: 7963 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9977 m).
+piece 13-8-0: 8264 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9965 m).
+piece 13-9-0: 8504 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9943 m).
+piece 13-10-0: 10619 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9974 m).
+piece 13-11-0: 3221 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9861 m).
+piece 14-5-0: 1525 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9287 m).
+piece 14-5-1: 132 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.888 m).
+piece 14-6-0: 5457 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.998 m).
+piece 14-7-0: 6704 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9973 m).
+piece 14-8-0: 12336 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9943 m).
+piece 14-9-0: 12680 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9998 m).
+piece 14-10-0: 10400 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9921 m).
+piece 14-11-0: 4230 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9924 m).
+piece 15-5-0: 356 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9251 m).
+piece 15-5-1: 55 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.9287 m).
+piece 15-6-0: 4608 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.998 m).
+piece 15-7-0: 10052 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 10 m).
+piece 15-8-0: 14842 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9967 m).
+piece 15-9-0: 12153 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9997 m).
+piece 15-10-0: 7939 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9925 m).
+piece 15-11-0: 2207 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9962 m).
+piece 16-6-0: 6294 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9978 m).
+piece 16-7-0: 14603 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9996 m).
+piece 16-8-0: 13203 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9925 m).
+piece 16-9-0: 10954 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9926 m).
+piece 16-10-0: 295 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9816 m).
+piece 17-6-0: 1394 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.984 m).
+piece 17-7-0: 11794 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9998 m).
+piece 17-8-0: 14322 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9992 m).
+piece 17-9-0: 10089 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9958 m).
+piece 17-10-0: 1058 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9993 m).
+piece 18-6-0: 739 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9819 m).
+piece 18-7-0: 7742 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9997 m).
+piece 18-8-0: 13580 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9992 m).
+piece 18-9-0: 10545 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9899 m).
+piece 18-10-0: 8490 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9934 m).
+piece 18-11-0: 571 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9637 m).
+piece 19-6-0: 3 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 8.262 m).
+piece 19-7-0: 10314 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9995 m).
+piece 19-8-0: 10616 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9989 m).
+piece 19-9-0: 8380 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9823 m).
+piece 19-10-0: 12233 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9994 m).
+piece 19-11-0: 7769 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9929 m).
+piece 20-7-0: 6558 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9885 m).
+piece 20-8-0: 9446 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.992 m).
+piece 20-9-0: 10571 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9895 m).
+piece 20-10-0: 7541 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.998 m).
+piece 20-11-0: 2372 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 9.9976 m).
+154 pieces and their index.json in /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/velhas/base_t10_p256/velhas.vtk.pieces
+        9.44 real        12.38 user         1.91 sys
+           149782528  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              113682  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  38  voluntary context switches
+               43155  involuntary context switches
+        121344912590  instructions retired
+         43984111029  cycles elapsed
+           111133176  peak memory footprint

@@ -11,9 +11,9 @@
 
 namespace terrain::hydrology {
 
-// How many nodes drain through each node, from the flood `upstream` runs
-// (docs/increments/29-nve-reference-catchments.md, "Accumulation, from the
-// same flood (C++)"). For every node c with data, count[c] and the two bits of
+// How many nodes drain through each node, from the same flood `upstream`
+// runs (flood.hpp), so the two agree node for node.
+// For every node c with data, count[c] and the two bits of
 // reach[c] equal upstream(z, {c})'s nodes_in, touches_edge and touches_nodata.
 struct AccumulateOutcome {
     std::vector<std::uint32_t> count; // row-major; 0 on NoData, else the number of

@@ -1,8 +1,7 @@
 #pragma once
 
 // What this build is, as the compiled code sees it: today only whether the
-// standard library checks its own preconditions (increment 24,
-// docs/increments/24-release-hardening.md section 3).
+// standard library checks its own preconditions.
 //
 // The answer is read from the macros the standard library itself defines, never
 // from the CMake option that asked for them, so a toolchain that ignores the

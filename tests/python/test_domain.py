@@ -298,12 +298,6 @@ class TestReading:
         with pytest.raises((ValueError, AttributeError, TypeError)):
             out.crs = "EPSG:4326"
 
-    def test_the_must_match_rule_is_gone(self, domain: ModuleType) -> None:
-        """R9: `check_crs` is replaced by the transform, and `epsg: int` by `crs: str`."""
-        assert not hasattr(domain, "check_crs")
-        assert "epsg" not in domain.DomainPolygon.model_fields
-        assert "crs" in domain.DomainPolygon.model_fields
-
 
 class TestToCrs:
     """R9: vertices only, each through pyproj's `always_xy` transform, exactly once."""

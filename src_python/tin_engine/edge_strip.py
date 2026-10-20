@@ -26,10 +26,16 @@ from tin_engine._core import (
 from tin_engine.stats import PhaseClock
 
 
-def generate(view: RasterView, start: RefineOutcome, clock: PhaseClock) -> ConstraintCheckPoints:
-    """The strip on ``start``'s constraint edges, z from ``view``."""
+def generate(
+    view: RasterView, start: RefineOutcome, clock: PhaseClock, frozen: int = 0
+) -> ConstraintCheckPoints:
+    """The strip on ``start``'s constraint edges, z from ``view``; none on an
+    edge whose mask meets ``frozen``, which no point may split."""
+    edges = np.asarray(start.edges)
+    if frozen:
+        edges = edges[(np.asarray(start.masks) & frozen) == 0]
     with clock.phase("edge strip: generate"):
-        return constraint_check_points(view, np.asarray(start.vertices), np.asarray(start.edges))
+        return constraint_check_points(view, np.asarray(start.vertices), edges)
 
 
 def run(
@@ -42,12 +48,13 @@ def run(
     field: LineTolerance | None = None,
     slope: SlopeTolerance | None = None,
     threads: int = 0,
+    frozen: int = 0,
 ) -> PointRefineOutcome:
     """``refine_strip`` from ``start``; ``clock`` gets the run's own two times.
     ``feet`` puts points near a line onto it first; ``field``, if any, sets
     each triangle's tolerance; ``slope``, if any, holds each point to its
     slope's tolerance too; ``threads`` goes to the C++ as given (0 is every
-    core)."""
+    core). No vertex goes on an edge whose mask meets ``frozen``."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
     out = refine_strip(
         view,
@@ -55,6 +62,7 @@ def run(
         *(np.asarray(a) for a in arrays),
         tolerance=tolerance,
         threads=threads,
+        frozen_mask=frozen,
         constraint_feet=feet,
         field=field,
         slope=slope,

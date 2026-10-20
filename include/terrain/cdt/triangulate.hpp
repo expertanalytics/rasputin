@@ -13,7 +13,7 @@
 // itself requires models to be usable without an instance, so statelessness is
 // part of the signature rather than a separate purity rule a future model would
 // not be covered by. A backend that needs scratch storage allocates it inside
-// the call -- parallel_refinement.md has every refinement thread sharing one
+// the call -- every refinement thread shares one
 // constraint set, and a stateful backend object is where that stops being true.
 //
 // SEMANTIC OBLIGATIONS OF THE CONCEPT, stated here because a concept cannot
@@ -22,7 +22,7 @@
 //
 //   0. The parameter is a NodedPslg and there is no Pslg overload: un-noded
 //      input is unrepresentable at the entry point rather than diagnosed inside
-//      it, which is increment 5c's architectural product.
+//      it.
 //   1. The returned vertex array BEGINS WITH pslg.vertices(), element-wise and
 //      in order. Additional vertices may only be appended.
 //   2. Only in-domain triangles are returned: nothing inside a Hole, nothing
@@ -31,7 +31,7 @@
 //   4. The mask convention of terrain/cdt/constrained_edges.hpp is the
 //      backend's to honour.
 //   5. The backend decides orientation and incircle AT LEAST AS EXACTLY as the
-//      kernel that validated the Pslg. Increment 3 pinned that a Pslg is valid
+//      kernel that validated the Pslg. A Pslg is valid
 //      with respect to a kernel; a backend using naive doubles could disagree
 //      with the validator about a sliver's winding. No kernel template
 //      parameter is threaded through the CDT: detria does not accept one, and

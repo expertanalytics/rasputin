@@ -16,17 +16,27 @@ round 1, blocking 2), or the generated test it runs fails;
 
 from __future__ import annotations
 
+import json
+import os
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from harness_fixtures import REAL, clean_env, git
 
+# h22 §7: a harness test (it imports nothing from tin_engine); CI runs it in the
+# `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 SCRIPT = "tools/scratch_copy.py"
 CORE = "_core.cpython-312-darwin.so"
+#: The words of the warning that the copied extensions were built from HEAD.
+BUILT_FROM_HEAD = "built from HEAD"
 
 FINDER = '''\
 """A stand-in for scikit-build-core's editable finder: tin_engine -> the decoy.
@@ -197,9 +207,41 @@ def test_from_a_worktree_a_directory_inside_the_main_checkout_is_refused(
     outside the worktree but inside the main checkout that holds it passed."""
     worktree = repo / ".claude/worktrees/w"
     git(repo, "worktree", "add", "-q", "--detach", str(worktree), "HEAD")
+    # h24 item 7: a worktree with no `.venv` is refused for that; give this one
+    # the repository's, so the refusal tested is the main-checkout one.
+    (worktree / ".venv").symlink_to(repo / ".venv")
     target = repo / where
     refused(run_copy(worktree, "HEAD", str(target)), says="inside")
     assert not target.exists() or not any(target.iterdir())
+
+
+def test_h24_7_a_worktree_with_no_venv_is_refused_before_anything_is_extracted(
+    tmp_path: Path,
+) -> None:
+    """h24 item 7: with no `<ROOT>/.venv/bin/python` the tool warned and still
+    printed a command naming that missing interpreter. Now: exit 2, one stderr
+    line naming the fix, and the target not created."""
+    root = tmp_path.resolve() / "novenv"
+    root.mkdir()
+    git(root, "init", "-q", "-b", "master")
+    git(root, "config", "user.email", "t@example.invalid")
+    git(root, "config", "user.name", "T")
+    source = REAL / SCRIPT
+    if source.exists():
+        (root / "tools").mkdir()
+        shutil.copy2(source, root / SCRIPT)
+    write(root, "src_python/tin_engine/__init__.py", "")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "base")
+    assert not (root / ".venv").exists()
+    target = tmp_path / "copy"
+    result = run_copy(root, "HEAD", str(target))
+    says = (f"scratch_copy: {root} has no .venv; make one with this worktree's install "
+            "before copying")  # fmt: skip
+    refused(result, says=says)
+    assert result.stderr.strip() == says, result.stderr
+    assert result.stdout.strip() == "", f"a command was printed: {result.stdout!r}"
+    assert not target.exists(), sorted(str(p) for p in target.rglob("*"))
 
 
 def test_an_empty_directory_is_accepted(repo: Path, tmp_path: Path) -> None:
@@ -302,7 +344,8 @@ def test_no_built_core_warns_and_still_copies(repo: Path, tmp_path: Path) -> Non
     (site_packages(repo) / "tin_engine" / CORE).unlink()
     target = tmp_path / "copy"
     result = copied(repo, "HEAD", target)
-    assert "_core" in result.stderr, f"no warning about the missing _core: {result.stderr!r}"
+    # h22 §6.2 rule 2: the warning names the packages looked for.
+    assert "tin_engine" in result.stderr, f"no warning naming tin_engine: {result.stderr!r}"
     assert (target / "src_python/tin_engine/mod.py").is_file()
     assert len(result.stdout.strip().splitlines()) == 1
 
@@ -311,8 +354,7 @@ def test_a_revision_before_a_cxx_change_warns_the_core_is_from_head(
     repo: Path, tmp_path: Path
 ) -> None:
     result = copied(repo, "HEAD~2", tmp_path / "copy")
-    assert "HEAD" in result.stderr, f"no warning that _core was built from HEAD: {result.stderr!r}"
-    assert "_core" in result.stderr
+    assert BUILT_FROM_HEAD in result.stderr, f"no warning about HEAD: {result.stderr!r}"
 
 
 def test_a_revision_with_the_same_cxx_does_not_warn(repo: Path, tmp_path: Path) -> None:
@@ -383,3 +425,124 @@ def test_a_python_process_started_by_a_test_imports_the_copy(repo: Path, tmp_pat
     )  # fmt: skip
     assert result.returncode == 0, f"exit {result.returncode}\n{result.stdout}\n{result.stderr}"
     assert "1 passed" in result.stdout, result.stdout
+
+
+# ---------------------------------------------------------------- h22 fix 3
+#
+# docs/increments/h22-harness-fixes.md §6.2 and §7 tests 15-18, on Fixture B:
+# the private layout. Source under `src/`, no `src_python/`; a real virtual
+# environment whose site-packages holds `pkg/_ext*.so` (stand-in bytes) for
+# the package in `src/`, `other/_x.so` with no source, and a `.pth` naming
+# `ROOT/src`, as scikit-build-core's editable install writes it.
+
+EXT = "_ext.cpython-312-darwin.so"
+
+
+@pytest.fixture
+def private_repo(tmp_path: Path) -> Path:
+    """Commits, oldest first: `base`, `cpp` (native/a.cpp), `py` (src/pkg/mod.py),
+    `tests-cpp` (tests/cpp/t.cpp). HEAD is `tests-cpp`."""
+    root = tmp_path.resolve() / "private"
+    root.mkdir()
+    git(root, "init", "-q", "-b", "master")
+    git(root, "config", "user.email", "t@example.invalid")
+    git(root, "config", "user.name", "T")
+    source = REAL / SCRIPT
+    if source.exists():
+        (root / "tools").mkdir()
+        shutil.copy2(source, root / SCRIPT)
+    write(root, ".gitignore", ".venv\n")
+    write(root, "src/pkg/__init__.py", "")
+    write(root, "src/pkg/mod.py", "VALUE = 'base'\n")
+    write(root, "native/a.cpp", "int a;\n")
+    write(root, "tests/cpp/t.cpp", "int t;\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "base")
+    later = (("native/a.cpp", "int a;\nint b;\n", "cpp"),
+             ("src/pkg/mod.py", "VALUE = 'py'\n", "py"),
+             ("tests/cpp/t.cpp", "int t;\nint u;\n", "tests-cpp"))  # fmt: skip
+    for relative, text, message in later:
+        write(root, relative, text)
+        git(root, "commit", "-q", "-am", message)
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(root / ".venv")],
+        capture_output=True, env=env(), check=True,
+    )  # fmt: skip
+    site = site_packages(root)
+    (site / "pkg").mkdir()
+    (site / "pkg" / EXT).write_bytes(b"\x7fELF stand-in")
+    (site / "other").mkdir()
+    (site / "other" / "_x.so").write_bytes(b"\x7fELF other")
+    write(site, "_editable_pkg.pth", f"{root / 'src'}\n")
+    write(site, "_host_packages.pth", str(Path(pytest.__file__).resolve().parent.parent) + "\n")
+    return root
+
+
+def pythonpath(printed: str) -> list[str]:
+    """The entries of the `PYTHONPATH=` word of the printed command."""
+    words = [w for w in shlex.split(printed.strip()) if w.startswith("PYTHONPATH=")]
+    assert len(words) == 1, f"not one PYTHONPATH= word: {printed!r}"
+    return words[0].removeprefix("PYTHONPATH=").split(os.pathsep)
+
+
+#: Run in a child of the private venv's interpreter: where `pkg` is imported from,
+#: and `sys.path`.
+WHERE = "import json, sys, pkg; print(json.dumps({'pkg': pkg.__file__, 'path': sys.path}))"
+
+
+def child(root: Path, printed: str, cwd: Path) -> dict[str, Any]:
+    environ = {**env(), "PYTHONPATH": os.pathsep.join(pythonpath(printed))}
+    done = subprocess.run(
+        [str(root / ".venv/bin/python"), "-c", WHERE],
+        capture_output=True, text=True, cwd=cwd, env=environ, timeout=60, check=False,
+    )  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    found: dict[str, Any] = json.loads(done.stdout)
+    return found
+
+
+def test_h22_15_the_extension_lands_beside_its_source_and_nothing_else_is_made(
+    private_repo: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "copy"
+    copied(private_repo, "HEAD", target)
+    landed = target / "src/pkg" / EXT
+    assert landed.is_file(), f"pkg's extension is not at {landed}"
+    assert landed.read_bytes() == b"\x7fELF stand-in"
+    assert not (target / "src/other").exists(), "a package with no source in the copy was made"
+    assert not list(target.rglob("_x.so")), "other's extension was copied"
+    assert not (target / "src_python").exists(), "src_python was made in a private-layout copy"
+
+
+def test_h22_16_the_printed_pythonpath_holds_the_copys_src_and_pkg_comes_from_it(
+    private_repo: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "copy"
+    printed = copied(private_repo, "HEAD", target).stdout
+    assert str(target / "src") in pythonpath(printed), printed
+    seen = child(private_repo, printed, tmp_path)
+    assert Path(seen["pkg"]).resolve().is_relative_to(target), seen["pkg"]
+    real_src = str((private_repo / "src").resolve())
+    assert all(str(Path(e).resolve()) != real_src for e in seen["path"] if e), (
+        f"the worktree's src is still on sys.path: {seen['path']}")  # fmt: skip
+
+
+def test_h22_17_the_sitecustomize_keeps_site_packages_on_sys_path(
+    private_repo: Path, tmp_path: Path
+) -> None:
+    printed = copied(private_repo, "HEAD", tmp_path / "copy").stdout
+    seen = child(private_repo, printed, tmp_path)
+    site = str(site_packages(private_repo).resolve())
+    assert site in [str(Path(e).resolve()) for e in seen["path"] if e], seen["path"]
+
+
+@pytest.mark.parametrize(
+    ("rev", "warns"),
+    [("HEAD~1", False), ("HEAD~2", False), ("HEAD~3", True)],
+    ids=["a-cpp-under-tests-only", "a-py-under-src", "a-cpp-elsewhere"],
+)
+def test_h22_18_only_a_cxx_change_outside_tests_warns_the_extension_is_from_head(
+    private_repo: Path, tmp_path: Path, rev: str, warns: bool
+) -> None:
+    result = copied(private_repo, rev, tmp_path / "copy")
+    assert (BUILT_FROM_HEAD in result.stderr) is warns, result.stderr

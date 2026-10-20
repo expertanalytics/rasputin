@@ -739,10 +739,6 @@ class TestRenamedAndMoved:
     what it reads, and `TerrainFeature` lives in `features` (layer 0), which
     `feature_input` imports it back from."""
 
-    def test_read_lake_polygons_replaces_read_lakes(self, fi: ModuleType) -> None:
-        assert callable(getattr(fi, "read_lake_polygons", None))
-        assert not hasattr(fi, "read_lakes")
-
     def test_read_lake_polygons_skips_what_is_not_a_polygon(
         self, tmp_path: Path, fi: ModuleType
     ) -> None:

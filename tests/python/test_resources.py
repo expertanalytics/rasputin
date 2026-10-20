@@ -1,7 +1,7 @@
 """`tin_engine.resources`: the one module that reads the machine (increment 38).
 
 `docs/increments/38-threads-and-memory.md`, sections 4.1 to 4.3, 6 and 8
-(T1 to T5, and T11's `decompose`). The module is fetched inside a fixture, so
+(T1 to T5). The module is fetched inside a fixture, so
 its absence fails these tests and leaves the rest of the session collecting.
 
 Figures that depend on the machine (its core count, its memory) are computed
@@ -10,16 +10,11 @@ design's "10 cores, 32 GiB" are this machine's and the suite runs on others.
 The cgroup readers take the cgroup root, so a `tmp_path` with a synthetic
 `cpu.max` or `memory.max` stands for a container; the scale assumed is one
 container with its own cgroup root (the design's stated limit).
-
-T11's `project_structure.md` assertion is not here: that file is prose under
-`tools/ci_changes.py`'s rule, and `conftest.py` fails a session in which a
-test opens one (h11, T5). `@reviewer` reads the two rows instead.
 """
 
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import os
 from pathlib import Path
 from types import ModuleType
@@ -279,10 +274,3 @@ class TestT5ParseBytes:
         with pytest.raises(ValueError) as info:
             res.resources(None, text, {})
         assert text in str(info.value)
-
-
-# ---------------------------------------------------------------- T11
-
-
-def test_t11_decompose_is_gone() -> None:
-    assert importlib.util.find_spec("tin_engine.decompose") is None

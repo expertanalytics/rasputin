@@ -1,6 +1,6 @@
 // The second and last translation unit in this repository that includes
-// detria.hpp. See lib/detria/README.md for why that is a rule and how it is
-// enforced.
+// detria.hpp; why that is a rule and how it is enforced:
+// `lib/detria/README.md`, *One translation unit*.
 
 #include <terrain/cdt/detria_backend.hpp>
 
@@ -24,8 +24,8 @@ namespace {
 using Triangulation = detria::Triangulation<Point2, std::uint32_t>;
 
 // Every detria::TriangulationError maps to exactly one CdtStatus, by an
-// exhaustive switch and NEVER BY A CAST -- increment 1 established that rule for
-// detria's orientation enums and mutation-tested the failures a cast produces.
+// exhaustive switch and NEVER BY A CAST, the rule detria's orientation enums
+// follow too: a cast silently maps a new enumerator to the wrong status.
 //
 // The switch has a second job here: `return BackendFailure` sits AFTER it rather
 // than in a `default:` arm, so -Wswitch under -Werror turns a re-pin that adds

@@ -146,14 +146,14 @@ def plan_mosaic(
     needed: Any = None,
     *,
     memory_budget: int | None = None,
+    cap: bool = True,
 ) -> MosaicPlan:
     """Select the tiles the request needs, on one lattice, or refuse.
 
     `bounds` is the box in the DEM's CRS; without it, the lattice's union.
     `needed` is a shapely geometry in the DEM's CRS, closed: a node on its
     boundary is needed. Without it, every node of the window is.
-    `memory_budget` caps the canvas in bytes; None is half the
-    machine's memory (`Resources.fallback()`).
+    With `cap`, `memory_budget` caps the canvas in bytes (`check_canvas`).
 
     When the request selects tiles on several lattices, the plan is on the one
     whose own tiles cover every needed node (`_covering`).
@@ -179,15 +179,40 @@ def plan_mosaic(
         raise MosaicError(f"the box {bounds} meets no tile")
     if len(chosen) > 1:
         covering = _covering(chosen, bounds, needed)
-        return plan_mosaic(covering, bounds, needed, memory_budget=memory_budget)
+        return plan_mosaic(covering, bounds, needed, memory_budget=memory_budget, cap=cap)
 
     lattice = chosen[0]
     (x_ref, y_ref), (r0, c0, r1, c1), selected = lattice.reference, lattice.window, lattice.selected
     rows, cols = r1 - r0 + 1, c1 - c0 + 1
     if rows < 2 or cols < 2:
         raise MosaicError(f"the request is {rows} x {cols} nodes; a mesh needs at least 2 x 2")
-    dtype = np.result_type(*(p.footprint.dtype for p in selected))
-    cap = Resources.fallback().memory_budget if memory_budget is None else memory_budget
+    vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
+    meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)
+    tiles = tuple(_placement(p, r0, c0, r1, c1) for p in selected)
+    plan = MosaicPlan(
+        meta=meta,
+        reference=(x_ref, y_ref),
+        window=IndexWindow(row0=r0, col0=c0, rows=rows, cols=cols),
+        tiles=tiles,
+    )
+    if cap:
+        check_canvas(plan, memory_budget)
+    units = {p.footprint.meta.z_unit: p.footprint.name for p in selected}
+    if len(units) > 1:  # the record names one unit
+        found = ", ".join(f"{name} in {unit}" for unit, name in sorted(units.items()))
+        raise MosaicError(f"tiles give heights in different units: {found}")
+    uncovered = _uncovered(meta, tiles, needed)
+    if uncovered:
+        raise MosaicError(uncovered)
+    return plan
+
+
+def check_canvas(plan: MosaicPlan, cap: int | None) -> None:
+    """Refuse a plan whose canvas is over `cap` bytes; None is half the
+    machine's memory (`Resources.fallback()`)."""
+    rows, cols = plan.meta.rows, plan.meta.cols
+    dtype = np.result_type(*(t.dtype for t in plan.tiles))
+    cap = Resources.fallback().memory_budget if cap is None else cap
     size = rows * cols * dtype.itemsize
     if size > cap:
         raise MosaicError(
@@ -195,21 +220,25 @@ def plan_mosaic(
             f"budget of {cap} bytes (set with --memory-budget; half the machine's memory when "
             "it is not set); narrow it with --bbox"
         )
-    units = {p.footprint.meta.z_unit: p.footprint.name for p in selected}
-    if len(units) > 1:  # the record names one unit
-        found = ", ".join(f"{name} in {unit}" for unit, name in sorted(units.items()))
-        raise MosaicError(f"tiles give heights in different units: {found}")
-    vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
-    meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)
-    tiles = tuple(_placement(p, r0, c0, r1, c1) for p in selected)
-    uncovered = _uncovered(meta, tiles, needed)
-    if uncovered:
-        raise MosaicError(uncovered)
-    return MosaicPlan(
-        meta=meta,
-        reference=(x_ref, y_ref),
-        window=IndexWindow(row0=r0, col0=c0, rows=rows, cols=cols),
-        tiles=tiles,
+
+
+def restrict(plan: MosaicPlan, window: IndexWindow) -> MosaicPlan:
+    """`plan` cut to `window` of its canvas, on the same lattice and reference:
+    each placement cut to it and shifted, the tiles that miss it dropped.
+    Index arithmetic only; a re-plan would pick its own reference."""
+    w, tiles = window, []
+    for t in plan.tiles:
+        box = _meet(t.canvas, w)
+        if box is not None:
+            r, c = box.row0 - t.canvas.row0, box.col0 - t.canvas.col0
+            canvas = box.model_copy(update={"row0": box.row0 - w.row0, "col0": box.col0 - w.col0})
+            source = box.model_copy(update={"row0": t.source.row0 + r, "col0": t.source.col0 + c})
+            tiles.append(t.model_copy(update={"canvas": canvas, "source": source}))
+    at = IndexWindow(
+        row0=plan.window.row0 + w.row0, col0=plan.window.col0 + w.col0, rows=w.rows, cols=w.cols
+    )
+    return plan.model_copy(
+        update={"meta": plan.meta.windowed(w), "window": at, "tiles": tuple(tiles)}
     )
 
 
@@ -374,7 +403,9 @@ def _covering(chosen: list[_Lattice], bounds: Bounds | None, needed: Any) -> lis
         if window is None:
             continue
         tiles = tuple(_placement(p, *window) for p in lattice.placed if p.meets(*window))
-        if not _uncovered(_grid(m, lattice.reference, window, False), tiles, needed):
+        if not _uncovered(
+            _grid(m, lattice.reference, window, vertical_unit_assumed=False), tiles, needed
+        ):
             covering.append(lattice)
     if not covering:
         a, b = chosen[0].selected[0].footprint, chosen[1].selected[0].footprint

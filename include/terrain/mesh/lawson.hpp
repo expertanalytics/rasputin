@@ -1,7 +1,6 @@
 #pragma once
 
-// Lawson legalisation of a LatticeMesh (docs/increments/14b-delaunay-insertion.md,
-// R1, R3 to R5).
+// Lawson legalisation of a LatticeMesh.
 //
 // An edge is flipped only when the neighbour's apex is strictly inside the
 // triangle's circle (`Incircle::Inside`), never on a cocircular tie, and never
@@ -10,7 +9,7 @@
 // for fixed points, which `FilteredKernel<DetriaExact>` gives.
 //
 // The circle test runs in a LatticeFrame, (col * dx, -(row * dy)) on the
-// fractional coordinates (docs/increments/16-domain-polygon.md, R2): world
+// fractional coordinates: world
 // coordinates without the translation, so the Delaunay property holds in the
 // world when dx != dy and the coordinates stay small for the filter.
 //
@@ -38,8 +37,7 @@
 namespace terrain::mesh {
 
 // A frame built directly, LatticeFrame{dx, dy}, never enables the integer
-// incircle; only lattice_frame() below can (docs/increments/21-parallel-refine.md,
-// "Pinned by the red suite (21b)").
+// incircle; only lattice_frame() below can.
 class LatticeFrame {
 public:
     double dx = 1.0;
@@ -60,9 +58,9 @@ private:
 };
 
 // The frame of a rows x cols grid, with the integer path enabled when the frame
-// is the lattice times one exact constant (QW2): dx == dy, dx a positive normal
+// is the lattice times one exact constant: dx == dy, dx a positive normal
 // double, and col * dx, row * dy exact for every node. Exactness is decided by
-// QW2's sufficient condition, which is also what it takes: the significant bits
+// a sufficient condition, which is also what it takes: the significant bits
 // of dx plus bit_width(max(rows, cols) - 1) are at most 53, so every product
 // fits the mantissa; the largest one must also be finite.
 [[nodiscard]] inline LatticeFrame lattice_frame(double dx, double dy, std::size_t rows,
@@ -125,8 +123,8 @@ namespace detail {
 // (col, -row), must flip against the apex dv across it: the quad's incircle
 // determinant positive in the frame -- dv inside the triangle's circle, or cv
 // inside the neighbour's. must_flip asks it, and so does quality.hpp's
-// read-only cavity (20c R7), so the two cannot disagree. Forced inline:
-// must_flip is on the split phase's path, and before 20c-2 made no call here.
+// read-only cavity, so the two cannot disagree. Forced inline: must_flip is
+// on the split phase's path, which should pay for no call here.
 template <pred::GeometryKernel K>
 [[nodiscard, gnu::always_inline]] inline bool quad_flips(MeshVertex av, MeshVertex bv, MeshVertex cv,
                                                          MeshVertex dv, const LatticeFrame& f) {
@@ -173,8 +171,8 @@ template <pred::GeometryKernel K>
 // contains q, the edge opposite q is tested; a flip leaves q at index 0 of both
 // slots it writes, and both go back on the stack.
 //
-// The stack is the caller's, so a loop of insertions reuses one buffer
-// (docs/increments/21-parallel-refine.md, 21a); its contents on entry are
+// The stack is the caller's, so a loop of insertions reuses one buffer; its
+// contents on entry are
 // discarded, and it is empty on return.
 using FlipStack = std::vector<std::uint32_t>;
 

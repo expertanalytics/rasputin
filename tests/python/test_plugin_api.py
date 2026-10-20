@@ -6,10 +6,21 @@ is the design's table, written out here: a name added to or dropped from
 ``__all__`` is a visible edit of this file. Identity, not equality: a
 re-export that wrapped or copied an object would let the two drift apart.
 The modules under test are imported inside each test, so each fails on its own.
+
+``SIGNATURES`` records the shape of each promised name, written out by hand:
+a promise change is then a visible edit of this file. A function is recorded
+as ``str(inspect.signature(...))`` (parameters, kinds, defaults, and the return
+annotation as source text, the modules using postponed annotations). A
+Pydantic class is recorded as its fields in order, the name alone when
+required, ``name=<repr of default>`` otherwise; a changed field type is not
+caught, only names, order, requiredness and defaults. ``THREADS`` is recorded
+as its type, the Typer option's flag, ``min`` and ``metavar``.
 """
 
 from __future__ import annotations
 
+import inspect
+import typing
 from importlib import import_module
 
 import pytest
@@ -28,11 +39,49 @@ PROMISED: dict[str, tuple[str, ...]] = {
     "catchment_core": ("accumulate",),
 }
 
-NAMES = [(home, name) for home, names in PROMISED.items() for name in names]
+#: The promised shape of each name in ``__all__``. On a deliberate change,
+#: update the entry in its own commit and name the change in the PR body.
+SIGNATURES: dict[str, str] = {
+    "THREADS": "int | None, --threads, min=0, metavar=N",
+    "Bounds": "x_min, y_min, x_max, y_max",
+    "DemRequest": (
+        "sources=(), cached=None, bounds=None, nodata=None, z_unit=None,"
+        " domain=None, target_crs=None"
+    ),
+    "DemTile": "meta, array",
+    "RasterMeta": (
+        "x_min, y_max, delta_x, delta_y, cols, rows, epsg, crs='', geographic=False,"
+        " nodata, nodata_source, pixel_is_area, vertical_unit_assumed,"
+        " z_unit='metre', file_crs=None"
+    ),
+    "Resources": "threads, memory_budget",
+    "accumulate": "(tile: 'DemTile') -> 'AccumulateOutcome'",
+    "cli_resources": ("(threads: 'int | None', memory_budget: 'str | None') -> 'Resources'"),
+    "core_args": "(tile: 'DemTile') -> 'RasterArgs'",
+    "destination": "(out: 'Path', hint: 'str' = '--out') -> 'Path'",
+    "encode_geotiff": (
+        "(grid: 'npt.ArrayLike', x0: 'float', y0: 'float', step: 'float', epsg: 'int') -> 'bytes'"
+    ),
+    "frame_factors": ("(crs: 'str | CRS', lon: 'Any', lat: 'Any') -> 'tuple[Xy, Xy]'"),
+    "open_dem": ("(request: 'DemRequest', resources: 'Resources | None' = None) -> 'DemInput'"),
+    "parse_crs": "(text: 'str | CRS') -> 'CRS'",
+    "plural": "(n: 'int', one: 'str', many: 'str') -> 'str'",
+    "read_mesh": "(data: 'bytes') -> 'MeshArrays'",
+    "repository_for": (
+        "(sources: 'tuple[Path, ...]', nodata: 'float | None' = None,"
+        " cached: 'CachedSource | None' = None, threads: 'int' = 1,"
+        " z_unit: 'ZUnit | None' = None)"
+        " -> 'TiffDemRepository | CacheRepository'"
+    ),
+    "reprojector": (
+        "(src: 'str | CRS', dst: 'str | CRS', *, threads: 'int' = 1) -> 'Callable[[Any], Xy]'"
+    ),
+    "same_crs": "(a: 'str | CRS', b: 'str | CRS') -> 'bool'",
+    "site_of": "(crs: 'str | CRS', x: 'float', y: 'float') -> 'Site'",
+    "words": "(exc: 'ValueError') -> 'str'",
+}
 
-#: The helpers that moved from ``cli`` to ``cli_kit``, under the names ``cli``
-#: still calls them by.
-MOVED = {"_destination": "destination", "_resources": "cli_resources", "_words": "words"}
+NAMES = [(home, name) for home, names in PROMISED.items() for name in names]
 
 
 def test_all_is_exactly_the_promised_list() -> None:
@@ -47,12 +96,33 @@ def test_each_name_is_the_object_in_its_home_module(home: str, name: str) -> Non
     assert getattr(api, name) is getattr(import_module(f"tin_engine.{home}"), name)
 
 
-@pytest.mark.parametrize(("old", "new"), sorted(MOVED.items()))
-def test_cli_calls_the_moved_helpers_under_their_old_names(old: str, new: str) -> None:
-    cli, kit = import_module("tin_engine.cli"), import_module("tin_engine.cli_kit")
-    assert getattr(cli, old) is getattr(kit, new)
-
-
 def test_cli_shares_the_threads_option_with_cli_kit() -> None:
     cli, kit = import_module("tin_engine.cli"), import_module("tin_engine.cli_kit")
     assert cli.THREADS is kit.THREADS
+
+
+def _shape(name: str, obj: object) -> str:
+    """The text ``SIGNATURES`` records for ``obj``, by the rules of the module docstring."""
+    if name == "THREADS":
+        kind, option = typing.get_args(obj)[:2]
+        return f"{kind}, {option.default}, min={option.min}, metavar={option.metavar}"
+    if inspect.isclass(obj):
+        fields = obj.model_fields.items()  # type: ignore[attr-defined]
+        return ", ".join(k if f.is_required() else f"{k}={f.default!r}" for k, f in fields)
+    return str(inspect.signature(obj))  # type: ignore[arg-type]
+
+
+def test_signatures_record_exactly_the_promised_list() -> None:
+    api = import_module("tin_engine.plugin_api")
+    assert sorted(SIGNATURES) == sorted(api.__all__)
+
+
+@pytest.mark.parametrize("name", sorted(SIGNATURES))
+def test_each_promised_name_keeps_its_recorded_signature(name: str) -> None:
+    api = import_module("tin_engine.plugin_api")
+    current = _shape(name, getattr(api, name))
+    assert current == SIGNATURES[name], (
+        f"a promised signature changed: plugins (rasputin-lsm among them) break."
+        f" If on purpose, update SIGNATURES in its own commit and say so in the"
+        f" PR body.\n  {name} recorded: {SIGNATURES[name]}\n  {name} current:  {current}"
+    )

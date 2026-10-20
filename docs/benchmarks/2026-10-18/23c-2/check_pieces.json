@@ -1,0 +1,362 @@
+{
+ "pieces_dir": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/velhas/velhas.vtk.pieces",
+ "piece_files": 51,
+ "index_entries": 51,
+ "constraint_segments_by_multiplicity": {
+  "1": 7490,
+  "2": 3305
+ },
+ "shared_segments_z_mismatch": 0,
+ "merged": {
+  "points": 359290,
+  "triangles": 711088,
+  "constraint_edges": 10795,
+  "duplicate_points_max_z_difference": 0.0
+ },
+ "quality": {
+  "worst_angle": 0.028318554381061473,
+  "angle_median": 36.86989764584402,
+  "share_under_1": 5.2032941070584794e-05,
+  "max_degree": 17,
+  "delaunay_checked": 1059582,
+  "delaunay_ambiguous": 7857,
+  "delaunay_violations": 0
+ },
+ "check": {
+  "shift_m": 0.0,
+  "strip_width_m": 30.0,
+  "interior": {
+   "nodes": 13791972,
+   "outside_mesh": 0,
+   "over_tolerance": 0,
+   "over_share": 0.0,
+   "max": 9.999971951008774,
+   "p99": 8.396992836864372,
+   "median": 2.2354673569934675
+  },
+  "strip": {
+   "nodes": 27806,
+   "outside_mesh": 0,
+   "over_tolerance": 0,
+   "over_share": 0.0,
+   "max": 9.996162900235504,
+   "p99": 7.6031532700522835,
+   "median": 1.2547119676601142
+  },
+  "mesh_sha256": "de1c8efde6a16b9f6526c036866442449a4f9b1f795d8239af23a1aa1dfb9e0b"
+ },
+ "control": {
+  "shift_m": 30.0,
+  "interior_over": 847428,
+  "strip_over": 1888
+ },
+ "per_piece": [
+  {
+   "file": "0-0-0.vtk",
+   "points": 1113,
+   "triangles": 1873,
+   "lines": 351
+  },
+  {
+   "file": "0-1-0.vtk",
+   "points": 3190,
+   "triangles": 5928,
+   "lines": 450
+  },
+  {
+   "file": "0-2-0.vtk",
+   "points": 2415,
+   "triangles": 4387,
+   "lines": 441
+  },
+  {
+   "file": "0-2-1.vtk",
+   "points": 45,
+   "triangles": 50,
+   "lines": 38
+  },
+  {
+   "file": "1-0-0.vtk",
+   "points": 2029,
+   "triangles": 3542,
+   "lines": 514
+  },
+  {
+   "file": "1-1-0.vtk",
+   "points": 4587,
+   "triangles": 9043,
+   "lines": 129
+  },
+  {
+   "file": "1-2-0.vtk",
+   "points": 6499,
+   "triangles": 12782,
+   "lines": 214
+  },
+  {
+   "file": "1-3-0.vtk",
+   "points": 1538,
+   "triangles": 2806,
+   "lines": 268
+  },
+  {
+   "file": "10-3-0.vtk",
+   "points": 8110,
+   "triangles": 15838,
+   "lines": 380
+  },
+  {
+   "file": "10-4-0.vtk",
+   "points": 18720,
+   "triangles": 36952,
+   "lines": 486
+  },
+  {
+   "file": "10-5-0.vtk",
+   "points": 14615,
+   "triangles": 28728,
+   "lines": 500
+  },
+  {
+   "file": "2-0-0.vtk",
+   "points": 777,
+   "triangles": 1258,
+   "lines": 294
+  },
+  {
+   "file": "2-1-0.vtk",
+   "points": 4546,
+   "triangles": 8965,
+   "lines": 125
+  },
+  {
+   "file": "2-2-0.vtk",
+   "points": 8507,
+   "triangles": 16832,
+   "lines": 180
+  },
+  {
+   "file": "2-3-0.vtk",
+   "points": 5434,
+   "triangles": 10276,
+   "lines": 590
+  },
+  {
+   "file": "2-4-0.vtk",
+   "points": 18,
+   "triangles": 19,
+   "lines": 15
+  },
+  {
+   "file": "2-4-1.vtk",
+   "points": 3,
+   "triangles": 1,
+   "lines": 3
+  },
+  {
+   "file": "3-0-0.vtk",
+   "points": 123,
+   "triangles": 177,
+   "lines": 67
+  },
+  {
+   "file": "3-1-0.vtk",
+   "points": 6043,
+   "triangles": 11705,
+   "lines": 379
+  },
+  {
+   "file": "3-2-0.vtk",
+   "points": 7079,
+   "triangles": 13955,
+   "lines": 201
+  },
+  {
+   "file": "3-3-0.vtk",
+   "points": 7594,
+   "triangles": 14976,
+   "lines": 210
+  },
+  {
+   "file": "3-4-0.vtk",
+   "points": 2621,
+   "triangles": 4892,
+   "lines": 348
+  },
+  {
+   "file": "4-1-0.vtk",
+   "points": 5018,
+   "triangles": 9654,
+   "lines": 380
+  },
+  {
+   "file": "4-2-0.vtk",
+   "points": 7170,
+   "triangles": 14138,
+   "lines": 200
+  },
+  {
+   "file": "4-3-0.vtk",
+   "points": 8791,
+   "triangles": 17370,
+   "lines": 210
+  },
+  {
+   "file": "4-4-0.vtk",
+   "points": 5347,
+   "triangles": 10202,
+   "lines": 490
+  },
+  {
+   "file": "5-1-0.vtk",
+   "points": 1281,
+   "triangles": 2300,
+   "lines": 260
+  },
+  {
+   "file": "5-1-1.vtk",
+   "points": 66,
+   "triangles": 94,
+   "lines": 36
+  },
+  {
+   "file": "5-2-0.vtk",
+   "points": 9016,
+   "triangles": 17764,
+   "lines": 266
+  },
+  {
+   "file": "5-3-0.vtk",
+   "points": 9853,
+   "triangles": 19461,
+   "lines": 243
+  },
+  {
+   "file": "5-4-0.vtk",
+   "points": 12381,
+   "triangles": 24486,
+   "lines": 274
+  },
+  {
+   "file": "5-5-0.vtk",
+   "points": 6356,
+   "triangles": 12334,
+   "lines": 376
+  },
+  {
+   "file": "6-2-0.vtk",
+   "points": 60,
+   "triangles": 83,
+   "lines": 35
+  },
+  {
+   "file": "6-2-1.vtk",
+   "points": 9,
+   "triangles": 7,
+   "lines": 9
+  },
+  {
+   "file": "6-2-2.vtk",
+   "points": 4,
+   "triangles": 2,
+   "lines": 4
+  },
+  {
+   "file": "6-2-3.vtk",
+   "points": 11375,
+   "triangles": 22322,
+   "lines": 426
+  },
+  {
+   "file": "6-3-0.vtk",
+   "points": 11822,
+   "triangles": 23364,
+   "lines": 278
+  },
+  {
+   "file": "6-4-0.vtk",
+   "points": 17473,
+   "triangles": 34666,
+   "lines": 278
+  },
+  {
+   "file": "6-5-0.vtk",
+   "points": 13903,
+   "triangles": 27426,
+   "lines": 378
+  },
+  {
+   "file": "7-2-0.vtk",
+   "points": 3720,
+   "triangles": 7082,
+   "lines": 356
+  },
+  {
+   "file": "7-2-1.vtk",
+   "points": 101,
+   "triangles": 132,
+   "lines": 68
+  },
+  {
+   "file": "7-3-0.vtk",
+   "points": 12596,
+   "triangles": 24907,
+   "lines": 283
+  },
+  {
+   "file": "7-4-0.vtk",
+   "points": 21388,
+   "triangles": 42476,
+   "lines": 298
+  },
+  {
+   "file": "7-5-0.vtk",
+   "points": 14169,
+   "triangles": 27958,
+   "lines": 378
+  },
+  {
+   "file": "8-2-0.vtk",
+   "points": 231,
+   "triangles": 337,
+   "lines": 123
+  },
+  {
+   "file": "8-3-0.vtk",
+   "points": 17754,
+   "triangles": 35077,
+   "lines": 429
+  },
+  {
+   "file": "8-4-0.vtk",
+   "points": 24499,
+   "triangles": 48576,
+   "lines": 420
+  },
+  {
+   "file": "8-5-0.vtk",
+   "points": 3482,
+   "triangles": 6657,
+   "lines": 305
+  },
+  {
+   "file": "9-3-0.vtk",
+   "points": 10008,
+   "triangles": 19618,
+   "lines": 396
+  },
+  {
+   "file": "9-4-0.vtk",
+   "points": 23199,
+   "triangles": 46055,
+   "lines": 341
+  },
+  {
+   "file": "9-5-0.vtk",
+   "points": 5967,
+   "triangles": 11555,
+   "lines": 377
+  }
+ ],
+ "seconds": 39.4
+}

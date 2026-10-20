@@ -19,12 +19,13 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 
 pytest.importorskip("mcp")
 
+import typer
 from mcp.client import Client
 from mcp.shared.exceptions import MCPError
 
@@ -157,6 +158,74 @@ class TestValidationBeforeTheChild:
         argv = json.loads(argv_file.read_text())
         assert argv.count("--record") == 1
         assert option_value(argv, "--record") == str(keep)
+
+
+# ---------------------------------------------------------------- 72, R3: sidecars before --
+
+
+def mesh_with_a_positional() -> typer.Typer:
+    """A toy `mesh`: the three options the server fills its sidecars into, as the real
+    command declares them, and a positional the real command does not have yet."""
+    toy = typer.Typer()
+
+    @toy.command()
+    def mesh(
+        extra: Annotated[str | None, typer.Argument()] = None,
+        out: Annotated[Path, typer.Option("--out", writable=True)] = Path("a.vtk"),
+        stats: Annotated[
+            Path | None, typer.Option("--stats", writable=True, allow_dash=True)
+        ] = None,
+        record_path: Annotated[
+            Path | None, typer.Option("--record", writable=True, allow_dash=True)
+        ] = None,
+    ) -> None:
+        """A mesh with a positional."""
+
+    @toy.command()
+    def version() -> None:
+        """Keeps `mesh` a subcommand."""
+
+    return toy
+
+
+class TestR3SidecarsBeforeTheDelimiter:
+    """`docs/increments/72-mcp-hardening.md`, section 1.1: the server's sidecars are set on
+    the arguments, so they land among the options, never after ``--``."""
+
+    async def test_record_and_stats_sidecars_are_options_before_the_positional(
+        self, tmp_path: Path, out_dir: Path
+    ) -> None:
+        argv_file = tmp_path / "argv.json"
+        server = mcp_server.build_server(
+            mesh_with_a_positional(),
+            child=fake_child(tmp_path, argv_file=str(argv_file)),
+            out_root=tmp_path,
+        )
+        arguments = {"extra": "-p", "out": str(out_dir / "a.vtk"), "stats": "-"}
+        result = await call(server, "mesh", arguments)
+        assert not result.is_error, result.content
+        argv = json.loads(argv_file.read_text())
+        assert argv[-2:] == ["--", "-p"], argv
+        options = argv[: argv.index("--")]
+        assert STATS_SIDECAR.fullmatch(Path(option_value(options, "--stats")).name), argv
+        assert RECORD_SIDECAR.fullmatch(Path(option_value(options, "--record")).name), argv
+        assert "-" not in options, argv
+
+    async def test_a_dem_value_that_reads_stats_is_kept_and_the_real_stats_gets_the_sidecar(
+        self, tmp_path: Path, out_dir: Path, build: Build
+    ) -> None:
+        argv_file = tmp_path / "argv.json"
+        server = build(child=fake_child(tmp_path, argv_file=str(argv_file)))
+        arguments = {"dem": ["--stats"], "out": str(out_dir / "x.vtk"), "stats": "-"}
+        await call(server, "mesh", arguments)
+        argv = json.loads(argv_file.read_text())
+        at = argv.index("--dem")
+        assert argv[at : at + 3] == ["--dem", "--stats", "--stats"], argv
+        stats = Path(argv[at + 3])
+        assert stats.parent == out_dir, argv
+        match = STATS_SIDECAR.fullmatch(stats.name)
+        assert match is not None and match["out"] == "x.vtk", argv
+        assert argv.count("--stats") == 2 and "-" not in argv, argv
 
 
 # ---------------------------------------------------------------- T5

@@ -6,8 +6,8 @@
 // One scalar, anchored at zero. There is no offset member and there must never
 // be one: the anchor is the entire reason `snap` is a pure function of `p`, and
 // an input-dependent anchor would make adding one vertex re-snap every other
-// one, turning four parallel-fors into a global reduction
-// (`parallel_refinement.md:105-118`). The signature is the enforcement -- there
+// one, turning four parallel-fors into a global reduction. The signature is
+// the enforcement -- there
 // is no argument through which an anchor could arrive.
 //
 // What snapping buys is NOT accuracy. `world(g)` is `index * spacing` in plain
@@ -38,7 +38,7 @@ namespace terrain {
 
 // The dedup key. Integral on purpose: std::int64_t has no NaN, so the ordering
 // below is total and equality is exact. A hash of the raw doubles is
-// prohibited as a dedup key here (`parallel_refinement.md:126-128`) -- it
+// prohibited as a dedup key here -- it
 // cannot find a NaN and it hashes near-coincident points apart.
 struct GridPoint {
     std::int64_t ix{};
@@ -66,8 +66,8 @@ inline constexpr std::int64_t kMaxGridIndex = std::int64_t{1} << 51;
 // admitted, because whether a grid that fine is a sane thing to ask for is the
 // driver's policy question rather than this type's.
 //
-// Free and constexpr for the reason increment 3 pulled out
-// detail::sizes_fit_u32: a check that can only be exercised through the object
+// Free and constexpr for the reason detail::sizes_fit_u32 is free: a check
+// that can only be exercised through the object
 // that asserts on it is a check that rots. The driver calls this and returns a
 // status; SnapGrid asserts it.
 //

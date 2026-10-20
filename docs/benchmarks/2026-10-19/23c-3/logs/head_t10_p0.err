@@ -1,0 +1,19 @@
+707739 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 10 m).
+        3.97 real        17.31 user         3.43 sys
+          1739194368  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1010959  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   9  voluntary context switches
+               17923  involuntary context switches
+        127985997819  instructions retired
+         60814160216  cycles elapsed
+          1686095648  peak memory footprint

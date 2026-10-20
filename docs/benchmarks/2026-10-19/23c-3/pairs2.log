@@ -1,0 +1,73 @@
+=== head-r3 start 2026-10-18T23:59:10Z swap 6062.81 load { 1.87 2.78 3.02 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/head-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/head-r3
+REGRESSION: tile refine_s[t=0] 0.1856 -> 0.2390 (+28.8 %)
+REGRESSION: tile refine_s[t=1] 0.4930 -> 0.5324 (+8.0 %)
+REGRESSION: tile refine_s[t=2] 0.3100 -> 0.3500 (+12.9 %)
+REGRESSION: tile refine_s[t=3] 0.2559 -> 0.2974 (+16.2 %)
+REGRESSION: tile refine_s[t=4] 0.2331 -> 0.2818 (+20.9 %)
+REGRESSION: tile refine_s[t=5] 0.2158 -> 0.2660 (+23.2 %)
+REGRESSION: tile refine_s[t=6] 0.2041 -> 0.2571 (+26.0 %)
+REGRESSION: tile refine_s[t=7] 0.1955 -> 0.2459 (+25.8 %)
+REGRESSION: tile refine_s[t=8] 0.1898 -> 0.2429 (+28.0 %)
+REGRESSION: tile refine_s[t=9] 0.1870 -> 0.2428 (+29.8 %)
+REGRESSION: tile refine_s[t=10] 0.1908 -> 0.2393 (+25.4 %)
+REGRESSION: tile refine_s[t=11] 0.1916 -> 0.2497 (+30.3 %)
+REGRESSION: tile refine_s[t=12] 0.1861 -> 0.2391 (+28.5 %)
+REGRESSION: tile refine_s[t=13] 0.1922 -> 0.2464 (+28.2 %)
+REGRESSION: tile refine_s[t=14] 0.1905 -> 0.2492 (+30.8 %)
+REGRESSION: tile refine_s[t=15] 0.1900 -> 0.2381 (+25.3 %)
+REGRESSION: tile refine_s[t=16] 0.1932 -> 0.2480 (+28.4 %)
+REGRESSION: tile refine_s[t=17] 0.1920 -> 0.2465 (+28.4 %)
+REGRESSION: tile refine_s[t=18] 0.1914 -> 0.2384 (+24.6 %)
+REGRESSION: tile refine_s[t=19] 0.1872 -> 0.2474 (+32.2 %)
+REGRESSION: tile refine_s[t=20] 0.1887 -> 0.2395 (+27.0 %)
+=== head-r3 exit 1 2026-10-19T00:01:48Z swap 6054.81 load { 3.84 3.03 3.06 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== base-r3 start 2026-10-19T00:01:48Z swap 6054.81 load { 3.84 3.03 3.06 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/base-r3
+ACCEPTED
+=== base-r3 exit 0 2026-10-19T00:04:20Z swap 6054.81 load { 2.94 2.96 3.02 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== base-r4 start 2026-10-19T00:04:20Z swap 6054.81 load { 2.94 2.96 3.02 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/base-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/base-r4
+ACCEPTED
+=== base-r4 exit 0 2026-10-19T00:06:53Z swap 6054.81 load { 2.64 2.95 3.01 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+=== head-r4 start 2026-10-19T00:06:53Z swap 6054.81 load { 2.64 2.95 3.01 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/23c-3/docs/benchmarks/2026-10-19/23c-3/2026-10-19/head-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/dd80fd6d-d090-4e0b-9831-7583ca070b9c/scratchpad/perf23c3/m/head-r4
+REGRESSION: tile refine_s[t=0] 0.1911 -> 0.2478 (+29.7 %)
+REGRESSION: tile refine_s[t=1] 0.4887 -> 0.5231 (+7.0 %)
+REGRESSION: tile refine_s[t=2] 0.3092 -> 0.3518 (+13.8 %)
+REGRESSION: tile refine_s[t=3] 0.2552 -> 0.2968 (+16.3 %)
+REGRESSION: tile refine_s[t=4] 0.2313 -> 0.2810 (+21.5 %)
+REGRESSION: tile refine_s[t=5] 0.2154 -> 0.2645 (+22.8 %)
+REGRESSION: tile refine_s[t=6] 0.2038 -> 0.2557 (+25.4 %)
+REGRESSION: tile refine_s[t=7] 0.1950 -> 0.2454 (+25.9 %)
+REGRESSION: tile refine_s[t=8] 0.1892 -> 0.2420 (+27.9 %)
+REGRESSION: tile refine_s[t=9] 0.1920 -> 0.2377 (+23.8 %)
+REGRESSION: tile refine_s[t=10] 0.1890 -> 0.2454 (+29.8 %)
+REGRESSION: tile refine_s[t=11] 0.1890 -> 0.2474 (+30.9 %)
+REGRESSION: tile refine_s[t=12] 0.1899 -> 0.2369 (+24.8 %)
+REGRESSION: tile refine_s[t=13] 0.1919 -> 0.2482 (+29.3 %)
+REGRESSION: tile refine_s[t=14] 0.1865 -> 0.2468 (+32.4 %)
+REGRESSION: tile refine_s[t=15] 0.1863 -> 0.2399 (+28.8 %)
+REGRESSION: tile refine_s[t=16] 0.1873 -> 0.2482 (+32.6 %)
+REGRESSION: tile refine_s[t=17] 0.1920 -> 0.2388 (+24.4 %)
+REGRESSION: tile refine_s[t=18] 0.1909 -> 0.2452 (+28.4 %)
+REGRESSION: tile refine_s[t=19] 0.1889 -> 0.2480 (+31.3 %)
+REGRESSION: tile refine_s[t=20] 0.1875 -> 0.2389 (+27.4 %)
+=== head-r4 exit 1 2026-10-19T00:09:30Z swap 6054.81 load { 2.72 2.78 2.92 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=8126563)	100%; charged; 0:00 remaining present: true
+ALLDONE

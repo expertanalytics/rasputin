@@ -1,47 +1,46 @@
 #pragma once
 
 // A minimum-angle pass over a LatticeMesh, run once on the start mesh before
-// DEM refinement (docs/increments/20-start-quality.md, R2 to R6, R10).
+// DEM refinement.
 //
 // A triangle is bad when its circumradius-to-shortest-edge ratio, in the world
 // frame (col * dx, -(row * dy)), exceeds 1 / (2 sin theta): its minimum angle
 // is below theta. The ratio is a double proposal only; nothing topological
 // depends on it. For a bad triangle the pass inserts the DEM node nearest its
-// circumcentre (R3), located by a visibility walk with the exact orient_sign,
+// circumcentre, located by a visibility walk with the exact orient_sign,
 // and inserted with split_inside or split_edge -- the latter exactly when the
-// node lies on an edge, constrained or not (R6) -- then legalised around.
+// node lies on an edge, constrained or not -- then legalised around.
 //
-// Skips, in the order the code tests them (R4's list, with the vertex test
-// after the walk, which is what finds it): circumradius below the floor
-// sqrt(dx^2 + dy^2), so the node is within R / 2 of the centre (R5); centre
+// Skips, in the order the code tests them (the vertex test comes after the
+// walk, which is what finds it): circumradius below the floor
+// sqrt(dx^2 + dy^2), so the node is within R / 2 of the centre; centre
 // outside the node rectangle (never clamped); the node rejected by the caller's
-// validity callable (a NoData node, which trim would remove; the fix of
-// 20-start-quality.md); the walk crossing a constrained edge or leaving the
-// mesh; the node already a vertex; the node on a frozen edge of the triangle it
-// lies in (docs/increments/23-basin-scale.md, N4). The walk is bounded by
+// validity callable (a NoData node, which trim would remove); the walk
+// crossing a constrained edge or leaving the mesh; the node already a vertex;
+// the node on a frozen edge of the triangle it lies in. The walk is bounded by
 // triangle_count() steps.
 //
-// Constraint feet (docs/increments/20c-soft-quality.md, R2). With
+// Constraint feet. With
 // constraint_feet, a located node closer than min(dx, dy) / 2 to a constraint
 // (constraint_foot.hpp) goes in as its foot when that is a Hit the validity
 // callable accepts, and is skipped (skipped_near_line) for any other answer
 // but None. The callable is asked about the foot as a MeshVertex.
 //
-// The soft criterion (20c R7). With min_gain_deg >= 0, a candidate (node or
+// The soft criterion. With min_gain_deg >= 0, a candidate (node or
 // foot) goes in only if the worst angle of the triangles it would make, capped
 // at theta, is at least the worst of those it would replace plus the gain,
 // less kGainSlackDeg; otherwise skipped_no_gain. The triangles come from
 // quality_cavity, read-only, with Lawson's own flip test, so they are what
-// legalise_around then writes. The line split (20c R8). With the criterion
+// legalise_around then writes. The line split. With the criterion
 // and constraint_feet on, a walk blocked by a constrained, non-frozen edge
 // with a triangle beyond splits that edge at the node's foot, if the foot is
 // at least min(dx, dy) / 2 from both ends, fits, and is valid; not judged by
-// R7; otherwise skipped_blocked.
+// the soft criterion; otherwise skipped_blocked.
 //
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
 // stale and dropped. It ends because every insertion is a new node of a finite
-// lattice and entries are added only for written slots (R10).
+// lattice and entries are added only for written slots.
 //
 // Depends on core, predicates, lattice_mesh.hpp and lawson.hpp; knows no
 // raster and reads no height. The grid's rows and cols come in as numbers, and
@@ -70,17 +69,17 @@
 
 namespace terrain::mesh {
 
-// R7's slack s, degrees: a candidate is accepted when new >= old + gain - s,
-// so a foot that keeps its edge's end angle exactly is not decided by its
-// last bit (20c R7, "Why the slack").
+// The soft criterion's slack s, degrees: a candidate is accepted when
+// new >= old + gain - s, so a foot that keeps its edge's end angle exactly is
+// not decided by its last bit.
 inline constexpr double kGainSlackDeg = 1e-6;
 
 struct QualityOptions {
     double min_angle_deg = 0.0;  // <= 0 (or NaN): the pass does nothing
     std::size_t rows = 0;        // the node rectangle, [0, cols-1] x [0, rows-1]
     std::size_t cols = 0;
-    bool constraint_feet = false;  // R2.6: a node near a constraint goes in as its foot
-    double min_gain_deg = -1.0;    // 20c R7's gain P; negative (or NaN): off, and R8 with it
+    bool constraint_feet = false;  // a node near a constraint goes in as its foot
+    double min_gain_deg = -1.0;    // the soft criterion's gain P; negative (or NaN): off, and the line split with it
 };
 
 struct QualityOutcome {
@@ -94,8 +93,8 @@ struct QualityOutcome {
     std::size_t skipped_void = 0;     // the snapped node is not valid (NoData)
     std::size_t feet = 0;               // feet inserted instead of the node, not in `inserted`
     std::size_t skipped_near_line = 0;  // near a constraint with no usable foot
-    std::size_t skipped_no_gain = 0;    // R7: the candidate would lower the worst angle
-    std::size_t line_splits = 0;        // R8: lines split at a node's foot, in no count above
+    std::size_t skipped_no_gain = 0;    // the candidate would lower the worst angle
+    std::size_t line_splits = 0;        // lines split at a node's foot, in no count above
 };
 
 // The default validity callable: every node holds data.
@@ -134,7 +133,7 @@ struct QualityEntry {
     }
 };
 
-// R7's prediction: the slots inserting p would replace and the triangles it
+// The soft criterion's prediction: the slots inserting p would replace and the triangles it
 // would make, p joined to each boundary edge, counter-clockwise. `on` 0..2:
 // p goes in on t's edge `on` and the triangle across seeds too; 3: inside t.
 // Grown across unconstrained edges by quad_flips, Lawson's own test.
@@ -190,7 +189,7 @@ template <pred::GeometryKernel K>
     return best * 180.0 / std::numbers::pi;
 }
 
-// R7's constants and scratch: theta, the gain, theta's cosine and sine, the cavity.
+// The soft criterion's constants and scratch: theta, the gain, theta's cosine and sine, the cavity.
 struct GainJudge {
     double theta, gain, cos_t = std::cos(theta * std::numbers::pi / 180.0),
                         sin_t = std::sin(theta * std::numbers::pi / 180.0);
@@ -216,7 +215,7 @@ struct GainJudge {
     }
 };
 
-// R7: inserting p at (t, on) leaves the worst angle, capped at theta, no lower
+// Whether inserting p at (t, on) leaves the worst angle, capped at theta, no lower
 // than before plus gain, less the slack. The worst before only lowers the
 // bar, so (by monotone rounding) the answer is yes once the worst after
 // clears it at theta, or at any worst-before-so-far.
@@ -255,7 +254,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
         offer(t);
 
     const bool judged = o.min_gain_deg >= 0.0, split_lines = judged && o.constraint_feet;
-    const double half_cell = std::min(f.dx, f.dy) / 2.0;  // delta_q, R2.2
+    const double half_cell = std::min(f.dx, f.dy) / 2.0;  // delta_q
     detail::GainJudge judge{o.min_angle_deg, o.min_gain_deg};
     std::vector<std::uint32_t> written;
     // p into t (`on` 3) or onto t's edge `on`, legalised; written slots offered.
@@ -325,7 +324,7 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
                     break;
                 }
         }
-        if (blocked) {  // R8: split the line at the node's foot, or skip
+        if (blocked) {  // the line split: split the line at the node's foot, or skip
             std::optional<FootSearch> s;
             if (split_lines && m.neighbours(t)[hit] != kNoNeighbour)
                 s = detail::foot_on(m, t, hit, p, std::numeric_limits<double>::infinity(), half_cell, f);

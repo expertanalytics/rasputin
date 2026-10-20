@@ -7,7 +7,7 @@
 // input from two threads produce bit-identical output, because every ordering in
 // it is either GridPoint's total order or the input's chain order, and never the
 // order a thread happened to find something in. That is what makes it safe to
-// release the GIL around at 5c.
+// release the GIL around.
 //
 // THE SIX STEPS, and what each one is allowed to decide:
 //
@@ -45,12 +45,12 @@
 // fixed. segment_meets_cell uses CLOSED cells, so such an edge must be split at
 // both flanking nodes, and the resulting middle edge grazes the cells of the
 // original endpoints -- the orbit has period two and Ok is unreachable at any
-// cap. That is a known, named defect, out of scope here and specified in
-// docs/increments/05d-corner-graze.md, whose fix changes 5a's shipped predicate.
-// 5b ships NotConverged for it deliberately; a driver that answers Ok there has
+// cap. That is a known defect, out of scope here; its fix changes the
+// intersection predicate. The noder returns NotConverged for it deliberately;
+// a driver that answers Ok there has
 // either skipped the verification or is running a verifier that agrees with it.
 //
-// Header-only and templated on K, exactly as increment 3's validator is; nothing
+// Header-only and templated on K, exactly as the PSLG validator is; nothing
 // in src/noding/.
 
 #include <terrain/core/edge_properties.hpp>
@@ -84,7 +84,7 @@ struct NodeOptions {
     // spelling. There is no default spacing anywhere in C++, for the same reason
     // K has no default in ring.hpp and pslg_builder.hpp: the right value is a
     // policy question about the data, and three of the failure statuses point at
-    // it, two of them in opposite directions. A default in cli.py at 5c is the
+    // it, two of them in opposite directions. A default in cli.py is the
     // composition root making a policy choice and is a different thing.
     double spacing;
 
@@ -247,8 +247,8 @@ template <pred::GeometryKernel K>
         input_keys.push_back(grid.snap(pslg.vertices()[i]));
     }
 
-    // The working geometry. Round 1 runs on the INPUT coordinates, because a
-    // crossing of the input is what the user asked about; from round 2 on it runs
+    // The working geometry. The first pass runs on the INPUT coordinates, because a
+    // crossing of the input is what the user asked about; every later pass runs
     // on world(node id), which is where snap-induced crossings live.
     std::vector<std::vector<Point2>> pts(pslg.chains().size());
     std::vector<std::vector<EdgeProperties>> props(pslg.chains().size());
@@ -357,7 +357,7 @@ template <pred::GeometryKernel K>
             vertices.push_back(grid.world(g));
         }
 
-        // --- The step 05-noder.md's list does not have: ring re-validation --
+        // --- Ring re-validation --
         if (NodeOutcome bad =
                 detail::revalidate_rings<K>(pslg, options.spacing, vertices, runs);
             bad.status != NodeStatus::Ok) {

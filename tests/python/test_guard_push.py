@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -1108,8 +1109,8 @@ def test_10_a_granted_reviewed_branch_is_pushed_opened_and_enqueued(granted: Gra
     assert len(used) == 3
     assert len({line["act"] for line in used}) == 3
     for line in used:
-        assert set(line) == {"at", "window", "branch", "act", "head", "review"}
-        assert (line["branch"], line["head"]) == ("feat", head)
+        assert set(line) == {"at", "window", "branch", "act", "head", "review", "remote"}
+        assert (line["branch"], line["head"], line["remote"]) == ("feat", head, "origin")
         assert line["window"] == iso(granted.since)
         assert line["review"][0] == granted.x
     assert queue_lines(granted.repo) == []
@@ -1200,3 +1201,287 @@ def test_17_a_directory_the_shell_would_expand_is_denied(
 def test_18_a_grants_log_that_cannot_be_written_denies(granted: Granted) -> None:
     grants_used_path(granted.repo).mkdir(parents=True)
     denied(granted.repo, f"git push origin {granted.head}:refs/heads/feat")
+
+
+# ---------------------------------------------------------------- h24 item 2
+#
+# docs/increments/h24-harness-fixes.md §3 item 2: a granted act written in a
+# line that is not one bare command is refused, as before, but the refusal
+# says so (NOT_BARE), so the session can rerun the command alone. The words
+# only choose the refusal's text; the rerun is judged by the grant as today.
+
+NOT_BARE = (
+    "the grant takes only one bare command, every word written out "
+    "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone"
+)
+
+#: The 00:22:54 line of 2026-10-18 (body cut to one line), for `feat`.
+PR_BODY_THEN_CREATE = (
+    "S=/abs/scratchpad && cat > $S/pr68.md <<'EOF'\n"
+    "One line of body.\n"
+    "EOF\n"
+    "gh pr create --head feat --title 'T' --body-file $S/pr68.md"
+)
+BARE_CREATE = "gh pr create --head feat --title 'T' --body-file /abs/pr.md"
+
+
+def test_h24_2_a_granted_act_in_a_line_of_several_commands_says_not_bare(
+    granted: Granted,
+) -> None:
+    why = denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert f"{GRANT_CLAUSE} {NOT_BARE}" in why, why
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_h24_2_the_same_line_for_a_branch_not_granted_is_the_plain_refusal(
+    granted: Granted,
+) -> None:
+    flag_granting(granted.repo, ["other"])
+    why = denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert GH_PR in why, why
+    assert NOT_BARE not in why and "granted branch" not in why, why
+
+
+def test_h24_2_a_push_naming_its_sha_by_a_variable_says_not_bare(granted: Granted) -> None:
+    why = denied(granted.repo, "git push origin $SHA:refs/heads/feat")
+    assert f"{GRANT_CLAUSE} {NOT_BARE}" in why, why
+    assert not grants_used_path(granted.repo).exists()
+
+
+def test_h24_2_the_bare_command_rerun_after_a_not_bare_refusal_passes(granted: Granted) -> None:
+    """The rerun the refusal asks for: one bare command, judged by the grant as before."""
+    denied(granted.repo, PR_BODY_THEN_CREATE)
+    assert guard(granted.repo, BARE_CREATE) is None
+    [line] = jsonl(grants_used_path(granted.repo))
+    assert (line["branch"], line["act"], line["head"]) == ("feat", "pull request", granted.head)
+
+
+# ---------------------------------------------------------------- h24 item 5a
+#
+# docs/increments/h24-harness-fixes.md §3 item 5a: a `gh api graphql` segment
+# whose one `query` field reads (starts with `{` or `query`, and holds the
+# letters `mutation` and `subscription` nowhere) passes; anything the guard
+# cannot read word for word keeps today's rule, where a field means a write.
+# `segment_why` runs on the words as the shell would split them, before
+# expansion, so `$X` is the word the guard sees.
+
+#: The 23:03:56 read of 2026-10-17.
+PR_EDITS = (
+    'query={ repository(owner:"expertanalytics", name:"rasputin") '
+    "{ pullRequest(number:285) { userContentEdits(first:5) { nodes { editedAt } } } } }"
+)
+GRAPHQL = ["gh", "api", "graphql"]
+
+GRAPHQL_READS: dict[str, list[str]] = {
+    "the-23-03-56-read": [*GRAPHQL, "-f", PR_EDITS],
+    "shorthand": [*GRAPHQL, "-f", "query={ viewer { login } }"],
+    "named-with-operation-name": [*GRAPHQL, "-f", "query=query A { viewer { login } }",
+                                  "-f", "operationName=A"],
+    "method-post": [*GRAPHQL, "-X", "POST", "-f", "query={ viewer { login } }"],
+    "raw-field-and-jq": [*GRAPHQL, "--raw-field", "query={ viewer { login } }",
+                         "--jq", ".data.viewer.login"],
+}  # fmt: skip
+
+GRAPHQL_ASKED: dict[str, list[str]] = {
+    # The design review's writes: a `#` inside a string is no comment, an
+    # expansion hides what gh receives, and a second plain word is unread.
+    "hash-in-a-string-then-a-mutation": [
+        *GRAPHQL, "-f", 'query=query A { a(x:"#") } mutation B { addComment(input:{}) { c } }',
+        "-f", "operationName=B"],
+    "an-expansion-inside-the-query": [*GRAPHQL, "-f", "query=query A {a} $M",
+                                      "-f", "operationName=B"],
+    "an-expansion-as-a-word": [*GRAPHQL, "$X", "-f", "query={ a }"],
+    "a-second-plain-word": [*GRAPHQL, "repos/a/b/issues", "-f", "query={ a }"],
+    # Each a write, or a query the guard cannot read.
+    "variables": [*GRAPHQL, "-f", "query=query($n:Int!){ a }", "-F", "n=285"],
+    "mutation": [*GRAPHQL, "-f", "query=mutation { addComment(input:{}) { c } }"],
+    "query-then-mutation": [*GRAPHQL, "-f", "query=query { a } mutation { b }"],
+    "subscription": [*GRAPHQL, "-f", "query=subscription { a }"],
+    "query-from-a-file": [*GRAPHQL, "-F", "query=@q.graphql"],
+    "input-file": [*GRAPHQL, "--input", "q.json"],
+    "method-put": [*GRAPHQL, "-X", "PUT", "-f", "query={ a }"],
+    "two-queries": [*GRAPHQL, "-f", "query={ a }", "-f", "query={ b }"],
+    "a-variable-beside-the-query": [*GRAPHQL, "-f", "query={ a }", "-f", "n=1"],
+    "method-override-header": [*GRAPHQL, "-H", "X-HTTP-Method-Override: PUT",
+                               "-f", "query={ a }"],
+    "paginate": [*GRAPHQL, "--paginate", "-f", "query={ a }"],
+    "a-flag-with-its-value-glued": [*GRAPHQL, "--raw-field=query={ a }"],
+    "a-backtick": [*GRAPHQL, "-f", "query={ a(x:`id`) }"],
+    "a-leading-comment": [*GRAPHQL, "-f", "query=# c\n{ a }"],
+    "rest-with-a-field": ["gh", "api", "repos/a/b/issues", "-f", "title=x"],
+}  # fmt: skip
+
+
+@pytest.fixture
+def guard_push_hook(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.setattr(sys, "path", [*sys.path])  # the hook appends tools/ on import
+    return load_guard_push()
+
+
+@pytest.mark.parametrize("words", GRAPHQL_READS.values(), ids=GRAPHQL_READS.keys())
+def test_h24_5a_a_graphql_read_passes(guard_push_hook: ModuleType, words: list[str]) -> None:
+    assert guard_push_hook.segment_why(words) is None
+
+
+@pytest.mark.parametrize("words", GRAPHQL_ASKED.values(), ids=GRAPHQL_ASKED.keys())
+def test_h24_5a_a_graphql_write_or_unreadable_query_asks(
+    guard_push_hook: ModuleType, words: list[str]
+) -> None:
+    assert guard_push_hook.segment_why(words) == GH_API
+
+
+# ------------------------------------------------- h24 item 5a, code review 1
+#
+# The guard reads the words before the shell expands them. It refuses `$` and
+# a backtick, but brace expansion and a glob also change the words gh gets:
+# each line below passes as a read today, yet the shell hands gh a mutation,
+# a `-X PUT`, or the name of a file holding a mutation. The fix proposed in
+# review: a read only when every flag value is plain ([A-Za-z0-9_.=-]) or
+# single-quoted in the command text, so these run through the whole hook.
+
+#: A mutation the brace expansion turns into a second `-f query=` field.
+BRACED_MUTATION = (
+    '\'query=mutation { addComment(input:{subjectId:"X",body:"y"}) { clientMutationId } }\''
+)
+EXPANDED_WRITES: dict[str, str] = {
+    "braces-give-a-second-query": (
+        f"gh api graphql -f query='{{ a }}' -q {{.,-f,{BRACED_MUTATION}}}"
+    ),
+    "braces-give-a-put": "gh api graphql -f query='{ a }' -q {x,-X,PUT}",
+    "a-glob-names-a-mutation-file": "gh api graphql -f query={a}*",
+}
+#: The file the glob of "a-glob-names-a-mutation-file" matches in the working folder.
+GLOB_TARGET = "query={a}mutation{b}"
+
+GRAPHQL_READ_LINES: dict[str, str] = {
+    "single-quoted-query": "gh api graphql -f query='{ viewer { login } }'",
+    "whole-field-single-quoted": "gh api graphql -f 'query={ viewer { login } }'",
+    "plain-values": (
+        "gh api graphql -X POST -f 'query=query A { viewer { login } }' "
+        "-f operationName=A --jq .data.viewer.login"
+    ),
+}
+
+
+@pytest.mark.parametrize("command", EXPANDED_WRITES.values(), ids=EXPANDED_WRITES.keys())
+def test_h24_5a_a_graphql_line_the_shell_expands_asks(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    (repo / GLOB_TARGET).write_text("")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert GH_API in reason, reason
+
+
+@pytest.mark.parametrize("command", GRAPHQL_READ_LINES.values(), ids=GRAPHQL_READ_LINES.keys())
+def test_h24_5a_a_plain_or_single_quoted_graphql_read_passes(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+
+
+# ------------------------------------------------- h24 item 5a, design review 3
+#
+# `segment_why` gets the whole line as `text`, as `main` passes it, and the
+# words the scanner gives for the gh segment. zsh expands a word starting
+# with `=` to a path, also when written `''=ls`. A line holding a redirect
+# expands nothing gh sees but still fails the whole-line pattern, so it asks;
+# it must ask fast, since a hook that times out lets the call through.
+
+
+def gh_segment(hook: ModuleType, line: str) -> list[str]:
+    """The words of the line's one gh simple command, as `main` hands them on."""
+    simples = hook.shell_scan.parse(line)
+    assert simples is not None, line
+    [argv] = [s.argv for s in simples if s.argv[:1] == ["gh"]]
+    words: list[str] = argv
+    return words
+
+
+def test_h24_5a_a_word_starting_with_equals_after_quote_removal_asks(
+    guard_push_hook: ModuleType,
+) -> None:
+    line = "gh api graphql -f query='{ a }' -q ''=ls"
+    words = gh_segment(guard_push_hook, line)
+    assert words[-1] == "=ls", words
+    assert guard_push_hook.segment_why(words, line) == GH_API
+
+
+#: Design review round 3's failing line: 72 characters, ending in a redirect.
+#: On a backtracking pattern a 36-character failing line took 5.8 s.
+REDIRECT_LINE = "gh api graphql -f query='{ a }' --jq .data.repository.id > /tmp/out.json"
+
+
+def test_h24_5a_a_long_failing_line_asks_in_under_a_second(guard_push_hook: ModuleType) -> None:
+    assert len(REDIRECT_LINE) == 72
+    words = gh_segment(guard_push_hook, REDIRECT_LINE)
+    start = time.perf_counter()
+    why = guard_push_hook.segment_why(words, REDIRECT_LINE)
+    elapsed = time.perf_counter() - start
+    assert why == GH_API
+    assert elapsed < 1.0, f"segment_why took {elapsed:.3f} s on a 72-character line"
+
+
+# ---------------------------------------------------------------- h24 item 15
+#
+# A here-string fed to a shell is the shell's program, parsed as commands, so a
+# publishing act inside it is judged like one on the line. zsh joins every
+# stdin redirect of one command, so a second here-string counts too.
+
+#: {command: the reason it must name}.
+HERE_STRING_ASKED: dict[str, str] = {
+    "bash <<< 'git push origin x'": PUSH,
+    'sh <<< "gh pr merge 1"': GH_PR,
+    "env bash <<< 'git push origin x'": PUSH,
+    "timeout 5 bash <<< 'git push origin x'": PUSH,
+    "zsh <<< 'echo a' <<< 'git push origin x'": PUSH,
+    # A shell parses every stdin body whatever its -c program: the -c program
+    # here is itself a shell reading stdin.
+    "bash -c bash <<'EOF'\ngit push origin x\nEOF": PUSH,
+    "sh -c 'cat | sh' <<'EOF'\ngit push origin x\nEOF": PUSH,
+    "bash -c bash <<< 'git push origin x'": PUSH,
+}
+
+HERE_STRING_PASSED = (
+    "cat <<< 'git push origin x'",
+    "bash <<< 'git status'",
+    "python3 -c 'print(1)' <<< 'git push origin x'",
+    # An interpreter's inline program, or a script, keeps a heredoc as data.
+    "python3 -c 'print(1)' <<'EOF'\ngit push origin x\nEOF",
+    "bash script.sh <<'EOF'\ngit push origin x\nEOF",
+)
+
+
+@pytest.mark.parametrize("command", HERE_STRING_ASKED)
+def test_h24_15_a_publishing_act_in_a_shell_here_string_asks(repo: Path, command: str) -> None:
+    set_mode(repo, "off")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert HERE_STRING_ASKED[command] in reason, reason
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("command", HERE_STRING_ASKED)
+def test_h24_15_a_publishing_act_in_a_shell_here_string_is_queued_while_unattended(
+    repo: Path, command: str
+) -> None:
+    set_mode(repo, "on")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "deny"
+    assert HERE_STRING_ASKED[command] in reason, reason
+    [line] = queue_lines(repo)
+    assert (line["hook"], line["act"]) == ("guard_push", command)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", HERE_STRING_PASSED)
+def test_h24_15_a_here_string_that_is_data_or_reads_passes(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []

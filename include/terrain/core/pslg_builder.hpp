@@ -12,7 +12,7 @@
 // caller and an off-by-one in them is unrepresentable rather than validated.
 //
 // THE FAILURE CHANNEL IS DIAGNOSTICS, NOT A STATUS AND NOT AN EXCEPTION, and
-// the split from increment 2's channel is by error CLASS, not by taste.
+// the split from IndexedRing's channel is by error CLASS, not by taste.
 // IndexedRing's constructor throws std::invalid_argument
 // because a malformed view is a PROGRAMMER error on a type built per query,
 // where a returned status would be ignored at ten call sites. A malformed
@@ -230,8 +230,8 @@ template <pred::GeometryKernel K>
     }
 
     // 2. Index range, once over the whole flat buffer. THIS IS THE CHECK THAT
-    // MAKES IndexedRing::vertex(i)'s UNCHECKED READ SAFE, and increment 2
-    // deferred it here explicitly. One diagnostic per occurrence, not per
+    // MAKES IndexedRing::vertex(i)'s UNCHECKED READ SAFE; IndexedRing leaves
+    // it here on purpose. One diagnostic per occurrence, not per
     // chain; the offending value and its position go in the message, because
     // `vertex` is documented as a valid index and this value is not one.
     for (std::size_t c = 0; c < n; ++c) {
@@ -303,7 +303,7 @@ template <pred::GeometryKernel K>
 
     // 5. Winding, per closed chain, one orientation<K> call -- never a
     // shoelace area, whose sign cancels to noise on a sliver at UTM33 magnitudes
-    // and which increment 2 forbade from driving a topology decision. A wrong
+    // and which must never drive a topology decision. A wrong
     // winding is NEVER SILENTLY REVERSED: if the caller's geometry disagrees
     // with the caller's declared role, one of the two is a bug and guessing
     // which hides it forever. Python normalises with shapely, where reversal is
@@ -355,8 +355,8 @@ template <pred::GeometryKernel K>
 
 // Formats the error, the chain, the vertex and the message. Nothing else --
 // no coordinates beyond what the message already carries, no ring previews, no
-// suggested fixes. Unbounded rendering of a ring was excluded in increment 2
-// for the same reason.
+// suggested fixes: a ring rendered without bound would make the message
+// unbounded too.
 [[nodiscard]] inline std::string describe(const PslgDiagnostic& d) {
     std::string out{detail::pslg_error_name(d.error)};
     if (d.chain != kNoChain) {
@@ -395,8 +395,8 @@ public:
     // channels is how half the failures end up unreported.
     //
     // THE STORED INDEX ORDER IS THE ORDER RECEIVED, BYTE FOR BYTE; the builder
-    // never rotates a chain. That is what makes the rotation hazard inherited
-    // from increment 2 harmless here: {A, A, B, C} is a legal ring and its
+    // never rotates a chain. That is what makes the rotation hazard of
+    // IndexedRing harmless here: {A, A, B, C} is a legal ring and its
     // rotation {A, B, C, A} is an illegal stored closure. Any future normaliser
     // -- one that rotates a chain to start at its lowest vertex, say -- MUST
     // COLLAPSE AN ADJACENT DUPLICATE FIRST.

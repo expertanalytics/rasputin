@@ -82,7 +82,7 @@ def refined(
         started = start_chains(read_domain(path), (), DEFAULT_VOCABULARY)
         xy = started.vertices
         chains = [([int(i) for i in c], ROLES[role], int(m)) for c, role, m in started.chains]
-    run = _engine(xy, chains, True, DEFAULT_SNAP_SPACING)
+    run = _engine(xy, chains, delaunay=True, spacing=DEFAULT_SNAP_SPACING)
     assert run.mesh is not None and run.noded is not None, run.message
     edges, masks = _constraint_arrays(run.mesh, run.noded)
     if min_angle_deg is None:

@@ -1,0 +1,19 @@
+base_t10_p64 exit 0
+head_t10_p64 exit 0
+base_t10_p16 exit 0
+head_t10_p16 exit 0
+base_t10_p256 exit 0
+head_t10_p256 exit 0
+head_t50_p64 exit 0
+head_t50_p0 exit 0
+head_t20_p64 exit 0
+head_t20_p0 exit 0
+head_t10_p0 exit 0
+head_t5_p64 exit 0
+head_t5_p0 exit 0
+head_t2_p64 exit 0
+head_t2_p0 exit 0
+head_t1_p64 exit 0
+head_t1_p0 exit 0
+base_t1_p64 exit 0
+VELHASDONE

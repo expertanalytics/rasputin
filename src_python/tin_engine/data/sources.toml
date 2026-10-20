@@ -5,6 +5,7 @@
 # file in the same [source.<id>] form, under ids of their own:
 # $RASPUTIN_DATA/sources.toml if it exists, else
 # $XDG_CONFIG_HOME/rasputin/sources.toml, else ~/.config/rasputin/sources.toml.
+# A GML 3.2 file is registered as the .gpkg `rasputin gml-to-gpkg` makes of it.
 # A plugin may ship a sources.toml of its own (entry point group
 # rasputin.sources).
 # `rasputin sources` says which file it read.
