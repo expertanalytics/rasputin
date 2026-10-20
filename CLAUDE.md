@@ -88,6 +88,8 @@ the personas. Its rules:
   that increment, and its lessons recorded); the morning after each
   unattended night (idle time, guard refusals and false positives, work done
   out of role); and for a research round, weekly or when Ola asks.
+  `tools/duties.py` shows which are owed (recap, every prompt, Ola's status
+  line).
 
 ## 4. Operational Commands
 

@@ -1,9 +1,9 @@
 # Harness h23: duties owed, computed from git and the away log
 
-Status: **designed, design review APPROVED (round 2)**, 2026-10-17, on `worktree-h23-duties` off master
-`81ea2f73`. One PR. Every production file is governed (`tools/`,
-`.claude/settings.json`), so the green step and the settings change wait for
-Ola, by day.
+Status: **green at `a28b42d7`** (with the master merge `af9112cb` and both
+settings entries, on Ola's yes), 2026-10-20, on `worktree-h23-duties`; code
+review round 1 CHANGES REQUESTED for the prose of sections 4 and 6, now
+written. Next: code review round 2.
 
 Ola, 2026-10-17: "Go, is there a way to get you to work more regularly on
 "duties"?"
@@ -389,3 +389,4 @@ check-recording, and `gather` runs D1's query without `--since`.
 
 - **Design review, round 1, 2026-10-17.** Commit `d72cd744`, 0 counted lines, @reviewer: CHANGES REQUESTED. B1: any new file under `docs/retrospectives/` counts as a check, and non-check files exist there (`next.md`, the rule-file sweep); count only commits whose subject ends `(@orchestrator)`, with a test case. Held: an unmerged check clears D1/D2 because D4 lists the branch; hook claims match the docs; 0.10 s measured; "none owed" is not noise; the 3-day gap would have been flagged from #268 on. Suggestions: D4 out of the per-turn hook; check-recording PRs that touch only ROADMAP and an increment file should not owe a check; read `origin/master` too; four git calls, not three.
 - **Design review, round 2, 2026-10-17.** Commit `b22e5041`, 0 counted lines, @reviewer: APPROVED WITH WORDINGS, applied by the main session: the evidence command starts 2026-10-01 (a bare `--since` date takes the current time of day). The untested pin is minor (only `next.md`, already on master). Idea for the build: leave `next.md` out of the check query by name. The build waits for Ola (governed files; the status-line question).
+- **Code review, round 1, 2026-10-20.** On `a28b42d7`, 175 counted lines (estimate about 85), @reviewer: CHANGES REQUESTED, prose of sections 4 and 6 missing; behaviour, size and packed regions accepted.
