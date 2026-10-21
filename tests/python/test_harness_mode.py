@@ -208,6 +208,7 @@ def test_decide_ask_while_unattended_denies_with_the_queue_reason() -> None:
     for phrase in (
         "The refusal is already recorded in the queue.",
         "Do not retry",
+        "unless its reason says it may be redone",  # h29 §3.2
         "ASK OLA:",
         "handback",
     ):

@@ -941,3 +941,69 @@ def test_h24_1_dated_evidence_with_a_code_change_is_refused_naming_the_code(
     late = commit_files(built.repo, {f"{DATED}/run.json": "{}\n", "tools/x.py": "x = 9\n"},
                         "evidence and a code change")  # fmt: skip
     refuses_naming(judge(built), late, "tools/x.py", built.x)
+
+
+# ---------------------------------------------------------------- h29 §3.2
+#
+# docs/increments/h29-review-rules.md §4 tests 2 to 4: a grant refused only
+# because the head is not reviewed says it may be redone once an approving
+# verdict on that head is recorded; any other refusal does not say so. Each
+# case judges in process on `Granted` with the flag on and `harness_mode.ROOT`
+# pointed at it, as the `private` fixture does, for the three granted forms.
+
+
+def redo(head: str) -> str:
+    return f"may be redone once @reviewer's verdict approving {head[:7]} is recorded"
+
+
+@pytest.fixture
+def grant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Granted:
+    built = Granted(tmp_path.resolve() / "repo")
+    monkeypatch.setattr(push_grant.hm, "ROOT", built.repo)
+    state = push_grant.hm.state_dir(built.repo)
+    assert state is not None and state.resolve().is_relative_to(tmp_path.resolve()), state
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    return built
+
+
+def acts(head: str) -> dict[str, str]:
+    """The three granted forms for `feat` at `head`: push, pull request, enqueue."""
+    return {
+        "push": f"git push origin {head}:refs/heads/feat",
+        "create": "gh pr create --head feat --title 't' --body-file f",
+        "enqueue": f"gh pr merge feat --match-head-commit {head}",
+    }
+
+
+def granted_judge(built: Granted, command: str) -> Any:
+    reason = push_grant.PR if command.startswith("gh ") else push_grant.PUSH
+    return push_grant.judge({"cwd": str(built.repo)}, command, [reason])
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_h29_2_no_record_is_refused_saying_it_may_be_redone(grant: Granted, act: str) -> None:
+    write_reviews(grant.repo, [])
+    found = granted_judge(grant, acts(grant.head)[act])
+    refused_with(found, NO_REVIEW)
+    assert found.why.startswith(f"head {grant.head[:7]} is not reviewed: "), found.why
+    assert redo(grant.head) in found.why, found.why
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_h29_3_changes_requested_on_the_head_is_refused_saying_it_may_be_redone(
+    grant: Granted, act: str
+) -> None:
+    write_reviews(grant.repo, [review_record(grant.head, "CHANGES REQUESTED")])
+    found = granted_judge(grant, acts(grant.head)[act])
+    refused_with(found, CHANGES)
+    assert redo(grant.head) in found.why, found.why
+
+
+def test_h29_4_an_enqueue_already_used_in_this_window_does_not_say_redo(grant: Granted) -> None:
+    command = acts(grant.head)["enqueue"]
+    first = granted_judge(grant, command)
+    assert first is not None and first.passed, first
+    second = granted_judge(grant, command)
+    refused_with(second, f"head {grant.head[:7]} was enqueued already in this window")
+    assert "redone" not in second.why, second.why

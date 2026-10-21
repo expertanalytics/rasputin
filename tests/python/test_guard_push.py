@@ -1704,13 +1704,20 @@ def test_h25_round2_stdin_route_or_redefined_python_naming_a_push_asks(
 # ---------------------------------------------------------------- h27
 #
 # docs/increments/h27-unpushed-amend.md §3: an amend whose HEAD no
-# remote-tracking ref and no tag holds, on a bare one-command line, passes
+# remote-tracking ref and no tag holds, on a bare one-command line (h29 below
+# widens the line), passes
 # silently in every mode; anything else asks by day and is refused and queued
 # while away. Each fixture pushes into a bare `origin` with git itself, so the
 # tracking ref is the one a real push leaves.
 
 HISTORY = "this rewrites history, which is destructive once anything is published"
 NO_VERIFY = "--no-verify disables git's own hooks"
+#: h29 §3.3's message, without its leading "; ", word for word.
+AMEND_FORM = (
+    "an amend of a commit no remote holds passes when it comes last, after at most "
+    "`cd <absolute path>` and `git add` commands joined by `&&`, or as "
+    "`git -C <absolute path> commit --amend …` alone; it may be redone in that form"
+)
 
 
 class Line(NamedTuple):
@@ -1768,12 +1775,24 @@ def abbreviated(option: str) -> Case:
     return case
 
 
+def not_bare(template: str, cwd: str = "repo") -> Case:
+    """An unpushed HEAD on a line other than one bare `git commit --amend`."""
+
+    def case(repo: Path, tmp_path: Path) -> Line:
+        local_commit(repo)
+        return Line(template.format(repo=repo), repo if cwd == "repo" else tmp_path)
+
+    return case
+
+
 H27_PASSED = {
     "1-no-C": plain_amend,
     "2-absolute-C-with-a": amend_by_path,
     "3-worktree": amend_in_worktree,
     "4-amen": abbreviated("--amen"),
     "4-am": abbreviated("--am"),
+    # Recomputed for h29 §3.3: asked under h27, passes once `cd` may come first.
+    "9-cd-first": not_bare("cd {repo} && git commit --amend --no-edit"),
 }
 
 
@@ -1816,16 +1835,6 @@ def no_head_by_path(repo: Path, tmp_path: Path) -> Line:
     return Line(f"git -C {tmp_path / 'fresh'} commit --amend --no-edit", repo)
 
 
-def not_bare(template: str, cwd: str = "repo") -> Case:
-    """An unpushed HEAD on a line that is not one bare command."""
-
-    def case(repo: Path, tmp_path: Path) -> Line:
-        local_commit(repo)
-        return Line(template.format(repo=repo), repo if cwd == "repo" else tmp_path)
-
-    return case
-
-
 def no_cwd(repo: Path, tmp_path: Path) -> Line:
     local_commit(repo)
     return Line("git commit --amend --no-edit", None)
@@ -1846,7 +1855,6 @@ H27_ASKED = {
     "7-pushed-from-a-worktree": pushed_from_worktree,
     "8-no-head": no_head,
     "8-no-head-absolute-C": no_head_by_path,
-    "9-cd-first": not_bare("cd {repo} && git commit --amend --no-edit"),
     "9-GIT_DIR-assignment": not_bare("GIT_DIR={repo}/.git git commit --amend --no-edit"),
     "9-config-override": not_bare("git -c a.b=c commit --amend --no-edit"),
     # `repo` relative to cwd names the unpushed repository, so only the rule refuses it.
@@ -1857,6 +1865,14 @@ H27_ASKED = {
     "11-amen-pushed": pushed_head_abbreviated("--amen"),
     "11-am-pushed": pushed_head_abbreviated("--am"),
 }
+
+
+def assert_amend_form(command: str, reason: str) -> None:
+    """h29 §3.3: the form is named exactly when the history rewrite is the only reason."""
+    if "--no-verify" in command:
+        assert AMEND_FORM not in reason, reason
+    else:
+        assert AMEND_FORM in reason, reason
 
 
 def judge(repo: Path, line: Line, mode: str) -> tuple[str, str] | None:
@@ -1893,6 +1909,7 @@ def test_h27_an_amend_not_shown_unpushed_asks_while_attended(
     assert HISTORY in reason
     if "--no-verify" in line.command:
         assert NO_VERIFY in reason
+    assert_amend_form(line.command, reason)
     assert queue_lines(pushed) == []
 
 
@@ -1907,6 +1924,106 @@ def test_h27_an_amend_not_shown_unpushed_is_refused_and_queued_while_away(
     assert kind == "deny"
     assert reason.startswith("Refused: unattended mode is on until ")
     assert HISTORY in reason
+    assert_amend_form(line.command, reason)
     [queued] = queue_lines(pushed)
     assert (queued["hook"], queued["act"]) == ("guard_push", line.command)
     assert HISTORY in queued["why"]
+
+
+# ---------------------------------------------------------------- h29
+#
+# docs/increments/h29-review-rules.md §3.3 and §4 rows 6 to 17: besides h27's
+# bare form, an amend passes on a line of simple commands joined only by `&&`:
+# at most one `cd <absolute path>` first, any `git add`, and the amend last.
+# The repository judged is the amend's `-C` path, else the `cd` path, else cwd.
+# Every other shape asks by day and is refused and queued while away, and its
+# reason names the passing form (AMEND_FORM). Same fixture as h27: one pushed
+# commit and, where a case calls `local_commit`, an unpushed HEAD.
+
+
+def pushed_head_after_cd(repo: Path, tmp_path: Path) -> Line:
+    return Line(f"cd {repo} && git commit --amend --no-edit", repo)
+
+
+H29_PASSED = {
+    # cwd is the parent, which is no repository: the `cd` path is the one judged.
+    "6-cd-then-amend": not_bare("cd {repo} && git commit --amend --no-edit", "parent"),
+    "7-cd-adds-then-amend": not_bare(
+        "cd {repo} && git add f && git add g && git commit -q --amend --no-edit -a", "parent"
+    ),
+    "8-add-then-amend-by-C": not_bare(
+        "git add f && git -C {repo} commit --amend --no-edit", "repo"
+    ),
+    "9-and-inside-single-quotes": not_bare("cd {repo} && git commit --amend -m 'a && b'", "parent"),
+}
+
+H29_ASKED = {
+    "10-pushed-head-after-cd": pushed_head_after_cd,
+    # `repo` relative to the parent names the unpushed repository: only the rule refuses it.
+    "11-relative-cd": not_bare("cd repo && git commit --amend --no-edit", "parent"),
+    "12-two-cd": not_bare("cd {repo} && cd {repo} && git commit --amend", "repo"),
+    "13-semicolon": not_bare("cd {repo}; git commit --amend", "repo"),
+    "13-or-list": not_bare("cd {repo} || git commit --amend", "repo"),
+    "13-pipe-before": not_bare("git add f | cat && git commit --amend", "repo"),
+    "14-other-command-before": not_bare(
+        "cd {repo} && git checkout -q HEAD~0 && git commit --amend", "repo"
+    ),
+    "15-not-last": not_bare(
+        "cd {repo} && git commit --amend --no-edit && git log --oneline -1", "repo"
+    ),
+    "16-rewrite-after": not_bare("cd {repo} && git commit --amend && git rebase master", "repo"),
+}
+
+
+@pytest.mark.parametrize("mode", ["off", "on", "expired"])
+@pytest.mark.parametrize("case", H29_PASSED.values(), ids=H29_PASSED.keys())
+def test_h29_an_amend_last_after_cd_and_git_add_passes_in_every_mode(
+    pushed: Path, tmp_path: Path, case: Case, mode: str
+) -> None:
+    line = case(pushed, tmp_path)
+    assert judge(pushed, line, mode) is None, line.command
+    assert queue_lines(pushed) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "expired"])
+@pytest.mark.parametrize("case", H29_ASKED.values(), ids=H29_ASKED.keys())
+def test_h29_any_other_amend_line_asks_naming_the_passing_form(
+    pushed: Path, tmp_path: Path, case: Case, mode: str
+) -> None:
+    line = case(pushed, tmp_path)
+    found = judge(pushed, line, mode)
+    assert found is not None, f"{line.command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert HISTORY in reason and AMEND_FORM in reason, reason
+    assert queue_lines(pushed) == []
+
+
+@pytest.mark.parametrize("case", H29_ASKED.values(), ids=H29_ASKED.keys())
+def test_h29_any_other_amend_line_is_refused_and_queued_while_away(
+    pushed: Path, tmp_path: Path, case: Case
+) -> None:
+    line = case(pushed, tmp_path)
+    found = judge(pushed, line, "on")
+    assert found is not None, f"{line.command!r} passed silently"
+    kind, reason = found
+    assert kind == "deny"
+    assert reason.startswith("Refused: unattended mode is on until ")
+    assert HISTORY in reason and AMEND_FORM in reason, reason
+    [queued] = queue_lines(pushed)
+    assert (queued["hook"], queued["act"]) == ("guard_push", line.command)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("unpushed", [False, True], ids=["pushed-head", "unpushed-head"])
+def test_h29_17_a_rewrite_that_is_no_amend_does_not_name_the_amend_form(
+    pushed: Path, mode: str, unpushed: bool
+) -> None:
+    if unpushed:
+        local_commit(pushed)
+    found = judge(pushed, Line("git rebase master", pushed), mode)
+    assert found is not None, "git rebase master passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert HISTORY in reason
+    assert AMEND_FORM not in reason, reason

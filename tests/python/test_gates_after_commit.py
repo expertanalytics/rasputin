@@ -173,6 +173,16 @@ def test_cd_into_the_worktree_gates_the_worktree(repos: Repos) -> None:
     run_in(repos.wt, "commit", "-q", "--allow-empty", "-m", "x")
     result = repos.subagent(f"cd {shlex.quote(str(repos.wt))} && git commit -q --allow-empty -m x")
     assert_red_in(result, repos.wt)
+
+
+def test_h29_18_a_red_gate_names_an_amend_form_the_push_guard_passes(repos: Repos) -> None:
+    """docs/increments/h29-review-rules.md §3.3: the text names the amend on a line of its own."""
+    run_in(repos.wt, "commit", "-q", "--allow-empty", "-m", "x")
+    result = repos.subagent(f"cd {shlex.quote(str(repos.wt))} && git commit -q --allow-empty -m x")
+    assert_red_in(result, repos.wt)
+    assert "commit --amend --no-edit -a" in result.stderr, result.stderr
+    assert "git -C" in result.stderr, result.stderr
+    assert "Fix and amend" not in result.stderr, result.stderr
     assert repos.ran_in(repos.main) == [], "the main checkout was gated in the worktree's place"
 
 
