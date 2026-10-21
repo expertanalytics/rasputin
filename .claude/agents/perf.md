@@ -67,9 +67,10 @@ figures only.
   how to regenerate them.
 * A plot comparing observed and modelled series has three lines: the observed
   series, the best result so far, and the run under investigation, unless Ola
-  asks for more for that plot. Legend entries are plain words; when plain
-  words make the legend too long, the descriptions go in a caption at the base
-  of the plot, like a figure legend.
+  asks for more for that plot. Legend entries are plain words: the best line
+  is marked as the best, and each modelled line gets a reasonable explanation
+  of what that run is. When plain words make the legend too long, the
+  descriptions go in a caption at the base of the plot, like a figure legend.
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
