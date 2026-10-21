@@ -1,6 +1,6 @@
 # Harness h29: the reviewer's verdict line, redoing a cured refusal, and amends after `cd`
 
-Status: **designed**, 2026-10-21, on `worktree-h29-review-rules` off master
+Status: **built, code review approved**, 2026-10-21, on `worktree-h29-review-rules` off master
 `5d8904ee`. Short path (`docs/increments/README.md`): about 30 counted lines,
 no C++ file, no refine or mesh code. The code steps change governed files
 (`tools/brief.py`, `tools/push_grant.py`, `tools/harness_mode.py`,
@@ -263,3 +263,4 @@ words (`REQUIRED-READING.md` +44, `architect.md` +10, `CLAUDE.md` -3).
 
 - **Design review, round 1, 2026-10-21.** On `6a99438429403b88233f4141aa0855b8f411b734` (origin/master..6a994384, 0 counted lines), @reviewer: CHANGES REQUESTED; the redo rule to cover pull requests and merges and an approving verdict covering the head, applied in `88a411b3`.
 - **Design review, round 2, 2026-10-21.** On `88a411b3f1fb3e60a347ec7139b824d65d539b70` (6a994384..88a411b3, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; W1 (the rule-size figures in §6), applied in the commit that adds this line.
+- **Code review, round 1, 2026-10-21.** On `01aa6c178a38d4a6028db59d339fee398ab3412d` (633a8181..01aa6c17, 31 counted lines), @reviewer: APPROVED; full Python suite 9555 passed, gates green, `&&` split probes fail safe.
