@@ -45,6 +45,12 @@ WRITES: dict[str, tuple[str, ...]] = {
 }  # fmt: skip
 PERSONAS = tuple(WRITES)
 NEEDS_INCREMENT = ("tester", "developer", "reviewer")
+#: The line .claude/hooks/record_review.py records (h29 §3.1); the reviewer's brief demands it.
+REVIEW_LINE = (
+    "End the handback with exactly one line `Review: <APPROVED | APPROVED WITH WORDINGS | "
+    "CHANGES REQUESTED> <40-hex sha of the head you reviewed>`, and start no other line with "
+    "`Review:`; without it no review is recorded (docs/increments/README.md step 4)."
+)
 QUOTED = re.compile(r"(?i)invariant-critical|mutation|@perf|acceptance run|tools/bench\.py")
 HEADER = re.compile(
     r"^<<<BRIEF persona=([a-z]+) worktree=(/\S+) head=([0-9a-f]{40}) hash=([0-9a-f]{12})>>>[ \t]*$"
@@ -263,6 +269,8 @@ def _brief(argv: list[str] | None) -> str:
     limit = ", ".join(WRITES[persona]) or "nothing"
     body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
+    if persona == "reviewer":
+        body.insert(3, REVIEW_LINE)
     if args.ola:
         body += _ola(args.ola)
     text, head = _normalise("\n".join(body)), _git(worktree, "rev-parse", "HEAD") or ""

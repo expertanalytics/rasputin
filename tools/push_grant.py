@@ -384,7 +384,11 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         return refused(f"head {head[:7]} {holds} private/master, so it goes only to {only}", head)
     reason, record = review_of(where, head, jsonl(state / "reviews.jsonl"), act.remote)
     if reason is not None or record is None:
-        return refused(f"head {head[:7]} is not reviewed: {reason}", head)
+        return refused(
+            f"head {head[:7]} is not reviewed: {reason}; it may be redone once "
+            f"@reviewer's verdict approving {head[:7]} is recorded",
+            head,
+        )
     since = flag.get("since")
     if act.kind in ("enqueue", "merge") and any(
         isinstance(u, dict) and (u.get("window"), u.get("branch"), u.get("act"), u.get("head"))
