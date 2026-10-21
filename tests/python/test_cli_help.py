@@ -40,7 +40,7 @@ COLUMNS = 200
 #: `rasputin --help`'s command panels and their commands, in order.
 PANELS = [
     ("Meshing", ["mesh", "palette"]),
-    ("Catchments", ["catchment", "station-catchments"]),
+    ("Catchments", ["catchment", "network-catchment", "station-catchments"]),
     ("Data", ["fetch", "fetch-stations", "sources", "gml-to-gpkg"]),
     ("Other", ["version", "mcp"]),
 ]
