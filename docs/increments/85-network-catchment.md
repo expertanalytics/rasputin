@@ -34,8 +34,7 @@ session on 2026-10-21, output in
 - Without `--lakes`, the point seed gave 0.0016 km² (the nearest DEM node in a
   flat lake).
 
-All but the first figure were measured for this design (section 7.3 gives the
-script's steps), with the pilot polygon moved from EPSG:4326 into EPSG:3006.
+All but the first figure were measured for this design (the script was not kept; after green, the section 3.1 command reproduces the Kultsjön figures, section 7.3), with the pilot polygon moved from EPSG:4326 into EPSG:3006.
 
 Sweden publishes the answer to "what drains here" as data: SMHI's SVAR 2022
 sub-catchments, each naming the unit it drains to. Where such a network
@@ -59,11 +58,11 @@ created with vector unit catchments will usually be downstream of the
 requested outlet, and the watershed will be larger than it should be". His
 hybrid (section 1.3, and his `delineator.py` on MERIT-Basins) then splits the
 home unit at the outlet with a raster flow-direction trace. He traces the
-hybrid to Djokic and Ye (1999, "Fast Watershed Delineation") and to the
+hybrid to Djokic and Ye (1999, "DEM preprocessing for efficient watershed delineation"; their method's name is Fast Watershed Delineation) and to the
 USGS's StreamStats and its Network-Linked Data Index (NLDI), whose
 split-catchment process (https://api.water.usgs.gov/docs/nldi-pygeoapi/splitcatchment,
 read 2026-10-21) cuts the local NHDPlus catchment at a point on a flowline,
-snapping points within 200 m to the flowline. His optional `MATCH_AREAS`
+and whose hydrolocation process snaps a point within 200 m to the flowline (https://waterdata.usgs.gov/blog/nldi-processes/, read 2026-10-21). His optional `MATCH_AREAS`
 moves the outlet to the reach whose upstream area best matches an estimate.
 
 The network form this increment reads, one row per unit with its own ID and
@@ -101,7 +100,7 @@ the catchment data (`ObjekttyperEgenskaper_Nedborfelt.pdf`, 2015-04-27,
 http://gis3.nve.no/metadata/objekttyperEgenskaper/ObjekttyperEgenskaper_Nedborfelt.pdf,
 read 2026-10-21) gives a REGINE unit its `vassdragsnummer`, the parent
 catchment's number (`nedborfeltVassdragNrOverordnet`), the upstream area
-(`nedborfeltOppstromAreal_km2`) and the names of its lowest and highest
+(`nedborfeltOppstrømAreal_km2`) and the names of its lowest and highest
 points, but no downstream unit's ID: up- and downstream follow from the
 hierarchical numbering. A REGINE network needs a reader that derives the
 downstream link from the number; left out (section 9).
@@ -170,7 +169,7 @@ equal. A null or empty own ID is refused.
    area and name; no geometry. A GeoPackage is read with one `SELECT` of
    those columns; a GeoJSON file is parsed whole. The network's CRS is the
    file's own, read as `--lakes` reads one
-   (`src_python/tin_engine/feature_input.py@5d8904ee:535-540`: a GeoJSON
+   (`src_python/tin_engine/feature_input.py@5d8904ee:519`: a GeoJSON
    file without a `crs` member is EPSG:4326, RFC 7946).
 2. **Build the network** (`Network`, pure): refuse a duplicate own ID. A down
    value that names no unit is a network end (the sea, a border, the edge of
@@ -197,8 +196,7 @@ equal. A null or empty own ID is refused.
 6. **Check the area.** Areas through `area_m2`
    (`src_python/tin_engine/geodesy.py@5d8904ee:131`: planar in a projected CRS,
    geodesic on the ellipsoid in degrees). With an upstream-area attribute, the
-   joined polygon's area (holes included, as the publisher's area includes
-   them) must be within 1 % of the seed unit's stated upstream area;
+   joined polygon's area with its holes subtracted (the stated area is the sum of the units' own areas, section 6; a hole belongs to no unit) must be within 1 % of the seed unit's stated upstream area;
    otherwise refused, naming both and the difference ("the network file lacks
    units, or its links are wrong"). This is what catches a clipped extract
    or a dangling link, which no structural check can tell from a network
@@ -208,7 +206,7 @@ equal. A null or empty own ID is refused.
    `mesh --domain` reads it as it reads `catchment`'s output, and print the
    path. Properties: the seed (unit, or point and CRS), the home unit and its
    outlet distance, `units` (the joined IDs, sorted), `unit_count`,
-   `area_km2`, `stated_upstream_area_km2` (or null), holes and their area,
+   `area_km2` (holes subtracted, as checked), `stated_upstream_area_km2` (or null), holes and their area,
    the network ends, and the check's block when run.
 
 stderr carries one plain line per step, as `catchment` does: the network
@@ -262,7 +260,7 @@ words, as `catchment`'s are:
 | `--unit` names no unit | `--unit` |
 | the seed point in no unit, or on the border of two | `--seed` |
 | the seed not within the radius of its unit's outlet, or no outlet point for it | `--seed` |
-| a cycle upstream of the seed | `--network` |
+| the seed unit on a cycle | `--network` |
 | a multipart join | `--network` |
 | the joined area more than 1 % off the stated upstream area | `--network` |
 
@@ -394,8 +392,7 @@ duplicate-ID refusal, the network-end count, the outlet radius comparison
    `upstream("B") == ("B","C")`; ends `{"-9999": 1}`.
 2. Confluence: B and C both drain to A, D to C: `upstream("A")` holds all
    four, A first.
-3. A cycle B→C→B upstream of A: refused naming B and C; `upstream` of a unit
-   outside the cycle still works.
+3. A cycle B→C→B, A draining to B (one down ID per unit, so a cycle lies upstream of no unit off it): `upstream("B")` refused naming B and C; `upstream` of D in a chain D→-9999 works.
 4. Duplicate own ID: refused naming it. Empty and null IDs: refused.
 5. `unit_id`: `7`, `7.0`, `"7"` give `"7"`; `7.5` gives `"7.5"`.
 6. Join of a 2 × 1 row of squares: one polygon, 2.000000 km², no holes.
@@ -496,3 +493,6 @@ options) moves to a second PR on the same increment.
 - A point seed away from its unit's outlet is refused, not cut and not
   widened (section 3.3).
 - The cross-check reports and never refuses.
+
+## Review
+- **Design review, round 1, 2026-10-21.** On `f6dc725cc39ef5d674634fcc4fccd9de9dc8f235` (origin/master..f6dc725c, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; W1-W10 (the Kultsjön script's fate, two citation fixes, REGINE's attribute spelling, a line cite, holes subtracted from the joined area, the cycle refusal and test 3, the ROADMAP row's cause), applied in the commit that adds this line.
