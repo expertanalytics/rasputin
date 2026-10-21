@@ -3,14 +3,9 @@
 This file drives the automation loops for Claude Code in this repository. The
 main session dispatches them (§3).
 
-## 1. Multi-Agent Ecosystem
-This project is governed by specialized sub-agents. Always defer tasks to the correct persona in `.claude/agents/`:
-* `@orchestrator`: Workflow watcher. Flags deviations from these rules, researches agentic design and proposes improvements, and owns `docs/retrospectives/`.
-* `@architect`: Enforces declarative structures, component boundaries, and interface decoupling. Checks the literature and any novelty claim before a design.
-* `@tester`: Owns the test suites. Enforces the coverage floor of `testing.md` and adversarial geometry fuzzing.
-* `@developer`: Writes clean, high-performance C++20 and async Python code.
-* `@reviewer`: Final gatekeeper. Audits CI status, LOC, red-step scaffolding, and prose claims against code.
-* `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
+## 1. Personas
+Each task goes to its persona, one file per persona in `.claude/agents/`; the
+file's `description` says what the persona does.
 
 ## 2. Core Constraints & Technical Mandates
 * **Strict Size Limit:** Under **700 net lines of production code per pull
