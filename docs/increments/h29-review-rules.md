@@ -156,8 +156,9 @@ About 20 lines.
 - `.claude/REQUIRED-READING.md`, the unattended-mode paragraph: "A refused write to a
   rule file, or a refused push, is never redone by any route." becomes the
   rule for the two cured refusals: a refused rule-file write is never
-  redone; a refused push only when its sole reason is an unreviewed head,
-  once the approving verdict is recorded; a refused amend in the form its
+  redone; a refused push, pull request or merge only when its sole reason
+  is an unreviewed head, and only once an approving `@reviewer` verdict
+  covering it is recorded; a refused amend in the form its
   reason names; the guard judges each redo again.
 - `CLAUDE.md` §3, *Prose edits while writers are busy*, becomes *Prose
   edits*: a pointer to README step 4 for wordings and review records, the
