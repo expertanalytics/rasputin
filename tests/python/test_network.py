@@ -234,6 +234,17 @@ class TestCheckArea:
         assert nw().check_area(995.0 * KM2, 1000.0 * KM2) is None
         refusal(nw().check_area, 0.5 * KM2, 5.5 * KM2)
 
+    @pytest.mark.parametrize("joined_km2", [99.0, 101.0])
+    def test_exactly_one_percent_off_passes(self, joined_km2: float) -> None:
+        """Refused only beyond the tolerance. Both gaps and 1 % of 100 km2 are
+        exactly 1e6 m2 in binary floating point, so the boundary is met exactly."""
+        assert nw().check_area(joined_km2 * KM2, 100.0 * KM2) is None
+
+    def test_the_tolerance_is_not_taken_of_the_joined_area(self) -> None:
+        """1.005 km2 over 100: beyond 1 % of the stated area, within 1 % of the
+        joined 101.005."""
+        refusal(nw().check_area, 101.005 * KM2, 100.0 * KM2)
+
 
 # ---------------------------------------------------------------------------
 # The home unit (test 8)

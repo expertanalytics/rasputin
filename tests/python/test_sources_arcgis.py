@@ -215,7 +215,7 @@ class TestTheListing:
         assert set(entry["attributes"]) == {"ID", "Code_18"}
         assert ("mesh", "--features", "corine") in fits_of(entry)
         assert ("catchment", "--lakes", None) in fits_of(entry)
-        assert {f[0] for f in fits_of(entry)} <= {"mesh", "catchment"}
+        assert {f[0] for f in fits_of(entry)} <= {"mesh", "catchment", "network-catchment"}
         (coded,) = [c for c in entry["classes"] if c["attribute"] == "Code_18"]
         assert coded["values"] == sorted(CODES[i] for i in IDS)
 
