@@ -168,8 +168,9 @@ def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
     one in degrees), a class raster's for `--land-cover`; for features,
     `--features` under each of `legends` (only the entry's when it names one)
     whose attribute the file has (a GeoPackage's column case-insensitively,
-    a GeoJSON property exactly), `catchment --lakes` for any polygons, and
-    the GeoJSON readers, which need a `crs` member, by geometry and attribute.
+    a GeoJSON property exactly), `catchment --lakes` and `network-catchment
+    --network` for any polygons, `network-catchment --outlets` for any points,
+    and the GeoJSON readers, which need a `crs` member, by geometry and attribute.
     Reads no file."""
     if facts.values == "heights":
         commands: tuple[str, ...] = ("mesh", "catchment")
@@ -186,7 +187,9 @@ def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
         if facts.legend in ("", name) and fold(legend.attribute) in names
     ]
     if shapes & (_POLYGONS | {"Geometry"}):
-        found.append(_fit("catchment", "--lakes"))
+        found += [_fit("catchment", "--lakes"), _fit("network-catchment", "--network")]
+    if "Point" in shapes:
+        found.append(_fit("network-catchment", "--outlets"))
     if facts.suffix != ".gpkg" and facts.crs_stated:
         if shapes == {"LineString"} and "objectid" in names:
             found += [_fit("catchment", "--rivers"), _fit("station-catchments", "--rivers")]
