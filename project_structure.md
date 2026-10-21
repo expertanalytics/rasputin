@@ -240,6 +240,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   re-exported; the catchment's _core calls, as
                            #   edge_strip.py is the edge strip's (python-
                            #   audit.md, section 11)
+  network.py               # Network.build/upstream over a sub-catchment
+                           #   network (each unit names its downstream unit),
+                           #   home_unit, join, check_area, compare; pure (85)
   hydrography.py           # RiverSegment, Station, Lake: the hydrography's
                            #   value types; no first-party import, so gauge
                            #   places on them without a codec, and io/rivers.py
@@ -452,6 +455,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   objekttype spellings), drop_copies,
                            #   read_segments -> (RiverSegments, crs, copies
                            #   dropped); one LineString per segment (29)
+    network_file.py        # read_links, units_at, unit_geometries,
+                           #   outlet_point, through repository (85)
     repository.py          # the ONE io/ module that opens files:
                            #   DemRepository, the Protocol: footprints, load,
                            #   load_window, check; TiffDemRepository lists

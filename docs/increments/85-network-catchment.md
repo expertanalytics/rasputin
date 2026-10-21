@@ -1,6 +1,6 @@
 # Increment 85: a catchment joined from a published sub-catchment network
 
-**Status: designed** by `@architect`, 2026-10-21, on master `5d8904ee`,
+**Status: built** (red `4dddf0b0`, green `a4b530c5`, kill record `4807334e`; 479 counted lines against about 450); designed by `@architect`, 2026-10-21, on master `5d8904ee`,
 branch `worktree-network-catchment`. Full path (about 450 counted lines, no
 C++ file, no refine or mesh code, so no `@perf` run). Number 85 because 84 is
 the highest number found in `docs/increments/` over every local branch and
@@ -494,5 +494,10 @@ options) moves to a second PR on the same increment.
   widened (section 3.3).
 - The cross-check reports and never refuses.
 
+## 11. The Kultsjön case, as built
+
+Code review round 1 ran the section 3.1 command on 4807334e, 2026-10-21: every section 7.3 figure, 19,556 ring positions (19,555 distinct); 8.5 s. By --unit, 2.5 s. The bare point: refused at 13,988 m, exit code 2.
+
 ## Review
 - **Design review, round 1, 2026-10-21.** On `f6dc725cc39ef5d674634fcc4fccd9de9dc8f235` (origin/master..f6dc725c, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; W1-W10 (the Kultsjön script's fate, two citation fixes, REGINE's attribute spelling, a line cite, holes subtracted from the joined area, the cycle refusal and test 3, the ROADMAP row's cause), applied in the commit that adds this line.
+- **Code review, round 1, 2026-10-21.** On `4807334e608e80d3cde3b1c898dfd57f84f03d3c` (origin/master..4807334e, 479 counted lines), @reviewer: APPROVED WITH WORDINGS; W1-W5 (Status line, ROADMAP row 85, two project_structure.md entries, section 11 with the Kultsjön figures), applied in the commit that adds this line.
