@@ -256,5 +256,10 @@ commit which moved.
 
 About 30 counted lines (§3.1 about 3, §3.2 about 2, §3.3 about 20, the
 after-commit text about 1), measured with `python3 tools/count_loc.py`.
-Rule text (`python3 tools/rule_sizes.py`, against master `5d8904ee`): +44
-words (`REQUIRED-READING.md` +37, `architect.md` +10, `CLAUDE.md` -3).
+Rule text (`python3 tools/rule_sizes.py`, against master `5d8904ee`): +51
+words (`REQUIRED-READING.md` +44, `architect.md` +10, `CLAUDE.md` -3).
+
+## Review
+
+- **Design review, round 1, 2026-10-21.** On `6a99438429403b88233f4141aa0855b8f411b734` (origin/master..6a994384, 0 counted lines), @reviewer: CHANGES REQUESTED; the redo rule to cover pull requests and merges and an approving verdict covering the head, applied in `88a411b3`.
+- **Design review, round 2, 2026-10-21.** On `88a411b3f1fb3e60a347ec7139b824d65d539b70` (6a994384..88a411b3, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; W1 (the rule-size figures in §6), applied in the commit that adds this line.
