@@ -55,6 +55,9 @@ SC_LAKES = ("station-catchments", "--lakes", None)
 RIVERS = {("catchment", "--rivers", None), ("station-catchments", "--rivers", None)}
 STATIONS = ("station-catchments", "--stations", None)
 REFERENCE = ("station-catchments", "--reference", None)
+#: A polygon source is a network of units; a point source, their outlet points.
+NETWORK = ("network-catchment", "--network", None)
+OUTLETS = ("network-catchment", "--outlets", None)
 
 
 def features(*maps: str) -> set[Fit]:
@@ -108,23 +111,23 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
         facts("heights", suffix="", crs=False, projected=False), DEMS),
     "classes": (facts("classes", suffix="", crs=False), {("mesh", "--land-cover", None)}),
     "land cover gpkg, every map of its attribute": (
-        gpkg(("Code_18",)), features("corine", "corine-water") | {LAKES}),
+        gpkg(("Code_18",)), features("corine", "corine-water") | {LAKES, NETWORK}),
     "gpkg attribute case-insensitive": (
-        gpkg(("code_18", "Remark")), features("corine", "corine-water") | {LAKES}),
+        gpkg(("code_18", "Remark")), features("corine", "corine-water") | {LAKES, NETWORK}),
     "geojson attribute exact": (
-        facts(geometry=POLY, attributes=("code_18",)), {LAKES, SC_LAKES}),
+        facts(geometry=POLY, attributes=("code_18",)), {LAKES, NETWORK, SC_LAKES}),
     "geojson attribute as the map spells it": (
         facts(geometry=POLY, attributes=("Code_18",)),
-        features("corine", "corine-water") | {LAKES, SC_LAKES}),
+        features("corine", "corine-water") | {LAKES, NETWORK, SC_LAKES}),
     "the entry's legend alone": (
-        gpkg(("Code_18",), legend="corine"), features("corine") | {LAKES}),
+        gpkg(("Code_18",), legend="corine"), features("corine") | {LAKES, NETWORK}),
     "the entry's legend, its attribute absent": (
-        gpkg(("Code_18",), legend="clc18_kode"), {LAKES}),
-    "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {LAKES}),
+        gpkg(("Code_18",), legend="clc18_kode"), {LAKES, NETWORK}),
+    "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {LAKES, NETWORK}),
     "mapbiomas classes": (facts(geometry=POLY, attributes=("class",)),
-                          features("mapbiomas-c11") | {LAKES, SC_LAKES}),
+                          features("mapbiomas-c11") | {LAKES, NETWORK, SC_LAKES}),
     "an uncoded property map": (facts(geometry=POLY, attributes=("property",), crs=False),
-                                features("property") | {LAKES}),
+                                features("property") | {LAKES, NETWORK}),
     "rivers": (facts(geometry=("LineString",), attributes=("objectid", "elvid")), RIVERS),
     "rivers in a gpkg: no rivers": (gpkg(("objectid",), geometry="LineString"), set()),
     "rivers with no crs member: no rivers": (
@@ -134,21 +137,25 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
     "rivers with no objectid: no rivers": (
         facts(geometry=("LineString",), attributes=("elvid",)), set()),
     "lines and polygons: lakes, no rivers": (
-        facts(geometry=("LineString", "Polygon"), attributes=("objectid",)), {LAKES}),
-    "stations": (facts(geometry=("Point",), attributes=("station", "name")), {STATIONS}),
+        facts(geometry=("LineString", "Polygon"), attributes=("objectid",)), {LAKES, NETWORK}),
+    "stations": (facts(geometry=("Point",), attributes=("station", "name")), {STATIONS, OUTLETS}),
     "stations in .json": (
-        facts(suffix=".json", geometry=("Point",), attributes=("station",)), {STATIONS}),
-    "stations with no crs member: none": (
-        facts(geometry=("Point",), attributes=("station",), crs=False), set()),
-    "stations with no station attribute: none": (
-        facts(geometry=("Point",), attributes=("name",)), set()),
-    "points and polygons: catchment lakes only": (
-        facts(geometry=("Point", "Polygon"), attributes=("station",)), {LAKES}),
-    "references": (facts(geometry=POLYS, attributes=("station",)), {LAKES, SC_LAKES, REFERENCE}),
-    "lakes": (facts(geometry=POLY, attributes=("objectid", "navn")), {LAKES, SC_LAKES}),
-    "lakes with no crs member: catchment lakes only": (
-        facts(geometry=POLYS, attributes=("name",), crs=False), {LAKES}),
-    "a lakes gpkg: catchment lakes only": (gpkg(("navn",), geometry="MultiPolygon"), {LAKES}),
+        facts(suffix=".json", geometry=("Point",), attributes=("station",)), {STATIONS, OUTLETS}),
+    "stations with no crs member: outlets only": (
+        facts(geometry=("Point",), attributes=("station",), crs=False), {OUTLETS}),
+    "stations with no station attribute: outlets only": (
+        facts(geometry=("Point",), attributes=("name",)), {OUTLETS}),
+    "points and polygons: lakes, network and outlets": (
+        facts(geometry=("Point", "Polygon"), attributes=("station",)),
+        {LAKES, NETWORK, OUTLETS}),
+    "references": (facts(geometry=POLYS, attributes=("station",)),
+                   {LAKES, NETWORK, SC_LAKES, REFERENCE}),
+    "lakes": (facts(geometry=POLY, attributes=("objectid", "navn")), {LAKES, NETWORK, SC_LAKES}),
+    "lakes with no crs member: catchment lakes and network": (
+        facts(geometry=POLYS, attributes=("name",), crs=False), {LAKES, NETWORK}),
+    "points in a gpkg: outlets": (gpkg(("unit",), geometry="Point"), {OUTLETS}),
+    "a lakes gpkg: catchment lakes and network": (
+        gpkg(("navn",), geometry="MultiPolygon"), {LAKES, NETWORK}),
 }  # fmt: skip
 
 

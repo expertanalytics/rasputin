@@ -21,14 +21,16 @@ import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Final, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, Final, Literal, TextIO, cast
 
 import numpy as np
 import numpy.typing as npt
+import shapely
 import typer
 from pydantic import ValidationError
+from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from tin_engine import cli_kit, edge_strip, final_check, installed_version
@@ -52,6 +54,7 @@ from tin_engine.catchment import (
     CatchmentRequest,
     GaugeResult,
     LakeError,
+    _lake,
     check_reach_crs,
     delineate,
 )
@@ -101,6 +104,7 @@ from tin_engine.feature_input import (
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
+from tin_engine.geodesy import area_m2
 from tin_engine.gml_import import gml_to_geopackage
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
@@ -128,6 +132,7 @@ from tin_engine.io.models import (
     ZSpelling,
     ZUnit,
 )
+from tin_engine.io.network_file import outlet_point, read_links, unit_geometries, units_at
 from tin_engine.io.ply import field_comments, write_ply
 from tin_engine.io.repository import (
     CacheRepository,
@@ -144,6 +149,14 @@ from tin_engine.landcover import label_triangles
 from tin_engine.legends import derived_cleanup, run_vocabulary, shipped_names
 from tin_engine.legends import load as load_legend
 from tin_engine.mosaic import Seam, check_canvas
+from tin_engine.network import (
+    Network,
+    check_area,
+    compare,
+    home_unit,
+    join,
+    outlet_distance_m,
+)
 from tin_engine.palettes import paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError
@@ -2808,6 +2821,264 @@ def _outline_properties(result: Catchment) -> dict[str, object]:
     }
 
 
+@contextmanager
+def _refused(hint: str, prefix: str = "") -> Iterator[None]:
+    """A `ValueError` made a usage error naming `hint`, its words after `prefix`."""
+    try:
+        yield
+    except ValueError as exc:
+        raise typer.BadParameter(f"{prefix}{exc}", param_hint=hint) from exc
+
+
+def network_catchment(
+    out: Annotated[
+        Path,
+        typer.Option("--out", writable=True, help="Where to write the polygon: .geojson or .json."),
+    ],
+    network: Annotated[
+        Path,
+        typer.Option(
+            "--network", help="The units' polygons (.gpkg, .geojson or .json), read in place."
+        ),
+    ],
+    id_attribute: Annotated[str, typer.Option("--id-attribute", help="The unit's own ID.")],
+    down_attribute: Annotated[
+        str, typer.Option("--down-attribute", help="The ID of the unit it drains to.")
+    ],
+    network_layer: Annotated[
+        str | None, typer.Option("--network-layer", help="The GeoPackage's features table.")
+    ] = None,
+    upstream_area_attribute: Annotated[
+        str | None,
+        typer.Option(
+            "--upstream-area-attribute",
+            help="The area upstream of the unit's outlet, its own included; the joined area "
+            "must be within 1 % of the seed unit's.",
+        ),
+    ] = None,
+    area_unit: Annotated[
+        Literal["m2", "km2"] | None,
+        typer.Option("--area-unit", help="The unit of --upstream-area-attribute."),
+    ] = None,
+    name_attribute: Annotated[
+        str | None, typer.Option("--name-attribute", help="The units' names, for the report.")
+    ] = None,
+    unit: Annotated[
+        str | None,
+        typer.Option("--unit", help="Seed: this unit and every unit upstream of it."),
+    ] = None,
+    seed: Annotated[
+        tuple[float, float] | None,
+        typer.Option("--seed", metavar="X Y", help="Seed: a point at a unit's outlet."),
+    ] = None,
+    seed_crs: Annotated[
+        str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
+    ] = "EPSG:4326",
+    lakes: Annotated[
+        Path | None,
+        typer.Option(
+            "--lakes", help="Any polygon file: the lake under the seed point is the seed."
+        ),
+    ] = None,
+    lakes_layer: Annotated[
+        str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
+    ] = None,
+    outlets: Annotated[
+        Path | None,
+        typer.Option(
+            "--outlets", help="The units' outlet points, one per unit, keyed by --id-attribute."
+        ),
+    ] = None,
+    outlets_layer: Annotated[
+        str | None, typer.Option("--outlets-layer", help="The GeoPackage's features table.")
+    ] = None,
+    outlet_radius: Annotated[
+        float | None,
+        typer.Option(
+            "--outlet-radius",
+            metavar="METRES",
+            help="How near the seed must be to its unit's outlet point. Default 200.",
+        ),
+    ] = None,
+    check_dem: Annotated[
+        str | None,
+        typer.Option(
+            "--check-dem",
+            help=f"Also run the terrain route (catchment) from the seed on this DEM ({DEM_HELP}) "
+            "and report where the two differ.",
+        ),
+    ] = None,
+    cache: CACHE = None,
+    threads: THREADS = None,
+    memory_budget: MEMORY_BUDGET = None,
+    z_unit: Z_UNIT = None,
+) -> None:
+    """Write the catchment joined from a published network of sub-catchment units.
+
+    Each unit names its downstream unit; the catchment is the seed's unit and
+    every unit upstream of it, joined as published, in the network's CRS, and
+    mesh --domain reads it. A point seed must lie, or its lake must, within
+    --outlet-radius of its unit's outlet point: a point inside a unit is
+    refused. --check-dem compares the result with the terrain route.
+    """
+    if (unit is None) == (seed is None):
+        raise typer.BadParameter("give exactly one of --unit and --seed", param_hint="--unit")
+    for name, value, other, given in (
+        ("--lakes", lakes, "--seed", seed),
+        ("--outlets", outlets, "--seed", seed),
+        ("--outlet-radius", outlet_radius, "--seed", seed),
+        ("--check-dem", check_dem, "--seed", seed),
+        ("--area-unit", area_unit, "--upstream-area-attribute", upstream_area_attribute),
+        ("--upstream-area-attribute", upstream_area_attribute, "--area-unit", area_unit),
+        ("--lakes-layer", lakes_layer, "--lakes", lakes),
+        ("--outlets-layer", outlets_layer, "--outlets", outlets),
+    ):
+        if value is not None and given is None:
+            raise typer.BadParameter(f"needs {other}", param_hint=name)
+    radius = 200.0 if outlet_radius is None else outlet_radius
+    if not (math.isfinite(radius) and radius >= 0.0):
+        raise typer.BadParameter("must be finite and at least 0", param_hint="--outlet-radius")
+    if out.suffix.lower() not in CATCHMENT_SUFFIXES:
+        raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
+    target = cli_kit.destination(out)
+    attributes = (upstream_area_attribute, area_unit, name_attribute)
+    with _refused("--network"):
+        crs, links = read_links(network, network_layer, id_attribute, down_attribute, *attributes)
+    with _refused("--network", f"{network.name}, {id_attribute}: "):
+        net = Network.build(links)
+    ends = ", ".join(f"{n} to {v or 'null'}" for v, n in net.ends.items())
+    typer.echo(f"network: {len(links)} units in {crs}; draining out of the file: {ends}", err=True)
+    seed_unit, place = unit or "", dict[str, object]({"unit": unit})
+    if seed_unit and seed_unit not in net.links:
+        raise typer.BadParameter(f"{network.name} has no unit {unit}", param_hint="--unit")
+    request: CatchmentRequest | None = None
+    if seed is not None:
+        ((x, y),) = reprojector(seed_crs, crs)([seed])
+        with _refused("--seed"):
+            covering = units_at(network, network_layer, id_attribute, Point(x, y))
+            seed_unit = home_unit(Point(x, y), covering)
+        with _refused("--lakes"):
+            found = (
+                None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
+            )
+            request = CatchmentRequest(
+                seed=seed,
+                seed_crs=seed_crs,
+                lakes=None if found is None else found[0],
+                lakes_crs=None if found is None else found[1],
+            )
+            geometry = Point(x, y) if found is None else _lake(request, crs)
+        link, own_km2 = net.links[seed_unit], area_m2(dict(covering)[seed_unit], crs) / 1e6
+        named = f"{seed_unit}{'' if link.name is None else f' ({link.name})'}"
+        choices = (
+            f"give --unit {seed_unit} for the whole unit, up to {own_km2:.2f} km2 of it below the "
+            "seed, or use the terrain route (rasputin catchment), which cuts at the point"
+        )
+        if outlets is None:
+            raise typer.BadParameter(
+                f"the seed is in the unit {named}; give --outlets to check that it is at the "
+                f"unit's outlet, or {choices}",
+                param_hint="--seed",
+            )
+        with _refused("--outlets"):
+            outlet = outlet_point(outlets, outlets_layer, id_attribute, seed_unit, crs)
+        if outlet is None:
+            raise typer.BadParameter(
+                f"{outlets.name} has no outlet point for the seed's unit {named}; {choices}",
+                param_hint="--seed",
+            )
+        distance = outlet_distance_m(geometry, outlet, crs)
+        if not distance <= radius:
+            raise typer.BadParameter(
+                f"the seed is {distance:.0f} m from the outlet of its unit {named}, "
+                f"{own_km2:.2f} km2, beyond --outlet-radius {radius:g} m; a point inside a unit "
+                f"is not joined: {choices}",
+                param_hint="--seed",
+            )
+        typer.echo(
+            f"seed unit: {named}, {own_km2:.6f} km2, the seed {distance:.0f} m from its outlet",
+            err=True,
+        )
+        place = {"seed": seed, "seed_crs": seed_crs, "home_unit": seed_unit, "distance_m": distance}
+    with _refused("--network"):
+        ids = net.upstream(seed_unit)
+        geometries = unit_geometries(network, network_layer, id_attribute, ids)
+        joined = join(list(geometries.values()), crs)
+    typer.echo(
+        f"joined: {plural(len(ids), 'unit', 'units')}, {joined.area_m2 / 1e6:.6f} km2, "
+        f"{plural(joined.holes, 'hole', 'holes')} ({joined.holes_m2 / 1e6:.6f} km2, filled)",
+        err=True,
+    )
+    stated = net.links[seed_unit].upstream_area_m2
+    if stated is not None:
+        with _refused("--network"):
+            check_area(joined.area_m2, stated)
+        typer.echo(f"area check: stated upstream area {stated / 1e6:.6f} km2, agrees", err=True)
+    properties: dict[str, object] = {
+        **place,
+        "units": sorted(ids),
+        "unit_count": len(ids),
+        "area_km2": joined.area_m2 / 1e6,
+        "stated_upstream_area_km2": None if stated is None else stated / 1e6,
+        "holes": joined.holes,
+        "holes_km2": joined.holes_m2 / 1e6,
+        "network_ends": dict(net.ends),
+    }
+    if check_dem is not None and request is not None:
+        properties["check_dem"] = _terrain_check(
+            joined.polygon,
+            geometries,
+            net,
+            crs,
+            request,
+            check_dem,
+            cache,
+            (threads, memory_budget, z_unit),
+        )
+    target.write_bytes(catchment_geojson(joined.polygon, crs, properties))
+    typer.echo(f"{target}")
+
+
+def _terrain_check(
+    polygon: Polygon,
+    units: Mapping[str, BaseGeometry],
+    net: Network,
+    crs: str,
+    request: CatchmentRequest,
+    dem: str,
+    cache: Path | None,
+    how: tuple[int | None, str | None, ZSpelling | None],
+) -> dict[str, object]:
+    """The terrain route from `request`'s seed on `dem`, compared with the
+    network's `polygon`, said on stderr; its failure is reported, not refused."""
+    res = cli_kit.cli_resources(how[0], how[1])
+    try:
+        result = delineate(request, _dem_repository([dem], cache, res, how[2]), res)
+    except (OSError, ValueError, typer.BadParameter) as exc:
+        text = exc.format_message() if isinstance(exc, typer.BadParameter) else str(exc)
+        typer.echo(f"check: the terrain route failed, nothing compared: {text}", err=True)
+        return {"dem": dem, "failed": text}
+    terrain = shapely.transform(result.reduced, reprojector(result.crs, crs))
+    check = compare(polygon, terrain, units, crs)
+    outside = [
+        {"id": u, "name": net.links[u].name, "area_km2": a} for u, a in check.units_mostly_outside
+    ]
+    total = sum(a for _, a in check.units_mostly_outside)
+    typer.echo(
+        f"check: terrain {check.terrain_area_km2:.2f} km2, shared {check.shared_km2:.2f}, "
+        f"network only {check.network_only_km2:.2f}, terrain only {check.terrain_only_km2:.2f}; "
+        f"{plural(len(outside), 'unit', 'units')} mostly outside the terrain catchment, "
+        f"{total:.2f} km2",
+        err=True,
+    )
+    return {
+        "dem": dem,
+        **asdict(check),
+        "units_mostly_outside": outside,
+        "units_mostly_outside_km2": total,
+    }
+
+
 @dataclass
 class _DirectorySink:
     """`station-catchments`' `BatchSink`: a station's catchment file is written
@@ -3037,7 +3308,7 @@ def station_catchments(
 app.callback()(main)
 for panel, commands in (
     (MESHING, (mesh, palette)),
-    (CATCHMENTS, (catchment, station_catchments)),
+    (CATCHMENTS, (catchment, network_catchment, station_catchments)),
     (DATA, (fetch, fetch_stations, sources, gml_to_gpkg)),
     (OTHER, (version,)),
 ):

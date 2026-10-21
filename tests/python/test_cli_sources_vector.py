@@ -135,9 +135,14 @@ class TestT6VectorListing:
             ("mesh", "--features", "corine"),
             ("mesh", "--features", "corine-water"),
             ("catchment", "--lakes", None),
+            ("network-catchment", "--network", None),
         }
         spelt = {(f["tool"], f["argument"]) for f in cover["fits"]}
-        assert spelt == {("mesh", "features"), ("catchment", "lakes")}
+        assert spelt == {
+            ("mesh", "features"),
+            ("catchment", "lakes"),
+            ("network_catchment", "network"),
+        }
 
     def test_the_lake_file(self, registered: Path, tmp_path: Path) -> None:
         lakes = by_id(boxed(INSIDE))[LAKES_ID]
@@ -150,7 +155,8 @@ class TestT6VectorListing:
         assert lakes["coverage"] == pytest.approx(list(LAKE_COVERAGE), abs=DEGREES)
         assert lakes["box_covered"] == pytest.approx(LAKE_SHARE_INSIDE, abs=SHARE)
         assert fits_of(lakes) == {("catchment", "--lakes", None),
-                                  ("station-catchments", "--lakes", None)}  # fmt: skip
+                                  ("station-catchments", "--lakes", None),
+                                  ("network-catchment", "--network", None)}  # fmt: skip
 
     def test_the_raster_fields_stay_empty_for_a_vector_source(self, registered: Path) -> None:
         found = by_id(listing())
@@ -230,7 +236,11 @@ class TestT6VectorListing:
             COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, legend="corine")
         })  # fmt: skip
         found = by_id(listing())[COVER_ID]
-        assert fits_of(found) == {("mesh", "--features", "corine"), ("catchment", "--lakes", None)}
+        assert fits_of(found) == {
+            ("mesh", "--features", "corine"),
+            ("catchment", "--lakes", None),
+            ("network-catchment", "--network", None),
+        }
 
 
 # ------------------------------------------------------------ T9
@@ -344,4 +354,8 @@ class TestAr50Listing:
         assert found["classes"] == [
             {"attribute": "arealtype", "values": ["30", "60"], "distinct": 2}
         ]
-        assert fits_of(found) == {("mesh", "--features", "ar50"), ("catchment", "--lakes", None)}
+        assert fits_of(found) == {
+            ("mesh", "--features", "ar50"),
+            ("catchment", "--lakes", None),
+            ("network-catchment", "--network", None),
+        }

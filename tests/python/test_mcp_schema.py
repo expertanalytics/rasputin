@@ -359,14 +359,14 @@ class TestR2TheRealPositionals:
 
 # ---------------------------------------------------------------- T3
 
-#: The nine commands an agent is offered, as tool names, in the order of
+#: The ten commands an agent is offered, as tool names, in the order of
 #: `rasputin --help` (`mcp` is the server). Their parameter
 #: counts are not pinned: the test below holds each schema's properties equal
 #: to the command's own click parameters, which implies the count, and a
 #: pinned count would turn red on every merge that adds a CLI option without
 #: saying anything about the schema.
 TOOL_NAMES = [
-    "mesh", "palette", "catchment", "station_catchments",
+    "mesh", "palette", "catchment", "network_catchment", "station_catchments",
     "fetch", "fetch_stations", "sources", "gml_to_gpkg", "version",
 ]  # fmt: skip
 
@@ -561,6 +561,7 @@ WRITABLE = {
     ("mesh", "out"), ("mesh", "out_edges"), ("mesh", "stats"), ("mesh", "record_path"),
     ("palette", "out"),
     ("catchment", "out"),
+    ("network_catchment", "out"),
     ("station_catchments", "out_dir"),
     ("fetch_stations", "out_dir"),
     ("fetch", "cache"),

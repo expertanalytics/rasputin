@@ -51,6 +51,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "gauge": "hydrography",
         "reference": "io.models",
         "decompose": "",  # 23c: the partition rule; reads no machine, imports nothing
+        "network": "geodesy",  # 85: a catchment joined from a sub-catchment network
     },
     {  # L2: io/ codecs, and the one module that opens a connection
         "io": "io.ply io.vtk_legacy",
@@ -103,15 +104,17 @@ LAYERS: tuple[dict[str, str], ...] = (
         "legends": "feature_input features toml_data",  # 41: legend files to Legend
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
+        # 85: a network file's links and units; reads through feature_input
+        "io.network_file": "crs feature_input io.geojson io.geopackage io.repository network",
     },
     {  # L5: flags in, files and stderr out
         "cli": "_core basin_run catchment catchment_batch chains legends cli_kit crs dem_input"
                " domain decompose edge_strip elevation feature_input features fetch.features"
-               " fetch.http fetch.nve fetch.plan fetch.run final_check gauge gml_import grid_domain"
-               " hydrography io.cog io.domain_file io.geojson io.geopackage_write io.mesh_index"
-               " io.models io.ply io.repository"
+               " fetch.http fetch.nve fetch.plan fetch.run final_check gauge geodesy gml_import"
+               " grid_domain hydrography io.cog io.domain_file io.geojson io.geopackage_write"
+               " io.mesh_index io.models io.network_file io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " mcp.http mcp.server mosaic palettes plugins raster refine_job resources"
+               " mcp.http mcp.server mosaic network palettes plugins raster refine_job resources"
                " run_record source_report sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
