@@ -20,6 +20,9 @@ file's `description` says what the persona does.
   `# fmt: off` is allowed, provided the packed lines stay readable and the
   review says why each new region is packed. This is the only statement of the
   rule; everywhere else points here.
+* **Rule text pays for itself:** a change that adds words to the files
+  `tools/rule_sizes.py` counts cuts as many in the same change, unless Ola
+  explicitly allows the growth.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
   `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
@@ -34,11 +37,7 @@ Before acting on this repository — in the main session as well as in any perso
 that starts cold or resumes after a context loss runs the recovery steps at the
 top of `.claude/REQUIRED-READING.md` **before** its first spawn, commit or edit;
 that is the only statement of the rule and of where in-flight state lives.
-Every code alteration must execute this strict pipeline, dispatched by the main session:
-1. `@architect` defines interfaces and types.
-2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).
-3. `@developer` writes the minimal code needed to pass the active tests.
-4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
+Every code alteration follows the step order below, dispatched by the main session.
 
 ### The main session dispatches
 The main session, started with no agent name, is the dispatcher: it spawns
@@ -74,9 +73,8 @@ the personas. Its rules:
   file and writes no code.
 * **Recap each round.** At every new round or increment, run
   `python3 tools/session_state.py` and open with its recap.
-* **Milestone updates.** After each milestone, give Ola a one-line log of
-  where the round stands (e.g. "`@tester` has 8 failing tests; on to
-  `@developer`").
+* **Milestone updates.** After each milestone, one line to Ola on where the
+  round stands.
 * **Report only finished, verified results, briefly.** Answer Ola's question
   first, then stop. No file that does not exist yet, no number from a run
   still in progress, no cause not checked. No unasked images, no undefined
@@ -87,8 +85,7 @@ the personas. Its rules:
   that increment, and its lessons recorded); the morning after each
   unattended night (idle time, guard refusals and false positives, work done
   out of role); and for a research round, weekly or when Ola asks.
-  `tools/duties.py` shows which are owed (recap, every prompt, Ola's status
-  line).
+  `tools/duties.py` shows which are owed.
 
 ## 4. Operational Commands
 
@@ -129,10 +126,7 @@ CI is authoritative: local green does not mean the branch is green, so
 gh pr checks <pr>      # must be green; required for merge on master
 ```
 `CI result` is green only when every gating job passed, or was skipped on a
-prose-only change; it is meant to be the one required check on `master`, and
-`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks`
-shows whether it is yet. While the per-job checks are still required, a
-prose-only PR waits on matrix checks that never report. A PR that changes
+prose-only change. A PR that changes
 only prose (Markdown at the root or under `docs/`, less the files the suites
 read; `tools/ci_changes.py` decides) skips the C++, sanitizer and Python jobs
 and runs only the governance gates, so its green says nothing about code.

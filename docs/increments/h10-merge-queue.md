@@ -120,7 +120,7 @@ practice. The places that describe merging:
   only prints a warning (the queue's method wins); `-d`/`--delete-branch` is
   refused. Never pass `--admin`: it bypasses the queue."
 - **`.claude/REQUIRED-READING.md`, approval boundary** (the "A fresh yes"
-  paragraph) and **`docs/PRINCIPLES.md` E1**: after `gh pr merge` add "(which
+  paragraph) and **`docs/PRINCIPLES.md@94a157b2:201-207` (E1)**: after `gh pr merge` add "(which
   enqueues; one yes covers one enqueue)". `gh pr merge` on a PR whose checks
   have not passed turns on auto-merge into the queue (`gh pr merge --help`,
   gh 2.101.0); that is the same act and needs the same yes.

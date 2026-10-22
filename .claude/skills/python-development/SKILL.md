@@ -9,7 +9,6 @@ Enforces cutting-edge, safe, and testable Python 3.12+ architecture for orchestr
 
 ## 1. Data Integrity & Validation (Pydantic V2)
 * **Strict Modeling:** Every external data input, configuration option, and API boundary must use **Pydantic models** (`pydantic.BaseModel`).
-* **Settings Management:** Use `pydantic-settings` for application and environment configuration.
 * **Type Safety:** Enforce strict runtime and static type hinting. Leverage `Annotated` types for precise validation criteria (e.g., coordinate boundaries, file path validation).
 
 ## 2. Asynchronous & Decoupled Architecture
@@ -24,15 +23,8 @@ Enforces cutting-edge, safe, and testable Python 3.12+ architecture for orchestr
   * Never use `eval()`, `exec()`, or insecure YAML/Pickle parsing. Use `pydantic` or `json` for serialization.
   * Sanitise input coordinates and parameters at the CLI boundary before passing them to Pybind11.
 
-## 4. Testability & Quality Assurance
-* **Test Architecture:** Maintain 100% testable logic. Use `pytest` for all unit and integration/system-level tests.
-* **Unit Level:** Mock the Pybind11 geometry engine using standard fixtures to isolate pure Python logic, DTM parsing, and CLI formatting.
-* **System Level:** Implement complete integration tests that orchestrate the pipeline from a mock DTM file input to a generated TIN output.
-* **Async Testing:** Use `pytest-asyncio` for verifying asynchronous execution loops and non-blocking tasks.
-
 ## 5. Pragmatic Code Design
 * **Pragmatic Polymorphism:** Prefer composition over inheritance. Use structural subtyping (`typing.Protocol`) or simple functional abstractions instead of heavy object-oriented hierarchies.
-* **Change Limit:** see the ceiling in `CLAUDE.md` §2.
 
 ## 6. Docstrings and Comments
 Docstrings and comments describe the code as it is, for a reader who has never

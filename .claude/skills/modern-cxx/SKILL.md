@@ -20,7 +20,6 @@ Enforces C++20/C++23 standards, zero-overhead abstractions, component swappabili
 
 ## 2. Memory, Data Layout & Execution
 * **Ownership:** Enforce RAII. Use smart pointers (`std::unique_ptr`) only for resource boundaries; use stack allocation, string views (`std::string_view`), and spans (`std::span`) for zero-copy data passing.
-* **Asynchrony & Streaming:** Use C++20 **Coroutines** (`std::generator`, `co_yield`, `co_await`) for lazy terrain sampling, heavy batch processing, or streaming mesh updates to/from Python without massive allocations.
 * **Memory Locality:** Prefer contiguous memory layouts (`std::vector`). Avoid pointer-chasing topologies; represent mesh connectivity via indices into contiguous arrays.
 
 ## 3. Python Bindings (Pybind11)

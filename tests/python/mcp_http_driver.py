@@ -250,8 +250,10 @@ def rasputin_server(
 
     The output root is ``root/out``; the spec file ``root/spec.json``; the fake
     child unless ``child`` is given. ``data``, when given, is ``RASPUTIN_DATA``
-    while the app is built, so the server's read roots are computed from it (its
-    ``cache`` folder and its ``sources.toml``). The signing key is `KEY`, by
+    while the app is built; the app copies the environment then, so it holds for
+    the server's life, and the server's read roots are computed from it (its
+    ``cache`` folder and its ``sources.toml``, read again when that file
+    changes). The signing key is `KEY`, by
     `secrets.token_bytes` patched while the app is built.
     """
     import secrets

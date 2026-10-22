@@ -59,9 +59,23 @@ from tin_engine.mcp.server import (
 )
 from tin_engine.mcp.store import Store
 from tin_engine.mcp.workspace import HTTP_REFUSED, NAME, USER, CallScope, overlap
-from tin_engine.sources import catalogue, data_root, plugin_source_files, user_source_file, xdg_base
+from tin_engine.sources import (
+    catalogue,
+    data_root,
+    plugin_source_files,
+    user_source_candidates,
+    user_source_file,
+    xdg_base,
+)
 
-__all__ = ["HttpSettings", "StaticTokens", "build_app", "serve_http", "tokens_from_env"]
+__all__ = [
+    "HttpSettings",
+    "SharedRoots",
+    "StaticTokens",
+    "build_app",
+    "serve_http",
+    "tokens_from_env",
+]
 
 #: Seconds a link is valid, and seconds a stored or written file is kept (both chosen;
 #: `DOWNLOAD_LINK`'s description states them).
@@ -76,9 +90,9 @@ HTTP_INSTRUCTIONS = INSTRUCTIONS + (
     "\nOver HTTP: each call runs in your own folder; give paths relative to it, as a result's "
     "outputs are. A call reads only your folder and the server's data sources. Each output "
     "comes back as a download link valid 1 hour; download_link makes a fresh one. Files in "
-    "your folder are kept 7 days. A change to the server's sources takes a restart. An input "
-    "may also be a download link this server gave you, of any age, while its file is kept. "
-    "upload sends a file of your own, up to 2 MiB, and returns its link."
+    "your folder are kept 7 days. A change to the server's sources applies from your next "
+    "call. An input may also be a download link this server gave you, of any age, while its "
+    "file is kept. upload sends a file of your own, up to 2 MiB, and returns its link."
 )
 
 
@@ -164,6 +178,55 @@ def _shared_roots(environ: Mapping[str, str]) -> tuple[Path, ...]:
     return tuple(p.expanduser().resolve() for p in [*([cache] if cache else []), *paths])
 
 
+def _stamp(candidates: Sequence[Path]) -> tuple[bytes | str | None, ...]:
+    """Each candidate's content: its bytes, None when it is not a file, the error's text
+    when reading fails. The content, not the mtime, so a touch alone changes nothing."""
+
+    def one(path: Path) -> bytes | str | None:
+        try:
+            return path.read_bytes() if path.is_file() else None
+        except OSError as exc:
+            return str(exc)
+
+    return tuple(one(p) for p in candidates)
+
+
+class SharedRoots:
+    """The read roots every user shares, read again from the next call when the sources
+    file changes. A file the catalogue refuses, or a root overlapping ``out_root``, keeps
+    the last good roots and is logged once; at construction it raises a `ValueError`."""
+
+    def __init__(self, environ: Mapping[str, str], out_root: Path) -> None:
+        self._environ, self._out_root = environ, out_root
+        self._candidates = user_source_candidates(environ)
+        self._stamp = _stamp(self._candidates)
+        self.roots = self._load()
+        self._lock = asyncio.Lock()
+
+    def _load(self) -> tuple[Path, ...]:
+        roots = _shared_roots(self._environ)
+        if (words := overlap(self._out_root, roots)) is not None:
+            raise ValueError(words)
+        return roots
+
+    async def current(self) -> tuple[Path, ...]:
+        """The roots for a call arriving now, reloaded first when the file changed."""
+        async with self._lock:
+            stamp = await asyncio.to_thread(_stamp, self._candidates)
+            if stamp == self._stamp:
+                return self.roots
+            try:
+                new = await asyncio.to_thread(self._load)
+            except ValueError as exc:
+                LOG.warning("sources file refused; keeping the data sources read before: %s", exc)
+                self._stamp = stamp
+                return self.roots
+            # stored after the load, so a reload cancelled midway is tried again
+            self._stamp, self.roots = stamp, new
+            LOG.info("read roots now %s", new)
+            return new
+
+
 @dataclass(frozen=True)
 class _Delivery:
     """The quota and the sweep before a call; the store and the signed links after."""
@@ -222,25 +285,23 @@ def build_app(
         if d.tool_name in (DOWNLOAD_LINK, UPLOAD):
             raise ValueError(f"a command is named {d.command.name}, a tool of the server's own")
     out_root = settings.out_root.expanduser().resolve()
-    shared = _shared_roots(os.environ)
-    if (words := overlap(out_root, shared)) is not None:
-        raise ValueError(words)
+    shared = SharedRoots(dict(os.environ), out_root)
     for user in tokens:
         Store(out_root / user).sweep_now(time.time(), KEEP_SECONDS)
     key = secrets.token_bytes(32)
     # uvicorn writes its access line whenever that logger has a handler, access_log or not
     logging.getLogger("uvicorn.access").disabled = True
 
-    def scope_for(ctx: ServerRequestContext[Any]) -> CallScope:
+    async def scope_for(ctx: ServerRequestContext[Any]) -> CallScope:
         access = get_access_token()
         if access is None or access.client_id not in tokens:
             raise RuntimeError("a call without a user")
-        work = out_root / access.client_id / "work"
+        roots, work = await shared.current(), out_root / access.client_id / "work"
         work.mkdir(parents=True, exist_ok=True)
         return CallScope(
             cwd=work,
             write_root=work,
-            read_roots=(work, out_root / access.client_id / "store", *shared),
+            read_roots=(work, out_root / access.client_id / "store", *roots),
             user=access.client_id,
             refused=frozenset(HTTP_REFUSED),
             link_prefix=settings.public_url.rstrip("/") + "/files/",
@@ -293,7 +354,9 @@ def build_app(
         delivery=_Delivery(settings, key),
         instructions=HTTP_INSTRUCTIONS,
     )
-    LOG.info("serving users %s at %s, reading %s", sorted(tokens), settings.public_url, shared)
+    LOG.info(
+        "serving users %s at %s, reading %s", sorted(tokens), settings.public_url, shared.roots
+    )
     return server.streamable_http_app(
         transport_security=security,
         host=settings.host,

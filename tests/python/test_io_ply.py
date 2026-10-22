@@ -10,7 +10,7 @@ Everything here goes through `plyread`, a parser written for the suite that
 reads the header it is handed and takes every size from a declaration in the
 blob. It never asks the writer where anything is. That is deliberate and it is
 the difference between a test and a restatement of the implementation
-(`PRINCIPLES.md` B1).
+(`.claude/REQUIRED-READING.md`, *Claims*).
 
 Committed red at `1d4ec8b`, when the intended failure was
 `ModuleNotFoundError: tin_engine.io` -- the package did not exist, and
@@ -28,7 +28,7 @@ TWO THINGS THIS SUITE DELIBERATELY DOES NOT ASSERT.
 
 1. That QGIS or ParaView opens the result. Nobody here can run either, and
    ruling 2 forbids the claim until a person has opened a file and said so in
-   the record (`PRINCIPLES.md` A1, A4). What the suite asserts is what the
+   the record (`.claude/REQUIRED-READING.md`, *Claims*). What the suite asserts is what the
    bytes are.
 2. `cli_kit.destination`'s refusals. They are covered in `test_cli_kit.py`;
    re-testing them here would pin one boundary in two places.
@@ -55,7 +55,7 @@ from tin_engine.io.ply import write_ply
 
 #: A millimetre-resolved easting at UTM 33N magnitudes -- the road-crosses-river
 #: shape's origin is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
-#: `TestDoublePrecision` proves the probe can fail before trusting it (A3).
+#: `TestDoublePrecision` proves the probe can fail before trusting it.
 EASTING = 430_000.001
 
 #: A z the caller supplied and nothing snapped. The grid rounds x and y; ruling
@@ -204,7 +204,7 @@ class TestDoublePrecision:
     """Ruling 2: float32 is a corruption, and this is the probe that says so."""
 
     def test_the_probe_can_fail(self) -> None:
-        # A3. Written before the round trip is trusted: if EASTING survived a
+        # Written before the round trip is trusted: if EASTING survived a
         # float32 trip, the test below would pass against the dtype it exists
         # to refuse. The float32 step at this magnitude is 2**19 * 2**-24.
         assert float(np.float32(EASTING)) != EASTING
@@ -308,7 +308,7 @@ class TestTheTwoFilesRegister:
 class TestTheGuardsThatHadNeverRun:
     """The two guards beyond what the rest of this suite asks for.
 
-    `PRINCIPLES.md` A4: neither may be credited with covering anything until it
+    `.claude/REQUIRED-READING.md`, *Claims*: neither may be credited with covering anything until it
     has run against a broken input. Both were the only uncovered production
     lines in the tree until these tests existed.
 

@@ -27,7 +27,7 @@ import signal
 import stat
 import sys
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Protocol
@@ -481,7 +481,7 @@ def build_server(
     jobs: int = 1,
     child: Sequence[str] = CHILD,
     out_root: Path | None = None,
-    scope_for: Callable[[ServerRequestContext[Any]], CallScope] | None = None,
+    scope_for: Callable[[ServerRequestContext[Any]], Awaitable[CallScope]] | None = None,
     delivery: Delivery | None = None,
     instructions: str = INSTRUCTIONS,
 ) -> Server[Any]:
@@ -495,7 +495,11 @@ def build_server(
     """
     root = (out_root or Path.home() / DEFAULT_OUT_ROOT).expanduser().resolve()
     stdio = CallScope(cwd=None, write_root=root, read_roots=None, user=None)
-    scope_of = scope_for or (lambda ctx: stdio)
+
+    async def stdio_scope(ctx: ServerRequestContext[Any]) -> CallScope:
+        return stdio
+
+    scope_of = scope_for or stdio_scope
     tools = {d.tool_name: d for d in derive(app)}
     semaphore, prefix = anyio.Semaphore(jobs), list(child)
     extra = [] if delivery is None else [DOWNLOAD_TOOL, UPLOAD_TOOL]
@@ -507,9 +511,9 @@ def build_server(
         ctx: ServerRequestContext[Any], params: types.CallToolRequestParams
     ) -> types.CallToolResult:
         if delivery is not None and params.name == DOWNLOAD_LINK:
-            return await _download_link(scope_of(ctx), params.arguments or {}, delivery)
+            return await _download_link(await scope_of(ctx), params.arguments or {}, delivery)
         if delivery is not None and params.name == UPLOAD:
-            return await _upload(scope_of(ctx), params.arguments or {}, delivery)
+            return await _upload(await scope_of(ctx), params.arguments or {}, delivery)
         tool = tools.get(params.name)
         if tool is None:
             raise MCPError(types.INVALID_PARAMS, f"Unknown tool: {params.name}")
@@ -517,7 +521,7 @@ def build_server(
             arguments = tool.model.model_validate(params.arguments or {})
         except ValidationError as exc:
             return _error(None, "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()))
-        scope = scope_of(ctx)
+        scope = await scope_of(ctx)
         if isinstance(inputs := await _inputs(scope, tool, arguments), str):
             return _error(None, inputs)
         arguments = inputs

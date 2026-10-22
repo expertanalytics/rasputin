@@ -2,7 +2,7 @@
 
 This module exists so that increment 10's round trip goes through a parser that
 **reads the header it was handed** instead of re-deriving the writer's byte
-offsets (`PRINCIPLES.md` B1, and `10-mesh-output.md`'s "Testing" section). The
+offsets (`.claude/REQUIRED-READING.md`, *Claims*, and `10-mesh-output.md`'s "Testing" section). The
 distinction is the whole value of the suite: a reader that computed "vertices
 start at 3 * 8 * N bytes from the end of the header, because that is what
 `write_ply` computes" would agree with the writer's arithmetic bug and report a

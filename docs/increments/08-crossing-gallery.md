@@ -288,7 +288,7 @@ says what the geometry is and asserts nothing about the landscape.
 The fixture's own `description` string is untouched at the geometry level but
 carries the same false noun (*"two lake holes"*) and is corrected with it.
 
-Per `PRINCIPLES.md` C3 this lands in this PR or it is not recorded.
+Per `docs/PRINCIPLES.md@94a157b2:147-151` (C3) this lands in this PR or it is not recorded.
 
 ## What 5b and 5c made false in `06-cdt-viewer.md`
 
@@ -333,7 +333,7 @@ changed between two commits is real — restated under the new name.
   above it that explains why it grew.
 - `docs/increments/06-cdt-viewer.md` — the four corrections above.
 - `docs/increments/08-crossing-gallery.md` — this file.
-- `ROADMAP.md` — the row for increment 8, per `PRINCIPLES.md` C4.
+- `ROADMAP.md` — the row for increment 8, per `docs/PRINCIPLES.md@94a157b2:153-159` (C4).
 - `tests/python/test_viz_svg.py`, `tests/python/test_cli_draw.py`.
 
 Explicitly out of scope: any C++ file, `bindings/`, `_core.pyi`,
@@ -364,7 +364,7 @@ count assertion passes on a node constructed in the wrong place. The predicted
 positions are `(200,250)`; `(700,250)`; `(250,250)` and `(450,250)`, plus
 `ORIGIN`.
 
-**The probe must be able to fail** (`PRINCIPLES.md` A3). The controlled negative
+**The probe must be able to fail** (`docs/PRINCIPLES.md@94a157b2:43-51`, A3). The controlled negative
 for the crossing assertion already exists in the suite:
 `test_viz_svg.py::TestGalleryPredicates` self-tests `properly_cross` against a
 shared endpoint. Extend that habit — assert that `road-enters-forest`'s road

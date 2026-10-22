@@ -262,7 +262,12 @@ sources; any other path is refused, whether or not the file exists. A value
 with `/` in it must be a plain path (letters, digits and `. _ ~ / -`), so
 give a CRS as an EPSG code. `fetch --refresh` is refused, since it would
 discard the cache every user shares; give `--cache` inside your folder
-instead. Changing the sources takes a restart.
+instead.
+
+A change to the sources file applies from the next call, with no restart, so
+links stay valid; a call already running keeps the sources it started with.
+While the file cannot be read (a half-saved edit, say), the server keeps the
+sources it read last and logs why, and a call that reads the sources (any `mesh`, `fetch` or catchment call, even with paths only) is refused, in words naming the file, until the file is fixed.
 
 An input may also be a download link this server gave you, of any age, as
 long as its file is kept; an expired link still works as an input. The

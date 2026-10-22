@@ -16,9 +16,7 @@ figures only.
 
 ## 1. What you own
 * **The acceptance run** (`docs/increments/README.md`, "Acceptance: an increment
-  that touches refine or mesh code" — the one statement of the rule): the 1 m
-  benchmark and a thread-scaling sweep, compared with the previous increment's
-  run.
+  that touches refine or mesh code" — the one statement of the rule).
 * **`tools/bench.py`**, the checked-in script both runs come from; its design is
   `docs/benchmarks/bench-py.md`. It is code under `tools/`, so a change to it
   follows the TDD loop: a failing test in `tests/python/test_bench.py` first,
@@ -36,9 +34,6 @@ figures only.
   rebuild and reinstall the extension first, per `.claude/REQUIRED-READING.md`
   ("Stale artifacts"); a run against a stale `.so` measures the previous
   increment.
-* **Record the power state with every run and compare like with like**, as
-  `docs/increments/README.md`, *Acceptance*, states. If the matching baseline
-  does not exist, say so rather than compare across.
 * **Compare like with like on bounds checks too**: judge `--hardening on`
   (the default) only against hardened runs and `--hardening off` only against
   unchecked ones; when a baseline of the matching mode is missing, measure the
@@ -52,16 +47,12 @@ figures only.
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
   check and the Delaunay check. A faster run that loses quality is a regression.
-* **Sanitize a scratch build before you run it for numbers.** A simulation or
-  instrumentation patch that changes C++ runs once sanitized on a small case
-  before any Release, timed or full-size run: `-fsanitize=address,undefined`
-  (as `build-san` builds) where it can run, which is a C++ driver or test
-  binary. ASan cannot be loaded into the Python process here (the harness
-  strips `DYLD_INSERT_LIBRARIES`), so a run through `_core` uses
-  `-fsanitize=undefined` with libc++'s extensive hardening mode instead. A run
-  that crashed produces no numbers. A deliberate crash (a plant) stays out of
-  a script's default loop: a crash in a Python process shows as a crash dialog
-  on the owner's screen.
+* **Sanitize a scratch build before you run it for numbers:** a C++ patch for
+  a timed or full-size run first runs once on a small case under
+  `-fsanitize=address,undefined` (a C++ driver or test binary), or
+  `-fsanitize=undefined` with libc++ extensive hardening through `_core`, where
+  ASan cannot load. A crashed run has no numbers; a deliberate crash stays out
+  of a script's default loop.
 
 ## 3. Evidence
 * Commit the evidence under `docs/benchmarks/<date>/`: a `README.md` with the
@@ -69,19 +60,16 @@ figures only.
   Evidence left in `/tmp` or a scratchpad is lost with the session.
 * Large outputs (meshes) stay out of the repository; say where they were and
   how to regenerate them.
-* A plot comparing observed and modelled series has three lines: the observed
-  series, the best result so far, and the run under investigation, unless Ola
-  asks for more for that plot. Legend entries are plain words: the best line
-  is marked as the best, and each modelled line gets a reasonable explanation
-  of what that run is. When plain words make the legend too long, the
-  descriptions go in a caption at the base of the plot, like a figure legend.
+* A plot of observed against modelled series has three lines unless Ola asks
+  for more: observed, the best so far and the run under investigation.
+  Plain-word legends mark the best and give each run a reasonable explanation;
+  when too long, they go in a caption at the base, like a figure legend.
 * A table scoring a modelled series against an observed one shows KGE with
   its parts r, α and β, NSE, and the half-water date (the day half the
   period's flow has passed).
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
-  the baseline. No figure from a run still in progress, and no cause you have
-  not measured: "thought to be" is the honest wording until a profile says so.
+  the baseline. An unprofiled cause is "thought to be".
 * Verdict: `ACCEPTED` or `REGRESSION` (naming the measure and the size), or
   `NO BASELINE` when the matching power-state baseline is missing.

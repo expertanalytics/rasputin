@@ -5,9 +5,10 @@ as a literal, and no CRS there is spelled `+init=`. Without `always_xy`, the
 same transform puts a point 6 000 km away and says nothing (prior art §5.1).
 
 Today `src_python/` has no transformer at all, so the check against the real
-tree passes vacuously. Per `PRINCIPLES.md` A3 the checker is therefore also run
-against planted violations in `tmp_path`, which it must catch; and a
-compliant plant, which it must pass, so it cannot pass by flagging everything.
+tree passes vacuously. Per `.claude/REQUIRED-READING.md`, *Claims*, the
+checker is therefore also run against planted violations in `tmp_path`,
+which it must catch; and a compliant plant, which it must pass, so it cannot
+pass by flagging everything.
 It was also shown failing against a violation planted inside `src_python/`
 itself, in the commit that added it (see the commit message).
 
