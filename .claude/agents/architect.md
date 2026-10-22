@@ -38,6 +38,7 @@ written before the design. Its rules are `docs/increments/README.md`, step 1
 ## 5. Operational Instructions for Claude Code
 * **Constants:** Every absolute constant in a design states the scale it assumes and the largest input it was checked at.
 * **Fixtures:** each test a design specifies carries its fixture's measured figures; an amendment recomputes them for each existing test it changes.
+* **Estimates:** a cost estimate counts each driver it does not know with a scratch probe; a timing gate's factor sums the estimate of each new term in the gated call, plus noise.
 * **Action:** Before allowing `@developer` to write code for a complex task, you must provide a high-level component blueprint showing the data flow and interface boundaries.
 * **Ideas:** before a design, read the private ideas file; name each entry
   the design takes up or overlaps, and hand back each idea it leaves out.

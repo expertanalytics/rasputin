@@ -50,6 +50,7 @@ the personas. Its rules:
   tests go back to `@developer`.
 * **Resume while small.** Resume a persona only while its transcript is under
   about 150 k tokens; past that, spawn fresh on the increment file.
+* **Worktrees.** Make each new worktree with `tools/new_worktree.py`.
 * **Finish before starting.** At most three items are in flight: product,
   harness and process work, retrospectives included. An item counts from
   its first spawn until its PR merges or Ola parks or drops it, except while
@@ -80,7 +81,6 @@ the personas. Its rules:
   first, then stop. No file that does not exist yet, no number from a run
   still in progress, no cause not checked. No unasked images, no undefined
   jargon.
-* **Prohibited dependencies.** Hold every persona to §2's list.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
   `@orchestrator`, which records it in `docs/retrospectives/`.
 * **When to spawn `@orchestrator`.** After each increment merges (a check of

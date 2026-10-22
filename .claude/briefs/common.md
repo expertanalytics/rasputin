@@ -10,7 +10,8 @@ $note; write **no other file under .claude/current-task/**.
 **Ola's words appear only under "Ola, verbatim"** below.
 If **blocked on power, network or a lock**, stop and hand back.
 Start a long run with Bash's `run_in_background` and wait for its end
-notice, never `sleep`; write a rule
+notice, never `sleep` or a polling loop; before you hand back, stop every
+background command you started; write a rule
 file with Edit or Write, never through the shell.
 End each commit message with the **Co-Authored-By trailer** from your
 system context. End each commit subject you write with `(@$persona)`.

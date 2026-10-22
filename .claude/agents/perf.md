@@ -44,6 +44,10 @@ figures only.
   unchecked ones; when a baseline of the matching mode is missing, measure the
   previous merge commit in that mode back to back
   (`docs/increments/24-release-hardening.md` §7).
+* **Outside data first:** before planning runs on outside data, check its
+  dates and extent against the run's period and domain.
+* **Python profiles:** py-spy needs root on macOS for native frames;
+  otherwise use cProfile and `sample <pid>`.
 * **Repeat and take the median**; record the
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
@@ -71,6 +75,9 @@ figures only.
   is marked as the best, and each modelled line gets a reasonable explanation
   of what that run is. When plain words make the legend too long, the
   descriptions go in a caption at the base of the plot, like a figure legend.
+* A table scoring a modelled series against an observed one shows KGE with
+  its parts r, α and β, NSE, and the half-water date (the day half the
+  period's flow has passed).
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
