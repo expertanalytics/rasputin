@@ -516,6 +516,30 @@ change. No existing test meshes fixture A under `ar50` and checks its codes
 (`git grep -n '"ar50"' tests`: the CLI legend tests above and the listing),
 so no existing figure changes.
 
+**Pinned by the red suite** (`b574d4ad`, confirmed by `@architect`):
+
+1. Each loader refusal of rules 1 to 5 names, besides the file, what is
+   wrong: the split's class code (40, 30), the attribute (`COVER`), the
+   forbidden key (`water`, `edges`), the repeated value (51), or the
+   sub-class code (10, 5051, 3031); a split in an uncoded legend names
+   `split`. So the existing "a class code is listed twice" refusal, which rule
+   5 joins, now names the code; no older test reads its words
+   (`git grep -n "listed twice" tests`).
+2. The whole `land_cover_codes` text is `"<code_system>, attribute
+   <attribute>, <clause>, <clause>, legend <name>; 0 = in no polygon, and
+   every constraint line"`, the clauses in class-code order joined by ", "; a
+   legend without splits gives today's text.
+3. `Legend.splits == ()` for a legend without `[[split]]`; `Split.codes` is
+   any `Mapping` (tests read it through `dict(...)`).
+4. A `GmlFeature` read without `extra` has `extra == ()`, as `RawFeature`
+   and `SourceRows` do.
+5. The loader keys a sub-class's `value` with `split_key` too, so a TOML
+   text with letters (`value = "5a"`) keys as `"5a"`.
+
+Fixture A's figures, rechecked at `b574d4ad` (`gml_to_geopackage`, then
+`typeof` in `sqlite3`): fids 1 to 6, arealtype 60 five times then 30,
+vegetasjonsdekke integer 98 on all six, treslag 32, 31, 31, 31, 31, 31.
+
 ## 9. Left out
 
 - **The comparison of the two forest approaches** (AR50's tree type alone;
