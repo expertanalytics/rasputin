@@ -34,7 +34,8 @@ RECORDED = "The refusal is already recorded in the queue."
 QUEUE_REASON = (
     "Refused: unattended mode is on until {until}; {act} waits for Ola ({why}). "
     + RECORDED
-    + " Do not retry it and do not work around it. Main session: add one line "
+    + " Do not retry it or work around it unless its reason says it may be redone. "
+    "Main session: add one line "
     "`ASK OLA: {act}: <what you wanted and why>` to `.claude/current-task/session.md`, "
     "then continue with other work. Subagent: put that `ASK OLA:` line in your handback "
     "and carry on with the rest of your brief. If the brief cannot proceed without this "

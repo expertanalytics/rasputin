@@ -35,9 +35,11 @@ the other wrappers are stripped, so G2 applies to them. A quoted command
 string (`sh -c '…'`) is judged as its own line by the same rules, so
 `sh -c 'git myalias'` asks and `sh -c 'caffeinate git myalias'` passes.
 
-An amend whose HEAD is held by no remote-tracking ref or tag, on a bare
-one-command line, passes: nobody else can have that commit. Anything the
-guard cannot establish about such a line asks.
+An amend whose HEAD is held by no remote-tracking ref or tag passes: nobody
+else can have that commit. It comes last on a line of simple commands joined
+only by `&&`, after at most one `cd <absolute path>` and any `git add`
+(docs/increments/h29-review-rules.md §3.3). Anything the guard cannot
+establish about such a line asks, and names that form.
 """
 
 import functools
@@ -113,6 +115,13 @@ GRAPHQL_FLAGS = {"-f", "--raw-field", "-F", "--field", "-X", "--method", "-q", "
 EXPANDS_NOTHING = re.compile(r"(?:[A-Za-z0-9_./= \t|-]|'[^']*')*")
 #: The prefixes of `--amend` git accepts (`--a` is ambiguous to git and fails).
 AMENDS = {"--am", "--ame", "--amen", "--amend"}
+#: `&&` outside single quotes: an even number of quotes follows it.
+AND = re.compile(r"&&(?=(?:[^']*'[^']*')*[^']*$)")
+AMEND_FORM = (
+    "an amend of a commit no remote holds passes when it comes last, after at most "
+    "`cd <absolute path>` and `git add` commands joined by `&&`, or as "
+    "`git -C <absolute path> commit --amend …` alone; it may be redone in that form"
+)
 CURL_DATA = ("--data", "--form", "--json", "--upload-file")
 #: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
 FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
@@ -356,20 +365,31 @@ def git_out(where: str, *args: str) -> str | None:
 
 
 def unpushed_amend(command: str, cwd: str | None) -> bool:
-    """True when the line is one bare amend and its HEAD is held by no remote-tracking ref or tag.
+    """True when the line ends in a bare amend whose HEAD no remote-tracking ref or tag holds.
 
-    Bare: one simple command whose argv is the line's own words, nothing the shell
-    expands, and no git option before `commit` but one absolute `-C`, so HEAD is the
-    one the amend replaces. Anything unknown, an exception included, is False.
+    The line is simple commands joined only by `&&`, each part's argv its own words
+    and expanding nothing: at most one `cd <absolute path>` first, any `git add`, and
+    the amend last with no git option before `commit` but one absolute `-C`, so HEAD
+    is the one the amend replaces. Anything unknown, an exception included, is False.
     """
     try:
         simples = shell_scan.parse(command) if shell_scan else None
-        if not simples or len(simples) != 1 or shlex.split(command) != simples[0].argv:
+        parts = AND.split(command)
+        if not simples or len(simples) != len(parts) or any(
+                EXPANDS_NOTHING.fullmatch(p) is None or shlex.split(p) != s.argv
+                for p, s in zip(parts, simples, strict=True)):  # fmt: skip
             return False
-        argv = simples[0].argv
+        *before, argv = [s.argv for s in simples]
+        if before and before[0][:1] == ["cd"]:
+            cd = before.pop(0)
+            if len(cd) != 2 or not Path(cd[1]).is_absolute():
+                return False
+            cwd = cd[1]
+        if any(b[:2] != ["git", "add"] for b in before):
+            return False
         head, rest = (argv[1:3], argv[3:]) if argv[1:2] == ["-C"] else ([], argv[1:])
         where = head[1] if head else cwd
-        if (EXPANDS_NOTHING.fullmatch(command) is None or argv[:1] != ["git"]
+        if (argv[:1] != ["git"]
                 or rest[:1] != ["commit"] or not AMENDS & set(rest) or not isinstance(where, str)
                 or not where or (head and not Path(where).is_absolute())):  # fmt: skip
             return False
@@ -430,6 +450,8 @@ def main() -> int:
         if not reasons or (reasons == [HISTORY] and unpushed_amend(command, event.get("cwd"))):
             return 0
         why = "; ".join(reasons)
+        if reasons == [HISTORY] and any(AMENDS & set(words) for words in commands):
+            why += "; " + AMEND_FORM
         grant = push_grant.judge(event, command, reasons) if push_grant else None
         if grant is not None and grant.passed:
             return 0
