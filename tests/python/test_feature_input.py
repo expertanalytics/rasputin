@@ -2002,3 +2002,49 @@ class TestExtraFromGeoJson:
         read = fi.read_source(path, None, "a", lambda _: EVERYWHERE, extra=("b",))
         assert read.extra == ((52,), (None,))
         assert [v for _, _, v in read.rows] == [1, 1]
+
+
+class TestASplitAttributeAsWritten:
+    """Section 3: a split's attribute is read under the name the legend gives
+    it. The GeoJSON and GML readers match names exactly, so a capitalised
+    split attribute must reach them as written; the shipped lowercase `ar50`
+    splits are covered by `TestSplitCodes` and `TestExtraFromAGeoPackage`."""
+
+    def source(self, fi: ModuleType, tmp_path: Path, data: Path, attribute: str) -> Any:
+        from legend_fixtures import coded_map
+        from legend_fixtures import write as write_text
+        from test_legends import split, split_classes
+
+        splits = split_classes(split(50, "Veg", (51, 5051)), split(30, "tre", (31, 3031)))
+        toml = write_text(tmp_path / "caps.toml", coded_map(attribute=attribute, classes=splits))
+        return fi.FeatureSource(path=data, legend=ff.legend(str(toml)))
+
+    def codes(self, fi: ModuleType, source: Any) -> dict[Any, int]:
+        fs = fi.open_features(fi.FeatureRequest(sources=(source,)), BOX, UTM33)
+        return {f.fid: f.code for f in fs.features}
+
+    def test_a_geojson_property_named_with_a_capital(self, fi: ModuleType, tmp_path: Path) -> None:
+        data = write_geojson(
+            tmp_path / "caps.geojson",
+            [
+                Feat("open", cell(0), {"cover": 50, "Veg": 51}),
+                Feat("forest", cell(1), {"cover": 30, "tre": 31}),
+            ],
+        )
+        source = self.source(fi, tmp_path, data, "cover")
+        assert self.codes(fi, source) == {"open": 5051, "forest": 3031}
+
+    def test_a_gml_element_named_with_a_capital(self, fi: ModuleType, tmp_path: Path) -> None:
+        def with_second(fid: str, i: int, code: str, element: str) -> str:
+            text = member(fid, moved(cell(i), UTM33, "EPSG:4326"), code)
+            return text.replace("<ogr:sl_sdeid>99</ogr:sl_sdeid>", element)
+
+        data = tmp_path / "caps.gml"
+        data.write_bytes(
+            document(
+                with_second("s.1", 0, "50", "<ogr:Veg>51</ogr:Veg>"),
+                with_second("s.2", 1, "30", "<ogr:tre>31</ogr:tre>"),
+            ).getvalue()
+        )
+        source = self.source(fi, tmp_path, data, "clc18_kode")
+        assert self.codes(fi, source) == {"s.1": 5051, "s.2": 3031}
