@@ -56,6 +56,7 @@ class GmlFeature:
     fid: str
     geometry: BaseGeometry | None
     value: str | None
+    extra: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +68,10 @@ class GmlDocument:
     features: tuple[GmlFeature, ...]
 
 
-def read_gml(stream: IO[bytes], attribute: str) -> GmlDocument:
+def read_gml(stream: IO[bytes], attribute: str, extra: tuple[str, ...] = ()) -> GmlDocument:
     """Every feature of the document in ``stream``; its ``value`` is the text of
-    its child element named ``attribute``, None when absent. A document that
+    its child element named ``attribute``, None when absent, and ``extra`` the
+    same for each name in ``extra``. A document that
     declares the GML 3.2 namespace is refused at the declaration."""
     try:
         events = ET.iterparse(stream, events=("start-ns",))
@@ -90,14 +92,15 @@ def read_gml(stream: IO[bytes], attribute: str) -> GmlDocument:
             if fid is None:
                 continue
             found = next((e for e in element.iter() if e.tag in _GEOMETRIES), None)
-            value = next((c.text for c in element if c.tag.rpartition("}")[2] == attribute), None)
+            texts = {c.tag.rpartition("}")[2]: c.text for c in reversed(element)}
+            value, more = texts.get(attribute), tuple(texts.get(n) for n in extra)
             try:
                 geometry = None if found is None else _geometry(found)
             except (ValueError, IndexError) as exc:
                 raise GmlError(f"feature {fid}: unreadable coordinates ({exc})") from exc
             if found is not None and found.get("srsName") is not None:
                 names.add(str(found.get("srsName")))
-            features.append(GmlFeature(fid=fid, geometry=geometry, value=value))
+            features.append(GmlFeature(fid=fid, geometry=geometry, value=value, extra=more))
     if len(names) > 1:
         raise GmlError(f"the geometries name {len(names)} CRSs: {sorted(names)}")
     return GmlDocument(crs=names.pop() if names else None, features=tuple(features))
