@@ -1,6 +1,6 @@
 """Lead time per pull request, from git alone (Ola's ask of 2026-10-07).
 
-For each PR merged into master since a date, prints:
+For each PR merged into origin/master since a date (a local master can be stale), prints:
   start  the first commit on the PR's branch (author date)
   built  the last commit on the branch (author date): the work is done
   merged the merge commit on master (committer date)
@@ -39,7 +39,8 @@ def row(name: str, start: int, built: int, end: int, n: int, merged: str) -> Non
 def main() -> None:
     since, pending = sys.argv[1], sys.argv[2:]
     print(f"{'PR':34} {'start':11}  {'build':>6}  {'wait':>5}  {'total':>6}  {'n':>3}  merged")
-    log = git("log", "--first-parent", "master", f"--since={since}", "--merges",
+    # "--since=<date>" alone means that date at the current time of day
+    log = git("log", "--first-parent", "origin/master", f"--since={since} 00:00", "--merges",
               "--grep=Merge pull request", "--format=%H %ct %s")  # fmt: skip
     for line in reversed(log.splitlines()):
         sha, ct, subject = line.split(" ", 2)
@@ -47,7 +48,7 @@ def main() -> None:
         start, built, n = span(f"{sha}^1", f"{sha}^2")
         row(name, start, built, int(ct), n, time.strftime("%m-%d %H:%M", time.localtime(int(ct))))
     for branch in pending:
-        base = git("merge-base", "master", branch).strip()
+        base = git("merge-base", "origin/master", branch).strip()
         start, built, n = span(base, branch)
         row(branch, start, built, int(time.time()), n, "not yet")
 
