@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """PreToolUse: the working tree is the agent's, the remote is the user's.
 
-PRINCIPLES.md E1 states this and the user stated it directly -- "ensure one agent
-working at the time, and alert me before pushing". It held because the agent
-remembered to ask. That is not a mechanism; it is a habit, and the same session
-has forgotten comparable ones.
+.claude/REQUIRED-READING.md (the approval boundary) states this and the user
+stated it directly -- "ensure one agent working at the time, and alert me before
+pushing". It held because the agent remembered to ask. That is not a mechanism;
+it is a habit, and the same session has forgotten comparable ones.
 
 `gh pr create`, `gh pr merge` and `git push` all publish, and `gh pr update-branch`
 writes to a pull request's branch (docs/increments/h10-merge-queue.md §4a). So
@@ -458,9 +458,9 @@ def main() -> int:
         if grant is not None:
             why += f"; granted branch {grant.branch}, but {grant.why}"
         reason = (
-            "This reaches beyond the working tree: " + why + ".\nPRINCIPLES.md E1 -- the "
-            "working tree is the agent's, the remote is the user's. Approval of an earlier "
-            "push does not carry to this one."
+            "This reaches beyond the working tree: " + why + ".\n.claude/REQUIRED-READING.md, "
+            "the approval boundary -- the working tree is the agent's, the remote is the "
+            "user's. Approval of an earlier push does not carry to this one."
         )
         emit(event, "ask", reason, command, why)
     except Exception as error:  # a crash must not turn an ask into a pass
