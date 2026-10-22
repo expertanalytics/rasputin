@@ -348,8 +348,9 @@ a plain path, so it is refused by the form check. What a bare name can
 reveal is which PROJ resources the server has installed: public grids and
 init files. Accepted and named here.
 
-The read roots, computed once at start (a change to the sources file takes a
-restart, which the HTTP instructions say):
+The read roots, computed at start and again at a call's start when the
+sources file has changed (`docs/increments/90-mcp-reload-sources.md`; a file
+the catalogue refuses keeps the last good roots):
 
 - the user's `work/`;
 - the tile cache (`cli_kit`'s default: `$RASPUTIN_DATA/cache`, else the XDG
