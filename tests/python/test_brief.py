@@ -789,3 +789,32 @@ def test_12_an_absolute_increment_is_used_as_given(
     assert "Status: from elsewhere." in output
     assert "the worktree's inc" not in output
     assert f"From {elsewhere}" in output
+
+
+# ---------------------------------------------------------------- h29 §3.1
+#
+# docs/increments/h29-review-rules.md §4 test 1: the reviewer's block demands
+# the one line `.claude/hooks/record_review.py` records, after the write limit;
+# no other persona's block carries it.
+
+REVIEW_FORMAT = (
+    "`Review: <APPROVED | APPROVED WITH WORDINGS | CHANGES REQUESTED> "
+    "<40-hex sha of the head you reviewed>`"
+)
+
+
+@pytest.mark.parametrize("persona", PERSONAS)
+def test_h29_1_only_the_reviewer_block_demands_the_review_line(
+    repo: Path, home: Path, persona: str
+) -> None:
+    brief = load_path(repo / BRIEF, f"h29_brief_{persona}")
+    line = getattr(brief, "REVIEW_LINE", None)
+    assert isinstance(line, str), f"{BRIEF} has no REVIEW_LINE constant"
+    assert REVIEW_FORMAT in line, line
+    body = collapsed(parse_block(ok(repo, home, *args_for(persona, repo))).body)
+    if persona == "reviewer":
+        assert collapsed(line) in body, body
+        assert body.index(collapsed(line)) > body.index("Write limit:"), body
+    else:
+        assert collapsed(line) not in body, body
+        assert "`Review:" not in body, body

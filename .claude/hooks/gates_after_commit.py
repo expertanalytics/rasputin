@@ -210,7 +210,8 @@ def main() -> int:
     text = "\n\n".join(conflicts)
     if blocks:
         text = ("The commit is in, and below are the gates that are red or the trees this hook "
-                "did not check. Fix and amend -- do not push or open a PR on this.\n\n"
+                "did not check. Fix, then amend with `git -C <that tree> commit --amend --no-edit "
+                "-a` on a line of its own -- do not push or open a PR on this.\n\n"
                 + "\n\n".join(blocks + conflicts)
                 + "\n\nThis is not the full set: mypy and ctest need a build, and CI "
                   "decides. Run `gh pr checks <pr>` before calling anything merge-ready.")

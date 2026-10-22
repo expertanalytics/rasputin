@@ -179,8 +179,11 @@ rather than asked, and the refusal is already queued: do not retry it or
 work around it, except a refusal whose named files are all ordinary (no rule
 file, no harness state, no push): that is a guard false positive. Redo the
 write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
-files to the handback. A refused write to a rule file, or a refused push, is
-never redone by any route. While away, a branch Ola named with
+files to the handback. A refused write to a rule file is never redone by any
+route. A refused push, pull request or merge is redone only when its sole
+reason is that the head is not reviewed, and only once an approving
+`@reviewer` verdict covering it is recorded; a refused amend, only in the form its reason names. The guard judges each redo
+again. While away, a branch Ola named with
 `away.py --grant <branch>` may be pushed (as `git push origin
 <sha>:refs/heads/<branch>`, or `git push private ...` for a branch holding
 commits of `private/master`), opened as a pull request and enqueued, or on the
