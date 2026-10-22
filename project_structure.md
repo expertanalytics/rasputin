@@ -280,12 +280,16 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   'property') reads a TOML file through toml_data into
                            #   a Legend; derived_cleanup(accuracy, cell):
                            #   repair, simplify, snap from the larger of the
-                           #   source's accuracy and the DEM cell; imports
-                           #   feature_input and features
+                           #   source's accuracy and the DEM cell; [[split]]
+                           #   tables refine a class by a second attribute
+                           #   into sub-classes (91); imports feature_input
+                           #   and features
   data/legends/            # the shipped legends: corine, corine-water,
                            #   clc18_kode, mapbiomas-c11, ar50 (.toml; codes,
                            #   labels, colours, water, edges, notice,
-                           #   positional accuracy)
+                           #   positional accuracy); ar50 splits forest (30)
+                           #   by treslag, open firm ground (50) by
+                           #   vegetasjonsdekke (91)
   palettes.py              # paraview_preset(table, name): a ParaView preset
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table
