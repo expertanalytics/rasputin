@@ -1,8 +1,15 @@
 # Increment 88: the parallel helper keeps its threads between calls
 
-**Status: designed** by `@architect`, 2026-10-21, on master `3b21eb59`,
-branch `worktree-sun-threads`. Full path: it changes a C++ header that refine
-and the mesh scan run through, so `@perf`'s acceptance run applies
+**Status: dropped, not built** (Ola's ruling, 2026-10-22). The request assumed
+about 35,000 parallel calls a year from the private package's step loop; the
+year makes 4,684 (35,000 was threads started, 8 a call; section 1), so a
+persistent team would save only about 1 to 1.5 s a year. The evaluator's time
+was per-receiver trigonometry, which the private package's increment 89 (the
+sun evaluator speed-up) sped up instead. The design below is kept unchanged
+because that increment cites it. Designed by `@architect`, 2026-10-21, on
+master `3b21eb59`, branch `worktree-sun-threads`. Full path: it changes a C++
+header that refine and the mesh scan run through, so `@perf`'s acceptance run
+applies
 (`docs/increments/README.md`, *Acceptance*). Number 88 because 87 is the
 highest found in `docs/increments/` over every local branch, every
 remote-tracking ref and every worktree under `.claude/worktrees/`, checked
