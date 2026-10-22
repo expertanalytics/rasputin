@@ -96,7 +96,7 @@ PLY.
 **Which makes one thing worth verifying before it is claimed.** Nothing in this
 record has been opened in QGIS, because no session here can run QGIS. So: no
 test and no document may say "QGIS opens this" until someone has opened one
-(`PRINCIPLES.md` A1, A4). What the suite can assert is what the bytes are. What
+(`docs/PRINCIPLES.md@94a157b2:25-58`, A1, A4). What the suite can assert is what the bytes are. What
 a person must do once, by hand, is open a written file in QGIS and in ParaView
 and say so here, with the version. If `double` is refused, the origin-offset
 fallback above is the answer and it gets written up here with the failure that
@@ -329,7 +329,7 @@ What the suite pins:
   writer's own logic. The test parses the header it was handed, unpacks the
   body by the header's own declarations, and compares arrays with
   `assert_array_equal`. A test that re-derives offsets the same way the writer
-  did would agree with the writer's bug (`PRINCIPLES.md` B1).
+  did would agree with the writer's bug (`docs/PRINCIPLES.md@94a157b2:92-98`, B1).
 - **ASCII and binary produce the same geometry.** Parse both, compare arrays.
   This is what catches one mode drifting when the other is edited.
 - **`double` really is 8 bytes on the wire**, checked by writing a coordinate

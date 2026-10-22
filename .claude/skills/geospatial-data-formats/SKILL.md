@@ -22,6 +22,6 @@ Enforces high-performance geospatial data ingestion and processing using Shapely
 * **Validation:** Reject any geospatial input that lacks a verifiable CRS (EPSG code, WKT, or PROJ string).
 * **PyProj Integration:** Use `pyproj.CRS` to validate incoming coordinate systems and `pyproj.Transformer` (with `always_xy=True`) for all reprojections before passing data to the C++ core.
 
-## 4. Testing
+## 5. Testing
 * **Mocking I/O:** Test geospatial ingestion using small, hand-crafted GeoJSON snippets, micro-TIFFs, and minimal XML strings.
 

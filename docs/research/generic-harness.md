@@ -142,7 +142,7 @@ one home:
 | `tools/check_detria_boundary.py` | Profile | a later "confinement" gate could generalise it, but not from one instance (§5b) |
 | `tools/bench.py` | Profile | — |
 | `docs/increments/README.md` | Generic, with profile paragraphs | see 1.4 |
-| `docs/PRINCIPLES.md` | Generic index | A5 (stale artifacts, C++-specific), E3 (I/O boundary) and E4 (ceiling) are profile pointers |
+| `docs/PRINCIPLES.md` | Generic index | A5 (stale artifacts, C++-specific), E3 (I/O boundary) and E4 (ceiling), `docs/PRINCIPLES.md@94a157b2:60-75` and `docs/PRINCIPLES.md@94a157b2:209-219`, are profile pointers |
 | `testing.md` | **Profile** | its conventions are generic and go into a template skeleton: `[live]`/`[planned]` markers, "never lose a bug twice", and the characterisation-test exception to "we do not test third-party code" |
 | `.claude/current-task/` protocol | Generic | the owner marker only |
 | `.gitignore` lines (`.claude/current-task/`, `.claude/worktrees/`) | Generic | — |
@@ -171,7 +171,7 @@ one home:
 | Acceptance: refine or mesh code | **Profile**. Generic shape: the profile may declare an acceptance run with trigger paths, a tool, an environment probe and an evidence directory |
 | Cost: reference, do not restate; mutation testing; model matching; documentation defects | Generic; the examples (predicates, kernels) are profile |
 | Cost: template cross products | Profile (C++) |
-| Cost: "Independent suites run as parallel agents" | **Contradicts PRINCIPLES D1**; see §6, defect 1 |
+| Cost: "Independent suites run as parallel agents" | **Contradicts `docs/PRINCIPLES.md@94a157b2:163-169` (D1)**; see §6, defect 1 |
 
 ### 1.5 Survey: rules stated more than once (checked on this branch)
 
@@ -315,7 +315,7 @@ Two carriers, with no overlap between them:
 | Roadmap | `session_state.py` (`ROADMAP.md`; "shipped", "landed", "unscheduled") | `profile.roadmap` | as today |
 | Governed rule files | `guard_governance.py` `GOVERNED` | the generic manifest ∪ `profile.rule_files` | adds `testing.md` and `.claude/skills/` (§6, defect 3) |
 | Skills to invoke | `REQUIRED-READING.md`, `developer.md` | `profile.skills` and one line in `CLAUDE.md` | the four |
-| Stale artifacts | `REQUIRED-READING.md`, `PRINCIPLES` A5 | a profile section of `CLAUDE.md` (§7, step 5) | four items |
+| Stale artifacts | `REQUIRED-READING.md`, `docs/PRINCIPLES.md@94a157b2:60-75` (A5) | a profile section of `CLAUDE.md` (§7, step 5) | four items |
 | Legacy archive | `check_citations.py`, `README` step 1 | `profile.legacy = {prefix, tag}` | `legacy/`, `legacy-archive` |
 | Persona path classes (R-B) | the audit's §7 table | `profile.paths.{production,tests,design,evidence}` (§6) | `src/ include/ bindings/ src_python/`, `tests/`, `docs/increments/`, `docs/benchmarks/` |
 
@@ -375,7 +375,7 @@ of the rules it indexes (1.5).
 
 Each entry becomes one table row: `ID | title | home (file § heading) | check
 (a command, or "object-identity question")`. The IDs and the A-E families
-stay, so `guard_push.py`'s "PRINCIPLES.md E1" and every other ID citation keep
+stay, so `guard_push.py`'s "PRINCIPLES.md E1" (`docs/PRINCIPLES.md@94a157b2:201-207`) and every other ID citation keep
 resolving. A5, E3 and E4 are profile rows: rasputin's index keeps them, and
 the generic template does not ship them.
 

@@ -503,7 +503,7 @@ counted lines and no C++):
    full suite, `mypy`, `ruff`, `check_citations.py`.
 4. `@reviewer`: reads the diff as a reader new to the project. The question for
    every rewritten reason: is it about the object the code evaluates
-   (`docs/PRINCIPLES.md`, B1)? A rewrite that dropped a reason along with its
+   (`docs/PRINCIPLES.md@94a157b2:92-98`, B1)? A rewrite that dropped a reason along with its
    label is a finding.
 
 PR 1 takes the full path: `@tester` writes the checker's failing tests first.

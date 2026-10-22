@@ -17,7 +17,7 @@ Enforces cutting-edge, safe, and testable Python 3.12+ architecture for orchestr
 * **Frontend-Backend Separation:** Keep the business logic completely decoupled from UI or CLI elements. Expose generic, stable APIs that can be wrapped by either a command-line interface or a WebSocket/REST API.
 
 ## 3. CLI Engineering & Security
-* **Modern CLI:** Use `typer` to build user-friendly, structured CLI applications for generating TIN models.
+* **Modern CLI:** Use `typer` or `click` to build user-friendly, structured CLI applications for generating TIN models.
 * **Security & Input Validation:**
   * Validate all file paths before ingestion; reject symlink exploits and path traversal attacks (use `pathlib.Path.resolve()`).
   * Never use `eval()`, `exec()`, or insecure YAML/Pickle parsing. Use `pydantic` or `json` for serialization.

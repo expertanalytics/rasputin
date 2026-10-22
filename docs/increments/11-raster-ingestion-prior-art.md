@@ -651,7 +651,7 @@ writing a stale value under a fresh key name.
 
 1. **`make_mesh(raster_data, polygon, proj4_str)`** — `legacy/bindings.cpp:187-194`,
    reached from `legacy/rasputin/mesh.py:43`. A CRS string as a C++ parameter.
-   Forbidden by `CLAUDE.md` §2 and `docs/PRINCIPLES.md` E3. Nothing in the new
+   Forbidden by `CLAUDE.md` §2. Nothing in the new
    `raster/` module has a CRS field, and nothing should acquire one.
 2. **Pillow as the GeoTIFF decoder.** Not prohibited, but `CLAUDE.md` §2's Core
    Stack names `tifffile`, and Pillow forced three of the defects above: the
