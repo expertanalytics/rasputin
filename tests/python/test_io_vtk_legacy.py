@@ -12,7 +12,7 @@ is a count mismatch against `CELL_DATA`.
 
 Everything goes through `vtkread`, a parser written for the suite that takes
 every size from a declaration in the blob and refuses whatever it does not
-recognise (`PRINCIPLES.md` B1). No `vtk` import appears here: this file runs in
+recognise (`.claude/REQUIRED-READING.md`, *Claims*). No `vtk` import appears here: this file runs in
 the plain dev environment, and the design's pure half must not depend on the
 test-only extra.
 
@@ -151,7 +151,7 @@ class TestPoints:
     """Ruling 2: double end to end, bit for bit."""
 
     def test_the_probe_can_fail(self) -> None:
-        # A3: if float32 held these, the round trip below would not refute it.
+        # If float32 held these, the round trip below would not refute it.
         assert float(np.float32(EASTING)) != EASTING
         assert float(np.float32(NORTHING)) != NORTHING
 

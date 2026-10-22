@@ -8,7 +8,7 @@ Two properties per refusal fixture:
 
 1. its `witness` holds, so the named defect is really in the bytes;
 2. the valid baseline does *not* satisfy that witness, so the witness can
-   fail (`PRINCIPLES.md` A3) and the defect is not shared with the baseline.
+   fail (`.claude/REQUIRED-READING.md`, *Claims*) and the defect is not shared with the baseline.
 """
 
 from __future__ import annotations

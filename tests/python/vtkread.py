@@ -3,7 +3,7 @@
 Increment 13's pure suite goes through this parser for the same reason
 increment 10's goes through `plyread`: it **reads the file it was handed**, and
 takes every count, type and width from a declaration in the blob. It never asks
-the writer where anything is (`PRINCIPLES.md` B1).
+the writer where anything is (`.claude/REQUIRED-READING.md`, *Claims*).
 
 It is deliberately narrow and deliberately strict. It knows the subset of
 legacy VTK 4.2 that `13-bundled-mesh.md` rules on -- `DATASET POLYDATA`, a

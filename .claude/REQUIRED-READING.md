@@ -6,12 +6,11 @@ order as the sections here.
 
 ## Before you act in a cold or resumed session
 
-"Ok, let's continue" is not an instruction. Neither is `git log`. Before the
-first subagent spawn, the first commit, or the first edit, in this order:
+Before the first subagent spawn, the first commit, or the first edit, in this
+order:
 
-1. The recap from `tools/session_state.py`: the round recap (last landed, in
-   flight, running background jobs, decisions waiting on Ola, next ROADMAP
-   items), `.claude/current-task/` and the predecessor's last human turns,
+1. The recap from `tools/session_state.py`: the round recap,
+   `.claude/current-task/` and the predecessor's last human turns,
    **including prompts Ola queued and the harness absorbed mid-turn** (they
    never appear as normal turns). The `SessionStart` hook puts it in context
    on startup, resume, `/clear`, compaction and fork; if it is missing, run
@@ -20,8 +19,7 @@ first subagent spawn, the first commit, or the first edit, in this order:
    file or PR is still pending, and an earlier pending turn outranks your
    reconstruction of "what comes next". Start no background job before the
    running ones are listed.
-3. If anything is still ambiguous after both, **ask Ola one question**. A
-   question costs a line; a guessed round costs ~150k tokens.
+3. If anything is still ambiguous after both, **ask Ola one question**.
 
 Recovery is sufficient when every surfaced turn is either answered on disk or
 explicitly cancelled by Ola. `git log` plus `docs/increments/` is not
@@ -44,8 +42,8 @@ sufficient: it shows what was finished, never what was asked.
     lost session, the next session does, after step 1 has printed it.
 - **One session per working tree.** Nothing assigns `session.md`, so
   concurrent sessions need separate worktrees.
-- **After merging a change to `CLAUDE.md` or `.claude/agents/`, restart
-  before spawning the changed persona**.
+- **After merging a change to `CLAUDE.md` or `.claude/agents/`, fast-forward
+  the main checkout and restart before the next spawn**.
 - **A subagent whose product is a file creates that file first and writes
   incrementally**, so a death leaves something to resume. A persona's prompt
   names the output path.
@@ -58,8 +56,7 @@ before writing, judging or planning any code. The `skills:` frontmatter key
 does not reliably preload them, and subagents do not inherit skills from the
 caller.
 
-Also read `docs/increments/README.md` (the protocol and a round's cost
-constraints) and the increment file for whatever you are working on.
+Read the increment file for whatever you are working on.
 
 **Ideas and idea-stage research live in `../rasputin_scratch/ideas/`
 (beside the main checkout): private to Ola, outside git; commit nothing from
@@ -76,15 +73,12 @@ in your handback under *Ideas*; the main session adds it.
 - **Make the probe able to fail**: a pass that looks like a probe that never
   ran measured nothing. Time a hang from outside the process.
 - **Do not write "X is verified by Y" until Y has been run against a broken
-  X.** Verify a gate by planting what it forbids: append the prohibited
-  directive to `CMakeLists.txt`, run `python3 tools/check_prohibited_deps.py`,
-  confirm it fails naming it, restore the file.
+  X.** Verify a gate by planting what it forbids.
 - Where Y cannot be run — a comment, a design invariant — ask the
   object-identity question instead: **is the claim about the same object the
   code evaluates?**
 - When a claim's truth depends on the state of the tree, **write the rule and
-  the command that resolves it, not the resolved value** (no "current anchor"
-  hash, no count of rounds or commits).
+  the command that resolves it, not the resolved value**.
 - This binds claims about behaviour — what a script does, what a suite covers,
   what a file says — not design opinions, which have no command to run. If you
   cannot run it, state the mechanism rather than the incident.
@@ -142,18 +136,13 @@ round of findings (a verdict other than `APPROVED`,
 
 ## The harness
 
-Active in `.claude/settings.json`: `guard_push.py` asks before any act
-that publishes, writes to the forge, rewrites history or writes refs,
-remotes or git config, and before `--no-verify` (its code lists them; not
-`gh pr close` or `gh pr comment`); `guard_governance.py` asks before any write
-to a file that states rules or to a `tools/` file named after a standard-library
-module, a copy or move into their directories included (`cp json.py tools`,
-with or without the trailing `/`), and a path is judged also with `.`,
-`..` and a doubled `/` resolved (`tools/./json.py`); not a write to a
-whole governed directory (`rm -r .claude/hooks`),
-except an absolute path in a session scratchpad, written by Edit or
-Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
-substitution or interpreter program). `guard_push.py` passes no git write in
+Active in `.claude/settings.json`: `guard_push.py` asks before any act that
+publishes, writes to the forge, rewrites history or writes refs, remotes or
+git config, or uses `--no-verify` (its code lists them); `guard_governance.py`
+asks before any write to a file that states rules or to a `tools/` file named
+after a standard-library module (its code lists what it resolves), except an
+absolute scratchpad path written by Edit or Write or one plain shell command.
+`guard_push.py` passes no git write in
 a scratchpad repository.
 `guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while

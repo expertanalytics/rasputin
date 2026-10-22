@@ -21,27 +21,13 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
 * **Parallel Suitability:** Favor data-parallel layouts (Structure of Arrays where applicable), regular memory access, and branch-minimized paths. Avoid pointer-heavy graph structures and recursive walks.
 
 ## 3. Robustness & Numerics
-* **Dependencies:** the prohibited list is `CLAUDE.md` §2.
 * **Filtered Arithmetic:** 
   1. Evaluate orientation, incircle, and intersections using fast hardware floats.
   2. Determine numerical ambiguity.
   3. Fall back to exact/arbitrary-precision filtering *only* when the float sign/ordering is unsafe.
-* **Degeneracy Handling:** Actively handle non-general positions (duplicate/coincident vertices, long collinear sequences, cocircular points, and acute angles) through explicit test cases.
-* **Test in the producer's relation, not the prose one:** an oracle must be
-  written in the relation the code under test actually used. The operative test:
-  *does this check use the relation the producer used, or the one that reads more
-  naturally in prose?* In a snapping module those differ on ~93 % of the input —
-  a snapped node is *near* a segment, not *on* it — so an exact-incidence oracle
-  over snapped output is red on correct output, and an oracle re-derived from the
-  producer's own bookkeeping is a self-confirming invariant that cannot fail when
-  the thing it checks is broken. Borrow the producer's *predicate*, never its
-  records. Worked example, where each occurrence was introduced by the fix to the
-  previous: `docs/increments/05-noder.md`, guarantees 14 and 15. The parent rule
-  carries the evidence, so it is not repeated here. This is the
-  geometry instance of one general rule, not a rule of its own — the same defect
-  reaches gate scripts and comments, where "the producer's relation" has no
-  meaning; `.claude/REQUIRED-READING.md` states it there as *is the claim about
-  the same object the code evaluates?*
+* **Degeneracy Handling:** handle the cases of `tester.md` §3A, and acute angles.
+* **Oracles use the producer's predicate, never its records** (the general
+  rule: `.claude/REQUIRED-READING.md`, *Claims*).
 
 ## 4. Prior Art Before Design
 * **Start from the literature:** the rule is `docs/increments/README.md`,
@@ -50,6 +36,5 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
   Delaunay refinement, and Üngör for off-centres.
 
 ## 5. Change & Review Boundaries
-* **Change Limit:** see the ceiling in `CLAUDE.md` §2.
 * Every major algorithmic change must explicitly document its impact on locality, parallelization, and numerical robustness.
 
