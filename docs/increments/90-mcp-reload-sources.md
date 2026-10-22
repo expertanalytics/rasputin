@@ -1,6 +1,6 @@
 # Increment 90: the MCP server picks up a changed sources file without a restart
 
-**Status: designed** by `@architect`, 2026-10-22, on master `94a157b2`,
+**Status: built, approved** (red `7fb24be8`, green `38940a48`; 49 counted lines against about 40); designed by `@architect`, 2026-10-22, on master `94a157b2`,
 branch `worktree-mcp-reload-sources`. Short path (`docs/increments/README.md`,
 *Small changes*): about 40 counted lines, Python only, no refine or mesh code,
 so no `@perf` run; `@reviewer` may send it to the full path. Number 90 because
@@ -229,3 +229,4 @@ counted lines (`python3 tools/count_loc.py <base> <head>`), worst case 55.
 ## Review
 
 - **Design review, round 1, 2026-10-22.** On `721dfbb89be10b359425543064cf53de78514c8b` (94a157b2..721dfbb8, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; two wordings (a broken file refuses every `mesh`, `fetch` and catchment call, not only calls by id, in §5 and the README; the stamp stored after the load so a cancelled reload is retried), applied in the commit that adds this line.
+- **Code review, round 1, 2026-10-22.** On `38940a482bfd053a4f127babd7aedd51488a68f0` (94a157b2..38940a48, 49 counted lines; red 7fb24be8, green 38940a48; full suite rerun on a clean tree 9,573 passed), @reviewer: APPROVED WITH WORDINGS; two wordings (the status line, ROADMAP row 90), applied in the commit that adds this line.
