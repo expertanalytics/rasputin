@@ -331,7 +331,10 @@ class _Tally:
 
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
-        names = tuple(dict.fromkeys(s.attribute.lower() for s in source.legend.splits))
+        spelt: dict[str, str] = {}  # lower case to the first spelling, read as written
+        for split in source.legend.splits:
+            spelt.setdefault(split.attribute.lower(), split.attribute)
+        names = tuple(spelt.values())
         read = read_source(
             source.path,
             source.layer,
@@ -343,7 +346,7 @@ class _Tally:
         if read.scanned:
             self.scanned.append(str(read.layer))
         try:
-            seconds = [dict(zip(names, e, strict=True)) for e in read.extra] or [{}] * len(
+            seconds = [dict(zip(spelt, e, strict=True)) for e in read.extra] or [{}] * len(
                 read.rows
             )
             self._take(source, read.crs, zip(read.rows, seconds, strict=True))
