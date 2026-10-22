@@ -227,6 +227,26 @@ class TestReadGml:
         assert doc.features == () or list(doc.features) == []
 
 
+class TestExtraElements:
+    """`docs/increments/91-ar50-vegetation-cover.md`, section 8, test 6: a
+    legend's split attributes, read beside the first; an absent element is
+    None (section 6)."""
+
+    def two(self) -> io.BytesIO:
+        """`sl_sdeid` on the first feature only; no feature has a `c`."""
+        second = member("f.2", LAKE, "512").replace("      <ogr:sl_sdeid>99</ogr:sl_sdeid>\n", "")
+        return document(member("f.1", LAND, "311"), second)
+
+    def test_the_text_of_each_element_or_none(self, gml: ModuleType) -> None:
+        doc = gml.read_gml(self.two(), "clc18_kode", extra=("sl_sdeid", "c"))
+        assert [f.extra for f in doc.features] == [("99", None), (None, None)]
+        assert [f.value for f in doc.features] == ["311", "512"]
+
+    def test_without_extra_there_is_none(self, gml: ModuleType) -> None:
+        doc = gml.read_gml(self.two(), "clc18_kode")
+        assert [f.extra for f in doc.features] == [(), ()]
+
+
 class TestGml32Refused:
     """`docs/increments/73-gml-vector-source.md`, section 4.1, test 7: a document
     declaring the GML 3.2 namespace is refused before any tree is built."""

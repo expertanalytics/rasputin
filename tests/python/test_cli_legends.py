@@ -543,8 +543,16 @@ class TestAr50ThroughTheCli:
         assert result.exit_code == 0, result.output
         (preset,) = json.loads(result.stdout)
         assert preset["Name"] == "rasputin AR50 NIBIO"
-        assert len(preset["Annotations"]) == 2 * 10
+        assert len(preset["Annotations"]) == 2 * 19
         assert "81 Freshwater" in preset["Annotations"]
+        assert (
+            "5052 Open firm ground, barren to non-continuous vegetation cover"
+            in (preset["Annotations"])
+        )
+        assert (
+            "3031 Forest, coniferous: at least 50 % of the forested area covered by conifers"
+            in (preset["Annotations"])
+        )
 
     def test_13_the_triangles_borders_and_record(
         self, tmp_path: Path, bumpy: Path, square: Path, ar50: Path
@@ -581,3 +589,73 @@ class TestAr50ThroughTheCli:
         assert {30, 81} <= {r[0] for r in rows}
         for found, name, colour in rows:
             assert (name, colour) == palette[found], found
+
+
+class TestAr50SplitsThroughTheCli:
+    """`docs/increments/91-ar50-vegetation-cover.md`, section 8, test 7:
+    coniferous forest (30, treslag 31) west, open firm ground with barren to
+    non-continuous vegetation (50, vegetasjonsdekke 52) east."""
+
+    SPLIT_TEXT = (
+        "class 30 split by treslag into 3031, 3032, 3033, 3099, "
+        "class 50 split by vegetasjonsdekke into 5051, 5052, 5054, 5055, 5099"
+    )
+
+    def cover(self, tmp_path: Path, *, second: bool = True) -> Path:
+        west: dict[str, Any] = {"arealtype": 30}
+        east: dict[str, Any] = {"arealtype": 50}
+        if second:
+            west["treslag"], east["vegetasjonsdekke"] = 31, 52
+        return write_geojson(tmp_path / "split.geojson", [Feat(1, WEST, west), Feat(2, EAST, east)])
+
+    def test_the_triangles_border_and_record(
+        self, tmp_path: Path, bumpy: Path, square: Path
+    ) -> None:
+        _, record, _ = run(
+            tmp_path, bumpy, square, "--features", str(self.cover(tmp_path)),
+            "--features-legend", "ar50",
+        )  # fmt: skip
+        vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
+        codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}
+        assert {3031, 5052} <= codes
+        assert not {30, 50} & codes
+        # The shared side's south end: every edge there is a land-cover border.
+        assert set(edges_at(vtk, rel(100.7, -60.2))) == {LAND_COVER}
+        assert self.SPLIT_TEXT in record["land_cover_codes"]
+        assert record["land_cover_codes"].startswith(
+            f"AR50 arealtype code, attribute arealtype, {self.SPLIT_TEXT}, legend ar50; "
+        )
+
+    def test_the_gpkg_triangles_carry_the_sub_class_names_and_colours(
+        self, tmp_path: Path, bumpy: Path, square: Path
+    ) -> None:
+        import sqlite3
+        from contextlib import closing
+
+        target = tmp_path / "x.gpkg"
+        code, said = invoke(
+            "mesh",
+            *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
+            *("--out", str(target), "--features", str(self.cover(tmp_path))),
+            *("--features-legend", "ar50"),
+        )
+        assert code == 0, basenames(said)
+        palette = importlib.import_module("tin_engine.legends").load("ar50").palette
+        with closing(sqlite3.connect(target)) as conn:
+            rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
+        assert {3031, 5052} <= {r[0] for r in rows}
+        for found, name, colour in rows:
+            assert (name, colour) == palette[found], found
+
+    def test_without_the_second_attributes_the_parents_codes(
+        self, tmp_path: Path, bumpy: Path, square: Path
+    ) -> None:
+        """Section 6: an export carrying only `arealtype` meshes as before."""
+        run(
+            tmp_path, bumpy, square, "--features", str(self.cover(tmp_path, second=False)),
+            "--features-legend", "ar50",
+        )  # fmt: skip
+        vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
+        codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}
+        assert {30, 50} <= codes
+        assert not {3031, 5052} & codes

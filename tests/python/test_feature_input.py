@@ -1847,3 +1847,158 @@ class TestTheSetIsUnchanged:
             assert [shapely.to_wkb(g) for g in a.lines] == [shapely.to_wkb(g) for g in b.lines]
         assert (new.clipped, new.outside, new.empty) == (old.clipped, old.outside, old.empty)
         assert new.cover_vertices == old.cover_vertices
+
+
+# ------------------------------------- splits by a second attribute (ar50)
+
+
+#: `docs/increments/91-ar50-vegetation-cover.md`, section 8, test 4: one
+#: feature per line, (properties, the code `ar50` gives it).
+SPLIT_CASES: list[tuple[dict[str, Any], int]] = [
+    ({"arealtype": 50, "vegetasjonsdekke": 52}, 5052),
+    ({"arealtype": 50, "vegetasjonsdekke": 52.0}, 5052),
+    ({"arealtype": 50, "vegetasjonsdekke": "52"}, 5052),
+    ({"arealtype": 50, "vegetasjonsdekke": 52.5}, 50),
+    ({"arealtype": 50, "vegetasjonsdekke": True}, 50),
+    ({"arealtype": 50, "vegetasjonsdekke": 98}, 50),
+    ({"arealtype": 50}, 50),
+    ({"arealtype": 50, "treslag": 31}, 50),
+    ({"arealtype": 30, "treslag": 31}, 3031),
+    ({"arealtype": 30, "treslag": 39}, 30),
+    ({"arealtype": 30, "vegetasjonsdekke": 52}, 30),
+    ({"arealtype": 60, "treslag": 31, "vegetasjonsdekke": 52}, 60),
+]
+
+
+def cell(i: int) -> Polygon:
+    """The ``i``-th of a row of small squares inside `BOX`, 20 m apart."""
+    return square(10 + 20 * i, 10, 25 + 20 * i, 25)
+
+
+class TestSplitCodes:
+    """Section 3, how a feature is coded, through `open_features` under `ar50`."""
+
+    def test_each_feature_gets_its_class_or_sub_class_code(self, tmp_path: Path) -> None:
+        features = [Feat(f"f{i}", cell(i), props) for i, (props, _) in enumerate(SPLIT_CASES)]
+        fs = open_one(write_geojson(tmp_path / "ar50.geojson", features), BOX, "ar50")
+        got = {f.fid: f.code for f in fs.features}
+        assert got == {f"f{i}": code for i, (_, code) in enumerate(SPLIT_CASES)}
+
+    def test_the_masks_are_the_first_attributes(self, tmp_path: Path) -> None:
+        """A sub-class's borders carry its parent's edge names: `land_cover`."""
+        features = [Feat(f"f{i}", cell(i), props) for i, (props, _) in enumerate(SPLIT_CASES)]
+        fs = open_one(write_geojson(tmp_path / "ar50.geojson", features), BOX, "ar50")
+        assert {f.mask for f in fs.features} == {V.mask("land_cover")}
+        assert len(fs.features) == len(SPLIT_CASES)
+
+    def test_a_first_value_equal_to_a_sub_class_code_is_refused(
+        self, fi: ModuleType, tmp_path: Path
+    ) -> None:
+        """`ar50` codes an unlisted arealtype as land, so a stray 5051 would
+        otherwise mean two things in one mesh."""
+        path = write_geojson(
+            tmp_path / "stray.geojson",
+            [Feat("ok", cell(0), {"arealtype": 50}), Feat("stray-7", cell(1), {"arealtype": 5051})],
+        )
+        with pytest.raises(fi.FeatureError) as caught:
+            open_one(path, BOX, "ar50")
+        for word in ("stray.geojson", "stray-7", "5051"):
+            assert word in str(caught.value), word
+
+
+class TestSplitKey:
+    """Section 3, the key of a value: one function keys the loader's values
+    and a feature's."""
+
+    @pytest.mark.parametrize("value", [52, 52.0, "52", " 52 ", "52.0"], ids=repr)
+    def test_a_whole_number_is_its_integer_text(self, fi: ModuleType, value: Any) -> None:
+        assert fi.split_key(value) == "52"
+
+    def test_a_text_with_letters_is_itself(self, fi: ModuleType) -> None:
+        assert fi.split_key("5a") == "5a"
+
+    @pytest.mark.parametrize(
+        "value", [None, True, False, 52.5, float("nan"), "nan", [52]], ids=repr
+    )
+    def test_no_key(self, fi: ModuleType, value: Any) -> None:
+        assert fi.split_key(value) is None
+
+
+# -------------------------------- the readers' extra attributes (ar50 splits)
+
+
+#: Fixture A's treslag, in fid order (`gml32_fixtures.AR50_FIGURES`).
+FIXTURE_A_TRESLAG = (32, 31, 31, 31, 31, 31)
+#: A box in EPSG:25832 holding every fixture-A feature.
+EVERYWHERE = (-1.0e7, -1.0e7, 1.0e7, 1.0e8)
+
+
+@pytest.fixture
+def fixture_a_gpkg(tmp_path: Path) -> Path:
+    """Fixture A converted with `gml_to_geopackage`."""
+    import importlib
+
+    from gml32_fixtures import AR50_SAMPLE
+    from tin_engine.io.repository import create_sqlite
+
+    gml_import = importlib.import_module("tin_engine.gml_import")
+    target = tmp_path / "ar50.gpkg"
+    with AR50_SAMPLE.open("rb") as stream, closing(create_sqlite(target)) as conn:
+        gml_import.gml_to_geopackage(stream, conn)
+    return target
+
+
+class TestExtraFromAGeoPackage:
+    """Section 8, test 5: `read_source(..., extra=...)` over fixture A."""
+
+    def read(self, fi: ModuleType, path: Path, **kw: Any) -> Any:
+        return fi.read_source(path, None, "arealtype", lambda _: EVERYWHERE, **kw)
+
+    def test_one_tuple_per_row_in_extras_order(self, fi: ModuleType, fixture_a_gpkg: Path) -> None:
+        read = self.read(fi, fixture_a_gpkg, extra=("vegetasjonsdekke", "treslag"))
+        assert read.extra == tuple((98, t) for t in FIXTURE_A_TRESLAG)
+
+    def test_the_rows_are_a_plain_reads(self, fi: ModuleType, fixture_a_gpkg: Path) -> None:
+        plain = self.read(fi, fixture_a_gpkg)
+        read = self.read(fi, fixture_a_gpkg, extra=("vegetasjonsdekke", "treslag"))
+        assert [(f, g.wkb, v) for f, g, v in read.rows] == [(f, g.wkb, v) for f, g, v in plain.rows]
+        assert all(len(row) == 3 for row in read.rows)
+
+    def test_a_column_name_matches_in_any_case(self, fi: ModuleType, fixture_a_gpkg: Path) -> None:
+        read = self.read(fi, fixture_a_gpkg, extra=("VEGETASJONSDEKKE",))
+        assert read.extra == ((98,),) * 6
+
+    def test_a_missing_column_is_none_not_a_refusal(
+        self, fi: ModuleType, fixture_a_gpkg: Path
+    ) -> None:
+        """Section 6: a missing second attribute is no value."""
+        read = self.read(fi, fixture_a_gpkg, extra=("vegetasjonsdekke", "no_such_column"))
+        assert read.extra == ((98, None),) * 6
+
+    def test_without_extra_there_is_none(self, fi: ModuleType, fixture_a_gpkg: Path) -> None:
+        assert self.read(fi, fixture_a_gpkg).extra == ()
+
+    def test_ar50_codes_the_forest_feature_by_its_tree_type(
+        self, fi: ModuleType, fixture_a_gpkg: Path
+    ) -> None:
+        """Five marsh features (60) keep their code whatever their treslag;
+        the forest feature (fid 6, treslag 31) is coniferous, 3031."""
+        rows = self.read(fi, fixture_a_gpkg).rows
+        x0, y0, x1, y1 = shapely.union_all([g for _, g, _ in rows]).bounds
+        around = shapely.box(x0 - 500, y0 - 500, x1 + 500, y1 + 500)
+        domain = domain_of(around, "EPSG:25832")
+        fs = open_one(fixture_a_gpkg, domain, "ar50", dem_crs="EPSG:25832")
+        assert {f.fid: f.code for f in fs.features} == {1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 3031}
+
+
+class TestExtraFromGeoJson:
+    """Section 8, test 6, the GeoJSON branch: an absent property is None."""
+
+    def test_an_absent_property_is_none(self, fi: ModuleType, tmp_path: Path) -> None:
+        path = write_geojson(
+            tmp_path / "b.geojson",
+            [Feat("one", cell(0), {"a": 1, "b": 52}), Feat("two", cell(1), {"a": 1})],
+        )
+        read = fi.read_source(path, None, "a", lambda _: EVERYWHERE, extra=("b",))
+        assert read.extra == ((52,), (None,))
+        assert [v for _, _, v in read.rows] == [1, 1]
