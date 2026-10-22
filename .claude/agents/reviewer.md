@@ -47,7 +47,8 @@ probe only for a figure the design marks unmeasured.
    the quick check's catchments (`tools/bench_quick.py`), and every library
    repair or coverage call names its method and tolerance, and every claimed
    mutant kill holds against the fixtures' figures, all holes reported in one
-   pass.
+   pass. Check the design's list of files and pieces against Ola's verbatim
+   ruling: anything beyond its words blocks the design until Ola rules on it.
 
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 

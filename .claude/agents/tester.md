@@ -24,6 +24,8 @@ correctness.
 * **Determinism:** Tests must be 100% deterministic. Eliminate any race conditions in async Python loops, and enforce strict bitwise consistency or acceptable floating-point tolerances (using `pytest.approx` or custom numerical predicates) in C++.
 * **Numeric bounds:** Every absolute bound in an assertion states the scale it assumes and the largest input it was checked at.
 * **Zero Flakiness:** Flaky tests are a blocking bug. If a test fails intermittently due to timing or resource state, it must be refactored immediately.
+* **Lists:** a red step that adds a command or module greps the tests for
+  each list of them it must join, and adds it there.
 * **Scaffolding:** after green, remove red-step scaffolding, red notes included, before review.
 * **Choices beyond the design:** list every choice your tests pin that the
   increment file leaves open, under the handback heading "Pinned or assumed
@@ -76,5 +78,5 @@ Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
 ## 4. Operational Style Guide for Tests
 * **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
 * **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message. A refusal test asserts the reason (stderr or message), not only the exit status. When the design names the fix by code location, apply it to a scratch copy made as for mutants, with your uncommitted tests copied in, and run the whole suite once; an older test it turns red is fixed in the red commit.
-* **PR Constraint:** Reject any code change that lacks corresponding tests. Test suites are exempt from the ceiling in `CLAUDE.md` §2 entirely — it counts production code.
+* **PR Constraint:** Reject any code change that lacks corresponding tests.
 
