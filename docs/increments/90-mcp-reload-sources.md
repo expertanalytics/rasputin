@@ -70,13 +70,13 @@ SharedRoots.current() -> tuple[Path, ...]                [http.py]
   async with self._lock:                                 one reload at a time
       stamp = await to_thread(_stamp, candidates)        candidates = user_source_candidates(environ), fixed
       if stamp == self._stamp: return self.roots
-      self._stamp = stamp                                a refused file is judged once, not every call
       try:
           new = await to_thread(_load)                   _shared_roots(environ), then overlap(out_root, new)
       except ValueError as exc:
           LOG.warning("sources file refused; keeping the data sources read before: %s", exc)
+          self._stamp = stamp                            judged once: a broken file logs once
           return self.roots
-      self.roots = new
+      self._stamp, self.roots = stamp, new               set after the load: a cancelled reload is retried
       LOG.info("read roots now %s", new)
       return new
 
@@ -113,10 +113,7 @@ call_tool / _download_link / _upload                     [server.py]
 3. **A refused file keeps the last good roots** and logs one warning line,
    naming the file and the reason (the catalogue's own words: file, line,
    column). The same refused content is not judged again, so a broken file
-   logs once, not once per call. A call that names a source by id is refused
-   by its child, in the CLI's words naming the file
-   (`src_python/tin_engine/cli.py@94a157b2:1906`); that is the caller's report. A call reading
-   only paths runs on the last good roots. Never all user sources dropped by
+   logs once, not once per call. A `mesh`, `fetch` or catchment call is refused by its child, even one naming only paths, since each reads the catalogue (`src_python/tin_engine/cli.py@94a157b2:886`), in the CLI's words naming the file; that is the caller's report. The last good roots serve the server's own read check. Never all user sources dropped by
    a broken file.
 4. **A new source that overlaps `--out-root` is refused the same way** (rule
    3): the overlap rule of increment 69, 5.2 is kept on every reload, since a
@@ -228,3 +225,7 @@ works as an input (unchanged).
 `scope_for` and `build_app`, about 4. `server.py`: the type, the stdio
 `async def` and three `await`s, about 5. Instructions: 0 net. About 40
 counted lines (`python3 tools/count_loc.py <base> <head>`), worst case 55.
+
+## Review
+
+- **Design review, round 1, 2026-10-22.** On `721dfbb89be10b359425543064cf53de78514c8b` (94a157b2..721dfbb8, 0 counted lines), @reviewer: APPROVED WITH WORDINGS; two wordings (a broken file refuses every `mesh`, `fetch` and catchment call, not only calls by id, in §5 and the README; the stamp stored after the load so a cancelled reload is retried), applied in the commit that adds this line.
