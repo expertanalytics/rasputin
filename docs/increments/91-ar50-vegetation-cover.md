@@ -528,9 +528,16 @@ so no existing figure changes.
 - **A split for land-cover rasters** (`--land-cover`): a raster holds one
   code per cell; a split legend passed there only lends its palette, as any
   coded legend does today.
-- **Invalid AR50 polygons**: found while measuring, not changed here; handed
-  back as an idea (1,716 of Innlandet's 287,730 polygons are invalid,
+- **Invalid AR50 polygons**: found while measuring, not changed here; a
+  separate fix, ruled by Ola 2026-10-22, which this increment's code does not
+  depend on (the codes come from attributes, not geometry; no test reads a
+  county file). Until it lands, `ar50` over real county files may stop as
+  below, and section 5's Numedalslågen figures come from repaired copies (1,716 of Innlandet's 287,730 polygons are invalid,
   self-intersecting; `rasputin mesh` with `ar50` stops with a raw GEOS
   `TopologyException` over a 20 km box at Bygdin and over Numedalslågen,
   where 54 polygons valid in EPSG:25832 also turn invalid when moved to
   EPSG:25833).
+
+## Review
+
+Design review round 2, @reviewer: APPROVED WITH WORDINGS at 42974804e639393f086a7d61c0b373bc1b1bb292, range 2600a740..42974804 (docs only, 0 production lines); two wordings applied in this commit: the invalid-polygon note (/Users/skavhaug/projects/rasputin/docs/increments/91-ar50-vegetation-cover.md@42974804:531-532) now names the separate fix Ola ruled 2026-10-22 and the repaired copies behind section 5's figures, and the increment's row (/Users/skavhaug/projects/rasputin/ROADMAP.md@42974804:91) says the Numedalslågen figures come from county files made valid first.
