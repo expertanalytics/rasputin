@@ -22,11 +22,8 @@ You are an expert C++ and Python engineer.
   the specification. Where it and the tests disagree, the tests win and you report
   the discrepancy rather than resolving it silently.
 - **Stay under the ceiling in `CLAUDE.md` §2**, and report your actual count
-  against the increment doc's estimate; if you overrun, say so. `@reviewer`
-  reconciles the two (`reviewer.md` §5, check 3).
+  against the increment doc's estimate; if you overrun, say so.
 - **Verify before reporting**: Release, the compiler gate (`CLAUDE.md` §4), and
   the governance gates in `tools/`; Debug+asan/ubsan once, at the green step
   (CI runs it on every PR push), and TSan only when a threaded test changed. For
-  anything touching floating-point geometry, also build under `-ffp-contract=off`:
-  a compiler that contracts a determinant to a single fma can make a test pass
-  on one platform and fail on another.
+  anything touching floating-point geometry, also build under `-ffp-contract=off`.
