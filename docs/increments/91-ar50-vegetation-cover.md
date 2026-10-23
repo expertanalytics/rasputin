@@ -564,6 +564,8 @@ vegetasjonsdekke integer 98 on all six, treslag 32, 31, 31, 31, 31, 31.
 
 ## Review
 
+Design review round 1, @reviewer: CHANGES REQUESTED at 5d440b09960f4b9a848c19403ee214af50ae826a (2026-10-22 12:25 UTC, from the hook's review log; the findings are those the Status paragraph names: rows stay 3-tuples, one rule for a missing second attribute, whole-number matching, the quick check's cost, no listing change). Recorded late, 2026-10-23, after the post-merge check found it missing.
+
 Design review round 2, @reviewer: APPROVED WITH WORDINGS at 42974804e639393f086a7d61c0b373bc1b1bb292, range 2600a740..42974804 (docs only, 0 production lines); two wordings applied in this commit: the invalid-polygon note (/Users/skavhaug/projects/rasputin/docs/increments/91-ar50-vegetation-cover.md@42974804:531-532) now names the separate fix Ola ruled 2026-10-22 and the repaired copies behind section 5's figures, and the increment's row (/Users/skavhaug/projects/rasputin/ROADMAP.md@42974804:91) says the Numedalslågen figures come from county files made valid first.
 
 Code review round 1, @reviewer: CHANGES REQUESTED at 0efd87fc54a950ad29e2fbc719ee0c3975ed47ce, range 2600a740..0efd87fc (90 counted lines); two blocking: section 7's prose edits were never made, and a split attribute spelled with capitals was not read from GML or GeoJSON (the names were lowercased before reaching readers that match exactly); fixed in 614a613e (red test), 32a36b44 (fix) and the commit that adds this line (README.md, docs/GLOSSARY.md, project_structure.md, ROADMAP.md row 91).
