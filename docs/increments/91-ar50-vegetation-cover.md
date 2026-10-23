@@ -1,6 +1,6 @@
 # Increment 91: a legend splits classes by a second attribute (AR50's open firm ground by vegetation cover, forest by tree type)
 
-**Status: built, in review** (green `0efd87fc`, fix `32a36b44`); designed by `@architect`, 2026-10-22, on `2600a740` (master),
+**Status: merged (#339, 2026-10-23)** (green `0efd87fc`, fix `32a36b44`); designed by `@architect`, 2026-10-22, on `2600a740` (master),
 branch `worktree-ar50-vegetation`; amended after `@reviewer`'s design review
 round 1 (rows stay 3-tuples, one rule for a missing second attribute,
 whole-number matching, the quick check's cost, no listing change) and after
