@@ -2,6 +2,8 @@
 # 2022-05-23 (ar50.xsd, English names). Colours: NIBIO, Presentasjonsregler
 # AR50, 12 June 2026, except 99, which NIBIO leaves unfilled. Positional
 # accuracy: NIBIO's product sheet, "2 og dårligere". docs/increments/73-gml-vector-source.md, section 4.5.
+# Splits: tree type (treslag) and vegetation cover (vegetasjonsdekke), codes from
+# ar50.xsd, colours from NIBIO's tables Treslag and Snaumark; docs/increments/91-ar50-vegetation-cover.md, section 3.
 name = "ar50"
 attribute = "arealtype"
 code_system = "AR50 arealtype code"
@@ -65,3 +67,65 @@ water = true
 code = 99
 label = "Not surveyed"
 colour = "#8c8c8c"
+
+[[split]]
+code = 30
+attribute = "treslag"
+
+[[split.class]]
+value = 31
+code = 3031
+label = "Forest, coniferous: at least 50 % of the forested area covered by conifers"
+colour = "#895944"
+
+[[split.class]]
+value = 32
+code = 3032
+label = "Forest, deciduous: less than 20 % of the forested area covered by conifers"
+colour = "#8b786f"
+
+[[split.class]]
+value = 33
+code = 3033
+label = "Forest, mixed: 20 to 50 % of the forested area covered by conifers"
+colour = "#8b786e"
+
+[[split.class]]
+value = 99
+code = 3099
+label = "Forest, tree type not registered"
+colour = "#9ecc73"
+
+[[split]]
+code = 50
+attribute = "vegetasjonsdekke"
+
+[[split.class]]
+value = 51
+code = 5051
+label = "Open firm ground, no vegetation"
+colour = "#c0c0c0"
+
+[[split.class]]
+value = 52
+code = 5052
+label = "Open firm ground, barren to non-continuous vegetation cover"
+colour = "#ffe8c2"
+
+[[split.class]]
+value = 54
+code = 5054
+label = "Open firm ground, barren to good vegetation cover"
+colour = "#e1c790"
+
+[[split.class]]
+value = 55
+code = 5055
+label = "Open firm ground, good to lush non-continuous vegetation cover"
+colour = "#c7a971"
+
+[[split.class]]
+value = 99
+code = 5099
+label = "Open firm ground, vegetation cover not registered"
+colour = "#f8f7ba"

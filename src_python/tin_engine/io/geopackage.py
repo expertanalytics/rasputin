@@ -47,11 +47,13 @@ class GpkgLayer:
 
 @dataclass(frozen=True, slots=True)
 class RawFeature:
-    """One row: its primary key, geometry (None for the empty flag) and value."""
+    """One row: its primary key, geometry (None for the empty flag), value,
+    and the extra columns asked for (None where the layer has no such column)."""
 
     fid: int
     geometry: BaseGeometry | None
     value: Any
+    extra: tuple[Any, ...] = ()
 
 
 def _q(name: str) -> str:
@@ -130,13 +132,15 @@ def query_features(
     box: Box | None,
     attribute: str,
     scale: float = 100_000.0,
+    extra: tuple[str, ...] = (),
 ) -> Iterator[RawFeature]:
     """Every row whose R-tree box, widened by ``s * max(1, s / scale)`` with
     ``s`` its width plus height, meets the closed ``box``
     ``(minx, miny, maxx, maxy)``; every row with no box or no R-tree. A
     superset of the rows meeting ``box``, in primary-key order. The widening
     is for long edges: an edge straight in the file's CRS is drawn straight
-    in the DEM's, and the two lines part by up to that much."""
+    in the DEM's, and the two lines part by up to that much. Each name in
+    ``extra`` is one more column, matched in any case; NULL when absent."""
     columns = {
         row[1].lower(): row[1] for row in conn.execute(f"PRAGMA table_info({_q(layer.table)})")
     }
@@ -144,7 +148,11 @@ def query_features(
         raise GeoPackageError(f"layer {layer.table!r} has no column {attribute!r}")
     pk, table = _q(layer.pk), _q(layer.table)
     select = (
-        f"SELECT t.{pk}, t.{_q(layer.column)}, t.{_q(columns[attribute.lower()])} FROM {table} t"
+        f"SELECT t.{pk}, t.{_q(layer.column)}, t.{_q(columns[attribute.lower()])}"
+        + "".join(
+            f", t.{_q(columns[n.lower()])}" if n.lower() in columns else ", NULL" for n in extra
+        )
+        + f" FROM {table} t"
     )
     params: dict[str, float] = {}
     if box is not None and layer.rtree is not None:
@@ -165,7 +173,7 @@ def query_features(
                 f"{layer.table}: this SQLite has no R-tree module ({exc})"
             ) from exc
         raise
-    for fid, data, value in rows:
+    for fid, data, value, *more in rows:
         try:
             srs_id, geometry = (layer.srs_id, None) if data is None else decode_geometry(data)
         except GeoPackageError as exc:
@@ -174,7 +182,7 @@ def query_features(
             raise GeoPackageError(
                 f"layer {layer.table!r} row {fid}: srs_id {srs_id}, the layer's is {layer.srs_id}"
             )
-        yield RawFeature(fid=fid, geometry=geometry, value=value)
+        yield RawFeature(fid=fid, geometry=geometry, value=value, extra=tuple(more))
 
 
 @dataclass(frozen=True, slots=True)

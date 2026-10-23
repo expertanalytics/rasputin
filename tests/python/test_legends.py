@@ -554,6 +554,54 @@ AR50_TABLE = (
     (82, "Ocean", "#d2ffff", (210, 255, 255)),
     (99, "Not surveyed", "#8c8c8c", None),
 )
+#: `docs/increments/91-ar50-vegetation-cover.md`, section 3's two tables:
+#: parent, value, code, label, colour, and NIBIO's RGB (None: NIBIO gives none).
+AR50_SPLIT_TABLE = (
+    (
+        30,
+        31,
+        3031,
+        "Forest, coniferous: at least 50 % of the forested area covered by conifers",
+        "#895944",
+        (137, 89, 68),
+    ),
+    (
+        30,
+        32,
+        3032,
+        "Forest, deciduous: less than 20 % of the forested area covered by conifers",
+        "#8b786f",
+        (139, 120, 111),
+    ),
+    (
+        30,
+        33,
+        3033,
+        "Forest, mixed: 20 to 50 % of the forested area covered by conifers",
+        "#8b786e",
+        (139, 120, 110),
+    ),
+    (30, 99, 3099, "Forest, tree type not registered", "#9ecc73", None),
+    (50, 51, 5051, "Open firm ground, no vegetation", "#c0c0c0", (192, 192, 192)),
+    (
+        50,
+        52,
+        5052,
+        "Open firm ground, barren to non-continuous vegetation cover",
+        "#ffe8c2",
+        (255, 232, 194),
+    ),
+    (50, 54, 5054, "Open firm ground, barren to good vegetation cover", "#e1c790", (225, 199, 144)),
+    (
+        50,
+        55,
+        5055,
+        "Open firm ground, good to lush non-continuous vegetation cover",
+        "#c7a971",
+        (199, 169, 113),
+    ),
+    (50, 99, 5099, "Open firm ground, vegetation cover not registered", "#f8f7ba", (248, 247, 186)),
+)
 AR50_NOTICE = (
     "Contains data under the Norwegian licence for Open Government Data (NLOD) "
     "distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
@@ -583,9 +631,35 @@ class TestAr50:
         assert got.preset == "rasputin AR50 NIBIO"
 
     def test_the_palette_is_exactly_the_tables(self, cm: ModuleType) -> None:
+        """The nine classes, then the four forest and five open-firm-ground
+        sub-classes of `docs/increments/91-ar50-vegetation-cover.md`, section 3."""
         want = {0: ("No polygon; constraint lines", "#3c3c3c")}
         want |= {code: (label, colour) for code, label, colour, _ in AR50_TABLE}
+        want |= {code: (label, colour) for _, _, code, label, colour, _ in AR50_SPLIT_TABLE}
         assert dict(cm.load("ar50").palette) == want
+        assert len(want) == 19
+
+    def test_the_sub_class_colours_are_nibios_rgb(self) -> None:
+        """Each sub-class colour is its RGB in hex; forest 99, which NIBIO
+        does not colour, takes forest's own."""
+        for parent, value, code, _, colour, rgb in AR50_SPLIT_TABLE:
+            if rgb is None:
+                assert (code, colour) == (3099, "#9ecc73")
+            else:
+                assert colour == "#{:02x}{:02x}{:02x}".format(*rgb), code
+            assert code == 100 * parent + value, code
+
+    def test_the_splits(self, cm: ModuleType) -> None:
+        """Forest by tree type, open firm ground by vegetation cover, in code order."""
+        got = [(s.code, s.attribute, dict(s.codes)) for s in cm.load("ar50").splits]
+        assert got == [
+            (30, "treslag", {"31": 3031, "32": 3032, "33": 3033, "99": 3099}),
+            (
+                50,
+                "vegetasjonsdekke",
+                {"51": 5051, "52": 5052, "54": 5054, "55": 5055, "99": 5099},
+            ),
+        ]
 
     def test_fresh_water_and_ocean_carry_water_and_the_rest_land_cover(
         self, cm: ModuleType
@@ -596,3 +670,128 @@ class TestAr50:
         want |= {"81": ("land_cover", "water"), "82": ("land_cover", "water")}
         assert dict(got.classes) == want
         assert got.otherwise == land
+
+
+# ------------------------------------------- splits by a second attribute
+
+
+def split_classes(*splits: str) -> str:
+    """Classes 10, 30 and 50, then ``splits`` (each one or more TOML tables)."""
+    classes = "".join(
+        f'[[class]]\ncode = {code}\nlabel = "{label}"\ncolour = "{colour}"\n\n'
+        for code, label, colour in (
+            (10, "Built", "#e86474"),
+            (30, "Forest", "#9ecc73"),
+            (50, "Open", "#d9d9d9"),
+        )
+    )
+    return classes + "\n".join(splits)
+
+
+def split(code: int, attribute: str, *subs: tuple[Any, int]) -> str:
+    """One `[[split]]` of ``code`` by ``attribute``; ``subs`` are (value, code),
+    each labelled and coloured from its code."""
+    text = f'[[split]]\ncode = {code}\nattribute = "{attribute}"\n\n'
+    for value, sub in subs:
+        shown = f'"{value}"' if isinstance(value, str) else str(value)
+        text += (
+            f"[[split.class]]\nvalue = {shown}\ncode = {sub}\n"
+            f'label = "Sub {sub}"\ncolour = "#0000{sub % 100:02d}"\n\n'
+        )
+    return text
+
+
+#: Section 8, test 1: 50 by `veg` listed before 30 by `tre`, 99 in both.
+VEG = split(50, "veg", (51, 5051), (99, 5099))
+TRE = split(30, "tre", (31, 3031), (99, 3099))
+
+
+class TestSplitLoads:
+    """`docs/increments/91-ar50-vegetation-cover.md`, section 8, test 1."""
+
+    def test_the_splits_in_code_order_and_their_codes(self, cm: ModuleType, tmp_path: Path) -> None:
+        text = coded_map(classes=split_classes(VEG, TRE))
+        got = cm.load(str(write(tmp_path / "two.toml", text)))
+        assert [(s.code, s.attribute, dict(s.codes)) for s in got.splits] == [
+            (30, "tre", {"31": 3031, "99": 3099}),
+            (50, "veg", {"51": 5051, "99": 5099}),
+        ]
+
+    def test_the_sub_classes_join_the_palette_not_the_classes(
+        self, cm: ModuleType, tmp_path: Path
+    ) -> None:
+        got = cm.load(str(write(tmp_path / "two.toml", coded_map(classes=split_classes(VEG, TRE)))))
+        assert dict(got.palette) == {
+            0: ("No polygon; constraint lines", "#3c3c3c"),
+            10: ("Built", "#e86474"),
+            30: ("Forest", "#9ecc73"),
+            50: ("Open", "#d9d9d9"),
+            3031: ("Sub 3031", "#000031"),
+            3099: ("Sub 3099", "#000099"),
+            5051: ("Sub 5051", "#000051"),
+            5099: ("Sub 5099", "#000099"),
+        }
+        assert set(got.classes) == {"10", "30", "50"}
+
+    def test_a_legend_without_splits_has_none(self, cm: ModuleType, tmp_path: Path) -> None:
+        assert cm.load(str(write(tmp_path / "base.toml", coded_map()))).splits == ()
+
+    @pytest.mark.parametrize("value", ["52", 52, "52.0", " 52 "])
+    def test_a_value_is_keyed_as_a_whole_number(
+        self, cm: ModuleType, tmp_path: Path, value: Any
+    ) -> None:
+        """Section 3, the key of a value: the loader keys a sub-class's
+        `value` as a feature's value is keyed at run time."""
+        text = coded_map(classes=split_classes(split(50, "veg", (value, 5052))))
+        (got,) = cm.load(str(write(tmp_path / "key.toml", text))).splits
+        assert dict(got.codes) == {"52": 5052}
+
+    def test_a_text_value_with_letters_is_kept(self, cm: ModuleType, tmp_path: Path) -> None:
+        text = coded_map(classes=split_classes(split(50, "veg", ("5a", 5052))))
+        (got,) = cm.load(str(write(tmp_path / "letters.toml", text))).splits
+        assert dict(got.codes) == {"5a": 5052}
+
+
+def coded_with(*splits: str) -> str:
+    """`coded_map` over `split_classes` with ``splits``."""
+    return coded_map(classes=split_classes(*splits))
+
+
+#: `VEG` with its first sub-class given a key a sub-class may not carry.
+WET = VEG.replace("code = 5051\n", "code = 5051\nwater = true\n")
+LINED = VEG.replace("code = 5051\n", 'code = 5051\nedges = ["levee"]\n')
+#: (file stem, the legend text, words the refusal names besides the file).
+SPLIT_REFUSALS = [
+    ("uncoded", uncoded_map() + "\n" + split(1, "veg", (51, 5051)), ("split",)),
+    ("unlisted-class", coded_with(split(40, "veg", (51, 4051))), ("40",)),
+    ("class-twice", coded_with(TRE, split(30, "veg", (51, 3051))), ("30",)),
+    ("first-attribute", coded_with(split(50, "COVER", (51, 5051))), ("COVER",)),
+    ("sub-is-wet", coded_with(WET), ("water",)),
+    ("sub-lines", coded_with(LINED), ("edges",)),
+    ("one-key", coded_with(split(50, "veg", (51, 5051), ("51.0", 5052))), ("51",)),
+    ("listed-code", coded_with(split(50, "veg", (51, 10))), ("10",)),
+    ("code-twice", coded_with(split(50, "veg", (51, 5051), (52, 5051))), ("5051",)),
+    ("code-in-two", coded_with(TRE, split(50, "veg", (51, 3031))), ("3031",)),
+]
+
+
+class TestSplitRefusals:
+    """Section 8, test 2: section 3's rules 1 to 5, each refused naming the file."""
+
+    @pytest.mark.parametrize(
+        ("stem", "text", "words"), SPLIT_REFUSALS, ids=[c[0] for c in SPLIT_REFUSALS]
+    )
+    def test_refused(
+        self, cm: ModuleType, tmp_path: Path, stem: str, text: str, words: tuple[str, ...]
+    ) -> None:
+        refused(cm, write(tmp_path / f"{stem}.toml", text), *words)
+
+    def test_two_splits_may_share_an_attribute_and_a_value(
+        self, cm: ModuleType, tmp_path: Path
+    ) -> None:
+        """Rules 3 and 5 allow it: the refusals above are their changes alone."""
+        text = coded_map(
+            classes=split_classes(split(50, "veg", (99, 5099)), split(30, "veg", (99, 3099)))
+        )
+        got = cm.load(str(write(tmp_path / "shared.toml", text)))
+        assert [(s.code, s.attribute) for s in got.splits] == [(30, "veg"), (50, "veg")]

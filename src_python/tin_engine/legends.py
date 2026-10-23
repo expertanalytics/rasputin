@@ -19,7 +19,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from tin_engine.feature_input import Legend
+from tin_engine.feature_input import Legend, Split, split_key
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.toml_data import parse
 
@@ -29,6 +29,7 @@ Edges = list[str] | Literal["drop"]
 FIRST_EXTRA_BIT, MAX_EXTRAS = 10, 22
 _CODED = {"code", "label", "colour", "water"}
 DEFAULT_NAMES = tuple(p.name for p in DEFAULT_VOCABULARY.properties)
+Colour = Annotated[str, Field(pattern=r"^#[0-9a-f]{6}$")]
 
 
 class _Strict(BaseModel):
@@ -54,6 +55,19 @@ class _NoClass(_Strict):
     colour: Annotated[str, Field(pattern=r"^#[0-9a-f]{6}$")]
 
 
+class _SubClass(_Strict):
+    value: int | str
+    code: Code
+    label: str
+    colour: Colour
+
+
+class _Split(_Strict):
+    code: Code
+    attribute: str
+    classes: list[_SubClass] = Field(alias="class")
+
+
 class _Vocabulary(_Strict):
     extra: list[str] = []
 
@@ -72,6 +86,7 @@ class _File(_Strict):
     classes: list[_Class] = Field(alias="class")
     codes: dict[str, Code] = {}
     vocabulary: _Vocabulary = _Vocabulary()
+    split: list[_Split] = []
 
     @model_validator(mode="after")
     def _consistent(self) -> _File:
@@ -89,8 +104,24 @@ class _File(_Strict):
                 kind = "coded" if coded else "uncoded"
                 raise ValueError(f"class {i + 1}: {bad} wrong or missing in a {kind} legend")
         listed = [c.code for c in self.classes if c.code is not None]
-        if len(set(listed)) < len(listed):
-            raise ValueError("a class code is listed twice")
+        if self.split and not coded:
+            raise ValueError("[[split]] needs code_system")
+        split = [s.code for s in self.split]
+        for s in self.split:
+            if s.code not in listed or split.count(s.code) > 1:
+                raise ValueError(f"split of class {s.code}: not a listed class, or split twice")
+            if s.attribute.lower() == self.attribute.lower():
+                raise ValueError(f"split of class {s.code}: {s.attribute} is the first attribute")
+            keys = [split_key(c.value) for c in s.classes]
+            for key, sub in zip(keys, s.classes, strict=True):
+                if key is None or keys.count(key) > 1:
+                    raise ValueError(
+                        f"split of class {s.code}: value {sub.value!r} has no key or recurs"
+                    )
+        every = [*listed, *(sub.code for s in self.split for sub in s.classes)]
+        for code in every:
+            if every.count(code) > 1:
+                raise ValueError(f"class code {code} is listed twice")
         for text, code in self.codes.items():
             if code not in listed:
                 raise ValueError(f"codes: {text} = {code} names no listed class")
@@ -125,6 +156,9 @@ class _File(_Strict):
                 palette[c.code] = (c.label, c.colour)
         for text, code in self.codes.items():
             classes[text] = classes[str(code)]
+        for s in self.split:
+            palette |= {sub.code: (sub.label, sub.colour) for sub in s.classes}
+        splits = sorted(self.split, key=lambda s: s.code)
         land = edges(self.edges.land) if self.edges else None
         otherwise = {
             "land": land if land is not None else "drop",
@@ -144,6 +178,14 @@ class _File(_Strict):
             accuracy_m=self.positional_accuracy_m or 0.0,
             string_codes=self.codes,
             extra_names=tuple(self.vocabulary.extra),
+            splits=tuple(
+                Split(
+                    code=s.code,
+                    attribute=s.attribute,
+                    codes={str(split_key(c.value)): c.code for c in s.classes},
+                )
+                for s in splits
+            ),
         )
 
 

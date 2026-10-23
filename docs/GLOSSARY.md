@@ -219,5 +219,8 @@ cartographic legend lacks, the edge names each class's borders carry in the
 mesh. Shipped ones are in `src_python/tin_engine/data/legends/`; one is chosen
 with `--features-legend` or `--land-cover-legend`, by name or path, or by a
 sources-file `legend` key. `property` is the one legend that is not a file: it
-reads each feature's `property` attribute as its edge name. Read by
+reads each feature's `property` attribute as its edge name. A coded legend
+may split classes by a second attribute (`[[split]]` tables) into sub-classes
+with codes of their own; a value it does not list keeps the parent's code.
+Read by
 `tin_engine/legends.py`; `docs/increments/58-legend.md`.

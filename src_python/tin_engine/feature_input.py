@@ -65,6 +65,32 @@ class FeatureError(ValueError):
     """A source or feature refused, naming the file and, for a feature, its fid."""
 
 
+class Split(BaseModel):
+    """Class ``code`` split by its second ``attribute``: `split_key` of that
+    value to a sub-class code; an unlisted or missing value keeps ``code``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    code: int
+    attribute: str
+    codes: Mapping[str, int]
+
+
+def split_key(value: Any) -> str | None:
+    """The text a second value is matched by: a whole number's integer text
+    (52, 52.0, " 52 " and "52.0" are "52"), other text as it is, and None for
+    anything else (None, a bool, 52.5, NaN, a list)."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    try:
+        number = float(value)
+    except ValueError:
+        return str(value)
+    return str(int(number)) if math.isfinite(number) and number.is_integer() else None
+
+
 class Legend(BaseModel):
     """An attribute's values to vocabulary names. ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
@@ -87,6 +113,7 @@ class Legend(BaseModel):
     accuracy_m: float = 0.0
     string_codes: Mapping[str, int] = {}
     extra_names: tuple[str, ...] = ()
+    splits: tuple[Split, ...] = ()
 
 
 class FeatureSource(BaseModel):
@@ -304,24 +331,37 @@ class _Tally:
 
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
+        spelt: dict[str, str] = {}  # lower case to the first spelling, read as written
+        for split in source.legend.splits:
+            spelt.setdefault(split.attribute.lower(), split.attribute)
+        names = tuple(spelt.values())
         read = read_source(
             source.path,
             source.layer,
             source.legend.attribute,
             lambda own: self.region(own).bounds,
             source.crs,
+            names,
         )
         if read.scanned:
             self.scanned.append(str(read.layer))
         try:
-            self._take(source, read.crs, read.rows)
+            seconds = [dict(zip(spelt, e, strict=True)) for e in read.extra] or [{}] * len(
+                read.rows
+            )
+            self._take(source, read.crs, zip(read.rows, seconds, strict=True))
         except FeatureError:
             raise
         except (ValueError, KeyError) as exc:
             raise FeatureError(f"{source.path.name}: {exc}") from exc
         return read.crs, read.layer
 
-    def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
+    def _take(
+        self,
+        source: FeatureSource,
+        own: str,
+        rows: Iterable[tuple[tuple[Any, Any, Any], Mapping[str, Any]]],
+    ) -> None:
         name, legend = source.path.name, source.legend
         src = parse_crs(own)
         move = None if same_crs(src, self.dem) else reprojector(src, self.dem, threads=self.threads)
@@ -332,7 +372,7 @@ class _Tally:
             if "gridshift" not in steps and "deformation" not in steps:
                 bound = _bound(self.dem, self.region(src))
         cover: list[tuple[Any, int, int, BaseGeometry]] = []
-        for fid, geometry, value in rows:
+        for (fid, geometry, value), second in rows:
             t0 = time.perf_counter()
             if geometry is None or geometry.is_empty:
                 self.empty += 1
@@ -345,7 +385,8 @@ class _Tally:
             mask = _mask(legend, self.vocabulary, value, f"{name}: feature {fid}")
             if mask is None:
                 continue
-            code = _code(legend, value, f"{name}: feature {fid}") if legend.codes else None
+            what = f"{name}: feature {fid}"
+            code = _code(legend, value, what, second) if legend.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
             if polygonal and code is not None and self.cleanup is not None:  # cleaned whole
@@ -478,6 +519,7 @@ class SourceRows:
     layer: str | None
     scanned: bool
     rows: list[tuple[Any, Any, Any]]
+    extra: tuple[tuple[Any, ...], ...] = ()
 
 
 def read_source(
@@ -486,12 +528,15 @@ def read_source(
     attribute: str | None,
     box_for: Callable[[str], tuple[float, float, float, float]],
     crs: str | None = None,
+    extra: tuple[str, ...] = (),
 ) -> SourceRows:
     """One source's features, unclipped, in its own CRS, by suffix.
 
     ``attribute`` None reads a GeoPackage's primary key. ``box_for(own CRS)``
     is the box a GeoPackage's R-tree is queried with. ``crs``, when given,
-    must be the file's; a GML file naming none takes it. Every refusal is a
+    must be the file's; a GML file naming none takes it. ``extra`` names more
+    attributes, read per row into ``SourceRows.extra`` (None where a feature
+    or layer has none; ``()`` when none is asked). Every refusal is a
     :class:`FeatureError` naming the file."""
     suffix = path.suffix.lower()
     if suffix not in SUFFIXES:
@@ -504,18 +549,21 @@ def read_source(
                 info = layer_info(conn, layer)
                 own = _own(path, crs, info.crs)
                 scale = 1.0 if parse_crs(own).is_geographic else 100_000.0
-                found = query_features(conn, info, box_for(own), attribute or info.pk, scale)
+                found = list(
+                    query_features(conn, info, box_for(own), attribute or info.pk, scale, extra)
+                )
                 rows = [(r.fid, r.geometry, r.value) for r in found]
-            return SourceRows(own, info.table, info.rtree is None, rows)
+            more = tuple(r.extra for r in found) if extra else ()
+            return SourceRows(own, info.table, info.rtree is None, rows, more)
         if suffix == ".gml":
             with path.open("rb") as stream:
-                doc = read_gml(stream, attribute or "")
+                doc = read_gml(stream, attribute or "", extra)
             if doc.crs is None and crs is None:
                 raise FeatureError(f"{path.name}: no geometry names its srsName; give its CRS")
             own = _own(path, crs, doc.crs or str(crs))
-            return SourceRows(
-                own, None, scanned=False, rows=[(f.fid, f.geometry, f.value) for f in doc.features]
-            )
+            read = [(f.fid, f.geometry, f.value) for f in doc.features]
+            more = tuple(f.extra for f in doc.features) if extra else ()
+            return SourceRows(own, None, False, read, more)
         features, text = read_collection(read_json(path), default_crs=RFC7946_CRS)
         try:  # a malformed feature's structure raises any of these
             rows = [
@@ -523,9 +571,10 @@ def read_source(
                 for k, f in enumerate(features)
             ]
             values = [(k, g, p.get(attribute)) for k, g, p in rows]
+            more = tuple(tuple(p.get(n) for n in extra) for *_, p in rows) if extra else ()
         except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
             raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
-        return SourceRows(_own(path, crs, text), None, scanned=False, rows=values)
+        return SourceRows(_own(path, crs, text), None, False, values, more)
     except FeatureError:
         raise
     except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
@@ -564,9 +613,11 @@ def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 
 
-def _code(legend: Legend, value: Any, what: str) -> int:
+def _code(legend: Legend, value: Any, what: str, second: Mapping[str, Any]) -> int:
     """A class code is an integer in 1 .. 2**31 - 1, or a text the legend's
-    ``string_codes`` turn into one; anything else is refused."""
+    ``string_codes`` turn into one; anything else is refused. A split class
+    takes the sub-class code its second value (``second``, by lower-case
+    attribute name) keys to; a first value equal to a sub-class code is refused."""
     try:
         text = "0" if isinstance(value, list) else str(value)
         code = legend.string_codes.get(text) or int(text)
@@ -575,6 +626,12 @@ def _code(legend: Legend, value: Any, what: str) -> int:
     if not 1 <= code < 2**31:
         shown = value[0] if isinstance(value, list) and value else value
         raise FeatureError(f"{what}: {shown!r} is not a class code in 1 .. 2**31 - 1")
+    for split in legend.splits:
+        if code == split.code:
+            key = split_key(second.get(split.attribute.lower()))
+            return split.codes.get(key, code) if key is not None else code
+        if code in split.codes.values():
+            raise FeatureError(f"{what}: {legend.attribute} {code} is a sub-class code")
     return code
 
 

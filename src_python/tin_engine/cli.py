@@ -1543,7 +1543,12 @@ def _land_cover(
         f"{labels.thin} too narrow to label with certainty",
         err=True,
     )
-    text = f"{legend.codes}, attribute {legend.attribute}, legend {legend.name}; "
+    splits = "".join(
+        f", class {s.code} split by {s.attribute} into "
+        + ", ".join(map(str, sorted(s.codes.values())))
+        for s in legend.splits
+    )
+    text = f"{legend.codes}, attribute {legend.attribute}{splits}, legend {legend.name}; "
     return labels.codes, text + "0 = in no polygon, and every constraint line"
 
 
