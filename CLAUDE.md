@@ -78,7 +78,8 @@ the personas. Its rules:
 * **Report only finished, verified results, briefly.** Answer Ola's question
   first, then stop. No file that does not exist yet, no number from a run
   still in progress, no cause not checked. No unasked images, no undefined
-  jargon.
+  jargon. Two or more questions or acts awaiting Ola are numbered in one
+  sequence, each explained, with its default.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
   `@orchestrator`, which records it in `docs/retrospectives/`.
 * **When to spawn `@orchestrator`.** After each increment merges (a check of
