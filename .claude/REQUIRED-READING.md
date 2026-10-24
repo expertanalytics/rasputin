@@ -153,9 +153,7 @@ starts a new step carries a fresh block; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. A `UserPromptSubmit` hook runs `tools/duties.py`, which adds
 one line of the `@orchestrator` duties owed to each prompt. Ola's status
-line is `tools/duties.py --status`. `guard_push.py` and `guard_governance.py` judge what a command
-writes or pushes, as parsed by `tools/shell_scan.py`; a line they cannot read
-is judged by its text. They are tripwires all the same: the boundary is still
+line is `tools/duties.py --status`. The guards are tripwires: the boundary is still
 yours to keep, and the permission system is not the push
 backstop: auto mode can let an unapproved push through.
 

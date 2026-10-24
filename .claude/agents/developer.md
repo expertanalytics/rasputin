@@ -10,8 +10,6 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 Load `.claude/REQUIRED-READING.md` before acting.
 
-You are an expert C++ and Python engineer.
-
 ## Non-negotiable, and specific to this role
 
 - **You are the green step.** A failing suite already exists. Write the minimal
@@ -22,7 +20,8 @@ You are an expert C++ and Python engineer.
   the specification. Where it and the tests disagree, the tests win and you report
   the discrepancy rather than resolving it silently.
 - **Stay under the ceiling in `CLAUDE.md` §2**, and report your actual count
-  against the increment doc's estimate; if you overrun, say so.
+  against the increment doc's estimate and, where the design prices a step,
+  a short profile's figure against that price; if you overrun, say so.
 - **Verify before reporting**: Release, the compiler gate (`CLAUDE.md` §4), and
   the governance gates in `tools/`; Debug+asan/ubsan once, at the green step
   (CI runs it on every PR push), and TSan only when a threaded test changed. For
