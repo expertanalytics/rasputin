@@ -2495,9 +2495,10 @@ def _budget_refined(
         found = search(trial, window)
     except UnderFloor as exc:
         f, e = exc.floor.triangles, exc.floor.max_error
-        raise RunError(
+        raise typer.BadParameter(
             f"the fewest triangles this DEM gives is {f} triangles, at a largest error of "
-            f"{e:.3g} m; ask for at least {f} with --triangles"
+            f"{e:.3g} m; ask for at least {f}",
+            param_hint="--triangles",
         ) from exc
     assert kept is not None
     tried = "; ".join(f"{t.tolerance:.3g} m: {t.triangles}" for t in found.trials)

@@ -235,8 +235,9 @@ def summary(record: RunRecord) -> str:
     tolerance, top = by.get("tolerance_m"), by.get("max_error_m")
     asked, cap, tried = by.get("triangles_asked"), by.get("triangles_cap"), by.get("budget_trials")
     shown = tolerance.value if tolerance is not None else ""
+    figures = ".5g"
     if asked is not None and cap is not None and tried is not None and tolerance is not None:
-        shown = f"{float(tolerance.value):.3g}"
+        shown, figures = f"{float(tolerance.value):.3g}", ".3g"
         n, found = record.triangles, f"tolerance {shown} m"
         trials = plural(tried.value.count(";") + 1, "trial", "trials")
         if top is not None and top.number == 0:
@@ -256,7 +257,7 @@ def summary(record: RunRecord) -> str:
             ]
     if tolerance is not None and top is not None:
         who = "node of the original DEM" if "dem_nodes_checked" in by else "DEM node"
-        largest = f"{top.number:.5g}"
+        largest = format(top.number, figures)
         if float(top.value) <= float(tolerance.value):
             said.append(
                 f"Every {who} inside the mesh is within {shown} m of it "
@@ -265,7 +266,7 @@ def summary(record: RunRecord) -> str:
         else:
             said.append(
                 f"The largest difference at a {who} inside the mesh is {largest} m, "
-                f"above the tolerance of {tolerance.value} m."
+                f"above the tolerance of {shown} m."
             )
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:
