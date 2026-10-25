@@ -100,7 +100,7 @@ across: it is CGAL, runs the other way, and offers no error bound.
 ## 3. The rule
 
 **Inputs.** `--triangles N` (an integer ≥ 1) and `--max-triangles M`
-(an integer > N; default ⌊1.05 N⌋). The **window** is every count from
+(an integer > N; default the larger of ⌊1.05 N⌋ and N + 1). The **window** is every count from
 2N − M to M inclusive: as far under N as M is over it. Ola's "soft and hard":
 N is the aim, M is never exceeded.
 
@@ -430,10 +430,10 @@ trial of the demo can refuse (section 7).
 | constant | value | scale it assumes | largest input checked |
 |---|---|---|---|
 | `FLOOR_TOLERANCE` | 10⁶ m | above any height difference on Earth (under 9,000 m) and any NoData sentinel's magnitude that could leak into an error (32,767) | floor at 10⁴ and 10⁷ m gave the same count on the study's four inputs; Kultsjön at 320 m and 10⁶ m: 28,561 both |
-| default cap | ⌊1.05 N⌋ | the study's window; a 2 % cap costs 0 to 2 trials more (the study's section 9.3) | Kultsjön 5 %: 5 trials; 2 %: 6 (section 7) |
+| default cap | max(⌊1.05 N⌋, N + 1) | the study's window; a 2 % cap costs 0 to 2 trials more (the study's section 9.3) | Kultsjön 5 %: 5 trials; 2 %: 6 (section 7) |
 | coarse-to-fine start | E_F / 4, quartered | scale-free: the floor's own largest error | Kultsjön E_F = 216 m: 54, 13.5, 3.37 m; velhas E_F = 76.6 m: 19.1, 4.79 m |
 | "well above the floor" | 1.5 F | the fit on log(c − F) needs c − F clear of the rounding of F | all three cases below |
-| `MAX_TRIALS` | 12 | counts every trial of every step; twice the most seen (7, measured and synthetic) | section 7; the 360 synthetic searches of section 3 (at most 7) |
+| `MAX_TRIALS` | 12 | counts every trial of every step; nearly twice the most seen (7, measured and synthetic) | section 7; the 360 synthetic searches of section 3 (at most 7) |
 | saturation | largest error = 0 | exact: a zero largest error means every valid node is on the mesh, so no tolerance changes it | bumpy without `--stride` (640 triangles, error 0 at every T, `search-bumpy.json`) |
 
 ## 6. Judged against the architect's criteria
@@ -700,14 +700,14 @@ mesh equal to the tolerance run's, each node once).
   cap.
 - A10 options: `--triangles` with `--tolerance` refused ("one of");
   `--triangles` with `--pieces 2` refused with today's cutting message;
-  `--triangles` with `--piece-budget 2054000` accepted (A12);
+  `--triangles` with `--piece-budget` passes the option checks (A12 then refuses at the fourth trial);
   `--domain` with `--triangles` and no `--tolerance` accepted; the MCP
   `mesh` tool's schema lists `triangles` and `max_triangles`
   (`test_mcp_cli.py`'s derivation helper).
 - A11 saturation: in `search`, a `trial` returning largest error 0 at every
   T with count 640: window (639, 670) returns it after one trial with
   `tolerance` 0, not missed; window (1000, 1050) ends after one trial,
-  `missed`, chosen 640. A function saturating mid-search (bumpy's shape,
+  `missed`, chosen 640. A function saturating mid-search (A6's form with F 12, E_F 36.938, k 0.9, A 60, as `pure_search.py`;
   F 12, E_F 36.938, counts capped at 640 with error 0 there) and window
   (700, 735): ends `missed` after 3 trials (measured), chosen 640. On the
   CLI: bumpy without `--stride`, `--triangles 639` writes 640 triangles,
@@ -718,7 +718,7 @@ mesh equal to the tolerance run's, each node once).
   exit 2 with nothing written; the message names 1.42 m, 2 × 2 pieces,
   2054000 bytes and `--tolerance`; the same with the default piece budget
   lands (A1). Mutation target: the check made after the trial instead of
-  before it (the message then differs: no trial at 1.42 m ran).
+  before it (the test counts the trials run with a spy on `_refined`: three, not four).
 
 **B. The error summary (104b)**
 
@@ -834,3 +834,4 @@ cost were within noise, which it is not (above), hence `--rms`.
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `0f16382557a8af041b12f790b2dd6b55e15aa15e`, range `97759b7b..0f163825`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 190 (104a) and 220 (104b) estimated. Blocking: (1) section 3 step 2's quartering loop has no trial cap and loops at floor error 0 (`search-bumpy.json`) or when the DEM's most triangles are under 1.5 times the floor: "Every trial counts toward the twelve; when T is 0 or the count stops changing, the search ends missed", with a test; (2) P4: `--triangles 28000` gives cap 29,400, which holds the floor of 28,561, so it returns the floor; use `--triangles 27000` (cap 28,350); (3) A6's "at most 9 trials" was never run and the synthetic floor trial's largest error and targets are unstated; a simulation took 10-11 trials and some searches missed the window; state both and run the pure rule before `@tester`; (4) 104b's cost premise is false: `refine.hpp:19` rescans only changed triangles; on the quick check's tile (0.425 s) a +3 % gate allows 13 ms; time one full scan pass on the quick check's cases; (5) section 4.2's "basin-scale windows are the cut path's, which refuses the budget" is false: a budget run skips the automatic cut by memory (`cli.py:996`); check `partition` at each trial's tolerance and refuse a budget run that would need pieces. Showcase: can claim size asked, at most M triangles, tolerance found and reported, mesh identical to `--tolerance` at that tolerance; cannot claim a better mesh (9.79 m comes with 2.4 % more triangles, on the same curve); the error-against-count curve is the demonstration; rewrite P1's "(−2.1 %)" and the ROADMAP's "RMS 3.00 m against 3.05 m" so neither reads as an improvement. Cut-run refusal acceptable for Kultsjön; Tuesday plan sound. Not pushed; no CI.
+- **Design review, round 2, 2026-10-25.** `@reviewer`, head `a6c00bf9ba24ebebfbe4850b27cab639dcd31aaa`, range `d1d9942f..a6c00bf9`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); about 220 (104a) and 220 (104b) estimated. Round 1 blockers closed: trial cap and zero-error stop hold; P4 at 27000 (cap 28,350 under the floor); `pure-search.log` matches A6, A8, A9, A11; `scan-cost.log` timings match the quick check baseline; A12 `partition` figures recomputed (one piece down to 4.787 m, 2 x 2 at 1.4224 m); showcase wording no longer reads as an improvement. Five wordings applied in this commit: default cap max(floor(1.05 N), N + 1) (lines 103, 433); "nearly twice the most seen" (436); `--piece-budget` passes the option checks (703); A6 form named (710); trial count by a spy on `_refined` (721). Ideas: P3 "under 5.5 s" is tight; no flip count logged for lagan; `partition` ValueError handling during a trial unstated. Not pushed; no CI.
