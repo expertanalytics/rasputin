@@ -95,6 +95,14 @@ def budget_trials(record: dict[str, Any]) -> list[tuple[float, int]]:
     return pairs
 
 
+def says_within_three_figures(run: Run) -> None:
+    """The summary's "within ... m" is the tolerance found to three significant
+    figures, the figure of "tolerance ... m found in"."""
+    found = f"{run.record['tolerance_m']:.3g}"
+    assert repr(run.record["tolerance_m"]) != found, "the tolerance found is already short"
+    says(plain(run.stderr), f"tolerance {found} m found in", f"within {found} m of it")
+
+
 def timings_note(stats: str) -> str:
     """The `--stats` Timings note: the prose between the heading and its table."""
     after = stats.split("## Timings", 1)[1]
@@ -153,6 +161,11 @@ class TestA1Window:
             stderr
         )
         assert "5 trials" in stderr
+
+    def test_the_summary_says_within_the_tolerance_to_three_figures(self, velhas_7386: Run) -> None:
+        """Ola's ruling: a budget run's "within ... m" rounds the tolerance found as
+        the first sentence does (`.3g`), not its full `repr`."""
+        says_within_three_figures(velhas_7386)
 
     def test_stats_has_a_row_for_each_budget_key(self, velhas_7386: Run) -> None:
         names = stats_names(velhas_7386.stats)
@@ -247,6 +260,19 @@ class TestA5Native:
         run = mesh_run(tmp_path, "--dem", str(bumpy), "--stride", "8", "--triangles", "546")
         assert 519 <= run.triangles <= 573
         assert run.record["triangles_cap"] == 573
+
+    def test_the_summary_says_within_the_tolerance_to_three_figures(
+        self, tmp_path: Path, bumpy: Path
+    ) -> None:
+        run = mesh_run(tmp_path, "--dem", str(bumpy), "--stride", "8", "--triangles", "546")
+        says_within_three_figures(run)
+
+    def test_a_tolerance_run_says_within_its_tolerance_in_full(
+        self, tmp_path: Path, bumpy: Path
+    ) -> None:
+        """Only a budget run rounds: `--tolerance` keeps today's sentence."""
+        run = mesh_run(tmp_path, "--dem", str(bumpy), "--tolerance", "4.254655409631253")
+        says(plain(run.stderr), "within 4.254655409631253 m of it")
 
     def test_the_default_cap_is_at_least_one_over_the_ask(
         self, tmp_path: Path, bumpy: Path

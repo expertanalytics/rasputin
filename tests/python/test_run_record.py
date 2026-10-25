@@ -735,6 +735,30 @@ class TestBudgetFields:
         got = fields(rr, self.budget(rr))
         assert not set(self.WORDING) & set(got), got
 
+    @pytest.mark.parametrize("missed", [False, True])
+    def test_the_summary_says_within_the_tolerance_to_three_figures(
+        self, rr: ModuleType, missed: bool
+    ) -> None:
+        """Ola's ruling: on a budget run, hit or missed window, "within ... m"
+        rounds the tolerance found as the first sentence does (`.3g`)."""
+        over: dict[str, Any] = {"budget_window_missed": "yes"} if missed else {}
+        record = projected(
+            rr,
+            tolerance_m=4.254655409631253,
+            max_error_m=4.2,
+            triangles_asked=7386,
+            triangles_cap=7755,
+            budget_trials=self.TRIALS,
+            **over,
+        )
+        text = rr.summary(record)
+        assert "tolerance 4.25 m" in text, text
+        assert "within 4.25 m of it" in text, text
+
+    def test_a_tolerance_run_says_within_its_tolerance_in_full(self, rr: ModuleType) -> None:
+        text = rr.summary(projected(rr, tolerance_m=4.254655409631253, max_error_m=4.2))
+        assert "within 4.254655409631253 m of it" in text, text
+
     def test_each_is_a_stats_row(self, rr: ModuleType) -> None:
         got = rows(rr, self.budget(rr))
         assert got["triangles_asked"] == (self.WORDING["triangles_asked"], "7386")
