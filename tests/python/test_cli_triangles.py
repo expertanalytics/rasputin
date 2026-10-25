@@ -99,13 +99,15 @@ def budget_trials(record: dict[str, Any]) -> list[tuple[float, int]]:
 def says_within_three_figures(run: Run) -> None:
     """The summary's "within ... m" is the tolerance found to three significant
     figures, the figure of "tolerance ... m found in", and its largest difference
-    shares that precision."""
+    shares that precision; the root-mean-square follows it, as on every budget
+    run (section 4.3), to two decimals (section 4.4's "3.00 m")."""
     found = f"{run.record['tolerance_m']:.3g}"
     assert repr(run.record["tolerance_m"]) != found, "the tolerance found is already short"
     says(plain(run.stderr), f"tolerance {found} m found in", f"within {found} m of it")
     largest = f"{run.record['max_error_m']:.3g}"
     assert f"{run.record['max_error_m']:.5g}" != largest, "the largest difference is already short"
-    says(plain(run.stderr), f"(largest difference {largest} m)")
+    rms = f"root-mean-square {run.record['rms_error_m']:.2f} m"
+    says(plain(run.stderr), f"(largest difference {largest} m, {rms})")
 
 
 def timings_note(stats: str) -> str:

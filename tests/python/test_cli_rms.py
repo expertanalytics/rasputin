@@ -10,8 +10,9 @@ The oracle (`source_summary`) recomputes both from the written `.vtk` and the
 fixture's own nodes: the source DEM's valid nodes moved to the target CRS by
 pyproj on the reprojected path, the DEM's nodes on the native one; each node
 located by barycentric weights with a 1e-12 slack, its error against the
-plane of the mesh's own vertices; a node on a vertex is not a point (as in
-the scan). It never reads the record's figures or the scan's.
+plane of the mesh's own vertices; a node within `COINCIDENT` of a vertex is
+not a point (section 4.3: a check point that became a vertex is skipped). It
+never reads the record's figures or the scan's.
 
 Invariant-critical (each node once, agreement with the record).
 """
@@ -48,13 +49,20 @@ VELHAS_ARGS = (
     *("--domain", str(VELHAS / "catchment.geojson")),
     *("--out-crs", TARGET),
 )
+#: A node this close to a vertex (metres) is that vertex, not a point: the store
+#: keeps a check point's position to 2^-24 of a cell, so a node inserted as a
+#: vertex is written up to about 2 um from where pyproj puts it. Velhas (30 m
+#: cells; checked at 0.5, 1 and 2 m): coincident nodes lie at most 1.25 um
+#: from their vertex, every other node at least 0.15 m from any vertex.
+COINCIDENT = 1e-4
 RMS_KEYS = ("rms_error_m", "error_nodes_measured")
 SUMMARY_ROW = "error summary"
 
 #: Velhas at each tolerance, measured by `source_summary` on the meshes this
 #: tree writes (2026-10-25): the source nodes inside the mesh that are not
-#: vertices, and their root-mean-square error in metres.
-VELHAS_FIGURES = {"1": (12_666, 0.42147), "2": (12_667, 0.77775), "0.5": (12_653, 0.21506)}
+#: vertices, and their root-mean-square error in metres. The nodes inside,
+#: vertices included, are 12,681 at every tolerance (section 7's count).
+VELHAS_FIGURES = {"1": (11_673, 0.43903), "2": (12_381, 0.78668), "0.5": (10_021, 0.24165)}
 
 bumpy = rough_dem(14)
 
@@ -90,7 +98,7 @@ def source_summary(
     vtk: VtkFile, xy: npt.NDArray[np.float64], zp: npt.NDArray[np.float64]
 ) -> Measured:
     """Every node `xy` (in the mesh's CRS) with height `zp` that lies in a
-    closed triangle of `vtk` and on none of its vertices: how many, their
+    closed triangle of `vtk` and within `COINCIDENT` of none of its vertices: how many, their
     root-mean-square and largest |plane - z|, the plane from the file's vertices."""
     points = vtk.points
     tri = np.asarray(vtk.polygons, np.int64)
@@ -116,8 +124,8 @@ def source_summary(
         plane = wa * za + wb * zb + wc * zc
         e = np.where(inside, np.abs(plane - zp[lo : lo + 256, None]), -1.0)
         error[lo : lo + 256] = np.where(inside.any(axis=1), e.max(axis=1), np.nan)
-        top = np.maximum(np.maximum(wa, wb), wc)
-        on_vertex[lo : lo + 256] = (inside & (top > 1.0 - 1e-9)).any(axis=1)
+        gap = q[lo : lo + 256, None, :] - v[None, :, :]
+        on_vertex[lo : lo + 256] = (gap**2).sum(axis=2).min(axis=1) < COINCIDENT**2
     measured = ~np.isnan(error) & ~on_vertex
     found = error[measured]
     return Measured(int(found.size), float(np.sqrt(np.mean(found**2))), float(found.max()))
@@ -254,7 +262,7 @@ class TestB4Threads:
 class TestB5Words:
     def test_the_summary_line_ends_with_the_rms(self, velhas_rms: dict[str, Run]) -> None:
         stderr = squashed(plain(velhas_rms["1"].stderr))
-        assert squashed("root-mean-square 0.42 m).") in stderr, stderr
+        assert squashed("root-mean-square 0.44 m).") in stderr, stderr
         assert squashed("(largest difference 0.99789 m, root-mean-square") in stderr, stderr
 
     def test_stats_has_a_row_for_each_key_and_the_timing(self, velhas_rms: dict[str, Run]) -> None:
