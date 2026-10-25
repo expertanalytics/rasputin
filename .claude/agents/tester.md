@@ -21,7 +21,9 @@ You write the failing suites and hold the coverage floor `testing.md` defines.
   it.
 * **Determinism:** no races, no flaky test (a blocking bug); bitwise results or
   a stated tolerance. Every absolute bound states the scale it assumes and the
-  largest input it was checked at.
+  largest input it was checked at. A pinned digest leaves out host-filled
+  fields. Exact equality only through plain arithmetic; a NumPy
+  transcendental such as `cbrt` gets `assert_allclose(rtol=1e-15)`.
 * **Lists:** a red step that adds a command or module greps the tests for
   each list of them it must join, and adds it there.
 * **Scaffolding:** after green, remove red-step scaffolding, red notes included, before review.
@@ -72,7 +74,6 @@ Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
 `tests/cpp/property/prop_refinement_constraint_feet.cpp`.
 
 ## 4. Operational Style Guide for Tests
-* **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
+* **Idiomatic & Clean:** Test code is production code. Use `pytest` fixtures heavily for data setup.
 * **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message. A refusal test asserts the reason (stderr or message), not only the exit status. When the design names the fix by code location, apply it to a scratch copy made as for mutants, with your uncommitted tests copied in, and run the whole suite once; an older test it turns red is fixed in the red commit.
-* **PR Constraint:** Reject any code change that lacks corresponding tests.
 

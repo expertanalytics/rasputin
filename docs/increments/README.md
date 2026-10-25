@@ -11,7 +11,9 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
 1. `@architect` writes `docs/increments/NN-name.md`. Design only — types,
    invariants, exclusions, degeneracy policy, LOC estimate. No production code.
    The file carries a **Prior art: legacy and literature** section, written
-   before the design, not after it.
+   before the design. A change under about 150 lines gets a one-page design:
+   equations, sources, prediction, test list. Its effect is probed and
+   reported to Ola before it is built.
 
    *Literature.* Name the published method the increment builds on, with a
    citation, and say what differs from it. Design with the literature, not
