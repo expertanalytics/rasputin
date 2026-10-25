@@ -1,0 +1,139 @@
+# rasputin mesh — statistics
+
+`rasputin mesh --out /tmp/perf-104a-meshes/base-t10-r3.gpkg --dem glo30 --domain /Users/skavhaug/rasputin-output/opal-se2-2026-10-21/catchments/kultsjon.geojson --domain-crs EPSG:3006 --out-crs EPSG:3006 --features /Users/skavhaug/.cache/rasputin/clc2018/features.gpkg --features-legend corine --features-repair 1.0 --features-tolerance 50.0 --features-outline-snap 5.0 --threads 4 --memory-budget 4G --z-unit m --tolerance 10.0 --stats /Users/skavhaug/projects/rasputin/.claude/worktrees/tri-budget/docs/benchmarks/2026-10-25/104a/kultsjon/base-t10-r3.md --record /Users/skavhaug/projects/rasputin/.claude/worktrees/tri-budget/docs/benchmarks/2026-10-25/104a/kultsjon/base-t10-r3.json`
+
+bounds checks: on (libc++ fast)
+
+## Sizes
+
+| item | count |
+|---|---|
+| resampled grid nodes | 1575 × 2153 (31 m) |
+| domain vertices | 867 (1 ring, 0 holes) |
+| start vertices | 11362 |
+| start triangles | 21569 |
+| output vertices | 33645 |
+| output triangles | 65893 |
+| constraint edges | 13703 |
+| base-t10-r3.gpkg | 21.6 MB |
+
+## Inputs
+
+| item | value | name |
+|---|---|---|
+| The tiles or downloaded blocks used | Copernicus_DSM_COG_10_N64_00_E014_00_DEM; Copernicus_DSM_COG_10_N64_00_E015_00_DEM; Copernicus_DSM_COG_10_N65_00_E014_00_DEM; Copernicus_DSM_COG_10_N65_00_E015_00_DEM | `dem_tiles` |
+| Overlapping tiles that disagree, and by how much | none: the tiles agree where they overlap | `dem_seams` |
+| Unit of z | metres (given with --z-unit) | `dem_vertical_unit` |
+| The DEM's own coordinate system | EPSG:4326 | `dem_crs` |
+| Conversion from the DEM's coordinate system | Inverse of SWEREF99 to WGS 84 (1) + SWEREF99 TM (with axis order normalized for visualization) | `dem_transform` |
+| The grid the DEM was interpolated onto | 31 m square grid in EPSG:3006, 2153 columns x 1575 rows | `resampled_grid` |
+| The domain file and shape | kultsjon.geojson: 1 outline, 0 holes, 867 vertices | `domain` |
+| The domain's coordinate system | EPSG:3006 | `domain_crs` |
+| Conversion from the domain's coordinate system | none | `domain_transform` |
+| Each features file: layer, legend, features, lines, vertices | features.gpkg layer features, legend corine: 16 features, 647 lines, 21372 vertices | `features` |
+| Each features file's coordinate system | EPSG:3035 | `features_crs` |
+| Conversion from each features file's coordinate system | Inverse of Europe Equal Area 2001 + Inverse of SWEREF99 to ETRS89 (1) + SWEREF99 TM (with axis order normalized for visualization) | `features_transform` |
+| Land-cover borders closer than this made one, narrower gaps filled | 1 | `features_repair_m` |
+| Borders between land-cover polygons of one class dropped | on | `features_merge_same_class` |
+| Land-cover borders simplified, each at most this far from its border after the repair and the outline rule, each class's area kept (0 = off) | 50 | `features_tolerance_m` |
+| Land-cover borders this close to the outline moved onto it | 5 | `features_outline_snap_m` |
+| What refinement started from | the domain outline and the feature lines | `start_mesh` |
+| Starting mesh improved to this smallest angle (0 = off) | 15 | `start_min_angle_deg` |
+| Starting mesh: a point is added only if it raises the smallest angle around it by at least this many degrees (negative = always added) | 0 | `start_quality_gain_deg` |
+| Points very close to a line were moved onto it | on | `snap_to_lines` |
+| Threads used | 4 | `threads` |
+
+## Quality (plan view, x/y)
+
+| metric | median | < 1° | < 10° | worst |
+|---|---|---|---|---|
+| minimum angle | 34.26° | 0.01 % | 1.33 % | 0.426° |
+
+| metric | median | p99 | max | ≥ 12 | ≥ 20 |
+|---|---|---|---|---|---|
+| vertex degree (triangles) | 6 | 9 | 12 | 6 | 0 |
+
+## Result
+
+| item | value | name |
+|---|---|---|
+| Coordinate system | EPSG:3006 | `crs` |
+| Tolerance | 10 | `tolerance_m` |
+| Largest height error | 9.999842725887447 | `max_error_m` |
+| DEM | glo30 | `dem_source` |
+| Credit | produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved | `dem_credit` |
+| Licence | Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" | `licence_note` |
+| Vertices removed on NoData | 0 | `nodata_vertices_removed` |
+| Credit for the features data | Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU | `features_notice` |
+| What land_cover_code holds | CORINE Land Cover level-3 code, attribute Code_18, legend corine; 0 = in no polygon, and every constraint line | `land_cover_codes` |
+| Land-cover vertices before and after clean-up | 63188 after the clip, 21685 after clean-up | `land_cover_vertices` |
+| Land-cover area inside the outline that the outline rule gave to another polygon, m2 | 4420.8 | `land_cover_area_moved_m2` |
+| Largest error against the resampled grid | 9.998921901102449 | `resampled_grid_max_error_m` |
+| Nodes of the original DEM compared with the mesh | 3670772 | `dem_nodes_checked` |
+| Points that comparison added | 2201 | `dem_check_points_inserted` |
+| Passes of that comparison | 9 | `dem_check_rounds` |
+| DEM nodes on a vertex (to rounding), not compared | 0 | `dem_nodes_at_vertices` |
+| Their largest difference | 0 | `dem_nodes_at_vertices_max_error_m` |
+| Points along lines (grid-line crossings and halfway between) compared | 244318 | `line_points_checked` |
+| Their largest difference from the mesh | 9.997527806281823 | `line_max_error_m` |
+| Points along lines on NoData cells, not compared | 0 | `line_points_on_nodata` |
+| Points along lines that could not be added | 0 | `line_points_refused` |
+| Their largest difference from the mesh | 0 | `line_points_refused_max_error_m` |
+| Points along lines added | 127 | `line_points_inserted` |
+| Points along lines dropped as duplicates | 13 | `line_points_duplicate` |
+| Self-check: DEM nodes with data left outside the mesh | 0 | `dem_nodes_outside_mesh` |
+| Triangles flat or turned over at the written coordinates; their edges were left out of the last edge-swap check | 0 | `triangles_flat_as_written` |
+| Edges that fail the empty-circle test at the written coordinates and could not be swapped | 0 | `edges_not_delaunay_as_written` |
+| Refinement passes | 15 | `refinement_rounds` |
+| Points added | 16577 | `points_inserted` |
+| Of them, into triangles with a NoData corner | 0 | `points_inserted_on_nodata` |
+| Edge swaps | 40823 | `edge_flips` |
+| Points added to improve the starting mesh | 2535 | `start_quality_points_inserted` |
+| Tries skipped while improving it | 594 | `start_quality_points_skipped` |
+| Tries that would not have improved the angles | 337 | `start_quality_points_without_gain` |
+| Points moved onto lines while improving the starting mesh | 108 | `start_quality_points_snapped_to_lines` |
+| Land-cover and outline lines split to improve angles | 862 | `start_quality_lines_split` |
+| Points refinement moved onto lines | 816 | `points_snapped_to_lines` |
+| Moves onto lines refused | 0 | `snaps_refused` |
+| Points the final check against the DEM moved onto lines | 110 | `final_check_points_snapped_to_lines` |
+| Of them, also added where they were | 0 | `final_check_snapped_points_added_anyway` |
+| Starting-mesh vertices not on a DEM node | 11361 | `start_vertices_between_dem_nodes` |
+
+## Timings
+
+Wall clock, `time.perf_counter_ns` (Python) and `std::chrono::steady_clock`
+(inside `refine`), one run, no warm-up. Total is the `mesh` command body, from
+argument checks to the last file written; interpreter start-up and imports are
+not in it. Threads used: 4.
+
+| phase | seconds | share |
+|---|---|---|
+| domain read | 0.003 | 0.1 % |
+| decode | 0.390 | 13.4 % |
+| features read | 0.160 | 5.5 % |
+| features clip | 1.356 | 46.6 % |
+| features clip: clean-up | 0.795 | 27.3 % |
+| start mesh: build | 0.000 | 0.0 % |
+| start mesh: node | 0.032 | 1.1 % |
+| start mesh: triangulate | 0.009 | 0.3 % |
+| start mesh: constraint edges | 0.022 | 0.8 % |
+| refine | 0.046 | 1.6 % |
+| refine: legalise start | 0.001 | 0.0 % |
+| refine: start quality | 0.006 | 0.2 % |
+| refine: scan (parallel) | 0.022 | 0.8 % |
+| refine: split + flip (serial) | 0.009 | 0.3 % |
+| refine: setup + output | 0.008 | 0.3 % |
+| edge strip: generate | 0.006 | 0.2 % |
+| check points: project | 0.259 | 8.9 % |
+| check points: store | 0.072 | 2.5 % |
+| final check: scan (parallel) | 0.067 | 2.3 % |
+| final check: split + flip (serial) | 0.004 | 0.1 % |
+| trim | 0.003 | 0.1 % |
+| land cover | 0.028 | 1.0 % |
+| write: geopackage | 0.398 | 13.7 % |
+| other | 0.052 | 1.8 % |
+| **total** | **2.907** | **100 %** |
+
+Sub-rows sum to their parent and are not added to the total.
+
+Statistics computed in 0.014 s, not included above.
