@@ -211,7 +211,15 @@ class TestA4SameMesh:
         assert len(budget.polygons) == len(tolerance.polygons)
         np.testing.assert_array_equal(np.array(budget.polygons), np.array(tolerance.polygons))
         assert budget.point_scalars.keys() == tolerance.point_scalars.keys()
-        assert budget.field_data == tolerance.field_data
+        assert budget.field_data.keys() == tolerance.field_data.keys()
+        for key, mine in budget.field_data.items():
+            theirs = tolerance.field_data[key]
+            assert (mine.type_name, mine.components, mine.raw) == (
+                theirs.type_name,
+                theirs.components,
+                theirs.raw,
+            ), key
+            np.testing.assert_array_equal(mine.values, theirs.values, err_msg=key)
         assert not set(BUDGET_KEYS) & set(budget.field_data)
 
 
