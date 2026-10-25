@@ -13,7 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from tin_engine._core import RefineOutcome
+from tin_engine._core import CheckPoints, RefineOutcome
+from tin_engine.budget import Window
 from tin_engine.elevation import Trimmed
 from tin_engine.run_record import Value
 from tin_engine.target_grid import Block, TargetGrid
@@ -40,14 +41,17 @@ class Once[T]:
 @dataclass(frozen=True, slots=True)
 class How:
     """How a start mesh is refined (with ``grid`` and ``checks``, the final
-    check against a resampled grid)."""
+    check against a resampled grid; ``checks`` as blocks are filed into a
+    store by the refine that takes them). With ``budget``, ``tolerance`` is
+    set per trial by the search for the window's count."""
 
     dem: str
     tolerance: float
     min_angle: float
     feet: bool
     grid: TargetGrid | None
-    checks: Iterable[Block] | None
+    checks: Iterable[Block] | CheckPoints | None
+    budget: Window | None = None
 
 
 @dataclass(frozen=True, slots=True)
