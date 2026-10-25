@@ -128,11 +128,12 @@ every option.
   share of every triangle, from a class raster or from class polygons: a
   file with `--land-cover-legend`, or a fetched source with a legend such as
   `clc2018`.
-- **`.gpkg`** (GeoPackage) is for QGIS. With `--land-cover` and a legend it
-  holds a `cells` layer, one point per triangle with Shyft's fractions
-  (glacier, lake, reservoir, forest, unspecified), savanna, slope, aspect and
-  area, and a `land_cover_fractions` table with each class's share of each
-  triangle.
+- **`.gpkg`** (GeoPackage) is for QGIS. With `--land-cover` it holds a
+  `land_cover_fractions` table with each class's share of each triangle,
+  legend or not. With a legend it also holds a `cells` layer, one point per
+  triangle with Shyft's fractions (glacier, lake, reservoir, forest,
+  unspecified), savanna, slope, aspect and area; reservoir is 0 until
+  reservoirs are read.
 - **`.ply`** is for QGIS and other mesh tools. The surface goes to `--out`,
   and the constraint edges, if you want them, to a second file named by
   `--out-edges`.

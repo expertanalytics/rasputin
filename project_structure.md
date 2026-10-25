@@ -285,8 +285,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   assign (an STRtree cut per triangle, uncovered
                            #   area class 0); pure, shapely and numpy (105c)
   cells.py                 # the cell table: categories_of (refuses water
-                           #   without a category), categorise (five
-                           #   Shyft shares), geometry (centroid, plan area,
+                           #   without a category), categorise (glacier,
+                           #   lake, forest, savanna, unspecified), geometry (centroid, plan area,
                            #   slope, aspect), cell_table; pure, numpy (105a)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
