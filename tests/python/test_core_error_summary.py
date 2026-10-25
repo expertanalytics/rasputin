@@ -308,6 +308,7 @@ class TestB2EachNodeOnce:
         diagonals += [(t, 4.0 - t) for t in (0.5, 1.0, 1.5, 2.5, 3.0, 3.5)]
         sides = [(0.5, 0.0), (4.0, 1.25), (2.75, 4.0), (0.0, 3.5), (2.0, 0.0), (4.0, 2.0)]
         inside = [(1.0, 2.0), (2.0, 3.0), (2.5, 1.0), (3.25, 2.125), (0.75, 1.5), (1.5, 0.25)]
+        inside += [(2.0 + 1 / 1024, 2.0)]  # 1/1024 of a cell from the centre: still a point
         at = np.array(coincident + diagonals + sides + inside + extra, np.float64)
         z = np.random.default_rng(13).integers(0, 6400, len(at)).astype(np.float32) / 64
         store = _core.CheckPoints(x_min=X0, y_max=Y0, spacing=1.0, rows=5, cols=5)  # type: ignore[attr-defined]
@@ -342,12 +343,42 @@ class TestB2EachNodeOnce:
         assert 0 < want.count < len(at) - 5
         agrees(got, want)
 
+    def test_an_invalid_vertex_with_a_height_is_still_void(self, error_summary: Summary) -> None:
+        """`valid` decides, not the height: the top-left vertex marked invalid
+        with a finite z gives what the NaN z gives."""
+        store, _, _, _ = self.fan_store([])
+        vertices, triangles = fan()
+        valid = np.array([False, True, True, True, True])
+        nan = error_summary(store, vertices, triangles, np.array([np.nan, 20, 30, 40, 50.0]), valid)
+        got = error_summary(store, vertices, triangles, np.array([10.0, 20, 30, 40, 50]), valid)
+        assert (got.count, got.max_error, got.rms_error) == (
+            nan.count,
+            nan.max_error,
+            nan.rms_error,
+        )
+
     def test_a_store_never_frozen_is_refused(self, error_summary: Summary) -> None:
         store = _core.CheckPoints(x_min=X0, y_max=Y0, spacing=1.0, rows=5, cols=5)  # type: ignore[attr-defined]
         store.add(world([1.5], [1.5]), np.ones(1, np.float32))
         vertices, triangles = fan()
         with pytest.raises(RuntimeError, match="not frozen"):
             error_summary(store, vertices, triangles, np.zeros(5), np.ones(5, bool))
+
+    def test_an_off_node_corner_skips_no_node_beside_it(self, error_summary: Summary) -> None:
+        """The fan with its centre a quarter cell off node (2, 2): the four
+        corners are the only vertices on nodes, so 21 nodes count, (2, 2)
+        among them; no coincidence radius applies. The centre's height is the
+        bilinear one, as `scan` takes it."""
+        array = noise(5, 5, 14)
+        vertices, triangles = fan()
+        vertices[4] = world([2.25], [2.0])[0]
+        z = corner_z(array, vertices)
+        z[4] = 0.75 * float(array[2, 2]) + 0.25 * float(array[2, 3])
+        valid = np.ones(5, bool)
+        got = error_summary(view_of(array), vertices, triangles, z, valid)
+        want = lattice_oracle(array, vertices, triangles, z, valid)
+        assert want.count == 25 - 4
+        agrees(got, want)
 
 
 # ---------------------------------------------------------------- B3: the producer's own error
