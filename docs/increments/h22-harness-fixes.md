@@ -102,8 +102,8 @@ own copy of the harness (section 9).
   answers `Branch not protected` (404), and the repository has
   `allow_auto_merge: false`. So `gh pr merge --merge` merges at once, red
   checks or not. The guard checks the checks itself (4.4).
-- `gh pr view lsm-lake-inflow -R expertanalytics/rasputin-private --json
-  state,baseRefName,headRefOid,statusCheckRollup` took 0.74 s and returned
+- `gh pr view` on a private branch, `--json
+  state,baseRefName,headRefOid,statusCheckRollup`, took 0.74 s and returned
   one `CheckRun` with conclusion `SUCCESS`, state `OPEN`, base `master`.
 - History is shared up to the split: `git merge-base origin/master
   private/master` is `a058bb6b` (2026-10-14). `private/master` holds 93
@@ -282,12 +282,12 @@ deletion is visible at commit time too.
 
 ## 6. Fix 3: `tools/scratch_copy.py`
 
-### 6.1 What breaks (reproduced 2026-10-17 on `lsm-lake-inflow` at `cea32bad`)
+### 6.1 What breaks (reproduced 2026-10-17 on a private branch at `cea32bad`)
 
 The private copy of the tool (`tools/scratch_copy.py` in that worktree, the
 same code as public but for one docstring line) made a copy, and from it:
 
-- `rasputin_lsm.__file__` was `.../worktrees/lsm-lake-inflow/src/rasputin_lsm/__init__.py`:
+- `rasputin_lsm.__file__` was `.../worktrees/<branch>/src/rasputin_lsm/__init__.py`:
   the worktree's, not the copy's. The sitecustomize drops the editable
   finder, but the skbc `.pth` file's second line already put the worktree's
   `src` on `sys.path`, and the printed `PYTHONPATH` names `src_python`,
@@ -298,7 +298,7 @@ same code as public but for one docstring line) made a copy, and from it:
   `src_python/tin_engine/` in the copy (the core is a plain install there,
   pinned by `pyproject.toml`); harmless, since the installed package wins,
   but wrong.
-- `pytest -x` stopped at `test_cli_inflow.py` after 421 passes.
+- `pytest -x` stopped at a private test after 421 passes.
 
 ### 6.2 The rule
 
@@ -322,7 +322,7 @@ same code as public but for one docstring line) made a copy, and from it:
 5. `copy` reads the module's `ROOT` at call time (it does today), so the
    live check can run the public tool on a private worktree.
 
-The prototype of rules 1 to 3, by hand on `lsm-lake-inflow` at `cea32bad`
+The prototype of rules 1 to 3, by hand on the same private branch at `cea32bad`
 into the session scratchpad: `rasputin_lsm` and `_lsm` both from the copy,
 `tin_engine` from the venv; the full suite **3374 passed, 27 skipped, 0
 failed in 434 s**.

@@ -32,7 +32,8 @@ red, and `CI result` is the check that decides.
 ### The checks the gates cannot make
 
 Verify recorded evidence by reading and diffing; rebuild `_core` or re-run a
-probe only for a figure the design marks unmeasured.
+probe only for a figure the design marks unmeasured. A figure counts as
+recorded only in a file the branch holds.
 
 1. **Red-step scaffolding is gone**: no comment or stub still marks the red step.
 2. **Every prose claim the increment touched is still true.** Read the docs the

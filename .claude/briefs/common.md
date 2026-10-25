@@ -11,7 +11,7 @@ $note; write **no other file under .claude/current-task/**.
 If **blocked on power, network or a lock**, stop and hand back.
 Start a long run with Bash's `run_in_background` and wait for its end
 notice, never `sleep` or a polling loop; before you hand back, stop every
-background command you started; write a rule
+background command you started, by its id, never by a name pattern; write a rule
 file with Edit or Write, never through the shell.
 End each commit message with the **Co-Authored-By trailer** from your
 system context. End each commit subject you write with `(@$persona)`.

@@ -192,9 +192,6 @@ no such item exists.
 The recap is capped at 10,000 characters (`python3 tools/session_state.py |
 wc -m`), so keep `session.md` and the note files short.
 
-Propose any further hook for Ola's approval; never add one to
-`.claude/settings.json` on your own initiative.
-
 ## Data, scratch and temp folders are not a channel
 
 `../rasputin_data` holds input data and `../rasputin_scratch` holds results;

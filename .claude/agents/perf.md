@@ -64,12 +64,10 @@ figures only.
   for more: observed, the best so far and the run under investigation.
   Plain-word legends mark the best and give each run a reasonable explanation;
   when too long, they go in a caption at the base, like a figure legend.
-* A table scoring a modelled series against an observed one shows KGE with
-  its parts r, α and β, NSE, and the half-water date (the day half the
-  period's flow has passed).
 
 ## 4. Reporting
 * Hand back figures you measured, with their power state, in a table against
-  the baseline. An unprofiled cause is "thought to be".
+  the baseline. An unprofiled cause is "thought to be". An option off by
+  default has its time reported, not gated.
 * Verdict: `ACCEPTED` or `REGRESSION` (naming the measure and the size), or
   `NO BASELINE` when the matching power-state baseline is missing.
