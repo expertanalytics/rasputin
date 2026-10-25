@@ -252,7 +252,7 @@ class TestRowAreas:
 
 class TestClassFractions:
     OFFSETS = np.array([0, 2, 3, 5], dtype=np.uint32)
-    CLASSES = np.array([3, 15, 33, 0, 24], dtype=np.uint8)
+    CLASSES = np.array([3, 15, 33, 0, 3031], dtype=np.int32)
     FRACTIONS = np.array([0.25, 0.75, 1.0, 0.4, 0.6], dtype=np.float32)
 
     def make(self, **changes: Any) -> Any:
@@ -268,7 +268,7 @@ class TestClassFractions:
         assert_array_equal(table.classes, self.CLASSES)
         assert_array_equal(table.fractions, self.FRACTIONS)
         assert (table.offsets.dtype, table.classes.dtype, table.fractions.dtype) == (
-            np.uint32, np.uint8, np.float32,
+            np.uint32, np.int32, np.float32,
         )  # fmt: skip
 
     def test_it_is_frozen(self) -> None:
@@ -285,14 +285,14 @@ class TestClassFractions:
             {"offsets": np.array([0, 3, 2, 5], dtype=np.uint32)},
             {"offsets": np.array([0, 2, 3, 4], dtype=np.uint32)},
             {"offsets": np.array([0, 2, 3, 5], dtype=np.int64)},
-            {"classes": np.array([3, 15, 33, 0], dtype=np.uint8)},
-            {"classes": np.array([3, 15, 33, 0, 24], dtype=np.int32)},
+            {"classes": np.array([3, 15, 33, 0], dtype=np.int32)},
+            {"classes": np.array([3, 15, 33, 0, 24], dtype=np.uint8)},
             {"fractions": np.array([0.25, 0.75, 1.0, 0.4, 0.6], dtype=np.float64)},
             {"fractions": np.array([0.25, 0.75, 1.0, 0.4], dtype=np.float32)},
         ],
         ids=[
             "offsets-not-from-0", "offsets-decreasing", "offsets-end-short", "offsets-int64",
-            "classes-short", "classes-int32", "fractions-float64", "fractions-short",
+            "classes-short", "classes-uint8", "fractions-float64", "fractions-short",
         ],
     )  # fmt: skip
     def test_a_malformed_table_is_refused(self, changes: dict[str, Any]) -> None:
@@ -302,7 +302,7 @@ class TestClassFractions:
     def test_an_empty_table_has_no_triangles(self) -> None:
         table = self.make(
             offsets=np.array([0], dtype=np.uint32),
-            classes=np.zeros(0, dtype=np.uint8),
+            classes=np.zeros(0, dtype=np.int32),
             fractions=np.zeros(0, dtype=np.float32),
         )
         assert table.triangles == 0
@@ -321,6 +321,14 @@ class TestFractionsAndDominant:
         assert table.fractions.dtype == np.float32
         assert_array_equal(table.fractions, np.array([0.25, 0.75, 1.0], dtype=np.float32))
         assert_array_equal(table.classes, self.CLASSES)
+
+    def test_the_rasters_uint8_classes_become_the_tables_int32_once(self) -> None:
+        """`docs/increments/105-cell-table.md` 4.5: one class number has one
+        type in every file, so `class_areas`'s uint8 is cast here."""
+        table = fractions_of(self.OFFSETS, self.CLASSES, self.AREAS)
+        assert table.classes.dtype == np.int32
+        empty = fractions_of(np.array([0], dtype=np.uint32), np.zeros(0, np.uint8), np.zeros(0))
+        assert empty.classes.dtype == np.int32
 
     def test_a_row_without_entries_is_refused_naming_the_resolution(self) -> None:
         """F1 cannot hold for a triangle with no class area; `class_areas`

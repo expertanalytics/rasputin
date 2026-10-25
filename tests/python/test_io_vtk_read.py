@@ -187,7 +187,7 @@ class TestLandCoverCodes:
     ) -> None:
         table = ClassFractions(
             offsets=np.array([0, 2, 3, 5, 6, 7], dtype=np.uint32),
-            classes=np.array([3, 15, 33, 0, 24, 62, 7], dtype=np.uint8),
+            classes=np.array([3, 15, 33, 0, 24, 3031, 7], dtype=np.int32),
             fractions=np.array([0.25, 0.75, 1.0, 0.4, 0.6, 1.0, 1.0], dtype=np.float32),
         )
         mask = DEFAULT_VOCABULARY.mask("river", "road")

@@ -84,6 +84,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         # 23c-3: what one window's refine takes and gives, cut or not
         "refine_job": "_core budget elevation run_record target_grid",
         "land_cover_fractions": "_core crs io.models io.repository",  # 26b: class_areas
+        # 105c: polygons cut per triangle; the table and its helpers from above
+        "polygon_fractions": "land_cover_fractions",
         "_core": "",
     },
     {  # L4: pipelines
@@ -115,7 +117,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_index io.models io.network_file io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " mcp.http mcp.server mosaic network palettes plugins raster refine_job resources"
+               " mcp.http mcp.server mosaic network palettes plugins polygon_fractions raster"
+               " refine_job resources"
                " run_record source_report sources stats target_grid tin_engine tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
