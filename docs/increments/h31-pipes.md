@@ -178,8 +178,7 @@ files; `pipes.py set` may change it later with `--plain` / `--governed`)*.
 **What a free writer takes.** `pipes.py next` applies, in this order, the
 first that holds; "runnable" excludes `waiting` items always, and while
 unattended (`harness_mode.read_mode`) also items without `plain`. An
-in-flight item is **busy** while `.claude/current-task/` holds a note
-`<persona>-<name>-*.md` for its branch's worktree, the branch being
+in-flight item is **busy** while `.claude/current-task/` holds a note `<persona>-<name>-<HHMMSS>.md`, the name being everything between the first hyphen and the six-digit time, for its branch's worktree, the branch being
 `worktree-<name>` (`tools/brief.py` writes the note, `tools/new_worktree.py`
 names the branch): a writer already has it *(review 2, item 1)*.
 
@@ -201,7 +200,7 @@ names the branch): a writer already has it *(review 2, item 1)*.
 
 The output is one line, `next: <pipe>/<id> <state> (<reason>)`, where the
 reason names the step that chose it ("nearest to merging", "stuck 4 d",
-"core is first", "fallback").
+"core is first", "fallback"). `next` also prints one `busy: <pipe>/<id> (<note file>)` line for each in-flight item it skipped as busy.
 
 **Counting.** The cap stays three items in flight across all pipes
 (`CLAUDE.md` §3). A `waiting` item is not in flight *(review 1, item 4; this
@@ -437,7 +436,7 @@ with the rest.
    `next` is `lsm`'s queued item. With the `red` item's note removed, `next`
    is it, reason "nearest to merging". With three in flight across the
    pipes, all busy, `next` is `IDLE`, never a `queued` or fallback item
-   *(review 2, items 1 and 3)*.
+   *(review 2, items 1 and 3)*. A note `developer-<name>-x-190000.md` does not make `<name>` busy.
 4. **Waiting is not in flight.** Five items: three `waiting`, one `red` and
    busy, one `queued`; `in_flight` is 1, and `next` is the `queued` item
    *(review 2, item 1)*.
@@ -483,3 +482,4 @@ README.md`, *Cost constraints*).
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `c2b2dc69fc15f9ddeb38f1ecad25a0db2a1053b7`, range `d886847d..c2b2dc69`. Verdict: CHANGES REQUESTED. LOC: 0 (design); table sums to about 220, not 250. Blocking: (1) live lists go in `<git-common-dir>/pipes/`, not `harness/` (REQUIRED-READING 163-164: no agent writes harness state); no guard entry needed (`judge_bash` already passes `python3 tools/pipes.py set`); (2) `ASK OLA:` lines are read by `harness_mode.py`, `guard_unattended.py`, `away.py --back` and `session_state.py`: "Refusals and defaults taken while away stay `ASK OLA:` lines in `session.md`; only questions about an item move to `pipes.py ask`"; `session_format` stops requiring one `QUEUE:` line; (3) private definitions read with `git ls-tree --name-only <remote>/master .claude/pipes/` and `git show`, no fetch (the recap runs in a hook), printing "read from <remote>/master <sha7>, committed <date>"; a missing ref warns, does not fail; (4) `waiting` items do not count toward the cap of three; "writes no governed path" needs an item field set at `add`; (5) a tracked fallback "re-filled when used" needs a commit per use: keep the REQUIRED-READING fallback sentence until `away.py` checks it (second slice), the refusal test moves there too; (6) resurfacing (Ola: "when stuff is stuck behind for a while, they should resurface"): "An item `queued` or `waiting` longer than three days is listed first in the recap under `Stuck:` with its age, and `next` ranks it ahead of fresher items of equal step", about 15 lines plus a test; (7) Status: "Status: **design to build, first slice**, ruled by Ola 2026-10-25 (\"yes, build the first slice\"): rules option A, the rest as recommended. Section 8 holds the rulings." If `session_state.py` imports `pipes.py`, `pipes.py` joins GOVERNED. Not pushed; no CI.
 - **Design review, round 2, 2026-10-25.** `@reviewer`, head `bbc7dfdc1ff041527c46f581b78406b09b54a1b0`, range `82d96911..bbc7dfdc`. Verdict: CHANGES REQUESTED. LOC: 0 (design); table about 231. Round 1's seven closed and checked (`judge_bash` passes `pipes.py set`/`ask` with `tools/pipes.py` in GOVERNED; `private/master` 79848102; fallback sentence kept). Blocking, writer order (section 4): (1) busy items: "An in-flight item is busy while `.claude/current-task/` holds a `<persona>-<worktree>-*.md` file for its branch's worktree; steps 1 and 4 skip busy items", tests 3 and 4 mark their in-flight items busy and test 4 gains a `queued` item that `next` picks; (2) "Steps 2 and 3 skip fallback items."; (3) step 4 starts a fourth item unattended: add "under the same count". Wordings: drop "Ties go to the stuck item (section 9), then" from step 1 and "step 1's ties and" from section 9; section 7: "after *Waiting on Ola*, before the `session.md format:` warnings" (`tools/session_state.py` 399-408); test 10: "one `red`, one `queued`". Not pushed; no CI.
+- **Design review, round 3, 2026-10-25.** `@reviewer`, head `3b0d2d981dfdc348ddc6b37d6fcfa2e5743ebecd`, range `51b3dc93..3b0d2d98`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); about 240. Round 2 closed as given. Applied in this commit: the busy note name is `<persona>-<name>-<HHMMSS>.md` (a longer worktree name no longer collides, e.g. `tri-budget-rms`), with a test 3 case; `next` prints a `busy:` line per skipped item, so a stale note leaves a trace. Not pushed; no CI.
