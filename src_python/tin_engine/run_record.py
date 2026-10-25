@@ -234,8 +234,10 @@ def summary(record: RunRecord) -> str:
     said = [f"{record.triangles} triangles."]
     tolerance, top = by.get("tolerance_m"), by.get("max_error_m")
     asked, cap, tried = by.get("triangles_asked"), by.get("triangles_cap"), by.get("budget_trials")
+    shown = tolerance.value if tolerance is not None else ""
     if asked is not None and cap is not None and tried is not None and tolerance is not None:
-        n, found = record.triangles, f"tolerance {float(tolerance.value):.3g} m"
+        shown = f"{float(tolerance.value):.3g}"
+        n, found = record.triangles, f"tolerance {shown} m"
         trials = plural(tried.value.count(";") + 1, "trial", "trials")
         if top is not None and top.number == 0:
             said = [
@@ -257,7 +259,7 @@ def summary(record: RunRecord) -> str:
         largest = f"{top.number:.5g}"
         if float(top.value) <= float(tolerance.value):
             said.append(
-                f"Every {who} inside the mesh is within {tolerance.value} m of it "
+                f"Every {who} inside the mesh is within {shown} m of it "
                 f"(largest difference {largest} m)."
             )
         else:
