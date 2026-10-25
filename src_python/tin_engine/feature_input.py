@@ -58,6 +58,8 @@ ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"
 MARGIN, DENSIFY = 100.0, 1_000.0
 #: WGS 84's smallest and largest radii of curvature, metres, for ``w(e)``.
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
+#: A land-cover class's share in a hydrological cell; a class without one is unspecified.
+Category = Literal["forest", "lake", "glacier", "savanna", "unspecified"]
 Widening = Callable[[tuple[float, float], tuple[float, float]], float]
 
 
@@ -97,7 +99,8 @@ class Legend(BaseModel):
     ``codes``, when not empty, names the code system the values are integer
     codes of; such a legend labels triangles. ``palette`` colours and names
     those codes. A class whose names are None is dropped; the rest come from a
-    legend file (`tin_engine.legends`)."""
+    legend file (`tin_engine.legends`). ``categories`` holds each class
+    code that names its cell category, ``water_codes`` the water classes."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -114,6 +117,8 @@ class Legend(BaseModel):
     string_codes: Mapping[str, int] = {}
     extra_names: tuple[str, ...] = ()
     splits: tuple[Split, ...] = ()
+    categories: Mapping[int, Category] = {}
+    water_codes: frozenset[int] = frozenset()
 
 
 class FeatureSource(BaseModel):

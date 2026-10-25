@@ -26,7 +26,7 @@ from shapely.geometry.base import BaseGeometry
 
 from tin_engine.features import EdgeVocabulary
 from tin_engine.io.geopackage import APPLICATION_ID
-from tin_engine.io.models import UNDEFINED_SRS, SrsEntry
+from tin_engine.io.models import SHARES, UNDEFINED_SRS, CellTable, ClassFractions, SrsEntry
 
 #: What every ``last_change`` and ``update_time`` says, so the same run gives
 #: the same bytes.
@@ -321,6 +321,50 @@ def write_triangles(
             conn.executemany("INSERT INTO triangles VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
     register_layer(conn, "triangles", "POLYGON", srs_id, _bounds(boxes), z=True)
     build_rtree(conn, "triangles", boxes, batch)
+
+
+def write_cells(conn: sqlite3.Connection, cells: CellTable, srs_id: int) -> None:
+    """The ``cells`` layer: one PointZ row per triangle at its centroid, in
+    triangle order (``fid - 1`` is the index), catchment 1, the plan area, the
+    height, slope, aspect (NULL where NaN) and the shares; registered and indexed."""
+    xyz = cells.midpoints[:, None, :]
+    rec = _records(xyz, srs_id, 1001, [("xyz", "<f8", 3)])
+    rec["xyz"] = cells.midpoints
+    blobs, boxes = _split(rec)
+    names = "".join(f", {name} REAL" for name in SHARES)
+    conn.execute(
+        "CREATE TABLE cells (fid INTEGER PRIMARY KEY, geom POINT, catchment_id INTEGER, "
+        f"area_m2 REAL, z_m REAL, slope_deg REAL, aspect_deg REAL{names})"
+    )
+    aspect = [None if np.isnan(a) else a for a in cells.aspect_deg.tolist()]
+    columns = [cells.area_m2, cells.midpoints[:, 2], cells.slope_deg]
+    rows = zip(
+        range(1, len(blobs) + 1), blobs, [1] * len(blobs), *(c.tolist() for c in columns),
+        aspect, *cells.shares.T.tolist(), strict=True,
+    )  # fmt: skip
+    with _transaction(conn):
+        conn.executemany(f"INSERT INTO cells VALUES ({', '.join('?' * 13)})", rows)
+    register_layer(conn, "cells", "POINT", srs_id, _bounds(boxes), z=True)
+    build_rtree(conn, "cells", boxes)
+
+
+def write_fractions(conn: sqlite3.Connection, fractions: ClassFractions) -> None:
+    """The ``land_cover_fractions`` attributes table: one row per (triangle,
+    class) entry, ``triangle`` the triangle's ``fid``, indexed on it."""
+    rows = np.repeat(np.arange(1, fractions.triangles + 1), np.diff(fractions.offsets))
+    conn.execute(
+        "CREATE TABLE land_cover_fractions (fid INTEGER PRIMARY KEY, triangle INTEGER, "
+        "code INTEGER, fraction REAL)"
+    )
+    with _transaction(conn):
+        conn.executemany(
+            "INSERT INTO land_cover_fractions VALUES (NULL, ?, ?, ?)",
+            zip(
+                rows.tolist(), fractions.classes.tolist(), fractions.fractions.tolist(), strict=True
+            ),
+        )
+    conn.execute("CREATE INDEX land_cover_fractions_triangle ON land_cover_fractions (triangle)")
+    _register_attributes(conn, "land_cover_fractions")
 
 
 def write_lines(

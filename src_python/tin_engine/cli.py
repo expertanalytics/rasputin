@@ -68,6 +68,7 @@ from tin_engine.catchment_batch import (
     run_batch,
     seed_for,
 )
+from tin_engine.cells import categories_of, cell_table
 from tin_engine.chains import start_chains
 from tin_engine.cli_kit import THREADS
 from tin_engine.crs import (
@@ -97,6 +98,7 @@ from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
     SUFFIXES,
+    Category,
     FeatureError,
     FeatureRequest,
     FeatureSet,
@@ -118,7 +120,9 @@ from tin_engine.io.geojson import catchment_geojson
 from tin_engine.io.geopackage_write import (
     Palette,
     create_geopackage,
+    write_cells,
     write_classes,
+    write_fractions,
     write_land_cover,
     write_lines,
     write_run,
@@ -916,6 +920,12 @@ def mesh(
         known,
         _fetch_run(land_cover or "", domain, bbox, out_crs, cache),
     )
+    categories = None  # the cells layer's, checked here before any DEM is read
+    if classes is not None and classes.legend is not None and out.suffix == ".gpkg":
+        try:
+            categories = categories_of(classes.legend)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
@@ -1209,6 +1219,8 @@ def mesh(
         codes_text = str(more["land_cover_codes"])
         if classes.legend is not None:  # names and colours for the .gpkg
             palette = classes.legend.palette
+        elif out.suffix == ".gpkg":
+            more["cells"] = "none, the land cover has no legend"
         values |= more
     if dem_run.cut is not None:
         from tin_engine.io.mesh_index import ConformityError, MeshIndex
@@ -1279,7 +1291,9 @@ def mesh(
     encoders: list[Callable[[], bytes]] = []
     if out.suffix == ".gpkg":
         with clock.phase("write: geopackage"):
-            _write_geopackage(surface, surface_mesh, codes, palette, cover, record, vocabulary)
+            _write_geopackage(
+                surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories
+            )
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
         encoders = [
@@ -1338,10 +1352,13 @@ def _write_geopackage(
     cover: list[tuple[int, BaseGeometry]],
     record: RunRecord,
     vocabulary: EdgeVocabulary,
+    fractions: ClassFractions | None = None,
+    categories: Mapping[int, Category] | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
-    a failed run leaves nothing under the asked name."""
+    a failed run leaves nothing under the asked name. Class ``fractions`` add
+    their long-form table, and with ``categories`` the ``cells`` layer."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
@@ -1359,6 +1376,11 @@ def _write_geopackage(
             write_classes(conn)
             if palette is not None:
                 write_styles(conn, palette, ["triangles", *(["land_cover"] if cover else [])])
+        if fractions is not None:
+            write_fractions(conn, fractions)
+            if categories is not None:
+                cells = cell_table(mesh.vertices, mesh.triangles, fractions, categories)
+                write_cells(conn, cells, srs.srs_id)
         rows = [("rasputin_version", "rasputin version", installed_version(), None)]
         rows.append(("command", "command", _command(), None))
         write_run(conn, [*rows, *((e.name, e.wording, e.value, e.number) for e in record.entries)])

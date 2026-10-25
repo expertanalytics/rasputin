@@ -131,16 +131,19 @@ colour = "#a9b574"
 code = 311
 label = "Broad-leaved forest"
 colour = "#4f8f3f"
+category = "forest"
 
 [[class]]
 code = 312
 label = "Coniferous forest"
 colour = "#1f5a2e"
+category = "forest"
 
 [[class]]
 code = 313
 label = "Mixed forest"
 colour = "#357438"
+category = "forest"
 
 [[class]]
 code = 321
@@ -186,6 +189,7 @@ colour = "#4b3f3a"
 code = 335
 label = "Glaciers and perpetual snow"
 colour = "#eef6fb"
+category = "glacier"
 
 [[class]]
 code = 411
@@ -216,28 +220,33 @@ colour = "#b3bdb3"
 code = 511
 label = "Water courses"
 colour = "#4c8ec4"
+category = "lake"
 water = true
 
 [[class]]
 code = 512
 label = "Water bodies"
 colour = "#3e7bb6"
+category = "lake"
 water = true
 
 [[class]]
 code = 521
 label = "Coastal lagoons"
 colour = "#5b93b3"
+category = "lake"
 water = true
 
 [[class]]
 code = 522
 label = "Estuaries"
 colour = "#5188b4"
+category = "lake"
 water = true
 
 [[class]]
 code = 523
 label = "Sea and ocean"
 colour = "#2b5d8e"
+category = "unspecified"
 water = true
