@@ -17,7 +17,7 @@ separate path. Blocking; the C++ call releases the GIL, so an API worker runs
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -156,7 +156,9 @@ def assign(
 
 
 def fractions_of(
-    offsets: npt.NDArray[np.uint32], classes: npt.NDArray[np.uint8], areas: npt.NDArray[np.float64]
+    offsets: npt.NDArray[np.uint32],
+    classes: npt.NDArray[np.integer[Any]],
+    areas: npt.NDArray[np.float64],
 ) -> ClassFractions:
     """`f[t, k] = a[t, k] / sum_k a[t, k]` (1.1), as the file's float32."""
     counts = offsets[1:].astype(np.int64) - offsets[:-1].astype(np.int64)
@@ -164,11 +166,13 @@ def fractions_of(
         raise ValueError("a triangle has no class area; it is below the arithmetic's resolution")
     totals = np.add.reduceat(areas, offsets[:-1].astype(np.int64)) if len(areas) else areas
     fractions = (areas / np.repeat(totals, counts)).astype(np.float32)
-    return ClassFractions(offsets=offsets, classes=classes, fractions=fractions)
+    return ClassFractions(offsets=offsets, classes=classes.astype(np.int32), fractions=fractions)
 
 
 def dominant(
-    offsets: npt.NDArray[np.uint32], classes: npt.NDArray[np.uint8], areas: npt.NDArray[np.float64]
+    offsets: npt.NDArray[np.uint32],
+    classes: npt.NDArray[np.integer[Any]],
+    areas: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.int32]:
     """Per triangle, the class of the largest area, ties to the smaller class
     (1.4, step 7); classes are ascending within a row, so the first maximum."""

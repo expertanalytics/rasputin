@@ -609,6 +609,35 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
+def read_class_polygons(
+    path: Path, layer: str | None, legend: Legend, mesh_crs: str, xy: npt.NDArray[np.float64]
+) -> list[tuple[int, BaseGeometry]]:
+    """Every polygon of a coded source with its class code, moved to
+    ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of the
+    points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
+    skipped; a value that is no class code is a :class:`FeatureError`."""
+    spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
+
+    def box_for(own: str) -> tuple[float, float, float, float]:
+        ring = shapely.box(*xy.min(axis=0), *xy.max(axis=0)).buffer(MARGIN).exterior
+        near = shapely.get_coordinates(shapely.segmentize(ring, DENSIFY))
+        moved = near if same_crs(own, mesh_crs) else reprojector(mesh_crs, own)(near)
+        x0, y0, x1, y1 = shapely.bounds(shapely.multipoints(moved))
+        return (float(x0), float(y0), float(x1), float(y1))
+
+    read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
+    move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
+    out: list[tuple[int, BaseGeometry]] = []
+    for (fid, g, value), more in zip(read.rows, read.extra or [()] * len(read.rows), strict=True):
+        if g is None or g.is_empty or g.geom_type not in ("Polygon", "MultiPolygon"):
+            continue
+        second = dict(zip(spelt, more, strict=True))
+        code = _code(legend, value, f"{path.name}: feature {fid}", second)
+        flat = shapely.force_2d(g)
+        out.append((code, flat if move is None else shapely.transform(flat, move)))
+    return out
+
+
 def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 

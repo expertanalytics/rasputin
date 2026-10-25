@@ -85,7 +85,7 @@ def write_ply(
             The comment naming the code system is the caller's, in `comments`.
         face_fractions: the sparse table of class fractions per face, written
             as the face lists `land_cover_classes` (`list
-            uchar uchar`) and `land_cover_fractions` (`list uchar float`)
+            uchar int`) and `land_cover_fractions` (`list uchar float`)
             between `vertex_indices` and `land_cover_code`.
 
     Raises:
@@ -183,7 +183,7 @@ def _face_block(
                 f"face_fractions has {fractions.triangles} rows for {len(faces)} faces"
             )
         declaration += [
-            "property list uchar uchar land_cover_classes",
+            "property list uchar int land_cover_classes",
             "property list uchar float land_cover_fractions",
         ]
     if codes is not None:
@@ -223,19 +223,20 @@ def _face_lists(
             rows.append(" ".join(map(str, words)) + ("" if code is None else f" {code[t]}"))
         return _lines(rows)
     tail = 0 if code is None else 4
-    length = 15 + 5 * counts + tail
+    length = 15 + 8 * counts + tail
     start = np.concatenate([[0], np.cumsum(length)[:-1]])
     out = np.zeros(int(length.sum()), dtype=np.uint8)
     out[start] = 3
     out[start[:, None] + 1 + np.arange(12)] = faces.astype("<u4").view(np.uint8).reshape(-1, 12)
     out[start + 13] = counts
     within = np.arange(len(table.classes)) - np.repeat(offsets[:-1], counts)
-    out[np.repeat(start + 14, counts) + within] = table.classes
-    out[start + 14 + counts] = counts
-    at = np.repeat(start + 15 + counts, counts) + 4 * within
+    at = np.repeat(start + 14, counts) + 4 * within
+    out[at[:, None] + np.arange(4)] = table.classes.astype("<i4").view(np.uint8).reshape(-1, 4)
+    out[start + 14 + 4 * counts] = counts
+    at = np.repeat(start + 15 + 4 * counts, counts) + 4 * within
     out[at[:, None] + np.arange(4)] = table.fractions.astype("<f4").view(np.uint8).reshape(-1, 4)
     if code is not None:
-        at = start + 15 + 5 * counts
+        at = start + 15 + 8 * counts
         out[at[:, None] + np.arange(4)] = code.astype("<i4").view(np.uint8).reshape(-1, 4)
     return out.tobytes()
 
