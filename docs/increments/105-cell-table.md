@@ -1,8 +1,8 @@
 # Increment 105: the cell table — hydrological cells on a coarse mesh
 
-**Status: 105c merged (#353); 105a built (branch `worktree-cell-table` at
-`387c84b1`, 122 net lines; section 13), code review next; 105b not
-started.**
+**Status: 105c merged (#353); 105a reviewed, PR #356 (122 net lines;
+section 13); 105b built (branch `worktree-reservoirs` at `c7d17a54`, 87 net
+lines; section 14), code review next.**
 Designed by `@architect`, 2026-10-25,
 on master `074e6322`, worktree `shyft-cells`; round 2 the same day after the
 design review's round 1 (section *Review*) and the rulings the main session
@@ -626,6 +626,45 @@ Kill record (`387c84b1`): six mutants, all killed: the sum of the five
 and savanna subtracted (one mutant), the clamp dropped, the aspect quadrant,
 class 0 as lake, sea as lake, `categories_of` checking every class. Full
 suite 10,167 passed, 18 skipped, 1 xfailed.
+
+## 14. As built (105b)
+
+Red `78d982b6`, green `29b30809`, tests and kill record `c7d17a54`; 87 net
+production lines against 55 (the catalogue route and `_near` below are most
+of the difference). Beyond the design:
+
+- `@tester`'s pins: two overlapping outlines are unioned (0.6875, 0.0625,
+  where a per-polygon sum gives 0.9375); a polygon with a hole; a
+  zero-area triangle has share 0, not NaN; corners with z and a UTM-scale
+  offset (bound 1e-12); the CLI case runs the polygon route with `corine`
+  (T7 named a `coded_map` legend; the raster scene has no lake class), with
+  a file in the mesh CRS and one in WGS 84, and a `.shp` value refused before
+  any phase; a catalogue key gives the lake and reservoir columns bit for bit
+  as the same rectangle given as a file.
+- `--reservoirs` takes a cached catalogue source of features (its
+  `features.gpkg` and layer) as well as a `.gpkg`, `.geojson`, `.json` or
+  `.gml` file; an uncached source is refused naming the `rasputin fetch`
+  run (`_fetch_run`, as for `--land-cover`).
+- `feature_input.read_polygons` reads them; `read_class_polygons`' query
+  box moved into `_near`, which both readers share.
+- The read and the cut run in their own timed phase, `reservoirs`.
+- Refusals, usage errors on `--reservoirs` before any phase: "needs
+  --land-cover and a .gpkg output"; "X is neither a catalogue source of
+  features nor a .geojson, .json, .gpkg, .gml file"; "ID/features.gpkg is
+  not in the cache; run: rasputin fetch ...".
+- Two calls in `cli.mesh` are packed under `# fmt: skip`: `_reservoir_source`
+  (5 arguments) and `_write_geopackage` (10); ruff would put one argument per
+  line.
+- The MCP tool-list cap in `tests/python/test_mcp_schema.py` rose from 25,000
+  to 31,000 bytes by increment 37's rule (20 % above the measured 25,176,
+  rounded up to a thousand).
+- **Known gap:** the run record's `reservoirs` row is the file name, so a
+  catalogue key is recorded as `features.gpkg`, not as the key.
+
+Kill record (`c7d17a54`): 16 mutants, all killed, the design's two targets
+(`min(lake, r)`, `lake -= reservoir`) among them; two survived until the
+`.shp` refusal also asserted no phase ran and a two-layer GeoPackage was
+added. Full suite 10,196 passed, 18 skipped, 1 xfailed.
 
 ## Review
 
