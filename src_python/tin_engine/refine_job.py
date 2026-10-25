@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from tin_engine._core import CheckPoints, RefineOutcome
+from tin_engine._core import CheckPoints, RasterView, RefineOutcome, error_summary
 from tin_engine.budget import Window
 from tin_engine.elevation import Trimmed
 from tin_engine.run_record import Value
@@ -43,7 +43,8 @@ class How:
     """How a start mesh is refined (with ``grid`` and ``checks``, the final
     check against a resampled grid; ``checks`` as blocks are filed into a
     store by the refine that takes them). With ``budget``, ``tolerance`` is
-    set per trial by the search for the window's count."""
+    set per trial by the search for the window's count. With ``rms``, the
+    refined mesh's error summary is measured."""
 
     dem: str
     tolerance: float
@@ -52,6 +53,7 @@ class How:
     grid: TargetGrid | None
     checks: Iterable[Block] | CheckPoints | None
     budget: Window | None = None
+    rms: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,3 +64,14 @@ class Refined:
     trimmed: Trimmed
     values: Mapping[str, Value]  # the run record's entries
     on_frozen: int
+
+
+def error_values(
+    final: RefineOutcome, against: RasterView | CheckPoints, threads: int
+) -> dict[str, Value]:
+    """The record's root-mean-square error and node count for ``final``'s mesh
+    before the trim, against the DEM's nodes or the source's check points."""
+    got = error_summary(
+        against, final.vertices, final.triangles, final.z, final.valid, threads=threads
+    )
+    return {"rms_error_m": got.rms_error, "error_nodes_measured": got.count}

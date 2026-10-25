@@ -116,6 +116,15 @@ public:
         frozen_ = true;
     }
 
+    // The stored (col, row) position add() would give a point at p in the
+    // node rectangle.
+    [[nodiscard]] mesh::MeshVertex position(Point2 p) const noexcept {
+        const raster::RasterGeometry& g = geometry_;
+        const auto [r, dr] = file((g.y_max() - p.y) / g.delta_y(), g.rows());
+        const auto [c, dc] = file((p.x - g.x_min()) / g.delta_x(), g.cols());
+        return {static_cast<double>(c) + static_cast<double>(dc), static_cast<double>(r) + static_cast<double>(dr)};
+    }
+
     // f(MeshVertex p, float z) for every point in cell row `row` whose cell
     // column is in [c0, c1] (inclusive), in stored order. p is the stored
     // fractional (col, row) position.

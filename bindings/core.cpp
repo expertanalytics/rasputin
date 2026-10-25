@@ -26,6 +26,7 @@
 #include <terrain/refinement/check_points.hpp>
 #include <terrain/refinement/constraint_points.hpp>
 #include <terrain/refinement/line_tolerance.hpp>
+#include <terrain/refinement/measure.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
@@ -1197,6 +1198,53 @@ field and slope as refine's, built on the store's geometry; a check point is
 held to the slope of the steepest valid corner of its cell.
 Releases the GIL.
 )doc");
+
+    using terrain::refinement::ErrorSummary;
+    py::class_<ErrorSummary>(m, "ErrorSummary", R"doc(
+What error_summary returned: the largest and the root-mean-square |z - plane|
+over the points measured (0 when none), and how many there were.
+)doc")
+        .def_readonly("max_error", &ErrorSummary::max_error, "The largest error.")
+        .def_property_readonly("rms_error", &ErrorSummary::rms, "The root-mean-square error; 0 when count is 0.")
+        .def_readonly("count", &ErrorSummary::count, "The points measured, each once.");
+    // The mesh's arrays as start_mesh checks them, without constraint edges.
+    const auto summary_mesh = [](const py::object& vertices, const py::object& triangles, const py::object& z,
+                                 const py::object& valid) {
+        return start_mesh("error_summary", vertices, triangles, z, valid, U32(std::vector<py::ssize_t>{0, 2}),
+                          U32(std::vector<py::ssize_t>{0}));
+    };
+    const char* summary_doc = R"doc(
+Measure a mesh as written, once: the largest and the root-mean-square
+|z - plane| over the DEM's valid nodes (a RasterView; corner heights from the
+DEM, as refine takes them) or the frozen store's check points (corner heights
+z where valid), inside the mesh and not on a vertex. A point on an edge shared
+by two triangles counts once, for the lower triangle index; a triangle with an
+invalid corner measures nothing. Arrays as refine_points', without edges. The
+result does not depend on threads (0: all cores). A vertex outside the node
+rectangle or a mis-shaped array is a ValueError, an unfrozen store a
+RuntimeError. Releases the GIL.
+)doc";
+    m.def(
+        "error_summary",
+        [summary_mesh](const BoundRasterView& raster, const py::object& vertices, const py::object& triangles,
+                       const py::object& z, const py::object& valid, unsigned threads) {
+            const auto s = summary_mesh(vertices, triangles, z, valid);
+            const py::gil_scoped_release unlocked;  // `raster` and `s` hold every buffer
+            return std::visit(
+                [&](const auto& v) { return terrain::refinement::error_summary(v, s.mesh, threads); }, raster.view);
+        },
+        py::arg("view"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"), py::kw_only(),
+        py::arg("threads") = 0, summary_doc);
+    m.def(
+        "error_summary",
+        [summary_mesh](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
+                       const py::object& z, const py::object& valid, unsigned threads) {
+            const auto s = summary_mesh(vertices, triangles, z, valid);
+            const py::gil_scoped_release unlocked;
+            return terrain::refinement::error_summary(points, s.mesh, s.z, s.valid, threads);
+        },
+        py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
+        py::kw_only(), py::arg("threads") = 0, summary_doc);
 
     // SeamPoint is {Point2, z, s}: four doubles, read in place by three strided views.
     static_assert(sizeof(SeamPoint) == 4 * sizeof(double) && std::is_standard_layout_v<SeamPoint>);
