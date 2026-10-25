@@ -210,6 +210,25 @@ When `G` is 0 (flat, or no valid cell), `ε` is the cap `m / 2`, including at
 tolerance 0. Within `ε` of `N`, height changes by at most about `tol`, which is
 the scale refinement resolves (Ola).
 
+**Triangle budget.** `rasputin mesh --triangles N [--max-triangles M]`: the
+mesh is asked for by its triangle count instead of by `--tolerance`. A
+search over the tolerance finds one whose written mesh has between 2N − M
+and M triangles (the *window*; M defaults to the larger of ⌊1.05 N⌋ and
+N + 1), and writes exactly the mesh `--tolerance` writes at it; the
+tolerance found is the record's `tolerance_m`. Never more than M. Each
+tolerance tried is a *trial*, at most 12. `src_python/tin_engine/budget.py`;
+`docs/increments/104-triangle-budget.md`, section 3.
+
+**Floor (of a triangle budget).** The mesh no tolerance can shrink: the
+outline, the feature lines and the start-quality points, refined at a
+tolerance of 10⁶ m. Its largest error is the tolerance at and above which
+every mesh is the floor, so a budget answered by the floor reports that
+error as its tolerance. A cap under the floor's count is refused.
+
+**Saturated (trial).** A trial whose largest error is 0: every valid DEM
+node is a mesh vertex, so no smaller tolerance changes the mesh, and the
+search stops there.
+
 ## Land cover
 
 **Legend.** A TOML file that says how to read one land-cover source: the

@@ -36,6 +36,7 @@ from shapely.geometry.base import BaseGeometry
 from tin_engine import cli_kit, edge_strip, final_check, installed_version
 from tin_engine._core import (
     ChainRole,
+    CheckPoints,
     IndexedMesh2,
     LineTolerance,
     NodedPslg,
@@ -49,6 +50,7 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.budget import FLOOR_TOLERANCE, Trial, UnderFloor, Window, search
 from tin_engine.catchment import (
     Catchment,
     CatchmentRequest,
@@ -602,6 +604,24 @@ def mesh(
             "of the DEM; --stride then sets the start grid. Default: no refinement.",
         ),
     ] = None,
+    triangles: Annotated[
+        int | None,
+        typer.Option(
+            "--triangles",
+            min=1,
+            metavar="N",
+            help="Refine to about N triangles instead: the tolerance that gives them is "
+            "found and reported, and the mesh is the one --tolerance writes at it.",
+        ),
+    ] = None,
+    max_triangles: Annotated[
+        int | None,
+        typer.Option(
+            "--max-triangles",
+            metavar="M",
+            help="With --triangles, never more than M triangles. Default: 5 % over N.",
+        ),
+    ] = None,
     tolerance_near: Annotated[
         tuple[Path, float] | None,
         typer.Option(
@@ -938,8 +958,24 @@ def mesh(
             "a domain is meshed from its boundary alone, not a stride grid",
             param_hint="--stride",
         )
-    if domain is not None and tolerance is None:
-        raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
+    if tolerance is not None and triangles is not None:
+        raise typer.BadParameter(
+            "give one of --tolerance and --triangles", param_hint="--triangles"
+        )
+    if max_triangles is not None and (triangles is None or max_triangles <= triangles):
+        raise typer.BadParameter(
+            "needs --triangles, and must be over it", param_hint="--max-triangles"
+        )
+    window = None
+    if triangles is not None:
+        window = Window(
+            triangles, max_triangles or max(math.floor(1.05 * triangles), triangles + 1)
+        )
+    refining = tolerance is not None or window is not None
+    if domain is not None and not refining:
+        raise typer.BadParameter(
+            "--domain needs --tolerance or --triangles", param_hint="--tolerance"
+        )
     if start_min_angle is not None and not (
         math.isfinite(start_min_angle) and 0 <= start_min_angle <= 35
     ):
@@ -947,9 +983,9 @@ def mesh(
             f"must be finite, >= 0 and <= 35, got {start_min_angle}",
             param_hint="--start-min-angle",
         )
-    if start_min_angle is not None and tolerance is None:
+    if start_min_angle is not None and not refining:
         raise typer.BadParameter(
-            "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
+            "--start-min-angle needs --tolerance or --triangles", param_hint="--start-min-angle"
         )
     if start_quality_gain is not None and not (
         math.isfinite(start_quality_gain) and start_quality_gain <= 10
@@ -958,16 +994,19 @@ def mesh(
             f"must be finite and <= 10, got {start_quality_gain}",
             param_hint="--start-quality-gain",
         )
-    if start_quality_gain is not None and tolerance is None:
+    if start_quality_gain is not None and not refining:
         raise typer.BadParameter(
-            "--start-quality-gain needs --tolerance", param_hint="--start-quality-gain"
+            "--start-quality-gain needs --tolerance or --triangles",
+            param_hint="--start-quality-gain",
         )
-    if no_constraint_feet and tolerance is None:
+    if no_constraint_feet and not refining:
         raise typer.BadParameter(
-            "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
+            "--no-constraint-feet needs --tolerance or --triangles",
+            param_hint="--no-constraint-feet",
         )
     flag = "--pieces" if pieces is not None else "--piece-budget"
-    if (pieces, piece_budget) != (None, None) and (tolerance is None or domain is None):
+    cuts = pieces is not None or (piece_budget is not None and window is None)
+    if cuts and (tolerance is None or domain is None):
         raise typer.BadParameter("cutting needs --tolerance and --domain", param_hint=flag)
     try:
         budget = DEFAULT_PIECE_BUDGET if piece_budget is None else parse_bytes(piece_budget)
@@ -1077,6 +1116,8 @@ def mesh(
             res.threads,
             vocabulary,
             part,
+            window,
+            budget if domain is not None else None,
         )
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
@@ -1202,7 +1243,7 @@ def mesh(
         typer.echo(f"{folder / 'index.json'}")
         typer.echo(f"{len(index.pieces)} pieces and their index.json in {folder}", err=True)
         return
-    build = stride_record if tolerance is None else refined_record
+    build = refined_record if refining else stride_record
     record = build(triangles=len(surface_mesh.triangles), threads=res.threads, **values)
 
     vertices = surface_mesh.vertices
@@ -2266,6 +2307,8 @@ def _dem_mesh(
     threads: int = 0,
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY,
     cut: Partitioned | None = None,
+    budget: Window | None = None,
+    piece_budget: int | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile
     (with ``cut``, ``held`` is the window's grid alone, and the cut run is
@@ -2282,13 +2325,15 @@ def _dem_mesh(
     the tile is dropped. ``lines`` and ``steep`` build the line and slope
     tolerances on the tile's grid, passed to every refinement call. With
     ``cut``, a partition of more than one cell, the start has the partition
-    lines too, and the run is cut into pieces.
+    lines too, and the run is cut into pieces. With ``budget`` the tolerance
+    is searched for (``_budget_refined``, which checks ``piece_budget``).
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
     engine's own words, and no file is written.
     """
     tile = held.take() if isinstance(held, Once) else None
+    tolerance = FLOOR_TOLERANCE if budget is not None else tolerance  # each trial sets its own
     meta = held if isinstance(held, RasterMeta) else cast(DemTile, tile).meta
     values: dict[str, Value] = {}
     domain_vertices = domain_holes = None
@@ -2350,7 +2395,7 @@ def _dem_mesh(
                 valid=valid,
             )
     else:
-        how = How(dem, tolerance, min_angle, feet, grid, checks)
+        how = How(dem, tolerance, min_angle, feet, grid, checks, budget)
         refine_with = functools.partial(_refined, tuning=_Tuning(gain, lines, steep, threads))
         if cut is not None:
             from tin_engine.basin_run import cut_run
@@ -2369,9 +2414,14 @@ def _dem_mesh(
                 feature_counts, run_cut,
             )  # fmt: skip
         assert tile is not None
-        once = Once(tile)
-        del tile  # `_refined` drops the last reference before the final check
-        made = refine_with(once, run.mesh, edges, masks, how, clock)
+        if budget is not None:
+            made = _budget_refined(
+                tile, run.mesh, edges, masks, how, clock, refine_with, piece_budget
+            )
+        else:
+            once = Once(tile)
+            del tile  # `_refined` drops the last reference before the final check
+            made = refine_with(once, run.mesh, edges, masks, how, clock)
         trimmed = made.trimmed
         values |= made.values
     if len(trimmed.triangles) == 0:
@@ -2389,6 +2439,78 @@ def _dem_mesh(
         values=values,
         feature_counts=feature_counts,
     )
+
+
+def _budget_refined(
+    tile: DemTile,
+    start: IndexedMesh2,
+    edges: npt.NDArray[np.uint32],
+    masks: npt.NDArray[np.uint32],
+    how: How,
+    clock: PhaseClock,
+    refine_with: Callable[..., Refined],
+    piece_budget: int | None,
+) -> Refined:
+    """The mesh of the tolerance whose written count is in ``how.budget``:
+    each trial is one ``refine_with`` run at its tolerance, the check points
+    filed once for all. The trial with the most triangles not over the cap
+    is kept, so the chosen one is never run twice. With ``piece_budget``, a
+    trial whose tolerance would cut the window into pieces refuses the run
+    before it is refined."""
+    window = how.budget
+    assert window is not None
+    if how.grid is not None and how.checks is not None and not isinstance(how.checks, CheckPoints):
+        how = replace(how, checks=final_check.stored(how.grid, how.checks, clock))
+    kept: Refined | None = None
+
+    def trial(tolerance: float) -> Trial:
+        nonlocal kept
+        if piece_budget is not None:
+            try:
+                cells = partition(
+                    tile.meta.cols, tile.meta.rows, tolerance, piece_budget=piece_budget
+                )
+            except ValueError as exc:
+                raise RunError(str(exc)) from exc
+            if cells.nx * cells.ny > 1:
+                t = f"{tolerance:.3g}"
+                raise typer.BadParameter(
+                    f"--triangles {window.asked} needs a tolerance of {t} m here, which would cut "
+                    f"the window into {cells.nx} \N{MULTIPLICATION SIGN} {cells.ny} pieces under "
+                    f"the piece budget of {piece_budget} bytes; the triangle budget does not run "
+                    f"on pieces yet: use --tolerance {t} with --domain, or raise --piece-budget",
+                    param_hint="--triangles",
+                )
+        made = refine_with(
+            Once(tile), start, edges, masks, replace(how, tolerance=tolerance), clock
+        )
+        count = len(made.trimmed.triangles)
+        if count <= window.cap and (kept is None or count > len(kept.trimmed.triangles)):
+            kept = made
+        at = made.values.get("dem_nodes_at_vertices_max_error_m") or 0.0
+        return Trial(
+            tolerance, count, max(float(cast(float, made.values["max_error_m"])), float(at))
+        )
+
+    try:
+        found = search(trial, window)
+    except UnderFloor as exc:
+        f, e = exc.floor.triangles, exc.floor.max_error
+        raise typer.BadParameter(
+            f"the fewest triangles this DEM gives is {f} triangles, at a largest error of "
+            f"{e:.3g} m; ask for at least {f}",
+            param_hint="--triangles",
+        ) from exc
+    assert kept is not None
+    tried = "; ".join(f"{t.tolerance:.3g} m: {t.triangles}" for t in found.trials)
+    values = dict(kept.values) | {
+        "tolerance_m": found.chosen.tolerance,
+        "triangles_asked": window.asked,
+        "triangles_cap": window.cap,
+        "budget_trials": tried,
+        "budget_window_missed": "yes" if found.missed else None,
+    }
+    return replace(kept, values=values)
 
 
 def _refined(
@@ -2453,10 +2575,12 @@ def _refined(
         values["line_check_dem_nodes_inserted"] = final.nodes_inserted
     else:
         del tile  # the final check runs without the target tile
+        store = how.checks
+        if not isinstance(store, CheckPoints):
+            store = final_check.stored(how.grid, store, clock)
         final, n = final_check.run(
-            out, how.grid, how.checks, tolerance, clock, strip, feet, field, slope, threads,
-            frozen,
-        )  # fmt: skip
+            out, store, tolerance, clock, strip, feet, field, slope, threads, frozen
+        )
         max_error, near_error = final.max_error, final.max_error_near
         share = final.max_slope_share
         inside, tight = final.slope_nodes

@@ -81,6 +81,12 @@ WORDING = {
     "land_cover_area_moved_m2": (
         "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
     ),
+    "triangles_asked": "Triangles asked for (about this many)",
+    "triangles_cap": "Triangles at most",
+    "budget_trials": "Tolerances tried for the triangle budget, and the triangles each gave",
+    "budget_window_missed": (
+        "The triangle budget's window was missed; the nearest count under the cap was written"
+    ),
     "resampled_grid_max_error_m": "Largest error against the resampled grid",
     "max_error_near_lines_m": "Largest height error where the tolerance is the lines' own",
     "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
@@ -227,18 +233,40 @@ def summary(record: RunRecord) -> str:
     by = {e.name: e for e in record.entries}
     said = [f"{record.triangles} triangles."]
     tolerance, top = by.get("tolerance_m"), by.get("max_error_m")
+    asked, cap, tried = by.get("triangles_asked"), by.get("triangles_cap"), by.get("budget_trials")
+    shown = tolerance.value if tolerance is not None else ""
+    figures = ".5g"
+    if asked is not None and cap is not None and tried is not None and tolerance is not None:
+        shown, figures = f"{float(tolerance.value):.3g}", ".3g"
+        n, found = record.triangles, f"tolerance {shown} m"
+        trials = plural(tried.value.count(";") + 1, "trial", "trials")
+        if top is not None and top.number == 0:
+            said = [
+                f"{n} triangles: every DEM node is a vertex, the most this DEM gives "
+                f"(about {asked.value} asked for)."
+            ]
+        elif "budget_window_missed" in by:
+            said = [
+                f"{n} triangles, the most under the cap of {cap.value} (about {asked.value} "
+                f"asked for; no tolerance gave a count in between): {found}, {trials}."
+            ]
+        else:
+            said = [
+                f"{n} triangles, about the {asked.value} asked for (at most {cap.value}): "
+                f"{found} found in {trials}."
+            ]
     if tolerance is not None and top is not None:
         who = "node of the original DEM" if "dem_nodes_checked" in by else "DEM node"
-        largest = f"{top.number:.5g}"
+        largest = format(top.number, figures)
         if float(top.value) <= float(tolerance.value):
             said.append(
-                f"Every {who} inside the mesh is within {tolerance.value} m of it "
+                f"Every {who} inside the mesh is within {shown} m of it "
                 f"(largest difference {largest} m)."
             )
         else:
             said.append(
                 f"The largest difference at a {who} inside the mesh is {largest} m, "
-                f"above the tolerance of {tolerance.value} m."
+                f"above the tolerance of {shown} m."
             )
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:

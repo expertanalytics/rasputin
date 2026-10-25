@@ -167,8 +167,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   grown with mitred corners, a long staircase
                            #   outline in pieces (30d); shapely and NumPy
                            #   only, never imports _core
-  final_check.py           # run: phase 2, the source nodes filed in a
-                           #   CheckPoints, then refine_points from phase 1's
+  final_check.py           # stored: the source nodes filed once in a frozen
+                           #   CheckPoints (a budget run's trials share it);
+                           #   run: phase 2, refine_points from phase 1's
                            #   mesh (15c-2), seams frozen in a cut run (23c);
                            #   takes the edge strip, checked in the same loop
                            #   (15f-3)
@@ -192,6 +193,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   --pieces and --piece-budget, b(T); lines: the
                            #   partition lines clipped to the domain; pure,
                            #   reads no machine (23c)
+  budget.py                # the triangle budget (104): Window, Trial, Found,
+                           #   UnderFloor, search; pure: math and dataclasses
+                           #   only, never imports _core, numpy or typer, and
+                           #   holds no mesh; cli.py's _budget_refined supplies
+                           #   each trial (one _refined run at a tolerance)
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core.

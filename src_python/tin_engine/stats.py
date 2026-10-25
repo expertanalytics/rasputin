@@ -213,7 +213,7 @@ def _named(rows: Sequence[tuple[str, str, str]]) -> list[str]:
 
 _TIMINGS = """\
 Wall clock, `time.perf_counter_ns` (Python) and `std::chrono::steady_clock`
-(inside `refine`), one run, no warm-up. Total is the `mesh` command body, from
+(inside `refine`), {runs}, no warm-up. Total is the `mesh` command body, from
 argument checks to the last file written; interpreter start-up and imports are
 not in it."""
 
@@ -237,7 +237,16 @@ def _timings(report: Report) -> list[str]:
 
     rows = [(n, f"{s:.3f}", share(s)) for n, s in (*report.phases, ("other", total - top))]
     rows.append(("**total**", f"**{total:.3f}**", "**100 %**"))
-    intro = f"{_TIMINGS} Threads used: {report.threads}."
+    tried = [v for _, v, name in (*report.inputs, *report.result) if name == "budget_trials"]
+    runs, budget = "one run", ""
+    if tried:
+        trials = plural(tried[0].count(";") + 1, "trial", "trials")
+        runs = "one run per trial"
+        budget = (
+            f" The triangle budget ran {trials}: the refine, edge strip, final check"
+            " and trim rows sum all of them."
+        )
+    intro = f"{_TIMINGS.format(runs=runs)}{budget} Threads used: {report.threads}."
     lines = ["## Timings", "", intro, "", *_table(("phase", "seconds", "share"), rows), ""]
     if subs:
         lines += ["Sub-rows sum to their parent and are not added to the total.", ""]

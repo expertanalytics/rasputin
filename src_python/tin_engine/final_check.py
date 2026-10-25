@@ -28,27 +28,10 @@ from tin_engine.stats import PhaseClock
 from tin_engine.target_grid import Block, TargetGrid
 
 
-def run(
-    start: RefineOutcome,
-    grid: TargetGrid,
-    checks: Iterable[Block],
-    tolerance: float,
-    clock: PhaseClock,
-    strip: ConstraintCheckPoints | None = None,
-    feet: bool = False,
-    field: LineTolerance | None = None,
-    slope: SlopeTolerance | None = None,
-    threads: int = 0,
-    frozen_mask: int = 0,
-) -> tuple[PointRefineOutcome, int]:
-    """Phase 2 from phase 1's outcome `start`; the outcome and the number of
-    check points stored. `clock` gets the check points' and the final
-    check's rows. `strip`, the edge strip on the target grid, joins the same
-    loop. `feet` puts points near a line onto it first. `field`, if any, sets
-    each triangle's tolerance; `slope`, if any, holds each check point to the
-    tolerance of its cell's slope too. `threads` goes to the C++ as given (0
-    is every core). Nothing goes on an edge whose mask meets `frozen_mask`
-    (a cut run's seams)."""
+def stored(grid: TargetGrid, checks: Iterable[Block], clock: PhaseClock) -> CheckPoints:
+    """The source's nodes `checks` filed on `grid`'s frame and frozen, read-only
+    from then on, so any number of final checks may share it. `clock` gets
+    the check points' rows."""
     h = float(grid.spacing)
     store = CheckPoints(
         x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h, rows=grid.rows, cols=grid.cols
@@ -61,6 +44,30 @@ def run(
     clock.add("check points: project", time.perf_counter() - t0 - adding)
     with clock.phase("check points: store"):
         store.freeze()
+    clock.add("check points: store", adding)
+    return store
+
+
+def run(
+    start: RefineOutcome,
+    store: CheckPoints,
+    tolerance: float,
+    clock: PhaseClock,
+    strip: ConstraintCheckPoints | None = None,
+    feet: bool = False,
+    field: LineTolerance | None = None,
+    slope: SlopeTolerance | None = None,
+    threads: int = 0,
+    frozen_mask: int = 0,
+) -> tuple[PointRefineOutcome, int]:
+    """Phase 2 from phase 1's outcome `start` against the frozen `store`; the
+    outcome and the number of check points stored. `clock` gets the final
+    check's rows. `strip`, the edge strip on the target grid, joins the same
+    loop. `feet` puts points near a line onto it first. `field`, if any, sets
+    each triangle's tolerance; `slope`, if any, holds each check point to the
+    tolerance of its cell's slope too. `threads` goes to the C++ as given (0
+    is every core). Nothing goes on an edge whose mask meets `frozen_mask`
+    (a cut run's seams)."""
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
     out = refine_points(
         store,
@@ -73,7 +80,6 @@ def run(
         slope=slope,
         frozen_mask=frozen_mask,
     )
-    clock.add("check points: store", adding)
     clock.add("final check: scan (parallel)", out.scan_seconds)
     clock.add("final check: split + flip (serial)", out.split_seconds)
     return out, store.size
