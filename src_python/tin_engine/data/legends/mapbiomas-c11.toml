@@ -21,31 +21,37 @@ colour = "#3c3c3c"
 code = 3
 label = "Forest Formation"
 colour = "#1f8d49"
+category = "forest"
 
 [[class]]
 code = 6
 label = "Floodable Forest"
 colour = "#007785"
+category = "forest"
 
 [[class]]
 code = 4
 label = "Savanna Formation"
 colour = "#7dc975"
+category = "savanna"
 
 [[class]]
 code = 7
 label = "Flooded Savanna (beta)"
 colour = "#228c70"
+category = "savanna"
 
 [[class]]
 code = 5
 label = "Mangrove"
 colour = "#04381d"
+category = "forest"
 
 [[class]]
 code = 49
 label = "Wooded Sandbank Vegetation"
 colour = "#02d659"
+category = "forest"
 
 [[class]]
 code = 12
@@ -136,6 +142,7 @@ colour = "#e6ccff"
 code = 9
 label = "Forest Plantation"
 colour = "#7a5900"
+category = "forest"
 
 [[class]]
 code = 21
@@ -176,10 +183,12 @@ colour = "#db4d4f"
 code = 33
 label = "River, Lake and Ocean"
 colour = "#2532e4"
+category = "lake"
 water = true
 
 [[class]]
 code = 31
 label = "Aquaculture"
 colour = "#091077"
+category = "lake"
 water = true

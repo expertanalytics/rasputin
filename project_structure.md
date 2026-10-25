@@ -285,6 +285,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (halving to at most 64 coordinates a piece),
                            #   assign (an STRtree cut per triangle, uncovered
                            #   area class 0); pure, shapely and numpy (105c)
+  cells.py                 # the cell table: categories_of (refuses water
+                           #   without a category), categorise (glacier,
+                           #   lake, forest, savanna, unspecified), geometry (centroid, plan area,
+                           #   slope, aspect), cell_table; pure, numpy (105a)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -445,7 +449,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   multipolygon), create_rtree and fill_rtree
                            #   (build_rtree does both at once), the mesh's
                            #   layers (write_triangles, write_lines,
-                           #   write_land_cover, ...); create_features_table and
+                           #   write_land_cover, write_cells,
+                           #   write_fractions, ...); create_features_table and
                            #   insert_features, the rows of a fetched layer with
                            #   their R-tree entries (63); opens nothing
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,

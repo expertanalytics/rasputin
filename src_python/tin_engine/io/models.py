@@ -263,6 +263,25 @@ class ClassFractions(BaseModel):
         return len(self.offsets) - 1
 
 
+class CellTable(BaseModel):
+    """One hydrological cell per triangle, in triangle order: the plan
+    centroid with the mean corner height (T, 3), plan area, slope and aspect
+    in degrees (aspect NaN where the triangle has no downslope direction), and
+    the plan-area ``shares`` (T, 6) in the order of `SHARES`."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    midpoints: npt.NDArray[np.float64]
+    area_m2: npt.NDArray[np.float64]
+    slope_deg: npt.NDArray[np.float64]
+    aspect_deg: npt.NDArray[np.float64]
+    shares: npt.NDArray[np.float64]
+
+
+#: The share columns of a `CellTable`, as the ``cells`` layer orders them.
+SHARES = ("glacier", "lake", "reservoir", "forest", "unspecified", "savanna")
+
+
 class TileFootprint(BaseModel):
     """One tile as its header describes it: the file's name, its node grid, and
     the dtype it decodes to (float32 unless given)."""

@@ -19,7 +19,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from tin_engine.feature_input import Legend, Split, split_key
+from tin_engine.feature_input import Category, Legend, Split, split_key
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.toml_data import parse
 
@@ -27,7 +27,7 @@ Code = Annotated[int, Field(ge=1, lt=2**31)]
 Edges = list[str] | Literal["drop"]
 #: Bits 10 to 31 hold a legend's extra edge names; bit 9 is the cut's `seam`.
 FIRST_EXTRA_BIT, MAX_EXTRAS = 10, 22
-_CODED = {"code", "label", "colour", "water"}
+_CODED = {"code", "label", "colour", "water", "category"}
 DEFAULT_NAMES = tuple(p.name for p in DEFAULT_VOCABULARY.properties)
 Colour = Annotated[str, Field(pattern=r"^#[0-9a-f]{6}$")]
 
@@ -41,6 +41,7 @@ class _Class(_Strict):
     label: str | None = None
     colour: Annotated[str, Field(pattern=r"^#[0-9a-f]{6}$")] | None = None
     water: bool = False
+    category: Category | None = None
     value: str | None = None
     edges: Edges | None = None
 
@@ -159,6 +160,10 @@ class _File(_Strict):
         for s in self.split:
             palette |= {sub.code: (sub.label, sub.colour) for sub in s.classes}
         splits = sorted(self.split, key=lambda s: s.code)
+        categories = {c.code: c.category for c in self.classes if c.code and c.category}
+        for s in self.split:
+            if s.code in categories:
+                categories |= {sub.code: categories[s.code] for sub in s.classes}
         land = edges(self.edges.land) if self.edges else None
         otherwise = {
             "land": land if land is not None else "drop",
@@ -186,6 +191,8 @@ class _File(_Strict):
                 )
                 for s in splits
             ),
+            categories=categories,
+            water_codes=frozenset(c.code for c in self.classes if c.code and c.water),
         )
 
 

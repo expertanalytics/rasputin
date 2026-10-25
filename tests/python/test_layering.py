@@ -104,6 +104,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.features": "crs fetch.http fetch.plan io.geopackage_write io.repository sources"
                           " tin_engine",  # 63: an ArcGIS layer's polygons into the cache
         "tolerance_field": "crs feature_input",
+        "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
         "legends": "feature_input features toml_data",  # 41: legend files to Legend
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
@@ -111,7 +112,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.network_file": "crs feature_input io.geojson io.geopackage io.repository network",
     },
     {  # L5: flags in, files and stderr out
-        "cli": "_core basin_run budget catchment catchment_batch chains legends cli_kit crs"
+        "cli": "_core basin_run budget catchment catchment_batch cells chains legends cli_kit crs"
                " dem_input domain decompose edge_strip elevation feature_input features"
                " fetch.features fetch.http fetch.nve fetch.plan fetch.run final_check gauge"
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"

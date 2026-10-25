@@ -1,7 +1,8 @@
 # Increment 105: the cell table — hydrological cells on a coarse mesh
 
-**Status: 105c built (branch `worktree-shyft-cells` at `c2520d53`, 146 net
-lines; section 12), code review round 2 next; 105a and 105b not started.**
+**Status: 105c merged (#353); 105a built (branch `worktree-cell-table` at
+`387c84b1`, 122 net lines; section 13), code review next; 105b not
+started.**
 Designed by `@architect`, 2026-10-25,
 on master `074e6322`, worktree `shyft-cells`; round 2 the same day after the
 design review's round 1 (section *Review*) and the rulings the main session
@@ -591,6 +592,41 @@ floor, the depth backstop, the fallback and the rest floor killed; one
 equivalent (an unclipped half inside the clip, which the fallback recuts),
 killed when planted after the fallback.
 
+## 13. As built (105a)
+
+Red `791794f1`, green `5a6a0a69`, test fix and kill record `387c84b1`; 122
+net production lines against 140. Beyond the design:
+
+- `@tester`'s pins: categories as exact dicts per shipped legend;
+  `water_codes` against each TOML's `water = true` classes; a row short of 1
+  and an empty row (unspecified = 1 − sum); zero triangles; a duplicate-vertex
+  triangle (aspect NULL); south-facing in both windings; a UTM-scale offset;
+  without a legend only `land_cover_fractions` is written and the run record
+  says why; the polygon route (105c) writes `cells` too.
+- The R-tree box: SQLite's R-tree stores 32-bit floats and widens a bound
+  by up to 1.5 × 2⁻²³ relative, so the test checks min ≤ midpoint ≤ max and
+  each bound within 2⁻²² relative (checked at coordinates 0.33 to 2.33).
+- `CellTable` and `SHARES` live in `io/models.py` beside `ClassFractions`,
+  so `io/geopackage_write.py` (`write_cells`, `write_fractions`) keeps its
+  imports; `cells.py` builds the table.
+- `category` is accepted only on a coded class; anything but the five names
+  is refused at load.
+- The run record's new name is `cells` ("The cells layer"); its row says
+  "none, the land cover has no legend" when a `.gpkg` run has no legend.
+- The refusal: "class N: water without a category; give it lake or
+  unspecified", a usage error on `--land-cover-legend`.
+- Aspect from the upward normal (the normal flipped to z ≥ 0), so either
+  winding gives one aspect; a vertical or degenerate triangle has slope 0
+  and no aspect.
+- `write_cells`' row `zip` of 13 columns is packed onto three lines under
+  `# fmt: skip`, so the row keeps section 3's column order on three lines
+  instead of about ten.
+
+Kill record (`387c84b1`): six mutants, all killed: the sum of the five
+and savanna subtracted (one mutant), the clamp dropped, the aspect quadrant,
+class 0 as lake, sea as lake, `categories_of` checking every class. Full
+suite 10,167 passed, 18 skipped, 1 xfailed.
+
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `bb7c8e893e8b4793f8515fc42b67449246531d73`, range `074e6322..bb7c8e89`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 305 estimated in three PRs. Holds: Shyft quotes match `geo_personality.h` (TIN slope factor 1.0, grid 0.9); category mapping matches the shipped legends; licences (RGI CC BY 4.0, NVE glaciers CC BY-NC-SA, reservoir layer NLOD 1.0, 1,227 polygons); no GDAL or shapefile reader; T2, T3 recompute; refusal at 2,254 (865 with `--start-min-angle 0`) re-run; probe sums agree. Blocking: (1) no timings: say no step runs without `--land-cover` and time 105a writes and the 105c cut on the delivery's Kultsjön mesh; (2) no test cases for 105b and 105c (the `min(lake, r)` mutant unkilled): add lake 0.5/r 0.8 -> reservoir 0.5, lake 0, and lake 0.5/r 0.2 -> reservoir 0.2, lake 0.3, and a polygon-cut case; (3) refusing an uncategorised water class at load breaks `tests/python/legend_fixtures.py:35,61` and `test_legends.py:761`: amend them in red or refuse only when the cells table is written; (4) wordings: the delivery mesh has 86,537 triangles, not 65,893 (4.4, 4.5), São Francisco about 32 million triangles and 37 million rows; "sums to 1 exactly" is up to 44 x 6e-8 over; the 15.7 s includes reading and reprojecting; Q3 "no new option" but 105b adds `--reservoirs`; "the 104 showcase" -> "the triangle-budget showcase". Not pushed; no CI.
@@ -598,3 +634,4 @@ killed when planted after the fallback.
 - **Design review, round 3, 2026-10-25.** `@reviewer`, head `f8621a02a3988deade98d479b38ba7433cc40487`, range `123820cb..f8621a02`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); estimate 140 + 55 + 145 = 340 in three PRs. Nothing needs Ola to rule; the `int` widening is a default taken, not put to Ola. Applied in this commit: the no-snapping note moved to the per-triangle intersection; the subdivision sentence rewritten; "(section 11, item 6)"; section 11 heading "Default taken, not put to Ola"; the private reader check (`tests/python/vtkread.py` reads the declared type). Not pushed; no CI.
 - **Code review (105c), round 1, 2026-10-25.** `@reviewer`, head `cc1ce5098e2bb6f808751418b2d43ebaa7738276`, range `d0876add..cc1ce509`. Verdict: CHANGES REQUESTED. LOC: 123 net (estimate 145). Kill record covers both named targets (piece count: three mutants killed; the unclipped half equivalent inside the clip, killed after the fallback). Blocking: (1) `cli.py` `_class_fractions` credits a catalogue vector source (e.g. `clc2018`) with `url=str(classes.path)` and today's date; it must use the feature manifest's `url` and `first_fetched`; no test checks it; (2) an uncached catalogue vector source is refused only after meshing ("features.gpkg: unable to open database file"); the refusal belongs in `_class_source`, naming `rasputin fetch clc2018 --bbox …`; (3) prose for the merge: ROADMAP row for 105, the Status line, the as-built record, `polygon_fractions.py` and `read_class_polygons` in `project_structure.md`, section 4.5 with the intersection fallback and the floor of 8. Suggestion: `--land-cover` help to say `clc2018` is accepted. Not pushed; no CI.
 - **Code review (105c), round 2, 2026-10-25.** `@reviewer`, head `ad9ac0993e672573905d45a196ff49d6cadd934c`, range `cc1ce509..ad9ac099`. Verdict: APPROVED WITH WORDINGS. LOC: 146 net (round +23, `cli.py`; estimate 145). Round 1 closed: manifest credit with fallback; uncached layer refused in `_class_source`, exit 2, naming `rasputin fetch <id>`; shared `_fetch_run`; prose matches `polygon_fractions.py`; kill record matches `cc1ce509`. Applied: "(the brief said 5)" dropped from section 12. CI after push.
+- **Code review (105a), round 1, 2026-10-25.** `@reviewer`, head `d945aeab702c75bd51ad13aebff90dc8c5b8d12b`, range `6abe538f..d945aeab`. Verdict: APPROVED WITH WORDINGS. LOC: 122 net (estimate 140). Code matches section 9; section 13's pins match `791794f1`; kill record `387c84b1` covers the seven targets, 6 of 6 killed. Wordings 1-3 applied; wording 4 (the `cells.py` comment says 1e-6 where section 3 says 2.7e-6) left as a follow-up code fix.
