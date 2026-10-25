@@ -1,0 +1,4 @@
+probe_write.py N E OUT, 2026-10-25, battery (94 % to 90 % discharging):
+2254 triangles, 4034 fraction entries: triangles layer 0.01 s; cells layer 0.01 s; land_cover_fractions table 0.00 s; file 1.3 MB
+86537 triangles, 117333 fraction entries: triangles layer 0.46 s; cells layer 0.45 s; land_cover_fractions table 0.09 s; file 46.5 MB
+86537 triangles, 117333 fraction entries: triangles layer 0.45 s; cells layer 0.44 s; land_cover_fractions table 0.09 s; file 46.5 MB
