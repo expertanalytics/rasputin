@@ -1,7 +1,8 @@
 # Increment 104: the triangle budget
 
-**Status: 104a built (section 15), one departure sent back; 104b not
-started. Design round 2 (2026-10-25) answers the round-1 review.** Designed by `@architect`, 2026-10-25, on
+**Status: 104a built and accepted by `@perf` (section 15); code review
+round 1's two findings answered, round 2 next; 104b not started. Design
+round 2 (2026-10-25) answers the round-1 design review.** Designed by `@architect`, 2026-10-25, on
 master `97759b7b`, worktree `tri-budget`. Two pull requests from this one
 file, each with its own red and green commit and review: **104a**, the budget
 (Python only; it drives `refine`, so `@perf` times it), then **104b**, the
@@ -833,8 +834,9 @@ cost were within noise, which it is not (above), hence `--rms`.
 
 ## 15. As built (104a)
 
-Red `c36cdbe1`, green `d3bf0f04`, test fix `8f992e23`; 233 net production
-lines (`python3 tools/count_loc.py 47308a83 8f992e23`). What `@developer`
+Red `c36cdbe1`, green `d3bf0f04`, test fix `8f992e23`; then the commits
+in items 7 to 10, to `8e55deaf`. 247 net production lines against about 220
+(`python3 tools/count_loc.py 47308a83 8e55deaf`). What `@developer`
 pinned beyond the design, and whether the design accepts it (`@architect`,
 2026-10-25):
 
@@ -862,12 +864,38 @@ pinned beyond the design, and whether the design accepts it (`@architect`,
 6. **A trial's largest error is the record's**: `max_error_m` raised to the
    difference at DEM nodes on vertices. Accepted: it is the error the
    record reports, and saturation then means 0 there too.
-7. **No Timings sentence for a budget run.** **Not accepted.** 4.2 asks for
-   one sentence when a budget ran, and the Timings text says "one run, no
-   warm-up" (`stats._TIMINGS`), which on a budget run is false: the refine,
-   strip, final-check and trim rows sum every trial. The sentence (for
-   example "A triangle budget ran: the refinement rows sum its 5 trials.")
-   goes back to `@developer` before review.
+7. **The Timings sentence for a budget run**: missing at `8f992e23`, sent
+   back, and in at `656f5247` (red `13ddebfb`). On a budget run the
+   `--stats` Timings note says "one run per trial" and adds "The triangle
+   budget ran N trials: the refine, edge strip, final check and trim rows
+   sum all of them." The check point store rows are left out: the store is
+   filed once per run. Accepted: it is 4.2's sentence.
+8. **Two extras from Ola beyond the design** (2026-10-25). On a budget run
+   the tolerance found and the largest difference print to three
+   significant figures, in the summary's "within ... m" sentence and in the
+   warning (red `e862b0cc`, green `632cfce5`; red `0eb20d02`, green
+   `67564863`); a `--tolerance` run keeps its digits. The refusal of a
+   budget that the floor already exceeds is headed "Invalid value for
+   --triangles", not "--dem" (`0eb20d02`, `67564863`); the refusal of a
+   budget run that would need pieces followed, as code review round 1
+   suggested (red `7ea9ea53`, green `8e55deaf`). Both refusals keep their
+   messages.
+9. **`@perf` ACCEPTED at `9c7f47aa`**, run on `632cfce5`
+   (`docs/benchmarks/2026-10-25/104a/README.md`). Every `--tolerance` mesh
+   is byte-identical to master's and its timings within noise. On Kultsjön
+   `--triangles 65893` found 9.7885 m in 5 trials, 67,494 triangles, and
+   costs 0.82 s over `--tolerance 10` (`--stats` total 3.714 s against
+   2.896 s; 1.5 s allowed); `--tolerance 9.788516166348431` writes the same
+   `.vtk`. P1, P2, P3 and P4 met; P1's RMS waits for 104b. The two wordings
+   that run reported are item 8's.
+10. **Mutant kill round at `956a261d`** (`@tester`, code review round 1's
+   blocking item): 35 mutants of the named targets A1-A4, A9, A11 and A12,
+   planted one at a time in a scratch copy. 33 killed, 4 of them only after
+   tests were strengthened in that commit; 1 equivalent (a count equal to
+   the cap ends the search before the bracket is read); 1 survivor outside
+   the named targets (a trial's largest error without the error at DEM
+   nodes on vertices), which needs a fixture whose error there exceeds the
+   final check's; none has one today.
 
 ## Review
 
