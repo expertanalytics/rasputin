@@ -2474,11 +2474,12 @@ def _budget_refined(
                 raise RunError(str(exc)) from exc
             if cells.nx * cells.ny > 1:
                 t = f"{tolerance:.3g}"
-                raise RunError(
+                raise typer.BadParameter(
                     f"--triangles {window.asked} needs a tolerance of {t} m here, which would cut "
                     f"the window into {cells.nx} \N{MULTIPLICATION SIGN} {cells.ny} pieces under "
                     f"the piece budget of {piece_budget} bytes; the triangle budget does not run "
-                    f"on pieces yet: use --tolerance {t} with --domain, or raise --piece-budget"
+                    f"on pieces yet: use --tolerance {t} with --domain, or raise --piece-budget",
+                    param_hint="--triangles",
                 )
         made = refine_with(
             Once(tile), start, edges, masks, replace(how, tolerance=tolerance), clock
