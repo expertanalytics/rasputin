@@ -35,6 +35,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 from __future__ import annotations
 
+import datetime
 import os
 import sqlite3
 from collections.abc import Iterable, Sequence
@@ -67,6 +68,7 @@ from gpkg_fixtures import Row as GpkgRow
 from legend_fixtures import uncoded_map
 from plyread import parse_header, read_ply
 from recordread import file_field
+from tin_engine.io.repository import FeatureManifest
 from tin_engine.stats import PhaseClock
 from vector_fixtures import vector_entry
 from vtkread import VtkFile, read_vtk
@@ -332,6 +334,77 @@ class TestSources:
         for ours, theirs in zip(table(run), want, strict=True):
             assert_array_equal(ours, theirs)
         assert file_field(run, "land_cover_source") == CATALOGUE_KEY
+
+
+# ------------------------------------------------------------ a fetched map-service layer
+
+FEATURES_KEY = "cover-layer"
+FEATURES_URL = "https://maps.example.org/arcgis/rest/services/Cover/MapServer/0"
+FIRST_FETCHED = datetime.date(2020, 1, 2)
+
+
+class TestAFetchedLayer:
+    """4.5: a catalogue vector source of kind `arcgis-features`, as `clc2018`
+    is, read from `<cache>/<id>/features.gpkg`. Here a user's entry with
+    `legend = "corine"` over the scene's CRS, so no network is needed."""
+
+    @pytest.fixture
+    def cache(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+        config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
+        entry = {
+            "kind": "arcgis-features", "url": FEATURES_URL, "crs": MESH_CRS,
+            "fields": ["ID", "Code_18"], "legend": "corine",
+            "credit": "Test cover, {url} (accessed on {date})", "licence_note": "Test licence",
+        }  # fmt: skip
+        write_sources(config, {FEATURES_KEY: entry})
+        return tmp_path / "cache"
+
+    def test_the_credit_is_the_manifests_url_and_first_fetch_date(
+        self, cache: Path, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """Review round 1, finding 1: as the raster route credits the cached
+        object's URL and fetch date, a fetched layer is credited with its
+        manifest's `url` and `first_fetched`, not the cache path and today."""
+        where = cache / FEATURES_KEY
+        where.mkdir(parents=True)
+        write_cover_gpkg_layer(where / "features.gpkg", cover_polygons())
+        manifest = FeatureManifest(
+            source=FEATURES_KEY, url=FEATURES_URL, crs=MESH_CRS, id_field="ID",
+            fields=("ID", "Code_18"), rasputin_version="0", first_fetched=FIRST_FETCHED,
+        )  # fmt: skip
+        (where / "manifest.json").write_text(manifest.model_dump_json(), encoding="utf-8")
+        target = tmp_path / "x.vtk"
+        code, output = mesh(
+            dem, domain, target, "--land-cover", FEATURES_KEY, "--cache", str(cache)
+        )
+        assert code == 0, output
+        run = read_vtk(target.read_bytes())
+        assert file_field(run, "land_cover_credit") == (
+            f"Test cover, {FEATURES_URL} (accessed on 2020-01-02)"
+        )
+
+    def test_an_uncached_layer_is_refused_before_any_phase_naming_the_fetch(
+        self, cache: Path, tmp_path: Path, dem: Path, domain: Path, phases: list[str]
+    ) -> None:
+        """Review round 1, finding 2: refused in the option checks, not after
+        meshing with SQLite's "unable to open database file"."""
+        target = tmp_path / "x.vtk"
+        code, output = mesh(
+            dem, domain, target, "--land-cover", FEATURES_KEY, "--cache", str(cache)
+        )
+        assert code == USAGE, output
+        assert phases == [], phases
+        assert not target.exists()
+        assert "unable to open" not in output, output
+        assert "--land-cover" in output, output
+        assert f"rasputinfetch{FEATURES_KEY}" in squashed(output), output
+
+
+def write_cover_gpkg_layer(path: Path, polygons: Sequence[tuple[int, BaseGeometry]]) -> Path:
+    """The cover as a fetch writes it: one table, `features`, keyed by `ID`."""
+    rows = [GpkgRow(k + 1, g, {"Code_18": str(code)}) for k, (code, g) in enumerate(polygons)]
+    return write_gpkg(path, [Layer("features", 31983, rows, pk="ID")])
 
 
 # ------------------------------------------------------------ refusals
