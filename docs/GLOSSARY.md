@@ -219,6 +219,15 @@ tolerance found is the record's `tolerance_m`. Never more than M. Each
 tolerance tried is a *trial*, at most 12. `src_python/tin_engine/budget.py`;
 `docs/increments/104-triangle-budget.md`, section 3.
 
+**Error summary (`--rms`).** One pass over the mesh as written: the
+root-mean-square of |DEM height − mesh height| over the DEM nodes (on a
+reprojected run, the source's nodes) inside the mesh, each counted once,
+those on a vertex skipped. Record keys `rms_error_m` and
+`error_nodes_measured`; the summary line adds "root-mean-square X.XX m".
+Always on a budget run; on a `--tolerance` run with `--rms`.
+`include/terrain/refinement/measure.hpp`;
+`docs/increments/104-triangle-budget.md`, section 4.3.
+
 **Floor (of a triangle budget).** The mesh no tolerance can shrink: the
 outline, the feature lines and the start-quality points, refined at a
 tolerance of 10⁶ m. Its largest error is the tolerance at and above which

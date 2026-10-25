@@ -1,7 +1,7 @@
 # Increment 104: the triangle budget
 
 **Status: 104a built and accepted by `@perf` (section 15); code review
-round 1's two findings answered, round 2 approved; 104b not started. Design
+round 2 approved. 104b built (section 16); `@perf`'s acceptance run next. Design
 round 2 (2026-10-25) answers the round-1 design review.** Designed by `@architect`, 2026-10-25, on
 master `97759b7b`, worktree `tri-budget`. Two pull requests from this one
 file, each with its own red and green commit and review: **104a**, the budget
@@ -565,7 +565,8 @@ floor.)
 `--domain catchment.geojson --out-crs EPSG:31983`; the reprojected path, as
 Kultsjön): floor 49 triangles, E_F = 76.598 m; written counts 64 m: 54;
 16 m: 204; 8 m: 520; 4 m: 1,320; 2 m: 3,178; 1 m: 7,386; 0.5 m: 14,734;
-0.25 m: 24,571. Errors over the 12,681 source nodes inside the mesh: 1 m:
+0.25 m: 24,571. Errors over the 12,681 source nodes inside the mesh,
+those on a vertex included (section 10, B3, has the counts without): 1 m:
 largest 0.99789, RMS 0.42122, mean −0.01554; 0.5 m: 0.49997, 0.21482,
 −0.01158; 2 m: 1.99671, 0.77732, −0.05450; floor: 76.598, 21.243, +10.037.
 Prototype searches: N 7,386 (5 %) → 5 trials (10⁶; 19.149; 4.7874; 1.4224;
@@ -735,12 +736,15 @@ mesh equal to the tolerance run's, each node once).
   the same `count` as the number of points minus coincident ones. Mutation
   target: the ownership rule (lower triangle index).
 - B3 agreement with the record: velhas `--tolerance 1 --rms` has
-  `rms_error_m` 0.42122 ± 0.0001, `error_nodes_measured` 12,681, and
+  `rms_error_m` 0.43903 ± 0.0001, `error_nodes_measured` 11,673, and
   `max_error_m` equal to the summary's
   largest error (the test reads both from the record and recomputes the RMS
   with an independent barycentric evaluation over the fixture's projected
   nodes, the oracle using its own plane, never the record). `--tolerance 2`:
-  0.77732; `--tolerance 0.5`: 0.21482. The equality is pinned on a run
+  12,381 nodes, 0.78668; `--tolerance 0.5`: 10,021, 0.24165. These are
+  section 7's figures less the nodes that became vertices (4.3: a check
+  point coincident with a vertex is skipped; 1,008, 300 and 2,660 of the
+  12,681): 0.42122 × √(12,681 / 11,673) = 0.43903. The equality is pinned on a run
   without feature lines; on a run with them the edge strip's rescan skips
   nodes within its coincidence radius of a strip point (`scan.hpp`'s
   header), so the summary, which skips nothing, may report a larger value
@@ -749,7 +753,7 @@ mesh equal to the tolerance run's, each node once).
   demo run (section 11).
 - B4 thread independence: velhas `--rms --threads 1` and `--threads 4`
   records have a bit-equal `rms_error_m`.
-- B5 the words: the summary line ends with "root-mean-square 0.42 m)" on
+- B5 the words: the summary line ends with "root-mean-square 0.44 m)" on
   velhas at 1 m with `--rms`, and without `--rms` is today's line and the
   record has no `rms_error_m`; `--stats` rows for the two new keys and the
   "error summary" timing row; the `.vtk` file
@@ -757,7 +761,8 @@ mesh equal to the tolerance run's, each node once).
   `test_refine_golden.py` passes unchanged).
 - B6 the budget path measures the chosen trial without asking: A1's record
   has an `rms_error_m` and the budget run on velhas reports
-  `error_nodes_measured` 12,681; its summary line has "root-mean-square".
+  `error_nodes_measured` and `rms_error_m` the oracle's (B3) on the mesh
+  written; its summary line has "root-mean-square".
 
 ## 11. Acceptance (`@perf`)
 
@@ -896,6 +901,38 @@ pinned beyond the design, and whether the design accepts it (`@architect`,
    the named targets (a trial's largest error without the error at DEM
    nodes on vertices), which needs a fixture whose error there exceeds the
    final check's; none has one today.
+
+## 16. As built (104b)
+
+Red `5a3ca6db`, green `8b3a4c17`, test fixes `e9f7a705`, kill round
+`e3487ee6`. 230 net production lines against about 220
+(`python3 tools/count_loc.py d886847d e3487ee6`). Beyond the design, each
+accepted (`@architect`, 2026-10-25):
+
+1. **`@tester`'s pins.** A source node within 1 × 10⁻⁴ m of a vertex is
+   on it and skipped (the store rounds positions by 2⁻²⁴ of a cell; on
+   velhas such nodes lie within 1.25 µm, every other node at least 0.15 m
+   away); this moved B3's and B5's figures (section 10). Nodes on border
+   edges are counted. No nodes gives RMS 0. A vertex outside the raster or
+   with a non-finite coordinate is refused ("outside"), as is a store not
+   frozen ("not frozen"). The summary prints the RMS to two decimals.
+2. **The main session's defaults.** `--rms` is refused without
+   `--tolerance` or `--triangles`, and on a cut run (pieces).
+3. **`@developer`'s.** On the store path, a vertex whose stored check point
+   writes back to it bit for bit is placed at that point, so the point is
+   skipped as a corner and the planes are `refine_points`' own. On the
+   native path the vertex heights are the DEM's, as `scan` takes them. A
+   run over the tolerance gets the RMS in brackets after "above the
+   tolerance of T m". The Python entry is `refine_job.error_values`, not
+   4.3's `measure.summary`.
+4. **The MCP tool-list bound** in `test_mcp_schema.py` rises from 25,000 to
+   31,000 bytes by increment 37's rule (about 20 % over the measure, rounded
+   up to a thousand; 25,178 bytes with the new options).
+5. **Mutant kill round at `e3487ee6`** (`@tester`) over B1-B3: 20 mutants,
+   18 killed (three only after tests were added in that commit), 2
+   equivalent (the on-edge test by `sign` instead of the walk's exact
+   orientation; partials reduced in reverse slot order, still one fixed
+   order).
 
 ## Review
 

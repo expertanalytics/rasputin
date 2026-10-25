@@ -60,7 +60,10 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   over N). The count written is between 2N − M and M when the search finds
   a tolerance that gives one, otherwise the largest it found under M; never
   over M. A cap under the fewest triangles the outline and feature lines
-  make is refused, and the message names that fewest count.
+  make is refused, and the message names that fewest count. A budget run
+  also reports the root-mean-square height error over the DEM nodes inside
+  the mesh; a `--tolerance` run does with `--rms` (one more pass over the
+  mesh).
 - **A tolerance that varies.** `--tolerance-near FILE N` with
   `--tolerance-ramp START END` holds the mesh to N metres along named lines
   (a railway, a river) and ramps to the general tolerance with distance;
