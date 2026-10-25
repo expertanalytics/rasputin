@@ -26,8 +26,8 @@ commits failing tests; **green step**: `@developer` makes them pass.
 verdict into the increment file. **Governed file**: a file the governance
 guard asks about (rule files, hooks, `tools/`). Increment numbers: 57 vector
 datasets in the source catalogue (#275), 58 "class map" renamed "legend"
-(#277), 60 `DemInput.label` deleted (#276), 61 lake-inflow routing
-(private), 62 observed melt-out (private, parked), 63 `rasputin fetch` for
+(#277), 60 `DemInput.label` deleted (#276), 61 routing to a lake
+shore (private), 62 observed melt-out (private, parked), 63 `rasputin fetch` for
 lakes and land cover, 64 `plugin_api` exports `accumulate` (#279), 65 the
 refined mesh is Delaunay at its written coordinates (#278), 66 no two
 vertices written at one point, h22 harness fixes (private push grants,
