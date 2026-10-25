@@ -3,7 +3,7 @@
 Asked for by Ola after he rejected `/clear` by hand (proposal 1 of
 `2026-10-25-merge-352.md` §4, now withdrawn). Times UTC. Source: the main
 transcript `a8ebd8a5-7c29-4760-8e5d-791db2aa83cc.jsonl`, from the
-auto-compaction at 09:56:55 to 21:45 (593 model calls). **Public file**:
+auto-compaction at 09:56:55 to 20:46 (593 model calls). **Public file**:
 private-package work is counted, never described.
 
 ## 0. Duties owed
@@ -16,7 +16,7 @@ Method: each call's context (input + cache read + cache write, from its
 `usage` block) minus the previous call's is the growth; it is shared among the
 items that arrived in between by their size (characters / 4; an image counted
 as 1,600 tokens, the documented ceiling, unchecked against today's page).
-Growth 09:57-21:45: **783 k tokens** (65 k after the compaction to 851 k).
+Growth 09:57-20:46: **783 k tokens** (65 k after the compaction to 851 k).
 
 | What | Share of growth | How |
 |---|---|---|
@@ -27,6 +27,7 @@ Growth 09:57-21:45: **783 k tokens** (65 k after the compaction to 851 k).
 | Harness reminders and hook output | 9 % (71 k) | per-turn reminders, duty line, guard texts |
 | Plots shown to Ola | 2 % (13 k) | 10 images |
 | Wording edits by hand | 1 % | 2 `Edit`, 16 `Write` calls (mostly `session.md`) |
+| Not attributed | 3 % (about 26 k) | |
 
 Cost follows size: every call re-reads the whole context from cache, so the
 weighted cost of a call grows with everything that came before it (Claude Code
