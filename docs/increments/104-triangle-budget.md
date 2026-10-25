@@ -1,7 +1,7 @@
 # Increment 104: the triangle budget
 
-**Status: designed, not built; design round 2 (2026-10-25) answers the
-round-1 review.** Designed by `@architect`, 2026-10-25, on
+**Status: 104a built (section 15), one departure sent back; 104b not
+started. Design round 2 (2026-10-25) answers the round-1 review.** Designed by `@architect`, 2026-10-25, on
 master `97759b7b`, worktree `tri-budget`. Two pull requests from this one
 file, each with its own red and green commit and review: **104a**, the budget
 (Python only; it drives `refine`, so `@perf` times it), then **104b**, the
@@ -830,6 +830,44 @@ floor and the same-mesh guarantee there is nothing to show.
 Defaults taken on review's two open questions (round 1): no mean signed
 error (104b is RMS only); RMS on every tolerance run only if its measured
 cost were within noise, which it is not (above), hence `--rms`.
+
+## 15. As built (104a)
+
+Red `c36cdbe1`, green `d3bf0f04`, test fix `8f992e23`; 233 net production
+lines (`python3 tools/count_loc.py 47308a83 8f992e23`). What `@developer`
+pinned beyond the design, and whether the design accepts it (`@architect`,
+2026-10-25):
+
+1. **`How.tolerance` stays a float**, not `float | None`: on a budget run it
+   holds `FLOOR_TOLERANCE` until each trial replaces it
+   (`replace(how, tolerance=T)`). Accepted. In `_dem_mesh` the value is read
+   only as "refining or not" before the trials, each trial replaces it before
+   `_refined` reads it, and the cut path refuses the budget (4.5). The design's "exactly one set"
+   is lost as a type; nothing reads the placeholder as a tolerance.
+2. **The kept trial is the one with the most triangles not over the cap**,
+   so a missed window needs no rerun. Accepted, and it is section 3's
+   choice, not a new one: every trial before a window hit is over M or
+   under 2N − M, so the hit is the most under the cap; on a miss it is
+   step 4's choice, and ties keep the first, as `search` does. The rerun
+   and its Timings addition (step 4) are gone. Cost: two trial meshes can be
+   alive during a trial (4.2 said one); the kept one has at most M
+   triangles, so the extra memory is bounded by the cap asked for.
+3. **A floor answer reports the floor's largest error** as its tolerance,
+   saturated or not (0 when every node is a vertex). Accepted: section 3,
+   step 1, and A11.
+4. **`--triangles` has `min=1`**: 0 and −5 get click's range error before
+   `Window` sees them. Accepted: the same refusal (4.1), in click's words.
+5. **`--piece-budget` without a domain is accepted and unused.** Accepted:
+   4.2, "without a domain no run is cut today, and the check is not made".
+6. **A trial's largest error is the record's**: `max_error_m` raised to the
+   difference at DEM nodes on vertices. Accepted: it is the error the
+   record reports, and saturation then means 0 there too.
+7. **No Timings sentence for a budget run.** **Not accepted.** 4.2 asks for
+   one sentence when a budget ran, and the Timings text says "one run, no
+   warm-up" (`stats._TIMINGS`), which on a budget run is false: the refine,
+   strip, final-check and trim rows sum every trial. The sentence (for
+   example "A triangle budget ran: the refinement rows sum its 5 trials.")
+   goes back to `@developer` before review.
 
 ## Review
 

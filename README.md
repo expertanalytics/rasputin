@@ -53,6 +53,14 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   until every triangle is within `--tolerance` metres of the DEM, then kept
   Delaunay, with a minimum-angle start so there are no slivers along the
   boundary.
+- **Refinement to a triangle count.** `--triangles N` instead of
+  `--tolerance` asks for about N triangles: rasputin searches for the
+  tolerance that gives them, reports it, and writes the mesh `--tolerance`
+  writes at that tolerance. `--max-triangles M` is the hard cap (default 5 %
+  over N). The count written is between 2N − M and M when the search finds
+  a tolerance that gives one, otherwise the largest it found under M; never
+  over M. A cap under the fewest triangles the outline and feature lines
+  make is refused, and the message names that fewest count.
 - **A tolerance that varies.** `--tolerance-near FILE N` with
   `--tolerance-ramp START END` holds the mesh to N metres along named lines
   (a railway, a river) and ramps to the general tolerance with distance;
@@ -90,6 +98,14 @@ rasputin mesh \
     --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-legend corine \
     --tolerance 5 \
     --out quarter_landcover.vtk
+
+# The same quarter disc with about 100,000 triangles: the tolerance
+# that gives them is found and reported.
+rasputin mesh \
+    --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif \
+    --domain docs/benchmarks/2026-09-26/quarter.geojson \
+    --triangles 100000 \
+    --out quarter_budget.vtk
 
 # Natural colours for the land-cover classes, for ParaView.
 rasputin palette corine --out corine.json
