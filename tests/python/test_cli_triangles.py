@@ -95,6 +95,12 @@ def budget_trials(record: dict[str, Any]) -> list[tuple[float, int]]:
     return pairs
 
 
+def timings_note(stats: str) -> str:
+    """The `--stats` Timings note: the prose between the heading and its table."""
+    after = stats.split("## Timings", 1)[1]
+    return squashed(after.split("\n|", 1)[0])
+
+
 @dataclass
 class RefinedCalls:
     count: int = 0
@@ -151,6 +157,16 @@ class TestA1Window:
     def test_stats_has_a_row_for_each_budget_key(self, velhas_7386: Run) -> None:
         names = stats_names(velhas_7386.stats)
         assert {"triangles_asked", "triangles_cap", "budget_trials"} <= set(names)
+
+    def test_the_timings_note_says_its_rows_sum_the_five_trials(self, velhas_7386: Run) -> None:
+        """Section 4.2: the refine, strip, check and trim rows add every trial's time."""
+        note = timings_note(velhas_7386.stats)
+        assert squashed("triangle budget") in note, note
+        assert squashed("sum") in note and squashed("5 trials") in note, note
+
+    def test_a_tolerance_run_has_no_budget_sentence(self, tmp_path: Path, bumpy: Path) -> None:
+        note = timings_note(mesh_run(tmp_path, "--dem", str(bumpy), "--tolerance", "5").stats)
+        assert "trial" not in note and squashed("triangle budget") not in note, note
 
     def test_five_trials_ran_and_none_again(self, tmp_path: Path, trials: RefinedCalls) -> None:
         """The window's trial is the mesh kept: no rerun on a hit."""
@@ -319,6 +335,11 @@ class TestA11Saturated:
         assert run.record["tolerance_m"] == 0.0
         assert len(budget_trials(run.record)) == 1
         assert "budget_window_missed" not in run.record
+
+    def test_the_timings_note_counts_one_trial(self, tmp_path: Path, bumpy: Path) -> None:
+        run = mesh_run(tmp_path, "--dem", str(bumpy), "--triangles", "639")
+        note = timings_note(run.stats)
+        assert squashed("triangle budget") in note and squashed("1 trial") in note, note
 
     def test_a_window_above_every_node_writes_every_node_and_says_so(
         self, tmp_path: Path, bumpy: Path
