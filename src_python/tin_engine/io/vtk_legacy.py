@@ -96,7 +96,7 @@ def write_vtk(
             `land_cover_codes` when non-empty and `triangle_codes` is given.
         class_fractions: the sparse table of class fractions per triangle,
             written as the dataset arrays `land_cover_offsets`
-            (`unsigned_int`), `land_cover_classes` (`unsigned_char`) and
+            (`unsigned_int`), `land_cover_classes` (`int`) and
             `land_cover_fractions` (`float`).
 
     Raises:
@@ -148,7 +148,7 @@ def write_vtk(
         arrays: tuple[npt.NDArray[np.generic], ...] = (
             class_fractions.offsets, class_fractions.classes, class_fractions.fractions,
         )  # fmt: skip
-        types = ("unsigned_int", "unsigned_char", "float")
+        types = ("unsigned_int", "int", "float")
         dataset += [
             _numeric(name, values, type_name, binary)
             for name, values, type_name in zip(FRACTION_ARRAYS, arrays, types, strict=True)

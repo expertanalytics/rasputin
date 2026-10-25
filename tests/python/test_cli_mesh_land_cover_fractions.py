@@ -180,7 +180,7 @@ class TestTheFile:
     def test_the_arrays_have_the_designs_types_and_one_row_per_triangle(self, run: Covered) -> None:
         offsets, classes, fractions = (run.vtk.field_data[n] for n in ARRAYS)
         assert (offsets.type_name, classes.type_name, fractions.type_name) == (
-            "unsigned_int", "unsigned_char", "float",
+            "unsigned_int", "int", "float",
         )  # fmt: skip
         assert len(run.offsets) == len(run.vtk.polygons) + 1
         assert run.offsets[0] == 0 and run.offsets[-1] == len(run.classes) == len(run.fractions)

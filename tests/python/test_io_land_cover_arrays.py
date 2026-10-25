@@ -26,12 +26,14 @@ from tin_engine.io.vtk_legacy import write_vtk
 from vtkread import VtkFile, read_vtk
 
 #: Four triangles: two classes, one, two, one. Class 0 (no data) among them,
-#: and a fraction that is not exact in binary (0.4) to show the float32 width.
+#: a fraction that is not exact in binary (0.4) to show the float32 width, and
+#: an AR50 split code (3031) and a large code past 2^16 to show the int32 width
+#: (`docs/increments/105-cell-table.md` 4.5).
 OFFSETS = np.array([0, 2, 3, 5, 6], dtype=np.uint32)
-CLASSES = np.array([3, 15, 33, 0, 24, 62], dtype=np.uint8)
+CLASSES = np.array([3, 15, 33, 0, 3031, 2**31 - 1], dtype=np.int32)
 FRACTIONS = np.array([0.25, 0.75, 1.0, 0.4, 0.6, 1.0], dtype=np.float32)
 #: 1.4 step 7: the largest fraction's class per triangle.
-CODES = np.array([15, 33, 24, 62], dtype=np.int32)
+CODES = np.array([15, 33, 3031, 2**31 - 1], dtype=np.int32)
 NAMES = ("land_cover_offsets", "land_cover_classes", "land_cover_fractions")
 
 
@@ -64,7 +66,7 @@ class TestVtkFieldData:
         vtk = vtk_with(binary, class_fractions=table())
         offsets, classes, fractions = (vtk.field_data[name] for name in NAMES)
         assert offsets.type_name == "unsigned_int"
-        assert classes.type_name == "unsigned_char"
+        assert classes.type_name == "int"
         assert fractions.type_name == "float"
         assert (offsets.components, classes.components, fractions.components) == (1, 1, 1)
         assert_array_equal(np.asarray(offsets.values), OFFSETS)
@@ -132,7 +134,7 @@ class TestPlyFaceLists:
             "vertex_indices", "land_cover_classes", "land_cover_fractions", "land_cover_code",
         ]  # fmt: skip
         classes, fractions, code = face.properties[1:]
-        assert (classes.count_type, classes.type_name) == ("uchar", "uchar")
+        assert (classes.count_type, classes.type_name) == ("uchar", "int")
         assert (fractions.count_type, fractions.type_name) == ("uchar", "float")
         assert (code.count_type, code.type_name) == (None, "int")
 
@@ -164,11 +166,11 @@ class TestPlyFaceLists:
             self.surface(ascii=True, faces=TRIANGLES[:3], face_codes=CODES[:3])
 
     def test_a_face_of_256_classes_is_refused_as_the_lists_count_is_a_uchar(self) -> None:
-        """`list uchar ...` counts to 255; a row of every uint8 class (the
-        only way past it) is refused rather than written short."""
+        """`list uchar ...` counts to 255; a row of 256 classes is refused
+        rather than written short."""
         crowded = table(
             offsets=np.array([0, 256, 257, 258, 259], dtype=np.uint32),
-            classes=np.concatenate([np.arange(256), [0, 0, 0]]).astype(np.uint8),
+            classes=np.concatenate([np.arange(256), [0, 0, 0]]).astype(np.int32),
             fractions=np.concatenate([np.full(256, 1 / 256), [1.0, 1.0, 1.0]]).astype(np.float32),
         )
         with pytest.raises(ValueError, match="255"):

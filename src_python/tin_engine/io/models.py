@@ -231,13 +231,13 @@ class ClassFractions(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     offsets: npt.NDArray[np.uint32]
-    classes: npt.NDArray[np.uint8]
+    classes: npt.NDArray[np.int32]
     fractions: npt.NDArray[np.float32]
 
     @field_validator("offsets", "classes", "fractions")
     @classmethod
     def _one_dimensional(cls, value: npt.NDArray[Any], info: ValidationInfo) -> npt.NDArray[Any]:
-        want = {"offsets": np.uint32, "classes": np.uint8, "fractions": np.float32}[
+        want = {"offsets": np.uint32, "classes": np.int32, "fractions": np.float32}[
             str(info.field_name)
         ]
         if value.ndim != 1 or value.dtype != want:

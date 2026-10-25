@@ -22,7 +22,7 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   `ValueError`. Releases the GIL; `threads` 0 is all cores.
 - `tin_engine.io.models.ClassFractions(offsets, classes, fractions)`: frozen;
   `offsets` uint32 `(T + 1,)` starting at 0, non-decreasing, ending at
-  `len(classes)`; `classes` uint8 and `fractions` float32 of one length; the
+  `len(classes)`; `classes` int32 and `fractions` float32 of one length; the
   arrays are kept as given (another dtype is refused, not converted);
   `triangles` is T. Anything else is a `ValueError` (pydantic's).
 - `tin_engine.land_cover_fractions.row_areas(window: ClassWindow, crs: str)
@@ -31,12 +31,12 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
   pyproj.Geod"), or on its grid plane for a projected raster.
 - `io.vtk_legacy.write_vtk(..., class_fractions: ClassFractions | None = None)`:
   FieldData `land_cover_offsets` (`unsigned_int`), `land_cover_classes`
-  (`unsigned_char`), `land_cover_fractions` (`float`); the three names are
+  (`int`), `land_cover_fractions` (`float`); the three names are
   reserved like `land_cover_codes`; a table whose T is not the triangle
   count is a `ValueError`.
 - `io.ply.write_ply(..., face_fractions: ClassFractions | None = None)`: the
   face element's properties in order `vertex_indices`, `land_cover_classes`
-  (`list uchar uchar`), `land_cover_fractions` (`list uchar float`),
+  (`list uchar int`), `land_cover_fractions` (`list uchar float`),
   `land_cover_code` (`int`); with `edges` a `ValueError`.
 - `rasputin mesh --land-cover KEY [--land-cover-year Y]` (section 6): KEY a
   catalogue source of classes read from `--cache`, the year's object as
