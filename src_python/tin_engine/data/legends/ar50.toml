@@ -35,6 +35,7 @@ colour = "#ffd16e"
 code = 30
 label = "Forest"
 colour = "#9ecc73"
+category = "forest"
 
 [[class]]
 code = 50
@@ -50,17 +51,20 @@ colour = "#73dfff"
 code = 70
 label = "Snow and glacier"
 colour = "#ffffff"
+category = "glacier"
 
 [[class]]
 code = 81
 label = "Freshwater"
 colour = "#91e7ff"
+category = "lake"
 water = true
 
 [[class]]
 code = 82
 label = "Ocean"
 colour = "#d2ffff"
+category = "unspecified"
 water = true
 
 [[class]]
