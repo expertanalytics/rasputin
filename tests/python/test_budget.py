@@ -14,6 +14,7 @@ import math
 from collections.abc import Callable
 
 import pytest
+
 from tin_engine.budget import (
     FLOOR_TOLERANCE,
     MAX_TRIALS,
@@ -212,6 +213,20 @@ class TestA9TrialCap:
         assert found.chosen.triangles == max(under)
         assert any(t.triangles > GAP_WINDOW.cap for t in found.trials)
 
+    def test_the_largest_under_the_cap_is_chosen_when_it_is_not_the_last(self) -> None:
+        """A dip: the last trial, at 10.91 m, gives fewer triangles than the
+        one at 10.93 m before it, and the choice is the larger."""
+
+        def dipped(tolerance: float) -> Trial:
+            t = GAP(tolerance)
+            return Trial(tolerance, 59_000, t.max_error) if 10.90 < tolerance < 10.92 else t
+
+        found = search(dipped, GAP_WINDOW)
+        assert found.missed
+        assert len(found.trials) == 12
+        assert found.trials[-1].triangles == 59_000
+        assert found.chosen.triangles == 59_817
+
     @pytest.mark.parametrize("cap", [3, 4, 6, 9])
     def test_every_trial_counts_toward_the_cap_given(self, cap: int) -> None:
         recorded = Recorded(GAP)
@@ -249,7 +264,7 @@ class TestA9TrialCap:
         assert found.missed
         assert found.chosen.triangles == 1400
         assert found.trials[-1].max_error == 0.0
-        assert len(found.trials) <= MAX_TRIALS
+        assert len(found.trials) == 7  # the floor and six quarterings, the last saturated
 
 
 # ---------------------------------------------------------------- A11: saturation

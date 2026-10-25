@@ -23,6 +23,7 @@ from typer.testing import Result
 from cli_helpers import USAGE, crossing_lines, plain, rough_dem, runner, squashed
 from recordread import stats_names
 from tin_engine import cli
+from tin_engine.budget import FLOOR_TOLERANCE, Found, Trial, Window
 from tin_engine.cli import app
 from vtkread import VtkFile, read_vtk
 
@@ -260,6 +261,27 @@ class TestA4SameMesh:
             ), key
             np.testing.assert_array_equal(mine.values, theirs.values, err_msg=key)
         assert not set(BUDGET_KEYS) & set(budget.field_data)
+
+    def test_a_missed_window_writes_the_chosen_trials_mesh_not_the_last(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Section 15, item 2: the mesh kept is the trial with the most
+        triangles under the cap, so a miss whose last trial has fewer
+        (velhas at 1.5 m: 4590, then 3 m) writes the 1.5 m mesh."""
+
+        def missing(trial: Callable[[float], Trial], window: Window) -> Found:
+            tried = tuple(trial(t) for t in (FLOOR_TOLERANCE, 1.5, 3.0))
+            assert tried[2].triangles < tried[1].triangles <= window.cap
+            return Found(tried[1], tried, True)
+
+        monkeypatch.setattr(cli, "search", missing)
+        run = mesh_run(tmp_path, *VELHAS_ARGS, "--triangles", "7386", name="budget")
+        assert run.record["budget_window_missed"] == "yes"
+        assert run.record["tolerance_m"] == 1.5
+        assert run.triangles == budget_trials(run.record)[1][1] == 4590
+        again = mesh_run(tmp_path, *VELHAS_ARGS, "--tolerance", "1.5", name="tolerance")
+        np.testing.assert_array_equal(run.vtk.points, again.vtk.points)
+        np.testing.assert_array_equal(np.array(run.vtk.polygons), np.array(again.vtk.polygons))
 
 
 # ---------------------------------------------------------------- A5: the native path
