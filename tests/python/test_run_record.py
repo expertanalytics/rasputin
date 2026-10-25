@@ -694,3 +694,49 @@ class TestWrittenDelaunayFields:
             self.WORDING["edges_not_delaunay_as_written"],
             "0",
         )
+
+
+# ---------------------------------------------------------------- the triangle budget
+
+
+class TestBudgetFields:
+    """`docs/increments/104-triangle-budget.md`, *4.4 The record and the words*:
+    a budget run's four entries, after the largest error, none in the file."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "triangles_asked": "Triangles asked for (about this many)",
+        "triangles_cap": "Triangles at most",
+        "budget_trials": ("Tolerances tried for the triangle budget, and the triangles each gave"),
+        "budget_window_missed": (
+            "The triangle budget's window was missed; the nearest count under the cap was written"
+        ),
+    }
+    TRIALS = "1e+06 m: 49; 19.1 m: 157; 4.79 m: 1004; 1.42 m: 4861; 1.04 m: 7106"
+
+    def budget(self, rr: ModuleType) -> Any:
+        return projected(
+            rr,
+            triangles_asked=7386,
+            triangles_cap=7755,
+            budget_trials=self.TRIALS,
+            budget_window_missed="yes",
+        )
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_in_record_order_after_the_largest_error(self, rr: ModuleType) -> None:
+        order = list(rr.WORDING)
+        at = [order.index(name) for name in ("max_error_m", *self.WORDING)]
+        assert at == sorted(at), at
+
+    def test_none_goes_into_the_file(self, rr: ModuleType) -> None:
+        got = fields(rr, self.budget(rr))
+        assert not set(self.WORDING) & set(got), got
+
+    def test_each_is_a_stats_row(self, rr: ModuleType) -> None:
+        got = rows(rr, self.budget(rr))
+        assert got["triangles_asked"] == (self.WORDING["triangles_asked"], "7386")
+        assert got["budget_trials"] == (self.WORDING["budget_trials"], self.TRIALS)
+        assert got["budget_window_missed"] == (self.WORDING["budget_window_missed"], "yes")

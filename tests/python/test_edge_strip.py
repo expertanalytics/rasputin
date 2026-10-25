@@ -5,7 +5,8 @@
 `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip,
 start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock
 rows, no geometry. `final_check.run` gains `strip=None`, passed on to
-`refine_points`.
+`refine_points`. The check points are filed by `final_check.stored(grid,
+checks, clock)`, and `run` takes the frozen store in the grid's place.
 
 The fake replaces the two `_core` functions wherever `edge_strip` reads them,
 as module attributes or through a `_core` attribute; which import style the
@@ -196,11 +197,13 @@ class TestFinalCheckPassesTheStripOn:
 
     def test_with_a_strip(self, seen: list[dict[str, Any]]) -> None:
         strip = object()
-        final_check.run(start_mesh(), self.grid(), [], 1.0, ticking(), strip=strip)  # type: ignore[arg-type, call-arg]
+        store = final_check.stored(self.grid(), [], ticking())
+        final_check.run(start_mesh(), store, 1.0, ticking(), strip=strip)  # type: ignore[arg-type]
         ((call,),) = (seen,)
         assert self.strip_of(call) is strip
 
     def test_without_one(self, seen: list[dict[str, Any]]) -> None:
-        final_check.run(start_mesh(), self.grid(), [], 1.0, ticking())  # type: ignore[arg-type]
+        store = final_check.stored(self.grid(), [], ticking())
+        final_check.run(start_mesh(), store, 1.0, ticking())  # type: ignore[arg-type]
         ((call,),) = (seen,)
         assert self.strip_of(call) is None

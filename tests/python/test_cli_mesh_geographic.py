@@ -784,7 +784,7 @@ def test_the_final_checks_timing_rows_are_not_zero(
 
     def spying(*args: Any, **kwargs: Any) -> Any:
         outcome, n = real(*args, **kwargs)
-        clock = kwargs["clock"] if "clock" in kwargs else args[4]
+        clock = kwargs["clock"] if "clock" in kwargs else args[3]  # run(start, store, tol, clock)
         seen.append((outcome, clock))
         return outcome, n
 
