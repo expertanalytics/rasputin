@@ -1,7 +1,8 @@
 # Increment 105: the cell table — hydrological cells on a coarse mesh
 
-**Status: 105c built (branch `worktree-shyft-cells` at `c2520d53`, 146 net
-lines; section 12), code review round 2 next; 105a and 105b not started.**
+**Status: 105c merged (#353); 105a built (branch `worktree-cell-table` at
+`387c84b1`, 122 net lines; section 13), code review next; 105b not
+started.**
 Designed by `@architect`, 2026-10-25,
 on master `074e6322`, worktree `shyft-cells`; round 2 the same day after the
 design review's round 1 (section *Review*) and the rulings the main session
@@ -590,6 +591,40 @@ Kill record (`cc1ce509`): every mutant on the piece count, the `most`
 floor, the depth backstop, the fallback and the rest floor killed; one
 equivalent (an unclipped half inside the clip, which the fallback recuts),
 killed when planted after the fallback.
+
+## 13. As built (105a)
+
+Red `791794f1`, green `5a6a0a69`, test fix and kill record `387c84b1`; 122
+net production lines against 140. Beyond the design:
+
+- `@tester`'s pins: categories as exact dicts per shipped legend;
+  `water_codes` against each TOML's `water = true` classes; a row short of 1
+  and an empty row (unspecified = 1 − sum); zero triangles; a duplicate-vertex
+  triangle (aspect NULL); south-facing in both windings; a UTM-scale offset;
+  without a legend only `land_cover_fractions` is written and the run record
+  says why; the polygon route (105c) writes `cells` too.
+- The R-tree box: SQLite's R-tree stores 32-bit floats and widens a bound
+  by up to 1.5 × 2⁻²³ relative, so the test checks min ≤ midpoint ≤ max and
+  each bound within 2⁻²² relative (checked at coordinates 0.33 to 2.33).
+- `CellTable` and `SHARES` live in `io/models.py` beside `ClassFractions`,
+  so `io/geopackage_write.py` (`write_cells`, `write_fractions`) keeps its
+  imports; `cells.py` builds the table.
+- `category` is accepted only on a coded class; anything but the five names
+  is refused at load.
+- The run record's new name is `cells` ("The cells layer"); its row says
+  "none, the land cover has no legend" when a `.gpkg` run has no legend.
+- The refusal: "class N: water without a category; give it lake or
+  unspecified", a usage error on `--land-cover-legend`.
+- Aspect from the upward normal (the normal flipped to z ≥ 0), so either
+  winding gives one aspect; a vertical or degenerate triangle has slope 0
+  and no aspect.
+- `write_cells`' row `zip` of 13 columns is packed onto three lines under
+  `# fmt: skip`.
+
+Kill record (`387c84b1`): six mutants, all killed: the sum of the five
+and savanna subtracted (one mutant), the clamp dropped, the aspect quadrant,
+class 0 as lake, sea as lake, `categories_of` checking every class. Full
+suite 10,167 passed, 18 skipped, 1 xfailed.
 
 ## Review
 
