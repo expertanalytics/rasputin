@@ -265,9 +265,14 @@ def test_t4_cells_columns_and_registration(conn: sqlite3.Connection) -> None:
 
 @needs_rtree
 def test_t4_cells_rtree_has_one_point_box_per_triangle(conn: sqlite3.Connection) -> None:
-    boxes = conn.execute("SELECT id, minx, maxx, miny, maxy FROM rtree_cells_geom ORDER BY id")
+    # SQLite's R-tree stores 32-bit floats; when the cast lands on the wrong
+    # side it scales by 1 -+ 2**-23 and casts again, so each box contains its
+    # midpoint within 1.5 * 2**-23 relative; 2**-22 bounds it, at any scale.
+    rows = conn.execute("SELECT id, minx, maxx, miny, maxy FROM rtree_cells_geom ORDER BY id")
+    boxes = np.array([r[1:] for r in rows])
     mid, *_ = cells.geometry(VERTICES, TRIANGLES)
-    assert_allclose([b[1:] for b in boxes], mid[:, [0, 0, 1, 1]], rtol=1e-15)
+    assert (boxes[:, [0, 2]] <= mid[:, :2]).all() and (mid[:, :2] <= boxes[:, [1, 3]]).all()
+    assert_allclose(boxes, mid[:, [0, 0, 1, 1]], rtol=2.0**-22, atol=0)
     assert conn.execute("SELECT count(*) FROM rtree_cells_geom").fetchone() == (3,)
 
 
