@@ -52,6 +52,7 @@ from test_cli_mesh_features import GALLERY, SQUARE
 from test_cli_mesh_geographic import TARGET, VELHAS
 from test_cli_mesh_land_cover_fractions import classes, covered, offline
 from test_cli_mesh_stats import section
+from test_cli_rms import Summaries
 from test_cli_tolerance_slope import STEEP, box, v2
 from tin_engine.cli import app
 from tin_engine.crs import same_crs
@@ -240,7 +241,7 @@ class TestT6TheOptionAndTheVariable:
 
 
 class TestT7EveryCoreCallGetsTheCount:
-    """Five `_core` entry points take `threads`; each call site passes the count."""
+    """Six `_core` entry points take `threads`; each call site passes the count."""
 
     def test_refine_and_refine_strip(
         self, tmp_path: Path, bumpy: Path, monkeypatch: pytest.MonkeyPatch
@@ -260,6 +261,13 @@ class TestT7EveryCoreCallGetsTheCount:
         out = tmp_path / "x.vtk"
         mesh(*VELHAS_RUN, "--threads", "3", "--out", str(out))
         assert points.threads() == [3]
+        written(out)
+
+    def test_error_summary(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        summaries = Summaries(monkeypatch)
+        out = tmp_path / "x.vtk"
+        mesh(*VELHAS_RUN, "--rms", "--threads", "3", "--out", str(out))
+        assert summaries.threads() == [3]
         written(out)
 
     def test_slope_tolerance(

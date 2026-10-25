@@ -792,3 +792,67 @@ class TestBudgetFields:
         assert got["triangles_asked"] == (self.WORDING["triangles_asked"], "7386")
         assert got["budget_trials"] == (self.WORDING["budget_trials"], self.TRIALS)
         assert got["budget_window_missed"] == (self.WORDING["budget_window_missed"], "yes")
+
+
+# ---------------------------------------------------------------- the error summary
+
+
+class TestErrorSummaryFields:
+    """`docs/increments/104-triangle-budget.md`, *4.4 The record and the words*:
+    the error summary's two entries, after the budget's, none in the file; the
+    summary sentence ends with the root-mean-square when it was measured."""
+
+    WORDING: ClassVar[dict[str, str]] = {
+        "rms_error_m": "Root-mean-square height error",
+        "error_nodes_measured": "DEM nodes inside the mesh the height errors are over",
+    }
+
+    def measured(self, rr: ModuleType, rms: float = 0.4214686114336642, **over: Any) -> Any:
+        return projected(
+            rr,
+            tolerance_m=1.0,
+            max_error_m=0.9978908039820453,
+            rms_error_m=rms,
+            error_nodes_measured=12666,
+            **over,
+        )
+
+    def test_the_labels(self, rr: ModuleType) -> None:
+        for name, label in self.WORDING.items():
+            assert rr.WORDING.get(name) == label, name
+
+    def test_in_record_order_after_the_budget_s(self, rr: ModuleType) -> None:
+        order = list(rr.WORDING)
+        names = ("max_error_m", *TestBudgetFields.WORDING, *self.WORDING)
+        at = [order.index(name) for name in names]
+        assert at == sorted(at), at
+
+    def test_neither_goes_into_the_file(self, rr: ModuleType) -> None:
+        got = fields(rr, self.measured(rr))
+        assert not set(self.WORDING) & set(got), got
+
+    def test_each_is_a_stats_row(self, rr: ModuleType) -> None:
+        got = rows(rr, self.measured(rr))
+        assert got["error_nodes_measured"] == (self.WORDING["error_nodes_measured"], "12666")
+        assert got["rms_error_m"][0] == self.WORDING["rms_error_m"]
+
+    @pytest.mark.parametrize(("rms", "said"), [(0.4214686114336642, "0.42"), (3.0, "3.00")])
+    def test_the_summary_ends_with_the_root_mean_square(
+        self, rr: ModuleType, rms: float, said: str
+    ) -> None:
+        text = rr.summary(self.measured(rr, rms))
+        assert f"(largest difference 0.99789 m, root-mean-square {said} m)." in text, text
+
+    def test_on_a_budget_run_too(self, rr: ModuleType) -> None:
+        text = rr.summary(
+            self.measured(
+                rr, 3.0, triangles_asked=7386, triangles_cap=7755,
+                budget_trials=TestBudgetFields.TRIALS,
+            )
+        )  # fmt: skip
+        assert "(largest difference 0.998 m, root-mean-square 3.00 m)." in text, text
+
+    def test_not_measured_says_nothing_of_it(self, rr: ModuleType) -> None:
+        text = rr.summary(projected(rr, tolerance_m=1.0, max_error_m=0.9978908039820453))
+        assert "root-mean-square" not in text, text
+        assert "(largest difference 0.99789 m)." in text, text
