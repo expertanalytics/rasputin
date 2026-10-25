@@ -227,7 +227,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (32). read_source: one file's raw
                            #   rows (16b's reader, shared); read_lake_polygons:
                            #   the polygons of `catchment --lakes` near the
-                           #   seed point, in the file's CRS (22)
+                           #   seed point, in the file's CRS (22);
+                           #   read_class_polygons: a coded source's polygons
+                           #   with their class codes, in the mesh CRS (105c)
   border_simplify.py       # simplify_borders: land-cover polygons to flat
                            #   rings for _core.simplify_borders and back, same
                            #   polygons, parts and holes in order; no I/O (32)
@@ -279,6 +281,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   _core.class_areas, the ClassFractions table and
                            #   dominant class (26b); imports _core, crs,
                            #   io.models; io.repository for type checks only
+  polygon_fractions.py     # the same table from class polygons: subdivide
+                           #   (halving to at most 64 coordinates a piece),
+                           #   assign (an STRtree cut per triangle, uncovered
+                           #   area class 0); pure, shapely and numpy (105c)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);

@@ -96,12 +96,14 @@ from tin_engine.dem_input import (
 from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
+    SUFFIXES,
     FeatureError,
     FeatureRequest,
     FeatureSet,
     FeatureSource,
     Legend,
     open_features,
+    read_class_polygons,
     read_lake_polygons,
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
@@ -138,6 +140,7 @@ from tin_engine.io.network_file import outlet_point, read_links, unit_geometries
 from tin_engine.io.ply import field_comments, write_ply
 from tin_engine.io.repository import (
     CacheRepository,
+    CacheWriter,
     DemRepository,
     TiffDemRepository,
     create_sqlite,
@@ -160,6 +163,7 @@ from tin_engine.network import (
     outlet_distance_m,
 )
 from tin_engine.palettes import paraview_preset
+from tin_engine.polygon_fractions import assign as assign_polygon_fractions
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError, error_values
 from tin_engine.resources import Resources, parse_bytes
@@ -791,8 +795,8 @@ def mesh(
             "--land-cover",
             help="The exact share of each land-cover class in every triangle, "
             "from a cached catalogue source of classes "
-            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}) or a uint8 "
-            "GeoTIFF, in the mesh file.",
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}), a uint8 "
+            "GeoTIFF or class polygons, in the mesh file.",
         ),
     ] = None,
     land_cover_year: Annotated[
@@ -913,7 +917,12 @@ def mesh(
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
     classes = _class_source(
-        land_cover, land_cover_year, land_cover_legend, cache_root(cache, os.environ), known
+        land_cover,
+        land_cover_year,
+        land_cover_legend,
+        cache_root(cache, os.environ),
+        known,
+        _fetch_run(land_cover or "", domain, bbox, out_crs, cache),
     )
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
@@ -1075,13 +1084,7 @@ def mesh(
             checks, opened_seams, held = opened.checks, opened.seams, Once(opened.tile)
             del opened
     except NotCached as exc:
-        area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
-        if bbox is not None:
-            area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
-        frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
-        store = f"--cache {shlex.quote(str(cache))}" if cache else ""
-        flags = " ".join(filter(None, (area, frame, store)))
-        run = f"rasputin fetch {shlex.quote(dem[0])} {flags}".rstrip()
+        run = _fetch_run(dem[0], domain, bbox, out_crs, cache)
         raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
@@ -1393,24 +1396,54 @@ class _ClassSource:
     legend: Legend | None
 
 
+def _fetch_run(
+    key: str,
+    domain: Path | None,
+    bbox: tuple[float, float, float, float] | None,
+    out_crs: str | None,
+    cache: Path | None,
+) -> str:
+    """The ``rasputin fetch`` that copies `key` for this run's area into its cache."""
+    area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
+    if bbox is not None:
+        area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
+    frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
+    store = f"--cache {shlex.quote(str(cache))}" if cache else ""
+    flags = " ".join(filter(None, (area, frame, store)))
+    return f"rasputin fetch {shlex.quote(key)} {flags}".rstrip()
+
+
 def _class_source(
     value: str | None,
     year: int | None,
     legend_value: str | None,
     root: Path | None,
     known: Mapping[str, RemoteSource],
+    run: str = "",
 ) -> _ClassSource | None:
     """``--land-cover``, ``--land-cover-year`` and ``--land-cover-legend`` checked
     before any work: a catalogue key is that cached source, anything else a
     file, whose header is read here. Every refusal is a usage error naming
-    the option."""
+    the option; an uncached layer's names `run`, the fetch that copies it."""
     if value is None:
         for given, flag in ((year, "--land-cover-year"), (legend_value, "--land-cover-legend")):
             if given is not None:
                 raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
     source, path, chosen = known.get(value), None, None
-    if source is not None:
+    # Class polygons read in place; features with no legend are no classes, refused below.
+    if source is not None and source.values == "features" and (source.legend or legend_value):
+        if year is not None:
+            raise typer.BadParameter(f"{value} has no years", param_hint="--land-cover-year")
+        if source.path is None and root is None:
+            raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
+        path = source.path or (root or Path()) / source.id / "features.gpkg"
+        if source.path is None and not path.is_file():
+            raise typer.BadParameter(
+                f"{source.id}/features.gpkg is not in the cache; run: {run}",
+                param_hint="--land-cover",
+            )
+    elif source is not None:
         try:
             check_values(source, "classes", "--land-cover")
         except ValueError as exc:
@@ -1436,7 +1469,8 @@ def _class_source(
             )
         try:  # the header and one cell: a class raster in uint8 with a CRS
             corner = IndexWindow(row0=0, col0=0, rows=1, cols=1)
-            TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
+            if path.suffix.lower() not in SUFFIXES:
+                TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
         except (OSError, ValueError) as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
     name = legend_value or (source.legend if source is not None else "")
@@ -1446,8 +1480,12 @@ def _class_source(
         raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
     if legend is not None and not legend.codes:
         raise typer.BadParameter(
-            f"{name} names no class codes; a land-cover raster holds codes",
+            f"{name} names no class codes; land-cover classes are codes",
             param_hint="--land-cover-legend",
+        )
+    if legend is None and path is not None and path.suffix.lower() in SUFFIXES:
+        raise typer.BadParameter(
+            "class polygons need a legend with class codes", param_hint="--land-cover-legend"
         )
     return _ClassSource(source, chosen, None if path else root, path, legend)
 
@@ -1462,13 +1500,18 @@ def _class_fractions(
     cache: Path | None,
     threads: int = 1,
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
-    """The exact class fractions from the cached year or the file, timed as
-    the phase ``land cover fractions``; the table, the codes and the record
-    entries. An object the cache lacks is refused naming the ``fetch`` that
-    gets it."""
+    """The exact class fractions from the cached year, the file or the class
+    polygons, timed as the phase ``land cover fractions``; the table, the
+    codes and the record entries. An object the cache lacks is refused naming
+    the ``fetch`` that gets it."""
     source, year = classes.source, classes.year
-    repository: ClassRaster
-    if source is None:
+    repository: ClassRaster | None = None
+    if classes.path is not None and classes.path.suffix.lower() in SUFFIXES:
+        name, url, fetched = classes.path.name, str(classes.path), datetime.date.today()
+        if source is not None and source.path is None:  # fetched: credit what was copied
+            copied = CacheWriter(classes.path.parent.parent, source.id).feature_manifest()
+            url, fetched = (copied.url, copied.first_fetched) if copied else (url, fetched)
+    elif source is None:
         assert classes.path is not None
         name = classes.path.name
         repository = TiffDemRepository([classes.path], z_unit="metre", threads=threads)
@@ -1496,16 +1539,25 @@ def _class_fractions(
             raise typer.BadParameter(
                 f"{source.id}/{name} is not in the cache; run: {run}", param_hint="--land-cover"
             )
+        fetched = cached_classes.fetched(name) or datetime.date.today()
     with clock.phase("land cover fractions"):
         try:
-            assigned = assign_fractions(
-                trimmed.vertices,
-                trimmed.triangles,
-                mesh_crs=dem_crs,
-                repository=repository,
-                name=name,
-                threads=threads,
-            )
+            if repository is None:
+                assert classes.path is not None and classes.legend is not None
+                layer = source.layer if source is not None else None
+                xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
+                found = read_class_polygons(classes.path, layer, classes.legend, dem_crs, xy)
+                known_codes = frozenset(classes.legend.palette or {})
+                assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=known_codes)
+            else:
+                assigned = assign_fractions(
+                    trimmed.vertices,
+                    trimmed.triangles,
+                    mesh_crs=dem_crs,
+                    repository=repository,
+                    name=name,
+                    threads=threads,
+                )
         except (ValueError, NotCached) as exc:
             raise typer.BadParameter(cli_kit.words(exc), param_hint="--land-cover") from exc
     typer.echo(
@@ -1519,7 +1571,6 @@ def _class_fractions(
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
     if source is not None:  # a file carries no credit, licence or citation
-        fetched = cached_classes.fetched(name) or datetime.date.today()
         values |= {
             "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
             "land_cover_licence_note": escaped_ascii(source.licence_note),
