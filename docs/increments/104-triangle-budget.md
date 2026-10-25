@@ -1,6 +1,7 @@
 # Increment 104: the triangle budget
 
-**Status: designed, not built.** Designed by `@architect`, 2026-10-25, on
+**Status: designed, not built; design round 2 (2026-10-25) answers the
+round-1 review.** Designed by `@architect`, 2026-10-25, on
 master `97759b7b`, worktree `tri-budget`. Two pull requests from this one
 file, each with its own red and green commit and review: **104a**, the budget
 (Python only; it drives `refine`, so `@perf` times it), then **104b**, the
@@ -31,6 +32,14 @@ northern Sweden delivery of 2026-10-21.
 In two lines: `--triangles N` is a tolerance rasputin finds for you. The mesh
 it writes is exactly the mesh `--tolerance T` writes at the tolerance it
 found, so every guarantee of today's tolerance run holds at that T.
+
+**What the showcase claims, and what it does not.** You ask for a size and
+get at most M triangles; the tolerance is found and reported; the mesh is
+identical to `--tolerance` at that tolerance. The budget mesh is *not* a
+better mesh than the tolerance mesh: both lie on one error-against-count
+curve, and a lower largest error always comes with more triangles (on
+Kultsjön, 9.79 m costs 2.4 % more triangles than 10 m). That curve is the
+demonstration (section 8).
 
 ## 2. Prior art: legacy and literature
 
@@ -111,34 +120,57 @@ above which the mesh is the floor, so a floor result reports
 `tolerance_m` = E_F, not 10⁶.
 
 **The search** (`budget.search`, pure; section 4.1), given a `trial(T)` that
-returns the written count c(T) and the largest error at T:
+returns the written count c(T) and the largest error at T. **Every trial of
+every step counts toward `MAX_TRIALS` = 12**, and two things end the search
+early: a trial in the window, and a **saturated** trial, one whose largest
+error is 0 (every valid DEM node is a vertex, so no smaller tolerance can
+change the mesh; `refine` stops at tolerance 0 for the same reason,
+`refine.hpp`'s header).
 
 1. The floor: F, E_F = trial(T_FLOOR). If F > M, **refuse**: the message
    names F and E_F and says to ask for at least F (nothing is written). If
-   2N − M ≤ F, the floor is the answer.
-2. Coarse to fine, scale-free: T ← E_F / 4; trial. While c(T) < 1.5 F and T
-   is not in the window: T ← T / 4; trial. If still not in the window, one
-   more trial at T / 4, so that two trials stand well above the floor.
-3. Until a trial lands in the window, or twelve trials have run: through the
+   2N − M ≤ F, the floor is the answer, reported at tolerance E_F. If E_F = 0
+   the floor is saturated: it is the answer, and the record says the window
+   was missed (the DEM has no more to give).
+2. Coarse to fine, scale-free: T ← E_F / 4; trial. While c(T) < 1.5 F, T is
+   not in the window, the trial is not saturated and fewer than twelve
+   trials have run: T ← T / 4; trial. If still not in the window (same
+   guards), one more trial at T / 4, so that two trials stand well above the
+   floor. E_F > 0 here, so every T is positive, and c(T) > F for every
+   T < E_F (the node with error E_F is inserted); an unchanged count between
+   two quarterings is a plateau the loop steps through, bounded by the cap.
+3. Until a trial lands in the window, the last trial is saturated, or twelve
+   trials have run: through the
    last two trials (T_a, c_a) and (T_b, c_b), the secant on
    log(c − F) against log T:
    k = ln((c_a − F) / (c_b − F)) / ln(T_a / T_b), with each c − F floored at 1,
    and the next T = T_b · ((N − F) / (c_b − F))^(1/k). The bracket is the
    largest T whose count was over M (T too small) and the smallest T whose
-   count was under 2N − M (T too large). When k ≥ 0, T is not finite, or T
+   count was under 2N − M (T too large). When k ≥ 0 (equal counts included),
+   T is not finite, or T
    is not strictly inside the bracket, the next T is instead the geometric
    mean of the bracket's two ends; with one end missing, the known end
    divided or multiplied by 4. Trial.
-4. The answer is the first trial in the window. After twelve trials with none
-   in it, the answer is the trial with the largest count not over M, run
-   again (the search keeps no mesh but the answer's), and the record says the
-   window was missed. The cap M holds by construction: nothing over it is
-   ever chosen.
+4. The answer is the first trial in the window. Otherwise (twelve trials, or
+   a saturated trial outside the window) the answer is the trial with the
+   largest count not over M, and the record says the window was missed;
+   when that trial's mesh is not the last one kept, it is run again (the
+   search keeps no mesh but a window hit's; the rerun writes the same mesh,
+   by determinism, and its phases add to the Timings). The cap M holds by
+   construction: nothing over it is ever chosen.
+
+Run as a pure script before any test exists (`pure_search.py` in section
+7's folder, output `pure-search.log`): on 360 synthetic count functions
+(section 10, A6) every search landed in at most 7 trials; the saturated
+floor ends in 1 trial, saturation reached mid-search in 3, a 3 % rise lands
+in 5, and a gap wider than the window ends missed after exactly 12 with the
+largest count under the cap chosen (A8, A9, A11's figures).
 
 Why a search and not an exact stop inside `refine`: a round can nearly double
 the count, so stopping mid-run needs a sorted last round in C++; the study
 (section 9.4) measured the count moving about 0.1 % per 0.1 % of T, so a 2 %
-window holds about twenty reachable counts and the search always lands. The
+window holds about twenty reachable counts and the search lands when the
+window is reachable. The
 written count also moves after `refine`, which an in-loop stop cannot see.
 Measured on three inputs (section 7): 5 to 7 trials.
 
@@ -164,8 +196,8 @@ cli.py mesh                         refine_job.py / cli.py            budget.py 
                                     keeps the Refined of the trial in the window
                                     ---> record: tolerance_m = T found, triangles_asked,
                                          triangles_cap, budget_trials; summary line
-104b:  _core.error_summary(view | store, final mesh) --> rms_error_m, mean_signed_error_m,
-       error_nodes_measured (every refined run, budget or not)
+104b:  _core.error_summary(view | store, final mesh) --> rms_error_m, error_nodes_measured
+       (every budget run, on the chosen trial; a tolerance run with --rms)
 ```
 
 ### 4.1 `budget.py`: the search, pure (104a)
@@ -179,10 +211,11 @@ New module `src_python/tin_engine/budget.py`, no numpy, no `_core`, no typer:
 - `search(trial: Callable[[float], Trial], window: Window, *, floor_tolerance: float = FLOOR_TOLERANCE, max_trials: int = MAX_TRIALS) -> Found`
   with `Found` (frozen): `chosen: Trial`, `trials: tuple[Trial, ...]`,
   `missed: bool`; a budget under the floor raises `UnderFloor(floor: Trial)`.
-  Section 3's rule, nothing else.
+  Section 3's rule, nothing else; `pure_search.py` (section 7's folder) is
+  the rule written out once, and `budget.py` is that function with types.
 
 Testable with a synthetic `trial` (a count function of T), no kernel: tests
-A6 to A9.
+A6 to A9 and A11.
 
 ### 4.2 Driving the trials (104a, `cli.py` and `refine_job.py`)
 
@@ -192,23 +225,43 @@ A6 to A9.
   *refinement* (`--domain`, `--start-min-angle`, `--start-quality-gain`,
   `--no-constraint-feet`) accepts either and says "needs --tolerance or
   --triangles". `--tolerance-near` and `--tolerance-slope` keep "needs
-  --tolerance" (section 9, left out). `--pieces` and `--piece-budget` keep
-  "cutting needs --tolerance and --domain" (section 4.5).
+  --tolerance" (section 9, left out). `--pieces` keeps "cutting needs
+  --tolerance and --domain"; `--piece-budget` is accepted with `--triangles`
+  as the budget the piece check below is made against (section 4.5).
 - `How` gets the budget: `tolerance: float | None` and
   `budget: Window | None`, exactly one set. `_dem_mesh` with a budget runs
   `budget.search` with a `trial` closure that calls today's `_refined` once
   per T, keeps the `Refined` only when its count is in the window (so at most
   one trial's mesh is alive beside the tile), and reads the trimmed triangle
   count and `values["max_error_m"]`. The accepted `Refined` is what the
-  tolerance path returns today; nothing downstream changes.
+  tolerance path returns today; nothing downstream changes. On a missed
+  window (section 3, step 4) the closure runs the chosen tolerance once more
+  and keeps that mesh.
+- **A trial that would need pieces refuses the run.** Today a `--tolerance`
+  run with a domain is cut automatically when `partition(cols, rows,
+  tolerance, pieces=1, piece_budget)` has more than one cell (`cli.py`, the
+  `partition` call after `_open_dem`), because the bytes a node needs grow as
+  the tolerance shrinks (`decompose.bytes_per_node`: 19 B above 50 m, 637 B
+  at 0). A budget run cannot take that path (4.5), and it does not know its
+  tolerances in advance, so **the closure checks `partition` at each trial's
+  T before running it**: more than one cell is a `RunError` the CLI turns
+  into exit 2, nothing written, with the message "--triangles N needs a
+  tolerance of T m here, which would cut the window into nx × ny pieces
+  under the piece budget of B bytes; the triangle budget does not run on
+  pieces yet: use --tolerance T with --domain, or raise --piece-budget". The
+  floor trial at T_FLOOR takes the fewest bytes, so the refusal, when it
+  comes, comes after some trials have run; the record of a refused run is not
+  written. Without a domain no run is cut today, and the check is not made.
+  `check_canvas` guards the window's memory as on every uncut run.
 - **The tile stays alive through the trials.** `_refined` takes
   `Once[DemTile]` and drops its reference after the strip or before the final
   check; the closure holds the tile and hands a fresh `Once(tile)` to each
   trial, so `_refined` is unchanged. The peak is the tile plus the check-point
   store plus one trial's mesh, where a tolerance run holds the tile and the
   store at different times; on Kultsjön the tile is 1,575 × 2,153 float32
-  (13.6 MB) and the store 3.67 M points × 16 B (59 MB). Basin-scale windows
-  are the cut path's, which refuses the budget (4.5).
+  (13.6 MB) and the store 3.67 M points × 16 B (59 MB). The piece check
+  above is what keeps a budget run's window at the size one piece may have
+  under the piece budget.
 - **The check-point store is built once.** `How.checks` is an `Iterator[Block]`
   of the source's projected nodes, consumed by `final_check.run`; it cannot
   feed a second trial. `final_check.run` is split: `stored(grid, checks,
@@ -227,11 +280,18 @@ A6 to A9.
 
 RMS is computed nowhere today (`grep -rn -i rms src_python/tin_engine
 include` finds no such code). One new pass over the written mesh, once per
-run, after the final check, on every refined run:
+run, after the final check, **on every budget run (the chosen trial) and on
+a tolerance run that asks with `--rms`** ("also report the root-mean-square
+height error over the DEM nodes inside the mesh; one more pass over the
+mesh"). Not on every run: the pass costs 3 to 6 % of the whole `rasputin
+mesh` time on the quick check's cases with every core, and 22 % at one
+thread (measured below), which is outside the quick check's noise band at
+one thread, so a run that does not ask does not pay. RMS only: the mean
+signed error is left out (section 9).
 
 - `include/terrain/refinement/measure.hpp`: `struct ErrorSummary
-  { double max_error; double sum_squares; double sum_signed; std::size_t
-  count; }` with `rms()` and `mean_signed()`, and two overloads of
+  { double max_error; double sum_squares; std::size_t count; }` with
+  `rms()`, and two overloads of
   `error_summary(..., unsigned threads)`: one over a `RasterSource` (the
   native path: the DEM's nodes, corner heights as `scan` takes them) and one
   over a `CheckPoints` store with the mesh's z (the reprojected path: the
@@ -244,7 +304,7 @@ run, after the final check, on every refined run:
   A void triangle (a NoData corner) measures nothing.
 - **The walk is `scan`'s and `scan_points`'s, not a copy.** Both get a
   template parameter `class Acc = NoAccumulator`; the `consider` and `visit`
-  lambdas call `acc.add(signed_error, owned)` under `if constexpr`, so
+  lambdas call `acc.add(error, owned)` under `if constexpr`, so
   `refine`'s and `refine_points`'s instantiations compile to what they are
   today (bit-identical meshes and no new work in the hot loop; `@perf`
   checks both). The plane expression is therefore the same object `refine`
@@ -265,19 +325,53 @@ run, after the final check, on every refined run:
   valid, *, threads=0) -> ErrorSummary` (two overloads by the first
   argument's type, as `refine_points` and `refine_strip` take their arrays),
   GIL released; `ErrorSummary` read-only with `max_error`, `rms_error`,
-  `mean_signed_error`, `count`. `_core.pyi` mirrors it.
-- `_refined` calls it after the final check, on the final outcome's arrays,
-  against the view while the tile is held (native path) or against the store
-  (reprojected path), on the budget path for the chosen trial only; the
-  values become `rms_error_m`, `mean_signed_error_m` (mesh minus DEM) and
-  `error_nodes_measured`.
+  `count`. `_core.pyi` mirrors it.
+- `measure.summary(final, against, threads)` in Python (`refine_job.py`):
+  the final outcome's arrays against a `RasterView` (native path, while the
+  tile is held) or a `CheckPoints` store (reprojected path). A tolerance run
+  with `--rms` calls it from `_refined` after the strip or the final check,
+  before the tile reference goes (`How.rms: bool`); the budget closure calls
+  it once, after `search` returns, on the chosen trial, with the tile and
+  store it holds. The values become `rms_error_m` and
+  `error_nodes_measured`; the `--stats` row is "error summary".
 
-Cost: one scan round over the final mesh. On Kultsjön the final check's eight
-rounds took 0.071 s of scan in total (section 7's record), so one round is
-under 0.05 s of a 4.4 s run; on the 1 m benchmark tile one round of the
-472 k-triangle mesh covers the tile's 25.5 M nodes once, which `refine`'s
-scan already does about 53 times (section 9.4 of the study: 53 rounds), so
-the pass is about 2 % of `refine`'s scan time. Section 11 gates it.
+**Cost, measured** (`scan_cost.py` in section 7's folder, output
+`scan-cost.json` and `scan-cost.log`; AC power, master `97759b7b`'s
+`_core`, the quick check's cases from `docs/benchmarks/quick/cases.toml`
+and its AC baseline's medians). One full pass is `refine(view, written
+mesh, tolerance = 10⁶)` on the native path and `refine_points(store,
+written mesh, 10⁶)` on the reprojected one: one round, nothing inserted,
+`scan_seconds` read; its largest error equals the record's `max_error_m`
+on every case, so the pass measures the population the summary will.
+The round-1 premise that a pass is about 2 % of `refine`'s scan was false:
+`refine` rescans only the triangles a round touched (`refine.hpp`'s
+header), so its whole scan is only two to three full passes.
+
+| case (threads) | run total (s) | `refine` scan total (s) | one full pass (s), median of 5 | pass / run |
+|---|---:|---:|---:|---:|
+| tile, 25.5 M nodes, 464 k triangles (all cores) | 0.4245 | 0.0568 | 0.0265 | 6.2 % |
+| tile (1 thread) | 0.7255 | 0.3678 | 0.1567 | 21.6 % |
+| quarter, 9.0 M nodes (all) | 0.3638 | 0.0463 | 0.0160 | 4.4 % |
+| velhas, 72,859 check points, reprojected (all) | 0.1248 | final check 0.0074 | 0.0038 | 3.0 % |
+| romsdal-slope, 25.5 M nodes, 3.10 M triangles (all) | 3.588 | 0.5649 | 0.1201 | 3.3 % |
+| numedalslagen, features, 653 k triangles (all) | 8.846 | 0.3967 | 0.1144 | 1.3 % |
+| lagan, features, 12.3 M check points, reprojected (all) | 14.50 | final check 0.2659 | 0.1643 | 1.1 % |
+
+The probe's `refine` legalises the start mesh before its one scan; on the
+four cases without feature lines it flipped nothing and its largest error
+equals the record's, while on the two feature cases it flipped edges
+(33,924 on numedalslagen, with the constraint edges marked or not:
+`pass_constrained.py`, `pass-constrained.log`) and so scanned a mesh of the
+same size and node population but not the written one (largest error
+49.4 m against the record's 10.0 m). Their cost figures stand; their errors
+say nothing about the written mesh. `error_summary` scans the mesh as
+given and legalises nothing, which is also why no existing binding can
+stand in for it.
+
+Kultsjön (reprojected, 3.67 M check points): the final check's first round
+scans every point, so one pass is under its whole scan of 0.071 s
+(section 7's record): under 2 % of the 4.4 s run, and the budget run pays
+it once. Section 11 gates both paths.
 
 ### 4.4 The record and the words
 
@@ -289,8 +383,7 @@ the pass is about 2 % of `refine`'s scan time. Section 11 gates it.
 | `triangles_cap` | Triangles at most | M |
 | `budget_trials` | Tolerances tried for the triangle budget, and the triangles each gave | "1e+06 m: 28561; 54 m: 29439; 13.5 m: 49263; 3.37 m: 291983; 9.79 m: 67494" |
 | `budget_window_missed` | The triangle budget's window was missed; the nearest count under the cap was written | "yes", only when it was |
-| `rms_error_m` (104b) | Root-mean-square height error | over `error_nodes_measured` |
-| `mean_signed_error_m` (104b) | Mean height error, mesh minus DEM (a bias when far from 0) | |
+| `rms_error_m` (104b) | Root-mean-square height error | over `error_nodes_measured`; only when measured |
 | `error_nodes_measured` (104b) | DEM nodes inside the mesh the height errors are over | |
 
 `tolerance_m` keeps its wording; on a budget run it is the tolerance found.
@@ -300,7 +393,12 @@ which is what lets `@perf` check byte-identity (section 11). The stderr
 summary (`run_record.summary`) says, on a budget run, before today's
 sentence: "67494 triangles, about the 65893 asked for (at most 69187):
 tolerance 9.79 m found in 5 trials." and, with 104b, today's sentence ends
-"(largest difference 9.7885 m, root-mean-square 3.00 m)". Plain words, no
+"(largest difference 9.7885 m, root-mean-square 3.00 m)" when the RMS was
+measured. On a missed window the first sentence instead says "67494
+triangles, the most under the cap of 69187 (about 65893 asked for; no
+tolerance gave a count in between): tolerance 9.79 m, 12 trials", and when
+the chosen trial is saturated "640 triangles: every DEM node is a vertex,
+the most this DEM gives (about 1000 asked for)". Plain words, no
 labels (the plain-output rule of increment 25).
 
 The MCP server derives its `mesh` tool from the CLI's Typer command
@@ -319,10 +417,13 @@ per trial. Ola's ruling (one tolerance for the whole basin) is honoured by
 construction when the budget reaches the cut path: the study's step B finds
 that tolerance by a search on a sample before the run, and checks the cap
 after the pieces are joined; it is a later increment, and the cut path's
-`How.tolerance` stays a float. The automatic cut by memory (`partition` at
-`cli.py` line 996) needs a tolerance to size memory and is not taken on a
-budget run: the run is one window, guarded by `check_canvas` as every uncut
-run is. Kultsjön is one window (section 7).
+`How.tolerance` stays a float. The automatic cut by memory (`partition`
+after `_open_dem` in `cli.py`) needs a tolerance to size memory; a budget
+run makes that check per trial and refuses rather than cuts (section 4.2),
+so a budget run is always one window, guarded by `check_canvas` as every
+uncut run is. Kultsjön at 31 m is 1,575 × 2,153 = 3.39 M nodes, under
+16 GiB at every tolerance (637 B × 3.39 M = 2.16 GB at tolerance 0), so no
+trial of the demo can refuse (section 7).
 
 ## 5. Constants
 
@@ -332,7 +433,8 @@ run is. Kultsjön is one window (section 7).
 | default cap | ⌊1.05 N⌋ | the study's window; a 2 % cap costs 0 to 2 trials more (the study's section 9.3) | Kultsjön 5 %: 5 trials; 2 %: 6 (section 7) |
 | coarse-to-fine start | E_F / 4, quartered | scale-free: the floor's own largest error | Kultsjön E_F = 216 m: 54, 13.5, 3.37 m; velhas E_F = 76.6 m: 19.1, 4.79 m |
 | "well above the floor" | 1.5 F | the fit on log(c − F) needs c − F clear of the rounding of F | all three cases below |
-| `MAX_TRIALS` | 12 | twice the most seen (7) | section 7 |
+| `MAX_TRIALS` | 12 | counts every trial of every step; twice the most seen (7, measured and synthetic) | section 7; the 360 synthetic searches of section 3 (at most 7) |
+| saturation | largest error = 0 | exact: a zero largest error means every valid node is on the mesh, so no tolerance changes it | bumpy without `--stride` (640 triangles, error 0 at every T, `search-bumpy.json`) |
 
 ## 6. Judged against the architect's criteria
 
@@ -409,9 +511,9 @@ population the CLI reports):
 Read: the count never rises with T; the floor is 43 % of the 10 m count,
 so the raw count falls only as T^-1.1 around 10 m while c − F falls as
 T^-2.0 (the floor-subtracted fit is what the search needs); the largest
-error tracks T to 0.05 %; RMS is about 0.43 · T^0.85 between 5 and 20 m;
-the mean signed error is a small positive bias (the mesh above the DEM),
-0.33 m at 10 m.
+error tracks T to 0.05 %; RMS is about 0.43 · T^0.85 between 5 and 20 m.
+The mean signed column is the probe's measurement, kept as data for the
+sup-norm bias idea (section 13); the product does not report it (section 9).
 
 The prototype search (`search_probe.py`, section 3's rule run through the
 whole CLI per trial) on this input:
@@ -426,13 +528,15 @@ whole CLI per trial) on this input:
 ### Predictions for the demo, fixed here
 
 P1. `--triangles 65893` (the 10 m mesh's count, default cap 69,187) writes
-**67,494 triangles at tolerance 9.79 m in 5 trials**, largest error
-**9.79 m** against the tolerance mesh's 9.9998 m (−2.1 %), **RMS 3.00 m**
-(interpolated on the ladder between 9.5 and 10 m) against 3.05 m (−1.6 %),
-mean signed error about 0.33 m. Tolerance for the implementation's rounding
-of the secant: T within 9.78-9.80 m, count within 67,400-67,600, RMS within
-2.98-3.02 m. With `--max-triangles 67210` (2 %): 65,764 triangles at
-10.02 m, largest error 10.02 m, RMS about 3.055 m, 6 trials.
+**67,494 triangles at tolerance 9.79 m in 5 trials**: 2.4 % more
+triangles than asked, within the 5 % cap, with the largest error 9.79 m
+that this count buys on the curve (the 10 m mesh has 65,893 triangles and
+9.9998 m; neither mesh is better, they are two points on one curve). RMS
+**3.00 m** (interpolated on the ladder between 9.5 and 10 m; the 10 m
+mesh's is 3.05 m, the same curve). Tolerance for the implementation's
+rounding of the secant: T within 9.78-9.80 m, count within 67,400-67,600,
+RMS within 2.98-3.02 m. With `--max-triangles 67210` (2 %): 65,764
+triangles at 10.02 m, largest error 10.02 m, RMS about 3.055 m, 6 trials.
 
 P2. Error against count, both meshes on one curve: the ladder's columns
 above are the curve, and the budget run's `budget_trials` adds five points
@@ -442,13 +546,17 @@ mesh lie on the same curve by construction; they differ only in T.
 P3. Time: a `--tolerance 10` run with GeoPackage and `--stats` takes 4.4 s;
 the budget run adds four trials of refine + strip + final-check scan + trim
 (about 0.15 s each here; the decode, the features clip, the check-point
-projection and the write are done once), so **under 5.5 s**; the summary
+projection and the write are done once) and one error summary pass (under
+0.08 s, section 4.3), so **under 5.5 s**; the summary
 line and `--stats` say 5 trials. The prototype's 12.7 s is the whole CLI
 re-run per trial and is not the product's time.
 
-P4. `--triangles 30000` returns the floor (28,561 triangles, tolerance
-reported 215.97 m) in one trial; `--triangles 28000` is refused with the
-floor's count and error in the message.
+P4. `--triangles 30000` (cap 31,500, window from 28,500) returns the floor
+(28,561 triangles, tolerance reported 215.97 m) in one trial;
+`--triangles 27000` (cap ⌊1.05 × 27,000⌋ = 28,350, under the floor) is
+refused with the floor's count and error in the message, exit 2, nothing
+written. (`--triangles 28000` would not refuse: its cap 29,400 holds the
+floor.)
 
 ### The suite's fixtures (figures for section 10)
 
@@ -468,7 +576,28 @@ T 0.25180, 24,454; N 48 with M 50 → the floor (49) in one trial.
 no domain) with `--stride 8` (the native path, with the edge strip): floor 12
 triangles, E_F = 36.938 m; 10 m: 450; 5 m: 546; 2 m: 597; 1 m: 615; 0.5 m:
 631; 0 m: 640 (every node). Without `--stride` the start is every node and
-every tolerance gives 640 triangles with error 0: useful for refusals only.
+every tolerance gives 640 triangles with error 0 (`search-bumpy.json`): the
+saturated floor, test A11.
+
+The velhas target grid at the catchment domain is 158 × 130 = 20,540 nodes
+(`open_dem` on the fixture, 2026-10-25); `partition` with
+`--piece-budget 2054000` (100 B per node) gives one cell at the floor
+(19 B per node), at 19.149 m (27 B) and at 4.787 m (72 B), and 2 × 2
+cells at 1.4224 m (220 B): the fourth trial of the N 7,386 search refuses
+(test A12). The default budget of 16 GiB never cuts it.
+
+The pure rule on synthetic count functions (`pure_search.py`,
+`pure-search.log`, 2026-10-25): c(T) = F for T ≥ E_F, else
+F + round(A · ((E_F / T)^k − 1)), largest error min(T, E_F); F in
+{0, 50, 28,561} with E_F 50 m for F = 0 and 216 m otherwise; k in {0.6,
+1.1, 2.0}; A = 3 × 10⁵ / (1000^k − 1) (so c(E_F / 1000) − F is 3 × 10⁵);
+20 targets N log-spaced from max(c(E_F / 8), 1.3 F + 1, 20) to
+c(E_F / 2000), each with a 5 % and a 2 % cap: 360 searches, every one in
+the window, **at most 7 trials** (F = 28,561 and k = 2.0: 38 of 40 take 7;
+F = 0: 3 to 6), the second trial E_F / 4 in every search. The same rule on
+the three measured ladders, interpolated in log-log on c − F, reproduces
+section 7's trial counts within one (Kultsjön N 65,893: 5 and 6 trials;
+velhas N 7,386: 5 and 6; N 24,571 at 2 %: 7).
 
 ## 8. The showcase (Wednesday 2026-10-28)
 
@@ -486,11 +615,17 @@ commands are section 7's), into a folder of Ola's choosing under
    on log axes, the ladder as the curve, the two meshes marked, the five
    trials as hollow points; made by a scratch script from the records (not
    product code; matplotlib is not a dependency and stays out of the
-   package). Three series at most, legend in plain words.
+   package). Three series at most, legend in plain words. The caption says
+   what the plot shows: every mesh rasputin writes, by tolerance or by
+   budget, is a point on this one curve; the budget picks the point by its
+   count, the tolerance by its error.
 3. A `README.txt` with the two commands and the summary lines.
 
 The demonstration itself: run `--tolerance 10` and `--triangles 65893` live
-(each under 6 s), show the two summary lines, open the plot.
+(each under 6 s), show the two summary lines, open the plot. Said plainly:
+"ask for a size, get at most that many triangles, the tolerance it took is
+found and reported, and the mesh is the one `--tolerance` writes at that
+tolerance". Not said: that the budget mesh is better; it is not.
 
 ## 9. Left out
 
@@ -501,17 +636,22 @@ The demonstration itself: run `--tolerance 10` and `--triangles 65893` live
   (is N metres on the lines still N?) Ola has not ruled on, and the showcase
   does not need it. They keep "needs --tolerance".
 - Exact N (the study's step C): dropped by the study (section 9.4).
-- Percentiles of the error (the ideas-file entry *Mean, RMS and percentiles
-  of the vertical error in --stats*): RMS and the mean are taken up by 104b;
+- The mean signed error and percentiles of the error (the ideas-file entry
+  *Mean, RMS and percentiles of the vertical error in --stats*): RMS is
+  taken up by 104b; the mean signed error was dropped on review (the
+  showcase does not need it, and the bias question has its own idea entry);
   percentiles need a histogram or a sort and are left.
+- RMS on every tolerance run without asking: measured at 3 to 6 % of the run
+  with every core and 22 % at one thread (section 4.3), so it is `--rms`.
 - Warm starts between trials: the study found a warm step slower than a cold
   run and its mesh not the one `--tolerance T` gives (section 9.4).
 
 ## 10. The red suite
 
 Fixture figures are section 7's. `A` tests are 104a's, `B` tests 104b's.
-Invariant-critical, with mutation targets: A1-A4 and B1-B3 (the window held,
-the mesh equal to the tolerance run's, each node once).
+Invariant-critical, with mutation targets: A1-A4, A9, A11, A12 and B1-B3
+(the window held, the cap on every trial, saturation, the piece check, the
+mesh equal to the tolerance run's, each node once).
 
 **A. The budget (104a)**
 
@@ -536,26 +676,49 @@ the mesh equal to the tolerance run's, each node once).
   trial.
 - A5 the native path: bumpy `--stride 8 --triangles 546` lands in
   [519, 573]; `--triangles 10` is refused naming 12 triangles.
-- A6 `test_budget.py` (pure, synthetic `trial`): with c(T) = F + ⌊A·T^-k⌉
-  for F in {0, 50, 28,561}, k in {0.6, 1.1, 2.0}, A chosen so c(1) is
-  10⁴-10⁶, and windows of 5 % and 2 % around 20 targets each: every search
-  lands in the window in at most 9 trials, the first trial is
+- A6 `test_budget.py` (pure, synthetic `trial`): section 7's synthetic grid
+  exactly (c(T) = F for T ≥ E_F, else F + round(A · ((E_F / T)^k − 1)),
+  largest error min(T, E_F); F in {0, 50, 28,561}, E_F 50 m for F = 0 and
+  216 m otherwise, k in {0.6, 1.1, 2.0}, A = 3 × 10⁵ / (1000^k − 1), 20
+  targets log-spaced from max(c(E_F / 8), 1.3 F + 1, 20) to c(E_F / 2000),
+  caps 5 % and 2 %): all 360 searches land in the window in **at most 7
+  trials** (measured, `pure-search.log`), the first trial is
   `floor_tolerance`, the second E_F / 4, and the sequence is identical on a
   second call.
 - A7 refusals and the floor in `search` itself: `UnderFloor` carries the floor
   trial; a window holding the floor returns it after one trial with
   `tolerance` = E_F.
-- A8 a rise: c(T) as A6 but with one step of +3 % at a chosen T; the search
-  still lands or ends `missed` with `chosen.triangles ≤ cap`, never over
-  the cap, in at most 12 trials.
-- A9 the twelve-trial cap: a c(T) with every count either over M or under
-  2N − M (a gap wider than the window) ends `missed` after exactly 12 trials
-  with the largest count ≤ M chosen.
+- A8 a rise: c(T) as A6 (F 28,561, E_F 216, k 2.0, A 80.3) with one step of
+  +3 % below T = 3 m; for N in {40,000, 65,893, 150,000, 300,000, 600,000}
+  at 5 % the search lands in 5 trials (measured), and in every case
+  `chosen.triangles ≤ cap`.
+- A9 the twelve-trial cap: A8's function without the rise and with every
+  count in [60,000, 72,000] mapped to 72,001 (a gap wider than the window),
+  N 65,893 and M 69,187: ends `missed` after exactly 12 trials with the
+  largest count ≤ M chosen (measured: 59,949). Mutation targets: a trial
+  not counted toward the cap; the choice of the largest count under the
+  cap.
 - A10 options: `--triangles` with `--tolerance` refused ("one of");
   `--triangles` with `--pieces 2` refused with today's cutting message;
+  `--triangles` with `--piece-budget 2054000` accepted (A12);
   `--domain` with `--triangles` and no `--tolerance` accepted; the MCP
   `mesh` tool's schema lists `triangles` and `max_triangles`
   (`test_mcp_cli.py`'s derivation helper).
+- A11 saturation: in `search`, a `trial` returning largest error 0 at every
+  T with count 640: window (639, 670) returns it after one trial with
+  `tolerance` 0, not missed; window (1000, 1050) ends after one trial,
+  `missed`, chosen 640. A function saturating mid-search (bumpy's shape,
+  F 12, E_F 36.938, counts capped at 640 with error 0 there) and window
+  (700, 735): ends `missed` after 3 trials (measured), chosen 640. On the
+  CLI: bumpy without `--stride`, `--triangles 639` writes 640 triangles,
+  `tolerance_m` 0, one trial; `--triangles 1000` writes 640, the record's
+  `budget_window_missed` is "yes", the summary line says every DEM node is
+  a vertex. Mutation target: the saturation test (error = 0) in each step.
+- A12 pieces refused: velhas `--triangles 7386 --piece-budget 2054000` is
+  exit 2 with nothing written; the message names 1.42 m, 2 × 2 pieces,
+  2054000 bytes and `--tolerance`; the same with the default piece budget
+  lands (A1). Mutation target: the check made after the trial instead of
+  before it (the message then differs: no trial at 1.42 m ran).
 
 **B. The error summary (104b)**
 
@@ -570,22 +733,30 @@ the mesh equal to the tolerance run's, each node once).
   a `CheckPoints` store with points placed exactly on the shared edges gives
   the same `count` as the number of points minus coincident ones. Mutation
   target: the ownership rule (lower triangle index).
-- B3 agreement with the record: velhas `--tolerance 1` has `rms_error_m`
-  0.42122 ± 0.0001, `mean_signed_error_m` −0.0155 ± 0.0005,
-  `error_nodes_measured` 12,681, and `max_error_m` equal to the summary's
+- B3 agreement with the record: velhas `--tolerance 1 --rms` has
+  `rms_error_m` 0.42122 ± 0.0001, `error_nodes_measured` 12,681, and
+  `max_error_m` equal to the summary's
   largest error (the test reads both from the record and recomputes the RMS
   with an independent barycentric evaluation over the fixture's projected
   nodes, the oracle using its own plane, never the record). `--tolerance 2`:
-  0.77732; `--tolerance 0.5`: 0.21482.
-- B4 thread independence: velhas `--threads 1` and `--threads 4` records have
-  bit-equal `rms_error_m` and `mean_signed_error_m`.
+  0.77732; `--tolerance 0.5`: 0.21482. The equality is pinned on a run
+  without feature lines; on a run with them the edge strip's rescan skips
+  nodes within its coincidence radius of a strip point (`scan.hpp`'s
+  header), so the summary, which skips nothing, may report a larger value
+  than `max_error_m` there. On Kultsjön the probe found them equal to
+  1 × 10⁻⁷ on every ladder row (section 7); `@perf` records both on the
+  demo run (section 11).
+- B4 thread independence: velhas `--rms --threads 1` and `--threads 4`
+  records have a bit-equal `rms_error_m`.
 - B5 the words: the summary line ends with "root-mean-square 0.42 m)" on
-  velhas at 1 m; `--stats` rows for the three new keys; the `.vtk` file
+  velhas at 1 m with `--rms`, and without `--rms` is today's line and the
+  record has no `rms_error_m`; `--stats` rows for the two new keys and the
+  "error summary" timing row; the `.vtk` file
   fields of a `--tolerance` run are unchanged from master's (the golden test
   `test_refine_golden.py` passes unchanged).
-- B6 the budget path measures the chosen trial: A1's record has an
-  `rms_error_m` and the budget run on velhas reports
-  `error_nodes_measured` 12,681.
+- B6 the budget path measures the chosen trial without asking: A1's record
+  has an `rms_error_m` and the budget run on velhas reports
+  `error_nodes_measured` 12,681; its summary line has "root-mean-square".
 
 ## 11. Acceptance (`@perf`)
 
@@ -594,28 +765,34 @@ the mesh equal to the tolerance run's, each node once).
   within noise. The budget's own timing on Kultsjön, section 7's command
   with `--triangles 65893` against `--tolerance 10`, both to `.gpkg` with
   `--stats`: the budget run is at most **1.5 s slower** (four more trials at
-  about 0.15 s each is 0.6 s, the error summary under 0.05 s, noise on a
+  about 0.15 s each is 0.6 s, the error summary under 0.08 s, noise on a
   4.4 s run about 0.3 s, doubled), and its `--stats` Timings show the
   trials' refine rows summed. Power state recorded; the predictions P1-P4
   checked and written beside the figures.
 - 104b touches `scan.hpp` and `refine_points.hpp`: the 1 m benchmark's mesh
   hashes unchanged (the accumulator is a template default; the instantiations
-  `refine` uses must not change), refine time within noise; the whole
-  `rasputin mesh` time on the tile at most **+3 %** (one scan round of 53 is
-  about 2 % of scan, scan is under half of refine, plus noise); the
+  `refine` uses must not change), and **without `--rms` the whole
+  `rasputin mesh` time within noise** on the quick check (`tools/bench_quick.py`;
+  its band is the larger of 5 % and the baseline's spread, and 50 ms): no
+  new work runs. **With `--rms`**, the "error summary" row of `--stats` is
+  the measured pass of section 4.3 within a factor 1.5 (tile all cores
+  0.027 s, one thread 0.157 s; romsdal-slope 0.120 s; velhas 0.004 s), and
+  the run total grows by that row and no more (noise aside). The budget run
+  on Kultsjön pays one pass: under 0.08 s. The
   thread-scaling sweep as the protocol says.
 
 ## 12. Size, plan to Tuesday, and the cut line
 
 | part | files | counted lines |
 |---|---|---|
-| 104a | `budget.py` (new) about 90; `cli.py` two options, the refusals, the trial closure, the summary about 70; `final_check.py` the store split about 15; `refine_job.py` `How` about 3; `run_record.py` four keys and the summary sentence about 12 | **about 190** |
-| 104b | `measure.hpp` (new) about 90; `scan.hpp` and `refine_points.hpp` accumulators about 35; `bindings/core.cpp` about 45; `_core.pyi` about 25; `cli.py` the call and three values about 15; `run_record.py` three keys and the sentence about 8 | **about 220** |
+| 104a | `budget.py` (new) about 100 (the saturation and cap guards add about 10); `cli.py` two options, the refusals, the trial closure with the piece check, the summary about 85; `final_check.py` the store split about 15; `refine_job.py` `How` about 3; `run_record.py` four keys and the summary sentences about 15 | **about 220** |
+| 104b | `measure.hpp` (new) about 80; `scan.hpp` and `refine_points.hpp` accumulators about 35; `bindings/core.cpp` about 40; `_core.pyi` about 20; `cli.py` `--rms`, the call and two values about 20; `refine_job.py` `summary` and `How.rms` about 15; `run_record.py` two keys and the sentence about 8 | **about 220** |
 
 Prose in the same PRs (not counted): `README.md`'s refinement bullet gets
-`--triangles N` and `--max-triangles M`; `docs/GLOSSARY.md`, *Refinement*:
-*triangle budget* and *floor*; `project_structure.md` rows for `budget.py`
-and `measure.hpp`; `ROADMAP.md` row 104.
+`--triangles N` and `--max-triangles M` (104a) and `--rms` (104b);
+`docs/GLOSSARY.md`, *Refinement*:
+*triangle budget*, *floor* and *saturated*; `project_structure.md` rows for
+`budget.py` and `measure.hpp`; `ROADMAP.md` row 104.
 
 Plan: Sunday evening design review; Monday 104a red, green, review, `@perf`
 timing, merge; Monday afternoon 104b red and green (C++), Tuesday morning
@@ -633,9 +810,9 @@ floor and the same-mesh guarantee there is nothing to show.
 - *Mean, RMS and percentiles of the vertical error in --stats*
   (2026-10-08): RMS and mean taken up by 104b; percentiles left.
 - *Unbiased catchment height statistics under the sup-norm* (Ola,
-  2026-10-08): its candidate (3), reporting the mean signed error, is taken
-  up by 104b as a report; the bias on Kultsjön at 10 m is +0.33 m (section
-  7), a figure for that idea's research.
+  2026-10-08): overlapped, not taken up; the probe's measurement of the
+  bias on Kultsjön at 10 m (+0.33 m, section 7) is a figure for that idea's
+  research, and `error_summary`'s accumulator is where a signed sum would go.
 
 ## 14. Questions for Ola
 
@@ -645,6 +822,14 @@ floor and the same-mesh guarantee there is nothing to show.
    compare at equal size; the budget mesh then lands at 9.79 m with 2.4 %
    more triangles. Default taken: 65,893; a round number such as 50,000 or
    100,000 is one more run.
+3. The root-mean-square error is reported on every budget run and on a
+   tolerance run only with `--rms`, because one pass costs 3 to 6 % of the
+   run with every core and 22 % at one thread (section 4.3). Default taken:
+   `--rms` opt-in; making it unconditional is a one-line change later.
+
+Defaults taken on review's two open questions (round 1): no mean signed
+error (104b is RMS only); RMS on every tolerance run only if its measured
+cost were within noise, which it is not (above), hence `--rms`.
 
 ## Review
 
