@@ -426,5 +426,13 @@ class TestA12Pieces:
         assert "cutting needs" not in output  # the option checks passed
         assert trials.count == 3
 
+    def test_the_pieces_refusal_is_headed_by_triangles(self, tmp_path: Path) -> None:
+        """As the floor refusal: the option that asked for the run is `--triangles`."""
+        output = refused_run(
+            tmp_path, *VELHAS_ARGS, "--triangles", "7386", "--piece-budget", "2054000"
+        )
+        says(output, "Invalid value for --triangles", "2054000 bytes")
+        assert squashed("Invalid value for --dem") not in squashed(output), output
+
     def test_the_default_piece_budget_lands(self, velhas_7386: Run) -> None:
         assert 7017 <= velhas_7386.triangles <= 7755
