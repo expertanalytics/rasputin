@@ -140,6 +140,7 @@ from tin_engine.io.network_file import outlet_point, read_links, unit_geometries
 from tin_engine.io.ply import field_comments, write_ply
 from tin_engine.io.repository import (
     CacheRepository,
+    CacheWriter,
     DemRepository,
     TiffDemRepository,
     create_sqlite,
@@ -908,7 +909,12 @@ def mesh(
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
     classes = _class_source(
-        land_cover, land_cover_year, land_cover_legend, cache_root(cache, os.environ), known
+        land_cover,
+        land_cover_year,
+        land_cover_legend,
+        cache_root(cache, os.environ),
+        known,
+        _fetch_run(land_cover or "", domain, bbox, out_crs, cache),
     )
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
@@ -1067,13 +1073,7 @@ def mesh(
             checks, opened_seams, held = opened.checks, opened.seams, Once(opened.tile)
             del opened
     except NotCached as exc:
-        area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
-        if bbox is not None:
-            area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
-        frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
-        store = f"--cache {shlex.quote(str(cache))}" if cache else ""
-        flags = " ".join(filter(None, (area, frame, store)))
-        run = f"rasputin fetch {shlex.quote(dem[0])} {flags}".rstrip()
+        run = _fetch_run(dem[0], domain, bbox, out_crs, cache)
         raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
@@ -1384,17 +1384,35 @@ class _ClassSource:
     legend: Legend | None
 
 
+def _fetch_run(
+    key: str,
+    domain: Path | None,
+    bbox: tuple[float, float, float, float] | None,
+    out_crs: str | None,
+    cache: Path | None,
+) -> str:
+    """The ``rasputin fetch`` that copies `key` for this run's area into its cache."""
+    area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
+    if bbox is not None:
+        area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
+    frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
+    store = f"--cache {shlex.quote(str(cache))}" if cache else ""
+    flags = " ".join(filter(None, (area, frame, store)))
+    return f"rasputin fetch {shlex.quote(key)} {flags}".rstrip()
+
+
 def _class_source(
     value: str | None,
     year: int | None,
     legend_value: str | None,
     root: Path | None,
     known: Mapping[str, RemoteSource],
+    run: str = "",
 ) -> _ClassSource | None:
     """``--land-cover``, ``--land-cover-year`` and ``--land-cover-legend`` checked
     before any work: a catalogue key is that cached source, anything else a
     file, whose header is read here. Every refusal is a usage error naming
-    the option."""
+    the option; an uncached layer's names `run`, the fetch that copies it."""
     if value is None:
         for given, flag in ((year, "--land-cover-year"), (legend_value, "--land-cover-legend")):
             if given is not None:
@@ -1408,6 +1426,11 @@ def _class_source(
         if source.path is None and root is None:
             raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
         path = source.path or (root or Path()) / source.id / "features.gpkg"
+        if source.path is None and not path.is_file():
+            raise typer.BadParameter(
+                f"{source.id}/features.gpkg is not in the cache; run: {run}",
+                param_hint="--land-cover",
+            )
     elif source is not None:
         try:
             check_values(source, "classes", "--land-cover")
@@ -1473,6 +1496,9 @@ def _class_fractions(
     repository: ClassRaster | None = None
     if classes.path is not None and classes.path.suffix.lower() in SUFFIXES:
         name, url, fetched = classes.path.name, str(classes.path), datetime.date.today()
+        if source is not None and source.path is None:  # fetched: credit what was copied
+            copied = CacheWriter(classes.path.parent.parent, source.id).feature_manifest()
+            url, fetched = (copied.url, copied.first_fetched) if copied else (url, fetched)
     elif source is None:
         assert classes.path is not None
         name = classes.path.name
