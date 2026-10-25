@@ -25,11 +25,12 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   `none`. A run without `--land-cover` has no such row.
 - Both refusals name `--land-cover` and `.gpkg`, exit 2, before any phase is
   timed. A reservoir file of a suffix rasputin does not read (`.shp`) is a
-  usage error naming `--reservoirs` and the suffix.
+  usage error naming `--reservoirs` and the suffix, also before any phase.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 from collections.abc import Iterator
@@ -44,11 +45,15 @@ from shapely.geometry import Polygon, box
 
 from class_fixtures import KEY
 from cli_helpers import USAGE, squashed
+from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin
+from gpkg_fixtures import Layer, write_gpkg
+from gpkg_fixtures import Row as GpkgRow
 from test_cli_land_cover_polygons import cover_polygons, to_mesh, to_wgs84, write_cover_geojson
 from test_cli_mesh_cells import check_sums, column, corners, mesh, scene, written
 from tin_engine.stats import PhaseClock
+from vector_fixtures import vector_entry
 
 __all__ = ["scene"]  # a fixture, used by name
 
@@ -126,6 +131,95 @@ def test_t7_reservoir_is_min_of_lake_and_r(
     assert value is not None and "res.geojson" in value, value
 
 
+# ------------------------------------------------------------ a catalogue source
+
+RESERVOIRS_KEY = "test-reservoirs"
+RESERVOIRS_URL = "https://maps.example.org/arcgis/rest/services/Res/MapServer/9"
+
+
+def write_reservoirs_gpkg(path: Path, layer: str = "features") -> Path:
+    """The rectangle as a fetch writes a layer: one table, `features`, keyed by
+    `ID`; under another name, a second table `decoy` holds the whole scene."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [GpkgRow(1, reservoir_rectangle(), {"magasinNr": "1"})]
+    x0, y0 = dem_origin()
+    decoy = [GpkgRow(1, box(x0 - 100.0, y0 - 2500.0, x0 + 2500.0, y0 + 100.0), {"magasinNr": "2"})]
+    layers = [Layer(layer, 31983, rows, pk="ID")]
+    return write_gpkg(
+        path, layers if layer == "features" else [Layer("decoy", 31983, decoy), *layers]
+    )
+
+
+def install_reservoirs(monkeypatch: pytest.MonkeyPatch, entry: dict[str, object]) -> None:
+    """`entry` as the user's sources file's `RESERVOIRS_KEY`."""
+    monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+    config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
+    write_sources(config, {RESERVOIRS_KEY: entry})
+
+
+def layer_entry() -> dict[str, object]:
+    """An `arcgis-features` source, read from `<cache>/<id>/features.gpkg`."""
+    return {
+        "kind": "arcgis-features", "url": RESERVOIRS_URL, "crs": MESH_CRS,
+        "fields": ["ID", "magasinNr"],
+        "credit": "Test reservoirs, {url} (accessed on {date})", "licence_note": "Test licence",
+    }  # fmt: skip
+
+
+@pytest.mark.parametrize("kind", ["fetched-layer", "local-entry"])
+def test_t7_a_catalogue_source_of_features_gives_the_files_split(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    """`--reservoirs <key>`: a fetched layer in the run's `--cache`, or the
+    named layer of a local entry's GeoPackage of two, splits the lake share exactly as the same
+    rectangle given as a file does."""
+    if kind == "fetched-layer":
+        write_reservoirs_gpkg(scene["cache"] / RESERVOIRS_KEY / "features.gpkg")
+        install_reservoirs(monkeypatch, layer_entry())
+    else:
+        gpkg = write_reservoirs_gpkg(tmp_path / "own" / "res.gpkg", layer="regulated")
+        install_reservoirs(monkeypatch, vector_entry(gpkg, "Test reservoirs", layer="regulated"))
+    res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
+    args = ("--land-cover", str(cover), "--land-cover-legend", "corine", "--reservoirs")
+    with (
+        closing(written(scene, tmp_path / "file.gpkg", *args, str(res))) as a,
+        closing(written(scene, tmp_path / "key.gpkg", *args, RESERVOIRS_KEY)) as b,
+    ):
+        reservoir = column(b, "cells", "reservoir")
+        assert reservoir.max() > 0.5, reservoir.max()
+        for name in ("lake", "reservoir"):
+            assert_array_equal(column(b, "cells", name), column(a, "cells", name), name)
+        value = record(b, "reservoirs")
+    assert value is not None and not re.search(r"\bnone\b", value), value
+
+
+def test_t7_an_uncached_layer_is_refused_naming_the_fetch(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phases: list[str],
+) -> None:
+    """No `<cache>/<id>/features.gpkg`: a usage error before any phase that
+    names the option, the missing cache and the `rasputin fetch` that fills it."""
+    install_reservoirs(monkeypatch, layer_entry())
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(
+        scene, target, "--land-cover", str(cover), "--land-cover-legend", "corine",
+        "--reservoirs", RESERVOIRS_KEY,
+    )  # fmt: skip
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "--reservoirs" in flat and "notinthecache" in flat, output
+    assert f"rasputinfetch{RESERVOIRS_KEY}" in flat, output
+    assert phases == [], phases
+    assert not target.exists()
+
+
 # ------------------------------------------------------------ refusals
 
 
@@ -157,7 +251,7 @@ def test_t7_reservoirs_need_land_cover_and_a_gpkg(
 
 
 def test_t7_a_shapefile_is_refused_naming_the_option(
-    scene: dict[str, Path], tmp_path: Path
+    scene: dict[str, Path], tmp_path: Path, phases: list[str]
 ) -> None:
     res = tmp_path / "res.shp"
     res.write_bytes(b"\x00\x00\x27\x0a")
@@ -169,6 +263,7 @@ def test_t7_a_shapefile_is_refused_naming_the_option(
     assert code == USAGE, output
     flat = squashed(output)
     assert "--reservoirs" in flat and ".shp" in flat, output
+    assert phases == [], phases
     assert not target.exists()
 
 
