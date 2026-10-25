@@ -97,10 +97,14 @@ def budget_trials(record: dict[str, Any]) -> list[tuple[float, int]]:
 
 def says_within_three_figures(run: Run) -> None:
     """The summary's "within ... m" is the tolerance found to three significant
-    figures, the figure of "tolerance ... m found in"."""
+    figures, the figure of "tolerance ... m found in", and its largest difference
+    shares that precision."""
     found = f"{run.record['tolerance_m']:.3g}"
     assert repr(run.record["tolerance_m"]) != found, "the tolerance found is already short"
     says(plain(run.stderr), f"tolerance {found} m found in", f"within {found} m of it")
+    largest = f"{run.record['max_error_m']:.3g}"
+    assert f"{run.record['max_error_m']:.5g}" != largest, "the largest difference is already short"
+    says(plain(run.stderr), f"(largest difference {largest} m)")
 
 
 def timings_note(stats: str) -> str:
@@ -224,6 +228,12 @@ class TestA3Floor:
     def test_an_ask_under_the_floor_is_refused_naming_it(self, tmp_path: Path) -> None:
         output = refused_run(tmp_path, *VELHAS_ARGS, "--triangles", "40")
         says(output, "49 triangles", "76.6 m", "at least 49")
+
+    def test_the_floor_refusal_is_headed_by_triangles(self, tmp_path: Path) -> None:
+        """The refusal names the option asked wrongly, `--triangles`, not `--dem`."""
+        output = refused_run(tmp_path, *VELHAS_ARGS, "--triangles", "40")
+        says(output, "Invalid value for --triangles")
+        assert squashed("Invalid value for --dem") not in squashed(output), output
 
 
 # ---------------------------------------------------------------- A4: the same mesh

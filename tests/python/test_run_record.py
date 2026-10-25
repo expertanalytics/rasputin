@@ -759,6 +759,34 @@ class TestBudgetFields:
         text = rr.summary(projected(rr, tolerance_m=4.254655409631253, max_error_m=4.2))
         assert "within 4.254655409631253 m of it" in text, text
 
+    def budget_run(self, rr: ModuleType, tolerance: float, largest: float) -> Any:
+        return projected(
+            rr,
+            tolerance_m=tolerance,
+            max_error_m=largest,
+            triangles_asked=7386,
+            triangles_cap=7755,
+            budget_trials=self.TRIALS,
+        )
+
+    def test_the_largest_difference_shares_the_tolerance_s_three_figures(
+        self, rr: ModuleType
+    ) -> None:
+        """Ola's ruling: with the 2 % cap the summary said "within 10 m ...
+        (largest difference 10.02 m)", the largest reading over the tolerance.
+        On a budget run both figures print `.3g`."""
+        text = rr.summary(self.budget_run(rr, 10.020234567, 10.019712345))
+        assert "within 10 m of it (largest difference 10 m)." in text, text
+
+    def test_the_warning_says_the_tolerance_to_three_figures(self, rr: ModuleType) -> None:
+        """Ola's ruling: on a budget run "above the tolerance of T m" prints T `.3g`."""
+        text = rr.summary(self.budget_run(rr, 4.254655409631253, 4.31234))
+        assert "above the tolerance of 4.25 m." in text, text
+
+    def test_a_tolerance_run_warns_with_its_tolerance_in_full(self, rr: ModuleType) -> None:
+        text = rr.summary(projected(rr, tolerance_m=4.254655409631253, max_error_m=4.31234))
+        assert "above the tolerance of 4.254655409631253 m." in text, text
+
     def test_each_is_a_stats_row(self, rr: ModuleType) -> None:
         got = rows(rr, self.budget(rr))
         assert got["triangles_asked"] == (self.WORDING["triangles_asked"], "7386")
