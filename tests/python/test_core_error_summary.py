@@ -461,18 +461,24 @@ class TestThreads:
         )
 
     def test_the_summary_releases_the_gil(self, error_summary: Summary) -> None:
-        """One thread over 16 M nodes in two triangles: long enough to watch."""
-        n = 4001
+        """One thread over 16 M nodes in two triangles, summarised `calls` times in
+        a row: long enough to watch. One call took 0.048 s on a Linux CI runner,
+        so `calls = 6` keeps the timed work near 0.3 s there, six times the bound;
+        repeating the call costs no memory, unlike a larger grid."""
+        n, calls = 4001, 6
         array = np.random.default_rng(1).uniform(0.0, 100.0, (n, n)).astype(np.float32)
         vertices, triangles, z = corner_mesh(array)
         view = view_of(array)
-        got, ticks, elapsed = ticks_during(
-            lambda: error_summary(view, vertices, triangles, z, np.ones(4, bool), threads=1)
+        valid = np.ones(4, bool)
+        results, ticks, elapsed = ticks_during(
+            lambda: [
+                error_summary(view, vertices, triangles, z, valid, threads=1) for _ in range(calls)
+            ]
         )
-        assert got.count == n * n - 4
+        assert [r.count for r in results] == [n * n - 4] * calls
         assert elapsed >= 0.05, (
-            f"error_summary took only {elapsed:.3f}s -- too fast to measure GIL release; "
-            "enlarge the grid rather than lowering this bound"
+            f"{calls} error_summary calls took only {elapsed:.3f}s -- too fast to measure "
+            "GIL release; add calls rather than lowering this bound"
         )
         assert ticks >= RELEASED_TICKS, (
             f"only {ticks} ticks in {elapsed:.3f}s: error_summary appears to hold the GIL"
