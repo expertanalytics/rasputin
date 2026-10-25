@@ -29,6 +29,10 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   is a `ValueError` (the shared `fractions_of` refusal, "no class area").
 - No polygons: every triangle is class 0, fraction 1. No triangles: an empty
   table with one offset.
+- `most` below 8 is a `ValueError` naming 8; a piece is not halved past
+  `DEPTH` (64) levels; where the rectangle clip loses area the halves still
+  tile the piece; an uncovered rest of at most 1e-9 of its triangle is no
+  class 0 entry, one above it is.
 """
 
 from __future__ import annotations
@@ -216,6 +220,37 @@ class TestEdgesOfTheInput:
         with pytest.raises(ValueError, match="finite"):
             assigned(pf, [(311, broken)])
 
+    def test_a_rounding_rest_is_no_class_0_entry(self, pf: ModuleType) -> None:
+        """A 100 m triangle 6,600 km from the origin inside a 500 m 1,000-gon
+        cut in pieces: the pieces' areas miss the triangle's by +5e-13 of it
+        (checked here, so the case can fail), under the 1e-9 floor, so the row
+        is 311 alone."""
+        tri = np.array([[500_010.25, 6_600_020.5], [500_090.75, 6_600_035.25],
+                        [500_040.5, 6_600_095.75]])  # fmt: skip
+        big = Point(500_037.1, 6_600_041.9).buffer(500.0, quad_segs=250)
+        shape = Polygon(tri)
+        pieces = np.array(pf.subdivide(big), dtype=object)
+        rest = shape.area - float(np.sum(shapely.area(shapely.intersection(shape, pieces))))
+        assert 0.0 < rest <= 1e-9 * shape.area
+        offsets, classes, fractions = table_of(
+            pf.assign(tri, np.array([[0, 1, 2]]), [(311, big)], known=KNOWN)
+        )
+        assert_array_equal(offsets, [0, 1])
+        assert_array_equal(classes, [311])
+        assert_array_equal(fractions, [1.0])
+
+    def test_an_uncovered_rest_above_the_floor_is_class_0(self, pf: ModuleType) -> None:
+        """311 over [0, 2]^2 but a hole of 2e-4 x 2e-4 inside A: 2e-8 of A
+        uncovered, twenty times the 1e-9 floor, is a class 0 entry."""
+        holed = Polygon(
+            box(0.0, 0.0, 2.0, 2.0).exterior.coords,
+            [box(0.5, 0.5, 0.5002, 0.5002).exterior.coords],
+        )
+        offsets, classes, fractions = table_of(assigned(pf, [(311, holed)]))
+        assert_array_equal(offsets, [0, 2, 3])
+        assert_array_equal(classes, [0, 311, 311])
+        np.testing.assert_allclose(fractions[0], 2e-8, rtol=1e-4)
+
     def test_a_zero_area_triangle_is_refused(self, pf: ModuleType) -> None:
         """Three collinear corners: no area to share out, as the raster route
         refuses."""
@@ -268,6 +303,51 @@ class TestSubdivide:
     def test_a_polygon_of_exactly_most_coordinates_is_one_piece(self, pf: ModuleType) -> None:
         assert len(list(pf.subdivide(RING, most=1001))) == 1
         assert len(list(pf.subdivide(RING, most=1000))) > 1
+
+    @pytest.mark.parametrize("most", [7, 5])
+    def test_most_below_8_is_refused(self, pf: ModuleType, most: int) -> None:
+        """A rectangle less a notch at one vertex is 7 vertices and the
+        closing point; halving cannot always get under 8."""
+        with pytest.raises(ValueError, match=f"at least 8, got {most}"):
+            pf.subdivide(STRIP, most=most)
+
+    def test_a_piece_is_not_halved_past_depth_levels(
+        self, pf: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With the backstop at 2 levels the 1,000-gon stops at 4 quarters,
+        each over `most`, and they still tile it."""
+        monkeypatch.setattr(pf, "DEPTH", 2)
+        pieces = list(pf.subdivide(RING, most=8))
+        assert len(pieces) == 4
+        assert min(coordinate_counts(pieces)) > 8
+        assert abs(area_sum(pieces) / RING.area - 1.0) <= AREA
+
+    def test_vertices_an_ulp_apart_stop_at_64_levels(self, pf: ModuleType) -> None:
+        """Section 3A's near-coincidence: a notch of 20 vertices one ulp apart
+        near (0.3, 0.3) in [0, 1]^2. 64 halvings do not separate them, so one
+        piece keeps more than `most` coordinates; the pieces still tile."""
+        zigzag, x, y = [], 0.3, [0.3, float(np.nextafter(0.3, 1.0))]
+        for k in range(20):
+            zigzag.append((x, y[k % 2]))
+            x = float(np.nextafter(x, 1.0))
+        notched = Polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), *zigzag[::-1], (0.0, 1.0)])
+        assert notched.is_valid
+        pieces = list(pf.subdivide(notched, most=8))
+        assert max(coordinate_counts(pieces)) > 8
+        assert abs(area_sum(pieces) / notched.area - 1.0) <= AREA
+
+    def test_a_hole_touching_the_ring_on_the_cut_line_keeps_its_area(self, pf: ModuleType) -> None:
+        """[0, 2] x [0, 4] less the hole (0, 2), (1, 1.5), (1, 2.5), which
+        touches the outer ring at (0, 2), on the first cut y = 2: GEOS's
+        rectangle clip gives the upper half 0.25 instead of 3.75; the pieces
+        must still sum to 7.5."""
+        holed = Polygon(box(0.0, 0.0, 2.0, 4.0).exterior.coords, [[(0, 2), (1, 1.5), (1, 2.5)]])
+        assert holed.is_valid and shapely.get_num_coordinates(holed) == 9
+        assert shapely.clip_by_rect(holed, 0.0, 2.0, 2.0, 4.0).area == 0.25
+        pieces = list(pf.subdivide(holed, most=8))
+        assert max(coordinate_counts(pieces)) <= 8
+        assert abs(area_sum(pieces) / holed.area - 1.0) <= AREA
+        assert abs(shapely.union_all(pieces).area / holed.area - 1.0) <= AREA
 
     def test_holes_count_and_are_kept(self, pf: ModuleType) -> None:
         """A square of 5 coordinates around a 1,000-gon hole: 1,006 in all, so
