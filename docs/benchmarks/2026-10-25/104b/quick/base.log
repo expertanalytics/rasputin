@@ -1,0 +1,9 @@
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 69 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 48 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 42 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/tri-budget-rms/docs/benchmarks/quick/baseline-apple-m1-max-ac.json
+NO BASELINE: machine os_version: 27.0.1 vs 27.0
