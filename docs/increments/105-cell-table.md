@@ -1,6 +1,8 @@
 # Increment 105: the cell table — hydrological cells on a coarse mesh
 
-**Status: designed, not built; design round 2.** By `@architect`, 2026-10-25,
+**Status: 105c built (branch `worktree-shyft-cells` at `c2520d53`, 146 net
+lines; section 12), code review round 2 next; 105a and 105b not started.**
+Designed by `@architect`, 2026-10-25,
 on master `074e6322`, worktree `shyft-cells`; round 2 the same day after the
 design review's round 1 (section *Review*) and the rulings the main session
 relayed from Ola (section 11). From Ola's two sentences of 2026-10-25:
@@ -235,7 +237,7 @@ returns (`shapely.intersection` areas without `grid_size`, so no snapping, summe
 `ClassFractions` table as the raster route. Uncovered area is class 0. A coded
 `--features` legend beside it stays refused, as today.
 
-*Subdivision.* Each class polygon is halved along the longer side of its bounding box with `shapely.clip_by_rect` until every piece has at most **64 coordinates** (`shapely.get_num_coordinates`: closing points and holes count; PostGIS's `ST_Subdivide` idea). `clip_by_rect` output is not guaranteed valid; pieces are not repaired, and T6's area sums guard them; a piece keeps its polygon's
+*Subdivision.* Each class polygon is halved along the longer side of its bounding box with `shapely.clip_by_rect` until every piece has at most **64 coordinates** (`shapely.get_num_coordinates`: closing points and holes count; PostGIS's `ST_Subdivide` idea). `clip_by_rect` output is not guaranteed valid; pieces are not repaired, and T6's area sums guard them. Where the two halves' areas miss the piece's by more than 1e-9 of it (GEOS's clip drops area when a hole touches the ring at a point on the cut line), both halves are cut again with `shapely.intersection`. `most` below 8 is refused: a rectangle less a notch at one vertex is 7 vertices and the closing point, which halving never gets under; and a piece is not halved past 64 levels, so a point no halving separates cannot loop. A piece keeps its polygon's
 class, and the sum over pieces equals the sum over the polygon because the
 pieces tile it. Without it the cut is 7 ms per triangle at any mesh size,
 paid in the vertices of the CORINE polygon each triangle meets (section 8a:
@@ -565,6 +567,29 @@ MapBiomas 7 *Flooded Savanna (beta)* is savanna with 4, by its name; 9
 **Default taken, not put to Ola:**
 
 6. 105c widens class numbers in `.vtk` and `.ply` to `int` for every land-cover run, raster runs too (4.5). Default: yes. `git grep -n land_cover_classes private/master` returns nothing, and the private package's `tests/python/vtkread.py` reads the declared type (`"int": ">i4"`), so no private reader breaks.
+
+## 12. As built (105c)
+
+Red `8e6b04d6`, green `fbeb13d3`, kill record `cc1ce509`, review fixes red
+`71340652` and green `c2520d53`; 146 net production lines against 145.
+Beyond the design:
+
+- `most` floor 8 (the brief said 5) and the 64-level halving backstop, and
+  the intersection fallback where `clip_by_rect` drops area (4.5).
+- An uncovered rest under 1e-9 of its triangle is the cut's rounding, not a
+  class 0 entry (a chosen threshold).
+- A catalogue vector source is taken only with a legend, its own or
+  `--land-cover-legend`; an uncached one is refused before meshing, naming
+  the `rasputin fetch` run, a hint now shared with `--dem` (`_fetch_run`).
+- A fetched layer is credited with its manifest's `url` and `first_fetched`;
+  with no manifest, its path and today's date.
+- The `--land-cover` help text stays short (the MCP tool list is at 24,975
+  of its 25,000 bytes); README says `clc2018` is accepted.
+
+Kill record (`cc1ce509`): every mutant on the piece count, the `most`
+floor, the depth backstop, the fallback and the rest floor killed; one
+equivalent (an unclipped half inside the clip, which the fallback recuts),
+killed when planted after the fallback.
 
 ## Review
 

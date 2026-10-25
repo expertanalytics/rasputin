@@ -124,7 +124,10 @@ every option.
   It holds the triangles, the constraint edges with their feature bits and,
   with a legend, the cell array `land_cover_code`. To colour by land cover,
   import `corine.json` in ParaView's Colour Map Editor (Choose Preset, Import)
-  and colour by `land_cover_code`.
+  and colour by `land_cover_code`. `--land-cover` adds each class's exact
+  share of every triangle, from a class raster or from class polygons: a
+  file with `--land-cover-legend`, or a fetched source with a legend such as
+  `clc2018`.
 - **`.ply`** is for QGIS and other mesh tools. The surface goes to `--out`,
   and the constraint edges, if you want them, to a second file named by
   `--out-edges`.
