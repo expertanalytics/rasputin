@@ -21,11 +21,17 @@ triangle, and the lake share it is compared with is float32 (6e-8).
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 - The run record row is named `reservoirs`; with the option, its value names
-  the file; without it (on a run that writes the `cells` layer), it says
+  the file, or for a catalogue source the catalogue key (fetched layer and
+  local entry alike); without it (on a run that writes the `cells` layer), it says
   `none`. A run without `--land-cover` has no such row.
 - Both refusals name `--land-cover` and `.gpkg`, exit 2, before any phase is
   timed. A reservoir file of a suffix rasputin does not read (`.shp`) is a
   usage error naming `--reservoirs` and the suffix, also before any phase.
+- A land cover with no legend writes no `cells` layer, so `--reservoirs` with
+  it is refused like the two above: exit 2, before any phase, naming
+  `--reservoirs` and the word "legend".
+- With no cache root, a catalogue key for `--reservoirs` gets the whole
+  `NO_CACHE` refusal `--land-cover` gives, before any phase.
 """
 
 from __future__ import annotations
@@ -44,7 +50,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 from shapely.geometry import Polygon, box
 
 from class_fixtures import KEY
-from cli_helpers import USAGE, squashed
+from cli_helpers import USAGE, invoke, no_cache_anywhere, says_no_cache, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin
@@ -195,6 +201,7 @@ def test_t7_a_catalogue_source_of_features_gives_the_files_split(
             assert_array_equal(column(b, "cells", name), column(a, "cells", name), name)
         value = record(b, "reservoirs")
     assert value is not None and not re.search(r"\bnone\b", value), value
+    assert RESERVOIRS_KEY in value and "features.gpkg" not in value, value
 
 
 def test_t7_an_uncached_layer_is_refused_naming_the_fetch(
@@ -270,3 +277,41 @@ def test_t7_a_shapefile_is_refused_naming_the_option(
 def test_t7_without_land_cover_no_reservoirs_row(scene: dict[str, Path], tmp_path: Path) -> None:
     with closing(written(scene, tmp_path / "plain.gpkg")) as conn:
         assert record(conn, "reservoirs") is None
+
+
+def test_t7_a_land_cover_without_a_legend_is_refused_naming_the_legend(
+    scene: dict[str, Path], tmp_path: Path, phases: list[str]
+) -> None:
+    """No legend, no `cells` layer: nothing would hold the reservoir share."""
+    res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, "--land-cover", KEY, "--reservoirs", str(res))
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "--reservoirs" in flat and "legend" in flat, output
+    assert phases == [], phases
+    assert not target.exists()
+
+
+def test_t7_without_a_cache_root_a_key_is_refused_as_land_cover_is(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phases: list[str],
+) -> None:
+    """No `--cache`, `RASPUTIN_DATA`, `XDG_CACHE_HOME` or `HOME`; the land
+    cover is a file, so only the reservoirs key needs a cache."""
+    install_reservoirs(monkeypatch, layer_entry())
+    no_cache_anywhere(monkeypatch)
+    target = tmp_path / "x.gpkg"
+    code, output = invoke(
+        "mesh", "--dem", str(scene["dem"]), "--domain", str(scene["domain"]),
+        "--tolerance", "3", "--out", str(target), "--land-cover", str(cover),
+        "--land-cover-legend", "corine", "--reservoirs", RESERVOIRS_KEY,
+    )  # fmt: skip
+    assert code == USAGE, output
+    assert "--reservoirs" in squashed(output), output
+    says_no_cache(output)
+    assert phases == [], phases
+    assert not target.exists()
