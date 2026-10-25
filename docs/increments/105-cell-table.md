@@ -171,8 +171,8 @@ level, say) count once; then `reservoir_t = min(lake_t, r_t)` and
 `lake_t -= reservoir_t`. Exact when the polygons are the lake outlines at the
 regulated level; otherwise bounded by the lake share, so a reservoir polygon
 over land the land cover calls forest adds nothing. `--reservoirs` without
-`--land-cover`, or with a `.vtk` output, is a usage error ("needs
---land-cover and a .gpkg output"). Without `--reservoirs`, reservoir is 0 and
+`--land-cover` with a legend, or with a `.vtk` output, is a usage error ("needs
+--land-cover with a legend and a .gpkg output"). Without `--reservoirs`, reservoir is 0 and
 the run record says so (no warning: nothing was found wrong). Sources: **Norway**, NVE's
 reservoir layer `VassdragsreguleringVannkraft/MapServer/9` (registered in
 Ola's sources file as `nve-reservoirs`, cached 2026-10-17: 1,227 polygons
@@ -354,7 +354,7 @@ the GeoPackage content list and the `.vtk` arrays of such a run.
   class 2 before any DEM is read (no `x.gpkg.part` exists afterwards); the
   same with `--out x.vtk` writes the mesh with its three fraction arrays as
   today; `--reservoirs` (105b) with `--out x.vtk` or without `--land-cover`
-  is a usage error.
+  with a legend is a usage error.
 - **T6 polygon fractions (105c).** `polygon_fractions.assign` on triangles
   `A = (0,0), (2,0), (0,2)` and `B = (2,0), (2,2), (0,2)` (plan area 2 each)
   against class polygons 311 = the strip `[0,1] × [0,2]` and 512 = the square
@@ -649,7 +649,8 @@ of the difference). Beyond the design:
   box moved into `_near`, which both readers share.
 - The read and the cut run in their own timed phase, `reservoirs`.
 - Refusals, usage errors on `--reservoirs` before any phase: "needs
-  --land-cover and a .gpkg output"; "X is neither a catalogue source of
+  --land-cover with a legend and a .gpkg output"; the no-cache refusal
+  `NO_CACHE` that `--land-cover` gives; "X is neither a catalogue source of
   features nor a .geojson, .json, .gpkg, .gml file"; "ID/features.gpkg is
   not in the cache; run: rasputin fetch ...".
 - Two calls in `cli.mesh` are packed under `# fmt: skip`: `_reservoir_source`
@@ -658,8 +659,7 @@ of the difference). Beyond the design:
 - The MCP tool-list cap in `tests/python/test_mcp_schema.py` rose from 25,000
   to 31,000 bytes by increment 37's rule (20 % above the measured 25,176,
   rounded up to a thousand).
-- **Known gap:** the run record's `reservoirs` row is the file name, so a
-  catalogue key is recorded as `features.gpkg`, not as the key.
+- The `reservoirs` row names the catalogue key.
 
 Kill record (`c7d17a54`): 16 mutants, all killed, the design's two targets
 (`min(lake, r)`, `lake -= reservoir`) among them; two survived until the
@@ -675,3 +675,4 @@ added. Full suite 10,196 passed, 18 skipped, 1 xfailed.
 - **Code review (105c), round 2, 2026-10-25.** `@reviewer`, head `ad9ac0993e672573905d45a196ff49d6cadd934c`, range `cc1ce509..ad9ac099`. Verdict: APPROVED WITH WORDINGS. LOC: 146 net (round +23, `cli.py`; estimate 145). Round 1 closed: manifest credit with fallback; uncached layer refused in `_class_source`, exit 2, naming `rasputin fetch <id>`; shared `_fetch_run`; prose matches `polygon_fractions.py`; kill record matches `cc1ce509`. Applied: "(the brief said 5)" dropped from section 12. CI after push.
 - **Code review (105a), round 1, 2026-10-25.** `@reviewer`, head `d945aeab702c75bd51ad13aebff90dc8c5b8d12b`, range `6abe538f..d945aeab`. Verdict: APPROVED WITH WORDINGS. LOC: 122 net (estimate 140). Code matches section 9; section 13's pins match `791794f1`; kill record `387c84b1` covers the seven targets, 6 of 6 killed. Wordings 1-3 applied; wording 4 (the `cells.py` comment says 1e-6 where section 3 says 2.7e-6) left as a follow-up code fix.
 - **Code review (105b), round 1, 2026-10-25.** `@reviewer`, head `12c7167f50b588e57d9852313af3ef67724e07fb`, range `edc17a6f..12c7167f`. Verdict: CHANGES REQUESTED. LOC: 87 net (estimate 55; overrun justified by section 4.2). Kill record `c7d17a54` 16 of 16. Blocking: (1) `--reservoirs` with a legend-less land cover and a .gpkg output is accepted, read and recorded, but no cells layer is written; refuse unless categories exist, naming the legend, with a test; (2) record the catalogue key, not `features.gpkg`. Suggestion: one `_cached_features` helper for `_class_source` and `_reservoir_source`, giving `--reservoirs` the `NO_CACHE` refusal too.
+- **Code review (105b), round 2, 2026-10-25.** `@reviewer`, head `2a51e73f3ae51b3fc0f6766824b7a67a3e47185a`, range `6df49915..2a51e73f`. Verdict: APPROVED WITH WORDINGS. LOC: 83 net (round −4). All four round-1 findings resolved; three wordings applied (refusal "with a legend" in sections 4, T5 and 14; no-cache refusal named; known gap dropped).
