@@ -2,9 +2,10 @@
 
 Status: **design to build, first slice**, ruled by Ola 2026-10-25 ("yes, build
 the first slice"): rules option A, the rest as recommended. Section 8 holds
-the rulings. Design round 2 by `@architect`, 2026-10-25, on
+the rulings. Design round 3 by `@architect`, 2026-10-25, on
 `worktree-pipes-design`; round 1's seven review findings are closed in
-sections 3 to 9, each marked *(review 1, item N)*.
+sections 3 to 9, each marked *(review 1, item N)*; round 2's three in
+sections 4 and 11, marked *(review 2, item N)*, its wordings in 4, 7, 9, 11.
 
 Ola, 2026-10-25: "When I'm back, we should make a few development pipes. Then
 we add tasks to these pipes. We are limited by the number of agents, but this
@@ -176,20 +177,25 @@ files; `pipes.py set` may change it later with `--plain` / `--governed`)*.
 
 **What a free writer takes.** `pipes.py next` applies, in this order, the
 first that holds; "runnable" excludes `waiting` items always, and while
-unattended (`harness_mode.read_mode`) also items without `plain`:
+unattended (`harness_mode.read_mode`) also items without `plain`. An
+in-flight item is **busy** while `.claude/current-task/` holds a note
+`<persona>-<name>-*.md` for its branch's worktree, the branch being
+`worktree-<name>` (`tools/brief.py` writes the note, `tools/new_worktree.py`
+names the branch): a writer already has it *(review 2, item 1)*.
 
-1. Across all pipes, the runnable in-flight item nearest to merging
-   (`review` before `green` before `red` before `designing`); this keeps
-   `CLAUDE.md` §3's rule and Kanban's "finish first". Ties go to the stuck
-   item (section 9), then to the higher-priority pipe, then to the older
-   `since`.
+1. Across all pipes, the runnable in-flight item that is not busy, nearest to
+   merging (`review` before `green` before `red` before `designing`); this
+   keeps `CLAUDE.md` §3's rule and Kanban's "finish first". Ties go to the
+   higher-priority pipe, then to the older `since`.
 2. If the in-flight count is under three: a stuck runnable `queued` item,
    oldest first, from any pipe *(section 9)*; otherwise the highest-priority
-   pipe's first runnable `queued` item.
+   pipe's first runnable `queued` item. Steps 2 and 3 skip fallback items
+   *(review 2, item 2)*.
 3. The next pipe by priority with a runnable `queued` item, under the same
    count.
-4. Any pipe's fallback item, highest priority first, when it is runnable and
-   not already in flight.
+4. Under the same count *(review 2, item 3)*, any pipe's fallback item,
+   highest priority first, when it is runnable and neither in flight nor
+   busy.
 5. Idle, printed as `IDLE: no runnable item in any pipe`, which the morning
    check counts.
 
@@ -295,15 +301,18 @@ other harness tools, because the recap runs from a hook on the system
    working tree's `.claude/pipes/*.toml`, then each other remote as section 3
    says; the second value is the warnings. Git is reached through one
    injectable `run(args) -> (code, stdout)` so tests pass a fake.
-3. **Rules.** `order(pipes, items, now, unattended) -> Choice` (section 4's
-   five steps, returning the item and the reason), `stuck(items, now) ->
-   list[Item]` (section 9), `in_flight(items) -> int`. Pure functions of
-   their arguments; `now` and `unattended` are parameters, never read inside.
+3. **Rules.** `order(pipes, items, now, unattended, busy) -> Choice`
+   (section 4's five steps, returning the item and the reason; `busy` is the
+   set of branches `busy_branches(tasks) -> set[str]` lists from the note
+   files in `.claude/current-task/`), `stuck(items, now) -> list[Item]`
+   (section 9), `in_flight(items) -> int`. Pure functions of their
+   arguments; `now`, `unattended` and `busy` are parameters, never read
+   inside.
 4. **Commands.** `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`,
    `show`; each parses, reads, applies one pure function, appends one line.
    `show` prints the block below; `session_state.print_recap` calls
-   `pipes.show_lines(repo, now)` and prints them where the `QUEUE:` lines
-   were read, between *Waiting on Ola* and the format warnings.
+   `pipes.show_lines(repo, now)` and prints them after *Waiting on Ola*,
+   before the `session.md format:` warnings.
 
 **The recap block** (`pipes.py show`), capped at 40 lines then `... N more`,
 each line at most 120 characters, so the block is at most 4,800 of the
@@ -367,8 +376,8 @@ What resurfacing does, in both places an item can be overlooked:
   `Stuck:`, each with its age in whole days (`4 d`), before any pipe's own
   block, and a stuck `waiting` item's question is numbered first under
   *Questions for Ola*.
-- **The order.** In `next`, step 1's ties and step 2 prefer a stuck item to a
-  fresher one of the same step, oldest first, across pipes: a stuck `queued`
+- **The order.** In `next`, step 2 prefers a stuck item to a fresher one,
+  oldest first, across pipes: a stuck `queued`
   item in the lowest pipe is taken before a fresh one in the highest. A stuck
   `waiting` item is not runnable, so it only surfaces; its ruling is Ola's.
 
@@ -381,7 +390,7 @@ still not wanted is `parked` or `dropped` by Ola's word, which ends it.
 
 | Where | Change | Size |
 |---|---|---|
-| `tools/pipes.py` (new) | records, definitions (tree and other remotes, no fetch), the order rule, stuck, `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`, `show` | about 235 lines (220 + about 15 for stuck) |
+| `tools/pipes.py` (new) | records, definitions (tree and other remotes, no fetch), the order rule, stuck, busy, `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`, `show` | about 245 lines (220 + about 15 for stuck + about 10 for busy) |
 | `tools/session_state.py` | print `pipes.show_lines` where `QUEUE:` was read; `session_format` accepts zero or one `QUEUE:` line | about +15, -20 |
 | `.claude/hooks/guard_governance.py` | `"tools/pipes.py"` added to `GOVERNED`, because `session_state.py` imports it | +1 |
 | `.claude/REQUIRED-READING.md` | the `session.md` format line: `NOW:` (one), `ASK OLA:` lines, `QUEUE:` (at most one); item questions go to `pipes.py ask`; the fallback sentence kept | net about -15 words |
@@ -390,7 +399,7 @@ still not wanted is `parked` or `dropped` by Ola's word, which ends it.
 | `tests/python/harness_fixtures.py` | `tools/pipes.py` added to `COPIED` | uncounted |
 | `tests/python/test_pipes.py` | section 11 | uncounted |
 
-Net about 230 lines of counted code *(review 1: the round-1 table summed to
+Net about 240 lines of counted code *(review 1: the round-1 table summed to
 220, not 250)*, one PR under the 700 cap. **Governed paths throughout**
 (`session_state.py`, `guard_governance.py`, both rule files), so built by
 day, with Ola at the prompt. **The second slice**: `away.py`'s enter step
@@ -421,18 +430,25 @@ with the rest.
    items `a` `review` in `lsm`, `b` `green` in `core`, `c` `queued` in `core`:
    `next` is `lsm/a`, reason "nearest to merging".
 3. **Order, steps 2 and 3, and the caps.** `core` has two in flight (`red`,
-   `green`) and one `queued`; `lsm` has none in flight and one `queued`: in
-   flight is 2 of 3, `core` is at its per-pipe two, so `next` is `lsm`'s
-   queued item. With three in flight across the pipes, `next` is step 4 or
-   5, never a `queued` item.
-4. **Waiting is not in flight.** Four items: three `waiting` and one `red`;
-   `in_flight` is 1, and `next` may take a `queued` item.
+   `green`), both busy (the fixture's `.claude/current-task/` holds one
+   `developer-<name>-190000.md` per branch, plus a `session.md` that
+   `busy_branches` ignores), and one `queued`; `lsm` has none in flight and
+   one `queued`: in flight is 2 of 3, `core` is at its per-pipe two, so
+   `next` is `lsm`'s queued item. With the `red` item's note removed, `next`
+   is it, reason "nearest to merging". With three in flight across the
+   pipes, all busy, `next` is `IDLE`, never a `queued` or fallback item
+   *(review 2, items 1 and 3)*.
+4. **Waiting is not in flight.** Five items: three `waiting`, one `red` and
+   busy, one `queued`; `in_flight` is 1, and `next` is the `queued` item
+   *(review 2, item 1)*.
 5. **Unattended.** The same items with `unattended=True`: a `queued` item
    without `plain` is skipped; with none `plain`, `next` prints
    `IDLE: no runnable item in any pipe`.
 6. **Fallback.** Every non-fallback item `waiting`; one `queued --fallback`
-   item in `lsm`: `next` is it, reason "fallback". `add --fallback
-   --governed` is refused with a message naming both flags.
+   item in `lsm`: `next` is it, reason "fallback"; with a plain `queued`
+   item added to `core`, `next` is that one, not the fallback *(review 2,
+   item 2)*. `add --fallback --governed` is refused with a message naming
+   both flags.
 7. **Private definitions.** A second bare repository, added as remote
    `private`, with one commit holding `.claude/pipes/lsm.toml`; after
    `git fetch private` (in the test, not in the tool), `definitions` returns
@@ -451,7 +467,8 @@ with the rest.
 9. **Questions.** Two `waiting` items, one stuck; *Questions for Ola* numbers
    the stuck one `1.`, each line ends with its default.
 10. **Recap integration.** `harness_fixtures.run_script(repo,
-    "tools/session_state.py", "")` with one pipe and two items prints the
+    "tools/session_state.py", "")` with one pipe and two items, one `red`,
+    one `queued`, prints the
     `Pipes (in flight 1 of 3` header after *Waiting on Ola*; `session_format`
     on a file with one `NOW:` and no `QUEUE:` line returns no warning, with
     two `QUEUE:` lines returns one.
