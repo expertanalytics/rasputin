@@ -231,13 +231,11 @@ existing array in each, 4.5).
 legend such as `clc2018` or Ola's `ar50-innlandet`): the class polygons are
 read through `feature_input.read_source` with the legend, moved to the mesh
 CRS, **subdivided**, and each triangle is cut against the pieces an `STRtree`
-returns (`shapely.intersection` areas, summed per class), giving the same
+returns (`shapely.intersection` areas without `grid_size`, so no snapping, summed per class), giving the same
 `ClassFractions` table as the raster route. Uncovered area is class 0. A coded
 `--features` legend beside it stays refused, as today.
 
-*Subdivision.* Each class polygon is halved along the longer side of its
-bounding box with `shapely.clip_by_rect` (its output is not guaranteed valid; pieces are not repaired, and T6's area sum guards them), cut with `shapely.intersection` without `grid_size` (no snapping) until every piece has at most
-**64 coordinates** (`shapely.get_num_coordinates`: closing points and holes count) (PostGIS's `ST_Subdivide` idea); a piece keeps its polygon's
+*Subdivision.* Each class polygon is halved along the longer side of its bounding box with `shapely.clip_by_rect` until every piece has at most **64 coordinates** (`shapely.get_num_coordinates`: closing points and holes count; PostGIS's `ST_Subdivide` idea). `clip_by_rect` output is not guaranteed valid; pieces are not repaired, and T6's area sums guard them; a piece keeps its polygon's
 class, and the sum over pieces equals the sum over the polygon because the
 pieces tile it. Without it the cut is 7 ms per triangle at any mesh size,
 paid in the vertices of the CORINE polygon each triangle meets (section 8a:
@@ -261,7 +259,7 @@ once in `fractions_of`, and the readers follow the declared type
 (`vtk_read.py` knows `int`; `tests/python/vtkread.py` and `plyread.py` read
 the declared type). About 10 lines; the `.vtk` and `.ply` arrays change
 type, and a reader outside this repository (the private package's) must read
-the declared type rather than assume `unsigned_char` (section 11, pin).
+the declared type rather than assume `unsigned_char` (section 11, item 6).
 Cost: 3 more bytes per entry, about 110 MB on a São Francisco `.vtk` of 37
 million entries.
 
@@ -564,11 +562,12 @@ MapBiomas 7 *Flooded Savanna (beta)* is savanna with 4, by its name; 9
 *Forest Plantation* stays forest; CORINE 324 Transitional woodland-shrub and
 244 Agro-forestry, and AR50 60 Marsh, stay unspecified.
 
-**Open:**
+**Default taken, not put to Ola:**
 
-6. 105c widens class numbers in `.vtk` and `.ply` to `int` for every land-cover run, raster runs too (4.5). Default: yes. `git grep -n land_cover_classes private/master` returns nothing, so no private reader breaks.
+6. 105c widens class numbers in `.vtk` and `.ply` to `int` for every land-cover run, raster runs too (4.5). Default: yes. `git grep -n land_cover_classes private/master` returns nothing, and the private package's `tests/python/vtkread.py` reads the declared type (`"int": ">i4"`), so no private reader breaks.
 
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `bb7c8e893e8b4793f8515fc42b67449246531d73`, range `074e6322..bb7c8e89`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 305 estimated in three PRs. Holds: Shyft quotes match `geo_personality.h` (TIN slope factor 1.0, grid 0.9); category mapping matches the shipped legends; licences (RGI CC BY 4.0, NVE glaciers CC BY-NC-SA, reservoir layer NLOD 1.0, 1,227 polygons); no GDAL or shapefile reader; T2, T3 recompute; refusal at 2,254 (865 with `--start-min-angle 0`) re-run; probe sums agree. Blocking: (1) no timings: say no step runs without `--land-cover` and time 105a writes and the 105c cut on the delivery's Kultsjön mesh; (2) no test cases for 105b and 105c (the `min(lake, r)` mutant unkilled): add lake 0.5/r 0.8 -> reservoir 0.5, lake 0, and lake 0.5/r 0.2 -> reservoir 0.2, lake 0.3, and a polygon-cut case; (3) refusing an uncategorised water class at load breaks `tests/python/legend_fixtures.py:35,61` and `test_legends.py:761`: amend them in red or refuse only when the cells table is written; (4) wordings: the delivery mesh has 86,537 triangles, not 65,893 (4.4, 4.5), São Francisco about 32 million triangles and 37 million rows; "sums to 1 exactly" is up to 44 x 6e-8 over; the 15.7 s includes reading and reprojecting; Q3 "no new option" but 105b adds `--reservoirs`; "the 104 showcase" -> "the triangle-budget showcase". Not pushed; no CI.
 - **Design review, round 2, 2026-10-25.** `@reviewer`, head `123820cb0f6f08d2128c99733c84f40b9065ecd7`, range `4163bc45..123820cb`. Verdict: CHANGES REQUESTED, only for Ola's ruling on widening class numbers to `int` in `.vtk` and `.ply` for every land-cover run (now question 6, default yes; `git grep land_cover_classes private/master` finds no reader). LOC: 0 (design); estimate 140 + 55 + 145 = 340, each part under 150. Round 1 closed: section 8a timings match the probes (610.7 s -> 2.7 s, same totals); T6, T7 recomputed; legend check only when the cells table is written (call before the DEM read, `cli.py:907`); five wordings fixed. Four wordings applied in this commit: section 9 heading restored; "64 coordinates" with what counts; clip_by_rect validity and intersection without snapping; question 6 replaces the pin. Not pushed; no CI.
+- **Design review, round 3, 2026-10-25.** `@reviewer`, head `f8621a02a3988deade98d479b38ba7433cc40487`, range `123820cb..f8621a02`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); estimate 140 + 55 + 145 = 340 in three PRs. Nothing needs Ola to rule; the `int` widening is a default taken, not put to Ola. Applied in this commit: the no-snapping note moved to the per-triangle intersection; the subdivision sentence rewritten; "(section 11, item 6)"; section 11 heading "Default taken, not put to Ola"; the private reader check (`tests/python/vtkread.py` reads the declared type). Not pushed; no CI.
