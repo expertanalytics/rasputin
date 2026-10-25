@@ -236,8 +236,8 @@ returns (`shapely.intersection` areas, summed per class), giving the same
 `--features` legend beside it stays refused, as today.
 
 *Subdivision.* Each class polygon is halved along the longer side of its
-bounding box with `shapely.clip_by_rect` until every piece has at most
-**64 vertices** (PostGIS's `ST_Subdivide` idea); a piece keeps its polygon's
+bounding box with `shapely.clip_by_rect` (its output is not guaranteed valid; pieces are not repaired, and T6's area sum guards them), cut with `shapely.intersection` without `grid_size` (no snapping) until every piece has at most
+**64 coordinates** (`shapely.get_num_coordinates`: closing points and holes count) (PostGIS's `ST_Subdivide` idea); a piece keeps its polygon's
 class, and the sum over pieces equals the sum over the polygon because the
 pieces tile it. Without it the cut is 7 ms per triangle at any mesh size,
 paid in the vertices of the CORINE polygon each triangle meets (section 8a:
@@ -520,6 +520,8 @@ MapBiomas as polygons, which nobody will do: its land cover is a raster, and
 the raster route is C++. The vector route is for CORINE and AR50 domains of
 up to a few hundred thousand triangles, where it is seconds.
 
+## 9. Size and order
+
 Estimates, each driver named: **105a** about 140 lines (legend fields +15,
 `cells.py` with `categories_of` 55, `write_cells` and `write_fractions` 45,
 CLI wiring, the legend check and record lines 25; TOML is not counted).
@@ -564,12 +566,9 @@ MapBiomas 7 *Flooded Savanna (beta)* is savanna with 4, by its name; 9
 
 **Open:**
 
-6. **Pin, not a question:** 105c changes the type of the `.vtk` array
-   `land_cover_classes` from `unsigned_char` to `int` and the `.ply` list from
-   `uchar` to `int` (section 4.5). A reader that assumes the old type breaks;
-   one that reads the declared type does not. The private package's reader is
-   to be checked before 105c merges.
+6. 105c widens class numbers in `.vtk` and `.ply` to `int` for every land-cover run, raster runs too (4.5). Default: yes. `git grep -n land_cover_classes private/master` returns nothing, so no private reader breaks.
 
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `bb7c8e893e8b4793f8515fc42b67449246531d73`, range `074e6322..bb7c8e89`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 305 estimated in three PRs. Holds: Shyft quotes match `geo_personality.h` (TIN slope factor 1.0, grid 0.9); category mapping matches the shipped legends; licences (RGI CC BY 4.0, NVE glaciers CC BY-NC-SA, reservoir layer NLOD 1.0, 1,227 polygons); no GDAL or shapefile reader; T2, T3 recompute; refusal at 2,254 (865 with `--start-min-angle 0`) re-run; probe sums agree. Blocking: (1) no timings: say no step runs without `--land-cover` and time 105a writes and the 105c cut on the delivery's Kultsjön mesh; (2) no test cases for 105b and 105c (the `min(lake, r)` mutant unkilled): add lake 0.5/r 0.8 -> reservoir 0.5, lake 0, and lake 0.5/r 0.2 -> reservoir 0.2, lake 0.3, and a polygon-cut case; (3) refusing an uncategorised water class at load breaks `tests/python/legend_fixtures.py:35,61` and `test_legends.py:761`: amend them in red or refuse only when the cells table is written; (4) wordings: the delivery mesh has 86,537 triangles, not 65,893 (4.4, 4.5), São Francisco about 32 million triangles and 37 million rows; "sums to 1 exactly" is up to 44 x 6e-8 over; the 15.7 s includes reading and reprojecting; Q3 "no new option" but 105b adds `--reservoirs`; "the 104 showcase" -> "the triangle-budget showcase". Not pushed; no CI.
+- **Design review, round 2, 2026-10-25.** `@reviewer`, head `123820cb0f6f08d2128c99733c84f40b9065ecd7`, range `4163bc45..123820cb`. Verdict: CHANGES REQUESTED, only for Ola's ruling on widening class numbers to `int` in `.vtk` and `.ply` for every land-cover run (now question 6, default yes; `git grep land_cover_classes private/master` finds no reader). LOC: 0 (design); estimate 140 + 55 + 145 = 340, each part under 150. Round 1 closed: section 8a timings match the probes (610.7 s -> 2.7 s, same totals); T6, T7 recomputed; legend check only when the cells table is written (call before the DEM read, `cli.py:907`); five wordings fixed. Four wordings applied in this commit: section 9 heading restored; "64 coordinates" with what counts; clip_by_rect validity and intersection without snapping; question 6 replaces the pin. Not pushed; no CI.
