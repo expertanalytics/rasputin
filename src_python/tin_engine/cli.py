@@ -934,9 +934,8 @@ def mesh(
             categories = categories_of(classes.legend)
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
-    wanted = classes is not None and out.suffix == ".gpkg"
     reservoir = _reservoir_source(
-        reservoirs, wanted, known, cache_root(cache, os.environ),
+        reservoirs, categories is not None, known, cache_root(cache, os.environ),
         _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
     )  # fmt: skip
     regulated = None  # each triangle's share under the reservoir polygons
@@ -1239,11 +1238,11 @@ def mesh(
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
                 try:
-                    found_polygons = read_polygons(*reservoir, dem_crs, xy[:, :2])
+                    found_polygons = read_polygons(*reservoir[:2], dem_crs, xy[:, :2])
                 except FeatureError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
                 regulated = overlay(xy[dem_run.trimmed.triangles], found_polygons)
-            more["reservoirs"] = escaped_ascii(reservoir[0].name)
+            more["reservoirs"] = escaped_ascii(reservoir[2])
         elif categories is not None:
             more["reservoirs"] = "none"
         values |= more
@@ -1451,37 +1450,48 @@ def _fetch_run(
     return f"rasputin fetch {shlex.quote(key)} {flags}".rstrip()
 
 
+def _cached_features(source: RemoteSource, root: Path | None, run: str, flag: str) -> Path:
+    """A catalogue source of features' file: its own path, else its copy in the
+    cache under `root`; an uncached copy's refusal names `run`, the fetch."""
+    if source.path is not None:
+        return source.path
+    if root is None:
+        raise typer.BadParameter(NO_CACHE, param_hint=flag)
+    path = root / source.id / "features.gpkg"
+    if not path.is_file():
+        raise typer.BadParameter(
+            f"{source.id}/features.gpkg is not in the cache; run: {run}", param_hint=flag
+        )
+    return path
+
+
 def _reservoir_source(
     value: str | None,
     wanted: bool,
     known: Mapping[str, RemoteSource],
     root: Path | None,
     run: str,
-) -> tuple[Path, str | None] | None:
-    """``--reservoirs`` checked before any work: the file and layer of a cached
-    catalogue source of features, or a file rasputin reads. ``wanted`` is
-    whether the run writes cells: --land-cover and a .gpkg output. An uncached
-    source's refusal names `run`, the fetch that copies it."""
+) -> tuple[Path, str | None, str] | None:
+    """``--reservoirs`` checked before any work: the file, layer and record name
+    of a cached catalogue source of features (its key), or of a file rasputin
+    reads (its name). ``wanted`` is whether the run writes cells: --land-cover
+    with a legend and a .gpkg output. An uncached source's refusal names `run`."""
     if value is None:
         return None
     if not wanted:
-        raise typer.BadParameter("needs --land-cover and a .gpkg output", param_hint="--reservoirs")
+        raise typer.BadParameter(
+            "needs --land-cover with a legend and a .gpkg output", param_hint="--reservoirs"
+        )
     source = known.get(value)
     if source is not None and source.values == "features":
-        path = source.path or (root or Path()) / source.id / "features.gpkg"
-        if source.path is None and not path.is_file():
-            raise typer.BadParameter(
-                f"{source.id}/features.gpkg is not in the cache; run: {run}",
-                param_hint="--reservoirs",
-            )
-        return path, source.layer
+        return _cached_features(source, root, run, "--reservoirs"), source.layer, value
     path = Path(value)
     if path.suffix.lower() not in SUFFIXES or not path.is_file():
         raise typer.BadParameter(
             f"{value} is neither a catalogue source of features nor a {', '.join(SUFFIXES)} file",
             param_hint="--reservoirs",
         )
-    return path, None
+    return path, None, path.name
 
 
 def _class_source(
@@ -1506,14 +1516,7 @@ def _class_source(
     if source is not None and source.values == "features" and (source.legend or legend_value):
         if year is not None:
             raise typer.BadParameter(f"{value} has no years", param_hint="--land-cover-year")
-        if source.path is None and root is None:
-            raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
-        path = source.path or (root or Path()) / source.id / "features.gpkg"
-        if source.path is None and not path.is_file():
-            raise typer.BadParameter(
-                f"{source.id}/features.gpkg is not in the cache; run: {run}",
-                param_hint="--land-cover",
-            )
+        path = _cached_features(source, root, run, "--land-cover")
     elif source is not None:
         try:
             check_values(source, "classes", "--land-cover")
@@ -1525,10 +1528,7 @@ def _class_source(
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
         if root is None:
-            raise typer.BadParameter(
-                NO_CACHE,
-                param_hint="--land-cover",
-            )
+            raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
     else:
         if year is not None:
             raise typer.BadParameter("a file has no years", param_hint="--land-cover-year")
