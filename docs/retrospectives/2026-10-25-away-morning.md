@@ -5,7 +5,7 @@ public retrospective and rules branches, three branches of the private
 package); it ran out at 12:21:11 with no `--back`
 (`.git/harness/windows.jsonl`). The brief called it "about 08:30-12:21";
 08:33 is the entry in Norwegian winter time, the same hour slip as §4.
-Ola was at work and answered 28 times inside the window ("I'm busy this
+Ola was at work and answered 29 times (28 turns and one prompt queued at 10:32:59, line 21994) inside the window ("I'm busy this
 morning - can you work alone a few hours?", 07:32:48). Sources: the main
 transcript `a8ebd8a5-7c29-4760-8e5d-791db2aa83cc.jsonl` ("line N"), its
 `subagents/` records, `.git/harness/queue.jsonl` (lines 1-14; not archived,
@@ -22,9 +22,7 @@ refusals and lead times.
 since, latest 2026-10-25 12:21 UTC)". Owed from 12:21:11; spawned 14:31:14
 (line 24255): **2 h 10 min**. Of that, 1 h 17 min the Mac was suspended
 (Ola, 12:21:22: "I'm heading home now - suspending"; next turn 13:38:29).
-From 13:38 to 14:29 both writer slots held work on the triangle budget and
-a private probe, then `@perf` ran alone (14:03-14:29). The check went in at
-the first free slot; Ola's ruling of 17 October that duties go before
+From 13:39 to 14:03 the triangle budget and a private run held the writer slots, with one slot free at 13:39-13:46 and 13:49-13:57; `@perf` then ran alone (14:03-14:29), and the check went in after it; Ola's ruling of 17 October that duties go before
 product work lives in memory only, not in a rule file, so nothing held the
 13:45 slot for it (§5, proposal 3).
 
@@ -33,7 +31,7 @@ The weekly check of the private ideas file is due 2026-10-26.
 ## 1. Idle timeline
 
 Agent spans from the 32 subagent records that overlap the window. **No idle
-stretch.** The longest gap with no agent running was 1 min 25 s (09:25:05
+stretch.** The longest gap with no agent running was 1 min 24 s (09:25:05
 to 09:26:29, between `@perf`'s private year runs and the triangle budget
 design). `@perf` ran alone 08:29-09:25 (56 min), by rule. Writers never
 exceeded two (checked at every spawn time against the spans).
@@ -41,7 +39,7 @@ exceeded two (checked at every spawn time against the spans).
 | Work | Span | Note |
 |---|---|---|
 | Private increment: design, review, red, green, `@perf` runs | 07:22 to 09:25 | |
-| Private increment: code review, master merged in, two test re-pins, two re-reviews, PR, merge | 09:26 to 10:15 | private #73 merged 10:15:50 |
+| Private increment: code review, master merged in, two test re-pins, two re-reviews, PR, merge | 09:26 to 10:15 | private #73 merged 10:15:53 |
 | Triangle budget (public increment 104): design, review round 1 changes, round 2 approved | 09:26 to 10:33 | |
 | Triangle budget red, green, test fix, prose, Timings red | 10:34 to 12:18 | §3 |
 | Private probes (four, one branch) | 09:57 to 14:01 | beside the budget |
@@ -125,10 +123,10 @@ Wednesday"). Commits on `tri-budget`:
 | Red and green: the Timings note | 12:16:41 to 13:38:28 | 82, of which 77 suspended |
 | Red and green: rounding the found tolerance | 13:45:59 to 14:02:07 | 16 |
 | `@perf` acceptance, ACCEPTED | 14:03:07 to 14:29:02 | 26 |
-| Red: summary figures, floor refusal | 14:31:02 to 14:33:21 | running |
+| Red and green: summary figures, floor refusal | 14:31:02 to 14:38:17 | 7 |
 
 Ask to acceptance: 5 h 11 min, of which 1 h 17 min suspended. Not merged;
-**the code review has not run yet**, which the step order allows (it comes
+**the code review had not run when this was written (14:39)**, which the step order allows (it comes
 before merge).
 
 1. **A test no code could pass.** `c36cdbe1`'s A4 compared two
@@ -141,12 +139,12 @@ before merge).
    itself. Proposal 5.
 2. **Three red/green rounds for output text after the main green**
    (Timings note, rounding, summary figures), each with its own pair of
-   spawns. The two after the acceptance run touch `run_record.py` text only;
+   spawns. The one after the acceptance run changes text in `run_record.py` and `cli.py` and turns the floor refusal into a parameter error;
    whether `@perf`'s run still covers the head is the reviewer's call.
    Lesson 1.
 
 The private increment that merged as #73: design spawn 07:22:29 to merge
-10:15:50, **2 h 53 min**.
+10:15:53, **2 h 53 min**.
 
 ## 4. Records and reports
 
@@ -157,8 +155,7 @@ The private increment that merged as #73: design spawn 07:22:29 to merge
    as 11:35 (it was 10:15). At 09:42:52 (line 21067) "The results were in
    my message about an hour ago": they were at 09:26:55, 16 min earlier.
    Lesson 2.
-2. **Two numbered lists, both starting at 1.** 10:26:55 (line 21851) asked
-   three questions; 10:28:54 (line 21927) began "Decision for you: 1.".
+2. **Three numbered lists in five minutes, each starting at 1.** 10:23:56 (line 21794) asked one question; 10:26:55 (line 21851) asked three, repeating it third; 10:28:54 (line 21927) began "Decision for you: 1.".
    Ola, 10:31:16: "You have two questions now?". The answer (line 21937)
    gave "four, plus one I've been holding since yesterday", numbered once.
    Against Ola's rule of one running sequence.
@@ -173,8 +170,8 @@ The private increment that merged as #73: design spawn 07:22:29 to merge
    the transcript, the other being 3 above, which was caught before the spawn.
 5. **`tools/duties.py` misses the private repository.** It reads merges
    and retrospectives of `origin/master` only (`tools/duties.py:171`).
-   Private #69 (07:33:46) and #73 (10:15:50) never showed as owed; the main
-   session noticed (line 21851). Since Ola's ruling of 13:46 that every
+   Private #69 (07:33:49) and #73 (10:15:53) never showed as owed; the main
+   session noticed (line 21851). Since Ola's ask of 13:39:15 ("We should have lsm retrospectives as well", line 23378), taken at 13:46:08 to mean that every
    private merge gets its check in the private repository, a private
    retrospective also never clears a duty. Proposal 1.
 
