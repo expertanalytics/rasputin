@@ -242,10 +242,11 @@ def load(value: str) -> Legend:
     return parse(text, _File, f"legend file {shown}").legend()
 
 
-def run_vocabulary(legends: Iterable[Legend]) -> EdgeVocabulary:
-    """Section 6: the default vocabulary plus every legend's extras, in order of
-    first appearance, on bits 10 upward; the default itself with none."""
-    extras = list(dict.fromkeys(n for m in legends for n in m.extra_names))
+def run_vocabulary(legends: Iterable[Legend], more: tuple[str, ...] = ()) -> EdgeVocabulary:
+    """Section 6: the default vocabulary plus every legend's extras and then
+    `more`, in order of first appearance, on bits 10 upward; the default itself
+    with none."""
+    extras = list(dict.fromkeys([*(n for m in legends for n in m.extra_names), *more]))
     if not extras:
         return DEFAULT_VOCABULARY
     if len(extras) > MAX_EXTRAS:

@@ -32,8 +32,9 @@ import typer
 from pydantic import ValidationError
 from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.geometry.polygon import orient
 
-from tin_engine import cli_kit, edge_strip, final_check, installed_version
+from tin_engine import cli_kit, edge_strip, final_check, installed_version, sub_catchments
 from tin_engine._core import (
     ChainRole,
     CheckPoints,
@@ -108,6 +109,7 @@ from tin_engine.feature_input import (
     read_class_polygons,
     read_lake_polygons,
     read_polygons,
+    read_source,
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
@@ -782,7 +784,8 @@ def mesh(
             help="Metres: simplify land-cover borders, each moved at most this far from its "
             "border after the repair and the outline rule, each class keeping its area; the "
             "simplification can bring a border back within the outline-snap distance of the "
-            "outline, but not closer than the repair distance. 0 is off. " + DERIVED.format(50),
+            "outline, but not closer than the repair distance. 0 is off. Also the band of "
+            "--catchments borders, which is otherwise set by --triangles. " + DERIVED.format(50),
         ),
     ] = None,
     features_outline_snap: Annotated[
@@ -825,6 +828,16 @@ def mesh(
         typer.Option(
             "--reservoirs",
             help="Reservoir polygons, a file or cached source, splitting the cells' lake share.",
+        ),
+    ] = None,
+    catchments: Annotated[
+        str | None,
+        typer.Option(
+            "--catchments",
+            metavar="UNITS",
+            help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
+            "whose inner point lies in --domain are joined into the domain, their borders "
+            "become constraints, and each cell's catchment_id is its unit's id.",
         ),
     ] = None,
     threads: THREADS = None,
@@ -925,7 +938,7 @@ def mesh(
             legends.append(
                 load_legend(feature_legends[i] if i < len(feature_legends) else "property")
             )
-        vocabulary = run_vocabulary(legends)
+        vocabulary = run_vocabulary(legends, ("catchment",) if catchments else ())
     except ValueError as exc:
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
@@ -947,7 +960,22 @@ def mesh(
         reservoirs, categories is not None, known, cache_root(cache, os.environ),
         _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
     )  # fmt: skip
+    units_source = _reservoir_source(
+        catchments, categories is not None, known, cache_root(cache, os.environ),
+        _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments",
+    )  # fmt: skip
+    if catchments is not None and domain is None:
+        raise typer.BadParameter(
+            "needs --domain: the units whose inner point lies in the domain are the sub-catchments",
+            param_hint="--catchments",
+        )
+    if catchments is not None and triangles is None and features_tolerance is None:
+        raise typer.BadParameter(
+            "needs --triangles, whose budget sets the border band, or --features-tolerance",
+            param_hint="--catchments",
+        )
     regulated = None  # each triangle's share under the reservoir polygons
+    catchment_ids = None  # each cell's unit, with --catchments
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
@@ -1071,6 +1099,11 @@ def mesh(
                 given = read_domain(domain, domain_crs)
             except DomainError as exc:
                 raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+    units: Units | None = None
+    if given is not None and units_source is not None:
+        with clock.phase("catchments"), _refused("--catchments"):
+            units = _units(*units_source, given, triangles, features_tolerance)
+        given = units.domain
     try:
         planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
         meta, part, grid = planned.meta, None, planned.grid
@@ -1126,6 +1159,12 @@ def mesh(
         found = _open_features(
             sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
         )
+    if units is not None and dem_domain is not None:
+        units = units.moved(dem_crs)
+        line = sub_catchments.borders([g for _, g in units.units], vocabulary.mask("catchment"))
+        found = FeatureSet(features=(line,)) if found is None else found.model_copy(
+            update={"features": (*found.features, line)}
+        )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
     simplified = (
         found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
@@ -1263,6 +1302,21 @@ def mesh(
             more |= {"reservoirs": escaped_ascii(reservoir[2]), "reservoirs_repaired": repaired}
         elif categories is not None:
             more["reservoirs"] = "none"
+        if units is not None:
+            xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)[:, :2]
+            centroids = xy[dem_run.trimmed.triangles].mean(axis=1)
+            catchment_ids, strays = sub_catchments.cell_ids(units.units, centroids)
+            if strays:
+                typer.echo(
+                    f"catchments: {strays} cells had their centroid in no unit and took the "
+                    "nearest",
+                    err=True,
+                )
+            more |= {
+                "catchments": escaped_ascii(units.name),
+                "catchments_units": len(units.units),
+                "catchments_band_m": units.band_m,
+            }
         values |= more
     if dem_run.cut is not None:
         from tin_engine.io.mesh_index import ConformityError, MeshIndex
@@ -1335,7 +1389,7 @@ def mesh(
         with clock.phase("write: geopackage"):
             _write_geopackage(
                 surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories,
-                regulated,
+                regulated, catchment_ids,
             )  # fmt: skip
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
@@ -1398,12 +1452,14 @@ def _write_geopackage(
     fractions: ClassFractions | None = None,
     categories: Mapping[int, Category] | None = None,
     regulated: npt.NDArray[np.float64] | None = None,
+    catchment_ids: npt.NDArray[np.int64] | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
     a failed run leaves nothing under the asked name. Class ``fractions`` add
     their long-form table, and with ``categories`` the ``cells`` layer, its lake
-    share split by ``regulated``, each triangle's share under reservoirs."""
+    share split by ``regulated``, each triangle's share under reservoirs, and
+    each cell's ``catchment_ids`` (1 when None)."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
@@ -1425,7 +1481,7 @@ def _write_geopackage(
             write_fractions(conn, fractions)
             if categories is not None:
                 cells = cell_table(mesh.vertices, mesh.triangles, fractions, categories, regulated)
-                write_cells(conn, cells, srs.srs_id)
+                write_cells(conn, cells, srs.srs_id, catchment_ids)
         rows = [("rasputin_version", "rasputin version", installed_version(), None)]
         rows.append(("command", "command", _command(), None))
         write_run(conn, [*rows, *((e.name, e.wording, e.value, e.number) for e in record.entries)])
@@ -1489,18 +1545,86 @@ def _reservoir_source(
     known: Mapping[str, RemoteSource],
     root: Path | None,
     run: str,
+    flag: str = "--reservoirs",
 ) -> tuple[Path, str | None, str] | None:
-    """``--reservoirs`` checked before any work: the file, layer and record name
-    of a cached catalogue source of features (its key), or of a file rasputin
-    reads (its name). ``wanted`` is whether the run writes cells: --land-cover
-    with a legend and a .gpkg output. An uncached source's refusal names `run`."""
+    """``flag`` (``--reservoirs`` or ``--catchments``) checked before any work:
+    the file, layer and record name of a cached catalogue source of features
+    (its key), or of a file rasputin reads (its name). ``wanted`` is whether
+    the run writes cells: --land-cover with a legend and a .gpkg output. An
+    uncached source's refusal names `run`."""
     if value is None:
         return None
     if not wanted:
         raise typer.BadParameter(
-            "needs --land-cover with a legend and a .gpkg output", param_hint="--reservoirs"
+            "needs --land-cover with a legend and a .gpkg output", param_hint=flag
         )
-    return _features_source(value, "--reservoirs", known, root, run)
+    return _features_source(value, flag, known, root, run)
+
+
+@dataclass(frozen=True)
+class Units:
+    """The sub-catchment units as (id, polygon), the domain they join into,
+    the band their borders were simplified within, and the source's name."""
+
+    units: list[tuple[int, BaseGeometry]]
+    domain: DomainPolygon
+    band_m: float
+    name: str
+
+    def moved(self, crs: str) -> Units:
+        """The units in `crs`, each vertex moved as the domain's are."""
+        if same_crs(self.domain.crs, crs):
+            return self
+        move = reprojector(self.domain.crs, crs)
+        units = [(i, shapely.transform(g, move)) for i, g in self.units]
+        return replace(self, units=units, domain=self.domain.to_crs(crs))
+
+
+def _units(
+    path: Path,
+    layer: str | None,
+    name: str,
+    given: DomainPolygon,
+    triangles: int | None,
+    tolerance: float | None,
+) -> Units:
+    """The units of `path` whose inner point lies in `given`, repaired, their
+    borders simplified within `tolerance`, else the band `triangles` sets, in
+    their own CRS; said on stderr. A refusal is a ValueError."""
+    read = read_source(path, layer, None, lambda own: given.to_crs(own).polygon.bounds)
+    if parse_crs(read.crs).is_geographic:
+        raise ValueError(
+            f"{name} is in degrees ({crs_label(read.crs)}); the border band is in metres, so "
+            "give the units in a projected CRS"
+        )
+    rows = [
+        (fid, shapely.force_2d(g))
+        for fid, g, _ in read.rows
+        if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
+    ]
+    inside = given.to_crs(read.crs).polygon
+    picked = [rows[k] for k in sub_catchments.select([g for _, g in rows], inside)]
+    if not picked:
+        raise ValueError(f"no unit of {name} has its inner point inside the domain")
+    ids = sub_catchments.check_ids([fid for fid, _ in picked], name)
+    repaired = sub_catchments.repair([g for _, g in picked])
+    area = join(repaired, read.crs).polygon.area
+    if tolerance is not None:
+        band, why = tolerance, "--features-tolerance"
+    else:
+        assert triangles is not None
+        band = sub_catchments.band_m(area, triangles)
+        why = f"a triangle's edge at {triangles} triangles, {8 * band:.0f} m, over 8"
+    kept = sub_catchments.simplify(repaired, band) if band > 0 else repaired
+    union = orient(shapely.coverage_union_all(kept), sign=1.0)
+    vertices = int(shapely.get_num_coordinates(np.asarray(kept, dtype=object)).sum())
+    typer.echo(
+        f"catchments: {len(kept)} units of {name}, borders simplified at {band:.0f} m ({why}): "
+        f"{vertices} vertices, {area / 1e6:.2f} km2",
+        err=True,
+    )
+    domain = DomainPolygon(polygon=union, crs=read.crs)
+    return Units(list(zip(ids, kept, strict=True)), domain, band, name)
 
 
 def _features_source(
