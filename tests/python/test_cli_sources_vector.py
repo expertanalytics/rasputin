@@ -136,12 +136,16 @@ class TestT6VectorListing:
             ("mesh", "--features", "corine-water"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
+            ("mesh", "--reservoirs", None),
+            ("mesh", "--catchments", None),
         }
         spelt = {(f["tool"], f["argument"]) for f in cover["fits"]}
         assert spelt == {
             ("mesh", "features"),
             ("catchment", "lakes"),
             ("network_catchment", "network"),
+            ("mesh", "reservoirs"),
+            ("mesh", "catchments"),
         }
 
     def test_the_lake_file(self, registered: Path, tmp_path: Path) -> None:
@@ -156,7 +160,9 @@ class TestT6VectorListing:
         assert lakes["box_covered"] == pytest.approx(LAKE_SHARE_INSIDE, abs=SHARE)
         assert fits_of(lakes) == {("catchment", "--lakes", None),
                                   ("station-catchments", "--lakes", None),
-                                  ("network-catchment", "--network", None)}  # fmt: skip
+                                  ("network-catchment", "--network", None),
+                                  ("mesh", "--reservoirs", None),
+                                  ("mesh", "--catchments", None)}  # fmt: skip
 
     def test_the_raster_fields_stay_empty_for_a_vector_source(self, registered: Path) -> None:
         found = by_id(listing())
@@ -240,6 +246,8 @@ class TestT6VectorListing:
             ("mesh", "--features", "corine"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
+            ("mesh", "--reservoirs", None),
+            ("mesh", "--catchments", None),
         }
 
 
@@ -358,4 +366,6 @@ class TestAr50Listing:
             ("mesh", "--features", "ar50"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
+            ("mesh", "--reservoirs", None),
+            ("mesh", "--catchments", None),
         }

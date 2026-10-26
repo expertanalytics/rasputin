@@ -348,3 +348,14 @@ class TestT10Instructions:
             assert key not in text, key
         for named in ("corine", "lakes.geojson", "norway"):
             assert named not in text.lower(), named
+
+    def test_the_route_from_an_outline_to_a_mesh_is_named(self) -> None:
+        """106e, test 8 (`docs/increments/106-wednesday-cells.md`, section 8):
+        the sentence names `simplify_domain`, an argument the mesh tool has."""
+        from tin_engine.mcp.schema import derive
+
+        text = " ".join(mcp_server.INSTRUCTIONS.split())
+        assert "simplify_domain" in text, text
+        assert "mesh reads as domain" in text, text
+        (tool,) = [d for d in derive(app) if d.tool_name == "mesh"]
+        assert "simplify_domain" in tool.tool().input_schema["properties"]
