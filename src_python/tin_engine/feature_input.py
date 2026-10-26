@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import sqlite3
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +49,6 @@ from tin_engine.io.geojson import GEOJSON_SUFFIXES, RFC7946_CRS, read_collection
 from tin_engine.io.geopackage import layer_info, query_features
 from tin_engine.io.gml import read_gml
 from tin_engine.io.repository import open_geopackage, read_json
-from tin_engine.sources import NamedBy, kept_named
 
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
@@ -681,16 +680,16 @@ def read_polygons(
     mesh_crs: str,
     xy: npt.NDArray[np.float64],
     tell: Callable[[int, int], None] | None = None,
-    named: tuple[NamedBy, Sequence[Any]] | None = None,
+    named: tuple[str, Callable[[list[Any]], list[int]]] | None = None,
 ) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
     by vertex and repaired; a GeoPackage is queried, the count returned and
-    ``tell`` called, as by :func:`read_class_polygons`. With ``named``, only
-    the features its names keep (:func:`kept_named`)."""
-    read = read_source(path, layer, None if named is None else named[0].key, _near(xy, mesh_crs))
+    ``tell`` called, as by :func:`read_class_polygons`. With ``named`` (an
+    attribute and a filter of its values to the indices kept), only those."""
+    read = read_source(path, layer, None if named is None else named[0], _near(xy, mesh_crs))
     rows = read.rows
     if named is not None:
-        rows = [rows[k] for k in kept_named([v for *_, v in rows], named[1], named[0].prefix)]
+        rows = [rows[k] for k in named[1]([v for *_, v in rows])]
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
         shapely.force_2d(g)

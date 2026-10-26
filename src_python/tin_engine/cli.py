@@ -191,11 +191,11 @@ from tin_engine.sources import (
     SOURCES,
     STATION_SOURCES,
     VECTOR_SUFFIXES,
-    NamedBy,
     RemoteSource,
     catalogue,
     check_values,
     data_root,
+    kept_named,
     plugin_source_files,
     user_source_file,
     xdg_base,
@@ -1548,7 +1548,7 @@ def _reservoir_source(
     root: Path | None,
     run: str,
     flag: str = "--reservoirs",
-) -> tuple[Path, str | None, str, tuple[NamedBy, list[object]] | None] | None:
+) -> tuple[Path, str | None, str, tuple[str, Callable[[list[object]], list[int]]] | None] | None:
     """``flag`` (``--reservoirs`` or ``--catchments``) checked before any work:
     the file, layer and record name of a cached catalogue source of features
     (its key), or of a file rasputin reads (its name), and for an entry with
@@ -1577,7 +1577,11 @@ def _reservoir_source(
         read = read_source(names.path, None, rule.field, lambda _: (0.0, 0.0, 0.0, 0.0))
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint=flag) from exc
-    return (*found, (rule, [v for *_, v in read.rows]))
+    names_given = [v for *_, v in read.rows]
+    return (
+        *found,
+        (rule.key, functools.partial(kept_named, names=names_given, prefix=rule.prefix)),
+    )
 
 
 @dataclass(frozen=True)
