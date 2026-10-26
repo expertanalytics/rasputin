@@ -1,8 +1,8 @@
 # Increment 106: four fixes for Wednesday's Swedish cells
 
 **Status: designed** by `@architect`, 2026-10-26, on master `f17b3e11`,
-worktree `demo-fixes`. Four small PRs, built in the order 106a, 106b, 106c,
-106d. Number 106: 105 is the highest under `docs/increments/` over every ref
+worktree `demo-fixes`. Five small PRs, built in the order 106a, 106b, 106c,
+106d, 106e (106e designed on 106c's head `a9366418`, worktree `demo-fixes-e`). Number 106: 105 is the highest under `docs/increments/` over every ref
 (`git for-each-ref` + `git ls-tree`, 2026-10-26).
 
 Ola, 2026-10-26: "I want to use the MCP to build the catchments our Swedish
@@ -28,11 +28,12 @@ in its docstring; their outputs went to `/tmp/p106/` (not kept).
 | 106b | `network-catchment --network` takes only a file path, not the catalogue name `smhi-svar2022-subcatchments` | `--network`, `--lakes` and `--outlets` take a catalogue name or a file | about 15 | short | no |
 | 106c | every cell has `catchment_id` 1; tagging cells afterwards puts 18.9 % of Kultsjön's area in the wrong one of its 75 SVAR units | `mesh --catchments` repairs SMHI's units, simplifies them with rasputin's own border simplification at a band set by the triangle budget, makes their borders constraints, so no cell straddles two, and writes each cell's unit id | about 95 | full loop | **yes** |
 | 106d | no Swedish reservoir polygons: the reservoir share is 0 | a catalogue entry can keep only the lakes a dam names; `smhi-reservoirs` gives Kultsjön 82.73 km² of reservoir | about 35 | short | no |
+| 106e | an official outline cannot be meshed at a small budget (Ljungan's forces at least 190,387 triangles), and NVE's one-part MultiPolygon outlines are refused: both took scripts outside rasputin | `mesh --simplify-domain` simplifies the outline with 106c's band from the budget; a one-part MultiPolygon is read as its polygon; the refusal, `sources` and the MCP instructions name the route | about 50 | full loop | **yes** |
 
-About 165 net production lines in all. No C++ in any of them.
+About 215 net production lines in all. No C++ in any of them.
 
-`@perf` applies to 106c only: it adds constraint lines to what drives the
-mesh (*Acceptance* in `docs/increments/README.md`). 106a changes only the
+`@perf` applies to 106c and 106e only: 106c adds constraint lines to what
+drives the mesh, 106e changes the domain when its flag is given (*Acceptance* in `docs/increments/README.md`). 106a changes only the
 polygons the land-cover table and the reservoir share read after the mesh is
 made; 106b only how a file is found; 106d only which reservoir polygons are
 read. None of those three touches the mesh.
@@ -533,6 +534,186 @@ a Shyft read-back example, `--outline-tolerance` on `network-catchment`
 
 None open. Round 2's question (a 200 m default band) is answered by Ola's
 ruling of round 3: the band follows the triangle budget.
+
+## 8. 106e: the canonical route, outline to a 500-triangle mesh, with no step outside rasputin
+
+**Round 4** (2026-10-26), on 106c's head `a9366418`. Ola: "We either
+autocatchment or use an official outline. Then, we get 500 cell meshes. I
+want this to be useful for Sol, only using the MCP. So we better make sure
+there are no hidden secrets." On simplifying the outline to the budget: "No,
+mesh --triangles N should not _always_ do that. But it _could_ be an option
+to do that." And: "They do not need to be in the same geopackage": each
+basin is its own run and file, so 106e has no assembly step and no
+per-basin budget in one run.
+
+### The two routes, and where each stops today
+
+- **Terrain:** `catchment --dem glo30 --seed ...` writes one `Polygon`, no
+  holes, in the DEM's CRS (EPSG:4326 for glo30), its outline reduced at twice
+  the DEM cell. Kultsjön lake-seeded (Opal's
+  `catchments/kultsjon-lake-seeded-check.geojson`): 617 vertices; `mesh
+  --domain` it `--dem glo30 --out-crs EPSG:3006 --triangles 500` is
+  **refused**: "the fewest triangles this DEM gives is 1555".
+- **Official:** `network-catchment --network smhi-svar2022-subcatchments`
+  writes one `Polygon`, holes filled, in the network's CRS (EPSG:3006),
+  unsimplified. Ljungan (Opal's `catchments-original/ljungan.geojson`):
+  111,248 vertices; the same `mesh` call is **refused** at 190,387. Opal's
+  delivery simplified its outlines with its own script ("topology-preserving
+  simplified by 50 m", its `METHODS.txt`).
+- **NVE's gauge outlines** (HydrologiskeData3, total catchment to a gauge)
+  come as a `MultiPolygon` of one part; `--domain` refuses it ("the domain
+  must be one Polygon, got MultiPolygon"), and Glomma's delivery unwrapped
+  it by hand (its `METHODS.txt`: "The original one-part MultiPolygon was
+  unwrapped to Polygon").
+
+### What changes
+
+1. **`mesh --simplify-domain`** (a flag, off by default). The `--domain`
+   outline, holes included, is simplified as 106c simplifies the units' union:
+   `sub_catchments.simplify([polygon], band)`, the polygon and its frame as
+   one coverage, so the area is kept and every ring moves at most the band.
+   The band is `--features-tolerance` when given (0: unchanged), else
+   `sub_catchments.band_m(A, N)` (h/8, *What it does* in section 4) with `A`
+   the domain's area in the CRS of the simplification and `N` the
+   `--triangles` value. The CRS: the domain's own when projected; when in
+   degrees, the Lambert azimuthal equal-area projection centred on the
+   domain's centroid, on the domain CRS's ellipsoid, there and back vertex by
+   vertex with `DomainPolygon.to_crs` (an equal-area CRS, so the area kept is
+   the true area). It runs right after the domain is read, before the DEM is
+   opened, so the window, the land cover's clip and the outline rule all see
+   the simplified outline. Stderr, one line: `domain: outline simplified at
+   963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 195
+   vertices, 12838.64 km2`, with `(--features-tolerance)` in the bracket when
+   given. Record: `domain_band_m`. Help: "Simplify the --domain outline, each
+   ring moved at most a band and the area kept: --features-tolerance, or else
+   an eighth of a triangle's edge at --triangles. --catchments always
+   simplifies its outline."
+   **With `--catchments`:** the domain there only selects units, and the
+   outline is the units' union, already simplified at the same band; the
+   flag is accepted and changes nothing (simplifying `D` first could change
+   which inner points it holds).
+   Refusals, headed `--simplify-domain`: without `--domain`, "needs
+   --domain"; with neither `--triangles` nor `--features-tolerance`, "needs
+   --triangles, whose budget sets the outline band, or --features-tolerance".
+   Today's band from the land-cover legend is untouched: the flag reads
+   `--features-tolerance` only as 106c's `--catchments` does.
+2. **A one-part `MultiPolygon` domain** is read as its one polygon
+   (`io/domain_file.py`); more parts are refused: "the domain must be one
+   Polygon, got a MultiPolygon of 2 parts".
+3. **The route is named where Sol looks** (the hidden steps found):
+   - the fewest-triangles refusal, on a `--domain` run without the flag, adds
+     "; or give --simplify-domain to simplify the outline to the budget"
+     (`cli.py`, `UnderFloor`);
+   - `sources`' `fits` for polygon sources lists `mesh --reservoirs`, and
+     `mesh --catchments` when the source's CRS is projected; today it names
+     only `catchment --lakes` and `network-catchment --network`, while the
+     MCP instructions tell the model to read `fits`
+     (`source_report.fits`; vector `Facts.projected` is None today, set from
+     the CRS the report already reads);
+   - one sentence in the MCP instructions (`mcp/server.py`, `INSTRUCTIONS`):
+     "catchment and network_catchment write a polygon that mesh reads as
+     domain; with simplify_domain its outline follows the triangle budget."
+
+   Checked and not hidden, so left out: the fetches (each refusal names its
+   `fetch`), `network-catchment`'s seed (a unit's `ARO_UUID`, or a point with
+   `--outlets smhi-outlet-points`; the `sources` descriptions name both
+   attributes), the cells layer needing `--land-cover` and `.gpkg` (its
+   refusal says so), and the CRS of `catchment`'s output (any CRS is read).
+
+### Measured (probes, 106c's head `a9366418`, extension built 2026-10-26)
+
+`outline_budget.py` (each Opal outline as SMHI's network joins it) and
+`outline_degrees.py` (an outline in degrees, via the centred equal-area
+projection), both in `docs/increments/106-probes/`:
+
+| outline | km² | vertices | N | band | after | area change | simplify |
+|---|---|---|---|---|---|---|---|
+| Kultsjön, official | 1,702.67 | 19,555 | 500 | 350.5 m | 106 | 2.4e-7 m² | 0.21 s |
+| Ljungan, official | 12,838.64 | 111,248 | 500 | 962.6 m | 195 | 3.2e-5 m² | 2.43 s |
+| | | | 5,000 | 304.4 m | 632 | 1.3e-5 m² | 1.24 s |
+| Umeälven, official | 26,771.60 | 133,783 | 500 | 1,390.0 m | 138 | 3.1e-5 m² | 3.90 s |
+| Kultsjön, terrain (EPSG:4326) | 1,097.30 | 617 | 500 | 281.4 m | 122 | relative 2.4e-8 (geodesic) | under 0.01 s |
+
+All seven Opal outlines: valid, one polygon, no hole, at 500 and 5,000.
+Meshed (`--dem glo30 --out-crs EPSG:3006 --triangles 500`): Kultsjön
+official 490 triangles in 2.6 s; Ljungan 503 in 4.0 s (both runs, the
+simplification apart); Kultsjön terrain 502; and with `--land-cover clc2018`
+to `.gpkg` Kultsjön official writes 490 cells (46.5 s, nearly all 106a's
+land-cover repair). Umeälven's glo30 blocks are not cached (not run).
+
+**Constants.** None new: the band is 106c's h/8, the frame and the 1 m
+clearance are 106c's. The equal-area projection keeps area exactly and
+stretches distance by under 1 % within about 1,800 km (16 degrees of arc)
+of its centre, so a
+band in degrees-CRS domains is right to that scale; checked on a 1,097 km²
+outline, and the projected path up to 26,771.60 km².
+
+### Tests (key properties)
+
+Fixture `ZZ`: in `test_cli_mesh_catchments.py`'s scene (56 x 56 nodes at
+60 m, EPSG:31983, `local` frame), the square [0, 3000]² with each side a
+zigzag of 60 steps of 50 m, every other vertex pushed 20 m outward: 240
+vertices, valid, 9,120,000 m². `ZZH`: `ZZ` with a hole, the square [1200,
+1800]² zigzagged the same way, 12 steps a side, every other vertex 20 m
+away from the hole's centre: 288 vertices,
+8,736,000 m².
+
+1. **Read** (pure): a one-part `MultiPolygon` of `ZZ` reads as `ZZ`,
+   oriented (`equals_exact`, tolerance 0); a two-part one is refused with
+   the wording above; a `Polygon` reads as today.
+2. **Simplify, projected** (pure): `ZZ` at N 100, band 57.366336 m
+   (relative 1e-9): 4 vertices, area relative change under 1e-12, valid.
+   `ZZH` at N 100 (band 56.145636 m): outer ring 4, hole 4, area kept
+   (the "frame left out" mutant leaves the hole's 48 and the outer 240).
+3. **Simplify, in degrees** (pure): `ZZ` moved to EPSG:4326 (centroid
+   -44.93, -15.24): the result is in EPSG:4326, 4 vertices, geodesic area
+   relative change under 1e-6 (measured 3e-8), band 57.4 m (relative 1e-3).
+   The band from an area in square degrees (about 5e-4) fails this.
+4. **End to end**, `ZZ` as `--domain`, `--triangles 100`: without the flag
+   refused, "the fewest triangles this DEM gives is 470", and the refusal
+   names `--simplify-domain`; with it, 101 triangles (within the budget's
+   5 %), the stderr line "240 to 4 vertices", `domain_band_m` 57.366336
+   (relative 1e-9); with `--features-tolerance 30`, `domain_band_m` 30.
+5. **Unchanged without it:** `ZZ` simplified by hand (the probe's output at
+   N 400) meshed at `--triangles 400` without the flag gives 396 triangles
+   and the same rows as 106c's head; no `domain_band_m` in the record.
+6. **With `--catchments`**: test 5's units run of section 4 with the flag
+   writes the same `triangles` and `cells` rows as without it.
+7. **Refusals:** the two above.
+8. **Named where Sol looks:** `fits` of a projected polygon `.geojson` lists
+   `mesh --reservoirs` and `mesh --catchments`, of one in EPSG:4326 only
+   `--reservoirs`, of a points file neither; `INSTRUCTIONS` holds
+   "simplify_domain".
+
+**Invariant-critical suite** (mutation round required): tests 1, 2, 3, 4.
+Mutation targets: the one-part check (any `MultiPolygon` taken as its first
+part: test 1), the frame left out (test 2's hole), the simplification in
+degrees (test 3's band), the band's factor and its area (test 4's
+`domain_band_m`), the flag ignored (test 4's count).
+
+**`@perf`** (the domain drives the mesh): the 1 m benchmark unchanged and
+byte-identical to 106c's head (no flag); Ljungan official at `--triangles
+500` with the flag: 503 triangles, the time against the probes, 4.0 s mesh
+plus 2.4 s simplification plus reading the outline (unmeasured;
+`@perf` sets it), plus 10 % noise; Kultsjön terrain-traced: 502.
+
+**Size.** About 55 net lines: the flag and its two checks (14), the
+simplification with its CRS choice, stderr and record (18), the one-part
+read (3), the refusal's hint (4), `fits` and vector `Facts.projected` (8),
+the instruction sentence and the record wording (8). Full loop: over 50
+lines, and the domain drives the mesh.
+
+*Prior art.* As section 1: rasputin's border simplification
+(`docs/increments/32-landcover-simplify.md`) through 106c's frame; the
+Lambert azimuthal equal-area projection (Snyder, *Map Projections: A Working
+Manual*, USGS Professional Paper 1395, 1987, ch. 24), used as published.
+*Legacy:* `git grep -n -i -E "simplif|MultiPolygon" legacy-archive -- legacy`
+returns CGAL's surface-mesh edge collapse (`legacy/rasputin/mesh.py:102`,
+legacy-archive's `legacy/rasputin/triangulate_dem.h`, line 243) and a raster-polygon intersection type
+(the same file, lines 73 and 410); no outline simplification and no domain
+reader. Nothing to carry across. *Ideas file:* overlaps "MCP tool descriptions: how to mesh
+a domain too big for one run" (the instruction sentence only; the basin path
+is not touched).
 
 ## Review record
 
