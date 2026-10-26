@@ -50,7 +50,8 @@ class Areas:
 
 @dataclass(frozen=True)
 class Overlaid:
-    """The polygons as (code, geometry), none overlapping, and per replaced code its areas."""
+    """The polygons as (code, geometry), none overlapping if each source's own polygons
+    do not overlap, and per replaced code its areas."""
 
     polygons: list[tuple[int, BaseGeometry]]
     areas: dict[int, Areas]

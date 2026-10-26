@@ -75,6 +75,16 @@ credit = "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjeng
 licence_note = "Norsk lisens for offentlige data (NLOD) 1.0, https://data.norge.no/nlod/no/1.0. NVE accepts no liability for damage or injuries due to errors in data and incorrect use of data."
 description = "NVE's lake database: \"Innsjødatabasen til NVE inneholder informasjon om vann og innsjøer.\" Lakes larger than 2500 m² have a national number (vatnlnr); scale 1:20 000 (Geonorge)."
 
+[source.nve-glaciers]
+kind = "arcgis-features"
+url = "https://kart.nve.no/enterprise/rest/services/Bre2/MapServer/9"
+crs = "EPSG:25833"
+# The glacier-unit layer's fields asked; its many survey and image fields are never collected.
+fields = ["breid", "brenavn", "areal_km2"]
+credit = "Kilde: NVE, Breflate (breenheter oppdelt av isskiller), {url}, hentet {date}; lagret som GeoPackage av rasputin."
+licence_note = "NVE's map service states no licence for this layer. NVE's 2018-2019 glacier outline archive copy (GlacierAreaOutline_NO_2018_2019) is CC BY-NC-SA 4.0 (non-commercial)."
+description = "NVE's glacier units: \"Breenheter oppdelt av isskiller\" (the layer's description), glaciers split at ice divides, 6,743 polygons."
+
 [source.clc2018]
 kind = "arcgis-features"
 url = "https://image.discomap.eea.europa.eu/arcgis/rest/services/Corine/CLC2018_LAEA/MapServer/0"
