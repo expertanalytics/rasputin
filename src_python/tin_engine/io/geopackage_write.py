@@ -323,9 +323,12 @@ def write_triangles(
     build_rtree(conn, "triangles", boxes, batch)
 
 
-def write_cells(conn: sqlite3.Connection, cells: CellTable, srs_id: int) -> None:
+def write_cells(
+    conn: sqlite3.Connection, cells: CellTable, srs_id: int, catchment_ids: Any = None
+) -> None:
     """The ``cells`` layer: one PointZ row per triangle at its centroid, in
-    triangle order (``fid - 1`` is the index), catchment 1, the plan area, the
+    triangle order (``fid - 1`` is the index), its ``catchment_ids`` entry (1
+    without them), the plan area, the
     height, slope, aspect (NULL where NaN) and the shares; registered and indexed."""
     xyz = cells.midpoints[:, None, :]
     rec = _records(xyz, srs_id, 1001, [("xyz", "<f8", 3)])
@@ -339,7 +342,9 @@ def write_cells(conn: sqlite3.Connection, cells: CellTable, srs_id: int) -> None
     aspect = [None if np.isnan(a) else a for a in cells.aspect_deg.tolist()]
     columns = [cells.area_m2, cells.midpoints[:, 2], cells.slope_deg]
     rows = zip(
-        range(1, len(blobs) + 1), blobs, [1] * len(blobs), *(c.tolist() for c in columns),
+        range(1, len(blobs) + 1), blobs,
+        [1] * len(blobs) if catchment_ids is None else np.asarray(catchment_ids).tolist(),
+        *(c.tolist() for c in columns),
         aspect, *cells.shares.T.tolist(), strict=True,
     )  # fmt: skip
     with _transaction(conn):

@@ -32,8 +32,9 @@ import typer
 from pydantic import ValidationError
 from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.geometry.polygon import orient
 
-from tin_engine import cli_kit, edge_strip, final_check, installed_version
+from tin_engine import cli_kit, edge_strip, final_check, installed_version, sub_catchments
 from tin_engine._core import (
     ChainRole,
     CheckPoints,
@@ -108,6 +109,7 @@ from tin_engine.feature_input import (
     read_class_polygons,
     read_lake_polygons,
     read_polygons,
+    read_source,
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
@@ -188,6 +190,7 @@ from tin_engine.run_record import (
 from tin_engine.sources import (
     SOURCES,
     STATION_SOURCES,
+    VECTOR_SUFFIXES,
     RemoteSource,
     catalogue,
     check_values,
@@ -826,6 +829,17 @@ def mesh(
             help="Reservoir polygons, a file or cached source, splitting the cells' lake share.",
         ),
     ] = None,
+    catchments: Annotated[
+        str | None,
+        typer.Option(
+            "--catchments",
+            metavar="UNITS",
+            help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
+            "whose inner point lies in --domain are joined into the domain, their borders, "
+            "simplified within --features-tolerance or else a band --triangles sets, become "
+            "constraints, and each cell's catchment_id is its unit's id.",
+        ),
+    ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -924,7 +938,7 @@ def mesh(
             legends.append(
                 load_legend(feature_legends[i] if i < len(feature_legends) else "property")
             )
-        vocabulary = run_vocabulary(legends)
+        vocabulary = run_vocabulary(legends, ("catchment",) if catchments else ())
     except ValueError as exc:
         raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-legend") from exc
     known = _known_sources(os.environ)
@@ -946,7 +960,22 @@ def mesh(
         reservoirs, categories is not None, known, cache_root(cache, os.environ),
         _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
     )  # fmt: skip
+    units_source = _reservoir_source(
+        catchments, categories is not None, known, cache_root(cache, os.environ),
+        _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments",
+    )  # fmt: skip
+    if catchments is not None and domain is None:
+        raise typer.BadParameter(
+            "needs --domain: the units whose inner point lies in the domain are the sub-catchments",
+            param_hint="--catchments",
+        )
+    if catchments is not None and triangles is None and features_tolerance is None:
+        raise typer.BadParameter(
+            "needs --triangles, whose budget sets the border band, or --features-tolerance",
+            param_hint="--catchments",
+        )
     regulated = None  # each triangle's share under the reservoir polygons
+    catchment_ids = None  # each cell's unit, with --catchments
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
@@ -1070,6 +1099,11 @@ def mesh(
                 given = read_domain(domain, domain_crs)
             except DomainError as exc:
                 raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+    units: Units | None = None
+    if given is not None and units_source is not None:
+        with clock.phase("catchments"), _refused("--catchments"):
+            units = _units(*units_source, given, triangles, features_tolerance)
+        given = units.domain
     try:
         planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
         meta, part, grid = planned.meta, None, planned.grid
@@ -1125,6 +1159,12 @@ def mesh(
         found = _open_features(
             sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
         )
+    if units is not None and dem_domain is not None:
+        units = units.moved(dem_crs)
+        line = sub_catchments.borders([g for _, g in units.units], vocabulary.mask("catchment"))
+        found = FeatureSet(features=(line,)) if found is None else found.model_copy(
+            update={"features": (*found.features, line)}
+        )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
     simplified = (
         found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
@@ -1262,6 +1302,21 @@ def mesh(
             more |= {"reservoirs": escaped_ascii(reservoir[2]), "reservoirs_repaired": repaired}
         elif categories is not None:
             more["reservoirs"] = "none"
+        if units is not None:
+            xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)[:, :2]
+            centroids = xy[dem_run.trimmed.triangles].mean(axis=1)
+            catchment_ids, strays = sub_catchments.cell_ids(units.units, centroids)
+            if strays:
+                typer.echo(
+                    f"catchments: {strays} cells had their centroid in no unit and took the "
+                    "nearest",
+                    err=True,
+                )
+            more |= {
+                "catchments": escaped_ascii(units.name),
+                "catchments_units": len(units.units),
+                "catchments_band_m": units.band_m,
+            }
         values |= more
     if dem_run.cut is not None:
         from tin_engine.io.mesh_index import ConformityError, MeshIndex
@@ -1334,7 +1389,7 @@ def mesh(
         with clock.phase("write: geopackage"):
             _write_geopackage(
                 surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories,
-                regulated,
+                regulated, catchment_ids,
             )  # fmt: skip
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
@@ -1397,12 +1452,14 @@ def _write_geopackage(
     fractions: ClassFractions | None = None,
     categories: Mapping[int, Category] | None = None,
     regulated: npt.NDArray[np.float64] | None = None,
+    catchment_ids: npt.NDArray[np.int64] | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
     a failed run leaves nothing under the asked name. Class ``fractions`` add
     their long-form table, and with ``categories`` the ``cells`` layer, its lake
-    share split by ``regulated``, each triangle's share under reservoirs."""
+    share split by ``regulated``, each triangle's share under reservoirs, and
+    each cell's ``catchment_ids`` (1 when None)."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
@@ -1424,7 +1481,7 @@ def _write_geopackage(
             write_fractions(conn, fractions)
             if categories is not None:
                 cells = cell_table(mesh.vertices, mesh.triangles, fractions, categories, regulated)
-                write_cells(conn, cells, srs.srs_id)
+                write_cells(conn, cells, srs.srs_id, catchment_ids)
         rows = [("rasputin_version", "rasputin version", installed_version(), None)]
         rows.append(("command", "command", _command(), None))
         write_run(conn, [*rows, *((e.name, e.wording, e.value, e.number) for e in record.entries)])
@@ -1488,25 +1545,113 @@ def _reservoir_source(
     known: Mapping[str, RemoteSource],
     root: Path | None,
     run: str,
+    flag: str = "--reservoirs",
 ) -> tuple[Path, str | None, str] | None:
-    """``--reservoirs`` checked before any work: the file, layer and record name
-    of a cached catalogue source of features (its key), or of a file rasputin
-    reads (its name). ``wanted`` is whether the run writes cells: --land-cover
-    with a legend and a .gpkg output. An uncached source's refusal names `run`."""
+    """``flag`` (``--reservoirs`` or ``--catchments``) checked before any work:
+    the file, layer and record name of a cached catalogue source of features
+    (its key), or of a file rasputin reads (its name). ``wanted`` is whether
+    the run writes cells: --land-cover with a legend and a .gpkg output. An
+    uncached source's refusal names `run`."""
     if value is None:
         return None
     if not wanted:
         raise typer.BadParameter(
-            "needs --land-cover with a legend and a .gpkg output", param_hint="--reservoirs"
+            "needs --land-cover with a legend and a .gpkg output", param_hint=flag
         )
+    return _features_source(value, flag, known, root, run)
+
+
+@dataclass(frozen=True)
+class Units:
+    """The sub-catchment units as (id, polygon), the domain they join into,
+    the band their borders were simplified within, and the source's name."""
+
+    units: list[tuple[int, BaseGeometry]]
+    domain: DomainPolygon
+    band_m: float
+    name: str
+
+    def moved(self, crs: str) -> Units:
+        """The units in `crs`, each vertex moved as the domain's are."""
+        if same_crs(self.domain.crs, crs):
+            return self
+        move = reprojector(self.domain.crs, crs)
+        units = [(i, shapely.transform(g, move)) for i, g in self.units]
+        return replace(self, units=units, domain=self.domain.to_crs(crs))
+
+
+def _units(
+    path: Path,
+    layer: str | None,
+    name: str,
+    given: DomainPolygon,
+    triangles: int | None,
+    tolerance: float | None,
+) -> Units:
+    """The units of `path` whose inner point lies in `given`, repaired, their
+    borders simplified within `tolerance`, else the band `triangles` sets, in
+    their own CRS; said on stderr. A refusal is a ValueError."""
+    read = read_source(path, layer, None, lambda own: given.to_crs(own).polygon.bounds)
+    if parse_crs(read.crs).is_geographic:
+        raise ValueError(
+            f"{name} is in degrees ({crs_label(read.crs)}); the border band is in metres, so "
+            "give the units in a projected CRS"
+        )
+    rows = [
+        (fid, shapely.force_2d(g))
+        for fid, g, _ in read.rows
+        if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
+    ]
+    inside = given.to_crs(read.crs).polygon
+    picked = [rows[k] for k in sub_catchments.select([g for _, g in rows], inside)]
+    if not picked:
+        raise ValueError(f"no unit of {name} has its inner point inside the domain")
+    ids = sub_catchments.check_ids([fid for fid, _ in picked], name)
+    repaired = sub_catchments.repair([g for _, g in picked])
+    area = join(repaired, read.crs).polygon.area
+    if tolerance is not None:
+        band, why = tolerance, "--features-tolerance"
+    else:
+        assert triangles is not None
+        band = sub_catchments.band_m(area, triangles)
+        why = f"a triangle's edge at {triangles} triangles, {8 * band:.0f} m, over 8"
+    kept = sub_catchments.simplify(repaired, band) if band > 0 else repaired
+    union = orient(shapely.coverage_union_all(kept), sign=1.0)
+    vertices = int(shapely.get_num_coordinates(np.asarray(kept, dtype=object)).sum())
+    typer.echo(
+        f"catchments: {len(kept)} units of {name}, borders simplified at {band:.0f} m ({why}): "
+        f"{vertices} vertices, {area / 1e6:.2f} km2",
+        err=True,
+    )
+    domain = DomainPolygon(polygon=union, crs=read.crs)
+    return Units(list(zip(ids, kept, strict=True)), domain, band, name)
+
+
+def _features_source(
+    value: str,
+    flag: str,
+    known: Mapping[str, RemoteSource],
+    root: Path | None,
+    run: str,
+    suffixes: tuple[str, ...] = SUFFIXES,
+) -> tuple[Path, str | None, str]:
+    """`flag`'s value: the file, layer and record name of a cached catalogue
+    source of features (its key), or of a file with one of `suffixes` (its
+    name). An uncached source's refusal names `run`, the fetch that copies it."""
     source = known.get(value)
     if source is not None and source.values == "features":
-        return _cached_features(source, root, run, "--reservoirs"), source.layer, value
+        if Path(value).is_file():
+            raise typer.BadParameter(
+                f"{value} is both a catalogue source and a file here ({Path(value).resolve()}); "
+                "rename or move the file, or give its path as ./" + value,
+                param_hint=flag,
+            )
+        return _cached_features(source, root, run, flag), source.layer, value
     path = Path(value)
-    if path.suffix.lower() not in SUFFIXES or not path.is_file():
+    if path.suffix.lower() not in suffixes or not path.is_file():
         raise typer.BadParameter(
-            f"{value} is neither a catalogue source of features nor a {', '.join(SUFFIXES)} file",
-            param_hint="--reservoirs",
+            f"{value} is neither a catalogue source of features nor a {', '.join(suffixes)} file",
+            param_hint=flag,
         )
     return path, None, path.name
 
@@ -3149,9 +3294,11 @@ def network_catchment(
         typer.Option("--out", writable=True, help="Where to write the polygon: .geojson or .json."),
     ],
     network: Annotated[
-        Path,
+        str,
         typer.Option(
-            "--network", help="The units' polygons (.gpkg, .geojson or .json), read in place."
+            "--network",
+            help="The units' polygons: a catalogue source of features or a .gpkg, .geojson "
+            "or .json file, read in place.",
         ),
     ],
     id_attribute: Annotated[str, typer.Option("--id-attribute", help="The unit's own ID.")],
@@ -3188,16 +3335,17 @@ def network_catchment(
         str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
     ] = "EPSG:4326",
     lakes: Annotated[
-        Path | None,
+        str | None,
         typer.Option(
-            "--lakes", help="Any polygon file: the lake under the seed point is the seed."
+            "--lakes",
+            help="Any polygon source or file: the lake under the seed point is the seed.",
         ),
     ] = None,
     lakes_layer: Annotated[
         str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
     ] = None,
     outlets: Annotated[
-        Path | None,
+        str | None,
         typer.Option(
             "--outlets", help="The units' outlet points, one per unit, keyed by --id-attribute."
         ),
@@ -3254,25 +3402,43 @@ def network_catchment(
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
     target = cli_kit.destination(out)
+    known, root = _known_sources(os.environ), cache_root(cache, os.environ)
+
+    def read_in_place(value: str, layer: str | None, flag: str) -> tuple[Path, str | None]:
+        """`flag`'s file and its layer: the one given, else the entry's."""
+        run = _fetch_run(value, None, None, None, cache)
+        path, entry_layer, _ = _features_source(value, flag, known, root, run, VECTOR_SUFFIXES)
+        return path, layer or entry_layer
+
+    network_file, network_layer = read_in_place(network, network_layer, "--network")
+    lakes_file = outlets_file = None
+    if lakes is not None:
+        lakes_file, lakes_layer = read_in_place(lakes, lakes_layer, "--lakes")
+    if outlets is not None:
+        outlets_file, outlets_layer = read_in_place(outlets, outlets_layer, "--outlets")
     attributes = (upstream_area_attribute, area_unit, name_attribute)
     with _refused("--network"):
-        crs, links = read_links(network, network_layer, id_attribute, down_attribute, *attributes)
-    with _refused("--network", f"{network.name}, {id_attribute}: "):
+        crs, links = read_links(
+            network_file, network_layer, id_attribute, down_attribute, *attributes
+        )
+    with _refused("--network", f"{network_file.name}, {id_attribute}: "):
         net = Network.build(links)
     ends = ", ".join(f"{n} to {v or 'null'}" for v, n in net.ends.items())
     typer.echo(f"network: {len(links)} units in {crs}; draining out of the file: {ends}", err=True)
     seed_unit, place = unit or "", dict[str, object]({"unit": unit})
     if seed_unit and seed_unit not in net.links:
-        raise typer.BadParameter(f"{network.name} has no unit {unit}", param_hint="--unit")
+        raise typer.BadParameter(f"{network_file.name} has no unit {unit}", param_hint="--unit")
     request: CatchmentRequest | None = None
     if seed is not None:
         ((x, y),) = reprojector(seed_crs, crs)([seed])
         with _refused("--seed"):
-            covering = units_at(network, network_layer, id_attribute, Point(x, y))
+            covering = units_at(network_file, network_layer, id_attribute, Point(x, y))
             seed_unit = home_unit(Point(x, y), covering)
         with _refused("--lakes"):
             found = (
-                None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
+                None
+                if lakes_file is None
+                else read_lake_polygons(lakes_file, lakes_layer, seed, seed_crs)
             )
             request = CatchmentRequest(
                 seed=seed,
@@ -3287,17 +3453,17 @@ def network_catchment(
             f"give --unit {seed_unit} for the whole unit, up to {own_km2:.2f} km2 of it below the "
             "seed, or use the terrain route (rasputin catchment), which cuts at the point"
         )
-        if outlets is None:
+        if outlets_file is None:
             raise typer.BadParameter(
                 f"the seed is in the unit {named}; give --outlets to check that it is at the "
                 f"unit's outlet, or {choices}",
                 param_hint="--seed",
             )
         with _refused("--outlets"):
-            outlet = outlet_point(outlets, outlets_layer, id_attribute, seed_unit, crs)
+            outlet = outlet_point(outlets_file, outlets_layer, id_attribute, seed_unit, crs)
         if outlet is None:
             raise typer.BadParameter(
-                f"{outlets.name} has no outlet point for the seed's unit {named}; {choices}",
+                f"{outlets_file.name} has no outlet point for the seed's unit {named}; {choices}",
                 param_hint="--seed",
             )
         distance = outlet_distance_m(geometry, outlet, crs)
@@ -3315,7 +3481,7 @@ def network_catchment(
         place = {"seed": seed, "seed_crs": seed_crs, "home_unit": seed_unit, "distance_m": distance}
     with _refused("--network"):
         ids = net.upstream(seed_unit)
-        geometries = unit_geometries(network, network_layer, id_attribute, ids)
+        geometries = unit_geometries(network_file, network_layer, id_attribute, ids)
         joined = join(list(geometries.values()), crs)
     typer.echo(
         f"joined: {plural(len(ids), 'unit', 'units')}, {joined.area_m2 / 1e6:.6f} km2, "

@@ -1,0 +1,11 @@
+catchments: 75 units of smhi-svar2022-subcatchments, borders simplified at 101 m (a triangle's edge at 6000 triangles, 810 m, over 8): 2701 vertices, 1702.67 km2
+lines: 3012 vertices read, 1432 after joining shared edges and adding crossings
+DEM: 4 files, 2155 columns x 1576 rows
+land cover: 43 of 1171 polygons crossed itself and was repaired
+land cover: 10589 class shares over 6057 triangles, 16 classes
+6057 triangles, about the 6000 asked for (at most 6300): tolerance 92.3 m found in 2 trials. Every node of the original DEM inside the mesh is within 92.3 m of it (largest difference 92.2 m, root-mean-square 20.54 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106c-out/kultsjon-6000.gpkg
+/Users/skavhaug/projects/rasputin_scratch/perf-106c-out/kultsjon-6000.stats.json
+real 47.71
+user 47.73
+sys 1.03

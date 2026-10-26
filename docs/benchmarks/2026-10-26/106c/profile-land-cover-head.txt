@@ -1,0 +1,23 @@
+Mon Oct 26 10:46:43 2026    /Users/skavhaug/projects/rasputin_scratch/perf-106c-out/head-lc.prof
+
+         12386208 function calls (12369262 primitive calls) in 49.543 seconds
+
+   Ordered by: internal time
+   List reduced from 4398 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       43   33.190    0.772   33.190    0.772 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/constructive.py:667(make_valid)
+   271662    6.220    0.000    6.772    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/constructive.py:375(clip_by_rect)
+1218/1186    1.638    0.001    1.542    0.001 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/pyproj/transformer.py:841(transform)
+     1171    1.497    0.001    1.497    0.001 {is_valid_scalar}
+     1170    0.910    0.001   10.785    0.009 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/src_python/tin_engine/polygon_fractions.py:42(subdivide)
+   272918    0.871    0.000    1.733    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/_geometry.py:628(get_parts)
+        1    0.404    0.404    0.404    0.404 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/set_operations.py:110(intersection)
+274256/274220    0.312    0.000    0.413    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+   379457    0.298    0.000    0.298    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/_geometry.py:168(get_num_coordinates)
+   543324    0.245    0.000    0.245    0.000 {area_scalar}
+  1358310    0.233    0.000    0.552    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/shapely/constructive.py:412(<genexpr>)
+  1088069    0.232    0.000    0.320    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-c/.venv/lib/python3.14/site-packages/numpy/_core/numeric.py:1911(isscalar)
+
+
+

@@ -81,6 +81,9 @@ WORDING = {
     "reservoirs": "Reservoir polygons splitting the cells' lake share",
     "land_cover_repaired": "Land-cover polygons that crossed themselves, repaired",
     "reservoirs_repaired": "Reservoir polygons that crossed themselves, repaired",
+    "catchments": "Sub-catchment units: their borders constraints, their ids the cells'",
+    "catchments_units": "Sub-catchment units whose inner point lies in the domain",
+    "catchments_band_m": "Band the sub-catchment borders were simplified within, m",
     "land_cover_vertices": "Land-cover vertices before and after clean-up",
     "land_cover_area_moved_m2": (
         "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
