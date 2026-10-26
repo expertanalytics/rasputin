@@ -1,0 +1,9 @@
+DEM: 4 files, 2153 columns x 1575 rows
+land cover: 10298 class shares over 5720 triangles, 16 classes
+5720 triangles, about the 6000 asked for (at most 6300): tolerance 52.2 m found in 5 trials. Every node of the original DEM inside the mesh is within 52.2 m of it (largest difference 52.1 m, root-mean-square 14.83 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/kultsjon-master.gpkg
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/kultsjon-master.stats.json
+BENCH {"refine_s": 0.01077312498819083, "app_s": 11.526706165983342, "max_error": 52.04934072814535, "rounds": 15, "inserted": 1706, "flips": 4481, "hardening": "libc++ fast", "total_s": 11.509319333, "phases": {"domain read": 0.002297166, "decode": 0.428749167, "start mesh: build": 0.000189875, "start mesh: node": 0.001076584, "start mesh: triangulate": 0.000442833, "start mesh: constraint edges": 0.000992959, "check points: project": 0.1685642939992249, "check points: store": 0.07412308091189283, "refine": 0.076059874, "refine: legalise start": 0.000116081, "refine: start quality": 0.009201916, "refine: scan (parallel)": 0.046642042, "refine: split + flip (serial)": 0.015283702, "refine: setup + output": 0.004816132999999997, "edge strip: generate": 0.003931459, "final check: scan (parallel)": 0.09290145899999999, "final check: split + flip (serial)": 0.003605292, "trim": 0.004184083, "error summary": 0.013499875, "land cover fractions": 10.508347167, "write: geopackage": 0.069664084}}
+real 12.19
+user 13.56
+sys 0.38

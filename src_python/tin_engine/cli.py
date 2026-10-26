@@ -1250,11 +1250,16 @@ def mesh(
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
                 try:
-                    found_polygons = read_polygons(*reservoir[:2], dem_crs, xy[:, :2])
+                    found_polygons, repaired = read_polygons(
+                        *reservoir[:2],
+                        dem_crs,
+                        xy[:, :2],
+                        functools.partial(_say_repaired, "reservoirs"),
+                    )
                 except FeatureError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
                 regulated = overlay(xy[dem_run.trimmed.triangles], found_polygons)
-            more["reservoirs"] = escaped_ascii(reservoir[2])
+            more |= {"reservoirs": escaped_ascii(reservoir[2]), "reservoirs_repaired": repaired}
         elif categories is not None:
             more["reservoirs"] = "none"
         values |= more
@@ -1629,7 +1634,14 @@ def _class_fractions(
                 assert classes.path is not None and classes.legend is not None
                 layer = source.layer if source is not None else None
                 xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
-                found = read_class_polygons(classes.path, layer, classes.legend, dem_crs, xy)
+                found, repaired = read_class_polygons(
+                    classes.path,
+                    layer,
+                    classes.legend,
+                    dem_crs,
+                    xy,
+                    functools.partial(_say_repaired, "land cover"),
+                )
                 known_codes = frozenset(classes.legend.palette or {})
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=known_codes)
             else:
@@ -1653,6 +1665,8 @@ def _class_fractions(
         "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
+    if repository is None:
+        values["land_cover_repaired"] = repaired
     if source is not None:  # a file carries no credit, licence or citation
         values |= {
             "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
@@ -1660,6 +1674,14 @@ def _class_fractions(
             "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
         }
     return assigned.table, assigned.codes, values
+
+
+def _say_repaired(what: str, repaired: int, read: int) -> None:
+    """One stderr line when the polygons read had self-crossing rings."""
+    if repaired:
+        typer.echo(
+            f"{what}: {repaired} of {read} polygons crossed itself and was repaired", err=True
+        )
 
 
 def _piece_vocabulary(vocabulary: EdgeVocabulary) -> EdgeVocabulary:

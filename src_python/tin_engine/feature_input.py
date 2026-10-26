@@ -614,13 +614,48 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
+def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeometry | None:
+    """``geometry`` if valid, else ``shapely.make_valid(geometry)`` within the
+    box of the points ``xy`` widened by 100 m, as polygons, except where two
+    rings share a stretch of edge: there both sides keep the same parity.
+    None if empty.
+    A ring that crosses itself makes GEOS's overlays throw. Only the part near
+    the mesh is ever overlaid, and repairing a large polygon whole takes seconds.
+    make_valid keeps a point when an odd number of rings, counted over all
+    parts, wind around it. So the rings cut to the box, with the box's own
+    edge, split it into faces, and a face is kept when an odd number of parts
+    contain a point of it. Cutting the polygon instead of its rings can swap
+    inside and outside when a ring crosses itself outside the box."""
+    if geometry.is_valid:
+        return geometry
+    box = shapely.box(*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
+    lines = shapely.clip_by_rect(shapely.boundary(geometry), *box.bounds)
+    noded = shapely.union_all([lines, box.exterior])
+    faces = shapely.get_parts(shapely.polygonize(shapely.get_parts(noded)))
+    x, y = shapely.get_coordinates(shapely.point_on_surface(faces)).T
+    odd = np.zeros(len(faces), dtype=bool)
+    for part in shapely.get_parts(geometry):
+        odd ^= shapely.contains_xy(part, x, y)
+    kept = shapely.get_parts(shapely.coverage_union_all(faces[odd]))
+    return MultiPolygon(list(kept)) if len(kept) else None
+
+
 def read_class_polygons(
-    path: Path, layer: str | None, legend: Legend, mesh_crs: str, xy: npt.NDArray[np.float64]
-) -> list[tuple[int, BaseGeometry]]:
+    path: Path,
+    layer: str | None,
+    legend: Legend,
+    mesh_crs: str,
+    xy: npt.NDArray[np.float64],
+    tell: Callable[[int, int], None] | None = None,
+) -> tuple[list[tuple[int, BaseGeometry]], int]:
     """Every polygon of a coded source with its class code, moved to
     ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of the
     points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
-    skipped; a value that is no class code is a :class:`FeatureError`."""
+    skipped; a value that is no class code is a :class:`FeatureError`. Each
+    polygon is repaired after the move (:func:`_repaired`, near ``xy``), and
+    dropped when nothing polygonal is left; the count returned is how many
+    were. ``tell``, if given, is called with that count and the number of
+    polygons read."""
     spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
     box_for = _near(xy, mesh_crs)
     read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
@@ -633,7 +668,11 @@ def read_class_polygons(
         code = _code(legend, value, f"{path.name}: feature {fid}", second)
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
-    return out
+    fixed = [(code, _repaired(g, xy)) for code, g in out]
+    repaired = sum(a is not b for (_, a), (_, b) in zip(out, fixed, strict=True))
+    if tell is not None:
+        tell(repaired, len(out))
+    return [(c, g) for c, g in fixed if g is not None], repaired
 
 
 def _near(
@@ -653,10 +692,15 @@ def _near(
 
 
 def read_polygons(
-    path: Path, layer: str | None, mesh_crs: str, xy: npt.NDArray[np.float64]
-) -> list[BaseGeometry]:
+    path: Path,
+    layer: str | None,
+    mesh_crs: str,
+    xy: npt.NDArray[np.float64],
+    tell: Callable[[int, int], None] | None = None,
+) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
-    by vertex; a GeoPackage is queried as by :func:`read_class_polygons`."""
+    by vertex and repaired; a GeoPackage is queried, the count returned and
+    ``tell`` called, as by :func:`read_class_polygons`."""
     read = read_source(path, layer, None, _near(xy, mesh_crs))
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
@@ -664,7 +708,12 @@ def read_polygons(
         for _, g, _ in read.rows
         if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
     ]
-    return flat if move is None else [shapely.transform(g, move) for g in flat]
+    moved = flat if move is None else [shapely.transform(g, move) for g in flat]
+    fixed = [_repaired(g, xy) for g in moved]
+    repaired = sum(a is not b for a, b in zip(moved, fixed, strict=True))
+    if tell is not None:
+        tell(repaired, len(moved))
+    return [g for g in fixed if g is not None], repaired
 
 
 def _finite(geometry: BaseGeometry) -> bool:
