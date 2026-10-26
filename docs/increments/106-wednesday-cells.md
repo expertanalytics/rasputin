@@ -26,10 +26,10 @@ in its docstring; their outputs went to `/tmp/p106/` (not kept).
 |---|---|---|---|---|---|
 | 106a | a self-intersecting land-cover or reservoir polygon crashes the cell table (AR50 Innlandet, Norway) | the polygon is repaired when read, and the run says how many were | about 20 | short | no |
 | 106b | `network-catchment --network` takes only a file path, not the catalogue name `smhi-svar2022-subcatchments` | `--network`, `--lakes` and `--outlets` take a catalogue name or a file | about 15 | short | no |
-| 106c | every cell has `catchment_id` 1; tagging cells afterwards puts 18.9 % of Kultsjön's area in the wrong one of its 75 SVAR units | `mesh --catchments` repairs SMHI's units, simplifies them with rasputin's own border simplification, makes their borders constraints, so no cell straddles two, and writes each cell's unit id | about 90 | full loop | **yes** |
+| 106c | every cell has `catchment_id` 1; tagging cells afterwards puts 18.9 % of Kultsjön's area in the wrong one of its 75 SVAR units | `mesh --catchments` repairs SMHI's units, simplifies them with rasputin's own border simplification at a band set by the triangle budget, makes their borders constraints, so no cell straddles two, and writes each cell's unit id | about 95 | full loop | **yes** |
 | 106d | no Swedish reservoir polygons: the reservoir share is 0 | a catalogue entry can keep only the lakes a dam names; `smhi-reservoirs` gives Kultsjön 82.73 km² of reservoir | about 35 | short | no |
 
-About 160 net production lines in all. No C++ in any of them.
+About 165 net production lines in all. No C++ in any of them.
 
 `@perf` applies to 106c only: it adds constraint lines to what drives the
 mesh (*Acceptance* in `docs/increments/README.md`). 106a changes only the
@@ -53,6 +53,15 @@ question. So 106c drops the `catchments` table, `--catchments-simplify`,
 `--catchments-layer` and grouping by an attribute, and simplifies with
 rasputin's own border simplification; 106d's `named_by` keeps only what the
 `smhi-reservoirs` entry uses.
+
+**Round 3** (2026-10-26), 106c only, on 106a's head `ee1dda88`. Ola's
+ruling: the border band must not be a fixed distance (round 2's 200 m). In
+his words: "let's say I want to mesh the northern hemisphere. Then I guess
+this catchment would get maybe 8 vertices and edges. Or 5, or 10". The
+triangle budget sets the resolution, so the band follows from it, and a
+border gets about as many vertices as the triangle edges along it, at any
+scale. `--features-tolerance` stays an explicit override. Section 7's
+question is withdrawn.
 
 ## 1. Prior art: legacy and literature
 
@@ -181,13 +190,28 @@ chosen per call by the file given (section 6); there is no grouping option.
    `border_simplify.simplify_borders` as one coverage, band `METRES`,
    clearance 1 m (the repair distance, as for land cover). The frame makes
    the union's outline a border like the others: it is simplified with
-   them, every unit keeps its area, and no gap can open. `METRES` is the
+   them, every unit keeps its area, and no gap can open. The frame's margin
+   is 2 x band + 1 km, so it always exceeds the band. `METRES` is the
    existing `--features-tolerance` when given (its help gains "and
-   --catchments borders"), and then the land cover's band too; when not
-   given, the catchments' band is 200 m and the land cover keeps its band
+   --catchments borders"), and then the land cover's band too; 0 repairs
+   only. When not given, the band comes from the triangle budget:
+
+   `h = sqrt(4 A / (sqrt(3) N))`, `band = h / 8`
+
+   with `A` the units' union area after the repair (m², in the units' CRS)
+   and `N` the `--triangles` value. `h` is the edge of an equilateral
+   triangle of area `A / N`, the mean triangle's edge at that budget. On
+   SVAR's borders the simplification leaves segments about 8 bands long
+   (*Measured*, round 3), so `h / 8` makes a border's segments about one
+   triangle edge long: a border of length `L` gets about `L / h` vertices,
+   at any scale. Kultsjön (1,702.67 km²) at 4,000 triangles: h 991 m, band
+   124 m; at 400: 3,135 m and 392 m. The land cover then keeps its band
    derived from the legend (`legends.derived_cleanup`), so `--catchments`
-   changes neither the land cover's band nor the 15-degree start-angle
-   rule; 0 repairs only.
+   changes neither the land cover's band nor the 15-degree start-angle rule.
+   Without `--triangles` (the `--tolerance` path) there is no budget and so
+   no edge length to follow: `--catchments` then needs
+   `--features-tolerance` (refusal 7). A pure function
+   `band_m(area_m2, triangles)` in `sub_catchments.py` holds the formula.
 4. **The domain is their union** (`coverage_union_all`), which replaces `D`
    for the rest of the run, before the DEM is opened, so the DEM window is
    chosen from it. `D` only selects.
@@ -212,9 +236,11 @@ chosen per call by the file given (section 6); there is no grouping option.
    today. No other table.
 
 Stderr, one line: `catchments: 75 units of smhi-svar2022-subcatchments,
-borders simplified at 200 m: 1558 vertices, 1702.67 km2`. The run record:
-`catchments` (the source's name), `catchments_units` (the count) and
-`catchments_band_m` (the band used, given or 200). The start mesh's minimum
+borders simplified at 101 m (a triangle's edge at 6000 triangles, 809 m,
+over 8): 2701 vertices, 1702.67 km2`; with `--features-tolerance` given, the
+bracket reads `(--features-tolerance)`. The run record: `catchments` (the
+source's name), `catchments_units` (the count) and `catchments_band_m` (the
+band used, given or derived). The start mesh's minimum
 angle stays 25 degrees: the 15-degree rule (`cli.py`, "15 degrees with land
 cover simplified") reads only land cover, and the probes below ran at 25.
 
@@ -236,6 +262,8 @@ simplified union of the units, so `network-catchment`'s unsimplified outline
    "UNITS: feature N has no id Shyft's catchment_id can hold".
 6. The units' union in more than one part: "the units join into N parts that
    do not touch: a, b km2" (`network.join`'s wording).
+7. Neither `--triangles` nor `--features-tolerance`: "needs --triangles,
+   whose budget sets the border band, or --features-tolerance".
 
 `--features-tolerance`'s existing check (finite, at least 0) covers the band.
 
@@ -293,13 +321,50 @@ buffer of Ljungan's 111,249-vertex outline took minutes).
   under 36,595 cells at 200 m; the rehearsal's Ljungan run without
   sub-catchments had 9,985.
 
+**Round 3: the band from the budget** (106a's head `ee1dda88`, the
+extension rebuilt; probes `budget_band.py` and `budget_borders_plot.py`).
+SMHI's main sub-basins (SVAR's units joined by `BARONR`, after the 1 m
+repair): Kultsjön is one (1,702.67 km², its borders the outline, 19,555
+vertices, 359.6 km), Ljungan four (12,838.64 km², 136,911 vertices,
+2,346.3 km). Segment length against band, Kultsjön: band h/4 gives segments
+1.95 to 2.23 h, h/2 gives 3.81 to 4.32 h, h gives 7.01 to 8.90 h (budgets
+400, 4,000, 40,000), so segments run about 8 bands; hence h/8. At h/8:
+
+| sub-basins | `--triangles` | h | band | border vertices | border length / h | triangles | mesh vertices on the outline |
+|---|---|---|---|---|---|---|---|
+| Kultsjön, 1 | 400 | 3,135 m | 392 m | 90 | 96 | 400 | 98 |
+| | 4,000 | 991 m | 124 m | 290 | 312 | 3,963 | 329 |
+| | 40,000 | 314 m | 39 m | 862 | 1,014 | not run | |
+| Ljungan, 4 | 400 | 8,610 m | 1,076 m | 216 | 198 | 408 | |
+| | 4,000 | 2,723 m | 340 m | 732 | 666 | 4,050 | |
+| | 40,000 | 861 m | 108 m | 2,328 | 2,210 | not run | |
+
+Border vertices against length / h: 0.85 to 1.10 over two areas eight times
+apart and a hundredfold in budget. Every row: each sub-basin's area
+unchanged (relative under 1e-14), coverage valid, the union one polygon with
+no hole and its area unchanged, so no gap. The whole probe, reading and three
+budgets, takes 1.0 s (Kultsjön) and 10.1 s (Ljungan); meshing 1.2 to
+4.1 s. No triangle has more than 1.5e-5 of its area in a
+second sub-basin (`straddle.py`), every centroid in one. The picture,
+`docs/increments/106-probes/kultsjon-budget-borders.png`: SMHI's outline,
+the simplified border and the mesh at 400 and 4,000.
+
+SVAR's **fine units** at h/8 need a larger budget, because each unit's
+junctions and short borders are fixed: Kultsjön's 75 at `--triangles 4000`
+(band 124 m) is refused by the existing check, "the fewest triangles this
+DEM gives is 4675"; at 6,000 (band 101 m, 2,701 vertices) it gives 6,057
+triangles in 1.2 s. Ljungan's 809 at 40,000 (band 108 m) is refused at
+54,645; at 80,000 (band 76 m, 36,970 vertices) it gives 78,046 in 30.9 s.
+The refusal already names the budget to ask for.
+
 **Constants.** The 1 m repair distance assumes a projected CRS in metres and
 SVAR's mismatches; checked on Ljungan's 809 units (the largest input), where
-it changes no area. The 1 km frame margin only has to exceed the band
-(checked at 300 m). The 200 m default band assumes units of 0.004 to
-1,000 km² and a few thousand cells per 1,000 km²: it is the smallest band
-probed that lets Kultsjön take the rehearsal's 4,000; checked on Kultsjön
-and Ljungan (above).
+it changes no area. The frame margin, 2 x band + 1 km, only has to exceed
+the band; checked at bands 39 m to 3,135 m. The factor 8 assumes natural
+catchment borders, rough at every scale probed (SVAR's); it is scale-free, so a hemisphere's budget gives a hemisphere's band
+by the same rule; checked from 1,702.67 to 12,838.64 km² and 400 to 40,000
+triangles. A border smoother than SVAR's (a straight line) gets fewer
+vertices, never more.
 
 ### Tests (key properties)
 
@@ -346,27 +411,40 @@ Figures measured with shapely 2.2.0 (GEOS 3.14.1).
 6. **Unchanged without it**: the same run without `--catchments` writes
    `catchment_id` 1 on every row and the same `triangles` and `cells` rows
    as master.
-7. **Refusals** 1, 2, 3, 4 and 6 above.
+7. **Refusals** 1, 2, 3, 4, 6 and 7 above.
+8. **The band from the budget.** Pure: `band_m(4_000_000, 400)` is
+   18.996 m (h 151.967 m), relative 1e-9; `band_m(4_000_000, 40_000)` is a
+   tenth of it. End to end: test 5's run without `--features-tolerance`,
+   with `--triangles 200` (A 9,000,000 m²): the record's
+   `catchments_band_m` is 40.296 m (h 322.371 m), relative 1e-9, and the
+   stderr line says "a triangle's edge at 200 triangles"; the same run
+   with `--features-tolerance 0` records 0.
 
-**Invariant-critical suite** (mutation round required): tests 1, 4, 5 and 6.
+**Invariant-critical suite** (mutation round required): tests 1, 4, 5, 6
+and 8.
 Mutation targets: the inner-point rule (centroid or intersects in its place:
 test 1's U), the frame left out (test 4), the borders not added as
 constraints (test 5's slanted borders), the ids taken from the first
 triangle vertex in place of the centroid (test 5's absent stderr line: a
-vertex on a border is within no unit), the fid range check (test 3).
+vertex on a border is within no unit), the fid range check (test 3), the
+band's factor (h or h/4 in place of h/8, and A/N in place of the
+equilateral triangle's area: test 8).
 
 **`@perf`**: the 1 m benchmark (no `--catchments`) unchanged, meshes
-byte-identical to master's; Kultsjön at `--triangles 4000` and Ljungan at
-`--triangles 40000` with `--catchments smhi-svar2022-subcatchments`, the
-predicted counts (3,972 and 40,175, within the budget's 5 %), at most 3e-4
-of any triangle outside its unit, and the time against the probes: mesh
-1.3 s and 7.0 s, plus reading and repairing 0.3 s and 3.0 s, plus the
-simplification 0.6 s and 6.6 s, plus 10 % noise.
+byte-identical to master's; with `--catchments smhi-svar2022-subcatchments`
+and the band from the budget, Kultsjön at `--triangles 6000` and Ljungan at
+`--triangles 80000`, the predicted counts (6,057 and 78,046, within the
+budget's 5 %), at most 8.1e-5 and 3.0e-4 of any triangle outside the unit
+holding most of it, and the time against the probes: mesh 1.2 s and
+30.9 s, plus reading and repairing 0.3 s and 3.0 s, plus the
+simplification 0.6 s and 6.1 s, plus 10 % noise; and Kultsjön at
+`--triangles 4000 --features-tolerance 200` gives round 2's 3,972.
 
-**Size.** About 90 net lines: the option and its checks (10), a pure module
+**Size.** About 95 net lines: the option and its checks (12), a pure module
 `sub_catchments.py` (select, repair, the frame and `simplify_borders`, the
-union, the borders as a feature, the ids: 40), the wiring in `mesh` (20),
-the writer's `catchment_id` column (8), stderr and record (12). Full loop.
+band from the budget, the union, the borders as a feature, the ids: 43),
+the wiring in `mesh` (20), the writer's `catchment_id` column (8), stderr
+and record (12). Full loop.
 
 ## 5. 106d: Swedish reservoirs as a catalogue entry
 
@@ -434,10 +512,12 @@ units:
 rasputin mesh --out kultsjon.gpkg --dem glo30 --out-crs EPSG:3006
   --domain ~/rasputin-output/opal-se2-2026-10-21/catchments/kultsjon.geojson
   --catchments smhi-svar2022-subcatchments
-  --land-cover clc2018 --reservoirs smhi-reservoirs --triangles 4000
+  --land-cover clc2018 --reservoirs smhi-reservoirs --triangles 6000
 ```
 
-Each cell's `catchment_id` is then its unit's `fid` in SMHI's GeoPackage,
+With the band from the budget, Kultsjön's 75 fine units need about 6,000
+triangles (4,000 is refused, naming 4,675); its one main sub-basin meshes
+at 400. Each cell's `catchment_id` is then its unit's `fid` in SMHI's GeoPackage,
 whose row also carries `ARO_UUID`, `BARONR` and the name, so the client can
 join them. For SMHI's main sub-basins Ola gives a different file to
 `--catchments`: a GeoJSON of SVAR's units joined by `BARONR`, each feature's
@@ -451,10 +531,8 @@ a Shyft read-back example, `--outline-tolerance` on `network-catchment`
 
 ## 7. Questions for Ola (defaults taken unless he says otherwise)
 
-1. The border band's default, 200 m: every unit keeps its area exactly, but
-   a border may move up to 200 m from SMHI's line; Kultsjön can then go down
-   to 3,498 cells, Ljungan with all 809 units to 36,595. Default: 200 m,
-   overridden per call with `--features-tolerance`.
+None open. Round 2's question (a 200 m default band) is answered by Ola's
+ruling of round 3: the band follows the triangle budget.
 
 ## Review record
 
