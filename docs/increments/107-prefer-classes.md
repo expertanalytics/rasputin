@@ -62,13 +62,16 @@ naming the legend.
   catchment moves this way, mostly from sparse vegetation (2.44 %) and heath
   (1.02 %).
 - **(b) CORINE water where the preferred source has none.** CORINE's 512 is
-  dropped wholly ("not for lakes"). Each leftover piece takes the class of the
-  kept CORINE polygon sharing the longest border with it (a tie: the lower
-  code; no kept neighbour: class 0, which the cell table counts as
-  unspecified). Why: it is what CORINE's own generalisation does with an
+  dropped wholly ("not for lakes"). A leftover piece is one connected part
+  (`shapely.get_parts`) of what is left of a replaced polygon after the cut.
+  Each takes the class whose kept CORINE polygons share the longest border
+  with it, lengths summed per class (a tie: the lower code). A piece with no
+  kept neighbour (it borders only preferred polygons) is left out: its area is
+  uncovered, which `assign` already gives class 0 and the cell table counts as
+  unspecified. Why: it is what CORINE's own generalisation does with an
   area it cannot keep, and the shoreline CORINE drew too wide borders the
   land it swallowed. Then a **warning** (a finding from the data, so allowed)
-  when, inside the mesh, the preferred source gives less of a category than the
+  when, inside the mesh's triangles, the preferred source gives less of a category than the
   replaced class did, by more than 1e-9 of it (rounding):
   `lake: nve-lakes gives <A> km² where clc2018 gave <B> km²; <C> km² of clc2018 water had no nve-lakes lake and took a neighbouring class`.
   Every run with `--prefer` records the three areas per key. Sula: at most 0.37 %
@@ -108,17 +111,44 @@ legend.prefer {category: code}  ───┘        │ polygons [(code, geom)],
 ```
 
 - `tin_engine/preferred.py`, pure (shapely in, shapely out, no file, no CRS):
-  `overlay(base: Sequence[tuple[int, BaseGeometry]], chosen: Sequence[tuple[int, Sequence[BaseGeometry]]], within: BaseGeometry) -> Overlaid`,
-  where `chosen` is (replaced code, polygons) in command-line order and
-  `Overlaid` a frozen dataclass: the polygons, and per code the replaced,
-  given and refilled areas inside `within`. STRtree for the cuts and the
-  neighbour search. About 70 lines.
+  `overlay(base: Sequence[tuple[int, BaseGeometry]], chosen: Sequence[tuple[int, Sequence[BaseGeometry]]], corners: Float64) -> Overlaid`,
+  where `chosen` is (replaced code, polygons) in command-line order,
+  `corners` the mesh's triangles (T, 3, 2) and `Overlaid` a frozen
+  dataclass: the polygons, and per code the replaced, given and refilled
+  areas inside the triangles. No outline is needed: the polygon route has
+  only the mesh's points, and the triangles are the mesh. About 75 lines.
+  Steps, as the timing probe runs them (it tests against the domain outline
+  where the code tests against the triangles):
+  1. keep the preferred polygons that meet a triangle (STRtree of the
+     triangles, `predicate="intersects"`); unclipped, as the base is;
+  2. cut each base polygon by the union of the preferred polygons it meets;
+  3. leftover pieces of the replaced class that meet a triangle;
+  4. **the shared border:** the kept polygons near the pieces subdivided by
+     `polygon_fractions.subdivide` (64 coordinates, as `assign` does), each
+     piece's boundary buffered by **0.01 m**, and the length of that band's
+     intersection with each subdivided piece's boundary summed per class.
+     Why a band: halving inserts points on the cut lines, so a border both
+     sides share is only nearly equal after subdivision; exact GEOS
+     intersection then finds points, length 0. Measured (`prefer_timing.py`):
+     exact finds a neighbour for 9,110 of 10,344 pieces in Numedalslågen and
+     3,965 of 4,126 in Lagan; 1 mm, 1 cm and 1 m all find 9,263 and 3,987.
+     1 cm sits in the middle of that plateau, far above coordinate rounding
+     in projected metres (about 1e-9 m at 7e6 m) and far below CORINE's
+     100 m minimum width, so a polygon that only touches a corner adds at
+     most about 2 cm. Checked on those two catchments (projected metres,
+     6,441 km² the larger);
+  5. areas: replaced and refilled from `cells.overlay(corners, polygons)`
+     times the triangle areas, given from the class fractions.
 - Legend: `[prefer]` table and `Legend.prefer: Mapping[Category, int]`, about
   10 lines; TOML data uncounted.
 - CLI: repeatable `--prefer KEY=SOURCE` (catalogue name or file, fetched and
   read as `--reservoirs` is), checks, warning, record entries: about 60 lines.
-- `within` is the outline the mesh was clipped to, in the mesh CRS
-  (`@developer` pins which variable; the areas must be inside the mesh).
+- `--prefer` needs no `.gpkg` output: it changes the class fractions, which
+  every mesh format carries; only the cell table needs `.gpkg`.
+- Each preferred catalogue source's credit, licence note and citation go into
+  the mesh metadata beside `land_cover_credit`, as
+  `land_cover_prefer_credit` and the like, one `key: text` part per key;
+  a file gives its name only, as `--land-cover` does.
 
 ## 5. Tests (synthetic squares, metres, one CRS)
 
@@ -130,18 +160,46 @@ legend.prefer {category: code}  ───┘        │ polygons [(code, geom)],
    40 m, so all 320 m² become 312, and the warning fires (0 < 320).
 3. Preferred lake [0,20]² and glacier [10,30]²: lake first gives lake 400,
    glacier 300 m²; glacier first, glacier 400, lake 300.
-4. A preferred lake over a 511 river: the river is cut, 511 stays elsewhere.
-5. Refusals: unknown key, legend without `[prefer]`, raster `--land-cover`,
+4. Base 100×100 m class 322 with a 511 river strip [0,100]×[45,55]
+   (1,000 m²; 322 is 9,000 m²); preferred lake [40,60]²: lake 400 m² as
+   512, 511 800 m², 322 8,800 m²; no 512 in the base, so no leftover and no
+   warning (400 is not less than 0).
+5. A piece bordering only a preferred lake: base 322 square with a 512
+   square [40,60]², preferred lake the ring [30,70]² less [45,55]²: the
+   100 m² piece [45,55]² has no kept neighbour and is left out (class 0,
+   100 m²).
+6. Refusals: unknown key, legend without `[prefer]`, raster `--land-cover`,
    `--prefer` alone, `KEY=` with no source.
-6. CLI end to end: the cell table's lake share comes from the preferred
+7. CLI end to end: the cell table's lake share comes from the preferred
    polygons, `--reservoirs` splits it, class fractions still sum to 1.
 
 ## 6. Size and timing
 
-About 140 net production lines (`tools/count_loc.py`), far under 700. One
+About 145 net production lines (`tools/count_loc.py`), far under 700. One
 PR, buildable Tuesday 2026-10-27 for Wednesday: lakes need nothing new; the
-glacier entry is one catalogue entry beside it. Probe:
-`docs/increments/107-probes/prefer_probe.py`.
+glacier entry is one catalogue entry beside it. Probes:
+`docs/increments/107-probes/prefer_probe.py` (shares),
+`docs/increments/107-probes/prefer_timing.py` (timing; Apple M1 Max on
+battery, one run each, no mesh build).
+
+Expected added time of `--prefer lake=...` on the quick check's two
+land-cover catchments (the quick check's own cases pass neither option, so
+its timings do not change):
+
+| step | Numedalslågen, NVE lakes | Lagan, SMHI lakes |
+|---|---|---|
+| read the preferred source | 2.9 s (26,538 lakes in the box) | 3.1 s (42,176) |
+| cut (lakes meeting the domain) | 3.7 s (5,550 lakes, 900 polygons) | 1.8 s (530, 724) |
+| neighbour search | 2.7 s (10,344 pieces) | 3.0 s (4,126) |
+| area accounting, two `cells.overlay` calls | about 1 s (105b: 0.45 s each at 86,537 triangles) | about 1 s |
+| `assign`'s input | 201,118 pieces become 249,788 (+24 %) | 636,492 become 635,241 (0 %) |
+| **total** | **about 10 s, plus up to 24 % of the land-cover fractions phase** | **about 9 s** |
+
+The fractions phase's own time on these catchments is not measured (it needs
+a mesh); `@developer` reports it, with and without `--prefer`, in the green
+handback. The first prototype, which cut by the union of every lake in the
+box and searched neighbours polygon by polygon, took 68 s for the search
+alone: the steps above are pinned because they are the measured ones.
 
 ## 7. Question for Ola
 
