@@ -615,16 +615,27 @@ def read_lake_polygons(
 
 
 def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeometry | None:
-    """``geometry`` if valid, else the polygons of ``shapely.make_valid`` of its
-    part inside the box of the points ``xy`` widened by 100 m; None if none.
+    """``geometry`` if valid, else ``shapely.make_valid(geometry)`` within the
+    box of the points ``xy`` widened by 100 m, as polygons; None if empty.
     A ring that crosses itself makes GEOS's overlays throw. Only the part near
-    the mesh is ever overlaid, and repairing a large polygon whole takes seconds."""
+    the mesh is ever overlaid, and repairing a large polygon whole takes seconds.
+    make_valid keeps a point when an odd number of rings, counted over all
+    parts, wind around it. So the rings cut to the box, with the box's own
+    edge, split it into faces, and a face is kept when an odd number of parts
+    contain a point of it. Cutting the polygon instead of its rings can swap
+    inside and outside when a ring crosses itself outside the box."""
     if geometry.is_valid:
         return geometry
-    cut = shapely.clip_by_rect(geometry, *(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
-    parts = shapely.get_parts(shapely.get_parts(shapely.make_valid(cut)))
-    kept = [p for p in parts if isinstance(p, Polygon) and not p.is_empty]
-    return MultiPolygon(kept) if kept else None
+    box = shapely.box(*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
+    lines = shapely.clip_by_rect(shapely.boundary(geometry), *box.bounds)
+    noded = shapely.union_all([lines, box.exterior])
+    faces = shapely.get_parts(shapely.polygonize(shapely.get_parts(noded)))
+    x, y = shapely.get_coordinates(shapely.point_on_surface(faces)).T
+    odd = np.zeros(len(faces), dtype=bool)
+    for part in shapely.get_parts(geometry):
+        odd ^= shapely.contains_xy(part, x, y)
+    kept = shapely.get_parts(shapely.coverage_union_all(faces[odd]))
+    return MultiPolygon(list(kept)) if len(kept) else None
 
 
 def read_class_polygons(
