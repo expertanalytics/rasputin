@@ -840,6 +840,15 @@ def mesh(
             "constraints, and each cell's catchment_id is its unit's id.",
         ),
     ] = None,
+    simplify_domain: Annotated[
+        bool,
+        typer.Option(
+            "--simplify-domain",
+            help="Simplify the --domain outline, each ring moved at most a band and the area "
+            "kept: --features-tolerance, or else an eighth of a triangle's edge at --triangles. "
+            "--catchments always simplifies its outline.",
+        ),
+    ] = False,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -974,6 +983,13 @@ def mesh(
             "needs --triangles, whose budget sets the border band, or --features-tolerance",
             param_hint="--catchments",
         )
+    if simplify_domain and domain is None:
+        raise typer.BadParameter("needs --domain", param_hint="--simplify-domain")
+    if simplify_domain and triangles is None and features_tolerance is None:
+        raise typer.BadParameter(
+            "needs --triangles, whose budget sets the outline band, or --features-tolerance",
+            param_hint="--simplify-domain",
+        )
     regulated = None  # each triangle's share under the reservoir polygons
     catchment_ids = None  # each cell's unit, with --catchments
     if classes is not None:
@@ -1104,6 +1120,22 @@ def mesh(
         with clock.phase("catchments"), _refused("--catchments"):
             units = _units(*units_source, given, triangles, features_tolerance)
         given = units.domain
+    domain_band = None
+    if given is not None and units is None and simplify_domain:
+        with clock.phase("domain simplify"):
+            before = _ring_vertices(given.polygon)
+            given, domain_band = sub_catchments.simplify_domain(
+                given, triangles, features_tolerance
+            )
+            area = sub_catchments.equal_area(given).polygon.area
+        why = "--features-tolerance" if features_tolerance is not None else (
+            f"a triangle's edge at {triangles} triangles, {8 * domain_band:.0f} m, over 8"
+        )  # fmt: skip
+        typer.echo(
+            f"domain: outline simplified at {domain_band:.0f} m ({why}): {before} to "
+            f"{_ring_vertices(given.polygon)} vertices, {area / 1e6:.2f} km2",
+            err=True,
+        )
     try:
         planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
         meta, part, grid = planned.meta, None, planned.grid
@@ -1140,9 +1172,10 @@ def mesh(
             # tile's one reference is the holder `_dem_mesh` empties.
             checks, opened_seams, held = opened.checks, opened.seams, Once(opened.tile)
             del opened
-    except NotCached as exc:
-        run = _fetch_run(dem[0], domain, bbox, out_crs, cache)
-        raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
+    except NotCached as exc:  # an outline past the domain's box needs the window's blocks
+        hint = _bbox_fetch(dem[0], exc, cache) if simplify_domain or catchments else ""
+        hint = hint or f"; run: {_fetch_run(dem[0], domain, bbox, out_crs, cache)}"
+        raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
     # The clean-up scale is the coarsest coded legend's accuracy (CORINE's
@@ -1199,6 +1232,11 @@ def mesh(
         )
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
+    except typer.BadParameter as exc:
+        plain = domain is not None and domain_band is None and units is None
+        if isinstance(exc.__cause__, UnderFloor) and plain:
+            exc.message += "; or give --simplify-domain to simplify the outline to the budget"
+        raise
     surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
     names = [t.name for t in plan.tiles]
     size = f"{meta.cols} columns x {meta.rows} rows"
@@ -1238,6 +1276,8 @@ def mesh(
     if given is not None:
         how = transform_label(given.crs, dem_crs)
         values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
+        if domain_band is not None:
+            values["domain_band_m"] = domain_band
     if found is not None and sources and dem_run.feature_counts is not None:
         # One entry per source, joined. Lines and their vertices are a
         # property of the merged PSLG, not of a source, so every entry
@@ -1522,6 +1562,21 @@ def _fetch_run(
     store = f"--cache {shlex.quote(str(cache))}" if cache else ""
     flags = " ".join(filter(None, (area, frame, store)))
     return f"rasputin fetch {shlex.quote(key)} {flags}".rstrip()
+
+
+def _bbox_fetch(key: str, exc: NotCached, cache: Path | None) -> str:
+    """The refusal's tail naming the ``rasputin fetch`` of `exc`'s window
+    box, in the source's CRS; empty when it has no box."""
+    if exc.box is None:
+        return ""
+    fetch = " ".join(repr(v).removesuffix(".0") for v in exc.box)
+    given = f" --cache {shlex.quote(str(cache))}" if cache else ""
+    return f"; run: rasputin fetch {shlex.quote(key)} --bbox {fetch}{given}"
+
+
+def _ring_vertices(polygon: Polygon) -> int:
+    """The vertices of `polygon`'s rings, each closing repeat left out."""
+    return sum(len(r.coords) - 1 for r in (polygon.exterior, *polygon.interiors))
 
 
 def _cached_features(source: RemoteSource, root: Path | None, run: str, flag: str) -> Path:
@@ -3193,11 +3248,9 @@ def catchment(
             )
         result = delineate(request, repository, res)
     except NotCached as exc:
-        fetch = "" if exc.box is None else " ".join(repr(v).removesuffix(".0") for v in exc.box)
-        given = f" --cache {shlex.quote(str(cache))}" if cache else ""
-        key = shlex.quote(dem[0])
-        hint = f"; run: rasputin fetch {key} --bbox {fetch}{given}" if fetch else ""
-        raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
+        raise typer.BadParameter(
+            f"{exc}{_bbox_fetch(dem[0], exc, cache)}", param_hint="--dem"
+        ) from exc
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:

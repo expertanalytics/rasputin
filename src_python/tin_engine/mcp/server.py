@@ -106,6 +106,8 @@ INSTRUCTIONS = (
     "Where a polygon source's description says each unit names its downstream unit, "
     "network_catchment joins the units upstream of a unit, or of a seed at a unit's outlet; "
     "check_dem compares the result with the terrain route of catchment.\n"
+    "catchment and network_catchment write a polygon that mesh reads as domain; with "
+    "simplify_domain its outline follows the triangle budget.\n"
     "Output folders are created as needed, inside the output root that sources reports as "
     "out_root; give output paths in full: a path outside it, through .. or a link too, is "
     "refused.\n"

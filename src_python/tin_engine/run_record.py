@@ -30,6 +30,7 @@ WORDING = {
     "resampled_grid": "The grid the DEM was interpolated onto",
     "domain": "The domain file and shape",
     "domain_crs": "The domain's coordinate system",
+    "domain_band_m": "Band the domain outline was simplified within, m",
     "domain_transform": "Conversion from the domain's coordinate system",
     "features": "Each features file: layer, legend, features, lines, vertices",
     "features_crs": "Each features file's coordinate system",
