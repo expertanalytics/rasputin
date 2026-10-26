@@ -99,7 +99,10 @@ run then went through (5,940 cells).
 (`src_python/tin_engine/feature_input.py`) repair each polygon after moving
 it into the mesh's CRS (a move can make a ring cross itself too): a valid
 polygon is kept as it is; an invalid one is replaced by the polygonal parts
-of `shapely.make_valid(g)` (default method), and dropped when it has none.
+of `make_valid(g)` within the mesh points' box widened by 100 m, computed from
+the rings cut to that box (the odd-count rule across parts), except where two
+rings share a stretch of edge: there both sides keep the same parity. It is
+dropped when it has none.
 Both functions also return how many they repaired or dropped. Their only
 callers are `mesh`'s land-cover and reservoir steps
 (`src_python/tin_engine/cli.py`).
@@ -460,3 +463,4 @@ a Shyft read-back example, `--outline-tolerance` on `network-catchment`
 
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
+- **Code review (106a), rounds 3-4, 2026-10-26.** `@reviewer`: CHANGES REQUESTED on `be26db8fa3dea97e7241143757d961616776d906` (clipping a self-crossing polygon before repair can flip inside and outside); APPROVED WITH WORDINGS on `4afd75fbe3b3dbfec067feec2f639bd0dfa80ea2` (rings cut to the box, odd-count rule; `@perf` ACCEPTED: Kultsjön 5.61 s vs master 10.51 s, tables equal). Design wording applied here; the `_repaired` docstring wording follows from `@developer`.
