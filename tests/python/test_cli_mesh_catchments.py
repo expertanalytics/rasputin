@@ -37,6 +37,7 @@ import socket
 import sqlite3
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -215,8 +216,11 @@ def rows_of(conn: sqlite3.Connection, table: str) -> dict[str, list[object]]:
     return columns
 
 
-def assert_masters(conn: sqlite3.Connection, table: str) -> None:
-    got, master = rows_of(conn, table), MASTER_ROWS[table]
+def assert_masters(
+    conn: sqlite3.Connection, table: str, masters: dict[str, Any] = MASTER_ROWS
+) -> None:
+    """The table's rows equal `masters`' within ATOL and ATOL_DEG."""
+    got, master = rows_of(conn, table), masters[table]
     assert list(got) == master["columns"]
     for i, name in enumerate(master["columns"]):
         want = [row[i] for row in master["rows"]]

@@ -21,8 +21,12 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   `_units` reads `--features-tolerance`.
 - The stderr line counts a ring's vertices without its closing repeat (ZZ
   is "240", as the design's line says).
-- Test 5's digest of the `triangles` and `cells` rows is recorded on 106e's
-  design head `ce0680ee`, before any 106e code: "the same rows as 106c's head".
+- Test 5 compares the `triangles` and `cells` rows with those of 106e's
+  design head `ce0680ee`, before any 106e code ("the same rows as 106c's
+  head"), read from `data/simplify_domain_rows_ce0680ee.json`. The file was
+  written on macOS from a run whose rows hashed to the sha256 recorded there
+  (`16269330e28c...565ed2b39ed6`), and is compared as
+  `test_cli_mesh_catchments.assert_masters` compares, within its tolerances.
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ from test_cli_mesh_catchments import (  # noqa: F401  (fixtures, by name)
     ORIGIN,
     Run,
     RunOf,
+    assert_masters,
     mesh,
     record,
     run_of,
@@ -235,9 +240,10 @@ def test_4_the_given_tolerance_sets_the_band(zz_scene: dict[str, Path], run_of: 
 
 # ------------------------------------------------------------ 5. unchanged without it
 
-#: sha256 over the `triangles` and `cells` rows, in fid order, of the run
-#: below, recorded at `ce0680ee` before any 106e code.
-ROWS_DIGEST_400 = "16269330e28c0a2346c67b464bdd759c6eb513a705d6393c4d45565ed2b39ed6"
+#: The rows of the run below at `ce0680ee`; see the module docstring.
+ROWS_400 = json.loads(
+    (Path(__file__).parent / "data/simplify_domain_rows_ce0680ee.json").read_text()
+)
 
 
 def rows_digest(conn: sqlite3.Connection) -> str:
@@ -258,7 +264,8 @@ def test_5_a_hand_simplified_domain_meshes_as_today(
     scene.update(with_domain(scene, by_hand, "by-hand.geojson"))
     ran = run_of("by-hand.gpkg", "--triangles", "400")
     assert ran.conn.execute("SELECT count(*) FROM triangles").fetchone()[0] == 396
-    assert rows_digest(ran.conn) == ROWS_DIGEST_400
+    assert_masters(ran.conn, "triangles", ROWS_400)
+    assert_masters(ran.conn, "cells", ROWS_400)
     assert record(ran.conn, "domain_band_m") is None
     assert "domain: outline simplified" not in ran.output
 
