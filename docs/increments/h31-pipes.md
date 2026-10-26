@@ -6,6 +6,9 @@ the rulings. Design round 3 by `@architect`, 2026-10-25, on
 `worktree-pipes-design`; round 1's seven review findings are closed in
 sections 3 to 9, each marked *(review 1, item N)*; round 2's three in
 sections 4 and 11, marked *(review 2, item N)*, its wordings in 4, 7, 9, 11.
+Amended after the red step (`5fc19f4a`), 2026-10-26: the tester's pins ruled
+(section 11) and the recap block made one table (section 7, Ola: "We need a
+nice way to look at the pipe, probably in a table format.").
 
 Ola, 2026-10-25: "When I'm back, we should make a few development pipes. Then
 we add tasks to these pipes. We are limited by the number of agents, but this
@@ -116,7 +119,7 @@ States: `queued`, `designing`, `red`, `green`, `review`, `waiting` (on Ola),
 `merged`, plus `parked` and `dropped` (Ola's words, kept so the item is not
 re-proposed). Each change is one command, `python3 tools/pipes.py set <item>
 <state> [--branch B] [--pr N] [--next "<step>"]`, by the main session; the
-recap prints every pipe as one block, each item one line (section 7). Where
+recap prints one table, one row per item (section 7). Where
 git can tell the state (a `## Review` record, a merge on master), the tool
 prints a warning when the file disagrees, and nothing more in the first slice.
 
@@ -313,25 +316,37 @@ other harness tools, because the recap runs from a hook on the system
    `pipes.show_lines(repo, now)` and prints them after *Waiting on Ola*,
    before the `session.md format:` warnings.
 
-**The recap block** (`pipes.py show`), capped at 40 lines then `... N more`,
-each line at most 120 characters, so the block is at most 4,800 of the
-recap's 10,000-character cap:
+**The recap block is one table**, the same text as `pipes.py show` and
+`python3 tools/pipes.py` with no arguments; there is no second rendering.
+Capped at 40 lines then `... N more`, each line at most 120 characters, so the
+block is at most 4,800 of the recap's 10,000-character cap:
 
 ```
 Pipes (in flight 2 of 3; pipes read from private/master 79848102, committed 2026-10-25)
-Stuck:
-  core/h30      waiting  4 d  finish the 4 governed files with Ola at the prompt?  default: waits
-  core/basin    queued   9 d  the basin-scale pieces  fallback
-core (priority 1): the public repository: product, harness and process
-  review    tri-budget  worktree-tri-budget-rms #351  next: reviewer round 2
-  designing h31         worktree-pipes-design         next: red
-  queued    fable-june  plain                          next: design
-lsm (priority 2): the private repository's land-surface work
-  ...
+     PIPE    PRI ITEM                          STEP      WAITING ON  SINCE      NEXT
+     core    1   h30 governed files            waiting   Ola         4 d stuck  question 1 below
+     core    1   basin basin-scale pieces      queued    free agent  9 d stuck  fallback: design
+next core    1   tri-budget triangle budget    review    free agent  2 h        reviewer round 2 #351
+     core    1   h31 development pipes         red       its agent   5 h        green
+     core    1   fable-june Fable June data    queued    free agent  1 d        design
+     lsm     2   snow-shelter wind shelter     queued    Ola present 2 d        design
 Questions for Ola:
   1. core/h30: finish the 4 governed files with you at the prompt?  default: waits
 next: core/tri-budget review (nearest to merging)
 ```
+
+One row per item that is not `merged`, `parked` or `dropped`. Columns, fixed
+widths, a cell cut with `...` when longer: the mark (5: `next` on the row
+`order` picks, else blank), PIPE (8), PRI (4, the pipe's priority), ITEM (30,
+id then title), STEP (10, the state), WAITING ON (12: `Ola` when `waiting`;
+`Ola present` when unattended and not `plain`; `its agent` when busy; `free
+agent` otherwise), SINCE (11: whole days, or hours under one day, then
+`stuck` past section 9's threshold), NEXT (the rest, to 120: `next`, then
+`#<pr>` if set; a `waiting` row says `question N below`). Rows: stuck first,
+oldest first; then by pipe priority; within a pipe, in flight nearest to
+merging first, then `waiting`, then `queued` in the pipe's order (`top`).
+Plain ASCII, no colour. The header line carries the unreadable count when
+not zero (`1 unreadable`) and the definition warnings follow it.
 
 `session_format` *(review 1, item 2)* stops requiring exactly one `QUEUE:`
 line: zero or one is accepted (one, because the fallback sentence of section
@@ -371,10 +386,9 @@ would not. It is one module constant, `STUCK_AFTER = timedelta(days=3)`.
 
 What resurfacing does, in both places an item can be overlooked:
 
-- **The recap.** Stuck items are listed first in the pipes block, under
-  `Stuck:`, each with its age in whole days (`4 d`), before any pipe's own
-  block, and a stuck `waiting` item's question is numbered first under
-  *Questions for Ola*.
+- **The recap.** Stuck items are the table's first rows, oldest first, SINCE
+  reading `4 d stuck` (section 7), and a stuck `waiting` item's question is
+  numbered first under *Questions for Ola*.
 - **The order.** In `next`, step 2 prefers a stuck item to a fresher one,
   oldest first, across pipes: a stuck `queued`
   item in the lowest pipe is taken before a fresh one in the highest. A stuck
@@ -389,7 +403,7 @@ still not wanted is `parked` or `dropped` by Ola's word, which ends it.
 
 | Where | Change | Size |
 |---|---|---|
-| `tools/pipes.py` (new) | records, definitions (tree and other remotes, no fetch), the order rule, stuck, busy, `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`, `show` | about 245 lines (220 + about 15 for stuck + about 10 for busy) |
+| `tools/pipes.py` (new) | records, definitions (tree and other remotes, no fetch), the order rule, stuck, busy, `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`, `show` | about 260 lines (220 + about 15 for stuck + about 10 for busy + about 15 for the table: about 25 for columns, row order and cell cutting, less about 10 for the per-pipe blocks and `Stuck:` section it replaces) |
 | `tools/session_state.py` | print `pipes.show_lines` where `QUEUE:` was read; `session_format` accepts zero or one `QUEUE:` line | about +15, -20 |
 | `.claude/hooks/guard_governance.py` | `"tools/pipes.py"` added to `GOVERNED`, because `session_state.py` imports it | +1 |
 | `.claude/REQUIRED-READING.md` | the `session.md` format line: `NOW:` (one), `ASK OLA:` lines, `QUEUE:` (at most one); item questions go to `pipes.py ask`; the fallback sentence kept | net about -15 words |
@@ -398,8 +412,8 @@ still not wanted is `parked` or `dropped` by Ola's word, which ends it.
 | `tests/python/harness_fixtures.py` | `tools/pipes.py` added to `COPIED` | uncounted |
 | `tests/python/test_pipes.py` | section 11 | uncounted |
 
-Net about 240 lines of counted code *(review 1: the round-1 table summed to
-220, not 250)*, one PR under the 700 cap. **Governed paths throughout**
+Net about 255 lines of counted code *(review 1: the round-1 table summed to
+220, not 250; the table view adds about 15)*, one PR under the 700 cap. **Governed paths throughout**
 (`session_state.py`, `guard_governance.py`, both rule files), so built by
 day, with Ola at the prompt. **The second slice**: `away.py`'s enter step
 reads `next` and refuses with no fallback (then the REQUIRED-READING fallback
@@ -458,8 +472,10 @@ with the rest.
    argument list starts with `fetch`.
 8. **Stuck.** Items `old` `queued` with `since` 4 d before `now`, `fresh`
    `queued` 1 d before, `q` `waiting` 5 d before; `stuck` returns `q` then
-   `old` (oldest first); `show_lines` begins with `Stuck:` and the two lines
-   carry `5 d` and `4 d`; `next` with `fresh` in the priority-1 pipe and
+   `old` (oldest first); in `show_lines` the first two table rows are `core`
+   `q` (SINCE `5 d stuck`) and `lsm` `old` (`4 d stuck`, marked `next`), and
+   the `fresh` row (`1 d`, no `stuck`) comes after both *(amended after red:
+   no `Stuck:` heading, no per-pipe headings)*; `next` with `fresh` in the priority-1 pipe and
    `old` in the priority-2 pipe is `old`, reason "stuck 4 d". An item
    `queued` 3 d minus one second before `now` is not stuck (the threshold is
    strict).
@@ -474,6 +490,31 @@ with the rest.
 11. **Guard.** `guard_governance.judge_bash("python3 tools/pipes.py set h31
     red")` is `None`; `governed("tools/pipes.py")` is `True` after the
     `GOVERNED` entry (it is `False` today, checked).
+12. **The table** *(amended after red; `@tester` adds these)*. In the fixture
+    repository with `core` priority 1 and `lsm` priority 2: items `r` `red`
+    (branch `worktree-r`, busy by a note), `g` `green` not busy, `w`
+    `waiting` with a question, `q` `queued`, all in `core`, `l` `queued` in
+    `lsm`, and `m` `merged`: `python3 tools/pipes.py` with no arguments
+    prints the same text as `show`; under the column heading row (it holds
+    `PIPE`, `PRI`, `ITEM`, `STEP`, `WAITING ON`, `SINCE`, `NEXT`) there is
+    exactly one row per item but `m` (five rows); only the `g` row starts
+    with `next`, matching the `next` command's choice; WAITING ON reads `its
+    agent` on `r`, `Ola` on `w`, `free agent` on `q`; and every row's
+    columns start at the heading's offsets. Test 8's set covers the `stuck`
+    mark and its order; test cap (40 lines of 120) stays as it is, the
+    200-character titles now cut at the ITEM width.
+
+The red step's pins (`5fc19f4a`), ruled after it: all seven accepted as
+pinned. (1) Item record keys `id`, `title`, `state`, `pipe`, `next`,
+`branch`, `pr`, `question`, `default`, `plain`, `fallback`, `since`; the
+pipe's own record also holds `priority`, `priority_words` and its open
+`question`/`default` (section 5). (2) `Pipe(name, purpose, priority,
+source)`, keyword arguments. (3) `order(...)` returns a value with `.item`
+(`None` when idle) and `.reason`. (4) `fold` returns `dict[str, Item]` by id,
+the type `order` and `stuck` take; `load_items` is `fold` over a file. (5)
+`definitions(repo, run=...)`, `run` defaulting to the real git call. (6)
+`show` says `1 unreadable`, on its header line (section 7). (7) More than one
+`QUEUE:` line warns `N QUEUE lines; at most one expected`.
 
 No mutation round: this suite is not invariant-critical (`docs/increments/
 README.md`, *Cost constraints*).
