@@ -104,6 +104,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.features": "crs fetch.http fetch.plan io.geopackage_write io.repository sources"
                           " tin_engine",  # 63: an ArcGIS layer's polygons into the cache
         "tolerance_field": "crs feature_input",
+        "sub_catchments": "border_simplify features",  # 106c: units as constraints, cell ids
         "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
         "legends": "feature_input features toml_data",  # 41: legend files to Legend
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
@@ -120,7 +121,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
                " mcp.http mcp.server mosaic network palettes plugins polygon_fractions raster"
                " refine_job resources"
-               " run_record source_report sources stats target_grid tin_engine tolerance_field",
+               " run_record source_report sources stats sub_catchments target_grid tin_engine"
+               " tolerance_field",
         "__main__": "plugins",  # 37: `python -m tin_engine`, the server's child; 51: with plugins
         "cli_kit": "resources",  # 51: the CLI helpers a plugin's commands share with the core's
         "plugins": "cli",  # 51: the core's commands, then each installed plugin's
