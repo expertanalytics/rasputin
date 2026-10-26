@@ -1640,6 +1640,12 @@ def _features_source(
     name). An uncached source's refusal names `run`, the fetch that copies it."""
     source = known.get(value)
     if source is not None and source.values == "features":
+        if Path(value).is_file():
+            raise typer.BadParameter(
+                f"{value} is both a catalogue source and a file here ({Path(value).resolve()}); "
+                "rename or move the file, or give its path as ./" + value,
+                param_hint=flag,
+            )
         return _cached_features(source, root, run, flag), source.layer, value
     path = Path(value)
     if path.suffix.lower() not in suffixes or not path.is_file():
