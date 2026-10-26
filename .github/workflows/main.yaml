@@ -279,10 +279,11 @@ jobs:
 
       # The harness tests run in the harness job below (h17 §4b); the two
       # marker expressions are complements, so each test runs in one of them.
-      # The floor leg (3.12) stays serial: a parallel run can hide a test that
-      # fails only after another test left state behind (h15 §5 X).
+      # The floor leg (3.12) runs serially in the merge queue only: a parallel
+      # run can hide a test that fails only after another test left state
+      # behind (h15 §5 X); on pull requests it runs in parallel for speed.
       - name: Tests
-        run: pytest -m "not harness" ${{ matrix.python-version != '3.12' && '-n auto' || '' }}
+        run: pytest -m "not harness" ${{ (matrix.python-version != '3.12' || github.event_name != 'merge_group') && '-n auto' || '' }}
 
   # h17 §4b: the tests of the harness tools (tools/ and .claude/), marked
   # `harness`, import nothing from tin_engine. So this job installs only the
