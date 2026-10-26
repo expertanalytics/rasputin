@@ -736,7 +736,7 @@ away from the hole's centre: 288 vertices,
    6599960", and the output holds `run: rasputin fetch test-utm33 --bbox
    500150 6599880 500400 6599960 --cache <cache>` and no `--domain` (the
    window measured without the flag on 106c's head; a triangle keeps its
-   three vertices at any band). The existing test without the flag keeps
+   three vertices at any band). The same run with `--catchments U` in place of `--simplify-domain`, `U` a GeoJSON of one unit (the triangle, `id` 1), names the same `--bbox` run. The existing test without the flag keeps
    its `--domain` run unchanged, and `catchment`'s hint tests pass
    unchanged.
 
@@ -745,7 +745,7 @@ Mutation targets: the one-part check (any `MultiPolygon` taken as its first
 part: test 1), the frame left out (test 2's hole), the simplification in
 degrees (test 3's band), the band's factor and its area (test 4's
 `domain_band_m`), the flag ignored (test 4's count), the refusal's
-`--domain` kept with the flag (test 9).
+`--domain` kept with the flag (test 9), or with `--catchments` (test 9's second run).
 
 **`@perf`** (the domain drives the mesh): the 1 m benchmark unchanged and
 byte-identical to 106c's head (no flag); Ljungan official at `--triangles
@@ -778,3 +778,4 @@ is not touched).
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
 - **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
 - **Design review of 106e, round 1, 2026-10-26.** `@reviewer`, head `f2a0abfe29780c9cb32f075a52fd251d727219b6`. Verdict: CHANGES REQUESTED. Blocking: a fetch loop, the simplified outline passing the fetched box (up to 477 m, Umeälven at 500) while the missing-blocks refusal names the original `--domain`; fix: name `--bbox` from the missing-blocks box, as `catchment` does, one test. Wordings: the table's "about 55", point 3's "or `--catchments`".
+- **Design review of 106e, round 2, 2026-10-26.** `@reviewer`, head `a5399b83dad9c56f7ea5006dcbfcbb1edb7986e5`, range `f2a0abfe..a5399b83`. Verdict: APPROVED WITH WORDINGS. Fetch loop closed (refusal names the planned window's `--bbox`); probe reproduced; two wordings applied (test 9's `--catchments` run and its mutation target).
