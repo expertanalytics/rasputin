@@ -72,6 +72,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.1",
+    "pytest-xdist>=3.5",  # `pytest -n auto`: tools/merge_master.py runs the suite in parallel
     "hypothesis>=6.100",
     "mypy>=1.10",
     "ruff~=0.16.8",  # pinned: `ruff format --check` gates CI; style shifts per minor

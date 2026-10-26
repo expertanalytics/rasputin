@@ -193,7 +193,9 @@ def finish(t: Tree, args: argparse.Namespace) -> int:
         return 4
     if first is not None and not rebuild(t):
         return 4
-    if t.run([t.py, "-m", "pytest", "-q"], t.wt, capture=False).returncode != 0:
+    xdist = any((t.wt / ".venv" / "lib").glob("python*/site-packages/xdist"))  # -n when installed
+    if t.run([t.py, "-m", "pytest", "-q", *(["-n", "auto"] if xdist else [])], t.wt,
+             capture=False).returncode != 0:  # fmt: skip
         print("merge_master: pytest is red. Nothing committed; the merge is left in progress",
               file=sys.stderr)  # fmt: skip
         return 4
