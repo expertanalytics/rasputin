@@ -59,6 +59,7 @@ class Item:
     before: str | None = None  # the state `ask` left, which `answer` restores
     priority: int | None = None  # on a pipe's own record only
     priority_words: str | None = None
+    ruling: str | None = None  # Ola's words on the last question `answer` closed
 
 
 @dataclass(frozen=True)
@@ -363,8 +364,11 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
                     question=args.question, default=args.default)  # fmt: skip
     elif args.cmd == "answer":
         item = state.items.get(args.id) or _item(state, args.id)
+        if not item.question:
+            raise RefusedError(f"pipes: {args.id} has no open question")
         back = item.state if item.state == "pipe" else item.before or "queued"
-        _append(state, item, now, state=back, before=None, question=None, default=None)
+        _append(state, item, now, state=back, before=None, question=None, default=None,
+                ruling=args.words)  # fmt: skip
     elif args.cmd == "priority":
         for pair in args.pairs:
             name, _, value = pair.partition("=")
