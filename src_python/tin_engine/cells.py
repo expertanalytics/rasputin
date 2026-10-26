@@ -12,10 +12,12 @@ and a legend in, no file, no CRS.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
+import shapely
+from shapely.geometry.base import BaseGeometry
 
 from tin_engine.feature_input import Category, Legend
 from tin_engine.io.models import CellTable, ClassFractions
@@ -71,11 +73,36 @@ def cell_table(
     triangles: npt.NDArray[np.integer],
     fractions: ClassFractions,
     categories: Mapping[int, Category],
+    regulated: Float64 | None = None,
 ) -> CellTable:
-    """The cells of a mesh and its class fractions; reservoir 0 on every row."""
+    """The cells of a mesh and its class fractions; ``regulated``, each
+    triangle's share under reservoir polygons, splits the lake share, and
+    without it reservoir is 0 on every row."""
     midpoints, area, slope, aspect = geometry(vertices, triangles)
     glacier, lake, forest, savanna, unspecified = categorise(fractions, categories).T
-    shares = np.column_stack([glacier, lake, np.zeros_like(lake), forest, unspecified, savanna])
+    lake, reservoir = split_reservoir(lake, np.zeros_like(lake) if regulated is None else regulated)
+    shares = np.column_stack([glacier, lake, reservoir, forest, unspecified, savanna])
     return CellTable(
         midpoints=midpoints, area_m2=area, slope_deg=slope, aspect_deg=aspect, shares=shares
     )
+
+
+def split_reservoir(lake: Float64, r: Float64) -> tuple[Float64, Float64]:
+    """``(lake - reservoir, reservoir)`` with ``reservoir = min(lake, r)``, as new
+    arrays: a reservoir polygon over what the land cover calls land adds nothing."""
+    reservoir = np.minimum(lake, r)
+    return lake - reservoir, reservoir
+
+
+def overlay(corners: Float64, polygons: Sequence[BaseGeometry]) -> Float64:
+    """Each triangle's plan-area share under the union of ``polygons``, so an
+    outline given twice counts once. ``corners`` is (T, 3, k), k >= 2, of which
+    x and y count; a triangle of zero plan area has share 0."""
+    xy = np.asarray(corners, np.float64)[:, :, :2]
+    shares = np.zeros(len(xy))
+    triangles = shapely.polygons(xy) if len(xy) else np.array([], object)
+    area = shapely.area(triangles)
+    some = area > 0  # a collinear ring is no polygon to cut
+    under = shapely.intersection(triangles[some], shapely.union_all(list(polygons)))
+    shares[some] = shapely.area(under) / area[some]
+    return shares

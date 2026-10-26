@@ -622,14 +622,7 @@ def read_class_polygons(
     points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
     skipped; a value that is no class code is a :class:`FeatureError`."""
     spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
-
-    def box_for(own: str) -> tuple[float, float, float, float]:
-        ring = shapely.box(*xy.min(axis=0), *xy.max(axis=0)).buffer(MARGIN).exterior
-        near = shapely.get_coordinates(shapely.segmentize(ring, DENSIFY))
-        moved = near if same_crs(own, mesh_crs) else reprojector(mesh_crs, own)(near)
-        x0, y0, x1, y1 = shapely.bounds(shapely.multipoints(moved))
-        return (float(x0), float(y0), float(x1), float(y1))
-
+    box_for = _near(xy, mesh_crs)
     read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     out: list[tuple[int, BaseGeometry]] = []
@@ -641,6 +634,37 @@ def read_class_polygons(
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
     return out
+
+
+def _near(
+    xy: npt.NDArray[np.float64], mesh_crs: str
+) -> Callable[[str], tuple[float, float, float, float]]:
+    """The box of the points ``xy`` (in ``mesh_crs``) widened by 100 m, in a
+    source's own CRS: what a GeoPackage is queried with."""
+
+    def box_for(own: str) -> tuple[float, float, float, float]:
+        ring = shapely.box(*xy.min(axis=0), *xy.max(axis=0)).buffer(MARGIN).exterior
+        near = shapely.get_coordinates(shapely.segmentize(ring, DENSIFY))
+        moved = near if same_crs(own, mesh_crs) else reprojector(mesh_crs, own)(near)
+        x0, y0, x1, y1 = shapely.bounds(shapely.multipoints(moved))
+        return (float(x0), float(y0), float(x1), float(y1))
+
+    return box_for
+
+
+def read_polygons(
+    path: Path, layer: str | None, mesh_crs: str, xy: npt.NDArray[np.float64]
+) -> list[BaseGeometry]:
+    """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
+    by vertex; a GeoPackage is queried as by :func:`read_class_polygons`."""
+    read = read_source(path, layer, None, _near(xy, mesh_crs))
+    move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
+    flat = [
+        shapely.force_2d(g)
+        for _, g, _ in read.rows
+        if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
+    ]
+    return flat if move is None else [shapely.transform(g, move) for g in flat]
 
 
 def _finite(geometry: BaseGeometry) -> bool:

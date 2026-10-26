@@ -484,10 +484,11 @@ class TestTheRealApp:
         assert all(z_unit_refused(tool.model, s) for s in ("furlong", "M", "us_ft"))
 
     def test_the_whole_tool_list_stays_small(self) -> None:
-        # 25,178 bytes measured for the commands of `cli.app` with the triangle
-        # budget's `--triangles`, `--max-triangles` and `--rms` (increment 104;
-        # 16,575 at section 3). The bound is about 20 % above the measure, rounded
-        # up to a thousand, as 20,000 was above 16,575: room for help text to grow.
+        # 25,395 bytes measured for the commands of `cli.app` with the triangle
+        # budget's `--triangles`, `--max-triangles` and `--rms` (increment 104)
+        # and `mesh --reservoirs` (increment 105; 16,575 at section 3). The bound
+        # is about 20 % above the measure, rounded up to a thousand, as 20,000 was
+        # above 16,575: room for help text to grow.
         size = sum(len(json.dumps(d.tool().input_schema)) for d in mcp_schema.derive(app))
         assert size < 31_000, size
 

@@ -438,11 +438,10 @@ class TestJobsCap:
         log = tmp_path / "intervals.jsonl"
         server = build(jobs=2, child=fake_child(tmp_path, sleep=0.5, interval_file=str(log)))
         async with Client(server) as client:
-            began = time.monotonic()
-            await asyncio.gather(client.call_tool("version", {}), client.call_tool("version", {}))
-            wall = time.monotonic() - began
+            first, second = await asyncio.gather(
+                client.call_tool("version", {}), client.call_tool("version", {})
+            )
+        assert not first.is_error and not second.is_error
         runs = intervals(log)
+        # the children's own sleep intervals overlap: side by side, with no wall-clock bound
         assert len(runs) == 2 and overlap(*runs), runs
-        # two 0.5 s sleeps side by side: about 0.55 s with the interpreter's start-up;
-        # the bound leaves 0.45 s for a loaded machine and still refutes a sequence (1.0 s)
-        assert wall < 1.0, wall

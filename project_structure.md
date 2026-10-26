@@ -229,7 +229,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   the polygons of `catchment --lakes` near the
                            #   seed point, in the file's CRS (22);
                            #   read_class_polygons: a coded source's polygons
-                           #   with their class codes, in the mesh CRS (105c)
+                           #   with their class codes, in the mesh CRS (105c);
+                           #   read_polygons: a source's polygons, in the mesh
+                           #   CRS, for --reservoirs (105b)
   border_simplify.py       # simplify_borders: land-cover polygons to flat
                            #   rings for _core.simplify_borders and back, same
                            #   polygons, parts and holes in order; no I/O (32)
@@ -288,7 +290,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   cells.py                 # the cell table: categories_of (refuses water
                            #   without a category), categorise (glacier,
                            #   lake, forest, savanna, unspecified), geometry (centroid, plan area,
-                           #   slope, aspect), cell_table; pure, numpy (105a)
+                           #   slope, aspect), cell_table; overlay (each
+                           #   triangle's share under reservoir polygons),
+                           #   split_reservoir (105b); pure, numpy, shapely (105a)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
