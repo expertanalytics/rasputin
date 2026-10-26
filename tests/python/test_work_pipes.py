@@ -1,6 +1,6 @@
 """`tools/work_pipes.py`: named work lists, the order a free writer takes, and resurfacing.
 
-The spec is `docs/increments/h31-pipes.md`, *11. Tests (`tests/python/test_pipes.py`)*.
+The spec is `docs/increments/h31-pipes.md`, *11. Tests (`tests/python/test_work_pipes.py`)*.
 The pure functions take `now`, `unattended` and the busy branches as
 arguments, so no test sleeps or patches the clock; the fixture time is
 2026-10-25T19:00:00Z and every age is measured from it. Commands run as the
