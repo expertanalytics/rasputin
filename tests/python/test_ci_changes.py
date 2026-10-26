@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -816,6 +817,139 @@ def test_h2_python_job_runs_the_complement_of_the_harness_marker(
     if harness:
         tools = _marker_expression(_pytest_step(_steps(harness), HARNESS))
         assert main == f"not {tools}", f"{main!r} is not the complement of {tools!r}"
+
+
+# ---------------------------------------------------------------------------
+# h15 §5 X, as Ola ruled on 2026-10-26: the floor leg (3.12) of the python job
+# runs the main suite serially only in the merge queue (`merge_group`), so the
+# check that no test depends on state another left behind still runs before
+# each merge; on every other trigger, and on 3.13 and 3.14 always, the suite
+# runs in parallel (`-n auto`). The `${{ }}` expressions of the pytest line are
+# evaluated below for each trigger and leg, so the test does not pin how the
+# condition is written, only that it reads `github.event_name`.
+# ---------------------------------------------------------------------------
+
+SERIAL_EVENT = "merge_group"
+FLOOR_VERSION = "3.12"
+_EXPR_TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(==|!=|&&|\|\||!|\(|\))|([A-Za-z_][\w.-]*))")
+
+
+def _evaluate(expression: str, context: dict[str, str]) -> str | bool:
+    """A GitHub Actions expression over string literals, context names, `==`,
+    `!=`, `!`, `&&`, `||` and parentheses; `&&` and `||` return an operand."""
+    tokens: list[str] = []
+    rest = expression.strip()
+    while rest:
+        match = _EXPR_TOKEN.match(rest)
+        assert match and match.end(), f"cannot read the expression at {rest!r}"
+        tokens.append(next(group for group in match.groups() if group is not None))
+        rest = rest[match.end() :].strip()
+    position = 0
+
+    def peek() -> str | None:
+        return tokens[position] if position < len(tokens) else None
+
+    def take() -> str:
+        nonlocal position
+        position += 1
+        return tokens[position - 1]
+
+    def primary() -> str | bool:
+        token = take()
+        if token == "(":
+            value = either()
+            assert take() == ")", f"unbalanced parentheses in {expression!r}"
+            return value
+        if token == "!":
+            return not primary()
+        if token.startswith("'"):
+            return token[1:-1].replace("''", "'")
+        if token in ("true", "false"):
+            return token == "true"
+        assert token in context, (
+            f"the expression reads {token!r}; this test knows only {sorted(context)}"
+        )
+        return context[token]
+
+    def comparison() -> str | bool:
+        value = primary()
+        while peek() in ("==", "!="):
+            equal = take() == "=="
+            value = (value == primary()) is equal
+        return value
+
+    def both() -> str | bool:
+        value = comparison()
+        while peek() == "&&":
+            take()
+            right = comparison()
+            value = right if value else value
+        return value
+
+    def either() -> str | bool:
+        value = both()
+        while peek() == "||":
+            take()
+            right = both()
+            value = value if value else right
+        return value
+
+    value = either()
+    assert peek() is None, f"unread tokens in {expression!r}: {tokens[position:]}"
+    return value
+
+
+def _python_job_pytest_args(jobs: dict[str, list[str]], event: str, version: str) -> list[str]:
+    """The python job's pytest command line on `event`, leg `version`, expressions evaluated."""
+    run = _pytest_step(_steps(jobs["python"]), "python")
+    context = {"matrix.python-version": version, "github.event_name": event}
+
+    def substitute(match: re.Match[str]) -> str:
+        value = _evaluate(match.group(1), context)
+        return value if isinstance(value, str) else ("true" if value else "")
+
+    return shlex.split(re.sub(r"\$\{\{(.*?)\}\}", substitute, run))
+
+
+def _is_parallel(args: list[str]) -> bool:
+    return any(
+        arg in ("-n", "--numprocesses") or re.match(r"(-n|--numprocesses=?)\S", arg) for arg in args
+    )
+
+
+def _triggers(workflow: str) -> list[str]:
+    return [
+        m.group(1)
+        for line in _top_level_block(workflow, "on")
+        if (m := re.fullmatch(r"  ([\w-]+):.*", line))
+    ]
+
+
+def test_h15_floor_leg_runs_serially_in_the_merge_queue(jobs: dict[str, list[str]]) -> None:
+    args = _python_job_pytest_args(jobs, SERIAL_EVENT, FLOOR_VERSION)
+    assert not _is_parallel(args), f"3.12 on {SERIAL_EVENT} must run serially: {args}"
+
+
+@pytest.mark.parametrize("event", ["pull_request", "workflow_dispatch"])
+def test_h15_floor_leg_runs_in_parallel_outside_the_merge_queue(
+    jobs: dict[str, list[str]], workflow: str, event: str
+) -> None:
+    assert event in _triggers(workflow), f"main.yaml has no {event} trigger"
+    args = _python_job_pytest_args(jobs, event, FLOOR_VERSION)
+    assert " ".join(args).count("-n auto") == 1, f"3.12 on {event} must run with -n auto: {args}"
+
+
+def test_h15_other_legs_always_run_in_parallel(jobs: dict[str, list[str]], workflow: str) -> None:
+    versions = [v for v in _python_versions(jobs["python"]) if v != FLOOR_VERSION]
+    assert versions, "the python job has no leg besides the floor"
+    triggers = _triggers(workflow)
+    assert SERIAL_EVENT in triggers, triggers
+    for event in triggers:
+        for version in versions:
+            args = _python_job_pytest_args(jobs, event, version)
+            assert " ".join(args).count("-n auto") == 1, (
+                f"{version} on {event} must run with -n auto: {args}"
+            )
 
 
 def _tsan_suites(run: str) -> list[str]:
