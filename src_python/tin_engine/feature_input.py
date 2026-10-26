@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import sqlite3
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +49,7 @@ from tin_engine.io.geojson import GEOJSON_SUFFIXES, RFC7946_CRS, read_collection
 from tin_engine.io.geopackage import layer_info, query_features
 from tin_engine.io.gml import read_gml
 from tin_engine.io.repository import open_geopackage, read_json
+from tin_engine.sources import NamedBy, kept_named
 
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
@@ -680,15 +681,20 @@ def read_polygons(
     mesh_crs: str,
     xy: npt.NDArray[np.float64],
     tell: Callable[[int, int], None] | None = None,
+    named: tuple[NamedBy, Sequence[Any]] | None = None,
 ) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
     by vertex and repaired; a GeoPackage is queried, the count returned and
-    ``tell`` called, as by :func:`read_class_polygons`."""
-    read = read_source(path, layer, None, _near(xy, mesh_crs))
+    ``tell`` called, as by :func:`read_class_polygons`. With ``named``, only
+    the features its names keep (:func:`kept_named`)."""
+    read = read_source(path, layer, None if named is None else named[0].key, _near(xy, mesh_crs))
+    rows = read.rows
+    if named is not None:
+        rows = [rows[k] for k in kept_named([v for *_, v in rows], named[1], named[0].prefix)]
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
         shapely.force_2d(g)
-        for _, g, _ in read.rows
+        for _, g, _ in rows
         if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
     ]
     moved = flat if move is None else [shapely.transform(g, move) for g in flat]
