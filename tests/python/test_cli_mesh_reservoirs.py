@@ -315,3 +315,34 @@ def test_t7_without_a_cache_root_a_key_is_refused_as_land_cover_is(
     says_no_cache(output)
     assert phases == [], phases
     assert not target.exists()
+
+
+def test_t7_a_key_that_is_also_a_file_here_is_refused_naming_both(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phases: list[str],
+) -> None:
+    """A catalogue id with a vector suffix, and a file of that name in the
+    working directory: a usage error naming both, before any phase."""
+    key = "test-reservoirs.geojson"
+    gpkg = write_reservoirs_gpkg(tmp_path / "own" / "res.gpkg")
+    monkeypatch.delenv("RASPUTIN_DATA", raising=False)
+    config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
+    write_sources(config, {f'"{key}"': vector_entry(gpkg, "Test reservoirs", layer="features")})
+    here = tmp_path / "here"
+    here.mkdir()
+    write_reservoirs(here / key, wgs84=False)
+    monkeypatch.chdir(here)
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(
+        scene, target, "--land-cover", str(cover), "--land-cover-legend", "corine",
+        "--reservoirs", key,
+    )  # fmt: skip
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "Invalidvaluefor--reservoirs" in flat, output
+    assert squashed(key) in flat and "catalogue" in flat and "file" in flat, output
+    assert phases == [], phases
+    assert not target.exists()

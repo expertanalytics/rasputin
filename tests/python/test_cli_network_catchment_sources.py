@@ -132,3 +132,23 @@ def test_an_uncached_source_names_the_fetch(
     )  # fmt: skip
     flat = squashed(output)
     assert "notinthecache" in flat and "rasputinfetchtest-units" in flat, output
+
+
+@pytest.mark.parametrize("option", list(KEYS))
+def test_a_key_that_is_also_a_file_here_is_refused_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, files: dict[str, Path], option: str
+) -> None:
+    """A catalogue id with a vector suffix, and a file of that name in the
+    working directory: neither is taken silently; a usage error names both."""
+    key = f"{KEYS[option]}.geojson"
+    quoted = f'"{key}"'  # a dotted TOML key needs quotes
+    install(monkeypatch, tmp_path, {quoted: vector_entry(files[option], f"Test {option}")})
+    here = tmp_path / "here"
+    here.mkdir()
+    (here / key).write_bytes(files[option].read_bytes())
+    monkeypatch.chdir(here)
+    args = [a for o, p in files.items() for a in (o, key if o == option else str(p))]
+    output = refuse(tmp_path, *args, *ATTRIBUTES, *SEED, says=(f"Invalid value for {option}",))
+    flat = squashed(output)
+    assert squashed(key) in flat and "catalogue" in flat and "file" in flat, output
+    assert "neither" not in flat, output
