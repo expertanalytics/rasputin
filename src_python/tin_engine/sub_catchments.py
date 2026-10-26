@@ -15,10 +15,16 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 import shapely
+from pyproj import CRS
+from pyproj.crs import ProjectedCRS
+from pyproj.crs.coordinate_operation import LambertAzimuthalEqualAreaConversion
 from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
+from shapely.geometry.polygon import orient
 
 from tin_engine.border_simplify import simplify_borders
+from tin_engine.crs import parse_crs
+from tin_engine.domain import DomainPolygon
 from tin_engine.features import TerrainFeature
 
 #: Metres: the snapping and gap width of the repair, and the clearance of the
@@ -63,6 +69,35 @@ def band_m(area_m2: float, triangles: int) -> float:
     """An eighth of the edge of an equilateral triangle of area
     `area_m2 / triangles`: a border then gets about one vertex per triangle edge."""
     return math.sqrt(4.0 * area_m2 / (math.sqrt(3.0) * triangles)) / EDGES_PER_BAND
+
+
+def equal_area(domain: DomainPolygon) -> DomainPolygon:
+    """`domain` itself when projected; in degrees, moved to the Lambert
+    azimuthal equal-area projection centred on its centroid, on its CRS's
+    ellipsoid, so areas are true and distances near it nearly so."""
+    crs = parse_crs(domain.crs)
+    if not crs.is_geographic:
+        return domain
+    centre = domain.polygon.centroid
+    laea = LambertAzimuthalEqualAreaConversion(centre.y, centre.x)
+    return domain.to_crs(CRS(ProjectedCRS(conversion=laea, geodetic_crs=crs.geodetic_crs)))
+
+
+def simplify_domain(
+    domain: DomainPolygon, triangles: int | None, tolerance: float | None
+) -> tuple[DomainPolygon, float]:
+    """`domain`'s outline and holes, each ring moved at most the band and the
+    area kept, in its own CRS, and the band: `tolerance` when given, else
+    `band_m` of its area at `triangles`, both in metres of `equal_area`."""
+    work = equal_area(domain)
+    if tolerance is not None:
+        band = tolerance
+    else:
+        assert triangles is not None
+        band = band_m(work.polygon.area, triangles)
+    if band > 0:
+        work = work.model_copy(update={"polygon": orient(simplify([work.polygon], band)[0])})
+    return work.to_crs(domain.crs), band
 
 
 def check_ids(fids: Sequence[object], name: str) -> list[int]:

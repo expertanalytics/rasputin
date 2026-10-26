@@ -27,12 +27,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from shapely.geometry import box
+from pyproj import Transformer
+from shapely.geometry import Point, box
+from shapely.ops import transform
 
 import batch_fixtures as bf
 from catchment_fixtures import EPSG, lake_box
 from dataset_fixtures import write_sources
-from feature_fixtures import domain_of, legend
+from feature_fixtures import Feat, domain_of, legend, write_geojson
 from tin_engine import source_report
 from tin_engine.cli import app
 from tin_engine.feature_input import (
@@ -58,6 +60,12 @@ REFERENCE = ("station-catchments", "--reference", None)
 #: A polygon source is a network of units; a point source, their outlet points.
 NETWORK = ("network-catchment", "--network", None)
 OUTLETS = ("network-catchment", "--outlets", None)
+#: Any polygons fit `mesh --reservoirs`; projected ones `mesh --catchments` too,
+#: whose border band is in metres.
+RESERVOIRS = ("mesh", "--reservoirs", None)
+CATCHMENTS = ("mesh", "--catchments", None)
+#: What any polygons fit.
+POLYGONS_FIT = (LAKES, NETWORK, RESERVOIRS)
 
 
 def features(*maps: str) -> set[Fit]:
@@ -111,23 +119,23 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
         facts("heights", suffix="", crs=False, projected=False), DEMS),
     "classes": (facts("classes", suffix="", crs=False), {("mesh", "--land-cover", None)}),
     "land cover gpkg, every map of its attribute": (
-        gpkg(("Code_18",)), features("corine", "corine-water") | {LAKES, NETWORK}),
+        gpkg(("Code_18",)), features("corine", "corine-water") | {*POLYGONS_FIT}),
     "gpkg attribute case-insensitive": (
-        gpkg(("code_18", "Remark")), features("corine", "corine-water") | {LAKES, NETWORK}),
+        gpkg(("code_18", "Remark")), features("corine", "corine-water") | {*POLYGONS_FIT}),
     "geojson attribute exact": (
-        facts(geometry=POLY, attributes=("code_18",)), {LAKES, NETWORK, SC_LAKES}),
+        facts(geometry=POLY, attributes=("code_18",)), {*POLYGONS_FIT, SC_LAKES}),
     "geojson attribute as the map spells it": (
         facts(geometry=POLY, attributes=("Code_18",)),
-        features("corine", "corine-water") | {LAKES, NETWORK, SC_LAKES}),
+        features("corine", "corine-water") | {*POLYGONS_FIT, SC_LAKES}),
     "the entry's legend alone": (
-        gpkg(("Code_18",), legend="corine"), features("corine") | {LAKES, NETWORK}),
+        gpkg(("Code_18",), legend="corine"), features("corine") | {*POLYGONS_FIT}),
     "the entry's legend, its attribute absent": (
-        gpkg(("Code_18",), legend="clc18_kode"), {LAKES, NETWORK}),
-    "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {LAKES, NETWORK}),
+        gpkg(("Code_18",), legend="clc18_kode"), {*POLYGONS_FIT}),
+    "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {*POLYGONS_FIT}),
     "mapbiomas classes": (facts(geometry=POLY, attributes=("class",)),
-                          features("mapbiomas-c11") | {LAKES, NETWORK, SC_LAKES}),
+                          features("mapbiomas-c11") | {*POLYGONS_FIT, SC_LAKES}),
     "an uncoded property map": (facts(geometry=POLY, attributes=("property",), crs=False),
-                                features("property") | {LAKES, NETWORK}),
+                                features("property") | {*POLYGONS_FIT}),
     "rivers": (facts(geometry=("LineString",), attributes=("objectid", "elvid")), RIVERS),
     "rivers in a gpkg: no rivers": (gpkg(("objectid",), geometry="LineString"), set()),
     "rivers with no crs member: no rivers": (
@@ -137,7 +145,7 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
     "rivers with no objectid: no rivers": (
         facts(geometry=("LineString",), attributes=("elvid",)), set()),
     "lines and polygons: lakes, no rivers": (
-        facts(geometry=("LineString", "Polygon"), attributes=("objectid",)), {LAKES, NETWORK}),
+        facts(geometry=("LineString", "Polygon"), attributes=("objectid",)), {*POLYGONS_FIT}),
     "stations": (facts(geometry=("Point",), attributes=("station", "name")), {STATIONS, OUTLETS}),
     "stations in .json": (
         facts(suffix=".json", geometry=("Point",), attributes=("station",)), {STATIONS, OUTLETS}),
@@ -147,15 +155,26 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
         facts(geometry=("Point",), attributes=("name",)), {OUTLETS}),
     "points and polygons: lakes, network and outlets": (
         facts(geometry=("Point", "Polygon"), attributes=("station",)),
-        {LAKES, NETWORK, OUTLETS}),
+        {*POLYGONS_FIT, OUTLETS}),
     "references": (facts(geometry=POLYS, attributes=("station",)),
-                   {LAKES, NETWORK, SC_LAKES, REFERENCE}),
-    "lakes": (facts(geometry=POLY, attributes=("objectid", "navn")), {LAKES, NETWORK, SC_LAKES}),
+                   {*POLYGONS_FIT, SC_LAKES, REFERENCE}),
+    "lakes": (facts(geometry=POLY, attributes=("objectid", "navn")), {*POLYGONS_FIT, SC_LAKES}),
     "lakes with no crs member: catchment lakes and network": (
-        facts(geometry=POLYS, attributes=("name",), crs=False), {LAKES, NETWORK}),
+        facts(geometry=POLYS, attributes=("name",), crs=False), {*POLYGONS_FIT}),
     "points in a gpkg: outlets": (gpkg(("unit",), geometry="Point"), {OUTLETS}),
     "a lakes gpkg: catchment lakes and network": (
-        gpkg(("navn",), geometry="MultiPolygon"), {LAKES, NETWORK}),
+        gpkg(("navn",), geometry="MultiPolygon"), {*POLYGONS_FIT}),
+    "projected polygons: --catchments too": (
+        facts(geometry=POLY, attributes=("name",), projected=True),
+        {*POLYGONS_FIT, CATCHMENTS, SC_LAKES}),
+    "polygons in degrees: --reservoirs, no --catchments": (
+        facts(geometry=POLYS, attributes=("name",), projected=False),
+        {*POLYGONS_FIT, SC_LAKES}),
+    "a projected polygon gpkg: --catchments too": (
+        gpkg(("navn",), geometry="MultiPolygon", projected=True),
+        {*POLYGONS_FIT, CATCHMENTS}),
+    "projected points: neither": (
+        facts(geometry=("Point",), attributes=("name",), projected=True), {OUTLETS}),
 }  # fmt: skip
 
 
@@ -316,3 +335,47 @@ class TestT5FitsAgreeWithTheReaders:
         assert accepts_lakes(path, LANDCOVER)
         assert accepts_features(path, LANDCOVER, "corine")
         assert not accepts_features(path, LANDCOVER, "clc18_kode")
+
+
+# ------------------------------------------------------------ 106e, test 8
+
+
+def test_106e_the_listing_names_mesh_for_polygons(tmp_path: Path) -> None:
+    """`docs/increments/106-wednesday-cells.md`, section 8, test 8: a projected
+    polygon file fits `mesh --reservoirs` and `mesh --catchments`, one in
+    EPSG:4326 `--reservoirs` only, a points file neither; the CRS is the one
+    the listing reads from the file."""
+    unit = box(500_000.0, 6_600_000.0, 501_000.0, 6_601_000.0)
+    to_wgs84 = Transformer.from_crs("EPSG:25833", "EPSG:4326", always_xy=True).transform
+    files = {
+        "projected": write_geojson(
+            tmp_path / "units.geojson", [Feat(1, unit, {"name": "u"})], "EPSG:25833"
+        ),
+        "degrees": write_geojson(
+            tmp_path / "units-deg.geojson",
+            [Feat(1, transform(to_wgs84, unit), {"name": "u"})],
+            "EPSG:4326",
+        ),
+        "points": write_geojson(
+            tmp_path / "points.geojson",
+            [Feat(k, Point(c), {"name": f"p{k}"}) for k, c in enumerate(unit.exterior.coords[:2])],
+            "EPSG:25833",
+        ),
+    }
+    user = write_sources(
+        tmp_path / "conf" / "sources.toml",
+        {key: vector_entry(path, f"fixture {key}") for key, path in files.items()},
+    )
+    document = source_report.listing({"RASPUTIN_DATA": str(user.parent)}, None, None)
+    found = {s.id: s for s in document.sources}
+    mesh_fits = {
+        key: {(f.command, f.option) for f in found[key].fits if f.command == "mesh"}
+        for key in files
+    }
+    for key in files:
+        assert found[key].problem is None, (key, found[key].problem)
+    assert mesh_fits == {
+        "projected": {("mesh", "--reservoirs"), ("mesh", "--catchments")},
+        "degrees": {("mesh", "--reservoirs")},
+        "points": set(),
+    }

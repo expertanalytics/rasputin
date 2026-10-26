@@ -27,6 +27,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from shapely.geometry import Polygon
 
 import tin_engine
 from cli_helpers import (
@@ -39,6 +40,7 @@ from cli_helpers import (
     squashed,
 )
 from cog_fixtures import VARIANTS, build, write_cache
+from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import TIE_X, TIE_Y
 from test_cli_mesh_mosaic import field, same_mesh, terrain
 from test_cli_mesh_refine import stats_row
@@ -300,6 +302,54 @@ class TestW5TheFetchCommandInTheMessage:
         assert code == USAGE, output
         wanted = f"run: rasputin fetch {KEY} --domain {domain} --cache {tmp_path / 'cache'}"
         assert squashed(wanted) in squashed(output), output
+
+    # 106e, test 9 (`docs/increments/106-wednesday-cells.md`, section 8): with
+    # an outline that may pass the domain's bounds, the fetch named is the
+    # planned window's `--bbox`, in the source's CRS. The window is the one
+    # the run without either option reports; a triangle keeps its three
+    # vertices at any band.
+    WINDOW = ("500150", "6599880", "500400", "6599960")
+    RING = ((TIE_X + 150, TIE_Y - 120), (TIE_X + 400, TIE_Y - 120), (TIE_X + 300, TIE_Y - 40))
+
+    def refused_with(self, tmp_path: Path, data: bytes, out: str, *extra: str) -> str:
+        write_cache(tmp_path / "cache", KEY, {"dem": data}, skip={"dem": (6,)})
+        domain = geojson(tmp_path / "d.geojson", list(self.RING))
+        target = tmp_path / out
+        code, output = invoke(
+            "mesh",
+            "--dem", KEY, "--cache", str(tmp_path / "cache"), "--domain", str(domain),
+            "--tolerance", "1", "--features-tolerance", "5", "--out", str(target), *extra,
+        )  # fmt: skip
+        assert code == USAGE, output
+        assert not target.exists()
+        flat = squashed(output)
+        window = " ".join(self.WINDOW)
+        missing = f"1 of the 6 blocks needed are not in the cache for the window {window}"
+        assert squashed(missing) in flat, output
+        wanted = f"run: rasputin fetch {KEY} --bbox {window} --cache {tmp_path / 'cache'}"
+        assert squashed(wanted) in flat, output
+        assert "--domain" not in output.split("run: rasputin fetch", 1)[1], output
+        return output
+
+    def test_with_simplify_domain_the_fetch_is_the_window(
+        self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
+    ) -> None:
+        self.refused_with(tmp_path, data, "m.vtk", "--simplify-domain")
+
+    def test_with_catchments_the_fetch_is_the_window(
+        self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
+    ) -> None:
+        """`U` is one unit, the domain's triangle, `id` 1; `--catchments`
+        writes cells, so a land cover with a legend and a `.gpkg` are given."""
+        unit = Polygon(self.RING)
+        units = write_geojson(tmp_path / "u.geojson", [Feat(1, unit, {"name": "u1"})])
+        cover = write_geojson(
+            tmp_path / "cover.geojson", [Feat(1, unit.buffer(100.0), {"Code_18": "311"})]
+        )
+        self.refused_with(
+            tmp_path, data, "m.gpkg", "--catchments", str(units),
+            "--land-cover", str(cover), "--land-cover-legend", "corine",
+        )  # fmt: skip
 
     def test_the_count_of_missing_and_needed_blocks(
         self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None

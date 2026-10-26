@@ -1,7 +1,8 @@
 """The domain file: what ``--domain`` reads.
 
-One ``Polygon``, holes allowed, from GeoJSON (a bare geometry, a ``Feature`` or
-a ``FeatureCollection`` of exactly one) or WKT, by suffix. Vertices are used as
+One ``Polygon``, holes allowed (a ``MultiPolygon`` of one part is its
+polygon), from GeoJSON (a bare geometry, a ``Feature`` or a
+``FeatureCollection`` of exactly one) or WKT, by suffix. Vertices are used as
 given: no densifying, simplifying or snapping. The polygon is oriented outer
 counter-clockwise and holes clockwise, the winding the C++ core's input check
 requires.
@@ -24,7 +25,7 @@ from pathlib import Path
 import shapely
 import shapely.wkt
 from pyproj import CRS
-from shapely.geometry import Polygon, shape
+from shapely.geometry import MultiPolygon, Polygon, shape
 from shapely.geometry.polygon import orient
 from shapely.validation import explain_validity
 
@@ -73,6 +74,13 @@ def read_domain(path: Path, crs: str | None = None) -> DomainPolygon:
     except (ValueError, TypeError, KeyError, AttributeError, shapely.errors.GEOSException) as exc:
         raise DomainError(f"cannot parse {path.name}: {exc}") from exc
 
+    if isinstance(geometry, MultiPolygon):
+        if len(geometry.geoms) != 1:
+            raise DomainError(
+                f"{path.name}: the domain must be one Polygon, "
+                f"got a MultiPolygon of {len(geometry.geoms)} parts"
+            )
+        geometry = geometry.geoms[0]
     if not isinstance(geometry, Polygon):
         raise DomainError(f"{path.name}: the domain must be one Polygon, got {geometry.geom_type}")
     if geometry.is_empty:

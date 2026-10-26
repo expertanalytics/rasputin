@@ -1,8 +1,8 @@
 # Increment 106: four fixes for Wednesday's Swedish cells
 
 **Status: designed** by `@architect`, 2026-10-26, on master `f17b3e11`,
-worktree `demo-fixes`. Four small PRs, built in the order 106a, 106b, 106c,
-106d. Number 106: 105 is the highest under `docs/increments/` over every ref
+worktree `demo-fixes`. Five small PRs, built in the order 106a, 106b, 106c,
+106d, 106e (106e designed on 106c's head `a9366418`, worktree `demo-fixes-e`). Number 106: 105 is the highest under `docs/increments/` over every ref
 (`git for-each-ref` + `git ls-tree`, 2026-10-26).
 
 Ola, 2026-10-26: "I want to use the MCP to build the catchments our Swedish
@@ -28,11 +28,12 @@ in its docstring; their outputs went to `/tmp/p106/` (not kept).
 | 106b | `network-catchment --network` takes only a file path, not the catalogue name `smhi-svar2022-subcatchments` | `--network`, `--lakes` and `--outlets` take a catalogue name or a file | about 15 | short | no |
 | 106c | every cell has `catchment_id` 1; tagging cells afterwards puts 18.9 % of Kultsjön's area in the wrong one of its 75 SVAR units | `mesh --catchments` repairs SMHI's units, simplifies them with rasputin's own border simplification at a band set by the triangle budget, makes their borders constraints, so no cell straddles two, and writes each cell's unit id | about 95 | full loop | **yes** |
 | 106d | no Swedish reservoir polygons: the reservoir share is 0 | a catalogue entry can keep only the lakes a dam names; `smhi-reservoirs` gives Kultsjön 82.73 km² of reservoir | about 35 | short | no |
+| 106e | an official outline cannot be meshed at a small budget (Ljungan's forces at least 190,387 triangles), and NVE's one-part MultiPolygon outlines are refused: both took scripts outside rasputin | `mesh --simplify-domain` simplifies the outline with 106c's band from the budget; a one-part MultiPolygon is read as its polygon; the refusals, `sources` and the MCP instructions name the route, and a missing-blocks refusal names a fetch that covers the simplified outline | about 60 | full loop | **yes** |
 
-About 165 net production lines in all. No C++ in any of them.
+About 225 net production lines in all. No C++ in any of them.
 
-`@perf` applies to 106c only: it adds constraint lines to what drives the
-mesh (*Acceptance* in `docs/increments/README.md`). 106a changes only the
+`@perf` applies to 106c and 106e only: 106c adds constraint lines to what
+drives the mesh, 106e changes the domain when its flag is given (*Acceptance* in `docs/increments/README.md`). 106a changes only the
 polygons the land-cover table and the reservoir share read after the mesh is
 made; 106b only how a file is found; 106d only which reservoir polygons are
 read. None of those three touches the mesh.
@@ -537,12 +538,258 @@ a Shyft read-back example, `--outline-tolerance` on `network-catchment`
 None open. Round 2's question (a 200 m default band) is answered by Ola's
 ruling of round 3: the band follows the triangle budget.
 
+## 8. 106e: the canonical route, outline to a 500-triangle mesh, with no step outside rasputin
+
+**Round 4** (2026-10-26), on 106c's head `a9366418`. Ola: "We either
+autocatchment or use an official outline. Then, we get 500 cell meshes. I
+want this to be useful for Sol, only using the MCP. So we better make sure
+there are no hidden secrets." On simplifying the outline to the budget: "No,
+mesh --triangles N should not _always_ do that. But it _could_ be an option
+to do that." And: "They do not need to be in the same geopackage": each
+basin is its own run and file, so 106e has no assembly step and no
+per-basin budget in one run.
+
+**Round 2** (2026-10-26), on `f2a0abfe`: after round 1's review, item 4
+(the missing-blocks refusal names a `--bbox` fetch, for the flag and for
+`--catchments`), its probe and test 9; two wordings.
+
+### The two routes, and where each stops today
+
+- **Terrain:** `catchment --dem glo30 --seed ...` writes one `Polygon`, no
+  holes, in the DEM's CRS (EPSG:4326 for glo30), its outline reduced at twice
+  the DEM cell. Kultsjön lake-seeded (Opal's
+  `catchments/kultsjon-lake-seeded-check.geojson`): 617 vertices; `mesh
+  --domain` it `--dem glo30 --out-crs EPSG:3006 --triangles 500` is
+  **refused**: "the fewest triangles this DEM gives is 1555".
+- **Official:** `network-catchment --network smhi-svar2022-subcatchments`
+  writes one `Polygon`, holes filled, in the network's CRS (EPSG:3006),
+  unsimplified. Ljungan (Opal's `catchments-original/ljungan.geojson`):
+  111,248 vertices; the same `mesh` call is **refused** at 190,387. Opal's
+  delivery simplified its outlines with its own script ("topology-preserving
+  simplified by 50 m", its `METHODS.txt`).
+- **NVE's gauge outlines** (HydrologiskeData3, total catchment to a gauge)
+  come as a `MultiPolygon` of one part; `--domain` refuses it ("the domain
+  must be one Polygon, got MultiPolygon"), and Glomma's delivery unwrapped
+  it by hand (its `METHODS.txt`: "The original one-part MultiPolygon was
+  unwrapped to Polygon").
+
+### What changes
+
+1. **`mesh --simplify-domain`** (a flag, off by default). The `--domain`
+   outline, holes included, is simplified as 106c simplifies the units' union:
+   `sub_catchments.simplify([polygon], band)`, the polygon and its frame as
+   one coverage, so the area is kept and every ring moves at most the band.
+   The band is `--features-tolerance` when given (0: unchanged), else
+   `sub_catchments.band_m(A, N)` (h/8, *What it does* in section 4) with `A`
+   the domain's area in the CRS of the simplification and `N` the
+   `--triangles` value. The CRS: the domain's own when projected; when in
+   degrees, the Lambert azimuthal equal-area projection centred on the
+   domain's centroid, on the domain CRS's ellipsoid, there and back vertex by
+   vertex with `DomainPolygon.to_crs` (an equal-area CRS, so the area kept is
+   the true area). It runs right after the domain is read, before the DEM is
+   opened, so the window, the land cover's clip and the outline rule all see
+   the simplified outline. Stderr, one line: `domain: outline simplified at
+   963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 198
+   vertices, 12838.64 km2`, with `(--features-tolerance)` in the bracket when
+   given. Record: `domain_band_m`. Help: "Simplify the --domain outline, each
+   ring moved at most a band and the area kept: --features-tolerance, or else
+   an eighth of a triangle's edge at --triangles. --catchments always
+   simplifies its outline."
+   **With `--catchments`:** the domain there only selects units, and the
+   outline is the units' union, already simplified at the same band; the
+   flag is accepted and changes nothing (simplifying `D` first could change
+   which inner points it holds).
+   Refusals, headed `--simplify-domain`: without `--domain`, "needs
+   --domain"; with neither `--triangles` nor `--features-tolerance`, "needs
+   --triangles, whose budget sets the outline band, or --features-tolerance".
+   Today's band from the land-cover legend is untouched: the flag reads
+   `--features-tolerance` only as 106c's `--catchments` does.
+2. **A one-part `MultiPolygon` domain** is read as its one polygon
+   (`io/domain_file.py`); more parts are refused: "the domain must be one
+   Polygon, got a MultiPolygon of 2 parts".
+3. **The route is named where Sol looks** (the hidden steps found):
+   - the fewest-triangles refusal, on a `--domain` run without the flag or `--catchments`, adds
+     "; or give --simplify-domain to simplify the outline to the budget"
+     (`cli.py`, `UnderFloor`);
+   - `sources`' `fits` for polygon sources lists `mesh --reservoirs`, and
+     `mesh --catchments` when the source's CRS is projected; today it names
+     only `catchment --lakes` and `network-catchment --network`, while the
+     MCP instructions tell the model to read `fits`
+     (`source_report.fits`; vector `Facts.projected` is None today, set from
+     the CRS the report already reads);
+   - one sentence in the MCP instructions (`mcp/server.py`, `INSTRUCTIONS`):
+     "catchment and network_catchment write a polygon that mesh reads as
+     domain; with simplify_domain its outline follows the triangle budget."
+
+   Checked and not hidden, so left out: the fetches without the flag or
+   `--catchments` (each refusal names its `fetch`; with either, item 4),
+   `network-catchment`'s seed (a unit's `ARO_UUID`, or a point with
+   `--outlets smhi-outlet-points`; the `sources` descriptions name both
+   attributes), the cells layer needing `--land-cover` and `.gpkg` (its
+   refusal says so), and the CRS of `catchment`'s output (any CRS is read).
+4. **The missing-blocks refusal names a fetch that covers the outline
+   meshed** (round 2). `fetch --domain D` copies the DEM blocks of `D`'s
+   bounds grown by 6 cells (`fetch/plan.py`, `source_box`: a margin of 4
+   plus 2; about 186 m for glo30). With `--simplify-domain` the outline can
+   pass `D`'s bounds by up to the band, and with `--catchments` the units'
+   union passes them wherever `D` cuts a unit whose inner point it holds
+   (*Measured*: up to 477 m and 868 m). Today mesh's refusal (`cli.py`, the
+   `except NotCached` after `assemble_dem`) names `fetch` with the original
+   `--domain`, which adds no block: an agent with only the MCP loops. With
+   `--simplify-domain` or `--catchments` given and the exception's box set,
+   the refusal names `rasputin fetch KEY --bbox X0 Y0 X1 Y1 [--cache C]`,
+   the box being `NotCached.box` (the window's node box in the source's
+   CRS) and no `--out-crs` (a `fetch --bbox` is in the source's CRS
+   without it), as `catchment` does today (`cli.py`, its `except
+   NotCached`). That hint moves into one helper both commands call, so
+   `catchment`'s wording stays byte for byte. Without either option the
+   refusal is as today. The feature sources (`--catchments`' units,
+   vector land cover, reservoirs) need nothing: a catalogue fetch keeps
+   every polygon meeting `D`'s box whole, and the units selected meet it.
+
+### Measured (probes, 106c's head `a9366418`, extension built 2026-10-26)
+
+`outline_budget.py` (each Opal outline as SMHI's network joins it) and
+`outline_degrees.py` (an outline in degrees, via the centred equal-area
+projection), both in `docs/increments/106-probes/`:
+
+| outline | km² | vertices | N | band | after | area change | simplify |
+|---|---|---|---|---|---|---|---|
+| Kultsjön, official | 1,702.67 | 19,555 | 500 | 350.5 m | 106 | 2.4e-7 m² | 0.21 s |
+| Ljungan, official | 12,838.64 | 111,248 | 500 | 962.6 m | 195 (measured 198) | 3.2e-5 m² | 2.43 s |
+| | | | 5,000 | 304.4 m | 632 | 1.3e-5 m² | 1.24 s |
+| Umeälven, official | 26,771.60 | 133,783 | 500 | 1,390.0 m | 138 | 3.1e-5 m² | 3.90 s |
+| Kultsjön, terrain (EPSG:4326) | 1,097.30 | 617 | 500 | 281.4 m | 122 | relative 2.4e-8 (geodesic) | under 0.01 s |
+
+All seven Opal outlines: valid, one polygon, no hole, at 500 and 5,000.
+Meshed (`--dem glo30 --out-crs EPSG:3006 --triangles 500`): Kultsjön
+official 490 triangles in 2.6 s; Ljungan 503 in 4.0 s (both runs, the
+simplification apart; `@perf` measured 198 vertices and 483 triangles: the
+probe simplified the ring clockwise as stored, `read_domain` orients it
+counter-clockwise first, `docs/benchmarks/2026-10-26/106e/orient_probe.py`); Kultsjön terrain 502; and with `--land-cover clc2018`
+to `.gpkg` Kultsjön official writes 490 cells (46.5 s, nearly all 106a's
+land-cover repair). Umeälven's glo30 blocks are not cached (not run).
+
+`fetch_reach.py` (round 2; 3 min 18 s for all eight): how far each
+outline's bounds pass `D`'s, the box `fetch --domain D` grows by about
+186 m for glo30; N 500, EPSG:3006, the SVAR 2022 units from
+`rasputin_data/sweden_smhi_svar/wfs-20261021`:
+
+| `D` | `--simplify-domain` | `--catchments` (units) |
+|---|---|---|
+| Åselealven | 428.0 m | 428.0 m (726) |
+| Faxälven | 334.9 m | 567.3 m (471) |
+| Fjällsjöälven | 329.8 m | 114.1 m (464) |
+| Indalsälven | 158.9 m | 868.1 m (1,311) |
+| Kultsjön | 97.3 m | 97.3 m (75) |
+| Ljungan | 242.5 m | 221.0 m (809) |
+| Umeälven | 476.8 m | 302.0 m (1,436) |
+| Kultsjön, terrain | 101.6 m | 107.8 m (51) |
+
+Past 186 m: 6 of the 7 official outlines with the flag, 5 of 7 with
+`--catchments`; so 106c's `--catchments` has the same gap, and item 4
+covers both.
+
+**Constants.** None new: the band is 106c's h/8, the frame and the 1 m
+clearance are 106c's. The equal-area projection keeps area exactly and
+stretches distance by under 1 % within about 1,800 km (16 degrees of arc)
+of its centre, so a
+band in degrees-CRS domains is right to that scale; checked on a 1,097 km²
+outline, and the projected path up to 26,771.60 km².
+
+### Tests (key properties)
+
+Fixture `ZZ`: in `test_cli_mesh_catchments.py`'s scene (56 x 56 nodes at
+60 m, EPSG:31983, `local` frame), the square [0, 3000]² with each side a
+zigzag of 60 steps of 50 m, every other vertex pushed 20 m outward: 240
+vertices, valid, 9,120,000 m². `ZZH`: `ZZ` with a hole, the square [1200,
+1800]² zigzagged the same way, 12 steps a side, every other vertex 20 m
+away from the hole's centre: 288 vertices,
+8,736,000 m².
+
+1. **Read** (pure): a one-part `MultiPolygon` of `ZZ` reads as `ZZ`,
+   oriented (`equals_exact`, tolerance 0); a two-part one is refused with
+   the wording above; a `Polygon` reads as today.
+2. **Simplify, projected** (pure): `ZZ` at N 100, band 57.366336 m
+   (relative 1e-9): 4 vertices, area relative change under 1e-12, valid.
+   `ZZH` at N 100 (band 56.145636 m): outer ring 4, hole 4, area kept
+   (the "frame left out" mutant leaves the hole's 48 and the outer 240).
+3. **Simplify, in degrees** (pure): `ZZ` moved to EPSG:4326 (centroid
+   -44.93, -15.24): the result is in EPSG:4326, 4 vertices, geodesic area
+   relative change under 1e-6 (measured 3e-8), band 57.4 m (relative 1e-3).
+   The band from an area in square degrees (about 5e-4) fails this.
+4. **End to end**, `ZZ` as `--domain`, `--triangles 100`: without the flag
+   refused, "the fewest triangles this DEM gives is 470", and the refusal
+   names `--simplify-domain`; with it, 101 triangles (within the budget's
+   5 %), the stderr line "240 to 4 vertices", `domain_band_m` 57.366336
+   (relative 1e-9); with `--features-tolerance 30`, `domain_band_m` 30.
+5. **Unchanged without it:** `ZZ` simplified by hand (the probe's output at
+   N 400) meshed at `--triangles 400` without the flag gives 396 triangles
+   and the same rows as 106c's head; no `domain_band_m` in the record.
+6. **With `--catchments`**: test 5's units run of section 4 with the flag
+   writes the same `triangles` and `cells` rows as without it.
+7. **Refusals:** the two above.
+8. **Named where Sol looks:** `fits` of a projected polygon `.geojson` lists
+   `mesh --reservoirs` and `mesh --catchments`, of one in EPSG:4326 only
+   `--reservoirs`, of a points file neither; `INSTRUCTIONS` holds
+   "simplify_domain".
+9. **The fetch named covers the outline** (round 2): `test_cli_mesh_cache.py`'s
+   `TestW5TheFetchCommandInTheMessage.test_with_domain` scene (the cache of
+   `test-utm33` without block 6, the triangle domain) with
+   `--simplify-domain --features-tolerance 5` added: refused, "1 of the 6
+   blocks needed are not in the cache for the window 500150 6599880 500400
+   6599960", and the output holds `run: rasputin fetch test-utm33 --bbox
+   500150 6599880 500400 6599960 --cache <cache>` and no `--domain` (the
+   window measured without the flag on 106c's head; a triangle keeps its
+   three vertices at any band). The same run with `--catchments U` in place of `--simplify-domain`, `U` a GeoJSON of one unit (the triangle, `id` 1), names the same `--bbox` run. The existing test without the flag keeps
+   its `--domain` run unchanged, and `catchment`'s hint tests pass
+   unchanged.
+
+**Invariant-critical suite** (mutation round required): tests 1, 2, 3, 4.
+Mutation targets: the one-part check (any `MultiPolygon` taken as its first
+part: test 1), the frame left out (test 2's hole), the simplification in
+degrees (test 3's band), the band's factor and its area (test 4's
+`domain_band_m`), the flag ignored (test 4's count), the refusal's
+`--domain` kept with the flag (test 9), or with `--catchments` (test 9's second run).
+
+**`@perf`** (the domain drives the mesh): the 1 m benchmark unchanged and
+byte-identical to 106c's head (no flag); Ljungan official at `--triangles
+500` with the flag: 503 triangles (measured: 483, from 198 outline vertices,
+not the probe's 195; ring orientation, `orient_probe.py`), the time against the probes, 4.0 s mesh
+plus 2.4 s simplification plus reading the outline (unmeasured;
+`@perf` sets it), plus 10 % noise; Kultsjön terrain-traced: 502.
+
+**Size.** About 60 net lines: the flag and its two checks (14), the
+simplification with its CRS choice, stderr and record (18), the one-part
+read (3), the refusal's hint (4), `fits` and vector `Facts.projected` (8),
+the instruction sentence and the record wording (8), the `--bbox` fetch
+helper shared with `catchment` and its use in mesh (about 5). Full loop: over 50
+lines, and the domain drives the mesh.
+
+*Prior art.* As section 1: rasputin's border simplification
+(`docs/increments/32-landcover-simplify.md`) through 106c's frame; the
+Lambert azimuthal equal-area projection (Snyder, *Map Projections: A Working
+Manual*, USGS Professional Paper 1395, 1987, ch. 24), used as published.
+*Legacy:* `git grep -n -i -E "simplif|MultiPolygon" legacy-archive -- legacy`
+returns CGAL's surface-mesh edge collapse (`legacy/rasputin/mesh.py:102`,
+legacy-archive's `legacy/rasputin/triangulate_dem.h`, line 243) and a raster-polygon intersection type
+(the same file, lines 73 and 410); no outline simplification and no domain
+reader. Nothing to carry across. *Ideas file:* overlaps "MCP tool descriptions: how to mesh
+a domain too big for one run" (the instruction sentence only; the basin path
+is not touched).
+
 ## Review record
 
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
 - **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
+- **Design review of 106e, round 1, 2026-10-26.** `@reviewer`, head `f2a0abfe29780c9cb32f075a52fd251d727219b6`. Verdict: CHANGES REQUESTED. Blocking: a fetch loop, the simplified outline passing the fetched box (up to 477 m, Umeälven at 500) while the missing-blocks refusal names the original `--domain`; fix: name `--bbox` from the missing-blocks box, as `catchment` does, one test. Wordings: the table's "about 55", point 3's "or `--catchments`".
+- **Design review of 106e, round 2, 2026-10-26.** `@reviewer`, head `a5399b83dad9c56f7ea5006dcbfcbb1edb7986e5`, range `f2a0abfe..a5399b83`. Verdict: APPROVED WITH WORDINGS. Fetch loop closed (refusal names the planned window's `--bbox`); probe reproduced; two wordings applied (test 9's `--catchments` run and its mutation target).
+- **106e kill record, 2026-10-26.** `@tester`, `3736e39a`: 9 of 9 mutants killed, tests 1-4 and 9.
+- **106e acceptance, 2026-10-26.** `@perf`, `e1ea98a9`: ACCEPTED. 1 m benchmark without the flag byte-identical to master `e0d129c0`; Ljungan 198 outline vertices and 483 triangles (the design's 195 and 503 came from the clockwise ring), Kultsjön traced 502 (`docs/benchmarks/2026-10-26/106e/README.md`).
+- **Code review of 106e, round 1, 2026-10-26.** `@reviewer`, head `e1ea98a90256cde2bd1e587d6c63686c7b51b50b`. Verdict: APPROVED WITH WORDINGS. Wordings applied: the benchmark README's base is master `e0d129c0` without 106c, and the land-cover step carries 106a's old repair until master (`4afd75fb`) is merged in; section 8 records Ljungan's measured 198 vertices and 483 triangles (ring orientation).
+- **Code review (106a), rounds 3-4, 2026-10-26.** `@reviewer`: CHANGES REQUESTED on `be26db8fa3dea97e7241143757d961616776d906` (clipping a self-crossing polygon before repair can flip inside and outside); APPROVED WITH WORDINGS on `4afd75fbe3b3dbfec067feec2f639bd0dfa80ea2` (rings cut to the box, odd-count rule; `@perf` ACCEPTED: Kultsjön 5.61 s vs master 10.51 s, tables equal). Design wording applied here; the `_repaired` docstring wording follows from `@developer`.
+- **Code review (106e), round 2, 2026-10-26.** `@reviewer`, head `d945ecc6a64629cc1f3086a14d801e711312e70d`, range `e1ea98a9..d945ecc6`. Verdict: APPROVED WITH WORDINGS. Wordings and master merge checked; one benchmark wording applied (times measured with 106a's old repair).
 - **Code review (106b+106c), round 1, 2026-10-26.** `@reviewer`, head `a9366418ba24f5e96f71f36a92910d9fdd2881ac`. Verdict: CHANGES REQUESTED. A catalogue key that is also a file here was taken silently; refuse naming both. 198 net lines judged earned; kill record 10/10; `@perf` ACCEPTED.
 - **Code review (106b+106c), round 2, 2026-10-26.** `@reviewer`, head `cd32df7bee935ac9e43394b1bf26e81d821827f6`, range `a9366418..cd32df7b`. Verdict: APPROVED WITH WORDINGS. Refusal added (6 lines); one wording applied in 106b's Refusal paragraph.
 - **Code review (106d), round 1, 2026-10-26.** `@reviewer`, head `fb7c9f5081ce398bb4b66590ffd178d4c450a98c`, range `0d8f3793..fb7c9f50`. Verdict: APPROVED WITH WORDINGS. 52 net lines (estimate 35; refusals in cli.py); one refusal covers both "not in the catalogue" and "not a local `.geojson`". `smhi-reservoirs` stays out of the shipped catalogue; the main session registers it in Ola's sources file after merge.
-- **Code review (106a), rounds 3-4, 2026-10-26.** `@reviewer`: CHANGES REQUESTED on `be26db8fa3dea97e7241143757d961616776d906` (clipping a self-crossing polygon before repair can flip inside and outside); APPROVED WITH WORDINGS on `4afd75fbe3b3dbfec067feec2f639bd0dfa80ea2` (rings cut to the box, odd-count rule; `@perf` ACCEPTED: Kultsjön 5.61 s vs master 10.51 s, tables equal). Design wording applied here; the `_repaired` docstring wording follows from `@developer`.

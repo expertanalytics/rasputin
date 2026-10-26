@@ -142,8 +142,8 @@ class CatalogueReport(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class Facts:
-    """What `fits` judges a source by: what it holds; for heights whether the
-    CRS is projected (None when unknown); for features the file's suffix,
+    """What `fits` judges a source by: what it holds; whether the CRS is
+    projected (None when unknown); for features the file's suffix,
     geometry type names, attributes, whether it states its CRS (a GeoPackage
     always does), and the entry's legend ("" when none)."""
 
@@ -168,9 +168,11 @@ def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
     one in degrees), a class raster's for `--land-cover`; for features,
     `--features` under each of `legends` (only the entry's when it names one)
     whose attribute the file has (a GeoPackage's column case-insensitively,
-    a GeoJSON property exactly), `catchment --lakes` and `network-catchment
-    --network` for any polygons, `network-catchment --outlets` for any points,
-    and the GeoJSON readers, which need a `crs` member, by geometry and attribute.
+    a GeoJSON property exactly), `catchment --lakes`, `network-catchment
+    --network` and `mesh --reservoirs` for any polygons, `mesh --catchments`
+    for projected ones (its border band is in metres), `network-catchment
+    --outlets` for any points, and the GeoJSON readers, which need a `crs`
+    member, by geometry and attribute.
     Reads no file."""
     if facts.values == "heights":
         commands: tuple[str, ...] = ("mesh", "catchment")
@@ -188,6 +190,9 @@ def fits(facts: Facts, legends: Mapping[str, Legend]) -> tuple[Fit, ...]:
     ]
     if shapes & (_POLYGONS | {"Geometry"}):
         found += [_fit("catchment", "--lakes"), _fit("network-catchment", "--network")]
+        found.append(_fit("mesh", "--reservoirs"))
+        if facts.projected:
+            found.append(_fit("mesh", "--catchments"))
     if "Point" in shapes:
         found.append(_fit("network-catchment", "--outlets"))
     if facts.suffix != ".gpkg" and facts.crs_stated:
@@ -262,7 +267,7 @@ def _vector(
             shapes = frozenset({_TYPES.get(got.geometry.upper(), got.geometry)})
             facts = Facts(
                 "features",
-                None,
+                parse_crs(layer.crs).is_projected,
                 suffix,
                 shapes,
                 got.attributes,
@@ -276,7 +281,13 @@ def _vector(
     else:
         doc = collection_summary(read_json(path))
         facts = Facts(
-            "features", None, suffix, doc.geometry, doc.attributes, doc.crs_stated, entry.legend
+            "features",
+            parse_crs(doc.crs).is_projected,
+            suffix,
+            doc.geometry,
+            doc.attributes,
+            doc.crs_stated,
+            entry.legend,
         )
         found = fits(facts, legends)
         for a in _coded(found, legends, doc.attributes):
