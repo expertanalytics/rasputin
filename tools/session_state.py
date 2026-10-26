@@ -401,9 +401,9 @@ def print_recap(tasks: Path) -> None:
     for line in _capped([d if len(d) <= 160 else d[:157] + "..." for d in decisions], 5):
         print(f"  {line}")
     try:  # a fault in the pipes block costs one line, like the harness
-        import pipes
+        import work_pipes
 
-        piped = pipes.show_lines(REPO, datetime.now(UTC))
+        piped = work_pipes.show_lines(REPO, datetime.now(UTC))
     except Exception as error:
         piped = [f"Pipes: unknown ({type(error).__name__}: {str(error)[:120]})".replace("\n", " ")]
     print("\n".join(piped))
