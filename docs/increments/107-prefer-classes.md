@@ -74,7 +74,7 @@ naming the legend.
   when, inside the mesh's triangles, the preferred source gives less of a category than the
   replaced class did, by more than 1e-9 of it (rounding):
   `lake: nve-lakes gives <A> km² where clc2018 gave <B> km²; <C> km² of clc2018 water had no nve-lakes lake and took a neighbouring class`.
-  Every run with `--prefer` records the three areas per key. Sula: at most 0.37 %
+  Every run with `--prefer` records the three areas per key. Refilled counts only the pieces that took a class; a piece left out counts in none of the three. Sula: at most 0.37 %
   refilled (the probe counts all CORINE water, not 512 alone), no warning. Nigardsbrevatn (76.5.0, 65.23 km²): glacier 76.19 %
   CORINE against 70.17 % NVE, so the warning fires there (the glacier has
   shrunk; CORINE is generalised).
@@ -138,7 +138,7 @@ legend.prefer {category: code}  ───┘        │ polygons [(code, geom)],
      most about 2 cm. Checked on those two catchments (projected metres,
      6,441 km² the larger);
   5. areas: replaced and refilled from `cells.overlay(corners, polygons)`
-     times the triangle areas, given from the class fractions.
+     times the triangle areas, given from `cells.overlay(corners, kept preferred polygons)` the same way, before `assign` runs.
 - Legend: `[prefer]` table and `Legend.prefer: Mapping[Category, int]`, about
   10 lines; TOML data uncounted.
 - CLI: repeatable `--prefer KEY=SOURCE` (catalogue name or file, fetched and
@@ -207,3 +207,8 @@ alone: the steps above are pinned because they are the measured ones.
    is CC BY-NC-SA (non-commercial). Default: add `nve-glaciers` with that
    stated in its licence note, and the Wednesday demo uses `--prefer` for
    lakes only unless you confirm the licence.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 752b7601..2e7b9195, 0 net production lines (no speed estimate; no border-length method).
+- Design round 2: APPROVED WITH WORDINGS, 2e7b9195..c561f5a3, 0 net production lines; the two wordings (section 4 step 5, section 2(b)) applied in this commit.
