@@ -519,6 +519,33 @@ the type `order` and `stuck` take; `load_items` is `fold` over a file. (5)
 No mutation round: this suite is not invariant-critical (`docs/increments/
 README.md`, *Cost constraints*).
 
+## As built (first slice, green at `c66ae776`)
+
+- **Size.** 340 net counted lines (`python3 tools/count_loc.py master
+  c66ae776`: `tools/pipes.py` 333, `tools/session_state.py` 6,
+  `guard_governance.py` 1), against about 255 in section 10.
+- **Beyond the design.** Two record keys: `rank` (order inside a pipe; `top`
+  sets it below the pipe's lowest) and `before` (the state `ask` left, which
+  `answer` restores). A pipe's own record has state `pipe`, listed nowhere as
+  an item. `add` refuses a pipe with no definition (`pipes: no pipe <name>
+  defined`), so the tool takes no item until `core.toml` exists. An
+  unreadable unattended flag counts as unattended (`read_mode` state not
+  `off`): the safe side, plain items only.
+- **Rule files.** `CLAUDE.md` §3 *Finish before starting*: the sentence on
+  where a free writer goes becomes "`python3 tools/pipes.py next` names the
+  item a free writer takes" (-10 words). `.claude/REQUIRED-READING.md`, the
+  `session.md` line: `QUEUE:` at most one; `ASK OLA:` for a refusal or a
+  default taken while away; items and their questions go in `tools/pipes.py`;
+  "only the main session writes it" shortened (+8 words). Net -2 words, not
+  the -35 section 10 estimated; the fallback sentence is unchanged.
+- **`.claude/pipes/core.toml`, not yet written** (outside both writers'
+  limits; who adds it is Ola's call). Exact content, checked with `tomllib`:
+
+  ```toml
+  name = "core"
+  purpose = "Public rasputin work: the terrain mesh product, its tools, and the harness and process that build them."
+  ```
+
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `c2b2dc69fc15f9ddeb38f1ecad25a0db2a1053b7`, range `d886847d..c2b2dc69`. Verdict: CHANGES REQUESTED. LOC: 0 (design); table sums to about 220, not 250. Blocking: (1) live lists go in `<git-common-dir>/pipes/`, not `harness/` (REQUIRED-READING 163-164: no agent writes harness state); no guard entry needed (`judge_bash` already passes `python3 tools/pipes.py set`); (2) `ASK OLA:` lines are read by `harness_mode.py`, `guard_unattended.py`, `away.py --back` and `session_state.py`: "Refusals and defaults taken while away stay `ASK OLA:` lines in `session.md`; only questions about an item move to `pipes.py ask`"; `session_format` stops requiring one `QUEUE:` line; (3) private definitions read with `git ls-tree --name-only <remote>/master .claude/pipes/` and `git show`, no fetch (the recap runs in a hook), printing "read from <remote>/master <sha7>, committed <date>"; a missing ref warns, does not fail; (4) `waiting` items do not count toward the cap of three; "writes no governed path" needs an item field set at `add`; (5) a tracked fallback "re-filled when used" needs a commit per use: keep the REQUIRED-READING fallback sentence until `away.py` checks it (second slice), the refusal test moves there too; (6) resurfacing (Ola: "when stuff is stuck behind for a while, they should resurface"): "An item `queued` or `waiting` longer than three days is listed first in the recap under `Stuck:` with its age, and `next` ranks it ahead of fresher items of equal step", about 15 lines plus a test; (7) Status: "Status: **design to build, first slice**, ruled by Ola 2026-10-25 (\"yes, build the first slice\"): rules option A, the rest as recommended. Section 8 holds the rulings." If `session_state.py` imports `pipes.py`, `pipes.py` joins GOVERNED. Not pushed; no CI.
