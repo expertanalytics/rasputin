@@ -614,12 +614,15 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
-def _repaired(geometry: BaseGeometry) -> BaseGeometry | None:
-    """``geometry`` if valid, else the polygons of ``shapely.make_valid`` of it
-    (a ring that crosses itself makes GEOS's overlays throw); None if none."""
+def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeometry | None:
+    """``geometry`` if valid, else the polygons of ``shapely.make_valid`` of its
+    part inside the box of the points ``xy`` widened by 100 m; None if none.
+    A ring that crosses itself makes GEOS's overlays throw. Only the part near
+    the mesh is ever overlaid, and repairing a large polygon whole takes seconds."""
     if geometry.is_valid:
         return geometry
-    parts = shapely.get_parts(shapely.get_parts(shapely.make_valid(geometry)))
+    cut = shapely.clip_by_rect(geometry, *(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
+    parts = shapely.get_parts(shapely.get_parts(shapely.make_valid(cut)))
     kept = [p for p in parts if isinstance(p, Polygon) and not p.is_empty]
     return MultiPolygon(kept) if kept else None
 
@@ -636,9 +639,10 @@ def read_class_polygons(
     ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of the
     points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
     skipped; a value that is no class code is a :class:`FeatureError`. Each
-    polygon is repaired after the move (:func:`_repaired`), and dropped when
-    nothing polygonal is left; the count returned is how many were. ``tell``,
-    if given, is called with that count and the number of polygons read."""
+    polygon is repaired after the move (:func:`_repaired`, near ``xy``), and
+    dropped when nothing polygonal is left; the count returned is how many
+    were. ``tell``, if given, is called with that count and the number of
+    polygons read."""
     spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
     box_for = _near(xy, mesh_crs)
     read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
@@ -651,7 +655,7 @@ def read_class_polygons(
         code = _code(legend, value, f"{path.name}: feature {fid}", second)
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
-    fixed = [(code, _repaired(g)) for code, g in out]
+    fixed = [(code, _repaired(g, xy)) for code, g in out]
     repaired = sum(a is not b for (_, a), (_, b) in zip(out, fixed, strict=True))
     if tell is not None:
         tell(repaired, len(out))
@@ -692,7 +696,7 @@ def read_polygons(
         if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
     ]
     moved = flat if move is None else [shapely.transform(g, move) for g in flat]
-    fixed = [_repaired(g) for g in moved]
+    fixed = [_repaired(g, xy) for g in moved]
     repaired = sum(a is not b for a, b in zip(moved, fixed, strict=True))
     if tell is not None:
         tell(repaired, len(moved))
