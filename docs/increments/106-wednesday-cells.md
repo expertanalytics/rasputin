@@ -182,9 +182,12 @@ chosen per call by the file given (section 6); there is no grouping option.
    clearance 1 m (the repair distance, as for land cover). The frame makes
    the union's outline a border like the others: it is simplified with
    them, every unit keeps its area, and no gap can open. `METRES` is the
-   existing `--features-tolerance` (its help gains "and --catchments
-   borders"); with `--catchments` and the option not given it is 200 m;
-   0 repairs only.
+   existing `--features-tolerance` when given (its help gains "and
+   --catchments borders"), and then the land cover's band too; when not
+   given, the catchments' band is 200 m and the land cover keeps its band
+   derived from the legend (`legends.derived_cleanup`), so `--catchments`
+   changes neither the land cover's band nor the 15-degree start-angle
+   rule; 0 repairs only.
 4. **The domain is their union** (`coverage_union_all`), which replaces `D`
    for the rest of the run, before the DEM is opened, so the DEM window is
    chosen from it. `D` only selects.
@@ -456,3 +459,4 @@ a Shyft read-back example, `--outline-tolerance` on `network-catchment`
 ## Review record
 
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
+- **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
