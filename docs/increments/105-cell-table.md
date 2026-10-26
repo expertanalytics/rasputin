@@ -1,8 +1,8 @@
 # Increment 105: the cell table — hydrological cells on a coarse mesh
 
-**Status: 105c merged (#353); 105a built (branch `worktree-cell-table` at
-`387c84b1`, 122 net lines; section 13), code review next; 105b not
-started.**
+**Status: 105c merged (#353); 105a reviewed, PR #356 (122 net lines;
+section 13); 105b built (branch `worktree-reservoirs` at `c7d17a54`, 87 net
+lines; section 14), code review next.**
 Designed by `@architect`, 2026-10-25,
 on master `074e6322`, worktree `shyft-cells`; round 2 the same day after the
 design review's round 1 (section *Review*) and the rulings the main session
@@ -171,8 +171,8 @@ level, say) count once; then `reservoir_t = min(lake_t, r_t)` and
 `lake_t -= reservoir_t`. Exact when the polygons are the lake outlines at the
 regulated level; otherwise bounded by the lake share, so a reservoir polygon
 over land the land cover calls forest adds nothing. `--reservoirs` without
-`--land-cover`, or with a `.vtk` output, is a usage error ("needs
---land-cover and a .gpkg output"). Without `--reservoirs`, reservoir is 0 and
+`--land-cover` with a legend, or with a `.vtk` output, is a usage error ("needs
+--land-cover with a legend and a .gpkg output"). Without `--reservoirs`, reservoir is 0 and
 the run record says so (no warning: nothing was found wrong). Sources: **Norway**, NVE's
 reservoir layer `VassdragsreguleringVannkraft/MapServer/9` (registered in
 Ola's sources file as `nve-reservoirs`, cached 2026-10-17: 1,227 polygons
@@ -354,7 +354,7 @@ the GeoPackage content list and the `.vtk` arrays of such a run.
   class 2 before any DEM is read (no `x.gpkg.part` exists afterwards); the
   same with `--out x.vtk` writes the mesh with its three fraction arrays as
   today; `--reservoirs` (105b) with `--out x.vtk` or without `--land-cover`
-  is a usage error.
+  with a legend is a usage error.
 - **T6 polygon fractions (105c).** `polygon_fractions.assign` on triangles
   `A = (0,0), (2,0), (0,2)` and `B = (2,0), (2,2), (0,2)` (plan area 2 each)
   against class polygons 311 = the strip `[0,1] × [0,2]` and 512 = the square
@@ -627,6 +627,45 @@ and savanna subtracted (one mutant), the clamp dropped, the aspect quadrant,
 class 0 as lake, sea as lake, `categories_of` checking every class. Full
 suite 10,167 passed, 18 skipped, 1 xfailed.
 
+## 14. As built (105b)
+
+Red `78d982b6`, green `29b30809`, tests and kill record `c7d17a54`; 87 net
+production lines against 55 (the catalogue route and `_near` below are most
+of the difference). Beyond the design:
+
+- `@tester`'s pins: two overlapping outlines are unioned (0.6875, 0.0625,
+  where a per-polygon sum gives 0.9375); a polygon with a hole; a
+  zero-area triangle has share 0, not NaN; corners with z and a UTM-scale
+  offset (bound 1e-12); the CLI case runs the polygon route with `corine`
+  (T7 named a `coded_map` legend; the raster scene has no lake class), with
+  a file in the mesh CRS and one in WGS 84, and a `.shp` value refused before
+  any phase; a catalogue key gives the lake and reservoir columns bit for bit
+  as the same rectangle given as a file.
+- `--reservoirs` takes a cached catalogue source of features (its
+  `features.gpkg` and layer) as well as a `.gpkg`, `.geojson`, `.json` or
+  `.gml` file; an uncached source is refused naming the `rasputin fetch`
+  run (`_fetch_run`, as for `--land-cover`).
+- `feature_input.read_polygons` reads them; `read_class_polygons`' query
+  box moved into `_near`, which both readers share.
+- The read and the cut run in their own timed phase, `reservoirs`.
+- Refusals, usage errors on `--reservoirs` before any phase: "needs
+  --land-cover with a legend and a .gpkg output"; the no-cache refusal
+  `NO_CACHE` that `--land-cover` gives; "X is neither a catalogue source of
+  features nor a .geojson, .json, .gpkg, .gml file"; "ID/features.gpkg is
+  not in the cache; run: rasputin fetch ...".
+- Two calls in `cli.mesh` are packed under `# fmt: skip`: `_reservoir_source`
+  (5 arguments) and `_write_geopackage` (10); ruff would put one argument per
+  line.
+- The MCP tool-list cap in `tests/python/test_mcp_schema.py` rose from 25,000
+  to 31,000 bytes by increment 37's rule (20 % above the measured 25,176,
+  rounded up to a thousand).
+- The `reservoirs` row names the catalogue key.
+
+Kill record (`c7d17a54`): 16 mutants, all killed, the design's two targets
+(`min(lake, r)`, `lake -= reservoir`) among them; two survived until the
+`.shp` refusal also asserted no phase ran and a two-layer GeoPackage was
+added. Full suite 10,196 passed, 18 skipped, 1 xfailed.
+
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `bb7c8e893e8b4793f8515fc42b67449246531d73`, range `074e6322..bb7c8e89`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 305 estimated in three PRs. Holds: Shyft quotes match `geo_personality.h` (TIN slope factor 1.0, grid 0.9); category mapping matches the shipped legends; licences (RGI CC BY 4.0, NVE glaciers CC BY-NC-SA, reservoir layer NLOD 1.0, 1,227 polygons); no GDAL or shapefile reader; T2, T3 recompute; refusal at 2,254 (865 with `--start-min-angle 0`) re-run; probe sums agree. Blocking: (1) no timings: say no step runs without `--land-cover` and time 105a writes and the 105c cut on the delivery's Kultsjön mesh; (2) no test cases for 105b and 105c (the `min(lake, r)` mutant unkilled): add lake 0.5/r 0.8 -> reservoir 0.5, lake 0, and lake 0.5/r 0.2 -> reservoir 0.2, lake 0.3, and a polygon-cut case; (3) refusing an uncategorised water class at load breaks `tests/python/legend_fixtures.py:35,61` and `test_legends.py:761`: amend them in red or refuse only when the cells table is written; (4) wordings: the delivery mesh has 86,537 triangles, not 65,893 (4.4, 4.5), São Francisco about 32 million triangles and 37 million rows; "sums to 1 exactly" is up to 44 x 6e-8 over; the 15.7 s includes reading and reprojecting; Q3 "no new option" but 105b adds `--reservoirs`; "the 104 showcase" -> "the triangle-budget showcase". Not pushed; no CI.
@@ -635,3 +674,5 @@ suite 10,167 passed, 18 skipped, 1 xfailed.
 - **Code review (105c), round 1, 2026-10-25.** `@reviewer`, head `cc1ce5098e2bb6f808751418b2d43ebaa7738276`, range `d0876add..cc1ce509`. Verdict: CHANGES REQUESTED. LOC: 123 net (estimate 145). Kill record covers both named targets (piece count: three mutants killed; the unclipped half equivalent inside the clip, killed after the fallback). Blocking: (1) `cli.py` `_class_fractions` credits a catalogue vector source (e.g. `clc2018`) with `url=str(classes.path)` and today's date; it must use the feature manifest's `url` and `first_fetched`; no test checks it; (2) an uncached catalogue vector source is refused only after meshing ("features.gpkg: unable to open database file"); the refusal belongs in `_class_source`, naming `rasputin fetch clc2018 --bbox …`; (3) prose for the merge: ROADMAP row for 105, the Status line, the as-built record, `polygon_fractions.py` and `read_class_polygons` in `project_structure.md`, section 4.5 with the intersection fallback and the floor of 8. Suggestion: `--land-cover` help to say `clc2018` is accepted. Not pushed; no CI.
 - **Code review (105c), round 2, 2026-10-25.** `@reviewer`, head `ad9ac0993e672573905d45a196ff49d6cadd934c`, range `cc1ce509..ad9ac099`. Verdict: APPROVED WITH WORDINGS. LOC: 146 net (round +23, `cli.py`; estimate 145). Round 1 closed: manifest credit with fallback; uncached layer refused in `_class_source`, exit 2, naming `rasputin fetch <id>`; shared `_fetch_run`; prose matches `polygon_fractions.py`; kill record matches `cc1ce509`. Applied: "(the brief said 5)" dropped from section 12. CI after push.
 - **Code review (105a), round 1, 2026-10-25.** `@reviewer`, head `d945aeab702c75bd51ad13aebff90dc8c5b8d12b`, range `6abe538f..d945aeab`. Verdict: APPROVED WITH WORDINGS. LOC: 122 net (estimate 140). Code matches section 9; section 13's pins match `791794f1`; kill record `387c84b1` covers the seven targets, 6 of 6 killed. Wordings 1-3 applied; wording 4 (the `cells.py` comment says 1e-6 where section 3 says 2.7e-6) left as a follow-up code fix.
+- **Code review (105b), round 1, 2026-10-25.** `@reviewer`, head `12c7167f50b588e57d9852313af3ef67724e07fb`, range `edc17a6f..12c7167f`. Verdict: CHANGES REQUESTED. LOC: 87 net (estimate 55; overrun justified by section 4.2). Kill record `c7d17a54` 16 of 16. Blocking: (1) `--reservoirs` with a legend-less land cover and a .gpkg output is accepted, read and recorded, but no cells layer is written; refuse unless categories exist, naming the legend, with a test; (2) record the catalogue key, not `features.gpkg`. Suggestion: one `_cached_features` helper for `_class_source` and `_reservoir_source`, giving `--reservoirs` the `NO_CACHE` refusal too.
+- **Code review (105b), round 2, 2026-10-25.** `@reviewer`, head `2a51e73f3ae51b3fc0f6766824b7a67a3e47185a`, range `6df49915..2a51e73f`. Verdict: APPROVED WITH WORDINGS. LOC: 83 net (round −4). All four round-1 findings resolved; three wordings applied (refusal "with a legend" in sections 4, T5 and 14; no-cache refusal named; known gap dropped).

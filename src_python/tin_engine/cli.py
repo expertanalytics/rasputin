@@ -68,7 +68,7 @@ from tin_engine.catchment_batch import (
     run_batch,
     seed_for,
 )
-from tin_engine.cells import categories_of, cell_table
+from tin_engine.cells import categories_of, cell_table, overlay
 from tin_engine.chains import start_chains
 from tin_engine.cli_kit import THREADS
 from tin_engine.crs import (
@@ -107,6 +107,7 @@ from tin_engine.feature_input import (
     open_features,
     read_class_polygons,
     read_lake_polygons,
+    read_polygons,
 )
 from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
 from tin_engine.gauge import Gauge, Placement
@@ -810,6 +811,13 @@ def mesh(
             "--features-legend. Default: the source's.",
         ),
     ] = None,
+    reservoirs: Annotated[
+        str | None,
+        typer.Option(
+            "--reservoirs",
+            help="Reservoir polygons, a file or cached source, splitting the cells' lake share.",
+        ),
+    ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -926,6 +934,11 @@ def mesh(
             categories = categories_of(classes.legend)
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover-legend") from exc
+    reservoir = _reservoir_source(
+        reservoirs, categories is not None, known, cache_root(cache, os.environ),
+        _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
+    )  # fmt: skip
+    regulated = None  # each triangle's share under the reservoir polygons
     if classes is not None:
         for coded_legend in (m for m in legends if m.codes):
             raise typer.BadParameter(
@@ -1221,6 +1234,17 @@ def mesh(
             palette = classes.legend.palette
         elif out.suffix == ".gpkg":
             more["cells"] = "none, the land cover has no legend"
+        if reservoir is not None:
+            with clock.phase("reservoirs"):
+                xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
+                try:
+                    found_polygons = read_polygons(*reservoir[:2], dem_crs, xy[:, :2])
+                except FeatureError as exc:
+                    raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
+                regulated = overlay(xy[dem_run.trimmed.triangles], found_polygons)
+            more["reservoirs"] = escaped_ascii(reservoir[2])
+        elif categories is not None:
+            more["reservoirs"] = "none"
         values |= more
     if dem_run.cut is not None:
         from tin_engine.io.mesh_index import ConformityError, MeshIndex
@@ -1292,8 +1316,9 @@ def mesh(
     if out.suffix == ".gpkg":
         with clock.phase("write: geopackage"):
             _write_geopackage(
-                surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories
-            )
+                surface, surface_mesh, codes, palette, cover, record, vocabulary, table, categories,
+                regulated,
+            )  # fmt: skip
         typer.echo(f"{surface}")
     elif out.suffix == ".vtk":
         encoders = [
@@ -1354,11 +1379,13 @@ def _write_geopackage(
     vocabulary: EdgeVocabulary,
     fractions: ClassFractions | None = None,
     categories: Mapping[int, Category] | None = None,
+    regulated: npt.NDArray[np.float64] | None = None,
 ) -> None:
     """``target`` as a GeoPackage, written as ``<target>.part``
     and renamed onto it: an existing file is replaced, never appended to, and
     a failed run leaves nothing under the asked name. Class ``fractions`` add
-    their long-form table, and with ``categories`` the ``cells`` layer."""
+    their long-form table, and with ``categories`` the ``cells`` layer, its lake
+    share split by ``regulated``, each triangle's share under reservoirs."""
     srs = srs_entry(next((e.value for e in record.entries if e.name == "crs"), None))
     part = target.with_name(target.name + ".part")
     part.unlink(missing_ok=True)  # a stale .part would be appended to, not replaced
@@ -1379,7 +1406,7 @@ def _write_geopackage(
         if fractions is not None:
             write_fractions(conn, fractions)
             if categories is not None:
-                cells = cell_table(mesh.vertices, mesh.triangles, fractions, categories)
+                cells = cell_table(mesh.vertices, mesh.triangles, fractions, categories, regulated)
                 write_cells(conn, cells, srs.srs_id)
         rows = [("rasputin_version", "rasputin version", installed_version(), None)]
         rows.append(("command", "command", _command(), None))
@@ -1423,6 +1450,50 @@ def _fetch_run(
     return f"rasputin fetch {shlex.quote(key)} {flags}".rstrip()
 
 
+def _cached_features(source: RemoteSource, root: Path | None, run: str, flag: str) -> Path:
+    """A catalogue source of features' file: its own path, else its copy in the
+    cache under `root`; an uncached copy's refusal names `run`, the fetch."""
+    if source.path is not None:
+        return source.path
+    if root is None:
+        raise typer.BadParameter(NO_CACHE, param_hint=flag)
+    path = root / source.id / "features.gpkg"
+    if not path.is_file():
+        raise typer.BadParameter(
+            f"{source.id}/features.gpkg is not in the cache; run: {run}", param_hint=flag
+        )
+    return path
+
+
+def _reservoir_source(
+    value: str | None,
+    wanted: bool,
+    known: Mapping[str, RemoteSource],
+    root: Path | None,
+    run: str,
+) -> tuple[Path, str | None, str] | None:
+    """``--reservoirs`` checked before any work: the file, layer and record name
+    of a cached catalogue source of features (its key), or of a file rasputin
+    reads (its name). ``wanted`` is whether the run writes cells: --land-cover
+    with a legend and a .gpkg output. An uncached source's refusal names `run`."""
+    if value is None:
+        return None
+    if not wanted:
+        raise typer.BadParameter(
+            "needs --land-cover with a legend and a .gpkg output", param_hint="--reservoirs"
+        )
+    source = known.get(value)
+    if source is not None and source.values == "features":
+        return _cached_features(source, root, run, "--reservoirs"), source.layer, value
+    path = Path(value)
+    if path.suffix.lower() not in SUFFIXES or not path.is_file():
+        raise typer.BadParameter(
+            f"{value} is neither a catalogue source of features nor a {', '.join(SUFFIXES)} file",
+            param_hint="--reservoirs",
+        )
+    return path, None, path.name
+
+
 def _class_source(
     value: str | None,
     year: int | None,
@@ -1445,14 +1516,7 @@ def _class_source(
     if source is not None and source.values == "features" and (source.legend or legend_value):
         if year is not None:
             raise typer.BadParameter(f"{value} has no years", param_hint="--land-cover-year")
-        if source.path is None and root is None:
-            raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
-        path = source.path or (root or Path()) / source.id / "features.gpkg"
-        if source.path is None and not path.is_file():
-            raise typer.BadParameter(
-                f"{source.id}/features.gpkg is not in the cache; run: {run}",
-                param_hint="--land-cover",
-            )
+        path = _cached_features(source, root, run, "--land-cover")
     elif source is not None:
         try:
             check_values(source, "classes", "--land-cover")
@@ -1464,10 +1528,7 @@ def _class_source(
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover-year") from exc
         if root is None:
-            raise typer.BadParameter(
-                NO_CACHE,
-                param_hint="--land-cover",
-            )
+            raise typer.BadParameter(NO_CACHE, param_hint="--land-cover")
     else:
         if year is not None:
             raise typer.BadParameter("a file has no years", param_hint="--land-cover-year")

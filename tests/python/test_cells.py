@@ -1,9 +1,10 @@
 """The cell table: legend categories, `tin_engine.cells` and the two GeoPackage writers.
 
 `docs/increments/105-cell-table.md`, section 3 (the columns), 4.1 (categories
-in the legend files, the check only for the cells table) and section 6, T1
-to T4. Every expected figure is hand arithmetic or recomputed here from the
-formulas of section 3, never read from the producer.
+in the legend files, the check only for the cells table), 4.2 (the reservoir
+split) and section 6, T1 to T4 and T7. Every expected figure is hand
+arithmetic or recomputed here from the formulas of section 3, never read from
+the producer.
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
@@ -19,6 +20,12 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   is the triangle's `fid` (index + 1).
 - `categories` holds only named classes: 0 and a class without `category`
   are absent from it.
+- `cells.split_reservoir(lake, r)` returns `(lake, reservoir)` as new arrays
+  and leaves its arguments unchanged.
+- `cells.overlay(corners, polygons)` takes the corners as a (T, 3, k) array,
+  k >= 2, of which only x and y count, and the reservoir polygons as a
+  sequence it unions itself; it returns r per triangle, 0 for a triangle of
+  zero plan area (no NaN reaches the table) and 0 for an empty sequence.
 """
 
 from __future__ import annotations
@@ -35,6 +42,7 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 from pyproj import CRS
 from pyproj.enums import WktVersion
+from shapely.geometry import Polygon, box
 
 from gpkg_fixtures import needs_rtree
 from legend_fixtures import coded_map, corine_like, write
@@ -312,3 +320,88 @@ def test_t4_fractions_long_form(conn: sqlite3.Connection) -> None:
         for i in conn.execute("PRAGMA index_list(land_cover_fractions)")
     ]
     assert ["triangle"] in indexed, indexed
+
+
+# ------------------------------------------------------------ T7 reservoir split
+
+
+@pytest.mark.parametrize(
+    ("lake", "r", "want_lake", "want_reservoir"),
+    [
+        (0.5, 0.8, 0.0, 0.5),  # r over the lake: a mutant taking reservoir = r gives 0.8
+        (0.5, 0.2, 0.3, 0.2),  # r inside it: reservoir = lake gives 0.5; no subtraction 0.5
+        (0.0, 0.6, 0.0, 0.0),  # a reservoir polygon over land adds nothing
+        (0.5, 0.0, 0.5, 0.0),  # no reservoir: the lake unchanged
+        (0.5, 0.5, 0.0, 0.5),  # the whole lake regulated
+    ],
+)
+def test_t7_split_reservoir(lake: float, r: float, want_lake: float, want_reservoir: float) -> None:
+    """reservoir = min(lake, r), lake -= reservoir; plain arithmetic, so exact."""
+    got_lake, got_reservoir = cells.split_reservoir(np.array([lake]), np.array([r]))
+    assert_array_equal(got_reservoir, [want_reservoir])
+    assert_array_equal(got_lake, [want_lake])
+
+
+def test_t7_split_reservoir_by_row_and_leaves_its_arguments() -> None:
+    lake, r = np.array([0.5, 0.5, 0.0, 0.5]), np.array([0.8, 0.2, 0.6, 0.0])
+    got_lake, got_reservoir = cells.split_reservoir(lake, r)
+    assert_array_equal(got_reservoir, [0.5, 0.2, 0.0, 0.0])
+    assert_array_equal(got_lake, [0.0, 0.3, 0.0, 0.5])
+    assert_array_equal(lake, [0.5, 0.5, 0.0, 0.5]), "lake changed in place"
+    assert_array_equal(r, [0.8, 0.2, 0.6, 0.0]), "r changed in place"
+
+
+def test_t7_split_reservoir_no_triangles() -> None:
+    got_lake, got_reservoir = cells.split_reservoir(np.zeros(0), np.zeros(0))
+    assert got_lake.shape == got_reservoir.shape == (0,)
+
+
+#: T6's triangles A and B, plan area 2 each, tiling [0, 2]^2 along x + y = 2.
+AB = np.array([[(0, 0), (2, 0), (0, 2)], [(2, 0), (2, 2), (0, 2)]], np.float64)
+
+
+@pytest.mark.parametrize(
+    ("polygons", "want"),
+    [
+        ([box(0, 0, 1, 1)], [0.5, 0.0]),  # in A, its corner (1, 1) on the hypotenuse
+        ([box(1, 1, 2, 2)], [0.0, 0.5]),  # in B
+        ([box(0.5, 0.5, 1.5, 1.5)], [0.25, 0.25]),  # halved by x + y = 2
+        ([box(0, 0, 1, 1), box(0, 0, 1, 1)], [0.5, 0.0]),  # one outline twice counts once
+        # overlapping outlines: the union [0, 1.5] x [0, 1] is 1.375 in A and 0.125
+        # in B; summed per polygon they would give 0.9375 in A
+        ([box(0, 0, 1, 1), box(0.5, 0, 1.5, 1)], [0.6875, 0.0625]),
+        # an island: [0, 1]^2 less [0.25, 0.75]^2 is 0.75, all in A
+        ([Polygon(box(0, 0, 1, 1).exterior.coords, [box(0.25, 0.25, 0.75, 0.75).exterior.coords])],
+         [0.375, 0.0]),
+        ([box(10, 10, 11, 11)], [0.0, 0.0]),  # nowhere near
+        ([], [0.0, 0.0]),  # no polygon
+    ],
+)  # fmt: skip
+def test_t7_overlay(polygons: list[Polygon], want: list[float]) -> None:
+    """Figures by hand; binary fractions of binary areas, so exact."""
+    assert_array_equal(cells.overlay(AB, polygons), want)
+
+
+def test_t7_overlay_reads_only_x_and_y() -> None:
+    """The corners as `vertices[triangles]` gives them, z included."""
+    with_z = np.concatenate([AB, np.array([[[5.0], [-3.0], [1e4]]] * 2)], axis=2)
+    assert_array_equal(cells.overlay(with_z, [box(0.5, 0.5, 1.5, 1.5)]), [0.25, 0.25])
+
+
+def test_t7_overlay_at_utm_scale() -> None:
+    """Checked at x 500,000 and y 7,000,000 m (UTM north) with triangles of
+    2 m^2: GEOS gives 0.25 exactly there; the bound allows 1e-12 of rounding."""
+    dx, dy = 500_000.25, 7_000_000.5
+    moved = AB + np.array([dx, dy])
+    got = cells.overlay(moved, [box(dx + 0.5, dy + 0.5, dx + 1.5, dy + 1.5)])
+    assert_allclose(got, [0.25, 0.25], rtol=0, atol=1e-12)
+
+
+def test_t7_overlay_zero_area_triangle_is_0_not_nan() -> None:
+    """Collinear corners, under a covering polygon: 0 / 0 must not reach the table."""
+    corners = np.array([[(0, 0), (1, 1), (2, 2)], AB[0]], np.float64)
+    assert_array_equal(cells.overlay(corners, [box(-1, -1, 3, 3)]), [0.0, 1.0])
+
+
+def test_t7_overlay_no_triangles() -> None:
+    assert cells.overlay(np.zeros((0, 3, 2)), [box(0, 0, 1, 1)]).shape == (0,)

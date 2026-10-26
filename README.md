@@ -132,8 +132,9 @@ every option.
   `land_cover_fractions` table with each class's share of each triangle,
   legend or not. With a legend it also holds a `cells` layer, one point per
   triangle with Shyft's fractions (glacier, lake, reservoir, forest,
-  unspecified), savanna, slope, aspect and area; reservoir is 0 until
-  reservoirs are read.
+  unspecified), savanna, slope, aspect and area. `--reservoirs` (a polygon
+  file or a fetched source) moves the lake share under its polygons to
+  reservoir; without it, reservoir is 0.
 - **`.ply`** is for QGIS and other mesh tools. The surface goes to `--out`,
   and the constraint edges, if you want them, to a second file named by
   `--out-edges`.

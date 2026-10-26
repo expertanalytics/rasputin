@@ -78,6 +78,7 @@ WORDING = {
     "features_licence": "Licence of the features data",
     "land_cover_codes": "What land_cover_code holds",
     "cells": "The cells layer",
+    "reservoirs": "Reservoir polygons splitting the cells' lake share",
     "land_cover_vertices": "Land-cover vertices before and after clean-up",
     "land_cover_area_moved_m2": (
         "Land-cover area inside the outline that the outline rule gave to another polygon, m2"
