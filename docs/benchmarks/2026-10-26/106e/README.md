@@ -1,8 +1,9 @@
 # 106e acceptance: `mesh --simplify-domain` (@perf, 2026-10-26)
 
 Head `worktree-demo-fixes-e` at `3736e39a` (106e's green step `2a351e1d`,
-its tests `92e39f54`, the kill record `3736e39a`). Base: master `e0d129c0`
-(106c merged), from a detached scratch worktree, run back to back with the
+its tests `92e39f54`, the kill record `3736e39a`). Base: master `e0d129c0`,
+without 106c (without its flags 106c changes no mesh), from a detached
+scratch worktree, run back to back with the
 head. The rule is the `@perf` paragraph of section 8 of
 `docs/increments/106-wednesday-cells.md` (106e).
 
@@ -96,7 +97,9 @@ Ljungan's outline, **0.10 s**. The simplification takes **2.57 s** (the
 probe 2.43 s; the reviewer's 5.2 s was under load). The land-cover step,
 46.6 s for Kultsjön's 502 triangles and 51.3 s for Ljungan's 483, is 106a's
 repair of self-crossing land-cover polygons (40 and 48 repaired), measured
-on 106c's day (`../106c/README.md`); not 106e's.
+on 106c's day (`../106c/README.md`); not 106e's. This branch still
+carries 106a's old, slow repair; master's corrected one (`4afd75fb`)
+arrives when master is merged in.
 
 ## Files
 

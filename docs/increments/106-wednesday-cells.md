@@ -586,7 +586,7 @@ per-basin budget in one run.
    the true area). It runs right after the domain is read, before the DEM is
    opened, so the window, the land cover's clip and the outline rule all see
    the simplified outline. Stderr, one line: `domain: outline simplified at
-   963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 195
+   963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 198
    vertices, 12838.64 km2`, with `(--features-tolerance)` in the bracket when
    given. Record: `domain_band_m`. Help: "Simplify the --domain outline, each
    ring moved at most a band and the area kept: --features-tolerance, or else
@@ -653,7 +653,7 @@ projection), both in `docs/increments/106-probes/`:
 | outline | km² | vertices | N | band | after | area change | simplify |
 |---|---|---|---|---|---|---|---|
 | Kultsjön, official | 1,702.67 | 19,555 | 500 | 350.5 m | 106 | 2.4e-7 m² | 0.21 s |
-| Ljungan, official | 12,838.64 | 111,248 | 500 | 962.6 m | 195 | 3.2e-5 m² | 2.43 s |
+| Ljungan, official | 12,838.64 | 111,248 | 500 | 962.6 m | 195 (measured 198) | 3.2e-5 m² | 2.43 s |
 | | | | 5,000 | 304.4 m | 632 | 1.3e-5 m² | 1.24 s |
 | Umeälven, official | 26,771.60 | 133,783 | 500 | 1,390.0 m | 138 | 3.1e-5 m² | 3.90 s |
 | Kultsjön, terrain (EPSG:4326) | 1,097.30 | 617 | 500 | 281.4 m | 122 | relative 2.4e-8 (geodesic) | under 0.01 s |
@@ -661,7 +661,9 @@ projection), both in `docs/increments/106-probes/`:
 All seven Opal outlines: valid, one polygon, no hole, at 500 and 5,000.
 Meshed (`--dem glo30 --out-crs EPSG:3006 --triangles 500`): Kultsjön
 official 490 triangles in 2.6 s; Ljungan 503 in 4.0 s (both runs, the
-simplification apart); Kultsjön terrain 502; and with `--land-cover clc2018`
+simplification apart; `@perf` measured 198 vertices and 483 triangles: the
+probe simplified the ring clockwise as stored, `read_domain` orients it
+counter-clockwise first, `docs/benchmarks/2026-10-26/106e/orient_probe.py`); Kultsjön terrain 502; and with `--land-cover clc2018`
 to `.gpkg` Kultsjön official writes 490 cells (46.5 s, nearly all 106a's
 land-cover repair). Umeälven's glo30 blocks are not cached (not run).
 
@@ -749,7 +751,8 @@ degrees (test 3's band), the band's factor and its area (test 4's
 
 **`@perf`** (the domain drives the mesh): the 1 m benchmark unchanged and
 byte-identical to 106c's head (no flag); Ljungan official at `--triangles
-500` with the flag: 503 triangles, the time against the probes, 4.0 s mesh
+500` with the flag: 503 triangles (measured: 483, from 198 outline vertices,
+not the probe's 195; ring orientation, `orient_probe.py`), the time against the probes, 4.0 s mesh
 plus 2.4 s simplification plus reading the outline (unmeasured;
 `@perf` sets it), plus 10 % noise; Kultsjön terrain-traced: 502.
 
@@ -779,3 +782,6 @@ is not touched).
 - **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
 - **Design review of 106e, round 1, 2026-10-26.** `@reviewer`, head `f2a0abfe29780c9cb32f075a52fd251d727219b6`. Verdict: CHANGES REQUESTED. Blocking: a fetch loop, the simplified outline passing the fetched box (up to 477 m, Umeälven at 500) while the missing-blocks refusal names the original `--domain`; fix: name `--bbox` from the missing-blocks box, as `catchment` does, one test. Wordings: the table's "about 55", point 3's "or `--catchments`".
 - **Design review of 106e, round 2, 2026-10-26.** `@reviewer`, head `a5399b83dad9c56f7ea5006dcbfcbb1edb7986e5`, range `f2a0abfe..a5399b83`. Verdict: APPROVED WITH WORDINGS. Fetch loop closed (refusal names the planned window's `--bbox`); probe reproduced; two wordings applied (test 9's `--catchments` run and its mutation target).
+- **106e kill record, 2026-10-26.** `@tester`, `3736e39a`: 9 of 9 mutants killed, tests 1-4 and 9.
+- **106e acceptance, 2026-10-26.** `@perf`, `e1ea98a9`: ACCEPTED. 1 m benchmark without the flag byte-identical to master `e0d129c0`; Ljungan 198 outline vertices and 483 triangles (the design's 195 and 503 came from the clockwise ring), Kultsjön traced 502 (`docs/benchmarks/2026-10-26/106e/README.md`).
+- **Code review of 106e, round 1, 2026-10-26.** `@reviewer`, head `e1ea98a90256cde2bd1e587d6c63686c7b51b50b`. Verdict: APPROVED WITH WORDINGS. Wordings applied: the benchmark README's base is master `e0d129c0` without 106c, and the land-cover step carries 106a's old repair until master (`4afd75fb`) is merged in; section 8 records Ljungan's measured 198 vertices and 483 triangles (ring orientation).
