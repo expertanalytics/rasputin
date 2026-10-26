@@ -697,15 +697,20 @@ def read_polygons(
     mesh_crs: str,
     xy: npt.NDArray[np.float64],
     tell: Callable[[int, int], None] | None = None,
+    named: tuple[str, Callable[[list[Any]], list[int]]] | None = None,
 ) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
     by vertex and repaired; a GeoPackage is queried, the count returned and
-    ``tell`` called, as by :func:`read_class_polygons`."""
-    read = read_source(path, layer, None, _near(xy, mesh_crs))
+    ``tell`` called, as by :func:`read_class_polygons`. With ``named`` (an
+    attribute and a filter of its values to the indices kept), only those."""
+    read = read_source(path, layer, None if named is None else named[0], _near(xy, mesh_crs))
+    rows = read.rows
+    if named is not None:
+        rows = [rows[k] for k in named[1]([v for *_, v in rows])]
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
         shapely.force_2d(g)
-        for _, g, _ in read.rows
+        for _, g, _ in rows
         if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
     ]
     moved = flat if move is None else [shapely.transform(g, move) for g in flat]

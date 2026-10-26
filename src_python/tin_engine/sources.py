@@ -72,6 +72,25 @@ def _fields(name: str, template: str | None, allowed: set[str], *, needed: bool 
         raise ValueError(f"{name} uses {shown}; it takes {takes}" + (", each" if needed else ""))
 
 
+class NamedBy(BaseModel):
+    """Which features of an entry are kept: those whose `key` attribute, as
+    text after `prefix`, is the `field` of some feature of the source `source`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str
+    field: str
+    key: str
+    prefix: str
+
+
+def kept_named(keys: Sequence[Any], names: Sequence[Any], prefix: str) -> list[int]:
+    """The indices, ascending, of the `keys` that some name equals as
+    `prefix` followed by the key's `str`; a None name matches nothing."""
+    wanted = {name for name in names if name is not None}
+    return [k for k, key in enumerate(keys) if prefix + str(key) in wanted]
+
+
 class RemoteSource(BaseModel):
     """One source: one COG (`url`), one COG per tile (`url_template` and the
     `tile_list_url` saying which tiles exist), one COG per year
@@ -120,6 +139,8 @@ class RemoteSource(BaseModel):
     z_unit: ZUnit | None = None
     #: What the cells represent, and the resolution and region, as the distributor states them.
     description: str = ""
+    #: Keep only the features another source names (a local .geojson entry only).
+    named_by: NamedBy | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -134,6 +155,10 @@ class RemoteSource(BaseModel):
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
+        if self.named_by is not None and not _geojson(self):
+            raise ValueError(
+                "named_by: only a local .geojson source of features keeps what another names"
+            )
         if self.fields and self.kind != "arcgis-features":
             raise ValueError(f"fields: refused for {self.kind}")
         if self.kind == "arcgis-features":
@@ -229,6 +254,12 @@ class RemoteSource(BaseModel):
 def _vector(path: object) -> bool:
     """Whether `path` names a vector file, by its suffix."""
     return path is not None and Path(str(path)).suffix.lower() in VECTOR_SUFFIXES
+
+
+def _geojson(source: RemoteSource) -> bool:
+    """Whether `source` is a local .geojson file of features."""
+    path = source.path
+    return source.kind == "local" and path is not None and path.suffix.lower() == ".geojson"
 
 
 def check_values(source: RemoteSource, wanted: Literal["heights", "classes"], option: str) -> None:
@@ -439,12 +470,14 @@ __all__ = [
     "STATION_SOURCES",
     "VECTOR_SUFFIXES",
     "Catalogue",
+    "NamedBy",
     "PluginFile",
     "RemoteSource",
     "StationSource",
     "catalogue",
     "check_values",
     "data_root",
+    "kept_named",
     "notice",
     "plugin_source_files",
     "user_source_candidates",

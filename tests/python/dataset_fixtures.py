@@ -133,6 +133,8 @@ def _toml_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, int | float):
         return repr(value)
+    if isinstance(value, Mapping):  # an inline table
+        return "{ " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in value.items()) + " }"
     if isinstance(value, Sequence) and not isinstance(value, str):
         return "[" + ", ".join(_toml_value(v) for v in value) + "]"
     return json.dumps(str(value))  # a TOML basic string for ASCII text
