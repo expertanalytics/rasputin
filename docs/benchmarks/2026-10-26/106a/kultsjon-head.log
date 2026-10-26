@@ -1,0 +1,10 @@
+DEM: 4 files, 2153 columns x 1575 rows
+land cover: 43 of 1170 polygons crossed itself and was repaired
+land cover: 10298 class shares over 5720 triangles, 16 classes
+5720 triangles, about the 6000 asked for (at most 6300): tolerance 52.2 m found in 5 trials. Every node of the original DEM inside the mesh is within 52.2 m of it (largest difference 52.1 m, root-mean-square 14.83 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/kultsjon-head.gpkg
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/kultsjon-head.stats.json
+BENCH {"refine_s": 0.009924957994371653, "app_s": 6.714906417066231, "max_error": 52.04934072814535, "rounds": 15, "inserted": 1706, "flips": 4481, "hardening": "libc++ fast", "total_s": 6.698298833, "phases": {"domain read": 0.001754833, "decode": 0.397145875, "start mesh: build": 0.000262, "start mesh: node": 0.001020834, "start mesh: triangulate": 0.000445958, "start mesh: constraint edges": 0.00117325, "check points: project": 0.18212620506528765, "check points: store": 0.07400754499802423, "refine": 0.076484917, "refine: legalise start": 0.00011996000000000001, "refine: start quality": 0.009420542, "refine: scan (parallel)": 0.04565353999999999, "refine: split + flip (serial)": 0.016353964, "refine: setup + output": 0.004936911000000002, "edge strip: generate": 0.0038208319999999997, "final check: scan (parallel)": 0.090758999, "final check: split + flip (serial)": 0.0038009599999999995, "trim": 0.004242541, "error summary": 0.010166, "land cover fractions": 5.719296333, "write: geopackage": 0.072637708}}
+real 7.16
+user 8.93
+sys 0.34

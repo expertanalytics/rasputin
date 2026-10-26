@@ -1,0 +1,11 @@
+DEM: 2 files, 4136 columns x 2214 rows
+land cover: 32 of 2843 polygons crossed itself and was repaired
+land cover: 9175 class shares over 5940 triangles, 15 classes
+5940 triangles, about the 6000 asked for (at most 6300): tolerance 546 m found in 1 trial. Every DEM node inside the mesh is within 546 m of it (largest difference 546 m, root-mean-square 113.11 m).
+DEM heights read as metres; the file does not say. If they are feet, give --z-unit ft or us-ft.
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/sjodal-head.gpkg
+/Users/skavhaug/projects/rasputin_scratch/perf-106a-out/sjodal-head.stats.json
+BENCH {"refine_s": 0.010179582983255386, "app_s": 3.2199059170670807, "max_error": 545.9200599537053, "rounds": 1, "inserted": 0, "flips": 0, "hardening": "libc++ fast", "total_s": 3.202878375, "phases": {"domain read": 0.002874709, "decode": 0.18072225, "start mesh: build": 0.000123208, "start mesh: node": 0.00155275, "start mesh: triangulate": 0.000864125, "start mesh: constraint edges": 0.0018925, "refine": 0.010211625, "refine: legalise start": 4.0709e-05, "refine: start quality": 0.006092208, "refine: scan (parallel)": 0.003432042, "refine: split + flip (serial)": 9.667e-06, "refine: setup + output": 0.0006369989999999992, "edge strip: generate": 0.001311166, "edge strip: scan (parallel)": 0.000231666, "edge strip: split + flip (serial)": 0.000216209, "trim": 0.000399208, "error summary": 0.00514075, "land cover fractions": 2.491555958, "reservoirs": 0.411625125, "write: geopackage": 0.073699708}}
+real 3.51
+user 3.48
+sys 0.15
