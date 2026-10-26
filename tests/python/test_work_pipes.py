@@ -1,4 +1,4 @@
-"""`tools/pipes.py`: named work lists, the order a free writer takes, and resurfacing.
+"""`tools/work_pipes.py`: named work lists, the order a free writer takes, and resurfacing.
 
 The spec is `docs/increments/h31-pipes.md`, *11. Tests (`tests/python/test_pipes.py`)*.
 The pure functions take `now`, `unattended` and the busy branches as
@@ -30,7 +30,7 @@ from harness_fixtures import REAL, clean_env, git, make_repo, run_script
 # A harness test; CI runs it in the `harness` job, not the product legs.
 pytestmark = pytest.mark.harness
 
-pipes = harness_fixtures.Tool("pipes")
+pipes = harness_fixtures.Tool("work_pipes")
 
 NOW = datetime(2026, 10, 25, 19, 0, tzinfo=UTC)
 HOUR, DAY = timedelta(hours=1), timedelta(days=1)
@@ -88,7 +88,7 @@ def live_list(repo: Path, pipe: str) -> Path:
 
 
 def append(repo: Path, *records: dict[str, Any]) -> None:
-    """Append records to their pipes' live lists, as `tools/pipes.py` would."""
+    """Append records to their pipes' live lists, as `tools/work_pipes.py` would."""
     for record in records:
         path = live_list(repo, record["pipe"])
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,12 +105,12 @@ def note(repo: Path, name: str, persona: str = "developer") -> Path:
 
 
 def cli(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return run_script(repo, "tools/pipes.py", "", *args)
+    return run_script(repo, "tools/work_pipes.py", "", *args)
 
 
 def ok(repo: Path, *args: str) -> str:
     result = cli(repo, *args)
-    assert result.returncode == 0, f"pipes.py {' '.join(args)}: {result.stderr}"
+    assert result.returncode == 0, f"work_pipes.py {' '.join(args)}: {result.stderr}"
     return result.stdout
 
 
@@ -118,7 +118,7 @@ def ok(repo: Path, *args: str) -> str:
 def repo(tmp_path: Path) -> Path:
     """The fixture repository with `core` and `lsm` defined, `core` first by priority."""
     root = make_repo(tmp_path / "repo")
-    assert (root / "tools" / "pipes.py").exists(), "tools/pipes.py is missing from the copy"
+    assert (root / "tools" / "work_pipes.py").exists(), "work_pipes.py missing from the copy"
     (root / ".claude" / "pipes").mkdir(parents=True)
     (root / ".claude" / "pipes" / "core.toml").write_text(CORE_TOML)
     (root / ".claude" / "pipes" / "lsm.toml").write_text(LSM_TOML)
@@ -592,16 +592,17 @@ def load_guard() -> ModuleType:
 
 @pytest.mark.parametrize(
     "command",
-    ['python3 tools/pipes.py set h31 red', 'python3 tools/pipes.py add core x "x" --plain',
-     'python3 tools/pipes.py ask h31 "q?" --default "yes"',
+    ['python3 tools/work_pipes.py set h31 red',
+     'python3 tools/work_pipes.py add core x "x" --plain',
+     'python3 tools/work_pipes.py ask h31 "q?" --default "yes"',
      "echo '{}' >> .git/pipes/core.jsonl"],
 )  # fmt: skip
 def test_the_commands_pass_the_governance_guard(command: str) -> None:
     assert load_guard().judge_bash(command) is None
 
 
-def test_pipes_py_is_governed() -> None:
-    assert load_guard().governed("tools/pipes.py") is True
+def test_work_pipes_py_is_governed() -> None:
+    assert load_guard().governed("tools/work_pipes.py") is True
 
 
 # ---------------------------------------------------------------- 12. the table
@@ -633,7 +634,7 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     append(repo, *table_set())
     note(repo, "r")  # `r` is busy: its worktree's note is in current-task
     shown = ok(repo, "show")
-    assert ok(repo) == shown, "pipes.py with no arguments must print `show`"
+    assert ok(repo) == shown, "work_pipes.py with no arguments must print `show`"
     lines = shown.splitlines()
     assert max(len(line) for line in lines) <= 120
     rows = table(lines)
