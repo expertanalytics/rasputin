@@ -97,9 +97,7 @@ Ljungan's outline, **0.10 s**. The simplification takes **2.57 s** (the
 probe 2.43 s; the reviewer's 5.2 s was under load). The land-cover step,
 46.6 s for Kultsjön's 502 triangles and 51.3 s for Ljungan's 483, is 106a's
 repair of self-crossing land-cover polygons (40 and 48 repaired), measured
-on 106c's day (`../106c/README.md`); not 106e's. This branch still
-carries 106a's old, slow repair; master's corrected one (`4afd75fb`)
-arrives when master is merged in.
+on 106c's day (`../106c/README.md`); not 106e's. These times were measured with 106a's old, slow repair; master's corrected one (`4afd75fb`) came in with the merge at `d945ecc6`.
 
 ## Files
 
