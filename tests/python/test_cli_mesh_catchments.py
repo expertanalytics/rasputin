@@ -20,14 +20,18 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - A file's `catchments` record entry is the file's name, as `--reservoirs`
   records a file; the record entries are read from the `.gpkg`'s `run`
   table, `catchments_units` as the text `3`.
-- Test 6 pins a digest of the `triangles` and `cells` rows of the run
-  without `--catchments` (`ROWS_DIGEST`), recorded at the design's head
-  `e8251ee8`, before any 106c code: "the same rows as master".
+- Test 6 compares the `triangles` and `cells` rows of the run without
+  `--catchments` with master's, read from
+  `data/catchments_rows_e8251ee8.json`: "the same rows as master". The file
+  was written on macOS from a run whose rows hashed to the sha256 recorded
+  at the design's head `e8251ee8`, before any 106c code
+  (`9e9dd934ee4b...1c1ef9265e35e`); geometries are stored as their
+  coordinates, x, y, z per vertex.
 """
 
 from __future__ import annotations
 
-import hashlib
+import json
 import math
 import socket
 import sqlite3
@@ -37,7 +41,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import shapely
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_allclose, assert_array_equal
 from pyproj import Transformer
 from shapely.affinity import translate
 from shapely.geometry import Polygon, box
@@ -52,6 +56,7 @@ from test_cli_fetch import install
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import column, corners
 from tin_engine import sources
+from tin_engine.io.geopackage import layer_info, query_features
 
 STEP, NODES = 60.0, 56
 #: The local frame's (0, 0) in `MESH_CRS`.
@@ -188,23 +193,51 @@ def test_no_cell_straddles_and_each_takes_its_units_id(
 
 # ------------------------------------------------------------ 6. unchanged without it
 
-#: sha256 over the `triangles` and `cells` rows, in fid order, of the run
-#: below, recorded at `e8251ee8` before any 106c code.
-ROWS_DIGEST = "9e9dd934ee4bc2c9a07f3404af369691bf4116e324d934c91df1c1ef9265e35e"
+#: Master's rows of the run below; see the module docstring.
+MASTER_ROWS = json.loads((Path(__file__).parent / "data/catchments_rows_e8251ee8.json").read_text())
+#: Platforms differ in the last bits of libm's sin and cos (the DEM) and of
+#: PROJ, so floats are compared within an absolute tolerance, everything else
+#: exactly: ATOL in metres, square metres and shares, ATOL_DEG for `*_deg`.
+#: Scales: x, y up to 8.4e6 m, z about 700 m, areas up to 1e5 m2, shares in
+#: [0, 1]. One float32 ulp added to half the DEM's nodes (seeds 1 to 5) moved
+#: no x, y or area, z by 6.1e-5 m, slope by 1.3e-4 deg and aspect by
+#: 1.2e-3 deg; a vertex moved by 1.5 mm, or its z by 1 cm, fails.
+ATOL, ATOL_DEG = 1e-3, 1e-2
 
 
-def rows_digest(conn: sqlite3.Connection) -> str:
-    digest = hashlib.sha256()
-    for table in ("triangles", "cells"):
-        for row in conn.execute(f"SELECT * FROM {table} ORDER BY fid"):
-            digest.update(repr(row).encode())
-    return digest.hexdigest()
+def rows_of(conn: sqlite3.Connection, table: str) -> dict[str, list[object]]:
+    """The table's columns in fid order; a geometry as its x, y, z per vertex."""
+    names = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+    found = query_features(conn, layer_info(conn, table), None, "fid")
+    rows = conn.execute(f"SELECT * FROM {table} ORDER BY fid").fetchall()
+    columns = {n: [r[i] for r in rows] for i, n in enumerate(names)}
+    columns["geom"] = [shapely.get_coordinates(f.geometry, include_z=True).tolist() for f in found]
+    return columns
+
+
+def assert_masters(conn: sqlite3.Connection, table: str) -> None:
+    got, master = rows_of(conn, table), MASTER_ROWS[table]
+    assert list(got) == master["columns"]
+    for i, name in enumerate(master["columns"]):
+        want = [row[i] for row in master["rows"]]
+        where = f"{table}.{name}"
+        if name == "geom":
+            assert [len(g) for g in got[name]] == [len(g) for g in want], where
+            got_xyz, want_xyz = np.concatenate(got[name]), np.concatenate(want)
+            assert_allclose(got_xyz, want_xyz, rtol=0, atol=ATOL, err_msg=where)
+        elif any(isinstance(v, float) for v in want):
+            atol = ATOL_DEG if name.endswith("_deg") else ATOL
+            got_v, want_v = np.array(got[name], np.float64), np.array(want, np.float64)
+            assert_allclose(got_v, want_v, rtol=0, atol=atol, equal_nan=True, err_msg=where)
+        else:
+            assert got[name] == want, where
 
 
 def test_without_catchments_the_rows_are_masters(run_of: RunOf) -> None:
     ran = run_of("without.gpkg", "--triangles", "200")
     assert set(column(ran.conn, "cells", "catchment_id")) == {1}
-    assert rows_digest(ran.conn) == ROWS_DIGEST
+    assert_masters(ran.conn, "triangles")
+    assert_masters(ran.conn, "cells")
     assert record(ran.conn, "catchments") is None
 
 

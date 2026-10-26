@@ -158,7 +158,7 @@ options become `str` in place of `Path`.
 **Refusal.** A value that is neither: `X is neither a catalogue source of
 features nor a .gpkg, .geojson, .json file` (the `--reservoirs` wording),
 headed by the option. A source that is not cached names the fetch to run, as
-`--reservoirs` does.
+`--reservoirs` does. A catalogue key that is also a file in the working directory is refused too, naming both; `./<name>` picks the file.
 
 **Tests.** With a temporary sources file (`RASPUTIN_DATA`) registering the
 network fixture of `tests/python/test_cli_network_catchment.py`, under a
@@ -790,3 +790,5 @@ is not touched).
 - **Code review of 106e, round 1, 2026-10-26.** `@reviewer`, head `e1ea98a90256cde2bd1e587d6c63686c7b51b50b`. Verdict: APPROVED WITH WORDINGS. Wordings applied: the benchmark README's base is master `e0d129c0` without 106c, and the land-cover step carries 106a's old repair until master (`4afd75fb`) is merged in; section 8 records Ljungan's measured 198 vertices and 483 triangles (ring orientation).
 - **Code review (106a), rounds 3-4, 2026-10-26.** `@reviewer`: CHANGES REQUESTED on `be26db8fa3dea97e7241143757d961616776d906` (clipping a self-crossing polygon before repair can flip inside and outside); APPROVED WITH WORDINGS on `4afd75fbe3b3dbfec067feec2f639bd0dfa80ea2` (rings cut to the box, odd-count rule; `@perf` ACCEPTED: Kultsjön 5.61 s vs master 10.51 s, tables equal). Design wording applied here; the `_repaired` docstring wording follows from `@developer`.
 - **Code review (106e), round 2, 2026-10-26.** `@reviewer`, head `d945ecc6a64629cc1f3086a14d801e711312e70d`, range `e1ea98a9..d945ecc6`. Verdict: APPROVED WITH WORDINGS. Wordings and master merge checked; one benchmark wording applied (times measured with 106a's old repair).
+- **Code review (106b+106c), round 1, 2026-10-26.** `@reviewer`, head `a9366418ba24f5e96f71f36a92910d9fdd2881ac`. Verdict: CHANGES REQUESTED. A catalogue key that is also a file here was taken silently; refuse naming both. 198 net lines judged earned; kill record 10/10; `@perf` ACCEPTED.
+- **Code review (106b+106c), round 2, 2026-10-26.** `@reviewer`, head `cd32df7bee935ac9e43394b1bf26e81d821827f6`, range `a9366418..cd32df7b`. Verdict: APPROVED WITH WORDINGS. Refusal added (6 lines); one wording applied in 106b's Refusal paragraph.
