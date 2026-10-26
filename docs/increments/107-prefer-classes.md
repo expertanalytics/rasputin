@@ -137,8 +137,7 @@ legend.prefer {category: code}  ───┘        │ polygons [(code, geom)],
      100 m minimum width, so a polygon that only touches a corner adds at
      most about 2 cm. Checked on those two catchments (projected metres,
      6,441 km² the larger);
-  5. areas: replaced and refilled from `cells.overlay(corners, polygons)`
-     times the triangle areas, given from `cells.overlay(corners, kept preferred polygons)` the same way, before `assign` runs.
+  5. areas: each triangle intersected with the subdivided pieces it meets (STRtree pairs) and the areas summed, before `assign` runs; equal to the union's area because the polygons of each call do not overlap (`cells.overlay` with 5,550 lakes ran over 22 minutes on Numedalslågen).
 - Legend: `[prefer]` table and `Legend.prefer: Mapping[Category, int]`, about
   10 lines; TOML data uncounted.
 - CLI: repeatable `--prefer KEY=SOURCE` (catalogue name or file, fetched and
@@ -212,3 +211,4 @@ alone: the steps above are pinned because they are the measured ones.
 
 - Design round 1: CHANGES REQUESTED, 752b7601..2e7b9195, 0 net production lines (no speed estimate; no border-length method).
 - Design round 2: APPROVED WITH WORDINGS, 2e7b9195..c561f5a3, 0 net production lines; the two wordings (section 4 step 5, section 2(b)) applied in this commit.
+- Code round 1: CHANGES REQUESTED, 752b7601..91dfdb7c, 240 net production lines (the nve-glaciers catalogue entry missing; section 4 step 5 reworded to the pairwise area sum, applied in this commit).
