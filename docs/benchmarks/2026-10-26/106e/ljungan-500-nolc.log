@@ -1,0 +1,9 @@
+domain: outline simplified at 963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 198 vertices, 12838.64 km2
+DEM: 12 files, 8237 columns x 3923 rows
+483 triangles, about the 500 asked for (at most 525): tolerance 247 m found in 7 trials. Every node of the original DEM inside the mesh is within 247 m of it (largest difference 244 m, root-mean-square 69.19 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106e/ljungan-500-nolc.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-e/docs/benchmarks/2026-10-26/106e/ljungan-500-nolc.stats.md
+real 7.23
+user 22.68
+sys 0.87
+exit 0

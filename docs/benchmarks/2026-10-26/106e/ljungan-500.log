@@ -1,0 +1,26 @@
+domain: outline simplified at 963 m (a triangle's edge at 500 triangles, 7701 m, over 8): 111248 to 198 vertices, 12838.64 km2
+DEM: 12 files, 8237 columns x 3923 rows
+land cover: 48 of 14661 polygons crossed itself and was repaired
+land cover: 2547 class shares over 483 triangles, 26 classes
+483 triangles, about the 500 asked for (at most 525): tolerance 247 m found in 7 trials. Every node of the original DEM inside the mesh is within 247 m of it (largest difference 244 m, root-mean-square 69.19 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106e/ljungan-500.gpkg
+/Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes-e/docs/benchmarks/2026-10-26/106e/ljungan-500.stats.md
+       58.94 real        72.33 user         2.47 sys
+          2257649664  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              387836  page reclaims
+                  80  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                2459  voluntary context switches
+              109152  involuntary context switches
+        653769572720  instructions retired
+        229570414128  cycles elapsed
+          2059110536  peak memory footprint
+exit 0
