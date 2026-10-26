@@ -401,6 +401,11 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
         )
     if any(s.values == "features" and s.present for s in sources):
         notes.append("A vector source's coverage is its layer's extent box, not its features.")
+    notes += [
+        f"{s.id} counts every feature of its file; a run keeps only those {rule.source} names."
+        for s in sources
+        if s.present and (rule := found.sources[s.id].named_by) is not None
+    ]
     return CatalogueReport(
         user_file=None if user is None else str(user),
         looked_at=tuple(map(str, looked)),
