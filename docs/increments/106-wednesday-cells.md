@@ -435,9 +435,9 @@ byte-identical to master's; with `--catchments smhi-svar2022-subcatchments`
 and the band from the budget, Kultsjön at `--triangles 6000` and Ljungan at
 `--triangles 80000`, the predicted counts (6,057 and 78,046, within the
 budget's 5 %), at most 8.1e-5 and 3.0e-4 of any triangle outside the unit
-holding most of it, and the time against the probes: mesh 1.2 s and
+holding most of it (unmeasured at these budgets; `@perf` sets them), and the time against the probes: mesh 1.2 s and
 30.9 s, plus reading and repairing 0.3 s and 3.0 s, plus the
-simplification 0.6 s and 6.1 s, plus 10 % noise; and Kultsjön at
+simplification 0.6 s and 6.1 s (unmeasured; `@perf` sets them), plus 10 % noise; and Kultsjön at
 `--triangles 4000 --features-tolerance 200` gives round 2's 3,972.
 
 **Size.** About 95 net lines: the option and its checks (12), a pure module
@@ -538,3 +538,4 @@ ruling of round 3: the band follows the triangle budget.
 
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
+- **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
