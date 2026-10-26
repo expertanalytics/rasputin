@@ -188,6 +188,7 @@ from tin_engine.run_record import (
 from tin_engine.sources import (
     SOURCES,
     STATION_SOURCES,
+    VECTOR_SUFFIXES,
     RemoteSource,
     catalogue,
     check_values,
@@ -1499,14 +1500,28 @@ def _reservoir_source(
         raise typer.BadParameter(
             "needs --land-cover with a legend and a .gpkg output", param_hint="--reservoirs"
         )
+    return _features_source(value, "--reservoirs", known, root, run)
+
+
+def _features_source(
+    value: str,
+    flag: str,
+    known: Mapping[str, RemoteSource],
+    root: Path | None,
+    run: str,
+    suffixes: tuple[str, ...] = SUFFIXES,
+) -> tuple[Path, str | None, str]:
+    """`flag`'s value: the file, layer and record name of a cached catalogue
+    source of features (its key), or of a file with one of `suffixes` (its
+    name). An uncached source's refusal names `run`, the fetch that copies it."""
     source = known.get(value)
     if source is not None and source.values == "features":
-        return _cached_features(source, root, run, "--reservoirs"), source.layer, value
+        return _cached_features(source, root, run, flag), source.layer, value
     path = Path(value)
-    if path.suffix.lower() not in SUFFIXES or not path.is_file():
+    if path.suffix.lower() not in suffixes or not path.is_file():
         raise typer.BadParameter(
-            f"{value} is neither a catalogue source of features nor a {', '.join(SUFFIXES)} file",
-            param_hint="--reservoirs",
+            f"{value} is neither a catalogue source of features nor a {', '.join(suffixes)} file",
+            param_hint=flag,
         )
     return path, None, path.name
 
@@ -3149,9 +3164,11 @@ def network_catchment(
         typer.Option("--out", writable=True, help="Where to write the polygon: .geojson or .json."),
     ],
     network: Annotated[
-        Path,
+        str,
         typer.Option(
-            "--network", help="The units' polygons (.gpkg, .geojson or .json), read in place."
+            "--network",
+            help="The units' polygons: a catalogue source of features or a .gpkg, .geojson "
+            "or .json file, read in place.",
         ),
     ],
     id_attribute: Annotated[str, typer.Option("--id-attribute", help="The unit's own ID.")],
@@ -3188,16 +3205,17 @@ def network_catchment(
         str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
     ] = "EPSG:4326",
     lakes: Annotated[
-        Path | None,
+        str | None,
         typer.Option(
-            "--lakes", help="Any polygon file: the lake under the seed point is the seed."
+            "--lakes",
+            help="Any polygon source or file: the lake under the seed point is the seed.",
         ),
     ] = None,
     lakes_layer: Annotated[
         str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
     ] = None,
     outlets: Annotated[
-        Path | None,
+        str | None,
         typer.Option(
             "--outlets", help="The units' outlet points, one per unit, keyed by --id-attribute."
         ),
@@ -3254,25 +3272,43 @@ def network_catchment(
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
     target = cli_kit.destination(out)
+    known, root = _known_sources(os.environ), cache_root(cache, os.environ)
+
+    def read_in_place(value: str, layer: str | None, flag: str) -> tuple[Path, str | None]:
+        """`flag`'s file and its layer: the one given, else the entry's."""
+        run = _fetch_run(value, None, None, None, cache)
+        path, entry_layer, _ = _features_source(value, flag, known, root, run, VECTOR_SUFFIXES)
+        return path, layer or entry_layer
+
+    network_file, network_layer = read_in_place(network, network_layer, "--network")
+    lakes_file = outlets_file = None
+    if lakes is not None:
+        lakes_file, lakes_layer = read_in_place(lakes, lakes_layer, "--lakes")
+    if outlets is not None:
+        outlets_file, outlets_layer = read_in_place(outlets, outlets_layer, "--outlets")
     attributes = (upstream_area_attribute, area_unit, name_attribute)
     with _refused("--network"):
-        crs, links = read_links(network, network_layer, id_attribute, down_attribute, *attributes)
-    with _refused("--network", f"{network.name}, {id_attribute}: "):
+        crs, links = read_links(
+            network_file, network_layer, id_attribute, down_attribute, *attributes
+        )
+    with _refused("--network", f"{network_file.name}, {id_attribute}: "):
         net = Network.build(links)
     ends = ", ".join(f"{n} to {v or 'null'}" for v, n in net.ends.items())
     typer.echo(f"network: {len(links)} units in {crs}; draining out of the file: {ends}", err=True)
     seed_unit, place = unit or "", dict[str, object]({"unit": unit})
     if seed_unit and seed_unit not in net.links:
-        raise typer.BadParameter(f"{network.name} has no unit {unit}", param_hint="--unit")
+        raise typer.BadParameter(f"{network_file.name} has no unit {unit}", param_hint="--unit")
     request: CatchmentRequest | None = None
     if seed is not None:
         ((x, y),) = reprojector(seed_crs, crs)([seed])
         with _refused("--seed"):
-            covering = units_at(network, network_layer, id_attribute, Point(x, y))
+            covering = units_at(network_file, network_layer, id_attribute, Point(x, y))
             seed_unit = home_unit(Point(x, y), covering)
         with _refused("--lakes"):
             found = (
-                None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
+                None
+                if lakes_file is None
+                else read_lake_polygons(lakes_file, lakes_layer, seed, seed_crs)
             )
             request = CatchmentRequest(
                 seed=seed,
@@ -3287,17 +3323,17 @@ def network_catchment(
             f"give --unit {seed_unit} for the whole unit, up to {own_km2:.2f} km2 of it below the "
             "seed, or use the terrain route (rasputin catchment), which cuts at the point"
         )
-        if outlets is None:
+        if outlets_file is None:
             raise typer.BadParameter(
                 f"the seed is in the unit {named}; give --outlets to check that it is at the "
                 f"unit's outlet, or {choices}",
                 param_hint="--seed",
             )
         with _refused("--outlets"):
-            outlet = outlet_point(outlets, outlets_layer, id_attribute, seed_unit, crs)
+            outlet = outlet_point(outlets_file, outlets_layer, id_attribute, seed_unit, crs)
         if outlet is None:
             raise typer.BadParameter(
-                f"{outlets.name} has no outlet point for the seed's unit {named}; {choices}",
+                f"{outlets_file.name} has no outlet point for the seed's unit {named}; {choices}",
                 param_hint="--seed",
             )
         distance = outlet_distance_m(geometry, outlet, crs)
@@ -3315,7 +3351,7 @@ def network_catchment(
         place = {"seed": seed, "seed_crs": seed_crs, "home_unit": seed_unit, "distance_m": distance}
     with _refused("--network"):
         ids = net.upstream(seed_unit)
-        geometries = unit_geometries(network, network_layer, id_attribute, ids)
+        geometries = unit_geometries(network_file, network_layer, id_attribute, ids)
         joined = join(list(geometries.values()), crs)
     typer.echo(
         f"joined: {plural(len(ids), 'unit', 'units')}, {joined.area_m2 / 1e6:.6f} km2, "
