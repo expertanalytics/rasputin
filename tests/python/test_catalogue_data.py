@@ -68,6 +68,8 @@ LOCAL_FIELDS = ("path", "description")
 VECTOR_FIELDS = ("layer",)
 #: The field the map-service kind added: the attributes asked of the layer.
 FEATURE_FIELDS = ("fields",)
+#: The field the named filter added: None on every shipped entry.
+NAMED_FIELDS = ("named_by",)
 USER_ID = "my-x"
 
 
@@ -158,11 +160,12 @@ class TestT1TheShippedCatalogue:
         self, sources: ModuleType, snapshot: dict[str, Any], key: str
     ) -> None:
         dumped = sources.SOURCES[key].model_dump(mode="json")
-        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS + FEATURE_FIELDS
+        added = TILE_FIELDS + LOCAL_FIELDS + VECTOR_FIELDS + FEATURE_FIELDS + NAMED_FIELDS
         rest = {k: v for k, v in dumped.items() if k not in added}
         assert rest == snapshot["sources"][key]
         assert dumped["path"] is None
         assert dumped.get("layer") is None
+        assert dumped["named_by"] is None
 
     def test_glo30_gains_its_tile_name_and_spacing(self, sources: ModuleType) -> None:
         glo30 = sources.SOURCES["glo30"]

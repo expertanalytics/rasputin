@@ -195,6 +195,7 @@ from tin_engine.sources import (
     catalogue,
     check_values,
     data_root,
+    kept_named,
     plugin_source_files,
     user_source_file,
     xdg_base,
@@ -1102,7 +1103,7 @@ def mesh(
     units: Units | None = None
     if given is not None and units_source is not None:
         with clock.phase("catchments"), _refused("--catchments"):
-            units = _units(*units_source, given, triangles, features_tolerance)
+            units = _units(*units_source[:3], given, triangles, features_tolerance)
         given = units.domain
     try:
         planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
@@ -1295,6 +1296,7 @@ def mesh(
                         dem_crs,
                         xy[:, :2],
                         functools.partial(_say_repaired, "reservoirs"),
+                        reservoir[3],
                     )
                 except FeatureError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
@@ -1546,19 +1548,40 @@ def _reservoir_source(
     root: Path | None,
     run: str,
     flag: str = "--reservoirs",
-) -> tuple[Path, str | None, str] | None:
+) -> tuple[Path, str | None, str, tuple[str, Callable[[list[object]], list[int]]] | None] | None:
     """``flag`` (``--reservoirs`` or ``--catchments``) checked before any work:
     the file, layer and record name of a cached catalogue source of features
-    (its key), or of a file rasputin reads (its name). ``wanted`` is whether
-    the run writes cells: --land-cover with a legend and a .gpkg output. An
-    uncached source's refusal names `run`."""
+    (its key), or of a file rasputin reads (its name), and for an entry with
+    `named_by` that rule and the names its source gives, read whole.
+    ``wanted`` is whether the run writes cells: --land-cover with a legend
+    and a .gpkg output. An uncached source's refusal names `run`."""
     if value is None:
         return None
+    _refuse_named(known.get(value), value, flag)
     if not wanted:
         raise typer.BadParameter(
             "needs --land-cover with a legend and a .gpkg output", param_hint=flag
         )
-    return _features_source(value, flag, known, root, run)
+    found = _features_source(value, flag, known, root, run)
+    rule = known[value].named_by if value in known else None
+    if rule is None:
+        return (*found, None)
+    names = known.get(rule.source)
+    if names is None or names.path is None or names.path.suffix.lower() != ".geojson":
+        raise typer.BadParameter(
+            f"{value} keeps the features {rule.source} names, and {rule.source} is not a "
+            "local .geojson source of features in the catalogue",
+            param_hint=flag,
+        )
+    try:  # a GeoJSON file is read whole: the box is not asked for
+        read = read_source(names.path, None, rule.field, lambda _: (0.0, 0.0, 0.0, 0.0))
+    except FeatureError as exc:
+        raise typer.BadParameter(str(exc), param_hint=flag) from exc
+    names_given = [v for *_, v in read.rows]
+    return (
+        *found,
+        (rule.key, functools.partial(kept_named, names=names_given, prefix=rule.prefix)),
+    )
 
 
 @dataclass(frozen=True)
@@ -1627,6 +1650,15 @@ def _units(
     return Units(list(zip(ids, kept, strict=True)), domain, band, name)
 
 
+def _refuse_named(source: RemoteSource | None, value: str, flag: str) -> None:
+    """Only --reservoirs reads an entry that keeps what another source names."""
+    if source is not None and source.named_by is not None and flag != "--reservoirs":
+        raise typer.BadParameter(
+            f"{value} keeps only the features another source names; only --reservoirs reads it",
+            param_hint=flag,
+        )
+
+
 def _features_source(
     value: str,
     flag: str,
@@ -1640,6 +1672,7 @@ def _features_source(
     name). An uncached source's refusal names `run`, the fetch that copies it."""
     source = known.get(value)
     if source is not None and source.values == "features":
+        _refuse_named(source, value, flag)
         if Path(value).is_file():
             raise typer.BadParameter(
                 f"{value} is both a catalogue source and a file here ({Path(value).resolve()}); "
