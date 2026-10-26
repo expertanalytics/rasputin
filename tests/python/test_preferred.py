@@ -159,7 +159,7 @@ def test_case3_the_first_preferred_source_wins_an_overlap(
     preferred: ModuleType, order: tuple[int, int], lake: float, glacier: float
 ) -> None:
     """Preferred lake [0,20]², glacier [10,30]², over heath."""
-    sources = {LAKE: [box(0, 0, 20, 20)], GLACIER: [box(10, 0, 30, 20)]}
+    sources = {LAKE: [box(0, 0, 20, 20)], GLACIER: [box(10, 10, 30, 30)]}
     chosen = [(code, sources[code]) for code in order]
     result = preferred.overlay([(HEATH, box(0, 0, 100, 100))], chosen, square_corners())
     check(per_code(result.polygons), {LAKE: lake, GLACIER: glacier, HEATH: 9300.0})
@@ -167,12 +167,12 @@ def test_case3_the_first_preferred_source_wins_an_overlap(
 
 
 def test_case3_the_same_code_twice_unions_the_sources(preferred: ModuleType) -> None:
-    """Two lake sources, [0,20]² and [10,30] x [0,20]: one lake of 600 m²."""
-    chosen = [(LAKE, [box(0, 0, 20, 20)]), (LAKE, [box(10, 0, 30, 20)])]
+    """Two lake sources, [0,20]² and [10,30]²: one lake of 700 m²."""
+    chosen = [(LAKE, [box(0, 0, 20, 20)]), (LAKE, [box(10, 10, 30, 30)])]
     result = preferred.overlay([(HEATH, box(0, 0, 100, 100))], chosen, square_corners())
-    check(per_code(result.polygons), {LAKE: 600.0, HEATH: 9400.0})
+    check(per_code(result.polygons), {LAKE: 700.0, HEATH: 9300.0})
     check_disjoint(result.polygons)
-    check_areas(result, LAKE, replaced=0.0, given=600.0, refilled=0.0)
+    check_areas(result, LAKE, replaced=0.0, given=700.0, refilled=0.0)
 
 
 def test_case4_other_water_classes_stay_the_bases(preferred: ModuleType) -> None:
