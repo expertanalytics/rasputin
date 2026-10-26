@@ -33,7 +33,7 @@ sufficient: it shows what was finished, never what was asked.
     deleted when the round lands. Each line starts with `NOW:` (one),
     `QUEUE:` (at most one) or `ASK OLA:` (a refusal, or a default taken while
     away), at most 300 characters each; no rulings, no history. Items and
-    their questions go in `tools/pipes.py` (`add`, `ask`). The recap lists
+    their questions go in `tools/work_pipes.py` (`add`, `ask`). The recap lists
     every worktree's `ASK OLA:` lines and warns on any other line.
   - Every other file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
     three lines or fewer: the ask, the persona and the file it will produce.

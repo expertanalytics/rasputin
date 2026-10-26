@@ -55,7 +55,7 @@ the personas. Its rules:
   its first spawn until its PR merges or Ola parks or drops it, except while
   it waits only on Ola. A new item starts only when fewer than three count.
   If Ola asks for one beyond that, warn him with the count ("this makes
-  4 of 3") and start it only after he confirms. `python3 tools/pipes.py next`
+  4 of 3") and start it only after he confirms. `python3 tools/work_pipes.py next`
   names the item a free writer takes. The next item is chosen with Ola from
   his private ideas file.
 * **No asking between internal steps, but stop at the remote.** Do not ask
