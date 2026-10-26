@@ -58,6 +58,9 @@ COPIED = (
     # h23: the recap prints the duties line through this module
     # (docs/increments/h23-duties.md §4).
     "tools/duties.py",
+    # h31: the recap prints the pipes block through this module
+    # (docs/increments/h31-pipes.md §7).
+    "tools/work_pipes.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

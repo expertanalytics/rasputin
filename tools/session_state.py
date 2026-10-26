@@ -198,7 +198,7 @@ MAX_LINE = 300
 
 
 def session_format(text: str, name: str = "session.md") -> list[str]:
-    """Warnings on `session.md`: one NOW, one QUEUE, ASK OLA lines, nothing else."""
+    """Warnings on `session.md`: one NOW, at most one QUEUE, ASK OLA lines, nothing else."""
     counts, empty, other, long = {"NOW": 0, "QUEUE": 0}, [], [], []
     for number, line in enumerate(text.splitlines(), 1):
         line = line.rstrip()
@@ -213,9 +213,9 @@ def session_format(text: str, name: str = "session.md") -> list[str]:
             counts[match[1]] += 1
             if not match[2].strip():
                 empty.append(f"{name}:{number}: empty {match[1]} line")
-    wrong = [
-        f"{name}: {n} {kind} lines; exactly one expected" for kind, n in counts.items() if n != 1
-    ]
+    wrong = [f"{name}: {counts['NOW']} NOW lines; exactly one expected"] * (counts["NOW"] != 1)
+    if counts["QUEUE"] > 1:
+        wrong.append(f"{name}: {counts['QUEUE']} QUEUE lines; at most one expected")
     return wrong + empty + other + long
 
 
@@ -400,6 +400,13 @@ def print_recap(tasks: Path) -> None:
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
     for line in _capped([d if len(d) <= 160 else d[:157] + "..." for d in decisions], 5):
         print(f"  {line}")
+    try:  # a fault in the pipes block costs one line, like the harness
+        import work_pipes
+
+        piped = work_pipes.show_lines(REPO, datetime.now(UTC))
+    except Exception as error:
+        piped = [f"Pipes: unknown ({type(error).__name__}: {str(error)[:120]})".replace("\n", " ")]
+    print("\n".join(piped))
     session = tasks / "session.md"
     warnings = session_format(_read(session, "")) if os.path.lexists(session) else []
     if warnings:
