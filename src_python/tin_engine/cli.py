@@ -558,7 +558,10 @@ def mesh(
         typer.Option(
             "--out",
             writable=True,
-            help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS.",
+            help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS. A .gpkg with "
+            "--land-cover and a legend also holds the layer cells, what Shyft reads: one row per "
+            "triangle with its land-type shares glacier, lake, reservoir, forest and unspecified "
+            "(savanna, listed too, lies inside unspecified).",
         ),
     ],
     dem: Annotated[
@@ -697,9 +700,10 @@ def mesh(
         str | None,
         typer.Option(
             "--out-crs",
-            help="Mesh in this CRS: a DEM in another CRS (required for a "
-            "geographic one) is resampled onto a square grid here, and with --tolerance "
-            "checked against its own nodes. --bbox is then in this CRS.",
+            help="Mesh in this CRS: a DEM in another CRS (required for one in degrees, "
+            "such as glo30) is resampled onto a square grid here, and with --tolerance "
+            "checked against its own nodes. --bbox is then in this CRS. For example "
+            "EPSG:3006 in Sweden, EPSG:25833 in Norway.",
         ),
     ] = None,
     start_min_angle: Annotated[
@@ -804,8 +808,10 @@ def mesh(
             "--land-cover",
             help="The exact share of each land-cover class in every triangle, "
             "from a cached catalogue source of classes "
-            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}), a uint8 "
-            "GeoTIFF or class polygons, in the mesh file.",
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}) or of "
+            "class polygons with a legend "
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'features' and s.legend)}"
+            "), a uint8 GeoTIFF or a file of class polygons, in the mesh file.",
         ),
     ] = None,
     land_cover_year: Annotated[
@@ -1175,7 +1181,7 @@ def mesh(
             del opened
     except NotCached as exc:  # an outline past the domain's box needs the window's blocks
         hint = _bbox_fetch(dem[0], exc, cache) if simplify_domain or catchments else ""
-        hint = hint or f"; run: {_fetch_run(dem[0], domain, bbox, out_crs, cache)}"
+        hint = hint or f"{RUN_FETCH}{_fetch_run(dem[0], domain, bbox, out_crs, cache)}"
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
@@ -1549,6 +1555,11 @@ class _ClassSource:
     legend: Legend | None
 
 
+#: The words before a refusal's fetch command, which the MCP server's fetch tool takes
+#: as arguments: the child the server runs cannot tell who reads the refusal.
+RUN_FETCH = "; over MCP, call the fetch tool with this source and options as arguments; run: "
+
+
 def _fetch_run(
     key: str,
     domain: Path | None,
@@ -1573,7 +1584,7 @@ def _bbox_fetch(key: str, exc: NotCached, cache: Path | None) -> str:
         return ""
     fetch = " ".join(repr(v).removesuffix(".0") for v in exc.box)
     given = f" --cache {shlex.quote(str(cache))}" if cache else ""
-    return f"; run: rasputin fetch {shlex.quote(key)} --bbox {fetch}{given}"
+    return f"{RUN_FETCH}rasputin fetch {shlex.quote(key)} --bbox {fetch}{given}"
 
 
 def _ring_vertices(polygon: Polygon) -> int:
@@ -1591,7 +1602,7 @@ def _cached_features(source: RemoteSource, root: Path | None, run: str, flag: st
     path = root / source.id / "features.gpkg"
     if not path.is_file():
         raise typer.BadParameter(
-            f"{source.id}/features.gpkg is not in the cache; run: {run}", param_hint=flag
+            f"{source.id}/features.gpkg is not in the cache{RUN_FETCH}{run}", param_hint=flag
         )
     return path
 
@@ -1858,7 +1869,8 @@ def _class_fractions(
             ]
             run = " ".join(filter(None, words))
             raise typer.BadParameter(
-                f"{source.id}/{name} is not in the cache; run: {run}", param_hint="--land-cover"
+                f"{source.id}/{name} is not in the cache{RUN_FETCH}{run}",
+                param_hint="--land-cover",
             )
         fetched = cached_classes.fetched(name) or datetime.date.today()
     with clock.phase("land cover fractions"):
