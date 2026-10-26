@@ -280,7 +280,7 @@ jobs:
       # The harness tests run in the harness job below (h17 §4b); the two
       # marker expressions are complements, so each test runs in one of them.
       - name: Tests
-        run: pytest -m "not harness"
+        run: pytest -m "not harness" -n auto
 
   # h17 §4b: the tests of the harness tools (tools/ and .claude/), marked
   # `harness`, import nothing from tin_engine. So this job installs only the
@@ -352,7 +352,7 @@ jobs:
       - name: Tests with the codecs extra
         run: |
           python -m pip install -e ".[dev,codecs]"
-          pytest --no-cov tests/python/test_io_geotiff.py tests/python/test_geotiff_fixtures.py \
+          pytest -n auto --no-cov tests/python/test_io_geotiff.py tests/python/test_geotiff_fixtures.py \
             tests/python/test_io_read_meta.py tests/python/test_cli_mesh_mosaic.py \
             tests/python/test_cli_mesh_domain_crs.py tests/python/test_cli_mesh_domain.py \
             tests/python/test_refine_golden.py tests/python/test_cli_constraint_feet.py \
@@ -366,7 +366,7 @@ jobs:
       - name: Tests with the viewer extra
         run: |
           python -m pip install -e ".[dev,codecs,viewer]"
-          pytest --no-cov tests/python/test_io_vtk_readback.py tests/python/test_cli_mesh_dem.py
+          pytest -n auto --no-cov tests/python/test_io_vtk_readback.py tests/python/test_cli_mesh_dem.py
 
       # Static gates, per CLAUDE.md section 4. Run on the floor leg only:
       # mypy and ruff are configured for a single target version, so repeating

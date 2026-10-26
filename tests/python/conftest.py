@@ -100,6 +100,19 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ["XDG_STATE_HOME"] = str(home / ".local" / "state")
     for name in USER_SETTINGS:
         os.environ.pop(name, None)
+    os.environ.update(WIDE_TERMINAL)
+
+
+#: The terminal every test's CLI output is rendered for, unless a test names
+#: its own `COLUMNS`. Typer prints an error inside a Rich panel as wide as the
+#: terminal, and Rich breaks a word longer than the panel anywhere: at 80
+#: columns a `tmp_path` such as ``/tmp/pytest-of-runner/pytest-0/popen-gw2/...``
+#: (xdist) ends a line mid file name, and ``levees.toml`` reads ``lev ees.toml``.
+#: Both are set because Rich sizes a forced terminal (`GITHUB_ACTIONS` makes
+#: Typer force one) whose `TERM` is `dumb` at 80 columns unless it knows both
+#: the width and the height. `CliRunner(env=...)` and a subprocess's `env` still
+#: override them.
+WIDE_TERMINAL = {"COLUMNS": "1000", "LINES": "100"}
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
