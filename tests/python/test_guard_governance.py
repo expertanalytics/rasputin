@@ -68,6 +68,8 @@ GOVERNED_NOW = (
     # to either is an edit to a hook.
     "tools/push_grant.py",
     "tools/ci_changes.py",
+    # h31 §10: session_state.py imports it, so it is harness code.
+    "tools/work_pipes.py",
 )
 
 #: Files named `config` that are not a git config: GOVERNED_SUFFIXES is matched

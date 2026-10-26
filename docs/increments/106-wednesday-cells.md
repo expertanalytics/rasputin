@@ -109,7 +109,10 @@ run then went through (5,940 cells).
 (`src_python/tin_engine/feature_input.py`) repair each polygon after moving
 it into the mesh's CRS (a move can make a ring cross itself too): a valid
 polygon is kept as it is; an invalid one is replaced by the polygonal parts
-of `shapely.make_valid(g)` (default method), and dropped when it has none.
+of `make_valid(g)` within the mesh points' box widened by 100 m, computed from
+the rings cut to that box (the odd-count rule across parts), except where two
+rings share a stretch of edge: there both sides keep the same parity. It is
+dropped when it has none.
 Both functions also return how many they repaired or dropped. Their only
 callers are `mesh`'s land-cover and reservoir steps
 (`src_python/tin_engine/cli.py`).
@@ -785,3 +788,4 @@ is not touched).
 - **106e kill record, 2026-10-26.** `@tester`, `3736e39a`: 9 of 9 mutants killed, tests 1-4 and 9.
 - **106e acceptance, 2026-10-26.** `@perf`, `e1ea98a9`: ACCEPTED. 1 m benchmark without the flag byte-identical to master `e0d129c0`; Ljungan 198 outline vertices and 483 triangles (the design's 195 and 503 came from the clockwise ring), Kultsjön traced 502 (`docs/benchmarks/2026-10-26/106e/README.md`).
 - **Code review of 106e, round 1, 2026-10-26.** `@reviewer`, head `e1ea98a90256cde2bd1e587d6c63686c7b51b50b`. Verdict: APPROVED WITH WORDINGS. Wordings applied: the benchmark README's base is master `e0d129c0` without 106c, and the land-cover step carries 106a's old repair until master (`4afd75fb`) is merged in; section 8 records Ljungan's measured 198 vertices and 483 triangles (ring orientation).
+- **Code review (106a), rounds 3-4, 2026-10-26.** `@reviewer`: CHANGES REQUESTED on `be26db8fa3dea97e7241143757d961616776d906` (clipping a self-crossing polygon before repair can flip inside and outside); APPROVED WITH WORDINGS on `4afd75fbe3b3dbfec067feec2f639bd0dfa80ea2` (rings cut to the box, odd-count rule; `@perf` ACCEPTED: Kultsjön 5.61 s vs master 10.51 s, tables equal). Design wording applied here; the `_repaired` docstring wording follows from `@developer`.
