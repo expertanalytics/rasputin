@@ -154,7 +154,7 @@ options become `str` in place of `Path`.
 **Refusal.** A value that is neither: `X is neither a catalogue source of
 features nor a .gpkg, .geojson, .json file` (the `--reservoirs` wording),
 headed by the option. A source that is not cached names the fetch to run, as
-`--reservoirs` does.
+`--reservoirs` does. A catalogue key that is also a file in the working directory is refused too, naming both; `./<name>` picks the file.
 
 **Tests.** With a temporary sources file (`RASPUTIN_DATA`) registering the
 network fixture of `tests/python/test_cli_network_catchment.py`, under a
@@ -539,3 +539,5 @@ ruling of round 3: the band follows the triangle budget.
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
 - **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
+- **Code review (106b+106c), round 1, 2026-10-26.** `@reviewer`, head `a9366418ba24f5e96f71f36a92910d9fdd2881ac`. Verdict: CHANGES REQUESTED. A catalogue key that is also a file here was taken silently; refuse naming both. 198 net lines judged earned; kill record 10/10; `@perf` ACCEPTED.
+- **Code review (106b+106c), round 2, 2026-10-26.** `@reviewer`, head `cd32df7bee935ac9e43394b1bf26e81d821827f6`, range `a9366418..cd32df7b`. Verdict: APPROVED WITH WORDINGS. Refusal added (6 lines); one wording applied in 106b's Refusal paragraph.
