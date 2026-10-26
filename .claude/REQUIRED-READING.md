@@ -29,11 +29,12 @@ sufficient: it shows what was finished, never what was asked.
 
 - **The current ask lives in `.claude/current-task/`**, untracked and
   gitignored. **One file per writer; the spawner deletes it.**
-  - `session.md` is the main session's, and only the main session writes it,
-    in place; it is deleted when the round lands. Each line starts with
-    `NOW:` (one), `QUEUE:` (one) or `ASK OLA:` (one per decision waiting on
-    Ola), at most 300 characters each; no rulings, no history. The recap
-    lists every worktree's `ASK OLA:` lines and warns on any other line.
+  - `session.md` is the main session's alone, written in place; it is
+    deleted when the round lands. Each line starts with `NOW:` (one),
+    `QUEUE:` (at most one) or `ASK OLA:` (a refusal, or a default taken while
+    away), at most 300 characters each; no rulings, no history. Items and
+    their questions go in `tools/work_pipes.py` (`add`, `ask`). The recap lists
+    every worktree's `ASK OLA:` lines and warns on any other line.
   - Every other file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
     three lines or fewer: the ask, the persona and the file it will produce.
     `tools/brief.py` names the path, and the subagent writes no other. The
