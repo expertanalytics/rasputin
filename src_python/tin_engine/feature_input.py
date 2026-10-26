@@ -625,14 +625,20 @@ def _repaired(geometry: BaseGeometry) -> BaseGeometry | None:
 
 
 def read_class_polygons(
-    path: Path, layer: str | None, legend: Legend, mesh_crs: str, xy: npt.NDArray[np.float64]
+    path: Path,
+    layer: str | None,
+    legend: Legend,
+    mesh_crs: str,
+    xy: npt.NDArray[np.float64],
+    tell: Callable[[int, int], None] | None = None,
 ) -> tuple[list[tuple[int, BaseGeometry]], int]:
     """Every polygon of a coded source with its class code, moved to
     ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of the
     points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
     skipped; a value that is no class code is a :class:`FeatureError`. Each
     polygon is repaired after the move (:func:`_repaired`), and dropped when
-    nothing polygonal is left; the count returned is how many were."""
+    nothing polygonal is left; the count returned is how many were. ``tell``,
+    if given, is called with that count and the number of polygons read."""
     spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
     box_for = _near(xy, mesh_crs)
     read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
@@ -646,9 +652,10 @@ def read_class_polygons(
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
     fixed = [(code, _repaired(g)) for code, g in out]
-    return [(c, g) for c, g in fixed if g is not None], sum(
-        a is not b for (_, a), (_, b) in zip(out, fixed, strict=True)
-    )
+    repaired = sum(a is not b for (_, a), (_, b) in zip(out, fixed, strict=True))
+    if tell is not None:
+        tell(repaired, len(out))
+    return [(c, g) for c, g in fixed if g is not None], repaired
 
 
 def _near(
@@ -668,11 +675,15 @@ def _near(
 
 
 def read_polygons(
-    path: Path, layer: str | None, mesh_crs: str, xy: npt.NDArray[np.float64]
+    path: Path,
+    layer: str | None,
+    mesh_crs: str,
+    xy: npt.NDArray[np.float64],
+    tell: Callable[[int, int], None] | None = None,
 ) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
-    by vertex and repaired; a GeoPackage is queried, and the count returned,
-    as by :func:`read_class_polygons`."""
+    by vertex and repaired; a GeoPackage is queried, the count returned and
+    ``tell`` called, as by :func:`read_class_polygons`."""
     read = read_source(path, layer, None, _near(xy, mesh_crs))
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
@@ -682,9 +693,10 @@ def read_polygons(
     ]
     moved = flat if move is None else [shapely.transform(g, move) for g in flat]
     fixed = [_repaired(g) for g in moved]
-    return [g for g in fixed if g is not None], sum(
-        a is not b for a, b in zip(moved, fixed, strict=True)
-    )
+    repaired = sum(a is not b for a, b in zip(moved, fixed, strict=True))
+    if tell is not None:
+        tell(repaired, len(moved))
+    return [g for g in fixed if g is not None], repaired
 
 
 def _finite(geometry: BaseGeometry) -> bool:

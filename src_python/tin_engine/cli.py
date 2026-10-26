@@ -1250,11 +1250,15 @@ def mesh(
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
                 try:
-                    found_polygons, repaired = read_polygons(*reservoir[:2], dem_crs, xy[:, :2])
+                    found_polygons, repaired = read_polygons(
+                        *reservoir[:2],
+                        dem_crs,
+                        xy[:, :2],
+                        functools.partial(_say_repaired, "reservoirs"),
+                    )
                 except FeatureError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
                 regulated = overlay(xy[dem_run.trimmed.triangles], found_polygons)
-            _say_repaired("reservoirs", repaired, len(found_polygons))
             more |= {"reservoirs": escaped_ascii(reservoir[2]), "reservoirs_repaired": repaired}
         elif categories is not None:
             more["reservoirs"] = "none"
@@ -1631,9 +1635,13 @@ def _class_fractions(
                 layer = source.layer if source is not None else None
                 xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
                 found, repaired = read_class_polygons(
-                    classes.path, layer, classes.legend, dem_crs, xy
+                    classes.path,
+                    layer,
+                    classes.legend,
+                    dem_crs,
+                    xy,
+                    functools.partial(_say_repaired, "land cover"),
                 )
-                _say_repaired("land cover", repaired, len(found))
                 known_codes = frozenset(classes.legend.palette or {})
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=known_codes)
             else:
@@ -1668,11 +1676,11 @@ def _class_fractions(
     return assigned.table, assigned.codes, values
 
 
-def _say_repaired(what: str, repaired: int, kept: int) -> None:
+def _say_repaired(what: str, repaired: int, read: int) -> None:
     """One stderr line when the polygons read had self-crossing rings."""
     if repaired:
         typer.echo(
-            f"{what}: {repaired} of {kept} polygons crossed itself and was repaired", err=True
+            f"{what}: {repaired} of {read} polygons crossed itself and was repaired", err=True
         )
 
 
