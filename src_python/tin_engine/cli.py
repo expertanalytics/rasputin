@@ -784,8 +784,7 @@ def mesh(
             help="Metres: simplify land-cover borders, each moved at most this far from its "
             "border after the repair and the outline rule, each class keeping its area; the "
             "simplification can bring a border back within the outline-snap distance of the "
-            "outline, but not closer than the repair distance. 0 is off. Also the band of "
-            "--catchments borders, which is otherwise set by --triangles. " + DERIVED.format(50),
+            "outline, but not closer than the repair distance. 0 is off. " + DERIVED.format(50),
         ),
     ] = None,
     features_outline_snap: Annotated[
@@ -836,8 +835,9 @@ def mesh(
             "--catchments",
             metavar="UNITS",
             help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
-            "whose inner point lies in --domain are joined into the domain, their borders "
-            "become constraints, and each cell's catchment_id is its unit's id.",
+            "whose inner point lies in --domain are joined into the domain, their borders, "
+            "simplified within --features-tolerance or else a band --triangles sets, become "
+            "constraints, and each cell's catchment_id is its unit's id.",
         ),
     ] = None,
     threads: THREADS = None,
