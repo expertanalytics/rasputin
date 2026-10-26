@@ -14,6 +14,7 @@ line, and folded by `pipes.fold`; a pipe's priority comes from a `Pipe`.
 from __future__ import annotations
 
 import importlib.util
+import itertools
 import json
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -135,6 +136,37 @@ def first_index(lines: list[str], prefix: str) -> int:
     found = [i for i, line in enumerate(lines) if line.startswith(prefix)]
     assert found, f"no line starts with {prefix!r}: {lines}"
     return found[0]
+
+
+COLUMNS = ("PIPE", "PRI", "ITEM", "STEP", "WAITING ON", "SINCE", "NEXT")
+
+
+def table(lines: list[str]) -> list[dict[str, str]]:
+    """The table's rows, each cell cut at the column heading's offset, `mark` first.
+
+    A row is any line after the column heading row and before `Questions for
+    Ola:` or the closing `next:` line. Each column must start where its heading
+    starts, so a cell that spills into the next column fails here.
+    """
+    at = [i for i, line in enumerate(lines) if all(name in line for name in COLUMNS)]
+    assert len(at) == 1, f"one column heading row expected: {lines}"
+    heading = lines[at[0]]
+    offsets = [heading.index(name) for name in COLUMNS]
+    assert offsets == sorted(offsets), heading
+    rows = []
+    for line in lines[at[0] + 1 :]:
+        if line.startswith(("Questions for Ola:", "next:")):
+            break
+        for name, offset in zip(COLUMNS, offsets, strict=True):
+            if name == "NEXT" and len(line) <= offset:
+                continue  # an empty NEXT cell, its trailing blanks stripped
+            assert line[offset - 1] == " ", f"{name} does not start at {offset}: {line!r}"
+            if name != "NEXT":
+                assert line[offset] != " ", f"{name} cell empty or shifted: {line!r}"
+        bounds = [0, *offsets, len(line)]
+        cells = [line[a:b].strip() for a, b in itertools.pairwise(bounds)]
+        rows.append(dict(zip(("mark", *COLUMNS), cells, strict=True)))
+    return rows
 
 
 # ---------------------------------------------------------------- 1. fold
@@ -415,13 +447,16 @@ def test_the_recap_block_lists_stuck_items_first_with_their_age(repo: Path) -> N
     append(repo, *STUCK_SET)
     lines = pipes.show_lines(repo, NOW)
     assert lines[0].startswith("Pipes (in flight 0 of 3")
-    stuck_at = lines.index("Stuck:")
-    assert stuck_at < first_index(lines, "core (priority")
-    assert stuck_at < first_index(lines, "lsm (priority")
-    first, second = lines[stuck_at + 1], lines[stuck_at + 2]
-    assert "core/q" in first and "5 d" in first
-    assert "lsm/old" in second and "4 d" in second
-    assert not any("core/fresh" in line for line in lines[stuck_at : first_index(lines, "core (")])
+    assert "Stuck:" not in lines  # one table: no `Stuck:` heading, no per-pipe headings
+    assert not any(line.startswith(("core (priority", "lsm (priority")) for line in lines)
+    rows = table(lines)
+    first, second = rows[0], rows[1]
+    key = ("PIPE", "SINCE")
+    assert [first[k] for k in key] == ["core", "5 d stuck"] and first["ITEM"].startswith("q ")
+    assert [second[k] for k in key] == ["lsm", "4 d stuck"] and second["ITEM"].startswith("old ")
+    assert (first["mark"], second["mark"]) == ("", "next")
+    fresh = [row for row in rows[2:] if row["ITEM"].split()[0] == "fresh"]
+    assert len(fresh) == 1 and fresh[0]["SINCE"] == "1 d", rows
 
 
 # ---------------------------------------------------------------- 9. questions
@@ -547,3 +582,63 @@ def test_the_commands_pass_the_governance_guard(command: str) -> None:
 
 def test_pipes_py_is_governed() -> None:
     assert load_guard().governed("tools/pipes.py") is True
+
+
+# ---------------------------------------------------------------- 12. the table
+
+
+def live(item: str, state: str, age: timedelta, **extra: Any) -> dict[str, Any]:
+    """`rec` aged from the real clock, for commands that read it.
+
+    Ages sit 10 minutes past a whole hour, so neither rounding nor flooring to
+    hours moves across a boundary while the test runs.
+    """
+    record = rec(item, state, **extra)
+    since = datetime.now(UTC).replace(microsecond=0) - age - timedelta(minutes=10)
+    record["since"] = since.isoformat(timespec="seconds")
+    return record
+
+
+def table_set() -> list[dict[str, Any]]:
+    """Test 12's items: four open in `core`, one in `lsm`, and a merged one."""
+    return [
+        live("r", "red", 2 * HOUR), live("g", "green", 3 * HOUR),
+        live("w", "waiting", 5 * HOUR, question="ship it?", default="wait"),
+        live("q", "queued", 2 * HOUR, title="t" * 200),
+        live("l", "queued", DAY + 2 * HOUR, pipe="lsm"), live("m", "merged", HOUR, pr=7),
+    ]  # fmt: skip
+
+
+def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
+    append(repo, *table_set())
+    note(repo, "r")  # `r` is busy: its worktree's note is in current-task
+    shown = ok(repo, "show")
+    assert ok(repo) == shown, "pipes.py with no arguments must print `show`"
+    lines = shown.splitlines()
+    assert max(len(line) for line in lines) <= 120
+    rows = table(lines)
+    by_id = {row["ITEM"].split()[0]: row for row in rows}
+    assert [row["ITEM"].split()[0] for row in rows] == ["g", "r", "w", "q", "l"]
+    assert len(by_id) == len(rows) and "m" not in by_id
+    chosen = [line for line in ok(repo, "next").splitlines() if line.startswith("next: ")]
+    assert chosen and chosen[0].startswith("next: core/g ")
+    assert [row["ITEM"].split()[0] for row in rows if row["mark"] == "next"] == ["g"]
+    assert {i: by_id[i]["WAITING ON"] for i in "rgwql"} == {
+        "r": "its agent", "g": "free agent", "w": "Ola", "q": "free agent", "l": "free agent"
+    }  # fmt: skip
+    assert {i: (by_id[i]["PIPE"], by_id[i]["PRI"], by_id[i]["STEP"]) for i in "rwl"} == {
+        "r": ("core", "1", "red"), "w": ("core", "1", "waiting"), "l": ("lsm", "2", "queued")
+    }  # fmt: skip
+    assert by_id["w"]["NEXT"].startswith("question 1 below")
+    assert (by_id["r"]["SINCE"], by_id["l"]["SINCE"]) == ("2 h", "1 d")
+    assert not any("stuck" in row["SINCE"] for row in rows)
+    assert by_id["q"]["ITEM"].endswith("...") and len(by_id["q"]["ITEM"]) <= 30
+
+
+def test_unattended_an_item_that_is_not_plain_waits_on_ola_present(repo: Path) -> None:
+    append(repo, live("gov", "queued", HOUR), live("pl", "queued", HOUR, plain=True),
+           live("w", "waiting", HOUR, question="ship it?", default="wait"))  # fmt: skip
+    harness_fixtures.flag_on(repo)
+    rows = table(ok(repo).splitlines())
+    waiting_on = {row["ITEM"].split()[0]: row["WAITING ON"] for row in rows}
+    assert waiting_on == {"gov": "Ola present", "pl": "free agent", "w": "Ola"}
