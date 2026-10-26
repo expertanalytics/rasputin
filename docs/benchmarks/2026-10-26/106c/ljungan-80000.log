@@ -1,0 +1,11 @@
+catchments: 809 units of smhi-svar2022-subcatchments, borders simplified at 76 m (a triangle's edge at 80000 triangles, 609 m, over 8): 36970 vertices, 12838.64 km2
+lines: 38898 vertices read, 18642 after joining shared edges and adding crossings
+DEM: 12 files, 8270 columns x 3913 rows
+land cover: 48 of 14642 polygons crossed itself and was repaired
+land cover: 147528 class shares over 78046 triangles, 27 classes
+78046 triangles, about the 80000 asked for (at most 84000): tolerance 56.6 m found in 6 trials. Every node of the original DEM inside the mesh is within 56.6 m of it (largest difference 56.6 m, root-mean-square 11.96 m).
+/Users/skavhaug/projects/rasputin_scratch/perf-106c-out/ljungan-80000.gpkg
+/Users/skavhaug/projects/rasputin_scratch/perf-106c-out/ljungan-80000.stats.json
+real 97.65
+user 153.00
+sys 3.89
