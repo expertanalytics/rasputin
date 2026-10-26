@@ -313,7 +313,7 @@ other harness tools, because the recap runs from a hook on the system
 4. **Commands.** `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`,
    `show`; each parses, reads, applies one pure function, appends one line.
    `show` prints the block below; `session_state.print_recap` calls
-   `pipes.show_lines(repo, now)` and prints them after *Waiting on Ola*,
+   `work_pipes.show_lines(repo, now)` and prints them after *Waiting on Ola*,
    before the `session.md format:` warnings.
 
 **The recap block is one table**, the same text as `work_pipes.py show` and
@@ -404,7 +404,7 @@ still not wanted is `parked` or `dropped` by Ola's word, which ends it.
 | Where | Change | Size |
 |---|---|---|
 | `tools/work_pipes.py` (new) | records, definitions (tree and other remotes, no fetch), the order rule, stuck, busy, `add`, `set`, `ask`, `answer`, `priority`, `top`, `next`, `show` | about 260 lines (220 + about 15 for stuck + about 10 for busy + about 15 for the table: about 25 for columns, row order and cell cutting, less about 10 for the per-pipe blocks and `Stuck:` section it replaces) |
-| `tools/session_state.py` | print `pipes.show_lines` where `QUEUE:` was read; `session_format` accepts zero or one `QUEUE:` line | about +15, -20 |
+| `tools/session_state.py` | print `work_pipes.show_lines` where `QUEUE:` was read; `session_format` accepts zero or one `QUEUE:` line | about +15, -20 |
 | `.claude/hooks/guard_governance.py` | `"tools/work_pipes.py"` added to `GOVERNED`, because `session_state.py` imports it | +1 |
 | `.claude/REQUIRED-READING.md` | the `session.md` format line: `NOW:` (one), `ASK OLA:` lines, `QUEUE:` (at most one); item questions go to `work_pipes.py ask`; the fallback sentence kept | net about -15 words |
 | `CLAUDE.md` §3 | *Finish before starting*: "a free writer goes first ... process work" becomes "`python3 tools/work_pipes.py next` says which item" | net about -20 words |
@@ -555,3 +555,4 @@ README.md`, *Cost constraints*).
 - **Design review, round 3, 2026-10-25.** `@reviewer`, head `3b0d2d981dfdc348ddc6b37d6fcfa2e5743ebecd`, range `51b3dc93..3b0d2d98`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); about 240. Round 2 closed as given. Applied in this commit: the busy note name is `<persona>-<name>-<HHMMSS>.md` (a longer worktree name no longer collides, e.g. `tri-budget-rms`), with a test 3 case; `next` prints a `busy:` line per skipped item, so a stale note leaves a trace. Not pushed; no CI.
 - **Code review, round 1, 2026-10-26.** `@reviewer`, head `8691037448c70ea461c595d9a5c9f7015f4d48a3`. Verdict: CHANGES REQUESTED. Blocking: `answer` dropped the ruling; `answer` without an open question changed state.
 - **Code review, round 2, 2026-10-26.** `@reviewer`, head `316adc0a7babc3ad75ad60cdb269c5c78ae7f038`. Verdict: CHANGES REQUESTED. Blocking: CI red on Python 3.12, `tools/pipes.py` shadowed the standard-library `pipes` module; renamed to `tools/work_pipes.py`.
+- **Code review, round 3, 2026-10-26.** `@reviewer`, head `97f31e5e9e59b6b0cbf245eeff1489f393ebff05`, range `316adc0a..97f31e5e`. Verdict: APPROVED WITH WORDINGS. Rename to `tools/work_pipes.py` complete; two wordings applied (`work_pipes.show_lines`).
