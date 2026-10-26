@@ -614,13 +614,25 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
+def _repaired(geometry: BaseGeometry) -> BaseGeometry | None:
+    """``geometry`` if valid, else the polygons of ``shapely.make_valid`` of it
+    (a ring that crosses itself makes GEOS's overlays throw); None if none."""
+    if geometry.is_valid:
+        return geometry
+    parts = shapely.get_parts(shapely.get_parts(shapely.make_valid(geometry)))
+    kept = [p for p in parts if isinstance(p, Polygon) and not p.is_empty]
+    return MultiPolygon(kept) if kept else None
+
+
 def read_class_polygons(
     path: Path, layer: str | None, legend: Legend, mesh_crs: str, xy: npt.NDArray[np.float64]
-) -> list[tuple[int, BaseGeometry]]:
+) -> tuple[list[tuple[int, BaseGeometry]], int]:
     """Every polygon of a coded source with its class code, moved to
     ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of the
     points ``xy`` (in ``mesh_crs``) widened by 100 m. Lines and empty rows are
-    skipped; a value that is no class code is a :class:`FeatureError`."""
+    skipped; a value that is no class code is a :class:`FeatureError`. Each
+    polygon is repaired after the move (:func:`_repaired`), and dropped when
+    nothing polygonal is left; the count returned is how many were."""
     spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
     box_for = _near(xy, mesh_crs)
     read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
@@ -633,7 +645,10 @@ def read_class_polygons(
         code = _code(legend, value, f"{path.name}: feature {fid}", second)
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
-    return out
+    fixed = [(code, _repaired(g)) for code, g in out]
+    return [(c, g) for c, g in fixed if g is not None], sum(
+        a is not b for (_, a), (_, b) in zip(out, fixed, strict=True)
+    )
 
 
 def _near(
@@ -654,9 +669,10 @@ def _near(
 
 def read_polygons(
     path: Path, layer: str | None, mesh_crs: str, xy: npt.NDArray[np.float64]
-) -> list[BaseGeometry]:
+) -> tuple[list[BaseGeometry], int]:
     """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
-    by vertex; a GeoPackage is queried as by :func:`read_class_polygons`."""
+    by vertex and repaired; a GeoPackage is queried, and the count returned,
+    as by :func:`read_class_polygons`."""
     read = read_source(path, layer, None, _near(xy, mesh_crs))
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
@@ -664,7 +680,11 @@ def read_polygons(
         for _, g, _ in read.rows
         if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
     ]
-    return flat if move is None else [shapely.transform(g, move) for g in flat]
+    moved = flat if move is None else [shapely.transform(g, move) for g in flat]
+    fixed = [_repaired(g) for g in moved]
+    return [g for g in fixed if g is not None], sum(
+        a is not b for a, b in zip(moved, fixed, strict=True)
+    )
 
 
 def _finite(geometry: BaseGeometry) -> bool:
