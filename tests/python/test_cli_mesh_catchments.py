@@ -172,13 +172,15 @@ def test_no_cell_straddles_and_each_takes_its_units_id(
     second = np.sort(shares, axis=1)[:, -2]
     assert second.max() <= SHARE, f"{int((second > SHARE).sum())} cells straddle two units"
     assert abs(area.sum() - 9_000_000) <= 1e-6 * 9_000_000, area.sum()
+    # First, so a rule taking a cell's first vertex, which lies on a border and so
+    # within no unit, fails here as the design names it.
+    assert "centroid in no unit" not in ran.output, ran.output
     centroids = shapely.centroid(triangles)
     holder = np.array([[u.contains(c) for u in UNITS] for c in centroids])
     assert (holder.sum(1) == 1).all()
     expected = np.array(FIDS)[holder.argmax(1)]
     assert_array_equal(column(ran.conn, "cells", "catchment_id"), expected)
     assert set(expected) == set(FIDS)
-    assert "centroid in no unit" not in ran.output, ran.output
     assert record(ran.conn, "catchments") == "units.geojson"
     assert record(ran.conn, "catchments_units") == "3"
     assert float(record(ran.conn, "catchments_band_m") or "nan") == 0.0
