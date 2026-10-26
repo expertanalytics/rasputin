@@ -104,7 +104,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "fetch.features": "crs fetch.http fetch.plan io.geopackage_write io.repository sources"
                           " tin_engine",  # 63: an ArcGIS layer's polygons into the cache
         "tolerance_field": "crs feature_input",
-        "sub_catchments": "border_simplify features",  # 106c: units as constraints, cell ids
+        "sub_catchments": "border_simplify crs domain features",  # 106c, 106e: units; the domain
         "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
         "legends": "feature_input features toml_data",  # 41: legend files to Legend
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
