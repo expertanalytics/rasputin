@@ -502,7 +502,8 @@ GOOD = "NOW: build h8\nQUEUE: red, green\nASK OLA: push?\n\nASK OLA: merge?\n"
 GOOD_BULLETED = "- NOW: build h8\n* QUEUE: red\n  + ASK OLA: push?\n\t- ASK OLA: merge?\n"
 
 
-@pytest.mark.parametrize("text", [GOOD, GOOD_BULLETED])
+# h31 §7: the pipes hold the queue, so zero QUEUE lines are as good as one.
+@pytest.mark.parametrize("text", [GOOD, GOOD_BULLETED, "NOW: n\n", "NOW: n\nASK OLA: x\n"])
 def test_a_well_formed_session_md_gives_no_warning(text: str) -> None:
     assert session_state.session_format(text) == []
 
@@ -511,8 +512,7 @@ def test_a_well_formed_session_md_gives_no_warning(text: str) -> None:
     ("text", "warning"),
     [
         ("QUEUE: q\n", "session.md: 0 NOW lines; exactly one expected"),
-        ("NOW: n\n", "session.md: 0 QUEUE lines; exactly one expected"),
-        ("NOW: n\nQUEUE: a\nQUEUE: b\n", "session.md: 2 QUEUE lines; exactly one expected"),
+        ("NOW: n\nQUEUE: a\nQUEUE: b\n", "session.md: 2 QUEUE lines; at most one expected"),
         ("NOW: a\nNOW: b\nQUEUE: q\n", "session.md: 2 NOW lines; exactly one expected"),
         ("NOW:   \nQUEUE: q\n", "session.md:1: empty NOW line"),
         ("NOW: n\n- QUEUE:\n", "session.md:2: empty QUEUE line"),
@@ -547,7 +547,7 @@ def test_the_warnings_come_in_the_order_of_the_design() -> None:
     text = f"Rulings: z\nNOW:\nNOW: a\n{long_ask}\nQUEUE: q\nQUEUE: r\n"
     assert session_state.session_format(text) == [
         "session.md: 2 NOW lines; exactly one expected",
-        "session.md: 2 QUEUE lines; exactly one expected",
+        "session.md: 2 QUEUE lines; at most one expected",
         "session.md:2: empty NOW line",
         f"session.md:1: {NOT_A}Rulings: z",
         "session.md:4: 309 characters; at most 300",
@@ -607,10 +607,10 @@ def test_the_recap_prints_format_warnings_for_a_faulty_main_session_md(
     lines = _recap(harness_repo)
     waiting = lines.index("Waiting on Ola:")
     assert lines[waiting + 1] == "  session.md: ASK OLA: push?"
-    assert lines[waiting + 2] == "session.md format:"
+    # h31 §7: the pipes block may stand between the decisions and the format block.
+    assert lines.index("session.md format:") > waiting + 1
     assert _block(lines, "session.md format:") == [
         "session.md: 0 NOW lines; exactly one expected",
-        "session.md: 0 QUEUE lines; exactly one expected",
         f"session.md:2: {NOT_A}Rulings: x",
     ]
 
