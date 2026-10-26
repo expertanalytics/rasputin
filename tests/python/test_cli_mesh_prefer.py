@@ -1,0 +1,250 @@
+"""`rasputin mesh --land-cover ... --prefer lake=<source>`: the lake class
+taken from a preferred polygon source, the rest from the land cover.
+
+`docs/increments/107-prefer-classes.md`, section 2 (the rule, the warning,
+the refusals), section 4 (legend `[prefer]` table, CLI, credit) and section 5,
+cases 6 and 7. The scene is `test_cli_mesh_cells.py`'s on the polygon route
+with `corine` (`cover_polygons`: forest 311 and 312, water 512, the rest
+uncovered). The preferred lake rectangle covers the east end of forest 311,
+the uncovered land between and the west of water 512. What is left of the
+water borders no kept polygon (a 200 m gap on every side), so it is left out
+(class 0): the lake share is the preferred lake's alone, and the warning fires
+(the preferred lake is smaller than the water it replaces).
+
+THE ORACLE: per triangle of the `triangles` layer read back, GEOS's
+`intersection(...).area` share with the preferred lake (lake), and with the
+forest polygons less the lake (forest). Bound `SHARE` = 1e-6, as in
+`test_cli_mesh_reservoirs.py`: the cut at these coordinates (below 1e7 m,
+triangles of 100 m and up) loses under 1e-9 of a triangle, and the shares are
+float32 (6e-8).
+
+PINNED HERE, where the design leaves it open (listed for `@architect`):
+
+- Every refusal is a usage error (exit 2) before any phase is timed, naming
+  `--prefer`; the raster and no-land-cover ones also name `--land-cover`, the
+  unknown key names the key, the legend refusal names the legend.
+- A file's warning names the land cover and the preferred source by file name
+  (`cover.geojson`, `lake.geojson`), in the design's sentence.
+- The run record holds a row whose name contains `prefer`, whose value names
+  the key and carries the three areas (at least three numbers); the credit row
+  is `land_cover_prefer_credit`, naming the key and the file.
+- `--prefer` with a `.vtk` output is accepted.
+"""
+
+from __future__ import annotations
+
+import re
+import sqlite3
+from contextlib import closing
+from pathlib import Path
+
+import numpy as np
+import pytest
+import shapely
+from numpy.testing import assert_allclose
+from shapely.geometry import Polygon, box
+
+from class_fixtures import KEY
+from cli_helpers import USAGE, squashed
+from feature_fixtures import Feat, write_geojson
+from fraction_fixtures import MESH_CRS, dem_origin
+from legend_fixtures import coded_map, write
+from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson
+from test_cli_mesh_cells import check_sums, column, corners, mesh, scene, written
+from test_cli_mesh_reservoirs import (
+    oracle_r,
+    phases,
+    record,
+    reservoir_rectangle,
+    write_reservoirs,
+)
+from tin_engine.legends import load
+
+__all__ = ["phases", "scene"]  # fixtures, used by name
+
+#: On a share: see the module docstring.
+SHARE = 1e-6
+#: The warning's words, whitespace removed (Rich may break lines anywhere).
+TOOK = "tookaneighbouringclass"
+
+
+def preferred_lake() -> Polygon:
+    """Over the east end of forest 311, the land beyond it and the west of
+    water 512; no side on a DEM node (the DEM's step is 60 m)."""
+    x0, y0 = dem_origin()
+    return box(x0 + 1000.2, y0 - 1400.3, x0 + 1700.7, y0 - 800.6)
+
+
+def big_lake() -> Polygon:
+    """Over all of water 512 inside the domain, and more."""
+    x0, y0 = dem_origin()
+    return box(x0 + 1300.1, y0 - 1800.2, x0 + 2700.3, y0 - 500.4)
+
+
+def write_lake(path: Path, lake: Polygon) -> Path:
+    return write_geojson(path, [Feat(1, lake, {"vatnLnr": "1"})], crs=MESH_CRS)
+
+
+def share(conn: sqlite3.Connection, shape: shapely.Geometry) -> np.ndarray:
+    triangles = shapely.polygons(corners(conn)[:, :, :2])
+    return shapely.area(shapely.intersection(triangles, shape)) / shapely.area(triangles)
+
+
+@pytest.fixture
+def cover(tmp_path: Path) -> Path:
+    return write_cover_geojson(tmp_path / "cover.geojson", cover_polygons())
+
+
+@pytest.fixture
+def lake(tmp_path: Path) -> Path:
+    return write_lake(tmp_path / "lake.geojson", preferred_lake())
+
+
+def corine(cover: Path, *more: str) -> tuple[str, ...]:
+    return ("--land-cover", str(cover), "--land-cover-legend", "corine", *more)
+
+
+# ------------------------------------------------------------ the legends
+
+
+def test_the_legends_name_the_class_each_key_replaces() -> None:
+    assert dict(load("corine").prefer) == {"lake": 512, "glacier": 335}
+    assert dict(load("ar50").prefer) == {"lake": 81, "glacier": 70}
+
+
+# ------------------------------------------------------------ case 7, end to end
+
+
+def test_case7_the_lake_share_comes_from_the_preferred_polygons(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path
+) -> None:
+    args = corine(cover, "--prefer", f"lake={lake}")
+    code, output = mesh(scene, tmp_path / "x.gpkg", *args)
+    assert code == 0, output
+    with closing(sqlite3.connect(tmp_path / "x.gpkg")) as conn:
+        assert_allclose(column(conn, "cells", "lake"), share(conn, preferred_lake()), atol=SHARE)
+        forest = shapely.union_all([g for c, g in cover_polygons() if c in (311, 312)])
+        expected = share(conn, forest.difference(preferred_lake()))
+        assert_allclose(column(conn, "cells", "forest"), expected, atol=SHARE)
+        assert not column(conn, "cells", "glacier").any()
+        check_sums(conn)
+        rows = conn.execute("SELECT name, value FROM run WHERE name LIKE '%prefer%'").fetchall()
+        credit = record(conn, "land_cover_prefer_credit")
+    assert credit is not None and "lake" in credit and "lake.geojson" in credit, credit
+    areas = [str(v) for n, v in rows if "credit" not in n and "licence" not in n]
+    assert any("lake" in v and len(re.findall(r"\d+(?:\.\d+)?", v)) >= 3 for v in areas), rows
+    # less lake than the water it replaced: the warning, in the design's words
+    flat = squashed(output)
+    assert "lake:lake.geojsongives" in flat and "cover.geojsongave" in flat, output
+    assert "ofcover.geojsonwaterhadnolake.geojsonlakeand" + TOOK in flat, output
+
+
+def test_case7_reservoirs_split_the_preferred_lake_share(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path
+) -> None:
+    res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
+    prefer = ("--prefer", f"lake={lake}")
+    split = (*prefer, "--reservoirs", str(res))
+    with (
+        closing(written(scene, tmp_path / "a.gpkg", *corine(cover, *prefer))) as a,
+        closing(written(scene, tmp_path / "b.gpkg", *corine(cover, *split))) as b,
+    ):
+        before = column(a, "cells", "lake")
+        lake_b, reservoir = column(b, "cells", "lake"), column(b, "cells", "reservoir")
+        r = oracle_r(b, reservoir_rectangle())
+        assert_allclose(reservoir, np.minimum(before, r), rtol=0, atol=SHARE)
+        assert_allclose(lake_b + reservoir, before, rtol=0, atol=1e-12)
+        assert reservoir.max() > 0.5, reservoir.max()
+        assert ((r > 0.5) & (before == 0)).any(), "no land under the rectangle"
+        check_sums(b)
+
+
+def test_case7_no_warning_when_the_preferred_lake_gives_more(
+    scene: dict[str, Path], tmp_path: Path, cover: Path
+) -> None:
+    big = write_lake(tmp_path / "big.geojson", big_lake())
+    code, output = mesh(scene, tmp_path / "x.gpkg", *corine(cover, "--prefer", f"lake={big}"))
+    assert code == 0, output
+    assert TOOK not in squashed(output), output
+
+
+def test_prefer_needs_no_gpkg(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path
+) -> None:
+    target = tmp_path / "x.vtk"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"))
+    assert code == 0, output
+    assert target.exists()
+
+
+# ------------------------------------------------------------ case 6, refusals
+
+
+def refused(scene: dict[str, Path], tmp_path: Path, phases: list[str], *args: str) -> str:
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *args)
+    assert code == USAGE, output
+    assert phases == [], phases
+    assert not target.exists()
+    flat = squashed(output)
+    assert "--prefer" in flat, output
+    return flat
+
+
+def test_case6_an_unknown_key_is_refused_naming_it(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
+) -> None:
+    flat = refused(scene, tmp_path, phases, *corine(cover, "--prefer", f"river={lake}"))
+    assert "river" in flat, flat
+
+
+def test_case6_a_legend_without_prefer_is_refused_naming_it(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
+) -> None:
+    classes = (
+        '[[class]]\ncode = 311\nlabel = "Forest"\ncolour = "#1f8d49"\ncategory = "forest"\n\n'
+        '[[class]]\ncode = 512\nlabel = "Lake"\ncolour = "#2532e4"\nwater = true\n'
+        'category = "lake"\n'
+    )
+    legend = write(tmp_path / "mine.toml", coded_map("mine", attribute="Code_18", classes=classes))
+    args = ("--land-cover", str(cover), "--land-cover-legend", str(legend))
+    flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
+    assert "mine" in flat, flat
+
+
+def test_case6_a_raster_land_cover_is_refused(
+    scene: dict[str, Path], tmp_path: Path, lake: Path, phases: list[str]
+) -> None:
+    args = ("--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11")
+    flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
+    assert "--land-cover" in flat, flat
+
+
+def test_case6_prefer_alone_is_refused(
+    scene: dict[str, Path], tmp_path: Path, lake: Path, phases: list[str]
+) -> None:
+    flat = refused(scene, tmp_path, phases, "--prefer", f"lake={lake}")
+    assert "--land-cover" in flat, flat
+
+
+def test_case6_a_key_with_no_source_is_refused(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, phases: list[str]
+) -> None:
+    refused(scene, tmp_path, phases, *corine(cover, "--prefer", "lake="))
+
+
+# ------------------------------------------------------------ the MCP tool
+
+
+def test_the_mcp_mesh_tool_takes_prefer_as_a_list() -> None:
+    pytest.importorskip("mcp")
+    from tin_engine.cli import app
+    from tin_engine.mcp import schema as mcp_schema
+
+    mesh_tool = {d.tool_name: d for d in mcp_schema.derive(app)}["mesh"]
+    prefer = mesh_tool.tool().input_schema["properties"]["prefer"]
+    assert "array" in str(prefer), prefer
+    arguments = {"out": "x.vtk", "dem": ["d.tif"], "prefer": ["lake=a", "glacier=b"]}
+    argv = mesh_tool.argv(mesh_tool.model.model_validate(arguments))
+    joined = " ".join(argv)
+    assert "--prefer lake=a" in joined and "--prefer glacier=b" in joined, argv
