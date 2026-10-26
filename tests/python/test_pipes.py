@@ -488,6 +488,26 @@ def test_ask_sets_waiting_and_answer_restores_the_state(repo: Path) -> None:
     assert "split it in two?" not in ok(repo, "show")
 
 
+def test_answer_records_the_ruling_on_the_item_record(repo: Path) -> None:
+    ok(repo, "add", "core", "r1", "an item with a question")
+    ok(repo, "ask", "r1", "split it in two?", "--default", "keep it whole")
+    ok(repo, "answer", "r1", "split it, the reader part first")
+    records = [json.loads(line) for line in live_list(repo, "core").read_text().splitlines()]
+    newest = [r for r in records if r["id"] == "r1"][-1]
+    assert newest.get("ruling") == "split it, the reader part first", newest
+
+
+def test_answer_without_an_open_question_is_refused_and_changes_nothing(repo: Path) -> None:
+    ok(repo, "add", "core", "h1", "an item with no question")
+    ok(repo, "set", "h1", "red", "--branch", "worktree-h1")
+    lines_before = live_list(repo, "core").read_text()
+    result = cli(repo, "answer", "h1", "stray")
+    assert result.returncode != 0, result.stdout
+    assert "h1" in result.stderr and "no open question" in result.stderr, result.stderr
+    assert live_list(repo, "core").read_text() == lines_before
+    assert pipes.load_items(live_list(repo, "core"))["h1"].state == "red"
+
+
 def test_a_question_on_a_pipe_changes_no_item(repo: Path) -> None:
     ok(repo, "add", "core", "k1", "an item")
     ok(repo, "ask", "core", "move the queue by hand?", "--default", "yes")
