@@ -616,7 +616,9 @@ def read_lake_polygons(
 
 def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeometry | None:
     """``geometry`` if valid, else ``shapely.make_valid(geometry)`` within the
-    box of the points ``xy`` widened by 100 m, as polygons; None if empty.
+    box of the points ``xy`` widened by 100 m, as polygons, except where two
+    rings share a stretch of edge: there both sides keep the same parity.
+    None if empty.
     A ring that crosses itself makes GEOS's overlays throw. Only the part near
     the mesh is ever overlaid, and repairing a large polygon whole takes seconds.
     make_valid keeps a point when an odd number of rings, counted over all
