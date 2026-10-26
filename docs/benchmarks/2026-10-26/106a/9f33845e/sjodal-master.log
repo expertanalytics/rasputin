@@ -1,0 +1,84 @@
+DEM: 2 files, 4136 columns x 2214 rows
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /Users/skavhaug/projects/rasputin_scratch/perf-106a-base/build-bench/pkg/tin │
+│ _engine/cli.py:1241 in mesh                                                  │
+│                                                                              │
+│   1238 │   │   │   palette = coded.palette                                   │
+│   1239 │   │   │   cover = [(f.code, f.polygon) for f in found.features if   │
+│        f.polygon and f.code]                                                 │
+│   1240 │   if classes is not None:                                           │
+│ ❱ 1241 │   │   table, codes, more = _class_fractions(                        │
+│   1242 │   │   │   classes, dem_run.trimmed, dem_crs, clock, domain,         │
+│        out_crs, cache, res.threads                                           │
+│   1243 │   │   )                                                             │
+│   1244 │   │   codes_text = str(more["land_cover_codes"])                    │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin_scratch/perf-106a-base/build-bench/pkg/tin │
+│ _engine/cli.py:1634 in _class_fractions                                      │
+│                                                                              │
+│   1631 │   │   │   │   xy = np.asarray(trimmed.vertices,                     │
+│        dtype=np.float64)[:, :2]                                              │
+│   1632 │   │   │   │   found = read_class_polygons(classes.path, layer,      │
+│        classes.legend, dem_crs, xy)                                          │
+│   1633 │   │   │   │   known_codes = frozenset(classes.legend.palette or {}) │
+│ ❱ 1634 │   │   │   │   assigned = assign_polygon_fractions(xy,               │
+│        trimmed.triangles, found, known=known_codes)                          │
+│   1635 │   │   │   else:                                                     │
+│   1636 │   │   │   │   assigned = assign_fractions(                          │
+│   1637 │   │   │   │   │   trimmed.vertices,                                 │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin_scratch/perf-106a-base/build-bench/pkg/tin │
+│ _engine/polygon_fractions.py:93 in assign                                    │
+│                                                                              │
+│    90 │   │   │   raise ValueError(f"class {code} is not in the legend")     │
+│    91 │   │   if not np.isfinite(shapely.get_coordinates(polygon)).all():    │
+│    92 │   │   │   raise ValueError(f"a polygon of class {code} has a         │
+│       coordinate that is not finite")                                        │
+│ ❱  93 │   │   cut = subdivide(polygon, most)                                 │
+│    94 │   │   pieces += cut                                                  │
+│    95 │   │   codes += [code] * len(cut)                                     │
+│    96 │   shapes = shapely.polygons(xy[tri]) if len(tri) else np.zeros(0,    │
+│       dtype=object)                                                          │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin_scratch/perf-106a-base/build-bench/pkg/tin │
+│ _engine/polygon_fractions.py:65 in subdivide                                 │
+│                                                                              │
+│    62 │   │   │   rects = [(x0, y0, x1, (y0 + y1) / 2), (x0, (y0 + y1) / 2,  │
+│       x1, y1)]                                                               │
+│    63 │   │   halves = [shapely.clip_by_rect(part, *r) for r in rects]       │
+│    64 │   │   if abs(sum(h.area for h in halves) - part.area) > AREA *       │
+│       part.area:                                                             │
+│ ❱  65 │   │   │   halves = [shapely.intersection(part, shapely.box(*r)) for  │
+│       r in rects]                                                            │
+│    66 │   │   for half in halves:                                            │
+│    67 │   │   │   parts = shapely.get_parts(half)                            │
+│    68 │   │   │   todo += [(p, depth + 1) for p in parts if isinstance(p,    │
+│       Polygon) and not p.is_empty]                                           │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes/.venv/lib/pyt │
+│ hon3.14/site-packages/shapely/decorators.py:184 in wrapper                   │
+│                                                                              │
+│   181 │   │                                                                  │
+│   182 │   │   @wraps(func)                                                   │
+│   183 │   │   def wrapper(*args, **kwargs):                                  │
+│ ❱ 184 │   │   │   result = func(*args, **kwargs)                             │
+│   185 │   │   │                                                              │
+│   186 │   │   │   n = len(args)                                              │
+│   187 │   │   │   if n > warn_from:                                          │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/demo-fixes/.venv/lib/pyt │
+│ hon3.14/site-packages/shapely/set_operations.py:165 in intersection          │
+│                                                                              │
+│   162 │   │                                                                  │
+│   163 │   │   return lib.intersection_prec(a, b, grid_size, **kwargs)        │
+│   164 │                                                                      │
+│ ❱ 165 │   return lib.intersection(a, b, **kwargs)                            │
+│   166                                                                        │
+│   167                                                                        │
+│   168 # Note: future plan is to change this signature over a few releases:   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+GEOSException: TopologyException: side location conflict at 176029.99991634864 
+6824000.0004117731. This can occur if the input geometry is invalid.
+real 2.61
+user 2.22
+sys 0.17

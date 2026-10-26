@@ -68,3 +68,35 @@ with AR50 repaired by hand; master still throws.
 
 The meshes were written to `rasputin_scratch/perf-106a-out/` and removed;
 `run.sh` regenerates them.
+
+## The corrected repair, `9f33845e` (later the same day)
+
+`9f33845e` replaces `make_valid` on the clipped polygon: it cuts the
+polygon's rings to the same widened box, splits them where they cross, and
+keeps the faces the odd-count rule (the one `make_valid` uses) puts inside.
+Same machine, method and `run.sh`, unchanged; on AC before each run. Master
+`79535812` was rebuilt from a fresh `git archive` (the earlier copy was
+removed); both `.so` files are again sha256 `a353ac1e…`, so the C++ is the
+same bytes and no sanitizer run is owed. Master then head, back to back, one
+run each. The files are in `9f33845e/` (the head runs are `*-head.*`).
+
+| catchment | build | land cover fractions (s) | run total (s) | polygons repaired | triangles | outputs |
+|---|---|---:|---:|---|---:|---|
+| Kultsjön | master `79535812` | 10.51 | 11.51 | (none) | 5,720 | |
+| Kultsjön | head `9f33845e` | **5.61** | 6.58 | 43 | 5,720 | equal to master's |
+| Kultsjön | `993ed3a2` (above) | 5.72 | 6.70 | 43 | 5,720 | equal to master's |
+| Nedre Sjodalsvatn | master | crashes: GEOS `TopologyException` ("side location conflict") at 2.6 s | | | | none |
+| Nedre Sjodalsvatn | head `9f33845e` | **2.50** | 3.20 | 32 | 5,940 | finishes |
+
+Outputs (`same_output.py`, Kultsjön): `triangles`, `cells`,
+`land_cover_fractions`, `land_cover_classes`, `lines` and `layer_styles` are
+identical to master's row for row. In the `run` table the only value that
+differs is the `command` row (the package path and output file names, which
+name the build); the rest is the new `land_cover_repaired` row (43), which
+shifts every later row's number by one, so `same_output.py` reports many
+"rows differ" there: compared by name, every other run value is equal. Mesh
+quality is therefore master's. Nedre Sjodalsvatn's `--stats` matches the
+`993ed3a2` run's in every count; only phase times differ.
+
+Head against master, Kultsjön: the land-cover step is 4.90 s faster (0.53 of
+master's); against `993ed3a2` it is 0.11 s faster, within one run's noise.
