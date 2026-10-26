@@ -28,9 +28,9 @@ in its docstring; their outputs went to `/tmp/p106/` (not kept).
 | 106b | `network-catchment --network` takes only a file path, not the catalogue name `smhi-svar2022-subcatchments` | `--network`, `--lakes` and `--outlets` take a catalogue name or a file | about 15 | short | no |
 | 106c | every cell has `catchment_id` 1; tagging cells afterwards puts 18.9 % of Kultsjön's area in the wrong one of its 75 SVAR units | `mesh --catchments` repairs SMHI's units, simplifies them with rasputin's own border simplification at a band set by the triangle budget, makes their borders constraints, so no cell straddles two, and writes each cell's unit id | about 95 | full loop | **yes** |
 | 106d | no Swedish reservoir polygons: the reservoir share is 0 | a catalogue entry can keep only the lakes a dam names; `smhi-reservoirs` gives Kultsjön 82.73 km² of reservoir | about 35 | short | no |
-| 106e | an official outline cannot be meshed at a small budget (Ljungan's forces at least 190,387 triangles), and NVE's one-part MultiPolygon outlines are refused: both took scripts outside rasputin | `mesh --simplify-domain` simplifies the outline with 106c's band from the budget; a one-part MultiPolygon is read as its polygon; the refusal, `sources` and the MCP instructions name the route | about 50 | full loop | **yes** |
+| 106e | an official outline cannot be meshed at a small budget (Ljungan's forces at least 190,387 triangles), and NVE's one-part MultiPolygon outlines are refused: both took scripts outside rasputin | `mesh --simplify-domain` simplifies the outline with 106c's band from the budget; a one-part MultiPolygon is read as its polygon; the refusals, `sources` and the MCP instructions name the route, and a missing-blocks refusal names a fetch that covers the simplified outline | about 60 | full loop | **yes** |
 
-About 215 net production lines in all. No C++ in any of them.
+About 225 net production lines in all. No C++ in any of them.
 
 `@perf` applies to 106c and 106e only: 106c adds constraint lines to what
 drives the mesh, 106e changes the domain when its flag is given (*Acceptance* in `docs/increments/README.md`). 106a changes only the
@@ -546,6 +546,10 @@ to do that." And: "They do not need to be in the same geopackage": each
 basin is its own run and file, so 106e has no assembly step and no
 per-basin budget in one run.
 
+**Round 2** (2026-10-26), on `f2a0abfe`: after round 1's review, item 4
+(the missing-blocks refusal names a `--bbox` fetch, for the flag and for
+`--catchments`), its probe and test 9; two wordings.
+
 ### The two routes, and where each stops today
 
 - **Terrain:** `catchment --dem glo30 --seed ...` writes one `Polygon`, no
@@ -601,7 +605,7 @@ per-basin budget in one run.
    (`io/domain_file.py`); more parts are refused: "the domain must be one
    Polygon, got a MultiPolygon of 2 parts".
 3. **The route is named where Sol looks** (the hidden steps found):
-   - the fewest-triangles refusal, on a `--domain` run without the flag, adds
+   - the fewest-triangles refusal, on a `--domain` run without the flag or `--catchments`, adds
      "; or give --simplify-domain to simplify the outline to the budget"
      (`cli.py`, `UnderFloor`);
    - `sources`' `fits` for polygon sources lists `mesh --reservoirs`, and
@@ -614,11 +618,31 @@ per-basin budget in one run.
      "catchment and network_catchment write a polygon that mesh reads as
      domain; with simplify_domain its outline follows the triangle budget."
 
-   Checked and not hidden, so left out: the fetches (each refusal names its
-   `fetch`), `network-catchment`'s seed (a unit's `ARO_UUID`, or a point with
+   Checked and not hidden, so left out: the fetches without the flag or
+   `--catchments` (each refusal names its `fetch`; with either, item 4),
+   `network-catchment`'s seed (a unit's `ARO_UUID`, or a point with
    `--outlets smhi-outlet-points`; the `sources` descriptions name both
    attributes), the cells layer needing `--land-cover` and `.gpkg` (its
    refusal says so), and the CRS of `catchment`'s output (any CRS is read).
+4. **The missing-blocks refusal names a fetch that covers the outline
+   meshed** (round 2). `fetch --domain D` copies the DEM blocks of `D`'s
+   bounds grown by 6 cells (`fetch/plan.py`, `source_box`: a margin of 4
+   plus 2; about 186 m for glo30). With `--simplify-domain` the outline can
+   pass `D`'s bounds by up to the band, and with `--catchments` the units'
+   union passes them wherever `D` cuts a unit whose inner point it holds
+   (*Measured*: up to 477 m and 868 m). Today mesh's refusal (`cli.py`, the
+   `except NotCached` after `assemble_dem`) names `fetch` with the original
+   `--domain`, which adds no block: an agent with only the MCP loops. With
+   `--simplify-domain` or `--catchments` given and the exception's box set,
+   the refusal names `rasputin fetch KEY --bbox X0 Y0 X1 Y1 [--cache C]`,
+   the box being `NotCached.box` (the window's node box in the source's
+   CRS) and no `--out-crs` (a `fetch --bbox` is in the source's CRS
+   without it), as `catchment` does today (`cli.py`, its `except
+   NotCached`). That hint moves into one helper both commands call, so
+   `catchment`'s wording stays byte for byte. Without either option the
+   refusal is as today. The feature sources (`--catchments`' units,
+   vector land cover, reservoirs) need nothing: a catalogue fetch keeps
+   every polygon meeting `D`'s box whole, and the units selected meet it.
 
 ### Measured (probes, 106c's head `a9366418`, extension built 2026-10-26)
 
@@ -640,6 +664,26 @@ official 490 triangles in 2.6 s; Ljungan 503 in 4.0 s (both runs, the
 simplification apart); Kultsjön terrain 502; and with `--land-cover clc2018`
 to `.gpkg` Kultsjön official writes 490 cells (46.5 s, nearly all 106a's
 land-cover repair). Umeälven's glo30 blocks are not cached (not run).
+
+`fetch_reach.py` (round 2; 3 min 18 s for all eight): how far each
+outline's bounds pass `D`'s, the box `fetch --domain D` grows by about
+186 m for glo30; N 500, EPSG:3006, the SVAR 2022 units from
+`rasputin_data/sweden_smhi_svar/wfs-20261021`:
+
+| `D` | `--simplify-domain` | `--catchments` (units) |
+|---|---|---|
+| Åselealven | 428.0 m | 428.0 m (726) |
+| Faxälven | 334.9 m | 567.3 m (471) |
+| Fjällsjöälven | 329.8 m | 114.1 m (464) |
+| Indalsälven | 158.9 m | 868.1 m (1,311) |
+| Kultsjön | 97.3 m | 97.3 m (75) |
+| Ljungan | 242.5 m | 221.0 m (809) |
+| Umeälven | 476.8 m | 302.0 m (1,436) |
+| Kultsjön, terrain | 101.6 m | 107.8 m (51) |
+
+Past 186 m: 6 of the 7 official outlines with the flag, 5 of 7 with
+`--catchments`; so 106c's `--catchments` has the same gap, and item 4
+covers both.
 
 **Constants.** None new: the band is 106c's h/8, the frame and the 1 m
 clearance are 106c's. The equal-area projection keeps area exactly and
@@ -684,12 +728,24 @@ away from the hole's centre: 288 vertices,
    `mesh --reservoirs` and `mesh --catchments`, of one in EPSG:4326 only
    `--reservoirs`, of a points file neither; `INSTRUCTIONS` holds
    "simplify_domain".
+9. **The fetch named covers the outline** (round 2): `test_cli_mesh_cache.py`'s
+   `TestW5TheFetchCommandInTheMessage.test_with_domain` scene (the cache of
+   `test-utm33` without block 6, the triangle domain) with
+   `--simplify-domain --features-tolerance 5` added: refused, "1 of the 6
+   blocks needed are not in the cache for the window 500150 6599880 500400
+   6599960", and the output holds `run: rasputin fetch test-utm33 --bbox
+   500150 6599880 500400 6599960 --cache <cache>` and no `--domain` (the
+   window measured without the flag on 106c's head; a triangle keeps its
+   three vertices at any band). The existing test without the flag keeps
+   its `--domain` run unchanged, and `catchment`'s hint tests pass
+   unchanged.
 
 **Invariant-critical suite** (mutation round required): tests 1, 2, 3, 4.
 Mutation targets: the one-part check (any `MultiPolygon` taken as its first
 part: test 1), the frame left out (test 2's hole), the simplification in
 degrees (test 3's band), the band's factor and its area (test 4's
-`domain_band_m`), the flag ignored (test 4's count).
+`domain_band_m`), the flag ignored (test 4's count), the refusal's
+`--domain` kept with the flag (test 9).
 
 **`@perf`** (the domain drives the mesh): the 1 m benchmark unchanged and
 byte-identical to 106c's head (no flag); Ljungan official at `--triangles
@@ -697,10 +753,11 @@ byte-identical to 106c's head (no flag); Ljungan official at `--triangles
 plus 2.4 s simplification plus reading the outline (unmeasured;
 `@perf` sets it), plus 10 % noise; Kultsjön terrain-traced: 502.
 
-**Size.** About 55 net lines: the flag and its two checks (14), the
+**Size.** About 60 net lines: the flag and its two checks (14), the
 simplification with its CRS choice, stderr and record (18), the one-part
 read (3), the refusal's hint (4), `fits` and vector `Facts.projected` (8),
-the instruction sentence and the record wording (8). Full loop: over 50
+the instruction sentence and the record wording (8), the `--bbox` fetch
+helper shared with `catchment` and its use in mesh (about 5). Full loop: over 50
 lines, and the domain drives the mesh.
 
 *Prior art.* As section 1: rasputin's border simplification
@@ -720,3 +777,4 @@ is not touched).
 - **Design review, round 1, 2026-10-26.** `@reviewer`, head `89e22445b28122ba6b1915535a632cc1c48a3a73`. Verdict: CHANGES REQUESTED. Blocking: (1) 106c test 1's square units let a centroid rule pass: add a non-convex unit; (2) 106c test 5 lets "ids from the first vertex" and "borders not added" pass: assert the nearest-unit stderr line absent and slant a border; (3) scope: cut 106c to Wednesday's needs, `named_by` to the entry's. Not pushed; no CI.
 - **Design review, round 2, 2026-10-26.** `@reviewer`, head `ff1ab7fd7ab227c24d0ddc51e8c1901a9aec533b`, range `89e22445..ff1ab7fd`. Verdict: APPROVED WITH WORDINGS. Round 1's three findings resolved; one wording applied (which band the land cover gets with `--catchments`).
 - **Design review, round 3, 2026-10-26.** `@reviewer`, head `706a3f6b29d8f6637f3ba398f644ac2389c93563`, range `ee1dda88..706a3f6b`. Verdict: APPROVED WITH WORDINGS. Band from the budget (h/8) checked and reproduced; three unrecorded acceptance figures marked unmeasured for `@perf`.
+- **Design review of 106e, round 1, 2026-10-26.** `@reviewer`, head `f2a0abfe29780c9cb32f075a52fd251d727219b6`. Verdict: CHANGES REQUESTED. Blocking: a fetch loop, the simplified outline passing the fetched box (up to 477 m, Umeälven at 500) while the missing-blocks refusal names the original `--domain`; fix: name `--bbox` from the missing-blocks box, as `catchment` does, one test. Wordings: the table's "about 55", point 3's "or `--catchments`".
