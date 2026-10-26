@@ -603,6 +603,45 @@ def refine_points(
     meets ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
 
 @final
+class ErrorSummary:
+    """What :func:`error_summary` returned; read-only."""
+
+    @property
+    def max_error(self) -> float: ...
+    @property
+    def rms_error(self) -> float:
+        """0 when ``count`` is 0."""
+    @property
+    def count(self) -> int: ...
+
+@overload
+def error_summary(
+    view: RasterView,
+    vertices: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    z: npt.ArrayLike,
+    valid: npt.ArrayLike,
+    *,
+    threads: int = ...,
+) -> ErrorSummary:
+    """The largest and root-mean-square ``|z - plane|`` over the DEM's valid
+    nodes inside the mesh and not on a vertex, each once. A vertex outside the
+    node rectangle is a ``ValueError``. Releases the GIL."""
+
+@overload
+def error_summary(
+    points: CheckPoints,
+    vertices: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    z: npt.ArrayLike,
+    valid: npt.ArrayLike,
+    *,
+    threads: int = ...,
+) -> ErrorSummary:
+    """The same over a frozen store's check points; an unfrozen store is a
+    ``RuntimeError``."""
+
+@final
 class SeamOutcome:
     """What :func:`refine_seam` returned. ``a < b`` by ``(x, y)``; the arrays are
     read-only views, from ``a`` to ``b``, that keep the outcome alive."""

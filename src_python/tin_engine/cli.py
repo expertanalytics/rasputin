@@ -170,7 +170,7 @@ from tin_engine.network import (
 from tin_engine.palettes import paraview_preset
 from tin_engine.polygon_fractions import assign as assign_polygon_fractions
 from tin_engine.raster import to_core
-from tin_engine.refine_job import How, Once, Refined, RunError
+from tin_engine.refine_job import How, Once, Refined, RunError, error_values
 from tin_engine.resources import Resources, parse_bytes
 from tin_engine.run_record import (
     SEAMS_AGREE,
@@ -631,6 +631,14 @@ def mesh(
             help="With --triangles, never more than M triangles. Default: 5 % over N.",
         ),
     ] = None,
+    rms: Annotated[
+        bool,
+        typer.Option(
+            "--rms",
+            help="Also report the root-mean-square height error over the DEM nodes "
+            "inside the mesh; one more pass over the mesh. Always on with --triangles.",
+        ),
+    ] = False,
     tolerance_near: Annotated[
         tuple[Path, float] | None,
         typer.Option(
@@ -1008,6 +1016,8 @@ def mesh(
         raise typer.BadParameter(
             "--domain needs --tolerance or --triangles", param_hint="--tolerance"
         )
+    if rms and tolerance is None and window is None:
+        raise typer.BadParameter("--rms needs --tolerance", param_hint="--rms")
     if start_min_angle is not None and not (
         math.isfinite(start_min_angle) and 0 <= start_min_angle <= 35
     ):
@@ -1073,6 +1083,7 @@ def mesh(
             asked = (
                 ("--stats", stats), ("--out-edges", out_edges), ("--record", record_path),
                 ("--land-cover", land_cover), ("--out", out if out.suffix == ".gpkg" else None),
+                ("--rms", rms or None),
             )  # fmt: skip
             for hint, given_option in asked:
                 if given_option is not None:
@@ -1144,6 +1155,7 @@ def mesh(
             part,
             window,
             budget if domain is not None else None,
+            rms,
         )
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
@@ -2443,6 +2455,7 @@ def _dem_mesh(
     cut: Partitioned | None = None,
     budget: Window | None = None,
     piece_budget: int | None = None,
+    rms: bool = False,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile
     (with ``cut``, ``held`` is the window's grid alone, and the cut run is
@@ -2461,6 +2474,7 @@ def _dem_mesh(
     ``cut``, a partition of more than one cell, the start has the partition
     lines too, and the run is cut into pieces. With ``budget`` the tolerance
     is searched for (``_budget_refined``, which checks ``piece_budget``).
+    With ``rms``, or a budget, the error summary of the mesh is measured.
     Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets the phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -2529,7 +2543,7 @@ def _dem_mesh(
                 valid=valid,
             )
     else:
-        how = How(dem, tolerance, min_angle, feet, grid, checks, budget)
+        how = How(dem, tolerance, min_angle, feet, grid, checks, budget, rms and budget is None)
         refine_with = functools.partial(_refined, tuning=_Tuning(gain, lines, steep, threads))
         if cut is not None:
             from tin_engine.basin_run import cut_run
@@ -2550,7 +2564,7 @@ def _dem_mesh(
         assert tile is not None
         if budget is not None:
             made = _budget_refined(
-                tile, run.mesh, edges, masks, how, clock, refine_with, piece_budget
+                tile, run.mesh, edges, masks, how, clock, refine_with, piece_budget, threads
             )
         else:
             once = Once(tile)
@@ -2584,13 +2598,14 @@ def _budget_refined(
     clock: PhaseClock,
     refine_with: Callable[..., Refined],
     piece_budget: int | None,
+    threads: int = 0,
 ) -> Refined:
     """The mesh of the tolerance whose written count is in ``how.budget``:
     each trial is one ``refine_with`` run at its tolerance, the check points
     filed once for all. The trial with the most triangles not over the cap
     is kept, so the chosen one is never run twice. With ``piece_budget``, a
     trial whose tolerance would cut the window into pieces refuses the run
-    before it is refined."""
+    before it is refined. The kept mesh's error summary is measured once."""
     window = how.budget
     assert window is not None
     if how.grid is not None and how.checks is not None and not isinstance(how.checks, CheckPoints):
@@ -2637,13 +2652,20 @@ def _budget_refined(
         ) from exc
     assert kept is not None
     tried = "; ".join(f"{t.tolerance:.3g} m: {t.triangles}" for t in found.trials)
-    values = dict(kept.values) | {
-        "tolerance_m": found.chosen.tolerance,
-        "triangles_asked": window.asked,
-        "triangles_cap": window.cap,
-        "budget_trials": tried,
-        "budget_window_missed": "yes" if found.missed else None,
-    }
+    store = how.checks if how.grid is not None and isinstance(how.checks, CheckPoints) else None
+    with clock.phase("error summary"):
+        measured = error_values(kept.final, to_core(tile) if store is None else store, threads)
+    values = (
+        dict(kept.values)
+        | measured
+        | {
+            "tolerance_m": found.chosen.tolerance,
+            "triangles_asked": window.asked,
+            "triangles_cap": window.cap,
+            "budget_trials": tried,
+            "budget_window_missed": "yes" if found.missed else None,
+        }
+    )
     return replace(kept, values=values)
 
 
@@ -2700,6 +2722,9 @@ def _refined(
         final = edge_strip.run(
             to_core(tile), strip, out, tolerance, clock, feet, field, slope, threads, frozen
         )
+        if how.rms and final.ok():
+            with clock.phase("error summary"):
+                values |= error_values(final, to_core(tile), threads)
         del tile
         # Refine's maximum and the strip run's make an upper bound.
         max_error = max(out.max_error, final.max_error)
@@ -2715,6 +2740,9 @@ def _refined(
         final, n = final_check.run(
             out, store, tolerance, clock, strip, feet, field, slope, threads, frozen
         )
+        if how.rms and final.ok():
+            with clock.phase("error summary"):
+                values |= error_values(final, store, threads)
         max_error, near_error = final.max_error, final.max_error_near
         share = final.max_slope_share
         inside, tight = final.slope_nodes

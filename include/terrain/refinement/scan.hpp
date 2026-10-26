@@ -50,6 +50,13 @@
 // walk; with one weight everywhere that is the node above. The void branch
 // fills none. Without one (NoSlope) the walk is compiled as before.
 //
+// An accumulator. Given one, every valid node the walk
+// measures is also passed to acc->add(error, owned), where `owned` is false
+// for a node on an edge whose neighbour across has the lower triangle index,
+// so a node on a shared edge is owned by one triangle; a border edge is
+// owned. The void branch passes none. Without one (NoAccumulator) the walk is
+// compiled as before.
+//
 // Pure: reads the DEM and the mesh, writes nothing but its return value (and
 // the SlopeScan it is given), so any number of threads may scan one mesh at once.
 
@@ -105,6 +112,7 @@ struct SlopeScan : SlopeRank {
 };
 
 struct NoSlope {};  // a scan without a slope
+struct NoAccumulator {};  // a scan without an accumulator
 
 // A vertex's height: value_at for a node; otherwise bilinear in the
 // fractional frame over the cell holding it (the last cell on the border), and
@@ -152,9 +160,10 @@ template <raster::RasterSource R>
     return std::nullopt;
 }
 
-template <raster::RasterSource R, class S = NoSlope>
+template <raster::RasterSource R, class S = NoSlope, class Acc = NoAccumulator>
 [[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t,
-                              double radius = 0.0, const S* slope = nullptr, SlopeScan* ss = nullptr) {
+                              double radius = 0.0, const S* slope = nullptr, SlopeScan* ss = nullptr,
+                              Acc* acc = nullptr) {
     using mesh::LatticeVertex;
     using mesh::MeshVertex;
     using T = typename R::value_type;
@@ -225,9 +234,24 @@ template <raster::RasterSource R, class S = NoSlope>
                    ? std::abs(z - (o1 * *zv[0] + o2 * *zv[1] + o0 * *zv[2]) / two_a)
                    : std::max({std::abs(z - *zv[0]), std::abs(z - *zv[1]), std::abs(z - *zv[2])});
     };
+    // Which of the three edges this triangle owns (the accumulator's rule).
+    [[maybe_unused]] std::array<bool, 3> owns{};
+    if constexpr (!std::is_same_v<Acc, NoAccumulator>)
+        for (unsigned k = 0; k < 3; ++k)
+            owns[k] = m.neighbours(t)[k] == mesh::kNoNeighbour || m.neighbours(t)[k] > t;
+
     // NoData needs no branch: a NaN error never beats the best, and a
-    // sentinel's error is selected to 0, which never does either.
-    auto consider = [&](T z, double err, LatticeVertex p) {
+    // sentinel's error is selected to 0, which never does either. `o`, when
+    // given, holds p's three integer orientations.
+    auto consider = [&](T z, double err, LatticeVertex p,
+                        [[maybe_unused]] const std::array<std::int64_t, 3>* o = nullptr) {
+        if constexpr (!std::is_same_v<Acc, NoAccumulator>)
+            if (!missing(z)) {
+                bool owned = true;
+                for (unsigned k = 0; k < 3; ++k)
+                    owned = owned && ((o ? (*o)[k] != 0 : sign(k, p) != 0) || owns[k]);
+                acc->add(err, owned);
+            }
         err = missing(z) ? 0.0 : err;
         if (err > r.max_error) {
             r.max_error = err;
@@ -266,7 +290,7 @@ template <raster::RasterSource R, class S = NoSlope>
                         consider(z,
                                  error(static_cast<double>(z), static_cast<double>(o[0]),
                                        static_cast<double>(o[1]), static_cast<double>(o[2])),
-                                 LatticeVertex{row, c + j});
+                                 LatticeVertex{row, c + j}, &o);
                         for (unsigned k = 0; k < 3; ++k)
                             o[k] += step[k];
                     }
@@ -278,7 +302,7 @@ template <raster::RasterSource R, class S = NoSlope>
                         consider(z,
                                  error(static_cast<double>(z), static_cast<double>(o[0]),
                                        static_cast<double>(o[1]), static_cast<double>(o[2])),
-                                 LatticeVertex{row, c + j});
+                                 LatticeVertex{row, c + j}, &o);
                     for (unsigned k = 0; k < 3; ++k)
                         o[k] += step[k];
                 }

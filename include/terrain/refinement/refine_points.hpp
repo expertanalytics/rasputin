@@ -137,10 +137,12 @@ struct PointRefineOutcome : RefineOutcome {
 
 namespace detail {
 
-template <class Store, class S = NoSlope>
+// With an accumulator, every point measured in a valid triangle is also
+// passed to acc->add(error, owned), owned as in scan (scan.hpp).
+template <class Store, class S = NoSlope, class Acc = NoAccumulator>
 [[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m, std::span<const double> zt,
                                     std::uint32_t t, double radius = 0.0, const S* slope = nullptr,
-                                    PointScan* steep = nullptr) {
+                                    PointScan* steep = nullptr, Acc* acc = nullptr) {
     using mesh::MeshVertex;
     const raster::RasterGeometry& g = points.geometry();
     const auto& tri = m.triangles()[t];
@@ -160,9 +162,14 @@ template <class Store, class S = NoSlope>
         for (unsigned k = 0; k < 3; ++k)  // a corner, or within `radius` of one
             if (p == v[k] || (radius > 0.0 && std::hypot(p.col - v[k].col, p.row - v[k].row) <= radius))
                 return;
-        for (unsigned k = 0; k < 3; ++k)
-            if (mesh::orient_sign(v[k], v[(k + 1) % 3], p) < 0)
+        [[maybe_unused]] bool owned = true;
+        for (unsigned k = 0; k < 3; ++k) {
+            const int o = mesh::orient_sign(v[k], v[(k + 1) % 3], p);
+            if (o < 0)
                 return;
+            if constexpr (!std::is_same_v<Acc, NoAccumulator>)
+                owned = owned && (o != 0 || m.neighbours(t)[k] == mesh::kNoNeighbour || m.neighbours(t)[k] > t);
+        }
         const auto z = static_cast<double>(zf);
         if (const auto e = frozen ? frozen_edge_at(m, t, p, radius) : std::nullopt) {
             const unsigned f = (*e + 1) % 3;
@@ -191,6 +198,8 @@ template <class Store, class S = NoSlope>
         const double err =
             two_a > 0.0 ? std::abs(z - (value(1, p) * zv[0] + value(2, p) * zv[1] + value(0, p) * zv[2]) / two_a)
                         : std::max({std::abs(z - zv[0]), std::abs(z - zv[1]), std::abs(z - zv[2])});
+        if constexpr (!std::is_same_v<Acc, NoAccumulator>)
+            acc->add(err, owned);
         if (err > r.max_error) {
             r.max_error = err;
             r.point = p;

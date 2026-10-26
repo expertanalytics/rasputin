@@ -89,6 +89,8 @@ WORDING = {
     "budget_window_missed": (
         "The triangle budget's window was missed; the nearest count under the cap was written"
     ),
+    "rms_error_m": "Root-mean-square height error",
+    "error_nodes_measured": "DEM nodes inside the mesh the height errors are over",
     "resampled_grid_max_error_m": "Largest error against the resampled grid",
     "max_error_near_lines_m": "Largest height error where the tolerance is the lines' own",
     "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
@@ -260,15 +262,17 @@ def summary(record: RunRecord) -> str:
     if tolerance is not None and top is not None:
         who = "node of the original DEM" if "dem_nodes_checked" in by else "DEM node"
         largest = format(top.number, figures)
+        rms = by.get("rms_error_m")
+        mean = f"root-mean-square {float(rms.value):.2f} m" if rms is not None else ""
         if float(top.value) <= float(tolerance.value):
             said.append(
                 f"Every {who} inside the mesh is within {shown} m of it "
-                f"(largest difference {largest} m)."
+                f"(largest difference {largest} m{', ' if mean else ''}{mean})."
             )
         else:
             said.append(
                 f"The largest difference at a {who} inside the mesh is {largest} m, "
-                f"above the tolerance of {shown} m."
+                f"above the tolerance of {shown} m{f' ({mean})' if mean else ''}."
             )
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:

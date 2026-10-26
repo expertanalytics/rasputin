@@ -1,7 +1,7 @@
 # Increment 104: the triangle budget
 
 **Status: 104a built and accepted by `@perf` (section 15); code review
-round 1's two findings answered, round 2 approved; 104b not started. Design
+round 2 approved. 104b built (section 16); accepted by `@perf` (`b909c2d7`); code review round 1 approved with wordings. Design
 round 2 (2026-10-25) answers the round-1 design review.** Designed by `@architect`, 2026-10-25, on
 master `97759b7b`, worktree `tri-budget`. Two pull requests from this one
 file, each with its own red and green commit and review: **104a**, the budget
@@ -565,7 +565,8 @@ floor.)
 `--domain catchment.geojson --out-crs EPSG:31983`; the reprojected path, as
 Kultsjön): floor 49 triangles, E_F = 76.598 m; written counts 64 m: 54;
 16 m: 204; 8 m: 520; 4 m: 1,320; 2 m: 3,178; 1 m: 7,386; 0.5 m: 14,734;
-0.25 m: 24,571. Errors over the 12,681 source nodes inside the mesh: 1 m:
+0.25 m: 24,571. Errors over the 12,681 source nodes inside the mesh,
+those on a vertex included (section 10, B3, has the counts without): 1 m:
 largest 0.99789, RMS 0.42122, mean −0.01554; 0.5 m: 0.49997, 0.21482,
 −0.01158; 2 m: 1.99671, 0.77732, −0.05450; floor: 76.598, 21.243, +10.037.
 Prototype searches: N 7,386 (5 %) → 5 trials (10⁶; 19.149; 4.7874; 1.4224;
@@ -735,12 +736,15 @@ mesh equal to the tolerance run's, each node once).
   the same `count` as the number of points minus coincident ones. Mutation
   target: the ownership rule (lower triangle index).
 - B3 agreement with the record: velhas `--tolerance 1 --rms` has
-  `rms_error_m` 0.42122 ± 0.0001, `error_nodes_measured` 12,681, and
+  `rms_error_m` 0.43903 ± 0.0001, `error_nodes_measured` 11,673, and
   `max_error_m` equal to the summary's
   largest error (the test reads both from the record and recomputes the RMS
   with an independent barycentric evaluation over the fixture's projected
   nodes, the oracle using its own plane, never the record). `--tolerance 2`:
-  0.77732; `--tolerance 0.5`: 0.21482. The equality is pinned on a run
+  12,381 nodes, 0.78668; `--tolerance 0.5`: 10,021, 0.24165. These are
+  section 7's figures less the nodes that became vertices (4.3: a check
+  point coincident with a vertex is skipped; 1,008, 300 and 2,660 of the
+  12,681): 0.42122 × √(12,681 / 11,673) = 0.43903. The equality is pinned on a run
   without feature lines; on a run with them the edge strip's rescan skips
   nodes within its coincidence radius of a strip point (`scan.hpp`'s
   header), so the summary, which skips nothing, may report a larger value
@@ -749,7 +753,7 @@ mesh equal to the tolerance run's, each node once).
   demo run (section 11).
 - B4 thread independence: velhas `--rms --threads 1` and `--threads 4`
   records have a bit-equal `rms_error_m`.
-- B5 the words: the summary line ends with "root-mean-square 0.42 m)" on
+- B5 the words: the summary line ends with "root-mean-square 0.44 m)" on
   velhas at 1 m with `--rms`, and without `--rms` is today's line and the
   record has no `rms_error_m`; `--stats` rows for the two new keys and the
   "error summary" timing row; the `.vtk` file
@@ -757,7 +761,8 @@ mesh equal to the tolerance run's, each node once).
   `test_refine_golden.py` passes unchanged).
 - B6 the budget path measures the chosen trial without asking: A1's record
   has an `rms_error_m` and the budget run on velhas reports
-  `error_nodes_measured` 12,681; its summary line has "root-mean-square".
+  `error_nodes_measured` and `rms_error_m` the oracle's (B3) on the mesh
+  written; its summary line has "root-mean-square".
 
 ## 11. Acceptance (`@perf`)
 
@@ -897,9 +902,43 @@ pinned beyond the design, and whether the design accepts it (`@architect`,
    nodes on vertices), which needs a fixture whose error there exceeds the
    final check's; none has one today.
 
+## 16. As built (104b)
+
+Red `5a3ca6db`, green `8b3a4c17`, test fixes `e9f7a705`, kill round
+`e3487ee6`. 230 net production lines against about 220
+(`python3 tools/count_loc.py d886847d e3487ee6`). Beyond the design, each
+accepted (`@architect`, 2026-10-25):
+
+1. **`@tester`'s pins.** A source node within 1 × 10⁻⁴ m of a vertex is
+   on it and skipped (the store rounds positions by 2⁻²⁴ of a cell; on
+   velhas such nodes lie within 1.25 µm, every other node at least 0.15 m
+   away); this moved B3's and B5's figures (section 10). Nodes on border
+   edges are counted. No nodes gives RMS 0. A vertex outside the raster or
+   with a non-finite coordinate is refused ("outside"), as is a store not
+   frozen ("not frozen"). The summary prints the RMS to two decimals.
+2. **The main session's defaults.** `--rms` is refused without
+   `--tolerance` or `--triangles`, and on a cut run (pieces).
+3. **`@developer`'s.** On the store path, a vertex whose stored check point
+   writes back to it bit for bit is placed at that point, so the point is
+   skipped as a corner and the planes are `refine_points`' own. On the
+   native path the vertex heights are the DEM's, as `scan` takes them. A
+   run over the tolerance gets the RMS in brackets after "above the
+   tolerance of T m". The Python entry is `refine_job.error_values`, not
+   4.3's `measure.summary`.
+4. **The MCP tool-list bound** in `test_mcp_schema.py` rises from 25,000 to
+   31,000 bytes by increment 37's rule (about 20 % over the measure, rounded
+   up to a thousand; 25,178 bytes with the new options).
+5. **Mutant kill round at `e3487ee6`** (`@tester`) over B1-B3: 20 mutants,
+   18 killed (three only after tests were added in that commit), 2
+   equivalent (the on-edge test by `sign` instead of the walk's exact
+   orientation; partials reduced in reverse slot order, still one fixed
+   order).
+6. **Acceptance `b909c2d7`** (`@perf`): ACCEPTED as in ROADMAP row 104; `cases.toml` now names `--features-legend`; the AC quick-check baseline was replaced with master `d886847d`, measured the same day.
+
 ## Review
 
 - **Design review, round 1, 2026-10-25.** `@reviewer`, head `0f16382557a8af041b12f790b2dd6b55e15aa15e`, range `97759b7b..0f163825`. Verdict: CHANGES REQUESTED. LOC: 0 (design); about 190 (104a) and 220 (104b) estimated. Blocking: (1) section 3 step 2's quartering loop has no trial cap and loops at floor error 0 (`search-bumpy.json`) or when the DEM's most triangles are under 1.5 times the floor: "Every trial counts toward the twelve; when T is 0 or the count stops changing, the search ends missed", with a test; (2) P4: `--triangles 28000` gives cap 29,400, which holds the floor of 28,561, so it returns the floor; use `--triangles 27000` (cap 28,350); (3) A6's "at most 9 trials" was never run and the synthetic floor trial's largest error and targets are unstated; a simulation took 10-11 trials and some searches missed the window; state both and run the pure rule before `@tester`; (4) 104b's cost premise is false: `refine.hpp:19` rescans only changed triangles; on the quick check's tile (0.425 s) a +3 % gate allows 13 ms; time one full scan pass on the quick check's cases; (5) section 4.2's "basin-scale windows are the cut path's, which refuses the budget" is false: a budget run skips the automatic cut by memory (`cli.py:996`); check `partition` at each trial's tolerance and refuse a budget run that would need pieces. Showcase: can claim size asked, at most M triangles, tolerance found and reported, mesh identical to `--tolerance` at that tolerance; cannot claim a better mesh (9.79 m comes with 2.4 % more triangles, on the same curve); the error-against-count curve is the demonstration; rewrite P1's "(−2.1 %)" and the ROADMAP's "RMS 3.00 m against 3.05 m" so neither reads as an improvement. Cut-run refusal acceptable for Kultsjön; Tuesday plan sound. Not pushed; no CI.
 - **Design review, round 2, 2026-10-25.** `@reviewer`, head `a6c00bf9ba24ebebfbe4850b27cab639dcd31aaa`, range `d1d9942f..a6c00bf9`. Verdict: APPROVED WITH WORDINGS. LOC: 0 (design); about 220 (104a) and 220 (104b) estimated. Round 1 blockers closed: trial cap and zero-error stop hold; P4 at 27000 (cap 28,350 under the floor); `pure-search.log` matches A6, A8, A9, A11; `scan-cost.log` timings match the quick check baseline; A12 `partition` figures recomputed (one piece down to 4.787 m, 2 x 2 at 1.4224 m); showcase wording no longer reads as an improvement. Five wordings applied in this commit: default cap max(floor(1.05 N), N + 1) (lines 103, 433); "nearly twice the most seen" (436); `--piece-budget` passes the option checks (703); A6 form named (710); trial count by a spy on `_refined` (721). Ideas: P3 "under 5.5 s" is tight; no flip count logged for lagan; `partition` ValueError handling during a trial unstated. Not pushed; no CI.
 - **Code review, round 1, 2026-10-25.** `@reviewer`, head `67564863dce370be18c00f5e0ef3456e237275a9`, range `47308a83..67564863`. Verdict: CHANGES REQUESTED. LOC: 246 net (estimate about 220, ceiling 700). Blocking: (1) no mutant kill record for the invariant-critical tests A1-A4, A9, A11, A12; `@tester` runs the kill round for every named target; (2) ROADMAP row 104 and section 15 item 7 are stale after 656f5247 (Timings sentence in), 9c7f47aa (`@perf` ACCEPTED) and the later wording commits; section 15 omits the Timings, rounding and wording commits, Ola's two extras (three significant figures on a budget run; the floor refusal naming `--triangles`) and the acceptance run. Sound: no red-step scaffolding; section 15 items 1-6 match the code; README and glossary match; the acceptance at 632cfce5 still stands; citations gate exits 0. Suggestion: the refusal of a budget run that would need pieces still reads "Invalid value for --dem". Not pushed; no CI.
 - **Code review, round 2, 2026-10-25.** `@reviewer`, head `d316fa269b64c1e5405f5026cda10cb692c4bd8d`, range `67564863..d316fa26`. Verdict: APPROVED WITH WORDINGS. LOC: 247 net (this round +1, `cli.py`). Round 1 closed: the kill record in `956a261d` covers every named target in section 10 (A1-A4, A9, A11, A12), 35 mutants; survivors "bracket-cap>=" (equivalent) and "sat-cli-at" (outside the named targets) acceptable; new tests match the record (433 passed); Status line, section 15 items 7-10 and ROADMAP row match. The pieces refusal raises `typer.BadParameter` headed `--triangles` (`cli.py:2477-2483`), no longer relabelled at `cli.py:1122`. `@perf` acceptance `9c7f47aa` stands. One wording applied in this commit (ROADMAP row 104: the floor refusal named, the pieces refusal "followed on review"); Status and row set to round 2 approved. CI after push.
+- **Code review (104b), round 1, 2026-10-25.** `@reviewer`, head `b909c2d78092243d123b462d93e1e4b9d454edb4`, range `d886847d..b909c2d7`. Verdict: APPROVED WITH WORDINGS. LOC: 230 net (estimate about 220). No red-step scaffolding; no file I/O in `measure.hpp`; `-Werror` gate passes; 290 passed in the six touched suites; kill record `e3487ee6` covers B1-B3 (ownership by lower triangle index, each node once, agreement with the record), two equivalents sound; `@perf` ACCEPTED `b909c2d7`, the `--rms` row reported not gated (perf.md, off-by-default options); MCP tool list 25,194 bytes after master merge, under 31,000. Applied in this commit: Status line, section 16 item 6, `measure.hpp` row in project_structure; ROADMAP row 104 wording applied in the master merge (ROADMAP conflicts with master). Not recorded in section 16: partials are one per triangle, not one per slot (`measure.hpp:96`).

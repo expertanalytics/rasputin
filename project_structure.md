@@ -67,6 +67,7 @@ include/terrain/           # public C++ headers, header-only where possible
     refine_points.hpp      # refine_points: greedy insertion against stored
                            #   check points (15c, the final check); with the
                            #   edge strip, and refine_strip (15f)
+    measure.hpp            # error_summary: largest and RMS error of a mesh as written, each node once (104b)
     strip_scan.hpp         # the edge strip inside the loop: sub-edge map,
                            #   scan by owned sub-edge, guarded insertion (15f)
     constraint_points.hpp  # constraint_check_points, ConstraintCheckPoints:
