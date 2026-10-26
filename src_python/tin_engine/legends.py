@@ -88,6 +88,7 @@ class _File(_Strict):
     codes: dict[str, Code] = {}
     vocabulary: _Vocabulary = _Vocabulary()
     split: list[_Split] = []
+    prefer: dict[Category, Code] = {}
 
     @model_validator(mode="after")
     def _consistent(self) -> _File:
@@ -123,9 +124,9 @@ class _File(_Strict):
         for code in every:
             if every.count(code) > 1:
                 raise ValueError(f"class code {code} is listed twice")
-        for text, code in self.codes.items():
+        for text, code in [*self.codes.items(), *self.prefer.items()]:
             if code not in listed:
-                raise ValueError(f"codes: {text} = {code} names no listed class")
+                raise ValueError(f"codes or prefer: {text} = {code} names no listed class")
         repeated = [n for n in extras if n in DEFAULT_NAMES]
         if repeated:
             raise ValueError(f"vocabulary extra {', '.join(repeated)} is a default name")
@@ -193,6 +194,7 @@ class _File(_Strict):
             ),
             categories=categories,
             water_codes=frozenset(c.code for c in self.classes if c.code and c.water),
+            prefer=self.prefer,
         )
 
 

@@ -75,11 +75,18 @@ WORDING = {
     "land_cover_credit": "Credit for the land-cover classes",
     "land_cover_licence_note": "Licence of the land-cover classes",
     "land_cover_cite": "Please cite for the land-cover classes",
+    "land_cover_prefer_credit": "Credit for the classes taken from a preferred source",
+    "land_cover_prefer_licence_note": "Licence of the classes taken from a preferred source",
+    "land_cover_prefer_cite": "Please cite for the classes taken from a preferred source",
     "features_notice": "Credit for the features data",
     "features_licence": "Licence of the features data",
     "land_cover_codes": "What land_cover_code holds",
     "cells": "The cells layer",
     "reservoirs": "Reservoir polygons splitting the cells' lake share",
+    "land_cover_prefer": (
+        "Classes taken from a preferred source: inside the mesh, the land cover's area of the "
+        "class, the preferred source's, and what went to neighbouring classes"
+    ),
     "land_cover_repaired": "Land-cover polygons that crossed themselves, repaired",
     "reservoirs_repaired": "Reservoir polygons that crossed themselves, repaired",
     "catchments": "Sub-catchment units: their borders constraints, their ids the cells'",

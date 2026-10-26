@@ -17,6 +17,11 @@ land = ["land_cover"]
 label = "No polygon; constraint lines"
 colour = "#3c3c3c"
 
+# The one class a --prefer source's polygons take, and the only one they replace.
+[prefer]
+lake = 512
+glacier = 335
+
 [[class]]
 code = 111
 label = "Continuous urban fabric"

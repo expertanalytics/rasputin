@@ -100,7 +100,8 @@ class Legend(BaseModel):
     codes of; such a legend labels triangles. ``palette`` colours and names
     those codes. A class whose names are None is dropped; the rest come from a
     legend file (`tin_engine.legends`). ``categories`` holds each class
-    code that names its cell category, ``water_codes`` the water classes."""
+    code that names its cell category, ``water_codes`` the water classes, and
+    ``prefer`` the one class a preferred source's polygons take, per category."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -119,6 +120,7 @@ class Legend(BaseModel):
     splits: tuple[Split, ...] = ()
     categories: Mapping[int, Category] = {}
     water_codes: frozenset[int] = frozenset()
+    prefer: Mapping[Category, int] = {}
 
 
 class FeatureSource(BaseModel):
