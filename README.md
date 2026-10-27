@@ -28,7 +28,7 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   The box is in the source's CRS (EPSG:25833 and EPSG:3035), or in
   `--out-crs`; `--domain FILE` takes a polygon's box instead. Each lands as
   one GeoPackage in the tile cache, and `rasputin sources` then lists it with
-  its path and the options it fits (`mesh --features` with `--features-legend
+  its path and the options it fits (`mesh --features` with `--features-rules
   corine`, `catchment --lakes`). A rerun asks only for polygons not yet
   cached. The credits go into a `NOTICE.txt` beside the file: NVE's data is
   under the Norwegian licence for open government data (NLOD 1.0), which
@@ -41,10 +41,10 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
   crosses them. A GML 3.2 file of surfaces, such as NIBIO's AR50 land-resource
   map, is converted once with `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`;
-  the shipped `ar50` legend reads its land type (`arealtype`) and splits
+  the shipped `ar50` meshing rules read its land type (`arealtype`) and split
   forest by tree type (`treslag`, codes 3031 to 3099) and open firm ground by
   vegetation cover (`vegetasjonsdekke`, codes 5051 to 5099).
-- **Land-cover labels, cleaned up.** With a CORINE legend, every triangle
+- **Land-cover labels, cleaned up.** With CORINE meshing rules, every triangle
   gets the class of the polygon it lies in. First the borders are repaired
   (`--features-repair`), merged between neighbours of one class, snapped onto
   the domain outline where they nearly touch it, and simplified to
@@ -98,7 +98,7 @@ rasputin mesh \
 rasputin mesh \
     --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif \
     --domain docs/benchmarks/2026-09-26/quarter.geojson \
-    --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-legend corine \
+    --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-rules corine \
     --tolerance 5 \
     --out quarter_landcover.vtk
 
@@ -125,15 +125,15 @@ every option.
 
 - **`.vtk`** (legacy VTK, one file) is for [ParaView](https://www.paraview.org).
   It holds the triangles, the constraint edges with their feature bits and,
-  with a legend, the cell array `land_cover_code`. To colour by land cover,
+  with meshing rules, the cell array `land_cover_code`. To colour by land cover,
   import `corine.json` in ParaView's Colour Map Editor (Choose Preset, Import)
   and colour by `land_cover_code`. `--land-cover` adds each class's exact
   share of every triangle, from a class raster or from class polygons: a
-  file with `--land-cover-legend`, or a fetched source with a legend such as
+  file with `--land-cover-rules`, or a fetched source with meshing rules such as
   `clc2018`.
 - **`.gpkg`** (GeoPackage) is for QGIS. With `--land-cover` it holds a
   `land_cover_fractions` table with each class's share of each triangle,
-  legend or not. With a legend it also holds a `cells` layer, one point per
+  meshing rules or not. With meshing rules it also holds a `cells` layer, one point per
   triangle with Shyft's fractions (glacier, lake, reservoir, forest,
   unspecified), savanna, slope, aspect and area. `--reservoirs` (a polygon
   file or a fetched source) moves the lake share under its polygons to
@@ -210,7 +210,7 @@ The listing also names vector datasets (polygons, lines, points) with their
 path, layer, geometry types, feature count, attributes and, for land cover,
 the class values, and it reports the output root as `out_root`. Each source's
 `fits` names the tools and arguments it can be given to (`mesh` `features`
-with the legend to pass, `catchment` `lakes`, `station_catchments`
+with the meshing rules to pass, `catchment` `lakes`, `station_catchments`
 `stations`, ...), read from the file's header; the agent passes a vector
 source's path, not its id.
 
@@ -229,8 +229,8 @@ description = "Bare-ground terrain model, 10 m cells."
 ```
 
 A vector dataset is a `.gpkg`, `.geojson` or `.json` path; `layer` names the
-table of a GeoPackage that holds more than one, and `legend` the legend
-a land-cover file is coded in:
+table of a GeoPackage that holds more than one, and `rules` the meshing rules
+a land-cover file is read with (they name the legend, its colours):
 
 ```toml
 [source.my-lakes]
@@ -244,7 +244,7 @@ description = "Lake polygons, 1:50 000."
 kind = "local"
 path = "~/data/landcover.gpkg"
 layer = "landcover"
-legend = "corine"
+rules = "corine"
 credit = "© The data's owner"
 licence_note = "CC BY 4.0"
 description = "Land-cover polygons, minimum mapping unit 25 ha."

@@ -1,30 +1,13 @@
-# NIBIO's AR50 land-resource map, land type (arealtype). Codes: SOSI AR50
-# 2022-05-23 (ar50.xsd, English names). Colours: NIBIO, Presentasjonsregler
-# AR50, 12 June 2026, except 99, which NIBIO leaves unfilled. Positional
-# accuracy: NIBIO's product sheet, "2 og dårligere". docs/increments/73-gml-vector-source.md, section 4.5.
-# Splits: tree type (treslag) and vegetation cover (vegetasjonsdekke), codes from
-# ar50.xsd, colours from NIBIO's tables Treslag and Snaumark; docs/increments/91-ar50-vegetation-cover.md, section 3.
+# NIBIO's AR50 land-resource map, land type (arealtype) and its splits' sub-classes.
+# Colours: NIBIO, Presentasjonsregler AR50, 12 June 2026, except 99, which NIBIO
+# leaves unfilled, and forest 99, which takes forest's own; tables Treslag and
+# Snaumark for the sub-classes.
 name = "ar50"
-attribute = "arealtype"
-code_system = "AR50 arealtype code"
-positional_accuracy_m = 2
-notice = "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
-licence = "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
 preset = "rasputin AR50 NIBIO"
-unlisted = "land"
-
-[edges]
-water = ["land_cover", "water"]
-land = ["land_cover"]
 
 [no_class]
 label = "No polygon; constraint lines"
 colour = "#3c3c3c"
-
-# The one class a --prefer source's polygons take, and the only one they replace.
-[prefer]
-lake = 81
-glacier = 70
 
 [[class]]
 code = 10
@@ -40,7 +23,6 @@ colour = "#ffd16e"
 code = 30
 label = "Forest"
 colour = "#9ecc73"
-category = "forest"
 
 [[class]]
 code = 50
@@ -56,85 +38,63 @@ colour = "#73dfff"
 code = 70
 label = "Snow and glacier"
 colour = "#ffffff"
-category = "glacier"
 
 [[class]]
 code = 81
 label = "Freshwater"
 colour = "#91e7ff"
-category = "lake"
-water = true
 
 [[class]]
 code = 82
 label = "Ocean"
 colour = "#d2ffff"
-category = "unspecified"
-water = true
 
 [[class]]
 code = 99
 label = "Not surveyed"
 colour = "#8c8c8c"
 
-[[split]]
-code = 30
-attribute = "treslag"
-
-[[split.class]]
-value = 31
+[[class]]
 code = 3031
 label = "Forest, coniferous: at least 50 % of the forested area covered by conifers"
 colour = "#895944"
 
-[[split.class]]
-value = 32
+[[class]]
 code = 3032
 label = "Forest, deciduous: less than 20 % of the forested area covered by conifers"
 colour = "#8b786f"
 
-[[split.class]]
-value = 33
+[[class]]
 code = 3033
 label = "Forest, mixed: 20 to 50 % of the forested area covered by conifers"
 colour = "#8b786e"
 
-[[split.class]]
-value = 99
+[[class]]
 code = 3099
 label = "Forest, tree type not registered"
 colour = "#9ecc73"
 
-[[split]]
-code = 50
-attribute = "vegetasjonsdekke"
-
-[[split.class]]
-value = 51
+[[class]]
 code = 5051
 label = "Open firm ground, no vegetation"
 colour = "#c0c0c0"
 
-[[split.class]]
-value = 52
+[[class]]
 code = 5052
 label = "Open firm ground, barren to non-continuous vegetation cover"
 colour = "#ffe8c2"
 
-[[split.class]]
-value = 54
+[[class]]
 code = 5054
 label = "Open firm ground, barren to good vegetation cover"
 colour = "#e1c790"
 
-[[split.class]]
-value = 55
+[[class]]
 code = 5055
 label = "Open firm ground, good to lush non-continuous vegetation cover"
 colour = "#c7a971"
 
-[[split.class]]
-value = 99
+[[class]]
 code = 5099
 label = "Open firm ground, vegetation cover not registered"
 colour = "#f8f7ba"

@@ -397,9 +397,9 @@ MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
         "anyOf": [{"items": STRING, "type": "array"}, {"type": "null"}],
         "default": None,
         "description": "With --domain, polygons and lines as constraints (.geojson, .json, "
-        ".gpkg or .gml), clipped to the domain, each edge carrying its legend's bits. "
+        ".gpkg or .gml), clipped to the domain, each edge carrying its meshing rules' bits. "
         "Repeatable: each --features is one source, paired by position with the Nth of "
-        "--features-crs, --features-layer and --features-legend.",
+        "--features-crs, --features-layer and --features-rules.",
     },
     "snap_spacing": {
         "default": 0.001,

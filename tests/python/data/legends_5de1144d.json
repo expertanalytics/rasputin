@@ -1,0 +1,1061 @@
+{
+ "corine": {
+  "preset": "rasputin CORINE natural",
+  "colours": [
+   [
+    0,
+    "No polygon; constraint lines",
+    "#3c3c3c"
+   ],
+   [
+    111,
+    "Continuous urban fabric",
+    "#8c5f5a"
+   ],
+   [
+    112,
+    "Discontinuous urban fabric",
+    "#a88d86"
+   ],
+   [
+    121,
+    "Industrial or commercial units",
+    "#8e8a96"
+   ],
+   [
+    122,
+    "Road and rail networks and associated land",
+    "#6e6e6e"
+   ],
+   [
+    123,
+    "Port areas",
+    "#7d8796"
+   ],
+   [
+    124,
+    "Airports",
+    "#a8a8a8"
+   ],
+   [
+    131,
+    "Mineral extraction sites",
+    "#b49b78"
+   ],
+   [
+    132,
+    "Dump sites",
+    "#8a7d64"
+   ],
+   [
+    133,
+    "Construction sites",
+    "#bcae98"
+   ],
+   [
+    141,
+    "Green urban areas",
+    "#86b86e"
+   ],
+   [
+    142,
+    "Sport and leisure facilities",
+    "#a3cf7e"
+   ],
+   [
+    211,
+    "Non-irrigated arable land",
+    "#e6d58c"
+   ],
+   [
+    212,
+    "Permanently irrigated land",
+    "#d9cc6e"
+   ],
+   [
+    213,
+    "Rice fields",
+    "#cdd89a"
+   ],
+   [
+    221,
+    "Vineyards",
+    "#9c7a44"
+   ],
+   [
+    222,
+    "Fruit trees and berry plantations",
+    "#a9ad5e"
+   ],
+   [
+    223,
+    "Olive groves",
+    "#8f9a52"
+   ],
+   [
+    231,
+    "Pastures",
+    "#b4d47a"
+   ],
+   [
+    241,
+    "Annual crops associated with permanent crops",
+    "#dccf94"
+   ],
+   [
+    242,
+    "Complex cultivation patterns",
+    "#d2c47c"
+   ],
+   [
+    243,
+    "Land principally occupied by agriculture, with significant areas of natural vegetation",
+    "#bcc47e"
+   ],
+   [
+    244,
+    "Agro-forestry areas",
+    "#a9b574"
+   ],
+   [
+    311,
+    "Broad-leaved forest",
+    "#4f8f3f"
+   ],
+   [
+    312,
+    "Coniferous forest",
+    "#1f5a2e"
+   ],
+   [
+    313,
+    "Mixed forest",
+    "#357438"
+   ],
+   [
+    321,
+    "Natural grasslands",
+    "#c2d68a"
+   ],
+   [
+    322,
+    "Moors and heathland",
+    "#a7c47f"
+   ],
+   [
+    323,
+    "Sclerophyllous vegetation",
+    "#8a9658"
+   ],
+   [
+    324,
+    "Transitional woodland-shrub",
+    "#7ea65a"
+   ],
+   [
+    331,
+    "Beaches, dunes, sands",
+    "#e9ddb2"
+   ],
+   [
+    332,
+    "Bare rocks",
+    "#8f8f8f"
+   ],
+   [
+    333,
+    "Sparsely vegetated areas",
+    "#b9b8a0"
+   ],
+   [
+    334,
+    "Burnt areas",
+    "#4b3f3a"
+   ],
+   [
+    335,
+    "Glaciers and perpetual snow",
+    "#eef6fb"
+   ],
+   [
+    411,
+    "Inland marshes",
+    "#6e9470"
+   ],
+   [
+    412,
+    "Peat bogs",
+    "#8a6642"
+   ],
+   [
+    421,
+    "Salt marshes",
+    "#7f9f8c"
+   ],
+   [
+    422,
+    "Salines",
+    "#d8d6cc"
+   ],
+   [
+    423,
+    "Intertidal flats",
+    "#b3bdb3"
+   ],
+   [
+    511,
+    "Water courses",
+    "#4c8ec4"
+   ],
+   [
+    512,
+    "Water bodies",
+    "#3e7bb6"
+   ],
+   [
+    521,
+    "Coastal lagoons",
+    "#5b93b3"
+   ],
+   [
+    522,
+    "Estuaries",
+    "#5188b4"
+   ],
+   [
+    523,
+    "Sea and ocean",
+    "#2b5d8e"
+   ]
+  ],
+  "categories": {
+   "311": "forest",
+   "312": "forest",
+   "313": "forest",
+   "335": "glacier",
+   "511": "lake",
+   "512": "lake",
+   "521": "lake",
+   "522": "lake",
+   "523": "unspecified"
+  },
+  "prefer": {
+   "lake": 512,
+   "glacier": 335
+  },
+  "water_codes": [
+   511,
+   512,
+   521,
+   522,
+   523
+  ]
+ },
+ "corine-water": {
+  "preset": "rasputin CORINE natural",
+  "colours": [
+   [
+    0,
+    "No polygon; constraint lines",
+    "#3c3c3c"
+   ],
+   [
+    111,
+    "Continuous urban fabric",
+    "#8c5f5a"
+   ],
+   [
+    112,
+    "Discontinuous urban fabric",
+    "#a88d86"
+   ],
+   [
+    121,
+    "Industrial or commercial units",
+    "#8e8a96"
+   ],
+   [
+    122,
+    "Road and rail networks and associated land",
+    "#6e6e6e"
+   ],
+   [
+    123,
+    "Port areas",
+    "#7d8796"
+   ],
+   [
+    124,
+    "Airports",
+    "#a8a8a8"
+   ],
+   [
+    131,
+    "Mineral extraction sites",
+    "#b49b78"
+   ],
+   [
+    132,
+    "Dump sites",
+    "#8a7d64"
+   ],
+   [
+    133,
+    "Construction sites",
+    "#bcae98"
+   ],
+   [
+    141,
+    "Green urban areas",
+    "#86b86e"
+   ],
+   [
+    142,
+    "Sport and leisure facilities",
+    "#a3cf7e"
+   ],
+   [
+    211,
+    "Non-irrigated arable land",
+    "#e6d58c"
+   ],
+   [
+    212,
+    "Permanently irrigated land",
+    "#d9cc6e"
+   ],
+   [
+    213,
+    "Rice fields",
+    "#cdd89a"
+   ],
+   [
+    221,
+    "Vineyards",
+    "#9c7a44"
+   ],
+   [
+    222,
+    "Fruit trees and berry plantations",
+    "#a9ad5e"
+   ],
+   [
+    223,
+    "Olive groves",
+    "#8f9a52"
+   ],
+   [
+    231,
+    "Pastures",
+    "#b4d47a"
+   ],
+   [
+    241,
+    "Annual crops associated with permanent crops",
+    "#dccf94"
+   ],
+   [
+    242,
+    "Complex cultivation patterns",
+    "#d2c47c"
+   ],
+   [
+    243,
+    "Land principally occupied by agriculture, with significant areas of natural vegetation",
+    "#bcc47e"
+   ],
+   [
+    244,
+    "Agro-forestry areas",
+    "#a9b574"
+   ],
+   [
+    311,
+    "Broad-leaved forest",
+    "#4f8f3f"
+   ],
+   [
+    312,
+    "Coniferous forest",
+    "#1f5a2e"
+   ],
+   [
+    313,
+    "Mixed forest",
+    "#357438"
+   ],
+   [
+    321,
+    "Natural grasslands",
+    "#c2d68a"
+   ],
+   [
+    322,
+    "Moors and heathland",
+    "#a7c47f"
+   ],
+   [
+    323,
+    "Sclerophyllous vegetation",
+    "#8a9658"
+   ],
+   [
+    324,
+    "Transitional woodland-shrub",
+    "#7ea65a"
+   ],
+   [
+    331,
+    "Beaches, dunes, sands",
+    "#e9ddb2"
+   ],
+   [
+    332,
+    "Bare rocks",
+    "#8f8f8f"
+   ],
+   [
+    333,
+    "Sparsely vegetated areas",
+    "#b9b8a0"
+   ],
+   [
+    334,
+    "Burnt areas",
+    "#4b3f3a"
+   ],
+   [
+    335,
+    "Glaciers and perpetual snow",
+    "#eef6fb"
+   ],
+   [
+    411,
+    "Inland marshes",
+    "#6e9470"
+   ],
+   [
+    412,
+    "Peat bogs",
+    "#8a6642"
+   ],
+   [
+    421,
+    "Salt marshes",
+    "#7f9f8c"
+   ],
+   [
+    422,
+    "Salines",
+    "#d8d6cc"
+   ],
+   [
+    423,
+    "Intertidal flats",
+    "#b3bdb3"
+   ],
+   [
+    511,
+    "Water courses",
+    "#4c8ec4"
+   ],
+   [
+    512,
+    "Water bodies",
+    "#3e7bb6"
+   ],
+   [
+    521,
+    "Coastal lagoons",
+    "#5b93b3"
+   ],
+   [
+    522,
+    "Estuaries",
+    "#5188b4"
+   ],
+   [
+    523,
+    "Sea and ocean",
+    "#2b5d8e"
+   ]
+  ],
+  "categories": {
+   "311": "forest",
+   "312": "forest",
+   "313": "forest",
+   "335": "glacier",
+   "511": "lake",
+   "512": "lake",
+   "521": "lake",
+   "522": "lake",
+   "523": "unspecified"
+  },
+  "prefer": {},
+  "water_codes": [
+   511,
+   512,
+   521,
+   522,
+   523
+  ]
+ },
+ "clc18_kode": {
+  "preset": "rasputin CORINE natural",
+  "colours": [
+   [
+    0,
+    "No polygon; constraint lines",
+    "#3c3c3c"
+   ],
+   [
+    111,
+    "Continuous urban fabric",
+    "#8c5f5a"
+   ],
+   [
+    112,
+    "Discontinuous urban fabric",
+    "#a88d86"
+   ],
+   [
+    121,
+    "Industrial or commercial units",
+    "#8e8a96"
+   ],
+   [
+    122,
+    "Road and rail networks and associated land",
+    "#6e6e6e"
+   ],
+   [
+    123,
+    "Port areas",
+    "#7d8796"
+   ],
+   [
+    124,
+    "Airports",
+    "#a8a8a8"
+   ],
+   [
+    131,
+    "Mineral extraction sites",
+    "#b49b78"
+   ],
+   [
+    132,
+    "Dump sites",
+    "#8a7d64"
+   ],
+   [
+    133,
+    "Construction sites",
+    "#bcae98"
+   ],
+   [
+    141,
+    "Green urban areas",
+    "#86b86e"
+   ],
+   [
+    142,
+    "Sport and leisure facilities",
+    "#a3cf7e"
+   ],
+   [
+    211,
+    "Non-irrigated arable land",
+    "#e6d58c"
+   ],
+   [
+    212,
+    "Permanently irrigated land",
+    "#d9cc6e"
+   ],
+   [
+    213,
+    "Rice fields",
+    "#cdd89a"
+   ],
+   [
+    221,
+    "Vineyards",
+    "#9c7a44"
+   ],
+   [
+    222,
+    "Fruit trees and berry plantations",
+    "#a9ad5e"
+   ],
+   [
+    223,
+    "Olive groves",
+    "#8f9a52"
+   ],
+   [
+    231,
+    "Pastures",
+    "#b4d47a"
+   ],
+   [
+    241,
+    "Annual crops associated with permanent crops",
+    "#dccf94"
+   ],
+   [
+    242,
+    "Complex cultivation patterns",
+    "#d2c47c"
+   ],
+   [
+    243,
+    "Land principally occupied by agriculture, with significant areas of natural vegetation",
+    "#bcc47e"
+   ],
+   [
+    244,
+    "Agro-forestry areas",
+    "#a9b574"
+   ],
+   [
+    311,
+    "Broad-leaved forest",
+    "#4f8f3f"
+   ],
+   [
+    312,
+    "Coniferous forest",
+    "#1f5a2e"
+   ],
+   [
+    313,
+    "Mixed forest",
+    "#357438"
+   ],
+   [
+    321,
+    "Natural grasslands",
+    "#c2d68a"
+   ],
+   [
+    322,
+    "Moors and heathland",
+    "#a7c47f"
+   ],
+   [
+    323,
+    "Sclerophyllous vegetation",
+    "#8a9658"
+   ],
+   [
+    324,
+    "Transitional woodland-shrub",
+    "#7ea65a"
+   ],
+   [
+    331,
+    "Beaches, dunes, sands",
+    "#e9ddb2"
+   ],
+   [
+    332,
+    "Bare rocks",
+    "#8f8f8f"
+   ],
+   [
+    333,
+    "Sparsely vegetated areas",
+    "#b9b8a0"
+   ],
+   [
+    334,
+    "Burnt areas",
+    "#4b3f3a"
+   ],
+   [
+    335,
+    "Glaciers and perpetual snow",
+    "#eef6fb"
+   ],
+   [
+    411,
+    "Inland marshes",
+    "#6e9470"
+   ],
+   [
+    412,
+    "Peat bogs",
+    "#8a6642"
+   ],
+   [
+    421,
+    "Salt marshes",
+    "#7f9f8c"
+   ],
+   [
+    422,
+    "Salines",
+    "#d8d6cc"
+   ],
+   [
+    423,
+    "Intertidal flats",
+    "#b3bdb3"
+   ],
+   [
+    511,
+    "Water courses",
+    "#4c8ec4"
+   ],
+   [
+    512,
+    "Water bodies",
+    "#3e7bb6"
+   ],
+   [
+    521,
+    "Coastal lagoons",
+    "#5b93b3"
+   ],
+   [
+    522,
+    "Estuaries",
+    "#5188b4"
+   ],
+   [
+    523,
+    "Sea and ocean",
+    "#2b5d8e"
+   ]
+  ],
+  "categories": {
+   "311": "forest",
+   "312": "forest",
+   "313": "forest",
+   "335": "glacier",
+   "511": "lake",
+   "512": "lake",
+   "521": "lake",
+   "522": "lake",
+   "523": "unspecified"
+  },
+  "prefer": {},
+  "water_codes": [
+   511,
+   512,
+   521,
+   522,
+   523
+  ]
+ },
+ "mapbiomas-c11": {
+  "preset": "rasputin MapBiomas Collection 11",
+  "colours": [
+   [
+    0,
+    "No class; constraint lines",
+    "#3c3c3c"
+   ],
+   [
+    3,
+    "Forest Formation",
+    "#1f8d49"
+   ],
+   [
+    6,
+    "Floodable Forest",
+    "#007785"
+   ],
+   [
+    4,
+    "Savanna Formation",
+    "#7dc975"
+   ],
+   [
+    7,
+    "Flooded Savanna (beta)",
+    "#228c70"
+   ],
+   [
+    5,
+    "Mangrove",
+    "#04381d"
+   ],
+   [
+    49,
+    "Wooded Sandbank Vegetation",
+    "#02d659"
+   ],
+   [
+    12,
+    "Grassland Formation",
+    "#d6bc74"
+   ],
+   [
+    77,
+    "Herbaceous and Shrub Formation",
+    "#86b074"
+   ],
+   [
+    11,
+    "Wetland",
+    "#519799"
+   ],
+   [
+    84,
+    "Salt Marsh (beta)",
+    "#81dbbf"
+   ],
+   [
+    50,
+    "Herbaceous Sandbank Vegetation",
+    "#ffaa5f"
+   ],
+   [
+    32,
+    "Hypersaline Tidal Flat",
+    "#fc8114"
+   ],
+   [
+    29,
+    "Rocky Outrcrop",
+    "#ad5100"
+   ],
+   [
+    15,
+    "Pasture",
+    "#edde8e"
+   ],
+   [
+    39,
+    "Soybean",
+    "#f5b3c8"
+   ],
+   [
+    20,
+    "Sugar cane",
+    "#db7093"
+   ],
+   [
+    40,
+    "Rice",
+    "#c71585"
+   ],
+   [
+    62,
+    "Cotton (beta)",
+    "#ff69b4"
+   ],
+   [
+    41,
+    "Other Temporary Crops",
+    "#f54ca9"
+   ],
+   [
+    46,
+    "Coffe",
+    "#d68fe2"
+   ],
+   [
+    47,
+    "Citrus",
+    "#9932cc"
+   ],
+   [
+    35,
+    "Palm Oil",
+    "#9065d0"
+   ],
+   [
+    48,
+    "Other Perennial Crops",
+    "#e6ccff"
+   ],
+   [
+    9,
+    "Forest Plantation",
+    "#7a5900"
+   ],
+   [
+    21,
+    "Mosaic of Uses",
+    "#ffefc3"
+   ],
+   [
+    23,
+    "Beach, Dune and Sand Spot",
+    "#ffa07a"
+   ],
+   [
+    24,
+    "Urban Area",
+    "#d4271e"
+   ],
+   [
+    30,
+    "Mining",
+    "#9c0027"
+   ],
+   [
+    75,
+    "Photovoltaic Power Plant",
+    "#757272"
+   ],
+   [
+    91,
+    "Wind farm (beta)",
+    "#403d3e"
+   ],
+   [
+    25,
+    "Other non Vegetated Areas",
+    "#db4d4f"
+   ],
+   [
+    33,
+    "River, Lake and Ocean",
+    "#2532e4"
+   ],
+   [
+    31,
+    "Aquaculture",
+    "#091077"
+   ]
+  ],
+  "categories": {
+   "3": "forest",
+   "6": "forest",
+   "4": "savanna",
+   "7": "savanna",
+   "5": "forest",
+   "49": "forest",
+   "9": "forest",
+   "33": "lake",
+   "31": "lake"
+  },
+  "prefer": {},
+  "water_codes": [
+   31,
+   33
+  ]
+ },
+ "ar50": {
+  "preset": "rasputin AR50 NIBIO",
+  "colours": [
+   [
+    0,
+    "No polygon; constraint lines",
+    "#3c3c3c"
+   ],
+   [
+    10,
+    "Developed area and traffic",
+    "#e86474"
+   ],
+   [
+    20,
+    "Agriculture",
+    "#ffd16e"
+   ],
+   [
+    30,
+    "Forest",
+    "#9ecc73"
+   ],
+   [
+    50,
+    "Open firm ground",
+    "#d9d9d9"
+   ],
+   [
+    60,
+    "Marsh",
+    "#73dfff"
+   ],
+   [
+    70,
+    "Snow and glacier",
+    "#ffffff"
+   ],
+   [
+    81,
+    "Freshwater",
+    "#91e7ff"
+   ],
+   [
+    82,
+    "Ocean",
+    "#d2ffff"
+   ],
+   [
+    99,
+    "Not surveyed",
+    "#8c8c8c"
+   ],
+   [
+    3031,
+    "Forest, coniferous: at least 50 % of the forested area covered by conifers",
+    "#895944"
+   ],
+   [
+    3032,
+    "Forest, deciduous: less than 20 % of the forested area covered by conifers",
+    "#8b786f"
+   ],
+   [
+    3033,
+    "Forest, mixed: 20 to 50 % of the forested area covered by conifers",
+    "#8b786e"
+   ],
+   [
+    3099,
+    "Forest, tree type not registered",
+    "#9ecc73"
+   ],
+   [
+    5051,
+    "Open firm ground, no vegetation",
+    "#c0c0c0"
+   ],
+   [
+    5052,
+    "Open firm ground, barren to non-continuous vegetation cover",
+    "#ffe8c2"
+   ],
+   [
+    5054,
+    "Open firm ground, barren to good vegetation cover",
+    "#e1c790"
+   ],
+   [
+    5055,
+    "Open firm ground, good to lush non-continuous vegetation cover",
+    "#c7a971"
+   ],
+   [
+    5099,
+    "Open firm ground, vegetation cover not registered",
+    "#f8f7ba"
+   ]
+  ],
+  "categories": {
+   "30": "forest",
+   "70": "glacier",
+   "81": "lake",
+   "82": "unspecified",
+   "3031": "forest",
+   "3032": "forest",
+   "3033": "forest",
+   "3099": "forest"
+  },
+  "prefer": {
+   "lake": 81,
+   "glacier": 70
+  },
+  "water_codes": [
+   81,
+   82
+  ]
+ }
+}

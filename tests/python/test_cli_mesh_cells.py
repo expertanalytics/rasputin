@@ -11,8 +11,8 @@ back, never from the producer's own records.
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- The record line for a land cover without a legend is the `run` row named
-  `cells`, its value saying "no legend".
+- The record line for a land cover without meshing rules is the `run` row
+  named `cells`, its value "none, the land cover has no meshing rules".
 - The legend check's refusal names the class as `class <code>`.
 """
 
@@ -110,7 +110,7 @@ def check_sums(conn: sqlite3.Connection) -> None:
 @pytest.fixture
 def mapbiomas(scene: dict[str, Path], tmp_path: Path) -> Any:
     conn = written(
-        scene, tmp_path / "x.gpkg", "--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11"
+        scene, tmp_path / "x.gpkg", "--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11"
     )
     yield conn
     conn.close()
@@ -155,10 +155,10 @@ def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> No
     check_sums(mapbiomas)
 
 
-# ------------------------------------------------------------ a raster without a legend
+# ------------------------------------------------------------ a raster without meshing rules
 
 
-def test_t5_without_a_legend_only_the_fractions_table(
+def test_t5_without_meshing_rules_only_the_fractions_table(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
     with closing(written(scene, tmp_path / "x.gpkg", "--land-cover", KEY)) as conn:
@@ -166,7 +166,7 @@ def test_t5_without_a_legend_only_the_fractions_table(
         assert "cells" not in tables and "land_cover_fractions" in tables, tables
         assert conn.execute("SELECT count(*) FROM land_cover_fractions").fetchone() == (ENTRIES,)
         (value,) = conn.execute("SELECT value FROM run WHERE name = 'cells'").fetchone()
-    assert "no legend" in value, value
+    assert value == "none, the land cover has no meshing rules", value
 
 
 # ------------------------------------------------------------ the legend check
@@ -187,9 +187,9 @@ def test_t5_uncategorised_water_refused_for_a_gpkg_before_the_dem(
         PhaseClock, "add", lambda self, name, s: (phases.append(name), original(self, name, s))
     )
     target = tmp_path / "x.gpkg"
-    code, output = mesh(scene, target, "--land-cover", KEY, "--land-cover-legend", str(lake))
+    code, output = mesh(scene, target, "--land-cover", KEY, "--land-cover-rules", str(lake))
     assert code == USAGE, output
-    assert "--land-cover-legend" in output and re.search(r"class 2\b", output), output
+    assert "--land-cover-rules" in output and re.search(r"class 2\b", output), output
     assert phases == [], phases
     assert not target.exists() and not (tmp_path / "x.gpkg.part").exists()
 
@@ -198,7 +198,7 @@ def test_t5_the_same_legend_writes_a_vtk(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
     target = tmp_path / "x.vtk"
-    code, output = mesh(scene, target, "--land-cover", KEY, "--land-cover-legend", str(lake))
+    code, output = mesh(scene, target, "--land-cover", KEY, "--land-cover-rules", str(lake))
     assert code == 0, squashed(output)
     names = set(read_vtk(target.read_bytes()).field_data)
     assert {"land_cover_offsets", "land_cover_classes", "land_cover_fractions"} <= names
@@ -212,7 +212,7 @@ def test_t5_polygon_route_writes_cells(scene: dict[str, Path], tmp_path: Path) -
     cover = write_cover_geojson(tmp_path / "cover.geojson", cover_polygons())
     target = tmp_path / "p.gpkg"
     with closing(
-        written(scene, target, "--land-cover", str(cover), "--land-cover-legend", "corine")
+        written(scene, target, "--land-cover", str(cover), "--land-cover-rules", "corine")
     ) as conn:
         assert_allclose(column(conn, "cells", "forest"), shares_of(conn, {311, 312}), atol=1e-12)
         assert_allclose(column(conn, "cells", "lake"), shares_of(conn, {512}), atol=1e-12)

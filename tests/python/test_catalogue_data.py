@@ -24,7 +24,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   ...); a TOML syntax error carries "line N".
 - A user id equal to a shipped one is refused with a message naming
   `sources.toml` twice (both files have that name) and the id.
-- A user entry's relative `legend` resolves to the path of the file
+- A user entry's relative `rules` resolves to the path of the file
   beside the user file (compared after `Path.resolve()`).
 - `sources.data_root` treats an empty `RASPUTIN_DATA` as unset, as `cache_root`
   does today.
@@ -360,15 +360,15 @@ class TestT3UserEntries:
         message = str(caught.value)
         assert user.name in message and "station" in message, message
 
-    def test_a_relative_legend_is_beside_the_user_file(
+    def test_a_relative_rules_is_beside_the_user_file(
         self, sources: ModuleType, tmp_path: Path
     ) -> None:
         user = write(
             tmp_path / "root" / "sources.toml",
-            {f"source.{USER_ID}": changed(PER_YEAR, legend="maps/x.toml")},
+            {f"source.{USER_ID}": changed(PER_YEAR, rules="maps/x.toml")},
         )
         got = sources.catalogue(user).sources[USER_ID]
-        assert Path(got.legend).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
+        assert Path(got.rules).resolve() == (tmp_path / "root" / "maps" / "x.toml").resolve()
 
 
 class TestT3DataRoot:

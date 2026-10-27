@@ -218,7 +218,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   refine cli.py hands it, K4); no Typer, refusals
                            #   are RunError (23c). index.json is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
-                           #   read, mapped to masks by a Legend, pre-clipped,
+                           #   read, mapped to masks by MeshingRules, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
                            #   as linework -> FeatureSet (16b); opens .gml
                            #   itself, reads GeoJSON through io/repository's
@@ -297,20 +297,27 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
                            #   numpy and shapely, never imports _core
-  legends.py               # legends as data (41): load(name | path |
-                           #   'property') reads a TOML file through toml_data into
-                           #   a Legend; derived_cleanup(accuracy, cell):
-                           #   repair, simplify, snap from the larger of the
-                           #   source's accuracy and the DEM cell; [[split]]
-                           #   tables refine a class by a second attribute
-                           #   into sub-classes (91); imports feature_input
-                           #   and features
-  data/legends/            # the shipped legends: corine, corine-water,
+  legends.py               # legends, the colour scheme only (108):
+                           #   load_legend(name | path) reads a TOML file
+                           #   through toml_data into a frozen Legend (preset,
+                           #   labels, colours); imports nothing first-party
+                           #   but toml_data
+  data/legends/            # the shipped legends: corine, mapbiomas-c11, ar50
+  meshing_rules.py         # meshing rules as data (41, 108): load(name |
+                           #   path | 'property') into MeshingRules, naming
+                           #   their legend; [cells] maps codes to cell
+                           #   categories and --prefer classes;
+                           #   derived_cleanup(accuracy, cell): repair,
+                           #   simplify, snap from the larger of the source's
+                           #   accuracy and the DEM cell; [[split]] tables
+                           #   refine a class by a second attribute into
+                           #   sub-classes (91); imports feature_input,
+                           #   features and legends
+  data/meshing_rules/      # the shipped rules: corine, corine-water,
                            #   clc18_kode, mapbiomas-c11, ar50 (.toml; codes,
-                           #   labels, colours, water, edges, notice,
-                           #   positional accuracy); ar50 splits forest (30)
-                           #   by treslag, open firm ground (50) by
-                           #   vegetasjonsdekke (91)
+                           #   edges, notice, positional accuracy, [cells]);
+                           #   ar50 splits forest (30) by treslag, open firm
+                           #   ground (50) by vegetasjonsdekke (91)
   palettes.py              # paraview_preset(table, name): a ParaView preset
                            #   from a code -> (label, colour) table (16c);
                            #   imports nothing first-party; the CORINE table

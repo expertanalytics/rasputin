@@ -34,7 +34,7 @@ from shapely.ops import transform
 import batch_fixtures as bf
 from catchment_fixtures import EPSG, lake_box
 from dataset_fixtures import write_sources
-from feature_fixtures import Feat, domain_of, legend, write_geojson
+from feature_fixtures import Feat, domain_of, rules, write_geojson
 from tin_engine import source_report
 from tin_engine.cli import app
 from tin_engine.feature_input import (
@@ -78,8 +78,8 @@ def fits_for(fields: dict[str, Any]) -> Any:
 
 def maps() -> dict[str, Any]:
     """What `listing` passes: every shipped legend plus `property`."""
-    shipped = importlib.import_module("tin_engine.legends").shipped_names()
-    return {name: legend(name) for name in (*shipped, "property")}
+    shipped = importlib.import_module("tin_engine.meshing_rules").shipped_names()
+    return {name: rules(name) for name in (*shipped, "property")}
 
 
 def facts(
@@ -90,7 +90,7 @@ def facts(
     attributes: tuple[str, ...] = (),
     crs: bool = True,
     projected: bool | None = None,
-    legend: str = "",
+    rules: str = "",
 ) -> dict[str, Any]:
     """`Facts`' fields; built in the test, so the module collects before `Facts` exists."""
     return dict(
@@ -100,7 +100,7 @@ def facts(
         geometry=frozenset(geometry),
         attributes=attributes,
         crs_stated=crs,
-        legend=legend,
+        rules=rules,
     )
 
 
@@ -127,10 +127,10 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
     "geojson attribute as the map spells it": (
         facts(geometry=POLY, attributes=("Code_18",)),
         features("corine", "corine-water") | {*POLYGONS_FIT, SC_LAKES}),
-    "the entry's legend alone": (
-        gpkg(("Code_18",), legend="corine"), features("corine") | {*POLYGONS_FIT}),
-    "the entry's legend, its attribute absent": (
-        gpkg(("Code_18",), legend="clc18_kode"), {*POLYGONS_FIT}),
+    "the entry's rules alone": (
+        gpkg(("Code_18",), rules="corine"), features("corine") | {*POLYGONS_FIT}),
+    "the entry's rules, its attribute absent": (
+        gpkg(("Code_18",), rules="clc18_kode"), {*POLYGONS_FIT}),
     "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {*POLYGONS_FIT}),
     "mapbiomas classes": (facts(geometry=POLY, attributes=("class",)),
                           features("mapbiomas-c11") | {*POLYGONS_FIT, SC_LAKES}),
@@ -182,7 +182,7 @@ class TestT4Fits:
     @pytest.mark.parametrize(("given", "expected"), ROWS.values(), ids=ROWS.keys())
     def test_the_rules(self, given: dict[str, Any], expected: set[Fit]) -> None:
         got = fits_for(given)
-        listed = [(f.command, f.option, f.legend) for f in got]
+        listed = [(f.command, f.option, f.rules) for f in got]
         assert len(listed) == len(set(listed)), listed  # each fit once
         assert set(listed) == expected
 
@@ -212,10 +212,10 @@ class TestT4Fits:
         assert ("station-catchments", "--dem", "station_catchments", "dem") in seen
         assert ("mesh", "--features", "mesh", "features") in seen
 
-    def test_only_a_features_fit_names_a_legend(self) -> None:
+    def test_only_a_features_fit_names_rules(self) -> None:
         for row, _expected in ROWS.values():
             for fit in fits_for(row):
-                assert (fit.legend is not None) == (fit.option == "--features"), fit
+                assert (fit.rules is not None) == (fit.option == "--features"), fit
 
 
 # ------------------------------------------------------------ T5
@@ -225,7 +225,7 @@ INSIDE_POINT = lake_box().centroid.coords[0]
 
 
 def accepts_features(path: Path, layer: str | None, name: str) -> bool:
-    source = FeatureSource(path=path, legend=legend(name), layer=layer)
+    source = FeatureSource(path=path, rules=rules(name), layer=layer)
     domain = domain_of(box(495_000.0, 6_555_000.0, 525_000.0, 6_605_000.0))
     try:
         found = open_features(FeatureRequest(sources=(source,)), domain, EPSG)
@@ -298,7 +298,7 @@ def listed(tmp_path: Path) -> dict[str, tuple[Path, str | None, set[Fit]]]:
     for key, (path, layer) in files.items():
         entry = found[key]
         assert entry.problem is None, (key, entry.problem)
-        out[key] = (path, layer, {(f.command, f.option, f.legend) for f in entry.fits})
+        out[key] = (path, layer, {(f.command, f.option, f.rules) for f in entry.fits})
     return out
 
 

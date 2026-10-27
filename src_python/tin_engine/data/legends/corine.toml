@@ -1,26 +1,11 @@
 # CORINE Land Cover, level 3: natural colours after Patterson and Kelso (2004),
-# not the official legend. Positional accuracy: better than 100 m (EEA, CLC2018
-# Technical Guidelines). docs/increments/41-class-maps-as-data.md, section 4.
+# not the official legend.
 name = "corine"
-attribute = "Code_18"
-code_system = "CORINE Land Cover level-3 code"
-positional_accuracy_m = 100
-notice = "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU"
 preset = "rasputin CORINE natural"
-unlisted = "land"
-
-[edges]
-water = ["land_cover", "water"]
-land = ["land_cover"]
 
 [no_class]
 label = "No polygon; constraint lines"
 colour = "#3c3c3c"
-
-# The one class a --prefer source's polygons take, and the only one they replace.
-[prefer]
-lake = 512
-glacier = 335
 
 [[class]]
 code = 111
@@ -136,19 +121,16 @@ colour = "#a9b574"
 code = 311
 label = "Broad-leaved forest"
 colour = "#4f8f3f"
-category = "forest"
 
 [[class]]
 code = 312
 label = "Coniferous forest"
 colour = "#1f5a2e"
-category = "forest"
 
 [[class]]
 code = 313
 label = "Mixed forest"
 colour = "#357438"
-category = "forest"
 
 [[class]]
 code = 321
@@ -194,7 +176,6 @@ colour = "#4b3f3a"
 code = 335
 label = "Glaciers and perpetual snow"
 colour = "#eef6fb"
-category = "glacier"
 
 [[class]]
 code = 411
@@ -225,33 +206,23 @@ colour = "#b3bdb3"
 code = 511
 label = "Water courses"
 colour = "#4c8ec4"
-category = "lake"
-water = true
 
 [[class]]
 code = 512
 label = "Water bodies"
 colour = "#3e7bb6"
-category = "lake"
-water = true
 
 [[class]]
 code = 521
 label = "Coastal lagoons"
 colour = "#5b93b3"
-category = "lake"
-water = true
 
 [[class]]
 code = 522
 label = "Estuaries"
 colour = "#5188b4"
-category = "lake"
-water = true
 
 [[class]]
 code = 523
 label = "Sea and ocean"
 colour = "#2b5d8e"
-category = "unspecified"
-water = true

@@ -91,7 +91,7 @@ LAYERS: tuple[dict[str, str], ...] = (
     {  # L4: pipelines
         "dem_input": "crs domain grow io.models io.repository mosaic resources target_grid",
         "feature_input": "border_simplify crs domain features io.geojson io.geopackage io.gml"
-                         " io.repository",
+                         " io.repository legends",  # 108: the rules compose their legend
         "catchment": "burn catchment_core crs gauge geodesy io.models io.repository mosaic"
                      " outline resources sensitivity",
         "catchment_batch": "catchment crs gauge geodesy hydrography io.repository reference"
@@ -107,9 +107,11 @@ LAYERS: tuple[dict[str, str], ...] = (
         "sub_catchments": "border_simplify crs domain features",  # 106c, 106e: units; the domain
         "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
         "preferred": "cells polygon_fractions",  # 107: classes from a preferred source
-        "legends": "feature_input features toml_data",  # 41: legend files to Legend
-        "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
-                         " io.models io.repository sources",  # 55: the listing; 57: vector sources
+        "legends": "toml_data",  # 108: a legend file is the colour scheme only
+        "meshing_rules": "feature_input features legends toml_data",  # 108: rules files
+        # 55: the listing; 57: vector sources
+        "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage"
+                         " meshing_rules io.models io.repository sources",
         # 85: a network file's links and units; reads through feature_input
         "io.network_file": "crs feature_input io.geojson io.geopackage io.repository network",
     },
@@ -120,6 +122,7 @@ LAYERS: tuple[dict[str, str], ...] = (
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_index io.models io.network_file io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
+               " meshing_rules"
                " mcp.http mcp.server mosaic network palettes plugins polygon_fractions preferred"
                " raster"
                " refine_job resources"

@@ -20,16 +20,16 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - The record field for a map's licence is `features_licence`; absent when
   every map's licence is empty.
 - `rasputin palette PATH` writes the file's `preset` as the preset's `Name`.
-- The three help texts end "Default: from the legend's positional
+- The three help texts end "Default: from the meshing rules' positional
   accuracy and the DEM cell (CORINE: N)." with N 1, 50 and 5.
-- A `--features-legend` file error, an unknown name, an extra repeating a
+- A `--features-rules` file error, an unknown name, an extra repeating a
   default name, and more than 22 extras in one run are usage errors (exit 2).
-- A `--land-cover` catalogue entry's `legend` is honoured from the entry
-  in `SOURCES`, so a test entry carrying `legend="mapbiomas-c11"` gets
+- A `--land-cover` catalogue entry's `rules` is honoured from the entry
+  in `SOURCES`, so a test entry carrying `rules="mapbiomas-c11"` gets
   MapBiomas's names and colours.
 
 RED at the commit that adds this file: no `tin_engine.legends` and no
-`data/legends/`; `--features-legend` takes only the four built-in names
+`data/legends/`; `--features-rules` takes only the four built-in names
 (a path is "unknown map"); the clean-up defaults are fixed at 1, 50 and 5;
 `palette` knows only `corine`; `--land-cover` writes no class names; no
 extra names, no text codes, no licence row.
@@ -51,7 +51,7 @@ from class_fixtures import PATH_TEMPLATE, per_year_entry
 from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem, runner
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import write_class_cache, write_dem, write_domain
-from legend_fixtures import basenames, coded_map, corine_like, uncoded_map, write
+from legend_fixtures import basenames, coded_map, corine_like, legend_text, uncoded_map, write
 from legend_snapshot import PRESET_BYTES
 from recordread import file_field
 from test_cli_features_cleanup import Spy, run, switches
@@ -67,7 +67,7 @@ SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
 OPTIONS = ("features_repair", "features_tolerance", "features_outline_snap")
-DERIVED = "Default: from the legend's positional accuracy and the DEM cell (CORINE: {})."
+DERIVED = "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: {})."
 LEVEE = LineString([rel(30.1, -40.3), rel(170.2, -40.3)])
 ROAD = LineString([rel(30.1, -15.2), rel(170.2, -15.2)])
 
@@ -131,7 +131,8 @@ class TestPalette:
         assert target.read_bytes() == PRESET_BYTES
 
     def test_t5_palette_of_a_path(self, tmp_path: Path) -> None:
-        path = write(tmp_path / "mine.toml", coded_map())
+        listed = [(1, "Forest", "#1f8d49"), (2, "Lake", "#2532e4")]
+        path = write(tmp_path / "mine.toml", legend_text("mine", "rasputin mine", listed))
         result = runner.invoke(app, ["palette", str(path)])
         assert result.exit_code == 0, result.output
         (preset,) = json.loads(result.stdout)
@@ -147,24 +148,24 @@ class TestPalette:
         assert result.exit_code == 0, result.output
         (preset,) = json.loads(result.stdout)
         maps = importlib.import_module("tin_engine.legends")
-        assert preset["Name"] == maps.load("mapbiomas-c11").preset
+        assert preset["Name"] == maps.load_legend("mapbiomas-c11").preset
         assert "33 River, Lake and Ocean" in preset["Annotations"]
         assert len(preset["Annotations"]) == 2 * 34
 
-    def test_t5_palette_refuses_an_uncoded_map(self, tmp_path: Path) -> None:
+    def test_t5_palette_refuses_a_rules_file(self, tmp_path: Path) -> None:
         path = write(tmp_path / "levees.toml", uncoded_map())
         code, said = invoke("palette", str(path))
         output = basenames(said)
         assert code == USAGE, output
-        assert "has no classes to colour" in output
-        assert "levees.toml" in output
+        assert "levees.toml" in output and "attribute" in output, output
 
     def test_t5_palette_refuses_an_unknown_name_listing_the_shipped(self) -> None:
         code, said = invoke("palette", "corin")
         output = basenames(said)
         assert code == USAGE, output
-        for name in SHIPPED:
-            assert name in output, name
+        assert "unknown legend corin; use ar50, corine, mapbiomas-c11" in output, output
+        for name in ("corine-water", "clc18_kode"):
+            assert name not in output, name
 
 
 # ------------------------------------------------------------- T5: mesh
@@ -172,7 +173,7 @@ class TestPalette:
 
 class TestFeaturesMapOption:
     def test_t5_the_help_lists_the_shipped_names(self) -> None:
-        text = mesh_params()["features_legend"].help or ""
+        text = mesh_params()["features_rules"].help or ""
         for name in (*SHIPPED, "property"):
             assert name in text, name
 
@@ -183,7 +184,7 @@ class TestFeaturesMapOption:
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
             *("--out", str(tmp_path / "x.vtk"), "--features", str(corine)),
-            *("--features-legend", "corin"),
+            *("--features-rules", "corin"),
         )
         output = basenames(said)
         assert code == USAGE, output
@@ -199,7 +200,7 @@ class TestFeaturesMapOption:
             "mesh",
             *("--dem", str(tmp_path / "absent.tif"), "--domain", str(square)),
             *("--tolerance", "1", "--out", str(tmp_path / "x.vtk")),
-            *("--features", str(corine), "--features-legend", str(tmp_path / "nope.toml")),
+            *("--features", str(corine), "--features-rules", str(tmp_path / "nope.toml")),
         )
         output = basenames(said)
         assert code == USAGE, output
@@ -209,16 +210,18 @@ class TestFeaturesMapOption:
     def test_t5_a_bad_file_is_refused_naming_it(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        path = write(tmp_path / "bad.toml", corine_like("bad", "40").replace('"#4f8f3f"', '"x"'))
+        path = write(
+            tmp_path / "bad.toml", corine_like("bad", "40").replace("code = 311", "code = 0")
+        )
         code, said = invoke(
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
             *("--out", str(tmp_path / "x.vtk"), "--features", str(corine)),
-            *("--features-legend", str(path)),
+            *("--features-rules", str(path)),
         )
         output = basenames(said)
         assert code == USAGE, output
-        assert "bad.toml" in output and "colour" in output
+        assert "bad.toml" in output and "code" in output
 
 
 # ------------------------------------------------------------- T7
@@ -238,7 +241,7 @@ class TestDerivedDistances:
     ) -> None:
         spy = Spy(monkeypatch)
         _, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
+            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
         )
         assert recorded(record) == CORINE_DISTANCES
         (request,) = spy.requests
@@ -251,7 +254,7 @@ class TestDerivedDistances:
             tmp_path,
             bumpy,
             square,
-            *("--features", str(corine), "--features-legend", "corine"),
+            *("--features", str(corine), "--features-rules", "corine"),
             *("--features-tolerance", "20"),
         )
         assert recorded(record) == (1.0, 20.0, 5.0)
@@ -278,12 +281,12 @@ class TestDerivedDistances:
         spy = Spy(monkeypatch)
         path = write(tmp_path / "mine.toml", corine_like("mine", accuracy))
         report, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", str(path)
+            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", str(path)
         )
         assert recorded(record) == want
         (request,) = spy.requests
         assert (request.repair_m, request.tolerance_m, request.outline_snap_m) == want
-        assert "legend mine" in record["features"]
+        assert "rules mine" in record["features"]
         assert report
 
     def test_t7_a_user_map_with_one_override(
@@ -294,7 +297,7 @@ class TestDerivedDistances:
             tmp_path,
             bumpy,
             square,
-            *("--features", str(corine), "--features-legend", str(path)),
+            *("--features", str(corine), "--features-rules", str(path)),
             *("--features-repair", "0.7"),
         )
         assert recorded(record) == (0.7, 20.0, 2.0)
@@ -308,8 +311,8 @@ class TestDerivedDistances:
             tmp_path,
             bumpy,
             square,
-            *("--features", str(corine), "--features-legend", str(path)),
-            *("--features", str(other), "--features-legend", "corine"),
+            *("--features", str(corine), "--features-rules", str(path)),
+            *("--features", str(other), "--features-rules", "corine"),
         )
         assert recorded(record) == CORINE_DISTANCES
 
@@ -344,7 +347,7 @@ class TestTextCodesOnTriangles:
             [Feat("w", WEST, {"cover": "Forest"}), Feat("e", EAST, {"cover": "Lake"})],
         )
         path = write(tmp_path / "cover.toml", coded_map(codes="Forest = 1\nLake = 2\n"))
-        run(tmp_path, bumpy, square, "--features", str(cover), "--features-legend", str(path))
+        run(tmp_path, bumpy, square, "--features", str(cover), "--features-rules", str(path))
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = vtk.cell_array("land_cover_code").values
         lines = len(vtk.lines)
@@ -361,7 +364,7 @@ class TestVocabularyExtrasInTheMesh:
         self, tmp_path: Path, bumpy: Path, square: Path, levees: Path
     ) -> None:
         path = write(tmp_path / "levees.toml", uncoded_map())
-        run(tmp_path, bumpy, square, "--features", str(levees), "--features-legend", str(path))
+        run(tmp_path, bumpy, square, "--features", str(levees), "--features-rules", str(path))
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         bits = [int(b) for b in vtk.field_data["feature_bits"].values]
         names = [str(n) for n in vtk.field_data["feature_names"].values]
@@ -378,7 +381,7 @@ class TestVocabularyExtrasInTheMesh:
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
         path = write(tmp_path / "mine.toml", corine_like("mine", "40"))
-        run(tmp_path, bumpy, square, "--features", str(corine), "--features-legend", str(path))
+        run(tmp_path, bumpy, square, "--features", str(corine), "--features-rules", str(path))
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         assert file_field(vtk, "feature_vocabulary") == DEFAULT_VOCABULARY.fingerprint()
 
@@ -390,7 +393,7 @@ class TestVocabularyExtrasInTheMesh:
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
             *("--out", str(tmp_path / "x.vtk"), "--features", str(levees)),
-            *("--features-legend", str(path)),
+            *("--features-rules", str(path)),
         )
         output = basenames(said)
         assert code == USAGE, output
@@ -411,8 +414,8 @@ class TestVocabularyExtrasInTheMesh:
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
             *("--out", str(tmp_path / "x.vtk")),
-            *("--features", str(levees), "--features-legend", str(one)),
-            *("--features", str(levees), "--features-legend", str(two)),
+            *("--features", str(levees), "--features-rules", str(one)),
+            *("--features", str(levees), "--features-rules", str(two)),
         )
         output = basenames(said)
         assert code == USAGE, output
@@ -444,7 +447,7 @@ class TestMapBiomasThroughTheCli:
         **entry: Any,
     ) -> Path:
         """One `--land-cover` run of the test class source, its entry carrying
-        ``entry`` (`legend`, say), written to ``out``."""
+        ``entry`` (`rules`, say), written to ``out``."""
         sources = importlib.import_module("tin_engine.sources")
         template = "https://example.invalid/" + PATH_TEMPLATE
         key = install(sources, monkeypatch, per_year_entry(sources, template, **entry)).id
@@ -465,9 +468,11 @@ class TestMapBiomasThroughTheCli:
         from contextlib import closing
 
         target = self.land_cover_mesh(
-            tmp_path, scene, monkeypatch, "named.gpkg", legend="mapbiomas-c11"
+            tmp_path, scene, monkeypatch, "named.gpkg", rules="mapbiomas-c11"
         )
-        palette = importlib.import_module("tin_engine.legends").load("mapbiomas-c11").palette
+        palette = (
+            importlib.import_module("tin_engine.meshing_rules").load("mapbiomas-c11").legend.colours
+        )
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert len({r[0] for r in rows}) > 2
@@ -479,7 +484,7 @@ class TestMapBiomasThroughTheCli:
     ) -> None:
         plain = self.land_cover_mesh(tmp_path, scene, monkeypatch, "plain.vtk")
         named = self.land_cover_mesh(
-            tmp_path, scene, monkeypatch, "named.vtk", legend="mapbiomas-c11"
+            tmp_path, scene, monkeypatch, "named.vtk", rules="mapbiomas-c11"
         )
         before, after = read_vtk(plain.read_bytes()), read_vtk(named.read_bytes())
         assert sorted(after.field_data) == sorted(before.field_data)
@@ -492,9 +497,9 @@ class TestMapBiomasThroughTheCli:
             [Feat(1, WEST, {"class": 3}), Feat(2, EAST, {"class": 33})],
         )
         _, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(cover), "--features-legend", "mapbiomas-c11"
+            tmp_path, bumpy, square, "--features", str(cover), "--features-rules", "mapbiomas-c11"
         )
-        notice = importlib.import_module("tin_engine.legends").load("mapbiomas-c11").notice
+        notice = importlib.import_module("tin_engine.meshing_rules").load("mapbiomas-c11").notice
         assert record["features_notice"] == notice
         assert "MapBiomas Project - Collection 11" in notice
         # MapBiomas at 30 m over a 10 m cell: s = 30.
@@ -510,7 +515,7 @@ class TestLicenceInTheRecord:
         )
         path = write(tmp_path / "mine.toml", text)
         _, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", str(path)
+            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", str(path)
         )
         assert record["features_licence"] == "CC BY 4.0"
 
@@ -518,9 +523,27 @@ class TestLicenceInTheRecord:
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
         _, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-legend", "corine"
+            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
         )
         assert "features_licence" not in record
+
+
+class TestTheNamesInTheRecord:
+    """`docs/increments/108-legend-split.md`, the Names table: the record's
+    `features` entry names the rules; the mesh text `land_cover_codes` keeps
+    the word "legend" and takes the rules file's name, so `corine-water`
+    keeps its own although its legend is `corine`."""
+
+    def test_corine_water(self, tmp_path: Path, bumpy: Path, square: Path, corine: Path) -> None:
+        _, record, _ = run(
+            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine-water"
+        )
+        assert ", rules corine-water: " in record["features"], record["features"]
+        assert ", legend corine-water; " in record["land_cover_codes"], record["land_cover_codes"]
+
+    def test_the_wording_of_the_features_field(self) -> None:
+        wording = importlib.import_module("tin_engine.run_record").WORDING["features"]
+        assert wording == "Each features file: layer, meshing rules, features, lines, vertices"
 
 
 # ------------------------------------------------- the AR50 legend, tests 12, 13
@@ -558,14 +581,14 @@ class TestAr50ThroughTheCli:
         self, tmp_path: Path, bumpy: Path, square: Path, ar50: Path
     ) -> None:
         _, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(ar50), "--features-legend", "ar50"
+            tmp_path, bumpy, square, "--features", str(ar50), "--features-rules", "ar50"
         )
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = vtk.cell_array("land_cover_code").values
         assert {30, 81} <= {int(c) for c in codes[len(vtk.lines) :]}
         assert set(edges_at(vtk, rel(160.9, -60.2))) == {LAND_COVER | WATER}
         assert set(edges_at(vtk, rel(40.3, -60.2))) == {LAND_COVER}
-        legend = importlib.import_module("tin_engine.legends").load("ar50")
+        legend = importlib.import_module("tin_engine.meshing_rules").load("ar50")
         assert record["features_notice"] == legend.notice
         assert record["features_licence"] == legend.licence
         assert recorded(record) == (0.1, 5.0, 0.5)
@@ -580,10 +603,10 @@ class TestAr50ThroughTheCli:
         code, said = invoke(
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
-            *("--out", str(target), "--features", str(ar50), "--features-legend", "ar50"),
+            *("--out", str(target), "--features", str(ar50), "--features-rules", "ar50"),
         )
         assert code == 0, basenames(said)
-        palette = importlib.import_module("tin_engine.legends").load("ar50").palette
+        palette = importlib.import_module("tin_engine.meshing_rules").load("ar50").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert {30, 81} <= {r[0] for r in rows}
@@ -613,7 +636,7 @@ class TestAr50SplitsThroughTheCli:
     ) -> None:
         _, record, _ = run(
             tmp_path, bumpy, square, "--features", str(self.cover(tmp_path)),
-            "--features-legend", "ar50",
+            "--features-rules", "ar50",
         )  # fmt: skip
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}
@@ -637,10 +660,10 @@ class TestAr50SplitsThroughTheCli:
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
             *("--out", str(target), "--features", str(self.cover(tmp_path))),
-            *("--features-legend", "ar50"),
+            *("--features-rules", "ar50"),
         )
         assert code == 0, basenames(said)
-        palette = importlib.import_module("tin_engine.legends").load("ar50").palette
+        palette = importlib.import_module("tin_engine.meshing_rules").load("ar50").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert {3031, 5052} <= {r[0] for r in rows}
@@ -653,7 +676,7 @@ class TestAr50SplitsThroughTheCli:
         """Section 6: an export carrying only `arealtype` meshes as before."""
         run(
             tmp_path, bumpy, square, "--features", str(self.cover(tmp_path, second=False)),
-            "--features-legend", "ar50",
+            "--features-rules", "ar50",
         )  # fmt: skip
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}

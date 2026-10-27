@@ -239,7 +239,7 @@ class TestT6VectorListing:
     ) -> None:
         _lakes, cover = fixture_v(tmp_path / "v")
         write_sources(config, {
-            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, legend="corine")
+            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, rules="corine")
         })  # fmt: skip
         found = by_id(listing())[COVER_ID]
         assert fits_of(found) == {
@@ -353,7 +353,7 @@ class TestAr50Listing:
         target = tmp_path / "ar50.gpkg"
         with AR50_SAMPLE.open("rb") as stream, closing(create_sqlite(target)) as conn:
             gml_import.gml_to_geopackage(stream, conn)
-        write_sources(config, {"ar50-sample": vector_entry(target, "AR50", legend="ar50")})
+        write_sources(config, {"ar50-sample": vector_entry(target, "AR50", rules="ar50")})
         return target
 
     def test_14_the_classes_and_fits(self, ar50_entry: Path) -> None:

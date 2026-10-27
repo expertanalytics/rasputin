@@ -8,7 +8,7 @@ of T3 to T9. Two fixtures carry it:
   `--record` and `--stats` beside it, once to `.vtk`, and twice more to one
   path for determinism and replacement. Needs the `codecs` extra (LZW).
 - **F3**, the `bumpy` DEM with two hand-made CORINE rectangles (311 west,
-  512 east) under `--features-legend corine`: the coded path, with the
+  512 east) under `--features-rules corine`: the coded path, with the
   `land_cover`, `land_cover_classes` and `layer_styles` tables.
 
 The `.vtk` of a run with the same arguments is the oracle for every figure:
@@ -160,7 +160,7 @@ def f3(tmp_path: Path, bumpy: Path) -> Written:
     corine = write_geojson(tmp_path / "corine.geojson", features)
     domain = geojson(tmp_path / "square.geojson", SQUARE)
     args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-    args += ("--features", str(corine), "--features-legend", "corine")
+    args += ("--features", str(corine), "--features-rules", "corine")
     return mesh_pair(tmp_path, "cover", *args)
 
 
@@ -477,7 +477,7 @@ class TestLandCover:
         corine = write_geojson(tmp_path / "road.geojson", [Feat("r", road, {"Code_18": "122"})])
         domain = geojson(tmp_path / "square.geojson", SQUARE)
         args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-        args += ("--features", str(corine), "--features-legend", "corine")
+        args += ("--features", str(corine), "--features-rules", "corine")
         written = mesh_pair(tmp_path, "road", *args)
         with closing(sqlite3.connect(written.gpkg)) as con:
             assert "land_cover" not in tables(con)
