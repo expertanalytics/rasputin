@@ -254,3 +254,9 @@ review, with Ola's yes at the guard's prompt:
 Net **-2** words. Counted lines: about 80 against the limit of 700.
 
 ## Review
+
+- Design round 1: CHANGES REQUESTED, 29914d50..1e563bd0, 0 net production lines (fix 3: path arguments of programs other than git and Python).
+- Design round 2: CHANGES REQUESTED, ..2ba17ddd, 0 (cd into the folder, then an untraceable program).
+- Design round 3: CHANGES REQUESTED, ..a7392426, 0 (sed writes through a script w command).
+- Design round 4: CHANGES REQUESTED, ..f21119e7, 0 (ed and ex read a script on standard input).
+- Design round 5: APPROVED, ..c4f1380e, 0 (fix 3 rewritten as default deny with an allow list).
