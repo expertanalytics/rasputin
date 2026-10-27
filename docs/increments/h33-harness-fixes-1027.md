@@ -1,7 +1,7 @@
 # Harness h33: four harness fixes of 2026-10-27
 
 Status: **designed**, 2026-10-27, on `worktree-harness-fixes-1027` off master
-`29914d50`. Full path (`docs/increments/README.md`): about 75 counted lines,
+`29914d50`. Full path (`docs/increments/README.md`): about 80 counted lines,
 over the short path's 50; no C++ file, no refine or mesh code. Every code file
 it changes is governed (`tools/brief.py`, `tools/push_grant.py`,
 `.claude/hooks/guard_governance.py`, `tools/check_citations.py`), so the green
@@ -78,18 +78,28 @@ parsed line, replacing that clause:
   argument the line changes to, and to all of them in order; a joined path
   is judged as (a) judges a path, each expansion read as `.git` (denied:
   `cd .git && touch harness/x`, `cd .git/harness && python3 -c
-  "open('x','w')"`, `cd $(git rev-parse --git-dir)/harness && touch x`);
+  "open('x','w')"`, `cd $(git rev-parse --git-dir)/harness && touch x`).
+  When the directories changed to so far, joined in order with each
+  expansion read as `.git`, match `HARNESS_PATH`, every later command not
+  on the read-only list below is denied, whatever it names (`cd
+  .git/harness && rsync -a /s/ . > /tmp/log`, `... && tar xf /t.tar >
+  /tmp/log`, `... && vim x > /tmp/log`: no path of theirs matches alone);
 - (c) arguments: in every simple command except a program that only reads,
-  a word that is one path (no whitespace) matching `HARNESS_PATH` counts as
-  a write target. The programs that only read: `cat`, `grep`, `ls`, `head`,
-  `tail`, `echo`, `printf`, `diff`, `stat`, `cd`, `pushd`. For an
-  interpreter this covers the script's words, `-m`'s words and the words
-  after a `-c` program (`python3 -c "…open(sys.argv[1],'w')"
-  .git/harness/x`). Denied with or without another write on the line:
-  `rsync -a s/ .git/harness/`, `tar xf t -C .git/harness`, `find
-  .git/harness -delete`, `bash s.sh .git/harness/x`, `ex -sc wq
-  .git/harness/x`, `vim .git/harness/x`, `python3 tools/x.py
-  .git/harness/y`;
+  a word that is one path (no whitespace) matching `HARNESS_PATH`, as
+  written or joined to the directories as in (b), counts as a write target
+  (`cd .git && rsync -a /s/ harness/`). The programs that only read:
+  `shell_scan.NO_RUN` less its writers (`tee`, `mkdir`, `rm`, `cp`, `mv`,
+  `touch`), plus `jq`, `sed`, `cd` and `pushd`; but `sed` with `-i` or
+  `--in-place`, `sort` with `-o` or `--output`, and `uniq` with two
+  operands write, so they do not count as read-only. For an interpreter this covers the
+  script's words, `-m`'s words and the words after a `-c` program
+  (`python3 -c "…open(sys.argv[1],'w')" .git/harness/x`). Denied with or
+  without another write on the line: `rsync -a s/ .git/harness/`, `tar xf
+  t -C .git/harness`, `find .git/harness -delete`, `bash s.sh
+  .git/harness/x`, `ex -sc wq .git/harness/x`, `vim .git/harness/x`,
+  `python3 tools/x.py .git/harness/y`, `sort -o .git/harness/x y`, `uniq y
+  .git/harness/x`. Passing: `wc -l`, `sort`, `cut`, `rg`, `jq .` and `sed
+  -n 1p` on a file there, also after `cd` into it;
 - (d) untraceable, only when the text names `.git/harness`: a simple command
   is `unknown`; a write target holds an expansion (the `H=`, `export`,
   `read`, `declare` and `$(...)` routes); or, on a line that writes
@@ -99,7 +109,7 @@ A quoted mention holds spaces, so it is never one path and (c) passes it.
 The unparseable-line rule (`:173`) and the Edit/Write arm stay. A Python
 program naming the folder in a literal it does not open for reading stays
 refused under (a): this design's own probe hit it (a `glob.glob` read);
-`grep`, `cat` or the Read tool read the folder. About 30 counted lines.
+`grep`, `cat` or the Read tool read the folder. About 35 counted lines.
 
 ## 4. Bare line citations in retrospectives are refused
 
@@ -136,16 +146,17 @@ redone in that form" for all three acts. Nothing more.
    heredoc naming `.git/harness/x`; `echo "see .git/harness" > note.md`;
    `git commit -m "guard: .git/harness"`; `python3 tools/brief.py a --task
    "the .git/harness/x file"`; `cat` and `grep` of a file there; `cd
-   $(git rev-parse --show-toplevel) && ls`. A deny list: every example of
-   §3 (b) and (c), the (c) ones each alone and with `> log`; `python3 -m
-   mod .git/harness/x`; `git apply p` with the path in its text; `echo x >
-   "$N"` with the path in its text. The existing denials
+   $(git rev-parse --show-toplevel) && ls`; every passing read of §3 (c),
+   plain and after `cd`. A deny list: every example of §3 (b) and (c), the
+   six non-interpreter (c) programs each alone and with `> log`; `python3
+   -m mod .git/harness/x`; `git apply p` with the path in its text; `echo
+   x > "$N"` with the path in its text. The existing denials
    (`test_guard_targets.py` lines with `-harness`) stay green unchanged.
-   Measured against today's `judge_bash` at `29914d50` (a probe loading the
-   hook): the 23 deny cases split 12 refused today, 11 passing today (the
-   holes: the (b) and (c) examples without `> log`, `-m`, the words after
-   `-c`); the first two pass cases are refused today (the false
-   positives), the other five pass.
+   Measured at `29914d50` with a scratch probe that loads the hook and
+   models §3 on `shell_scan.parse`: 31 deny cases, 16 refused by today's
+   `judge_bash` and 15 passing today (the holes), all 31 denied by the
+   model; 15 pass cases, 2 refused today (the false positives), all 15
+   passed by the model. No mismatch.
 4. `test_check_citations.py`: a bare cite in a retrospective fails, a pinned
    one passes, a `legacy/` one passes, a bare cite elsewhere under `docs/`
    behaves as today.
