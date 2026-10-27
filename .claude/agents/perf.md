@@ -43,7 +43,7 @@ figures only.
 * **Python profiles:** py-spy needs root on macOS for native frames;
   otherwise use cProfile and `sample <pid>`.
 * **A timing run runs alone**, read-only agents included; an untimed run
-  (model results, a sensitivity sweep) may run beside one writer.
+  (model results, a sensitivity sweep) may run beside one writer and read-only agents.
 * **Repeat and take the median**; record the
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
