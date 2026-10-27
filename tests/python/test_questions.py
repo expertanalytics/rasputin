@@ -161,6 +161,12 @@ def test_c4_bare_above_and_same_as_pass(store: Path, text: str) -> None:
     assert newest(store, text)["state"] == "open"
 
 
+def test_c4_phrases_match_only_as_whole_words(store: Path) -> None:
+    ask(store, "Keep what Ola has before ruled?")
+    assert newest(store, "Keep what Ola has before ruled?")["state"] == "open"
+    assert "read alone" in refused(store, "add", "Keep the order as before?", "--default", "no")
+
+
 # ---------------------------------------------------------------- 5. C5 refusals
 
 
@@ -211,6 +217,13 @@ def test_c5_a_branch_name_is_allowed_on_an_act(store: Path) -> None:
     ],
 )  # fmt: skip
 def test_c5_plain_tokens_that_look_like_labels_pass(store: Path, text: str) -> None:
+    ask(store, text)
+    assert newest(store, text)["state"] == "open"
+
+
+@pytest.mark.parametrize("text", ["Let @perf's run decide the timing?",
+                                  "Let @perf\u2019s run decide the timing?"])  # fmt: skip
+def test_c5_a_possessive_persona_handle_passes(store: Path, text: str) -> None:
     ask(store, text)
     assert newest(store, text)["state"] == "open"
 
@@ -277,6 +290,14 @@ def test_list_numbers_questions_acts_then_taken_in_one_sequence(store: Path) -> 
     assert lines[2].startswith("3. Taken: ")
     assert "the cache lives in the user's cache folder" in lines[2]
     assert shown[-1] == HELD_TWO
+
+
+def test_a_held_choices_question_is_not_called_yes_no(store: Path) -> None:
+    ask(store, "Which unit for heights?", "--choices", "metre|foot", default="metre")
+    ask(store, "Which unit for depths?", "--choices", "metre|fathom", default="metre")
+    shown = run(store, "list")
+    assert len(numbered(shown)) == 1
+    assert shown[-1] == "and 1 more question held until one above is answered"
 
 
 def test_a_taken_line_appears_in_one_list_only(store: Path) -> None:
