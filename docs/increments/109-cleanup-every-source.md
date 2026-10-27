@@ -1,8 +1,21 @@
-# Increment 109: the land-cover clean-up reaches every source, and says when it does not
+# Increment 109: the land-cover clean-up reaches every source
 
-**Status: designed** (`@architect`, 2026-10-27, on `1100fe2c`). One PR from
-master, no C++ file, no `@perf` run (section 5). About 70 net production
-lines.
+**Status: designed, round 2** (`@architect`, 2026-10-27, on `1100fe2c`).
+One PR from master, no C++ file, no `@perf` run (section 6). About 60 net
+production lines.
+
+## 0. What Ola asked
+
+Ola, verbatim (2026-10-27): "Is there any way of relaxing the inner
+constrains similarly as the catchment polygon?"; on the legend mix-up:
+"Design, write, build, merge."; and "yes, push the Sula fix when it's
+reviewed".
+
+Scope for tonight, the main session's ruling (Ola's demo is tomorrow): the
+simplification reaches every source (section 3, items 1, 2 and 4), the
+per-source counts in the run record (item 5), and a stated default for a
+missing positional accuracy (item 3), not a refusal, so Sol's demo files
+keep running. Deferred to a later increment: section 4.
 
 ## 1. What it fixes
 
@@ -55,66 +68,86 @@ carried.
 *Ideas file.* "Repair CORINE once per area of interest" overlaps (it would
 cache this stage's output); not taken up.
 
-## 3. The design
+## 3. The design (tonight)
 
-All in `feature_input.py`, `meshing_rules.py`, `cli.py` and `run_record.py`.
+In `feature_input.py`, `meshing_rules.py`, `cli.py` and `run_record.py`.
 
-1. **Every source's polygons are cleaned.** In `_Tally._take`, every Polygon
-   or MultiPolygon of a non-`property` source that its rules do not drop goes
-   to the clean-up, coded or not. The same-class merge groups an uncoded
-   polygon by its class value text. An uncoded polygon still labels no
-   triangle: its `TerrainFeature` keeps `code` and `polygon` None.
+1. **Every source's polygons are cleaned, except `property`'s.** In
+   `_Tally._take`, every Polygon or MultiPolygon of a source whose rules have
+   `cleaned = True` (a new `MeshingRules` field, `bool`, default True; False
+   only for `property`) and that its rules do not drop goes to the clean-up,
+   coded or not. The same-class merge groups an uncoded polygon by its class
+   value text. An uncoded polygon still labels no triangle: its
+   `TerrainFeature` keeps `code` and `polygon` None. `--features-rules`' help
+   gains the sentence "property: each feature's own edge names, never
+   cleaned or simplified." (today it says nothing of it,
+   `src_python/tin_engine/cli.py@1100fe2c:779-786`).
 2. **The uncovered rest is simplified with them.** In `_clean`, with the band
-   on, `rest = domain − coverage_union_all(inside)`; its parts that a 1 cm
-   inward buffer empties are left out, the others join the polygons given to
-   `simplify_borders` and are dropped after. `REST_MIN_WIDTH_M = 0.01` is
-   chosen, not derived: it assumes a metric CRS. Checked on `1100fe2c`: Sula
-   with shipped `corine` (30 km²), 18 rest parts, all of zero area and under
-   1 cm wide; numedalslagen and lagan (the quick check's land-cover cases,
-   the largest checked), one part of zero area each; Sula's coded lakes, 16
-   parts, 27.7 km², all kept.
-   A source that tiles the domain adds nothing, so its input to the
-   simplifier, and its mesh, are unchanged.
-3. **`positional_accuracy_m` is required in every rules file**, refused when
-   missing: "positional_accuracy_m missing: the source's positional accuracy
-   in metres, which sets the default clean-up distances". Today it is required
-   only with `code_system` (`src_python/tin_engine/meshing_rules.py@1100fe2c:121-122`).
-   Every shipped file has one; Sol's two files are refused until they state
-   one. `property` has none and is never cleaned (its help text says so).
+   on, `rest = domain − coverage_union_all(inside)`; its parts narrower than
+   `REST_MIN_WIDTH_M = 0.01` (a part that `buffer(-REST_MIN_WIDTH_M / 2)`
+   empties) are left out, the others join the polygons given to
+   `simplify_borders` and are dropped after. The constant is chosen, not
+   derived: it assumes a metric CRS. Checked on `1100fe2c`: Sula with shipped
+   `corine` (30 km²), 18 rest parts, all of zero area; numedalslagen and
+   lagan (the quick check's land-cover cases, the largest checked), one part
+   of zero area each; Sula's coded lakes, 16 parts, 27.7 km², all kept. A
+   source that tiles the domain adds nothing, so its simplifier input, and
+   its mesh, are unchanged.
+
+   *Failure policy.* If `simplify_borders` refuses the input with the rest
+   piece added (it raises `ValueError` saying why; the rest comes from two
+   overlay calls, and the outline can cut a lake), the run is **refused**,
+   as a refusal of the coded clean-up is today
+   (`src_python/tin_engine/feature_input.py@1100fe2c:361-363`): "<file>:
+   border simplification refused: <why>; --features-tolerance 0 meshes this
+   source with its borders as read". Why not a fallback: a silent or
+   warned fallback to unsimplified borders is the defect this increment
+   fixes, and the triangle count would again not follow the option. Sula's
+   lakes simplify without a refusal (section 5, prediction).
+3. **A missing positional accuracy gets a stated default: the DEM cell.**
+   `MeshingRules.accuracy_m` becomes `float | None` (None: the file states
+   none; `property`'s is None and never read, item 1). In the command, a
+   cleaned source with None counts as the DEM cell size, which leaves the
+   clean-up scale `s = max(accuracy, cell)` at the cell, so it neither
+   raises nor lowers the scale. Said once per such source on stderr and in
+   the record key `features_accuracy_m` (one entry per source, `; `-joined):
+   "sula-nve-lake-constraints.toml states no positional_accuracy_m; the DEM
+   cell, 10 m, is used". A finding about the data, so it is said (Ola's rule
+   on CLI warnings).
 4. **Default distances from the sources given.** The clean-up scale is the
-   largest accuracy over the non-`property` sources, not over coded ones with
-   CORINE's 100 m as fallback; with none, no clean-up runs.
-5. **Unused options are said.** When the stage ran on no polygon, the record
-   leaves the `features_repair_m`, `features_merge_same_class`,
-   `features_tolerance_m` and `features_outline_snap_m` keys out; an
-   explicitly given clean-up option prints one stderr line, e.g.
-   "features: --features-tolerance not used: no polygon in any --features
-   source" (a finding about the data).
-6. **Per-source record counts.** Each source's `features` entry counts its own
+   largest accuracy over the cleaned sources (item 3's default included),
+   not over coded ones with CORINE's 100 m as fallback.
+5. **Per-source record counts.** Each source's `features` entry counts its own
    lines and vertices after clip and clean-up (`FeatureSet.features` are in
    source order; slice by `counts`); the merged totals move to one new key,
    `features_joined`, "N lines, M vertices after joining shared edges and
    adding crossings", described in `run_record.py`.
-7. **The model takes the file's names.** Finding: the file says
+
+## 4. Later, not tonight
+
+1. **The model takes the file's names.** Finding: the file says
    `code_system`, `codes`, `unlisted` and `positional_accuracy_m`
    (`src_python/tin_engine/meshing_rules.py@1100fe2c:92-100`), the model it
    becomes says `codes`, `string_codes`, `otherwise` and `accuracy_m`
    (`src_python/tin_engine/feature_input.py@1100fe2c:111-119`), so `codes`
-   means two different things across one conversion
+   means two things across one conversion
    (`src_python/tin_engine/meshing_rules.py@1100fe2c:211-221`).
-   `MeshingRules` takes the file's four names; `positional_accuracy_m` has no
-   0.0 fallback (item 3). No aliases.
-8. **One clean-up default.** Finding: `FeatureRequest`'s four clean-up fields
+2. **One clean-up default.** Finding: `FeatureRequest`'s four clean-up fields
    default to all off (`src_python/tin_engine/feature_input.py@1100fe2c:142-148`),
    while the command derives 1, on, 50 and 5
-   (`src_python/tin_engine/cli.py@1100fe2c:1225-1230`), so a caller building a
-   request itself gets no clean-up without a word. The fields lose their
-   defaults, and `derived_cleanup` plus merge-on becomes a constructor,
-   `FeatureRequest.derived(sources, cell)`, that the command calls.
+   (`src_python/tin_engine/cli.py@1100fe2c:1225-1230`). Proposed: the fields
+   lose their defaults and a constructor `FeatureRequest.derived(sources,
+   cell)` gives the command's.
+3. **Unused options said.** When the stage ran on no polygon, the record
+   leaves the clean-up keys out and an explicitly given clean-up option
+   prints "features: --features-tolerance not used: no polygon in any
+   --features source".
+4. **Required accuracy.** Whether a missing `positional_accuracy_m` is later
+   refused instead of defaulted (item 3) is Ola's call.
 
-## 4. Prediction and tests
+## 5. Prediction and tests
 
-Prediction: sources that tile the domain give byte-identical meshes (gate 6);
+Prediction: sources that tile the domain give byte-identical meshes (gate 7);
 `corine-water` and every lake source now simplify. On Sula's 44 lakes
 (`/tmp/cleanup-every-source-probe/frame_probe.py`, `simplify_borders` on
 `1100fe2c`): 6,972 vertices alone at bands 1, 20 and 50 m; with the rest piece
@@ -129,11 +162,21 @@ Prediction: sources that tile the domain give byte-identical meshes (gate 6);
 2. **Coded lakes:** the same fixture with codes, the same counts (cause 2).
 3. **Tiling source:** two halves of the square; rest empty; the existing
    CORINE clean-up tests pass unchanged.
-4. **Refusal:** a rules file without `positional_accuracy_m`, message as above.
-5. **Record:** two sources give their own line and vertex counts and one
-   `features_joined`; a `property`-only run with `--features-tolerance 5`
-   prints the not-used line and no clean-up keys.
-6. **Gate, CORINE meshes byte-identical and no slower.** The quick check's
+4. **The 1 cm filter.** The 1,000 m square; a source of two polygons, the
+   lake at (300, 500) as in test 1 and `box(0, 0, 1000, 1000 − w)` less the
+   lake: 519 vertices. The rest is one strip, 5 vertices. `w = 0.008`: area
+   8.000 m², left out, the simplifier gets 2 polygons; `w = 0.012`: area
+   12.000 m², kept, it gets 3. Band 5 m, repair 0.01 m: the source's 519
+   vertices become 33 in both, lake area 31,412.773 m² kept
+   (`/tmp/cleanup-every-source-probe/sliver.py`).
+5. **Refusal message:** `simplify_borders` patched to raise
+   `ValueError("x")` with an uncoded source: the run is refused with the
+   message of item 2, naming the file.
+6. **Record:** two sources give their own line and vertex counts and one
+   `features_joined`; an uncoded source with no `positional_accuracy_m` on a
+   10 m DEM gives item 3's sentence on stderr and in `features_accuracy_m`,
+   and the derived tolerance 5 m (s/2 with s = 10).
+7. **Gate, CORINE meshes byte-identical and no slower.** The quick check's
    `numedalslagen` and `lagan` cases (`docs/benchmarks/quick/cases.toml`, plus
    `--out X.vtk --binary`), sha256 of the `.vtk` must stay
    `1b077a1a5ce8170f7cfebe9a01cdcfe551ecc50d22048f2e73f95a83b32b4705` and
@@ -147,16 +190,16 @@ Prediction: sources that tile the domain give byte-identical meshes (gate 6);
    (numedalslagen) and 0.186 s (lagan), about 1 %; the rest is one part of
    zero area in both, so it is left out and the simplifier's input is as
    today.
-7. **Sula, reported, not gated:** Sol's two files with an accuracy added
-   (100 m CORINE, 10 m lakes) and `corine-water`, at `--features-tolerance`
-   1, 20, 50: triangle counts reported to Ola beside section 1's table.
+8. **Sula, reported, not gated:** Sol's two files as they are (no accuracy:
+   item 3's default) and `corine-water`, at `--features-tolerance` 1, 20,
+   50: triangle counts reported to Ola beside section 1's table.
 
-## 5. Size
+## 6. Size
 
-About 70 net production lines: the clean-up gate and merge key +10, the rest
-piece +10, required accuracy and the default +5, the not-used line and omitted
-keys +15, the per-source counts +20, the derived request +10, field renames
-(13 sites in `src_python`) +0. No C++; CORINE meshes unchanged by gate 6, so
-no `@perf` acceptance run. Test helpers that write uncoded rules files
-(`tests/python/legend_fixtures.py`) and that build `FeatureRequest` without
-clean-up fields need `@tester`'s amendment in the red step.
+About 60 net production lines: the clean-up gate, `cleaned` flag and merge
+key +10, the rest piece and its filter +12, the refusal message +3, the
+accuracy default, its stderr line and record key +12, the scale over cleaned
+sources +3, the per-source counts and `features_joined` +20. No C++; CORINE
+meshes unchanged by gate 7, so no `@perf` acceptance run. Test helpers that
+build `MeshingRules` with `accuracy_m=0.0` for "none" may need `@tester`'s
+amendment in the red step.
