@@ -3,6 +3,14 @@
 `docs/increments/python-audit.md`, section 10 (R10). Test support only. Each
 suite keeps its own thresholds and its own control test, because what a
 held and a released call let through differs between the calls they measure.
+
+Two measures. `ticks_during` counts ticks, which other processes' load
+distorts: a starved thread hands the GIL over at the edges of a held call, and
+under `pytest -n auto` a held call let up to 26 ticks through. `silence_during`
+measures the longest stretch of the call with no tick, as a fraction of the
+call. Load can only lengthen a silence, never fill one, because the ticker
+cannot tick without the GIL: a held call stays near 1 and a released one near
+0 however busy the machine is.
 """
 
 from __future__ import annotations
@@ -10,6 +18,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from itertools import pairwise
 
 
 class _Ticker:
@@ -22,6 +31,7 @@ class _Ticker:
 
     def __init__(self) -> None:
         self.ticks = 0
+        self.stamps: list[float] = []
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -30,6 +40,7 @@ class _Ticker:
         self._ready.set()
         while not self._stop.is_set():
             self.ticks += 1
+            self.stamps.append(time.perf_counter())
             time.sleep(0.001)
 
     def __enter__(self) -> _Ticker:
@@ -52,3 +63,16 @@ def ticks_during[T](call: Callable[[], T]) -> tuple[T, int, float]:
         elapsed = time.perf_counter() - started
         after = ticker.ticks
     return result, after - before, elapsed
+
+
+def silence_during[T](call: Callable[[], T]) -> tuple[T, float, float]:
+    """Return the call's result, the longest stretch of it with no tick as a
+    fraction of its duration, and its duration."""
+    with _Ticker() as ticker:
+        time.sleep(0.02)  # let the ticker reach steady state
+        started = time.perf_counter()
+        result = call()
+        ended = time.perf_counter()
+    marks = [started, *(t for t in ticker.stamps if started < t < ended), ended]
+    longest = max(b - a for a, b in pairwise(marks))
+    return result, longest / (ended - started), ended - started
