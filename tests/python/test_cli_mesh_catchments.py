@@ -79,7 +79,7 @@ UNITS = [
 ]
 SQUARE = local(box(0, 0, 3000, 3000))
 RING = [(float(x), float(y)) for x, y in list(SQUARE.exterior.coords)[:-1]]
-LAND_COVER = ("--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11")
+LAND_COVER = ("--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11")
 
 
 @pytest.fixture

@@ -58,7 +58,7 @@ from test_cli_mesh_reservoirs import (
     reservoir_rectangle,
     write_reservoirs,
 )
-from tin_engine.legends import load
+from tin_engine import meshing_rules
 
 __all__ = ["phases", "scene"]  # fixtures, used by name
 
@@ -101,15 +101,15 @@ def lake(tmp_path: Path) -> Path:
 
 
 def corine(cover: Path, *more: str) -> tuple[str, ...]:
-    return ("--land-cover", str(cover), "--land-cover-legend", "corine", *more)
+    return ("--land-cover", str(cover), "--land-cover-rules", "corine", *more)
 
 
 # ------------------------------------------------------------ the legends
 
 
 def test_the_legends_name_the_class_each_key_replaces() -> None:
-    assert dict(load("corine").prefer) == {"lake": 512, "glacier": 335}
-    assert dict(load("ar50").prefer) == {"lake": 81, "glacier": 70}
+    assert dict(meshing_rules.load("corine").prefer) == {"lake": 512, "glacier": 335}
+    assert dict(meshing_rules.load("ar50").prefer) == {"lake": 81, "glacier": 70}
 
 
 # ------------------------------------------------------------ case 7, end to end
@@ -207,7 +207,7 @@ def test_case6_a_legend_without_prefer_is_refused_naming_it(
         'category = "lake"\n'
     )
     legend = write(tmp_path / "mine.toml", coded_map("mine", attribute="Code_18", classes=classes))
-    args = ("--land-cover", str(cover), "--land-cover-legend", str(legend))
+    args = ("--land-cover", str(cover), "--land-cover-rules", str(legend))
     flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
     assert "mine" in flat, flat
 
@@ -215,7 +215,7 @@ def test_case6_a_legend_without_prefer_is_refused_naming_it(
 def test_case6_a_raster_land_cover_is_refused(
     scene: dict[str, Path], tmp_path: Path, lake: Path, phases: list[str]
 ) -> None:
-    args = ("--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11")
+    args = ("--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11")
     flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
     assert "--land-cover" in flat, flat
 

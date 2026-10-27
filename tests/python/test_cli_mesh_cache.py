@@ -348,7 +348,7 @@ class TestW5TheFetchCommandInTheMessage:
         )
         self.refused_with(
             tmp_path, data, "m.gpkg", "--catchments", str(units),
-            "--land-cover", str(cover), "--land-cover-legend", "corine",
+            "--land-cover", str(cover), "--land-cover-rules", "corine",
         )  # fmt: skip
 
     def test_the_count_of_missing_and_needed_blocks(

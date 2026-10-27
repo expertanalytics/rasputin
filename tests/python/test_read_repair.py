@@ -53,7 +53,7 @@ from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 
 from cli_helpers import invoke
-from feature_fixtures import UTM33, Feat, legend, write_geojson
+from feature_fixtures import UTM33, Feat, rules, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, write_dem, write_domain
 from tin_engine.cells import overlay
 from tin_engine.feature_input import _repaired, read_class_polygons, read_polygons
@@ -86,7 +86,7 @@ def pair(out: Any) -> tuple[list[Any], int]:
 
 
 def classes(path: Path) -> tuple[list[tuple[int, BaseGeometry]], int]:
-    return pair(read_class_polygons(path, None, legend("corine"), UTM33, TRIANGLE))
+    return pair(read_class_polygons(path, None, rules("corine"), UTM33, TRIANGLE))
 
 
 def plain(path: Path) -> tuple[list[BaseGeometry], int]:
@@ -204,7 +204,7 @@ def test_6_a_mesh_run_with_a_bowtie_land_cover_completes_and_says_so(tmp_path: P
         *("--dem", str(write_dem(tmp_path / "dem.tif"))),
         *("--domain", str(write_domain(tmp_path / "domain.geojson"))),
         *("--tolerance", "3", "--out", str(tmp_path / "x.vtk"), "--record", str(record)),
-        *("--land-cover", str(cover), "--land-cover-legend", "corine"),
+        *("--land-cover", str(cover), "--land-cover-rules", "corine"),
     )
     assert code == 0, output
     assert "TopologyException" not in output, output

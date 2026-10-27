@@ -1,4 +1,4 @@
-"""`rasputin mesh --land-cover FILE.tif [--land-cover-legend NAME|FILE.toml]`.
+"""`rasputin mesh --land-cover FILE.tif [--land-cover-rules NAME|FILE.toml]`.
 
 `docs/increments/44-catalogue-as-data.md`, section 4.5 and section 7's T11
 (the CLI by path) and T8's CLI halves (a class raster in US survey feet; one
@@ -20,7 +20,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 - Each refusal is a usage error (exit 2), and none times a phase.
 - `--land-cover-year` with a file says "no years"; a missing path names the
-  path and lists the catalogue keys; `--land-cover-legend` alone says "needs
+  path and lists the catalogue keys; `--land-cover-rules` alone says "needs
   --land-cover"; a float32 raster names the file and `uint8`.
 - A file run needs neither `--cache` nor `RASPUTIN_DATA`.
 - A feet raster over another place than the mesh gets past the option check
@@ -53,7 +53,7 @@ from class_fixtures import (
     per_year_entry,
 )
 from cli_helpers import USAGE, invoke, squashed
-from feature_fixtures import legend
+from feature_fixtures import rules
 from fraction_fixtures import (
     oracle_fractions,
     rows_of,
@@ -181,11 +181,11 @@ class TestByPath:
             target,
             "--land-cover",
             str(scene["file"]),
-            "--land-cover-legend",
+            "--land-cover-rules",
             "mapbiomas-c11",
         )
         assert code == 0, output
-        palette = legend("mapbiomas-c11").palette
+        palette = rules("mapbiomas-c11").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert len({r[0] for r in rows}) > 2
@@ -255,15 +255,15 @@ class TestRefusals:
     ) -> None:
         output = self.refused(
             scene, tmp_path, phases,
-            "--land-cover", str(scene["file"]), "--land-cover-legend", "property",
+            "--land-cover", str(scene["file"]), "--land-cover-rules", "property",
         )  # fmt: skip
-        says(output, "--land-cover-legend", "property")
+        says(output, "--land-cover-rules", "property")
 
     def test_a_map_without_land_cover(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]
     ) -> None:
-        output = self.refused(scene, tmp_path, phases, "--land-cover-legend", "mapbiomas-c11")
-        says(output, "--land-cover-legend", "needs --land-cover")
+        output = self.refused(scene, tmp_path, phases, "--land-cover-rules", "mapbiomas-c11")
+        says(output, "--land-cover-rules", "needs --land-cover")
 
     def test_a_file_stating_feet_heights_is_refused_naming_it(
         self, offline: None, tmp_path: Path, scene: dict[str, Path], phases: list[str]

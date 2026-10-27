@@ -120,7 +120,7 @@ BUILT_IN = ("property", "corine", "corine-water", "clc18_kode")
 
 class TestLegends:
     def test_the_built_in_maps(self) -> None:
-        maps = {name: ff.legend(name) for name in BUILT_IN}
+        maps = {name: ff.rules(name) for name in BUILT_IN}
         assert {name: m.attribute for name, m in maps.items()} == {
             "property": "property",
             "corine": "Code_18",
@@ -133,17 +133,17 @@ class TestLegends:
         """R10 and "Test data": a mesh built from CORINE says so, and says the
         data were modified."""
         for name in ("corine", "corine-water", "clc18_kode"):
-            notice = ff.legend(name).notice
+            notice = ff.rules(name).notice
             assert "Copernicus Land Monitoring Service" in notice, name
             assert "modified" in notice.lower(), name
-        assert ff.legend("property").notice == ""
+        assert ff.rules("property").notice == ""
 
     def test_a_legend_is_frozen_and_strict(self, fi: ModuleType) -> None:
-        corine = ff.legend("corine")
+        corine = ff.rules("corine")
         with pytest.raises((TypeError, ValueError)):
             corine.attribute = "other"
         with pytest.raises(ValueError):
-            fi.Legend(name="x", attribute="a", classes={}, colour="red")
+            fi.MeshingRules(name="x", attribute="a", classes={}, colour="red")
 
     def test_property_one_name(self, tmp_path: Path) -> None:
         fs = one(tmp_path, INNER, {"property": "road"})
@@ -211,18 +211,20 @@ class TestLegends:
         self, tmp_path: Path, fi: ModuleType
     ) -> None:
         """R4: checked when the run starts, even with no feature to map."""
-        bad = fi.Legend(name="bad", attribute="kind", classes={"x": ("glacier",)}, otherwise="drop")
+        bad = fi.MeshingRules(
+            name="bad", attribute="kind", classes={"x": ("glacier",)}, otherwise="drop"
+        )
         path = write_geojson(tmp_path / "f.geojson", [])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=bad),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=bad),))
         with pytest.raises(fi.FeatureError, match="glacier"):
             fi.open_features(request, BOX, UTM33)
 
     def test_an_otherwise_name_the_vocabulary_lacks_is_refused_too(
         self, tmp_path: Path, fi: ModuleType
     ) -> None:
-        bad = fi.Legend(name="bad", attribute="kind", classes={}, otherwise=("glacier",))
+        bad = fi.MeshingRules(name="bad", attribute="kind", classes={}, otherwise=("glacier",))
         path = write_geojson(tmp_path / "f.geojson", [])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=bad),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=bad),))
         with pytest.raises(fi.FeatureError, match="glacier"):
             fi.open_features(request, BOX, UTM33)
 
@@ -231,9 +233,9 @@ class TestLegends:
     ) -> None:
         mine = EdgeVocabulary(properties=(EdgeProperty(name="road", bit=9),))
         path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
-        own_map = fi.Legend(name="mine", attribute="property", classes={"road": ("road",)})
+        own_map = fi.MeshingRules(name="mine", attribute="property", classes={"road": ("road",)})
         request = fi.FeatureRequest(
-            sources=(fi.FeatureSource(path=path, legend=own_map),), vocabulary=mine
+            sources=(fi.FeatureSource(path=path, rules=own_map),), vocabulary=mine
         )
         fs = fi.open_features(request, BOX, UTM33)
         assert [f.mask for f in fs.features] == [1 << 9]
@@ -1498,11 +1500,11 @@ class TestTheClipStaysTheSame:
     ) -> None:
         """Section 3.2: the refusal checks come before the whole-feature
         test, so a feature missing the region is still refused."""
-        strict = fi.Legend(
+        strict = fi.MeshingRules(
             name="strict", attribute="property", classes={"road": ("road",)}, otherwise="refuse"
         )
         path = write_geojson(tmp_path / "f.geojson", [Feat("far-9", where, {"property": "ice"})])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, legend=strict),))
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=strict),))
         with pytest.raises(fi.FeatureError, match=r"far-9.*'ice'.*strict"):
             fi.open_features(request, BOX, UTM33)
 
@@ -2017,7 +2019,7 @@ class TestASplitAttributeAsWritten:
 
         splits = split_classes(split(50, "Veg", (51, 5051)), split(30, "tre", (31, 3031)))
         toml = write_text(tmp_path / "caps.toml", coded_map(attribute=attribute, classes=splits))
-        return fi.FeatureSource(path=data, legend=ff.legend(str(toml)))
+        return fi.FeatureSource(path=data, rules=ff.rules(str(toml)))
 
     def codes(self, fi: ModuleType, source: Any) -> dict[Any, int]:
         fs = fi.open_features(fi.FeatureRequest(sources=(source,)), BOX, UTM33)

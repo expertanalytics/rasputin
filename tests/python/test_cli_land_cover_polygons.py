@@ -1,11 +1,11 @@
-"""`rasputin mesh --land-cover POLYGONS [--land-cover-legend NAME|FILE.toml]`:
+"""`rasputin mesh --land-cover POLYGONS [--land-cover-rules NAME|FILE.toml]`:
 exact class fractions per triangle from class polygons, in the mesh file.
 
 `docs/increments/105-cell-table.md`, section 4.5 (a vector value of
 `--land-cover`: a `.gpkg`, `.geojson` or `.gml` file, or a catalogue vector
 source with a legend; read through `feature_input.read_source`, moved to the
 mesh CRS, cut per triangle; uncovered area is class 0; a coded
-`--features-legend` beside it stays refused) and section 6, T6's CLI case.
+`--features-rules` beside it stays refused) and section 6, T6's CLI case.
 The scene is `test_cli_mesh_land_cover_fractions.py`'s: its DEM in SIRGAS
 2000 / UTM 23S, its domain, `--tolerance 3`. The class polygons are CORINE
 coded (`Code_18`, legend `corine`): 311 and 512 do not fit the `uint8` the
@@ -52,7 +52,7 @@ from shapely.geometry.base import BaseGeometry
 
 from cli_helpers import USAGE, invoke, squashed
 from dataset_fixtures import write_sources
-from feature_fixtures import Feat, legend, write_geojson
+from feature_fixtures import Feat, rules, write_geojson
 from fraction_fixtures import (
     MESH_CRS,
     Row,
@@ -198,7 +198,7 @@ def phases(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 def run_vtk(dem: Path, domain: Path, target: Path, polygons: Path, *extra: str) -> VtkFile:
     code, output = mesh(
-        dem, domain, target, "--land-cover", str(polygons), "--land-cover-legend", "corine", *extra
+        dem, domain, target, "--land-cover", str(polygons), "--land-cover-rules", "corine", *extra
     )
     assert code == 0, output
     assert "No such option" not in output, output
@@ -256,7 +256,7 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "x.ply"
         code, output = mesh(
-            dem, domain, target, "--land-cover", str(cover), "--land-cover-legend", "corine"
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-rules", "corine"
         )
         assert code == 0, output
         data = target.read_bytes()
@@ -279,16 +279,36 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "named.gpkg"
         code, output = mesh(
-            dem, domain, target, "--land-cover", str(cover), "--land-cover-legend", "corine"
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-rules", "corine"
         )
         assert code == 0, output
-        palette = legend("corine").palette
+        palette = rules("corine").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert {r[0] for r in rows} >= {311, 512}
         for code_, name, colour in rows:
             if code_ != 0:
                 assert (name, colour) == palette[code_], code_
+
+
+class TestAr50SubClasses:
+    """`docs/increments/108-legend-split.md`, section 5, test 4: an AR50
+    class-polygon run whose forest polygon carries a tree type takes the
+    sub-class code, which the rules know, so the run is not refused."""
+
+    def test_a_sub_class_polygon_is_counted(self, tmp_path: Path, dem: Path, domain: Path) -> None:
+        (_, forest), (_, water), _ = cover_polygons()
+        feats = [
+            Feat(1, forest, {"arealtype": 30, "treslag": 31}),
+            Feat(2, water, {"arealtype": 81}),
+        ]
+        path = write_geojson(tmp_path / "ar50.geojson", feats, crs=MESH_CRS)
+        target = tmp_path / "x.vtk"
+        code, output = mesh(
+            dem, domain, target, "--land-cover", str(path), "--land-cover-rules", "ar50"
+        )
+        assert code == 0, output
+        assert {3031, 81} <= set().union(*rows_of(*table(read_vtk(target.read_bytes()))))
 
 
 # ------------------------------------------------------------ the other readers and CRSs
@@ -321,11 +341,11 @@ class TestSources:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dem: Path, domain: Path
     ) -> None:
         """4.5: a catalogue vector source with a legend, here a user's local
-        entry with `legend = "corine"`; no `--land-cover-legend` is given."""
+        entry with `legend = "corine"`; no `--land-cover-rules` is given."""
         monkeypatch.delenv("RASPUTIN_DATA", raising=False)
         gpkg = write_cover_gpkg(tmp_path / "cover.gpkg", cover_polygons())
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
-        write_sources(config, {CATALOGUE_KEY: vector_entry(gpkg, "Test cover", legend="corine")})
+        write_sources(config, {CATALOGUE_KEY: vector_entry(gpkg, "Test cover", rules="corine")})
         want = table(run_vtk(dem, domain, tmp_path / "a.vtk", gpkg))
         target = tmp_path / "b.vtk"
         code, output = mesh(dem, domain, target, "--land-cover", CATALOGUE_KEY)
@@ -354,7 +374,7 @@ class TestAFetchedLayer:
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
         entry = {
             "kind": "arcgis-features", "url": FEATURES_URL, "crs": MESH_CRS,
-            "fields": ["ID", "Code_18"], "legend": "corine",
+            "fields": ["ID", "Code_18"], "rules": "corine",
             "credit": "Test cover, {url} (accessed on {date})", "licence_note": "Test licence",
         }  # fmt: skip
         write_sources(config, {FEATURES_KEY: entry})
@@ -431,7 +451,7 @@ class TestRefusals:
         odd = [*cover_polygons(), (9999, box(x0 + 300.4, y0 - 2200.0, x0 + 900.0, y0 - 2100.0))]
         path = write_cover_geojson(tmp_path / "odd.geojson", odd)
         output = self.refused(
-            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-legend", "corine"
+            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-rules", "corine"
         )
         assert "9999" in squashed(output) and "--land-cover" in output, output
 
@@ -439,7 +459,7 @@ class TestRefusals:
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
     ) -> None:
         output = self.refused(dem, domain, tmp_path, "--land-cover", str(cover), before=phases)
-        assert "--land-cover-legend" in output, output
+        assert "--land-cover-rules" in output, output
 
     def test_an_uncoded_legend_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
@@ -447,22 +467,22 @@ class TestRefusals:
         toml = tmp_path / "levees.toml"
         toml.write_text(uncoded_map(), encoding="utf-8")
         output = self.refused(
-            dem, domain, tmp_path, "--land-cover", str(cover), "--land-cover-legend", str(toml),
+            dem, domain, tmp_path, "--land-cover", str(cover), "--land-cover-rules", str(toml),
             before=phases,
         )  # fmt: skip
-        assert "--land-cover-legend" in output and "codes" in output, output
+        assert "--land-cover-rules" in output and "codes" in output, output
 
     def test_a_year_with_a_file_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
     ) -> None:
         output = self.refused(
             dem, domain, tmp_path,
-            "--land-cover", str(cover), "--land-cover-legend", "corine",
+            "--land-cover", str(cover), "--land-cover-rules", "corine",
             "--land-cover-year", "2018", before=phases,
         )  # fmt: skip
         assert "--land-cover-year" in output and "no years" in output, output
 
-    def test_a_coded_features_legend_beside_it_is_refused(
+    def test_a_coded_features_rules_beside_it_is_refused(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path
     ) -> None:
         """4.5: one code system per mesh, as for a class raster."""
@@ -472,7 +492,7 @@ class TestRefusals:
         )
         output = self.refused(
             dem, domain, tmp_path,
-            "--features", str(features), "--features-legend", "corine",
-            "--land-cover", str(cover), "--land-cover-legend", "corine",
+            "--features", str(features), "--features-rules", "corine",
+            "--land-cover", str(cover), "--land-cover-rules", "corine",
         )  # fmt: skip
         assert "--land-cover" in output and "corine" in output, output

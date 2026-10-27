@@ -6,10 +6,10 @@ input features and the legend, never from the producer's records (05b,
 of the masks of every feature whose boundary, as given in the source and
 moved by pyproj directly, lies along that edge, within the noder's snap.
 
-`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.legends`
+`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.meshing_rules`
 are imported lazily, so a suite importing this module still collects before
 they exist. Increment 41: a legend is loaded by name (or path) through
-`legends.load`, no longer read from a table in `feature_input`.
+`meshing_rules.load`, no longer read from a table in `feature_input`.
 """
 
 from __future__ import annotations
@@ -52,9 +52,9 @@ def chains_module() -> ModuleType:
     return importlib.import_module("tin_engine.chains")
 
 
-def legend(name: str) -> Any:
-    """Increment 41: the legend a `--features-legend` value names."""
-    return importlib.import_module("tin_engine.legends").load(name)
+def rules(name: str) -> Any:
+    """The meshing rules a `--features-rules` value names."""
+    return importlib.import_module("tin_engine.meshing_rules").load(name)
 
 
 def at(x: float, y: float) -> tuple[float, float]:
@@ -101,7 +101,7 @@ def write_geojson(path: Path, features: Iterable[Feat], crs: str | None = UTM33)
 
 
 def source(path: Path, map_name: str = "property", **kwargs: Any) -> Any:
-    return feature_input().FeatureSource(path=path, legend=legend(map_name), **kwargs)
+    return feature_input().FeatureSource(path=path, rules=rules(map_name), **kwargs)
 
 
 def open_one(
