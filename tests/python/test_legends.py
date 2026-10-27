@@ -31,7 +31,10 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   and, for a bad key or value, the key. The shipped files are
   `tin_engine/data/meshing_rules/<name>.toml`.
 - `meshing_rules.known_codes(rules) -> frozenset[int]`: the codes a class
-  polygon may carry.
+  polygon may carry; 0 among them only when the rules file says
+  `accept_no_class = true` (only with `code_system`, and the legend must
+  colour code 0); the legend's `[no_class]` decides nothing. Every shipped
+  rules file says it.
 - A refusal of a legend-only key in a rules file names the key and the word
   "legend"; one of a `[cells]` misplacement names "[cells]".
 - `derived_cleanup(accuracy_m, cell)` and `run_vocabulary` live in
@@ -981,9 +984,38 @@ class TestKnownCodes:
         want = {code for code, *_ in BEFORE[name]["colours"]}
         assert cm.known_codes(cm.load(name)) == frozenset(want)
 
-    def test_zero_only_with_a_no_class_entry(self, cm: ModuleType, tmp_path: Path) -> None:
+    def test_zero_is_the_rules_setting_not_the_legends(
+        self, cm: ModuleType, tmp_path: Path
+    ) -> None:
+        """Class code 0 (no polygon, constraint lines only) is accepted when
+        the rules say ``accept_no_class = true``; the legend's `[no_class]`
+        is its colour and label only, and decides nothing."""
+        off = cm.load(str(write(tmp_path / "r.toml", coded_map())))
+        (named,) = re.findall(r'^legend = "(.*)"$', coded_map(), flags=re.M)
+        assert "[no_class]" in (tmp_path / named).read_text(encoding="utf-8")
+        on = cm.load(str(write(tmp_path / "r0.toml", coded_map(accept_no_class=True))))
+        assert cm.known_codes(off) == {1, 2}
+        assert cm.known_codes(on) == {0, 1, 2}
+        assert 0 in off.legend.colours and 0 in on.legend.colours
+
+    @pytest.mark.parametrize("name", SHIPPED)
+    def test_every_shipped_rules_file_accepts_code_0(self, name: str) -> None:
+        assert shipped_toml(name).get("accept_no_class") is True, name
+
+    def test_accepting_zero_needs_its_colour_in_the_legend(
+        self, cm: ModuleType, tmp_path: Path
+    ) -> None:
         listed = [(1, "F", "#1f8d49"), (2, "L", "#2532e4")]
         colours = write(tmp_path / "plain.toml", legend_text("p", "p", listed, no_class=False))
-        text = re.sub(r'^legend = ".*"$', f'legend = "{colours.name}"', coded_map(), flags=re.M)
-        assert cm.known_codes(cm.load(str(write(tmp_path / "r.toml", text)))) == {1, 2}
-        assert cm.known_codes(cm.load(str(write(tmp_path / "r0.toml", coded_map())))) == {0, 1, 2}
+        text = re.sub(
+            r'^legend = ".*"$', f'legend = "{colours.name}"', coded_map(accept_no_class=True),
+            flags=re.M,
+        )  # fmt: skip
+        message = refused(cm, write(tmp_path / "zero-uncoloured.toml", text), "legend")
+        assert re.search(r"\b0\b", message), message
+
+    def test_accepting_zero_needs_code_system(self, cm: ModuleType, tmp_path: Path) -> None:
+        text = uncoded_map().replace(
+            'unlisted = "refuse"\n', 'unlisted = "refuse"\naccept_no_class = true\n'
+        )
+        refused(cm, write(tmp_path / "uncoded-zero.toml", text), "accept_no_class", "code_system")

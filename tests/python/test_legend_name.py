@@ -40,6 +40,7 @@ def test_the_legend_options_are_refused_naming_the_new(old: str, new: str, value
     code, output = invoke("mesh", old, value)
     assert code == USAGE, output
     assert f"{old} is now {new}; {COLOURS_ONLY}" in " ".join(output.split()), output
+    assert output.count(old) == 1, output
 
 
 def test_a_sources_file_with_the_class_map_key_is_refused(tmp_path: Path) -> None:

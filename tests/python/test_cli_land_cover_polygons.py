@@ -29,14 +29,16 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   catalogue source is named by its id, as the raster route does.
 - A vector file with no legend, an uncoded legend, or with
   `--land-cover-year`, is a usage error (exit 2) naming the option, before
-  any phase is timed; a polygon whose code the legend lacks is a usage error
-  naming the code and `--land-cover`.
+  any phase is timed; a polygon whose code the meshing rules lack is a usage
+  error naming the code and `--land-cover`, saying "class <code> is not in
+  the meshing rules" even when the legend colours the code.
 """
 
 from __future__ import annotations
 
 import datetime
 import os
+import re
 import sqlite3
 from collections.abc import Iterable, Sequence
 from contextlib import closing
@@ -65,7 +67,7 @@ from fraction_fixtures import (
 )
 from gpkg_fixtures import Layer, write_gpkg
 from gpkg_fixtures import Row as GpkgRow
-from legend_fixtures import uncoded_map
+from legend_fixtures import basenames, coded_map, legend_text, uncoded_map, write
 from plyread import parse_header, read_ply
 from recordread import file_field
 from tin_engine.io.repository import FeatureManifest
@@ -454,6 +456,28 @@ class TestRefusals:
             dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-rules", "corine"
         )
         assert "9999" in squashed(output) and "--land-cover" in output, output
+
+    def test_a_code_the_legend_colours_but_the_rules_lack_names_the_rules(
+        self, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """The legend colours 5 and 6, the rules list only 5 (an unlisted
+        class is land for the lines), so the code-6 polygon reaches the
+        fractions and is refused there, by the rules."""
+        colours = write(
+            tmp_path / "five-six.toml",
+            legend_text("fs", "p", [(5, "Five", "#1f8d49"), (6, "Six", "#2532e4")]),
+        )
+        classes = '[[class]]\ncode = 5\nlabel = "Five"\ncolour = "#1f8d49"\n'
+        text = coded_map(attribute="Code_18", classes=classes, unlisted="land")
+        text = re.sub(r'^legend = ".*"$', f'legend = "{colours.name}"', text, flags=re.M)
+        rules_file = write(tmp_path / "five.toml", text)
+        (_, forest), (_, water), _ = cover_polygons()
+        path = write_cover_geojson(tmp_path / "five-six.geojson", [(5, forest), (6, water)])
+        output = self.refused(
+            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-rules", str(rules_file)
+        )
+        assert "class 6 is not in the meshing rules" in " ".join(output.split()), output
+        assert "legend" not in basenames(output.replace("--land-cover-rules", "")), output
 
     def test_a_file_without_a_legend_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]

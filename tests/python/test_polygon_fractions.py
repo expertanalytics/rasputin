@@ -22,9 +22,10 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - `polygon_fractions.assign(vertices, triangles, polygons, *, known, most=64)
   -> land_cover_fractions.Assigned`: `vertices` `(N, 2)` or `(N, 3)` in the
   polygons' CRS (z ignored), `triangles` `(T, 3)` indices, `polygons` an
-  iterable of `(code, Polygon | MultiPolygon)` pairs, `known` the legend's
-  class codes. Uncovered area is class 0, a class like any other.
-- A code not in `known` is a `ValueError` naming the code; a non-finite
+  iterable of `(code, Polygon | MultiPolygon)` pairs, `known` the meshing
+  rules' class codes. Uncovered area is class 0, a class like any other.
+- A code not in `known` is a `ValueError`, "class <code> is not in the
+  meshing rules" (the rules decide, not the legend); a non-finite
   polygon coordinate is a `ValueError` saying "finite"; a zero-area triangle
   is a `ValueError` (the shared `fractions_of` refusal, "no class area").
 - No polygons: every triangle is class 0, fraction 1. No triangles: an empty
@@ -179,8 +180,8 @@ class TestHandFigures:
 
 
 class TestEdgesOfTheInput:
-    def test_a_code_absent_from_the_legend_is_refused_naming_it(self, pf: ModuleType) -> None:
-        with pytest.raises(ValueError, match="9999"):
+    def test_a_code_absent_from_the_rules_is_refused_naming_it(self, pf: ModuleType) -> None:
+        with pytest.raises(ValueError, match=r"^class 9999 is not in the meshing rules$"):
             assigned(pf, [(311, STRIP), (9999, SQUARE)])
 
     def test_no_polygons_leave_every_triangle_class_0(self, pf: ModuleType) -> None:

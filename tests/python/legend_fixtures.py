@@ -80,9 +80,12 @@ def coded_map(
     extra: str = "",
     licence: str = "",
     prefer: str = "",
+    accept_no_class: bool = False,
 ) -> str:
     """A coded rules file: Forest (code 1) and Lake (code 2, water), or
-    ``classes``; its legend (preset "rasputin NAME") is kept for `write`."""
+    ``classes``; its legend (preset "rasputin NAME", with `[no_class]`) is
+    kept for `write`. ``accept_no_class`` writes the rules' own setting that
+    class code 0 (no polygon, constraint lines only) is accepted."""
     classes = classes or (
         '[[class]]\ncode = 1\nlabel = "Forest"\ncolour = "#1f8d49"\n\n'
         '[[class]]\ncode = 2\nlabel = "Lake"\ncolour = "#2532e4"\nwater = true\n'
@@ -102,6 +105,8 @@ def coded_map(
     )
     if licence:
         head += f'licence = "{licence}"\n'
+    if accept_no_class:
+        head += "accept_no_class = true\n"
     body = '\n[edges]\nwater = ["land_cover", "water"]\nland = ["land_cover"]\n\n'
     tail = f"\n[codes]\n{codes}" if codes else ""
     tail += f"\n[vocabulary]\nextra = [{extra}]\n" if extra else ""

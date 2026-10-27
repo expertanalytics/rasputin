@@ -11,8 +11,8 @@ back, never from the producer's own records.
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- The record line for a land cover without a legend is the `run` row named
-  `cells`, its value saying "no legend".
+- The record line for a land cover without meshing rules is the `run` row
+  named `cells`, its value "none, the land cover has no meshing rules".
 - The legend check's refusal names the class as `class <code>`.
 """
 
@@ -155,10 +155,10 @@ def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> No
     check_sums(mapbiomas)
 
 
-# ------------------------------------------------------------ a raster without a legend
+# ------------------------------------------------------------ a raster without meshing rules
 
 
-def test_t5_without_a_legend_only_the_fractions_table(
+def test_t5_without_meshing_rules_only_the_fractions_table(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
     with closing(written(scene, tmp_path / "x.gpkg", "--land-cover", KEY)) as conn:
@@ -166,7 +166,7 @@ def test_t5_without_a_legend_only_the_fractions_table(
         assert "cells" not in tables and "land_cover_fractions" in tables, tables
         assert conn.execute("SELECT count(*) FROM land_cover_fractions").fetchone() == (ENTRIES,)
         (value,) = conn.execute("SELECT value FROM run WHERE name = 'cells'").fetchone()
-    assert "no legend" in value, value
+    assert value == "none, the land cover has no meshing rules", value
 
 
 # ------------------------------------------------------------ the legend check
