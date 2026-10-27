@@ -19,6 +19,7 @@ from harness_fixtures import (
     REAL,
     bash_event,
     file_event,
+    load_tool,
     make_repo,
     point_scratchpad,
     pretool_decision,
@@ -627,11 +628,16 @@ def test_h24_5b_a_read_of_a_governed_file_is_silent(repo: Path, mode: str) -> No
     assert queue_lines(repo) == []
 
 
+# A Python program is not on the short list of programs a line naming the
+# record folder may run, so even a read of the state by one is denied; `cat`
+# and `rg` read it.
+
+
 @pytest.mark.parametrize("mode", ["off", "on"])
-def test_h24_5b_a_json_load_of_the_harness_state_is_silent(repo: Path, mode: str) -> None:
+def test_h24_5b_a_json_load_of_the_harness_state_is_denied(repo: Path, mode: str) -> None:
     set_mode(repo, mode)
     event = bash_event(repo, state_read(repo))
-    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
     assert queue_lines(repo) == []
 
 
@@ -717,13 +723,13 @@ def test_h24_5b_an_expanded_read_of_a_governed_file_asks(repo: Path, form: str) 
 
 @pytest.mark.parametrize("mode", ["off", "on"])
 @pytest.mark.parametrize("form", QUOTED)
-def test_h24_5b_an_unexpanded_read_of_the_harness_state_is_silent(
+def test_h24_5b_an_unexpanded_read_of_the_harness_state_is_denied(
     repo: Path, mode: str, form: str
 ) -> None:
     set_mode(repo, mode)
     flag = repo / ".git" / "harness" / "unattended.json"
     event = bash_event(repo, quoted_reads(str(flag))[form])
-    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
     assert queue_lines(repo) == []
 
 
@@ -834,11 +840,27 @@ def item_14_silent(flag: Path) -> dict[str, str]:
         "a-governed-name-in-prose": "python3 -c 'print(\"see CLAUDE.md for rules\")'",
         "a-dollar-beside-a-plain-read": (
             "python3 -c 'print(open(\"/x/notes.txt\").read().count(\"$\"))'"),
+    }  # fmt: skip
+
+
+def item_14_state_reads(flag: Path) -> dict[str, str]:
+    """Python reads of the harness state by a quoted heredoc: denied, as no Python
+    program is on the record folder's short list."""
+    return {
         "a-json-read-by-quoted-heredoc": heredoc(
             rf'import json; print("\n".join(json.load(open("{flag}"))))', "<<'EOF'"),
         "a-dollar-read-by-quoted-heredoc": heredoc(
             f'print(open("{flag}").read().count("$"))', "<<'EOF'"),
     }  # fmt: skip
+
+
+@pytest.mark.parametrize("label", list(item_14_state_reads(Path("/x"))))
+def test_h24_14_a_python_read_of_the_harness_state_is_denied(repo: Path, label: str) -> None:
+    set_mode(repo, "off")
+    flag = repo / ".git" / "harness" / "unattended.json"
+    event = bash_event(repo, item_14_state_reads(flag)[label])
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
 
 
 ITEM_14_SILENT = list(item_14_silent(Path("/x")))
@@ -952,9 +974,20 @@ def here_string_silent(flag: Path) -> dict[str, str]:
         # A data reader's inline program keeps a heredoc as data.
         "c-program-beside-a-heredoc": (
             "python3 -c 'print(1)' <<'EOF'\nopen('CLAUDE.md','w').write('x')\nEOF"),
-        "json-read-of-the-harness-state": (
-            f"python3 <<< 'import json; print(json.load(open(\"{flag}\")))'"),
     }  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h24_15_a_here_string_json_read_of_the_harness_state_is_denied(
+    repo: Path, mode: str
+) -> None:
+    """No Python program is on the record folder's short list, a read included."""
+    set_mode(repo, mode)
+    flag = repo / ".git" / "harness" / "unattended.json"
+    command = f"python3 <<< 'import json; print(json.load(open(\"{flag}\")))'"
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
 
 
 HERE_STRING_SILENT = list(here_string_silent(Path("/x")))
@@ -1216,3 +1249,213 @@ def test_h25_a_relative_script_with_no_directory_change_is_silent(
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- the record folder
+#
+# A line that names the harness record folder (in any letter case, also after
+# quotes are removed), or that changes directory into `.git`, passes only when
+# every simple command is on a short list of programs that cannot write, every
+# write target is a plain path outside the folder, no `cd` leads into it, and
+# no expansion runs code the parser did not read. Every other line is judged
+# as before. The folder's name is built from parts here, so a line that writes
+# this file never names it.
+
+H = ".git/" + "harness"
+DENIED = ("deny", [], "")
+
+
+def record_folder_passes() -> dict[str, str]:
+    """Lines that only mention the folder or read from it, each with an id."""
+    return {
+        "quoted-heredoc-into-session": (
+            "cat >> .claude/current-task/session.md <<'EOF'\n"
+            f"NOW: see {H}/x and $(git rev-parse --git-dir)/harness\nEOF"
+        ),
+        "unquoted-heredoc-into-session": (
+            f"cat >> .claude/current-task/session.md <<EOF\nNOW: see {H}/x\nEOF"
+        ),
+        "echo-into-a-note": f'echo "see {H}" > note.md',
+        "printf-appending": f"printf '%s\\n' {H} >> notes.md",
+        "commit-m": f'git commit -m "guard: {H}"',
+        "commit-qm": f'git commit -qm "guard: {H}"',
+        "commit-F": f"echo {H} && git commit -F msg.txt",
+        "commit-message-long": f'git commit --message "guard: {H}"',
+        "brief-task": f'python3 tools/brief.py a --task "the {H}/x file"',
+        "brief-task-to-a-file": f'python3 tools/brief.py a --task "the {H}/x" > /tmp/brief.txt',
+        "cat": f"cat {H}/queue.jsonl",
+        "grep": f"grep -n x {H}/queue.jsonl",
+        "rg": f"rg x {H}",
+        "rg-to-a-file": f"rg x {H} > /tmp/hits",
+        "wc": f"wc -l {H}/queue.jsonl",
+        "cut": f"cut -c1-9 {H}/queue.jsonl",
+        "head-cut": f"head -3 {H}/queue.jsonl | cut -c1-9",
+        "tail": f"tail -n 2 {H}/queue.jsonl",
+        "ls": f"ls -la {H}",
+        "stat": f"stat {H}/unattended.json",
+        "diff": f"diff {H}/queue.jsonl /tmp/q",
+        "git-log": f"git log --oneline && echo {H}",
+        "git-show": f"git show HEAD && echo {H}",
+        "git-status": f"git status && echo {H}",
+        "git-diff": f"git diff --stat && echo {H}",
+        "cd-absolute-then-grep": f"cd /abs/checkout && grep -n x {H}/queue.jsonl",
+        "cd-git-status-echo": f"cd .git && git status && echo {H}",
+        "plain-expansions": f"echo $HOME {H} ${{HOME}} $1",
+        "cd-to-toplevel": "cd $(git rev-parse --show-toplevel) && ls",
+        "cd-hooks-ls": "cd .git/hooks && ls",
+        "upper-case-read": f"cat {H.upper()}/queue.jsonl",
+    }
+
+
+def record_folder_denials() -> dict[str, str]:
+    """Lines that write, or may write, the folder, or run code unread; each with an id."""
+    lines = {
+        "cd-git-touch": "cd .git && touch harness/x",
+        "cd-folder-python-c": f"cd {H} && python3 -c \"open('x','w')\"",
+        "cd-folder-rsync": f"cd {H} && rsync -a /s/ . > /tmp/log",
+        "cd-folder-tar": f"cd {H} && tar xf /tmp/a.tar > /tmp/log",
+        "cd-folder-vim": f"cd {H} && vim x > /tmp/log",
+        "cd-folder-sed-w": f"cd {H} && sed -n 'w x' in > /tmp/log",
+        "cd-folder-file-C": f"cd {H} && file -C -m m",
+        "cd-folder-cat": f"cd {H} && cat queue.jsonl",
+        "cd-git-rsync": "cd .git && rsync -a /s/ harness/",
+        "python-argv-open": f"python3 -c \"import sys; open(sys.argv[1],'w')\" {H}/x",
+        "bash-script": f"bash s.sh {H}/x",
+        "python-tool": f"python3 tools/x.py {H}/x",
+        "python-m": f"python3 -m mod {H}/x",
+        "sed-w": f"sed -n 'w {H}/x' in",
+        "awk-print": f"awk '{{print > \"{H}/x\"}}' in",
+        "git-apply-then-cat": f"git apply p && cat {H}/x",
+        "assigned-target": f'N={H}/x; echo x > "$N"',
+        "ed-on-a-pipe": f"printf 'a\\nx\\n.\\nw {H}/x\\n' | ed -s",
+        "ed-quoted-heredoc": f"ed -s <<'EOF'\na\nx\n.\nw {H}/x\nEOF",
+        "clobber": f"echo x >! {H}/y",
+        "append-clobber": f"echo x >>! {H}/y",
+        "both-clobber": f"echo x &>! {H}/y",
+        "append-pipe-clobber": f"echo x >>| {H}/y",
+        "glob-question": f"echo {H} > .git/harnes?/q",
+        "glob-bracket": f"echo {H} > .git/harnes[s]/q",
+        "e-flag": f"echo ${{(e):-'$(touch x)'}} {H}",
+        "brace-default": f"echo ${{HOME:-x}} {H}",
+        "arithmetic": f"echo $((1+1)) {H}",
+        "old-arithmetic": f"echo $[1] {H}",
+        "unquoted-heredoc-runs": f"cat > note.md <<EOF\n$(touch {H}/x)\nEOF",
+        "unquoted-heredoc-runs-elsewhere": f"cat > note.md <<EOF\n$(touch x) {H}\nEOF",
+        "unquoted-heredoc-backtick": f"cat > note.md <<EOF\n`touch x` {H}\nEOF",
+        "here-string-quoted": f'cat <<< "$(touch {H}/x)"',
+        "here-string-unquoted": f"cat <<< $(touch {H}/x)",
+        "glob-qualifier": f"echo {H} *(e:'touch x':)",
+        "rg-pre": f"rg --pre ./x pat {H}",
+        "rg-pre-equals": f"rg --pre=./x pat {H}",
+        "rg-pre-glob": f"rg --pre-glob '*' --pre ./x pat {H}",
+        "rg-hostname-bin": f"rg --hostname-bin=./x pat {H}",
+        "git-log-output": f"git log --output=/tmp/o && echo {H}",
+        "git-log-output-in": f"git log --output={H}/x",
+        "git-c": f"git -c core.pager=x log && echo {H}",
+        "git-C": f"git -C /tmp/r status && echo {H}",
+        "git-dir": f"git --git-dir=/tmp/r status && echo {H}",
+        "ripgrep-config": f"RIPGREP_CONFIG_PATH=/tmp/c rg x {H}",
+        "pythonpath": f'PYTHONPATH=/tmp python3 tools/brief.py a --task "{H}"',
+        "read-write-open": f"cat <> {H}/x",
+        "cd-git-echo": "cd .git && echo x > harness/y",
+        "cd-hooks-up": "cd .git/hooks && echo x > ../harness/y",
+        "cd-elsewhere-brief": f"cd /tmp/e && python3 tools/brief.py a --task {H}/x",
+        "pushd-elsewhere-brief": f"pushd /tmp/e && python3 tools/brief.py a --task {H}/x",
+        "env-rg": f"env rg x {H}",
+        "xargs-touch": f"ls {H} | xargs touch",
+        "pipe-to-sh": f"echo touch {H}/x | sh",
+        "home-target": f"echo x > ~/r/{H}/y",
+        "cd-two-arguments": f"cd a b && echo {H}",
+        "cd-option": f"cd -P .git && echo {H}",
+        "sort": f"sort {H}/queue.jsonl",
+        "jq": f"jq . {H}/queue.jsonl",
+        "rm-then-heredoc": f"rm n.md && cat >> session.md <<'EOF'\n{H}\nEOF",
+        # A short option cluster holding `e` opens the editor.
+        "commit-em": f'git commit -em "x {H}"',
+        "commit-e-m": f'git commit -e -m "x {H}"',
+        "commit-edit": f'git commit --edit -m "x {H}"',
+        "commit-no-message": f"git commit && echo {H}",
+        # The disk is case-insensitive: `.GIT/HARNESS` is the folder.
+        "upper-case-target": "echo x > " + H.upper() + "/y",
+        "mixed-case-cd": "cd .Git && touch Harness/y",
+        "mixed-case-mention": "touch x && echo " + ".Git/" + "Harness",
+        # The trigger also reads the words with quotes removed.
+        "quoted-inside-the-name": "rsync -a s/ .git/har''ness/ > log",
+        "double-quoted-name": 'rsync -a s/ .git/"harness"/ > log',
+    }
+    for program in (
+        "rsync -a /s/ {}/",
+        "tar -C {} -xf /tmp/a.tar",
+        "find {} -delete",
+        "ex -sc wq {}/x",
+        "vim {}/x",
+        "sort -o {}/x y",
+        "uniq y {}/x",
+    ):
+        word = program.split()[0]
+        lines[f"{word}-alone"] = program.format(H)
+        lines[f"{word}-to-a-log"] = program.format(H) + " > log"
+    return lines
+
+
+@pytest.fixture(scope="module")
+def guard() -> ModuleType:
+    return load_hook("guard_governance")
+
+
+@pytest.mark.parametrize("command", record_folder_passes().values(),
+                         ids=record_folder_passes().keys())  # fmt: skip
+def test_a_line_that_only_mentions_or_reads_the_record_folder_passes(
+    guard: ModuleType, command: str
+) -> None:
+    assert guard.judge_bash(command) is None
+
+
+@pytest.mark.parametrize("command", record_folder_denials().values(),
+                         ids=record_folder_denials().keys())  # fmt: skip
+def test_a_line_that_may_write_the_record_folder_is_denied(guard: ModuleType, command: str) -> None:
+    assert guard.judge_bash(command) == DENIED
+
+
+def test_the_folder_lists_hold_each_line_once() -> None:
+    passes, denials = record_folder_passes(), record_folder_denials()
+    assert not set(passes.values()) & set(denials.values())
+    assert len(set(denials.values())) == len(denials)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_a_mention_in_a_heredoc_passes_through_the_hook(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    command = record_folder_passes()["quoted-heredoc-into-session"]
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_a_case_changed_write_is_denied_through_the_hook(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    command = record_folder_denials()["upper-case-target"]
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found == ("deny", ALWAYS_DENIED)
+    assert queue_lines(repo) == []
+
+
+def test_shell_scan_marks_a_leading_assignment() -> None:
+    shell_scan = load_tool("shell_scan")
+    [assigned] = shell_scan.parse("RIPGREP_CONFIG_PATH=/tmp/c rg x y")
+    [bare] = shell_scan.parse("rg x y")
+    assert (assigned.assigns, bare.assigns) == (True, False)
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [("cat > n.md <<EOF\n$(touch x)\nEOF", True),
+     ("cat > n.md <<EOF\n`touch x`\nEOF", True),
+     ("cat > n.md <<'EOF'\n$(touch x)\nEOF", False),
+     ("cat > n.md <<EOF\nplain $HOME\nEOF", False)],
+    ids=["unquoted-dollar-paren", "unquoted-backtick", "quoted", "no-command"],
+)  # fmt: skip
+def test_shell_scan_marks_a_heredoc_body_the_shell_runs(command: str, expected: bool) -> None:
+    shell_scan = load_tool("shell_scan")
+    owner = [s for s in shell_scan.parse(command) if s.argv[:1] == ["cat"]]
+    assert [s.runs_body for s in owner] == [expected]

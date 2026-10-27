@@ -195,3 +195,74 @@ def test_with_the_tag_absent_a_legacy_citation_is_reported_not_passed(
     # A clone without the tag (CI's shallow checkout) must be told what is
     # missing, so the report names the tag rather than blaming the citation.
     assert TAG in broken
+
+
+# -- bare line citations in retrospectives ------------------------------------
+#
+# A retrospective is read long after the files it cites have moved on, so a
+# bare `path:line` there is listed under `unpinned` and fails the check; a
+# pinned one passes, a `legacy/` one stays pinned to the tag, and a bare one
+# elsewhere under `docs/` is judged as before.
+
+RETRO = "docs/retrospectives/2026-10-27-r.md"
+
+
+def _cite_in(repo: Path, relative: str, *citations: str) -> None:
+    """Commit `relative`, citing each of `citations` on its own line from line 3."""
+    body = "".join(f"See `{c}`.\n" for c in citations)
+    (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+    (repo / relative).write_text(f"# Record\n\n{body}")
+    _commit_all(repo, f"cite from {relative}")
+
+
+def _head(repo: Path) -> str:
+    done = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          check=True, capture_output=True, text=True)  # fmt: skip
+    return done.stdout.strip()
+
+
+def _unpinned_section(out: str) -> str:
+    _, header, rest = out.partition("== unpinned")
+    return (header + rest).partition("\n== ")[0]
+
+
+@pytest.mark.parametrize("citation", ["src_python/live.py:2", "src_python/live.py:1-3"],
+                         ids=["line", "range"])  # fmt: skip
+def test_a_bare_citation_in_a_retrospective_is_unpinned(archived_repo: Path, citation: str) -> None:
+    _cite_in(archived_repo, RETRO, citation)
+
+    run = _check(archived_repo)
+
+    assert run.code == 1, run.out
+    unpinned = _unpinned_section(run.out)
+    start = citation.split("-")[0]
+    assert f"{RETRO}:3: cites '{start}'" in unpinned, run.out
+    assert "pin it (path@<sha>:<n>)" in unpinned, run.out
+
+
+def test_a_pinned_citation_in_a_retrospective_passes(archived_repo: Path) -> None:
+    sha = _head(archived_repo)
+    _cite_in(archived_repo, RETRO, f"src_python/live.py@{sha[:8]}:2")
+
+    run = _check(archived_repo)
+
+    assert run.code == 0, run.out
+    assert "unpinned" not in run.out, run.out
+
+
+def test_a_legacy_citation_in_a_retrospective_passes(archived_repo: Path) -> None:
+    _cite_in(archived_repo, RETRO, f"{ARCHIVED}:1")
+
+    run = _check(archived_repo)
+
+    assert run.code == 0, run.out
+    assert "unpinned" not in run.out, run.out
+
+
+def test_a_bare_citation_elsewhere_under_docs_passes_as_before(archived_repo: Path) -> None:
+    _cite_in(archived_repo, "docs/increments/h1-x.md", "src_python/live.py:2")
+
+    run = _check(archived_repo)
+
+    assert run.code == 0, run.out
+    assert "unpinned" not in run.out, run.out

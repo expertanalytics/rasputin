@@ -33,6 +33,7 @@ from harness_fixtures import (
     jsonl,
     make_repo,
     review_record,
+    review_section,
     write_reviews,
 )
 
@@ -1020,3 +1021,158 @@ def test_h29_4_an_enqueue_already_used_in_this_window_does_not_say_redo(grant: G
     second = granted_judge(grant, command)
     refused_with(second, f"head {grant.head[:7]} was enqueued already in this window")
     assert "redone" not in second.why, second.why
+
+
+# ---------------------------------------------------------------- the review in the increment file
+#
+# An act on origin also wants the reviewed sha in the `## Review` section of an
+# increment file the branch changes (`git diff <remote>/master...<head>`, one
+# level under docs/increments/, README.md excluded), read at the head, as a
+# hexadecimal word of 7 to 40 digits that is a prefix of the recorded sha. A
+# branch that changes only docs/retrospectives/, and an act on the private
+# repository, are judged on the review log alone.
+
+
+def unrecorded(head: str, reviewed: str) -> str:
+    return (f"head {head[:7]} is not reviewed: no increment file this branch changes names "
+            f"{reviewed[:7]} under ## Review; it may be redone once the review of "
+            f"{reviewed[:7]} is recorded there")  # fmt: skip
+
+
+def restart_feat(built: Granted, files: dict[str, str] | None = None) -> str:
+    """Put feat back on master, commit a code change (and `files`), approve it; its sha."""
+    git(built.repo, "reset", "-q", "--hard", built.base)
+    x = commit_files(built.repo, {"tools/x.py": "x = 1\n", **(files or {})}, "X: a code commit")
+    write_reviews(built.repo, [review_record(x)])
+    return x
+
+
+def record_in(built: Granted, relative: str, text: str) -> str:
+    """A prose commit writing `relative`; the new head."""
+    return commit_file(built.repo, relative, text, f"record in {relative}")
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_h33_2_the_reviewed_sha_at_8_digits_under_review_passes(grant: Granted, act: str) -> None:
+    found = granted_judge(grant, acts(grant.head)[act])
+    assert found is not None and found.passed, found
+
+
+def test_h33_2_the_reviewed_sha_at_7_digits_passes(grant: Granted) -> None:
+    record_in(grant, "docs/increments/h99.md", review_section(grant.x, 7))
+    found = granted_judge(grant, acts(grant.head)["push"])
+    assert found is not None and found.passed, found
+
+
+def test_h33_2_the_full_sha_passes(grant: Granted) -> None:
+    record_in(grant, "docs/increments/h99.md", review_section(grant.x, 40))
+    found = granted_judge(grant, acts(grant.head)["push"])
+    assert found is not None and found.passed, found
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_h33_2_six_digits_are_refused(grant: Granted, act: str) -> None:
+    head = record_in(grant, "docs/increments/h99.md", review_section(grant.x, 6))
+    found = granted_judge(grant, acts(head)[act])
+    refused_with(found, unrecorded(head, grant.x))
+    assert found.why == unrecorded(head, grant.x), found.why
+
+
+def misplaced(x: str) -> dict[str, str]:
+    """Increment files that hold the sha, but not as a word under ## Review."""
+    return {
+        "status-line": f"# h99\n\nStatus: designed, reviewed at {x[:8]}\n\n## Review\n\n- ok\n",
+        "before-review": f"# h99\n\nSee {x[:8]}.\n\n## Review\n\n- Design round 1: APPROVED\n",
+        "section-after-review": f"# h99\n\n## Review\n\n- APPROVED\n\n## Notes\n\n..{x[:8]}\n",
+        "inside-a-longer-word": f"# h99\n\n## Review\n\n- APPROVED, ..{x[:8]}g9\n",
+        "a-review-subheading": f"# h99\n\n### Review\n\n- APPROVED, ..{x[:8]}\n",
+        "not-a-prefix": f"# h99\n\n## Review\n\n- APPROVED, ..{x[1:9]}\n",
+    }
+
+
+@pytest.mark.parametrize("case", list(misplaced("0" * 40)))
+def test_h33_2_the_sha_outside_the_review_section_is_refused(grant: Granted, case: str) -> None:
+    head = record_in(grant, "docs/increments/h99.md", misplaced(grant.x)[case])
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, grant.x))
+
+
+def test_h33_2_a_branch_that_changes_no_increment_file_is_refused(grant: Granted) -> None:
+    x = restart_feat(grant)
+    head = record_in(grant, "docs/notes.md", review_section(x))
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, x))
+
+
+@pytest.mark.parametrize("relative", ["docs/increments/README.md",
+                                      "docs/increments/old/h99.md",
+                                      "docs/h99.md"])  # fmt: skip
+def test_h33_2_a_record_outside_an_increment_file_is_refused(
+    grant: Granted, monkeypatch: pytest.MonkeyPatch, relative: str
+) -> None:
+    """README.md is read by the suites, so a change to it after the review fails
+    `review_of` first; that check is stood in for, so only the new one judges."""
+    x = restart_feat(grant)
+    head = record_in(grant, relative, review_section(x))
+    monkeypatch.setitem(push_grant.judge.__globals__, "review_of",
+                        lambda *a, **k: (None, review_record(x)))  # fmt: skip
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, x))
+
+
+def test_h33_2_a_record_brought_in_only_by_a_master_merge_is_refused(grant: Granted) -> None:
+    x = restart_feat(grant)
+    grant.on_master("docs/increments/h98.md", review_section(x))
+    head = grant.merge("refs/remotes/origin/master")
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, x))
+
+
+def test_h33_2_a_record_in_one_of_two_increment_files_passes(grant: Granted) -> None:
+    record_in(grant, "docs/increments/h98.md", "# h98\n\n## Review\n\n- none yet\n")
+    found = granted_judge(grant, acts(grant.head)["push"])
+    assert found is not None and found.passed, found
+
+
+def test_h33_2_the_file_is_read_at_the_head_not_in_the_worktree(grant: Granted) -> None:
+    head = record_in(grant, "docs/increments/h99.md", review_section(grant.x, 6))
+    (grant.repo / "docs/increments/h99.md").write_text(review_section(grant.x))
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, grant.x))
+
+
+def test_h33_2_a_wordings_commit_after_the_review_passes(grant: Granted) -> None:
+    write_reviews(grant.repo, [review_record(grant.x, "APPROVED WITH WORDINGS")])
+    text = review_section(grant.x) + "\nA wording fixed after the review.\n"
+    commit_files(grant.repo, {"docs/increments/h99.md": text, "docs/notes.md": "wording\n"},
+                 "the wordings")  # fmt: skip
+    found = granted_judge(grant, acts(grant.head)["push"])
+    assert found is not None and found.passed, found
+
+
+def test_h33_2_a_retrospective_only_branch_passes_on_the_log_alone(grant: Granted) -> None:
+    git(grant.repo, "reset", "-q", "--hard", grant.base)
+    head = commit_files(grant.repo, {"docs/retrospectives/2026-10-27-a.md": "# a\n",
+                                     "docs/retrospectives/2026-10-27-b.md": "# b\n"},
+                        "two retrospectives")  # fmt: skip
+    write_reviews(grant.repo, [review_record(head)])
+    found = granted_judge(grant, acts(head)["push"])
+    assert found is not None and found.passed, found
+
+
+def test_h33_2_a_retrospective_beside_other_prose_is_refused(grant: Granted) -> None:
+    git(grant.repo, "reset", "-q", "--hard", grant.base)
+    files = {"docs/retrospectives/2026-10-27-a.md": "# a\n", "docs/notes.md": "n\n"}
+    head = commit_files(grant.repo, files, "a retrospective and a note")
+    write_reviews(grant.repo, [review_record(head)])
+    found = granted_judge(grant, acts(head)["push"])
+    refused_with(found, unrecorded(head, head))
+
+
+def test_h33_2_a_private_act_passes_on_the_log_alone(
+    private: PrivateGranted, runner: Runner
+) -> None:
+    changed = git(private.repo, "diff", "--name-only", "refs/remotes/private/master...prv")
+    assert "docs/increments/" not in changed, changed
+    grant = judged(private, f"git push private {private.prv}:refs/heads/prv")
+    assert grant is not None and grant.passed, grant

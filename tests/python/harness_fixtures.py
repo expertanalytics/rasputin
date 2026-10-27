@@ -365,6 +365,12 @@ def commit_file(repo: Path, relative: str, text: str, message: str) -> str:
     return git(repo, "rev-parse", "HEAD").strip()
 
 
+def review_section(sha: str, digits: int = 8) -> str:
+    """An increment file whose `## Review` records an APPROVED round at `sha[:digits]`."""
+    return (f"# h99\n\nStatus: designed\n\n## Review\n\n"
+            f"- Design round 1: APPROVED, ..{sha[:digits]}, 0.\n")  # fmt: skip
+
+
 def review_record(sha: str, verdict: str = "APPROVED", at: str = "2026-10-13T20:00:00+00:00"
                   ) -> dict[str, Any]:  # fmt: skip
     """One line of `reviews.jsonl`, with the keys h20 §3.3 names."""
@@ -406,8 +412,9 @@ class Granted:
     `master` with 1 commit, `refs/remotes/origin/master` set to it by
     `git update-ref` (no remote); branch `feat` (checked out) with a code
     commit `x` adding `tools/x.py` (1 line), then a recording commit `rec`
-    adding `docs/increments/h99.md` (1 line, no trailer). `reviews.jsonl`
-    holds one record, `APPROVED` at `x`. The flag is on only if `flag` is.
+    adding `docs/increments/h99.md`, whose `## Review` names `x` at 8 digits
+    (no trailer). `reviews.jsonl` holds one record, `APPROVED` at `x`. The
+    flag is on only if `flag` is.
     """
 
     def __init__(self, root: Path, flag: bool = True, recording_code: bool = False) -> None:
@@ -417,7 +424,7 @@ class Granted:
         git(self.repo, "checkout", "-q", "-b", "feat")
         self.x = commit_file(self.repo, "tools/x.py", "x = 1\n", "X: a code commit")
         (self.repo / "docs/increments").mkdir(parents=True)
-        (self.repo / "docs/increments/h99.md").write_text("review recorded\n")
+        (self.repo / "docs/increments/h99.md").write_text(review_section(self.x))
         git(self.repo, "add", "docs/increments/h99.md")
         if recording_code:  # test 24: the recording commit also changes code
             (self.repo / "tools/x.py").write_text("x = 2\n")
@@ -471,10 +478,11 @@ class PrivateGranted:
     `m0` is the root commit. `refs/remotes/origin/master` is `m1` (a code commit
     on `m0`) and `refs/remotes/private/master` is `p1` (another code commit on
     `m0`), both by `git update-ref`, so N = 1 private-only commit. Branch `pub`
-    is `m1` plus a code commit, `prv` is `p1` plus a code commit; `pub` is
+    is `m1` plus a code commit `pub_code` and a commit recording its review in
+    `docs/increments/h98.md`; `prv` is `p1` plus a code commit; `pub` is
     checked out. `remote.private.url` names a bare repository in `root`'s
     parent that is never fetched, so N is read from the ref with no network.
-    The flag grants both branches; `reviews.jsonl` approves each head.
+    The flag grants both branches; `reviews.jsonl` approves `pub_code` and `prv`.
     """
 
     def __init__(self, root: Path) -> None:
@@ -490,11 +498,13 @@ class PrivateGranted:
         self.prv = commit_file(repo, "tools/x.py", "x = 'prv'\n", "a code commit on prv")
         git(repo, "checkout", "-q", "-b", "pub", self.m1)
         git(repo, "branch", "-q", "-D", "private-side")
-        self.pub = commit_file(repo, "tools/x.py", "x = 'pub'\n", "a code commit on pub")
+        self.pub_code = commit_file(repo, "tools/x.py", "x = 'pub'\n", "a code commit on pub")
+        self.pub = commit_file(repo, "docs/increments/h98.md", review_section(self.pub_code),
+                               "pub's review recorded")  # fmt: skip
         self.url = root.parent / "private.git"
         git(root.parent, "init", "-q", "--bare", str(self.url))
         git(repo, "config", "remote.private.url", str(self.url))
-        write_reviews(repo, [review_record(self.pub), review_record(self.prv)])
+        write_reviews(repo, [review_record(self.pub_code), review_record(self.prv)])
         self.since = flag_granting(repo, ["pub", "prv"])
 
     def head(self, branch: str) -> str:
