@@ -253,3 +253,4 @@ acceptance run.
 - Design round 1: CHANGES REQUESTED, origin/master..8196a44f, 0 net production lines (scope beyond the ruling, no speed or byte-identity pin, missed renames, AR50 sub-codes).
 - Design round 2: CHANGES REQUESTED, ..87ff7c00, 0 (mesh text land_cover_codes unpinned; 109 on the same branch; audit citations not on master).
 - Design round 3: APPROVED WITH WORDINGS, ..24fedc3d, 0; the two status wordings applied in this commit.
+- Code round 1: CHANGES REQUESTED, 5de1144d..62e321f9, 106 net production lines (three messages still say legend where meshing rules decide: polygon_fractions.py:90, cli.py:1381, cli.py:1675).
