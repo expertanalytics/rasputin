@@ -141,3 +141,8 @@ refused.
 About 40 counted lines: `shell_scan.py` 2 changed; the hook `known` 4,
 `in_folder` 10, `cd` join 5, per-command words 5, links 9, case 3,
 `WRITES` 0 net. No rule text changes.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, aabac548..650324b0, 0 net production lines (rules 2 and 3 refused 353 harmless transcript lines; three other new refusals uncosted).
+- Design round 2: APPROVED, ..c04efa9e, 0.
