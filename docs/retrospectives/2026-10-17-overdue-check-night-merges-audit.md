@@ -184,7 +184,7 @@ a harness write (false positive; read with Read instead).
    at 07:47, when `gh pr merge 277` answered "already merged" (`T:26526`).
 8. **Leftover `tail -f` waiters**: 2 stopped at 03:57 (`T:24624`) and 8 at
    08:36 (`T:26889`), between 5 hours and 2 days old. The cause is in the
-   files: `.claude/briefs/common.md:12` tells every persona to "Wait for a
+   files: `.claude/briefs/common.md@0e1616a2:12` tells every persona to "Wait for a
    background run with the Monitor tool", and no persona's `tools:` line
    names Monitor (`grep -n '^tools:' .claude/agents/*.md`). The private
    ideas file has had the fix since h19: *Monitor in every persona's tool
@@ -330,7 +330,7 @@ words carried from that retrospective (its P9) are still not applied.
   without the trailing `/`", `tools/./json.py`). Point to the hook files
   and keep the one rule each enforces: about −90 words. These are examples
   in a rule file, so they move to the hooks' docstrings.
-- `.claude/briefs/common.md:12`, the Monitor sentence: replace it under P2.
+- `.claude/briefs/common.md@0e1616a2:12`, the Monitor sentence: replace it under P2.
   About 0 net words.
 
 ## 5. Proposals
@@ -353,7 +353,7 @@ words carried from that retrospective (its P9) are still not applied.
   unchecked windows. Cost: one hook entry and one status-line entry in
   `.claude/settings.json` (Ola's yes); deletes nothing. The prose trigger
   list in `CLAUDE.md` §3 stays as the rule the hook checks.
-- **P2. A waiter that exits.** Change `.claude/briefs/common.md:12` to say:
+- **P2. A waiter that exits.** Change `.claude/briefs/common.md@0e1616a2:12` to say:
   "Run a long command with Bash `run_in_background` and wait for its exit
   notification; never `tail -f` or `sleep`." Alternatively add `Monitor` to
   the `tools:` lines (the ideas-file entry). Whether subagents get Monitor

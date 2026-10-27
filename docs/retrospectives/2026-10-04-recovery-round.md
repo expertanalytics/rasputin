@@ -49,7 +49,7 @@ What happened: 23b merged origin/master twice (e4f07c3, 24161fe). Master's
 `scan.hpp` by line, numbered against master. 23b edits both files, so the
 numbers were wrong on the merged branch. `@reviewer`'s round 6 (recorded at
 d5aeb82, `docs/increments/23-basin-scale.md`, the round-6 entry) listed
-`27-node-sampling.md:115,124,148,150,171,172,263` and `25-plain-output.md:115,120`.
+`docs/increments/27-node-sampling.md@dd48544f:115,124,148,150,171,172,263` and `docs/increments/25-plain-output.md@dd48544f:115,120`.
 `@developer`'s fix, e3a6add, also found two citations in `15f-edge-strip.md`
 (`:1554`, `:1866`) that 23b's own edits had moved, after five review rounds
 had approved.

@@ -497,7 +497,7 @@ As the main session passed them on 2026-10-07, one per line.
 - (slivers) gap/overlap checks pass mm-scale vertex pairs; search for short segments.
 - (30c red) test_mosaic build fixture passes needed only to plan_mosaic; seam tests must call assemble(plan, load, needed).
 - (20c) tag output vertices by insertion order before building anything: leading suspect (refinement) made 38 of 1598.
-- (20c) noder --snap-spacing 0.1/1 fails on Lagan: MalformedOutput chain does not tile the buffer (noded_pslg_builder.hpp:304); ROADMAP row added on Ola's yes.
+- (20c) noder --snap-spacing 0.1/1 fails on Lagan: MalformedOutput chain does not tile the buffer (include/terrain/noding/noded_pslg_builder.hpp@530fa7b4:304); ROADMAP row added on Ola's yes.
 - (20c dr2) an angle between two constraint segments at a shared vertex is a ceiling on any mesh's worst angle: cross-check worst-angle claims across runs with it.
 - (20c dr2 fix) shapely overlay on a coverage makes mm segments; check for them.
 - (D test fix) FIXTURE='catchment' equals a subcommand name; cli_driver's first-arg check let an old-form call through.

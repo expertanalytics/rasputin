@@ -195,7 +195,7 @@ role-bleed item of 2026-09-28 in `next.md` (`@architect` recording text
 corrections as Ola's rulings). P5.
 
 **L4. A status line copied into the ROADMAP row drifts** (`@reviewer`).
-The cases: increment 29 round 2's blocker 7, round 5's "`ROADMAP.md:54`
+The cases: increment 29 round 2's blocker 7, round 5's "`ROADMAP.md@e7b59233:54`
 still says 'awaiting round 4'", 23b round 6 item 3 and round 8, and now F1
 on master. Ola has ruled 14(a): the row says only designed, in progress or
 shipped, with the PR number. He ruled 14(b), a generated column, for stage

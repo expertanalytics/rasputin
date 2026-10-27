@@ -169,7 +169,7 @@ The private increment that merged as #73: design spawn 07:22:29 to merge
    resent unchanged at 10:34:15. The brief says two; only one refusal is in
    the transcript, the other being 3 above, which was caught before the spawn.
 5. **`tools/duties.py` misses the private repository.** It reads merges
-   and retrospectives of `origin/master` only (`tools/duties.py:171`).
+   and retrospectives of `origin/master` only (`tools/duties.py@28a86b92:171`).
    Private #69 (07:33:49) and #73 (10:15:53) never showed as owed; the main
    session noticed (line 21851). Since Ola's ask of 13:39:15 ("We should have lsm retrospectives as well", line 23378), taken at 13:46:08 to mean that every
    private merge gets its check in the private repository, a private

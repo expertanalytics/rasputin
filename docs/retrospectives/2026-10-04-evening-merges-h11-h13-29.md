@@ -93,7 +93,7 @@ What each round blocked on, and who wrote the text it blocked on:
 
 | Round | Reviewer time | Blockers, and whose text |
 |---|---|---|
-| 1 | 9.8 min | NVE's lake number 0 read as a lake (design and code: a real defect); status line and `ROADMAP.md:54` (`@architect`); a citation the green step moved (`@developer`'s change); a file-table row (`@architect`); `project_structure.md` entries (nobody's file) |
+| 1 | 9.8 min | NVE's lake number 0 read as a lake (design and code: a real defect); status line and `ROADMAP.md@a62b3edb:54` (`@architect`); a citation the green step moved (`@developer`'s change); a file-table row (`@architect`); `project_structure.md` entries (nobody's file) |
 | 2 | 7.8 min | a test citation moved by the main session's ae78666; status line (`@architect`); red-step paragraphs now false (`@tester`) |
 | 3 | 1.6 min | status line says "two citations", round 2 asked for one (`@architect`, c7d427a) |
 | 4 | 0.7 min | approved |
@@ -114,7 +114,7 @@ errors come from, not in the review.
 
 **The status line is the most frequent single blocker.** Across all 14
 review records in `29-nve-reference-catchments.md`, the status line or
-`ROADMAP.md:54` is a blocker in five (design round 2, PR 1 round 1, PR 3
+`ROADMAP.md@a62b3edb:54` is a blocker in five (design round 2, PR 1 round 1, PR 3
 rounds 1, 2 and 3) and a "required" or suggestion in two more. The status
 line is now one sentence of about 170 words that narrates every round, and
 it is stale on master ("awaiting the push and CI"), as is row 29.
