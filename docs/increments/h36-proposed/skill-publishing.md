@@ -9,10 +9,7 @@ description: Pushing, opening and merging pull requests, CI and the merge queue.
   done once and the tree changed since, ask again. A yes recorded on disk is
   asked again after a context loss.
 * **`@reviewer` first,** before a branch's first push and before a push that
-  follows a verdict other than `APPROVED`. On a prose or tooling branch it
-  runs what each claim is about, re-reads `tools/check_citations.py`'s
-  at-risk list as quotations, and names the incident each new rule prevents,
-  with a commit.
+  follows a verdict other than `APPROVED`, on any branch.
 * **Conflicts before the question:** `git fetch`, then
   `git merge-tree --write-tree origin/master <branch>`, and against each
   branch queued ahead. Master conflicts: a writer runs

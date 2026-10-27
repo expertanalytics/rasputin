@@ -1,7 +1,6 @@
 # CLAUDE.md
 
-Rules every agent loads. The main session also loads the `dispatch` skill
-before its first act.
+The main session also loads the `dispatch` skill before its first act.
 
 ## 1. Personas
 Each task goes to its persona in `.claude/agents/`; the file's `description`
@@ -37,8 +36,10 @@ pytest
 cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
 ctest --test-dir build
 mypy && ruff check . && ruff format --check .
+python3 tools/check_code_history.py   # not run by the hook below
 ```
 The C++ targets build with `-Wall -Wextra -Wpedantic -Werror`: any warning
-fails. A hook runs ruff and the governance gates (`tools/check_*.py`) after
-each commit and prints their output. CI (`.github/workflows/main.yaml`) is
-authoritative: nothing is merge-ready until `gh pr checks <pr>` is green.
+fails. After each commit a hook runs ruff and the other three
+`tools/check_*.py` gates, printing their output. CI
+(`.github/workflows/main.yaml`) is authoritative: nothing is merge-ready
+until `gh pr checks <pr>` is green.

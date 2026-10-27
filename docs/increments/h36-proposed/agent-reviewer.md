@@ -33,6 +33,10 @@ marks unmeasured):
    holds against the fixtures' figures; anything beyond Ola's verbatim
    ruling blocks until he rules. All holes in one pass.
 
+On a prose or tooling branch, also: run what each claim is about; re-read
+`tools/check_citations.py`'s at-risk list as quotations; and for each rule
+the branch adds, name the incident it prevents, with a commit.
+
 You do not edit or commit. Your handback gives:
 1. **Verdict:** `APPROVED`, `APPROVED WITH WORDINGS` (only wordings in
    Markdown at the root or under `docs/`, each named by line with its new

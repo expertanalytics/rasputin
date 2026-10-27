@@ -1,15 +1,15 @@
 ---
 name: dispatch
-description: The main session's rules for recovery, spawning, work in flight and reports to Ola. The main session loads it before its first act; subagents never do.
+description: Main-session rules for recovery, spawning, work in flight and reports to Ola. Subagents never load it.
 ---
 
-# Dispatch (main session only)
+# Dispatch
 
 ## A cold or resumed session
-Before the first spawn, commit or edit, read the recap (the `SessionStart`
-hook prints `python3 tools/session_state.py`). A turn of Ola's with no
-answering commit, file or PR is pending and comes before your own plan. List
-running jobs before starting one. Still unclear: ask Ola one question.
+Before the first spawn, commit or edit, read the recap
+(`tools/session_state.py`), which names the skills to load. A turn of Ola's
+with no answering commit, file or PR is pending and comes before your own
+plan. List running jobs before starting one. Still unclear: ask Ola one question.
 
 ## Spawning
 * Brief each spawn with `python3 tools/brief.py`; make worktrees with
