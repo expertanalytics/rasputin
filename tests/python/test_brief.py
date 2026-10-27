@@ -434,6 +434,36 @@ def test_6_perf_alone_says_nothing_runs_beside_it(repo: Path, home: Path) -> Non
     assert concurrency(output) == ("Concurrency: you run alone; nothing runs beside a timing run.")
 
 
+# Ola's ruling of 2026-10-27 (perf.md §2): an untimed @perf run (model
+# results, not timings), marked by --untimed, may run beside exactly one
+# writer; a timing run (no flag) still runs alone, read-only agents included.
+
+
+def test_6_untimed_perf_runs_beside_one_writer(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("perf", trees["B"], f"developer:{trees['A']}", extra=("--untimed",))
+    line = concurrency(ok(repo, home, *args))
+    assert f"@developer (writer, in {trees['A'].resolve()})" in line, line
+    assert "untimed" in line, line
+    assert "nothing runs beside a timing run" not in line, line
+
+
+def test_6_perf_beside_a_writer_without_untimed_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    refused(repo, home, *run_as("perf", trees["B"], f"developer:{trees['A']}"),
+            says="nothing runs beside a timing run (@perf)")  # fmt: skip
+
+
+def test_6_untimed_perf_beside_two_writers_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
+                  extra=("--untimed",))  # fmt: skip
+    refused(repo, home, *args, says="an untimed @perf run goes beside one writer at most")
+
+
 def test_6_rule_2_at_most_two_writers(repo: Path, home: Path, trees: dict[str, Path]) -> None:
     args = run_as("architect", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}")
     refused(repo, home, *args, says="at most two writers run at once")
