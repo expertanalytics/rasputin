@@ -1,8 +1,11 @@
 # Increment 108: a legend is the colour scheme; meshing rules are a file of their own
 
-**Status: designed** (`@architect`, 2026-10-27, on `5de1144d`). One PR, branch
-`worktree-legend-split`, about 110 net production lines, no C++ file, no
-`@perf` run (section 6). Ola ordered it built and merged today, 2026-10-27.
+**Status: designed, round 2** (`@architect`, 2026-10-27, on `5de1144d`). One
+PR, branch `worktree-legend-split`, about 70 net production lines, no C++
+file, no `@perf` run (section 6). The split only: it changes no mesh. The
+Sula defects it surfaced (section 3) are increment 109
+(`docs/increments/109-cleanup-every-source.md`), built right after this
+merges. Ola ordered both built and merged today, 2026-10-27.
 
 ## 1. What Ola asked
 
@@ -27,7 +30,7 @@ constraint edges, and at what accuracy) have no counterpart in either; they
 are ours. No novelty is claimed.
 
 *Legacy.* `git grep -l -i -E 'legend|palette|colou?r' legacy-archive -- legacy`
-returns ten files; the land-cover one, `legacy/rasputin/land_cover_repository.py`,
+returns twelve files; the land-cover one, `legacy/rasputin/land_cover_repository.py`,
 gives colours from a separate `color(cls, *, land_cover_type)` method (line
 16), apart from the classification: the split this increment makes. Nothing
 is carried across; the colours come from today's shipped files.
@@ -43,7 +46,7 @@ so the rules take Ola's own words: **meshing rules**.
 general applicability" overlaps (its rulings made these files data, increment
 41).
 
-## 3. The two causes of the Sula result, and the record bug
+## 3. The finding that motivates increment 109
 
 Sol's run on Sula (73.27.0, `--tolerance 20`) used two user files without
 `code_system` (`sula-corine-constraints.toml`, value-and-edges classes;
@@ -67,9 +70,10 @@ Re-run from master's venv into `/tmp/legend-split-probe` (one source per run):
    6,987 after clean-up at 1, 20 and 50 m alike. The shipped `corine-water`
    has the same defect.
 3. **The record repeats run totals per source.** `src_python/tin_engine/cli.py@5de1144d:1307-1316`
-   writes the merged PSLG's lines and vertices into every source's entry
-   (Sol's record: "112 lines, 8180 vertices" twice). Same code path; fixed
-   here.
+   writes the merged lines and vertices into every source's entry
+   (Sol's record: "112 lines, 8180 vertices" twice).
+
+All three are fixed in increment 109, not here.
 
 ## 4. The design
 
@@ -79,17 +83,55 @@ colour of code 0), and `[[class]]` with `code`, `label`, `colour`. Every key
 required, nothing else allowed; a repeated code or code 0 in `[[class]]` is
 refused. A legend may list codes no rules file uses.
 
-**Meshing-rules file** (`data/meshing_rules/<name>.toml`): `name`,
-`attribute`, **`positional_accuracy_m` required in every file** (refused when
-missing: "positional_accuracy_m missing: the source's positional accuracy in
-metres, which sets the default clean-up distances"), `unlisted`, optional
-`code_system`, `notice`, `licence`, `[edges]`, `[[class]]` (`code` or `value`,
-`water`, `category`, `edges`), `[[split]]` (sub-classes `value`, `code` only),
-`codes`, `vocabulary.extra`, `[prefer]`, and **`legend`**: a shipped legend
-name or a path, relative to the rules file. With `code_system`, `legend` is
-required and every class and sub-class code must be in it (refused naming the
-missing codes); without, `legend` is refused. `label` and `colour` are refused
-in a rules file.
+**Meshing-rules file** (`data/meshing_rules/<name>.toml`): today's fields less
+the colours: `name`, `attribute`, `unlisted`, optional `code_system`,
+`positional_accuracy_m` (required with `code_system`, as today; increment 109
+makes it required in every file), `notice`, `licence`, `[edges]`,
+`[[class]]` (`code` or `value`, `water`, `edges`), `[[split]]`
+(sub-classes `value`, `code` only), `codes`, `vocabulary.extra`, `[cells]`
+(below), and **`legend`**: a shipped legend name or a path, relative to the
+rules file. With `code_system`, `legend` is required and every class and
+sub-class code must be in it (refused naming the missing codes); without,
+`legend` is refused. `label`, `colour`, `preset` and `[no_class]` are
+refused in a rules file, each naming the legend as their place.
+
+**`unlisted = "land"` needs `[edges]`.** Today an uncoded file may state
+`unlisted = "land"` with no `[edges]` table, and every unlisted feature is
+then dropped without a word (`src_python/tin_engine/legends.py@5de1144d:168-173`;
+`docs/reviews/2026-10-27-concept-audit.md` on `ed0f6660`, finding 1.1). It is
+refused: "unlisted = \"land\" needs an [edges] table: its land list names
+the edges an unlisted feature gets". No shipped file and neither of Sol's
+files hits it (all have `[edges]` or are coded).
+
+**`[cells]`: the cell mapping, apart from the edges.** What the cell table
+and `--prefer` read is not a meshing rule (audit, section 3, item 2), so it
+moves out of `[[class]]` into one table, allowed only with `code_system`:
+
+```toml
+[cells.categories]          # each code a cell category counts
+lake = [512]
+glacier = [335]
+forest = [311, 312, 313]
+[cells.prefer]              # the one class a --prefer source's polygons take
+lake = 512
+glacier = 335
+```
+
+Keys of `categories` are the `Category` names (`forest`, `lake`, `glacier`,
+`savanna`, `unspecified`). Refused: a code in two categories, a code not
+listed (class or sub-class), `category` inside `[[class]]` or a top-level
+`[prefer]` (each naming `[cells]`). Split sub-classes still take their
+parent's category. A class's `water` flag stays in `[[class]]`: it picks the
+water edge list; the cells' check that every water class has a category
+(`src_python/tin_engine/cells.py@5de1144d:30-37`) is unchanged. The
+resulting `categories` and `prefer` mappings equal today's for every shipped
+file (test 3).
+
+**Not in 108, in 109:** the model's field names aligned with the file's
+(audit finding 2.11: model `codes` is the file's `code_system`,
+`string_codes` its `codes`, `otherwise` its `unlisted`, `accuracy_m` its
+`positional_accuracy_m`), and the request model's clean-up defaults, all off
+where the command derives them (audit finding 1.5).
 
 **Python.** `legends.py` keeps only the legend: a frozen `Legend` (`name`,
 `preset`, `colours: Mapping[int, tuple[str, str]]`), `load_legend(value)`.
@@ -98,87 +140,99 @@ New `meshing_rules.py` takes today's model, loader, `derived_cleanup` and
 `MeshingRules`, its `palette` and `preset` fields replaced by
 `legend: Legend | None` (composed, not copied). `FeatureSource.legend`
 becomes `.rules`. Readers of colours (`palette`, the GeoPackage writer's
-classes and style, `known_codes` at `src_python/tin_engine/cli.py@5de1144d:1916`) read
-`rules.legend.colours`, or for `known_codes` the rules' own class codes.
-`property` stays built in, has no accuracy and no legend, and is never
-cleaned (help text says so).
+classes and style) read `rules.legend.colours`. **`known_codes`**
+(`src_python/tin_engine/cli.py@5de1144d:1916`, today the palette's keys)
+becomes the rules' own codes: every listed class code, every split
+sub-class code, and 0 when the legend has `[no_class]`; this equals today's
+palette keys for every shipped file, so AR50's sub-classes (3031 ... 5099)
+stay known. `property` stays built in, with no legend.
 
-**The clean-up, fixed.** (a) Every polygon of a non-`property` source that is
-not dropped goes to the clean-up, coded or not; the same-class merge groups
-an uncoded source by its class value. An uncoded polygon still labels no
-triangle. (b) Before simplifying, `_clean` adds the domain's uncovered rest
-(`domain − union`) as one more polygon and drops it afterwards, so every
-shore is a shared border and only the domain outline stays fixed. Rest parts
-an inward buffer of 1 cm empties are left out: on Sula, CORINE's rest is 18
-parts of zero area, all under 1 cm wide (`corine_rest.py`), so a source that
-tiles the domain adds nothing and its mesh is byte-identical. The constant
-assumes a metric CRS and was checked on Sula's 30 km² domain. (c) The default
-accuracy is the largest over the non-`property` sources; with none, no
-clean-up runs. (d) When the stage ran on no polygon, the record leaves the
-four `features_*` clean-up keys out, and an explicitly given clean-up option
-prints one stderr line: "features: --features-tolerance not used: no polygon
-in any --features source" (a finding about the data, so allowed).
+**Names.** No aliases. Each old name is refused with a message naming the
+new one:
 
-**Record.** Each source's entry counts its own lines and vertices after
-clip and clean-up (from `FeatureSet.features`, which are in source order,
-sliced by `counts`); the merged totals move to one new key `features_joined`
-("N lines, M vertices after joining shared edges and adding crossings").
+| Today | After | Refusal |
+|---|---|---|
+| `mesh --features-legend` | `--features-rules` | "--features-legend is now --features-rules; a legend is the colour scheme only" (one table `RENAMED` in `cli.py`, appended to click's no-such-option error) |
+| `mesh --land-cover-legend` | `--land-cover-rules` | as above |
+| MCP `features_legend`, `land_cover_legend` | `features_rules`, `land_cover_rules` (derived from the options) | the schema's `additionalProperties: false`; `mcp/server.py`'s instruction text names the new arguments |
+| sources-file key `legend` | `rules` | "legend is now rules (a source names its meshing rules)", before the strict model's error |
+| `sources` fit field `legend` | `rules` | output only |
+| run record `features`: "legend X"; `src_python/tin_engine/run_record.py@5de1144d:35` "layer, legend, ..." | "rules X"; "layer, meshing rules, ..." | output only |
+| `rasputin palette NAME` (any legend) | a legend name or legend file only | `palette corine-water`: "unknown legend corine-water; use ar50, corine, mapbiomas-c11, or a .toml file" |
 
-**Names.** No aliases; old ones refused:
-
-| Today | After |
-|---|---|
-| `mesh --features-legend` | `--features-rules` |
-| `mesh --land-cover-legend` | `--land-cover-rules` |
-| MCP `features_legend`, `land_cover_legend` | `features_rules`, `land_cover_rules` (derived from the options; `mcp/server.py`'s instruction text by hand) |
-| sources-file key `legend` | `rules` |
-| `sources` fit field `legend` | `rules` |
-| `rasputin palette NAME` (any legend) | a legend name or legend file only |
+Prose renamed in the same PR: `docs/benchmarks/quick/cases.toml` (lines 32
+and 46), `INSTALL.md:270`, `README.md` (lines 31, 101, 132, 213, 232, 247 and
+the wording at 44, 47, 128, 136), `docs/GLOSSARY.md:246-254` (the legend
+entry cut to the colour scheme; a new "meshing rules" entry), and
+`project_structure.md:300-317`. The guard test
+`tests/python/test_legend_name.py` gains the old option names, key and MCP
+arguments.
 
 **Shipped files.** Legends: `corine` (one file: the three CORINE files'
-colours are equal, checked with `load`), `mapbiomas-c11`, `ar50` (sub-class
-colours as plain classes). Rules: `corine`, `corine-water`, `clc18_kode`
-(each `legend = "corine"`), `mapbiomas-c11`, `ar50`, accuracies unchanged
-(100, 100, 100, 30, 2 m).
+colours are equal, checked with `load` on `5de1144d`), `mapbiomas-c11`,
+`ar50` (sub-class colours as plain classes). Rules: `corine`, `corine-water`,
+`clc18_kode` (each `legend = "corine"`), `mapbiomas-c11`, `ar50`; every other
+field unchanged.
+
+**Ola's sources file at merge.** `~/.config/rasputin/sources.toml` has 15
+`legend = "ar50"` keys, all a shipped name that is also a shipped rules
+name. The moment 108 merges, the main session copies the file to
+`sources.toml.bak-108` and rewrites each `legend =` key at the start of a
+line to `rules =`, nothing else; it then checks the file with `rasputin
+sources` and tells Ola, who restarts his MCP server. The main session
+restarts nothing.
 
 No `--legend` override option in this PR: a user picks colours by naming a
 legend file in a rules file.
 
-## 5. Prediction and tests
-
-Prediction: every shipped coded source that tiles the domain gives a
-byte-identical mesh; Sol's two files are refused until they state an accuracy;
-with one stated, both simplify. Probe of (b) on Sula's 44 lakes (`frame_probe.py`):
-lake vertices 6,972 alone at bands 1, 20, 50; with the rest piece 3,947 /
-502 / 362, area unchanged.
+## 5. Tests and gates
 
 Tests (red first):
 
-1. **Uncoded source is cleaned.** Two lakes, circles of radius 100 m
-   (`quad_segs=64`) at (300, 500) and (700, 500) in a 1,000 m square domain,
-   uncoded rules: 514 vertices in. Measured with `simplify_borders`: band
-   1 m → 54, 5 m → 28, 20 m → 15, each lake's area 31,412.773 m² kept.
-2. **Coded lakes, same fixture with codes:** same counts (cause 2).
-3. **Tiling source unchanged:** two halves of the square, rest empty; the
-   existing CORINE clean-up and mesh snapshots pass unchanged.
-4. **Rules refusals:** missing `positional_accuracy_m`; `label` or `colour`
-   in rules; coded without `legend`; a class or sub-class code missing from
-   the legend (message names it); `legend` without `code_system`.
-5. **Legend refusals:** extra key, repeated code, code 0 in `[[class]]`, bad
+1. **Rules refusals:** `label`, `colour`, `preset` or `[no_class]` in rules
+   (each naming the legend); coded without `legend`; a class or sub-class
+   code missing from the legend (message names it); `legend` without
+   `code_system`; an uncoded file with `unlisted = "land"` and no `[edges]`
+   (message as above); `category` in `[[class]]`, a top-level `[prefer]`, a
+   code in two categories, a `[cells]` code not listed, `[cells]` without
+   `code_system`.
+2. **Legend refusals:** extra key, repeated code, code 0 in `[[class]]`, bad
    colour; `rasputin palette corine` bytes unchanged; `palette corine-water`
-   refused.
-6. **Old names refused:** `--features-legend`, `--land-cover-legend`,
-   sources key `legend`, MCP `features_legend` (beside the class-map checks
-   in `tests/python/test_legend_name.py`).
-7. **Record:** two sources give their own line and vertex counts and one
-   `features_joined`; a `property`-only run with `--features-tolerance 5`
-   prints the not-used line and no clean-up keys.
+   refused as in the table.
+3. **Same colours:** for each of the five shipped names, the composed
+   legend's colours and preset, and the rules' `categories`, `prefer` and
+   `water_codes`, equal today's `load(name)` fields, written by `@tester` from `5de1144d` into a snapshot
+   `tests/python/data/legends_5de1144d.json` in the red commit (the older
+   `legends_f09b9863.json` predates `ar50`).
+4. **AR50 known codes:** `known_codes` for `ar50` holds 3031, 3032, 3033,
+   3099, 5051, 5052, 5054, 5055, 5099 and equals today's palette keys; an AR50
+   class-polygon run with a sub-class polygon is not refused.
+5. **Old names refused with the new name:** `--features-legend`,
+   `--land-cover-legend`, sources key `legend`; MCP `features_legend` absent
+   from the schema.
+
+Gates, run by `@developer` on the green head and recorded in its handback:
+
+6. **No mesh changes.** The quick check's `numedalslagen` and `lagan` cases
+   (`docs/benchmarks/quick/cases.toml`, args as there with `--features-rules`,
+   plus `--out X.vtk --binary`), one run each, sha256 of the `.vtk`. Before,
+   measured on master's venv (source identical to `5de1144d`), AC power,
+   2026-10-27: numedalslagen
+   `1b077a1a5ce8170f7cfebe9a01cdcfe551ecc50d22048f2e73f95a83b32b4705` (two
+   runs, same hash), lagan
+   `4c9f885a5948444e1c2c9a695faedbf3e163d59a3490d6a4f12f793123d83965`. After
+   must equal both.
+7. **No time cost.** The same runs' wall time: before 10.41 s and 9.98 s
+   (numedalslagen), 16.26 s (lagan). The split adds one small TOML read per
+   run, so the expected cost is zero; one run each after is judged within
+   noise (10 %), with `@developer` still running beside it.
 
 ## 6. Size and checks
 
-About 110 net production lines (`python3 tools/count_loc.py`): rules model
-moved (+0), legend model and loader +35, the two clean-up fixes +25, record
-+15, CLI names and palette +15, defaults and the not-used line +20. TOML is
-not counted; the rename touches about 150 production and 300 test lines
-modified. No C++, so no `@perf` acceptance run; the byte-identity of the
-shipped coded sources is pinned by test 3 and the existing snapshots.
+About 70 net production lines (`python3 tools/count_loc.py`): rules model
+moved (+0), legend model and loader +35, the refusals naming new names +10,
+`known_codes` and the colour readers +10, `[cells]` and its refusals +12,
+the `unlisted` refusal +3. TOML is not counted; the rename
+modifies about 150 production and 300 test lines. Over the short path's 50,
+so the full path. No C++ and no mesh change (gate 6), so no `@perf`
+acceptance run.
