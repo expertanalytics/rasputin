@@ -1,16 +1,15 @@
-"""Whether a call released the GIL: count a ticker thread's ticks while it runs.
+"""Whether a call released the GIL: the longest silence of a ticker thread.
 
-`docs/increments/python-audit.md`, section 10 (R10). Test support only. Each
-suite keeps its own thresholds and its own control test, because what a
-held and a released call let through differs between the calls they measure.
+`docs/increments/python-audit.md`, section 10 (R10). Test support only. The
+thresholds and the control test that shows they separate a held call from a
+released one are in `test_core_cdt.py` (`HELD_SILENCE`, `RELEASED_SILENCE`).
 
-Two measures. `ticks_during` counts ticks, which other processes' load
-distorts: a starved thread hands the GIL over at the edges of a held call, and
-under `pytest -n auto` a held call let up to 26 ticks through. `silence_during`
-measures the longest stretch of the call with no tick, as a fraction of the
-call. Load can only lengthen a silence, never fill one, because the ticker
-cannot tick without the GIL: a held call stays near 1 and a released one near
-0 however busy the machine is.
+`silence_during` measures the longest stretch of a call with no tick, as a
+fraction of the call. A tick count would not do: under other processes' load a
+starved thread hands the GIL over at the edges of a held call, and under
+`pytest -n auto` a held call let 26 ticks through. Load can only lengthen a
+silence, never fill one, because the ticker cannot tick without the GIL: a
+held call stays near 1 and a released one near 0 however busy the machine is.
 """
 
 from __future__ import annotations
@@ -30,7 +29,6 @@ class _Ticker:
     """
 
     def __init__(self) -> None:
-        self.ticks = 0
         self.stamps: list[float] = []
         self._stop = threading.Event()
         self._ready = threading.Event()
@@ -39,7 +37,6 @@ class _Ticker:
     def _run(self) -> None:
         self._ready.set()
         while not self._stop.is_set():
-            self.ticks += 1
             self.stamps.append(time.perf_counter())
             time.sleep(0.001)
 
@@ -51,18 +48,6 @@ class _Ticker:
     def __exit__(self, *exc: object) -> None:
         self._stop.set()
         self._thread.join(timeout=10.0)
-
-
-def ticks_during[T](call: Callable[[], T]) -> tuple[T, int, float]:
-    """Return the call's result, the ticks observed during it, and its duration."""
-    with _Ticker() as ticker:
-        time.sleep(0.02)  # let the ticker reach steady state
-        before = ticker.ticks
-        started = time.perf_counter()
-        result = call()
-        elapsed = time.perf_counter() - started
-        after = ticker.ticks
-    return result, after - before, elapsed
 
 
 def silence_during[T](call: Callable[[], T]) -> tuple[T, float, float]:

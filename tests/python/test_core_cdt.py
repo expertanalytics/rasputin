@@ -755,9 +755,6 @@ class TestTriangulate:
 # side cannot drift down; the released bound allows 25 ms of a 0.1 s call.
 HELD_SILENCE = 0.75
 RELEASED_SILENCE = 0.25
-# Tick counts, for the suites that still count ticks (the refine-points and
-# error-summary GIL tests). Load lets a held call through up to 26 ticks.
-RELEASED_TICKS = 20
 
 
 @pytest.fixture(scope="module")
