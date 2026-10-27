@@ -3,8 +3,8 @@
 Status: **designed**, 2026-10-27, on `worktree-question-tool` off master
 `7c2aa7c0`. One PR: the tool alone, about 185 counted lines, no governed
 file. Wiring it into the recap and the rules in place of the `ASK OLA:` lines
-writes governed files and is its own increment,
-`docs/increments/h36-questions-in-recap.md`, built after this one with Ola at
+writes governed files and follows in its own PR,
+with its own increment file, built after this one with Ola at
 the guard's prompt. No C++, no refine or mesh code, no `@perf` run.
 
 Source: Ola, 2026-10-27: "Like, a question tool, so I don't have to repeat how
@@ -30,7 +30,7 @@ returns nothing; nothing is carried across.
 *In the tree.* `tools/work_pipes.py` `ask`/`answer` hold one question per
 item, with a default, and `show` numbers them; `.claude/current-task/session.md`
 holds `ASK OLA:` lines that the recap lists unnumbered. The tool replaces both
-(`h36-questions-in-recap.md`).
+(in that follow-up PR).
 
 ## 1. What it is
 
@@ -72,7 +72,7 @@ When any question is held (C3), the block ends with one line, `and N more
 yes/no questions held until one above is answered`.
 
 The block is built by a pure function, `list_lines(records) -> list[str]`,
-that reads the store and writes nothing; the recap (`h36`) calls only that.
+that reads the store and writes nothing; the recap, once wired in by the follow-up PR, calls only that.
 Only the main session's explicit `list` command stores the number mapping and
 marks `taken` lines shown, so a recap printed between a `list` and Ola's
 answer cannot renumber what he saw or swallow a default taken before he saw
