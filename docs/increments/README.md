@@ -34,18 +34,19 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
    test file** — that is what makes the trace mean anything.
-4. `@reviewer` audits before merge (CI is authoritative, `CLAUDE.md` §4). An increment that
+4. `@reviewer` audits before merge. An increment that
    touches refine or mesh code also needs `@perf`'s acceptance run (below).
    **The review leaves a trace in the increment file.** `@reviewer` is
    read-only, so the main session itself, not an agent it spawns, copies the
    handback's verdict, the commit range
    it reviewed and its LOC count, verbatim, into a `## Review` section of
    `docs/increments/NN-name.md` (one entry per review round), and commits it
-   before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
+   before the push.
    `@reviewer`'s verdict is `APPROVED`, `APPROVED WITH WORDINGS` or `CHANGES REQUESTED`, and its handback ends with exactly one line `Review: <verdict> <sha>`,
    and no other line starts with `Review:`: its
    verdict and the full sha of the head it reviewed; a hook records it, and
-   the away-mode push grant reads only that record. When `@reviewer`'s only
+   the away-mode push grant also wants that sha in the `## Review` of the
+   branch's increment file. When `@reviewer`'s only
    findings are wordings in prose files (Markdown at the root or under
    `docs/`) that it names line by line with the new text, its verdict is
    `APPROVED WITH WORDINGS`. The main session applies them exactly, in the
