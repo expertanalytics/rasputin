@@ -217,7 +217,7 @@ class _File(_Strict):
             codes=self.code_system,
             legend=legend,
             licence=self.licence,
-            accuracy_m=self.positional_accuracy_m or 0.0,
+            accuracy_m=self.positional_accuracy_m,
             string_codes=self.codes,
             extra_names=tuple(self.vocabulary.extra),
             splits=tuple(
@@ -266,7 +266,7 @@ def load(value: str) -> MeshingRules:
     refusal is a ``ValueError`` naming the file."""
     if value == "property":
         classes = {n: (n,) for n in DEFAULT_NAMES}
-        return MeshingRules(name="property", attribute="property", classes=classes)
+        return MeshingRules(name="property", attribute="property", classes=classes, cleaned=False)
     text, shown = read(value, _shipped(), [*shipped_names(), "property"], "meshing rules")
     label = f"meshing rules file {shown}"
     found = parse(text, _File, label)
