@@ -106,6 +106,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "tolerance_field": "crs feature_input",
         "sub_catchments": "border_simplify crs domain features",  # 106c, 106e: units; the domain
         "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
+        "preferred": "cells polygon_fractions",  # 107: classes from a preferred source
         "legends": "feature_input features toml_data",  # 41: legend files to Legend
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage legends"
                          " io.models io.repository sources",  # 55: the listing; 57: vector sources
@@ -119,7 +120,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_index io.models io.network_file io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " mcp.http mcp.server mosaic network palettes plugins polygon_fractions raster"
+               " mcp.http mcp.server mosaic network palettes plugins polygon_fractions preferred"
+               " raster"
                " refine_job resources"
                " run_record source_report sources stats sub_catchments target_grid tin_engine"
                " tolerance_field",

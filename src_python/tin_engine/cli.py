@@ -19,7 +19,7 @@ import os
 import shlex
 import sys
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
@@ -171,6 +171,7 @@ from tin_engine.network import (
 )
 from tin_engine.palettes import paraview_preset
 from tin_engine.polygon_fractions import assign as assign_polygon_fractions
+from tin_engine.preferred import overlay as overlay_preferred
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError, error_values
 from tin_engine.resources import Resources, parse_bytes
@@ -829,6 +830,17 @@ def mesh(
             "--features-legend. Default: the source's.",
         ),
     ] = None,
+    prefer: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--prefer",
+            metavar="KEY=SOURCE",
+            help="With class polygons from --land-cover, take the class its legend names for "
+            "KEY (lake, glacier) from SOURCE, a file or cached source of polygons, and the "
+            "rest from --land-cover; the land cover's own polygons of that class go to their "
+            "neighbours. Repeatable; where two sources overlap, the first given wins.",
+        ),
+    ] = None,
     reservoirs: Annotated[
         str | None,
         typer.Option(
@@ -975,6 +987,10 @@ def mesh(
     reservoir = _reservoir_source(
         reservoirs, categories is not None, known, cache_root(cache, os.environ),
         _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
+    )  # fmt: skip
+    preferred = _prefer_sources(
+        prefer or [], classes, known, cache_root(cache, os.environ),
+        lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
     )  # fmt: skip
     units_source = _reservoir_source(
         catchments, categories is not None, known, cache_root(cache, os.environ),
@@ -1326,7 +1342,15 @@ def mesh(
             cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
     if classes is not None:
         table, codes, more = _class_fractions(
-            classes, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads
+            classes,
+            dem_run.trimmed,
+            dem_crs,
+            clock,
+            domain,
+            out_crs,
+            cache,
+            res.threads,
+            preferred,
         )
         codes_text = str(more["land_cover_codes"])
         if classes.legend is not None:  # names and colours for the .gpkg
@@ -1831,18 +1855,18 @@ def _class_fractions(
     out_crs: str | None,
     cache: Path | None,
     threads: int = 1,
+    preferred: Sequence[_Preferred] = (),
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
     """The exact class fractions from the cached year, the file or the class
     polygons, timed as the phase ``land cover fractions``; the table, the
     codes and the record entries. An object the cache lacks is refused naming
-    the ``fetch`` that gets it."""
+    the ``fetch`` that gets it. ``preferred`` sources give their classes over
+    the class polygons'."""
     source, year = classes.source, classes.year
     repository: ClassRaster | None = None
+    values: dict[str, Value] = {}
     if classes.path is not None and classes.path.suffix.lower() in SUFFIXES:
-        name, url, fetched = classes.path.name, str(classes.path), datetime.date.today()
-        if source is not None and source.path is None:  # fetched: credit what was copied
-            copied = CacheWriter(classes.path.parent.parent, source.id).feature_manifest()
-            url, fetched = (copied.url, copied.first_fetched) if copied else (url, fetched)
+        name, url, fetched = classes.path.name, *_fetched(source, classes.path)
     elif source is None:
         assert classes.path is not None
         name = classes.path.name
@@ -1887,6 +1911,8 @@ def _class_fractions(
                     xy,
                     functools.partial(_say_repaired, "land cover"),
                 )
+                if preferred:
+                    found, values = _overlay_preferred(found, preferred, xy, trimmed, dem_crs, name)
                 known_codes = frozenset(classes.legend.palette or {})
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=known_codes)
             else:
@@ -1906,7 +1932,7 @@ def _class_fractions(
         err=True,
     )
     label = escaped_ascii(name) if source is None else source.id
-    values: dict[str, Value] = {
+    values |= {
         "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
@@ -1919,6 +1945,128 @@ def _class_fractions(
             "land_cover_cite": escaped_ascii("; ".join(source.cite)) or None,
         }
     return assigned.table, assigned.codes, values
+
+
+@dataclass(frozen=True, slots=True)
+class _Preferred:
+    """One ``--prefer KEY=SOURCE`` as checked: the key, the class code it
+    replaces, the file, layer and record name, and the catalogue entry if any."""
+
+    key: str
+    code: int
+    path: Path
+    layer: str | None
+    name: str
+    source: RemoteSource | None
+
+
+def _prefer_sources(
+    values: Sequence[str],
+    classes: _ClassSource | None,
+    known: Mapping[str, RemoteSource],
+    root: Path | None,
+    run: Callable[[str], str],
+) -> list[_Preferred]:
+    """Each ``--prefer`` checked before any work: class polygons from
+    --land-cover, a key its legend's ``[prefer]`` names, and a source of
+    polygons. An uncached source's refusal names ``run(source)``."""
+    if values and classes is None:
+        raise typer.BadParameter("needs --land-cover", param_hint="--prefer")
+    found = []
+    for value in values:
+        assert classes is not None
+        path = classes.path
+        if classes.legend is None or path is None or path.suffix.lower() not in SUFFIXES:
+            raise typer.BadParameter(
+                "needs class polygons from --land-cover; a raster --land-cover has none",
+                param_hint="--prefer",
+            )
+        key, _, given = value.partition("=")
+        prefer = classes.legend.prefer
+        if not given:
+            raise typer.BadParameter(
+                f"{value} names no source; give KEY=SOURCE", param_hint="--prefer"
+            )
+        if not prefer:
+            raise typer.BadParameter(
+                f"legend {classes.legend.name} names no class a preferred source replaces",
+                param_hint="--prefer",
+            )
+        if key not in prefer:
+            raise typer.BadParameter(
+                f"{key} is no key of legend {classes.legend.name}; use {', '.join(prefer)}",
+                param_hint="--prefer",
+            )
+        path, layer, name = _features_source(given, "--prefer", known, root, run(given))
+        source = known.get(given)
+        code = next(c for k, c in prefer.items() if k == key)
+        found.append(_Preferred(key, code, path, layer, name, source))
+    return found
+
+
+def _fetched(source: RemoteSource | None, path: Path) -> tuple[str, datetime.date]:
+    """The URL and date to credit for polygons read from ``path``: what was
+    copied, for a fetched catalogue source; else the path and today."""
+    url, fetched = str(path), datetime.date.today()
+    if source is not None and source.path is None:
+        copied = CacheWriter(path.parent.parent, source.id).feature_manifest()
+        url, fetched = (copied.url, copied.first_fetched) if copied else (url, fetched)
+    return url, fetched
+
+
+def _overlay_preferred(
+    found: list[tuple[int, BaseGeometry]],
+    preferred: Sequence[_Preferred],
+    xy: npt.NDArray[np.float64],
+    trimmed: Trimmed,
+    dem_crs: str,
+    label: str,
+) -> tuple[list[tuple[int, BaseGeometry]], dict[str, Value]]:
+    """The class polygons with the preferred sources' classes, a warning per
+    key whose source gives less than the land cover did, and the record entries."""
+    chosen = []
+    for p in preferred:
+        try:
+            polygons, _ = read_polygons(
+                p.path, p.layer, dem_crs, xy, functools.partial(_say_repaired, f"--prefer {p.key}")
+            )
+        except FeatureError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
+        chosen.append((p.code, polygons))
+    over = overlay_preferred(found, chosen, xy[trimmed.triangles])
+    rows, credits, licences, cites = [], [], [], []
+    for key in dict.fromkeys(p.key for p in preferred):
+        mine = [p for p in preferred if p.key == key]
+        names = " and ".join(escaped_ascii(p.name) for p in mine)
+        a = over.areas[mine[0].code]
+        given, replaced, refilled = (x / 1e6 for x in (a.given, a.replaced, a.refilled))
+        rows.append(
+            f"{key} from {names}: {replaced:.4f} km2 replaced, {given:.4f} km2 given, "
+            f"{refilled:.4f} km2 refilled"
+        )
+        if a.given < a.replaced * (1 - 1e-9):
+            what = "water" if key == "lake" else key
+            typer.echo(
+                f"{key}: {names} gives {given:.4f} km2 where {label} gave {replaced:.4f} km2; "
+                f"{refilled:.4f} km2 of {label} {what} had no {names} {key} and took a "
+                "neighbouring class",
+                err=True,
+            )
+        for p in mine:
+            if p.source is None:
+                credits.append(f"{key}: {escaped_ascii(p.name)}")
+                continue
+            url, fetched = _fetched(p.source, p.path)
+            credits.append(f"{key}: {escaped_ascii(p.source.credit_for(url=url, date=fetched))}")
+            licences.append(f"{key}: {escaped_ascii(p.source.licence_note)}")
+            cites += [f"{key}: {escaped_ascii(c)}" for c in p.source.cite]
+    values: dict[str, Value] = {
+        "land_cover_prefer": "; ".join(rows),
+        "land_cover_prefer_credit": "; ".join(credits),
+        "land_cover_prefer_licence_note": "; ".join(licences) or None,
+        "land_cover_prefer_cite": "; ".join(cites) or None,
+    }
+    return over.polygons, values
 
 
 def _say_repaired(what: str, repaired: int, read: int) -> None:
