@@ -213,3 +213,4 @@ alone: the steps above are pinned because they are the measured ones.
 - Design round 2: APPROVED WITH WORDINGS, 2e7b9195..c561f5a3, 0 net production lines; the two wordings (section 4 step 5, section 2(b)) applied in this commit.
 - Code round 1: CHANGES REQUESTED, 752b7601..91dfdb7c, 240 net production lines (the nve-glaciers catalogue entry missing; section 4 step 5 reworded to the pairwise area sum, applied in this commit).
 - Code round 2: APPROVED, 752b7601..7e4493d5, 240 net production lines.
+- Code round 3: APPROVED, 7e4493d5..59f24c16, 240 net production lines (CI red on 6ca007ca: three tests listing the shipped sources lacked nve-glaciers; test lists fixed).
