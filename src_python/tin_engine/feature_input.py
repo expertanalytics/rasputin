@@ -61,6 +61,9 @@ MARGIN, DENSIFY = 100.0, 1_000.0
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
 #: A land-cover class's share in a hydrological cell; a class without one is unspecified.
 Category = Literal["forest", "lake", "glacier", "savanna", "unspecified"]
+#: Parts of the domain's uncovered rest narrower than this, metres, stay out of
+#: the border simplification: a chosen width, assuming a metric CRS.
+REST_MIN_WIDTH_M = 0.01
 Widening = Callable[[tuple[float, float], tuple[float, float]], float]
 
 
@@ -103,7 +106,9 @@ class MeshingRules(BaseModel):
     meshing-rules file (`tin_engine.meshing_rules`). ``categories`` holds each class
     code that names its cell category, ``water_codes`` the water classes, and
     ``prefer`` the one class a preferred source's polygons take, per category.
-    ``accept_no_class`` says class code 0 (no polygon) is accepted."""
+    ``accept_no_class`` says class code 0 (no polygon) is accepted. ``cleaned``
+    False keeps the polygons out of the land-cover clean-up; ``accuracy_m``
+    None: the file states no positional accuracy."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -115,7 +120,8 @@ class MeshingRules(BaseModel):
     codes: str = ""
     legend: Legend | None = None
     licence: str = ""
-    accuracy_m: float = 0.0
+    accuracy_m: float | None = None
+    cleaned: bool = True
     string_codes: Mapping[str, int] = {}
     extra_names: tuple[str, ...] = ()
     splits: tuple[Split, ...] = ()
@@ -378,7 +384,7 @@ class _Tally:
             steps = transform_definition(src, self.dem)
             if "gridshift" not in steps and "deformation" not in steps:
                 bound = _bound(self.dem, self.region(src))
-        cover: list[tuple[Any, int, int, BaseGeometry]] = []
+        cover: list[tuple[Any, int, int | None, int | str, BaseGeometry]] = []
         for (fid, geometry, value), second in rows:
             t0 = time.perf_counter()
             if geometry is None or geometry.is_empty:
@@ -394,10 +400,12 @@ class _Tally:
                 continue
             what = f"{name}: feature {fid}"
             code = _code(rules, value, what, second) if rules.codes else None
-            polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
+            areal = geometry.geom_type in ("Polygon", "MultiPolygon")
+            polygonal = code is not None and areal
             moved = polygon = None
-            if polygonal and code is not None and self.cleanup is not None:  # cleaned whole
-                cover.append((fid, mask, code, geometry))  # moved after the loop
+            if areal and rules.cleaned and self.cleanup is not None:  # cleaned whole
+                key = str(value) if code is None else code  # the same-class merge's
+                cover.append((fid, mask, code, key, geometry))  # moved after the loop
                 self.seconds += time.perf_counter() - t0
                 continue
             if move is not None and bound is not None and bound[1](geometry):
@@ -419,14 +427,14 @@ class _Tally:
             t0 = time.perf_counter()
             if move is not None:  # every cover polygon in one transform call
                 moved_all = shapely.transform(np.array([g for *_, g in cover], dtype=object), move)
-                cover = [(*c[:3], g) for c, g in zip(cover, moved_all, strict=True)]
+                cover = [(*c[:4], g) for c, g in zip(cover, moved_all, strict=True)]
             for fid, *_, g in cover:
                 if not _finite(g):
                     raise FeatureError(
                         f"{name}: feature {fid} has a vertex with no image in the DEM"
                     )
             self.seconds += time.perf_counter() - t0
-            self._clean(cover, region, self.cleanup)
+            self._clean(cover, region, self.cleanup, name)
 
     def _add(
         self, fid: Any, mask: int, kept: list[Any], code: int | None, polygon: BaseGeometry | None
@@ -456,31 +464,37 @@ class _Tally:
             self.outside += 1
 
     def _clean(
-        self, cover: list[tuple[Any, int, int, BaseGeometry]], region: Polygon, ask: FeatureRequest
+        self,
+        cover: list[tuple[Any, int, int | None, int | str, BaseGeometry]],
+        region: Polygon,
+        ask: FeatureRequest,
+        name: str,
     ) -> None:
         """One source's land cover clipped to the read region, then repaired,
         merged by class and put to the outline, as asked; with the band on
         then clipped to the domain, simplified
         within the band at the repair distance's clearance, and its lines cut
-        where they lie on the outline. Its lines and label polygons then go
-        the usual way."""
+        where they lie on the outline. The domain's uncovered rest, less its
+        parts narrower than `REST_MIN_WIDTH_M`, is simplified with them, so no
+        border is fixed for lack of a neighbour. Its lines and label polygons
+        (coded polygons only) then go the usual way."""
         t0 = time.perf_counter()
         clipped = [_polygonal(shapely.intersection(g, region)) for *_, g in cover]
         self.outside += sum(g is None for g in clipped)
         if all(g is None for g in clipped):
             return
-        items = [c[:3] for c, g in zip(cover, clipped, strict=True) if g is not None]
+        items = [c[:4] for c, g in zip(cover, clipped, strict=True) if g is not None]
         polys = np.array([g for g in clipped if g is not None], dtype=object)
         before = int(shapely.get_num_coordinates(polys).sum())
         polys = shapely.coverage_clean(
             polys, snapping_distance=ask.repair_m, gap_width=ask.repair_m, merge_strategy="min_area"
         )
         if ask.merge_same_class:  # one polygon per class, under its first fid
-            groups: dict[int, list[int]] = {}
-            for i, (_, _, code) in enumerate(items):
-                groups.setdefault(code, []).append(i)
+            groups: dict[int | str, list[int]] = {}
+            for i, (*_, key) in enumerate(items):
+                groups.setdefault(key, []).append(i)
             first = sorted(g[0] for g in groups.values())
-            merged = [shapely.coverage_union_all(polys[groups[items[i][2]]]) for i in first]
+            merged = [shapely.coverage_union_all(polys[groups[items[i][3]]]) for i in first]
             polys = np.array(merged, dtype=object)
             items = [items[i] for i in first]
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
@@ -492,19 +506,29 @@ class _Tally:
                 Polygon() if (c := _polygonal(shapely.intersection(g, dom))) is None else c
                 for g in polygons
             ]
-            polygons = simplify_borders(inside, ask.tolerance_m, ask.repair_m).polygons
+            rest = shapely.difference(dom, shapely.coverage_union_all(inside))
+            half = REST_MIN_WIDTH_M / 2
+            wide = [p for p in shapely.get_parts(rest) if not p.buffer(-half).is_empty]
+            try:
+                done = simplify_borders([*inside, *wide], ask.tolerance_m, ask.repair_m)
+            except ValueError as exc:
+                raise FeatureError(
+                    f"{name}: border simplification refused: {exc}; --features-tolerance 0 "
+                    "meshes this source with its borders as read"
+                ) from exc
+            polygons = done.polygons[: len(inside)]
             tree = _outline_tree(dom)  # once per clean-up, not once per polygon
             lines_of = tuple(_outline_lines(g, tree) for g in polygons)
         after = sum(int(shapely.get_num_coordinates(line)) for ls in lines_of for line in ls)
         old = self.cover_vertices or (0, 0)
         self.cover_vertices = (old[0] + before, old[1] + after)
-        for (fid, mask, code), lines, polygon, ruled in zip(
+        for (fid, mask, code, _), lines, polygon, ruled in zip(
             items, lines_of, polygons, snapped.polygons, strict=True
         ):
             if ruled.is_empty:  # the repair gave all of it to its neighbours
                 self.empty += 1
             else:
-                self._add(fid, mask, list(lines), code, polygon)
+                self._add(fid, mask, list(lines), code, None if code is None else polygon)
         took = time.perf_counter() - t0
         self.seconds += took
         self.cleanup_seconds += took

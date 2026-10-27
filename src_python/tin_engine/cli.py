@@ -782,7 +782,8 @@ def mesh(
             "--features-rules",
             help="The Nth --features' meshing rules: "
             f"{', '.join([*shipped_names(), 'property'])}, or a meshing-rules file (.toml). "
-            "Default: property.",
+            "Default: property. property: each feature's own edge names, never cleaned or "
+            "simplified.",
         ),
     ] = None,
     features_repair: Annotated[
@@ -1221,10 +1222,21 @@ def mesh(
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
-    # The clean-up scale is the coarsest coded rules' accuracy (CORINE's
-    # 100 m without one), never finer than a DEM cell.
+    # The clean-up scale is the coarsest cleaned rules' accuracy, a file
+    # stating none counting as the DEM cell (CORINE's 100 m with no cleaned
+    # source), never finer than a DEM cell.
     cell = max(meta.delta_x, abs(meta.delta_y))
-    accuracy = max((m.accuracy_m for m in rules if m.codes), default=100.0)
+    accuracy = max(
+        (cell if m.accuracy_m is None else m.accuracy_m for m in rules if m.cleaned), default=100.0
+    )
+    no_accuracy = [
+        f"{Path(feature_rules[i]).name} states no positional_accuracy_m; the DEM cell, {cell:g} m, "
+        "is used"
+        for i, m in enumerate(rules)
+        if m.cleaned and m.accuracy_m is None
+    ]
+    for said in no_accuracy:
+        typer.echo(said, err=True)
     derived = derived_cleanup(accuracy, cell).model_dump()
     cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
     cleanup["merge_same_class"] = features_merge_same_class
@@ -1322,18 +1334,23 @@ def mesh(
         if domain_band is not None:
             values["domain_band_m"] = domain_band
     if found is not None and sources and dem_run.feature_counts is not None:
-        # One entry per source, joined. Lines and their vertices are a
-        # property of the merged PSLG, not of a source, so every entry
-        # carries the run totals; the per-source part is the name, layer,
-        # rules and feature count (found.counts[i]).
+        # One entry per source, joined, each counting its own features' lines
+        # (found.features are in source order, found.counts[i] of each);
+        # the merged PSLG's totals go to features_joined.
         chains, feature_vertices = dem_run.feature_counts
         totals = f"{plural(chains, 'line', 'lines')}, "
         totals += plural(feature_vertices, "vertex", "vertices")
+        values["features_joined"] = f"{totals} after joining shared edges and adding crossings"
         texts, crs_texts, transforms, notices = [], [], [], []
+        start = 0
         for i, src in enumerate(sources):
             layer = f" layer {found.layers[i]}" if found.layers[i] else ""
             counted = plural(found.counts[i], "feature", "features")
-            texts.append(f"{src.path.name}{layer}, rules {src.rules.name}: {counted}, {totals}")
+            kept = [g for f in found.features[start : start + found.counts[i]] for g in f.lines]
+            start += found.counts[i]
+            coords = sum(int(shapely.get_num_coordinates(g)) for g in kept)
+            mine = f"{plural(len(kept), 'line', 'lines')}, {plural(coords, 'vertex', 'vertices')}"
+            texts.append(f"{src.path.name}{layer}, rules {src.rules.name}: {counted}, {mine}")
             own = found.crs[i]
             crs_texts.append(crs_label(own))
             transforms.append(transform_label(own, dem_crs))
@@ -1341,6 +1358,7 @@ def mesh(
                 notices.append(src.rules.notice)
         values["features"] = escaped_ascii("; ".join(texts))
         values["features_crs"] = "; ".join(crs_texts)
+        values["features_accuracy_m"] = escaped_ascii("; ".join(no_accuracy)) or None
         values["features_transform"] = "; ".join(transforms)
         values["features_notice"] = "; ".join(notices) or None
         licences = dict.fromkeys(s.rules.licence for s in sources if s.rules.licence)
