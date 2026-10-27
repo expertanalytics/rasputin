@@ -7,8 +7,32 @@ today's rules (`docs/increments/README.md`): about 15 counted lines in
 prompt, by day. The rule texts of §5 are applied in the same PR by the main
 session with Ola's yes, as h33's were.
 
-Source: an outside review of the workflow that Ola pasted on 2026-10-27, its
-points 1, 3 and 4, which he ordered done "asap".
+Source: an outside review of the workflow that Ola pasted on 2026-10-27 and
+chose to adopt, prefaced by "we should do this asap". Its points 1, 3 and 4,
+verbatim:
+
+> "Abolish Automated Retrospective PRs: Restrict @orchestrator from filing
+> standalone PRs or editing governance docs on every cycle. Have it append
+> short Markdown records to a single uncommitted scratchpad or aggregate
+> lessons on a strict weekly cycle. Cut the retrospective overhead
+> immediately."
+>
+> "Refocus @reviewer on Semantics: Strip procedural checklist items from
+> @reviewer. Let count_loc.py, CI, and static hooks enforce LOC limits,
+> mutant targets, and formatting automatically. Instruct @reviewer to
+> evaluate only two things: domain model validity and edge-case handling."
+>
+> "Relax the Micro-Increment Churn: Five review rounds for an 88-line PR
+> point to conversational thrashing over trivialities. Raise the review
+> threshold for trivial/short-path changes to let minor structural fixes
+> land in a single round."
+
+Defaults the main session took while Ola was away; they are not his ruling,
+and he may reverse them: the research round moves into the weekly
+retrospective (§1); non-blocking findings become pipe items on every path,
+not only the short one (§2); the reviewer keeps a check whether the change's
+claims are true, and keeps the procedural checks no tool enforces yet
+(§2), until a tool does.
 
 ## Prior art: legacy and literature
 
@@ -29,11 +53,14 @@ entry to the **lessons log**, `../rasputin_scratch/lessons.md`: the scratch
 folder beside the main checkout, outside git, shared by every worktree and
 kept when one is removed. An entry is a heading
 `## <YYYY-MM-DDTHH:MMZ> merge #N` or `## <YYYY-MM-DDTHH:MMZ> night` (UTC), then
-at most five lines, each a finding or lesson with its evidence. Once a week
-one PR, a dated file under `docs/retrospectives/`, groups the entries since
-the last one by theme and holds the research round, the rule-text
-measurement and its proposed cut. The research round is no longer its own
-file.
+at most five lines, each a finding or lesson with its evidence. A finding
+that needs a fix goes in that check's handback as a follow-up, and the main
+session files it as a pipe item then, not after the weekly summary. Once a
+week one PR, a dated file under `docs/retrospectives/`, groups the entries
+since the last one by theme and holds the research round, the rule-text
+measurement and its proposed cut; it carries no inflow, KGE or
+precipitation-correction result (Ola's rule: those stay private). The
+research round is no longer its own file.
 
 The log is `@orchestrator`'s own data, written and read by it and read by a
 tool; it is addressed to no other agent, so the "not a channel" rule of
@@ -48,10 +75,14 @@ unattended night refuses every prompt. Ola adds the log's row to
 - New `lessons_path(repo) -> Path`: the parent of
   `git rev-parse --path-format=absolute --git-common-dir`, then
   `../rasputin_scratch/lessons.md` beside it. Same path from every worktree.
-- New pure `logged(text: str) -> datetime | None`: the latest stamp among
-  lines matching `^## (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z) (merge #\d+|night)\b`,
-  in UTC; other lines are ignored; no match gives `None`. A missing file reads
-  as empty.
+- New pure `logged(text: str, now: datetime) -> datetime | None`: the latest
+  stamp among lines matching
+  `^## (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z) (merge #\d+|night)\b`, in UTC, and
+  not later than `now`; a later stamp (a typo, a wrong clock) is ignored, so
+  it cannot silence the duties. Other lines are ignored; no match gives
+  `None`. A missing file reads as empty. The entry is stamped from
+  `date -u +%Y-%m-%dT%H:%MZ` at the start of the check, so a merge that lands
+  while the check runs is still owed.
 - `Inputs` gains `logged`; `research` goes.
 - The **baseline** is the later of `logged` and `retro` (the latest
   retrospective first added by a check commit, as today), so the switch-over
@@ -104,6 +135,8 @@ The short path (`docs/increments/README.md`) is today: under 50 net counted
 lines, no C++ file, nothing the *Acceptance* section covers. It gains: no rule
 text, and no new module or public type (the "no new concept" of the order).
 
+`@reviewer` measures the real diff with `tools/count_loc.py` and checks
+every condition above on it; if one fails, the change goes to the full path.
 Such a change lands after its one combined round. Only three findings block,
 and only they give `CHANGES REQUESTED`: a wrong result, a broken invariant, a
 failing test. The round after their fix checks that fix alone and raises no
@@ -117,24 +150,27 @@ Fixture times are UTC; `NOW = 2026-10-27T18:00Z`.
 
 1. `logged`: text with headings `## 2026-10-26T09:00Z merge #380`,
    `## 2026-10-27T12:00Z night`, `## 2026-10-27T13:00 merge #381` (no `Z`)
-   and a body line `## not a heading` gives `2026-10-27T12:00Z`; `""` gives
-   `None`.
-2. Post-merge after the log: `retro = 2026-10-20T10:00Z`,
+   and a body line `## not a heading` gives `2026-10-27T12:00Z` with
+   `now = NOW`; `""` gives `None`.
+2. A future stamp: adding `## 2026-10-28T09:00Z night` (15 hours after
+   `NOW`) still gives `2026-10-27T12:00Z`; text holding only that heading
+   gives `None`.
+3. Post-merge after the log: `retro = 2026-10-20T10:00Z`,
    `logged = 2026-10-27T12:00Z`, code merges `#381` at 11:00 and `#382` at
    13:00 on 2026-10-27 owe exactly
    `post-merge check (1 merge since the last log entry, 2026-10-27 12:00 UTC: #382)`.
-3. Baseline from the retrospective: `logged = None`, `retro =
+4. Baseline from the retrospective: `logged = None`, `retro =
    2026-10-27T12:00Z`, same merges: the same single item for `#382`; both
    `None`: `post-merge check (no log entry on record)`.
-4. Morning: a five-hour window ending 2026-10-27T11:00Z owes nothing with
+5. Morning: a five-hour window ending 2026-10-27T11:00Z owes nothing with
    `logged = 12:00Z`; one ending 13:00Z owes the morning item.
-5. Weekly: `retro = 2026-10-19T10:00Z` gives
+6. Weekly: `retro = 2026-10-19T10:00Z` gives
    `weekly retrospective (last 2026-10-19)`; `2026-10-21T10:00Z` gives no
    weekly item; `retro = None` gives `weekly retrospective (none on record)`.
    No item contains `research`.
-6. `lessons_path` from a repository and from a worktree of it is the same
+7. `lessons_path` from a repository and from a worktree of it is the same
    path, `<parent of the main checkout>/rasputin_scratch/lessons.md`.
-7. The orchestrator brief's write limit names `../rasputin_scratch/lessons.md`.
+8. The orchestrator brief's write limit names `../rasputin_scratch/lessons.md`.
 
 The existing tests that use `research=` or the "since the last retrospective"
 text are amended by `@tester` in the red commit. No invariant-critical suite.
@@ -177,7 +213,7 @@ Your mandate is the checks no gate makes: CI status, the size ceiling, leftover 
 ````
 
 ````text
-Your mandate is semantics: is the domain model valid (types, invariants, units, degenerate inputs), are edge cases handled, is every claim the change makes true. What a tool enforces is not yours: CI status and style (the merge queue's required `CI result`), and recording your verdict (a hook reads your `Review:` line). The procedural checks below are yours until a tool makes them.
+Your mandate is semantics: is the domain model valid (types, invariants, units, degenerate inputs), are edge cases handled, are the change's claims true. Tools enforce CI status, style (the required `CI result` check) and your verdict's record (a hook reads your `Review:` line). The checks below are yours until a tool makes them.
 ````
 
 #### R4 `.claude/agents/reviewer.md`
@@ -264,16 +300,17 @@ Once a week, check the private ideas file for entries gone stale or done unmarke
 ````text
 ## 3. The lessons log and the weekly retrospective
 
-After a merge or a night, append to `../rasputin_scratch/lessons.md`, never
-committed, a heading `## <YYYY-MM-DDTHH:MMZ> merge #N` (or `night`), then at
-most five lines: findings (§1) and the lessons the main session passes you.
-No branch, no PR; `tools/duties.py` reads the headings.
+After a merge or a night, append to `../rasputin_scratch/lessons.md` (never
+committed) `## <stamp> merge #N` (or `night`), stamped at the start by
+`date -u +%Y-%m-%dT%H:%MZ`, then at most five lines of findings (§1) and
+lessons passed to you. No PR. A finding needing a fix goes in your handback
+too, for a pipe item.
 
-Once a week, one PR: a dated file in `docs/retrospectives/` (yours, `next.md`
-included) grouping the log since the last one by theme, with the research
-round (§2). It measures the rule text (`python3 tools/rule_sizes.py`),
-proposes a cut, and flags anecdotes in rule files, moved to their owner or
-out. Check the private ideas file for entries gone stale or done unmarked.
+Weekly, one PR: a dated file in `docs/retrospectives/` (yours, `next.md`
+included) grouping the log by theme, with the research round (§2), no
+inflow, KGE or pcorr result, the rule text measured
+(`tools/rule_sizes.py`), a cut proposed and anecdotes in rule files flagged.
+Check the private ideas file for stale or done entries.
 ````
 
 #### R10 `.claude/agents/orchestrator.md`
@@ -295,7 +332,7 @@ C++ file and nothing the *Acceptance* section covers takes the short path;
 
 ````text
 An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
-C++ file, rule text or *Acceptance* code, and adds no module or public type, takes the short path;
+C++ file, rule text or *Acceptance* code, nor adds a module or public type, takes the short path;
 ````
 
 #### R12 `docs/increments/README.md`
@@ -306,20 +343,31 @@ C++ file, rule text or *Acceptance* code, and adds no module or public type, tak
 
 ````text
   still goes to `@architect` before green.
-- It lands after that round. Only a wrong result, a broken invariant or a
-  failing test is `CHANGES REQUESTED`; the next round checks that fix alone.
-  Any other finding is a follow-up pipe item.
+- `@reviewer` checks these conditions on the real diff (`count_loc.py`);
+  one failing means the full path. Else it lands after that round: only a
+  wrong result, a broken invariant or a failing test blocks, and the next
+  round checks that fix alone; other findings are pipe items.
+````
+
+#### R13 `docs/increments/README.md`
+
+````text
+   any other finding, is `CHANGES REQUESTED`.
+````
+
+````text
+   any other finding, is `CHANGES REQUESTED` (short path: below).
 ````
 
 ## 6. Rule text size
 
 Counted by `tools/rule_sizes.py`'s `current()` on copies of its files with
-R1 to R12 applied (each old text found exactly once first):
+R1 to R13 applied (each old text found exactly once first):
 
 | File | Words now | After | Change |
 |---|---|---|---|
 | `CLAUDE.md` | 1155 | 1157 | +2 |
-| `docs/increments/README.md` | 1060 | 1101 | +41 |
-| `.claude/agents/orchestrator.md` | 482 | 501 | +19 |
-| `.claude/agents/reviewer.md` | 565 | 464 | -101 |
-| All rule files | 9483 | 9444 | **-39** |
+| `docs/increments/README.md` | 1060 | 1116 | +56 |
+| `.claude/agents/orchestrator.md` | 482 | 503 | +21 |
+| `.claude/agents/reviewer.md` | 565 | 454 | -111 |
+| All rule files | 9483 | 9451 | **-32** |
