@@ -110,13 +110,13 @@ In `feature_input.py`, `meshing_rules.py`, `cli.py` and `run_record.py`.
    cleaned source with None counts as the DEM cell size, which leaves the
    clean-up scale `s = max(accuracy, cell)` at the cell, so it neither
    raises nor lowers the scale. Said once per such source on stderr and in
-   the record key `features_accuracy_m` (one entry per source, `; `-joined):
+   the record key `features_accuracy_m` (one entry per source that states no accuracy, `; `-joined; absent when every source states one):
    "sula-nve-lake-constraints.toml states no positional_accuracy_m; the DEM
    cell, 10 m, is used". A finding about the data, so it is said (Ola's rule
    on CLI warnings).
 4. **Default distances from the sources given.** The clean-up scale is the
    largest accuracy over the cleaned sources (item 3's default included),
-   not over coded ones with CORINE's 100 m as fallback.
+   not over coded ones only; with no cleaned source (`property` alone) the 100 m fallback stays, and nothing is cleaned.
 5. **Per-source record counts.** Each source's `features` entry counts its own
    lines and vertices after clip and clean-up (`FeatureSet.features` are in
    source order; slice by `counts`); the merged totals move to one new key,
@@ -208,3 +208,4 @@ amendment in the red step.
 
 - Design round 1: CHANGES REQUESTED, 1100fe2c..b243f7e5, 0 net production lines (Ola's words not quoted, no 1 cm filter test, no failure policy, a false help-text claim).
 - Design round 2: APPROVED WITH WORDINGS, ..606c90b8, 0; the one wording applied in this commit.
+- Code round 1: APPROVED WITH WORDINGS, 1100fe2c..07986321, 38 net production lines; the two wordings applied in this commit. Ola ruled the accuracy default himself on 2026-10-27: "use the cell size and say so" (lines 14 and 146 record it as tonight's default, taken before his ruling).
