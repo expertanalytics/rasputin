@@ -1,6 +1,6 @@
 # Increment 108: a legend is the colour scheme; meshing rules are a file of their own
 
-**Status: designed, round 3** (`@architect`, 2026-10-27, on `5de1144d`). One
+**Status: built; code review round 2 approved** (`@architect`, 2026-10-27, on `5de1144d`). One
 PR, branch `worktree-legend-split`, about 70 net production lines, no C++
 file, no `@perf` run (section 6). The split only: it changes no mesh. The
 Sula defects it surfaced (section 3) are increment 109, designed on its own
@@ -147,7 +147,7 @@ becomes `.rules`. Readers of colours (`palette`, the GeoPackage writer's
 classes and style) read `rules.legend.colours`. **`known_codes`**
 (`src_python/tin_engine/cli.py@5de1144d:1916`, today the palette's keys)
 becomes the rules' own codes: every listed class code, every split
-sub-class code, and 0 when the legend has `[no_class]`; this equals today's
+sub-class code, and 0 when the rules file sets `accept_no_class = true` (its legend must then colour code 0; code review round 1); this equals today's
 palette keys for every shipped file, so AR50's sub-classes (3031 ... 5099)
 stay known. `property` stays built in, with no legend.
 
@@ -254,3 +254,4 @@ acceptance run.
 - Design round 2: CHANGES REQUESTED, ..87ff7c00, 0 (mesh text land_cover_codes unpinned; 109 on the same branch; audit citations not on master).
 - Design round 3: APPROVED WITH WORDINGS, ..24fedc3d, 0; the two status wordings applied in this commit.
 - Code round 1: CHANGES REQUESTED, 5de1144d..62e321f9, 106 net production lines (three messages still say legend where meshing rules decide: polygon_fractions.py:90, cli.py:1381, cli.py:1675).
+- Code round 2: APPROVED WITH WORDINGS, 62e321f9..d7ff5d02, 112 net production lines; the three wordings applied in this commit.
