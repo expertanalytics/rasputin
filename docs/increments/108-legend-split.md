@@ -3,9 +3,8 @@
 **Status: designed, round 2** (`@architect`, 2026-10-27, on `5de1144d`). One
 PR, branch `worktree-legend-split`, about 70 net production lines, no C++
 file, no `@perf` run (section 6). The split only: it changes no mesh. The
-Sula defects it surfaced (section 3) are increment 109
-(`docs/increments/109-cleanup-every-source.md`), built right after this
-merges. Ola ordered both built and merged today, 2026-10-27.
+Sula defects it surfaced (section 3) are increment 109, designed on its own
+branch from master once this merges (one increment file per PR). Ola ordered both built and merged today, 2026-10-27.
 
 ## 1. What Ola asked
 
@@ -97,15 +96,18 @@ refused in a rules file, each naming the legend as their place.
 
 **`unlisted = "land"` needs `[edges]`.** Today an uncoded file may state
 `unlisted = "land"` with no `[edges]` table, and every unlisted feature is
-then dropped without a word (`src_python/tin_engine/legends.py@5de1144d:168-173`;
-`docs/reviews/2026-10-27-concept-audit.md` on `ed0f6660`, finding 1.1). It is
-refused: "unlisted = \"land\" needs an [edges] table: its land list names
+then dropped without a word: `src_python/tin_engine/legends.py@5de1144d:168-173`
+turns `unlisted = "land"` into `"drop"` when `[edges]` is absent, so the file
+says land and the run drops. It is refused: "unlisted = \"land\" needs an [edges] table: its land list names
 the edges an unlisted feature gets". No shipped file and neither of Sol's
 files hits it (all have `[edges]` or are coded).
 
 **`[cells]`: the cell mapping, apart from the edges.** What the cell table
-and `--prefer` read is not a meshing rule (audit, section 3, item 2), so it
-moves out of `[[class]]` into one table, allowed only with `code_system`:
+and `--prefer` read is not a meshing rule: a class's `category` and the
+`[prefer]` table are read only by the cell table
+(`src_python/tin_engine/cells.py@5de1144d:30-37`) and by `--prefer`
+(`src_python/tin_engine/cli.py@5de1144d:1985`), never by the building of
+constraint lines. So it moves out of `[[class]]` into one table, allowed only with `code_system`:
 
 ```toml
 [cells.categories]          # each code a cell category counts
@@ -128,10 +130,12 @@ resulting `categories` and `prefer` mappings equal today's for every shipped
 file (test 3).
 
 **Not in 108, in 109:** the model's field names aligned with the file's
-(audit finding 2.11: model `codes` is the file's `code_system`,
-`string_codes` its `codes`, `otherwise` its `unlisted`, `accuracy_m` its
-`positional_accuracy_m`), and the request model's clean-up defaults, all off
-where the command derives them (audit finding 1.5).
+(`src_python/tin_engine/feature_input.py@5de1144d:111-118`: model `codes` is
+the file's `code_system`, `string_codes` its `codes`, `otherwise` its
+`unlisted`, `accuracy_m` its `positional_accuracy_m`), and the request
+model's clean-up defaults, all off
+(`src_python/tin_engine/feature_input.py@5de1144d:139-145`) where the
+command derives 1, on, 50 and 5.
 
 **Python.** `legends.py` keeps only the legend: a frozen `Legend` (`name`,
 `preset`, `colours: Mapping[int, tuple[str, str]]`), `load_legend(value)`.
@@ -158,7 +162,14 @@ new one:
 | sources-file key `legend` | `rules` | "legend is now rules (a source names its meshing rules)", before the strict model's error |
 | `sources` fit field `legend` | `rules` | output only |
 | run record `features`: "legend X"; `src_python/tin_engine/run_record.py@5de1144d:35` "layer, legend, ..." | "rules X"; "layer, meshing rules, ..." | output only |
+| mesh field `land_cover_codes`: "legend X" | unchanged: X is the rules file's name | output only, kept so gate 6 holds |
 | `rasputin palette NAME` (any legend) | a legend name or legend file only | `palette corine-water`: "unknown legend corine-water; use ar50, corine, mapbiomas-c11, or a .toml file" |
+
+The `land_cover_codes` text is written into the mesh
+(`src_python/tin_engine/cli.py@5de1144d:2153`, today `legend.name`, the one
+file's name), so renaming it would change gate 6's sha256. It takes the rules
+file's name: `corine` for both gate cases, as today; `corine-water` and
+`clc18_kode` keep their own names although both name the legend `corine`.
 
 Prose renamed in the same PR: `docs/benchmarks/quick/cases.toml` (lines 32
 and 46), `INSTALL.md:270`, `README.md` (lines 31, 101, 132, 213, 232, 247 and
