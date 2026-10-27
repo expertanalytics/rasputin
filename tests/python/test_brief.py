@@ -634,7 +634,8 @@ WRITE_LIMITS = {
     "perf": ("docs/benchmarks/",),
     "architect": ("docs/", "docs/retrospectives/", "ROADMAP.md", "CLAUDE.md",
                   "root *.md files"),  # h16 T3: Ola's ruling of 2026-10-05
-    "orchestrator": ("docs/retrospectives/",),
+    # h34 §1 and test 8: the lessons log, beside the main checkout.
+    "orchestrator": ("docs/retrospectives/", "../rasputin_scratch/lessons.md"),
     "reviewer": (),
 }  # fmt: skip
 
