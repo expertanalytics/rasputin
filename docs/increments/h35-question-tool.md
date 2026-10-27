@@ -114,7 +114,7 @@ as an abbreviation.
 * **C2 one decision.** The text has more than one `?`, or does not end with
   `?` (`question` and `act` kinds): refused.
 * **C3 distinct answers.** A new yes/no question while another yes/no question
-  or act is open, or a new `--choices` question whose choices share a word
+  or act is open, or a new `--choices` question whose choices share an answer
   with an open question's choices: stored as `held`, not refused, with the
   printed reason "held until question qN is answered: the same short answer
   would fit both". `list` does not show held questions; `answer` releases the
@@ -195,3 +195,4 @@ line about 45.
 
 - Design round 1: CHANGES REQUESTED, 7c2aa7c0..34498188, 0 net production lines (second PR without its own file; checks C4 and C5 refusing good questions; recap renumbering; rulings beyond the ask).
 - Design round 2: APPROVED, ..9ab908aa, 0.
+- Code round 1: CHANGES REQUESTED, 7c2aa7c0..fae8cb1a, 226 net production lines (possessive handles refused; a false docstring claim; design and code disagreed on held choices; design wording "share an answer" applied in this commit).
