@@ -8,7 +8,9 @@ category each class counts as (``[cells]``). It is read with `tomllib`,
 checked by a strict Pydantic model, and turned into the frozen
 :class:`~tin_engine.feature_input.MeshingRules` the feature reader takes. A
 coded file names its legend (`tin_engine.legends`), the colour scheme of its
-codes: a shipped legend name or a path relative to the rules file. The
+codes: a shipped legend name or a path relative to the rules file. Class code 0
+(an area no polygon covers) is accepted only when the file says
+``accept_no_class = true``, and its legend must then colour it. The
 shipped rules live in ``tin_engine/data/meshing_rules/``; ``property``, the
 identity rules over the vocabulary's names, is built here, not shipped.
 """
@@ -99,6 +101,7 @@ class _File(_Strict):
     vocabulary: _Vocabulary = _Vocabulary()
     split: list[_Split] = []
     cells: _Cells | None = None
+    accept_no_class: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -123,6 +126,8 @@ class _File(_Strict):
             raise ValueError(
                 "a legend needs code_system" if self.legend else "code_system needs a legend"
             )
+        if self.accept_no_class and not coded:
+            raise ValueError("accept_no_class needs code_system")
         if self.cells is not None and not coded:
             raise ValueError("[cells] needs code_system")
         if self.unlisted == "land" and self.edges is None:
@@ -226,6 +231,7 @@ class _File(_Strict):
             categories=categories | given,
             water_codes=frozenset(c.code for c in self.classes if c.code and c.water),
             prefer=cells.prefer,
+            accept_no_class=self.accept_no_class,
         )
 
 
@@ -273,7 +279,11 @@ def load(value: str) -> MeshingRules:
         legend = load_legend(named)
     except ValueError as exc:
         raise ValueError(f"{label}: {exc}") from exc
-    codes = [c.code for c in found.classes] + [s.code for t in found.split for s in t.classes]
+    codes = (
+        [0] * found.accept_no_class
+        + [c.code for c in found.classes]
+        + [s.code for t in found.split for s in t.classes]
+    )
     missing = [str(code) for code in codes if code not in legend.colours]
     if missing:
         raise ValueError(f"{label}: class {', '.join(missing)} not in legend {legend.name}")
@@ -282,11 +292,10 @@ def load(value: str) -> MeshingRules:
 
 def known_codes(rules: MeshingRules) -> frozenset[int]:
     """The codes a class polygon may carry: every listed class and sub-class
-    code, and 0 when the legend colours it."""
+    code, and 0 when the rules set `accept_no_class`."""
     listed = {int(key) for key in rules.classes if key not in rules.string_codes}
     listed |= {code for s in rules.splits for code in s.codes.values()}
-    zero = {0} if rules.legend is not None and 0 in rules.legend.colours else set()
-    return frozenset(listed | zero)
+    return frozenset(listed | ({0} if rules.accept_no_class else set()))
 
 
 def run_vocabulary(rules: Iterable[MeshingRules], more: tuple[str, ...] = ()) -> EdgeVocabulary:

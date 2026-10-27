@@ -7,6 +7,8 @@ positional_accuracy_m = 100
 notice = "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU"
 unlisted = "land"
 legend = "corine"
+# Class code 0: an area no polygon covers, kept for its constraint lines only.
+accept_no_class = true
 
 [edges]
 water = ["land_cover", "water"]

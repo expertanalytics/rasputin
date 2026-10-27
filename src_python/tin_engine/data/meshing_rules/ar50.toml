@@ -11,6 +11,8 @@ notice = "Contains data under the Norwegian licence for Open Government Data (NL
 licence = "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
 unlisted = "land"
 legend = "ar50"
+# Class code 0: an area no polygon covers, kept for its constraint lines only.
+accept_no_class = true
 
 [edges]
 water = ["land_cover", "water"]

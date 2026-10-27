@@ -102,7 +102,8 @@ class MeshingRules(BaseModel):
     those codes. A class whose names are None is dropped; the rest come from a
     meshing-rules file (`tin_engine.meshing_rules`). ``categories`` holds each class
     code that names its cell category, ``water_codes`` the water classes, and
-    ``prefer`` the one class a preferred source's polygons take, per category."""
+    ``prefer`` the one class a preferred source's polygons take, per category.
+    ``accept_no_class`` says class code 0 (no polygon) is accepted."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -121,6 +122,7 @@ class MeshingRules(BaseModel):
     categories: Mapping[int, Category] = {}
     water_codes: frozenset[int] = frozenset()
     prefer: Mapping[Category, int] = {}
+    accept_no_class: bool = False
 
 
 class FeatureSource(BaseModel):

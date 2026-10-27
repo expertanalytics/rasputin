@@ -319,9 +319,7 @@ class _RenamedOptions(TyperCommand):
             new = RENAMED.get(exc.option_name)
             if new is None:
                 raise
-            words = (
-                f"{exc.message} {exc.option_name} is now {new}; a legend is the colour scheme only"
-            )
+            words = f"{exc.option_name} is now {new}; a legend is the colour scheme only"
             raise NoSuchOption(exc.option_name, words, ctx=ctx) from exc
 
 
@@ -1378,7 +1376,7 @@ def mesh(
         if classes.rules is not None:  # names and colours for the .gpkg
             palette = classes.rules.legend.colours if classes.rules.legend else None
         elif out.suffix == ".gpkg":
-            more["cells"] = "none, the land cover has no legend"
+            more["cells"] = "none, the land cover has no meshing rules"
         if reservoir is not None:
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
@@ -1672,7 +1670,7 @@ def _reservoir_source(
     _refuse_named(known.get(value), value, flag)
     if not wanted:
         raise typer.BadParameter(
-            "needs --land-cover with a legend and a .gpkg output", param_hint=flag
+            "needs --land-cover with meshing rules and a .gpkg output", param_hint=flag
         )
     found = _features_source(value, flag, known, root, run)
     rule = known[value].named_by if value in known else None

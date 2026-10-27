@@ -87,7 +87,7 @@ def assign(
     codes: list[int] = []
     for code, polygon in polygons:
         if code not in known:
-            raise ValueError(f"class {code} is not in the legend")
+            raise ValueError(f"class {code} is not in the meshing rules")
         if not np.isfinite(shapely.get_coordinates(polygon)).all():
             raise ValueError(f"a polygon of class {code} has a coordinate that is not finite")
         cut = subdivide(polygon, most)

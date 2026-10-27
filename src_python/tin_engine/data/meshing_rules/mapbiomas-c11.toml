@@ -9,6 +9,8 @@ positional_accuracy_m = 30
 notice = "Contains data from the MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil (CC BY-SA 4.0)"
 unlisted = "land"
 legend = "mapbiomas-c11"
+# Class code 0: an area no polygon covers, kept for its constraint lines only.
+accept_no_class = true
 
 [edges]
 water = ["land_cover", "water"]
