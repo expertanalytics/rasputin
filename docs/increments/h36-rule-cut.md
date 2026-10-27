@@ -289,3 +289,8 @@ over all of it.
 Left out: a `rule_sizes.py` column for the per-agent payload of §4 (counted
 here by `wc -w`); the history paragraph in `guard_governance.py`'s
 docstring.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, b2207408..439e8f81, 0 net production lines (reviewer rules unreachable in a skill; six files naming PRINCIPLES.md; a false hook claim; nothing loads dispatch; scope beyond the quoted words).
+- Design round 2: CHANGES REQUESTED, ..626d5e83, 0 (all five fixed; only Ola's ruling on the wider scope remains).
