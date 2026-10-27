@@ -23,12 +23,12 @@ import shapely
 from arcgis_fixtures import CODES, CORINE, CORINE_URL, IDS, NVE, NVE_URL, FakeLayer, LayerData
 from cli_helpers import USAGE, invoke
 from gpkg_fixtures import needs_rtree
+from tin_engine import meshing_rules
 from tin_engine.feature_input import read_lake_polygons, read_source
 from tin_engine.fetch.http import RangeClient
 from tin_engine.fetch.plan import FetchRequest
 from tin_engine.io.models import Bounds
 from tin_engine.io.repository import CacheWriter
-from tin_engine.legends import load
 from tin_engine.sources import SOURCES, RemoteSource, catalogue, notice
 
 CREDIT = "A test credit, {url}, {date}"
@@ -75,7 +75,7 @@ def listed(cache: Path) -> dict[str, dict[str, Any]]:
 
 
 def fits_of(entry: dict[str, Any]) -> set[tuple[str, str, str | None]]:
-    return {(f["command"], f["option"], f.get("legend")) for f in entry["fits"]}
+    return {(f["command"], f["option"], f.get("rules")) for f in entry["fits"]}
 
 
 # ------------------------------------------------------------ 1. the catalogue
@@ -99,7 +99,7 @@ class TestTheShippedEntries:
         assert entry.url == CORINE_URL
         assert entry.crs == "EPSG:3035"
         assert entry.fields == ("ID", "Code_18")
-        assert entry.legend == "corine"
+        assert entry.rules == "corine"
 
     def test_the_corine_credit_names_no_version_and_no_doi(self) -> None:
         """The service states no version; the DOI is the V2020_20u1 release's."""
@@ -247,7 +247,7 @@ class TestThroughTheReaders:
 
     def test_features_with_corine_read_the_cached_codes(self, tmp_path: Path) -> None:
         fetch_into(tmp_path, CORINE)
-        legend = load("corine")
+        legend = meshing_rules.load("corine")
         rows = read_source(
             tmp_path / "clc2018" / "features.gpkg", None, legend.attribute,
             lambda _crs: CORINE.extent(IDS),

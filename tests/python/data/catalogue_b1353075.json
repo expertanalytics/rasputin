@@ -10,7 +10,7 @@
    "cite": [
     "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321"
    ],
-   "legend": "",
+   "rules": "",
    "credit": "Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.",
    "crs": "EPSG:4674",
    "id": "anadem-v1",
@@ -26,7 +26,7 @@
   },
   "glo30": {
    "cite": [],
-   "legend": "",
+   "rules": "",
    "credit": "produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
    "crs": "EPSG:4326",
    "id": "glo30",
@@ -44,7 +44,7 @@
    "cite": [
     "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735"
    ],
-   "legend": "mapbiomas-c11",
+   "rules": "mapbiomas-c11",
    "credit": "MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil, accessed on {date} through the link: {url}",
    "crs": "EPSG:4326",
    "id": "mapbiomas-c11",

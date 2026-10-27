@@ -1,4 +1,4 @@
-"""`rasputin mesh ... --features-legend corine`: a land-cover code per cell (16c).
+"""`rasputin mesh ... --features-rules corine`: a land-cover code per cell (16c).
 
 `docs/increments/16c-landcover-labels.md`: R3 (what the files carry), R5 (what
 `feature_input` keeps), R6 (the CLI) and "Tests for @tester", through the
@@ -179,7 +179,7 @@ def mesh_corine(
     path = write_geojson(tmp_path / "corine.geojson", features)
     domain = domain or geojson(tmp_path / "square.geojson", SQUARE)
     code, output, target = run(
-        tmp_path, tif, domain, "--features", str(path), "--features-legend", "corine", *extra
+        tmp_path, tif, domain, "--features", str(path), "--features-rules", "corine", *extra
     )
     assert code == 0, output
     return labelled_vtk(read_vtk(target.read_bytes()), output, polygons_of(features))
@@ -298,7 +298,7 @@ class TestRecord:
             plain_square,
             "--features",
             str(two_squares),
-            "--features-legend",
+            "--features-rules",
             "corine",
         )
         assert code == 0, output
@@ -319,7 +319,7 @@ class TestRecord:
             plain_square,
             "--features",
             str(two_squares),
-            "--features-legend",
+            "--features-rules",
             "corine",
             *extra,
         )
@@ -340,7 +340,7 @@ class TestRecord:
         runs = {
             "none": (),
             "property": ("--features", str(by_property)),
-            "corine": ("--features", str(two_squares), "--features-legend", "corine"),
+            "corine": ("--features", str(two_squares), "--features-rules", "corine"),
         }
         files = {}
         for name, extra in runs.items():
@@ -367,7 +367,7 @@ class TestRecord:
             plain_square,
             "--features",
             str(two_squares),
-            "--features-legend",
+            "--features-rules",
             "corine",
             "--stats",
             "-",
@@ -397,7 +397,7 @@ class TestRefusals:
         feature and the value; a list is refused too."""
         path = write_geojson(tmp_path / "bad.geojson", [coded("f-77", WEST, value)])
         code, output, target = run(
-            tmp_path, bumpy, plain_square, "--features", str(path), "--features-legend", "corine"
+            tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
         )
         assert code == USAGE, output
         assert "f-77" in output and "--features" in output, output
@@ -423,7 +423,7 @@ class TestPly:
             plain_square,
             "--features",
             str(path),
-            "--features-legend",
+            "--features-rules",
             "corine",
             "--out-edges",
             str(edges_path),
@@ -463,7 +463,7 @@ def test_vtk_reads_the_array_back(tmp_path: Path, bumpy: Path, plain_square: Pat
     vtk = pytest.importorskip("vtk")
     path = write_geojson(tmp_path / "two.geojson", [coded(1, WEST, "311"), coded(2, EAST, "512")])
     code, output, target = run(
-        tmp_path, bumpy, plain_square, "--features", str(path), "--features-legend", "corine"
+        tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
     )
     assert code == 0, output
     reader = vtk.vtkPolyDataReader()
@@ -516,7 +516,7 @@ class TestWhatFeatureInputKeeps:
         ],
     )
     def test_the_maps_name_their_code_system(self, name: str, codes: str) -> None:
-        assert ff.legend(name).codes == codes
+        assert ff.rules(name).codes == codes
 
     def test_a_coded_polygon_keeps_its_code_and_polygon(self, tmp_path: Path) -> None:
         fs = self.open(tmp_path, [coded(1, WEST, "311")], "corine")

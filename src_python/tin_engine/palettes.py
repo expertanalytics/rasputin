@@ -1,6 +1,6 @@
-"""A ParaView preset from a legend's palette.
+"""A ParaView preset from a legend's colours.
 
-The palettes themselves are data: each coded legend file in
+The colours themselves are data: each legend file in
 ``tin_engine/data/legends/`` carries its classes' labels and colours.
 CORINE's are natural colours after Patterson and Kelso (2004), not the
 official CLC legend; they are a choice of taste, open to change.

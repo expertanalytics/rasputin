@@ -240,15 +240,23 @@ search stops there.
 
 ## Land cover
 
-**Legend.** A TOML file that says how to read one land-cover source: the
-attribute that holds its classes, each class's code, label and colour, the
-source's positional accuracy, its notice and licence, and, which a
-cartographic legend lacks, the edge names each class's borders carry in the
-mesh. Shipped ones are in `src_python/tin_engine/data/legends/`; one is chosen
-with `--features-legend` or `--land-cover-legend`, by name or path, or by a
-sources-file `legend` key. `property` is the one legend that is not a file: it
-reads each feature's `property` attribute as its edge name. A coded legend
-may split classes by a second attribute (`[[split]]` tables) into sub-classes
-with codes of their own; a value it does not list keeps the parent's code.
-Read by
-`tin_engine/legends.py`; `docs/increments/58-legend.md`.
+**Legend.** The colour scheme of a code system: a TOML file with each
+class's label and colour and the ParaView preset name, nothing more. Shipped
+ones are in `src_python/tin_engine/data/legends/` (`corine`,
+`mapbiomas-c11`, `ar50`); `rasputin palette` takes a legend's name or file.
+Meshing rules name the legend they colour by. Read by
+`tin_engine/legends.py`; `docs/increments/108-legend-split.md`.
+
+**Meshing rules.** A TOML file that says how to mesh one land-cover source:
+the attribute that holds its classes, each class's code, the edge names each
+class's borders carry in the mesh, the source's positional accuracy, its
+notice, the legend its codes are coloured by, and, in a `[cells]` table, which
+cell category and `--prefer` class each code counts as. Shipped ones are in
+`src_python/tin_engine/data/meshing_rules/`; one is chosen with
+`--features-rules` or `--land-cover-rules`, by name or path, or by a
+sources-file `rules` key. `property` is the one set of rules that is not a
+file: it reads each feature's `property` attribute as its edge name. Coded
+rules may split classes by a second attribute (`[[split]]` tables) into
+sub-classes with codes of their own; a value they do not list keeps the
+parent's code. Read by `tin_engine/meshing_rules.py`;
+`docs/increments/108-legend-split.md`.

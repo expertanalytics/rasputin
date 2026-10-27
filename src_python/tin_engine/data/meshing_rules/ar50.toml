@@ -1,0 +1,103 @@
+# NIBIO's AR50 land-resource map, land type (arealtype). Codes: SOSI AR50
+# 2022-05-23 (ar50.xsd); colours in the legend ar50. Positional accuracy:
+# NIBIO's product sheet, "2 og dårligere". docs/increments/73-gml-vector-source.md, section 4.5.
+# Splits: tree type (treslag) and vegetation cover (vegetasjonsdekke), codes from
+# ar50.xsd; docs/increments/91-ar50-vegetation-cover.md, section 3.
+name = "ar50"
+attribute = "arealtype"
+code_system = "AR50 arealtype code"
+positional_accuracy_m = 2
+notice = "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by NIBIO: AR50 land-resource map 1:50 000, re-encoded"
+licence = "Norwegian licence for Open Government Data (NLOD) 1.0, https://data.norge.no/nlod/en/1.0"
+unlisted = "land"
+legend = "ar50"
+# Class code 0: an area no polygon covers, kept for its constraint lines only.
+accept_no_class = true
+
+[edges]
+water = ["land_cover", "water"]
+land = ["land_cover"]
+
+[[class]]
+code = 10
+
+[[class]]
+code = 20
+
+[[class]]
+code = 30
+
+[[class]]
+code = 50
+
+[[class]]
+code = 60
+
+[[class]]
+code = 70
+
+[[class]]
+code = 81
+water = true
+
+[[class]]
+code = 82
+water = true
+
+[[class]]
+code = 99
+
+[[split]]
+code = 30
+attribute = "treslag"
+
+[[split.class]]
+value = 31
+code = 3031
+
+[[split.class]]
+value = 32
+code = 3032
+
+[[split.class]]
+value = 33
+code = 3033
+
+[[split.class]]
+value = 99
+code = 3099
+
+[[split]]
+code = 50
+attribute = "vegetasjonsdekke"
+
+[[split.class]]
+value = 51
+code = 5051
+
+[[split.class]]
+value = 52
+code = 5052
+
+[[split.class]]
+value = 54
+code = 5054
+
+[[split.class]]
+value = 55
+code = 5055
+
+[[split.class]]
+value = 99
+code = 5099
+
+[cells.categories]
+forest = [30]
+glacier = [70]
+lake = [81]
+unspecified = [82]
+
+# The one class a --prefer source's polygons take, and the only one they replace.
+[cells.prefer]
+lake = 81
+glacier = 70

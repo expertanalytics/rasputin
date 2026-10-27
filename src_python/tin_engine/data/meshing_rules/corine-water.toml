@@ -1,0 +1,158 @@
+# CORINE Land Cover, level 3; colours in the legend corine. Positional accuracy:
+# better than 100 m (EEA, CLC2018 Technical Guidelines). docs/increments/41-class-maps-as-data.md, section 4.
+name = "corine-water"
+attribute = "Code_18"
+code_system = "CORINE Land Cover level-3 code"
+positional_accuracy_m = 100
+notice = "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU"
+unlisted = "drop"
+legend = "corine"
+# Class code 0: an area no polygon covers, kept for its constraint lines only.
+accept_no_class = true
+
+[edges]
+water = ["water"]
+land = "drop"
+
+[[class]]
+code = 111
+
+[[class]]
+code = 112
+
+[[class]]
+code = 121
+
+[[class]]
+code = 122
+
+[[class]]
+code = 123
+
+[[class]]
+code = 124
+
+[[class]]
+code = 131
+
+[[class]]
+code = 132
+
+[[class]]
+code = 133
+
+[[class]]
+code = 141
+
+[[class]]
+code = 142
+
+[[class]]
+code = 211
+
+[[class]]
+code = 212
+
+[[class]]
+code = 213
+
+[[class]]
+code = 221
+
+[[class]]
+code = 222
+
+[[class]]
+code = 223
+
+[[class]]
+code = 231
+
+[[class]]
+code = 241
+
+[[class]]
+code = 242
+
+[[class]]
+code = 243
+
+[[class]]
+code = 244
+
+[[class]]
+code = 311
+
+[[class]]
+code = 312
+
+[[class]]
+code = 313
+
+[[class]]
+code = 321
+
+[[class]]
+code = 322
+
+[[class]]
+code = 323
+
+[[class]]
+code = 324
+
+[[class]]
+code = 331
+
+[[class]]
+code = 332
+
+[[class]]
+code = 333
+
+[[class]]
+code = 334
+
+[[class]]
+code = 335
+
+[[class]]
+code = 411
+
+[[class]]
+code = 412
+
+[[class]]
+code = 421
+
+[[class]]
+code = 422
+
+[[class]]
+code = 423
+
+[[class]]
+code = 511
+water = true
+
+[[class]]
+code = 512
+water = true
+
+[[class]]
+code = 521
+water = true
+
+[[class]]
+code = 522
+water = true
+
+[[class]]
+code = 523
+water = true
+
+[cells.categories]
+forest = [311, 312, 313]
+glacier = [335]
+lake = [511, 512, 521, 522]
+unspecified = [523]

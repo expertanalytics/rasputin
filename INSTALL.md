@@ -267,7 +267,7 @@ with a registered account. Download the vector GeoPackage
 
 ```sh
 --features U2018_CLC2018_V2020_20u1.gpkg \
---features-layer U2018_CLC2018_V2020_20u1 --features-legend corine
+--features-layer U2018_CLC2018_V2020_20u1 --features-rules corine
 ```
 
 Rasputin reads only the polygons near your domain, through the file's spatial

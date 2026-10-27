@@ -3,7 +3,7 @@
 `docs/increments/16b-terrain-polygons.md`, *The blueprint: data flow and boundaries*.
 
 A source is a GeoJSON ``FeatureCollection``, a GeoPackage layer or OGR's GML2,
-by suffix. Each feature's attribute goes through a :class:`Legend` to
+by suffix. Each feature's attribute goes through a :class:`MeshingRules` to
 vocabulary names and so to a mask; its rings and lines are pre-clipped to a
 region around the domain, moved into the DEM's CRS vertex by vertex, and
 clipped to the domain as linework; land cover with the simplification band on
@@ -49,6 +49,7 @@ from tin_engine.io.geojson import GEOJSON_SUFFIXES, RFC7946_CRS, read_collection
 from tin_engine.io.geopackage import layer_info, query_features
 from tin_engine.io.gml import read_gml
 from tin_engine.io.repository import open_geopackage, read_json
+from tin_engine.legends import Legend
 
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
@@ -93,15 +94,16 @@ def split_key(value: Any) -> str | None:
     return str(int(number)) if math.isfinite(number) and number.is_integer() else None
 
 
-class Legend(BaseModel):
+class MeshingRules(BaseModel):
     """An attribute's values to vocabulary names. ``otherwise`` is what an
     unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
     ``codes``, when not empty, names the code system the values are integer
-    codes of; such a legend labels triangles. ``palette`` colours and names
+    codes of; such rules label triangles, and ``legend`` colours and names
     those codes. A class whose names are None is dropped; the rest come from a
-    legend file (`tin_engine.legends`). ``categories`` holds each class
+    meshing-rules file (`tin_engine.meshing_rules`). ``categories`` holds each class
     code that names its cell category, ``water_codes`` the water classes, and
-    ``prefer`` the one class a preferred source's polygons take, per category."""
+    ``prefer`` the one class a preferred source's polygons take, per category.
+    ``accept_no_class`` says class code 0 (no polygon) is accepted."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -111,8 +113,7 @@ class Legend(BaseModel):
     otherwise: Literal["refuse", "drop"] | tuple[str, ...] = "refuse"
     notice: str = ""
     codes: str = ""
-    palette: Mapping[int, tuple[str, str]] | None = None
-    preset: str = ""
+    legend: Legend | None = None
     licence: str = ""
     accuracy_m: float = 0.0
     string_codes: Mapping[str, int] = {}
@@ -121,13 +122,14 @@ class Legend(BaseModel):
     categories: Mapping[int, Category] = {}
     water_codes: frozenset[int] = frozenset()
     prefer: Mapping[Category, int] = {}
+    accept_no_class: bool = False
 
 
 class FeatureSource(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: Path
-    legend: Legend
+    rules: MeshingRules
     layer: str | None = None
     crs: str | None = None
 
@@ -276,14 +278,12 @@ def open_features(
     for a DEM cell of `cell`. Raises :class:`FeatureError` on any refusal."""
     vocabulary = request.vocabulary
     for source in request.sources:
-        legend = source.legend
-        named = [n for names in legend.classes.values() for n in names or ()]
+        rules = source.rules
+        named = [n for names in rules.classes.values() for n in names or ()]
         try:
-            vocabulary.mask(
-                *named, *(() if isinstance(legend.otherwise, str) else legend.otherwise)
-            )
+            vocabulary.mask(*named, *(() if isinstance(rules.otherwise, str) else rules.otherwise))
         except ValueError as exc:
-            raise FeatureError(f"legend {legend.name}: {exc}") from exc
+            raise FeatureError(f"meshing rules {rules.name}: {exc}") from exc
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary, request.threads)
     tally.cell = cell
     switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
@@ -339,13 +339,13 @@ class _Tally:
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
         spelt: dict[str, str] = {}  # lower case to the first spelling, read as written
-        for split in source.legend.splits:
+        for split in source.rules.splits:
             spelt.setdefault(split.attribute.lower(), split.attribute)
         names = tuple(spelt.values())
         read = read_source(
             source.path,
             source.layer,
-            source.legend.attribute,
+            source.rules.attribute,
             lambda own: self.region(own).bounds,
             source.crs,
             names,
@@ -369,7 +369,7 @@ class _Tally:
         own: str,
         rows: Iterable[tuple[tuple[Any, Any, Any], Mapping[str, Any]]],
     ) -> None:
-        name, legend = source.path.name, source.legend
+        name, rules = source.path.name, source.rules
         src = parse_crs(own)
         move = None if same_crs(src, self.dem) else reprojector(src, self.dem, threads=self.threads)
         bound, region = None, self.region(self.dem)
@@ -389,11 +389,11 @@ class _Tally:
                 raise FeatureError(
                     f"{name}: feature {fid} is a {geometry.geom_type}; input is polygons and lines"
                 )
-            mask = _mask(legend, self.vocabulary, value, f"{name}: feature {fid}")
+            mask = _mask(rules, self.vocabulary, value, f"{name}: feature {fid}")
             if mask is None:
                 continue
             what = f"{name}: feature {fid}"
-            code = _code(legend, value, what, second) if legend.codes else None
+            code = _code(rules, value, what, second) if rules.codes else None
             polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
             moved = polygon = None
             if polygonal and code is not None and self.cleanup is not None:  # cleaned whole
@@ -645,7 +645,7 @@ def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeomet
 def read_class_polygons(
     path: Path,
     layer: str | None,
-    legend: Legend,
+    rules: MeshingRules,
     mesh_crs: str,
     xy: npt.NDArray[np.float64],
     tell: Callable[[int, int], None] | None = None,
@@ -658,16 +658,16 @@ def read_class_polygons(
     dropped when nothing polygonal is left; the count returned is how many
     were. ``tell``, if given, is called with that count and the number of
     polygons read."""
-    spelt = {s.attribute.lower(): s.attribute for s in legend.splits}
+    spelt = {s.attribute.lower(): s.attribute for s in rules.splits}
     box_for = _near(xy, mesh_crs)
-    read = read_source(path, layer, legend.attribute, box_for, None, tuple(spelt.values()))
+    read = read_source(path, layer, rules.attribute, box_for, None, tuple(spelt.values()))
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     out: list[tuple[int, BaseGeometry]] = []
     for (fid, g, value), more in zip(read.rows, read.extra or [()] * len(read.rows), strict=True):
         if g is None or g.is_empty or g.geom_type not in ("Polygon", "MultiPolygon"):
             continue
         second = dict(zip(spelt, more, strict=True))
-        code = _code(legend, value, f"{path.name}: feature {fid}", second)
+        code = _code(rules, value, f"{path.name}: feature {fid}", second)
         flat = shapely.force_2d(g)
         out.append((code, flat if move is None else shapely.transform(flat, move)))
     fixed = [(code, _repaired(g, xy)) for code, g in out]
@@ -727,46 +727,46 @@ def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 
 
-def _code(legend: Legend, value: Any, what: str, second: Mapping[str, Any]) -> int:
-    """A class code is an integer in 1 .. 2**31 - 1, or a text the legend's
+def _code(rules: MeshingRules, value: Any, what: str, second: Mapping[str, Any]) -> int:
+    """A class code is an integer in 1 .. 2**31 - 1, or a text the rules'
     ``string_codes`` turn into one; anything else is refused. A split class
     takes the sub-class code its second value (``second``, by lower-case
     attribute name) keys to; a first value equal to a sub-class code is refused."""
     try:
         text = "0" if isinstance(value, list) else str(value)
-        code = legend.string_codes.get(text) or int(text)
+        code = rules.string_codes.get(text) or int(text)
     except ValueError:
         code = 0
     if not 1 <= code < 2**31:
         shown = value[0] if isinstance(value, list) and value else value
         raise FeatureError(f"{what}: {shown!r} is not a class code in 1 .. 2**31 - 1")
-    for split in legend.splits:
+    for split in rules.splits:
         if code == split.code:
             key = split_key(second.get(split.attribute.lower()))
             return split.codes.get(key, code) if key is not None else code
         if code in split.codes.values():
-            raise FeatureError(f"{what}: {legend.attribute} {code} is a sub-class code")
+            raise FeatureError(f"{what}: {rules.attribute} {code} is a sub-class code")
     return code
 
 
-def _mask(legend: Legend, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:
+def _mask(rules: MeshingRules, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:
     """The mask ``value`` maps to, None for ``drop``; a list is a union."""
     names: list[str] = []
     for item in value if isinstance(value, list) else [value]:
         key = None if item is None else str(item)
-        if key is not None and key in legend.classes:
-            listed = legend.classes[key]
+        if key is not None and key in rules.classes:
+            listed = rules.classes[key]
             if listed is None:
                 return None
             names += listed
-        elif legend.otherwise == "drop":
+        elif rules.otherwise == "drop":
             return None
-        elif legend.otherwise == "refuse":
+        elif rules.otherwise == "refuse":
             raise FeatureError(
-                f"{what}: {legend.attribute} {item!r} is not in the legend {legend.name}"
+                f"{what}: {rules.attribute} {item!r} is not in the meshing rules {rules.name}"
             )
         else:
-            names += legend.otherwise
+            names += rules.otherwise
     return vocabulary.mask(*names)
 
 

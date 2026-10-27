@@ -32,7 +32,7 @@ WORDING = {
     "domain_crs": "The domain's coordinate system",
     "domain_band_m": "Band the domain outline was simplified within, m",
     "domain_transform": "Conversion from the domain's coordinate system",
-    "features": "Each features file: layer, legend, features, lines, vertices",
+    "features": "Each features file: layer, meshing rules, features, lines, vertices",
     "features_crs": "Each features file's coordinate system",
     "features_transform": "Conversion from each features file's coordinate system",
     "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",

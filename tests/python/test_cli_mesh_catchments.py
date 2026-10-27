@@ -79,7 +79,7 @@ UNITS = [
 ]
 SQUARE = local(box(0, 0, 3000, 3000))
 RING = [(float(x), float(y)) for x, y in list(SQUARE.exterior.coords)[:-1]]
-LAND_COVER = ("--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11")
+LAND_COVER = ("--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11")
 
 
 @pytest.fixture
@@ -289,13 +289,15 @@ def test_refusal_1_needs_a_domain(scene: dict[str, Path], tmp_path: Path) -> Non
     )  # fmt: skip
 
 
-@pytest.mark.parametrize("extra", [(), ("--land-cover", KEY)], ids=["no-land-cover", "no-legend"])
+@pytest.mark.parametrize(
+    "extra", [(), ("--land-cover", KEY)], ids=["no-land-cover", "no-meshing-rules"]
+)
 def test_refusal_2_needs_a_cells_layer(
     scene: dict[str, Path], tmp_path: Path, extra: tuple[str, ...]
 ) -> None:
     refused(
         scene, tmp_path, *extra, "--catchments", str(scene["units"]), *CATCHMENTS_TOLERANCE_0,
-        says="needs --land-cover with a legend and a .gpkg output",
+        says="needs --land-cover with meshing rules and a .gpkg output",
     )  # fmt: skip
 
 

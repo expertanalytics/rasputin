@@ -27,9 +27,9 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - Both refusals name `--land-cover` and `.gpkg`, exit 2, before any phase is
   timed. A reservoir file of a suffix rasputin does not read (`.shp`) is a
   usage error naming `--reservoirs` and the suffix, also before any phase.
-- A land cover with no legend writes no `cells` layer, so `--reservoirs` with
-  it is refused like the two above: exit 2, before any phase, naming
-  `--reservoirs` and the word "legend".
+- A land cover with no meshing rules writes no `cells` layer, so
+  `--reservoirs` with it is refused like the two above: exit 2, before any
+  phase, naming `--reservoirs` and "meshing rules".
 - With no cache root, a catalogue key for `--reservoirs` gets the whole
   `NO_CACHE` refusal `--land-cover` gives, before any phase.
 """
@@ -99,7 +99,7 @@ def cover(tmp_path: Path) -> Path:
 def without(scene: dict[str, Path], tmp_path: Path, cover: Path) -> Iterator[sqlite3.Connection]:
     """The polygon route with `corine`, no `--reservoirs`."""
     target = tmp_path / "without.gpkg"
-    args = ("--land-cover", str(cover), "--land-cover-legend", "corine")
+    args = ("--land-cover", str(cover), "--land-cover-rules", "corine")
     with closing(written(scene, target, *args)) as conn:
         yield conn
 
@@ -115,7 +115,7 @@ def test_t7_reservoir_is_min_of_lake_and_r(
     scene: dict[str, Path], tmp_path: Path, cover: Path, without: sqlite3.Connection, wgs84: bool
 ) -> None:
     res = write_reservoirs(tmp_path / "res.geojson", wgs84)
-    args = ("--land-cover", str(cover), "--land-cover-legend", "corine", "--reservoirs", str(res))
+    args = ("--land-cover", str(cover), "--land-cover-rules", "corine", "--reservoirs", str(res))
     with closing(written(scene, tmp_path / "with.gpkg", *args)) as conn:
         assert_array_equal(corners(conn), corners(without)), "the reservoirs moved the mesh"
         lake_before = column(without, "cells", "lake")
@@ -190,7 +190,7 @@ def test_t7_a_catalogue_source_of_features_gives_the_files_split(
         gpkg = write_reservoirs_gpkg(tmp_path / "own" / "res.gpkg", layer="regulated")
         install_reservoirs(monkeypatch, vector_entry(gpkg, "Test reservoirs", layer="regulated"))
     res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
-    args = ("--land-cover", str(cover), "--land-cover-legend", "corine", "--reservoirs")
+    args = ("--land-cover", str(cover), "--land-cover-rules", "corine", "--reservoirs")
     with (
         closing(written(scene, tmp_path / "file.gpkg", *args, str(res))) as a,
         closing(written(scene, tmp_path / "key.gpkg", *args, RESERVOIRS_KEY)) as b,
@@ -216,7 +216,7 @@ def test_t7_an_uncached_layer_is_refused_naming_the_fetch(
     install_reservoirs(monkeypatch, layer_entry())
     target = tmp_path / "x.gpkg"
     code, output = mesh(
-        scene, target, "--land-cover", str(cover), "--land-cover-legend", "corine",
+        scene, target, "--land-cover", str(cover), "--land-cover-rules", "corine",
         "--reservoirs", RESERVOIRS_KEY,
     )  # fmt: skip
     assert code == USAGE, output
@@ -248,7 +248,7 @@ def test_t7_reservoirs_need_land_cover_and_a_gpkg(
 ) -> None:
     res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
     target = tmp_path / f"x{suffix}"
-    extra = ("--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11") if land_cover else ()
+    extra = ("--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11") if land_cover else ()
     code, output = mesh(scene, target, *extra, "--reservoirs", str(res))
     assert code == USAGE, output
     flat = squashed(output)
@@ -264,7 +264,7 @@ def test_t7_a_shapefile_is_refused_naming_the_option(
     res.write_bytes(b"\x00\x00\x27\x0a")
     target = tmp_path / "x.gpkg"
     code, output = mesh(
-        scene, target, "--land-cover", KEY, "--land-cover-legend", "mapbiomas-c11",
+        scene, target, "--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11",
         "--reservoirs", str(res),
     )  # fmt: skip
     assert code == USAGE, output
@@ -279,16 +279,16 @@ def test_t7_without_land_cover_no_reservoirs_row(scene: dict[str, Path], tmp_pat
         assert record(conn, "reservoirs") is None
 
 
-def test_t7_a_land_cover_without_a_legend_is_refused_naming_the_legend(
+def test_t7_a_land_cover_without_meshing_rules_is_refused_naming_them(
     scene: dict[str, Path], tmp_path: Path, phases: list[str]
 ) -> None:
-    """No legend, no `cells` layer: nothing would hold the reservoir share."""
+    """No meshing rules, no `cells` layer: nothing would hold the reservoir share."""
     res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
     target = tmp_path / "x.gpkg"
     code, output = mesh(scene, target, "--land-cover", KEY, "--reservoirs", str(res))
     assert code == USAGE, output
     flat = squashed(output)
-    assert "--reservoirs" in flat and "legend" in flat, output
+    assert "--reservoirs" in flat and squashed("meshing rules") in flat, output
     assert phases == [], phases
     assert not target.exists()
 
@@ -308,7 +308,7 @@ def test_t7_without_a_cache_root_a_key_is_refused_as_land_cover_is(
     code, output = invoke(
         "mesh", "--dem", str(scene["dem"]), "--domain", str(scene["domain"]),
         "--tolerance", "3", "--out", str(target), "--land-cover", str(cover),
-        "--land-cover-legend", "corine", "--reservoirs", RESERVOIRS_KEY,
+        "--land-cover-rules", "corine", "--reservoirs", RESERVOIRS_KEY,
     )  # fmt: skip
     assert code == USAGE, output
     assert "--reservoirs" in squashed(output), output
@@ -337,7 +337,7 @@ def test_t7_a_key_that_is_also_a_file_here_is_refused_naming_both(
     monkeypatch.chdir(here)
     target = tmp_path / "x.gpkg"
     code, output = mesh(
-        scene, target, "--land-cover", str(cover), "--land-cover-legend", "corine",
+        scene, target, "--land-cover", str(cover), "--land-cover-rules", "corine",
         "--reservoirs", key,
     )  # fmt: skip
     assert code == USAGE, output
