@@ -143,7 +143,15 @@ the two cannot disagree. Over the persona being briefed and every `--beside`
 entry, `brief.py` exits 2, naming the rule, when:
 
 1. `perf` is among them with anyone else: nothing runs beside a timing run
-   (read-only agents included: a timing run needs a quiet machine);
+   (read-only agents included: a timing run needs a quiet machine). With
+   `--untimed` (the perf run computes results and times nothing, `perf.md`
+   §2), `perf` may instead share the set with exactly one writer and no one
+   else: `an untimed @perf run goes beside one writer at most`. The flag is
+   accepted on `perf`'s own brief and on the writer's brief whose `--beside`
+   names `perf`, so both sides get a brief; a read-only persona beside an
+   untimed `perf` is still refused, as Ola's ruling names only one writer;
+   `--untimed` with no `perf` in the set is refused
+   (`--untimed marks a @perf run`);
 2. there are more than two writers;
 3. two writers share a worktree;
 4. a read-only persona shares a worktree with a writer: the files it reads
@@ -154,6 +162,9 @@ The generated line:
 
 - `--beside none`: `Concurrency: you run alone.`
 - perf: `Concurrency: you run alone; nothing runs beside a timing run.`
+- untimed perf and one writer: the "otherwise" line below, with `@perf
+  (writer, untimed run, in <path>)` when `perf` is the one beside; on
+  `perf`'s own brief, the line adds `This run is untimed.`
 - otherwise: `Concurrency: also running: @tester (writer, in <path>), @reviewer
   (read-only, in <path>). At most two writers run at once; read-only agents
   do not count toward the two, as long as no writer changes the files they
