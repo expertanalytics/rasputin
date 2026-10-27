@@ -163,8 +163,9 @@ class TestPalette:
         code, said = invoke("palette", "corin")
         output = basenames(said)
         assert code == USAGE, output
-        for name in SHIPPED:
-            assert name in output, name
+        assert "unknown legend corin; use ar50, corine, mapbiomas-c11" in output, output
+        for name in ("corine-water", "clc18_kode"):
+            assert name not in output, name
 
 
 # ------------------------------------------------------------- T5: mesh
@@ -483,7 +484,7 @@ class TestMapBiomasThroughTheCli:
     ) -> None:
         plain = self.land_cover_mesh(tmp_path, scene, monkeypatch, "plain.vtk")
         named = self.land_cover_mesh(
-            tmp_path, scene, monkeypatch, "named.vtk", legend="mapbiomas-c11"
+            tmp_path, scene, monkeypatch, "named.vtk", rules="mapbiomas-c11"
         )
         before, after = read_vtk(plain.read_bytes()), read_vtk(named.read_bytes())
         assert sorted(after.field_data) == sorted(before.field_data)
