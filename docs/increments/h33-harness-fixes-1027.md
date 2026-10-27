@@ -260,3 +260,4 @@ Net **-2** words. Counted lines: about 80 against the limit of 700.
 - Design round 3: CHANGES REQUESTED, ..a7392426, 0 (sed writes through a script w command).
 - Design round 4: CHANGES REQUESTED, ..f21119e7, 0 (ed and ex read a script on standard input).
 - Design round 5: APPROVED, ..c4f1380e, 0 (fix 3 rewritten as default deny with an allow list).
+- Code round 1: CHANGES REQUESTED, 29914d50..a2dc0b35, 88 net production lines (three rule texts from section 7 not applied: h9 section 3.1a rule 1, increments README line 48, perf.md line 46).
