@@ -190,3 +190,8 @@ No mutation round; this is not an invariant-critical suite.
 About 185 counted lines: store and records about 35, checks about 65,
 `list_lines`, `list`, `answer` and the number mapping about 40, the command
 line about 45.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 7c2aa7c0..34498188, 0 net production lines (second PR without its own file; checks C4 and C5 refusing good questions; recap renumbering; rulings beyond the ask).
+- Design round 2: APPROVED, ..9ab908aa, 0.
