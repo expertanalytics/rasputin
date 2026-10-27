@@ -234,13 +234,13 @@ churn of the `_feature_source`→`_feature_sources` rename and blank/comment
 lines that CLAUDE.md §2 excludes. Net change is well within the worst-case ~70
 and nowhere near the 700 ceiling. **No split seam was needed or missed.**
 
-**Increment 22** (`docs/increments/22-auto-catchment.md:683-705`): the doc
+**Increment 22** (`docs/increments/22-auto-catchment.md@180b9acb:683-705`): the doc
 carries a full LOC table with `@reviewer`'s as-built counts (PR 1 = 619 net
 over `master..608e366`; PR 2 = 406 net). The per-file estimates were exceeded
 in places — `catchment.py` estimated 170, built 244 in PR 1 (a ~44% overrun) —
 but the increment was **pre-split into two PRs at defined seams** ("the fine
 catchment" ~510 lines / "the reduction" ~350 lines,
-`docs/increments/22-auto-catchment.md:707-715`), and both PRs landed under 700.
+`docs/increments/22-auto-catchment.md@180b9acb:707-715`), and both PRs landed under 700.
 **No unchecked overrun; the split seam did its job.** This is a model of the
 rule working: the estimate table names the seam before the code, and the
 reviewer reconciles actuals against it in the same PR.
@@ -249,7 +249,7 @@ reviewer reconciles actuals against it in the same PR.
 
 - **Increment 22: yes, and it is verifiable.** The LOC table cites "`@reviewer`'s
   count at review (2026-09-29)" with the exact commit ranges it counted
-  (`docs/increments/22-auto-catchment.md:699-705`). The review left a durable
+  (`docs/increments/22-auto-catchment.md@180b9acb:699-705`). The review left a durable
   trace because its output was written into the increment doc.
 - **Increment 16e: not verifiable from disk.** `@reviewer` is read-only
   (§1.1) and leaves no commit; `git log 3599be1~1..524b27e | grep -i review`
@@ -306,7 +306,7 @@ write to `src_python/x.py` and confirm the hook returns `ask` naming it, per
 Add to `docs/increments/README.md` step 4 (or `REQUIRED-READING.md`'s
 assessment section): the reviewer's verdict and LOC reconciliation are written
 into the increment doc (as increment 22 already does,
-`22-auto-catchment.md:699-705`), so "was the reviewer run?" is answerable after
+`docs/increments/22-auto-catchment.md@180b9acb:699-705`), so "was the reviewer run?" is answerable after
 the fact. Machine-check: an increment PR that touches `src_python/` or
 `include/` must add or update a reviewer line in its `docs/increments/NN-*.md`.
 Rationale: §4.2 — the reviewer is the only loop step with no required trace.

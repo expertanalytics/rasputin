@@ -145,11 +145,10 @@ entry, `brief.py` exits 2, naming the rule, when:
 1. `perf` is among them with anyone else: nothing runs beside a timing run
    (read-only agents included: a timing run needs a quiet machine). With
    `--untimed` (the perf run computes results and times nothing, `perf.md`
-   §2), `perf` may instead share the set with exactly one writer and no one
-   else: `an untimed @perf run goes beside one writer at most`. The flag is
+   §2), `perf` may instead share the set with at most one writer and any read-only
+   personas: `an untimed @perf run goes beside one writer at most`. The flag is
    accepted on `perf`'s own brief and on the writer's brief whose `--beside`
-   names `perf`, so both sides get a brief; a read-only persona beside an
-   untimed `perf` is still refused, as Ola's ruling names only one writer;
+   names `perf`, so both sides get a brief;
    `--untimed` with no `perf` in the set is refused
    (`--untimed marks a @perf run`);
 2. there are more than two writers;

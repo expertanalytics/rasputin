@@ -129,8 +129,15 @@ def governed(path: str, *, scratch_exempt: bool = True) -> bool:
 
 
 #: Only Ola enters or leaves unattended mode; only hooks and away.py write its state.
-HARNESS_PATH = re.compile(r"(^|/)\.git/harness(/|$)")
-STATE_WRITES = re.compile(r"\b(rm|touch|ln|mkdir|unlink|install)\b")
+#: Case-insensitive: the macOS disk is, so `.GIT/HARNESS` is the folder.
+HARNESS_PATH = re.compile(r"(^|/)\.git/harness(/|$)", re.I)
+GIT_DIR = re.compile(r"(^|/)\.git(/|$)", re.I)
+#: On a line naming the record folder, the programs that pass: none writes a file or
+#: runs a program, whatever its options (rg, git and python3 are judged further).
+READERS = {"echo", "printf", "cat", "grep", "head", "tail", "wc", "ls", "stat", "diff", "cut"}
+#: `${` other than `${NAME}`, `$((` and `$[` run code the reader does not see (zsh's `(e)`).
+HIDDEN_RUN = re.compile(r"\$\{(?!\w+\})|\$\(\(|\$\[")
+SHORT = re.compile(r"-[A-Za-z]+")
 #: A run of the away script in a line the parser cannot read: its name as a word.
 AWAY_TEXT = re.compile(r"(^|[\s/'\"])away\.py\b|-m\s+(\S+\.)?away\b")
 ALWAYS_DENIED = (
@@ -156,7 +163,7 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
         # dir is denied, however the path reaches the write (export, read, cd).
         if (any(HARNESS_PATH.search(shell_scan.static(t, ".git")) for t in targets)
                 or any(runs_away(s) for s in simples)
-                or (".git/harness" in command and any(s.writes or s.unknown for s in simples))):
+                or (names_folder(command, simples) and not only_reads(command, simples))):
             return "deny", [], ""
         # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md. The scratchpad
         # holds only for one plain command, which cannot link a path and write through it.
@@ -169,12 +176,75 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
         if not any(s.unknown or any(not shell_scan.static(w).strip("/") for w in s.writes)
                    for s in simples):
             return None
-    elif AWAY_TEXT.search(command) or (
-            ".git/harness" in command and (WRITES.search(command) or STATE_WRITES.search(command))):
+    elif AWAY_TEXT.search(command) or names_folder(command, None):
         return "deny", [], ""
     unread = simples is not None and any(s.unknown for s in simples)
     hits = text_hits(command) if WRITES.search(command) or unread else []
     return ("ask", hits, CANNOT_READ) if hits else None
+
+
+def names_folder(command: str, simples) -> bool:
+    """The line names the record folder (any case, quotes removed) or changes into `.git`."""
+    text = command.lower()
+    if ".git/harness" in text or ".git/harness" in re.sub(r"['\"\\]", "", text):
+        return True
+    if simples is None:  # unread: any cd or pushd beside a `.git` path component
+        return bool(re.search(r"\b(cd|pushd)\b", text)) and bool(re.search(
+            r"(^|[\s/'\"=])\.git(/|\s|$)", text))  # fmt: skip
+    return any(s.written[:1] in (["cd"], ["pushd"]) and any(map(GIT_DIR.search, s.written[1:]))
+               for s in simples)  # fmt: skip
+
+
+def plain(path: str) -> bool:
+    """A path the shell writes as written: no expansion, glob, `!` or `|`, `~` only as `~/`."""
+    return (bool(shell_scan.PLAIN_PATH.fullmatch(path)) and not set("!|") & set(path)
+            and (not path.startswith("~") or path.startswith("~/")))  # fmt: skip
+
+
+def allowed(simple, moved: bool) -> bool:
+    """A command on the short list that cannot write a file or run a program."""
+    words = simple.written
+    if simple.unknown or simple.assigns or simple.runs_body or words != simple.argv:
+        return False
+    name, rest = (words[0], words[1:]) if words else ("", [])
+    if not words or (len(words) == 1 and name in shell_scan.CLOSERS) or name in READERS:
+        return True
+    if name == "rg":
+        return not any(w.startswith(("--pre", "--hostname-bin")) for w in rest)
+    if name in ("cd", "pushd"):
+        return len(rest) < 2 and all(plain(w) and not w.startswith("-") for w in rest)
+    if name in ("python3", "python"):
+        return rest[:1] == ["tools/brief.py"] and not moved
+    if name != "git" or not rest:
+        return False
+    if rest[0] in ("log", "show", "diff", "status"):
+        return not any(w.startswith("--output") for w in rest)
+    shorts = [w for w in rest if SHORT.fullmatch(w)]
+    message = any(w.startswith(("--message", "--file")) for w in rest) or any(
+        set("mF") & set(w) for w in shorts)  # fmt: skip
+    edits = any(w == "--edit" for w in rest) or any("e" in w for w in shorts)
+    return rest[0] == "commit" and message and not edits
+
+
+def only_reads(command: str, simples) -> bool:
+    """A line naming the record folder: every command allowed, every write plain and outside
+    it, no `cd` into it, and no expansion that runs code the reader did not parse."""
+    if HIDDEN_RUN.search(command):
+        return False
+    moved = any(s.written[:1] in (["cd"], ["pushd"]) for s in simples)
+    here = ""
+    for simple in simples:
+        if not allowed(simple, moved):
+            return False
+        for target in simple.writes:
+            if not plain(target) or HARNESS_PATH.search(posixpath.normpath(
+                    posixpath.join(here, target))):  # fmt: skip
+                return False
+        if simple.written[:1] in (["cd"], ["pushd"]) and simple.written[1:]:
+            here = posixpath.normpath(posixpath.join(here, simple.written[1]))
+            if HARNESS_PATH.search(here):
+                return False
+    return True
 
 
 def text_hits(command: str) -> list[str]:

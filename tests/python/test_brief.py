@@ -464,6 +464,63 @@ def test_6_untimed_perf_beside_two_writers_is_refused(
     refused(repo, home, *args, says="an untimed @perf run goes beside one writer at most")
 
 
+# An untimed @perf run may also have read-only agents beside it; rule 4 (a
+# read-only agent shares no writer's worktree, perf's included) still holds.
+
+
+@pytest.mark.parametrize(
+    ("persona", "where", "beside"),
+    [
+        ("perf", "B", ("developer:A", "reviewer:C")),
+        ("reviewer", "C", ("perf:B", "developer:A")),
+    ],
+)
+def test_6_untimed_perf_runs_beside_a_writer_and_a_reader(
+    repo: Path,
+    home: Path,
+    trees: dict[str, Path],
+    persona: str,
+    where: str,
+    beside: tuple[str, ...],
+) -> None:
+    entries = [f"{e.split(':')[0]}:{trees[e.split(':')[1]]}" for e in beside]
+    line = concurrency(ok(repo, home, *run_as(persona, trees[where], *entries,
+                                              extra=("--untimed",))))  # fmt: skip
+    assert f"@developer (writer, in {trees['A'].resolve()})" in line, line
+    if persona == "perf":
+        assert f"@reviewer (read-only, in {trees['C'].resolve()})" in line, line
+        assert "This run is untimed." in line, line
+    else:
+        assert f"@perf (writer, untimed run, in {trees['B'].resolve()})" in line, line
+    assert "nothing runs beside a timing run" not in line, line
+
+
+def test_6_untimed_perf_runs_beside_a_reader_alone(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("perf", trees["B"], f"reviewer:{trees['C']}", extra=("--untimed",))
+    line = concurrency(ok(repo, home, *args))
+    assert f"@reviewer (read-only, in {trees['C'].resolve()})" in line, line
+
+
+def test_6_untimed_perf_reader_sharing_perfs_worktree_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    args = run_as("perf", trees["B"], f"developer:{trees['A']}", f"reviewer:{trees['B']}",
+                  extra=("--untimed",))  # fmt: skip
+    shared = trees["B"].resolve()
+    refused(repo, home, *args, says=f"@reviewer is read-only and shares {shared} with a writer")
+
+
+def test_6_untimed_perf_beside_two_writers_and_a_reader_is_refused(
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
+) -> None:
+    d = add_worktree(repo, tmp_path.resolve() / "D", "wt-d")
+    args = run_as("perf", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}",
+                  f"reviewer:{d}", extra=("--untimed",))  # fmt: skip
+    refused(repo, home, *args, says="an untimed @perf run goes beside one writer at most")
+
+
 def test_6_rule_2_at_most_two_writers(repo: Path, home: Path, trees: dict[str, Path]) -> None:
     args = run_as("architect", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}")
     refused(repo, home, *args, says="at most two writers run at once")
