@@ -69,7 +69,8 @@ sequence, questions first, then acts, then the defaults taken since the last
 ```
 
 When any question is held (C3), the block ends with one line, `and N more
-yes/no questions held until one above is answered`.
+yes/no questions held until one above is answered`; "yes/no" is left out
+unless every held question is yes/no, and one held question is "question".
 
 The block is built by a pure function, `list_lines(records) -> list[str]`,
 that reads the store and writes nothing; the recap, once wired in by the follow-up PR, calls only that.
@@ -196,3 +197,4 @@ line about 45.
 - Design round 1: CHANGES REQUESTED, 7c2aa7c0..34498188, 0 net production lines (second PR without its own file; checks C4 and C5 refusing good questions; recap renumbering; rulings beyond the ask).
 - Design round 2: APPROVED, ..9ab908aa, 0.
 - Code round 1: CHANGES REQUESTED, 7c2aa7c0..fae8cb1a, 226 net production lines (possessive handles refused; a false docstring claim; design and code disagreed on held choices; design wording "share an answer" applied in this commit).
+- Code round 2: APPROVED WITH WORDINGS, fae8cb1a..40ceebf4, 227 net production lines; the held-line wording applied in this commit.
