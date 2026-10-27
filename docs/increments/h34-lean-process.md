@@ -371,3 +371,8 @@ R1 to R13 applied (each old text found exactly once first):
 | `.claude/agents/orchestrator.md` | 482 | 503 | +21 |
 | `.claude/agents/reviewer.md` | 565 | 454 | -111 |
 | All rule files | 9483 | 9451 | **-32** |
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 662022b0..950be83d, 0 net production lines (short-path checks on the estimate only; future log stamps; fixes waiting a week; Ola not quoted).
+- Design round 2: APPROVED, ..f00e7bb1, 0.
