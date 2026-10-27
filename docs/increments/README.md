@@ -68,6 +68,10 @@ before the merge rather than after it.
 **Increment PRs merge with a merge commit, never a squash**, so the red commit
 stays ahead of the green one in history.
 
+**No stacked branches:** each fix branches from master, and waits for any fix
+it needs to merge, or shares its PR. **One increment file per PR**; a shared
+design gets its own short file.
+
 ## Small changes: the short path
 
 An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
