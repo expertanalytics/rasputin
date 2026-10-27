@@ -1,7 +1,7 @@
 # Harness h33: four harness fixes of 2026-10-27
 
 Status: **designed**, 2026-10-27, on `worktree-harness-fixes-1027` off master
-`29914d50`. Full path (`docs/increments/README.md`): about 80 counted lines,
+`29914d50`. Full path (`docs/increments/README.md`): about 85 counted lines,
 over the short path's 50; no C++ file, no refine or mesh code. Every code file
 it changes is governed (`tools/brief.py`, `tools/push_grant.py`,
 `.claude/hooks/guard_governance.py`, `tools/check_citations.py`), so the green
@@ -89,17 +89,26 @@ parsed line, replacing that clause:
   written or joined to the directories as in (b), counts as a write target
   (`cd .git && rsync -a /s/ harness/`). The programs that only read:
   `shell_scan.NO_RUN` less its writers (`tee`, `mkdir`, `rm`, `cp`, `mv`,
-  `touch`), plus `jq`, `sed`, `cd` and `pushd`; but `sed` with `-i` or
-  `--in-place`, `sort` with `-o` or `--output`, and `uniq` with two
-  operands write, so they do not count as read-only. For an interpreter this covers the
-  script's words, `-m`'s words and the words after a `-c` program
-  (`python3 -c "…open(sys.argv[1],'w')" .git/harness/x`). Denied with or
-  without another write on the line: `rsync -a s/ .git/harness/`, `tar xf
-  t -C .git/harness`, `find .git/harness -delete`, `bash s.sh
-  .git/harness/x`, `ex -sc wq .git/harness/x`, `vim .git/harness/x`,
-  `python3 tools/x.py .git/harness/y`, `sort -o .git/harness/x y`, `uniq y
-  .git/harness/x`. Passing: `wc -l`, `sort`, `cut`, `rg`, `jq .` and `sed
-  -n 1p` on a file there, also after `cd` into it;
+  `touch`) and less `file` (`file -C` writes), plus `jq`, `cd` and
+  `pushd`; `sort` with `-o` or `--output` and `uniq` with two operands
+  write, so they do not count as read-only. A program that takes a script
+  of its own (`sed`, `awk`, `gawk`, `mawk`, `nawk`, `ed`, `ex`, `vi`,
+  `vim`, `nvim`) has each word split on whitespace, quotes, braces,
+  parentheses, `;`, `,`, `|`, `<` and `>`, and each piece is judged as a
+  one-path word: a script's `w FILE` or `print > "FILE"` names its target
+  inside a word with spaces. For an interpreter this covers the script's
+  words, `-m`'s words and the words after a `-c` program (`python3 -c
+  "…open(sys.argv[1],'w')" .git/harness/x`). Denied with or without
+  another write on the line: `rsync -a s/ .git/harness/`, `tar xf t -C
+  .git/harness`, `find .git/harness -delete`, `bash s.sh .git/harness/x`,
+  `ex -sc wq .git/harness/x`, `vim .git/harness/x`, `python3 tools/x.py
+  .git/harness/y`, `sort -o .git/harness/x y`, `uniq y .git/harness/x`;
+  denied too: `sed -n 'w .git/harness/x' in > log`, `sed
+  's/a/b/w .git/harness/x' in > log`, `awk '{print > ".git/harness/x"}' in
+  > log`, and after `cd` into the folder `sed -n 'w x' in > /tmp/log` and
+  `file -C -m m` (by (b)). Passing: `wc -l`, `sort`, `cut`, `rg` and `jq
+  .` on a file there, also after `cd` into it; `sed` there is refused
+  (`cat`, `head`, `tail` and `rg` read it);
 - (d) untraceable, only when the text names `.git/harness`: a simple command
   is `unknown`; a write target holds an expansion (the `H=`, `export`,
   `read`, `declare` and `$(...)` routes); or, on a line that writes
@@ -109,7 +118,7 @@ A quoted mention holds spaces, so it is never one path and (c) passes it.
 The unparseable-line rule (`:173`) and the Edit/Write arm stay. A Python
 program naming the folder in a literal it does not open for reading stays
 refused under (a): this design's own probe hit it (a `glob.glob` read);
-`grep`, `cat` or the Read tool read the folder. About 35 counted lines.
+`grep`, `cat` or the Read tool read the folder. About 40 counted lines.
 
 ## 4. Bare line citations in retrospectives are refused
 
@@ -153,10 +162,12 @@ redone in that form" for all three acts. Nothing more.
    x > "$N"` with the path in its text. The existing denials
    (`test_guard_targets.py` lines with `-harness`) stay green unchanged.
    Measured at `29914d50` with a scratch probe that loads the hook and
-   models §3 on `shell_scan.parse`: 31 deny cases, 16 refused by today's
-   `judge_bash` and 15 passing today (the holes), all 31 denied by the
-   model; 15 pass cases, 2 refused today (the false positives), all 15
-   passed by the model. No mismatch.
+   models §3 on `shell_scan.parse`: 36 deny cases, 20 refused by today's
+   `judge_bash` and 16 passing today (the holes), all 36 denied by the
+   model; 14 pass cases, 2 refused today (the false positives), all 14
+   passed by the model. No mismatch. Without the script-word split, the
+   two `sed ... w` lines and the `awk` line pass the model: taking `sed`
+   off the read-only list alone does not close them.
 4. `test_check_citations.py`: a bare cite in a retrospective fails, a pinned
    one passes, a `legacy/` one passes, a bare cite elsewhere under `docs/`
    behaves as today.
