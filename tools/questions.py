@@ -5,7 +5,7 @@ The store is untracked, `<git-common-dir>/questions.jsonl`, one JSON record per
 line, appended only; the newest line for an id is its record, so every worktree
 sees one list. Beside it, `questions-shown.json` holds which number the last
 `list` gave to which id, so Ola's "2" keeps meaning what he saw. Standard
-library only: the recap imports this on the system `python3`.
+library only, so the recap can import it on the system `python3`.
 Spec: `docs/increments/h35-question-tool.md`, *1. What it is*
 """
 
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #: Chosen: two lines of the recap's 120 characters.
 LIMIT = 240
 NO_DEFAULT = {"", "none", "tbd", "?", "-"}
-ELSEWHERE = re.compile(r"see above|as above|as before|previous question|question \d+", re.I)
+ELSEWHERE = re.compile(r"\b(?:see above|as above|as before|previous question|question \d+)\b", re.I)
 COUNTED = re.compile(r"\b(?:increment|row) \d+", re.I)
 TREE = ("tools/", "docs/", "src_python/", "tests/", "include/", ".claude/", ".github/")
 # fmt: off
@@ -97,7 +97,7 @@ def _plain(text: str, terms: set[str], act: bool) -> None:
     spelled = set(re.findall(r"\(([A-Z]{2,6})\)", text))
     personas = {p.stem for p in (ROOT / ".claude" / "agents").glob("*.md")}
     for raw in text.split():
-        tok = raw.strip(PUNCT)
+        tok = re.sub(r"['\u2019]s$", "", raw.strip(PUNCT))
         if not tok or tok.startswith(("/", "~", "$")) or "://" in tok:
             continue
         kind = None
@@ -161,9 +161,10 @@ def _shown(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def list_lines(records: list[dict[str, Any]]) -> list[str]:
     """The block for Ola, numbered 1..n in one sequence; reads nothing and writes nothing."""
     lines = [_line(n, r) for n, r in enumerate(_shown(records), 1)]
-    if held := sum(r["state"] == "held" for r in records):
-        noun = "question" if held == 1 else "questions"
-        lines.append(f"and {held} more yes/no {noun} held until one above is answered")
+    if held := [r for r in records if r["state"] == "held"]:
+        kind = "yes/no " if all(_yes_no(r) for r in held) else ""
+        noun = "question" if len(held) == 1 else "questions"
+        lines.append(f"and {len(held)} more {kind}{noun} held until one above is answered")
     return lines
 
 
