@@ -27,9 +27,9 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - Both refusals name `--land-cover` and `.gpkg`, exit 2, before any phase is
   timed. A reservoir file of a suffix rasputin does not read (`.shp`) is a
   usage error naming `--reservoirs` and the suffix, also before any phase.
-- A land cover with no legend writes no `cells` layer, so `--reservoirs` with
-  it is refused like the two above: exit 2, before any phase, naming
-  `--reservoirs` and the word "legend".
+- A land cover with no meshing rules writes no `cells` layer, so
+  `--reservoirs` with it is refused like the two above: exit 2, before any
+  phase, naming `--reservoirs` and "meshing rules".
 - With no cache root, a catalogue key for `--reservoirs` gets the whole
   `NO_CACHE` refusal `--land-cover` gives, before any phase.
 """
@@ -279,16 +279,16 @@ def test_t7_without_land_cover_no_reservoirs_row(scene: dict[str, Path], tmp_pat
         assert record(conn, "reservoirs") is None
 
 
-def test_t7_a_land_cover_without_a_legend_is_refused_naming_the_legend(
+def test_t7_a_land_cover_without_meshing_rules_is_refused_naming_them(
     scene: dict[str, Path], tmp_path: Path, phases: list[str]
 ) -> None:
-    """No legend, no `cells` layer: nothing would hold the reservoir share."""
+    """No meshing rules, no `cells` layer: nothing would hold the reservoir share."""
     res = write_reservoirs(tmp_path / "res.geojson", wgs84=False)
     target = tmp_path / "x.gpkg"
     code, output = mesh(scene, target, "--land-cover", KEY, "--reservoirs", str(res))
     assert code == USAGE, output
     flat = squashed(output)
-    assert "--reservoirs" in flat and "legend" in flat, output
+    assert "--reservoirs" in flat and squashed("meshing rules") in flat, output
     assert phases == [], phases
     assert not target.exists()
 
