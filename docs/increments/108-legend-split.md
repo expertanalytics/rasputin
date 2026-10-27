@@ -1,6 +1,6 @@
 # Increment 108: a legend is the colour scheme; meshing rules are a file of their own
 
-**Status: designed, round 2** (`@architect`, 2026-10-27, on `5de1144d`). One
+**Status: designed, round 3** (`@architect`, 2026-10-27, on `5de1144d`). One
 PR, branch `worktree-legend-split`, about 70 net production lines, no C++
 file, no `@perf` run (section 6). The split only: it changes no mesh. The
 Sula defects it surfaced (section 3) are increment 109, designed on its own
@@ -247,3 +247,9 @@ the `unlisted` refusal +3. TOML is not counted; the rename
 modifies about 150 production and 300 test lines. Over the short path's 50,
 so the full path. No C++ and no mesh change (gate 6), so no `@perf`
 acceptance run.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, origin/master..8196a44f, 0 net production lines (scope beyond the ruling, no speed or byte-identity pin, missed renames, AR50 sub-codes).
+- Design round 2: CHANGES REQUESTED, ..87ff7c00, 0 (mesh text land_cover_codes unpinned; 109 on the same branch; audit citations not on master).
+- Design round 3: APPROVED WITH WORDINGS, ..24fedc3d, 0; the two status wordings applied in this commit.
