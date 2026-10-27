@@ -51,6 +51,19 @@ NO_REVIEW = "no review recorded for this branch"
 CHANGES = "last review round: CHANGES REQUESTED"
 
 
+# ---------------------------------------------------------------- redo in form
+#
+# Ola's ruling of 2026-10-27 (REQUIRED-READING.md, Unattended mode): a granted
+# act refused only for its form may be redone in the form its reason names,
+# and the refusal says so in the words of guard_push.py's AMEND_FORM.
+
+REDO_IN_FORM = "; it may be redone in that form"
+
+
+def test_not_bare_says_it_may_be_redone_in_that_form() -> None:
+    assert push_grant.NOT_BARE.endswith(f"run it alone{REDO_IN_FORM}"), push_grant.NOT_BARE
+
+
 # ---------------------------------------------------------------- test 8
 
 FORMS = (

@@ -1215,7 +1215,8 @@ def test_18_a_grants_log_that_cannot_be_written_denies(granted: Granted) -> None
 
 NOT_BARE = (
     "the grant takes only one bare command, every word written out "
-    "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone"
+    "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone; "
+    "it may be redone in that form"
 )
 
 #: The 00:22:54 line of 2026-10-18 (body cut to one line), for `feat`.

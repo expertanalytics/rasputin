@@ -54,7 +54,8 @@ UNSURE = "so it cannot be told whether this branch holds private commits; run gi
 #: `@perf`'s dated evidence folders; a file a commit adds there counts like prose.
 BENCH = re.compile(r"docs/benchmarks/\d{4}-\d{2}-\d{2}/.+", re.S)
 NOT_BARE = ("the grant takes only one bare command, every word written out "
-            "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone")  # fmt: skip
+            "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone; "
+            "it may be redone in that form")  # fmt: skip
 
 
 @dataclass(frozen=True)

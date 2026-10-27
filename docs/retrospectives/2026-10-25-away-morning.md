@@ -67,10 +67,10 @@ rule); 14:31:48, this run at its start, a read-only read of `.git/harness`
 by an interpreter (2.3).
 
 **2.1. The public pull request was refused for `--repo`, not for being
-unbare.** Line 20113: a single bare command. `tools/push_grant.py:130-132`,
+unbare.** Line 20113: a single bare command. `tools/push_grant.py@8e40a4e5:130-132`,
 `repo_remote()`, maps no `--repo` to `origin` and the private repository to
 `private`; naming the public repository returns "", so the act is not a
-granted form, and `tools/push_grant.py:361` gives the generic `NOT_BARE`
+granted form, and `tools/push_grant.py@8e40a4e5:361` gives the generic `NOT_BARE`
 reason. Checked: `push_grant.granted_act` returns `None` for the command
 as run and an `Act(kind='pull request', ...)` with `--repo
 expertanalytics/rasputin ` removed; the test
@@ -163,7 +163,7 @@ The private increment that merged as #73: design spawn 07:22:29 to merge
    `tools/brief.py ... --ola "1-3: yes"` matched Ola's turn of
    2026-10-23 08:36:29, not the one of 11:48:12. The main session saw it
    and rebuilt the brief without that quote (11:51:42). Cause:
-   `tools/brief.py:218` takes the first human turn containing the text,
+   `tools/brief.py@8e40a4e5:218` takes the first human turn containing the text,
    oldest first. Proposal 6.
 4. **One spawn refused for an edited brief,** 10:33:44 (line 22021),
    resent unchanged at 10:34:15. The brief says two; only one refusal is in

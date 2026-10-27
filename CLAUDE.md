@@ -82,11 +82,7 @@ the personas. Its rules:
   sequence, each explained, with its default.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
   `@orchestrator`, which records it in `docs/retrospectives/`.
-* **When to spawn `@orchestrator`.** After each increment merges (a check of
-  that increment, and its lessons recorded); the morning after each
-  unattended night (idle time, guard refusals and false positives, work done
-  out of role); and for a research round, weekly or when Ola asks.
-  `tools/duties.py` shows which are owed.
+* **When to spawn `@orchestrator`.** When `tools/duties.py` shows a duty owed.
 
 ## 4. Operational Commands
 

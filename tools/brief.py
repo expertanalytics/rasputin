@@ -4,7 +4,7 @@
 Spec: docs/increments/h9-spawn-briefs.md §3.1 to §3.4. The main session runs
 
     python3 tools/brief.py <persona> --worktree <path> --beside <none|persona:path>...
-                           [--increment <file>] [--no-build] [--ola <text>]...
+                           [--increment <file>] [--no-build] [--untimed] [--ola <text>]...
 
 and pastes the block, unchanged, before the task. `.claude/hooks/guard_spawn.py`
 reads it back with `find_blocks` and `check`, so the format has one owner. A
@@ -149,8 +149,12 @@ def _checkout(given: str) -> Path:
     return path
 
 
-def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool) -> str:
+def _concurrency(
+    persona: str, worktree: Path, beside: list[str], no_build: bool, untimed: bool = False
+) -> str:
     """§3.1a: the generated line, or a refusal naming the rule."""
+    if untimed and persona != "perf" and not any(e.partition(":")[0] == "perf" for e in beside):
+        raise BriefError("--untimed marks a @perf run")
     if beside == ["none"]:
         alone = "Concurrency: you run alone"
         return f"{alone}; nothing runs beside a timing run." if persona == "perf" else f"{alone}."
@@ -165,9 +169,11 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
             )
         others.append((name, _checkout(place)))
     everyone = [(persona, worktree), *others]
-    if any(name == "perf" for name, _ in everyone):
+    if any(name == "perf" for name, _ in everyone) and not untimed:
         raise BriefError("nothing runs beside a timing run (@perf), read-only agents included")
     writers = [place for name, place in everyone if WRITES[name]]
+    if untimed and (len(everyone) != 2 or len(writers) != 2):
+        raise BriefError("an untimed @perf run goes beside one writer at most")
     if len(writers) > 2:
         raise BriefError("at most two writers run at once")
     if len(set(writers)) < len(writers):
@@ -176,11 +182,14 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
         if not WRITES[who] and where in writers:
             raise BriefError(f"@{who} is read-only and shares {where} with a writer")
     kinds = {name: "writer" if WRITES[name] else "read-only" for name, _ in others}
+    if untimed:
+        kinds["perf"] = "writer, untimed run"
     listed = ", ".join(f"@{name} ({kinds[name]}, in {place})" for name, place in others)
     build = "You may not build C++ in this run." if no_build else "You may build C++ in this run."
+    tail = " This run is untimed." if untimed and persona == "perf" else ""
     return (f"Concurrency: also running: {listed}. At most two writers run at once; read-only "
             "agents do not count toward the two, as long as no writer changes the files they "
-            f"read.\n{build}")  # fmt: skip
+            f"read.{tail}\n{build}")  # fmt: skip
 
 
 def _from_increment(path: Path, shown: str) -> list[str]:
@@ -236,6 +245,7 @@ def _brief(argv: list[str] | None) -> str:
     parser.add_argument("--beside", action="append", required=True)
     parser.add_argument("--increment")
     parser.add_argument("--no-build", action="store_true")
+    parser.add_argument("--untimed", action="store_true")
     parser.add_argument("--ola", action="append", default=[])
     args = parser.parse_args(argv)
     persona = args.persona
@@ -267,7 +277,7 @@ def _brief(argv: list[str] | None) -> str:
     except (KeyError, ValueError) as exc:
         raise BriefError(f"{TEMPLATE}: the template names an unknown variable ({exc})") from exc
     limit = ", ".join(WRITES[persona]) or "nothing"
-    body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build),
+    body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
     if persona == "reviewer":
         body.insert(3, REVIEW_LINE)

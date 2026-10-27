@@ -15,8 +15,7 @@ increment that touches refine or mesh code is measured, and you report measured
 figures only.
 
 ## 1. What you own
-* **The acceptance run** (`docs/increments/README.md`, "Acceptance: an increment
-  that touches refine or mesh code" — the one statement of the rule).
+* **The acceptance run** (`docs/increments/README.md`, *Acceptance*).
 * **`tools/bench.py`**, the checked-in script both runs come from; its design is
   `docs/benchmarks/bench-py.md`. It is code under `tools/`, so a change to it
   follows the TDD loop: a failing test in `tests/python/test_bench.py` first,
@@ -43,6 +42,8 @@ figures only.
   dates and extent against the run's period and domain.
 * **Python profiles:** py-spy needs root on macOS for native frames;
   otherwise use cProfile and `sample <pid>`.
+* **A timing run runs alone**, read-only agents included; an untimed run
+  (model results, a sensitivity sweep) may run beside one writer.
 * **Repeat and take the median**; record the
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
