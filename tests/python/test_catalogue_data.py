@@ -56,7 +56,7 @@ SNAPSHOT = Path(__file__).parent / "data" / "catalogue_b1353075.json"
 SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11")
 STATIONS = ("nve-hrd",)
 #: The entries added after the snapshot: vector layers fetched from a map service.
-FEATURE_LAYERS = ("nve-lakes", "clc2018")
+FEATURE_LAYERS = ("nve-lakes", "nve-glaciers", "clc2018")
 GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
 #: 10" and 1" in degrees, each rounded up in the fifth significant digit.
 GLO30_TILE_SPACING = (0.0027778, 0.00027778)
