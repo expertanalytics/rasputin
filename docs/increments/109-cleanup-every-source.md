@@ -11,7 +11,7 @@ constrains similarly as the catchment polygon?"; on the legend mix-up:
 "Design, write, build, merge."; and "yes, push the Sula fix when it's
 reviewed".
 
-Scope for tonight, the main session's ruling (Ola's demo is tomorrow): the
+Scope for tonight, a default the main session took while Ola is away (his demo is tomorrow; not his ruling): the
 simplification reaches every source (section 3, items 1, 2 and 4), the
 per-source counts in the run record (item 5), and a stated default for a
 missing positional accuracy (item 3), not a refusal, so Sol's demo files
@@ -203,3 +203,8 @@ sources +3, the per-source counts and `features_joined` +20. No C++; CORINE
 meshes unchanged by gate 7, so no `@perf` acceptance run. Test helpers that
 build `MeshingRules` with `accuracy_m=0.0` for "none" may need `@tester`'s
 amendment in the red step.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 1100fe2c..b243f7e5, 0 net production lines (Ola's words not quoted, no 1 cm filter test, no failure policy, a false help-text claim).
+- Design round 2: APPROVED WITH WORDINGS, ..606c90b8, 0; the one wording applied in this commit.
