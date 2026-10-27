@@ -52,6 +52,8 @@ VIEW = ("state", "baseRefName", "headRefOid", "statusCheckRollup")
 UNREAD = "the pull request's checks could not be read"
 UNSURE = "so it cannot be told whether this branch holds private commits; run git fetch private"
 #: `@perf`'s dated evidence folders; a file a commit adds there counts like prose.
+INCREMENT = re.compile(r"docs/increments/[^/]+\.md")
+HEX_WORD = re.compile(r"(?<![0-9A-Za-z_])[0-9a-f]{7,40}(?![0-9A-Za-z_])")
 BENCH = re.compile(r"docs/benchmarks/\d{4}-\d{2}-\d{2}/.+", re.S)
 NOT_BARE = ("the grant takes only one bare command, every word written out "
             "(no variable, no &&, ;, pipe, redirect or heredoc); run it alone; "
@@ -289,6 +291,29 @@ def review_of(
     return None, record
 
 
+def recorded(repo: Path | str, head: str, sha: str, remote: str) -> bool:
+    """Whether an increment file the branch changes names `sha` under `## Review`, at `head`.
+
+    A branch that changes only retrospectives has no increment file and passes.
+    """
+    try:
+        diff = git(repo, "diff", "--name-only", "-z", f"refs/remotes/{remote}/master...{head}")
+        kept = git(repo, "diff", "--name-only", "-z", "--diff-filter=d",
+                   f"refs/remotes/{remote}/master...{head}")  # fmt: skip
+        texts = [git(repo, "show", f"{head}:{p}") for p in kept.split("\0")
+                 if INCREMENT.fullmatch(p) and p != "docs/increments/README.md"]  # fmt: skip
+    except subprocess.CalledProcessError:
+        return False
+    paths = [p for p in diff.split("\0") if p]
+    if paths and all(p.startswith("docs/retrospectives/") for p in paths):
+        return True
+    for text in texts:
+        section = re.search(r"^## Review.*?(?=^## |\Z)", text, re.M | re.S)
+        if section and any(sha.startswith(w) for w in HEX_WORD.findall(section.group(0))):
+            return True
+    return False
+
+
 def reviewed(repo: Path | str, head: str, records: list[Any], remote: str = "origin") -> str | None:
     """None when `head` is reviewed (§3.3), else the reason in plain words."""
     return review_of(repo, head, records, remote)[0]
@@ -390,6 +415,11 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
             f"@reviewer's verdict approving {head[:7]} is recorded",
             head,
         )
+    r7 = str(record.get("sha"))[:7]
+    if act.remote == "origin" and not recorded(where, head, str(record.get("sha")), act.remote):
+        return refused(f"head {head[:7]} is not reviewed: no increment file this branch changes "
+                       f"names {r7} under ## Review; it may be redone once the review of {r7} "
+                       "is recorded there", head)  # fmt: skip
     since = flag.get("since")
     if act.kind in ("enqueue", "merge") and any(
         isinstance(u, dict) and (u.get("window"), u.get("branch"), u.get("act"), u.get("head"))

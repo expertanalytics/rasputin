@@ -48,6 +48,9 @@ class Simple:
     written: list[str] = field(default_factory=list, repr=False, compare=False)
     piped: bool = field(default=False, repr=False, compare=False)
     fed: bool = field(default=False, repr=False, compare=False)
+    #: It had a leading `NAME=value`; it owns an unquoted heredoc whose body runs `$(` or `.
+    assigns: bool = field(default=False, compare=False)
+    runs_body: bool = field(default=False, compare=False)
 
 
 class UnreadableError(Exception):
@@ -346,6 +349,7 @@ class _Scan:
                     break
                 body.append(line + "\n")
             owner.heredoc = "".join(body)
+            owner.runs_body |= expands and ("$(" in owner.heredoc or "`" in owner.heredoc)
             rewritten = expands and any(c in owner.heredoc for c in "$`\\")
             self.finish_heredoc(owner, owner.heredoc, rewritten)
         self.pending = []
@@ -357,7 +361,9 @@ class _Scan:
         closed = not words or words[0] in CLOSERS  # a compound's or a subshell's redirects
         if words and all(ASSIGNMENT.match(word) for word in words):  # `H=.git/harness;`
             self.assigned |= dict(word.split("=", 1) for word in words)
+        assigns = False
         while words and (words[0] in RESERVED or ASSIGNMENT.match(words[0])):
+            assigns |= ASSIGNMENT.match(words[0]) is not None
             words = words[1:]
         if words[:1] == ["function"] and len(words) > 1:
             self.defined.add(words[1])
@@ -370,6 +376,7 @@ class _Scan:
             return
         simple = classify(words, writes)
         simple.written, simple.piped, simple.fed = words, self.piped, inputs
+        simple.assigns = assigns
         if simple.argv[:1] == ["alias"]:
             self.defined |= {word.split("=", 1)[0] for word in simple.argv[1:] if "=" in word}
         # A variable assigned earlier on the line is read as its value: `$H/x`.

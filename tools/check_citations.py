@@ -438,7 +438,12 @@ def main() -> int:
                         broken.append(f"{where}: cites '{cited}:{start}' -- file has {total} lines")
                         continue
                     rel_target = target.relative_to(REPO).as_posix()
-                    if governed(rel_target):
+                    if rel_source.as_posix().startswith("docs/retrospectives/"):
+                        unpinned.append(
+                            f"{where}: cites '{cited}:{start}' in a retrospective -- "
+                            "pin it (path@<sha>:<n>)"
+                        )
+                    elif governed(rel_target):
                         unpinned.append(
                             f"{where}: cites '{cited}:{start}' in rule file {rel_target} -- "
                             f"pin it (path@<sha>:<n>) or cite a heading"
