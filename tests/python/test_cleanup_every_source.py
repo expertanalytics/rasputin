@@ -5,13 +5,18 @@ tests 1 to 6, and *3. The design (tonight)*, items 1 to 5. Not named
 invariant-critical, so no mutants.
 
 Tests 1 to 5 run ``open_features`` on a 1,000 m square domain in EPSG:25833
-at plain coordinates (0 to 1,000 m), as the design measured its figures: the
-simplifier's vertex counts move with the coordinates' last bits (moved to the
-UTM-shaped offset of ``feature_fixtures.at`` the two lakes give 54 / 26 / 14,
-not 54 / 28 / 15, checked on shapely 2.2.0, GEOS 3.14.1), so they are pinned
-at the design's frame only. Areas are compared at ``rel=1e-9`` against the
-input polygon's own area, at coordinates of at most 1,000 m, where a double
-resolves about 1e-13 m.
+at plain coordinates (0 to 1,000 m), as the design measured its figures.
+Areas are compared at ``rel=1e-9`` against the input polygon's own area, at
+coordinates of at most 1,000 m, where a double resolves about 1e-13 m.
+
+The simplifier's vertex counts are not exact across platforms: they move with
+the coordinates' last bits. The same fixtures translated by 11 offsets (sub-
+metre ones and up to 1e6 m, the UTM offset of ``feature_fixtures.at`` among
+them; shapely 2.2.0, GEOS 3.14.1, darwin/arm64) gave 50 to 58 / 26 to 28 / 14
+to 18 for the design's 54 / 28 / 15, and 29 to 33 for test 4's 33. So a count
+is bounded (``AT_MOST``: the design's figure plus about 20 %, at least 8
+times fewer than the 514 in) and falls strictly with the band; the polygon
+counts the simplifier is given (2 or 3) and every area stay exact.
 
 Test 6 runs ``rasputin mesh`` on ``cli_helpers``' 10 m x 5 m micro DEM (cell
 10 m) inside its ``SQUARE``.
@@ -23,10 +28,11 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   ``polygon`` None, and its lines carry the class's edge names.
 - Test 1's and 2's counts are ``FeatureSet.cover_vertices`` (before, after),
   which counts line coordinates; with lakes away from the outline these are
-  the design's polygon counts. Test 4's 33 is the simplifier's own output
+  the design's polygon counts. Test 4's count is the simplifier's own output
   polygons (the source's two, less the rest piece), read through a spy on
-  ``feature_input.simplify_borders``; ``cover_vertices`` there is (519, 30),
-  since the land polygon's outline edges are cut off its lines.
+  ``feature_input.simplify_borders``; ``cover_vertices`` there is lower (30
+  on darwin/arm64), since the land polygon's outline edges are cut off its
+  lines.
 - Test 5's message is a :class:`FeatureError` whose text is exactly
   ``"<file>: border simplification refused: x; --features-tolerance 0 meshes
   this source with its borders as read"``: ``<why>`` is the ``ValueError``'s
@@ -69,6 +75,9 @@ RADIUS = 100.0
 QUAD_SEGS = 64  # 257 coordinates per circle, closing one included
 LAKE_AREA = 31_412.773  # the 256-gon's area, m2, as the design states it
 REPAIR = 0.01
+#: The design's counts (54 / 28 / 15 by band; 33 for test 4) plus about 20 %.
+AT_MOST = {1.0: 65, 5.0: 34, 20.0: 22}
+FILTER_AT_MOST = 40
 
 #: An uncoded rules file with no positional accuracy, the shape of Sol's
 #: lake file: a lake class and a land class by value.
@@ -153,22 +162,30 @@ class TestLakes:
     keeping its area; coded or not, the same counts."""
 
     @pytest.mark.parametrize("coded_rules", [False, True], ids=["uncoded", "coded"])
-    @pytest.mark.parametrize(("band", "after"), [(1.0, 54), (5.0, 28), (20.0, 15)])
     def test_two_lakes_are_simplified(
         self,
         fi: ModuleType,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         coded_rules: bool,
-        band: float,
-        after: int,
     ) -> None:
         lakes = [lake(300.0), lake(700.0)]
         assert vertices(lakes) == 514  # the premise
-        spy = Spy(fi, monkeypatch)
         src = source(fi, tmp_path, [("lake", g) for g in lakes], coded_rules)
-        fs = fi.open_features(request(fi, src, band), domain_of(DOMAIN), UTM33)
-        assert fs.cover_vertices == (514, after)
+        counts = []
+        for band, most in AT_MOST.items():
+            with monkeypatch.context() as patch:
+                spy = Spy(fi, patch)
+                fs = fi.open_features(request(fi, src, band), domain_of(DOMAIN), UTM33)
+            before, after = fs.cover_vertices
+            assert before == 514 and after <= most, (band, after)
+            counts.append(after)
+            self.kept(fs, spy, lakes, coded_rules)
+        assert counts == sorted(set(counts), reverse=True), counts  # falls strictly
+
+    @staticmethod
+    def kept(fs: Any, spy: Spy, lakes: list[Polygon], coded_rules: bool) -> None:
+        """Each lake keeps its area, and its code and label only if coded."""
         (call,) = spy.calls
         rings = [g for g in call[1].polygons if g.area < DOMAIN.area / 2]  # not the rest
         assert sum(g.area for g in rings) == pytest.approx(sum(g.area for g in lakes), rel=1e-9)
@@ -240,10 +257,12 @@ class TestTheCentimetreFilter:
         (call,) = spy.calls
         assert len(call[0]) == given
         out = call[1].polygons[:2]
-        assert vertices(out) == 33
+        assert vertices(out) <= FILTER_AT_MOST
         assert out[0].area == pytest.approx(water.area, rel=1e-9)
+        assert out[1].area == pytest.approx(land.area, rel=1e-9)
         assert water.area == pytest.approx(LAKE_AREA, abs=5e-4)
-        assert fs.cover_vertices == (519, 30)
+        before, after = fs.cover_vertices
+        assert before == 519 and after <= vertices(out)
 
 
 # ---------------------------------------------------------------- test 5
