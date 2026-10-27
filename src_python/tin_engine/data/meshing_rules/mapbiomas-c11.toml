@@ -1,0 +1,121 @@
+# MapBiomas Brazil, Collection 11: the official legend's codes
+# (legend_code_mapbiomas_brazil_collection_11.csv); colours in the legend
+# mapbiomas-c11. Positional accuracy: its Landsat cell, 30 m (MapBiomas states
+# none of its own).
+name = "mapbiomas-c11"
+attribute = "class"
+code_system = "MapBiomas Collection 11 class"
+positional_accuracy_m = 30
+notice = "Contains data from the MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land Cover Maps of Brazil (CC BY-SA 4.0)"
+unlisted = "land"
+legend = "mapbiomas-c11"
+
+[edges]
+water = ["land_cover", "water"]
+land = ["land_cover"]
+
+[[class]]
+code = 3
+
+[[class]]
+code = 6
+
+[[class]]
+code = 4
+
+[[class]]
+code = 7
+
+[[class]]
+code = 5
+
+[[class]]
+code = 49
+
+[[class]]
+code = 12
+
+[[class]]
+code = 77
+
+[[class]]
+code = 11
+
+[[class]]
+code = 84
+
+[[class]]
+code = 50
+
+[[class]]
+code = 32
+
+[[class]]
+code = 29
+
+[[class]]
+code = 15
+
+[[class]]
+code = 39
+
+[[class]]
+code = 20
+
+[[class]]
+code = 40
+
+[[class]]
+code = 62
+
+[[class]]
+code = 41
+
+[[class]]
+code = 46
+
+[[class]]
+code = 47
+
+[[class]]
+code = 35
+
+[[class]]
+code = 48
+
+[[class]]
+code = 9
+
+[[class]]
+code = 21
+
+[[class]]
+code = 23
+
+[[class]]
+code = 24
+
+[[class]]
+code = 30
+
+[[class]]
+code = 75
+
+[[class]]
+code = 91
+
+[[class]]
+code = 25
+
+[[class]]
+code = 33
+water = true
+
+[[class]]
+code = 31
+water = true
+
+[cells.categories]
+forest = [3, 6, 5, 49, 9]
+savanna = [4, 7]
+lake = [33, 31]

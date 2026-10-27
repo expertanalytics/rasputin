@@ -4,10 +4,10 @@
 
 A cell is its triangle's plan centroid, plan area, slope and aspect, and the
 plan-area shares of five categories summed from the exact class fractions:
-glacier, lake, forest and savanna from the legend's ``category`` keys, and
+glacier, lake, forest and savanna from the meshing rules' ``[cells]`` table, and
 unspecified as ``1 - glacier - lake - reservoir - forest`` clamped at 0, so
 savanna lies inside unspecified, as Shyft has no savanna share. Pure: arrays
-and a legend in, no file, no CRS.
+and meshing rules in, no file, no CRS.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import numpy.typing as npt
 import shapely
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import Category, Legend
+from tin_engine.feature_input import Category, MeshingRules
 from tin_engine.io.models import CellTable, ClassFractions
 
 Float64 = npt.NDArray[np.float64]
@@ -27,14 +27,14 @@ Float64 = npt.NDArray[np.float64]
 SUMMED: tuple[Category, ...] = ("glacier", "lake", "forest", "savanna")
 
 
-def categories_of(legend: Legend) -> Mapping[int, Category]:
-    """The legend's class categories, refused with a `ValueError` naming every
+def categories_of(rules: MeshingRules) -> Mapping[int, Category]:
+    """The rules' class categories, refused with a `ValueError` naming every
     water class without one, so water never falls silently into unspecified."""
-    missing = sorted(legend.water_codes - set(legend.categories))
+    missing = sorted(rules.water_codes - set(rules.categories))
     if missing:
         named = ", ".join(f"class {code}" for code in missing)
         raise ValueError(f"{named}: water without a category; give it lake or unspecified")
-    return legend.categories
+    return rules.categories
 
 
 def categorise(fractions: ClassFractions, categories: Mapping[int, Category]) -> Float64:
