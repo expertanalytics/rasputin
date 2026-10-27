@@ -1459,3 +1459,252 @@ def test_shell_scan_marks_a_heredoc_body_the_shell_runs(command: str, expected: 
     shell_scan = load_tool("shell_scan")
     owner = [s for s in shell_scan.parse(command) if s.argv[:1] == ["cat"]]
     assert [s.runs_body for s in owner] == [expected]
+
+
+# ---------------------------------------------------------------- guard follow-ups (h37)
+#
+# docs/increments/h37-guard-follow-ups.md §4: every line §1 found passing is
+# refused (asked for the zsh redirects and the letter-case rows, denied for the
+# record folder), except the rows §2 leaves open; the lines §4 keeps, and every
+# line §1 found refused, are judged as they are today. The folder name is built
+# from parts, as above.
+
+HN = "har" + "ness"
+GLOB_HN = HN[:-1] + "?"
+
+#: §1 (1): zsh's clobbering and combined redirects, each writing the file named.
+ZSH_OPERATORS = (">!", ">>!", ">>|", "&>!", ">&!", ">&|", ">>&", "&>>!", "&>>|", ">>&!",
+                 ">>&|", "2>!", "2>>|")  # fmt: skip
+
+
+def zsh_redirect_asks() -> dict[str, tuple[str, str]]:
+    """§1 (1), passing today: id -> (line, the governed target it must be asked for)."""
+    rows = {f"echo{op}": (f"echo x {op} CLAUDE.md", "CLAUDE.md") for op in ZSH_OPERATORS}
+    return rows | {
+        "no-space-append-clobber": ("echo x >>|CLAUDE.md", "CLAUDE.md"),
+        "clobber-alone": (">! CLAUDE.md", "CLAUDE.md"),
+        "exec-fd-clobber": ("exec {fd}>! CLAUDE.md", "CLAUDE.md"),
+        "clobber-settings": ("echo x >! .claude/settings.json", ".claude/settings.json"),
+        "clobber-away": ("echo x >! tools/away.py", "tools/away.py"),
+    }
+
+
+#: §1 (2), case: the macOS disk ignores letter case, so each writes a governed file.
+CASE_ASKS = {
+    "lower-claude": ("echo x > claude.md", "claude.md"),
+    "agents-capital": ("echo x > .Claude/agents/x.md", ".Claude/agents/x.md"),
+    "away-capitals": ("echo x > Tools/Away.py", "Tools/Away.py"),
+    "principles-lower": ("echo x > docs/principles.md", "docs/principles.md"),
+}
+
+#: §1 (2): the folder written with `.` and doubled `/` segments.
+FOLDER_SPELLINGS = (f".git//{HN}/m", f".git/./{HN}/m", f"./.git//{HN}/m", f".git///{HN}/m",
+                    f"/r/.git//{HN}/m")  # fmt: skip
+
+
+def folder_denials() -> dict[str, str]:
+    """§1 (2) and (3), passing today; each a write of the record folder, to be denied."""
+    lines = {f"{form.split()[0]}-{path}": form.format(path)
+             for path in FOLDER_SPELLINGS
+             for form in ("echo x > {}", "touch {}", "rm {}")}  # fmt: skip
+    return lines | {
+        "cd-git-dir-folder-touch": f"cd $(git rev-parse --git-dir)/{HN} && touch x",
+        "rsync-into-git-dir-folder": f"rsync -a s/ $(git rev-parse --git-dir)/{HN}/",
+        "cd-git-dir-touch-folder": f"cd $(git rev-parse --git-dir) && touch {HN}/x",
+        "touch-glob-question": f"touch .git/{GLOB_HN}/x",
+        "redirect-glob-bracket": f"echo x > .git/{HN[:-1]}[s]/x",
+        "touch-glob-git": f"touch .gi?/{HN}/x",
+        "redirect-dot-star": f"echo x > .*/{HN}/m",
+        # §2 rule 4a: a link to the git folder, made and written through on one line.
+        "link-git-then-write": f"ln -s .git g && echo x > g/{HN}/m",
+        "link-common-dir": "ln -s $(git rev-parse --git-common-dir) g",
+        "link-absolute-git-dir": "ln -s $(git rev-parse --absolute-git-dir) g",
+        # §3's rule 4a row: the main checkout's git folder linked into a scratchpad.
+        "link-assigned-git": "ln -sfn $R/.git $SP/lk/.git",
+        # §3's rows 2 and 3: a non-reader on a folder path held in an expansion.
+        "sed-on-common-dir-folder": f"G=$(git rev-parse --git-common-dir); sed -n 1p $G/{HN}/x",
+    }
+
+
+#: §4: lines kept passing (beside h33's list above, which reruns as it is).
+KEPT = {
+    "cd-job-tmp-pytest": "cd $CLAUDE_JOB_DIR/tmp/x && pytest",
+    "cd-toplevel-ls": "cd $(git rev-parse --show-toplevel) && ls",
+    "echo-git-dir-folder": f"echo $(git rev-parse --git-dir)/{HN}",
+    "make-stderr-grep": "make 2>&1 | grep x",
+    "echo-to-stderr": "echo x >&2",
+    "exec-close-fd": "exec 3>&-",
+    "git-grep-conflict-markers": "git grep -nE '^(<<<<<<<|>>>>>>>)'",
+    "link-build": "ln -s ../build b",
+    "link-data": "ln -s $DATA data",
+    "rm-glob-in-expansion": "rm $D/*",
+    "find-not-git": "find . -not -path '*/.git/*' -name x",
+    "known-scratch-cd": f"S=/tmp/s; cd $S/{HN} && echo x > y",
+    # §3: reads of the folder through an expansion stay open to the readers.
+    "cat-common-dir-folder": f"G=$(git rev-parse --git-common-dir); cat $G/{HN}/queue.jsonl",
+    # §2 rule 5: the standard-library-module rule stays exact in case.
+    "stdlib-name-other-case": "echo x > tools/Ast.py",
+}
+
+#: §2 *Stays open*: pinned as passing; only the operating system's sandbox closes them.
+STAYS_OPEN = {
+    "script-shell": "bash s.sh",
+    "script-python": "python3 tools/x.py",
+    "cd-expansion-unknown-writer": f"cd $X && rsync s/ {HN}/",
+    # §2's example `H=$G/harness; touch $H/x` is denied today (the scanner puts
+    # the assignment into the target), so it is pinned under STAYS_REFUSED; a
+    # variable set to a command substitution is the form that stays open.
+    "variable-set-to-substitution": f"H=$(echo $G/{HN}); touch $H/x",
+}
+
+#: §1's refused rows: each stays refused (asked or denied).
+STAYS_REFUSED = {
+    "redirect": "echo x > CLAUDE.md",
+    "redirect-pipe": "echo x >| CLAUDE.md",
+    "both-pipe": "echo x &>| CLAUDE.md",
+    "both-append": "echo x &>> CLAUDE.md",
+    "clobber-no-space": "echo x >!CLAUDE.md",
+    "exec-fd": "exec {fd}> CLAUDE.md",
+    "hooks-up-to-folder": f"echo x > .git/hooks/../{HN}/m",
+    "folder-double-slash-inside": f"echo x > .git/{HN}//m",
+    "folder-up-and-back": f"echo x > .git/{HN}/../{HN}/m",
+    "backslash-dot": f"echo x > \\.git/{HN}/m",
+    "quoted-inside-git": f'echo x > .g"it"/{HN}/m',
+    "cd-double-slash": f"cd .git//{HN} && touch x",
+    "cd-git-dot": f"cd .git/. && touch {HN}/x",
+    "cp-common-dir": f"cp x $(git rev-parse --git-common-dir)/{HN}/m",
+    "redirect-common-dir": f"echo x > $(git rev-parse --git-common-dir)/{HN}/m",
+    "variable-set-to-expansion": f"H=$G/{HN}; touch $H/x",
+}
+
+
+@pytest.mark.parametrize(("command", "target"), zsh_redirect_asks().values(),
+                         ids=zsh_redirect_asks().keys())  # fmt: skip
+def test_h37_a_zsh_redirect_to_a_governed_file_asks(
+    guard: ModuleType, command: str, target: str
+) -> None:
+    found = guard.judge_bash(command)
+    assert found is not None, f"{command!r} passed"
+    assert found[0] == "ask" and target in found[1], found
+
+
+def test_h37_an_unreadable_line_with_a_zsh_redirect_asks_by_its_text(guard: ModuleType) -> None:
+    cannot_read = "the guard cannot read this command's targets"
+    assert guard.judge_bash("echo 'u >! CLAUDE.md") == ("ask", ["CLAUDE.md"], cannot_read)
+
+
+@pytest.mark.parametrize(("command", "target"), CASE_ASKS.values(), ids=CASE_ASKS.keys())
+def test_h37_a_governed_name_in_another_letter_case_asks(
+    guard: ModuleType, command: str, target: str
+) -> None:
+    found = guard.judge_bash(command)
+    assert found is not None, f"{command!r} passed"
+    assert found[0] == "ask" and target in found[1], found
+
+
+@pytest.mark.parametrize("command", folder_denials().values(), ids=folder_denials().keys())
+def test_h37_a_write_of_the_folder_by_any_spelling_is_denied(
+    guard: ModuleType, command: str
+) -> None:
+    assert guard.judge_bash(command) == DENIED
+
+
+@pytest.mark.parametrize("command", KEPT.values(), ids=KEPT.keys())
+def test_h37_a_kept_line_passes(guard: ModuleType, command: str) -> None:
+    assert guard.judge_bash(command) is None
+
+
+@pytest.mark.parametrize("command", STAYS_OPEN.values(), ids=STAYS_OPEN.keys())
+def test_h37_a_line_the_design_leaves_open_passes(guard: ModuleType, command: str) -> None:
+    # §2 *Stays open*: what a program writes is fixed when it runs; the full
+    # close is Claude Code's sandbox, a question for Ola. Pinned so a change is seen.
+    assert guard.judge_bash(command) is None
+
+
+@pytest.mark.parametrize("command", STAYS_REFUSED.values(), ids=STAYS_REFUSED.keys())
+def test_h37_a_line_refused_today_stays_refused(guard: ModuleType, command: str) -> None:
+    assert guard.judge_bash(command) is not None
+
+
+def test_h37_the_lists_hold_each_line_once() -> None:
+    refused = [c for c, _ in (*zsh_redirect_asks().values(), *CASE_ASKS.values())]
+    refused += [*folder_denials().values(), *STAYS_REFUSED.values()]
+    passed = [*KEPT.values(), *STAYS_OPEN.values(), *record_folder_passes().values()]
+    assert len(set(refused)) == len(refused) and not set(refused) & set(passed)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("spelling", [f".git//{HN}/m", f".git/./{HN}/m"])
+def test_h37_a_file_tool_write_to_the_folder_by_any_spelling_is_denied(
+    repo: Path, mode: str, spelling: str
+) -> None:
+    set_mode(repo, mode)
+    event = file_event(repo, "Write", f"{repo}/{spelling}")
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found == ("deny", ALWAYS_DENIED)
+
+
+def test_h37_a_file_tool_write_through_hooks_up_to_the_folder_stays_refused(repo: Path) -> None:
+    event = file_event(repo, "Write", f"{repo}/.git/hooks/../{HN}/m")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is not None
+
+
+def test_h37_a_file_tool_write_to_a_governed_name_in_another_case_asks(repo: Path) -> None:
+    event = file_event(repo, "Write", f"{repo}/claude.md")
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None and found[0] == "ask", found
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h37_a_file_tool_write_to_a_note_named_like_claude_passes(repo: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    event = file_event(repo, "Write", f"{repo}/notes/claude-notes.md")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+
+
+@pytest.fixture
+def git_link(repo: Path) -> Path:
+    """`g` in the repository, a link an earlier line made to its git folder (§2 rule 4b)."""
+    (repo / "g").symlink_to(repo / ".git")
+    return repo / "g"
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h37_a_shell_write_through_a_link_made_earlier_is_denied(
+    repo: Path, git_link: Path, mode: str
+) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, f"echo x > g/{HN}/m")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+
+
+def test_h37_judge_bash_follows_a_link_from_the_given_directory(
+    guard: ModuleType, repo: Path, git_link: Path
+) -> None:
+    assert guard.judge_bash(f"echo x > g/{HN}/m", cwd=str(repo)) == DENIED
+
+
+def test_h37_a_file_tool_write_through_a_link_made_earlier_is_denied(
+    repo: Path, git_link: Path
+) -> None:
+    event = file_event(repo, "Write", f"{git_link}/{HN}/m")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) == ("deny", ALWAYS_DENIED)
+
+
+@pytest.mark.parametrize("tool", ["Bash", "Write"])
+def test_h37_a_write_through_a_link_to_a_governed_file_asks(repo: Path, tool: str) -> None:
+    (repo / "n").symlink_to(repo / "CLAUDE.md")
+    event = (bash_event(repo, "echo x > n") if tool == "Bash"
+             else file_event(repo, "Write", str(repo / "n")))  # fmt: skip
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, event))
+    assert found is not None and found[0] == "ask", found
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_h37_a_link_to_a_git_folder_under_a_scratchpad_passes(
+    repo: Path, pad: Path, mode: str
+) -> None:
+    set_mode(repo, mode)
+    event = bash_event(repo, f"ln -s {pad}/r/.git g")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
