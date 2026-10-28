@@ -48,8 +48,8 @@ def rec(item: str, state: str, pipe: str = "core", age: timedelta = HOUR, **extr
     """One live-list record for `item`, its state changed `age` before NOW."""
     record: dict[str, Any] = {
         "id": item, "title": f"title of {item}", "state": state, "pipe": pipe,
-        "next": "", "branch": f"worktree-{item}", "pr": None, "question": None,
-        "default": None, "plain": False, "fallback": False,
+        "next": "", "branch": f"worktree-{item}", "pr": None, "plain": False,
+        "fallback": False,
         "since": (NOW - age).isoformat(timespec="seconds"),
     }  # fmt: skip
     record.update(extra)
@@ -411,7 +411,7 @@ def test_an_unknown_key_in_a_definition_is_warned(repo: Path) -> None:
 
 
 STUCK_SET = [rec("old", "queued", pipe="lsm", age=4 * DAY), rec("fresh", "queued", age=DAY),
-             rec("q", "waiting", age=5 * DAY, question="drop it?", default="keep")]  # fmt: skip
+             rec("q", "waiting", age=5 * DAY)]  # fmt: skip
 
 
 def test_the_stuck_threshold_is_three_days() -> None:
@@ -462,58 +462,55 @@ def test_the_recap_block_lists_stuck_items_first_with_their_age(repo: Path) -> N
 # ---------------------------------------------------------------- 9. questions
 
 
-def test_questions_number_the_stuck_one_first_each_with_its_default(repo: Path) -> None:
-    append(
-        repo,
-        rec("new", "waiting", age=DAY, question="ship it?", default="wait"),
-        rec("old", "waiting", pipe="lsm", age=5 * DAY, question="drop it?", default="keep"),
-    )
-    lines = after(pipes.show_lines(repo, NOW), "Questions for Ola:")
-    first, second = lines[0].strip(), lines[1].strip()
-    assert first.startswith("1.") and "lsm/old" in first and "drop it?" in first
-    assert first.endswith("keep")
-    assert second.startswith("2.") and "core/new" in second and second.endswith("wait")
+def ask_ola(repo: Path, text: str, item: str | None = None, default: str = "wait",
+            *more: str) -> None:  # fmt: skip
+    """Put a question for Ola through `tools/questions.py`, tied to `item` if given."""
+    extra = (*more, "--item", item) if item else more
+    result = run_script(repo, "tools/questions.py", "", "add", text, "--default", default, *extra)
+    assert result.returncode == 0, result.stderr
 
 
-def test_ask_sets_waiting_and_answer_restores_the_state(repo: Path) -> None:
-    ok(repo, "add", "core", "q1", "a question item")
-    ok(repo, "set", "q1", "designing", "--branch", "worktree-q1")
-    ok(repo, "ask", "q1", "split it in two?", "--default", "keep it whole")
-    shown = ok(repo, "show")
-    asked = [line for line in after(shown.splitlines(), "Questions for Ola:") if "core/q1" in line]
-    assert asked and asked[0].endswith("keep it whole")
-    assert pipes.load_items(live_list(repo, "core"))["q1"].state == "waiting"
-    ok(repo, "answer", "q1", "keep it whole")
-    assert pipes.load_items(live_list(repo, "core"))["q1"].state == "designing"
-    assert "split it in two?" not in ok(repo, "show")
+def test_an_old_record_with_a_question_field_still_loads(repo: Path) -> None:
+    old = rec("o1", "queued", question="drop it?", default="keep", before="red",
+              ruling=None)  # fmt: skip
+    assert pipes.fold([old])["o1"].state == "queued"
+    append(repo, old, {**rec("core", "pipe"), "question": "move it?", "default": "yes"})
+    lines = pipes.show_lines(repo, NOW)
+    assert [row["ITEM"].split()[0] for row in table(lines)] == ["o1"]
+    assert not any(line.startswith("Questions for Ola:") for line in lines), lines
+    assert not any("drop it?" in line or "move it?" in line for line in lines), lines
 
 
-def test_answer_records_the_ruling_on_the_item_record(repo: Path) -> None:
-    ok(repo, "add", "core", "r1", "an item with a question")
-    ok(repo, "ask", "r1", "split it in two?", "--default", "keep it whole")
-    ok(repo, "answer", "r1", "split it, the reader part first")
-    records = [json.loads(line) for line in live_list(repo, "core").read_text().splitlines()]
-    newest = [r for r in records if r["id"] == "r1"][-1]
-    assert newest.get("ruling") == "split it, the reader part first", newest
+@pytest.mark.parametrize("args", [("ask", "a1", "split it?", "--default", "no"),
+                                  ("answer", "a1", "no")])  # fmt: skip
+def test_the_pipes_hold_no_questions_of_their_own(repo: Path, args: tuple[str, ...]) -> None:
+    ok(repo, "add", "core", "a1", "an item")
+    before = live_list(repo, "core").read_text()
+    assert cli(repo, *args).returncode != 0
+    assert live_list(repo, "core").read_text() == before
 
 
-def test_answer_without_an_open_question_is_refused_and_changes_nothing(repo: Path) -> None:
-    ok(repo, "add", "core", "h1", "an item with no question")
-    ok(repo, "set", "h1", "red", "--branch", "worktree-h1")
-    lines_before = live_list(repo, "core").read_text()
-    result = cli(repo, "answer", "h1", "stray")
-    assert result.returncode != 0, result.stdout
-    assert "h1" in result.stderr and "no open question" in result.stderr, result.stderr
-    assert live_list(repo, "core").read_text() == lines_before
-    assert pipes.load_items(live_list(repo, "core"))["h1"].state == "red"
-
-
-def test_a_question_on_a_pipe_changes_no_item(repo: Path) -> None:
-    ok(repo, "add", "core", "k1", "an item")
-    ok(repo, "ask", "core", "move the queue by hand?", "--default", "yes")
-    asked = after(ok(repo, "show").splitlines(), "Questions for Ola:")
-    assert any("move the queue by hand?" in line and line.endswith("yes") for line in asked)
-    assert pipes.load_items(live_list(repo, "core"))["k1"].state == "queued"
+def test_an_open_question_on_an_item_makes_it_wait_on_ola(repo: Path) -> None:
+    ok(repo, "add", "core", "a", "queued item")
+    ok(repo, "add", "core", "b", "asked item")
+    ok(repo, "set", "b", "designing", "--branch", "worktree-b")
+    ask_ola(repo, "Which name for the command?", None, "show", "--choices", "show|list")
+    ask_ola(repo, "Split it in two?", "b", default="keep it whole")
+    lines = ok(repo, "show").splitlines()
+    rows = {row["ITEM"].split()[0]: row for row in table(lines)}
+    assert (rows["b"]["STEP"], rows["b"]["WAITING ON"]) == ("designing", "Ola")
+    assert rows["b"]["NEXT"].startswith("question 2"), rows["b"]
+    assert rows["a"]["WAITING ON"] == "free agent" and "question" not in rows["a"]["NEXT"]
+    block = after(lines, "Questions for Ola:")[:-1]  # the last line is `next:`
+    listed = run_script(repo, "tools/questions.py", "", "list").stdout.splitlines()
+    assert block == listed and len(listed) == 2, (block, listed)
+    assert ok(repo, "next").splitlines()[-1].startswith("next: core/a ")
+    assert run_script(repo, "tools/questions.py", "", "answer", "2", "keep it").returncode == 0
+    lines = ok(repo, "show").splitlines()
+    rows = {row["ITEM"].split()[0]: row for row in table(lines)}
+    assert rows["b"]["WAITING ON"] == "free agent" and "question" not in rows["b"]["NEXT"]
+    assert after(lines, "Questions for Ola:")[0].startswith("1. Which name for the command?")
+    assert not any("Split it in two?" in line for line in lines)
 
 
 # ---------------------------------------------------------------- the commands
@@ -594,7 +591,8 @@ def load_guard() -> ModuleType:
     "command",
     ['python3 tools/work_pipes.py set h31 red',
      'python3 tools/work_pipes.py add core x "x" --plain',
-     'python3 tools/work_pipes.py ask h31 "q?" --default "yes"',
+     'python3 tools/work_pipes.py top h31',
+     'python3 tools/questions.py add "ship it?" --default "wait" --item h31',
      "echo '{}' >> .git/pipes/core.jsonl"],
 )  # fmt: skip
 def test_the_commands_pass_the_governance_guard(command: str) -> None:
@@ -624,7 +622,7 @@ def table_set() -> list[dict[str, Any]]:
     """Test 12's items: four open in `core`, one in `lsm`, and a merged one."""
     return [
         live("r", "red", 2 * HOUR), live("g", "green", 3 * HOUR),
-        live("w", "waiting", 5 * HOUR, question="ship it?", default="wait"),
+        live("w", "waiting", 5 * HOUR),
         live("q", "queued", 2 * HOUR, title="t" * 200),
         live("l", "queued", DAY + 2 * HOUR, pipe="lsm"), live("m", "merged", HOUR, pr=7),
     ]  # fmt: skip
@@ -632,6 +630,7 @@ def table_set() -> list[dict[str, Any]]:
 
 def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     append(repo, *table_set())
+    ask_ola(repo, "Ship it?", "w")
     note(repo, "r")  # `r` is busy: its worktree's note is in current-task
     shown = ok(repo, "show")
     assert ok(repo) == shown, "work_pipes.py with no arguments must print `show`"
@@ -650,7 +649,7 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     assert {i: (by_id[i]["PIPE"], by_id[i]["PRI"], by_id[i]["STEP"]) for i in "rwl"} == {
         "r": ("core", "1", "red"), "w": ("core", "1", "waiting"), "l": ("lsm", "2", "queued")
     }  # fmt: skip
-    assert by_id["w"]["NEXT"].startswith("question 1 below")
+    assert by_id["w"]["NEXT"].startswith("question 1")
     assert (by_id["r"]["SINCE"], by_id["l"]["SINCE"]) == ("2 h", "1 d")
     assert not any("stuck" in row["SINCE"] for row in rows)
     assert by_id["q"]["ITEM"].endswith("...") and len(by_id["q"]["ITEM"]) <= 30
@@ -658,7 +657,7 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
 
 def test_unattended_an_item_that_is_not_plain_waits_on_ola_present(repo: Path) -> None:
     append(repo, live("gov", "queued", HOUR), live("pl", "queued", HOUR, plain=True),
-           live("w", "waiting", HOUR, question="ship it?", default="wait"))  # fmt: skip
+           live("w", "waiting", HOUR))  # fmt: skip
     harness_fixtures.flag_on(repo)
     rows = table(ok(repo).splitlines())
     waiting_on = {row["ITEM"].split()[0]: row["WAITING ON"] for row in rows}
