@@ -55,7 +55,7 @@ from shapely.geometry.base import BaseGeometry
 
 from cli_helpers import USAGE, invoke, squashed
 from dataset_fixtures import write_sources
-from feature_fixtures import Feat, rules, write_geojson
+from feature_fixtures import Feat, classes, write_geojson
 from fraction_fixtures import (
     MESH_CRS,
     Row,
@@ -284,7 +284,7 @@ class TestTheFile:
             dem, domain, target, "--land-cover", str(cover), "--land-cover-classes", "corine"
         )
         assert code == 0, output
-        palette = rules("corine").legend.colours
+        palette = classes("corine").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert {r[0] for r in rows} >= {311, 512}

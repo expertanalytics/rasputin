@@ -52,7 +52,7 @@ from shapely.geometry.base import BaseGeometry
 
 from class_fixtures import KEY
 from cli_helpers import USAGE, squashed
-from feature_fixtures import Feat, write_geojson
+from feature_fixtures import Feat, classes, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, domain_ring
 from legend_fixtures import coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson
@@ -64,7 +64,6 @@ from test_cli_mesh_reservoirs import (
     reservoir_rectangle,
     write_reservoirs,
 )
-from tin_engine import land_cover_classes
 
 __all__ = ["phases", "scene"]  # fixtures, used by name
 
@@ -114,8 +113,8 @@ def corine(cover: Path, *more: str) -> tuple[str, ...]:
 
 
 def test_the_legends_name_the_class_each_key_replaces() -> None:
-    assert dict(land_cover_classes.load("corine").prefer) == {"lake": 512, "glacier": 335}
-    assert dict(land_cover_classes.load("ar50").prefer) == {"lake": 81, "glacier": 70}
+    assert dict(classes("corine").prefer) == {"lake": 512, "glacier": 335}
+    assert dict(classes("ar50").prefer) == {"lake": 81, "glacier": 70}
 
 
 # ------------------------------------------------------------ case 7, end to end
