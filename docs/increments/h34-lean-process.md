@@ -501,6 +501,44 @@ branch's writer re-reads `python3 tools/check_citations.py`'s at-risk list
 **as quotations**: resolving a line number is not resolving the quotation.
 ````
 
+#### R16 `.claude/agents/developer.md` and `docs/increments/README.md`
+
+Code round 1 found the fast lane forbidden by these three texts; Ola, on
+2026-10-28: "yes, add that line". Three pairs, each old text once in its file.
+
+````text
+Use only after @tester has produced a red suite.
+````
+
+````text
+Use after @tester's red suite, or alone in the fast lane.
+````
+
+````text
+## Non-negotiable, and specific to this role
+
+- **You are the green step.**
+````
+
+````text
+## Non-negotiable, and specific to this role
+
+In the fast lane you write the test first, then the fix, with no increment
+file; what follows on the red suite, test files and the increment file is
+the full lane's.
+
+- **You are the green step.**
+````
+
+````text
+amendment, in its own commit with the reason. `@developer` never edits tests,
+````
+
+````text
+amendment, in its own commit with the reason. In the full lane `@developer`
+never edits tests,
+````
+
 ## 6. Rule text size
 
 Counted by `tools/rule_sizes.py`'s `current()` on copies of its files with
@@ -515,6 +553,10 @@ R1 to R15 applied (each old text found exactly once first):
 | `.claude/agents/reviewer.md` | 565 | 454 | -111 |
 | `.claude/agents/tester.md` | 811 | 799 | -12 |
 | All rule files | 9483 | 9297 | **-186** |
+
+R16, counted by `tools/rule_sizes.py` on the tree: `developer.md` 217 to
+251 (+34), the README 986 to 990 (+4); all rule files 9297 to 9335, so
+**-148** for the branch.
 
 The same fifteen old texts also occur once each at `origin/master` `aabac548`,
 with the same counts.

@@ -60,8 +60,8 @@ commits they name; no separate
 `@architect` step.
 
 A ruling or a platform-retuned constant after the red commit is `@tester`'s
-amendment, in its own commit with the reason. `@developer` never edits tests,
-and no test change hides in an implementation commit.
+amendment, in its own commit with the reason. In the full lane `@developer`
+never edits tests, and no test change hides in an implementation commit.
 
 **The merge updates `ROADMAP.md`'s row for that increment**, in the same PR,
 before the merge rather than after it.
