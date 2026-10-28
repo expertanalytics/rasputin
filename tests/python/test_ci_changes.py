@@ -82,7 +82,6 @@ READ_BY_CODE = (
     "README.md",
     "CLAUDE.md",
     "docs/increments/README.md",
-    "docs/PRINCIPLES.md",
 )
 
 

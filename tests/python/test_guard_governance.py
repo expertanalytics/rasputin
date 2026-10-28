@@ -1522,7 +1522,7 @@ CASE_ASKS = {
     "lower-claude": ("echo x > claude.md", "claude.md"),
     "agents-capital": ("echo x > .Claude/agents/x.md", ".Claude/agents/x.md"),
     "away-capitals": ("echo x > Tools/Away.py", "Tools/Away.py"),
-    "principles-lower": ("echo x > docs/principles.md", "docs/principles.md"),
+    "readme-lower": ("echo x > docs/increments/readme.md", "docs/increments/readme.md"),
 }
 
 #: §1 (2): the folder written with `.` and doubled `/` segments.

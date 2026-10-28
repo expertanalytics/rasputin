@@ -5,7 +5,9 @@
 
 Counts the lines `git diff <base>...<head>` adds and removes, under §2's
 exclusions: a line counts unless it is blank, a comment, a docstring, or
-inside a raw literal's body. Added lines are judged in the file at `<head>`,
+inside a raw literal's body. Only Python, C++, CMake and shell files outside
+`tests/` and `docs/` count; a file renamed across that boundary counts in full.
+Added lines are judged in the file at `<head>`,
 removed lines at the merge base. Prints one tab-separated row per counted file
 (path, added, removed, net), a `total` row, then one `not counted:` line per
 changed file it skipped, with the reason. Committed revisions only. With

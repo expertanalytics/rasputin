@@ -93,7 +93,6 @@ SKIPPED_PREFIXES = ("lib/", "legacy/", ".claude/worktrees/")
 # Step 4 of the generic harness replaces this and guard_governance.py's copy.
 GOVERNED = (
     "CLAUDE.md",
-    "docs/PRINCIPLES.md",
     ".claude/REQUIRED-READING.md",
     "docs/increments/README.md",
     "testing.md",

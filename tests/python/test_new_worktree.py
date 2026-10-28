@@ -318,6 +318,7 @@ def test_a_pass_prints_the_block_naming_worktree_python_code_core_and_rebuild(
 ) -> None:
     outcome = run_tool(repos, ["alpha"], capsys)
     assert outcome.code == 0, outcome.text
+    wt = repos.worktree("alpha")
     lines = {line.split()[0]: line for line in outcome.out.splitlines() if line.split()}
     for label in ("worktree", "python", "code", "_core", "rebuild"):
         assert label in lines, f"no {label!r} line in:\n{outcome.out}"
@@ -325,8 +326,9 @@ def test_a_pass_prints_the_block_naming_worktree_python_code_core_and_rebuild(
     assert ".venv/bin/python" in lines["python"] and "3.14" in lines["python"]
     assert "src_python" in lines["code"]
     assert "_core.cpython-314-darwin.so" in lines["_core"]
-    assert "cmake --build" in lines["rebuild"] and "--target _core" in lines["rebuild"]
-    assert "build-pyext" in lines["rebuild"]
+    _, python3, tool, *rest = lines["rebuild"].split()
+    assert [python3, *rest] == ["python3", "(configured,", "not", "built)"]
+    assert tool.endswith("/tools/rebuild_core.py") and same(Path(tool).parents[1], wt)
 
 
 # --- 3. refusals ---------------------------------------------------------------------------
