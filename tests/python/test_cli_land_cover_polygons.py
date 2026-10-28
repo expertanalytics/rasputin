@@ -4,8 +4,8 @@ exact class fractions per triangle from class polygons, in the mesh file.
 `docs/increments/105-cell-table.md`, section 4.5 (a vector value of
 `--land-cover`: a `.gpkg`, `.geojson` or `.gml` file, or a catalogue vector
 source with a legend; read through `feature_input.read_source`, moved to the
-mesh CRS, cut per triangle; uncovered area is class 0; a coded
-`--features-rules` beside it stays refused) and section 6, T6's CLI case.
+mesh CRS, cut per triangle; uncovered area is class 0) and section 6, T6's
+CLI case.
 The scene is `test_cli_mesh_land_cover_fractions.py`'s: its DEM in SIRGAS
 2000 / UTM 23S, its domain, `--tolerance 3`. The class polygons are CORINE
 coded (`Code_18`, legend `corine`): 311 and 512 do not fit the `uint8` the
@@ -27,11 +27,12 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   `land_cover_codes` is `<file name> class number; 0 = no data, and every
   constraint line`, and no credit, licence or citation is written; a
   catalogue source is named by its id, as the raster route does.
-- A vector file with no legend, an uncoded legend, or with
-  `--land-cover-year`, is a usage error (exit 2) naming the option, before
-  any phase is timed; a polygon whose code the meshing rules lack is a usage
-  error naming the code and `--land-cover`, saying "class <code> is not in
-  the meshing rules" even when the legend colours the code.
+- A vector file with no class file, a class file without `code_system`, or
+  with `--land-cover-year`, is a usage error (exit 2) naming the option,
+  before any phase is timed (the class file's refusal also names
+  `code_system`); a polygon whose code the class file lacks is a usage error
+  naming the code and `--land-cover`, saying "class <code> is not in the
+  land-cover class file" even when the legend colours the code.
 """
 
 from __future__ import annotations
@@ -59,7 +60,6 @@ from fraction_fixtures import (
     MESH_CRS,
     Row,
     dem_origin,
-    domain_ring,
     dominant,
     rows_of,
     write_dem,
@@ -67,7 +67,7 @@ from fraction_fixtures import (
 )
 from gpkg_fixtures import Layer, write_gpkg
 from gpkg_fixtures import Row as GpkgRow
-from legend_fixtures import basenames, coded_map, legend_text, uncoded_map, write
+from legend_fixtures import basenames, coded_map, legend_text, write
 from plyread import parse_header, read_ply
 from recordread import file_field
 from tin_engine.io.repository import FeatureManifest
@@ -347,7 +347,7 @@ class TestSources:
         monkeypatch.delenv("RASPUTIN_DATA", raising=False)
         gpkg = write_cover_gpkg(tmp_path / "cover.gpkg", cover_polygons())
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
-        write_sources(config, {CATALOGUE_KEY: vector_entry(gpkg, "Test cover", rules="corine")})
+        write_sources(config, {CATALOGUE_KEY: vector_entry(gpkg, "Test cover", classes="corine")})
         want = table(run_vtk(dem, domain, tmp_path / "a.vtk", gpkg))
         target = tmp_path / "b.vtk"
         code, output = mesh(dem, domain, target, "--land-cover", CATALOGUE_KEY)
@@ -376,7 +376,7 @@ class TestAFetchedLayer:
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
         entry = {
             "kind": "arcgis-features", "url": FEATURES_URL, "crs": MESH_CRS,
-            "fields": ["ID", "Code_18"], "rules": "corine",
+            "fields": ["ID", "Code_18"], "classes": "corine",
             "credit": "Test cover, {url} (accessed on {date})", "licence_note": "Test licence",
         }  # fmt: skip
         write_sources(config, {FEATURES_KEY: entry})
@@ -457,18 +457,18 @@ class TestRefusals:
         )
         assert "9999" in squashed(output) and "--land-cover" in output, output
 
-    def test_a_code_the_legend_colours_but_the_rules_lack_names_the_rules(
+    def test_a_code_the_legend_colours_but_the_class_file_lacks_is_refused(
         self, tmp_path: Path, dem: Path, domain: Path
     ) -> None:
-        """The legend colours 5 and 6, the rules list only 5 (an unlisted
-        class is land for the lines), so the code-6 polygon reaches the
-        fractions and is refused there, by the rules."""
+        """The legend colours 5 and 6, the class file lists only 5 (an
+        unlisted class is kept), so the code-6 polygon reaches the fractions
+        and is refused there, by the class file."""
         colours = write(
             tmp_path / "five-six.toml",
             legend_text("fs", "p", [(5, "Five", "#1f8d49"), (6, "Six", "#2532e4")]),
         )
         classes = '[[class]]\ncode = 5\nlabel = "Five"\ncolour = "#1f8d49"\n'
-        text = coded_map(attribute="Code_18", classes=classes, unlisted="land")
+        text = coded_map(attribute="Code_18", classes=classes, unlisted="keep")
         text = re.sub(r'^legend = ".*"$', f'legend = "{colours.name}"', text, flags=re.M)
         rules_file = write(tmp_path / "five.toml", text)
         (_, forest), (_, water), _ = cover_polygons()
@@ -491,16 +491,16 @@ class TestRefusals:
         output = self.refused(dem, domain, tmp_path, "--land-cover", str(cover), before=phases)
         assert "--land-cover-classes" in output, output
 
-    def test_an_uncoded_legend_is_refused_before_any_phase(
+    def test_a_class_file_without_a_code_system_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
     ) -> None:
-        toml = tmp_path / "levees.toml"
-        toml.write_text(uncoded_map(), encoding="utf-8")
+        text = re.sub(r"^code_system = .*\n", "", coded_map(attribute="Code_18"), flags=re.M)
+        toml = write(tmp_path / "uncoded.toml", text)
         output = self.refused(
             dem, domain, tmp_path, "--land-cover", str(cover), "--land-cover-classes", str(toml),
             before=phases,
         )  # fmt: skip
-        assert "--land-cover-classes" in output and "codes" in output, output
+        assert "--land-cover-classes" in output and "code_system" in output, output
 
     def test_a_year_with_a_file_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
@@ -511,18 +511,3 @@ class TestRefusals:
             "--land-cover-year", "2018", before=phases,
         )  # fmt: skip
         assert "--land-cover-year" in output and "no years" in output, output
-
-    def test_a_coded_features_rules_beside_it_is_refused(
-        self, tmp_path: Path, dem: Path, domain: Path, cover: Path
-    ) -> None:
-        """4.5: one code system per mesh, as for a class raster."""
-        inner = Polygon(domain_ring()).buffer(-200.0)
-        features = write_geojson(
-            tmp_path / "corine.geojson", [Feat(1, inner, {"Code_18": "311"})], crs=MESH_CRS
-        )
-        output = self.refused(
-            dem, domain, tmp_path,
-            "--features", str(features), "--features-rules", "corine",
-            "--land-cover", str(cover), "--land-cover-classes", "corine",
-        )  # fmt: skip
-        assert "--land-cover" in output and "corine" in output, output
