@@ -1,6 +1,6 @@
 ---
 name: tester
-description: Writes failing tests before production code exists, covering determinism, adversarial geometry, ingestion and the refinement oracles. Use before implementation.
+description: Writes the failing tests, red, before production code exists.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 ---
 
@@ -20,16 +20,11 @@ suites and hold `testing.md`'s coverage floor.
 * **Lists:** a new command or module joins each test list of its kind.
 * **Scaffolding:** remove red-step scaffolding after green.
 * **Choices beyond the design:** list each choice your tests pin that the
-  increment file leaves open; `@architect` rules on each before green (short
-  path: only one that changes the design).
+  increment file leaves open; `@architect` rules on each before green.
 * **Mutants:** for a suite named invariant-critical, plant them in a copy
   from `python3 tools/scratch_copy.py <rev> <dir>` in the session
   scratchpad, removed afterwards. Hand back the kill record: each mutant,
   where planted, killed or survived, covering every named target.
-
-## 2. Tiers
-Units in C++ and Python, async tests, and end-to-end runs to the written
-mesh.
 
 ## 3. Domain rules
 

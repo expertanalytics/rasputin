@@ -1,7 +1,7 @@
 # Increment records
 
-One file per increment, `docs/increments/NN-name.md`, written by `@architect`
-before `@tester` starts and read by every persona working on it.
+One file per full-lane increment, `docs/increments/NN-name.md`, read by
+every persona working on it.
 
 ## The loop
 
@@ -11,15 +11,15 @@ before `@tester` starts and read by every persona working on it.
    reported to Ola before it is built. First comes **Prior art: legacy and
    literature**.
 
-   *Literature.* The published method it builds on, cited, and each
-   departure with its reason, saying so when one drops the method's
-   guarantees. A novelty claim says what was searched and found; an unchecked
-   one is a defect, as publication is kept possible.
+   *Literature:* the published method it builds on, cited; each departure
+   with its reason, named when it drops the method's guarantees; for a
+   novelty claim, what was searched and found (an unchecked one is a defect:
+   publication is kept possible).
 
-   *Legacy.* `git grep -n <pattern> legacy-archive -- legacy`, the files it
-   returned, and what is carried across or why nothing is; `@architect`
-   reads that source and states its intent. `@reviewer` reviews the design
-   before `@tester` starts, and again when an update adds a step.
+   *Legacy:* `git grep -n <pattern> legacy-archive -- legacy`, its files,
+   and what is carried across (its intent stated) or why nothing is.
+   `@reviewer` reviews the design before `@tester` starts, and again when an
+   update adds a step.
 2. `@tester` commits a failing suite, **red**, before the implementation.
 3. `@developer` makes it green; the green commit touches **no test file**. A
    ruling or retuned constant after red is `@tester`'s amendment, in its own
@@ -34,20 +34,22 @@ The main session writes the as-built record (pins, kill record, counts) from
 the handbacks and updates `ROADMAP.md`'s row in the PR. No stacked branches;
 one increment file per PR.
 
-## Small changes: the short path
+## Two lanes
 
-Under 50 net lines (`CLAUDE.md` §2), no C++ file and nothing *Acceptance*
-covers: the brief says short path, and `@reviewer` may send it back. The
-increment file holds the change, its tests, what is left out, the estimate
-and *Prior art*. One `@reviewer` round judges design, red and green together
-and rules on the red step's pins; a pin that changes the design goes to
-`@architect` before green. Red still comes before green.
+**The full lane** is the loop above, for the meshing core, the code whose
+mistakes give wrong numbers without a crash, and the land-surface physics.
 
-## Acceptance: an increment that touches refine or mesh code
+**The fast lane** is everything else: one `@developer`
+(`tools/brief.py --lane fast`) writes the test and the fix on one branch,
+CI runs, and it merges; no increment file, `@reviewer` or retrospective. CI
+refuses a full-lane path without an increment file (`tools/check_lane.py`
+lists the paths). After three red CI runs, stop and ask Ola through
+`tools/questions.py`.
+
+## Acceptance
 
 A diff touching `include/terrain/refinement/`, `include/terrain/mesh/` or
-what drives them needs `@perf`'s acceptance run (`.claude/agents/perf.md`,
-§1).
+what drives them needs `@perf`'s acceptance run (`perf.md` §1).
 
 ## Cost constraints
 

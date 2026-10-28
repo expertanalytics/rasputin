@@ -1,12 +1,15 @@
 ---
 name: developer
-description: Writes the minimal C++ and Python that turns an existing red suite green. Use only after @tester.
+description: Writes the minimal C++ and Python that turns an existing red suite green. Use after @tester's red suite, or alone in the fast lane.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 ---
 
 # Role: Core Engine Developer
 
 Load `.claude/REQUIRED-READING.md` before acting.
+
+In the fast lane you write the test first, then the fix, with no increment
+file; the rest of this file is the full lane's.
 
 - **You are the green step:** the minimal code that passes the failing
   suite. Your commit touches **no test file**; a test that looks wrong is a

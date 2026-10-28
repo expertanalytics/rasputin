@@ -1,6 +1,6 @@
 ---
 name: python-development
-description: Idiomatic Python 3.12+ for the orchestration layer. Use when writing Pydantic V2 models, Typer CLIs, asyncio pipelines, pytest/pytest-asyncio suites, or satisfying the strict mypy and ruff gates over src_python/tin_engine.
+description: Python 3.12+ orchestration: Pydantic V2 models, Typer CLIs, asyncio, pytest suites and the strict mypy and ruff gates.
 ---
 
 # Python Orchestration Layer
@@ -24,17 +24,14 @@ Composition over inheritance; `typing.Protocol` or functions over class
 hierarchies.
 
 ## 6. Docstrings and Comments
-They describe the code as it is, for a reader who never saw its history.
+They, and CLI `help=` text, describe the code as it is, for a reader who
+never saw its history.
 * A docstring says what the object takes, returns and refuses, and why
   anything surprising is so; a comment says why a line is as it is.
-* No history: no increment or design labels, review names, deciders, commit
-  hashes or past behaviour. A decision is written as its reason; a chosen
-  value says it was chosen.
-* A design-file pointer only where a derivation is too long to repeat:
-  `` `<path>.md`, *<heading>* ``, one line, at most one per module
-  docstring.
-* The same for CLI `help=` text.
-* An outside bug link only beside its workaround, with the reason written.
+* No increment or design labels, review names, deciders, commit hashes or
+  past behaviour: a decision is written as its reason, and a chosen value
+  says it was chosen (`tools/check_code_history.py` checks the labels).
+* At most one design-file pointer per module docstring, one line
+  (`` `<path>.md`, *<heading>* ``), where a derivation is too long to repeat;
+  an outside bug link only beside its workaround, with the reason.
 * Tool directives (`# type: ignore[...]`, `# noqa`, `# fmt: skip`) stay.
-
-`tools/check_code_history.py` checks the labels; the reviewer the rest.

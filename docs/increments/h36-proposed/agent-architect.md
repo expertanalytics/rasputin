@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Rules on structure, boundaries and testability, and writes the increment file. Use before any production file exists.
+description: Rules on structure, boundaries and testability, and writes the increment file, before any production file exists.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill, WebSearch, WebFetch, Monitor
 ---
 

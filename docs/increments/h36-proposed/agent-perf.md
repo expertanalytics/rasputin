@@ -1,6 +1,6 @@
 ---
 name: perf
-description: Runs the acceptance benchmark of increments touching refine or mesh code, owns tools/bench.py, profiles, and answers performance questions with measured figures.
+description: Runs the acceptance benchmark, owns tools/bench.py and profiles; answers performance questions with measured figures.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 ---
 
@@ -23,8 +23,7 @@ only.
 ## 2. How a run is made
 * **Like with like:** record the power state (`pmset -g batt`; Linux
   `/sys/class/power_supply`); compare battery with battery, AC with AC, and
-  `--hardening on` or `off` with its own kind. Missing such a baseline,
-  measure the previous merge commit that way, back to back.
+  `--hardening on` or `off` with its own kind.
 * **Rebuilt:** with `--no-build`, run `python3 tools/rebuild_core.py` first.
 * **Alone:** a timing run beside nothing, read-only agents included; an
   untimed run may have one writer and read-only agents beside it.

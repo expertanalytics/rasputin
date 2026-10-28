@@ -1,6 +1,6 @@
 ---
 name: geospatial-data-formats
-description: Geospatial ingestion and CRS handling in Python. Use when reading or writing rasters and vectors, parsing GeoTIFF with tifffile, working with shapely geometry, pyproj transformations, CRS metadata models, or deciding what crosses the Python/C++ I/O boundary.
+description: Geospatial input in Python: rasters, vectors, GeoTIFF with tifffile, shapely, pyproj and CRS, and what crosses the I/O boundary.
 ---
 
 # Geospatial Data Formats & CRS

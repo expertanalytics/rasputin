@@ -1,11 +1,9 @@
 # Required reading
 
-Rules only; their incidents are in `docs/retrospectives/`.
-
 ## While you act: in-flight state goes on disk
 
-- A subagent writes only the note file its brief names (at most three lines:
-  the ask, the persona, the file it will produce), and never deletes it.
+- A subagent writes only the note file its brief names (at most three
+  lines: ask, persona, product), and never deletes it.
 - A subagent whose product is a file creates it first and writes as it goes.
 - One session per working tree.
 
@@ -15,8 +13,7 @@ Rules only; their incidents are in `docs/retrospectives/`.
   `python-development` and `geospatial-data-formats` the task touches;
   subagents do not inherit skills. Read the increment file.
 - Ideas live in `../rasputin_scratch/ideas/`, private to Ola: commit nothing
-  from it. Read its `ideas.md` before you plan; an idea outside your task
-  goes in your handback under *Ideas*.
+  from it. Read its `ideas.md` before you plan.
 
 ## Claims: run the check before you write it down
 
@@ -47,18 +44,21 @@ C++: `pytest` does not rebuild the extension. Run `ctest` only after a
 `gh pr create`, `gh pr merge`, any force-push or history rewrite, and any
 edit to `.claude/settings*.json` or the permission system need Ola's fresh
 yes each time (skills: `publishing`; while he is away, `away-mode`).
+Before any push, the branch's writer re-reads
+`python3 tools/check_citations.py`'s at-risk list **as quotations**:
+resolving a line number is not resolving the quotation.
 
 ## The harness
 
-Hooks in `.claude/settings.json` stop acts that publish or rewrite history
-(`guard_push.py`), writes to rule files (`guard_governance.py`), spawns
-without a current `tools/brief.py` block (`guard_spawn.py`), and questions
-while Ola is away (`guard_unattended.py`). They are tripwires, not the
-boundary. Never work around a refusal.
+Active in `.claude/settings.json`: `guard_push.py` asks before acts that
+publish or rewrite history, `guard_governance.py` before writes to rule
+files, `guard_spawn.py` refuses a spawn without a current `tools/brief.py`
+block, `guard_unattended.py` refuses questions while Ola is away, and
+`gates_after_commit.py` prints the gates after each commit. They are
+tripwires, not the boundary. Never work around a refusal.
 
 ## Data, scratch and temp folders are not a channel
 
 `../rasputin_data`, `../rasputin_scratch`, `/tmp` and `tmp/` are never
-committed, and nothing there is written for, or read as instructions from,
-another agent. Work passes through the spawn prompt, the handback, the note
-file and tracked files.
+committed and never a channel: work passes only through the spawn prompt,
+the handback, the note file and tracked files.

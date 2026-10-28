@@ -1,6 +1,6 @@
 ---
 name: away-mode
-description: What to do while Ola is away (unattended mode). Load when the recap says unattended mode is on, when Ola says he is leaving, or when a guard refuses an act.
+description: Rules while Ola is away (unattended mode). Load when the recap says it is on, when he says he is leaving, or when a guard refuses an act.
 ---
 
 # Unattended mode
@@ -9,21 +9,23 @@ description: What to do while Ola is away (unattended mode). Load when the recap
   and ends it (`--back`). No agent runs `away.py` or writes
   `<git-common-dir>/harness/`.
 * When he says he is leaving, ask how long and ask him to run `away.py`.
-  Before he goes, `QUEUE:` names a fallback needing no ruling and no
-  governed write, and one stays queued for the last hour.
-* A guarded act is refused and already queued: never retry it or work
-  around it, except:
-  - a refusal naming only ordinary files (no rule file, harness state or
-    push) is a false positive: redo it with Edit or Write and report a
-    `GUARD FALSE POSITIVE:` line with the files;
-  - a refused push, PR or merge whose sole reason has gone (the head now
-    approved by `@reviewer`, the branch now granted, the form now right).
-* A branch Ola granted (`away.py --grant <branch>`) may be pushed
-  (`git push origin <sha>:refs/heads/<branch>`; `git push private ...` for
-  commits of `private/master`), opened as a PR and enqueued, or on the
-  private repository merged once green, once per head, if `@reviewer`'s
-  last verdict approved its head. The grant ends with the window.
-* Anything else for Ola is an `ASK OLA:` line (main session: `session.md`;
-  subagent: handback), then other work. A default taken is an `ASK OLA:`
-  line ending "default taken: <what>"; the first report after the window
-  lists them all. Whether to build at all waits for Ola.
+  `tools/work_pipes.py` then holds a fallback needing no ruling or governed
+  write, one still queued in the last hour.
+* A refused act is already queued: never retry it or work around it,
+  except a refusal naming only ordinary files (no rule file, harness state
+  or push), redone with Edit or Write and reported as a
+  `GUARD FALSE POSITIVE:` line naming them; and a push, PR or merge whose
+  sole reason has gone (head now approved, branch now granted, form now
+  right).
+* A branch Ola granted (`away.py --grant <branch>`) may, once per head, be
+  pushed (`git push origin <sha>:refs/heads/<branch>`, or `git push private
+  ...` for commits of `private/master`), opened as a PR and enqueued, or
+  merged on the private repository once green, if `@reviewer`'s last
+  verdict approved that head and its sha is under `## Review` in the
+  increment file. A fast-lane branch for origin needs neither (the guard
+  checks its lane). Grants end with the window.
+* Anything else for Ola: `questions.py add --act`, then other work. Record
+  each default taken, a first-question answer included, with
+  `questions.py taken` as it is taken; the first report after the window is
+  `questions.py list`. A subagent puts both in its handback. Whether to
+  build at all waits for Ola.

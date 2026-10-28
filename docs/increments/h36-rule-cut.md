@@ -1,9 +1,11 @@
 # Harness h36: cut the rule payload by half
 
-Status: **designed**, 2026-10-27, off master `b2207408`; round 2 after
-`@reviewer`'s CHANGES REQUESTED on `439e8f81`. Short path under today's
-rules: about 37 counted lines (§3), no C++ file, no refine or mesh code. Most
-of the PR is rule text, and six of the changed tools are governed
+Status: **designed**, 2026-10-28, round 3: origin/master `14a17091` merged
+in, and every proposed text rebased onto today's version of the file it
+replaces (§7). About 37 counted lines (§3), no C++ file, no refine or mesh
+code, and no path `tools/check_lane.py` names as full-lane. Kept in the full
+lane by the main session (design and review rounds already run). Most of the
+PR is rule text, and six of the changed tools are governed
 (`guard_governance.py` asks before each write), so both the main session's
 prose step and `@developer`'s green step run with Ola present.
 
@@ -18,14 +20,20 @@ this asap":
 > imperative command. Shift secondary guidance into dynamic skills that load
 > strictly on-demand.
 
-**Defaults the main session took while Ola is away** (defaults, not his
-rulings; he can reverse either):
+2026-10-28 13:33 UTC, answering "Should the rule cut also shorten the guide
+to increments and the four domain skills, delete the principles file, and add
+a small rebuild tool, beyond the three files the outside review named?":
 
-- Scope: every file `tools/rule_sizes.py` counts, so `docs/increments/README.md`,
-  `docs/PRINCIPLES.md` and the four domain skills are in, beside the files
-  the review names; the new rebuild tool is in too.
-- The lean-process rulings (§5) are carried in shortened; Ola sees each
-  shorter wording at the final review.
+> yes to the rule cut, all four files
+
+Read here as a yes to all four parts of the wider scope: the increments
+README, the four domain skills, deleting `docs/PRINCIPLES.md`, and
+`tools/rebuild_core.py` (an open question in the round-3 handback, with that
+reading as its default).
+
+**Default the main session took while Ola was away** (not his ruling; he can
+reverse it): the lean-process rulings, now merged (§5), are carried in
+shortened; Ola sees each shorter wording at the final review.
 
 The main session also reported that Ola likes tools that do one job and would
 build harness tools where they save context (its report, not his words).
@@ -44,7 +52,7 @@ script can carry out become scripts. No novelty is claimed.
 returns nothing; nothing is carried across.
 
 *Ideas file.* Two entries overlap: "Morning check proposals P1-P12 and the
-tester.md cut" (the cut is taken up here: `tester.md` 811 to 409 words) and
+tester.md cut" (the cut is taken up here: `tester.md` 799 to 374 words) and
 the `docs/PRINCIPLES.md` review (stale entries, D1 against two writers),
 which the file's deletion settles.
 
@@ -65,16 +73,16 @@ loads a `CLAUDE.md` in any subdirectory it reads).
 
 | File | Stays as an imperative | Moves to a skill | Replaced by a tool | Dropped |
 |---|---|---|---|---|
-| `CLAUDE.md` | §1 to §4, each cut to its commands; step order | dispatch rules of §3 → `dispatch`; CI and merge queue → `publishing` | size-limit definition → `tools/count_loc.py` docstring; "merge commit, never squash" → the merge queue's method; `@orchestrator` timing → `tools/duties.py`; gate list → `gates_after_commit.py`, except `check_code_history.py`, which the hook does not run (`gates_after_commit.py` `gates()`), so its command stays in §4's block | method-flag and `-d` behaviour of `gh pr merge` |
-| `REQUIRED-READING.md` | note file, skills, ideas, claims, approval boundary (four lines), harness (four lines), data folders | cold start, `session.md` → `dispatch`; grants, reviewer-before-push → `publishing`; unattended mode → `away-mode` | rebuild recipe → `tools/rebuild_core.py`; hook descriptions → the hooks' own refusal texts | recap-size rule; `touch` after a `cp` restore (mutants now run in scratch copies); "editing rule files is ordinary tree work" |
-| `docs/increments/README.md` | the loop, short path, acceptance pointer, cost constraints | verdict format → `reviewer.md`; acceptance details → `perf.md` | merge commit → the merge queue | "never dropped" list beyond red before green (each is stated where it applies) |
+| `CLAUDE.md` | §1 to §4, each cut to its commands; step order with both lanes | dispatch rules of §3, the first question included → `dispatch`; CI and merge queue → `publishing` | size-limit definition → `tools/count_loc.py` docstring; "merge commit, never squash" → the merge queue's method; `@orchestrator` timing → `tools/duties.py`; gate list → `gates_after_commit.py`, except `check_code_history.py`, which the hook does not run (`gates_after_commit.py` `gates()`), so its command stays in §4's block | method-flag and `-d` behaviour of `gh pr merge` |
+| `REQUIRED-READING.md` | note file, skills, ideas, claims, approval boundary and the at-risk citation re-read, harness hook list, data folders | cold start, `questions.py` and `work_pipes.py` → `dispatch`; grants, full-lane reviewer-before-push → `publishing`; unattended mode, fast-lane branches while away → `away-mode` | rebuild recipe → `tools/rebuild_core.py`; hook descriptions → the hooks' own refusal texts | recap-size rule; `touch` after a `cp` restore (mutants now run in scratch copies); "editing rule files is ordinary tree work" |
+| `docs/increments/README.md` | the loop, the two lanes, acceptance pointer, cost constraints | verdict format → `reviewer.md`; acceptance details → `perf.md` | merge commit → the merge queue | |
 | `docs/PRINCIPLES.md` | deleted; A6, B3, B4, D2, D3 become five lines in REQUIRED-READING's *Claims*; the six files that name it change (§3) | | | *Origin* and *Status* lines |
 | `.claude/briefs/common.md` | all; tested phrases kept word for word | | | "never by a name pattern" |
 | `architect.md` | §1 to §5 condensed | | | generic pillar prose |
-| `developer.md` | all, condensed | | | |
+| `developer.md` | all, condensed, the fast-lane paragraph included | | | |
 | `orchestrator.md` | all, condensed | | | |
 | `perf.md` | all, condensed; gains the acceptance run | | `--no-build` rebuild → `rebuild_core.py` | py-spy hint |
-| `reviewer.md` | all, condensed; gains the verdict format and REQUIRED-READING's three prose-branch checks (run what each claim is about; re-read the at-risk citations as quotations; name each new rule's incident) | | | |
+| `reviewer.md` | all, condensed; gains the verdict format | | | |
 | `tester.md` | §1, §3A, §3C, §3D, §4 | | coverage floor → `--cov-fail-under` in the pytest config | Catch2 and tier prose |
 | four domain skills | condensed, section numbers kept | | | marketing lines, generic advice |
 
@@ -90,9 +98,9 @@ they are loaded into every session.
 | `away-mode` | unattended mode, refusals, grants, defaults while away | when the recap names it (unattended mode on), when Ola says he is leaving, when a guard refuses an act |
 
 The approval boundary itself stays in REQUIRED-READING: every agent must know
-the remote is Ola's without loading anything. The three prose-branch review
-checks live in `reviewer.md`, the one file the agent that runs them loads;
-`publishing` only says the review comes first.
+the remote is Ola's without loading anything, and so does the writer's
+re-read of the at-risk citations before a push. `publishing` says the review
+comes first on a full-lane branch.
 
 **Why the recap names the skills.** `CLAUDE.md` stays in context through a
 compaction, but a skill body loaded earlier does not, and a line already
@@ -159,78 +167,60 @@ counted files, run against the proposed texts). Citations of PRINCIPLES.md
 pinned to a commit (`docs/PRINCIPLES.md@94a157b2:...`) still resolve.
 
 **Counted lines:** `rebuild_core.py` about 35, `session_state.py` about +6,
-the four list entries -4, `new_worktree.py` 0: about **37**, under the short
-path's 50.
+the four list entries -4, `new_worktree.py` 0: about **37**.
 
 ## 4. Words, by `tools/rule_sizes.py`'s count
 
+"Now" is the merged tree at `8356c3a3` (`python3 tools/rule_sizes.py`);
+"proposed" is `wc -w` over `docs/increments/h36-proposed/`, the same count
+(`rule_sizes.words` is `len(text.split())`).
+
 | File | Now | Proposed | Change |
 |---|---|---|---|
-| `CLAUDE.md` | 1155 | 308 | -847 |
-| `.claude/REQUIRED-READING.md` | 1857 | 471 | -1386 |
-| `docs/increments/README.md` | 1060 | 432 | -628 |
+| `CLAUDE.md` | 1175 | 295 | -880 |
+| `.claude/REQUIRED-READING.md` | 1752 | 473 | -1279 |
+| `docs/increments/README.md` | 990 | 412 | -578 |
 | `docs/PRINCIPLES.md` | 437 | 0 | -437 |
-| `.claude/briefs/common.md` | 244 | 206 | -38 |
-| `architect.md` | 495 | 219 | -276 |
-| `developer.md` | 217 | 142 | -75 |
-| `orchestrator.md` | 482 | 260 | -222 |
-| `perf.md` | 623 | 359 | -264 |
-| `reviewer.md` | 565 | 343 | -222 |
-| `tester.md` | 811 | 409 | -402 |
-| skill `computational-geometry` | 346 | 197 | -149 |
-| skill `geospatial-data-formats` | 249 | 126 | -123 |
-| skill `modern-cxx` | 308 | 153 | -155 |
-| skill `python-development` | 634 | 277 | -357 |
-| skill `dispatch` (new) | 0 | 342 | +342 |
-| skill `publishing` (new) | 0 | 161 | +161 |
-| skill `away-mode` (new) | 0 | 276 | +276 |
-| **Total** | **9483** | **4681** | **-4802 (49.4 % of now)** |
+| `.claude/briefs/common.md` | 244 | 227 | -17 |
+| `architect.md` | 495 | 218 | -277 |
+| `developer.md` | 251 | 174 | -77 |
+| `orchestrator.md` | 504 | 310 | -194 |
+| `perf.md` | 623 | 338 | -285 |
+| `reviewer.md` | 454 | 328 | -126 |
+| `tester.md` | 799 | 374 | -425 |
+| skill `computational-geometry` | 346 | 176 | -170 |
+| skill `geospatial-data-formats` | 249 | 109 | -140 |
+| skill `modern-cxx` | 308 | 131 | -177 |
+| skill `python-development` | 634 | 254 | -380 |
+| skill `dispatch` (new) | 0 | 365 | +365 |
+| skill `publishing` (new) | 0 | 164 | +164 |
+| skill `away-mode` (new) | 0 | 281 | +281 |
+| **Total** | **9261** | **4629** | **-4632 (50.0 % of now)** |
 
-Counted with `wc -w` over `docs/increments/h36-proposed/` (round 2: the
-reviewer gains the three prose-branch checks, `publishing` loses them,
-`CLAUDE.md` names the hook's gates and the code-history command, `dispatch`
-is trimmed; the total is unchanged). The total counts the new skills in
-full, though they load only on demand.
+The total counts the new skills in full, though they load only on demand.
 What each agent loads before its first act (`CLAUDE.md`, REQUIRED-READING,
 the increments README, plus the brief and its persona file, or `dispatch`
 for the main session):
 
 | Agent | Now | Proposed |
 |---|---|---|
-| main session | 4072 | 1553 |
-| `@architect` | 4811 | 1636 |
-| `@developer` | 4533 | 1559 |
-| `@orchestrator` | 4798 | 1677 |
-| `@perf` | 4939 | 1776 |
-| `@reviewer` | 4881 | 1760 |
-| `@tester` | 5127 | 1826 |
+| main session | 3917 | 1545 |
+| `@architect` | 4656 | 1625 |
+| `@developer` | 4412 | 1581 |
+| `@orchestrator` | 4665 | 1717 |
+| `@perf` | 4784 | 1745 |
+| `@reviewer` | 4615 | 1735 |
+| `@tester` | 4960 | 1781 |
 
-## 5. With the lean-process change (h34), which lands first by default
+## 5. The lean-process change (h34), merged first
 
-h34 (branch `worktree-lean-process`, waiting for Ola) edits the same files
-with 13 old-to-new texts. This PR then merges master, and the main session
-carries each h34 ruling into the proposed text, condensed:
-
-- R1 (lessons go to the lessons log): `dispatch` already says only "pass
-  handback lessons to `@orchestrator`"; no change.
-- R2 to R6 (`reviewer.md`): the opening sentence becomes h34's semantic
-  mandate; "CI first" goes; check 3 becomes "a change to the build is
-  exercised by the workflow"; "Suggestions" becomes "Follow-ups, filed by
-  your spawner as pipe items".
-- R7 to R10 (`orchestrator.md`): h34's description; the `-research` file
-  name goes; §3 becomes h34's lessons log and weekly retrospective; §4 adds
-  "and the log".
-- R11 to R13 (README): the short path gains "no rule text, no new module or
-  public type", the one-round rule, and its pointer from step 4.
-- h34's `tests/python/test_lean_process_rule_text.py` pins h34's texts word
-  for word; this PR's red step deletes it, since those texts no longer exist.
-
-Estimated effect: about +60 words, so about 4,741, half of now, with no
-margin. An estimate: if the applied total (`python3 tools/rule_sizes.py`)
-comes out above 4,741, the main session cuts the excess from the carried
-wordings before the final review, where Ola sees them (default above).
-With h34 first, this PR no longer takes the short path (h34 bars rule text
-from it).
+h34 merged as #389, with its follow-ups #390 to #393 (question tool, session
+file retired, lane follow-ups). Its rulings are now in the files themselves,
+so each proposed text was rebased onto them (§7) rather than carried over
+from h34's design. h34's `tests/python/test_lean_process_rule_text.py` pins
+its texts word for word; this PR's red step deletes it, since most of those
+texts no longer exist in that form. Its words are in "now" above, so §4's
+total already includes them; no estimate remains.
 
 ## 6. Tests and steps
 
@@ -274,10 +264,21 @@ keeps its intent):
   (replacing the `cmake --build` and `--target _core` asserts); the
   `build-pyext` assert goes.
 
-`tests/python/test_spawn_rule_text.py` and `tests/python/test_brief.py`
-pass unchanged: the phrases they pin are kept (checked with `grep` against
-the proposed files; the suites run against the applied files in CI). No
-invariant-critical suite.
+`tests/python/test_lean_process_rule_text.py` is deleted in the red step
+(§5).
+
+Three suites read the real rule files and pass unchanged against the
+proposed texts (checked by a script over `docs/increments/h36-proposed/`
+that applies each suite's own matching: its regexes, `collapsed()` and
+phrase lists; the suites run against the applied files in CI):
+`tests/python/test_spawn_rule_text.py` (the step-order phrase "a performance
+fix is timed by `@perf` before review;", the harness section naming
+`guard_spawn.py` and `tools/brief.py`, the tester and reviewer phrases),
+`tests/python/test_settings_wiring.py` (*The harness* has one paragraph
+opening "Active in `.claude/settings.json`" that names `guard_unattended.py`,
+`guard_push.py`, `guard_governance.py` and `gates_after_commit.py`), and
+`tests/python/test_brief.py` through `brief_fixtures.PHRASES` (the handback
+headings, "DEFAULTS TAKEN" included). No invariant-critical suite.
 
 Steps: red (`@tester`), green (`@developer`, with Ola present for the
 governed files: the tool, the recap line, the four list entries,
@@ -289,6 +290,61 @@ over all of it.
 Left out: a `rule_sizes.py` column for the per-agent payload of §4 (counted
 here by `wc -w`); the history paragraph in `guard_governance.py`'s
 docstring.
+
+## 7. Round 3: the proposed texts rebased onto 2026-10-28's rules
+
+The rule files changed between `b2207408` and `14a17091`
+(`git diff b2207408 14a17091 -- <file>`). Each change, and where the
+proposed text now holds it:
+
+| Today's rule | Proposed text |
+|---|---|
+| First question before an item's first spawn (`CLAUDE.md`) | `dispatch`, *Spawning* |
+| Step order with full and fast lane (`CLAUDE.md`) | `CLAUDE.md`, word for word |
+| Lessons go to the lessons log; a duty runs first with no free item (`CLAUDE.md`) | `dispatch` |
+| Merge queue text without the method flag (`CLAUDE.md`) | `publishing` |
+| Questions through `tools/questions.py`, items in `work_pipes.py`; `session.md` gone (REQUIRED-READING) | `dispatch`, *Work in flight*; the `session.md` bullet is gone |
+| `@reviewer` before push only on a full-lane branch (REQUIRED-READING) | `publishing` |
+| Writer re-reads the at-risk citations as quotations before any push (REQUIRED-READING) | REQUIRED-READING, approval boundary |
+| Fast-lane branch for origin needs no grant or review while away; `questions.py add --act`, `taken`, `list`; fallback held in `work_pipes.py` | `away-mode` |
+| Two lanes replace the short path; three red CI runs, ask Ola (README) | increments README, *Two lanes* |
+| Developer description and fast-lane paragraph | `developer.md` |
+| Tester: no short-path exception to *Choices beyond the design* | `tester.md` |
+| Orchestrator: description, lessons log and weekly retrospective, no `-research` name, writes the log | `orchestrator.md` |
+| Reviewer: semantic mandate, no CI precondition, build-workflow check, *Follow-ups* | `reviewer.md` |
+| Handback heading "DEFAULTS TAKEN" (brief) | `briefs-common.md` |
+
+**Dropped or rewritten from rounds 1 and 2,** because a rule merged today
+replaced them:
+
+- `reviewer.md` no longer gains the three prose-branch checks: h34 removed
+  them (its R15); adding them back would have reverted Ola's ruling.
+- `dispatch`'s `session.md` bullet and `away-mode`'s `ASK OLA:` and `QUEUE:`
+  lines: replaced by `questions.py` and `work_pipes.py` (#385, #391).
+- The README's short path, and every "short path" in this file: the short
+  path no longer exists.
+- §5's carry-over plan and its +60-word estimate: h34 is merged, so its
+  words are counted in "now".
+
+**Restored**, dropped by rounds 1 and 2 without a reason given in §1: the
+brief's scratch-copy write grant (`25f01c49`) and "never `sleep` or a
+polling loop" (`1d778553`); `dispatch`'s condition "with both writer slots
+busy" on merging append-only blocks.
+
+**Defects of round 2 found while rebasing**, now fixed: the proposed
+REQUIRED-READING's *The harness* lacked the "Active in
+`.claude/settings.json`" paragraph and `gates_after_commit.py`, which
+`test_settings_wiring.py` pins (already so at `b2207408`); the step-order
+phrase and the brief's "ASK OLA" heading would have failed today's
+`test_spawn_rule_text.py` and `brief_fixtures.PHRASES`.
+
+**Cut further to stay at half:** eleven `description` fields (the four
+domain skills, `architect.md`, `orchestrator.md`, `perf.md`, `reviewer.md`,
+`tester.md`, `publishing`, `away-mode`) cut to one short sentence;
+`tester.md` §2 (*Tiers*, a description of the suites), the duplicate
+baseline sentence in `perf.md`, `CLAUDE.md`'s gate-hook sentence (now only
+in REQUIRED-READING's hook list) and REQUIRED-READING's opening line and
+*Ideas* handback clause (the brief's headings carry it) are gone.
 
 ## Review
 

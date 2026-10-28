@@ -3,15 +3,14 @@
 The main session also loads the `dispatch` skill before its first act.
 
 ## 1. Personas
-Each task goes to its persona in `.claude/agents/`; the file's `description`
-says what it does.
+Each task goes to its persona in `.claude/agents/`.
 
-## 2. Core Constraints & Technical Mandates
+## 2. Constraints
 * **Size limit:** under **700 net production lines per pull request**, as
   `python3 tools/count_loc.py <base> <head>` counts them; its docstring
-  defines a counted line. Code packed by hand under `# fmt: skip` /
-  `# fmt: off` stays readable, and the review says why each new region is
-  packed.
+  defines a counted line, and CI runs it with `--max 700`. Code packed by
+  hand under `# fmt: skip` / `# fmt: off` stays readable, and the review
+  says why each new region is packed.
 * **Rule text pays for itself:** a change that adds words to the files
   `tools/rule_sizes.py` counts cuts as many in the same change, unless Ola
   allows the growth.
@@ -25,10 +24,11 @@ says what it does.
 ## 3. Test-Driven Development (TDD) Protocol
 Before acting, read `.claude/REQUIRED-READING.md` and
 `docs/increments/README.md`.
-* **Step order.** Design (`@architect`), failing tests (`@tester`), code
-  (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance
-  run when refine or mesh code is touched. A performance fix is timed by
-  `@perf` before review. Failing tests go back to `@developer`.
+* **Step order.** Full lane (`docs/increments/README.md`): design
+  (`@architect`), failing tests (`@tester`), code (`@developer`), test run,
+  review (`@reviewer`), and `@perf`'s acceptance run when refine or mesh code
+  is touched; a performance fix is timed by `@perf` before review; failing
+  tests go back to `@developer`. Fast lane: `@developer` alone.
 
 ## 4. Operational Commands
 ```bash
@@ -36,10 +36,9 @@ pytest
 cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
 ctest --test-dir build
 mypy && ruff check . && ruff format --check .
-python3 tools/check_code_history.py   # not run by the hook below
+python3 tools/check_code_history.py   # the commit hook skips this one
 ```
 The C++ targets build with `-Wall -Wextra -Wpedantic -Werror`: any warning
-fails. After each commit a hook runs ruff and the other three
-`tools/check_*.py` gates, printing their output. CI
+fails. CI
 (`.github/workflows/main.yaml`) is authoritative: nothing is merge-ready
 until `gh pr checks <pr>` is green.
