@@ -33,7 +33,7 @@ def test_the_class_map_options_are_refused() -> None:
     ("old", "new", "value"),
     [
         ("--features-legend", "--features-rules", "corine"),
-        ("--land-cover-legend", "--land-cover-rules", "mapbiomas-c11"),
+        ("--land-cover-legend", "--land-cover-classes", "mapbiomas-c11"),
     ],
 )
 def test_the_legend_options_are_refused_naming_the_new(old: str, new: str, value: str) -> None:

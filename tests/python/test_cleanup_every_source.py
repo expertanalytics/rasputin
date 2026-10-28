@@ -34,15 +34,15 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   on darwin/arm64), since the land polygon's outline edges are cut off its
   lines.
 - Test 5's message is a :class:`FeatureError` whose text is exactly
-  ``"<file>: border simplification refused: x; --features-tolerance 0 meshes
+  ``"<file>: border simplification refused: x; --edges-tolerance 0 meshes
   this source with its borders as read"``: ``<why>`` is the ``ValueError``'s
   own text.
 - Test 6: each ``features`` entry ends "N lines, M vertices" with that
   source's own counts, sliced from the ``FeatureSet`` by ``counts``;
-  ``features_joined`` is "N lines, M vertices after joining shared edges and
-  adding crossings"; ``features_joined`` and ``features_accuracy_m`` each
+  ``edges_joined`` is "N lines, M vertices after joining shared edges and
+  adding crossings"; ``edges_joined`` and ``land_cover_accuracy_m`` each
   have a ``run_record.WORDING`` entry; with one source lacking an accuracy,
-  ``features_accuracy_m`` is item 3's sentence alone.
+  ``land_cover_accuracy_m`` is item 3's sentence alone.
 - ``MeshingRules.cleaned`` is the field name (the design's); an uncoded file
   without ``positional_accuracy_m`` loads with ``accuracy_m`` None.
 """
@@ -284,7 +284,7 @@ class TestRefusal:
             fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
         assert str(caught.value) == (
             "lakes.geojson: border simplification refused: x; "
-            "--features-tolerance 0 meshes this source with its borders as read"
+            "--edges-tolerance 0 meshes this source with its borders as read"
         )
 
 
@@ -417,9 +417,9 @@ class TestTheRecord:
             assert entry.endswith(f": {counts}") or entry.endswith(f", {counts}"), entry
         assert entries[0].startswith("lake.geojson, rules lakes: 1 feature, ")
         assert entries[1].startswith("corine.geojson, rules corine: 2 features, ")
-        assert JOINED.match(record["features_joined"]), record["features_joined"]
-        assert "features_joined" in rr.WORDING
-        assert "features_accuracy_m" in rr.WORDING
+        assert JOINED.match(record["edges_joined"]), record["edges_joined"]
+        assert "edges_joined" in rr.WORDING
+        assert "land_cover_accuracy_m" in rr.WORDING
 
     def test_a_missing_accuracy_is_the_dem_cell(
         self, tmp_path: Path, bumpy: Path, square: Path, small_lake: Path
@@ -431,6 +431,6 @@ class TestTheRecord:
             *("--features", str(small_lake), "--features-rules", str(rules)),
         )
         assert output.count(NO_ACCURACY) == 1
-        assert record["features_accuracy_m"] == NO_ACCURACY
-        assert record["features_tolerance_m"] == 5.0  # s/2, s = max(10, 10)
-        assert record["features_repair_m"] == pytest.approx(0.1, rel=1e-12)  # s/100
+        assert record["land_cover_accuracy_m"] == NO_ACCURACY
+        assert record["edges_tolerance_m"] == 5.0  # s/2, s = max(10, 10)
+        assert record["edges_repair_m"] == pytest.approx(0.1, rel=1e-12)  # s/100

@@ -198,7 +198,7 @@ class TestPositionalPairing:
         crs and reads its own file CRS (the default EPSG:25833 = the DEM's)."""
         # First source in EPSG:4326, file carrying no crs member: it must be told
         # its CRS by the single paired option, and the reprojection into the DEM
-        # CRS is observable in the recorded `features_crs`.
+        # CRS is observable in the recorded `land_cover_crs`.
         lonlat = ff.moved(FOREST, "EPSG:25833", "EPSG:4326")
         first = write_geojson(tmp_path / "a.geojson", [prop("f", lonlat, "land_cover")], crs=None)
         second = write_geojson(tmp_path / "b.geojson", [prop("wall", WALL, "wall")])
@@ -207,7 +207,7 @@ class TestPositionalPairing:
             "--features", str(first), "--features-crs", "EPSG:4326",
             "--features", str(second),
         )  # fmt: skip
-        crss = [c.strip() for c in stats_row(report(tmp_path), "features_crs").split(";")]
+        crss = [c.strip() for c in stats_row(report(tmp_path), "land_cover_crs").split(";")]
         assert crss == ["EPSG:4326", "EPSG:25833"], crss
 
     def test_one_features_with_no_paired_options_is_unchanged(
@@ -481,8 +481,8 @@ class TestCodeSystems:
 
 
 class TestRecordPerSource:
-    """R6 / I5: one `features` and one `features_crs` entry per source in source
-    order; `features_notice` lists each distinct notice once; per-source `k
+    """R6 / I5: one `features` and one `land_cover_crs` entry per source in source
+    order; `land_cover_notice` lists each distinct notice once; per-source `k
     features` counts are correct."""
 
     def test_two_corine_sources_give_one_notice(
@@ -501,7 +501,7 @@ class TestRecordPerSource:
         # named once, not per source.
         features = stats_row(report(tmp_path), "features")
         assert len(features.split(";")) == 2, features
-        notice = text_field(vtk, "features_notice")
+        notice = text_field(vtk, "land_cover_notice")
         assert notice.count("Copernicus Land Monitoring Service") == 1, notice
 
     def test_per_source_feature_counts_are_correct(
@@ -530,5 +530,5 @@ class TestRecordPerSource:
             tmp_path, bumpy, plain_square,
             *two_sources(corine_src, parcel_src, a_map="corine", b_map="property"),
         )  # fmt: skip
-        crss = [c.strip() for c in stats_row(report(tmp_path), "features_crs").split(";")]
+        crss = [c.strip() for c in stats_row(report(tmp_path), "land_cover_crs").split(";")]
         assert crss == ["EPSG:25833", "EPSG:25833"], crss

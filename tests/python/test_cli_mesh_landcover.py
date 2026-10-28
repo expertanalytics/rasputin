@@ -108,10 +108,10 @@ NOTCHED: list[tuple[float, float]] = [
 BAND = rect(50.2, -30.1, 150.3, -15.2)
 #: 20c-3's four land-cover switches off: today's features, byte for byte.
 CLEAN_UP_OFF = (
-    "--features-repair=0",
-    "--no-features-merge-same-class",
-    "--features-tolerance=0",
-    "--features-outline-snap=0",
+    "--edges-repair=0",
+    "--no-edges-merge-same-class",
+    "--edges-tolerance=0",
+    "--edges-outline-snap=0",
 )
 
 
@@ -239,11 +239,11 @@ class TestFixtures:
         self, tmp_path: Path, bumpy: Path
     ) -> None:
         """16c's labelling of one polygon the domain clips into two pieces.
-        With 20c-3's outline rule off (``--features-outline-snap=0``, ruling
+        With 20c-3's outline rule off (``--edges-outline-snap=0``, ruling
         G2): the band's borders cross the notch's sides, and the rule, on by
         default, moves them there as designed (OR3), while this oracle
         checks every triangle against the input polygon as given. The border
-        simplification is off too (``--features-tolerance=0``): the band does
+        simplification is off too (``--edges-tolerance=0``): the band does
         not tile the domain, so the uncovered rest borders it and the
         simplifier moves its borders, as designed. The repair and the merge
         stay at their defaults."""
@@ -254,8 +254,8 @@ class TestFixtures:
             bumpy,
             features,
             domain,
-            "--features-outline-snap=0",
-            "--features-tolerance=0",
+            "--edges-outline-snap=0",
+            "--edges-tolerance=0",
         )
         west = got.inside(BAND.intersection(rect(12, -80, 80.1, 0)))
         east = got.inside(BAND.intersection(rect(119.9, -80, 190, 0)))

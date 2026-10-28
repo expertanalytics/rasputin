@@ -18,7 +18,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - The pure simplification is `sub_catchments.simplify_domain(domain,
   triangles, tolerance)`, returning the simplified `DomainPolygon`, in the
   domain's CRS, and the band in metres; `tolerance` wins when given, as
-  `_units` reads `--features-tolerance`.
+  `_units` reads `--edges-tolerance`.
 - The stderr line counts a ring's vertices without its closing repeat (ZZ
   is "240", as the design's line says).
 - Test 5 compares the `triangles` and `cells` rows with those of 106e's
@@ -230,12 +230,10 @@ def test_4_with_the_flag_the_budget_is_met(zz_scene: dict[str, Path], run_of: Ru
 
 
 def test_4_the_given_tolerance_sets_the_band(zz_scene: dict[str, Path], run_of: RunOf) -> None:  # noqa: F811
-    ran = run_of(
-        "given.gpkg", "--triangles", "100", "--simplify-domain", "--features-tolerance", "30"
-    )
+    ran = run_of("given.gpkg", "--triangles", "100", "--simplify-domain", "--edges-tolerance", "30")
     assert float(record(ran.conn, "domain_band_m") or "nan") == 30.0
     said = " ".join(ran.output.split())
-    assert "domain: outline simplified at 30 m (--features-tolerance): 240 to" in said, said
+    assert "domain: outline simplified at 30 m (--edges-tolerance): 240 to" in said, said
 
 
 # ------------------------------------------------------------ 5. unchanged without it
@@ -306,7 +304,7 @@ def test_7_needs_a_domain(scene: dict[str, Path], tmp_path: Path) -> None:  # no
 def test_7_needs_a_budget_or_a_band(zz_scene: dict[str, Path], tmp_path: Path) -> None:
     refused(
         zz_scene, tmp_path, "--domain", str(zz_scene["domain"]), "--tolerance", "3",
-        says="needs --triangles, whose budget sets the outline band, or --features-tolerance",
+        says="needs --triangles, whose budget sets the outline band, or --edges-tolerance",
     )  # fmt: skip
 
 

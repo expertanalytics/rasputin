@@ -204,7 +204,7 @@ def test_6_a_mesh_run_with_a_bowtie_land_cover_completes_and_says_so(tmp_path: P
         *("--dem", str(write_dem(tmp_path / "dem.tif"))),
         *("--domain", str(write_domain(tmp_path / "domain.geojson"))),
         *("--tolerance", "3", "--out", str(tmp_path / "x.vtk"), "--record", str(record)),
-        *("--land-cover", str(cover), "--land-cover-rules", "corine"),
+        *("--land-cover", str(cover), "--land-cover-classes", "corine"),
     )
     assert code == 0, output
     assert "TopologyException" not in output, output

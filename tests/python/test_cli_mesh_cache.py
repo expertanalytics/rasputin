@@ -318,7 +318,7 @@ class TestW5TheFetchCommandInTheMessage:
         code, output = invoke(
             "mesh",
             "--dem", KEY, "--cache", str(tmp_path / "cache"), "--domain", str(domain),
-            "--tolerance", "1", "--features-tolerance", "5", "--out", str(target), *extra,
+            "--tolerance", "1", "--edges-tolerance", "5", "--out", str(target), *extra,
         )  # fmt: skip
         assert code == USAGE, output
         assert not target.exists()
@@ -348,7 +348,7 @@ class TestW5TheFetchCommandInTheMessage:
         )
         self.refused_with(
             tmp_path, data, "m.gpkg", "--catchments", str(units),
-            "--land-cover", str(cover), "--land-cover-rules", "corine",
+            "--land-cover", str(cover), "--land-cover-classes", "corine",
         )  # fmt: skip
 
     def test_the_count_of_missing_and_needed_blocks(

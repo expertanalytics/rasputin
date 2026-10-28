@@ -79,7 +79,7 @@ FILE_FIELDS = {
     "cite",
     "nodata_vertices_removed",
     "heights",
-    "features_notice",
+    "land_cover_notice",
     "land_cover_codes",
 }
 
@@ -367,11 +367,11 @@ class TestTheOtherPaths:
             "tolerance_m",
             "max_error_m",
             "dem_source",
-            "features_notice",
+            "land_cover_notice",
             "land_cover_codes",
         }
         report = md.read_text(encoding="utf-8")
-        for name in ("features", "features_crs", "features_transform", "domain", "domain_crs"):
+        for name in ("features", "land_cover_crs", "land_cover_transform", "domain", "domain_crs"):
             assert stats_row(report, name), name
         assert stats_row(report, "start_mesh") == "the domain outline and the feature lines"
 

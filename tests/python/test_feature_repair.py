@@ -241,7 +241,7 @@ class TestEmptied:
 
 class TestTheOrder:
     """RP6: repair before simplifying. Two vertices 4.5 mm off A's straight
-    border, at a third and two thirds of it, with ``--features-tolerance 2``:
+    border, at a third and two thirds of it, with ``--edges-tolerance 2``:
     repaired first, A's and B's borders are one shared border of four
     vertices, and its one collapse drops both; simplified first, A's border is
     a side of the gap, used by one ring, so fixed (increment 32, section 6's
@@ -480,7 +480,7 @@ class TestMerge:
 class TestTolerance:
     """Step 3 is now the band (increment 32; this class assumed GEOS's
     simplifier, test 16): a border 100 m long zig-zagging 0.5 m either side
-    in 10 m steps, with ``--features-tolerance 2``, also with the repair at
+    in 10 m steps, with ``--edges-tolerance 2``, also with the repair at
     0. The coverage stays valid, the zig-zag goes, every polygon keeps its
     area (1e-9 relative; coordinates near 5e5 and 6.6e6 m, where one ulp is
     1e-9 m, on areas of 2 500 to 5 000 m2)."""

@@ -1,4 +1,4 @@
-"""`rasputin mesh --land-cover POLYGONS [--land-cover-rules NAME|FILE.toml]`:
+"""`rasputin mesh --land-cover POLYGONS [--land-cover-classes NAME|FILE.toml]`:
 exact class fractions per triangle from class polygons, in the mesh file.
 
 `docs/increments/105-cell-table.md`, section 4.5 (a vector value of
@@ -200,7 +200,7 @@ def phases(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 def run_vtk(dem: Path, domain: Path, target: Path, polygons: Path, *extra: str) -> VtkFile:
     code, output = mesh(
-        dem, domain, target, "--land-cover", str(polygons), "--land-cover-rules", "corine", *extra
+        dem, domain, target, "--land-cover", str(polygons), "--land-cover-classes", "corine", *extra
     )
     assert code == 0, output
     assert "No such option" not in output, output
@@ -258,7 +258,7 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "x.ply"
         code, output = mesh(
-            dem, domain, target, "--land-cover", str(cover), "--land-cover-rules", "corine"
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-classes", "corine"
         )
         assert code == 0, output
         data = target.read_bytes()
@@ -281,7 +281,7 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "named.gpkg"
         code, output = mesh(
-            dem, domain, target, "--land-cover", str(cover), "--land-cover-rules", "corine"
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-classes", "corine"
         )
         assert code == 0, output
         palette = rules("corine").legend.colours
@@ -307,7 +307,7 @@ class TestAr50SubClasses:
         path = write_geojson(tmp_path / "ar50.geojson", feats, crs=MESH_CRS)
         target = tmp_path / "x.vtk"
         code, output = mesh(
-            dem, domain, target, "--land-cover", str(path), "--land-cover-rules", "ar50"
+            dem, domain, target, "--land-cover", str(path), "--land-cover-classes", "ar50"
         )
         assert code == 0, output
         assert {3031, 81} <= set().union(*rows_of(*table(read_vtk(target.read_bytes()))))
@@ -343,7 +343,7 @@ class TestSources:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dem: Path, domain: Path
     ) -> None:
         """4.5: a catalogue vector source with a legend, here a user's local
-        entry with `legend = "corine"`; no `--land-cover-rules` is given."""
+        entry with `legend = "corine"`; no `--land-cover-classes` is given."""
         monkeypatch.delenv("RASPUTIN_DATA", raising=False)
         gpkg = write_cover_gpkg(tmp_path / "cover.gpkg", cover_polygons())
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
@@ -453,7 +453,7 @@ class TestRefusals:
         odd = [*cover_polygons(), (9999, box(x0 + 300.4, y0 - 2200.0, x0 + 900.0, y0 - 2100.0))]
         path = write_cover_geojson(tmp_path / "odd.geojson", odd)
         output = self.refused(
-            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-rules", "corine"
+            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-classes", "corine"
         )
         assert "9999" in squashed(output) and "--land-cover" in output, output
 
@@ -474,16 +474,22 @@ class TestRefusals:
         (_, forest), (_, water), _ = cover_polygons()
         path = write_cover_geojson(tmp_path / "five-six.geojson", [(5, forest), (6, water)])
         output = self.refused(
-            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-rules", str(rules_file)
+            dem,
+            domain,
+            tmp_path,
+            "--land-cover",
+            str(path),
+            "--land-cover-classes",
+            str(rules_file),
         )
         assert "class 6 is not in the meshing rules" in " ".join(output.split()), output
-        assert "legend" not in basenames(output.replace("--land-cover-rules", "")), output
+        assert "legend" not in basenames(output.replace("--land-cover-classes", "")), output
 
     def test_a_file_without_a_legend_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
     ) -> None:
         output = self.refused(dem, domain, tmp_path, "--land-cover", str(cover), before=phases)
-        assert "--land-cover-rules" in output, output
+        assert "--land-cover-classes" in output, output
 
     def test_an_uncoded_legend_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
@@ -491,17 +497,17 @@ class TestRefusals:
         toml = tmp_path / "levees.toml"
         toml.write_text(uncoded_map(), encoding="utf-8")
         output = self.refused(
-            dem, domain, tmp_path, "--land-cover", str(cover), "--land-cover-rules", str(toml),
+            dem, domain, tmp_path, "--land-cover", str(cover), "--land-cover-classes", str(toml),
             before=phases,
         )  # fmt: skip
-        assert "--land-cover-rules" in output and "codes" in output, output
+        assert "--land-cover-classes" in output and "codes" in output, output
 
     def test_a_year_with_a_file_is_refused_before_any_phase(
         self, tmp_path: Path, dem: Path, domain: Path, cover: Path, phases: list[str]
     ) -> None:
         output = self.refused(
             dem, domain, tmp_path,
-            "--land-cover", str(cover), "--land-cover-rules", "corine",
+            "--land-cover", str(cover), "--land-cover-classes", "corine",
             "--land-cover-year", "2018", before=phases,
         )  # fmt: skip
         assert "--land-cover-year" in output and "no years" in output, output
@@ -517,6 +523,6 @@ class TestRefusals:
         output = self.refused(
             dem, domain, tmp_path,
             "--features", str(features), "--features-rules", "corine",
-            "--land-cover", str(cover), "--land-cover-rules", "corine",
+            "--land-cover", str(cover), "--land-cover-classes", "corine",
         )  # fmt: skip
         assert "--land-cover" in output and "corine" in output, output

@@ -23,11 +23,11 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   and 1 in a full read for the same rows, so an indexed and an unindexed
   GeoPackage give the same row and the same file (the principle of Ola's
   ruling of 2026-09-28, "A table in a run report is output, not data.").
-- The `--stats` rows `features_crs` (`crs_label` of the source's CRS) and
-  `features_transform` (`none` for the DEM's own CRS, else
+- The `--stats` rows `land_cover_crs` (`crs_label` of the source's CRS) and
+  `land_cover_transform` (`none` for the DEM's own CRS, else
   `transform_description(source, dem)`), as `domain_crs` and
   `domain_transform`.
-- `features_notice`: the map's notice, still in the mesh file (Ola's ruling
+- `land_cover_notice`: the map's notice, still in the mesh file (Ola's ruling
   of 2026-10-03); absent when the map has none.
 - `start_mesh` reads `the domain outline and the feature lines`.
 - stderr says `lines: <n> vertices read, <m> after joining shared edges and
@@ -291,21 +291,21 @@ class TestRecord:
         assert int(match["n"]) == len(fs.features) == 5
         # The source's own lines and their coordinates (a closed ring
         # repeats its first point); the joined geometry's go to
-        # features_joined.
+        # edges_joined.
         own_lines = [line for f in fs.features for line in f.lines]
         assert int(match["c"]) == len(own_lines)
         assert int(match["v"]) == sum(int(shapely.get_num_coordinates(g)) for g in own_lines)
         joined = re.fullmatch(
             r"(\d+) lines?, (\d+) vert(?:ex|ices) after joining shared edges and adding crossings",
-            stats_row(stats, "features_joined"),
+            stats_row(stats, "edges_joined"),
         )
-        assert joined, stats_row(stats, "features_joined")
+        assert joined, stats_row(stats, "edges_joined")
         assert int(joined[1]) == len(chains)
         assert int(joined[2]) == len(started.vertices) - len(SQUARE)
-        assert stats_row(stats, "features_crs") == "EPSG:25833"
-        assert stats_row(stats, "features_transform").lower() == "none"
-        assert "features_notice" not in vtk.field_data
-        for moved in ("features", "features_crs", "features_transform"):
+        assert stats_row(stats, "land_cover_crs") == "EPSG:25833"
+        assert stats_row(stats, "land_cover_transform").lower() == "none"
+        assert "land_cover_notice" not in vtk.field_data
+        for moved in ("features", "land_cover_crs", "land_cover_transform"):
             assert moved not in vtk.field_data, moved
 
     def test_the_start_mesh_and_the_max_error(
@@ -340,8 +340,8 @@ class TestRecord:
         path = write_geojson(tmp_path / "wgs.geojson", lonlat, crs=None)
         meshed(tmp_path, bumpy, plain_square, "--features", str(path))
         stats = report(tmp_path)
-        assert stats_row(stats, "features_crs") == "EPSG:4326"
-        assert stats_row(stats, "features_transform") == transform_description(
+        assert stats_row(stats, "land_cover_crs") == "EPSG:4326"
+        assert stats_row(stats, "land_cover_transform") == transform_description(
             "EPSG:4326", "EPSG:25833"
         )
 
@@ -350,7 +350,7 @@ class TestRecord:
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
         )
-        assert "Copernicus Land Monitoring Service" in text_field(vtk, "features_notice")
+        assert "Copernicus Land Monitoring Service" in text_field(vtk, "land_cover_notice")
         assert (
             FEATURES_FIELD.fullmatch(stats_row(report(tmp_path), "features"))["rules"] == "corine"
         )  # type: ignore[index]
@@ -363,8 +363,8 @@ class TestRecord:
         assert code == 0, output
         header, _ = read_ply(target.read_bytes())
         fields = ply_fields(header.comments)
-        assert "Copernicus Land Monitoring Service" in fields["features_notice"]
-        for moved in ("features", "features_crs", "features_transform"):
+        assert "Copernicus Land Monitoring Service" in fields["land_cover_notice"]
+        for moved in ("features", "land_cover_crs", "land_cover_transform"):
             assert moved not in fields, moved
 
     def test_stderr_and_stats(
@@ -660,11 +660,11 @@ class TestCommittedExtract:
         assert match, stats_row(stats, "features")
         assert match["name"] == EXTRACT.name and match["layer"] == "U2018_CLC2018_V2020_20u1"
         assert match["rules"] == "corine" and int(match["n"]) > 0
-        assert stats_row(stats, "features_crs") == "EPSG:3035"
-        assert stats_row(stats, "features_transform") == transform_description(
+        assert stats_row(stats, "land_cover_crs") == "EPSG:3035"
+        assert stats_row(stats, "land_cover_transform") == transform_description(
             "EPSG:3035", "EPSG:25833"
         )
-        assert "Copernicus Land Monitoring Service" in text_field(vtk, "features_notice")
+        assert "Copernicus Land Monitoring Service" in text_field(vtk, "land_cover_notice")
 
     @needs_codecs
     def test_land_cover_everywhere_and_water_on_the_coast(self, run: Any) -> None:
@@ -699,7 +699,7 @@ class TestCommittedExtract:
 
     @pytest.fixture(scope="class")
     def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
-        """The same run with ``--features-tolerance 0`` (increment 32, test 16:
+        """The same run with ``--edges-tolerance 0`` (increment 32, test 16:
         the default band moves borders up to 50 m from the extract's, so I2's
         oracle, which labels by the extract's polygons, needs the band off)."""
         tmp = tmp_path_factory.mktemp("extract_band_0")
@@ -712,7 +712,7 @@ class TestCommittedExtract:
             str(EXTRACT),
             "--features-rules",
             "corine",
-            "--features-tolerance",
+            "--edges-tolerance",
             "0",
             tolerance="10",
         )
@@ -762,7 +762,7 @@ class TestCommittedExtract:
             tolerance="10",
         )
         stats = report(tmp_path)
-        assert stats_row(stats, "features_crs") == "EPSG:4326"
+        assert stats_row(stats, "land_cover_crs") == "EPSG:4326"
         match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
         assert match and match["name"] == LEGACY_GML.name and match["layer"] is None
         assert max_error(vtk) <= 10.0

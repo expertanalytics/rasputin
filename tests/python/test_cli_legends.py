@@ -17,7 +17,7 @@ literals (0.4, 0.1, ...) are the same doubles; checked up to a 1 km cell in
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- The record field for a map's licence is `features_licence`; absent when
+- The record field for a map's licence is `land_cover_licence`; absent when
   every map's licence is empty.
 - `rasputin palette PATH` writes the file's `preset` as the preset's `Name`.
 - The three help texts end "Default: from the meshing rules' positional
@@ -66,7 +66,7 @@ from vtkread import read_vtk
 SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
-OPTIONS = ("features_repair", "features_tolerance", "features_outline_snap")
+OPTIONS = ("edges_repair", "edges_tolerance", "edges_outline_snap")
 DERIVED = "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: {})."
 LEVEE = LineString([rel(30.1, -40.3), rel(170.2, -40.3)])
 ROAD = LineString([rel(30.1, -15.2), rel(170.2, -15.2)])
@@ -104,9 +104,9 @@ def levees(tmp_path: Path) -> Path:
 
 def recorded(record: dict[str, Any]) -> tuple[float, float, float]:
     return (
-        record["features_repair_m"],
-        record["features_tolerance_m"],
-        record["features_outline_snap_m"],
+        record["edges_repair_m"],
+        record["edges_tolerance_m"],
+        record["edges_outline_snap_m"],
     )
 
 
@@ -255,7 +255,7 @@ class TestDerivedDistances:
             bumpy,
             square,
             *("--features", str(corine), "--features-rules", "corine"),
-            *("--features-tolerance", "20"),
+            *("--edges-tolerance", "20"),
         )
         assert recorded(record) == (1.0, 20.0, 5.0)
 
@@ -298,7 +298,7 @@ class TestDerivedDistances:
             bumpy,
             square,
             *("--features", str(corine), "--features-rules", str(path)),
-            *("--features-repair", "0.7"),
+            *("--edges-repair", "0.7"),
         )
         assert recorded(record) == (0.7, 20.0, 2.0)
 
@@ -324,7 +324,7 @@ class TestDerivedDistances:
 
     @pytest.mark.parametrize(
         ("param", "corine_value"),
-        [("features_repair", "1"), ("features_tolerance", "50"), ("features_outline_snap", "5")],
+        [("edges_repair", "1"), ("edges_tolerance", "50"), ("edges_outline_snap", "5")],
     )
     def test_t7_the_help_says_derived(self, param: str, corine_value: str) -> None:
         help_text = mesh_params()[param].help or ""
@@ -500,7 +500,7 @@ class TestMapBiomasThroughTheCli:
             tmp_path, bumpy, square, "--features", str(cover), "--features-rules", "mapbiomas-c11"
         )
         notice = importlib.import_module("tin_engine.meshing_rules").load("mapbiomas-c11").notice
-        assert record["features_notice"] == notice
+        assert record["land_cover_notice"] == notice
         assert "MapBiomas Project - Collection 11" in notice
         # MapBiomas at 30 m over a 10 m cell: s = 30.
         assert recorded(record) == (0.3, 15.0, 1.5)
@@ -517,7 +517,7 @@ class TestLicenceInTheRecord:
         _, record, _ = run(
             tmp_path, bumpy, square, "--features", str(corine), "--features-rules", str(path)
         )
-        assert record["features_licence"] == "CC BY 4.0"
+        assert record["land_cover_licence"] == "CC BY 4.0"
 
     def test_t11_corine_writes_no_licence(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
@@ -525,7 +525,7 @@ class TestLicenceInTheRecord:
         _, record, _ = run(
             tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
         )
-        assert "features_licence" not in record
+        assert "land_cover_licence" not in record
 
 
 class TestTheNamesInTheRecord:
@@ -589,8 +589,8 @@ class TestAr50ThroughTheCli:
         assert set(edges_at(vtk, rel(160.9, -60.2))) == {LAND_COVER | WATER}
         assert set(edges_at(vtk, rel(40.3, -60.2))) == {LAND_COVER}
         legend = importlib.import_module("tin_engine.meshing_rules").load("ar50")
-        assert record["features_notice"] == legend.notice
-        assert record["features_licence"] == legend.licence
+        assert record["land_cover_notice"] == legend.notice
+        assert record["land_cover_licence"] == legend.licence
         assert recorded(record) == (0.1, 5.0, 0.5)
 
     def test_13_the_gpkg_triangles_carry_ar50_names_and_colours(
