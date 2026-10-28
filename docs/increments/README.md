@@ -56,15 +56,13 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
 
 The main session writes the as-built record (pins, kill record, counts) into
 the increment file from `@tester`'s and `@developer`'s handbacks or the
-commits they name; no separate
-`@architect` step.
+commits they name.
 
 A ruling or a platform-retuned constant after the red commit is `@tester`'s
 amendment, in its own commit with the reason. In the full lane `@developer`
 never edits tests, and no test change hides in an implementation commit.
 
-**The merge updates `ROADMAP.md`'s row for that increment**, in the same PR,
-before the merge rather than after it.
+**The merge updates `ROADMAP.md`'s row for that increment**, in the same PR.
 
 **Increment PRs merge with a merge commit, never a squash**, so the red commit
 stays ahead of the green one in history.
@@ -82,7 +80,8 @@ mistakes give wrong numbers without a crash, and the land-surface physics.
 (`tools/brief.py --lane fast`) writes the test and the fix on one branch,
 CI runs, and it merges. CI refuses a full-lane path without an increment
 file (`tools/check_lane.py`, which lists the paths). No increment file, `@reviewer` or retrospective. The
-approval boundary (`.claude/REQUIRED-READING.md`) holds.
+approval boundary (`.claude/REQUIRED-READING.md`) holds. After three red CI
+runs, stop and ask Ola through `tools/questions.py`.
 
 ## Acceptance: an increment that touches refine or mesh code
 

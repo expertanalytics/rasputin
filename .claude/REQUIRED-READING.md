@@ -110,10 +110,9 @@ spawning personas, builds, tests, gates, `.claude/current-task/`, and
 
 **A fresh yes, every time:** `git push` — including a branch's first —
 `gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue,
-except a branch Ola granted for an away window (*Unattended mode*)),
+except while away (*Unattended mode*)),
 any force-push or history rewrite, and any edit
-to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
-`.claude/**` or `docs/` is ordinary tree work.
+to `.claude/settings*.json` or the permission system.
 
 **A grant covers one occurrence.** An instruction that names a publishing act
 is the yes for one occurrence of it. The test is mechanical: *have I already
@@ -171,8 +170,11 @@ commits of `private/master`), opened as a pull request and enqueued, or on the
 private repository merged once its checks are green (once per head) without a
 fresh yes, provided `@reviewer`'s last verdict on the branch,
 recorded by a hook from its handback, approved its head; the guard checks
-this, and the grant ends with the window. Otherwise record it with `questions.py add --act` and continue with
-other work. Record a default taken while away with `questions.py taken` as
+this, and the grant ends with the window. A fast-lane branch for origin
+(`docs/increments/README.md`) needs neither grant nor review; the guard
+checks its lane. Otherwise record it with `questions.py add --act` and continue with
+other work. Record a default taken while away, a first-question answer included
+(`CLAUDE.md` §3), with `questions.py taken` as
 it is taken; the first report after the window is `questions.py list`. A
 subagent puts both in its handback. A question whether to build at all waits for Ola.
 When Ola says he is leaving, ask him how long, and ask him to run
