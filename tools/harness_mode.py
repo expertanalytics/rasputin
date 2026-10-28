@@ -35,11 +35,11 @@ QUEUE_REASON = (
     "Refused: unattended mode is on until {until}; {act} waits for Ola ({why}). "
     + RECORDED
     + " Do not retry it or work around it unless its reason says it may be redone. "
-    "Main session: add one line "
-    "`ASK OLA: {act}: <what you wanted and why>` to `.claude/current-task/session.md`, "
-    "then continue with other work. Subagent: put that `ASK OLA:` line in your handback "
-    "and carry on with the rest of your brief. If the brief cannot proceed without this "
-    "act, hand back now."
+    "Main session: record it with `python3 tools/questions.py add --act "
+    '"<the act, as a question>" --default "<what happens if Ola is silent>"`, then '
+    "continue with other work. Subagent: put that question, with its default, under "
+    "Questions for Ola in your handback and carry on with the rest of your brief. If the "
+    "brief cannot proceed without this act, hand back now."
 )
 BROKEN_FIRST = (
     "Refused: the unattended flag cannot be read ({detail}), so every guarded act is "
@@ -183,7 +183,9 @@ def settle(
     error = append_queue(state, queue_entry(event, hook, act, why, now))
     if error is None:
         return decision
-    lost = f"The refusal could not be recorded ({error}); your ASK OLA line is the only record."
+    lost = (
+        f"The refusal could not be recorded ({error}); the question you record is the only record."
+    )
     return Decision(decision.kind, decision.reason.replace(RECORDED, lost), True)
 
 

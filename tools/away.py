@@ -421,13 +421,14 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
     if not entries:
         print("  (none)")
     print("\n".join(grant_lines(root, state, flag)))
-    try:  # the recap module is optional to --back; the flag and the queue are not (§3.3)
-        from session_state import all_decisions
+    try:  # the question tool is optional to --back; the flag and the queue are not
+        import questions
 
-        decisions = all_decisions(root)
+        listed = argparse.Namespace(cmd="list")
+        decisions = questions.command(listed, questions.store_of(root), now)
     except Exception as error:
         decisions = [f"(unavailable: {type(error).__name__}: {error})"]
-    print("ASK OLA lines, every worktree's .claude/current-task/:")
+    print("Waiting on Ola:")
     for line in decisions or ["(none)"]:
         print(f"  {line}")
     if queue.exists():
