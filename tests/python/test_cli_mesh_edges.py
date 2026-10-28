@@ -27,7 +27,8 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   within 1 of the area) and names the file kept by its file name.
 - A class-border run without `--shares` writes no `land_cover_fractions`
   table and no `cells` layer; its `triangles` layer keeps the `code` column.
-  A run with no land-cover map writes no `code` column.
+  A run with no land-cover map writes `code` NULL on every triangle, as the
+  GeoPackage writer does for a mesh without codes.
 - Test 9's codes per triangle are pinned as a digest of the `code` column in
   `fid` order (int32, little endian) with the counts per code, from today's
   tree (`39595f5f`) with `--features cover.geojson --features-rules corine`
@@ -79,6 +80,10 @@ __all__ = ["phases", "scene"]  # fixtures, used by name
 
 #: On a line length, m: the design's figures are to 0.1 m, measured to 1e-6 m.
 LENGTH = 0.01
+#: The river's length inside the domain, m: the design gives 2,448.4 m, its
+#: figure to 0.1 m; shapely on the line gives 2,448.3688 m, so the figure is
+#: pinned to the second decimal and held to `LENGTH`, as test 2's are.
+RIVER = 2448.37
 #: On an area, m²: the design's figures are to 1 m².
 AREA = 1.0
 #: On a share: case 7's bound (`test_cli_mesh_prefer.py`).
@@ -146,10 +151,6 @@ def lengths(conn: sqlite3.Connection) -> dict[str, float]:
 
 def tables(conn: sqlite3.Connection) -> set[str]:
     return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-
-
-def columns(conn: sqlite3.Connection, table: str) -> list[str]:
-    return [r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')]
 
 
 def has_shares(conn: sqlite3.Connection) -> bool:
@@ -234,11 +235,11 @@ def test_2_no_edges_without_edges_and_the_run_gives_shares(
 def test_3_a_river_is_followed_and_the_shares_stay_case_7s(
     scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, river: Path
 ) -> None:
-    assert river_line().intersection(domain()).length == pytest.approx(2448.4, abs=0.05)
+    assert river_line().intersection(domain()).length == pytest.approx(RIVER, abs=LENGTH)
     args = (*classes(cover), *prefer(lake), "--lines", f"river={river}", *edges("river"))
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args, "--shares", *AS_READ)) as conn:
         found = lengths(conn)
-        assert found["river"] == pytest.approx(2448.4, abs=LENGTH), found
+        assert found["river"] == pytest.approx(RIVER, abs=LENGTH), found
         assert found.get("land_cover", 0.0) == 0.0, found
         check_case7_shares(conn)
 
@@ -511,9 +512,10 @@ def test_8_lines_alone_give_the_river_and_nothing_else(
     args = ("--lines", f"river={river}", *edges(selector))
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         found = lengths(conn)
-        assert found["river"] == pytest.approx(2448.4, abs=LENGTH), found
+        assert found["river"] == pytest.approx(RIVER, abs=LENGTH), found
         assert set(found) == {"river"}, found
-        assert "code" not in columns(conn, "triangles")
+        coded = conn.execute("SELECT count(*) FROM triangles WHERE code IS NOT NULL").fetchone()
+        assert coded == (0,), coded
         assert not has_shares(conn)
 
 
