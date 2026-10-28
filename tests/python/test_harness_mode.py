@@ -209,7 +209,7 @@ def test_decide_ask_while_unattended_denies_with_the_queue_reason() -> None:
         "The refusal is already recorded in the queue.",
         "Do not retry",
         "unless its reason says it may be redone",  # h29 §3.2
-        "ASK OLA:",
+        "python3 tools/questions.py add --act",
         "handback",
     ):
         assert phrase in decision.reason
@@ -224,7 +224,7 @@ def test_decide_ask_with_a_broken_flag_denies_with_the_broken_reason() -> None:
         "act is refused until Ola runs python3 tools/away.py --back; "
         f"{ACT} waits for Ola ({WHY})."
     )
-    assert "ASK OLA:" in decision.reason
+    assert "python3 tools/questions.py add --act" in decision.reason
     assert "unattended mode is on until" not in decision.reason
 
 
@@ -321,5 +321,5 @@ def test_a_refusal_the_queue_cannot_record_is_still_a_deny_and_says_so(
     kind, reason = found
     assert kind == "deny"
     assert "could not be recorded" in reason
-    assert "your ASK OLA line is the only record" in reason
+    assert "the question you record is the only record" in reason
     assert "The refusal is already recorded in the queue." not in reason

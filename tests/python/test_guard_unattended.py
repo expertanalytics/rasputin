@@ -86,9 +86,9 @@ def output(repo: Path, event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def refusal_text(mode: str, text: str) -> None:
-    """The queue reason (on) or the broken reason; both keep the ASK OLA instruction."""
+    """The queue reason (on) or the broken reason; both name the question tool."""
     assert text.startswith("Refused: ")
-    assert "ASK OLA:" in text
+    assert "python3 tools/questions.py add --act" in text
     if mode == "on":
         assert "unattended mode is on until" in text
     else:
@@ -113,7 +113,7 @@ def test_ask_user_question_is_denied_and_queued(repo: Path, mode: str) -> None:
     assert specific["permissionDecision"] == "deny"
     refusal_text(mode, specific["permissionDecisionReason"])
     assert (
-        "a question needs Ola; write it as the ASK OLA line"
+        "a question needs Ola; record it with python3 tools/questions.py add"
         in (specific["permissionDecisionReason"])
     )
     [line] = queue_lines(repo)
@@ -168,8 +168,8 @@ def test_a_config_change_is_blocked_and_queued(repo: Path, mode: str) -> None:
 FAILED_PREFIX = "guard_unattended failed ("
 FAILED_SUFFIX = (
     "), so this is refused rather than left for a prompt nobody may answer. It is not "
-    "queued: record it as an ASK OLA line (main session: in session.md; subagent: in its "
-    "handback) and continue."
+    "queued: record it with python3 tools/questions.py add --act (main session) or under "
+    "Questions for Ola in the handback (subagent) and continue."
 )
 
 
@@ -276,8 +276,10 @@ def test_an_idle_stop_while_away_is_blocked_once_with_the_reason(repo: Path) -> 
     assert found["decision"] == "block"
     reason = found["reason"]
     assert f"Unattended mode is on until {until:%Y-%m-%d %H:%M} UTC" in reason, reason
-    for fragment in ("nothing is running", "ASK OLA:", "QUEUE:", "NOW: idle:"):
+    for fragment in ("nothing is running", "python3 tools/questions.py add",
+                     "python3 tools/work_pipes.py next"):  # fmt: skip
         assert fragment in reason, f"{fragment!r} missing from {reason!r}"
+    assert "session.md" not in reason and "ASK OLA" not in reason
     assert queue_lines(repo) == []
 
 
@@ -406,7 +408,7 @@ def assert_window_note(note: str, until: datetime) -> None:
     assert f"Unattended mode is on until {until:%Y-%m-%d %H:%M} UTC" in note, note
     for name in GRANTED:
         assert name in note, f"{name!r} missing from {note!r}"
-    assert "ASK OLA:" in note, note
+    assert "python3 tools/questions.py add" in note, note
 
 
 def test_the_main_session_hears_the_window_once_per_session_and_window(repo: Path) -> None:

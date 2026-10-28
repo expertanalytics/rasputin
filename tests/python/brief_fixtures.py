@@ -53,7 +53,7 @@ PHRASES = (
     "Co-Authored-By trailer",
     "plain words",
     "Result; Pinned or assumed beyond the design; Questions for Ola; Lessons; Ideas; "
-    "ASK OLA and GUARD FALSE POSITIVE lines",
+    "DEFAULTS TAKEN and GUARD FALSE POSITIVE lines",
 )
 
 SESSION = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"

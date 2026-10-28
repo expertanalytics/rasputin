@@ -2,8 +2,8 @@
 """Print the round recap, then what the previous session was in the middle of.
 
 The recap (retrospective rule 5, Ola): the last thing landed, what is in
-flight, running Bash-tool jobs, decisions waiting on Ola (from every worktree),
-format warnings for `session.md`, the next three ROADMAP items and the rule-text
+flight, running Bash-tool jobs, the questions waiting on Ola (from the store
+`tools/questions.py` keeps), the next three ROADMAP items and the rule-text
 size table -- all read from files on disk, git and `ps`, so it is the same
 whoever runs it (docs/increments/h8-window-and-recap.md §3). The task files are
 the main checkout's, found from the common git dir, so a session started inside
@@ -11,7 +11,7 @@ a worktree sees them too.
 
 Then it answers one question: when a session starts cold or resumes after a
 context loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
-asks -- `session.md` first, each subagent's file after it as context) and the
+asks, one file per subagent) and the
 predecessor session transcript under ~/.claude/projects/, including prompts the
 user queued and the harness absorbed mid-turn -- which is where a lost
 instruction hides, because such a prompt never appears as a normal user turn.
@@ -50,7 +50,8 @@ if TYPE_CHECKING:  # imported in print_recap, where a harness fault costs one li
     import harness_mode
 UNKNOWN = (
     "UNATTENDED STATE UNKNOWN ({}): the recap could not read the flag or the queue. "
-    "Guarded acts may be refused; record each refusal as an ASK OLA line and continue."
+    "Guarded acts may be refused; record each refusal with python3 tools/questions.py add "
+    "--act and continue."
 )
 
 SLUG = re.sub(r"[^A-Za-z0-9]", "-", str(REPO))
@@ -154,69 +155,6 @@ def main_checkout(repo: Path) -> Path:
     """The main checkout: the parent of the common git dir when that is `.git`."""
     common = _git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
     return Path(common).parent if common and Path(common).name == ".git" else repo
-
-
-def checkouts(repo: Path) -> list[Path]:
-    """The main checkout, then every worktree whose directory still exists."""
-    listed = _git(repo, "worktree", "list", "--porcelain")
-    if listed is None:
-        return [repo]
-    paths = [Path(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")]
-    return [path for path in paths if path.is_dir()]
-
-
-# h8 §3.2: at the start of a line, after an optional bullet; case-sensitive.
-ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")
-
-
-def pending_decisions(tasks: Path) -> list[str]:
-    """`ASK OLA:` lines in any current-task file; an empty one as a warning."""
-    if not tasks.is_dir():
-        return []
-    found: list[str] = []
-    for path in sorted(p for p in tasks.glob("*") if not p.is_dir()):
-        for number, line in enumerate(_read(path, "").splitlines(), 1):
-            if match := ASK.match(line):
-                empty = f"{path.name}:{number}: WARNING: empty ASK OLA line"
-                found.append(f"{path.name}: {line.strip()}" if match[1].strip() else empty)
-    return found
-
-
-def all_decisions(repo: Path) -> list[str]:
-    """pending_decisions of every checkout; a worktree's lines carry its path."""
-    trees = checkouts(repo)
-    found: list[str] = []
-    for tree in trees:
-        name = tree.relative_to(trees[0]) if tree.is_relative_to(trees[0]) else tree
-        prefix = "" if tree == trees[0] else f"{name}: "
-        found += [prefix + line for line in pending_decisions(tree / ".claude" / "current-task")]
-    return found
-
-
-KIND = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?(NOW|QUEUE|ASK OLA):(.*)$")
-MAX_LINE = 300
-
-
-def session_format(text: str, name: str = "session.md") -> list[str]:
-    """Warnings on `session.md`: one NOW, at most one QUEUE, ASK OLA lines, nothing else."""
-    counts, empty, other, long = {"NOW": 0, "QUEUE": 0}, [], [], []
-    for number, line in enumerate(text.splitlines(), 1):
-        line = line.rstrip()
-        if not line:
-            continue
-        if len(line) > MAX_LINE:
-            long.append(f"{name}:{number}: {len(line)} characters; at most {MAX_LINE}")
-        match = KIND.match(line)
-        if match is None:
-            other.append(f"{name}:{number}: not a NOW, QUEUE or ASK OLA line: {line[:60]}")
-        elif match[1] != "ASK OLA":  # an empty ASK OLA line is warned by pending_decisions
-            counts[match[1]] += 1
-            if not match[2].strip():
-                empty.append(f"{name}:{number}: empty {match[1]} line")
-    wrong = [f"{name}: {counts['NOW']} NOW lines; exactly one expected"] * (counts["NOW"] != 1)
-    if counts["QUEUE"] > 1:
-        wrong.append(f"{name}: {counts['QUEUE']} QUEUE lines; at most one expected")
-    return wrong + empty + other + long
 
 
 def _capped(lines: list[str], cap: int) -> list[str]:
@@ -334,7 +272,7 @@ def unattended_header(mode: harness_mode.Mode) -> str | None:
     if mode.state == "on":
         return (
             f"UNATTENDED until {until}. Guarded acts are refused and queued: "
-            "record each as an ASK OLA line and continue."
+            "record each with python3 tools/questions.py add --act and continue."
         )
     return (
         f"Unattended mode ended at {until}. "
@@ -365,7 +303,7 @@ def queued(state: Path | None) -> list[str]:
     return lines
 
 
-def print_recap(tasks: Path) -> None:
+def print_recap() -> None:
     """Retrospective rule 5: the structured recap every round opens with."""
     try:
         import harness_mode
@@ -396,8 +334,13 @@ def print_recap(tasks: Path) -> None:
     print("Running Bash-tool jobs, any session (Claude Code shell wrappers):")
     for line in running_jobs():
         print(f"  {line}")
-    decisions = all_decisions(REPO)
-    print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
+    try:  # a fault in the question tool costs one line, like the harness
+        import questions
+
+        decisions = questions.list_lines(questions.load(questions.store_of(REPO))[0])
+    except Exception as error:
+        decisions = [f"(unavailable: {type(error).__name__}: {str(error)[:120]})"]
+    print("Waiting on Ola:" + ("" if decisions else " (no open question)"))
     for line in _capped([d if len(d) <= 160 else d[:157] + "..." for d in decisions], 5):
         print(f"  {line}")
     try:  # a fault in the pipes block costs one line, like the harness
@@ -407,12 +350,6 @@ def print_recap(tasks: Path) -> None:
     except Exception as error:
         piped = [f"Pipes: unknown ({type(error).__name__}: {str(error)[:120]})".replace("\n", " ")]
     print("\n".join(piped))
-    session = tasks / "session.md"
-    warnings = session_format(_read(session, "")) if os.path.lexists(session) else []
-    if warnings:
-        print("session.md format:")
-    for line in _capped(warnings, 4):
-        print(f"  {line}")
     for line in queue:
         print(line)
     print("Next on ROADMAP.md:")
@@ -429,36 +366,22 @@ def print_recap(tasks: Path) -> None:
 
 
 def print_current_task(tasks: Path) -> None:
-    """Print the session's ask first, then each subagent's as context.
+    """Print each subagent's ask, the trace of a step that may have died.
 
-    A cold session needs one of these promoted, not a flat dump: `session.md` is
-    the record of what the round is for, and a subagent file is a fragment of it
-    delegated. Both are printed because a subagent file may be the only trace of
-    a step that died, but the order says which one to believe about the round.
-
-    Sorted by name for stable output. session.md is promoted above the rest
-    explicitly, so the order among subagent files decides nothing.
+    Sorted by name for stable output. Every entry, not just *.md, and not
+    p.is_file(): a subagent that names its file without an extension, or
+    leaves a broken symlink, must not become invisible to the tool whose job
+    is surfacing what would otherwise be lost. is_file() is false for a
+    dangling symlink; not is_dir() surfaces it and _read names it. Liveness is
+    not visible from a directory listing, so the lifecycle rule in
+    .claude/REQUIRED-READING.md owns it and this prints what is there.
     """
-    session = tasks / "session.md"
-    print("== .claude/current-task/session.md ==")
-    print(_read(session, "(absent -- no session-level ask was recorded in flight)"))
-
-    # Every entry, not just *.md, and not p.is_file(): a subagent that names its
-    # file without an extension, or leaves a broken symlink, must not become
-    # invisible to the tool whose job is surfacing what would otherwise be lost.
-    # is_file() is false for a dangling symlink, so it dropped one silently;
-    # not is_dir() surfaces it and _read's FileNotFoundError names it.
-    others = sorted(p for p in tasks.glob("*") if not p.is_dir() and p.name != "session.md")
-    if not others:
+    print("== .claude/current-task/ ==")
+    files = sorted(p for p in tasks.glob("*") if not p.is_dir()) if tasks.is_dir() else []
+    if not files:
+        print("(empty -- no subagent ask was recorded in flight)")
         return
-    # No staleness flag here. It was computed from session.md's mtime, but
-    # session.md is overwritten as a round progresses, so an ordinary
-    # write-spawn-update sequence made every LIVE subagent file predate it and
-    # get marked for sweeping -- the one file a cold session must not lose.
-    # Liveness is not visible from a directory listing, so the lifecycle rule
-    # in .claude/REQUIRED-READING.md owns it and this prints what is there.
-    print(f"\n== {len(others)} subagent ask(s), as context ==")
-    for path in others:
+    for path in files:
         try:
             stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
         except OSError:
@@ -477,7 +400,7 @@ def main() -> int:
     args = parser.parse_args()
 
     tasks = main_checkout(REPO) / ".claude" / "current-task"
-    print_recap(tasks)
+    print_recap()
     print_current_task(tasks)
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
