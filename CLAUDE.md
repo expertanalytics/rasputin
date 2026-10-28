@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-The main session also loads the `dispatch` skill before its first act.
+The main session loads the `dispatch` skill before its first act.
 
 ## 1. Personas
 Each task goes to its persona in `.claude/agents/`.
@@ -13,9 +13,10 @@ Each task goes to its persona in `.claude/agents/`.
   says why each new region is packed.
 * **Rule text pays for itself:** a change that adds words to the files
   `tools/rule_sizes.py` counts cuts as many in the same change, unless Ola
-  allows the growth.
-* **Prohibited dependencies:** `CGAL`, `GDAL`, `OGR`, `Fiona`, `Rasterio`,
-  and external `date` libraries (`tools/check_prohibited_deps.py`).
+  allows it.
+* **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`,
+  `Fiona`, `Rasterio` or external `date` libraries
+  (`tools/check_prohibited_deps.py`).
 * **Core stack:** C++20 (Concepts, Pybind11, `std::chrono`); Python 3.12+
   (asyncio, Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
 * **I/O boundary:** file decoding is Python's. The C++ core never opens a
@@ -38,7 +39,7 @@ ctest --test-dir build
 mypy && ruff check . && ruff format --check .
 python3 tools/check_code_history.py   # the commit hook skips this one
 ```
-The C++ targets build with `-Wall -Wextra -Wpedantic -Werror`: any warning
+C++ builds with `-Wall -Wextra -Wpedantic -Werror`: any warning
 fails. CI
 (`.github/workflows/main.yaml`) is authoritative: nothing is merge-ready
 until `gh pr checks <pr>` is green.

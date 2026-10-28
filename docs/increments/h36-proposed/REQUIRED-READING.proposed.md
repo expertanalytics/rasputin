@@ -12,8 +12,8 @@
 - Invoke the Skill tool for each of `modern-cxx`, `computational-geometry`,
   `python-development` and `geospatial-data-formats` the task touches;
   subagents do not inherit skills. Read the increment file.
-- Ideas live in `../rasputin_scratch/ideas/`, private to Ola: commit nothing
-  from it. Read its `ideas.md` before you plan.
+- Ideas live in `../rasputin_scratch/ideas/`, private to Ola: commit an idea
+  only once picked. Read its `ideas.md` before you plan.
 
 ## Claims: run the check before you write it down
 

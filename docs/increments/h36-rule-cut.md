@@ -152,16 +152,16 @@ the duties line stays right after `Last landed:` (`test_duties.py`
 | File | Change | Counted lines |
 |---|---|---|
 | `.claude/hooks/guard_governance.py@b2207408:60` | drop the entry from `GOVERNED`; its docstring's line 14 mention stays (history, uncounted) | -1 |
-| `tools/rule_sizes.py:25` (governed) | drop it from `RULE_FILES` | -1 |
-| `tools/ci_changes.py:38` (governed) | drop it from `NOT_PROSE` and from the comment above | -1 |
+| `tools/rule_sizes.py@14a17091:25` (governed) | drop it from `RULE_FILES` | -1 |
+| `tools/ci_changes.py@14a17091:38` (governed) | drop it from `NOT_PROSE` and from the comment above | -1 |
 | `tools/check_citations.py@b2207408:96` (governed) | drop it from `GOVERNED` | -1 |
-| `tools/new_worktree.py:11, 125` | the docstring names `tools/rebuild_core.py` instead of REQUIRED-READING's recipe; the printed `rebuild` line becomes `python3 <wt>/tools/rebuild_core.py   (configured, not built)` | 0 |
-| `tests/python/test_session_state.py:731` | stop copying the file | tests |
+| `tools/new_worktree.py@14a17091:11`, line 125 | the docstring names `tools/rebuild_core.py` instead of REQUIRED-READING's recipe; the printed `rebuild` line becomes `python3 <wt>/tools/rebuild_core.py   (configured, not built)` | 0 |
+| `tests/python/test_session_state.py@14a17091:731` | stop copying the file | tests |
 
 Four more test files pin the file name and change with it (§6).
 
-**Changed: `docs/increments/h2-citation-pinning.md` line 109**: its example
-`PRINCIPLES.md §A6` is cut, since the file goes (the only citation the move
+**Changed: `docs/increments/h2-citation-pinning.md` line 109**: its example, a
+section citation of A6 in the principles file, is cut, since the file goes (the only citation the move
 breaks; checked by a script over every ID and heading citation into the
 counted files, run against the proposed texts). Citations of PRINCIPLES.md
 pinned to a commit (`docs/PRINCIPLES.md@94a157b2:...`) still resolve.
@@ -177,8 +177,8 @@ the four list entries -4, `new_worktree.py` 0: about **37**.
 
 | File | Now | Proposed | Change |
 |---|---|---|---|
-| `CLAUDE.md` | 1175 | 288 | -887 |
-| `.claude/REQUIRED-READING.md` | 1752 | 500 | -1252 |
+| `CLAUDE.md` | 1175 | 286 | -889 |
+| `.claude/REQUIRED-READING.md` | 1752 | 502 | -1250 |
 | `docs/increments/README.md` | 990 | 412 | -578 |
 | `docs/PRINCIPLES.md` | 437 | 0 | -437 |
 | `.claude/briefs/common.md` | 244 | 227 | -17 |
@@ -251,16 +251,16 @@ the asserted line is the one right after `== recap ==`):
 Existing tests changed because `docs/PRINCIPLES.md` goes (the red step; each
 keeps its intent):
 
-- `test_session_state.py:731`: the copied list loses the file.
+- `tests/python/test_session_state.py@14a17091:731`: the copied list loses the file.
 - `test_rule_sizes.py`: the `RULE_FILES` test (line 63) loses it; the
   `STARTING` fixture (line 131, 10 words) loses it, so its row assert (184)
   goes and the totals become 97 (lines 191-192, still `+7` on 90) and 97
   (line 229); the order test (line 205) loses it; line 293's anchor becomes
   `docs/increments/README.md`. Line 110 tests the pure `table()` with a
   literal dict and is unchanged.
-- `test_ci_changes.py:85`: `READ_BY_CODE` loses it.
-- `test_check_citations_pinning.py:570`: `GOVERNED` loses it.
-- `test_new_worktree.py:328`: the `rebuild` line names `tools/rebuild_core.py`
+- `tests/python/test_ci_changes.py@14a17091:85`: `READ_BY_CODE` loses it.
+- `tests/python/test_check_citations_pinning.py@14a17091:570`: `GOVERNED` loses it.
+- `tests/python/test_new_worktree.py@14a17091:328`: the `rebuild` line names `tools/rebuild_core.py`
   (replacing the `cmake --build` and `--target _core` asserts); the
   `build-pyext` assert goes.
 
@@ -342,7 +342,7 @@ phrase and the brief's "ASK OLA" heading would have failed today's
 **Cut further to stay at half:** eleven `description` fields (the four
 domain skills, `architect.md`, `orchestrator.md`, `perf.md`, `reviewer.md`,
 `tester.md`, `publishing`, `away-mode`) cut to one short sentence;
-`tester.md` §2 (*Tiers*, a description of the suites), the duplicate
+`.claude/agents/tester.md@14a17091:40` (*Tiers*, a description of the suites), the duplicate
 baseline sentence in `perf.md`, `CLAUDE.md`'s gate-hook sentence (now only
 in REQUIRED-READING's hook list) and REQUIRED-READING's opening line and
 *Ideas* handback clause (the brief's headings carry it) are gone.
@@ -354,7 +354,14 @@ kept, moved, replaced by a tool, or dropped as below:
 - Kept, condensed: the lost-session case of deleting a note file and "or
   explicitly cancelled by Ola" (`dispatch`); "state the mechanism" where
   nothing can run (*Claims*); "idle is accepted only when no such item
-  exists" (`away-mode`).
+  exists" (`away-mode`); "the permission system is not the push backstop:
+  auto mode can let an unapproved push through" (REQUIRED-READING, *The
+  harness*: "tripwires, not the boundary").
+- Kept as a permission, not a restatement (design round 4): "an idea enters
+  git only when picked for building" is REQUIRED-READING's "commit an idea
+  only once picked" (+2 words, paid by `CLAUDE.md`'s "also" and "the
+  growth"); "commit nothing from it" alone would forbid an increment file
+  built from a picked idea.
 - Fixed: `away-mode` required the head's sha under `## Review` in the
   increment file; today's rule is the verdict a hook records from
   `@reviewer`'s handback (`.claude/hooks/record_review.py`), so it says that.
@@ -363,8 +370,7 @@ kept, moved, replaced by a tool, or dropped as below:
   has no command to run); "A result another persona needs is named by path
   in the handback" (each agent's system prompt asks for absolute paths);
   "prompts Ola queued mid-turn" (the recap prints them); the `skills:`
-  preload note and "an idea enters git only when picked" (reasoning and a
-  restatement of "commit nothing from it"); "`pip install -e` is not the
+  preload note (reasoning); "`pip install -e` is not the
   route" (part of the rebuild recipe the tool replaces).
 - Replaced by a tool: the harness lines on the scratchpad pass, the duties
   hook, the status line and "the guard judges each redo again" (the hooks'
@@ -376,6 +382,14 @@ kept, moved, replaced by a tool, or dropped as below:
   review" (the README's fast lane says it); `away-mode`'s "A subagent puts
   both in its handback" (the brief's headings); `CLAUDE.md`'s "CI runs it
   with `--max 700`" (CI's workflow states it).
+
+**Gate fixes after the copy into place** (both missed by the design
+reviews, which ran the rule-text suites but not the governance gates on the
+proposed texts): `tools/check_prohibited_deps.py` parses `CLAUDE.md`'s list
+only in the form "**Prohibited Dependencies:** Never introduce <list>.", so
+the bullet takes that form (+2 words, paid by "The C++ targets build" becoming
+"C++ builds"); `tools/check_citations.py` found four broken citations, the
+two here now pinned to `14a17091`.
 
 ## Review
 
