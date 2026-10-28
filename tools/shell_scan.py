@@ -60,7 +60,7 @@ class UnreadableError(Exception):
 RESERVED = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}"}
 LOOP_HEADERS = {"for", "select", "function"}
 ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
-REDIRECT = re.compile(r"(\d*|&)(>>|>\||>&|>|<<<|<<-|<<|<>|<&|<)")
+REDIRECT = re.compile(r"(\d*|&)(>>&?[|!]?|>&[|!]|>[|!]|>&|>|<<<|<<-|<<|<>|<&|<)")
 WORD_END = set(" \t\n;&|()<>")
 WRAPPERS = {"env", "nohup", "time", "timeout", "nice", "command", "exec", "xargs", "script", "sudo"}
 #: Options of the wrappers above whose next word is their argument.
@@ -136,16 +136,21 @@ def ignored(target: str) -> bool:
     return target == "/dev/null" or target.startswith(("/dev/std", "/dev/fd/"))
 
 
-def parse(command: str, piped: bool = False) -> list[Simple] | None:
+def parse(
+    command: str, piped: bool = False, assigned: dict[str, str] | None = None
+) -> list[Simple] | None:
     """The simple commands of `command`, in the order the reader meets them, or None.
 
     `piped`: the line reads a pipe, as a piped shell's `-c` program or a shell's heredoc does.
+    `assigned`, when given, receives the line's `NAME=value` commands, values as written.
     """
     scan = _Scan(command)
     try:
         scan.run(None, piped)
     except UnreadableError:
         return None
+    if assigned is not None:
+        assigned.update(scan.assigned)
     feeders = [s for s in scan.heredoc_owners if runner(s, scan.defined)]
     moved = any(s.argv and base(s.argv[0]) in ("cd", "pushd") for s in scan.found)
     for simple in scan.found:
@@ -330,7 +335,7 @@ class _Scan:
             heredocs.append((target, None if op == "<<<" else op == "<<-", expands))
         elif substitution or (op == ">&" and (target.isdigit() or target == "-")):
             return
-        elif (op in (">", ">>", ">|", "<>", ">&") or prefix == "&") and not ignored(target):
+        elif (op[0] == ">" or op == "<>" or prefix == "&") and not ignored(target):
             writes.append(target)
 
     def read_heredocs(self) -> None:

@@ -42,11 +42,13 @@ Every code alteration follows the step order below, dispatched by the main sessi
 ### The main session dispatches
 The main session, started with no agent name, is the dispatcher: it spawns
 the personas. Its rules:
-* **Step order.** Design (`@architect`), failing tests (`@tester`), code
-  (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance run
-  when refine or mesh code is touched (`docs/increments/README.md`).
-  A performance fix is timed by `@perf` before review. Failing
-  tests go back to `@developer`.
+* **First question.** Before an item's first spawn, answer in one line Ola
+  may veto: is this needed; can we delete instead; which lane?
+* **Step order.** Full lane (`docs/increments/README.md`): design
+  (`@architect`), failing tests (`@tester`), code (`@developer`), test run,
+  review (`@reviewer`), and `@perf`'s acceptance run when refine or mesh code
+  is touched; a performance fix is timed by `@perf` before review; failing
+  tests go back to `@developer`. Fast lane: `@developer` alone.
 * **Resume while small.** Resume a persona only while its transcript is under
   about 150 k tokens; past that, spawn fresh on the increment file.
 * **Worktrees.** Make each new worktree with `tools/new_worktree.py`.
@@ -81,8 +83,9 @@ the personas. Its rules:
   jargon. Two or more questions or acts awaiting Ola are numbered in one
   sequence, each explained, with its default.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
-  `@orchestrator`, which records it in `docs/retrospectives/`.
-* **When to spawn `@orchestrator`.** When `tools/duties.py` shows a duty owed.
+  `@orchestrator`, which appends it to the lessons log.
+* **When to spawn `@orchestrator`.** When `tools/duties.py` shows a duty
+  owed; with no free item, that duty runs first.
 
 ## 4. Operational Commands
 
@@ -127,9 +130,8 @@ prose-only change. A PR that changes
 only prose (Markdown at the root or under `docs/`, less the files the suites
 read; `tools/ci_changes.py` decides) skips the C++, sanitizer and Python jobs
 and runs only the governance gates, so its green says nothing about code.
-`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR (the
-queue's method, merge commit, applies), and the queue tests it on top of the
-PRs ahead and merges it. No update-branch loop. A method flag such as `--merge`
-only prints a warning (the queue's method wins); `-d`/`--delete-branch` is
-refused. Never pass `--admin`: it bypasses the queue.
+`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR,
+and the queue tests it on top of the PRs ahead and merges it. No update-branch
+loop. `-d`/`--delete-branch` is refused. Never pass `--admin`: it bypasses the
+queue.
 

@@ -108,6 +108,7 @@ from tin_engine.feature_input import (
     FeatureSet,
     FeatureSource,
     MeshingRules,
+    Prefer,
     open_features,
     read_class_polygons,
     read_lake_polygons,
@@ -861,7 +862,8 @@ def mesh(
             help="With class polygons from --land-cover, take the class its meshing rules name for "
             "KEY (lake, glacier) from SOURCE, a file or cached source of polygons, and the "
             "rest from --land-cover; the land cover's own polygons of that class go to their "
-            "neighbours. Repeatable; where two sources overlap, the first given wins.",
+            "neighbours. Repeatable; where two sources overlap, the first given wins. When the "
+            "--land-cover file is also a --features source, its lines take the same classes.",
         ),
     ] = None,
     reservoirs: Annotated[
@@ -1013,6 +1015,7 @@ def mesh(
         prefer or [], classes, known, cache_root(cache, os.environ),
         lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
     )  # fmt: skip
+    own_lines = _cover_lines(classes, preferred, feature_paths, feature_layers, rules)
     units_source = _reservoir_source(
         catchments, categories is not None, known, cache_root(cache, os.environ),
         _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments",
@@ -1245,8 +1248,10 @@ def mesh(
     if feature_paths and dem_domain is not None:
         sources = _feature_sources(feature_paths, feature_crss, feature_layers, rules)
         found = _open_features(
-            sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell
-        )
+            sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell,
+            None if own_lines is None or classes is None or classes.rules is None
+            else (own_lines, classes.rules, preferred),
+        )  # fmt: skip
     if units is not None and dem_domain is not None:
         units = units.moved(dem_crs)
         line = sub_catchments.borders([g for _, g in units.units], vocabulary.mask("catchment"))
@@ -2716,6 +2721,50 @@ def _feature_sources(
     return tuple(built)
 
 
+def _cover_lines(
+    classes: _ClassSource | None,
+    preferred: Sequence[_Preferred],
+    paths: Sequence[Path],
+    layers: Sequence[str],
+    rules: Sequence[MeshingRules],
+) -> int | None:
+    """With --prefer, the index of the --features source that is the
+    --land-cover file (same file, its layer or none given), whose lines then
+    take the preferred classes; refused when a --prefer source is also a
+    --features source, or the land cover's lines read another attribute or
+    skip the clean-up."""
+    if not preferred or classes is None or classes.path is None or classes.rules is None:
+        return None
+    layer = classes.source.layer if classes.source is not None else None
+    same = [
+        i
+        for i, p in enumerate(paths)
+        if p.resolve() == classes.path.resolve()
+        and (layers[i] if i < len(layers) else None) in (None, layer)
+    ]
+    if not same:
+        return None
+    index = same[0]
+    given = {p.path.resolve(): p.key for p in preferred}
+    for p in paths:
+        if p.resolve() in given:
+            raise typer.BadParameter(
+                f"{p.name} is also the --prefer {given[p.resolve()]} source; with the "
+                "--land-cover file among the --features, its lines come in through the "
+                "land cover's, so give it only to --prefer",
+                param_hint="--features",
+            )
+    mine, cover = rules[index], classes.rules
+    if mine.attribute.lower() != cover.attribute.lower() or not mine.cleaned:
+        raise typer.BadParameter(
+            f"--features {index + 1} ({paths[index].name}) is the --land-cover file; with --prefer "
+            f"its meshing rules must read {cover.attribute}, as meshing rules {cover.name} do, "
+            "and keep the polygons in the clean-up",
+            param_hint="--features-rules",
+        )
+    return index
+
+
 def _open_features(
     sources: tuple[FeatureSource, ...],
     domain: DomainPolygon,
@@ -2725,14 +2774,27 @@ def _open_features(
     vocabulary: EdgeVocabulary,
     threads: int = 1,
     cell: float = 0.0,
+    own: tuple[int, MeshingRules, Sequence[_Preferred]] | None = None,
 ) -> FeatureSet:
     """Read and clip every source into one set, timed as
     ``features read`` and ``features clip``; a refusal is a usage error naming
-    the feature."""
+    the feature. With `own` (the land cover's source index, its rules and
+    the --prefer sources) that source's lines take the preferred classes."""
     t0 = time.perf_counter()
+    prefer = None
+    if own is not None:
+        xy = shapely.get_coordinates(domain.polygon.exterior)
+        chosen = []
+        for p in own[2]:
+            try:
+                polygons, _ = read_polygons(p.path, p.layer, dem_crs, xy)
+            except FeatureError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
+            chosen.append((p.code, polygons))
+        prefer = Prefer(source=own[0], rules=own[1], chosen=chosen)
     try:
         request = FeatureRequest(sources=sources, vocabulary=vocabulary, threads=threads, **cleanup)
-        found = open_features(request, domain, dem_crs, cell=cell)
+        found = open_features(request, domain, dem_crs, cell=cell, prefer=prefer)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)

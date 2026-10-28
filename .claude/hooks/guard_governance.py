@@ -36,10 +36,12 @@ for Ola, and a write of the harness state or a run of away.py is always denied
 """
 
 import json
+import os
 import posixpath
 import re
 import sys
 from fnmatch import fnmatch
+from itertools import pairwise
 from pathlib import Path
 
 # Appended, not put first: a tools/ file named after a stdlib module must not
@@ -92,7 +94,7 @@ GOVERNED_SUFFIXES = (".git/config",)
 #: `git show` -- and must pass silently, or the guard becomes noise and gets
 #: disabled, which is how guards die.
 WRITES = re.compile(
-    r"(>>?\s|<<\s*['\"]?\w*EOF|\bsed\s+-i|\btee\b|\bcp\b|\bmv\b|\bdd\b|\btruncate\b"
+    r"(>>?&?[|!]?\s|<<\s*['\"]?\w*EOF|\bsed\s+-i|\btee\b|\bcp\b|\bmv\b|\bdd\b|\btruncate\b"
     r"|\bgit\s+(checkout|restore|apply|revert)\b|\bpatch\b"
     r"|\bpython3?\s+-(?!m\s+(?:ruff|mypy|pytest)\b)\b)",  # python -m <gate> is a read
 )
@@ -111,27 +113,30 @@ def governed(path: str, *, scratch_exempt: bool = True) -> bool:
     lexical = posixpath.normpath(norm)
     if lexical not in (norm, ".") and governed(lexical, scratch_exempt=scratch_exempt):
         return True
-    parts = norm.split("/")
-    tail = parts[-1]
-    if any(norm.endswith(g) or tail == g for g in GOVERNED):
+    # Names compare case-folded, as the macOS disk does; the module rule below stays
+    # exact, since Python's import checks letter case there.
+    parts, low = norm.split("/"), norm.lower()
+    tail = low.split("/")[-1]
+    if any(low.endswith(g.lower()) or tail == g.lower() for g in GOVERNED):
         return True
-    if any(fnmatch(norm, f"*{pattern}") or fnmatch(tail, pattern.split("/")[-1])
+    if any(fnmatch(low, f"*{pattern}".lower()) or fnmatch(tail, pattern.split("/")[-1].lower())
            for pattern in GOVERNED_GLOBS):
         return True
-    if any(norm.endswith(suffix) for suffix in GOVERNED_SUFFIXES):
+    if any(low.endswith(suffix) for suffix in GOVERNED_SUFFIXES):
         return True
     # h16 G4: `python3 tools/x.py` puts tools/ first on sys.path, so a tools/ file
     # named after a stdlib module (tools/json/__init__.py, tools/ast.py) replaces it.
     if any(parts[at - 1] == "tools" and part.split(".")[0] in sys.stdlib_module_names
            for at, part in enumerate(parts) if at):
         return True
-    return any(prefix in norm for prefix in GOVERNED_PREFIXES)
+    return any(prefix.lower() in low for prefix in GOVERNED_PREFIXES)
 
 
-#: Only Ola enters or leaves unattended mode; only hooks and away.py write its state.
-#: Case-insensitive: the macOS disk is, so `.GIT/HARNESS` is the folder.
-HARNESS_PATH = re.compile(r"(^|/)\.git/harness(/|$)", re.I)
 GIT_DIR = re.compile(r"(^|/)\.git(/|$)", re.I)
+#: A `NAME=value` the guard reads its words by: no quote, expansion or separator in it.
+KNOWN = re.compile(r"[^\s'\"$`;&|()<>\\]*")
+#: A link source that is a git folder by what it runs.
+GIT_DIR_RUN = re.compile(r"rev-parse\b.*--(git-dir|git-common-dir|absolute-git-dir)\b")
 #: On a line naming the record folder, the programs that pass: none writes a file or
 #: runs a program, whatever its options (rg, git and python3 are judged further).
 READERS = {"echo", "printf", "cat", "grep", "head", "tail", "wc", "ls", "stat", "diff", "cut"}
@@ -153,24 +158,59 @@ def runs_away(simple) -> bool:
     return any(shell_scan.base(word or "") == "away.py" for word in (first, simple.script))
 
 
-def judge_bash(command: str) -> tuple[str, list[str], str] | None:
+def in_folder(path: str, globs: bool = True) -> bool:
+    """The path names the record folder: two adjacent parts stand for `.git` and `harness`.
+
+    Case-folded, as the macOS disk is. A part stands for its name when it is that name,
+    an expansion or, with `globs`, a pattern matching it; one of the two is written out,
+    so `$X/*` and `*/*` never match.
+    """
+    text = shell_scan.static(path, "\0") if shell_scan else path
+    parts = posixpath.normpath(text.replace("\\", "/")).lower().split("/")
+
+    def stands(part: str, name: str) -> bool:
+        pattern = re.sub(r"\{[^}]*\}", "*", part)
+        return part == name or (part != "" and not part.strip("\0")) or (
+            globs and fnmatch(name, pattern))  # fmt: skip
+
+    return any((a == ".git" or b == "harness") and stands(a, ".git") and stands(b, "harness")
+               for a, b in pairwise(parts))  # fmt: skip
+
+
+def real(path: str, cwd: str) -> str | None:
+    """The path's real path from `cwd`, a link followed; None for a path holding an expansion."""
+    return None if shell_scan.substituted(path) else os.path.realpath(os.path.join(cwd, path))
+
+
+def judge_bash(command: str, *, cwd: str | None = None) -> tuple[str, list[str], str] | None:
     """("deny", [], "") or ("ask", governed targets, why) for a Bash line; None passes it."""
-    simples = shell_scan.parse(command) if shell_scan else None
+    assigned: dict[str, str] = {}
+    simples = shell_scan.parse(command, assigned=assigned) if shell_scan else None
     if simples is not None:
-        targets = [t for s in simples for t in (*s.writes, *shell_scan.candidates(s))]
+        known = {name: value for name, value in assigned.items() if KNOWN.fullmatch(value)}
+        cwd, here, walked = cwd or os.getcwd(), "", []
+        for simple in simples:  # each target joined to the cd path so far, known values in
+            for target in (*simple.writes, *shell_scan.candidates(simple)):
+                path = posixpath.join(here, value_of(target, known))
+                walked.append((target, path, real(path, cwd)))
+            if simple.written[:1] in (["cd"], ["pushd"]) and simple.written[1:]:
+                here = posixpath.join(here, value_of(simple.written[1], known))
         # An expansion counts as matching .git: $(git rev-parse --git-common-dir)/harness.
         # Backstop, as before h4: a line that writes anything and names the state
         # dir is denied, however the path reaches the write (export, read, cd).
-        if (any(HARNESS_PATH.search(shell_scan.static(t, ".git")) for t in targets)
-                or any(runs_away(s) for s in simples)
+        if (any(in_folder(path) or (found is not None and in_folder(found))
+                for _, path, found in walked)
+                or any(runs_away(s) for s in simples) or reaches_folder(simples, known)
                 or (names_folder(command, simples) and not only_reads(command, simples))):
             return "deny", [], ""
-        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md. The scratchpad
-        # holds only for one plain command, which cannot link a path and write through it.
+        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md, and by its real
+        # path. The scratchpad holds only for one plain command, which cannot link a path
+        # and write through it.
         one = simples[0] if len(simples) == 1 else None
         plain = one is not None and one.program is None and one.script is None and not one.unknown
-        hits = list(dict.fromkeys(t for t in targets
-                                  if governed(shell_scan.static(t), scratch_exempt=plain)))
+        hits = list(dict.fromkeys(
+            t for t, _, found in walked if governed(shell_scan.static(t), scratch_exempt=plain)
+            or (found is not None and governed(found, scratch_exempt=plain))))  # fmt: skip
         if hits:
             return "ask", hits, f"it writes {', '.join(hits)}"
         if not any(s.unknown or any(not shell_scan.static(w).strip("/") for w in s.writes)
@@ -181,6 +221,33 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
     unread = simples is not None and any(s.unknown for s in simples)
     hits = text_hits(command) if WRITES.search(command) or unread else []
     return ("ask", hits, CANNOT_READ) if hits else None
+
+
+def value_of(word: str, known: dict[str, str]) -> str:
+    """The word with each `$NAME` or `${NAME}` of a known assignment replaced by its value."""
+    return shell_scan.PLAIN_PARAMETER.sub(
+        lambda match: known.get(match.group(1) or match.group(2), match.group(0)), word)
+
+
+def reaches_folder(simples, known: dict[str, str]) -> bool:
+    """A command with a word in the folder that is not a plain reader, or an `ln` of a git
+    folder outside a scratchpad: an earlier line's link would reach the folder."""
+    moved = any(s.written[:1] in (["cd"], ["pushd"]) for s in simples)
+    for simple in simples:
+        words = [value_of(word, known) for word in simple.written]
+        reads = allowed(simple, moved) and all(plain(t) and not in_folder(t) for t in simple.writes)
+        if not reads and any(in_folder(word, globs=False) for word in words):
+            return True
+        if shell_scan.base(simple.argv[0] if simple.argv else "") != "ln":
+            continue
+        found = shell_scan.operands(simple.argv[1:], shell_scan.COPIERS["ln"])
+        for source in (value_of(word, known) for word in found[:-1] or found):
+            if scratchpad is not None and scratchpad.under(source):
+                continue
+            last = posixpath.normpath(shell_scan.static(source)).split("/")[-1].lower()
+            if last == ".git" or GIT_DIR_RUN.search(source) or in_folder(source):
+                return True
+    return False
 
 
 def names_folder(command: str, simples) -> bool:
@@ -237,12 +304,11 @@ def only_reads(command: str, simples) -> bool:
         if not allowed(simple, moved):
             return False
         for target in simple.writes:
-            if not plain(target) or HARNESS_PATH.search(posixpath.normpath(
-                    posixpath.join(here, target))):  # fmt: skip
+            if not plain(target) or in_folder(posixpath.join(here, target)):
                 return False
         if simple.written[:1] in (["cd"], ["pushd"]) and simple.written[1:]:
             here = posixpath.normpath(posixpath.join(here, simple.written[1]))
-            if HARNESS_PATH.search(here):
+            if in_folder(here):
                 return False
     return True
 
@@ -307,14 +373,15 @@ def verdict(event: dict) -> None:
 
     if tool in ("Edit", "Write", "NotebookEdit"):
         path = supplied.get("file_path") or supplied.get("notebook_path") or ""
-        if HARNESS_PATH.search(path.replace("\\", "/")):
+        found = os.path.realpath(os.path.join(event.get("cwd") or os.getcwd(), path))
+        if in_folder(path) or in_folder(found):
             emit(event, "deny", ALWAYS_DENIED, "", "")
             return
-        if governed(path):
+        if governed(path) or governed(found):
             hits, act, why = [path], f"{tool} {path}", f"it writes {path}"
     elif tool == "Bash":
         act = supplied.get("command", "")
-        judged = judge_bash(act)
+        judged = judge_bash(act, cwd=event.get("cwd"))
         if judged is not None and judged[0] == "deny":
             emit(event, "deny", ALWAYS_DENIED, "", "")
             return

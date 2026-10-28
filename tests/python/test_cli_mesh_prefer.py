@@ -29,6 +29,12 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   the key and carries the three areas (at least three numbers); the credit row
   is `land_cover_prefer_credit`, naming the key and the file.
 - `--prefer` with a `.vtk` output is accepted.
+- When the land cover is also a `--features` source (its own lines,
+  `docs/increments/110-prefer-lines.md`, tests 3 to 5): the lines are read
+  from `cli.open_features`'s result, unioned; the two refusals exit 2 before
+  any phase, the first naming `--features`, `lake.geojson` and `lake`, the
+  second `--features-rules`; with the land cover not among the `--features`
+  sources, `--prefer` changes no line (exactly equal geometry).
 """
 
 from __future__ import annotations
@@ -37,17 +43,20 @@ import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 import shapely
 from numpy.testing import assert_allclose
 from shapely.geometry import Polygon, box
+from shapely.geometry.base import BaseGeometry
 
+import tin_engine.cli as cli
 from class_fixtures import KEY
 from cli_helpers import USAGE, squashed
 from feature_fixtures import Feat, write_geojson
-from fraction_fixtures import MESH_CRS, dem_origin
+from fraction_fixtures import MESH_CRS, dem_origin, domain_ring
 from legend_fixtures import coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson
 from test_cli_mesh_cells import check_sums, column, corners, mesh, scene, written
@@ -248,3 +257,149 @@ def test_the_mcp_mesh_tool_takes_prefer_as_a_list() -> None:
     argv = mesh_tool.argv(mesh_tool.model.model_validate(arguments))
     joined = " ".join(argv)
     assert "--prefer lake=a" in joined and "--prefer glacier=b" in joined, argv
+
+
+# ------------------------------------------------------------ the land cover's own lines
+
+#: Uncoded lines files: the land cover's, on its own attribute, and the lake's.
+COVER_LINES = (
+    'name = "cover-lines"\nattribute = "{attribute}"\nunlisted = "land"\n\n'
+    '[edges]\nwater = ["land_cover", "water"]\nland = ["land_cover"]\n\n'
+    '[[class]]\nvalue = "512"\nedges = ["land_cover", "water"]\n'
+)
+LAKE_LINES = (
+    'name = "lake-lines"\nattribute = "vatnLnr"\nunlisted = "drop"\n\n'
+    '[[class]]\nvalue = "1"\nedges = ["water"]\n'
+)
+#: The clean-up's switches off, as the design measured.
+AS_READ = ("--features-tolerance", "0", "--features-repair", "0", "--features-outline-snap", "0")
+#: On a length in m, at coordinates below 1e7 m with the clean-up moving no
+#: vertex: rounding only, far below the design's 0.1 m figures.
+LENGTH = 1e-6
+
+
+def lines_file(tmp_path: Path, text: str, name: str) -> Path:
+    path = tmp_path / name
+    path.write_text(text)
+    return path
+
+
+def features(path: Path, rules: Path) -> tuple[str, ...]:
+    return ("--features", str(path), "--features-rules", str(rules))
+
+
+class Opened:
+    """Every ``cli.open_features`` result."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.sets: list[Any] = []
+        real = cli.open_features
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            found = real(*args, **kwargs)
+            self.sets.append(found)
+            return found
+
+        monkeypatch.setattr(cli, "open_features", spy)
+
+
+def run_lines(
+    scene: dict[str, Path], target: Path, monkeypatch: pytest.MonkeyPatch, *args: str
+) -> tuple[BaseGeometry, sqlite3.Connection]:
+    """One run's constraint lines, unioned, and its GeoPackage."""
+    with monkeypatch.context() as patch:
+        spy = Opened(patch)
+        conn = written(scene, target, *args)
+    (found,) = spy.sets
+    return shapely.union_all([line for f in found.features for line in f.lines]), conn
+
+
+def test_the_land_covers_lines_take_the_preferred_lake(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    lake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test 3: the lake's border inside the domain is covered, none of the
+    replaced water's border is kept, and the lines are the overlaid polygons'
+    borders: 9,838.4 m without --prefer, 9,082.7 m with it."""
+    rules = lines_file(tmp_path, COVER_LINES.format(attribute="Code_18"), "cover.toml")
+    common = (*corine(cover), *features(cover, rules), *AS_READ)
+    before, a = run_lines(scene, tmp_path / "a.gpkg", monkeypatch, *common)
+    after, b = run_lines(
+        scene, tmp_path / "b.gpkg", monkeypatch, *common, "--prefer", f"lake={lake}"
+    )
+    a.close()
+    domain = Polygon(domain_ring())
+    polygons = dict(cover_polygons())
+    shores = [polygons[311].difference(preferred_lake()), polygons[312], preferred_lake()]
+    expected = shapely.union_all([g.boundary for g in shores]).intersection(domain)
+    assert before.intersection(domain).length == pytest.approx(9838.4, abs=0.05)
+    assert expected.length == pytest.approx(9082.7, abs=0.05)  # the premise
+    assert after.intersection(domain).length == pytest.approx(expected.length, abs=LENGTH)
+    shore = preferred_lake().boundary.intersection(domain)
+    assert shore.length == pytest.approx(2600.4, abs=0.05)
+    covered = shore.intersection(after.buffer(LENGTH)).length
+    assert covered == pytest.approx(shore.length, abs=LENGTH), covered
+    water = polygons[512].boundary.intersection(domain)
+    assert water.length == pytest.approx(2756.4, abs=0.05)
+    assert water.intersection(after.buffer(LENGTH)).length <= 10 * LENGTH
+    gone = before.intersection(domain).difference(after.buffer(1.0)).length
+    assert gone == pytest.approx(3350.1, abs=0.05), gone
+    with closing(b):  # the cell shares stay case 7's
+        assert_allclose(column(b, "cells", "lake"), share(b, preferred_lake()), atol=SHARE)
+        forest = shapely.union_all([g for c, g in cover_polygons() if c in (311, 312)])
+        expected_forest = share(b, forest.difference(preferred_lake()))
+        assert_allclose(column(b, "cells", "forest"), expected_forest, atol=SHARE)
+        check_sums(b)
+
+
+def test_the_preferred_source_as_features_too_is_refused(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
+) -> None:
+    """Test 4, refusal 1: its shorelines would come in twice."""
+    rules = lines_file(tmp_path, COVER_LINES.format(attribute="Code_18"), "cover.toml")
+    lake_rules = lines_file(tmp_path, LAKE_LINES, "lake.toml")
+    args = (*features(cover, rules), *features(lake, lake_rules), *AS_READ)
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"), *args)
+    assert code == USAGE, output
+    assert phases == [], phases
+    assert not target.exists()
+    flat = squashed(output)
+    assert "--features" in flat and "lake.geojson" in flat and "lake" in flat, output
+
+
+def test_land_cover_lines_on_another_attribute_are_refused(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
+) -> None:
+    """Test 4, refusal 2: the codes would not match."""
+    rules = lines_file(tmp_path, COVER_LINES.format(attribute="Code_12"), "cover.toml")
+    target = tmp_path / "x.gpkg"
+    prefer = corine(cover, "--prefer", f"lake={lake}")
+    code, output = mesh(scene, target, *prefer, *features(cover, rules), *AS_READ)
+    assert code == USAGE, output
+    assert phases == [], phases
+    assert not target.exists()
+    assert "--features-rules" in squashed(output), output
+
+
+def test_lines_of_other_sources_are_unchanged_by_prefer(
+    scene: dict[str, Path],
+    tmp_path: Path,
+    cover: Path,
+    lake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test 5: with only the lake file as --features, --prefer changes no line."""
+    lake_rules = lines_file(tmp_path, LAKE_LINES, "lake.toml")
+    common = (*corine(cover), *features(lake, lake_rules), *AS_READ)
+    plain, a = run_lines(scene, tmp_path / "a.gpkg", monkeypatch, *common)
+    preferred, b = run_lines(
+        scene, tmp_path / "b.gpkg", monkeypatch, *common, "--prefer", f"lake={lake}"
+    )
+    a.close()
+    b.close()
+    assert plain.length > 0  # the premise: the lake's lines are there
+    assert shapely.equals_exact(shapely.normalize(plain), shapely.normalize(preferred), 0.0)

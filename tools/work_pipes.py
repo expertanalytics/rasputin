@@ -7,8 +7,9 @@ read from the working tree and from `<remote>/master` of every remote but
 network. A pipe's live list is untracked, `<git-common-dir>/pipes/<name>.jsonl`,
 one JSON record per line, appended only; the newest line for an id is its
 record. A pipe's own record (id = the pipe's name, state `pipe`) holds its
-priority and any open question about the pipe. Standard library only: the
-recap imports this on the system `python3`.
+priority. Questions for Ola live in `tools/questions.py` alone: an item waits
+on Ola while a question there names it with `--item`. Standard library only:
+the recap imports this on the system `python3`.
 Spec: `docs/increments/h31-pipes.md`, *7. Blueprint: modules, data flow, and what the recap prints*
 """
 
@@ -20,6 +21,7 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,6 +31,7 @@ from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins
 import harness_mode
+import questions
 
 ROOT = Path(__file__).resolve().parents[1]
 #: Chosen: about three of Ola's daily check cycles, which allows a weekend.
@@ -51,15 +54,11 @@ class Item:
     next: str = ""
     branch: str | None = None
     pr: int | None = None
-    question: str | None = None
-    default: str | None = None
     plain: bool = False
     fallback: bool = False
     rank: float = 0  # lower is earlier in the pipe; `top` lowers it
-    before: str | None = None  # the state `ask` left, which `answer` restores
     priority: int | None = None  # on a pipe's own record only
     priority_words: str | None = None
-    ruling: str | None = None  # Ola's words on the last question `answer` closed
 
 
 @dataclass(frozen=True)
@@ -227,6 +226,16 @@ class State:
     unreadable: int
     lists: Path
     tasks: Path
+    asked: list[dict[str, Any]]  # the question tool's records
+
+
+def _asked(state: State) -> dict[str, int]:
+    """Item id to the number the question tool gives its first open question."""
+    found: dict[str, int] = {}
+    for n, record in enumerate(questions.open_records(state.asked), 1):
+        if record.get("item") and record["kind"] != "taken":
+            found.setdefault(record["item"], n)
+    return found
 
 
 def gather(repo: Path) -> State:
@@ -241,7 +250,9 @@ def gather(repo: Path) -> State:
     pipes = [dataclasses.replace(p, priority=items[p.name].priority) if p.name in items else p
              for p in pipes]  # fmt: skip
     main = common.parent if common.name == ".git" else repo
-    return State(pipes, items, warnings, notes, bad, lists, main / ".claude" / "current-task")
+    asked = questions.load(common / "questions.jsonl")[0]
+    return State(pipes, items, warnings, notes, bad, lists, main / ".claude" / "current-task",
+                 asked)  # fmt: skip
 
 
 def _open(items: dict[str, Item]) -> dict[str, Item]:
@@ -251,8 +262,21 @@ def _open(items: dict[str, Item]) -> dict[str, Item]:
 def _choose(state: State, now: datetime) -> tuple[Choice, dict[str, str], bool]:
     mode = harness_mode.read_mode(state.lists.parent / "harness", now)
     unattended = mode.state != "off"
-    notes = _notes(state.tasks)
-    return order(state.pipes, _open(state.items), now, unattended, set(notes)), notes, unattended
+    notes, asked = _notes(state.tasks), _asked(state)
+    items = {k: dataclasses.replace(i, state="waiting") if k in asked else i
+             for k, i in _open(state.items).items()}  # fmt: skip
+    return order(state.pipes, items, now, unattended, set(notes)), notes, unattended
+
+
+def _owed(repo: Path) -> list[str]:
+    """The duties line `tools/duties.py` gives the prompt hook, as a list; none on a fault."""
+    import duties
+
+    try:
+        found = duties.line(repo, "hook")
+    except Exception:  # the duties are advice here: a fault never stops `next`
+        return []
+    return [found] if found else []
 
 
 def _next_line(choice: Choice) -> str:
@@ -282,8 +306,7 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
                 i.since if i.state in RANK else now, place[i.id])  # fmt: skip
 
     rows = sorted((i for i in items.values() if i.state in (*RANK, "waiting", "queued")), key=key)
-    asks = [i for i in rows if i.state == "waiting"]
-    asks += [i for i in state.items.values() if i.state == "pipe" and i.question]
+    asked = _asked(state)
     unreadable = [f"{state.unreadable} unreadable"] * bool(state.unreadable)
     head = "; ".join([f"in flight {in_flight(items)} of {CAP}", *state.notes, *unreadable])
     lines = [f"Pipes ({head})"[:120], *(w[:120] for w in state.warnings)]
@@ -291,21 +314,73 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
     for i in rows:
         age = now - i.since
         since = f"{age.days} d" if age >= timedelta(days=1) else f"{age // timedelta(hours=1)} h"
-        who = ("Ola" if i.state == "waiting" else "Ola present" if unattended and not i.plain
+        who = ("Ola" if i.state == "waiting" or i.id in asked
+               else "Ola present" if unattended and not i.plain
                else "its agent" if i.branch in notes else "free agent")  # fmt: skip
-        nxt = (f"question {asks.index(i) + 1} below" if i in asks
+        nxt = (f"question {asked[i.id]} below" if i.id in asked
                else " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""])))  # fmt: skip
         since += " stuck" if i.id in late else ""
         cells = ("next" if i == choice.item else "", i.pipe, str(pri.get(i.pipe, "-")),
                  f"{i.id} {i.title}", i.state, who, since)  # fmt: skip
         lines.append(("".join(map(_cell, cells, WIDTHS)) + nxt)[:120].rstrip())
-    if asks:
+    if block := questions.list_lines(state.asked):
         lines.append("Questions for Ola:")
-    for n, i in enumerate(asks, 1):
-        where = i.pipe if i.state == "pipe" else f"{i.pipe}/{i.id}"
-        lines.append(f"  {n}. {where}: {str(i.question)[:60]}  default: {i.default}"[:120])
+    for line in block:
+        lines += textwrap.wrap(line, 120, subsequent_indent="   ")
     lines.append(_next_line(choice))
     return lines[:40] + ([f"... {len(lines) - 40} more"] if len(lines) > 40 else [])
+
+
+def _md(text: str) -> str:
+    """`text` safe inside a Markdown table cell: one line, `|` escaped."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+def _waits_on(state: State, item: Item, numbers: dict[str, int], running: set[str]) -> str:
+    """What `item` really waits for: Ola's answer, a running agent, or a free writer."""
+    if item.id in numbers:
+        return f"Ola (question {numbers[item.id]})"
+    held = [r for r in state.asked if r["state"] == "held" and r.get("item") == item.id]
+    if held or item.state == "waiting":
+        return "Ola (a held question)" if held else "Ola"
+    return "a running agent" if item.id in running else "a free writer"
+
+
+def markdown_lines(repo: Path, now: datetime) -> list[str]:
+    """The verbose view in GitHub-flavoured Markdown: every open item, nothing truncated."""
+    state = gather(repo)
+    choice, _, _ = _choose(state, now)
+    items, pri = _open(state.items), _priorities(state.pipes)
+    numbers = _asked(state)
+    running = {branch.removeprefix("worktree-") for branch in _notes(state.tasks)}
+    nxt = choice.item
+    taken = f"**{nxt.id}** {_md(nxt.title)} ({nxt.pipe}, {choice.reason})" if nxt else IDLE
+    lines = [f"In flight {in_flight(items)} of {CAP}. A free writer takes next: {taken}."]
+    lines += [f"> {w}" for w in state.warnings]
+    place = {key: n for n, key in enumerate(items)}
+    group = {**RANK, "waiting": 4, "queued": 5}
+    names = sorted({p.name for p in state.pipes} | {i.pipe for i in items.values()},
+                   key=lambda name: (pri.get(name, 99), name))  # fmt: skip
+    for name in names:
+        rows = sorted((i for i in items.values() if i.pipe == name and i.state in group),
+                      key=lambda i: (group[i.state], i.rank, place[i.id]))  # fmt: skip
+        lines += ["", f"### {name}", ""]
+        if not rows:
+            lines.append("No open items.")
+            continue
+        lines += ["| Item | Step | Waiting on | Next |", "|---|---|---|---|"]
+        for i in rows:
+            todo = " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""]))
+            cells = (f"**{_md(i.id)}** {_md(i.title)}", i.state,
+                     _waits_on(state, i, numbers, running), _md(todo))  # fmt: skip
+            lines.append("| " + " | ".join(cells) + " |")
+    block = questions.list_lines(state.asked)
+    numbered = [line for line in block if line[:1].isdigit()]
+    held = sum(r["state"] == "held" for r in state.asked)
+    lines += ["", "### Questions for Ola", "", *(numbered or ["No open questions."])]
+    if held:
+        lines += ["", block[-1][0].upper() + block[-1][1:] + "."]
+    return lines
 
 
 class RefusedError(Exception):
@@ -354,21 +429,6 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
         if args.plain or args.governed:
             change["plain"] = args.plain
         _append(state, item, now, **change)
-    elif args.cmd == "ask":
-        if args.id in {p.name for p in state.pipes}:
-            _append(state, _pipe_record(state, args.id, now), now, question=args.question,
-                    default=args.default)  # fmt: skip
-        else:
-            item = _item(state, args.id)
-            _append(state, item, now, state="waiting", before=item.before or item.state,
-                    question=args.question, default=args.default)  # fmt: skip
-    elif args.cmd == "answer":
-        item = state.items.get(args.id) or _item(state, args.id)
-        if not item.question:
-            raise RefusedError(f"pipes: {args.id} has no open question")
-        back = item.state if item.state == "pipe" else item.before or "queued"
-        _append(state, item, now, state=back, before=None, question=None, default=None,
-                ruling=args.words)  # fmt: skip
     elif args.cmd == "priority":
         for pair in args.pairs:
             name, _, value = pair.partition("=")
@@ -382,8 +442,11 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
         choice, notes, _ = _choose(state, now)
         flying = [i for i in _open(state.items).values() if i.state in RANK and i.branch in notes]
         return [f"busy: {i.pipe}/{i.id} ({notes[str(i.branch)]})" for i in flying] + [
-            _next_line(choice)
+            _next_line(choice),
+            *([] if choice.item else _owed(repo)),
         ]
+    elif getattr(args, "markdown", False):
+        return markdown_lines(repo, now)
     else:
         return show_lines(repo, now)
     return []
@@ -406,19 +469,13 @@ def parser() -> argparse.ArgumentParser:
         p.add_argument("--next", help="the next step, in plain words")
         p.add_argument("--plain", action="store_true", help="writes no governed path")
         p.add_argument("--governed", action="store_true", help="writes a governed path")
-    ask = sub.add_parser("ask", help="put a question for Ola on an item or a pipe")
-    ask.add_argument("id")
-    ask.add_argument("question")
-    ask.add_argument("--default", required=True, help="what is taken if Ola is silent")
-    answer = sub.add_parser("answer", help="record Ola's ruling and close the question")
-    answer.add_argument("id")
-    answer.add_argument("words")
     pri = sub.add_parser("priority", help="set pipe priorities, 1 highest")
     pri.add_argument("pairs", nargs="+", metavar="PIPE=N")
     pri.add_argument("--words", required=True, help="Ola's words")
     sub.add_parser("top", help="move an item to the head of its pipe").add_argument("id")
     sub.add_parser("next", help="the item the next free writer takes")
-    sub.add_parser("show", help="the table the recap prints")
+    show = sub.add_parser("show", help="the table the recap prints")
+    show.add_argument("--markdown", action="store_true", help="every open item, as Markdown")
     return top
 
 

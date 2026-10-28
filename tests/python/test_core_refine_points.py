@@ -35,8 +35,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from gil_probe import ticks_during
-from test_core_cdt import RELEASED_TICKS
+from gil_probe import silence_during
+from test_core_cdt import RELEASED_SILENCE
 from tin_engine import _core
 from tin_engine._core import ChainRole
 from tin_engine.cli import DEFAULT_SNAP_SPACING, _constraint_arrays, _engine
@@ -373,7 +373,7 @@ class TestBinding:
         cp = check_points(x_min=X_MIN, y_max=Y_MAX, spacing=H, rows=n, cols=n)
         cp.add(xy, z)
         cp.freeze()
-        out, ticks, elapsed = ticks_during(
+        out, silence, elapsed = silence_during(
             lambda: refine_points(
                 cp, corners, triangles, zc, valid, edges, masks, tolerance=0.0, threads=1
             )
@@ -383,8 +383,8 @@ class TestBinding:
             f"refine_points took only {elapsed:.3f}s -- too fast to measure GIL release; "
             "enlarge the store rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: refine_points appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: refine_points appears to hold the GIL"
         )
 
 

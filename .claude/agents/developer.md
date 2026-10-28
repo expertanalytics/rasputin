@@ -1,6 +1,6 @@
 ---
 name: developer
-description: Core engine developer. Writes the minimal C++20 and async Python needed to pass tests that already exist and fail. Use only after @tester has produced a red suite.
+description: Core engine developer. Writes the minimal C++20 and async Python needed to pass tests that already exist and fail. Use after @tester's red suite, or alone in the fast lane.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 ---
 
@@ -11,6 +11,10 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 Load `.claude/REQUIRED-READING.md` before acting.
 
 ## Non-negotiable, and specific to this role
+
+In the fast lane you write the test first, then the fix, with no increment
+file; what follows on the red suite, test files and the increment file is
+the full lane's.
 
 - **You are the green step.** A failing suite already exists. Write the minimal
   code that passes it.

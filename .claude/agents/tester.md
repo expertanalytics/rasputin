@@ -28,8 +28,7 @@ You write the failing suites and hold the coverage floor `testing.md` defines.
   each list of them it must join, and adds it there.
 * **Scaffolding:** after green, remove red-step scaffolding, red notes included, before review.
 * **Choices beyond the design:** list every choice your tests pin that the
-  increment file leaves open, in the handback; `@architect` confirms or rules on each before green
-  (on the short path, only a pin that changes the design: `docs/increments/README.md`).
+  increment file leaves open, in the handback; `@architect` confirms or rules on each before green.
 * **Mutants:** for a suite the increment file names invariant-critical, run
   its mutants as your own task, planted in a scratch copy made by
   `python3 tools/scratch_copy.py <rev> <dir>` in the session scratchpad, never

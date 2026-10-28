@@ -61,6 +61,12 @@ COPIED = (
     # h31: the recap prints the pipes block through this module
     # (docs/increments/h31-pipes.md §7).
     "tools/work_pipes.py",
+    # The fast lane while away: push_grant reads the full-lane paths and counts lines.
+    "tools/check_lane.py",
+    "tools/count_loc.py",
+    # The recap, `away.py --back` and the pipes block list the questions
+    # waiting on Ola through this module.
+    "tools/questions.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

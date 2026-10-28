@@ -876,3 +876,25 @@ def test_h25_a_fed_data_reader_is_not_unread(line: str) -> None:
     simples = shell_scan.parse(line)
     assert simples is not None
     assert [s.unread for s in simples] == [False, False]
+
+
+# ---------------------------------------------------------------- zsh redirects (h37 §2 rule 1)
+#
+# docs/increments/h37-guard-follow-ups.md: every operator starting `>` (or
+# `<>`, or with prefix `&`) records its target as a write; `>&` followed by a
+# digit or `-` stays a descriptor copy.
+
+ZSH_WRITES = (">!", ">>!", ">>|", "&>!", ">&!", ">&|", ">>&", "&>>!", "&>>|", ">>&!", ">>&|",
+              "2>!", "2>>|", ">|", "&>|", "&>>", ">&")  # fmt: skip
+
+
+@pytest.mark.parametrize("operator", ZSH_WRITES)
+def test_h37_a_zsh_redirect_records_its_target_as_a_write(operator: str) -> None:
+    [simple] = shell_scan.parse(f"echo x {operator} notes.txt")
+    assert (simple.argv, simple.writes) == (["echo", "x"], ["notes.txt"])
+
+
+@pytest.mark.parametrize("line", ["echo x >&2", "exec 3>&-", "make 2>&1"])
+def test_h37_a_descriptor_copy_writes_no_file(line: str) -> None:
+    simples = shell_scan.parse(line)
+    assert simples is not None and [s.writes for s in simples] == [[]]

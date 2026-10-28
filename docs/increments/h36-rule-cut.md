@@ -133,7 +133,7 @@ full), so the tool is the one statement.
 
 The mode is taken from the `read_mode` result `print_recap` already reads,
 not from the header text. Both positions other tests pin hold: the header
-stays above `== recap ==` (`test_session_state.py` `_header`, line 326) and
+stays above `== recap ==` (`test_session_state.py` `_header`, line 170) and
 the duties line stays right after `Last landed:` (`test_duties.py`
 `_after_last_landed`).
 
@@ -148,7 +148,7 @@ the duties line stays right after `Last landed:` (`test_duties.py`
 | `tools/ci_changes.py:38` (governed) | drop it from `NOT_PROSE` and from the comment above | -1 |
 | `tools/check_citations.py@b2207408:96` (governed) | drop it from `GOVERNED` | -1 |
 | `tools/new_worktree.py:11, 125` | the docstring names `tools/rebuild_core.py` instead of REQUIRED-READING's recipe; the printed `rebuild` line becomes `python3 <wt>/tools/rebuild_core.py   (configured, not built)` | 0 |
-| `tests/python/test_session_state.py:923` | stop copying the file | tests |
+| `tests/python/test_session_state.py:731` | stop copying the file | tests |
 
 Four more test files pin the file name and change with it (§6).
 
@@ -261,7 +261,7 @@ the asserted line is the one right after `== recap ==`):
 Existing tests changed because `docs/PRINCIPLES.md` goes (the red step; each
 keeps its intent):
 
-- `test_session_state.py:923`: the copied list loses the file.
+- `test_session_state.py:731`: the copied list loses the file.
 - `test_rule_sizes.py`: the `RULE_FILES` test (line 63) loses it; the
   `STARTING` fixture (line 131, 10 words) loses it, so its row assert (184)
   goes and the totals become 97 (lines 191-192, still `+7` on 90) and 97

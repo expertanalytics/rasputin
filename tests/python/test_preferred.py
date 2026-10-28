@@ -210,3 +210,17 @@ def test_a_preferred_polygon_off_the_mesh_is_dropped_one_across_its_edge_kept_wh
     result = preferred.overlay([(HEATH, box(0, 0, 100, 100))], chosen, square_corners())
     check(per_code(result.polygons), {LAKE: 400.0, HEATH: 9800.0})
     check_areas(result, LAKE, replaced=0.0, given=200.0, refilled=0.0)
+
+
+def test_replace_gives_overlays_polygons(preferred: ModuleType) -> None:
+    """`replace`, the cut and refill without the areas, with `near` the square
+    itself, gives case 1's polygons, in `overlay`'s order: the kept heath,
+    the preferred lake, the refilled piece [50,60] x [40,60] as heath."""
+    base = heath_with(box(40, 40, 60, 60))
+    chosen = [(LAKE, [box(30, 40, 50, 60)])]
+    replaced = preferred.replace(base, chosen, near=[box(0, 0, 100, 100)])
+    overlaid = preferred.overlay(base, chosen, square_corners())
+    assert [c for c, _ in replaced.polygons] == [c for c, _ in overlaid.polygons]
+    for (_, a), (_, b) in zip(replaced.polygons, overlaid.polygons, strict=True):
+        assert shapely.equals(a, b), (a.wkt, b.wkt)
+    check(per_code(replaced.polygons), {LAKE: 400.0, HEATH: 9600.0})

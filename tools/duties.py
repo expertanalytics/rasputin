@@ -5,7 +5,8 @@ with `--status` as the status line (the session's JSON on stdin), and imported
 by `tools/session_state.py` for the recap. It writes nothing and always exits
 0: a hook exiting 2 would block the prompt, so any fault becomes a
 `Duties: unknown` line instead, never silence, which would read as "none owed".
-Spec: `docs/increments/h23-duties.md`, *2. The duties, and how each is computed*.
+Spec: `docs/increments/h23-duties.md`, *2. The duties, and how each is computed*,
+as `docs/increments/h34-lean-process.md` §1 and §3 amend it (the lessons log).
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 NIGHT = timedelta(hours=4)
 WEEK = timedelta(days=7)
 RETROS = "docs/retrospectives/"
+INCREMENTS = "docs/increments/"
+#: A lessons-log entry heading: `## <UTC minute>Z merge #N` or `... night`.
+ENTRY = re.compile(r"^## (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z) (?:merge #\d+|night)\b", re.M)
 #: A check commit is a commit by `@orchestrator`, known by this subject suffix.
 CHECK = "(@orchestrator)"
 Place = Literal["hook", "recap", "status"]
@@ -56,7 +60,7 @@ class Merge:
 @dataclass(frozen=True)
 class Inputs:
     retro: datetime | None  # the latest first add of a retrospective by a check commit
-    research: datetime | None  # the same, over files whose name contains `-research`
+    logged: datetime | None  # the latest lessons-log entry, see `logged`
     merges: list[Merge]  # first-parent merges on the base, newest first
     windows: list[Window]
     unmerged: list[str]  # local branches adding a retrospective the base lacks
@@ -91,6 +95,18 @@ def _minute(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def lessons_path(repo: Path) -> Path:
+    """`rasputin_scratch/lessons.md` beside the main checkout, the same from every worktree."""
+    common = _git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return Path(common).parent.parent / "rasputin_scratch" / "lessons.md"
+
+
+def logged(text: str, now: datetime) -> datetime | None:
+    """The latest entry stamp in `text`, in UTC, ignoring stamps later than `now`."""
+    stamps = [datetime.fromisoformat(m[1]).replace(tzinfo=UTC) for m in ENTRY.finditer(text)]
+    return max((t for t in stamps if t <= now), default=None)
+
+
 def _recording(paths: tuple[str, ...]) -> bool:
     """A merge that records a check: a retrospective, beside ROADMAP and increment files only."""
     other = ("ROADMAP.md", "docs/increments/", RETROS)
@@ -103,22 +119,27 @@ def _listed(names: list[str], shown: int) -> str:
 
 
 def owed(inputs: Inputs, now: datetime) -> list[str]:
-    """The owed items, in output order: post-merge, morning, research, push."""
+    """The owed items, in output order: post-merge, morning, weekly, push."""
     retro, items = inputs.retro, []
+    base = max((t for t in (retro, inputs.logged) if t is not None), default=None)
     work = [
-        m for m in inputs.merges if (retro is None or m.when > retro) and not _recording(m.paths)
+        m
+        for m in inputs.merges
+        if (base is None or m.when > base)
+        and any(p.startswith(INCREMENTS) for p in m.paths)
+        and not _recording(m.paths)
     ]
-    if work and retro is None:
-        items.append("post-merge check (no retrospective on record)")
-    elif work and retro is not None:
+    if work and base is None:
+        items.append("post-merge check (no log entry on record)")
+    elif work and base is not None:
         labels = _listed([m.label for m in work], 3)
         plural = "s" * (len(work) > 1)
-        since = f"since the last retrospective, {_minute(retro)}"
+        since = f"since the last log entry, {_minute(base)}"
         items.append(f"post-merge check ({len(work)} merge{plural} {since}: {labels})")
     nights = [
         w
         for w in inputs.windows
-        if w.end <= now and w.end - w.start >= NIGHT and (retro is None or w.end > retro)
+        if w.end <= now and w.end - w.start >= NIGHT and (base is None or w.end > base)
     ]
     if nights:
         latest = _minute(max(w.end for w in nights))
@@ -126,10 +147,10 @@ def owed(inputs: Inputs, now: datetime) -> list[str]:
         items.append(
             f"morning check ({len(nights)} away window{plural} ended since, latest {latest})"
         )
-    if inputs.research is None:
-        items.append("research round (none on record)")
-    elif now - inputs.research >= WEEK:
-        items.append(f"research round (last {inputs.research.astimezone(UTC).date().isoformat()})")
+    if retro is None:
+        items.append("weekly retrospective (none on record)")
+    elif now - retro >= WEEK:
+        items.append(f"weekly retrospective (last {retro.astimezone(UTC).date().isoformat()})")
     names = sorted(set(inputs.unmerged))
     if names:
         items.append(
@@ -176,8 +197,10 @@ def gather(repo: Path, unmerged: bool) -> Inputs:
             added = datetime.fromisoformat(stamp)
             first[path] = min(first.get(path, added), added)
     retro = max(first.values(), default=None)
-    research = max((t for p, t in first.items() if "-research" in Path(p).name), default=None)
-    since = [f"--since={retro.isoformat()}"] if retro else []
+    lessons = lessons_path(repo)
+    entry = logged(lessons.read_text() if lessons.exists() else "", datetime.now(UTC))
+    start = max((t for t in (retro, entry) if t is not None), default=None)
+    since = [f"--since={start.isoformat()}"] if start else []
     merges = []
     for header, paths in _blocks(_git(repo, *MERGES, *since, base), "M "):
         sha, stamp, subject = [*header.split(" ", 2), ""][:3]
@@ -194,7 +217,7 @@ def gather(repo: Path, unmerged: bool) -> Inputs:
     log = state / "windows.jsonl" if state else None
     lines = log.read_text().splitlines() if log and log.exists() else []
     events = [e for e in map(_json, lines) if isinstance(e, dict)]
-    return Inputs(retro, research, merges, window_ends(events, datetime.now(UTC)), sorted(names))
+    return Inputs(retro, entry, merges, window_ends(events, datetime.now(UTC)), sorted(names))
 
 
 def _json(line: str) -> Any:

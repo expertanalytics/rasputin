@@ -5,6 +5,7 @@ Spec: docs/increments/h9-spawn-briefs.md §3.1 to §3.4. The main session runs
 
     python3 tools/brief.py <persona> --worktree <path> --beside <none|persona:path>...
                            [--increment <file>] [--no-build] [--untimed] [--ola <text>]...
+                           [--lane fast]
 
 and pastes the block, unchanged, before the task. `.claude/hooks/guard_spawn.py`
 reads it back with `find_blocks` and `check`, so the format has one owner. A
@@ -38,12 +39,14 @@ WRITES: dict[str, tuple[str, ...]] = {
                   ".claude/ files ending in .md", "root *.md files"),
     "developer": ("src_python/", "include/", "src/", "bindings/", "tools/", ".claude/hooks/",
                   ".github/", "CMakeLists.txt", "pyproject.toml"),
-    "orchestrator": ("docs/retrospectives/",),
+    "orchestrator": ("docs/retrospectives/", "the lessons log ../rasputin_scratch/lessons.md"),
     "perf": ("docs/benchmarks/",),
     "reviewer": (),
     "tester": ("tests/",),
 }  # fmt: skip
 PERSONAS = tuple(WRITES)
+#: The fast lane's developer writes the test, and rule text is fast-lane work.
+FAST_WRITES = ("tests/", "CLAUDE.md", ".claude/ files ending in .md", "docs/increments/README.md")
 NEEDS_INCREMENT = ("tester", "developer", "reviewer")
 #: The line .claude/hooks/record_review.py records (h29 §3.1); the reviewer's brief demands it.
 REVIEW_LINE = (
@@ -247,10 +250,13 @@ def _brief(argv: list[str] | None) -> str:
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--untimed", action="store_true")
     parser.add_argument("--ola", action="append", default=[])
+    parser.add_argument("--lane", choices=("fast",))  # h34 §3: test and fix by one developer
     args = parser.parse_args(argv)
-    persona = args.persona
+    persona, fast = args.persona, args.lane == "fast"
     if persona not in PERSONAS:
         raise BriefError(f"{persona} is not a persona; one of {', '.join(PERSONAS)}")
+    if fast and persona != "developer":
+        raise BriefError("--lane fast is for @developer only")
     worktree = _checkout(args.worktree)
     increment, parts = "none named", []
     if args.increment is not None:
@@ -261,7 +267,7 @@ def _brief(argv: list[str] | None) -> str:
             increment = f"{args.increment} (new: you create it)"
         else:
             raise BriefError(f"--increment {args.increment} does not exist")
-    elif persona in NEEDS_INCREMENT:
+    elif persona in NEEDS_INCREMENT and not fast:
         raise BriefError(f"@{persona} needs --increment")
     # <persona>-<worktree>-<HHMMSS>.md, numbered -2, -3 while the name is taken (h16 T3)
     tasks = session_state.main_checkout(ROOT) / ".claude" / "current-task"
@@ -276,7 +282,7 @@ def _brief(argv: list[str] | None) -> str:
         )
     except (KeyError, ValueError) as exc:
         raise BriefError(f"{TEMPLATE}: the template names an unknown variable ({exc})") from exc
-    limit = ", ".join(WRITES[persona]) or "nothing"
+    limit = ", ".join(WRITES[persona] + FAST_WRITES * fast) or "nothing"
     body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
     if persona == "reviewer":
