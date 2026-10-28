@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, revised after design review round 1** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: designed, revised after design review round 1, names revised after Ola** by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -15,7 +15,7 @@ Two questions, two sets of options:
    polygons, AR50, a class raster) and `--prefer KEY=SOURCE` (NVE's lakes
    and glaciers as areas, rivers and roads as lines). `--prefer` decides which
    source gives each class. The result is one map, built once, before the mesh.
-2. **Which of those must the mesh follow?** The meshing rules: `--edges`,
+2. **Which of those must the mesh follow?** The edges: `--edges`,
    chosen per class (`--edges lake --edges river`; `--edges all`). Edges come
    only from the map. `--edges-*` shape them (today's `--features-*`).
 
@@ -57,14 +57,14 @@ and fetches none.
 | `mesh --features` (repeatable) | **deleted**: class polygons go to `--land-cover`, lakes, glaciers, rivers, roads to `--prefer` |
 | `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value, the `--land-cover` file's; `--prefer-crs KEY=CRS`, `--prefer-layer KEY=LAYER`: per `--prefer` key, for a file (section 3) |
 | `--features-rules`, built-in `property` (also `--features`' default, `cli.py:991`; `source_report.py:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. Lost with `property`: one line file mixing edge kinds per feature (split it, one `--prefer` per kind) and polygons that are not land cover (no route; none in the shipped catalogue or the quick check) |
-| `--features-repair`, `--[no-]features-merge-same-class`, `--features-tolerance`, `--features-outline-snap` | `--edges-repair`, `--[no-]edges-merge-same-class`, `--edges-tolerance`, `--edges-outline-snap`; same meanings; defaults from the class file's accuracy, as for a coded source today. `--edges-tolerance` also works without `--land-cover`: it sets the `--catchments` and `--simplify-domain` band, as `--features-tolerance` does today |
+| `--features-repair`, `--[no-]features-merge-same-class`, `--features-tolerance`, `--features-outline-snap` | `--edges-repair`, `--[no-]edges-merge-same-class`, `--edges-tolerance`, `--edges-outline-snap`; same meanings; defaults from the land-cover class file's accuracy, as for a coded source today. `--edges-tolerance` also works without `--land-cover`: it sets the `--catchments` and `--simplify-domain` band, as `--features-tolerance` does today |
 | `--land-cover`, `--land-cover-year` | kept |
 | `--land-cover-rules` | `--land-cover-classes` |
 | `--prefer` | kept; also takes line sources (section 3); its sentence on `--features` lines deleted |
 | (none) | `--edges SELECTOR`, repeatable (section 3) |
 | `RENAMED`, `_RenamedOptions` (`--features-legend`, `--land-cover-legend`) | **deleted**: their targets go |
-| meshing-rules files (`data/meshing_rules/`, `meshing_rules.py`, "meshing rules" in help and docs) | **class files**: `data/classes/`, `classes.py`, "class file" |
-| class file keys `[edges]`, `class.edges`, `class.value`, `[vocabulary] extra` | **deleted** (edge names follow from the class, section 3) |
+| meshing-rules files (`data/meshing_rules/`, `meshing_rules.py`, "meshing rules" in help and docs) | **land-cover class files**: `data/land_cover_classes/`, `land_cover_classes.py` (beside `land_cover_fractions.py`), "land-cover class file" |
+| land-cover class file keys `[edges]`, `class.edges`, `class.value`, `[vocabulary] extra` | **deleted** (edge names follow from the class, section 3) |
 | `unlisted = "land"` | `unlisted = "keep"`; `drop`, `refuse` kept; `code_system` required |
 | `water`, `[cells]`, `[[split]]`, `codes`, `accept_no_class`, `positional_accuracy_m`, `notice`, `licence`, `legend`, `name`, `attribute` | kept |
 | `corine-water.toml` | **deleted**: `--edges water` |
@@ -77,18 +77,18 @@ and fetches none.
 | MCP `mesh` arguments `features*`, `land_cover_rules` | follow the CLI (the schema is derived): `edges`, `edges_*`, `land_cover_classes`, `land_cover_crs`, `land_cover_layer` |
 | MCP `INSTRUCTIONS`: "features_rules", "features_layer" | class polygons to `land_cover` with the fit's classes; lakes, glaciers, rivers, roads to `prefer`; `edges` |
 | `sources` fits: `mesh --features` with rules | `mesh --land-cover` with classes (class polygons), `mesh --prefer` (polygons or lines); `Fit.rules` → `Fit.classes` |
-| `FeatureSource`, `open_features`, `_Tally.source`, `_take`, `pre_clip`, `_runs`, `_bound`, `_linework`, `R_MIN`, `R_MAX` | **deleted**: reading is `read_class_polygons`, `read_polygons`, new `read_lines` |
-| `FeatureRequest` | `Cleanup(repair_m, merge_same_class, tolerance_m, outline_snap_m)` |
-| `MeshingRules` | `ClassRules`, less `classes` (value to edge names), `otherwise`'s names, `extra_names`, `cleaned` |
+| `FeatureSource`, `open_features`, `_Tally.source`, `_take`, `pre_clip`, `_runs`, `_bound`, `_linework`, `R_MIN`, `R_MAX` | **deleted**: reading is `read_class_polygons`, `read_polygons`, new `read_linestrings` |
+| `FeatureRequest` | `EdgeCleanup(repair_m, merge_same_class, tolerance_m, outline_snap_m)` |
+| `MeshingRules` | `LandCoverClasses`, less `classes` (value to edge names), `otherwise`'s names, `extra_names`, `cleaned` |
 | `meshing_rules.run_vocabulary` | the default vocabulary, plus `catchment` with `--catchments` |
 | #387: `cli._cover_lines` and its two refusals, `Prefer`, `open_features(prefer=)`, `_Tally._preferred` | **deleted**; the join moves into the map (section 3) |
 | `preferred.overlay` | **deleted**; `preferred.replace` kept |
 | `landcover.label_triangles`, `cli._land_cover` (codes from coded `--features`) | **deleted**: codes come from the fractions; `landcover.regions` kept |
 | `gml-to-gpkg` help "for --features" | "for --land-cover" |
 | `docs/benchmarks/quick/cases.toml` numedalslagen, lagan | `--land-cover <file> --land-cover-layer/-crs ... --land-cover-classes corine --edges all` |
-| `cells.py` (`MeshingRules`, "the meshing rules' `[cells]` table"), `legends.py` (docstring: legends named by meshing rules) | `ClassRules`, "the class file's" |
+| `cells.py` (`MeshingRules`, "the meshing rules' `[cells]` table"), `legends.py` (docstring: legends named by meshing rules) | `LandCoverClasses`, "the land-cover class file's" |
 | `io/domain_file.py`, `io/geojson.py` docstrings ("`--features`") | "`--land-cover`, `--prefer`" |
-| `docs/GLOSSARY.md` *Meshing rules* (`--features-rules`, sources `rules` key, `property`) | *Class file*; a new *Edges* entry (`--edges`, against `--out-edges`, which writes them) |
+| `docs/GLOSSARY.md` *Meshing rules* (`--features-rules`, sources `rules` key, `property`) | *Land-cover class file*; a new *Edges* entry (`--edges`, against `--out-edges`, which writes them) |
 | README, INSTALL, `project_structure.md`, ROADMAP | reworded |
 
 ## 3. Design
@@ -99,7 +99,7 @@ and fetches none.
         ▼
 land_cover_map.build(base, preferred, classes, region) -> LandCoverMap        [pure]
         │ areas: (code, polygon)…   lines: (key, line)…            │
---edges, --edges-* → EdgeChoice, Cleanup                           │
+--edges, --edges-* → EdgeChoice, EdgeCleanup                       │
         ▼                                                          │
 feature_input.edges_of(map, choice, cleanup, domain, vocabulary) -> FeatureSet [pure]
         │ + sub-catchment borders (unchanged) → mesh (C++ unchanged)│
@@ -115,9 +115,9 @@ feature_input.edges_of(map, choice, cleanup, domain, vocabulary) -> FeatureSet [
   piece is unioned with the same-class polygons it touches (110's join, moved
   from `_Tally._preferred`, on `(code, polygon)` pairs). The record's
   replaced, given and refilled areas are measured inside the domain. A line
-  `--prefer` is `read_lines` (LineString parts, moved vertex by vertex) and
+  `--prefer` is `read_linestrings` (LineString parts, moved vertex by vertex) and
   becomes the map's lines of that key.
-- **Keys.** An area key is one of the class file's `[cells.prefer]` (lake,
+- **Keys.** An area key is one of the land-cover class file's `[cells.prefer]` (lake,
   glacier), as today. A line key is an edge-vocabulary name other than
   `land_cover` and `water` (river, road, railway, coastline, contour, wall,
   ditch). Refused, naming `--prefer`: a line source for an area key, a
@@ -134,18 +134,18 @@ feature_input.edges_of(map, choice, cleanup, domain, vocabulary) -> FeatureSet [
   with a catalogue key, without its `--land-cover` or `--prefer KEY`, a
   layer for a file that is not a GeoPackage, a CRS that is not the file's
   own (`read_source` refuses it today).
-- **`--edges`.** Selectors: `all`, `water` (the class file's water classes),
+- **`--edges`.** Selectors: `all`, `water` (the land-cover class file's water classes),
   a category of its `[cells.categories]` (lake, forest, glacier, ...), a class
   code, a line key. Resolved at the CLI into `EdgeChoice(codes, lines)`. A
   border between two areas is an edge when either side's class is chosen;
   it carries `land_cover`, and `water` when that side is a water class (the
-  masks every shipped class file but `corine-water` gives today). So
+  masks every shipped land-cover class file but `corine-water` gives today). So
   `--edges water` sets both bits where `corine-water` set `water` only: a
   reader of the `land_cover` bit sees these lines too. A chosen line
   class's lines carry its name. Default: no edges. Refused, naming
   `--edges`: an unknown selector (the message lists the accepted ones), an
   area selector with a class raster, any selector without `--land-cover`.
-  A class file whose category is named `all`, `water` or a line key is
+  A land-cover class file whose category is named `all`, `water` or a line key is
   refused when it loads, naming the category, so a selector means one thing.
   Help text: `--edges` says "which borders and lines the mesh must follow";
   `--out-edges` says "write the mesh's edges to this PLY".
@@ -200,7 +200,7 @@ map holds 311 1,409,620 m², 312 509,495 m², 512 420,090 m².
    total 2,448.4 m; with `--edges lake` instead, no `river` line, and the
    fractions equal the run without the river.
 4. Case 7's shares (existing test) unchanged under `--edges all`.
-5. Each refusal of section 3, exit 2, naming its option (the class file's
+5. Each refusal of section 3, exit 2, naming its option (the land-cover class file's
    category named `all` or `river`: naming the category); `--features` is
    an unknown option; a sources file with a `rules` key is refused.
 6. MCP: the `mesh` tool lists `edges` and `land_cover_classes` and no
@@ -251,7 +251,10 @@ fractions in cut runs; faster class shares (22.8 s for 653,039 triangles).
 ## 7. Questions for Ola
 
 1. Rename the sources-file key `rules` to `classes`, with your own file
-   edited on merge (section 2)? Default: yes.
+   edited on merge (section 2)? It names a land-cover class file, which
+   replaces the meshing-rules file: `land_cover_classes.py`, the folder
+   `data/land_cover_classes/`, the model `LandCoverClasses`, the option
+   `--land-cover-classes`. Default: yes.
 2. May a mesh follow rivers or roads with no land-cover map at all? Default:
    no; `--edges` needs `--land-cover`.
 3. Following land-cover borders now always computes each triangle's class shares. A run that passes `--land-cover` today (Sula) costs the same. A run that follows CORINE borders without it goes from 9.5 s to 32 s on Numedalslågen and from 15 s to 68 s on Lagan, and the quick check's cases from about 2 to about 7 minutes. Keep an option to skip the shares? Default: no option; every real use so far (Sula, Shyft cells) wants the shares.
