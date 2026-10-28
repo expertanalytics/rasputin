@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, revised after design review round 3 (the two-stage Sula route probed, `--land-cover` alone keeps meaning the shares, no open question); design review round 4 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: designed, revised after design review round 4 (`--land-cover` takes several files, read as one map; the Sula lake lines located; the cut run's test); design review round 5 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -13,7 +13,9 @@ Three questions, three sets of options:
 
 1. **What is on the ground?** Areas: the land-cover map, `--land-cover`
    (CORINE's polygons, AR50, a class raster), with `--prefer KEY=SOURCE`
-   taking one class from another source (NVE's lakes and glaciers). Lines:
+   taking one class from another source (NVE's lakes and glaciers).
+   `--land-cover` takes several class-polygon files under one class file
+   (AR50 comes one file per county), read as one map. Lines:
    `--lines KEY=SOURCE` (rivers, roads), with or without a land-cover map.
 2. **Which of those must the mesh follow?** The edges: `--edges`,
    chosen per class or line kind (`--edges lake --edges river`; `--edges
@@ -67,12 +69,12 @@ and fetches none.
 
 | Today | Becomes |
 |---|---|
-| `mesh --features` (repeatable) | **deleted**: class polygons go to `--land-cover`, lakes and glaciers to `--prefer`, rivers and roads to `--lines` |
-| `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value, the `--land-cover` file's. No layer or CRS option for `--prefer` or `--lines` files: none of the 732 recorded runs gives one (section 3) |
+| `mesh --features` (repeatable) | **deleted**: class polygons go to `--land-cover` (repeatable, section 3), lakes and glaciers to `--prefer`, rivers and roads to `--lines` |
+| `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value each, for every `--land-cover` file. No layer or CRS option for `--prefer` or `--lines` files: none of the 732 recorded runs gives one (section 3) |
 | `--features-rules`, built-in `property` (also `--features`' default, `cli.py:991`; `source_report.py:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. No recorded run uses `property` or `--features` without rules (732 commands) |
 | a mesh's own `lines` layer fed back (`--features <mesh>.gpkg --features-layer lines` with rules on its `land_cover` and `water` columns; Ola's Sula runs of 27 October at 1, 2, 5, 10 and 20 m) | **no route**: the direct command gives the same borders and the same shares (section 4, two-stage probe) |
 | `--features-repair`, `--[no-]features-merge-same-class`, `--features-tolerance`, `--features-outline-snap` | `--edges-repair`, `--[no-]edges-merge-same-class`, `--edges-tolerance`, `--edges-outline-snap`; same meanings; defaults from the land-cover class file's accuracy, as for a coded source today. `--edges-tolerance` also works without `--land-cover`: it sets the `--catchments` and `--simplify-domain` band, as `--features-tolerance` does today |
-| `--land-cover`, `--land-cover-year` | kept; `--land-cover` says what is on the ground, and gives the shares unless the run follows class borders without `--shares` (section 3) |
+| `--land-cover`, `--land-cover-year` | kept; `--land-cover`, now repeatable, says what is on the ground, and gives the shares unless the run follows class borders without `--shares` (section 3) |
 | `--land-cover-rules` | `--land-cover-classes` |
 | `--prefer` | kept, area keys only (lake, glacier), still needs `--land-cover`; its sentence on `--features` lines deleted |
 | (none) | `--lines KEY=SOURCE`, repeatable: rivers, roads and the other line kinds, with or without `--land-cover` (section 3) |
@@ -90,7 +92,7 @@ and fetches none.
 | record `features`, `features_joined` | `edges`, `edges_joined` |
 | record `features_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` | `land_cover_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` |
 | record `features_repair_m`, `_merge_same_class`, `_tolerance_m`, `_outline_snap_m` | `edges_repair_m`, `edges_merge_same_class`, `edges_tolerance_m`, `edges_outline_snap_m` |
-| record `land_cover_prefer` | kept; a new `lines` field, one row per `--lines` key ("river from X: N lines, L km") |
+| record `land_cover_prefer` | kept; a new `lines` field, one row per `--lines` key ("river from X: N lines, L km"); a new `land_cover_overlap` field with more than one `--land-cover` file (section 3) |
 | MCP `mesh` arguments `features*`, `land_cover_rules` | follow the CLI (the schema is derived): `edges`, `edges_*`, `lines`, `shares`, `land_cover_classes`, `land_cover_crs`, `land_cover_layer` |
 | MCP `INSTRUCTIONS`: "features_rules", "features_layer" | class polygons to `land_cover` with the fit's classes; lakes, glaciers to `prefer`; rivers, roads to `lines`; `edges`; `shares` for class shares and cells |
 | `sources` fits: `mesh --features` with rules; `mesh --land-cover` (class raster) | `mesh --land-cover` with classes (class polygons), `mesh --prefer` (other polygons), `mesh --lines` (lines); the class raster's `mesh --land-cover` unchanged (it gives shares, as today); `Fit.rules` → `Fit.classes` |
@@ -158,6 +160,28 @@ in the shares step.
   join, moved from `_Tally._preferred`, on `(code, polygon)` pairs), on
   unchecked polygons as `_Tally._preferred` does today. The record's
   replaced, given and refilled areas are measured inside the domain.
+- **Several `--land-cover` files** (repeatable): class-polygon files under
+  the one land-cover class file (`--land-cover-classes`, or the catalogue
+  entries' `classes =`, which must agree), as Ola's AR50 runs pass one
+  file per county (Bygdin, Innlandet and ar50_46; Øyangen, ar50_32 and
+  ar50_33). Their polygons, in the order given, are the base: one map, so
+  the clean-up and the shares see one coverage, and `--prefer` cuts it as
+  it cuts one file. Where two files overlap, the first given keeps the
+  area (as `--prefer`'s first given wins): a later file's polygon that
+  overlaps an earlier file's (one `STRtree.query(predicate="overlaps")`
+  over each later file) is cut by them. The record's `land_cover_overlap`
+  gives that area inside the domain and the file kept; `land_cover_source`,
+  `land_cover_crs`, `_notice` and `_licence` list the files joined by `; `,
+  as `features*` does today. Today `--features` cleans each file on its
+  own, so the county line is an edge wherever it runs; here it is one
+  coverage, so with `--edges-merge-same-class` (on for AR50 by its
+  accuracy) the county line is an edge only where the class changes
+  across it. On Bygdin the two files tile the domain exactly (0 m²
+  overlap, 0 m² gap) and the county line runs 7,614 m inside it, all of it
+  with one class on both sides: today's mesh follows it, the new one does
+  not (question 4, section 7). Refused, naming `--land-cover`: a class
+  raster with any other `--land-cover` source; two catalogue entries or
+  files whose class files differ.
 - **Lines** (`--lines KEY=SOURCE`, repeatable). `read_linestrings`
   (LineString parts, moved vertex by vertex) gives `((key, LineString), ...)`,
   separate from the map, so lines need no `--land-cover`. A key is an
@@ -230,9 +254,14 @@ in the shares step.
   the borders).
 - **A cut run** (`--pieces`) refuses the shares (pieces carry no class
   shares yet, as today: `--land-cover` without class borders is refused
-  there, as now, and so is `--shares`); `--land-cover` with class borders
-  in `--edges`, and `--lines`, work as in an uncut run, and each piece gets
-  its codes as today.
+  there, naming `--land-cover`, and so is `--shares`, naming `--shares`);
+  `--land-cover` with class borders in `--edges`, and `--lines`, work as
+  in an uncut run, and each piece gets its codes as `_write_piece` gives
+  them today (`cli.py:2129`, codes by `label_triangles`). `--prefer` is
+  allowed there: the map is built once before the cut, so the pieces' codes
+  come from the preferred map, at no added code. Today a cut run refuses
+  `--land-cover`, so `--prefer` never reached one; none of the 732
+  recorded runs is cut (`--pieces`, `--piece-budget`: 0 runs).
 
 ## 4. Probe on Sula (NVE 73.27.0), 20 m
 
@@ -260,27 +289,58 @@ Every run's cells total 30.4411 km² with 8.935 % lake.
 Planted check: the same command with CORINE's own lakes gives 2,025
 triangles, so the probe tells maps apart.
 
-*Two-stage probe* (scratch script, not kept; tree `132a89cf`, on AC
-power). On 27 October Ola's Sula runs at 1, 2, 5, 10 and 20 m took their
+*Two-stage probe* (scratch scripts, not kept; trees `132a89cf` and
+`369bac65`, on AC power). On 27 October Ola's Sula runs at 1, 2, 5, 10 and 20 m took their
 borders from a prepared mesh's `lines` layer
 (`sula-73-27-0-features20m-fixed-20261027/prepared-constraints-20m.gpkg`,
 cleaned at 20 m from a 1 m mesh's classes), a route the new options do not
 take. The direct command (Sol's, above; `--tolerance 5`) against Ola's 5 m
 run:
 
-| Run, 5 m | Triangles | Lake | Edge lines | Water lines | Edge length within 1 / 5 / 20 m of the other run's | Farthest |
-|---|---|---|---|---|---|---|
-| two-stage (27 Oct) | 11,479 | 8.935 % | 105.32 km | 45.67 km | 93.4 / 98.2 / 100 % | 25.5 m |
-| direct | 10,283 | 8.935 % | 105.40 km | 45.66 km | 93.3 / 98.1 / 100 % | 25.7 m |
+Round 3's table counted the catchment outline (34.36 km, the same in
+both runs) among the edge lines, which raised every share of length
+within a distance; the figures below are the class borders alone
+(`lines` rows with `land_cover` set), sampled every metre, re-measured on
+tree `369bac65` with the direct command rerun at `--tolerance 5` (10,283
+triangles, as round 3).
 
-Same borders up to the 20 m clean-up's band, same shares; the direct run
-takes 7.8 s and no first stage. The triangle counts differ by the start
-mesh's smallest angle (25 degrees in the two-stage run, 15 in the direct),
-not by the borders. The edge lines are inputs, the same at every
-tolerance: the 20 m pair gives the same figures (4,943 and 3,271
-triangles). Planted check: CORINE's own lakes (Ola's 27 October
-`diagnostic-corine-only.gpkg`) against the direct run: 62 % within 5 m,
-farthest 770 m. So the fed-back route gets no home.
+| Lines, 5 m | Two-stage (27 Oct) | Direct | Within 1 / 5 / 20 m of the other run's, two-stage's; direct's | Beyond 5 m, two-stage's; direct's | Farthest |
+|---|---|---|---|---|---|
+| lake (`water` set) | 45.67 km | 45.66 km | 86.2 / 96.2 / 100 %; 86.1 / 96.3 / 100 % | 1,743 m; 1,700 m | 25.3 m; 25.5 m |
+| other class borders | 25.29 km | 25.38 km | 97.3 / 99.3 / 100 %; 97.0 / 99.1 / 100 % | 171 m; 237 m | 14.5 m; 19.7 m |
+
+A lake line is measured against the other run's lake lines, any other
+border against the other run's nearest class border (against other
+borders only, one stretch of the direct run's lies 49.8 m off: its
+neighbour in the two-stage run is a lake line). Triangles 11,479 and
+10,283; lake share 8.935 % in both. The length
+beyond 5 m is mostly on lake lines: 1.7 km of 45.7 km (3.8 %) of lake
+border lies 5 to 25.5 m from the other run's, against 0.2 km of 25.3 km
+of the other class borders. Each route cleans the borders on its own at
+20 m (`--features-tolerance 20`): the two-stage run cleaned a 1 m mesh's
+classes, the direct run cleans CORINE with NVE's lakes. Each keeps its
+lines within 20 m of what it cleaned, so the two can lie up to 40 m apart;
+the farthest found is 25.5 m. So the lake lines differ by more than a few
+metres along 1.7 km. Against the source both routes clean towards, NVE's
+lake border inside the domain (49.63 km):
+
+| Lake lines, 5 m | Within 1 / 5 / 20 m of NVE's lake border | Farthest from it | NVE's border within 20 m of the run's lake lines | Farthest |
+|---|---|---|---|---|
+| two-stage | 22.0 / 71.9 / 100 % | 18.8 m | 100 % | 19.9 m |
+| direct | 21.9 / 71.8 / 100 % | 18.8 m | 100 % | 19.7 m |
+
+Both routes keep the lake borders within 20 m of NVE's, and equally
+close: neither is the more faithful. That 28 % of each run's lake border
+lies 5 to 19 m from NVE's is the 20 m clean-up Ola's Sula commands ask
+for, in both routes alike; a smaller `--edges-tolerance` keeps it closer.
+The edge lines are inputs, the same at every tolerance: the 20 m pair
+gives the same figures (4,943 and 3,271 triangles, round 3). The
+triangle counts differ by the start mesh's smallest angle (25 degrees in
+the two-stage run, 15 in the direct), not by the borders; the direct run
+takes 7.3 s and no first stage. Planted check: CORINE's own lakes (Ola's
+27 October `diagnostic-corine-only.gpkg`, 13.48 km of lake line) against
+the direct run: of the direct run's lake lines, 11.2 % lie within 5 m of
+CORINE's, the farthest 2,234 m. So the fed-back route gets no home.
 
 *Read probe* (scratch script, not kept: `read_class_polygons` with the
 `corine` rules on the quick check's two files, the read box from the domain
@@ -333,6 +393,44 @@ line figures below as round 2 measured them.
    classes. `--reservoirs` with `--edges all` and no `--shares` is refused,
    naming `--shares`; `--shares` without `--land-cover` is refused.
    `--edges river` alone (test 8's run) gives no share table.
+10. Several `--land-cover` files (the scene's polygons split in two files;
+    `P` a planted box of class 512 inside forest 311, from `dem_origin`
+    `(420.3, −1319.8)` to `(620.4, −1119.1)`: 40,160.1 m², perimeter
+    801.6 m, 379.8 m west of the preferred lake). Measured with shapely;
+    the line lengths marked *derived* are test 2's plus a border's length,
+    not run, and `@tester` pins them from the run.
+    - `a.geojson` (311, 312) then `b.geojson` (512, `P`), with `--prefer
+      lake=...`, `--edges all --shares`: lines 9,082.7 m, `water` lines
+      2,600.4 m (test 2's), shares equal the one-file run's (case 7) to
+      1e-6; `land_cover_overlap` gives 40,160 m² (±1) and names
+      `a.geojson`; `land_cover_source` names both files.
+    - The same files, `b` first: `build` gives 311 1,369,460 m² and 512
+      460,250 m² (±1 m²), 312 unchanged; `--edges all` lines 9,884.3 m,
+      `water` 3,402.0 m (derived: `P`'s border added).
+    - 311 cut at `x = x0 + 750.5` into a west half (with 312, in one file)
+      and an east half (with 512, in the other): `--edges all
+      --no-edges-merge-same-class` lines 10,782.1 m (derived: the 1,699.4 m
+      cut added); `--edges-merge-same-class` 9,082.7 m: the county-line case.
+    - Refused, exit 2, naming `--land-cover`: a class raster (the scene's
+      catalogue key) with `cover.geojson`; two catalogue entries whose
+      `classes` differ.
+11. A cut run (`--pieces 4`, `.vtk` out, the scene and clean-up switches
+    above; the `mesh` helper's `--tolerance 3`). Pinned from today's tree
+    (`75ab2b4f`'s code) with `--features cover.geojson --features-rules
+    corine`, the same switches and `--pieces 4`: pieces `0-0-0`, `0-1-0`,
+    `1-0-0`, `1-1-0` with 447, 484, 437 and 438 triangles; codes per piece
+    {0: 171, 311: 276}, {0: 198, 311: 15, 312: 87, 512: 184}, {0: 159,
+    311: 278}, {0: 258, 311: 14, 512: 166}; triangle area by code over all
+    pieces 311 1,529,799.8 m², 512 910,920.4 m², 312 144,160.4 m² (the
+    polygons' areas inside the domain: 1,529,799.9, 910,920.2, 144,160.6).
+    - `--land-cover cover.geojson --land-cover-classes corine --edges all
+      --pieces 4` gives those four pieces' triangles and codes exactly.
+    - With `--prefer lake=lake.geojson` added: area by code over all
+      pieces 311 1,409,620 m², 512 420,090 m², 312 144,161 m², each ±1 m²
+      (the map of test 1, inside the domain).
+    - Refused, exit 2, before any phase: `--land-cover cover.geojson
+      --pieces 4` (no class borders, so shares), naming `--land-cover`;
+      `--edges all --shares --pieces 4`, naming `--shares`.
 
 ## 6. Size, timing, left out
 
@@ -369,6 +467,13 @@ total is. No `MESH CHANGED` verdict is expected either: the lines are
 today's (section 4, step 3), so the meshes are. `@developer` runs it and
 names both verdicts in the handback.
 
+*Timing, several files.* One new term, only with a second `--land-cover`
+file: the overlap query, 0.13 s on Bygdin (2,273 and 290 polygons read,
+none overlapping; scratch probe on tree `369bac65`, AC power). Cleaning the
+two files as one coverage costs what cleaning each costs (`coverage_clean`
+over the read region's 591 and 12 polygons: 0.249 s per file, 0.245 s
+joined, best of three). One file adds nothing.
+
 *Timing, the shares.* What `--land-cover` costs today, in the runs that
 compute them (section 3): round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
 (653,039 triangles on Numedalslågen), the polygon read with its validity
@@ -385,8 +490,30 @@ Answered, 2026-10-28: (1) the sources-file key `rules` becomes `classes`
 `--lines` (section 3). (3) No slowdown for a run that follows borders: it
 computes no shares unless `--shares` asks (sections 3 and 6).
 
-None open. Settled without asking, by Ola's 732 recorded `rasputin mesh`
-commands (every distinct command in a JSON file under `~/rasputin-output`):
+Open:
+
+4. *A county line inside a catchment.* Bygdin's two AR50 files meet on a
+   7.6 km county line inside the catchment, with the same class on both
+   sides all along it. Today's mesh follows that line (each file is
+   cleaned on its own); with the files read as one map it does not, since
+   the line is no border on the ground. Default: it is not followed. Say
+   if county lines should stay edges.
+
+Settled without asking, by Ola's 732 recorded `rasputin mesh` commands
+(every distinct command in a JSON file under `~/rasputin-output`),
+counting the sources given to each option the design changes:
+
+| Option | Runs | Given twice | What the second source is |
+|---|---|---|---|
+| `--features` | 713 | 17 | 9: NVE's lakes beside CORINE (Sula), now `--prefer`; 5: the same mesh's `lines` layer under two rule files (Sula, fed back), no route; 3: a second AR50 county file (Bygdin twice, Øyangen), now a second `--land-cover` |
+| `--features-rules`, `--features-legend` | 13, 700 | 8, 9 | the rule or legend of those second files |
+| `--features-layer` | 8 | 5 | `lines` twice, the fed-back runs |
+| `--land-cover`, `--prefer` | 29, 18 | 0, 0 | |
+| `--features-crs`, `--pieces`, `--piece-budget`, `--catchments` | 0 | | |
+
+No run gives any option three times. The `--features-*` clean-up options
+(706 runs each), `--land-cover-year` (2), `--reservoirs` (7) and
+`--simplify-domain` (9) are given once where given.
 
 - What `--features` took and the new options do not: a line file whose
   `property` column names each row's kind, and polygons kept only for
