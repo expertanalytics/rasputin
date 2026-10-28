@@ -40,6 +40,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
+import feature_fixtures as ff
 from class_fixtures import (
     AREA_KEYS,
     KEY,
@@ -53,7 +54,6 @@ from class_fixtures import (
     per_year_entry,
 )
 from cli_helpers import USAGE, invoke, squashed
-from feature_fixtures import classes
 from fraction_fixtures import (
     oracle_fractions,
     rows_of,
@@ -185,7 +185,7 @@ class TestByPath:
             "mapbiomas-c11",
         )
         assert code == 0, output
-        palette = classes("mapbiomas-c11").legend.colours
+        palette = ff.classes("mapbiomas-c11").legend.colours
         with closing(sqlite3.connect(target)) as conn:
             rows = conn.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
         assert len({r[0] for r in rows}) > 2
