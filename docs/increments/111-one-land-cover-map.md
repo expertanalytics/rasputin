@@ -372,3 +372,4 @@ shares are computed only with `--shares` (sections 3 and 6).
 
 - Design round 1: CHANGES REQUESTED, 75ab2b4f..a2f4dcaa, 0 (no speed estimate for the map and per-class edges; line files lose layer and CRS; Ola's sources file breaks on the rules → classes rename; six wordings and inventory gaps).
 - Design round 2: APPROVED WITH WORDINGS, af82b7d3..fd566170, 0; question 3 reworded and question 4 added in this commit.
+- Design round 3: CHANGES REQUESTED, fd566170..0da191d5, 0 (question 4's premise false: Ola's 27 Oct Sula 2 m and 5 m runs fed the 20 m mesh's `lines` layer back, which `--lines` refuses; question 5 narrowed to the `--land-cover` half, worded from the 26 Oct Swedish runs; `--lines-crs` and `--prefer-crs` have no user; three wordings).
