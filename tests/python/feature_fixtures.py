@@ -161,6 +161,10 @@ class Opened:
         return self.edges.cover_vertices
 
     @property
+    def area_changed(self) -> float:
+        return float(self.edges.area_changed)
+
+    @property
     def crs(self) -> str:
         return str(self.read.crs)
 
