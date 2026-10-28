@@ -320,6 +320,58 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
     return lines[:40] + ([f"... {len(lines) - 40} more"] if len(lines) > 40 else [])
 
 
+def _md(text: str) -> str:
+    """`text` safe inside a Markdown table cell: one line, `|` escaped."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+def _waits_on(state: State, item: Item, numbers: dict[str, int], running: set[str]) -> str:
+    """What `item` really waits for: Ola's answer, a running agent, or a free writer."""
+    if item.id in numbers:
+        return f"Ola (question {numbers[item.id]})"
+    held = [r for r in state.asked if r["state"] == "held" and r.get("item") == item.id]
+    if held or item.state == "waiting":
+        return "Ola (a held question)" if held else "Ola"
+    return "a running agent" if item.id in running else "a free writer"
+
+
+def markdown_lines(repo: Path, now: datetime) -> list[str]:
+    """The verbose view in GitHub-flavoured Markdown: every open item, nothing truncated."""
+    state = gather(repo)
+    choice, _, _ = _choose(state, now)
+    items, pri = _open(state.items), _priorities(state.pipes)
+    numbers = _asked(state)
+    running = {branch.removeprefix("worktree-") for branch in _notes(state.tasks)}
+    nxt = choice.item
+    taken = f"**{nxt.id}** {_md(nxt.title)} ({nxt.pipe}, {choice.reason})" if nxt else IDLE
+    lines = [f"In flight {in_flight(items)} of {CAP}. A free writer takes next: {taken}."]
+    lines += [f"> {w}" for w in state.warnings]
+    place = {key: n for n, key in enumerate(items)}
+    group = {**RANK, "waiting": 4, "queued": 5}
+    names = sorted({p.name for p in state.pipes} | {i.pipe for i in items.values()},
+                   key=lambda name: (pri.get(name, 99), name))  # fmt: skip
+    for name in names:
+        rows = sorted((i for i in items.values() if i.pipe == name and i.state in group),
+                      key=lambda i: (group[i.state], i.rank, place[i.id]))  # fmt: skip
+        lines += ["", f"### {name}", ""]
+        if not rows:
+            lines.append("No open items.")
+            continue
+        lines += ["| Item | Step | Waiting on | Next |", "|---|---|---|---|"]
+        for i in rows:
+            todo = " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""]))
+            cells = (f"**{_md(i.id)}** {_md(i.title)}", i.state,
+                     _waits_on(state, i, numbers, running), _md(todo))  # fmt: skip
+            lines.append("| " + " | ".join(cells) + " |")
+    block = questions.list_lines(state.asked)
+    numbered = [line for line in block if line[:1].isdigit()]
+    held = sum(r["state"] == "held" for r in state.asked)
+    lines += ["", "### Questions for Ola", "", *(numbered or ["No open questions."])]
+    if held:
+        lines += ["", block[-1][0].upper() + block[-1][1:] + "."]
+    return lines
+
+
 class RefusedError(Exception):
     pass
 
@@ -381,6 +433,8 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
         return [f"busy: {i.pipe}/{i.id} ({notes[str(i.branch)]})" for i in flying] + [
             _next_line(choice)
         ]
+    elif getattr(args, "markdown", False):
+        return markdown_lines(repo, now)
     else:
         return show_lines(repo, now)
     return []
@@ -408,7 +462,8 @@ def parser() -> argparse.ArgumentParser:
     pri.add_argument("--words", required=True, help="Ola's words")
     sub.add_parser("top", help="move an item to the head of its pipe").add_argument("id")
     sub.add_parser("next", help="the item the next free writer takes")
-    sub.add_parser("show", help="the table the recap prints")
+    show = sub.add_parser("show", help="the table the recap prints")
+    show.add_argument("--markdown", action="store_true", help="every open item, as Markdown")
     return top
 
 
