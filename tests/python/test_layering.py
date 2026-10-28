@@ -90,8 +90,10 @@ LAYERS: tuple[dict[str, str], ...] = (
     },
     {  # L4: pipelines
         "dem_input": "crs domain grow io.models io.repository mosaic resources target_grid",
+        # 108: the rules compose their legend; 110: the land cover's lines take the
+        # preferred classes (preferred imported inside the function, sideways in L4)
         "feature_input": "border_simplify crs domain features io.geojson io.geopackage io.gml"
-                         " io.repository legends",  # 108: the rules compose their legend
+                         " io.repository legends preferred",
         "catchment": "burn catchment_core crs gauge geodesy io.models io.repository mosaic"
                      " outline resources sensitivity",
         "catchment_batch": "catchment crs gauge geodesy hydrography io.repository reference"

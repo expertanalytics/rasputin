@@ -78,8 +78,9 @@ import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from gil_probe import ticks_during
+from gil_probe import silence_during
 from gpkg_fixtures import EXTRACT
+from test_core_cdt import RELEASED_SILENCE
 
 COUNTS = (
     "junctions",
@@ -92,7 +93,6 @@ COUNTS = (
     "rejected_clearance",  # section 15.2
     "skipped_placements",
 )
-RELEASED_TICKS = 20  # as test_core_noding.py: a released call lets the ticker run
 
 
 @pytest.fixture(scope="module")
@@ -377,10 +377,12 @@ class TestBinding:
                     ]
                 )
         points, starts = flat(rings)
-        out, ticks, elapsed = ticks_during(lambda: core.simplify_borders(points, starts, 10.0))
+        out, silence, elapsed = silence_during(lambda: core.simplify_borders(points, starts, 10.0))
         assert out.status == core.BorderStatus.Ok
         assert elapsed >= 0.05, f"took only {elapsed:.3f}s: too fast to see; enlarge the grid"
-        assert ticks >= RELEASED_TICKS, f"only {ticks} ticks in {elapsed:.3f}s: it holds the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: it holds the GIL"
+        )
 
 
 # ---------------------------------------------------------------- the adapter

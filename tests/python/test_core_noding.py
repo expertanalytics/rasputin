@@ -49,7 +49,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from gil_probe import ticks_during
+from gil_probe import silence_during
+from test_core_cdt import HELD_SILENCE, RELEASED_SILENCE
 from tin_engine import _core
 from tin_engine.features import DEFAULT_VOCABULARY
 
@@ -716,9 +717,6 @@ class TestEndToEnd:
 # --------------------------------------------------------------------------
 
 
-RELEASED_TICKS = 20
-
-
 @pytest.fixture(scope="module")
 def ladder_pslg() -> Any:
     """Enough noding work for the ticker to resolve: a grid of crossing
@@ -757,15 +755,15 @@ class TestGil:
         data = list(range(3_000_000))
         random.Random(12345).shuffle(data)
 
-        _, held, held_elapsed = ticks_during(lambda: sorted(data))
+        _, held, held_elapsed = silence_during(lambda: sorted(data))
         assert held_elapsed >= 0.05, f"control workload too fast ({held_elapsed:.3f}s)"
-        assert held <= 3, f"a GIL-holding call let {held} ticks through"
+        assert held >= HELD_SILENCE, f"a GIL-holding call was silent for only {held:.0%} of it"
 
-        _, released, _ = ticks_during(lambda: time.sleep(0.3))
-        assert released >= RELEASED_TICKS, f"a releasing call let only {released} ticks through"
+        _, released, _ = silence_during(lambda: time.sleep(0.3))
+        assert released <= RELEASED_SILENCE, f"a releasing call was silent for {released:.0%} of it"
 
     def test_node_releases_the_gil(self, ladder_pslg: Any) -> None:
-        outcome, ticks, elapsed = ticks_during(lambda: _core.node(ladder_pslg, SPACING))
+        outcome, silence, elapsed = silence_during(lambda: _core.node(ladder_pslg, SPACING))
         assert outcome.ok(), outcome.message
         # A probe able to fail: if the workload is too fast there is nothing to
         # observe, and this must say so rather than pass on an empty window.
@@ -773,8 +771,8 @@ class TestGil:
             f"noding took only {elapsed:.3f}s -- too fast to measure GIL release; "
             "enlarge ladder_pslg rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: node appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: node appears to hold the GIL"
         )
 
     def test_concurrent_noding_of_one_pslg_is_bit_identical(self, crossing_pslg: Any) -> None:

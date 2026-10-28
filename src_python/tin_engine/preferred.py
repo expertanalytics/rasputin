@@ -106,13 +106,60 @@ def _neighbours(pieces: Sequence[BaseGeometry], kept: Pairs) -> list[int | None]
     ]
 
 
+@dataclass(frozen=True)
+class Replaced:
+    """The cut and refill: per kept base polygon its index in the base, its
+    code and what is left of it; the preferred polygons as (code, geometry);
+    per refilled piece the code it replaced, the piece and the class it took."""
+
+    kept: list[tuple[int, int, BaseGeometry]]
+    given: list[tuple[int, BaseGeometry]]
+    refilled: list[tuple[int, BaseGeometry, int]]
+
+    @property
+    def polygons(self) -> list[tuple[int, BaseGeometry]]:
+        """Every polygon as (code, geometry): kept, given, refilled."""
+        kept = [(c, g) for _, c, g in self.kept]
+        return [*kept, *self.given, *((n, p) for _, p, n in self.refilled)]
+
+
+def replace(
+    base: Pairs,
+    chosen: Sequence[tuple[int, Sequence[BaseGeometry]]],
+    near: Sequence[BaseGeometry] | npt.NDArray[Any],
+) -> Replaced:
+    """`base` (code, polygon) with each code of `chosen` (replaced code,
+    preferred polygons, first wins an overlap, the same code twice unions)
+    taken from its preferred polygons; a preferred polygon or a leftover piece
+    is kept only where it meets a geometry of `near`."""
+    tree = shapely.STRtree(near)
+
+    def meeting(pairs: Pairs) -> list[tuple[int, BaseGeometry]]:
+        if not pairs:
+            return []
+        found = tree.query(_array([g for _, g in pairs]), predicate="intersects")[0]
+        return [pairs[i] for i in np.unique(found)]
+
+    preferred: list[tuple[int, BaseGeometry]] = []
+    for code, polygons in chosen:
+        own = meeting([(code, g) for g in polygons])
+        preferred += _cut(own, [g for _, g in preferred])
+    replaced = {code for code, _ in chosen}
+    cut = _cut([(i, g) for i, (_, g) in enumerate(base)], [g for _, g in preferred])
+    kept = [(i, base[i][0], g) for i, g in cut if base[i][0] not in replaced]
+    left = meeting(
+        [(base[i][0], p) for i, g in cut if base[i][0] in replaced for p in shapely.get_parts(g)]
+    )
+    classes = _neighbours([p for _, p in left], [(c, g) for _, c, g in kept]) if left else []
+    refilled = [(c, p, n) for (c, p), n in zip(left, classes, strict=True) if n is not None]
+    return Replaced(kept, preferred, refilled)
+
+
 def overlay(
     base: Pairs, chosen: Sequence[tuple[int, Sequence[BaseGeometry]]], corners: Float64
 ) -> Overlaid:
-    """`base` (code, polygon) with each code of `chosen` (replaced code,
-    preferred polygons, first wins an overlap, the same code twice unions)
-    taken from its preferred polygons; areas inside the triangles `corners`
-    (T, 3, k >= 2)."""
+    """`replace` with `near` the triangles `corners` (T, 3, k >= 2), and per
+    replaced code its areas inside them."""
     xy = np.asarray(corners, np.float64)[:, :, :2]
     triangles = shapely.polygons(xy) if len(xy) else np.zeros(0, dtype=object)
     tree = shapely.STRtree(triangles)
@@ -126,29 +173,13 @@ def overlay(
         p, t = tree.query(pieces, predicate="intersects")
         return float(shapely.area(shapely.intersection(triangles[t], pieces[p])).sum())
 
-    def meeting(pairs: Pairs) -> list[tuple[int, BaseGeometry]]:
-        if not pairs:
-            return []
-        found = tree.query(_array([g for _, g in pairs]), predicate="intersects")[0]
-        return [pairs[i] for i in np.unique(found)]
-
-    preferred: list[tuple[int, BaseGeometry]] = []
-    for code, polygons in chosen:
-        own = meeting([(code, g) for g in polygons])
-        preferred += _cut(own, [g for _, g in preferred])
-    replaced = {code for code, _ in chosen}
-    cut = _cut(base, [g for _, g in preferred])
-    kept = [(c, g) for c, g in cut if c not in replaced]
-    left = meeting([(c, p) for c, g in cut if c in replaced for p in shapely.get_parts(g)])
-    classes = _neighbours([p for _, p in left], kept) if left else []
-    refilled = [(c, p, n) for (c, p), n in zip(left, classes, strict=True) if n is not None]
+    done = replace(base, chosen, triangles)
     areas = {
         code: Areas(
             replaced=inside([g for c, g in base if c == code]),
-            given=inside([g for c, g in preferred if c == code]),
-            refilled=inside([p for c, p, _ in refilled if c == code]),
+            given=inside([g for c, g in done.given if c == code]),
+            refilled=inside([p for c, p, _ in done.refilled if c == code]),
         )
-        for code in replaced
+        for code, _ in chosen
     }
-    polygons = [*kept, *preferred, *((n, p) for _, p, n in refilled)]
-    return Overlaid(polygons, areas)
+    return Overlaid(done.polygons, areas)
