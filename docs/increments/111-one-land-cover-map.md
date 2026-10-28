@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, revised after Ola's answers to questions 1 to 3 (lines without a map, shares only when asked); design review round 3 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: designed, revised after design review round 3 (the two-stage Sula route probed, `--land-cover` alone keeps meaning the shares, no open question); design review round 4 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -19,15 +19,18 @@ Three questions, three sets of options:
    chosen per class or line kind (`--edges lake --edges river`; `--edges
    all`). Edges come only from the areas and lines above. `--edges-*` shape
    them (today's `--features-*`).
-3. **What does the mesh file say about the ground?** `--shares`: each
-   triangle's exact share of each class, and in a `.gpkg` the cells Shyft
-   reads. Without it, a run that follows class borders writes a class code
-   per triangle, as a `--features` run with CORINE does today, at today's
-   cost. The shares are computed only when `--shares` asks.
+3. **What does the mesh file say about the ground?** Each triangle's
+   exact share of each class, and in a `.gpkg` the cells Shyft reads, as
+   `--land-cover` gives them today. A run that follows class borders
+   (`--edges` naming a class) writes a class code per triangle instead, as
+   a `--features` run with CORINE does today, at today's cost; `--shares`
+   asks for the shares as well. So every recorded run that does not use
+   `--features` keeps its command, and none gets slower.
 
 The catchment outline (`--domain`) and sub-catchment borders (`--catchments`)
 stay their own concern. `--features` goes. What it carried moves to the
-areas and lines, except two inputs that stop working (question 4).
+areas and lines; the one route with no home, a mesh's own `lines` layer fed
+back, is answered by the direct command (section 4, two-stage probe).
 Sula's direct command becomes
 
     rasputin mesh ... --land-cover clc2018 --prefer lake=nve-lakes --edges all
@@ -65,15 +68,16 @@ and fetches none.
 | Today | Becomes |
 |---|---|
 | `mesh --features` (repeatable) | **deleted**: class polygons go to `--land-cover`, lakes and glaciers to `--prefer`, rivers and roads to `--lines` |
-| `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value, the `--land-cover` file's; `--prefer-crs KEY=CRS`, `--prefer-layer KEY=LAYER`, `--lines-crs KEY=CRS`, `--lines-layer KEY=LAYER`: per key, for a file (section 3) |
-| `--features-rules`, built-in `property` (also `--features`' default, `cli.py:991`; `source_report.py:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. Lost with `property`: the two inputs of question 4 |
+| `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value, the `--land-cover` file's. No layer or CRS option for `--prefer` or `--lines` files: none of the 732 recorded runs gives one (section 3) |
+| `--features-rules`, built-in `property` (also `--features`' default, `cli.py:991`; `source_report.py:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. No recorded run uses `property` or `--features` without rules (732 commands) |
+| a mesh's own `lines` layer fed back (`--features <mesh>.gpkg --features-layer lines` with rules on its `land_cover` and `water` columns; Ola's Sula runs of 27 October at 1, 2, 5, 10 and 20 m) | **no route**: the direct command gives the same borders and the same shares (section 4, two-stage probe) |
 | `--features-repair`, `--[no-]features-merge-same-class`, `--features-tolerance`, `--features-outline-snap` | `--edges-repair`, `--[no-]edges-merge-same-class`, `--edges-tolerance`, `--edges-outline-snap`; same meanings; defaults from the land-cover class file's accuracy, as for a coded source today. `--edges-tolerance` also works without `--land-cover`: it sets the `--catchments` and `--simplify-domain` band, as `--features-tolerance` does today |
-| `--land-cover`, `--land-cover-year` | kept; `--land-cover` now says what is on the ground, and computes no shares by itself (`--shares` does) |
+| `--land-cover`, `--land-cover-year` | kept; `--land-cover` says what is on the ground, and gives the shares unless the run follows class borders without `--shares` (section 3) |
 | `--land-cover-rules` | `--land-cover-classes` |
 | `--prefer` | kept, area keys only (lake, glacier), still needs `--land-cover`; its sentence on `--features` lines deleted |
 | (none) | `--lines KEY=SOURCE`, repeatable: rivers, roads and the other line kinds, with or without `--land-cover` (section 3) |
-| (none) | `--shares`: each triangle's class shares, the codes from them, and the `.gpkg` cells layer (section 3) |
-| `--reservoirs`, `--catchments`: "needs --land-cover with meshing rules and a .gpkg output" (`cli.py:1689`) | "needs --shares, a land-cover class file with `[cells]` and a .gpkg output" |
+| (none) | `--shares`: the shares as well, in a run that follows class borders (section 3) |
+| `--reservoirs`, `--catchments`: "needs --land-cover with meshing rules and a .gpkg output" (`cli.py:1689`) | unchanged without class borders in `--edges`; with them, also "needs --shares" |
 | (none) | `--edges SELECTOR`, repeatable (section 3) |
 | `RENAMED`, `_RenamedOptions` (`--features-legend`, `--land-cover-legend`) | **deleted**: their targets go |
 | meshing-rules files (`data/meshing_rules/`, `meshing_rules.py`, "meshing rules" in help and docs) | **land-cover class files**: `data/land_cover_classes/`, `land_cover_classes.py` (beside `land_cover_fractions.py`), "land-cover class file" |
@@ -87,9 +91,9 @@ and fetches none.
 | record `features_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` | `land_cover_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` |
 | record `features_repair_m`, `_merge_same_class`, `_tolerance_m`, `_outline_snap_m` | `edges_repair_m`, `edges_merge_same_class`, `edges_tolerance_m`, `edges_outline_snap_m` |
 | record `land_cover_prefer` | kept; a new `lines` field, one row per `--lines` key ("river from X: N lines, L km") |
-| MCP `mesh` arguments `features*`, `land_cover_rules` | follow the CLI (the schema is derived): `edges`, `edges_*`, `lines`, `lines_*`, `shares`, `land_cover_classes`, `land_cover_crs`, `land_cover_layer` |
+| MCP `mesh` arguments `features*`, `land_cover_rules` | follow the CLI (the schema is derived): `edges`, `edges_*`, `lines`, `shares`, `land_cover_classes`, `land_cover_crs`, `land_cover_layer` |
 | MCP `INSTRUCTIONS`: "features_rules", "features_layer" | class polygons to `land_cover` with the fit's classes; lakes, glaciers to `prefer`; rivers, roads to `lines`; `edges`; `shares` for class shares and cells |
-| `sources` fits: `mesh --features` with rules | `mesh --land-cover` with classes (class polygons), `mesh --prefer` (other polygons), `mesh --lines` (lines); `Fit.rules` → `Fit.classes` |
+| `sources` fits: `mesh --features` with rules; `mesh --land-cover` (class raster) | `mesh --land-cover` with classes (class polygons), `mesh --prefer` (other polygons), `mesh --lines` (lines); the class raster's `mesh --land-cover` unchanged (it gives shares, as today); `Fit.rules` → `Fit.classes` |
 | `FeatureSource`, `open_features`, `_Tally.source`, `_take`, `pre_clip`, `_runs`, `_bound`, `_linework`, `R_MIN`, `R_MAX` | **deleted**: reading is `read_class_polygons` (reading as `_take`'s cleaned-polygon branch does: one query, one move, no validity check; its `_repaired` moves to the shares step, section 3), `read_polygons`, new `read_linestrings` |
 | `FeatureRequest` | `EdgeCleanup(repair_m, merge_same_class, tolerance_m, outline_snap_m)` |
 | `MeshingRules` | `LandCoverClasses`, less `classes` (value to edge names), `otherwise`'s names, `extra_names`, `cleaned` |
@@ -107,7 +111,7 @@ and fetches none.
 ## 3. Design
 
 ```
---land-cover (+ -classes, -layer, -crs)  --prefer KEY=SOURCE (+ -layer, -crs)   --lines KEY=SOURCE (+ -layer, -crs)
+--land-cover (+ -classes, -layer, -crs)  --prefer KEY=SOURCE                     --lines KEY=SOURCE
         │ read near the read region, in the DEM's CRS (CLI, I/O)                     │ read_linestrings
         ▼                                                                            ▼
 land_cover_map.build(base, preferred, classes, region) -> LandCoverMap | None   lines: ((key, line), ...)
@@ -117,17 +121,26 @@ land_cover_map.build(base, preferred, classes, region) -> LandCoverMap | None   
 feature_input.edges_of(map, lines, choice, cleanup, domain, vocabulary) -> FeatureSet   [pure]
         │ + sub-catchment borders (unchanged) → mesh (C++ unchanged)    │
         ▼                                                               ▼
-after the mesh: --shares → assign_polygon_fractions(repaired map.areas) → shares, codes, cells
-                no --shares → label_triangles(chosen classes' areas) → codes, as today
+after the mesh: shares → assign_polygon_fractions(repaired map.areas) → shares, codes, cells
+                class borders without --shares → label_triangles(chosen classes' areas) → codes
 ```
 
-*Why round 2 tied the shares to the edges, and why nothing needs to.* Round
+*Why the shares follow from the run, not from `--land-cover` alone.* Round
 2 merged `--features`' class polygons (edges, a code per triangle) and
 `--land-cover`'s (shares) into one `--land-cover`, and kept `--land-cover`'s
-meaning: "the exact share of each class in every triangle". That was a
-naming choice, not a constraint of the data: the edges are drawn from the
-polygons before the mesh, the shares after it, and neither needs the other.
-The one step they share, reading the polygons, does carry a cost trap
+meaning: "the exact share of each class in every triangle", which made
+every border-following run pay for shares (Ola, question 3: no). The edges
+are drawn from the polygons before the mesh, the shares after it, and
+neither needs the other. Round 3 made the shares opt-in, which changed the
+12 recorded runs that pass `--land-cover` without `--features`, among them
+the seven 26 October Opal runs (Åseleälven, Faxälven, Fjällsjöälven,
+Indalsälven, Kultsjön, Ljungan, Umeälven, each with `--reservoirs`).
+This round keeps both recorded habits: `--land-cover` alone gives the
+shares, as those runs expect; a run that follows class borders gives
+codes, as the 696 recorded `--features` runs without `--land-cover` (681
+of them the Hafslund, Skagerak, Opal SE2 and Glomma batches) expect;
+`--shares` asks for both, as Sula's 17 runs with `--features` and
+`--land-cover` do. The one step the edges and the shares have in common, reading the polygons, does carry a cost trap
 (section 4, read probe): `read_class_polygons` checks each whole polygon's
 validity (`_repaired`), which the share overlay needs and the edges do not
 (the clean-up clips each polygon to the read region and repairs it,
@@ -160,16 +173,17 @@ in the shares step.
   source under `--lines`; a line source under `--prefer`; a second source
   for one `--lines` key.
 - **Layer and CRS of a file.** A catalogue key carries its entry's layer;
-  a file has `--land-cover-layer`/`--land-cover-crs` (the `--land-cover`
-  file), `--prefer-layer KEY=LAYER`/`--prefer-crs KEY=CRS` and
-  `--lines-layer KEY=LAYER`/`--lines-crs KEY=CRS` (each key's file), so a
-  river layer in a multi-layer GeoPackage and a GML file naming no `srsName`
-  keep the route `--features-layer` and `--features-crs` gave them; both go
-  to `read_source`'s `layer` and `crs` as today (`feature_input.py:656`).
-  Refused, naming the option: either with a catalogue key, without its
-  `--land-cover`, `--prefer KEY` or `--lines KEY`, a layer for a file that
-  is not a GeoPackage, a CRS that is not the file's own (`read_source`
-  refuses it today).
+  the `--land-cover` file has `--land-cover-layer` and `--land-cover-crs`
+  (the quick check's Numedalslågen and Lagan cases use them), passed to
+  `read_source`'s `layer` and `crs` as today (`feature_input.py:656`). A
+  `--prefer` or `--lines` file gets neither: no recorded run gives a layer
+  or CRS for anything but the class polygons (`--features-layer`: `lines`,
+  the fed-back route of section 4; `triangles` and `land_cover`, a mesh's
+  classes, now `--land-cover-layer`). Such a file needs one features layer
+  and a CRS of its own, or `read_source` refuses it as today, naming the
+  layers. Refused, naming the option: either `--land-cover-*` option with a
+  catalogue key or without `--land-cover`, a layer for a file that is not
+  a GeoPackage, a CRS that is not the file's own.
 - **`--edges`.** Selectors: `all` (every area class given and every
   `--lines` key), `water` (the land-cover class file's water classes), a
   category of its `[cells.categories]` (lake, forest, glacier, ...), a class
@@ -195,23 +209,30 @@ in the shares step.
   cleans. Lines are clipped to the domain, not cleaned, as `--features`
   lines are today; the `--edges-*` clean-up options shape area borders only.
   With no map, `edges_of` gives the lines alone.
-- **`--shares`** (flag). Needs `--land-cover`. The map's areas are repaired
-  near the mesh (`_repaired`, today's `read_class_polygons` step, now
-  here), then `assign_polygon_fractions` gives each triangle's shares; or
-  the class raster's route, as today. The codes per triangle come from the
-  shares, and a `.gpkg` with the class file's `[cells]` gets the cells
-  layer, both as `--land-cover` gives them today. `--reservoirs` and
-  `--catchments`' cell ids need `--shares` where they needed `--land-cover`.
-- **Without `--shares`**, a run with area edges writes a code per triangle
-  from `label_triangles` over the chosen classes' cleaned polygons (0 where
-  none), as a coded `--features` run does today; with no area edges, no
-  codes. No shares, no cells.
-- **An input nothing uses** is refused, naming it and what would use it:
-  `--land-cover` with neither an area selector in `--edges` nor `--shares`;
-  a `--lines KEY` that no `--edges` selector takes (question 5).
-- **A cut run** (`--pieces`) refuses `--shares` (pieces carry no class
-  shares yet, as today); `--land-cover` with `--edges` and `--lines` work as
-  in an uncut run, and each piece gets its codes as today.
+- **The shares** are computed when `--land-cover` is given and either no
+  `--edges` selector names a class or `--shares` (flag) asks. The map's
+  areas are repaired near the mesh (`_repaired`, today's
+  `read_class_polygons` step, now here), then `assign_polygon_fractions`
+  gives each triangle's shares; or the class raster's route, as today. The
+  codes per triangle come from the shares, and a `.gpkg` with the class
+  file's `[cells]` gets the cells layer, both as `--land-cover` gives them
+  today. `--shares` without `--land-cover` is refused, naming it.
+- **Class borders without `--shares`**: a code per triangle from
+  `label_triangles` over the chosen classes' cleaned polygons (0 where
+  none), as a coded `--features` run does today. No shares, no cells; the
+  record says "class shares: not computed (add --shares)". `--reservoirs`
+  and `--catchments`' cell ids, which need the cells, are refused there,
+  naming `--shares`; elsewhere they need `--land-cover` as today.
+- **No class map** (`--lines` alone): no codes, no shares.
+- **A line nothing uses** is refused, naming it and `--edges`: a
+  `--lines KEY` that no `--edges` selector takes, as an unused input is
+  refused elsewhere. `--land-cover` is never unused (it gives the shares or
+  the borders).
+- **A cut run** (`--pieces`) refuses the shares (pieces carry no class
+  shares yet, as today: `--land-cover` without class borders is refused
+  there, as now, and so is `--shares`); `--land-cover` with class borders
+  in `--edges`, and `--lines`, work as in an uncut run, and each piece gets
+  its codes as today.
 
 ## 4. Probe on Sula (NVE 73.27.0), 20 m
 
@@ -239,6 +260,28 @@ Every run's cells total 30.4411 km² with 8.935 % lake.
 Planted check: the same command with CORINE's own lakes gives 2,025
 triangles, so the probe tells maps apart.
 
+*Two-stage probe* (scratch script, not kept; tree `132a89cf`, on AC
+power). On 27 October Ola's Sula runs at 1, 2, 5, 10 and 20 m took their
+borders from a prepared mesh's `lines` layer
+(`sula-73-27-0-features20m-fixed-20261027/prepared-constraints-20m.gpkg`,
+cleaned at 20 m from a 1 m mesh's classes), a route the new options do not
+take. The direct command (Sol's, above; `--tolerance 5`) against Ola's 5 m
+run:
+
+| Run, 5 m | Triangles | Lake | Edge lines | Water lines | Edge length within 1 / 5 / 20 m of the other run's | Farthest |
+|---|---|---|---|---|---|---|
+| two-stage (27 Oct) | 11,479 | 8.935 % | 105.32 km | 45.67 km | 93.4 / 98.2 / 100 % | 25.5 m |
+| direct | 10,283 | 8.935 % | 105.40 km | 45.66 km | 93.3 / 98.1 / 100 % | 25.7 m |
+
+Same borders up to the 20 m clean-up's band, same shares; the direct run
+takes 7.8 s and no first stage. The triangle counts differ by the start
+mesh's smallest angle (25 degrees in the two-stage run, 15 in the direct),
+not by the borders. The edge lines are inputs, the same at every
+tolerance: the 20 m pair gives the same figures (4,943 and 3,271
+triangles). Planted check: CORINE's own lakes (Ola's 27 October
+`diagnostic-corine-only.gpkg`) against the direct run: 62 % within 5 m,
+farthest 770 m. So the fed-back route gets no home.
+
 *Read probe* (scratch script, not kept: `read_class_polygons` with the
 `corine` rules on the quick check's two files, the read box from the domain
 outline; tree `f4c7be7a`). Numedalslågen, 7,932 polygons: 3.8 s per read,
@@ -262,8 +305,8 @@ line figures below as round 2 measured them.
 1. `build`: those areas, to 1 m²; 110's join test (unit square) moved to it.
 2. Line length inside the domain, off the outline, ±0.01 m: `--edges all`
    9,082.7 m; `--edges lake` 2,600.4 m; `--edges forest` 7,482.8 m;
-   `--edges 311` 5,600.0 m; none without `--edges` (with `--shares`, so
-   `--land-cover` is used). With `all`, the `water` lines total 2,600.4 m.
+   `--edges 311` 5,600.0 m; none without `--edges` (the run gives shares).
+   With `all`, the `water` lines total 2,600.4 m.
 3. A river (`(200.3, −2500.7)`, `(1350.9, −1100.2)`, `(2900.6, −300.1)`
    from `dem_origin`): `--land-cover ... --lines river=... --edges river
    --shares`, the `river` lines total 2,448.4 m, and the shares equal the
@@ -277,22 +320,19 @@ line figures below as round 2 measured them.
    `land_cover_classes`, and no `features` argument.
 7. Sula (data-dependent): the command of section 0 gives 3,271 triangles,
    area 30.4411 km² and lake 8.935 %, as Sol's record.
-8. Test 3's river in a GeoPackage with a second layer, `--lines river=FILE
-   --lines-layer river=rivers`, and in a GML 2 file (`gml:LineString`,
-   `gml:coordinates`, as OGR writes; the 3.2 reader refuses curves) naming
-   no `srsName`, `--lines-crs river=<the scene's CRS>`: the `river` lines
-   total 2,448.4 m each (same geometry as test 3); without the option,
-   refused.
-9. No land-cover map: test 3's river, `--lines river=... --edges river` and
+8. No land-cover map: test 3's river, `--lines river=... --edges river` and
    `--edges all`, no `--land-cover`: the `river` lines total 2,448.4 m, no
    other edge, no code and no share per triangle.
-10. Shares only when asked: `--land-cover ... --edges all` without
-    `--shares` writes no share table, its `--stats` has no `land cover
-    fractions` phase, and its code per triangle equals the codes today's
-    tree gives for `--features` with the scene's class file (pinned from
-    today's tree before the change). With `--shares`, the share table is
-    written and the codes are its dominant classes. `--reservoirs` without
-    `--shares` is refused.
+9. When the shares are computed: `--land-cover ...` alone writes the
+   share table, as today (case 7's command, unchanged, gives case 7's
+   shares). `--land-cover ... --edges all` writes no share table, its
+   `--stats` has no `land cover fractions` phase, and its code per triangle
+   equals the codes today's tree gives for `--features` with the scene's
+   class file (pinned from today's tree before the change). Adding
+   `--shares` writes the share table, and the codes are its dominant
+   classes. `--reservoirs` with `--edges all` and no `--shares` is refused,
+   naming `--shares`; `--shares` without `--land-cover` is refused.
+   `--edges river` alone (test 8's run) gives no share table.
 
 ## 6. Size, timing, left out
 
@@ -305,13 +345,13 @@ invocations), all mechanical.
 (`docs/benchmarks/quick/baseline-apple-m1-max-ac.json`, tree `d886847d`,
 medians in seconds) and round 2's run of today's code (tree `af82b7d3`):
 
-| Case, today's command | Baseline total | Round 2 run | Read | Clean-up | Codes |
+| Case, today's command | Total, stored baseline | Total, round 2 | Read, round 2 | Clean-up, round 2 | Codes, round 2 |
 |---|---|---|---|---|---|
-| numedalslagen | 8.83 | 9.45 | under 0.2 | 5.94 | 0.30 |
+| numedalslagen | 8.83 | 9.45 | under 0.2 (stored baseline) | 5.94 | 0.30 |
 | lagan | 14.53 | 15.30 | 0.93 | 5.39 | 0.21 |
-| numedalslagen, `corine-water` | | 3.40 | | 0.74 | 0.27 |
+| numedalslagen, `corine-water` | (no case) | 3.40 | | 0.74 | 0.27 |
 
-The new commands (`--land-cover ... --edges all`, no `--shares`) run the
+The new commands (`--land-cover ... --edges all`, so no shares) run the
 same steps on the same polygons: the read as `_Tally._take` does it (one
 `read_source` query, one move), the clean-up of every class (`all` chooses
 every class, as `corine` does), and the codes by `label_triangles`. `build`
@@ -325,10 +365,12 @@ cases stay at about 2 minutes.
 verdict for numedalslagen or lagan. The cases keep their names and inputs,
 so the stored baseline judges them (`_mismatch` compares inputs, not
 arguments); phases renamed from `features ...` are not judged by name, the
-total is. `@developer` runs it and names the verdict in the handback.
+total is. No `MESH CHANGED` verdict is expected either: the lines are
+today's (section 4, step 3), so the meshes are. `@developer` runs it and
+names both verdicts in the handback.
 
-*Timing, `--shares`.* What `--land-cover` costs today, and only when asked:
-round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
+*Timing, the shares.* What `--land-cover` costs today, in the runs that
+compute them (section 3): round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
 (653,039 triangles on Numedalslågen), the polygon read with its validity
 check included.
 
@@ -340,33 +382,21 @@ faster class shares.
 
 Answered, 2026-10-28: (1) the sources-file key `rules` becomes `classes`
 (section 2). (2) Rivers, and roads the same way, without a land-cover map:
-`--lines` (section 3). (3) No slowdown for a run that follows borders: the
-shares are computed only with `--shares` (sections 3 and 6).
+`--lines` (section 3). (3) No slowdown for a run that follows borders: it
+computes no shares unless `--shares` asks (sections 3 and 6).
 
-4. Two kinds of input that `--features` takes today stop working.
-   (a) A line file whose rows each name their kind in a column called
-   `property` (one row `river`, the next `road`): after the change, a line
-   file gives one kind, `--lines river=FILE` makes every line in it a river,
-   so such a file must first be split into one file per kind. Your answer
-   to question 2 does not change this: rivers and roads each get their own
-   `--lines`. (b) Polygons that are not land-cover classes but whose outline
-   the mesh should follow (a dam or a building, tagged `property = wall`):
-   no way to give them after the change. Neither is used by your
-   `~/.config/rasputin/sources.toml` (its 15 `rules` entries are all
-   `ar50`, class polygons; its one line source, `nve-main-rivers`, has no
-   `property` column, so `--features` refuses it today, checked on a file
-   with its columns; after the change it enters as `--lines
-   river=nve-main-rivers` once cached), nor by the shipped catalogue, nor by
-   the quick check (CORINE with the `corine` class file). Drop both?
-   Default: yes.
-5. An input that nothing uses: `--land-cover` with no `--shares` and no
-   class border in `--edges`, or `--lines river=...` with no `--edges` that
-   takes rivers. Today `--land-cover` alone means "compute the shares", so a
-   command that passes `--land-cover` alone for the shares would now be
-   refused with the message "add --shares for each triangle's class shares, or
-   --edges for its borders". Refuse such inputs, naming the fix? Default:
-   yes (the other choice is that `--land-cover` alone keeps meaning
-   `--shares`, and unused lines are read and ignored).
+None open. Settled without asking, by Ola's 732 recorded `rasputin mesh`
+commands (every distinct command in a JSON file under `~/rasputin-output`):
+
+- What `--features` took and the new options do not: a line file whose
+  `property` column names each row's kind, and polygons kept only for
+  their outline (`property = wall`). No recorded run uses `property` or
+  `--features` without rules; they go. The one route that runs did use, a
+  mesh's own `lines` layer fed back (Sula, 27 October), gives the borders
+  the direct command gives (section 4, two-stage probe).
+- `--land-cover` alone keeps meaning the shares, so the 12 recorded runs
+  that pass it without `--features` keep their commands (section 3), and
+  nothing is refused as unused but a `--lines` key no `--edges` takes.
 
 ## Review
 
