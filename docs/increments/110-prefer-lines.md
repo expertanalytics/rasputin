@@ -1,7 +1,7 @@
 # Increment 110: the preferred source's shorelines are the land cover's lines
 
 **Status: designed** by `@architect`, 2026-10-28, on master `aabac548`,
-worktree `direct-lake-density`. One PR, full loop (about 85 net production
+worktree `direct-lake-density`. One PR, full loop (about 100 net production
 lines), Python only. Number 110: 109 is the highest under `docs/increments/`
 over every ref.
 
@@ -19,7 +19,8 @@ when the `--land-cover` file is also a `--features` source, its polygons get
 the preferred classes **before** they become lines, by the same
 `preferred.overlay` rule the class fractions use (107, section 2). Each lake
 then has one shoreline, NVE's, simplified together with its neighbours in one
-coverage, and the lines bound exactly the classes the fractions assign. The
+coverage, and the lines bound the classes the fractions assign, up to the
+clean-up's repair and simplification. The
 direct command becomes:
 
     rasputin mesh ... --features <clc2018 features.gpkg> --features-rules <corine lines>
@@ -37,9 +38,9 @@ no files. One source per mesh there; nothing to carry across.
 and repairing the topology around them is map conflation (Saalfeld,
 "Conflation: automated map compilation", *Int. J. Geographical Information
 Systems* 2(3), 1988, 217–228). Here the replacement rule is 107's, and the
-shared borders are then simplified once, as one polygon coverage (the GEOS
-coverage simplifier the clean-up already uses), so two sources cannot give
-two near-copies of one border. No novelty is claimed; none searched.
+shared borders are then simplified once, as one polygon coverage (the
+clean-up's own border simplifier, `_core.simplify_borders`), so two sources
+cannot give two near-copies of one border. No novelty is claimed; none searched.
 
 *Ideas file.* Takes up no entry of `../rasputin_scratch/ideas/ideas.md`.
 
@@ -58,9 +59,11 @@ CLI: --land-cover file == a --features file (resolved path, same layer)?
 - `tin_engine/preferred.py`: split `overlay` into
   `replace(base, chosen, near: Sequence[BaseGeometry]) -> Replaced` (steps
   1–4 of 107: keep what meets `near`, cut, leftover pieces, neighbour; a
-  frozen dataclass of the kept, given and refilled polygons, with
-  `polygons`) and `overlay`, which calls `replace` with the triangles and adds
-  the areas. `overlay`'s results do not change. About 15 lines.
+  frozen dataclass of the kept polygons, each with its index in `base`, the
+  given polygons, and the refilled pieces, each with its replaced code and
+  the class it took; `polygons` lists them as `overlay` does) and `overlay`,
+  which calls `replace` with the triangles and adds the areas. `overlay`'s
+  results do not change. About 20 lines.
 - `tin_engine/feature_input.py`: a frozen dataclass
   `Prefer(source: int, rules: MeshingRules, chosen: Sequence[tuple[int, Sequence[BaseGeometry]]])`:
   the index of the land cover's source in `request.sources`, the land cover's
@@ -70,11 +73,22 @@ CLI: --land-cover file == a --features file (resolved path, same layer)?
   clean-up way even when every clean-up switch is off (the stage then only
   clips and runs `coverage_clean` at 0); each polygon's overlay code is its
   value read by `_code` with the land cover's rules; after the move, before
-  `_clean`, the cover is `replace`d with `near` = the read region. Each output
-  polygon takes the mask, code and merge key of its class in that source, a
-  given polygon those of the replaced class (`_mask` of the code's text), and
-  the fid of its class's first polygon (None where the source has none). About
-  40 lines.
+  `_clean`, the cover is `replace`d with `near` = the read region.
+  - A kept polygon keeps its own item (fid, mask, code, merge key), by its
+    index in `base`.
+  - **A refilled piece joins its neighbours, whatever the merge switch says**:
+    it is unioned (`shapely.union_all`) with every kept polygon of the class
+    it took whose boundary meets the piece's boundary buffered by
+    `preferred.BAND` (the band the neighbour search uses), and the union
+    replaces them as one polygon with the first one's item. So the old CORINE
+    lake border between the piece and its neighbour is no line. A piece is
+    refilled only when such a neighbour exists, so there is always one. A
+    hairline the union leaves is the clean-up's repair's to remove.
+  - A given polygon takes the item of the source's first polygon of the
+    replaced class (`_mask` of the code's text where the source has none),
+    with fid the text `"<key> <n>"`, n its 1-based place among that key's
+    polygons (`TerrainFeature.fid` is `int | str`).
+  About 50 lines.
 - `cli.py`: find the land cover's `--features` source; read the preferred
   polygons with the domain outline's points; pass `Prefer`; the refusals
   below; one sentence in `--prefer`'s help ("When the --land-cover file is
@@ -82,7 +96,8 @@ CLI: --land-cover file == a --features file (resolved path, same layer)?
   lines.
 
 **Refusals** (usage errors, before any phase is timed):
-1. A `--features` file that is also a `--prefer` source, while the land
+1. A `--features` file that is also a `--prefer` source (resolved paths
+   compared, as for the land cover's), while the land
    cover is a `--features` source: its shorelines already come in through the
    land cover's lines, and a second copy is the defect this fixes. Names
    `--features`, the file and the key.
@@ -95,11 +110,13 @@ CLI: --land-cover file == a --features file (resolved path, same layer)?
 1. `replace` with `near` = one square gives `overlay`'s polygons for 107's
    test 1 (base 100×100 m class 322, 512 square [40,60]², lake
    [30,50]×[40,60]); `test_preferred.py` stays green unchanged.
-2. `open_features` on that square, domain = the square, clean-up off and on
-   (repair 0, merge on, tolerance 0): the lines off the outline are the lake
-   rectangle's boundary, 80 m, every vertex within 1e-9 m of it; none of the
-   60 m of the old 512 border off that boundary (x = 40 inside the lake, and
-   the east part beyond x = 50) remains.
+2. `open_features` on that square, domain = the square, three ways: clean-up
+   off; repair 0, merge on, tolerance 0; the same with merge off. Each time
+   the lines off the outline are the lake rectangle's boundary, 80 m, every
+   vertex within 1e-9 m of it; none of the 60 m of the old 512 border off
+   that boundary (x = 40 inside the lake, and the east part beyond x = 50)
+   remains. Measured: without the join, 40 m of it (the refilled piece's
+   border with the 322 polygon) would remain whenever merge is off.
 3. CLI on 107's scene (`test_cli_mesh_prefer.py`: `cover.geojson` as
    `--land-cover` with `corine` and as `--features` with a non-coded
    lines file, `lake.geojson` preferred, `--features-tolerance 0
@@ -137,12 +154,12 @@ Then the same through the MCP server's mesh tool.
 
 ## 5. Size, timing, what is left out
 
-About 85 net production lines. Added time, only on `--prefer` runs whose land
+About 100 net production lines. Added time, only on `--prefer` runs whose land
 cover is a `--features` source: a second read of the preferred source and a
 second cut and neighbour search (Sula: 0.03 s and 0.13 s, measured; on
 107's Numedalslågen figures about 2.9 + 6.4 s). No `@perf` acceptance run:
-no refine or mesh code changes, and `tools/bench.py`'s cases pass no
-`--prefer`, so their runs are the same by construction. Left out: reading the
+no refine or mesh code changes, and neither `tools/bench.py` nor
+`docs/benchmarks/quick/cases.toml` passes `--prefer`, so their runs are the same by construction. Left out: reading the
 preferred source once for both uses, and `--prefer` changing a `--features`
 source other than the land cover's own file.
 
