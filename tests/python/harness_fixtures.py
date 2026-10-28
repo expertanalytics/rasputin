@@ -61,6 +61,8 @@ COPIED = (
     # h31: the recap prints the pipes block through this module
     # (docs/increments/h31-pipes.md §7).
     "tools/work_pipes.py",
+    # The pipes block prints the question tool's open list through this module.
+    "tools/questions.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

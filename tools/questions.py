@@ -148,7 +148,7 @@ def _line(n: int, r: dict[str, Any]) -> str:
     return f"{n}. {r['text']}{choices} Default: {r['default'].rstrip('.')}."
 
 
-def _shown(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def open_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The records `list` numbers: open questions, open acts, then defaults taken not yet shown."""
     open_ = [r for r in records if r["state"] == "open"]
     return (
@@ -160,7 +160,7 @@ def _shown(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def list_lines(records: list[dict[str, Any]]) -> list[str]:
     """The block for Ola, numbered 1..n in one sequence; reads nothing and writes nothing."""
-    lines = [_line(n, r) for n, r in enumerate(_shown(records), 1)]
+    lines = [_line(n, r) for n, r in enumerate(open_records(records), 1)]
     if held := [r for r in records if r["state"] == "held"]:
         kind = "yes/no " if all(_yes_no(r) for r in held) else ""
         noun = "question" if len(held) == 1 else "questions"
@@ -224,7 +224,7 @@ def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
         return [f"stored as {record['id']}"]
     if args.cmd == "list":
         lines = list_lines(records)
-        shown = _shown(records)
+        shown = open_records(records)
         _shown_path(store).parent.mkdir(parents=True, exist_ok=True)
         _shown_path(store).write_text(json.dumps({str(n): r["id"] for n, r in enumerate(shown, 1)}))
         taken = [{**r, "shown": True} for r in shown if r["kind"] == "taken"]
