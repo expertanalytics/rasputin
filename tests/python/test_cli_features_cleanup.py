@@ -17,17 +17,18 @@ the row text (``"1"``) here change.
 
 PINNED HERE, where the design leaves it open (listed for ``@architect``):
 
-- The CLI hands the four switches to ``open_features`` in its
-  ``FeatureRequest`` (``repair_m``, ``merge_same_class``, ``tolerance_m``,
-  ``outline_snap_m``; see ``test_feature_repair.py``), on every run with
-  ``--features``: defaults 1, on, 0, 5, whatever the map.
+- The CLI hands the four switches to ``edges_of`` in its ``EdgeCleanup``
+  (``repair_m``, ``merge_same_class``, ``tolerance_m``, ``outline_snap_m``;
+  see ``test_feature_repair.py``), on every run with ``--land-cover`` and
+  ``--edges``: CORINE's derived defaults 1, on, 50, 5.
 - ``--stats`` prints them as ``1``, ``0`` and ``5`` (as
   ``start_quality_gain_deg``); the record holds floats.
 - No features, none of the four rows.
 - The vertex rows are found by the design's wording, "Land-cover vertices
   before and after clean-up"; their name and value format are not pinned.
-- The timing sub-row is the phase ``features clip: clean-up`` (the
-  ``"<parent>: ..."`` form ``stats._timings`` lists as a sub-row).
+- The timing sub-row is the phase ``edges: clean-up`` under ``edges`` (the
+  ``"<parent>: ..."`` form ``stats._timings`` lists as a sub-row;
+  ``docs/increments/111-one-land-cover-map.md``, section 8).
 - Refused, for its value: ``--edges-repair`` and
   ``--edges-tolerance`` negative or non-finite;
   ``--edges-outline-snap`` negative, non-finite, or at or above 100.
@@ -48,9 +49,9 @@ help and record sentence as section 6 words them; the start angle is 15 when
 the land-cover stage ran with the band above 0 and no ``--start-min-angle``
 was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
 digest per platform, and the simplifier never called).
-PINNED for increment 32: "the land-cover stage ran" is a ``--features`` file
-with coded polygons under a legend with codes (``corine``); features with
-no class codes (``gallery``) keep 25 at any band.
+PINNED for increment 32: "the land-cover stage ran" is a ``--land-cover``
+file with ``--edges`` naming its classes (``corine``); a run of lines alone
+(``gallery``, ``--lines road=``) keeps 25 at any band.
 
 Increment 32's fix (section 15.2's order; 15.3, test 22; 15.4's wording):
 with the default band the outline rule sees the band-0 input, so the record's
@@ -93,7 +94,7 @@ import tin_engine.run_record as rr
 from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from feature_fixtures import write_geojson
 from recordread import stats_names, stats_row
-from test_cli_mesh_features import GALLERY
+from test_cli_mesh_features import GALLERY_LINES
 from test_cli_mesh_landcover import EAST, WEST, coded, rect
 from vtkread import polygons_as_array, read_vtk
 
@@ -186,23 +187,34 @@ def near_outline(tmp_path: Path) -> Path:
     return write_geojson(tmp_path / "near_outline.geojson", features)
 
 
+#: ``corine`` (or another fixture) as a run's land cover, every class's
+#: borders chosen.
+CORINE_ARGS = ("--land-cover-classes", "corine", "--edges", "all")
+
+
+def cover(path: Path) -> tuple[str, ...]:
+    return ("--land-cover", str(path), *CORINE_ARGS)
+
+
 @pytest.fixture
-def gallery(tmp_path: Path) -> Path:
-    return write_geojson(tmp_path / "gallery.geojson", GALLERY)
+def gallery(tmp_path: Path) -> tuple[str, ...]:
+    """The gallery's roads as a `--lines` run: lines, no land cover."""
+    roads = write_geojson(tmp_path / "gallery-road.geojson", GALLERY_LINES["road"])
+    return ("--lines", f"road={roads}", "--edges", "road")
 
 
 class Spy:
-    """Every ``cli.open_features`` call's request."""
+    """Every ``cli.edges_of`` call's ``EdgeCleanup``."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.requests: list[Any] = []
-        real = cli.open_features
+        real = cli.edges_of
 
-        def spy(request: Any, *args: Any, **kwargs: Any) -> Any:
-            self.requests.append(request)
-            return real(request, *args, **kwargs)
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            self.requests.append(kwargs["cleanup"] if "cleanup" in kwargs else args[3])
+            return real(*args, **kwargs)
 
-        monkeypatch.setattr(cli, "open_features", spy)
+        monkeypatch.setattr(cli, "edges_of", spy)
 
 
 def run(tmp_path: Path, bumpy: Path, square: Path, *extra: str) -> tuple[str, dict[str, Any], str]:
@@ -248,9 +260,7 @@ class TestDefaults:
         Increment 32 (test 14, and test 16: this test assumed the old default,
         no simplification, ruling 1 (b)): the band is on at 50 m."""
         spy = Spy(monkeypatch)
-        report, record, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
-        )
+        report, record, _ = run(tmp_path, bumpy, square, *cover(corine))
         (request,) = spy.requests
         assert switches(request) == (REPAIR_DEFAULT, True, BAND_DEFAULT, OUTLINE_DEFAULT)
         assert stats_row(report, "edges_repair_m") == "1"
@@ -268,27 +278,11 @@ class TestDefaults:
         """Ruling R4: ``land_cover_area_moved_m2``'s wording, in ``--stats``
         on a land-cover run and in the record's table. Red on ``1e011cec``
         ("... that changed class, m2")."""
-        report, _, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
-        )
+        report, _, _ = run(tmp_path, bumpy, square, *cover(corine))
         assert "land_cover_area_moved_m2" in stats_names(report)
         assert AREA_WORDING in report
         assert "changed class" not in report
         assert rr.WORDING["land_cover_area_moved_m2"] == AREA_WORDING
-
-    def test_the_outline_rule_whenever_features_are_given(
-        self,
-        tmp_path: Path,
-        bumpy: Path,
-        square: Path,
-        gallery: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        spy = Spy(monkeypatch)
-        report, _, _ = run(tmp_path, bumpy, square, "--features", str(gallery))
-        (request,) = spy.requests
-        assert request.outline_snap_m == OUTLINE_DEFAULT
-        assert stats_row(report, "edges_outline_snap_m") == "5"
 
     def test_no_features_no_rows(self, tmp_path: Path, bumpy: Path, square: Path) -> None:
         report, record, _ = run(tmp_path, bumpy, square)
@@ -314,10 +308,7 @@ class TestGiven:
             tmp_path,
             bumpy,
             square,
-            "--features",
-            str(corine),
-            "--features-rules",
-            "corine",
+            *cover(corine),
             "--edges-repair",
             "0.1",
             "--no-edges-merge-same-class",
@@ -336,7 +327,7 @@ class TestGiven:
     def test_the_merge_row_says_on_or_off(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        args = ("--features", str(corine), "--features-rules", "corine")
+        args = cover(corine)
         (tmp_path / "on").mkdir()
         (tmp_path / "off").mkdir()
         on, _, _ = run(tmp_path / "on", bumpy, square, *args)
@@ -347,16 +338,15 @@ class TestGiven:
     def test_the_timing_sub_row(
         self, tmp_path: Path, bumpy: Path, square: Path, corine: Path
     ) -> None:
-        """``features clean-up`` under ``features clip``, in the timing table
-        of the ``--stats`` file ``run`` writes (ruling G1); the rows are found
-        by their cells, in order."""
-        report, _, _ = run(
-            tmp_path, bumpy, square, "--features", str(corine), "--features-rules", "corine"
-        )
-        clip = re.search(r"\|\s*features clip\s*\|", report)
-        sub = re.search(r"\|\s*features clip: clean-up\s*\|", report)
+        """``edges: clean-up`` under ``edges``, in the timing table of the
+        ``--stats`` file ``run`` writes (ruling G1); the rows are found by
+        their cells, in order. ``features clip`` is gone."""
+        report, _, _ = run(tmp_path, bumpy, square, *cover(corine))
+        clip = re.search(r"\|\s*edges\s*\|", report)
+        sub = re.search(r"\|\s*edges: clean-up\s*\|", report)
         assert clip and sub, report
         assert clip.start() < sub.start()
+        assert not re.search(r"\|\s*features clip", report), report
 
     def test_the_help_names_the_flags(self) -> None:
         names = {
@@ -403,7 +393,7 @@ class TestTheBand:
             return real(polygons, band, *args, **kwargs)
 
         monkeypatch.setattr(feature_input, "simplify_borders", spy)
-        corine_flags = ("--features", str(corine), "--features-rules", "corine")
+        corine_flags = cover(corine)
         report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--edges-tolerance", "0")
         assert calls == []
         assert record["edges_tolerance_m"] == 0.0
@@ -429,10 +419,7 @@ class TestTheBand:
             tmp_path,
             bumpy,
             square,
-            "--features",
-            str(corine),
-            "--features-rules",
-            "corine",
+            *cover(corine),
             "--edges-tolerance",
             "0",
         )
@@ -446,7 +433,7 @@ class TestTheBand:
             ("corine", ("--edges-tolerance", "0"), 25.0),
             ("corine", ("--start-min-angle", "25"), 25.0),  # given: it wins
             ("corine", ("--start-min-angle", "0"), 0.0),
-            ("gallery", (), 25.0),  # features, but no land-cover stage
+            ("gallery", (), 25.0),  # lines, but no land-cover stage
             (None, (), 25.0),
             (None, ("--start-min-angle", "15"), 15.0),
         ],
@@ -457,13 +444,12 @@ class TestTheBand:
         bumpy: Path,
         square: Path,
         corine: Path,
-        gallery: Path,
+        gallery: tuple[str, ...],
         features: str | None,
         extra: tuple[str, ...],
         angle: float,
     ) -> None:
-        given = {"corine": ("--features", str(corine), "--features-rules", "corine")}
-        given["gallery"] = ("--features", str(gallery))
+        given = {"corine": cover(corine), "gallery": gallery}
         report, record, _ = run(tmp_path, bumpy, square, *given.get(features or "", ()), *extra)
         assert record["start_min_angle_deg"] == angle
         assert stats_row(report, "start_min_angle_deg") == f"{angle:g}"
@@ -490,25 +476,16 @@ class TestTheFixOrder:
     ) -> tuple[dict[str, Any], Any, Any]:
         """The record, the ``FeatureSet`` and the domain of one run."""
         seen: list[tuple[Any, Any]] = []
-        real = cli.open_features
+        real = cli.edges_of
 
-        def spy(request: Any, domain: Any, *args: Any, **kwargs: Any) -> Any:
-            fs = real(request, domain, *args, **kwargs)
-            seen.append((fs, domain))
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            fs = real(*args, **kwargs)
+            seen.append((fs, kwargs["domain"] if "domain" in kwargs else args[4]))
             return fs
 
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(cli, "open_features", spy)
-            _, record, _ = run(
-                tmp_path,
-                bumpy,
-                square,
-                "--features",
-                str(corine),
-                "--features-rules",
-                "corine",
-                *extra,
-            )
+            patch.setattr(cli, "edges_of", spy)
+            _, record, _ = run(tmp_path, bumpy, square, *cover(corine), *extra)
         ((fs, domain),) = seen
         return record, fs, domain
 
@@ -583,10 +560,7 @@ def test_a_bad_value_is_refused(
         str(square),
         "--tolerance",
         "1",
-        "--features",
-        str(corine),
-        "--features-rules",
-        "corine",
+        *cover(corine),
         f"{flag}={value}",
         "--out",
         str(target),
