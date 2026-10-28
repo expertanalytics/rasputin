@@ -47,7 +47,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from gil_probe import ticks_during
+from gil_probe import silence_during
 from strip_oracle import (
     Grid,
     delaunay_violations,
@@ -57,7 +57,7 @@ from strip_oracle import (
     ruled_points,
     strip_findings,
 )
-from test_core_cdt import RELEASED_TICKS
+from test_core_cdt import RELEASED_SILENCE
 from test_core_refine_points import scattered, worst_excess
 from tin_engine import _core
 from tin_engine._core import ChainRole
@@ -526,14 +526,15 @@ class TestTheGilIsReleased:
         ends[1::2] = world(np.full(k, n - 1.25), (n - 1.5) - (row0 - 0.5))
         edges = np.arange(2 * k, dtype=np.uint32).reshape(k, 2)
         view = view_of(dem)
-        strip, ticks, elapsed = ticks_during(lambda: generator(view, ends, edges))
+        strip, silence, elapsed = silence_during(lambda: generator(view, ends, edges))
         assert strip.size > 1_000_000
         assert elapsed >= 0.05, (
             f"constraint_check_points took only {elapsed:.3f}s -- too fast to measure GIL "
             "release; enlarge the edges rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: constraint_check_points appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: "
+            "constraint_check_points appears to hold the GIL"
         )
 
     @staticmethod
@@ -561,7 +562,7 @@ class TestTheGilIsReleased:
 
     def test_by_refine_strip(self, generator: Factory, refine_strip: Factory) -> None:
         view, strip, args = self.square(401, generator)
-        out, ticks, elapsed = ticks_during(
+        out, silence, elapsed = silence_during(
             lambda: refine_strip(view, strip, *args, tolerance=0.0, threads=1)
         )
         assert out.ok(), out.message
@@ -569,8 +570,8 @@ class TestTheGilIsReleased:
             f"refine_strip took only {elapsed:.3f}s -- too fast to measure GIL release; "
             "enlarge the grid rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: refine_strip appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: refine_strip appears to hold the GIL"
         )
 
     def test_by_refine_points_with_a_strip(self, generator: Factory) -> None:
@@ -587,15 +588,15 @@ class TestTheGilIsReleased:
         cp = _core.CheckPoints(x_min=X_MIN, y_max=Y_MAX, spacing=H, rows=n, cols=n)
         cp.add(xy, z)
         cp.freeze()
-        out, ticks, elapsed = ticks_during(
+        out, silence, elapsed = silence_during(
             lambda: _core.refine_points(cp, *args, tolerance=0.0, threads=1, strip=strip)
         )
         assert out.ok(), out.message
         assert out.strip_points == strip.size > 0
         assert elapsed >= 0.05, f"refine_points took only {elapsed:.3f}s; enlarge the store"
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: refine_points with a strip appears to hold "
-            "the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: "
+            "refine_points with a strip appears to hold the GIL"
         )
 
 
