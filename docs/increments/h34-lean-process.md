@@ -1,8 +1,8 @@
 # Harness h34: lessons log, semantic review, two lanes
 
-Status: **designed**, 2026-10-27, round 3 2026-10-28, off master
-`662022b0`. Short path under the rules it started under: about 20 counted
-lines in `tools/duties.py` and `tools/brief.py`, no C++ file, no refine or mesh code.
+Status: **designed**, 2026-10-27, round 4 2026-10-28, off master
+`662022b0`. Full path: about 56 counted lines in `tools/duties.py`,
+`tools/brief.py`, `tools/count_loc.py` and a new `tools/check_lane.py`, no C++ file, no refine or mesh code.
 `tools/brief.py` is governed, so the green step runs with Ola at the guard's
 prompt, by day. The rule texts of §5 are applied in the same PR by the main
 session with Ola's yes, as h33's were.
@@ -27,23 +27,23 @@ verbatim:
 > threshold for trivial/short-path changes to let minor structural fixes
 > land in a single round."
 
-Round 3: Ola's ruling of 2026-10-28 on a second outside review, "1-2: yes.",
-as the main session relayed it: (1) two lanes replace one review round for
-small changes. Fast lane: one agent writes the test and the fix on one
-branch, CI runs, it merges; no design file, no review agent, no
-retrospective; everything outside the meshing core (triangulation,
-refinement, predicates) and the land-surface physics. Full lane, today's
-steps less the retrospective PR, for those two. (2) A first question before
-any item starts, answered by the main session with a veto: "is this needed;
-can we delete instead; which lane?". Not a new persona. §3 replaces the
-short-path round of rounds 1 and 2.
+Round 3: on 2026-10-28 the main session asked Ola: "1. Should I rework the
+lean-process change before you approve it, replacing 'one review round for
+small changes' with the two lanes: fast lane = test plus fix on one branch,
+then CI, then merge, no design file and no review agent, for everything
+outside the meshing core and the land-surface physics? Default: yes. 2.
+Should the lazy critic be a mandatory first question answered by the
+dispatcher, with a veto, rather than a new persona? Default: yes." Ola
+answered "1-2: yes." §3 replaces the short-path round of rounds 1 and 2.
 
 Defaults the main session took while Ola was away; they are not his ruling,
 and he may reverse them: the research round moves into the weekly
 retrospective (§1); non-blocking findings become pipe items on every path,
 (§2); the reviewer keeps a check whether the change's
 claims are true, and keeps the procedural checks no tool enforces yet
-(§2), until a tool does.
+(§2), until a tool does; the full lane's paths beyond the meshing core
+(§3: elevation sampling, hydrology, catchments, map projection); fast-lane
+branches wait for Ola while he is away.
 
 ## Prior art: legacy and literature
 
@@ -53,8 +53,7 @@ with a published form. No novelty is claimed.
 *Legacy.* `git grep -n -i -E 'retrospective|reviewer|lessons' legacy-archive -- legacy`
 returns nothing; nothing is carried across.
 
-*Ideas file.* No entry is taken up or overlapped. One new idea comes out of
-§3 (a CI gate for the size ceiling), in the handback.
+*Ideas file.* No entry is taken up or overlapped.
 
 ## 1. No retrospective PR per merge or per night
 
@@ -123,9 +122,9 @@ true. Each procedural check, with its enforcer:
 |---|---|---|
 | CI status, including a prose-only PR's skipped jobs | Merge queue: `CI result` is master's one required check (`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks` returns `["CI result"]`) | removed |
 | Readability, typing, style | ruff, ruff format, mypy in CI | removed (the sentence that waived them) |
-| Citations resolve | `tools/check_citations.py`, governance job of CI | not in `reviewer.md`; re-reading the at-risk quotations stays in `.claude/REQUIRED-READING.md`, since no tool can |
+| Citations resolve | `tools/check_citations.py`, governance job of CI | not in `reviewer.md`; re-reading the at-risk list as quotations stays in `.claude/REQUIRED-READING.md` (R15) as every branch writer's duty, since no tool can |
 | Verdict recorded | `.claude/hooks/record_review.py` and the push grant | the `Review:` line stays: it is the hook's input |
-| Size ceiling | none: `tools/count_loc.py` measures, but CI only runs its tests (`grep -n count_loc .github/workflows/main.yaml`: comments only) | **kept** until a CI step refuses a count over 700 |
+| Size ceiling | new CI step (§3): `tools/count_loc.py --max 700` | kept in `reviewer.md` until that step merges, then cut in a fast-lane change |
 | LOC reconciled against the estimate | none | removed: no result depends on it; the ceiling, kept, is the part that does |
 | Red-step scaffolding gone | none | kept |
 | Mutant kill record covers the named targets | none | kept |
@@ -147,12 +146,20 @@ in one line: is this needed; can we delete instead; which lane? Ola may veto
 the answer. While he is away it is an `ASK OLA:` default line. No persona and
 no tool.
 
-**Full lane:** the meshing core and the land-surface physics. In this
-repository the core is `include/terrain/cdt/`, `predicates/`, `refinement/`
-and `mesh/`, and `src/` (its `cdt/` and `predicates/`); `mesh/` is a default,
-taken because the *Acceptance* section's `@perf` run covers it. The
-land-surface physics is the private package's. Steps as today, with §1's log
-in place of the retrospective PR.
+**Full lane:** the meshing core and the code whose mistakes give wrong
+numbers without a crash, and the land-surface physics (the private
+package's). Steps as today, with §1's log in place of the retrospective PR.
+The paths, as `FULL_LANE` in `tools/check_lane.py`:
+
+- meshing core (Ola's words): `include/terrain/cdt/`, `predicates/`,
+  `refinement/`, `noding/`, `core/`, `mesh/`, and `src/`;
+- defaults, the main session's while Ola is away, his call open:
+  elevation sampling, `include/terrain/raster/`,
+  `src_python/tin_engine/elevation.py`, `raster.py`, `dem_input.py`,
+  `mosaic.py`, `target_grid.py`; hydrology, `include/terrain/hydrology/`;
+  catchments, `src_python/tin_engine/catchment.py`, `catchment_core.py`,
+  `network.py`, `sub_catchments.py`; map projection,
+  `src_python/tin_engine/crs.py`, `geodesy.py`.
 
 **Fast lane:** everything else, tools, harness and rule text included. One
 `@developer` writes the test and the fix on one branch; CI runs; it merges
@@ -160,6 +167,25 @@ through the queue. No increment file, no `@reviewer`, no log entry, no
 ROADMAP row. The approval boundary is unchanged: a push still needs Ola's
 yes, and away-mode grants still want a review verdict
 (`tools/push_grant.py`), so fast-lane branches wait for Ola while he is away.
+
+**Enforced in CI**, by two steps in the governance job, run on
+`pull_request` only (`if: github.event_name == 'pull_request'`): a merge
+group's base can sit behind PRs ahead of it in the queue, which would add
+their lines and their increment files. A PR enters the queue only on a green
+PR run (`CLAUDE.md` §4), so the steps cannot be skipped. Base
+`github.event.pull_request.base.sha`, head `github.sha`, the full history the
+job already fetches:
+
+- **Lane:** new `tools/check_lane.py <base> <head>`, stdlib only. It lists
+  `git diff --name-only <base>...<head>`; if a path starts with a
+  `FULL_LANE` entry and none matches `docs/increments/<name>.md` (one level,
+  `README.md` excluded), it prints each such path and exits 1. A git failure
+  exits 2, also red. About 30 counted lines.
+- **Size:** `tools/count_loc.py` gains `--max N`: after the usual output, a
+  `total` over N prints `count_loc: <total> net lines, over <N>` and exits 1.
+  About 6 counted lines. The step runs `--max 700`. Probe: over the last 40
+  merges on master the largest total is 344 (`e0d129c0`), so it would have
+  refused none; one run takes 0.4 s.
 
 The short path goes: the fast lane takes what it held, and its
 one-combined-round machinery (rounds 1 and 2's R11 to R13) is dropped.
@@ -171,6 +197,9 @@ one-combined-round machinery (rounds 1 and 2's R11 to R13) is dropped.
 - `tools/duties.py`: a merge owes a post-merge check only when one of its
   paths is under `docs/increments/` (a full-lane merge); the recording-merge
   exclusion stays.
+- Estimate for the PR: about 20 lines here, 36 above, so about 56 counted
+  lines; both new gates are governed (`tools/check_` prefix, `count_loc.py`
+  listed), so the green step runs with Ola at the prompt.
 
 ## 4. Tests that pin it (`tests/python/test_duties.py`, `test_brief.py`)
 
@@ -205,15 +234,27 @@ Fixture times are UTC; `NOW = 2026-10-27T18:00Z`.
 10. `brief.py developer --lane fast` without `--increment` succeeds, and its
     write limit names `tests/`; `developer` without the flag still needs
     `--increment`; `--lane fast` for any other persona is refused.
+11. `check_lane.py` on a scratch repository: a branch changing
+    `include/terrain/noding/x.hpp` alone exits 1 and names it; the same
+    plus `docs/increments/99-x.md` exits 0; plus only
+    `docs/increments/README.md` exits 1; `src_python/tin_engine/cli.py`
+    alone exits 0; `src_python/tin_engine/crs.py` alone exits 1; an unknown
+    base exits 2.
+12. `count_loc.py --max`: a scratch branch adding 701 counted lines exits 1
+    with the `over 700` line; 700 exits 0; without `--max` the 701-line
+    branch exits 0 as today.
+13. The workflow: `.github/workflows/main.yaml`'s governance job runs both
+    steps with the base and head above, under the `pull_request` condition.
 
 Changes to the red commit `850892ea`, made by `@tester` in a new commit:
 `test_duties.py`, the post-merge fixtures (the h34 tests and the older
 post-merge tests) give their merges a `docs/increments/` path, plus test 9;
-`test_brief.py`, test 10; `test_lean_process_rule_text.py`, its pairs
+`test_brief.py`, test 10; new `test_check_lane.py` and `test_count_loc.py`,
+tests 11 to 13; `test_lean_process_rule_text.py`, its pairs
 follow §5 as revised (the old R11 to R13 go; R11 to R15 are new). No
 invariant-critical suite.
 
-Left out: a CI gate for the size ceiling (an idea for Ola); deleting entries
+Left out: deleting entries
 from the log; any change to `tools/session_state.py`.
 
 ## 5. Rule texts, old to new
@@ -417,13 +458,13 @@ test file, and the approval boundary (`.claude/REQUIRED-READING.md`).
 ````text
 ## Two lanes
 
-**The full lane** is the loop above, for the meshing core
-(`include/terrain/` `cdt/`, `predicates/`, `refinement/`, `mesh/`; `src/`)
-and the land-surface physics.
+**The full lane** is the loop above, for the meshing core, the code whose
+mistakes give wrong numbers without a crash, and the land-surface physics.
 
 **The fast lane** is everything else: one `@developer`
 (`tools/brief.py --lane fast`) writes the test and the fix on one branch,
-CI runs, and it merges. No increment file, `@reviewer` or retrospective. The
+CI runs, and it merges. CI refuses a full-lane path without an increment
+file (`tools/check_lane.py`, which lists the paths). No increment file, `@reviewer` or retrospective. The
 approval boundary (`.claude/REQUIRED-READING.md`) holds.
 ````
 
@@ -455,7 +496,9 @@ round of findings (a verdict other than `APPROVED`,
 ````text
 **On a full-lane branch, `@reviewer` runs once before its first push, and
 again before a push that follows a round of findings (a verdict other than
-`APPROVED`, `docs/increments/README.md` step 4).**
+`APPROVED`, `docs/increments/README.md` step 4).** Before any push, the
+branch's writer re-reads `python3 tools/check_citations.py`'s at-risk list
+**as quotations**: resolving a line number is not resolving the quotation.
 ````
 
 ## 6. Rule text size
@@ -466,12 +509,12 @@ R1 to R15 applied (each old text found exactly once first):
 | File | Words now | After | Change |
 |---|---|---|---|
 | `CLAUDE.md` | 1155 | 1187 | +32 |
-| `.claude/REQUIRED-READING.md` | 1857 | 1792 | -65 |
-| `docs/increments/README.md` | 1060 | 968 | -92 |
+| `.claude/REQUIRED-READING.md` | 1857 | 1814 | -43 |
+| `docs/increments/README.md` | 1060 | 986 | -74 |
 | `.claude/agents/orchestrator.md` | 482 | 504 | +22 |
 | `.claude/agents/reviewer.md` | 565 | 454 | -111 |
 | `.claude/agents/tester.md` | 811 | 799 | -12 |
-| All rule files | 9483 | 9257 | **-226** |
+| All rule files | 9483 | 9297 | **-186** |
 
 The same fifteen old texts also occur once each at `origin/master` `aabac548`,
 with the same counts.
