@@ -1141,6 +1141,18 @@ def test_13_a_branch_not_granted_is_denied_without_the_grant_clause(granted: Gra
     assert not grants_used_path(granted.repo).exists()
 
 
+def test_a_fast_lane_branch_passes_the_hook_without_grant_or_review(granted: Granted) -> None:
+    """Ola, 2026-10-28: green fast-lane branches merge while he is away. A branch
+    off `master` changing only `tools/`, with no increment file, needs no grant."""
+    git(granted.repo, "checkout", "-q", "-b", "quick", granted.base)
+    head = commit_file(granted.repo, "tools/q.py", "q = 1\n", "a fast-lane change")
+    flag_granting(granted.repo, [])
+    for command in [c.replace("feat", "quick") for c in granted_acts(head)]:
+        assert guard(granted.repo, command) is None, command
+    assert [line["lane"] for line in jsonl(grants_used_path(granted.repo))] == ["fast"] * 3
+    assert queue_lines(granted.repo) == []
+
+
 @pytest.mark.parametrize(
     "wrap",
     ["env A=1 {}", "{} 2>&1", "{} && echo done", "sh -c '{}'", "timeout 5 {}"],

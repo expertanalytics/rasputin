@@ -28,6 +28,8 @@ from harness_fixtures import (
     PrivateGranted,
     Tool,
     commit_file,
+    flag_granting,
+    flag_path,
     git,
     grants_used_path,
     jsonl,
@@ -1176,3 +1178,120 @@ def test_h33_2_a_private_act_passes_on_the_log_alone(
     assert "docs/increments/" not in changed, changed
     grant = judged(private, f"git push private {private.prv}:refs/heads/prv")
     assert grant is not None and grant.passed, grant
+
+
+# ---------------------------------------------------------------- the fast lane
+#
+# Ola, 2026-10-28: "yes, merge green fast-lane branches while I'm away". While
+# away, a branch whose diff against origin/master changes no full-lane path
+# (tools/check_lane.py's FULL_LANE) and no increment file, at most 700 net
+# lines by tools/count_loc.py, may be pushed, opened and enqueued without a
+# grant or a review record; the merge queue still wants green CI. Any other
+# branch keeps the grant and review rule. Each case judges in process on a
+# repository whose flag is on and grants nothing.
+
+
+class Fast:
+    """`master` as origin/master, branch `quick` checked out with one commit of `files`."""
+
+    def __init__(self, root: Path, files: dict[str, str]) -> None:
+        self.repo = make_repo(root)
+        base = git(self.repo, "rev-parse", "master").strip()
+        git(self.repo, "update-ref", "refs/remotes/origin/master", base)
+        git(self.repo, "checkout", "-q", "-b", "quick")
+        self.head = commit_files(self.repo, files, "a fast-lane change")
+        self.since = flag_granting(self.repo, [])
+
+    def acts(self) -> dict[str, str]:
+        return {
+            "push": f"git push origin {self.head}:refs/heads/quick",
+            "create": "gh pr create --head quick --title 't' --body-file f",
+            "enqueue": f"gh pr merge quick --match-head-commit {self.head}",
+        }
+
+    def judge(self, act: str) -> Any:
+        command = self.acts()[act]
+        reason = push_grant.PR if command.startswith("gh ") else push_grant.PUSH
+        return push_grant.judge({"cwd": str(self.repo)}, command, [reason])
+
+
+def lines_of(n: int) -> str:
+    return "".join(f"v{i} = {i}\n" for i in range(n))
+
+
+@pytest.fixture
+def fast_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[dict[str, str]], Fast]:
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+
+    def build(files: dict[str, str]) -> Fast:
+        made = Fast(tmp_path.resolve() / "repo", files)
+        monkeypatch.setattr(push_grant.hm, "ROOT", made.repo)
+        return made
+
+    return build
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_a_fast_lane_branch_passes_without_grant_or_review(
+    fast_repo: Callable[[dict[str, str]], Fast], act: str
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n", "CLAUDE.md": "# rules, changed\n"})
+    found = fast.judge(act)
+    assert found is not None and found.passed, found
+    [line] = jsonl(grants_used_path(fast.repo))
+    assert (line["branch"], line["head"], line["lane"]) == ("quick", fast.head, "fast"), line
+
+
+def test_a_fast_lane_branch_of_exactly_700_lines_passes(
+    fast_repo: Callable[[dict[str, str]], Fast],
+) -> None:
+    found = fast_repo({"tools/big.py": lines_of(700)}).judge("push")
+    assert found is not None and found.passed, found
+
+
+def test_a_fast_lane_branch_is_enqueued_once_per_head(
+    fast_repo: Callable[[dict[str, str]], Fast],
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    assert fast.judge("enqueue").passed
+    refused_with(fast.judge("enqueue"), "enqueued already in this window")
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{"tools/y.py": "y = 1\n", "src/a.cpp": "int a;\n"},
+     {"include/terrain/mesh/m.hpp": "int m;\n"},
+     {"src_python/tin_engine/crs.py": "c = 1\n"},
+     {"tools/y.py": "y = 1\n", "docs/increments/h99-x.md": "# x\n"},
+     {"tools/big.py": lines_of(701)}],
+    ids=["full-lane-src", "full-lane-mesh", "full-lane-crs", "increment-file", "over-700"],
+)  # fmt: skip
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+def test_any_other_ungranted_branch_is_not_judged(
+    fast_repo: Callable[[dict[str, str]], Fast], files: dict[str, str], act: str
+) -> None:
+    fast = fast_repo(files)
+    assert fast.judge(act) is None
+    assert jsonl(grants_used_path(fast.repo)) == []
+
+
+def test_a_fast_lane_push_naming_another_sha_is_not_judged(
+    fast_repo: Callable[[dict[str, str]], Fast],
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    command = f"git push origin {H}:refs/heads/quick"
+    assert push_grant.judge({"cwd": str(fast.repo)}, command, [push_grant.PUSH]) is None
+
+
+def test_a_fast_lane_branch_goes_nowhere_while_ola_is_present(
+    fast_repo: Callable[[dict[str, str]], Fast],
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    flag_path(fast.repo).unlink()
+    assert fast.judge("push") is None
+
+
+def test_a_granted_full_lane_branch_still_needs_its_review(grant: Granted) -> None:
+    write_reviews(grant.repo, [])
+    refused_with(granted_judge(grant, acts(grant.head)["push"]), NO_REVIEW)

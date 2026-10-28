@@ -295,6 +295,27 @@ def test_unattended_with_nothing_plain_is_idle(repo: Path) -> None:
     assert not any(line.startswith("next:") for line in lines)
 
 
+# Owed checks first: with no item a free writer can take, `next` names the duty
+# tools/duties.py owes. The fixture repository has no retrospective, so a weekly
+# retrospective is owed there.
+
+OWED = "Duties owed: weekly retrospective (none on record)"
+
+
+def test_an_idle_next_names_the_owed_duty(repo: Path) -> None:
+    append(repo, rec("governed", "queued"))
+    harness_fixtures.flag_on(repo)
+    lines = ok(repo, "next").splitlines()
+    assert lines[-2:] == [IDLE, OWED], lines
+
+
+def test_a_next_with_an_item_names_no_duty(repo: Path) -> None:
+    append(repo, rec("plain", "queued", plain=True))
+    lines = ok(repo, "next").splitlines()
+    assert lines[-1].startswith("next: core/plain"), lines
+    assert not any(line.startswith("Duties") for line in lines), lines
+
+
 # ---------------------------------------------------------------- 6. fallback
 
 

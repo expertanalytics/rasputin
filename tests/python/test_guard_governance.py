@@ -1304,6 +1304,13 @@ def record_folder_passes() -> dict[str, str]:
         "cd-to-toplevel": "cd $(git rev-parse --show-toplevel) && ls",
         "cd-hooks-ls": "cd .git/hooks && ls",
         "upper-case-read": f"cat {H.upper()}/queue.jsonl",
+        # The folder named only inside a commit message, beside a command off the list.
+        "add-then-commit-m": f'git add -A && git commit -m "guard denies grep over {H}/r.jsonl"',
+        "add-then-commit-qm": f'git add -A && git commit -qm "x {H}"',
+        "add-then-commit-message-equals": f'git add -A && git commit --message="x {H}"',
+        "add-then-commit-glued-m": f'git add -A && git commit -m"x {H}"',
+        # A reader on the list reads the folder, its output filtered by readers.
+        "grep-review-log": f"grep -c APPROVED {H}/reviews.jsonl | tail -3",
     }
 
 
@@ -1375,6 +1382,16 @@ def record_folder_denials() -> dict[str, str]:
         "commit-e-m": f'git commit -e -m "x {H}"',
         "commit-edit": f'git commit --edit -m "x {H}"',
         "commit-no-message": f"git commit && echo {H}",
+        # A commit message spares only the words inside it.
+        "commit-m-then-python": f"git commit -m \"{H}\" && python3 -c \"open('{H}/q','w')\"",
+        "python-then-commit-m": f"python3 -c \"open('{H}/q','w')\"; git commit -m \"{H}\"",
+        "add-then-commit-em": f'git add -A && git commit -em "x {H}"',
+        "add-then-commit-e-m": f'git add -A && git commit -e -m "x {H}"',
+        "add-then-commit-m-runs": f'git add -A && git commit -m "$(touch x) {H}"',
+        "add-then-commit-m-backtick": f'git add -A && git commit -m "`touch x` {H}"',
+        "add-then-commit-m-pathspec": f'git add -A && git commit -m "{H}" -- {H}/x',
+        "add-then-tag-m": f'git add -A && git tag -m "x {H}" v1',
+        "readers-and-python": f"grep x {H}/r.jsonl | cut -c1-9; python3 -c \"open('{H}/q')\"",
         # The disk is case-insensitive: `.GIT/HARNESS` is the folder.
         "upper-case-target": "echo x > " + H.upper() + "/y",
         "mixed-case-cd": "cd .Git && touch Harness/y",
