@@ -35,8 +35,8 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
 T-P3 at the CLI: ``TOPOLOGY_20C1`` was RECORDED FROM 41bda81a (master with
 20c-1 merged, no 20c-2 production change) by a scratch program that ran this
 file's ``topology`` over the ``RefineOutcome`` ``rasputin mesh`` computes, at
-``--tolerance 1`` on the box over ``bumpy`` (alone, and with ``GALLERY``
-from ``tests/python/test_cli_mesh_features.py`` as ``--features``) and on
+``--tolerance 1`` on the box over ``bumpy`` (alone, and with the gallery
+of ``tests/python/test_cli_mesh_features.py``) and on
 the quarter circle over the Kartverket tile at 1 and 10, each with the
 CLI's defaults. It
 hashes integers only (triangles, valid, edges, masks, the vertex count and
@@ -61,11 +61,10 @@ import typer
 
 import tin_engine.cli as cli
 from cli_helpers import SQUARE, USAGE, geojson, help_text, invoke, rough_dem
-from feature_fixtures import write_geojson
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from recordread import stats_row
 from test_cli_mesh_domain import quarter_circle
-from test_cli_mesh_features import GALLERY
+from test_cli_mesh_features import gallery_args
 from test_cli_mesh_stats import mesh
 from tin_engine import _core
 from vtkread import read_vtk
@@ -80,7 +79,13 @@ WORDING = {
 #: Recorded from 41bda81a; see the module docstring.
 TOPOLOGY_20C1 = {
     "box": "f381fb6ae1d636edbcf285acadbf2607f96b102d938142b01c0a8fd2ebbf8db9",
-    "gallery": "3364ca6c823a7ce9eac8c7ab843e685b5081f642c23b798160a921f125f595e8",
+    # Increment 111: the gallery's lake is a CORINE water class, so its shore
+    # carries land_cover | water where the property gallery's carried water
+    # alone (3364ca6c...). Recorded on bce16583 with the same command as
+    # today's two sources, --features <the forest and lake> --features-rules
+    # corine --features <the roads and wall> --features-tolerance 0 (the
+    # same probe reproduced 3364ca6c... from the property gallery first).
+    "gallery": "3251eb4828873c7db1e64a644fa811e57e06bfa31796941dff2bf79d8557da03",
     "quarter_circle 1": "307ad79a751cd0a50b819660915343873a325b7923eb93a1550af48c4ad54672",
     "quarter_circle 10": "fbd02f6da4ac149e0fadaed340af0fa8337f9b870c0d98a12cdf5a5de47d0aa5",
 }
@@ -340,7 +345,7 @@ def test_minus_1_is_20c1s_mesh_on_the_box(
     """The box over ``bumpy``, alone and with test_cli_mesh_features' gallery."""
     extra = ["--start-quality-gain", "-1"]
     if scene == "gallery":
-        extra += ["--features", str(write_geojson(tmp_path / "gallery.geojson", GALLERY))]
+        extra += list(gallery_args(tmp_path))
     out = _box_outcome(tmp_path, bumpy, box, monkeypatch, *extra)
     assert (out.quality_no_gain, out.quality_line_splits) == (0, 0)
     assert topology(out) == TOPOLOGY_20C1[scene]
