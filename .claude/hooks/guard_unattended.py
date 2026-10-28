@@ -30,7 +30,7 @@ def act_of(event: dict) -> tuple[str, str] | None:
     supplied = event.get("tool_input") or {}
     if name == "PreToolUse" and event.get("tool_name") == "AskUserQuestion":
         first = (supplied.get("questions") or [{}])[0].get("question", "")
-        why = "a question needs Ola; write it as the ASK OLA line"
+        why = "a question needs Ola; record it with python3 tools/questions.py add"
         return f"AskUserQuestion: {first[:200]}", why
     if name == "PermissionRequest":
         target = supplied.get("command") or supplied.get("file_path") or ""
@@ -43,8 +43,8 @@ def act_of(event: dict) -> tuple[str, str] | None:
 
 FAILED = (
     "guard_unattended failed ({error}), so this is refused rather than left for a prompt "
-    "nobody may answer. It is not queued: record it as an ASK OLA line (main session: in "
-    "session.md; subagent: in its handback) and continue."
+    "nobody may answer. It is not queued: record it with python3 tools/questions.py add "
+    "--act (main session) or under Questions for Ola in the handback (subagent) and continue."
 )
 
 
@@ -82,12 +82,11 @@ def main() -> int:
 STOP_REASON = (
     "Unattended mode is on until {until} and nothing is running: no agent, no background "
     "command, no monitor, no scheduled wake-up. If this turn ends now, the session stays "
-    "idle until Ola returns. Before ending it: write any open question as an `ASK OLA:` "
-    "line in `.claude/current-task/session.md` and do not wait for the answer; start the "
-    "next item that needs no ruling (the `QUEUE:` line), or watch work that will finish, "
-    "for example `gh pr checks <pr> --watch` run in the background. If no such work "
-    "exists, set the `NOW:` line to `NOW: idle: <why>` and end the turn; this hook does "
-    "not refuse it a second time."
+    "idle until Ola returns. Before ending it: record any open question with "
+    "`python3 tools/questions.py add` and do not wait for the answer; start the next item "
+    "that needs no ruling (`python3 tools/work_pipes.py next`), or watch work that will "
+    "finish, for example `gh pr checks <pr> --watch` run in the background. If no such "
+    "work exists, end the turn; this hook does not refuse it a second time."
 )
 
 
@@ -108,7 +107,7 @@ NOTE = (
     "Unattended mode is on until {until}: Ola is away. Granted branches: {names}. Each may "
     "be pushed, opened as a pull request and enqueued without asking, once `@reviewer`'s "
     "recorded verdict approves its head; do not wait for Ola's yes on these. Every other "
-    "question is an `ASK OLA:` line."
+    "question goes to `python3 tools/questions.py add`."
 )
 
 

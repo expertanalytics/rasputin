@@ -563,15 +563,12 @@ def test_the_recap_prints_the_pipes_after_waiting_on_ola(repo: Path) -> None:
     ok(repo, "add", "core", "r", "in flight")
     ok(repo, "set", "r", "red", "--branch", "worktree-r")
     ok(repo, "add", "core", "q", "queued")
-    session = repo / ".claude" / "current-task" / "session.md"
-    session.parent.mkdir(parents=True, exist_ok=True)
-    session.write_text("NOW: n\nQUEUE: a\nQUEUE: b\n")  # two QUEUE lines: one warning
     result = run_script(repo, "tools/session_state.py", "")
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
     waiting = first_index(lines, "Waiting on Ola:")
     block = first_index(lines, "Pipes (in flight 1 of 3")
-    assert waiting < block < first_index(lines, "session.md format:")
+    assert waiting < block < first_index(lines, "Next on ROADMAP.md:")
 
 
 # ---------------------------------------------------------------- 11. the guard

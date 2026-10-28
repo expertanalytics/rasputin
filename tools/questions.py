@@ -265,19 +265,20 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def store_of(root: Path) -> Path:
+    """The store of the repository at `root`, which every worktree of it shares."""
     common = subprocess.run(
-        ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
         capture_output=True,
         text=True,
         check=True,
     )
+    return Path(common.stdout.strip()) / "questions.jsonl"
+
+
+def main(argv: list[str] | None = None) -> int:
     try:
-        lines = command(
-            parser().parse_args(argv),
-            Path(common.stdout.strip()) / "questions.jsonl",
-            datetime.now(UTC),
-        )
+        lines = command(parser().parse_args(argv), store_of(ROOT), datetime.now(UTC))
     except RefusedError as error:
         print(error, file=sys.stderr)
         return 1
