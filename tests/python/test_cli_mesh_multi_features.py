@@ -1,33 +1,25 @@
-"""`rasputin mesh` with several `--features` sources in one mesh: increment 16e.
+"""`rasputin mesh` with several sources of edges in one mesh: increment 16e,
+as `docs/increments/111-one-land-cover-map.md` reshapes it.
 
-`docs/increments/16e-multi-features.md`: R1 (the flags become repeatable and
-pair by position), R2/R3 (`_feature_sources` and its degeneracy policy), R4
-(the noder merges cross-source coincident edges, unioning the masks), R5/D1
-(labelling spans coded sources; two different non-empty code systems are
-refused, a coded plus a code-less source is allowed), R6 (one file record per
-source, one distinct notice), and "Tests, and the regression floor" (R7 cases
-1-5, 7). Invariants I1-I3, I5.
+`docs/increments/16e-multi-features.md`: R2/R3 (the degeneracy policy), R4
+(the noder merges cross-source coincident edges, unioning the masks), R5
+(labelling spans the land-cover files), R6 (one entry per source, one
+distinct notice), and "Tests, and the regression floor". Increment 111,
+section 3 and 8 (`test_cli_mesh_multi_features`): `--features`' positional
+pairing, two maps over one file and a codeless source beside a coded one
+go; two coded files are two `--land-cover` files under one land-cover class
+file, read as one map; an uncoded boundary is a `--lines` line; the shared
+seam is a land-cover border, and a `--lines` line along it; two CORINE
+files give one `land_cover_notice`.
 
 Reuses `test_cli_mesh_features.py`'s fixtures and helpers (`bumpy`,
 `plain_square`, `mesh`, `meshed`, `edges`, `text_field`, `report`,
-`FEATURES_FIELD`, the gallery geometries) so the multi-source cases read the
-same way the single-source ones do.
-
-This suite is RED before any production code: `--features` and its paired
-options are single-valued (`Path | None` / `str | None`: `mesh`'s `features`
-to their paired-option parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
-after 16e they are `list[...]`, `src_python/tin_engine/cli.py@390b516:660-685`), so
-a second `--features` overrides the first rather than adding a source, and
-`_feature_sources` does not exist. The suite fails because the new multi-source
-behaviour is absent, not on an unknown option: Typer accepts a repeated
-`--features` (it just keeps the last), so these runs execute and give a
-single-source result the assertions reject. `_feature_sources`'s import in
-`test_feature_input.py`'s companion case fails on the missing symbol.
+`edges_entries`) so the multi-source cases read the same way the
+single-source ones do.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import numpy as np
@@ -35,16 +27,15 @@ import pytest
 import shapely
 from shapely.geometry import LineString, Polygon
 
-import feature_fixtures as ff
 from cli_helpers import SQUARE, USAGE, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, write_geojson
-from gpkg_fixtures import Layer, Row, needs_rtree, write_gpkg
+from gpkg_fixtures import Layer, Row, write_gpkg
 from landcover_fixtures import vtk_labels
 from recordread import stats_row
 from test_cli_mesh_features import (
-    FEATURES_FIELD,
     SNAP,
     edges,
+    edges_entries,
     mesh,
     meshed,
     rel,
@@ -61,8 +52,8 @@ V = DEFAULT_VOCABULARY
 # DEM's own CRS (write_geojson's default EPSG:25833), so no reprojection.
 FOREST = Polygon([rel(30.3, -60.1), rel(60.7, -60.3), rel(60.9, -20.2), rel(30.1, -20.4)])
 LAKE = Polygon([rel(120.3, -60.2), rel(170.1, -60.4), rel(170.3, -20.1), rel(120.1, -20.3)])
-# An uncoded `property` boundary: a wall crossing the middle of the domain, its
-# edge a constraint that blocks the flood fill but names no class.
+# A boundary that names no class: a wall crossing the middle of the domain,
+# a `--lines wall` line that blocks the flood fill.
 WALL = LineString([rel(15.2, -35.1), rel(185.3, -35.1)])
 
 # R4 / I2: an edge shared bit-for-bit between two sources, both authored in the
@@ -80,10 +71,6 @@ def coded(fid: object, geometry: Polygon | LineString, code: object) -> Feat:
     return Feat(fid, geometry, {"Code_18": code})
 
 
-def prop(fid: object, geometry: Polygon | LineString, klass: str) -> Feat:
-    return Feat(fid, geometry, {"property": klass})
-
-
 bumpy = rough_dem(16)
 plain_square = polygon_file(SQUARE)
 
@@ -98,381 +85,196 @@ def corine_src(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def parcel_src(tmp_path: Path) -> Path:
-    """A code-less `property` source: one wall boundary."""
-    return write_geojson(tmp_path / "parcel.geojson", [prop("wall", WALL, "wall")])
+    """A line source: one wall boundary."""
+    return write_geojson(tmp_path / "parcel.geojson", [Feat("wall", WALL, {})])
 
 
-def two_sources(a: Path, b: Path, *, a_map: str = "property", b_map: str = "property") -> list[str]:
-    """`--features a --features-rules <a_map> --features b --features-rules <b_map>`,
-    each map written next to its source (R1: no broadcast)."""
-    return [
-        "--features", str(a), "--features-rules", a_map,
-        "--features", str(b), "--features-rules", b_map,
-    ]  # fmt: skip
+def land_cover(*paths: Path, classes: str = "corine") -> list[str]:
+    """Each of ``paths`` as a `--land-cover` file, under one class file."""
+    given = [a for path in paths for a in ("--land-cover", str(path))]
+    return [*given, "--land-cover-classes", classes]
+
+
+def with_wall(cover: Path, wall: Path) -> list[str]:
+    """`cover` as the land cover, `wall` as `--lines wall`, `--edges all`."""
+    return [*land_cover(cover), "--lines", f"wall={wall}", "--edges", "all"]
 
 
 # --------------------------------------------------------- R7 case 1: two sources
 
 
 class TestTwoSources:
-    """R7 case 1 / I3: a CORINE-coded source and an uncoded boundary source in
-    one mesh. The mesh carries both sets of constraint edges, the CORINE
-    source's `land_cover_code`, and the boundary source's edges block the fill."""
+    """R7 case 1 / I3: a CORINE land cover and a `--lines wall` boundary in
+    one mesh. The mesh carries both sets of constraint edges, the land
+    cover's `land_cover_code`, and the wall's edges block the fill."""
 
     @pytest.fixture
     def vtk(self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path,
             parcel_src: Path) -> VtkFile:  # fmt: skip
-        return meshed(
-            tmp_path, bumpy, plain_square,
-            *two_sources(corine_src, parcel_src, a_map="corine", b_map="property"),
-        )[0]  # fmt: skip
+        return meshed(tmp_path, bumpy, plain_square, *with_wall(corine_src, parcel_src))[0]
 
     def test_both_sources_constraints_are_present(self, vtk: VtkFile) -> None:
         _, masks = edges(vtk)
         found = set(masks.tolist())
         # CORINE: land_cover on the forest, land_cover+water on the lake.
         assert {V.mask("land_cover"), V.mask("land_cover", "water")} <= found
-        # The parcel wall carries its own `wall` bit, from the second source.
+        # The wall carries its own `wall` bit, from the line source.
         assert V.mask("wall") in found
 
     def test_the_wall_edge_is_a_constraint_alongside_the_coded_edges(self, vtk: VtkFile) -> None:
-        """The parcel's wall (second source) and the CORINE edges (first
-        source) are both present: neither source overrode the other."""
+        """The wall (the line source) and the CORINE edges (the map) are both
+        present: neither source overrode the other."""
         xy, masks = edges(vtk)
         wall = xy[(masks & V.mask("wall")) != 0]
-        assert len(wall), "the parcel source contributed no wall constraint"
+        assert len(wall), "the line source contributed no wall constraint"
         land = xy[(masks & V.mask("land_cover")) != 0]
-        assert len(land), "the CORINE source contributed no land_cover constraint"
+        assert len(land), "the land cover contributed no land_cover constraint"
 
     def test_the_coded_source_labels_the_cells(self, vtk: VtkFile) -> None:
-        """I3: the CORINE polygons label the cells; the uncoded parcel adds no
-        code but its boundary still partitions the fill."""
+        """I3: the CORINE polygons label the cells; the wall adds no code but
+        its line still partitions the fill."""
         _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512)])
         found = set(codes.tolist())
         assert 311 in found and 512 in found
 
-    def test_the_file_records_both_sources(self, vtk: VtkFile, tmp_path: Path) -> None:
-        """R6 / I5: the `features` row (a `--stats` row since increment 25)
-        has one entry per source, in order; the mesh file has none."""
-        assert "features" not in vtk.field_data
-        text = stats_row(report(tmp_path), "features")
-        entries = [e.strip() for e in text.split(";")]
-        assert len(entries) == 2, text
-        assert FEATURES_FIELD.fullmatch(entries[0])["rules"] == "corine", entries  # type: ignore[index]
-        assert FEATURES_FIELD.fullmatch(entries[1])["rules"] == "property", entries  # type: ignore[index]
+    def test_the_record_names_both_sources(self, vtk: VtkFile, tmp_path: Path) -> None:
+        """R6 / I5: the `edges` row (a `--stats` row) has one entry per
+        source, the map first; the mesh file has none."""
+        assert "edges" not in vtk.field_data
+        cover, wall = edges_entries(report(tmp_path))
+        assert (cover["name"], cover["classes"]) == ("corine.geojson", "corine")
+        assert (wall["name"], wall["key"]) == ("parcel.geojson", "wall")
 
-
-# --------------------------------------------------- R7 case 2: positional pairing
-
-
-class TestPositionalPairing:
-    """R1 / I1: the Nth `--features` takes the Nth of each paired option; a
-    paired list shorter than `--features` defaults the unpaired sources."""
-
-    def test_one_map_two_sources_defaults_the_second(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
-    ) -> None:
-        """`--features a --features b --features-rules corine`: `a` gets `corine`,
-        `b` takes the default `property` (the shorter list defaults)."""
-        vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features", str(parcel_src),
-            "--features-rules", "corine",
-        )  # fmt: skip
-        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
-        assert len(entries) == 2, entries
-        assert FEATURES_FIELD.fullmatch(entries[0])["rules"] == "corine", entries  # type: ignore[index]
-        assert FEATURES_FIELD.fullmatch(entries[1])["rules"] == "property", entries  # type: ignore[index]
-        # `corine` applied to the parcel would refuse its `wall` value; a clean
-        # run proves `b` took `property`.
-        _, masks = edges(vtk)
-        assert V.mask("wall") in set(masks.tolist())
-
-    def test_a_single_crs_binds_the_first_source(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path
-    ) -> None:
-        """R1: a single `--features-crs` pairs with the FIRST source (index 0),
-        not the last. The first source's geometry is authored in EPSG:4326 with
-        no crs member in its file, so only the paired `--features-crs EPSG:4326`
-        lets it reproject into the DEM's CRS; the second source carries no paired
-        crs and reads its own file CRS (the default EPSG:25833 = the DEM's)."""
-        # First source in EPSG:4326, file carrying no crs member: it must be told
-        # its CRS by the single paired option, and the reprojection into the DEM
-        # CRS is observable in the recorded `land_cover_crs`.
-        lonlat = ff.moved(FOREST, "EPSG:25833", "EPSG:4326")
-        first = write_geojson(tmp_path / "a.geojson", [prop("f", lonlat, "land_cover")], crs=None)
-        second = write_geojson(tmp_path / "b.geojson", [prop("wall", WALL, "wall")])
-        _vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(first), "--features-crs", "EPSG:4326",
-            "--features", str(second),
-        )  # fmt: skip
-        crss = [c.strip() for c in stats_row(report(tmp_path), "land_cover_crs").split(";")]
-        assert crss == ["EPSG:4326", "EPSG:25833"], crss
-
-    def test_one_features_with_no_paired_options_is_unchanged(
+    def test_one_land_cover_file_is_one_entry(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
     ) -> None:
-        """The regression guard: a single `--features` with a single
-        `--features-rules` still means one source with that map."""
-        _vtk, _ = meshed(
-            tmp_path,
-            bumpy,
-            plain_square,
-            "--features",
-            str(corine_src),
-            "--features-rules",
-            "corine",
-        )
-        text = stats_row(report(tmp_path), "features")
-        assert ";" not in text, text
-        assert FEATURES_FIELD.fullmatch(text)["rules"] == "corine", text  # type: ignore[index]
-
-
-# ------------------------------------------------ R7 case 3: the same file twice
-
-
-class TestSameFileTwice:
-    """R3 / D4: the same path given twice is allowed (two layers or two maps of
-    one GeoPackage); the noder merges the duplicated edges."""
-
-    @needs_rtree
-    def test_two_layers_of_one_geopackage(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path
-    ) -> None:
-        rows_a = [Row(1, FOREST, {"Code_18": "311"})]
-        rows_b = [Row(1, LAKE, {"Code_18": "512"})]
-        gpkg = write_gpkg(
-            tmp_path / "two.gpkg",
-            [
-                Layer("forest", 25833, rows_a, columns=("Code_18",)),
-                Layer("lake", 25833, rows_b, columns=("Code_18",)),
-            ],
-        )
-        vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(gpkg), "--features-layer", "forest", "--features-rules", "corine",
-            "--features", str(gpkg), "--features-layer", "lake", "--features-rules", "corine",
-        )  # fmt: skip
-        _, masks = edges(vtk)
-        found = set(masks.tolist())
-        assert {V.mask("land_cover"), V.mask("land_cover", "water")} <= found
-
-    def test_same_geojson_twice_two_maps(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
-    ) -> None:
-        """The same coded file read once as `corine` and once as
-        `corine-water`; both are the same code system (allowed under D1)."""
-        vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-rules", "corine",
-            "--features", str(corine_src), "--features-rules", "corine-water",
-        )  # fmt: skip
-        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
-        assert len(entries) == 2, entries
-        # The lake edge is present from both reads, merged, not doubled.
-        _, masks = edges(vtk)
-        assert V.mask("land_cover", "water") in set(masks.tolist())
+        """The regression guard: one `--land-cover` file is one entry."""
+        meshed(tmp_path, bumpy, plain_square, *land_cover(corine_src), "--edges", "all")
+        assert ";" not in stats_row(report(tmp_path), "edges")
+        (entry,) = edges_entries(report(tmp_path))
+        assert entry["classes"] == "corine"
 
 
 # --------------------------- R7 case 4 / I2: cross-source edge merge (R4)
 
 
 class TestCrossSourceMerge:
-    """R4 / I2: two sources with an edge coincident in the DEM's CRS merge into
-    one constraint edge whose mask is the union of the two maps' bits. The
-    cross-source analogue of 16b's within-source shared-edge merge."""
+    """R4 / I2: two sources with an edge coincident in the DEM's CRS give one
+    constraint edge whose mask is the union of the two sources' bits.
 
-    def seam_mesh(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> VtkFile:
-        """LEFT is a lake (water) in one CORINE source; RIGHT is forest
-        (land_cover) in a second. Their shared vertical seam is authored
-        identically in both, in the DEM's CRS."""
+    LEFT is a lake (water) in one `--land-cover` file, RIGHT forest in a
+    second: one map, so their shared side is one land-cover border, carrying
+    `land_cover` and `water` (the lake's side). With `SEAM` also given as a
+    `--lines road` line, the seam's edges carry the road's bit as well."""
+
+    def seam_mesh(self, tmp_path: Path, bumpy: Path, plain_square: Path, *more: str) -> VtkFile:
         left = write_geojson(tmp_path / "left.geojson", [coded("l", LEFT, "512")])
         right = write_geojson(tmp_path / "right.geojson", [coded("r", RIGHT, "311")])
         return meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(left), "--features-rules", "corine",
-            "--features", str(right), "--features-rules", "corine",
-        )[0]  # fmt: skip
+            tmp_path, bumpy, plain_square, *land_cover(left, right), "--edges", "all", *more
+        )[0]
+
+    def seam_masks(self, vtk: VtkFile) -> tuple[np.ndarray, np.ndarray]:
+        xy, masks = edges(vtk)
+        mids = (xy[:, 0] + xy[:, 1]) / 2
+        on_seam = np.asarray(shapely.distance(SEAM, shapely.points(mids))) <= SNAP
+        assert on_seam.any(), "no edge found on the shared seam"
+        return xy[on_seam], masks[on_seam]
 
     def test_the_shared_seam_carries_both_masks(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        vtk = self.seam_mesh(tmp_path, bumpy, plain_square)
-        xy, masks = edges(vtk)
-        # Every edge lying on the seam carries both sources' bits, merged.
-        mids = (xy[:, 0] + xy[:, 1]) / 2
-        on_seam = np.asarray(shapely.distance(SEAM, shapely.points(mids))) <= SNAP
-        assert on_seam.any(), "no edge found on the shared seam"
+        _, masks = self.seam_masks(self.seam_mesh(tmp_path, bumpy, plain_square))
         want = V.mask("land_cover", "water")
-        assert set(masks[on_seam].tolist()) == {want}, sorted(set(masks[on_seam].tolist()))
+        assert set(masks.tolist()) == {want}, sorted(set(masks.tolist()))
 
-    def test_the_seam_is_one_run_of_edges_not_doubled(
+    def test_a_line_along_the_seam_merges_with_the_border(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """The merge collapses the two coincident chains to one edge run: over
-        the whole seam every edge carries the union mask (no edge keeps only one
-        source's bit), and no seam edge is doubled (no two edges share both
-        endpoints — a doubled merge would repeat one). Both properties are read
-        from the seam edges themselves, without guessing a vertex coordinate."""
-        vtk = self.seam_mesh(tmp_path, bumpy, plain_square)
-        want = V.mask("land_cover", "water")
-        xy, masks = edges(vtk)
-        mids = (xy[:, 0] + xy[:, 1]) / 2
-        on_seam = np.asarray(shapely.distance(SEAM, shapely.points(mids))) <= SNAP
-        assert on_seam.any(), "no edge found on the shared seam"
-        assert set(masks[on_seam].tolist()) == {want}, sorted(set(masks[on_seam].tolist()))
-        seam_xy = xy[on_seam]
+        road = write_geojson(tmp_path / "seam.geojson", [Feat("seam", SEAM, {})])
+        vtk = self.seam_mesh(tmp_path, bumpy, plain_square, "--lines", f"road={road}")
+        _, masks = self.seam_masks(vtk)
+        want = V.mask("land_cover", "water", "road")
+        assert set(masks.tolist()) == {want}, sorted(set(masks.tolist()))
+
+    @pytest.mark.parametrize("with_road", [False, True], ids=["border", "border-and-road"])
+    def test_the_seam_is_one_run_of_edges_not_doubled(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, with_road: bool
+    ) -> None:
+        """The merge collapses the coincident chains to one edge run: no seam
+        edge is doubled (no two edges share both endpoints; a doubled merge
+        would repeat one). Read from the seam edges themselves, without
+        guessing a vertex coordinate."""
+        more: tuple[str, ...] = ()
+        if with_road:
+            road = write_geojson(tmp_path / "seam.geojson", [Feat("seam", SEAM, {})])
+            more = ("--lines", f"road={road}")
+        seam_xy, _ = self.seam_masks(self.seam_mesh(tmp_path, bumpy, plain_square, *more))
         keys = {tuple(sorted((tuple(np.round(a, 3)), tuple(np.round(b, 3))))) for a, b in seam_xy}
-        assert len(keys) == on_seam.sum(), "a seam edge is doubled (a parallel edge on the seam)"
+        assert len(keys) == len(seam_xy), "a seam edge is doubled (a parallel edge on the seam)"
 
 
 # ------------------------------------------------------ R7 case 5: degeneracy (R3)
 
 
 class TestDegeneracy:
-    """R3: every degenerate case a clear `typer.BadParameter` naming the flag,
-    and the 1-based index/path the design says so."""
+    """R3: every degenerate case a clear usage error naming the option."""
 
-    def test_a_map_longer_than_features_is_refused(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
-    ) -> None:
-        """Two `--features-rules`, one `--features`: refused naming the flag and
-        the counts (R3, the one length rule)."""
-        code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src),
-            "--features-rules", "corine", "--features-rules", "property",
-        )  # fmt: skip
-        assert code == USAGE, output
-        assert "--features-rules" in output and "No such option" not in output, output
-        assert re.search(r"\b2\b.*\b1\b", output), output
-        assert not target.exists()
-
-    def test_a_crs_longer_than_features_is_refused(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
-    ) -> None:
-        code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src),
-            "--features-crs", "EPSG:25833", "--features-crs", "EPSG:4326",
-        )  # fmt: skip
-        assert code == USAGE and "--features-crs" in output, output
-        assert "No such option" not in output, output
-        assert not target.exists()
-
-    def test_a_map_with_no_features_is_refused(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path
-    ) -> None:
-        """A paired option with no `--features` at all: the same length rule
-        with M = 0 (generalises the old "applies only with --features")."""
-        code, output, target = mesh(tmp_path, bumpy, plain_square, "--features-rules", "corine")
-        assert code == USAGE and "--features-rules" in output, output
-        assert "No such option" not in output, output
-        assert not target.exists()
-
-    def test_features_with_no_domain_is_refused(
+    def test_edges_with_no_domain_is_refused(
         self, tmp_path: Path, bumpy: Path, corine_src: Path, parcel_src: Path
     ) -> None:
-        """R3: `--features` given with no `--domain`, unchanged, with two."""
+        """R3: `--edges` with two sources and no `--domain`."""
         code, output = invoke(
             "mesh",
             "--dem", str(bumpy),
-            "--features", str(corine_src), "--features", str(parcel_src),
+            *with_wall(corine_src, parcel_src),
             "--out", str(bumpy.parent / "x.vtk"),
         )  # fmt: skip
-        assert code == USAGE and "--features" in output, output
+        assert code == USAGE and "--edges" in output, output
+        assert "needs --dem, --domain and --tolerance" in output, output
         assert "No such option" not in output, output
 
-    def test_an_unknown_map_at_index_two_is_refused_naming_the_index(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
+    def test_a_layer_with_a_geojson_land_cover_file_is_refused_naming_it(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-rules", "corine",
-            "--features", str(parcel_src), "--features-rules", "nosuch",
-        )  # fmt: skip
-        assert code == USAGE, output
-        assert "nosuch" in output and "2" in output, output
-        assert "No such option" not in output, output
-        assert not target.exists()
-
-    def test_a_layer_on_a_geojson_at_index_two_is_refused_naming_index_and_path(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, parcel_src: Path
-    ) -> None:
-        """A `--features-layer` on a non-`.gpkg` source at index 2: refused
-        naming the index and the path (R3). Under R1 left-align a single layer
-        binds source 0, so we give TWO `--features-layer` values with a `.gpkg`
-        first (its layer valid) and the `.geojson` parcel second (index 2); the
-        second layer lands on the geojson and is refused."""
+        """`--land-cover-layer` is for every `--land-cover` file: with a
+        GeoPackage and a GeoJSON file it is refused for the GeoJSON one,
+        naming the option and the file."""
         forest_rows = [Row(1, FOREST, {"Code_18": "311"})]
         gpkg = write_gpkg(
             tmp_path / "corine.gpkg",
             [Layer("corine2018", 25833, forest_rows, columns=("Code_18",))],
         )
+        lake = write_geojson(tmp_path / "lake.geojson", [coded("l", LAKE, "512")])
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(gpkg), "--features-layer", "corine2018",
-            "--features-rules", "corine",
-            "--features", str(parcel_src), "--features-layer", "x",
+            *land_cover(gpkg, lake), "--land-cover-layer", "corine2018", "--edges", "all",
         )  # fmt: skip
         assert code == USAGE, output
-        assert "--features-layer" in output and "No such option" not in output, output
-        assert "2" in output and parcel_src.name in output, output
+        assert "--land-cover-layer" in output and "No such option" not in output, output
+        assert lake.name in output, output
         assert not target.exists()
 
-    def test_a_shorter_paired_list_is_allowed(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
-    ) -> None:
-        """The common case: a paired option shorter than `--features` defaults
-        the missing entries, no error (R3)."""
-        code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            "--features", str(corine_src), "--features-rules", "corine",
-            "--features", str(parcel_src),
-        )  # fmt: skip
-        assert code == 0, output
-        assert target.exists()
+
+# --------------------------------------------------- D1: two land-cover files
 
 
-# --------------------------------------------------- D1: code systems across sources
+class TestTwoLandCoverFiles:
+    """Two `--land-cover` files under one class file are one map: both
+    files' polygons label the mesh."""
 
-
-class TestCodeSystems:
-    """D1: two sources with different non-empty code systems are refused (one
-    mesh, one `land_cover_code` system); a coded source plus a code-less
-    (`property`) source is allowed — the motivating CORINE + parcels case."""
-
-    def test_a_coded_source_and_a_codeless_source_is_allowed(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
-    ) -> None:
-        """The motivating case: CORINE (coded) plus a parcel boundary
-        (code-less `property`). Allowed, and only the coded source labels."""
-        code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            *two_sources(corine_src, parcel_src, a_map="corine", b_map="property"),
-        )  # fmt: skip
-        assert code == 0, output
-        vtk = read_vtk(target.read_bytes())
-        assert "land_cover_codes" in vtk.field_data
-        assert V.mask("wall") in set(edges(vtk)[1].tolist())
-
-    def test_two_same_system_coded_sources_is_allowed(
+    def test_both_files_label_the_mesh(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """Both CORINE maps carry the same `codes` system; mixing them is fine
-        (R5: the refusal never fires on today's maps)."""
         a = write_geojson(tmp_path / "a.geojson", [coded("f", FOREST, "311")])
         b = write_geojson(tmp_path / "b.geojson", [coded("l", LAKE, "512")])
         code, output, target = mesh(
-            tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-rules", "corine",
-            "--features", str(b), "--features-rules", "corine-water",
-        )  # fmt: skip
+            tmp_path, bumpy, plain_square, *land_cover(a, b), "--edges", "all"
+        )
         assert code == 0, output
         vtk = read_vtk(target.read_bytes())
         assert "land_cover_codes" in vtk.field_data
-        # Both sources' polygons label the mesh: neither overrode the other.
+        # Both files' polygons label the mesh: neither overrode the other.
         _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512)])
         assert {311, 512} <= set(codes.tolist()), sorted(set(codes.tolist()))
 
@@ -481,54 +283,37 @@ class TestCodeSystems:
 
 
 class TestRecordPerSource:
-    """R6 / I5: one `features` and one `land_cover_crs` entry per source in source
-    order; `land_cover_notice` lists each distinct notice once; per-source `k
-    features` counts are correct."""
+    """R6 / I5: the map is one `edges` entry naming its files, each line key
+    one more; `land_cover_crs` has one entry per land-cover file;
+    `land_cover_notice` lists each distinct notice once; the per-source
+    `<n> features` counts are each source's own."""
 
-    def test_two_corine_sources_give_one_notice(
+    def test_two_corine_files_give_one_notice(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """Both sources use CORINE maps carrying the same Copernicus notice;
-        the record names it once, not twice."""
         a = write_geojson(tmp_path / "a.geojson", [coded("f", FOREST, "311")])
         b = write_geojson(tmp_path / "b.geojson", [coded("l", LAKE, "512")])
-        vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-rules", "corine",
-            "--features", str(b), "--features-rules", "corine-water",
-        )  # fmt: skip
-        # Both sources are present (two file entries), and the shared notice is
-        # named once, not per source.
-        features = stats_row(report(tmp_path), "features")
-        assert len(features.split(";")) == 2, features
+        vtk, _ = meshed(tmp_path, bumpy, plain_square, *land_cover(a, b), "--edges", "all")
+        (entry,) = edges_entries(report(tmp_path))
+        assert entry["name"] == "a.geojson + b.geojson", entry.string
+        assert int(entry["n"]) == 2, entry.string
         notice = text_field(vtk, "land_cover_notice")
         assert notice.count("Copernicus Land Monitoring Service") == 1, notice
 
     def test_per_source_feature_counts_are_correct(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path
-    ) -> None:
-        """The first source has two features, the second one; each entry's
-        `<k> features` count is that source's own, not the run total."""
-        a = write_geojson(
-            tmp_path / "a.geojson", [coded("f", FOREST, "311"), coded("l", LAKE, "512")]
-        )
-        b = write_geojson(tmp_path / "b.geojson", [prop("w", WALL, "wall")])
-        _vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            "--features", str(a), "--features-rules", "corine",
-            "--features", str(b), "--features-rules", "property",
-        )  # fmt: skip
-        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
-        assert len(entries) == 2, entries
-        counts = [int(FEATURES_FIELD.fullmatch(e)["n"]) for e in entries]  # type: ignore[index]
-        assert counts == [2, 1], (counts, entries)
-
-    def test_features_crs_has_one_entry_per_source(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
     ) -> None:
-        _vtk, _ = meshed(
-            tmp_path, bumpy, plain_square,
-            *two_sources(corine_src, parcel_src, a_map="corine", b_map="property"),
-        )  # fmt: skip
+        """The map has two features, the wall one; each entry's `<n>
+        features` count is that source's own, not the run total."""
+        meshed(tmp_path, bumpy, plain_square, *with_wall(corine_src, parcel_src))
+        counts = [int(m["n"]) for m in edges_entries(report(tmp_path))]
+        assert counts == [2, 1], counts
+
+    def test_land_cover_crs_has_one_entry_per_file(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        a = write_geojson(tmp_path / "a.geojson", [coded("f", FOREST, "311")])
+        b = write_geojson(tmp_path / "b.geojson", [coded("l", LAKE, "512")])
+        meshed(tmp_path, bumpy, plain_square, *land_cover(a, b), "--edges", "all")
         crss = [c.strip() for c in stats_row(report(tmp_path), "land_cover_crs").split(";")]
         assert crss == ["EPSG:25833", "EPSG:25833"], crss
