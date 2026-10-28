@@ -359,7 +359,7 @@ class TestTheOtherPaths:
         corine = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(monkeypatch, "--dem", str(tif), "--domain", str(square), "--tolerance", "1",
-             "--features", str(corine), "--features-rules", "corine",
+             "--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all",
              "--out", str(out), "--stats", str(md))  # fmt: skip
         fields = vtk_fields(read_vtk(out.read_bytes()))
         assert set(fields) == {
@@ -371,7 +371,7 @@ class TestTheOtherPaths:
             "land_cover_codes",
         }
         report = md.read_text(encoding="utf-8")
-        for name in ("features", "land_cover_crs", "land_cover_transform", "domain", "domain_crs"):
+        for name in ("edges", "land_cover_crs", "land_cover_transform", "domain", "domain_crs"):
             assert stats_row(report, name), name
         assert stats_row(report, "start_mesh") == "the domain outline and the feature lines"
 
@@ -391,7 +391,7 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
         "tiles": ["--dem", str(tmp_path / "tiles"), "--tolerance", "1"],
         "features": [
             *("--dem", str(holed), "--domain", str(square), "--tolerance", "1"),
-            *("--features", str(corine), "--features-rules", "corine"),
+            *("--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all"),
         ],
         "reprojected": [
             *("--dem", str(VELHAS / "anadem_velhas.tif")),
