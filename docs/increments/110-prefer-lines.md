@@ -79,8 +79,10 @@ CLI: --land-cover file == a --features file (resolved path, same layer)?
   - **A refilled piece joins its neighbours, whatever the merge switch says**:
     it is unioned (`shapely.union_all`) with every kept polygon of the class
     it took whose boundary meets the piece's boundary buffered by
-    `preferred.BAND` (the band the neighbour search uses), and the union
-    replaces them as one polygon with the first one's item. So the old CORINE
+    `preferred.BAND` (the band the neighbour search uses); pieces and kept
+    polygons of one class that meet this way, directly or through each other,
+    form one group, and the group's union replaces them as one polygon with
+    its first kept polygon's item. So the old CORINE
     lake border between the piece and its neighbour is no line. A piece is
     refilled only when such a neighbour exists, so there is always one. A
     hairline the union leaves is the clean-up's repair's to remove.
@@ -166,3 +168,4 @@ source other than the land cover's own file.
 ## Review
 
 - Design round 1: CHANGES REQUESTED, aabac548..ae9e9197, 0 (old shoreline survives with merge off; polygons with no fid; two false sentences on the simplifier and on "exactly").
+- Design round 2: APPROVED WITH WORDINGS, ..6d62057a, 0; the wording (pieces join their neighbours in groups) applied in this commit.
