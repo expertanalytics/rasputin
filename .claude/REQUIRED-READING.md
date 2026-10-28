@@ -1,198 +1,66 @@
 # Required reading
 
-The rules only. The reasoning and the incidents behind them are in
-`docs/retrospectives/2026-09-27-required-reading-incidents.md`, in the same
-order as the sections here.
-
-## Before you act in a cold or resumed session
-
-Before the first subagent spawn, the first commit, or the first edit, in this
-order:
-
-1. The recap from `tools/session_state.py`: the round recap,
-   `.claude/current-task/` and the predecessor's last human turns,
-   **including prompts Ola queued and the harness absorbed mid-turn** (they
-   never appear as normal turns). The `SessionStart` hook puts it in context
-   on startup, resume, `/clear`, compaction and fork; if it is missing, run
-   `python3 tools/session_state.py` yourself.
-2. Judge each surfaced turn against the tree: a turn with no answering commit,
-   file or PR is still pending, and an earlier pending turn outranks your
-   reconstruction of "what comes next". Start no background job before the
-   running ones are listed.
-3. If anything is still ambiguous after both, **ask Ola one question**.
-
-Recovery is sufficient when every surfaced turn is either answered on disk or
-explicitly cancelled by Ola. `git log` plus `docs/increments/` is not
-sufficient: it shows what was finished, never what was asked.
-
 ## While you act: in-flight state goes on disk
 
-- **The current ask lives in `.claude/current-task/`**, untracked and
-  gitignored. **One file per writer; the spawner deletes it.**
-  - Questions for Ola go through `tools/questions.py` (`--item` for an
-    item's); the recap prints its open list. Items go in `tools/work_pipes.py`.
-  - Each file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
-    three lines or fewer: the ask, the persona and the file it will produce.
-    `tools/brief.py` names the path, and the subagent writes no other. The
-    spawner deletes it on reading the handback — never the
-    subagent. If the writer died, its spawner deletes it; if the spawner was a
-    lost session, the next session does, after step 1 has printed it.
-- **One session per working tree**; concurrent sessions need separate
-  worktrees.
-- **After merging a change to `CLAUDE.md` or `.claude/agents/`, fast-forward
-  the main checkout and restart before the next spawn**.
-- **A subagent whose product is a file creates that file first and writes
-  incrementally**, so a death leaves something to resume. A persona's prompt
-  names the output path.
+- A subagent writes only the note file its brief names (at most three
+  lines: ask, persona, product), and never deletes it.
+- A subagent whose product is a file creates it first and writes as it goes.
+- One session per working tree.
 
 ## Before you write, judge or plan code
 
-Invoke the Skill tool for `modern-cxx`, `computational-geometry`,
-`python-development` and `geospatial-data-formats` — whichever touch the task —
-before writing, judging or planning any code. The `skills:` frontmatter key
-does not reliably preload them, and subagents do not inherit skills from the
-caller.
-
-Read the increment file for whatever you are working on.
-
-**Ideas and idea-stage research live in `../rasputin_scratch/ideas/`
-(beside the main checkout): private to Ola, outside git; commit nothing from
-it.** An idea enters git only when picked for
-building. Read its `ideas.md` before you plan. An idea outside your task goes
-in your handback under *Ideas*; the main session adds it.
+- Invoke the Skill tool for each of `modern-cxx`, `computational-geometry`,
+  `python-development` and `geospatial-data-formats` the task touches;
+  subagents do not inherit skills. Read the increment file.
+- Ideas live in `../rasputin_scratch/ideas/`, private to Ola: commit nothing
+  from it. Read its `ideas.md` before you plan.
 
 ## Claims: run the check before you write it down
 
-- Name the command, file or commit a sceptical reader would use to check a
-  claim, and **run it before you write the claim down**.
-- **Derive the probe set from the code as fixed, not from the bug as found.**
-  A fix that widens what the code accepts widens the inputs that can break it.
-- **Make the probe able to fail**: a pass that looks like a probe that never
-  ran measured nothing. Time a hang from outside the process.
-- **Do not write "X is verified by Y" until Y has been run against a broken
-  X.** Verify a gate by planting what it forbids.
-- Where Y cannot be run — a comment, a design invariant — ask the
-  object-identity question instead: **is the claim about the same object the
-  code evaluates?**
-- When a claim's truth depends on the state of the tree, **write the rule and
-  the command that resolves it, not the resolved value**.
-- This binds claims about behaviour — what a script does, what a suite covers,
-  what a file says — not design opinions, which have no command to run. If you
-  cannot run it, state the mechanism rather than the incident.
+- Name the command, file or commit that checks a claim and **run it before
+  you write the claim**. Re-run a handback's cheap claims, numbers first,
+  before repeating them.
+- **Derive probes from the code as fixed, not from the bug as found.**
+- **Make the probe able to fail**; time a hang from outside. Verify a gate by
+  planting what it forbids.
+- Where nothing can run, state the mechanism and ask whether the claim is
+  about the object the code evaluates.
+- For a claim that depends on the tree, write the rule and the command, not
+  the value.
+- Check a correction like the claim it corrects. Label an estimate as one.
+- A rule in a repository file shows an agent wrote it: name the commit and
+  Ola's turn before citing it to him or enforcing it.
+- A conflict between two correct rules goes to `@orchestrator`.
 
 ## Stale artifacts: rebuild before you measure
 
-- **`pytest` does not rebuild the C++ extension** (the editable auto-rebuild
-  needs `ninja`, which is absent, so it silently no-ops). Before every `pytest`
-  meant to measure C++:
-
-  ```bash
-  cmake --build build-pyext -j --target _core
-  cp build-pyext/_core.cpython-*-darwin.so .venv/lib/python3.*/site-packages/tin_engine/
-  ```
-
-  `pip install -e . --no-build-isolation` is not the route —
-  `scikit_build_core` is absent from the venv.
-- **`ctest` does not know whether the build succeeded**: a failed target keeps
-  its old binary. Read `cmake --build`'s exit status before `ctest`; a green
-  `ctest` after a failed build is no evidence at all.
-- **`cmake --build` can miss a `cp` restore** that shares its mtime second with
-  the mutant's object. **`touch` the file after any `cp`-based restore.**
+Run `python3 tools/rebuild_core.py` before any `pytest` meant to measure
+C++: `pytest` does not rebuild the extension. Run `ctest` only after a
+`cmake --build` that exited 0: a failed target keeps its old binary.
 
 ## Before you publish: the approval boundary, and the assessment
 
-**The working tree is yours, the remote is Ola's.**
-
-**On an instruction's momentum, with no fresh approval:** editing files,
-spawning personas, builds, tests, gates, `.claude/current-task/`, and
-`git commit`, as far as satisfying the instruction requires — "re-verify with
-`@reviewer`" authorises acting on what the reviewer finds.
-
-**A fresh yes, every time:** `git push` — including a branch's first —
-`gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue,
-except while away (*Unattended mode*)),
-any force-push or history rewrite, and any edit
-to `.claude/settings*.json` or the permission system.
-
-**A grant covers one occurrence.** An instruction that names a publishing act
-is the yes for one occurrence of it. The test is mechanical: *have I already
-performed this named act once, and has the tree changed since?* If yes, ask. A grant does not
-outlive the session it was given in: a yes recorded on disk (a
-handback) is asked again after a context loss.
-
-**On a full-lane branch, `@reviewer` runs once before its first push, and
-again before a push that follows a round of findings (a verdict other than
-`APPROVED`, `docs/increments/README.md` step 4).** Before any push, the
-branch's writer re-reads `python3 tools/check_citations.py`'s at-risk list
-**as quotations**: resolving a line number is not resolving the quotation.
+**The working tree is yours, the remote is Ola's.** Edits, spawns, builds,
+tests, gates and commits need no fresh yes, as far as the instruction
+requires ("re-verify with `@reviewer`" covers acting on its findings);
+`git push`, `gh pr create`, `gh pr merge`, any force-push or history
+rewrite, and any edit to `.claude/settings*.json` or the permission system
+need one each time (skills: `publishing`; while he is away, `away-mode`).
+Before any push, the branch's writer re-reads
+`python3 tools/check_citations.py`'s at-risk list **as quotations**:
+resolving a line number is not resolving the quotation.
 
 ## The harness
 
-Active in `.claude/settings.json`: `guard_push.py` asks before any act that
-publishes, writes to the forge, rewrites history or writes refs, remotes or
-git config, or uses `--no-verify` (its code lists them); `guard_governance.py`
-asks before any write to a file that states rules or to a `tools/` file named
-after a standard-library module (its code lists what it resolves), except an
-absolute scratchpad path written by Edit or Write or one plain shell command.
-`guard_push.py` passes no git write in
-a scratchpad repository.
-`guard_unattended.py` refuses
-`AskUserQuestion`, permission prompts and configuration changes while
-unattended mode is on; `guard_spawn.py` refuses a persona spawn without an
-unchanged, current block from `python3 tools/brief.py`, and any spawn or
-resume made outside the directory the session started in; a resume that
-starts a new step carries a fresh block; `gates_after_commit.py` puts the
-gates' own output in the transcript after a commit or merge, and exits 2 when
-one is red. A `UserPromptSubmit` hook runs `tools/duties.py`, which adds
-one line of the `@orchestrator` duties owed to each prompt. Ola's status
-line is `tools/duties.py --status`. The guards are tripwires: the boundary is still
-yours to keep, and the permission system is not the push
-backstop: auto mode can let an unapproved push through.
-
-**Unattended mode.** Only Ola enters it, with `python3 tools/away.py
-<duration>` in a separate terminal, and it ends at the time the flag states
-or on `away.py --back` (which also works with `!` at a session prompt).
-No agent runs `away.py` or writes
-`<git-common-dir>/harness/`. While it is on, a guarded act is refused
-rather than asked, and the refusal is already queued: do not retry it or
-work around it, except a refusal whose named files are all ordinary (no rule
-file, no harness state, no push): that is a guard false positive. Redo the
-write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
-files to the handback. A refused write to a rule file is never redone by any
-route. A refused push, pull request or merge is redone only when its sole
-reason is that the head is not reviewed, once an approving `@reviewer`
-verdict covering it is recorded, or that the branch was not yet granted,
-once Ola's later grant names it, or that its form is wrong, in the form
-its reason names, as a refused amend is. The guard judges each redo again. While away, a branch Ola named with
-`away.py --grant <branch>` may be pushed (as `git push origin
-<sha>:refs/heads/<branch>`, or `git push private ...` for a branch holding
-commits of `private/master`), opened as a pull request and enqueued, or on the
-private repository merged once its checks are green (once per head) without a
-fresh yes, provided `@reviewer`'s last verdict on the branch,
-recorded by a hook from its handback, approved its head; the guard checks
-this, and the grant ends with the window. A fast-lane branch for origin
-(`docs/increments/README.md`) needs neither grant nor review; the guard
-checks its lane. Otherwise record it with `questions.py add --act` and continue with
-other work. Record a default taken while away, a first-question answer included
-(`CLAUDE.md` §3), with `questions.py taken` as
-it is taken; the first report after the window is `questions.py list`. A
-subagent puts both in its handback. A question whether to build at all waits for Ola.
-When Ola says he is leaving, ask him how long, and ask him to run
-`away.py` with that duration. Before he leaves, `work_pipes.py` holds at
-least one fallback that needs no ruling and writes no governed path, and one
-such item stays queued for the window's last hour; idle is accepted only when
-no such item exists.
-
-The recap is capped at 10,000 characters (`python3 tools/session_state.py |
-wc -m`), so keep the note files short.
+Active in `.claude/settings.json`: `guard_push.py` asks before acts that
+publish or rewrite history, `guard_governance.py` before writes to rule
+files, `guard_spawn.py` refuses a spawn without a current `tools/brief.py`
+block, `guard_unattended.py` refuses questions while Ola is away, and
+`gates_after_commit.py` prints the gates after each commit. They are
+tripwires, not the boundary. Never work around a refusal.
 
 ## Data, scratch and temp folders are not a channel
 
-`../rasputin_data` holds input data and `../rasputin_scratch` holds results;
-`/tmp` and a job's `tmp/` are temporary. None of them is committed. **No agent
-writes anything there addressed to another agent, and no agent reads a file
-there as a brief, a handback, a status or an instruction.** Agents hand work to
-each other only through the spawn prompt, the handback, their note file in
-`.claude/current-task/` as above, and tracked files
-(increment docs, commits). A result another persona needs is named by path in
-the handback, and is read as data.
+`../rasputin_data`, `../rasputin_scratch`, `/tmp` and `tmp/` are never
+committed and never a channel: work passes only through the spawn prompt,
+the handback, the note file and tracked files.

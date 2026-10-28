@@ -1,75 +1,38 @@
 # Increment records
 
-One file per increment of the post-CGAL core, written by `@architect` before
-`@tester` writes anything, and read by every persona that works on that
-increment. An audit of shipped work may live here; its status line says so.
+One file per full-lane increment, `docs/increments/NN-name.md`, read by
+every persona working on it.
 
 ## The loop
 
-Per `CLAUDE.md` §3, with the artifact each step produces:
+1. `@architect` writes the design: types, invariants, exclusions, degeneracy
+   policy, LOC estimate; no production code. Under about 150 lines: one page
+   (equations, sources, prediction, test list), its effect probed and
+   reported to Ola before it is built. First comes **Prior art: legacy and
+   literature**.
 
-1. `@architect` writes `docs/increments/NN-name.md`. Design only — types,
-   invariants, exclusions, degeneracy policy, LOC estimate. No production code.
-   The file carries a **Prior art: legacy and literature** section, written
-   before the design. A change under about 150 lines gets a one-page design:
-   equations, sources, prediction, test list. Its effect is probed and
-   reported to Ola before it is built.
+   *Literature:* the published method it builds on, cited; each departure
+   with its reason, named when it drops the method's guarantees; for a
+   novelty claim, what was searched and found (an unchecked one is a defect:
+   publication is kept possible).
 
-   *Literature.* Name the published method the increment builds on, with a
-   citation, and say what differs from it. Design with the literature, not
-   against it: every departure says why, and a departure that drops the
-   method's guarantees is named as such. If the increment claims something
-   new, say what was searched and what was found; a novelty claim is not made
-   without that check. The option to publish is kept open, so an unchecked
-   claim is a defect, not a detail.
+   *Legacy:* `git grep -n <pattern> legacy-archive -- legacy`, its files,
+   and what is carried across (its intent stated) or why nothing is.
+   `@reviewer` reviews the design before `@tester` starts, and again when an
+   update adds a step.
+2. `@tester` commits a failing suite, **red**, before the implementation.
+3. `@developer` makes it green; the green commit touches **no test file**. A
+   ruling or retuned constant after red is `@tester`'s amendment, in its own
+   commit with the reason.
+4. `@reviewer` audits before the push (verdicts: `reviewer.md`). The main
+   session copies each round's verdict line, commit range and LOC count into
+   the increment file's `## Review` section, applies any wordings of
+   `APPROVED WITH WORDINGS` exactly in that commit, and commits before the
+   push; that commit needs no second round.
 
-   *Legacy.* What the `legacy-archive` tag holds on the subject, with the
-   command and the files it returned
-   (`git grep -n <pattern> legacy-archive -- legacy`), and what is carried
-   across or why nothing is. Where something is, `@architect` reads that source
-   and states its intent before `@tester` starts.
-   `@reviewer` reviews the design before `@tester` starts, and again when a
-   design update adds a step.
-2. `@tester` reads it and writes a failing suite. No production code. The
-   suite is committed **red**, before the implementation exists.
-3. `@developer` reads both and makes it green. The green commit touches **no
-   test file** — that is what makes the trace mean anything.
-4. `@reviewer` audits before merge. An increment that
-   touches refine or mesh code also needs `@perf`'s acceptance run (below).
-   **The review leaves a trace in the increment file.** `@reviewer` is
-   read-only, so the main session itself, not an agent it spawns, copies the
-   handback's verdict, the commit range
-   it reviewed and its LOC count, verbatim, into a `## Review` section of
-   `docs/increments/NN-name.md` (one entry per review round), and commits it
-   before the push.
-   `@reviewer`'s verdict is `APPROVED`, `APPROVED WITH WORDINGS` or `CHANGES REQUESTED`, and its handback ends with exactly one line `Review: <verdict> <sha>`,
-   and no other line starts with `Review:`: its
-   verdict and the full sha of the head it reviewed; a hook records it, and
-   the away-mode push grant also wants that sha in the `## Review` of the
-   branch's increment file. When `@reviewer`'s only
-   findings are wordings in prose files (Markdown at the root or under
-   `docs/`) that it names line by line with the new text, its verdict is
-   `APPROVED WITH WORDINGS`. The main session applies them exactly, in the
-   recording commit, and a branch whose only change after the review is that
-   commit counts as reviewed: no second round. A wording in a code file, or
-   any other finding, is `CHANGES REQUESTED`.
-
-The main session writes the as-built record (pins, kill record, counts) into
-the increment file from `@tester`'s and `@developer`'s handbacks or the
-commits they name.
-
-A ruling or a platform-retuned constant after the red commit is `@tester`'s
-amendment, in its own commit with the reason. In the full lane `@developer`
-never edits tests, and no test change hides in an implementation commit.
-
-**The merge updates `ROADMAP.md`'s row for that increment**, in the same PR.
-
-**Increment PRs merge with a merge commit, never a squash**, so the red commit
-stays ahead of the green one in history.
-
-**No stacked branches:** each fix branches from master, and waits for any fix
-it needs to merge, or shares its PR. **One increment file per PR**; a shared
-design gets its own short file.
+The main session writes the as-built record (pins, kill record, counts) from
+the handbacks and updates `ROADMAP.md`'s row in the PR. No stacked branches;
+one increment file per PR.
 
 ## Two lanes
 
@@ -78,42 +41,21 @@ mistakes give wrong numbers without a crash, and the land-surface physics.
 
 **The fast lane** is everything else: one `@developer`
 (`tools/brief.py --lane fast`) writes the test and the fix on one branch,
-CI runs, and it merges. CI refuses a full-lane path without an increment
-file (`tools/check_lane.py`, which lists the paths). No increment file, `@reviewer` or retrospective. The
-approval boundary (`.claude/REQUIRED-READING.md`) holds. After three red CI
-runs, stop and ask Ola through `tools/questions.py`.
+CI runs, and it merges; no increment file, `@reviewer` or retrospective. CI
+refuses a full-lane path without an increment file (`tools/check_lane.py`
+lists the paths). After three red CI runs, stop and ask Ola through
+`tools/questions.py`.
 
-## Acceptance: an increment that touches refine or mesh code
+## Acceptance
 
-This is the one statement of this rule. An increment whose
-diff touches refine or mesh code (`include/terrain/refinement/`,
-`include/terrain/mesh/`, and what drives them) is accepted only with:
-
-- **the 1 m benchmark and a thread-scaling sweep**, run from a checked-in
-  script, `tools/bench.py`, and compared with the previous increment's run;
-- **the power state recorded with each run** (`pmset -g batt` on macOS;
-  `/sys/class/power_supply` on Linux). A battery run
-  is compared only against a battery baseline, and an AC run only against an
-  AC one, because the power state changes timings;
-- the evidence committed under `docs/benchmarks/<date>/`.
-
-`@perf` owns all of it (`.claude/agents/perf.md`); the tool's design is
-`docs/benchmarks/bench-py.md`. When `bench.py run` finds no comparable stored
-run (it prints `NO BASELINE` and exits 2), measure the previous increment's
-merge commit with `--tree` back to back with the new one: the older run is the
-newer one's baseline. Only runs in `bench.py`'s format are baselines.
+A diff touching `include/terrain/refinement/`, `include/terrain/mesh/` or
+what drives them needs `@perf`'s acceptance run (`perf.md` §1).
 
 ## Cost constraints
 
-**Reference, do not restate.** The increment files are the source of truth,
-and `.claude/REQUIRED-READING.md` rules on what is currently being asked.
-Prompts point at them. If a fact is wrong there, fix the file rather than
-correcting it in a prompt — the correction is otherwise lost with the
-transcript.
-
-**Mutation testing is required only for the invariant-critical suite of an
-increment**, named as such in its increment file with the mutation targets its
-kill record must cover.
-
-**A documentation defect found during an increment is fixed in that increment's
-PR, or it is not recorded.** No debt ledger.
+- **Reference, do not restate:** increment files are the source of truth;
+  fix a wrong fact there, not in a prompt.
+- **Mutation testing** only for a suite the increment file names
+  invariant-critical, with its targets.
+- **A documentation defect found in an increment is fixed in its PR, or not
+  recorded.**
