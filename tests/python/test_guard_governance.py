@@ -1304,11 +1304,6 @@ def record_folder_passes() -> dict[str, str]:
         "cd-to-toplevel": "cd $(git rev-parse --show-toplevel) && ls",
         "cd-hooks-ls": "cd .git/hooks && ls",
         "upper-case-read": f"cat {H.upper()}/queue.jsonl",
-        # The folder named only inside a commit message, beside a command off the list.
-        "add-then-commit-m": f'git add -A && git commit -m "guard denies grep over {H}/r.jsonl"',
-        "add-then-commit-qm": f'git add -A && git commit -qm "x {H}"',
-        "add-then-commit-message-equals": f'git add -A && git commit --message="x {H}"',
-        "add-then-commit-glued-m": f'git add -A && git commit -m"x {H}"',
         # A reader on the list reads the folder, its output filtered by readers.
         "grep-review-log": f"grep -c APPROVED {H}/reviews.jsonl | tail -3",
     }
@@ -1432,6 +1427,22 @@ def test_a_line_that_only_mentions_or_reads_the_record_folder_passes(
                          ids=record_folder_denials().keys())  # fmt: skip
 def test_a_line_that_may_write_the_record_folder_is_denied(guard: ModuleType, command: str) -> None:
     assert guard.judge_bash(command) == DENIED
+
+
+#: The folder named only inside a commit message, beside a command off the list.
+COMMIT_MESSAGE_MENTIONS = {
+    "add-then-commit-m": f'git add -A && git commit -m "guard denies grep over {H}/r.jsonl"',
+    "add-then-commit-qm": f'git add -A && git commit -qm "x {H}"',
+    "add-then-commit-message-equals": f'git add -A && git commit --message="x {H}"',
+    "add-then-commit-glued-m": f'git add -A && git commit -m"x {H}"',
+}
+
+
+@pytest.mark.xfail(strict=True, reason="the guard edit waits for Ola's approval")
+@pytest.mark.parametrize("command", COMMIT_MESSAGE_MENTIONS.values(),
+                         ids=COMMIT_MESSAGE_MENTIONS.keys())  # fmt: skip
+def test_a_mention_only_inside_a_commit_message_passes(guard: ModuleType, command: str) -> None:
+    assert guard.judge_bash(command) is None
 
 
 def test_the_folder_lists_hold_each_line_once() -> None:
