@@ -183,3 +183,7 @@ lines. Lane: full (it changes the approval boundary), `@reviewer` before push.
    for CI. Apply the two new conditions to away mode too? Default: yes.
 2. "Present" can only mean "away mode off", so a fast-lane branch also
    goes out while you sleep without `away.py`. Accept? Default: yes.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 22d09fe1..140f9e11, 0 (bypasses tried and closed: full-lane path, increment file, over 700 lines, stale sha, force push, other branch or master, private remote or `-R`, governed file, CI not green, enqueue for another head; blocking: `.github/` is neither full lane nor governed, so a fast-lane branch can make `CI result` always green (#367, #369, #374 changed `main.yaml`): exclude `.github/` and maybe `pyproject.toml` in `fast_lane()`, add to test 4; a forged `refs/remotes/origin/master` (Write or `printf >` passes both guards) empties the lane diff, and a forged `private/master` can send private commits to origin: check against `git ls-remote origin refs/heads/master`; the `away.py --fast-push` switch and `gh pr create` go beyond Ola's words; `judge` reads `unattended.json` unconditionally and would crash when he is present; `pr_view` is hard-wired to the private repository; follow-up: `gh pr create` is judged on the local branch, the PR opens from the remote one; measurement re-run: 38 PRs, 109.9 h, an upper bound; rule text -2 words holds).
