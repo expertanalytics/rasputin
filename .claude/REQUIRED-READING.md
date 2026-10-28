@@ -29,20 +29,16 @@ sufficient: it shows what was finished, never what was asked.
 
 - **The current ask lives in `.claude/current-task/`**, untracked and
   gitignored. **One file per writer; the spawner deletes it.**
-  - `session.md` is the main session's alone, written in place; it is
-    deleted when the round lands. Each line starts with `NOW:` (one),
-    `QUEUE:` (at most one) or `ASK OLA:` (a refusal, or a default taken while
-    away), at most 300 characters each; no rulings, no history. Items and
-    their questions go in `tools/work_pipes.py` (`add`, `ask`). The recap lists
-    every worktree's `ASK OLA:` lines and warns on any other line.
-  - Every other file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
+  - Questions for Ola go through `tools/questions.py` (`--item` for an
+    item's); the recap prints its open list. Items go in `tools/work_pipes.py`.
+  - Each file is one subagent's, `<persona>-<worktree>-<HHMMSS>.md`,
     three lines or fewer: the ask, the persona and the file it will produce.
     `tools/brief.py` names the path, and the subagent writes no other. The
     spawner deletes it on reading the handback — never the
     subagent. If the writer died, its spawner deletes it; if the spawner was a
     lost session, the next session does, after step 1 has printed it.
-- **One session per working tree.** Nothing assigns `session.md`, so
-  concurrent sessions need separate worktrees.
+- **One session per working tree**; concurrent sessions need separate
+  worktrees.
 - **After merging a change to `CLAUDE.md` or `.claude/agents/`, fast-forward
   the main checkout and restart before the next spawn**.
 - **A subagent whose product is a file creates that file first and writes
@@ -122,7 +118,7 @@ to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 **A grant covers one occurrence.** An instruction that names a publishing act
 is the yes for one occurrence of it. The test is mechanical: *have I already
 performed this named act once, and has the tree changed since?* If yes, ask. A grant does not
-outlive the session it was given in: a yes recorded on disk (`session.md`, a
+outlive the session it was given in: a yes recorded on disk (a
 handback) is asked again after a context loss.
 
 **On a full-lane branch, `@reviewer` runs once before its first push, and
@@ -175,19 +171,18 @@ commits of `private/master`), opened as a pull request and enqueued, or on the
 private repository merged once its checks are green (once per head) without a
 fresh yes, provided `@reviewer`'s last verdict on the branch,
 recorded by a hook from its handback, approved its head; the guard checks
-this, and the grant ends with the window. Otherwise record it as an `ASK OLA:` line (main session: in
-`session.md`; subagent: in its handback) and continue with other work.
-A default taken while away is an `ASK OLA:` line ending "default taken:
-<what>", written as it is taken; the first report to Ola after the window
-lists every one. A question whether to build at all waits for Ola.
+this, and the grant ends with the window. Otherwise record it with `questions.py add --act` and continue with
+other work. Record a default taken while away with `questions.py taken` as
+it is taken; the first report after the window is `questions.py list`. A
+subagent puts both in its handback. A question whether to build at all waits for Ola.
 When Ola says he is leaving, ask him how long, and ask him to run
-`away.py` with that duration. Before he leaves, the `QUEUE:` line names at
+`away.py` with that duration. Before he leaves, `work_pipes.py` holds at
 least one fallback that needs no ruling and writes no governed path, and one
 such item stays queued for the window's last hour; idle is accepted only when
 no such item exists.
 
 The recap is capped at 10,000 characters (`python3 tools/session_state.py |
-wc -m`), so keep `session.md` and the note files short.
+wc -m`), so keep the note files short.
 
 ## Data, scratch and temp folders are not a channel
 
