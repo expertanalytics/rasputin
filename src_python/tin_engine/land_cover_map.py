@@ -19,11 +19,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import LandCoverClasses
+from tin_engine.feature_input import LandCoverClasses, _repaired
 from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
@@ -51,7 +52,7 @@ def build(
     """The map of ``base`` (one sequence of (code, polygon) per file, in the
     order given) with each code of ``preferred`` (replaced code, polygons, as
     `preferred.replace` takes them) taken from its polygons near ``region``."""
-    areas, overlap = _joined(base)
+    areas, overlap = _joined(base, shapely.get_coordinates(region.exterior))
     if not preferred:
         return LandCoverMap(tuple(areas), classes, None, tuple(overlap))
     done = replace(areas, preferred, [region])
@@ -59,11 +60,12 @@ def build(
 
 
 def _joined(
-    base: Sequence[Pairs],
+    base: Sequence[Pairs], xy: npt.NDArray[np.float64]
 ) -> tuple[list[tuple[int, BaseGeometry]], list[tuple[int, BaseGeometry]]]:
     """The files' polygons, a later one less what it shares with earlier
     ones (pairs that only touch share none); and each area cut, with the
-    index of the file that kept it."""
+    index of the file that kept it. The polygons of each pair are repaired
+    near the points ``xy`` first (`_repaired`), as the shares step repairs."""
     kept: list[tuple[int, BaseGeometry]] = list(base[0]) if base else []
     owner = [0] * len(kept)
     overlap: list[tuple[int, BaseGeometry]] = []
@@ -74,6 +76,8 @@ def _joined(
             later = np.array([g for _, g in pairs], dtype=object)
             found = shapely.STRtree(shapes).query(later, predicate="intersects")
             for i, k in zip(*found, strict=True):
+                for n, g in ((i, later), (k, shapes)):
+                    g[n] = _repaired(g[n], xy) or Polygon()
                 shared = shapely.intersection(later[i], shapes[k])
                 if shared.area > 0:
                     hits[int(i)].append(int(k))
@@ -81,7 +85,7 @@ def _joined(
         added = []
         for i, (code, polygon) in enumerate(pairs):
             if i in hits:
-                polygon = polygon.difference(shapely.union_all([kept[k][1] for k in hits[i]]))
+                polygon = later[i].difference(shapely.union_all([shapes[k] for k in hits[i]]))
                 parts = [
                     p
                     for p in shapely.get_parts(polygon)

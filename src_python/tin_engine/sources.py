@@ -318,11 +318,14 @@ class PluginFile:
 def _entries[M: BaseModel](
     tables: dict[str, dict[str, Any]], kind: str, model: type[M], label: str
 ) -> dict[str, M]:
-    """Each table validated as `model`, its key the id; an `id` key is refused."""
+    """Each table validated as `model`, its key the id; an `id` key is refused,
+    and a source's `rules` key with its new name."""
     out: dict[str, M] = {}
     for key, table in tables.items():
         if "id" in table:
             raise ValueError(f"{label}: {kind}.{key}.id: the table's key is the id; drop the key")
+        if "rules" in table and model is RemoteSource:
+            raise ValueError(f"{label}: {kind}.{key}.rules: unknown key; rename rules to classes")
         out[key] = validate({**table, "id": key}, model, label, (kind, key))
     return out
 
