@@ -43,6 +43,13 @@ suite (16b-1/2)"):
 - `TerrainFeature` has `fid`, `mask` and `lines` (shapely `LineString`s in the
   DEM's CRS, clipped).
 
+`docs/increments/111-one-land-cover-map.md` moves the inputs: a polygon's
+own kind of edge (road, river, wall, ditch) is no longer a polygon property,
+so the grid's squares are given as their rings, each a `--lines` line of its
+kind (`edges_of` with no map), which keeps a different bit on each side of
+every shared edge; land-cover and water polygons are CORINE class polygons
+(311 and 512), and a water class's border carries `land_cover` and `water`.
+
 Committed red at `e99c8ea`: `tin_engine.feature_input` and `tin_engine.chains`
 did not exist yet, and because `feature_fixtures` imports them lazily each test
 failed on its own rather than aborting collection. Both modules landed in
@@ -59,6 +66,7 @@ import pytest
 import shapely
 from shapely.geometry import LineString, Polygon
 
+import feature_fixtures as ff
 from feature_fixtures import (
     CROSSING,
     UTM33,
@@ -91,8 +99,8 @@ LAAEA = "EPSG:3035"
 
 # ----------------------------------------------------------- the partitions
 
-#: 2 x 2 squares of 100 m, one property each, so every shared edge is two
-#: different bits and a union is visible.
+#: 2 x 2 squares of 100 m, one line kind each (their rings as lines), so every
+#: shared edge is two different bits and a union is visible.
 GRID = {
     "sw": (square(0, 0, 100, 100), "road"),
     "se": (square(100, 0, 200, 100), "river"),
@@ -132,8 +140,39 @@ LAKE = square(50, 50, 150, 150)
 RIVER = LineString([at(0, 100.25), at(30, 97.5), at(50, 100.25)])
 
 
+#: A feature's `property` to its CORINE class: the area kinds.
+AREA_CODES = {"land_cover": "311", "water": "512"}
+
+
+def opened(tmp_path: Path, features: list[Feat], domain: DomainPolygon) -> Any:
+    """`features` as `rasputin mesh` takes them: those of an area kind as
+    CORINE class polygons, the rest as `--lines` of their kind (a polygon by
+    its exterior ring), every class and kind chosen, the clean-up off. The
+    features come areas first, then the lines in order."""
+    fi = ff.feature_input()
+    areas = [f for f in features if f.properties["property"] in AREA_CODES]
+    lines = [f for f in features if f.properties["property"] not in AREA_CODES]
+    region = ff.region_of(domain)
+    built = None
+    if areas:
+        coded = [Feat(f.fid, f.geometry, {"Code_18": AREA_CODES[f.properties["property"]]})
+                 for f in areas]  # fmt: skip
+        known = ff.classes("corine")
+        path = write_geojson(tmp_path / "areas.geojson", coded)
+        read = fi.read_class_polygons(path, None, known, UTM33, ff.box_of(domain))
+        built = ff.land_cover_map().build([read.areas], [], known, region)
+    keyed = []
+    for f in lines:
+        geometry = f.geometry
+        if isinstance(geometry, Polygon):
+            geometry = LineString(geometry.exterior.coords)
+        keyed.append((str(f.properties["property"]), geometry))
+    choice = fi.EdgeChoice(every_class=True, lines=frozenset(k for k, _ in keyed))
+    return fi.edges_of(built, keyed, choice, ff.cleanup(), domain, V, region=region)
+
+
 def mesh_of(tmp_path: Path, features: list[Feat], domain: DomainPolygon) -> tuple[Any, Any, Noded]:
-    fs = open_one(write_geojson(tmp_path / "f.geojson", features), domain)
+    fs = opened(tmp_path, features, domain)
     started = start(domain, fs.features)
     return fs, started, run_engine(started)
 
@@ -210,27 +249,32 @@ class TestI1BitsFromTheInput:
         assert {m for e, m in along.items() if y(e) < at(0, 0)[1] or y(e) > at(0, 200)[1]} == {0}
 
     def test_a_hole_ring_shared_with_the_polygon_filling_it(self, tmp_path: Path) -> None:
-        """MUTANT 6: the outer polygon's hole ring carries its bit too, so the
-        hole's edges are land_cover | water, not water alone."""
+        """MUTANT 6: the outer polygon's hole ring carries its bit too. The
+        inner polygon is a water class (land_cover | water), the outer land
+        cover; with the hole ring dropped the truth's union would differ
+        nowhere, so the count of chains (exterior, hole, inner) kills it."""
         features = [
             Feat("outer", ISLAND_OUTER, {"property": "land_cover"}),
             Feat("inner", ISLAND_INNER, {"property": "water"}),
         ]
         _, started, noded = mesh_of(tmp_path, features, AROUND)
-        truth = truths([(ISLAND_OUTER, V.mask("land_cover")), (ISLAND_INNER, V.mask("water"))])
+        water = V.mask("land_cover", "water")
+        truth = truths([(ISLAND_OUTER, V.mask("land_cover")), (ISLAND_INNER, water)])
         assert mismatches(noded, expected_masks(noded, truth)) == []
         assert V.mask("land_cover", "water") in set(noded.masks.values())
         assert len(feature_chains(started)) == 3  # exterior, hole, the inner polygon
 
     def test_a_river_ending_on_the_lake_shore(self, tmp_path: Path) -> None:
         """A T-junction the noder resolves: the shore splits at the river's end
-        and keeps `water` on both halves; the river's edges are `river` only."""
+        and keeps its mask (a water class's, land_cover | water) on both
+        halves; the river's edges are `river` only."""
         features = [
             Feat("lake", LAKE, {"property": "water"}),
             Feat("river", RIVER, {"property": "river"}),
         ]
         _, _, noded = mesh_of(tmp_path, features, AROUND)
-        truth = truths([(LAKE, V.mask("water")), (RIVER, V.mask("river"))])
+        shore = V.mask("land_cover", "water")
+        truth = truths([(LAKE, shore), (RIVER, V.mask("river"))])
         assert mismatches(noded, expected_masks(noded, truth)) == []
         end = shapely.Point(RIVER.coords[-1])
         at_end = [
@@ -238,7 +282,7 @@ class TestI1BitsFromTheInput:
             for e, m in noded.masks.items()
             if min(shapely.Point(p).distance(end) for p in e) < 1e-3
         ]
-        assert sorted(at_end) == sorted([V.mask("water"), V.mask("water"), V.mask("river")])
+        assert sorted(at_end) == sorted([shore, shore, V.mask("river")])
 
 
 # ------------------------------------------------------------------- I2
@@ -265,8 +309,19 @@ class TestI2InputVerticesExact:
             Feat(name, moved(poly, UTM33, "EPSG:4326"), {"property": prop})
             for name, (poly, prop) in utm.items()
         ]
-        path = write_geojson(tmp_path / "f.geojson", lonlat, crs=None)
-        fs = open_one(path, CUTTING)
+        rings = [Feat(f.fid, LineString(f.geometry.exterior.coords), {}) for f in lonlat]  # type: ignore[union-attr]
+        fi = ff.feature_input()
+        region = ff.region_of(CUTTING)
+        read = fi.read_linestrings(
+            write_geojson(tmp_path / "f.geojson", rings, crs=None), None, UTM33,
+            ff.box_of(CUTTING),
+        )  # fmt: skip
+        keyed = [
+            (str(f.properties["property"]), line)
+            for f, line in zip(lonlat, read.lines, strict=True)
+        ]
+        choice = fi.EdgeChoice(lines=frozenset(k for k, _ in keyed))
+        fs = fi.edges_of(None, keyed, choice, ff.cleanup(), CUTTING, V, region=region)
         images = {
             p
             for f in lonlat
@@ -350,8 +405,7 @@ class TestReadOrder:
         reversed_path = copy_reversed(EXTRACT, tmp_path / "reversed.gpkg")
         a = open_one(EXTRACT, domain, "corine")
         b = open_one(reversed_path, domain, "corine")
-        assert [f.fid for f in b.features] == [f.fid for f in a.features]
-        assert [f.fid for f in a.features] == sorted(f.fid for f in a.features)
+        assert [(f.fid, f.code) for f in b.features] == [(f.fid, f.code) for f in a.features]
         sa, sb = start(domain, a.features), start(domain, b.features)
         assert np.array_equal(np.asarray(sa.vertices), np.asarray(sb.vertices))
         assert [(list(map(int, i)), r, int(m)) for i, r, m in sa.chains] == [
@@ -393,11 +447,14 @@ class TestCommittedExtract:
 
     def test_the_masks_are_the_corine_maps(self, run: Any) -> None:
         """MUTANT 3, per feature: each `TerrainFeature.mask` is R4's for its
-        row's `Code_18`, read from the file independently."""
+        class code (an area's fid is its index in the map, so the code is
+        the feature's own); the codes are among the file's, read
+        independently."""
         fs, _, _, _ = run
-        codes = {pk: code for pk, _, code in extract_features(EXTRACT, EXTRACT_TABLE)}
-        assert [f.mask for f in fs.features] == [corine_mask(codes[f.fid]) for f in fs.features]
-        assert {codes[f.fid] for f in fs.features} >= {"512", "523"}
+        codes = {code for _, _, code in extract_features(EXTRACT, EXTRACT_TABLE)}
+        assert [f.mask for f in fs.features] == [corine_mask(str(f.code)) for f in fs.features]
+        assert {str(f.code) for f in fs.features} <= codes
+        assert {str(f.code) for f in fs.features} >= {"512", "523"}
 
     def test_i2_vertices_are_reprojected_source_vertices_or_crossings(self, run: Any) -> None:
         fs, _, _, domain = run
