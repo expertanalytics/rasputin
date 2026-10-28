@@ -525,3 +525,4 @@ with the same counts.
 - Design round 2: APPROVED, ..f00e7bb1, 0.
 - Design round 3: CHANGES REQUESTED, ..caad7472, 0 (lane not enforced by path; noding and core outside the full lane; no 700-line owner in the fast lane; a false table claim; Ola only relayed).
 - Design round 4: APPROVED WITH WORDINGS, ..10707382, 0; the two wordings applied in this commit.
+- Code round 1: CHANGES REQUESTED, 1c3185a3..e6a0a7bb, 60 (developer.md and the increments README still forbid a fast-lane developer to write tests; a workflow comment still gives the at-risk re-read to @reviewer).
