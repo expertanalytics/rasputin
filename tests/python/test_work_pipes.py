@@ -142,7 +142,7 @@ COLUMNS = ("PIPE", "PRI", "ITEM", "STEP", "WAITING ON", "SINCE", "NEXT")
 
 
 def table(lines: list[str]) -> list[dict[str, str]]:
-    """The table's rows, each cell cut at the column heading's offset, `mark` first.
+    """The table's rows, each cell cut at the column heading's offset, `number` and `mark` first.
 
     A row is any line after the column heading row and before `Questions for
     Ola:` or the closing `next:` line. Each column must start where its heading
@@ -165,7 +165,9 @@ def table(lines: list[str]) -> list[dict[str, str]]:
                 assert line[offset] != " ", f"{name} cell empty or shifted: {line!r}"
         bounds = [0, *offsets, len(line)]
         cells = [line[a:b].strip() for a, b in itertools.pairwise(bounds)]
-        rows.append(dict(zip(("mark", *COLUMNS), cells, strict=True)))
+        number, _, mark = cells[0].partition(" ")
+        rows.append(dict(zip(("number", "mark", *COLUMNS), [number, mark.strip(), *cells[1:]],
+                             strict=True)))  # fmt: skip
     return rows
 
 
@@ -312,7 +314,7 @@ def test_an_idle_next_names_the_owed_duty(repo: Path) -> None:
 def test_a_next_with_an_item_names_no_duty(repo: Path) -> None:
     append(repo, rec("plain", "queued", plain=True))
     lines = ok(repo, "next").splitlines()
-    assert lines[-1].startswith("next: core/plain"), lines
+    assert lines[-1].startswith("next: 4.1 core/plain"), lines
     assert not any(line.startswith("Duties") for line in lines), lines
 
 
@@ -525,7 +527,7 @@ def test_an_open_question_on_an_item_makes_it_wait_on_ola(repo: Path) -> None:
     block = after(lines, "Questions for Ola:")[:-1]  # the last line is `next:`
     listed = run_script(repo, "tools/questions.py", "", "list").stdout.splitlines()
     assert block == listed and len(listed) == 2, (block, listed)
-    assert ok(repo, "next").splitlines()[-1].startswith("next: core/a ")
+    assert ok(repo, "next").splitlines()[-1].startswith("next: 4.2 core/a ")
     assert run_script(repo, "tools/questions.py", "", "answer", "2", "keep it").returncode == 0
     lines = ok(repo, "show").splitlines()
     rows = {row["ITEM"].split()[0]: row for row in table(lines)}
@@ -545,18 +547,18 @@ def test_next_prints_one_parseable_line_and_a_busy_line_per_skipped_item(repo: P
     lines = ok(repo, "next").splitlines()
     chosen = [line for line in lines if line.startswith("next: ")]
     assert len(chosen) == 1, lines
-    assert chosen[0].startswith("next: core/b queued (") and chosen[0].endswith(")")
+    assert chosen[0].startswith("next: 4.2 core/b queued (") and chosen[0].endswith(")")
     busy = [line for line in lines if line.startswith("busy: ")]
-    assert len(busy) == 1 and busy[0].startswith("busy: core/a (") and held.name in busy[0]
+    assert len(busy) == 1 and busy[0].startswith("busy: 4.1 core/a (") and held.name in busy[0]
     assert len(lines) == len(chosen) + len(busy), lines
 
 
 def test_top_moves_an_item_to_the_head_of_its_pipe(repo: Path) -> None:
     ok(repo, "add", "core", "x", "added first")
     ok(repo, "add", "core", "y", "added second")
-    assert ok(repo, "next").splitlines()[-1].startswith("next: core/x ")
+    assert ok(repo, "next").splitlines()[-1].startswith("next: 4.1 core/x ")
     ok(repo, "top", "y")
-    assert ok(repo, "next").splitlines()[-1].startswith("next: core/y ")
+    assert ok(repo, "next").splitlines()[-1].startswith("next: 4.1 core/y ")
 
 
 def test_an_id_is_unique_across_pipes(repo: Path) -> None:
@@ -659,7 +661,7 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     assert [row["ITEM"].split()[0] for row in rows] == ["g", "r", "w", "q", "l"]
     assert len(by_id) == len(rows) and "m" not in by_id
     chosen = [line for line in ok(repo, "next").splitlines() if line.startswith("next: ")]
-    assert chosen and chosen[0].startswith("next: core/g ")
+    assert chosen and chosen[0].startswith("next: 4.1 core/g ")
     assert [row["ITEM"].split()[0] for row in rows if row["mark"] == "next"] == ["g"]
     assert {i: by_id[i]["WAITING ON"] for i in "rgwql"} == {
         "r": "its agent", "g": "free agent", "w": "Ola", "q": "free agent", "l": "free agent"
@@ -680,3 +682,44 @@ def test_unattended_an_item_that_is_not_plain_waits_on_ola_present(repo: Path) -
     rows = table(ok(repo).splitlines())
     waiting_on = {row["ITEM"].split()[0]: row["WAITING ON"] for row in rows}
     assert waiting_on == {"gov": "Ola present", "pl": "free agent", "w": "Ola"}
+
+
+# ---------------------------------------------------------------- 13. item numbers
+# An item is named `<pipe>.<position>`: mesh is pipe 1, lsm 2, harness 3, any
+# other after those in name order; the position counts the pipe's open items in
+# the order `show` lists them, from 1.
+
+
+def test_rows_are_numbered_by_pipe_and_position_in_show_order(repo: Path) -> None:
+    (repo / ".claude" / "pipes" / "mesh.toml").write_text('name = "mesh"\npurpose = "m"\n')
+    (repo / ".claude" / "pipes" / "beta.toml").write_text('name = "beta"\npurpose = "b"\n')
+    append(repo, rec("c1", "queued"), rec("c2", "red"), rec("l1", "queued", pipe="lsm"),
+           rec("m1", "queued", pipe="mesh"), rec("b1", "queued", pipe="beta"),
+           rec("c3", "merged"))  # fmt: skip
+    rows = table(pipes.show_lines(repo, NOW))
+    found = {row["ITEM"].split()[0]: row["number"] for row in rows}
+    assert found == {"c2": "5.1", "c1": "5.2", "l1": "2.1", "m1": "1.1", "b1": "4.1"}, rows
+    lines = pipes.markdown_lines(repo, NOW)
+    assert "| 5.1 | **c2** title of c2 | red |" in "\n".join(lines), lines
+    assert "| 1.1 | **m1** title of m1 | queued |" in "\n".join(lines), lines
+
+
+def test_next_and_busy_lines_carry_the_number(repo: Path) -> None:
+    append(repo, rec("a", "red"), rec("b", "queued", pipe="lsm"))
+    note(repo, "a")
+    lines = ok(repo, "next").splitlines()
+    assert lines[0].startswith("busy: 4.1 core/a ("), lines
+    assert lines[-1].startswith("next: 2.1 lsm/b queued ("), lines
+
+
+def test_commands_that_take_an_id_accept_the_number(repo: Path) -> None:
+    ok(repo, "add", "core", "x", "first")
+    ok(repo, "add", "core", "y", "second")
+    ok(repo, "top", "4.2")
+    assert ok(repo, "next").splitlines()[-1].startswith("next: 4.1 core/y "), "top 4.2 moves y"
+    ok(repo, "set", "4.2", "parked")
+    assert pipes.load_items(live_list(repo, "core"))["x"].state == "parked"
+    result = cli(repo, "set", "4.9", "red")
+    assert result.returncode != 0 and "4.9" in result.stderr
+    refused = cli(repo, "add", "core", "4.1", "an id shaped like a number")
+    assert refused.returncode != 0 and "4.1" in refused.stderr
