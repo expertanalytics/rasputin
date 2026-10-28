@@ -715,6 +715,65 @@ def test_10_a_bowtie_in_the_later_file_is_repaired_not_a_traceback(
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
 
 
+def lone_bowtie() -> Polygon:
+    """A 200 m bowtie coded arable, crossing itself at its centre: its two
+    triangles (20,000 m²) lie in forest 311, the east one half on the
+    preferred lake. It shares area with no polygon of another file."""
+    x0, y0 = dem_origin()
+    a, b = x0 + 900.1, y0 - 1300.3
+    return Polygon([(a, b), (a + 200, b + 200), (a + 200, b), (a, b + 200)])
+
+
+def test_10_the_lone_bowtie_premises() -> None:
+    tie, polygons = lone_bowtie(), dict(cover_polygons())
+    assert not tie.is_valid
+    whole = shapely.make_valid(tie)
+    assert whole.area == pytest.approx(20000.0, abs=AREA)
+    assert polygons[311].intersection(whole).area == pytest.approx(20000.0, abs=AREA)
+    assert preferred_lake().intersection(whole).area > 0
+
+
+def run_kept(scene: dict[str, Path], target: Path, *args: str) -> None:
+    """`test_cli_mesh_cells.mesh`'s arguments, run here to keep the exception:
+    none escapes, none is printed as a traceback, and the exit is 0."""
+    given = ["--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3",
+             "--cache", str(scene["cache"]), "--out", str(target)]  # fmt: skip
+    result = runner.invoke(app, ["mesh", *given, *args])
+    assert result.exception is None, "".join(traceback.format_exception(result.exception))
+    assert result.exit_code == 0, result.output
+    assert "Traceback" not in result.output and "GEOSException" not in result.output
+
+
+@pytest.mark.parametrize("with_prefer", [False, True], ids=["alone", "prefer"])
+def test_10_a_bowtie_in_a_single_file_is_repaired_once_and_counted(
+    scene: dict[str, Path], tmp_path: Path, lake: Path, with_prefer: bool
+) -> None:
+    """Code review round 2: one `--land-cover` file holding a bowtie in no
+    overlapping pair stayed unrepaired, and `--prefer lake=` made
+    `preferred.replace` throw GEOSException in `_cut`. Repaired once where
+    the map is built, the run ends with exit 0 and the record counts the
+    one repair (`land_cover_repaired`), with or without `--prefer`."""
+    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (ARABLE, lone_bowtie())])
+    target = tmp_path / "x.gpkg"
+    run_kept(scene, target, *classes(f), *(prefer(lake) if with_prefer else ()), "--shares")
+    with closing(sqlite3.connect(target)) as conn:
+        assert record(conn, "land_cover_repaired") == "1"
+
+
+def test_10_a_bowtie_in_a_single_file_with_edge_cleanup_is_not_a_traceback(
+    scene: dict[str, Path], tmp_path: Path
+) -> None:
+    """Code review round 2: `--edges` with a clean-up switch on the same file
+    made the clean-up's clip (`feature_input.py`, `clean`) throw on the
+    unrepaired bowtie, on master too. Repaired where the map is built, the
+    run ends with exit 0 and follows the class borders."""
+    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (ARABLE, lone_bowtie())])
+    target = tmp_path / "x.gpkg"
+    run_kept(scene, target, *classes(f), *edges("all"), "--edges-repair", "0.1")
+    with closing(sqlite3.connect(target)) as conn:
+        assert lengths(conn)["land_cover"] > 0
+
+
 def test_10_the_box_first_given_keeps_its_area_and_border(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
