@@ -43,7 +43,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from gil_probe import ticks_during
+from gil_probe import silence_during
 from tin_engine import _core
 from tin_engine.features import DEFAULT_VOCABULARY, MAX_PROPERTIES
 
@@ -747,12 +747,14 @@ class TestTriangulate:
 # --------------------------------------------------------------------------
 
 
-# Thresholds from the control below, measured on CPython 3.14 (arm64): a
-# GIL-holding C call of 0.67 s let through 1 tick; a releasing call of 0.30 s
-# let through ~220. The gap is two orders of magnitude, so the thresholds do
-# not need to be tight.
-HELD_TICKS = 3
-RELEASED_TICKS = 20
+# The longest stretch of a call with no ticker tick, as a fraction of the call
+# (`gil_probe.silence_during`). Measured on CPython 3.14 (arm64), 10 cores, idle
+# and with 14 busy-loop processes: a GIL-holding `sorted` of 0.8-1.0 s stayed
+# at 0.947 or more; `time.sleep(0.3)`, `triangulate` (0.10-0.19 s) and `node`
+# (0.26-0.49 s) at 0.039 or less. Load only lengthens a silence, so the held
+# side cannot drift down; the released bound allows 25 ms of a 0.1 s call.
+HELD_SILENCE = 0.75
+RELEASED_SILENCE = 0.25
 
 
 @pytest.fixture(scope="module")
@@ -799,15 +801,17 @@ class TestGil:
         data = list(range(3_000_000))
         random.Random(12345).shuffle(data)
 
-        _, held, held_elapsed = ticks_during(lambda: sorted(data))
+        _, held, held_elapsed = silence_during(lambda: sorted(data))
         assert held_elapsed >= 0.05, f"control workload too fast ({held_elapsed:.3f}s)"
-        assert held <= HELD_TICKS, f"a GIL-holding call let {held} ticks through"
+        assert held >= HELD_SILENCE, f"a GIL-holding call was silent for only {held:.0%} of it"
 
-        _, released, _ = ticks_during(lambda: time.sleep(0.3))
-        assert released >= RELEASED_TICKS, f"a GIL-releasing call let only {released} ticks through"
+        _, released, _ = silence_during(lambda: time.sleep(0.3))
+        assert released <= RELEASED_SILENCE, (
+            f"a GIL-releasing call was silent for {released:.0%} of it"
+        )
 
     def test_triangulate_releases_the_gil(self, large_pslg: Any) -> None:
-        outcome, ticks, elapsed = ticks_during(lambda: _core.triangulate(large_pslg))
+        outcome, silence, elapsed = silence_during(lambda: _core.triangulate(large_pslg))
         assert outcome.ok(), outcome.message
         # A probe able to fail: if the workload is too fast there is nothing to
         # observe, and this must say so rather than pass on an empty window.
@@ -815,8 +819,8 @@ class TestGil:
             f"triangulation took only {elapsed:.3f}s -- too fast to measure GIL release; "
             "enlarge large_pslg rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: triangulate appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: triangulate appears to hold the GIL"
         )
 
 

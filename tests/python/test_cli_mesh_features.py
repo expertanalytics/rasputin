@@ -289,8 +289,19 @@ class TestRecord:
         chains = [c for c in started.chains if c[1] == "breakline"]
         assert "outside" not in match.string
         assert int(match["n"]) == len(fs.features) == 5
-        assert int(match["c"]) == len(chains)
-        assert int(match["v"]) == len(started.vertices) - len(SQUARE)
+        # The source's own lines and their coordinates (a closed ring
+        # repeats its first point); the joined geometry's go to
+        # features_joined.
+        own_lines = [line for f in fs.features for line in f.lines]
+        assert int(match["c"]) == len(own_lines)
+        assert int(match["v"]) == sum(int(shapely.get_num_coordinates(g)) for g in own_lines)
+        joined = re.fullmatch(
+            r"(\d+) lines?, (\d+) vert(?:ex|ices) after joining shared edges and adding crossings",
+            stats_row(stats, "features_joined"),
+        )
+        assert joined, stats_row(stats, "features_joined")
+        assert int(joined[1]) == len(chains)
+        assert int(joined[2]) == len(started.vertices) - len(SQUARE)
         assert stats_row(stats, "features_crs") == "EPSG:25833"
         assert stats_row(stats, "features_transform").lower() == "none"
         assert "features_notice" not in vtk.field_data

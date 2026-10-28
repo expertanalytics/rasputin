@@ -34,8 +34,8 @@ import numpy.typing as npt
 import pytest
 from numpy.testing import assert_allclose
 
-from gil_probe import ticks_during
-from test_core_cdt import RELEASED_TICKS
+from gil_probe import silence_during
+from test_core_cdt import RELEASED_SILENCE
 from test_core_refine import rough, start
 from test_core_refine_points import X_MIN as PX
 from test_core_refine_points import Y_MAX as PY
@@ -470,7 +470,7 @@ class TestThreads:
         vertices, triangles, z = corner_mesh(array)
         view = view_of(array)
         valid = np.ones(4, bool)
-        results, ticks, elapsed = ticks_during(
+        results, silence, elapsed = silence_during(
             lambda: [
                 error_summary(view, vertices, triangles, z, valid, threads=1) for _ in range(calls)
             ]
@@ -480,8 +480,8 @@ class TestThreads:
             f"{calls} error_summary calls took only {elapsed:.3f}s -- too fast to measure "
             "GIL release; add calls rather than lowering this bound"
         )
-        assert ticks >= RELEASED_TICKS, (
-            f"only {ticks} ticks in {elapsed:.3f}s: error_summary appears to hold the GIL"
+        assert silence <= RELEASED_SILENCE, (
+            f"no tick for {silence:.0%} of {elapsed:.3f}s: error_summary appears to hold the GIL"
         )
 
 
