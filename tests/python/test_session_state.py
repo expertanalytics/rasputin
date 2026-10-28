@@ -311,6 +311,58 @@ def test_recap_with_a_broken_harness_says_so_and_prints_the_rest(
     assert not any(line.startswith("Queued while unattended") for line in lines)
 
 
+# ------------------------------------------------ the load-the-skills line
+#
+# docs/increments/h36-rule-cut.md §3, tests 5-8: the line right after
+# `== recap ==` tells the main session which skills to load, by the mode the
+# recap read; away-mode joins dispatch whenever the guards refuse.
+
+DISPATCH_ONLY = "Main session: load the dispatch skill before your first act."
+DISPATCH_AND_AWAY = "Main session: load the dispatch and away-mode skills before your first act."
+
+
+def _after_recap_heading(lines: list[str]) -> str:
+    return lines[lines.index("== recap ==") + 1]
+
+
+def test_the_skills_line_with_no_flag_names_dispatch_only(harness_repo: Path) -> None:
+    assert _after_recap_heading(_recap(harness_repo)) == DISPATCH_ONLY
+
+
+def test_the_skills_line_while_unattended_names_dispatch_and_away_mode(
+    harness_repo: Path,
+) -> None:
+    harness_fixtures.flag_on(harness_repo)
+    assert _after_recap_heading(_recap(harness_repo)) == DISPATCH_AND_AWAY
+
+
+def test_the_skills_line_with_an_unreadable_flag_names_dispatch_and_away_mode(
+    harness_repo: Path,
+) -> None:
+    harness_fixtures.flag_broken(harness_repo, "not-json")
+    assert _after_recap_heading(_recap(harness_repo)) == DISPATCH_AND_AWAY
+
+
+def test_the_skills_line_after_the_window_ended_names_dispatch_only(harness_repo: Path) -> None:
+    harness_fixtures.flag_expired(harness_repo)
+    assert _after_recap_heading(_recap(harness_repo)) == DISPATCH_ONLY
+
+
+@pytest.mark.parametrize("how", ["missing", "raising"])
+def test_the_skills_line_with_the_state_unknown_names_dispatch_only(
+    harness_repo: Path, how: str
+) -> None:
+    # §3: "otherwise (off, ended, or state unknown)"; the flag is on underneath.
+    harness_fixtures.flag_on(harness_repo)
+    _break_harness(harness_repo, how)
+    assert _after_recap_heading(_recap(harness_repo)) == DISPATCH_ONLY
+
+
+def test_the_skills_line_keeps_last_landed_right_after_it(harness_repo: Path) -> None:
+    lines = _recap(harness_repo)
+    assert lines[lines.index("== recap ==") + 2].startswith("Last landed: ")
+
+
 # ================================================================ h8
 #
 # docs/increments/h8-window-and-recap.md §3.1-§3.7 and test plan §6. Fixture
@@ -728,7 +780,7 @@ def _copy_real_rule_files(repo: Path) -> int:
     """The real checkout's rule files at their paths; how many."""
     real = harness_fixtures.REAL
     paths = [real / p for p in ("CLAUDE.md", ".claude/REQUIRED-READING.md",
-                                "docs/increments/README.md", "docs/PRINCIPLES.md")]  # fmt: skip
+                                "docs/increments/README.md")]  # fmt: skip
     for pattern in RULE_GLOBS:
         paths += sorted(real.glob(pattern))
     for source in paths:

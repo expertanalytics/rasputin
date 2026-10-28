@@ -55,12 +55,11 @@ def test_words_of_empty_or_blank_text_is_zero() -> None:
 
 
 def test_rule_files_are_the_governed_rule_files_in_order() -> None:
-    """h8's four, then h9's brief template (docs/increments/h9-spawn-briefs.md §5)."""
+    """The three rule files, then the brief template (docs/increments/h9-spawn-briefs.md §5)."""
     assert rule_sizes.RULE_FILES == (
         "CLAUDE.md",
         ".claude/REQUIRED-READING.md",
         "docs/increments/README.md",
-        "docs/PRINCIPLES.md",
         ".claude/briefs/common.md",
     )
 
@@ -117,7 +116,7 @@ def test_table_without_a_reference_has_no_change_column() -> None:
 
 # ---------------------------------------------------------------- end to end
 #
-# The fixture: the four rule files, two agents, a nested skill file, committed;
+# The fixture: the three rule files, two agents, a nested skill file, committed;
 # a retrospective added in its own commit (the reference); then CLAUDE.md grown
 # by 12 words, REQUIRED-READING cut by 3, one agent added and one deleted.
 
@@ -128,7 +127,6 @@ STARTING = {
     "CLAUDE.md": "# rules\n" + "word " * 18,  # 20 words
     ".claude/REQUIRED-READING.md": "read " * 30,
     "docs/increments/README.md": "loop " * 15,
-    "docs/PRINCIPLES.md": "principle " * 10,
     ".claude/agents/tester.md": "test " * 8,
     ".claude/agents/old.md": "old " * 7,
     ".claude/skills/py/SKILL.md": "skill " * 6,
@@ -181,15 +179,14 @@ def test_the_script_prints_the_table_against_the_last_retrospective(
     assert row(32, "+12", "CLAUDE.md") in lines
     assert row(27, "-3", ".claude/REQUIRED-READING.md") in lines
     assert row(15, "0", "docs/increments/README.md") in lines
-    assert row(10, "0", "docs/PRINCIPLES.md") in lines
     assert row(5, "new", ".claude/agents/new.md") in lines
     assert row(8, "0", ".claude/agents/tester.md") in lines
     assert row(6, "0", ".claude/skills/py/SKILL.md") in lines
     assert row(4, "0", ".claude/skills/py/ref/deep.md") in lines
     [removed] = [line for line in lines if line.endswith(" .claude/agents/old.md")]
     assert removed.endswith(" removed (was 7) .claude/agents/old.md")
-    # now 32+27+15+10+5+8+6+4 = 107; then 20+30+15+10+8+7+6+4 = 100.
-    assert lines[-1] == row(107, "+7", "total")
+    # now 32+27+15+5+8+6+4 = 97; then 20+30+15+8+7+6+4 = 90.
+    assert lines[-1] == row(97, "+7", "total")
 
 
 def test_the_script_orders_the_rule_files_then_agents_then_skills(
@@ -202,7 +199,6 @@ def test_the_script_orders_the_rule_files_then_agents_then_skills(
         "CLAUDE.md",
         ".claude/REQUIRED-READING.md",
         "docs/increments/README.md",
-        "docs/PRINCIPLES.md",
         ".claude/agents/new.md",
         ".claude/agents/tester.md",
         ".claude/skills/py/SKILL.md",
@@ -226,7 +222,7 @@ def test_a_later_retrospective_moves_the_reference(sized: tuple[Path, str]) -> N
     assert lines[0] == f"Rule text in words, change since 2026-10-02-second.md ({later}):"
     assert row(32, "0", "CLAUDE.md") in lines
     assert not any("old.md" in line for line in lines)
-    assert lines[-1] == row(107, "0", "total")
+    assert lines[-1] == row(97, "0", "total")
 
 
 def test_without_a_retrospective_the_table_has_no_reference(tmp_path: Path) -> None:
@@ -249,7 +245,7 @@ def test_an_uncommitted_edit_counts_because_now_is_the_working_tree(
         out.write("one two three\n")
     lines = sizes(repo)
     assert row(35, "+15", "CLAUDE.md") in lines
-    assert lines[-1] == row(110, "+10", "total")
+    assert lines[-1] == row(100, "+10", "total")
 
 
 def test_without_a_repository_the_counts_print_with_a_git_failed_heading(
@@ -280,7 +276,7 @@ def test_without_a_repository_the_counts_print_with_a_git_failed_heading(
     ]
 
 
-def test_the_brief_template_has_a_row_after_principles_and_is_new_against_an_older_reference(
+def test_the_brief_template_has_a_row_after_the_readme_and_is_new_against_an_older_reference(
     sized: tuple[Path, str],
 ) -> None:
     """h9 test 25: the template, added after the reference, is a `new` row in place."""
@@ -290,4 +286,4 @@ def test_the_brief_template_has_a_row_after_principles_and_is_new_against_an_old
     lines = sizes(repo)
     assert row(9, "new", ".claude/briefs/common.md") in lines
     paths = [line.rsplit(" ", 1)[1] for line in lines[1:-1]]
-    assert paths.index(".claude/briefs/common.md") == paths.index("docs/PRINCIPLES.md") + 1
+    assert paths.index(".claude/briefs/common.md") == paths.index("docs/increments/README.md") + 1
