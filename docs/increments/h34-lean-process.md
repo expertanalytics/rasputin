@@ -177,7 +177,7 @@ PR run (`CLAUDE.md` §4), so the steps cannot be skipped. Base
 job already fetches:
 
 - **Lane:** new `tools/check_lane.py <base> <head>`, stdlib only. It lists
-  `git diff --name-only <base>...<head>`; if a path starts with a
+  `git diff --name-only --no-renames <base>...<head>` (a move lists both paths); if a path starts with a
   `FULL_LANE` entry and none matches `docs/increments/<name>.md` (one level,
   `README.md` excluded), it prints each such path and exits 1. A git failure
   exits 2, also red. About 30 counted lines.
@@ -239,7 +239,7 @@ Fixture times are UTC; `NOW = 2026-10-27T18:00Z`.
     plus `docs/increments/99-x.md` exits 0; plus only
     `docs/increments/README.md` exits 1; `src_python/tin_engine/cli.py`
     alone exits 0; `src_python/tin_engine/crs.py` alone exits 1; an unknown
-    base exits 2.
+    base exits 2; moving include/terrain/core/a.hpp to src_python/a.hpp alone exits 1.
 12. `count_loc.py --max`: a scratch branch adding 701 counted lines exits 1
     with the `over 700` line; 700 exits 0; without `--max` the 701-line
     branch exits 0 as today.
@@ -523,3 +523,5 @@ with the same counts.
 
 - Design round 1: CHANGES REQUESTED, 662022b0..950be83d, 0 net production lines (short-path checks on the estimate only; future log stamps; fixes waiting a week; Ola not quoted).
 - Design round 2: APPROVED, ..f00e7bb1, 0.
+- Design round 3: CHANGES REQUESTED, ..caad7472, 0 (lane not enforced by path; noding and core outside the full lane; no 700-line owner in the fast lane; a false table claim; Ola only relayed).
+- Design round 4: APPROVED WITH WORDINGS, ..10707382, 0; the two wordings applied in this commit.
