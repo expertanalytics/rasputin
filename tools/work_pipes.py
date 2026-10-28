@@ -41,6 +41,9 @@ RANK = {"review": 0, "green": 1, "red": 2, "designing": 3}  # nearest to merging
 STATES = ("queued", *RANK, "waiting", "merged", "parked", "dropped")
 IDLE = "IDLE: no runnable item in any pipe"
 NOTE = re.compile(r"^[^-]+-(.+)-\d{6}\.md$")
+NUMBER = re.compile(r"\d+\.\d+")  # `<pipe>.<position>`, as `numbers` gives them
+#: Chosen: the pipes Ola names most, in his order; any other follows, by name.
+PIPE_NUMBERS = {"mesh": 1, "lsm": 2, "harness": 3}
 Run = Callable[[list[str]], tuple[int, str]]
 
 
@@ -279,23 +282,21 @@ def _owed(repo: Path) -> list[str]:
     return [found] if found else []
 
 
-def _next_line(choice: Choice) -> str:
+def _next_line(choice: Choice, nums: dict[str, str]) -> str:
     i = choice.item
-    return f"next: {i.pipe}/{i.id} {i.state} ({choice.reason})" if i else IDLE
+    return f"next: {nums[i.id]} {i.pipe}/{i.id} {i.state} ({choice.reason})" if i else IDLE
 
 
 def _cell(text: str, width: int) -> str:
     return (text if len(text) < width else text[: width - 4] + "...").ljust(width)
 
 
-WIDTHS = (5, 8, 4, 30, 10, 12, 11)
-HEADS = ("", "PIPE", "PRI", "ITEM", "STEP", "WAITING ON", "SINCE")
+WIDTHS = (6, 5, 8, 4, 30, 10, 12, 11)
+HEADS = ("#", "", "PIPE", "PRI", "ITEM", "STEP", "WAITING ON", "SINCE")
 
 
-def show_lines(repo: Path, now: datetime) -> list[str]:
-    """The recap's table of every open item, its questions, and the next choice."""
-    state = gather(repo)
-    choice, notes, unattended = _choose(state, now)
+def _show_order(state: State, now: datetime) -> list[Item]:
+    """The open items in flight, waiting or queued: stuck first, then by pipe and step."""
     items, pri = _open(state.items), _priorities(state.pipes)
     late = {i.id: n for n, i in enumerate(stuck(items, now))}
     place = {key: n for n, key in enumerate(items)}
@@ -305,7 +306,32 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
         return (late.get(i.id, len(late)), pri.get(i.pipe, 99), group, i.rank,
                 i.since if i.state in RANK else now, place[i.id])  # fmt: skip
 
-    rows = sorted((i for i in items.values() if i.state in (*RANK, "waiting", "queued")), key=key)
+    return sorted((i for i in items.values() if i.state in (*RANK, "waiting", "queued")), key=key)
+
+
+def numbers(state: State, now: datetime) -> dict[str, str]:
+    """Item id to `<pipe>.<position>`: the position counts its pipe's rows in `show` order.
+
+    A number names an item for as long as nothing moves or closes; it is a handle
+    for typing, never stored.
+    """
+    rows = _show_order(state, now)
+    others = sorted(({p.name for p in state.pipes} | {i.pipe for i in rows}) - set(PIPE_NUMBERS))
+    pipe_no = PIPE_NUMBERS | {name: len(PIPE_NUMBERS) + n for n, name in enumerate(others, 1)}
+    found, count = dict[str, str](), dict.fromkeys(pipe_no, 0)
+    for i in rows:
+        count[i.pipe] += 1
+        found[i.id] = f"{pipe_no[i.pipe]}.{count[i.pipe]}"
+    return found
+
+
+def show_lines(repo: Path, now: datetime) -> list[str]:
+    """The recap's table of every open item, its questions, and the next choice."""
+    state = gather(repo)
+    choice, notes, unattended = _choose(state, now)
+    items, pri = _open(state.items), _priorities(state.pipes)
+    late = {i.id for i in stuck(items, now)}
+    rows, nums = _show_order(state, now), numbers(state, now)
     asked = _asked(state)
     unreadable = [f"{state.unreadable} unreadable"] * bool(state.unreadable)
     head = "; ".join([f"in flight {in_flight(items)} of {CAP}", *state.notes, *unreadable])
@@ -320,14 +346,14 @@ def show_lines(repo: Path, now: datetime) -> list[str]:
         nxt = (f"question {asked[i.id]} below" if i.id in asked
                else " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""])))  # fmt: skip
         since += " stuck" if i.id in late else ""
-        cells = ("next" if i == choice.item else "", i.pipe, str(pri.get(i.pipe, "-")),
+        cells = (nums[i.id], "next" if i == choice.item else "", i.pipe, str(pri.get(i.pipe, "-")),
                  f"{i.id} {i.title}", i.state, who, since)  # fmt: skip
         lines.append(("".join(map(_cell, cells, WIDTHS)) + nxt)[:120].rstrip())
     if block := questions.list_lines(state.asked):
         lines.append("Questions for Ola:")
     for line in block:
         lines += textwrap.wrap(line, 120, subsequent_indent="   ")
-    lines.append(_next_line(choice))
+    lines.append(_next_line(choice, nums))
     return lines[:40] + ([f"... {len(lines) - 40} more"] if len(lines) > 40 else [])
 
 
@@ -336,10 +362,10 @@ def _md(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def _waits_on(state: State, item: Item, numbers: dict[str, int], running: set[str]) -> str:
+def _waits_on(state: State, item: Item, asked: dict[str, int], running: set[str]) -> str:
     """What `item` really waits for: Ola's answer, a running agent, or a free writer."""
-    if item.id in numbers:
-        return f"Ola (question {numbers[item.id]})"
+    if item.id in asked:
+        return f"Ola (question {asked[item.id]})"
     held = [r for r in state.asked if r["state"] == "held" and r.get("item") == item.id]
     if held or item.state == "waiting":
         return "Ola (a held question)" if held else "Ola"
@@ -351,28 +377,30 @@ def markdown_lines(repo: Path, now: datetime) -> list[str]:
     state = gather(repo)
     choice, _, _ = _choose(state, now)
     items, pri = _open(state.items), _priorities(state.pipes)
-    numbers = _asked(state)
+    asked = _asked(state)
     running = {branch.removeprefix("worktree-") for branch in _notes(state.tasks)}
-    nxt = choice.item
-    taken = f"**{nxt.id}** {_md(nxt.title)} ({nxt.pipe}, {choice.reason})" if nxt else IDLE
+    nxt, nums = choice.item, numbers(state, now)
+    show_place = {i.id: n for n, i in enumerate(_show_order(state, now))}
+    taken = IDLE
+    if nxt:
+        taken = f"{nums[nxt.id]} **{nxt.id}** {_md(nxt.title)} ({nxt.pipe}, {choice.reason})"
     lines = [f"In flight {in_flight(items)} of {CAP}. A free writer takes next: {taken}."]
     lines += [f"> {w}" for w in state.warnings]
-    place = {key: n for n, key in enumerate(items)}
     group = {**RANK, "waiting": 4, "queued": 5}
     names = sorted({p.name for p in state.pipes} | {i.pipe for i in items.values()},
                    key=lambda name: (pri.get(name, 99), name))  # fmt: skip
     for name in names:
         rows = sorted((i for i in items.values() if i.pipe == name and i.state in group),
-                      key=lambda i: (group[i.state], i.rank, place[i.id]))  # fmt: skip
+                      key=lambda i: show_place[i.id])  # fmt: skip
         lines += ["", f"### {name}", ""]
         if not rows:
             lines.append("No open items.")
             continue
-        lines += ["| Item | Step | Waiting on | Next |", "|---|---|---|---|"]
+        lines += ["| # | Item | Step | Waiting on | Next |", "|---|---|---|---|---|"]
         for i in rows:
             todo = " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""]))
-            cells = (f"**{_md(i.id)}** {_md(i.title)}", i.state,
-                     _waits_on(state, i, numbers, running), _md(todo))  # fmt: skip
+            cells = (nums[i.id], f"**{_md(i.id)}** {_md(i.title)}", i.state,
+                     _waits_on(state, i, asked, running), _md(todo))  # fmt: skip
             lines.append("| " + " | ".join(cells) + " |")
     block = questions.list_lines(state.asked)
     numbered = [line for line in block if line[:1].isdigit()]
@@ -398,7 +426,10 @@ def _append(st: State, item: Item, now: datetime, **change: Any) -> None:
         out.write(json.dumps(record) + "\n")
 
 
-def _item(state: State, ident: str) -> Item:
+def _item(state: State, ident: str, now: datetime) -> Item:
+    """The open item with id `ident`, or with number `ident` in `show` order."""
+    if ident not in state.items and NUMBER.fullmatch(ident):
+        ident = {n: k for k, n in numbers(state, now).items()}.get(ident, ident)
     found = state.items.get(ident)
     if found is None or found.state == "pipe":
         raise RefusedError(f"pipes: no item {ident}")
@@ -417,6 +448,8 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
     if args.cmd == "add":
         if args.fallback and args.governed:
             raise RefusedError("pipes: --fallback with --governed: a fallback is plain")
+        if NUMBER.fullmatch(args.id):
+            raise RefusedError(f"pipes: id {args.id} has the shape of an item number")
         if args.id in state.items:
             raise RefusedError(f"pipes: id {args.id} is taken in pipe {state.items[args.id].pipe}")
         _pipe_record(state, args.pipe, now)
@@ -424,7 +457,7 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
                 title=args.title, next=args.next or "", plain=args.plain or args.fallback,
                 fallback=args.fallback)  # fmt: skip
     elif args.cmd == "set":
-        item, change = _item(state, args.id), {"state": args.state}
+        item, change = _item(state, args.id, now), {"state": args.state}
         change |= {k: v for k in ("branch", "pr", "next") if (v := getattr(args, k)) is not None}
         if args.plain or args.governed:
             change["plain"] = args.plain
@@ -435,14 +468,15 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
             _append(state, _pipe_record(state, name, now), now, priority=int(value),
                     priority_words=args.words)  # fmt: skip
     elif args.cmd == "top":
-        item = _item(state, args.id)
+        item = _item(state, args.id, now)
         ranks = [i.rank for i in _open(state.items).values() if i.pipe == item.pipe]
         _append(state, item, now, rank=min(ranks) - 1)
     elif args.cmd == "next":
         choice, notes, _ = _choose(state, now)
         flying = [i for i in _open(state.items).values() if i.state in RANK and i.branch in notes]
-        return [f"busy: {i.pipe}/{i.id} ({notes[str(i.branch)]})" for i in flying] + [
-            _next_line(choice),
+        nums = numbers(state, now)
+        return [f"busy: {nums[i.id]} {i.pipe}/{i.id} ({notes[str(i.branch)]})" for i in flying] + [
+            _next_line(choice, nums),
             *([] if choice.item else _owed(repo)),
         ]
     elif getattr(args, "markdown", False):

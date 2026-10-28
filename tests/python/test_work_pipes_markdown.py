@@ -9,6 +9,7 @@ repository, so the real live lists are never read.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -20,7 +21,7 @@ from harness_fixtures import git, make_repo, run_script
 
 pytestmark = pytest.mark.harness
 
-HEAD = "| Item | Step | Waiting on | Next |"
+HEAD = "| # | Item | Step | Waiting on | Next |"
 
 
 def ok(repo: Path, script: str, *args: str) -> str:
@@ -80,11 +81,13 @@ def section(lines: list[str], heading: str) -> list[str]:
 
 
 def rows(lines: list[str]) -> list[list[str]]:
-    """The table rows of a section, split on unescaped `|`, the head and rule dropped."""
+    """The table rows of a section, split on unescaped `|`, the head, rule and number dropped."""
     found = [line for line in lines if line.startswith("|")]
     assert found[0] == HEAD and set(found[1]) <= set("|- :"), found
     split = [line.replace("\\|", "\0").strip("|").split("|") for line in found[2:]]
-    return [[cell.strip().replace("\0", "\\|") for cell in row] for row in split]
+    cells = [[cell.strip().replace("\0", "\\|") for cell in row] for row in split]
+    assert all(re.fullmatch(r"\d+\.\d+", row[0]) for row in cells), cells
+    return [row[1:] for row in cells]
 
 
 def test_one_section_per_pipe_with_open_items_in_flight_first(repo: Path) -> None:
