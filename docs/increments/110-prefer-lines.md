@@ -145,3 +145,7 @@ no refine or mesh code changes, and `tools/bench.py`'s cases pass no
 `--prefer`, so their runs are the same by construction. Left out: reading the
 preferred source once for both uses, and `--prefer` changing a `--features`
 source other than the land cover's own file.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, aabac548..ae9e9197, 0 (old shoreline survives with merge off; polygons with no fid; two false sentences on the simplifier and on "exactly").
