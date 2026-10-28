@@ -906,3 +906,50 @@ def test_h29_1_only_the_reviewer_block_demands_the_review_line(
     else:
         assert collapsed(line) not in body, body
         assert "`Review:" not in body, body
+
+
+# ---------------------------------------------------------------- h34 test 10, the fast lane
+#
+# docs/increments/h34-lean-process.md section 3: `--lane fast` is accepted for
+# `developer` only; it needs no `--increment`, and its write limit adds
+# `tests/`, since one developer writes the test and the fix. Without the flag
+# nothing changes.
+
+FAST = ("--lane", "fast")
+
+
+def test_h34_10_a_fast_lane_developer_needs_no_increment(repo: Path, home: Path) -> None:
+    output = ok(repo, home, "developer", "--worktree", str(repo), "--beside", "none", *FAST)
+    assert not any(line.startswith("From ") for line in output.splitlines()), output
+
+
+def test_h34_10_the_fast_lane_developer_write_limit_adds_tests(repo: Path, home: Path) -> None:
+    output = ok(repo, home, "developer", "--worktree", str(repo), "--beside", "none", *FAST)
+    line = line_starting(output, "Write limit:")
+    assert "tests/" in line, line
+    for fragment in WRITE_LIMITS["developer"]:
+        assert fragment in line, line
+    assert line.endswith("and your note file."), line
+
+
+def test_h34_10_without_the_flag_the_developer_write_limit_has_no_tests(
+    repo: Path, home: Path
+) -> None:
+    line = line_starting(ok(repo, home, *args_for("developer", repo)), "Write limit:")
+    assert "tests/" not in line, line
+
+
+def test_h34_10_without_the_flag_a_developer_still_needs_an_increment(
+    repo: Path, home: Path
+) -> None:
+    refused(repo, home, "developer", "--worktree", str(repo), "--beside", "none",
+            says="@developer needs --increment")  # fmt: skip
+
+
+@pytest.mark.parametrize("persona", [p for p in PERSONAS if p != "developer"])
+def test_h34_10_the_fast_lane_is_refused_for_any_other_persona(
+    repo: Path, home: Path, persona: str
+) -> None:
+    """The reason is pinned, not just the flag: argparse's own refusal of an
+    unknown option also names `--lane fast`."""
+    refused(repo, home, *args_for(persona, repo, *FAST), says="--lane fast is for @developer only")

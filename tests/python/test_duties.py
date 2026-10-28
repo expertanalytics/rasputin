@@ -3,9 +3,11 @@
 Spec: docs/increments/h23-duties.md. Section 7 lists these tests by number;
 each block below carries its number. docs/increments/h34-lean-process.md
 replaces the research round by the weekly retrospective and adds the lessons
-log (`logged`, `lessons_path`); its section 4 tests are the `h34` blocks at the
-end, and the older tests it amends say so. The pure functions (`window_ends`,
-`owed`, `render`) get synthetic inputs; `gather`, `main` and the recap run
+log (`logged`, `lessons_path`), and owes a post-merge check only for a merge
+with a `docs/increments/` path (a full-lane merge); its section 4 tests are the
+`h34` blocks at the end, and the older tests it amends say so. The pure
+functions (`window_ends`, `owed`, `render`) get synthetic inputs; `gather`,
+`main` and the recap run
 against git repositories and away logs built under `tmp_path`, never the
 real away state. `tools/` is not a package, so the module is loaded from its
 path, inside each test, so a missing module fails the test naming the file.
@@ -155,17 +157,21 @@ def test_two_windows_count_and_name_the_latest_end() -> None:
 # ---------------------------------------------------------------- test 3, D1
 
 CODE = "src_python/tin_engine/x.py"
+#: A full-lane merge carries its increment file; only such a merge owes a
+#: post-merge check (h34 section 3; a code-only merge is fast-lane, h34 test 9).
+INCREMENT = "docs/increments/46-x.md"
+FULL = (CODE, INCREMENT)
 
 
 def test_a_merge_one_second_after_r_owes_a_post_merge_check() -> None:
-    one = merge(R + timedelta(seconds=1), "#280", CODE)
+    one = merge(R + timedelta(seconds=1), "#280", *FULL)
     assert duties.owed(inputs(retro=R, merges=[one]), NOW) == [
         "post-merge check (1 merge since the last log entry, 2026-10-17 06:40 UTC: #280)"
     ]
 
 
 def test_a_merge_one_second_before_r_owes_nothing() -> None:
-    one = merge(R - timedelta(seconds=1), "#279", CODE)
+    one = merge(R - timedelta(seconds=1), "#279", *FULL)
     assert duties.owed(inputs(retro=R, merges=[one]), NOW) == []
 
 
@@ -187,7 +193,7 @@ def test_a_check_recording_merge_owes_nothing(paths: tuple[str, ...]) -> None:
     "paths",
     [
         pytest.param(("ROADMAP.md", "docs/increments/46-x.md"), id="shape-of-237"),
-        pytest.param(("docs/retrospectives/x.md", CODE), id="retrospective-and-code"),
+        pytest.param(("docs/retrospectives/x.md", *FULL), id="retrospective-and-code"),
     ],
 )
 def test_a_merge_that_is_not_check_recording_owes(paths: tuple[str, ...]) -> None:
@@ -199,7 +205,7 @@ def test_a_merge_that_is_not_check_recording_owes(paths: tuple[str, ...]) -> Non
 
 def test_five_merges_list_the_newest_three_and_the_rest_as_a_count() -> None:
     # Newest first, the order `git log` gives.
-    five = [merge(R + timedelta(minutes=10 * n), f"#{n}", CODE) for n in (5, 4, 3, 2, 1)]
+    five = [merge(R + timedelta(minutes=10 * n), f"#{n}", *FULL) for n in (5, 4, 3, 2, 1)]
     assert duties.owed(inputs(retro=R, merges=five), NOW) == [
         "post-merge check (5 merges since the last log entry, 2026-10-17 06:40 UTC: #5, #4, #3, +2)"
     ]
@@ -207,7 +213,7 @@ def test_five_merges_list_the_newest_three_and_the_rest_as_a_count() -> None:
 
 def test_the_last_retrospective_time_prints_in_utc_whatever_its_offset() -> None:
     oslo = datetime(2026, 10, 17, 11, 40, tzinfo=timezone(timedelta(hours=2)))
-    one = merge(oslo + timedelta(minutes=5), "#280", CODE)
+    one = merge(oslo + timedelta(minutes=5), "#280", *FULL)
     assert duties.owed(inputs(retro=oslo, merges=[one]), NOW) == [
         "post-merge check (1 merge since the last log entry, 2026-10-17 09:40 UTC: #280)"
     ]
@@ -215,7 +221,7 @@ def test_the_last_retrospective_time_prints_in_utc_whatever_its_offset() -> None
 
 def test_with_no_baseline_on_record_a_merge_owes_and_says_so() -> None:
     """h34 amends: no retrospective and no log entry; the weekly item is owed too."""
-    one = merge(R, "#280", CODE)
+    one = merge(R, "#280", *FULL)
     assert duties.owed(inputs(retro=None, logged=None, merges=[one]), NOW) == [
         "post-merge check (no log entry on record)",
         "weekly retrospective (none on record)",
@@ -255,7 +261,7 @@ def _golden_inputs() -> Any:
     return inputs(
         retro=None,
         logged=R,
-        merges=[merge(utc("2026-10-17", "10:15"), "#280", CODE)],
+        merges=[merge(utc("2026-10-17", "10:15"), "#280", *FULL)],
         windows=[_window("2026-10-16T23:24:03+00:00", "2026-10-17T06:45:45+00:00")],
         unmerged=UNMERGED,
     )
@@ -311,6 +317,9 @@ TM2 = utc("2026-10-04", "09:00")  # retrospective-only merge #12 (retro-b)
 T3 = utc("2026-10-05", "09:00")  # docs/retrospectives/next.md, branch agenda
 T4 = utc("2026-10-06", "09:00")  # a check only on origin/master
 RETRO = "docs/retrospectives/2026-10-02-a.md"
+#: The code merges are full-lane: each carries its increment file (h34 section 3).
+INC11 = {"docs/increments/11-code.md": "# 11\n"}
+INC12 = {"docs/increments/12-other.md": "# 12\n"}
 
 
 def git(repo: Path, *args: str) -> str:
@@ -379,10 +388,15 @@ def test_gather_reads_retrospective_times_merges_and_unmerged_branches(tmp_path:
     git(repo, "checkout", "-q", "-b", "retro-b", root)
     commit(repo, T2, "Retrospective a, carried (@orchestrator)", {RETRO: "# a\n"})
     git(repo, "checkout", "-q", "-b", "code", root)
-    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n"})
+    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
     merge_into_master(repo, TM1, "code", "Merge pull request #11 from x/code")
     git(repo, "checkout", "-q", "-b", "feat2", "master")
-    commit(repo, TM1B - timedelta(minutes=30), "Other (@developer)", {"src/other.py": "y = 1\n"})
+    commit(
+        repo,
+        TM1B - timedelta(minutes=30),
+        "Other (@developer)",
+        {"src/other.py": "y = 1\n", **INC12},
+    )
     bare = merge_into_master(repo, TM1B, "feat2", "Merge branch 'feat2'")
     fetched(repo)
 
@@ -428,7 +442,7 @@ def test_gather_without_origin_master_reads_master(tmp_path: Path) -> None:
     repo = new_repo(tmp_path / "g")
     commit(repo, T1, "Retrospective a (@orchestrator)", {RETRO: "# a\n"})
     git(repo, "checkout", "-q", "-b", "code")
-    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n"})
+    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
     merge_into_master(repo, TM1, "code", "Merge pull request #11 from x/code")
 
     found = duties.gather(repo, False)
@@ -654,10 +668,11 @@ def test_h34_2_a_stamp_equal_to_now_counts() -> None:
 # ---------------------------------------------------------------- h34 tests 3 and 4, post-merge
 
 MERGES34 = [  # newest first, as `git log` gives them
-    merge(utc("2026-10-27", "13:00"), "#382", CODE),
-    merge(utc("2026-10-27", "11:00"), "#381", CODE),
+    merge(utc("2026-10-27", "13:00"), "#382", *FULL),
+    merge(utc("2026-10-27", "11:00"), "#381", *FULL),
 ]
 AFTER_NOON = "post-merge check (1 merge since the last log entry, 2026-10-27 12:00 UTC: #382)"
+RECENT34 = utc("2026-10-21", "10:00")  # a retrospective under a week old at NOW34
 
 
 def test_h34_3_merges_after_the_log_entry_are_owed() -> None:
@@ -684,6 +699,36 @@ def test_h34_4_with_neither_no_log_entry_is_on_record() -> None:
         "post-merge check (no log entry on record)",
         "weekly retrospective (none on record)",
     ]
+
+
+# ---------------------------------------------------------------- h34 test 9, fast lane
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        pytest.param((CODE,), id="python-code"),
+        pytest.param(("include/terrain/cdt/x.hpp", "tests/cpp/x.cpp"), id="core-code-and-tests"),
+        pytest.param(("tools/duties.py", "ROADMAP.md"), id="tool-and-roadmap"),
+        pytest.param(("docs/increments.md", "docs/x.md"), id="docs-but-not-increments"),
+    ],
+)
+def test_h34_9_a_merge_with_no_increment_path_owes_no_post_merge_check(
+    paths: tuple[str, ...],
+) -> None:
+    """A fast-lane merge, after the baseline, owes nothing; the full-lane one
+    beside it still does, alone."""
+    fast = merge(utc("2026-10-27", "14:00"), "#383", *paths)
+    found = inputs(retro=RECENT34, logged=utc("2026-10-27", "12:00"),
+                   merges=[fast, *MERGES34])  # fmt: skip
+    assert duties.owed(found, NOW34) == [AFTER_NOON]
+    alone = inputs(retro=RECENT34, logged=utc("2026-10-27", "12:00"), merges=[fast])
+    assert duties.owed(alone, NOW34) == []
+
+
+def test_h34_9_with_no_baseline_a_fast_lane_merge_alone_owes_no_post_merge_check() -> None:
+    found = inputs(retro=None, logged=None, merges=[merge(NOW34, "#383", CODE)])
+    assert duties.owed(found, NOW34) == ["weekly retrospective (none on record)"]
 
 
 # ---------------------------------------------------------------- h34 test 5, morning
@@ -766,10 +811,10 @@ def test_h34_7_gather_reads_the_log_from_a_worktree_and_starts_the_merge_query_t
     (tmp_path / "checkouts").mkdir()
     main = new_repo(tmp_path / "checkouts" / "rasputin")
     git(main, "checkout", "-q", "-b", "code")
-    commit(main, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n"})
+    commit(main, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
     merge_into_master(main, TM1, "code", "Merge pull request #11 from x/code")
     git(main, "checkout", "-q", "-b", "code2")
-    commit(main, TM2 - timedelta(hours=1), "More (@developer)", {"src/more.py": "y = 1\n"})
+    commit(main, TM2 - timedelta(hours=1), "More (@developer)", {"src/more.py": "y = 1\n", **INC12})
     merge_into_master(main, TM2, "code2", "Merge pull request #12 from x/code2")
     fetched(main)
     tree = harness_fixtures.add_worktree(main, tmp_path / "elsewhere" / "wt", "wt")

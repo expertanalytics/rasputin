@@ -20,6 +20,7 @@ missing every test that touches it fails naming `tools/count_loc.py`.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -836,3 +837,60 @@ def test_env_drops_config_given_in_the_environment(monkeypatch: pytest.MonkeyPat
     assert env["RASPUTIN_UNRELATED"] == "kept"
     assert env["GIT_CONFIG_KEYS"] == "not git's"
     assert env["GIT_CONFIG_GLOBAL"] == os.devnull
+
+
+# ---------------------------------------------------------------- h34 test 12, --max
+#
+# docs/increments/h34-lean-process.md §3 and §4 test 12: with `--max N`, a net
+# total over N prints `count_loc: <total> net lines, over <N>` after the usual
+# output and exits 1. CI runs it with `--max 700`, the ceiling of CLAUDE.md §2.
+
+
+def sized_repo(root: Path, added: int, removed: int = 0) -> Path:
+    """A branch adding `added` counted Python lines and removing `removed`."""
+    gone = "".join(f"r{n} = {n}\n" for n in range(removed))
+    base = {"src/keep.py": "k = 1\n", **({"src/gone.py": gone} if removed else {})}
+    repo = make_counted_repo(root, base)
+    files: dict[str, str | None] = {"src/big.py": "".join(f"v{n} = {n}\n" for n in range(added))}
+    if removed:
+        files["src/gone.py"] = None
+    commit_files(repo, files, "sized")
+    return repo
+
+
+OVER_700 = re.compile(r"^count_loc: 701 net lines, over 700$", re.MULTILINE)
+
+
+def test_h34_12_701_net_lines_with_max_700_exit_1_saying_over(tmp_path: Path) -> None:
+    repo = sized_repo(tmp_path.resolve() / "repo", 701)
+    plain = run_count(repo, "HEAD~1", "HEAD")
+    assert parse_report(plain).total == (701, 0, 701)
+    capped = run_count(repo, "HEAD~1", "HEAD", "--max", "700")
+    assert capped.returncode == 1, f"exit {capped.returncode}; stderr: {capped.stderr}"
+    assert OVER_700.search(capped.stdout + capped.stderr), capped.stdout + capped.stderr
+    assert capped.stdout.startswith(plain.stdout), "the usual output does not come first"
+
+
+def test_h34_12_700_net_lines_with_max_700_exit_0(tmp_path: Path) -> None:
+    repo = sized_repo(tmp_path.resolve() / "repo", 700)
+    plain = run_count(repo, "HEAD~1", "HEAD")
+    capped = run_count(repo, "HEAD~1", "HEAD", "--max", "700")
+    assert capped.returncode == 0, f"exit {capped.returncode}; stderr: {capped.stderr}"
+    assert capped.stdout == plain.stdout
+    assert "over" not in capped.stderr, capped.stderr
+
+
+def test_h34_12_the_ceiling_is_on_the_net_total(tmp_path: Path) -> None:
+    """701 added and 1 removed is 700 net: under the ceiling."""
+    repo = sized_repo(tmp_path.resolve() / "repo", 701, removed=1)
+    plain = run_count(repo, "HEAD~1", "HEAD")
+    assert parse_report(plain).total == (701, 1, 700)
+    capped = run_count(repo, "HEAD~1", "HEAD", "--max", "700")
+    assert capped.returncode == 0, f"exit {capped.returncode}; stderr: {capped.stderr}"
+
+
+def test_h34_12_without_max_701_net_lines_exit_0_as_before(tmp_path: Path) -> None:
+    repo = sized_repo(tmp_path.resolve() / "repo", 701)
+    result = run_count(repo, "HEAD~1", "HEAD")
+    assert result.returncode == 0, result.stderr
+    assert not OVER_700.search(result.stdout + result.stderr)
