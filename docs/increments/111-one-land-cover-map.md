@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, approved in design review round 6; section 8 (the Python interface and the wordings tests read) added for the test migration** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: built** (red `bce16583`, green `a8246816`, code review round 1's fixes `6cd8bea3` and `77b3def6`; at `77b3def6`, 19 net production lines, 1,057 added and 1,038 removed, by `tools/count_loc.py 75ab2b4f 77b3def6`; full suite 11,232 passed, 18 skipped, 1 xfailed; README, INSTALL, GLOSSARY and `project_structure.md` reworded; next `@reviewer`'s code review round 2). Designed, approved in design review round 6, section 8 (the Python interface and the wordings tests read) added for the test migration, by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -71,7 +71,7 @@ and fetches none.
 |---|---|
 | `mesh --features` (repeatable) | **deleted**: class polygons go to `--land-cover` (repeatable, section 3), lakes and glaciers to `--prefer`, rivers and roads to `--lines` |
 | `--features-crs`, `--features-layer` (paired, repeatable) | `--land-cover-crs`, `--land-cover-layer`: one value each, for every `--land-cover` file. No layer or CRS option for `--prefer` or `--lines` files: none of the 732 recorded runs gives one (section 3) |
-| `--features-rules`, built-in `property` (also `--features`' default, `cli.py:991`; `source_report.py:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. No recorded run uses `property` or `--features` without rules (732 commands) |
+| `--features-rules`, built-in `property` (also `--features`' default, `src_python/tin_engine/cli.py@75ab2b4f:991`; `src_python/tin_engine/source_report.py@75ab2b4f:384`) | **deleted**: what classes mean is `--land-cover-classes`, what the mesh follows `--edges`. No recorded run uses `property` or `--features` without rules (732 commands) |
 | a mesh's own `lines` layer fed back (`--features <mesh>.gpkg --features-layer lines` with rules on its `land_cover` and `water` columns; Ola's Sula runs of 27 October at 1, 2, 5, 10 and 20 m) | **no route**: the direct command gives the same borders and the same shares (section 4, two-stage probe) |
 | `--features-repair`, `--[no-]features-merge-same-class`, `--features-tolerance`, `--features-outline-snap` | `--edges-repair`, `--[no-]edges-merge-same-class`, `--edges-tolerance`, `--edges-outline-snap`; same meanings; defaults from the land-cover class file's accuracy, as for a coded source today. `--edges-tolerance` also works without `--land-cover`: it sets the `--catchments` and `--simplify-domain` band, as `--features-tolerance` does today |
 | `--land-cover`, `--land-cover-year` | kept; `--land-cover`, now repeatable, says what is on the ground, and gives the shares unless the run follows class borders without `--shares` (section 3) |
@@ -79,7 +79,7 @@ and fetches none.
 | `--prefer` | kept, area keys only (lake, glacier), still needs `--land-cover`; its sentence on `--features` lines deleted |
 | (none) | `--lines KEY=SOURCE`, repeatable: rivers, roads and the other line kinds, with or without `--land-cover` (section 3) |
 | (none) | `--shares`: the shares as well, in a run that follows class borders (section 3) |
-| `--reservoirs`, `--catchments`: "needs --land-cover with meshing rules and a .gpkg output" (`cli.py:1689`) | unchanged without class borders in `--edges`; with them, also "needs --shares" |
+| `--reservoirs`, `--catchments`: "needs --land-cover with meshing rules and a .gpkg output" (`src_python/tin_engine/cli.py@75ab2b4f:1689`) | unchanged without class borders in `--edges`; with them, also "needs --shares" |
 | (none) | `--edges SELECTOR`, repeatable (section 3) |
 | `RENAMED`, `_RenamedOptions` (`--features-legend`, `--land-cover-legend`) | **deleted**: their targets go |
 | meshing-rules files (`data/meshing_rules/`, `meshing_rules.py`, "meshing rules" in help and docs) | **land-cover class files**: `data/land_cover_classes/`, `land_cover_classes.py` (beside `land_cover_fractions.py`), "land-cover class file" |
@@ -87,8 +87,8 @@ and fetches none.
 | `unlisted = "land"` | `unlisted = "keep"`; `drop`, `refuse` kept; `code_system` required |
 | `water`, `[cells]`, `[[split]]`, `codes`, `accept_no_class`, `positional_accuracy_m`, `notice`, `licence`, `legend`, `name`, `attribute` | kept |
 | `corine-water.toml` | **deleted**: `--edges water` |
-| catalogue key `rules =` (shipped `sources.toml`: 2 entries; Ola's `~/.config/rasputin/sources.toml`: 15, all `"ar50"`) | `classes =` (Ola, question 1: rename); `rules` becomes an unknown key, refused (`extra="forbid"`, `sources.py:106`). The shipped file changes in the PR. Ola's own file is outside the tree: the main session edits it (`rules =` to `classes =`, 15 lines, a `.bak` copy first) with Ola's yes, right after the merge and the main checkout's fast-forward, before any command or MCP server reads it again; the PR description says so |
-| `sources.py:152`: a `legend` key refused, naming `rules` | **deleted**: an unknown key, refused like any other |
+| catalogue key `rules =` (shipped `sources.toml`: 2 entries; Ola's `~/.config/rasputin/sources.toml`: 15, all `"ar50"`) | `classes =` (Ola, question 1: rename); `rules` becomes an unknown key, refused (`extra="forbid"`, `src_python/tin_engine/sources.py@75ab2b4f:106`). The shipped file changes in the PR. Ola's own file is outside the tree: the main session edits it (`rules =` to `classes =`, 15 lines, a `.bak` copy first) with Ola's yes, right after the merge and the main checkout's fast-forward, before any command or MCP server reads it again; the PR description says so |
+| `src_python/tin_engine/sources.py@75ab2b4f:152`: a `legend` key refused, naming `rules` | **deleted**: an unknown key, refused like any other |
 | record `features`, `features_joined` | `edges`, `edges_joined` |
 | record `features_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` | `land_cover_crs`, `_transform`, `_accuracy_m`, `_notice`, `_licence` |
 | record `features_repair_m`, `_merge_same_class`, `_tolerance_m`, `_outline_snap_m` | `edges_repair_m`, `edges_merge_same_class`, `edges_tolerance_m`, `edges_outline_snap_m` |
@@ -194,14 +194,14 @@ in the shares step.
 - **Keys and refusals.** A `--prefer` key is one of the land-cover class
   file's `[cells.prefer]` (lake, glacier), as today. Refused, naming the
   option: `--prefer` without `--land-cover` or with a class raster (kept,
-  `cli.py:2017`, `:2024`); `--prefer` with a line key (the message names
+  `src_python/tin_engine/cli.py@75ab2b4f:2017`, `src_python/tin_engine/cli.py@75ab2b4f:2024`); `--prefer` with a line key (the message names
   `--lines`); `--lines` with an area key (naming `--prefer`); a polygon
   source under `--lines`; a line source under `--prefer`; a second source
   for one `--lines` key.
 - **Layer and CRS of a file.** A catalogue key carries its entry's layer;
   the `--land-cover` file has `--land-cover-layer` and `--land-cover-crs`
   (the quick check's Numedalslågen and Lagan cases use them), passed to
-  `read_source`'s `layer` and `crs` as today (`feature_input.py:656`). A
+  `read_source`'s `layer` and `crs` as today (`src_python/tin_engine/feature_input.py@75ab2b4f:656`). A
   `--prefer` or `--lines` file gets neither: no recorded run gives a layer
   or CRS for anything but the class polygons (`--features-layer`: `lines`,
   the fed-back route of section 4; `triangles` and `land_cover`, a mesh's
@@ -264,7 +264,7 @@ in the shares step.
   is cut, as `--piece-budget` or a small DEM may give one piece);
   `--land-cover` with class borders in `--edges`, and `--lines`, work as
   in an uncut run, and each piece gets its codes as `_write_piece` gives
-  them today (`cli.py:2129`, codes by `label_triangles`). `--prefer` is
+  them today (`src_python/tin_engine/cli.py@75ab2b4f:2129`, codes by `label_triangles`). `--prefer` is
   allowed there: the map is built once before the cut, so the pieces' codes
   come from the preferred map, at no added code. Today a cut run refuses
   `--land-cover`, so `--prefer` never reached one; none of the 732

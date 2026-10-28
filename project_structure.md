@@ -217,21 +217,30 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (windows, seam pass, each piece refined by the
                            #   refine cli.py hands it, K4); no Typer, refusals
                            #   are RunError (23c). index.json is cli.py's
-  feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
-                           #   read, mapped to masks by MeshingRules, pre-clipped,
-                           #   moved to the DEM's CRS and clipped to the domain
-                           #   as linework -> FeatureSet (16b); opens .gml
-                           #   itself, reads GeoJSON through io/repository's
+  feature_input.py         # class polygons and lines read, edges chosen
+                           #   (111): edges_of(map, lines, EdgeChoice,
+                           #   EdgeCleanup, ...) cleans the chosen classes'
+                           #   borders as one coverage, clips the chosen
+                           #   lines to the domain -> FeatureSet; pure. Opens
+                           #   .gml itself, reads GeoJSON through io/repository's
                            #   read_json and io/geojson's read_collection;
                            #   reaches _core only through border_simplify
                            #   (32). read_source: one file's raw
                            #   rows (16b's reader, shared); read_lake_polygons:
                            #   the polygons of `catchment --lakes` near the
                            #   seed point, in the file's CRS (22);
-                           #   read_class_polygons: a coded source's polygons
-                           #   with their class codes, in the mesh CRS (105c);
-                           #   read_polygons: a source's polygons, in the mesh
-                           #   CRS, for --reservoirs (105b)
+                           #   read_class_polygons: --land-cover's polygons
+                           #   with their class codes, in the mesh CRS, unchecked
+                           #   (105c, 111); repaired_areas: their validity
+                           #   repair, for the shares; read_linestrings: a
+                           #   --lines source (111); read_polygons: a source's
+                           #   polygons, in the mesh CRS, for --prefer and
+                           #   --reservoirs (105b)
+  land_cover_map.py        # build: the --land-cover files joined into one
+                           #   LandCoverMap (first given keeps an overlap),
+                           #   each --prefer class replaced and its refilled
+                           #   pieces joined to their class; pure, shapely
+                           #   and numpy; imports feature_input, preferred (111)
   border_simplify.py       # simplify_borders: land-cover polygons to flat
                            #   rings for _core.simplify_borders and back, same
                            #   polygons, parts and holes in order; no I/O (32)
@@ -303,8 +312,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   labels, colours); imports nothing first-party
                            #   but toml_data
   data/legends/            # the shipped legends: corine, mapbiomas-c11, ar50
-  meshing_rules.py         # meshing rules as data (41, 108): load(name |
-                           #   path | 'property') into MeshingRules, naming
+  land_cover_classes.py    # land-cover class files as data (41, 108, 111):
+                           #   load(name | path) into LandCoverClasses, naming
                            #   their legend; [cells] maps codes to cell
                            #   categories and --prefer classes;
                            #   derived_cleanup(accuracy, cell): repair,
@@ -313,9 +322,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   refine a class by a second attribute into
                            #   sub-classes (91); imports feature_input,
                            #   features and legends
-  data/meshing_rules/      # the shipped rules: corine, corine-water,
-                           #   clc18_kode, mapbiomas-c11, ar50 (.toml; codes,
-                           #   edges, notice, positional accuracy, [cells]);
+  data/land_cover_classes/ # the shipped class files: corine, clc18_kode,
+                           #   mapbiomas-c11, ar50 (.toml; codes, water,
+                           #   notice, positional accuracy, [cells]);
                            #   ar50 splits forest (30) by treslag, open firm
                            #   ground (50) by vegetasjonsdekke (91)
   palettes.py              # paraview_preset(table, name): a ParaView preset
@@ -699,7 +708,7 @@ Header-only. One helper in `chunks.hpp`, over `std::jthread` created per call an
 
 Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stanislawski, Buttenfield and Brockmeyer's area-preserving segment collapse (APSC, 2020): each collapse replaces two vertices by one on the line that keeps the area, so the area is kept up to rounding; collapses are taken least deviation first while the fine ring's vertices stay within a horizontal tolerance; each new edge is tested for crossings with `noding::classify<K>` over a uniform grid, and keep-points (the seed) must stay inside. Serial and deterministic. Visvalingam-Whyatt and Douglas-Peucker are not used: neither keeps area. See `docs/increments/22-auto-catchment.md`.
 
-`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--features-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--features-tolerance` above 0. See `docs/increments/32-landcover-simplify.md`.
+`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--edges-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--edges-tolerance` above 0. See `docs/increments/32-landcover-simplify.md`.
 
 ### `hydrology`
 

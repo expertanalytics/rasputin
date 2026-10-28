@@ -181,7 +181,7 @@ The static checks CI runs are listed in `CLAUDE.md`, section 4.
 - `dtm10/seam/` and `dtm10/lattices/`: small windows of neighbouring DTM10
   tiles, for `--dem DIR`.
 - `corine/clc2018_7908_3.gpkg`: CORINE Land Cover 2018 polygons over that
-  tile, for `--features`. Its credits are in `corine/NOTICE`.
+  tile, for `--land-cover`. Its credits are in `corine/NOTICE`.
 
 ### Remote DEMs: `rasputin fetch`
 
@@ -266,8 +266,9 @@ with a registered account. Download the vector GeoPackage
 (`U2018_CLC2018_V2020_20u1.gpkg`, about 8 GB) and pass it as
 
 ```sh
---features U2018_CLC2018_V2020_20u1.gpkg \
---features-layer U2018_CLC2018_V2020_20u1 --features-rules corine
+--land-cover U2018_CLC2018_V2020_20u1.gpkg \
+--land-cover-layer U2018_CLC2018_V2020_20u1 --land-cover-classes corine \
+--edges all
 ```
 
 Rasputin reads only the polygons near your domain, through the file's spatial
