@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, revised after design review round 5 (the overlap query's predicate; test 10's planted box; where a cut run's refusal falls); design review round 6 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: designed, approved in design review round 6; section 8 (the Python interface and the wordings tests read) added for the test migration** by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -547,6 +547,201 @@ No run gives any option three times. The `--features-*` clean-up options
 - `--land-cover` alone keeps meaning the shares, so the 12 recorded runs
   that pass it without `--features` keep their commands (section 3), and
   nothing is refused as unused but a `--lines` key no `--edges` takes.
+
+## 8. Python interface, and the wordings tests read
+
+Added after design review round 6, for `@tester`'s migration of the
+existing tests (`Migration (111)` commits, up to `d54e7cb8`). Interface
+only: section 3's behaviour stands. Where this section and section 3's
+diagram differ (`build` never returns None; the map's `values`), this
+section is the pin.
+
+*Names.* In `tin_engine.feature_input` (which keeps `read_source`,
+`SourceRows`, `source_region`, `read_lake_polygons`, `read_polygons`,
+`split_key`, `Split`, `FeatureError`, `FeatureSet`, `TerrainFeature`'s
+import, `snap_to_outline`, `OutlineSnap`, `IN_LINE`, `REST_MIN_WIDTH_M`,
+`_untouched`, `_outline_lines`, `_chains`, and the module name
+`simplify_borders` that tests patch):
+
+```python
+class LandCoverClasses(BaseModel):  # frozen, extra="forbid": MeshingRules less what goes
+    name: str
+    attribute: str
+    codes: str                         # the code system; required (no uncoded file)
+    legend: Legend                     # required with a code system, as `load` checks today
+    classes: frozenset[str]            # the listed values: MeshingRules.classes' keys
+    otherwise: Literal["refuse", "drop", "keep"] = "refuse"   # "keep": the value is the code
+    notice: str = ""; licence: str = ""; accuracy_m: float | None = None
+    string_codes: Mapping[str, int] = {}; splits: tuple[Split, ...] = ()
+    categories: Mapping[int, Category] = {}; water_codes: frozenset[int] = frozenset()
+    prefer: Mapping[Category, int] = {}; accept_no_class: bool = False
+
+class EdgeChoice(BaseModel):         # frozen, extra="forbid"; the CLI resolves --edges into it
+    every_class: bool = False          # `all`: every class in the map
+    codes: frozenset[int] = frozenset()   # classes whose borders are edges
+    lines: frozenset[str] = frozenset()   # --lines keys whose lines are edges
+
+class EdgeCleanup(BaseModel):        # frozen, extra="forbid"; all off by default, as FeatureRequest
+    repair_m: float = 0.0
+    merge_same_class: bool = False
+    tolerance_m: float = 0.0
+    outline_snap_m: float = 0.0
+
+@dataclass(frozen=True, slots=True)
+class ClassPolygons:                 # what read_class_polygons read
+    areas: tuple[tuple[int, BaseGeometry], ...]  # (code, polygon), file order, in mesh_crs, unchecked
+    crs: str; layer: str | None; scanned: bool; empty: int   # empty: rows skipped as empty
+
+@dataclass(frozen=True, slots=True)
+class SourceLines:                   # what read_linestrings read
+    lines: tuple[LineString, ...]      # in mesh_crs, file order, a MultiLineString as its parts
+    crs: str; layer: str | None; scanned: bool; empty: int
+
+def read_class_polygons(path: Path, layer: str | None, classes: LandCoverClasses, mesh_crs: str,
+                        box_for: Callable[[str], tuple[float, float, float, float]],
+                        *, crs: str | None = None, threads: int = 1) -> ClassPolygons
+def read_linestrings(path: Path, layer: str | None, mesh_crs: str,
+                     box_for: Callable[[str], tuple[float, float, float, float]],
+                     *, threads: int = 1) -> SourceLines
+def repaired_areas(areas: Sequence[tuple[int, BaseGeometry]], xy: npt.NDArray[np.float64],
+                   tell: Callable[[int, int], None] | None = None,
+                   ) -> tuple[list[tuple[int, BaseGeometry]], int]
+def edges_of(land_cover: LandCoverMap | None, lines: Sequence[tuple[str, LineString]],
+             choice: EdgeChoice, cleanup: EdgeCleanup, domain: DomainPolygon,
+             vocabulary: EdgeVocabulary, *, region: Polygon) -> FeatureSet
+```
+
+In `tin_engine.land_cover_map`, as `test_land_cover_map.py` pins it:
+
+```python
+@dataclass(frozen=True)
+class LandCoverMap:
+    areas: tuple[tuple[int, BaseGeometry], ...]   # unchecked polygons, DEM's CRS
+    classes: LandCoverClasses
+    replaced: preferred.Replaced | None           # the --prefer cut; None without --prefer
+    overlap: tuple[tuple[int, BaseGeometry], ...] # (index of the file kept, area cut from a later one)
+
+def build(base: Sequence[Sequence[tuple[int, BaseGeometry]]],      # one per --land-cover file
+          preferred: Sequence[tuple[int, Sequence[BaseGeometry]]],  # as preferred.replace's chosen
+          classes: LandCoverClasses, region: Polygon) -> LandCoverMap
+```
+
+`replaced` and `overlap` are section 3's `values`: the CLI measures them
+inside the domain for `land_cover_prefer` and `land_cover_overlap`, since
+`build` sees the read region only. A class raster gives
+`LandCoverMap((), classes, None, ())`; no `--land-cover` gives no map (the
+CLI passes None).
+
+- `box_for` is `read_source`'s: the CLI passes `lambda own:
+  source_region(domain, dem_crs, own, cell=cell).bounds`, as `_Tally.region`
+  does today. `region` in `edges_of` is that region in the DEM's CRS.
+- `read_class_polygons` reads as `_Tally._take`'s cleaned branch: one query,
+  every polygon moved in one `shapely.transform` call, no validity check.
+  Refused (`FeatureError` naming file and feature): a value no class takes
+  under `otherwise`; a vertex with no image in the DEM ("has a vertex with
+  no image in the DEM", as today); a point, a collection, and a line (lines
+  go to `--lines`). The CLI's hint is `--land-cover`.
+- `read_linestrings` refuses a polygon row (the CLI's hint `--lines`; the
+  message names `--prefer`), a point, a collection, and a vertex with no
+  image. It takes no `crs`: no `--lines-crs` (section 3).
+- `repaired_areas` is today's `read_class_polygons` repair half
+  (`_repaired` near `xy`, emptied polygons dropped, the count returned and
+  told), run in the shares step on `map.areas`; its stderr line stays
+  `_say_repaired("land cover", ...)`'s.
+- `edges_of` is pure. A chosen area's mask is `land_cover`, plus `water`
+  when its code is in `water_codes`; its `TerrainFeature` keeps `code` and
+  its cleaned polygon (for `label_triangles`), `fid` its index in
+  `land_cover.areas` (a merged group, its first). A line's mask is its key's
+  bit, `fid` `f"{key} {i}"` with `i` its index in `lines`, `code` None.
+  Features: the areas first, then the lines in order. The clean-up runs, as
+  `open_features` decides today, when a switch is on or the map was cut
+  (`replaced` not None), with snapping `repair_m or -1.0` after a cut; with
+  every switch off and no cut it does not run and `cover_vertices` is None,
+  so test 11's pinned meshes hold. `FeatureSet` drops `crs`, `layers`,
+  `scanned` and `clip_seconds` (the readers and the CLI's clock hold them);
+  `counts` has one entry per source edges were taken from: the map, when
+  the choice names a class, then each chosen `--lines` key in the order
+  its first line appears.
+- The CLI imports `edges_of` by name, so a spy patches `cli.edges_of`, as
+  tests patch `cli.open_features` today.
+- `land_cover_classes` (module renamed from `meshing_rules`) keeps `load`,
+  `shipped_names`, `known_codes`, `derived_cleanup` and `CleanUpDistances`
+  (its fields in `EdgeCleanup`'s names). `load("property")` is an unknown
+  name. A class file without `code_system` is refused naming
+  `code_system`.
+
+*What replaces each removed name, for the unstarted files.*
+
+| Removed | Becomes |
+|---|---|
+| `open_features` on polygons | `read_class_polygons` → `build` → `edges_of` |
+| `open_features` on lines | `read_linestrings` → `edges_of(None, ...)` |
+| `FeatureSource` | the reader's arguments (path, layer, classes, crs) |
+| `FeatureRequest` | `EdgeCleanup`, plus `EdgeChoice`; `threads` goes to the readers |
+| `MeshingRules` | `LandCoverClasses` |
+| `Prefer`, `open_features(prefer=)` | `build`'s `preferred` |
+| `_Tally`, `pre_clip`, `_runs`, `_linework`, `_bound`, `R_MIN`, `R_MAX`, `_mask` | go, with their tests |
+| `meshing_rules.run_vocabulary`, `FIRST_EXTRA_BIT`, `MAX_EXTRAS`, `NO_EDGES` | go: `DEFAULT_VOCABULARY`, plus `catchment` with `--catchments` |
+| `preferred.overlay`, `Overlaid`, `cli._overlay_preferred` | go; `replace` stays |
+
+Per file:
+
+- `test_feature_input`: `TestSources`, `TestOneGeojsonRule` and the
+  `read_source` cases stay. `property` tests, `the_request_vocabulary`,
+  name-per-value maps, `corine_water`'s, and the per-source layer/CRS
+  pairing go. CORINE and `clc18_kode` masks: `edges_of` with
+  `EdgeChoice(every_class=True)` (water classes `land_cover|water`, the
+  rest `land_cover`). `TestGeometry`, `TestCrs`, `TestAnEmptyGeometryIsNull`:
+  the two readers (an empty row counts in `empty`; a self-crossing ring is
+  read, not refused). `TestClip`: `edges_of`.
+- `test_legends`: `fi._mask`, `TestVocabularyExtras`, the uncoded base,
+  `class.edges` overrides, `property` go; `t2` masks through `edges_of`;
+  the rest load through `land_cover_classes`.
+- `test_cli_legends`: `--features-rules` → `--land-cover-classes`;
+  "palette refuses a rules file" → "a land-cover class file".
+- `test_cli_mesh_features`: the gallery's lines → `--lines` per kind
+  (`road`, `river`, `wall`), its polygons → `--land-cover` with
+  `--edges all`. `--edges` without `--domain`: "needs --dem, --domain and
+  --tolerance", hint `--edges`. The `--features-*` option tests go or
+  rename (`--land-cover-layer`, `--land-cover-crs`, each refused without
+  `--land-cover`); `FEATURES_FIELD` follows the `edges` row below.
+- `test_cli_mesh_multi_features`: positional pairing, two maps over one
+  file, and codeless-beside-coded go; two coded files are two
+  `--land-cover` files under one class file (test 10); the shared seam
+  is a land-cover border and a `--lines` line; two CORINE files give one
+  `land_cover_notice` (de-duplicated, as today).
+- `test_cleanup_every_source`, `test_feature_repair`,
+  `test_cli_features_cleanup`: `request(...)` → `EdgeCleanup`, the read →
+  `read_class_polygons`/`build`, the spy → `cli.edges_of`.
+  `TestProperty` and `rp5` (an uncoded map) go: lines are never cleaned
+  (section 3; test 8's river length checks it at default switches).
+- `test_source_fits`: `read_class_polygons` with `land_cover_classes.load(fit.classes)`.
+- `test_preferred`: the `overlay` tests go; `replace`'s stay.
+
+*Wordings.*
+
+- `--stats` row `edges`: one entry per `counts` source, joined by `; `:
+  the map `<file> + <file>[ layer <L>], classes <C>: <n> features, <c>
+  lines, <v> vertices`; a line key `<file>, lines <key>: <n> features,
+  <c> lines, <v> vertices`. Today's form, with `rules <R>` replaced by
+  `classes <C>` or `lines <key>`; the counts unchanged.
+- stderr, when `edges_of` runs: `edges: <n> kept (<c> cut at the domain
+  outline), <o> outside the domain, <e> empty`, `<e>` the readers' `empty`
+  plus `FeatureSet.empty`. The no-index line is unchanged.
+- Phases: `land cover read` (the `--land-cover` files and `--prefer`
+  sources read, and `build`), `lines read` (the `--lines` files), `edges`
+  (`edges_of`), `edges: clean-up` (its clean-up). `features read`,
+  `features clip` and `features clip: clean-up` go. The two ruled
+  entries of `docs/benchmarks/quick/hotspots.toml` (lagan, numedalslagen)
+  change `phase` to `edges` in the PR, their rulings verbatim: it is the
+  same clean-up, less the vertex move, now under `land cover read`.
+
+*Pins checked* (from the migration commits): `--lines` as two files for
+the crossing's road and river (one source per key); line lengths from the
+`lines` layer to 0.01 m (test 2's bound); "meshing rules" becoming
+"land-cover class file"; `--stats` row `features` becoming `edges`; a class
+file without `code_system` refused naming it, hint `--land-cover-classes`;
+`classes =` for `rules =`, on both shipped entries. All six confirmed.
 
 ## Review
 
