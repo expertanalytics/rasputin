@@ -113,11 +113,11 @@ class TestReadsFindsEveryValue:
     def test_tuple_elements_items_and_defaults_are_read_values(self) -> None:
         tool = TOOLS["mesh"]
         model = tool.model.model_validate(
-            mesh(tolerance_near=["/etc/hosts", 5], features=["a.geojson", "b.geojson"])
+            mesh(tolerance_near=["/etc/hosts", 5], land_cover=["a.geojson", "b.geojson"])
         )
         reads = tool.reads(model)
         assert ("tolerance_near", "/etc/hosts") in reads
-        assert ("features", "a.geojson") in reads and ("features", "b.geojson") in reads
+        assert ("land_cover", "a.geojson") in reads and ("land_cover", "b.geojson") in reads
         assert ("dem", "glo30") in reads
         assert all(value != "5" and value != "5.0" for _, value in reads), reads
 
@@ -142,7 +142,7 @@ class TestRefused:
                 "tolerance_near", {"tolerance_near": ["/etc/hosts", 5]}, id="tuple element"
             ),
             pytest.param(
-                "features", {"features": ["in.geojson", "/etc/hosts"]}, id="repeatable item"
+                "land_cover", {"land_cover": ["in.geojson", "/etc/hosts"]}, id="repeatable item"
             ),
         ],
     )
