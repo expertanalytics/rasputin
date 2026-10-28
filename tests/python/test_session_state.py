@@ -396,6 +396,13 @@ def test_the_recap_lists_the_open_questions_numbered_as_the_question_tool_does(
     ]
 
 
+def test_the_recap_lists_every_open_question_while_it_fits(harness_repo: Path) -> None:
+    _ask(harness_repo, *(_question(k, f"Keep case {k}?") for k in range(1, 13)))
+    _ask(harness_repo, _question(12, "Keep case 12?", state="held"))
+    waiting = _block(_recap(harness_repo), "Waiting on Ola:")
+    assert waiting == [f"{k}. Keep case {k}? Default: no." for k in range(1, 13)]
+
+
 def test_the_recap_writes_nothing_to_the_question_store(harness_repo: Path) -> None:
     _ask(harness_repo, _question(1, "Took the metre.", "taken"))
     before = _store(harness_repo).read_text()
@@ -715,10 +722,9 @@ def test_the_recap_with_a_broken_size_module_prints_one_line_and_the_rest(
 
 # ---------------------------------------------------------------- test 11, §3.6
 #
-# The four sections h8 adds or widens, at their caps, fit 3,000 characters
-# together. Each block runs from its heading to the line before the next
-# section's heading, newlines included, so the fixture's transcripts and
-# ROADMAP.md do not enter the sum.
+# The jobs and size sections, at their caps, fit 3,000 characters together;
+# the questions take what is left of the recap's 10,000. Each block runs from
+# its heading to the line before the next section's heading, newlines included.
 
 BUDGET = 3000
 RULE_GLOBS = (".claude/agents/*.md", ".claude/skills/**/*.md")
@@ -742,18 +748,12 @@ def _blocks(lines: list[str]) -> dict[str, str]:
     """The text of each budgeted section, heading to the next heading."""
     starts = {
         "jobs": lines.index(JOBS),
-        "waiting": next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:")),
         "sizes": next(i for i, line in enumerate(lines) if line.startswith("Rule text in words")),
     }
     ends = {
-        "jobs": starts["waiting"],
-        "waiting": next(
-            i for i, line in enumerate(lines)
-            if i > starts["waiting"]
-            and (line.startswith(("Pipes", "Queued while")) or line == "Next on ROADMAP.md:")
-        ),
+        "jobs": next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:")),
         "sizes": lines.index(TASKS),
-    }  # fmt: skip
+    }
     return {k: "".join(line + "\n" for line in lines[starts[k] : ends[k]]) for k in starts}
 
 
@@ -766,8 +766,9 @@ def test_the_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
     retro.write_text("# Retro\n")
     harness_fixtures.git(main, "add", "-A")
     harness_fixtures.git(main, "commit", "-q", "-m", "real rule files and a retrospective")
-    # 30 open questions of 240 characters.
-    _ask(main, *(_question(k, f"{k:02d} " + "a" * 236 + "?") for k in range(30)))
+    # 80 open questions of 240 characters, one stored as held: more than the recap holds.
+    _ask(main, *(_question(k, f"{k:02d} " + "a" * 236 + "?") for k in range(80)))
+    _ask(main, _question(7, "07 " + "a" * 236 + "?", state="held"))
     # 15 wrapper processes whose eval'd commands are 300 characters long.
     command = "sleep 600; : " + "c" * (300 - 13)
     script = "".join(_printf(100000 + k, 1, "10-02:03:04", wrapper(command)) for k in range(15))
@@ -778,8 +779,11 @@ def test_the_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
     assert _block(lines, JOBS)[-1] == "... 11 more"
     assert len(_block(lines, JOBS)) == 5
     waiting = _block(lines, "Waiting on Ola:")
-    assert len(waiting) == 6 and waiting[-1] == "... 25 more"
-    assert all(line.endswith("...") and len(line) <= 163 for line in waiting[:5])
+    shown, more = waiting[:-1], waiting[-1]
+    assert more == f"... {80 - len(shown)} more: python3 tools/questions.py list prints them all"
+    assert 10 < len(shown) < 80 and shown[-1].startswith(f"{len(shown)}. ")
+    assert all(line.endswith("...") and len(line) <= 163 for line in shown)
+    assert sum(len(line) + 1 for line in lines) <= 10_000
     assert len(blocks["sizes"].splitlines()) >= files + 2
     total = sum(len(text) for text in blocks.values())
     assert total <= BUDGET, {k: len(v) for k, v in blocks.items()}
