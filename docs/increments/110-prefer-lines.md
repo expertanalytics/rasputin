@@ -169,3 +169,4 @@ source other than the land cover's own file.
 
 - Design round 1: CHANGES REQUESTED, aabac548..ae9e9197, 0 (old shoreline survives with merge off; polygons with no fid; two false sentences on the simplifier and on "exactly").
 - Design round 2: APPROVED WITH WORDINGS, ..6d62057a, 0; the wording (pieces join their neighbours in groups) applied in this commit.
+- Code round 1: APPROVED, 8df02051..7badf659, 146.
