@@ -1,6 +1,6 @@
 # Harness h37: governance guard follow-ups of h33
 
-Status: **designed**, 2026-10-27, on `worktree-guard-zsh` off master
+Status: **built**, 2026-10-28 (red `4a9ecd11`, green `9649346b`, 48 counted lines), on `worktree-guard-zsh` off master
 `aabac548`. Short path (`docs/increments/README.md`): about 40 counted lines,
 no C++ file. Both code files are governed (`.claude/hooks/guard_governance.py`,
 `tools/shell_scan.py`), so the green step runs with Ola at the guard's prompt,
@@ -146,3 +146,4 @@ About 40 counted lines: `shell_scan.py` 2 changed; the hook `known` 4,
 
 - Design round 1: CHANGES REQUESTED, aabac548..650324b0, 0 net production lines (rules 2 and 3 refused 353 harmless transcript lines; three other new refusals uncosted).
 - Design round 2: APPROVED, ..c04efa9e, 0.
+- Code round 1: APPROVED WITH WORDINGS, aabac548..de36ae46, 48; the two status wordings applied in this commit.
