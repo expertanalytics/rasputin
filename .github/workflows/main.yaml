@@ -239,6 +239,17 @@ jobs:
       - name: No history in code docs
         run: python tools/check_code_history.py
 
+      # h34 section 3: a full-lane path needs an increment file, and the PR
+      # stays under CLAUDE.md section 2's ceiling. Pull requests only: a merge
+      # group's base can sit behind the PRs ahead of it in the queue.
+      - name: Lane
+        if: github.event_name == 'pull_request'
+        run: python tools/check_lane.py ${{ github.event.pull_request.base.sha }} ${{ github.sha }}
+
+      - name: Size ceiling
+        if: github.event_name == 'pull_request'
+        run: python tools/count_loc.py ${{ github.event.pull_request.base.sha }} ${{ github.sha }} --max 700
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
