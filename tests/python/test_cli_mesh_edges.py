@@ -544,13 +544,16 @@ def test_9_land_cover_alone_writes_the_shares(
 def test_9_class_borders_alone_give_todays_codes_and_no_shares(
     scene: dict[str, Path], tmp_path: Path, cover: Path, phases: list[str]
 ) -> None:
-    args = (*classes(cover), *edges("all"), *AS_READ, "--stats")
+    stats = tmp_path / "stats.md"
+    args = (*classes(cover), *edges("all"), *AS_READ, "--stats", str(stats))
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         assert not has_shares(conn)
         codes = codes_of(conn)
         texts = [str(v) for (v,) in conn.execute("SELECT value FROM run").fetchall()]
     assert any("not computed" in t and "add --shares" in t for t in texts), texts
     assert "land cover fractions" not in phases, phases
+    report = stats.read_text(encoding="utf-8")
+    assert "| edges |" in report and "land cover fractions" not in report, report
     found, counts = np.unique(codes, return_counts=True)
     assert dict(zip(found.tolist(), counts.tolist(), strict=True)) == TODAYS_CODES
     assert hashlib.sha256(codes.tobytes()).hexdigest() == TODAYS_DIGEST
