@@ -25,13 +25,13 @@ from pydantic import BaseModel, ConfigDict
 
 from tin_engine.crs import crs_label, parse_crs, reprojector
 from tin_engine.dem_input import repository_for
-from tin_engine.feature_input import MeshingRules
+from tin_engine.feature_input import LandCoverClasses
 from tin_engine.geodesy import LocalFrame
 from tin_engine.io.geojson import collection_summary
 from tin_engine.io.geopackage import distinct_values, layer_info, layer_summary
 from tin_engine.io.models import TileFootprint
 from tin_engine.io.repository import CacheRepository, open_geopackage, read_json
-from tin_engine.meshing_rules import load, shipped_names
+from tin_engine.land_cover_classes import load, shipped_names
 from tin_engine.sources import (
     OUT_ROOT_VARIABLE,
     RemoteSource,
@@ -59,7 +59,7 @@ _POLYGONS = frozenset({"Polygon", "MultiPolygon"})
 
 
 class ClassField(BaseModel):
-    """Coded meshing rules' attribute as the file spells it, its distinct
+    """A land-cover class file's attribute as the file spells it, its distinct
     values sorted as text (at most `CLASS_VALUES`), and how many there are."""
 
     model_config = ConfigDict(frozen=True)
@@ -71,11 +71,12 @@ class ClassField(BaseModel):
 
 class Fit(BaseModel):
     """An option a source can be given to: the command line's `command` and
-    `option`, the MCP server's `tool` and `argument`, and with `--features`
-    the meshing rules to pass as `--features-rules`. A necessary condition read
-    from the header, not a promise: the reader may still refuse rows the
-    header does not show (a missing or repeated `objectid`, a repeated
-    `station`, a polygon with no area). What the features mean is the
+    `option`, the MCP server's `tool` and `argument`, and with `--land-cover`
+    of class polygons the land-cover class file to pass as
+    `--land-cover-classes`. A necessary condition read from the header, not
+    a promise: the reader may still refuse rows the header does not show (a
+    missing or repeated `objectid`, a repeated `station`, a polygon with no
+    area). What the features mean is the
     description's to say: land-cover polygons fit `catchment --lakes` too."""
 
     model_config = ConfigDict(frozen=True)
@@ -84,7 +85,7 @@ class Fit(BaseModel):
     option: str
     tool: str
     argument: str
-    rules: str | None = None
+    classes: str | None = None
 
 
 class SourceReport(BaseModel):
@@ -115,7 +116,7 @@ class SourceReport(BaseModel):
     origin: str
     #: A vector source's header: its GeoJSON type names ("Geometry" for a
     #: GeoPackage column declared generic), feature count, attribute names in
-    #: file order, and the values of each coded attribute that fits meshing rules.
+    #: file order, and the values of each attribute a fitting class file reads.
     layer: str | None = None
     geometry: tuple[str, ...] = ()
     features: int | None = None
@@ -145,7 +146,7 @@ class Facts:
     """What `fits` judges a source by: what it holds; whether the CRS is
     projected (None when unknown); for features the file's suffix,
     geometry type names, attributes, whether it states its CRS (a GeoPackage
-    always does), and the entry's meshing rules ("" when none)."""
+    always does), and the entry's land-cover class file ("" when none)."""
 
     values: Literal["heights", "classes", "features"]
     projected: bool | None
@@ -153,26 +154,29 @@ class Facts:
     geometry: frozenset[str]
     attributes: tuple[str, ...]
     crs_stated: bool
-    rules: str
+    classes: str
 
 
-def _fit(command: str, option: str, rules: str | None = None) -> Fit:
+def _fit(command: str, option: str, classes: str | None = None) -> Fit:
     """A fit, its MCP spelling derived as `mcp/schema.py` derives it."""
     tool, argument = command.replace("-", "_"), option.lstrip("-").replace("-", "_")
-    return Fit(command=command, option=option, tool=tool, argument=argument, rules=rules)
+    return Fit(command=command, option=option, tool=tool, argument=argument, classes=classes)
 
 
-def fits(facts: Facts, rule_sets: Mapping[str, MeshingRules]) -> tuple[Fit, ...]:
+def fits(facts: Facts, rule_sets: Mapping[str, LandCoverClasses]) -> tuple[Fit, ...]:
     """The options a source fits, each the acceptance condition of the reader
     the option calls: a DEM's for `--dem` (not `station-catchments`' for
     one in degrees), a class raster's for `--land-cover`; for features,
-    `--features` under each of `rule_sets` (only the entry's when it names one)
-    whose attribute the file has (a GeoPackage's column case-insensitively,
-    a GeoJSON property exactly), `catchment --lakes`, `network-catchment
-    --network` and `mesh --reservoirs` for any polygons, `mesh --catchments`
-    for projected ones (its border band is in metres), `network-catchment
-    --outlets` for any points, and the GeoJSON readers, which need a `crs`
-    member, by geometry and attribute.
+    `--land-cover` under each of `rule_sets` (only the entry's when it names
+    one) whose attribute the file has (a GeoPackage's column
+    case-insensitively, a GeoJSON property exactly), `catchment --lakes`,
+    `network-catchment --network` and `mesh --reservoirs` for any polygons,
+    `mesh --prefer` for those whose CRS is stated or not known to be degrees
+    (a file read as RFC 7946's degrees that is not cannot be placed), `mesh
+    --catchments` for projected ones (its border band is in metres), `mesh
+    --lines` for lines only, `network-catchment --outlets` for any points,
+    and the GeoJSON readers, which need a `crs` member, by geometry and
+    attribute.
     Reads no file."""
     if facts.values == "heights":
         commands: tuple[str, ...] = ("mesh", "catchment")
@@ -184,15 +188,19 @@ def fits(facts: Facts, rule_sets: Mapping[str, MeshingRules]) -> tuple[Fit, ...]
     fold: Callable[[str], str] = str.lower if facts.suffix == ".gpkg" else str
     names, shapes = {fold(a) for a in facts.attributes}, facts.geometry
     found = [
-        _fit("mesh", "--features", name)
+        _fit("mesh", "--land-cover", name)
         for name, rules in rule_sets.items()
-        if facts.rules in ("", name) and fold(rules.attribute) in names
+        if facts.classes in ("", name) and fold(rules.attribute) in names
     ]
     if shapes & (_POLYGONS | {"Geometry"}):
         found += [_fit("catchment", "--lakes"), _fit("network-catchment", "--network")]
         found.append(_fit("mesh", "--reservoirs"))
+        if facts.crs_stated or facts.projected is not False:  # degrees unstated: unplaced
+            found.append(_fit("mesh", "--prefer"))
         if facts.projected:
             found.append(_fit("mesh", "--catchments"))
+    if shapes and shapes <= {"LineString", "MultiLineString"}:
+        found.append(_fit("mesh", "--lines"))
     if "Point" in shapes:
         found.append(_fit("network-catchment", "--outlets"))
     if facts.suffix != ".gpkg" and facts.crs_stated:
@@ -254,10 +262,10 @@ def _figures(
 
 
 def _vector(
-    path: Path, entry: RemoteSource, box: Box | None, rule_sets: Mapping[str, MeshingRules]
+    path: Path, entry: RemoteSource, box: Box | None, rule_sets: Mapping[str, LandCoverClasses]
 ) -> dict[str, Any]:
     """The header figures of a vector source's file `path`, its fits, and the
-    values of each coded attribute fitting meshing rules read; its coverage is
+    values of each attribute a fitting class file reads; its coverage is
     the extent box, not the features."""
     suffix, coded = path.suffix.lower(), {}
     if suffix == ".gpkg":
@@ -272,7 +280,7 @@ def _vector(
                 shapes,
                 got.attributes,
                 crs_stated=True,
-                rules=entry.rules,
+                classes=entry.classes,
             )
             found = fits(facts, rule_sets)
             for a in _coded(found, rule_sets, got.attributes):
@@ -287,7 +295,7 @@ def _vector(
             doc.geometry,
             doc.attributes,
             doc.crs_stated,
-            entry.rules,
+            entry.classes,
         )
         found = fits(facts, rule_sets)
         for a in _coded(found, rule_sets, doc.attributes):
@@ -309,12 +317,10 @@ def _vector(
 
 
 def _coded(
-    found: tuple[Fit, ...], rule_sets: Mapping[str, MeshingRules], attributes: tuple[str, ...]
+    found: tuple[Fit, ...], rule_sets: Mapping[str, LandCoverClasses], attributes: tuple[str, ...]
 ) -> list[str]:
-    """The attributes, as the file spells them, that fitting coded meshing rules read."""
-    read = {
-        rule_sets[f.rules].attribute.lower() for f in found if f.rules and rule_sets[f.rules].codes
-    }
+    """The attributes, as the file spells them, that fitting class files read."""
+    read = {rule_sets[f.classes].attribute.lower() for f in found if f.classes}
     return [a for a in attributes if a.lower() in read]
 
 
@@ -323,7 +329,7 @@ def _one(
     origin: str,
     cache: Path | None,
     box: Box | None,
-    rule_sets: Mapping[str, MeshingRules],
+    rule_sets: Mapping[str, LandCoverClasses],
 ) -> SourceReport:
     """`entry` with what its files or its cache say, and the options it fits;
     a read that fails is its `problem`, and a vector file not read fits none."""
@@ -355,7 +361,7 @@ def _one(
             found["problem"] = str(exc)
     if entry.values != "features":
         facts = Facts(
-            entry.values, projected, "", frozenset(), (), crs_stated=False, rules=entry.rules
+            entry.values, projected, "", frozenset(), (), crs_stated=False, classes=entry.classes
         )
         found["fits"] = fits(facts, rule_sets)
     named = entry.model_dump(include=set(_FROM_ENTRY))
@@ -381,7 +387,7 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
         found, problem = catalogue(None, plugins), str(exc)
     # The XDG file when there is one: what a server started with only HOME reads.
     register = looked[-1] if looked else None
-    rule_sets = {name: load(name) for name in (*shipped_names(), "property")}
+    rule_sets = {name: load(name) for name in shipped_names()}
     sources = tuple(
         _one(entry, found.origins[key], cache, box, rule_sets)
         for key, entry in found.sources.items()

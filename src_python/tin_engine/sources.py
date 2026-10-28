@@ -133,8 +133,8 @@ class RemoteSource(BaseModel):
     licence_note: str
     #: The works the distributor asks to cite; `notice` and the mesh file carry them.
     cite: tuple[str, ...] = ()
-    #: The meshing rules (`tin_engine.meshing_rules`) that read its classes.
-    rules: str = ""
+    #: The land-cover class file (`tin_engine.land_cover_classes`) that reads its classes.
+    classes: str = ""
     #: The height unit the catalogue states for files that do not.
     z_unit: ZUnit | None = None
     #: What the cells represent, and the resolution and region, as the distributor states them.
@@ -146,10 +146,7 @@ class RemoteSource(BaseModel):
     @classmethod
     def _features_by_suffix(cls, data: Any) -> Any:
         """A vector path or a map-service layer stating no `values` holds
-        features: the file or the kind says what it is. A `legend`
-        key is refused, naming `rules`."""
-        if isinstance(data, dict) and "legend" in data:
-            raise ValueError("legend is now rules (a source names its meshing rules)")
+        features: the file or the kind says what it is."""
         if not isinstance(data, dict) or "values" in data:
             return data
         if _vector(data.get("path")) or data.get("kind") == "arcgis-features":
@@ -401,7 +398,7 @@ def _beside(file: Path, value: str) -> Path:
 
 
 def _read(file: Path) -> dict[str, RemoteSource]:
-    """The `[source.<id>]` tables of a catalogue file; a relative `rules`
+    """The `[source.<id>]` tables of a catalogue file; a relative `classes`
     or `path` is taken from the file's directory. Refused, as a `ValueError`
     naming the file: anything `RemoteSource` refuses, and a station table
     (fetching a station list follows one service's layout, which is code)."""
@@ -413,9 +410,9 @@ def _read(file: Path) -> dict[str, RemoteSource]:
     for key in tables.station:
         raise ValueError(f"{label}: station.{key}: station lists are not added from a file")
     for table in tables.source.values():
-        given = str(table.get("rules", ""))
+        given = str(table.get("classes", ""))
         if given.endswith(".toml") or "/" in given or os.sep in given:
-            table["rules"] = str(_beside(file, given))
+            table["classes"] = str(_beside(file, given))
         if "path" in table:
             table["path"] = str(_beside(file, str(table["path"])))
     return _entries(tables.source, "source", RemoteSource, label)

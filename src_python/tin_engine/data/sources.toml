@@ -61,7 +61,7 @@ licence_note = "CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike 4.0 Intern
 cite = [
     "Souza, C. M., et al. (2020). Reconstructing Three Decades of Land Use and Land Cover Changes in Brazilian Biomes with Landsat Archive and Earth Engine. Remote Sensing, 12(17), 2735. https://doi.org/10.3390/rs12172735",
 ]
-rules = "mapbiomas-c11"
+classes = "mapbiomas-c11"
 # Quoted from the abstract of Souza et al. (2020), cited above.
 description = "Annual land use and land cover classes of Brazil, \"the most comprehensive and detailed mapping for the country at a 30 m pixel resolution\"; one map per year."
 
@@ -90,7 +90,7 @@ kind = "arcgis-features"
 url = "https://image.discomap.eea.europa.eu/arcgis/rest/services/Corine/CLC2018_LAEA/MapServer/0"
 crs = "EPSG:3035"
 fields = ["ID", "Code_18"]
-rules = "corine"
+classes = "corine"
 credit = "CORINE Land Cover 2018 (vector/raster 100 m), Europe, 6-yearly. European Union's Copernicus Land Monitoring Service information, the European Environment Agency's map service {url} (accessed on {date}). Modified: the polygons meeting a box, stored as a GeoPackage by rasputin. Not endorsed by the European Union."
 licence_note = "Copernicus Land Monitoring Service: full, open and free access (Commission Delegated Regulation (EU) No 1159/2013). Name the source, state any modification, and do not imply endorsement by the European Union."
 description = "Land cover of Europe in 2018 in the 44 classes of the 3-level CORINE nomenclature (Code_18); \"minimum mapping unit (MMU) for status layers is 25 hectares\", \"minimum width of linear elements is 100 metres\" (the service's description)."

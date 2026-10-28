@@ -1,18 +1,14 @@
 # CORINE Land Cover, level 3; colours in the legend corine. Positional accuracy:
 # better than 100 m (EEA, CLC2018 Technical Guidelines). docs/increments/41-class-maps-as-data.md, section 4.
-name = "corine"
-attribute = "Code_18"
+name = "clc18_kode"
+attribute = "clc18_kode"
 code_system = "CORINE Land Cover level-3 code"
 positional_accuracy_m = 100
 notice = "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU"
-unlisted = "land"
+unlisted = "keep"
 legend = "corine"
 # Class code 0: an area no polygon covers, kept for its constraint lines only.
 accept_no_class = true
-
-[edges]
-water = ["land_cover", "water"]
-land = ["land_cover"]
 
 [[class]]
 code = 111
@@ -156,8 +152,3 @@ forest = [311, 312, 313]
 glacier = [335]
 lake = [511, 512, 521, 522]
 unspecified = [523]
-
-# The one class a --prefer source's polygons take, and the only one they replace.
-[cells.prefer]
-lake = 512
-glacier = 335

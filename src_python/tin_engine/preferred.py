@@ -48,15 +48,6 @@ class Areas:
     refilled: float
 
 
-@dataclass(frozen=True)
-class Overlaid:
-    """The polygons as (code, geometry), none overlapping if each source's own polygons
-    do not overlap, and per replaced code its areas."""
-
-    polygons: list[tuple[int, BaseGeometry]]
-    areas: dict[int, Areas]
-
-
 def _array(geometries: Sequence[BaseGeometry]) -> npt.NDArray[Any]:
     array = np.empty(len(geometries), dtype=object)
     array[:] = list(geometries)
@@ -155,11 +146,12 @@ def replace(
     return Replaced(kept, preferred, refilled)
 
 
-def overlay(
-    base: Pairs, chosen: Sequence[tuple[int, Sequence[BaseGeometry]]], corners: Float64
-) -> Overlaid:
-    """`replace` with `near` the triangles `corners` (T, 3, k >= 2), and per
-    replaced code its areas inside them."""
+def areas_inside(
+    base: Pairs, done: Replaced, codes: Sequence[int], corners: Float64
+) -> dict[int, Areas]:
+    """Per replaced code of ``codes``, its areas inside the triangles
+    ``corners`` (T, 3, k >= 2): the base polygons' of that code (``base``,
+    valid), the preferred polygons' and the refilled pieces' of `done`."""
     xy = np.asarray(corners, np.float64)[:, :, :2]
     triangles = shapely.polygons(xy) if len(xy) else np.zeros(0, dtype=object)
     tree = shapely.STRtree(triangles)
@@ -173,13 +165,11 @@ def overlay(
         p, t = tree.query(pieces, predicate="intersects")
         return float(shapely.area(shapely.intersection(triangles[t], pieces[p])).sum())
 
-    done = replace(base, chosen, triangles)
-    areas = {
+    return {
         code: Areas(
             replaced=inside([g for c, g in base if c == code]),
             given=inside([g for c, g in done.given if c == code]),
             refilled=inside([p for c, p, _ in done.refilled if c == code]),
         )
-        for code, _ in chosen
+        for code in codes
     }
-    return Overlaid(done.polygons, areas)
