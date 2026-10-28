@@ -177,11 +177,7 @@ unchanged).
 **Which repository is judged.** With both URLs pinned, the guard's
 `ls-remote` and fetch, `git push origin` and `gh` (which picks its
 repository from these remotes when no `-R` is given) all address
-`expertanalytics/rasputin`. The one way left to point `gh` elsewhere is
-`GH_REPO` or `gh repo set-default` (the latter passes `guard_push` today,
-checked by piping it to the hook); either can only act on a pull request
-in that other repository, and a branch reaches the private one only by a
-push, which asks. The enqueue's checks are read with `-R
+`expertanalytics/rasputin`. `gh` can still be pointed elsewhere by `GH_REPO` or `gh repo set-default` (which passes `guard_push` today and writes `remote.<name>.gh-resolved`), so the fast lane also refuses when `GH_REPO` is set or `git config --get-regexp '^remote\..*\.gh-resolved$'` prints a line other than `remote.origin.gh-resolved base`. The enqueue's checks are read with `-R
 expertanalytics/rasputin` (change 3) whatever `gh` defaults to.
 **Left open, on purpose:** a test module that disables others from import
 time (no file list can find it).
@@ -291,9 +287,9 @@ the flag file removed.
 10. `guard_push` end to end, present, no `unattended.json` on disk: the fast
     push line exits 0 with no output; a full-lane push still asks.
 11. Redirected URLs, both modes, fast branch `quick`: `GIT_CONFIG_GLOBAL`
-    set to a file with `url.<second bare repo>.pushInsteadOf = <origin's
+    set to a file with `url.<second bare repo, holding origin's master>.pushInsteadOf = <origin's
     path>`, then with `insteadOf` instead, then (no global file) a second
-    `pushurl` added to origin in the repository's own config: push, create
+    `pushurl` added to origin in the repository's own config; then `remote.private.gh-resolved = base`: push, create
     and enqueue are each `None` or refused, reason names origin's URL,
     nothing logged. The same `pushInsteadOf` on `private`'s path: a granted
     push to origin is refused.
@@ -304,10 +300,10 @@ read put back), and must fail.
 
 ## 7. Size
 
-Production: `push_grant.py` about 58 lines (`masters` about 20, the URL
-pin and `REMOTE_URLS` 8, `CI_CONFIG`
+Production: `push_grant.py` about 60 lines (`masters` about 20, the URL
+pin and `REMOTE_URLS` 10, `CI_CONFIG`
 and its check 8, the threaded sha and the create check about 12, present
-mode and `pr_view` 10), `guard_push.py` 1: about 59 net lines (`away.py`'s
+mode and `pr_view` 10), `guard_push.py` 1: about 61 net lines (`away.py`'s
 20 for the switch dropped), all in governed files, so the build needs Ola's
 yes for each write (as any harness change). Tests about 185 lines (test 11
 and the fixtures' URL patch about 25), fixture
@@ -329,3 +325,4 @@ Answered 2026-10-28 (his words at the top of this file):
 
 - Design round 1: CHANGES REQUESTED, 22d09fe1..140f9e11, 0 (bypasses tried and closed: full-lane path, increment file, over 700 lines, stale sha, force push, other branch or master, private remote or `-R`, governed file, CI not green, enqueue for another head; blocking: `.github/` is neither full lane nor governed, so a fast-lane branch can make `CI result` always green (#367, #369, #374 changed `main.yaml`): exclude `.github/` and maybe `pyproject.toml` in `fast_lane()`, add to test 4; a forged `refs/remotes/origin/master` (Write or `printf >` passes both guards) empties the lane diff, and a forged `private/master` can send private commits to origin: check against `git ls-remote origin refs/heads/master`; the `away.py --fast-push` switch and `gh pr create` go beyond Ola's words; `judge` reads `unattended.json` unconditionally and would crash when he is present; `pr_view` is hard-wired to the private repository; follow-up: `gh pr create` is judged on the local branch, the PR opens from the remote one; measurement re-run: 38 PRs, 109.9 h, an upper bound; rule text -2 words holds).
 - Design round 2: CHANGES REQUESTED, 80acf385..10cfa036, 0 (round-1 findings all closed: `.github/` and `CI_CONFIG` kept out, forged local master re-probed and now harmless, `gh pr create` checks origin's copy, `unattended.json` only in away mode, `pr_view` takes the repository, off switch gone; blocking: a global `url.<fake>.pushInsteadOf` in `~/.gitconfig` (not governed) redirects `get-url --push`, so the lane diff is empty while `gh pr create` and `gh pr merge` still act on GitHub, and the same on the private remote fools `home()`: refuse unless `git remote get-url --all` and `get-url --push --all` each equal exactly one expected URL, a constant the tests patch, with a `GIT_CONFIG_GLOBAL` + `pushInsteadOf` test; §3's "about the right repository" holds for `git push`, not for the `gh` acts).
+- Design round 3: APPROVED WITH WORDINGS, 32c25bba..bd04863c, 0 (round-2 hole closed: `pushInsteadOf`, `insteadOf`, an added `pushurl`, a second `url` or `pushurl`, and `GIT_CONFIG_COUNT` each fail the one-line `REMOTE_URLS` check; §3 holds, `gh pr list` with no default picks expertanalytics/rasputin; wordings applied in this commit: §3 now refuses on `GH_REPO` or a `gh-resolved` other than origin's, test 11's second repository holds origin's master and adds `remote.private.gh-resolved = base`, size about 60 and 61 lines; follow-up: SSH-level redirection (`~/.ssh/config`, `core.sshCommand`) needs deliberate tampering, its fix (masters through `gh api`) is not cheap).
