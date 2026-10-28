@@ -254,11 +254,10 @@ fractions in cut runs; faster class shares (22.8 s for 653,039 triangles).
    edited on merge (section 2)? Default: yes.
 2. May a mesh follow rivers or roads with no land-cover map at all? Default:
    no; `--edges` needs `--land-cover`.
-3. Following land-cover borders now always computes each triangle's class
-   shares, three to four times the run time on the quick check's two
-   catchments. Keep an option to skip the shares? Default: no option; every
-   real use so far (Sula, Shyft cells) wants the shares.
+3. Following land-cover borders now always computes each triangle's class shares. A run that passes `--land-cover` today (Sula) costs the same. A run that follows CORINE borders without it goes from 9.5 s to 32 s on Numedalslågen and from 15 s to 68 s on Lagan, and the quick check's cases from about 2 to about 7 minutes. Keep an option to skip the shares? Default: no option; every real use so far (Sula, Shyft cells) wants the shares.
+4. Two things `--features` carries today get no route: one line file mixing kinds (rivers and roads together; split it, one `--prefer` per kind), and outlines that are not land cover (a wall, a building). Drop both? Default: yes; neither is in the shipped catalogue or the quick check.
 
 ## Review
 
 - Design round 1: CHANGES REQUESTED, 75ab2b4f..a2f4dcaa, 0 (no speed estimate for the map and per-class edges; line files lose layer and CRS; Ola's sources file breaks on the rules → classes rename; six wordings and inventory gaps).
+- Design round 2: APPROVED WITH WORDINGS, af82b7d3..fd566170, 0; question 3 reworded and question 4 added in this commit.
