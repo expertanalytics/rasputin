@@ -8,7 +8,7 @@ The first form makes `<main>/.claude/worktrees/<name>` on branch
 `worktree-<name>` at `--from` (default `origin/master`, fetched first). Both
 forms then make `<wt>/.venv` with uv, install this checkout into it editable
 (`.[dev,codecs]` plus pybind11), configure `<wt>/build-pyext` for the
-`_core` rebuild recipe of `.claude/REQUIRED-READING.md`, and check that the
+`_core` rebuild of `tools/rebuild_core.py`, and check that the
 venv imports `tin_engine` from this worktree. Each step is skipped when its
 product is already there, so `--existing` is safe to run again; it never
 deletes anything.
@@ -122,7 +122,7 @@ def set_up(run: Run, wt: Path, version: str) -> None:
     python = run([py, "--version"], wt).stdout.strip()
     print(f"worktree  {wt}  (branch {branch} at {sha})\npython    {py}  ({python})\n"
           f"code      tin_engine and tin_engine.cli from {wt}/src_python\n_core     {found[2]}\n"
-          f"rebuild   cmake --build {wt}/build-pyext -j --target _core"
+          f"rebuild   python3 {wt}/tools/rebuild_core.py"
           "   (configured, not built)")  # fmt: skip
 
 
