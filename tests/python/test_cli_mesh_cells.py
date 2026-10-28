@@ -11,7 +11,7 @@ back, never from the producer's own records.
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- The record line for a land cover without meshing rules is the `run` row
+- The record line for a land cover without a land-cover class file is the `run` row
   named `cells`, its value "none, the land cover has no land-cover class file".
 - The legend check's refusal names the class as `class <code>`.
 """
@@ -155,10 +155,10 @@ def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> No
     check_sums(mapbiomas)
 
 
-# ------------------------------------------------------------ a raster without meshing rules
+# ------------------------------------------------------------ a raster without a land-cover class file
 
 
-def test_t5_without_meshing_rules_only_the_fractions_table(
+def test_t5_without_a_class_file_only_the_fractions_table(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
     with closing(written(scene, tmp_path / "x.gpkg", "--land-cover", KEY)) as conn:
