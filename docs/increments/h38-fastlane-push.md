@@ -2,6 +2,9 @@
 
 Status: design, awaiting Ola's approval (§8). No production code yet.
 
+Ola, verbatim, 2026-10-28, on whether "present" covers him asleep without
+`away.py`: "I set away when going to sleep."
+
 Ola, 2026-10-28, on the proposal "Fast-lane push and enqueue without asking
 while you are present, as away mode already allows: CI green, lane check green,
 and never for rule files or settings": "Decisions 1-4: defaults."
@@ -84,8 +87,8 @@ guard_push.py --(command, reasons)--> judge
    raise when absent, which the hook turns into a block). A present
    enqueue is logged with `"window": null`, and "once per head" then means
    once per head while present. With mode `broken` it still returns `None`.
-   "Present" is what the guard can see: away mode off. That includes Ola
-   asleep without `away.py` (question 2).
+   "Present" is what the guard can see: away mode off. Settled: Ola sets
+   away mode when he goes to sleep (his words, top of this file).
 2. **No governed or CI-config path.** `fast_lane()` also fails when any path
    in the diff is one `guard_governance.governed()` names (imported from
    `.claude/hooks/`: rule files, `.claude/settings*.json*`, agents, hooks,
@@ -131,7 +134,7 @@ guard_push.py --(command, reasons)--> judge
    each took 1.7 to 1.9 s (three runs, from this machine); so a judged act
    costs about 3.6 s more, on a guard that already runs `count_loc.py`. Only
    push and `gh pr` commands reach `judge`.
-5. **Off switch** (waiting on Ola, question 4; included by default).
+5. **Off switch** (waiting on Ola, question 3; included by default).
    `python3 tools/away.py --fast-push off` writes
    `<git-common-dir>/harness/fast-push.json`; while that file exists (or
    cannot be read: fails closed) `fast_lane()` returns false in both modes,
@@ -146,7 +149,7 @@ Changes 2 to 4 apply in away mode too: one path, one set of conditions
 
 **Acts let through**, on origin only, for a branch passing all of the above:
 the push of its head by sha; `gh pr create` of it into master (waiting on
-Ola, question 3; included by default); and one `gh pr merge` enqueue per head.
+Ola, question 2; included by default); and one `gh pr merge` enqueue per head.
 The writer waits for CI with `gh pr checks <pr> --watch` run in the
 background, then enqueues; an early enqueue just asks.
 
@@ -180,10 +183,10 @@ than "granted branch" when the lane was fast.
   boundary (`.claude/REQUIRED-READING.md`) holds." (-5): REQUIRED-READING is
   the one statement of it.
 
-If Ola answers no to question 3 (create still asks), the added sentence is
+If Ola answers no to question 2 (create still asks), the added sentence is
 instead "A fast-lane branch for origin is pushed and enqueued with no yes,
 grant or review: the guard checks lane and CI." (21 words, net 0). Question
-4 changes no rule text: the off switch and the path lists live in the
+3 changes no rule text: the off switch and the path lists live in the
 guard's code, since no agent acts on them; the guard does.
 
 ## 5. What it would have saved
@@ -210,7 +213,7 @@ in round 2 with the `CI_CONFIG` class added.
 | full lane or increment file, untouched (28) | 54.9 h | 48.6 h |
 
 Most long fast-lane waits span a night (#386 gil-flake 11.2 h); the guard
-passes those too, since it sees only whether away mode is on (question 2).
+passes those in either mode.
 What remains after the change is CI on the PR before the enqueue: 0.2 h
 median (17 PRs opened at once, at most 0.6 h). Subtracting 0.3 h per PR
 leaves **about 90 h over the week, 2.6 h per fast-lane PR, an upper bound**
@@ -291,12 +294,10 @@ Lane: full (it changes the approval boundary), `@reviewer` before push.
 1. Today, while away, a fast-lane branch that changes a rule file such as
    `CLAUDE.md` may be pushed and enqueued, and its enqueue does not wait
    for CI. Apply the new conditions to away mode too? Default: yes.
-2. "Present" can only mean "away mode off", so a fast-lane branch also
-   goes out while you sleep without `away.py`. Accept? Default: yes.
-3. Opening the pull request (`gh pr create`) was not in your words "push
+2. Opening the pull request (`gh pr create`) was not in your words "push
    and enqueue". Let it through without a yes too? Default: yes (in
    `tools/questions.py`, item fastlane-push; waiting on the answer).
-4. An off switch you can flip from a session prompt (`!python3
+3. An off switch you can flip from a session prompt (`!python3
    tools/away.py --fast-push off`), which you did not ask for. Build it?
    Default: yes (in `tools/questions.py`, item fastlane-push; waiting on
    the answer).
