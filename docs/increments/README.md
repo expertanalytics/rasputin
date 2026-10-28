@@ -28,8 +28,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    (`git grep -n <pattern> legacy-archive -- legacy`), and what is carried
    across or why nothing is. Where something is, `@architect` reads that source
    and states its intent before `@tester` starts.
-   `@reviewer` reviews the design before `@tester` starts (on the short path,
-   below, with the code), and again when a design update adds a step.
+   `@reviewer` reviews the design before `@tester` starts, and again when a
+   design update adds a step.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
@@ -60,8 +60,8 @@ commits they name; no separate
 `@architect` step.
 
 A ruling or a platform-retuned constant after the red commit is `@tester`'s
-amendment, in its own commit with the reason. `@developer` never edits tests,
-and no test change hides in an implementation commit.
+amendment, in its own commit with the reason. In the full lane `@developer`
+never edits tests, and no test change hides in an implementation commit.
 
 **The merge updates `ROADMAP.md`'s row for that increment**, in the same PR,
 before the merge rather than after it.
@@ -73,22 +73,16 @@ stays ahead of the green one in history.
 it needs to merge, or shares its PR. **One increment file per PR**; a shared
 design gets its own short file.
 
-## Small changes: the short path
+## Two lanes
 
-An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
-C++ file and nothing the *Acceptance* section covers takes the short path;
-the brief says so, and `@reviewer` may send it back to the full path.
+**The full lane** is the loop above, for the meshing core, the code whose
+mistakes give wrong numbers without a crash, and the land-surface physics.
 
-- Its increment file is short: what changes, the tests that pin it, what is
-  left out, the estimate, and the *Prior art* section (step 1).
-- One `@reviewer` round judges the design, the red step and the green step
-  together, and rules on the red step's pins. A pin that changes the design
-  still goes to `@architect` before green.
-- The main session commits the verdict, the Status line and the ROADMAP
-  row together, before the push.
-
-Never dropped: the red commit ahead of the green one, a green commit with no
-test file, and the approval boundary (`.claude/REQUIRED-READING.md`).
+**The fast lane** is everything else: one `@developer`
+(`tools/brief.py --lane fast`) writes the test and the fix on one branch,
+CI runs, and it merges. CI refuses a full-lane path without an increment
+file (`tools/check_lane.py`, which lists the paths). No increment file, `@reviewer` or retrospective. The
+approval boundary (`.claude/REQUIRED-READING.md`) holds.
 
 ## Acceptance: an increment that touches refine or mesh code
 

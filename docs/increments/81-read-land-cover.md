@@ -2,7 +2,7 @@
 
 **Status: built, approved** (red 03df40e9, green 1f8cd59c, red f88d5cf7, fix bbd5198d, 31 counted lines); designed by `@architect`, 2026-10-20, on `8fd1e118`, master,
 branch `worktree-mesh-landcover`. **Short path**
-(`docs/increments/README.md`, *Small changes*): about 25 counted lines, no
+(`docs/increments/README.md@aabac548:76`): about 25 counted lines, no
 C++ file, no refine or mesh code.
 Number 81 because 80 is the highest number found in `docs/increments/` over
 every local branch and remote-tracking ref (`git ls-tree --name-only <ref>

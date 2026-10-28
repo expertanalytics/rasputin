@@ -2,7 +2,7 @@
 
 **Status: built, approved** (red 7249a49f, green bd6b7054, test fix 93bf4cb8, 2 counted lines); designed by `@architect`, 2026-10-18, on `cef9f3f0` (master,
 increment 69 merged as #290), branch `worktree-mcp-hardening`. **Short
-path** (`docs/increments/README.md`, *Small changes*): about 12 counted
+path** (`docs/increments/README.md@aabac548:76`): about 12 counted
 lines, no C++ file, no refine or mesh code.
 Number 72 because 70 and 71 are held by designs on the worktrees
 `lsm-ddd-routing` and `lsm-route-memory`.

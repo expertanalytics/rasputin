@@ -49,7 +49,7 @@ def test_claude_md_has_no_briefs_bullet() -> None:
 
 def test_claude_md_step_order_times_a_performance_fix_before_review() -> None:
     step_order = bullet(CLAUDE.read_text(), "**Step order.**")
-    assert "A performance fix is timed by `@perf` before review." in step_order
+    assert "a performance fix is timed by `@perf` before review;" in step_order
 
 
 def test_required_reading_names_the_hook_and_the_script_in_the_harness() -> None:

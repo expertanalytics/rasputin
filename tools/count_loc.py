@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """The one counter for the production-line ceiling of `CLAUDE.md` §2 (h16 T1).
 
-    python3 tools/count_loc.py <base> [<head>]
+    python3 tools/count_loc.py <base> [<head>] [--max N]
 
 Counts the lines `git diff <base>...<head>` adds and removes, under §2's
 exclusions: a line counts unless it is blank, a comment, a docstring, or
 inside a raw literal's body. Added lines are judged in the file at `<head>`,
 removed lines at the merge base. Prints one tab-separated row per counted file
 (path, added, removed, net), a `total` row, then one `not counted:` line per
-changed file it skipped, with the reason. Committed revisions only.
+changed file it skipped, with the reason. Committed revisions only. With
+`--max N`, a net total over N then prints `count_loc: <total> net lines, over
+<N>` and exits 1 (h34 §3: CI runs it with `--max 700`).
 
 Spec: docs/increments/h16-harness-fixes.md §2, T1. Exit 2 with one
 `count_loc:` line on stderr on a git error.
@@ -239,9 +241,12 @@ def _read(rev: str, path: str, kind: Kind) -> frozenset[int]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    if len(args) not in (1, 2):
-        print("count_loc: usage: count_loc.py <base> [<head>]", file=sys.stderr)
+    args = sys.argv[1:] if argv is None else list(argv)
+    cap = args[args.index("--max") + 1 :][:1] if "--max" in args else []
+    if cap:
+        del args[args.index("--max") : args.index("--max") + 2]
+    if len(args) not in (1, 2) or "--max" in args or not all(c.isdigit() for c in cap):
+        print("count_loc: usage: count_loc.py <base> [<head>] [--max N]", file=sys.stderr)
         return 2
     try:
         given = args[1] if len(args) == 2 else "HEAD"
@@ -271,6 +276,9 @@ def main(argv: list[str] | None = None) -> int:
     print("total\t" + "\t".join(map(str, totals)))
     for line in skipped:
         print(line)
+    if cap and totals[2] > int(cap[0]):
+        print(f"count_loc: {totals[2]} net lines, over {cap[0]}")
+        return 1
     return 0
 
 

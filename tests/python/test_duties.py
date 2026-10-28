@@ -1,8 +1,13 @@
 """`tools/duties.py`: the `@orchestrator` runs owed, computed from git and the away log.
 
 Spec: docs/increments/h23-duties.md. Section 7 lists these tests by number;
-each block below carries its number. The pure functions (`window_ends`,
-`owed`, `render`) get synthetic inputs; `gather`, `main` and the recap run
+each block below carries its number. docs/increments/h34-lean-process.md
+replaces the research round by the weekly retrospective and adds the lessons
+log (`logged`, `lessons_path`), and owes a post-merge check only for a merge
+with a `docs/increments/` path (a full-lane merge); its section 4 tests are the
+`h34` blocks at the end, and the older tests it amends say so. The pure
+functions (`window_ends`, `owed`, `render`) get synthetic inputs; `gather`,
+`main` and the recap run
 against git repositories and away logs built under `tmp_path`, never the
 real away state. `tools/` is not a package, so the module is loaded from its
 path, inside each test, so a missing module fails the test naming the file.
@@ -44,7 +49,7 @@ def inputs(**fields: Any) -> Any:
     """`duties.Inputs` with nothing owed, overridden by `fields`."""
     base: dict[str, Any] = {
         "retro": utc("2026-10-17", "06:40"),
-        "research": utc("2026-10-16"),
+        "logged": None,
         "merges": [],
         "windows": [],
         "unmerged": [],
@@ -152,17 +157,21 @@ def test_two_windows_count_and_name_the_latest_end() -> None:
 # ---------------------------------------------------------------- test 3, D1
 
 CODE = "src_python/tin_engine/x.py"
+#: A full-lane merge carries its increment file; only such a merge owes a
+#: post-merge check (h34 section 3; a code-only merge is fast-lane, h34 test 9).
+INCREMENT = "docs/increments/46-x.md"
+FULL = (CODE, INCREMENT)
 
 
 def test_a_merge_one_second_after_r_owes_a_post_merge_check() -> None:
-    one = merge(R + timedelta(seconds=1), "#280", CODE)
+    one = merge(R + timedelta(seconds=1), "#280", *FULL)
     assert duties.owed(inputs(retro=R, merges=[one]), NOW) == [
-        "post-merge check (1 merge since the last retrospective, 2026-10-17 06:40 UTC: #280)"
+        "post-merge check (1 merge since the last log entry, 2026-10-17 06:40 UTC: #280)"
     ]
 
 
 def test_a_merge_one_second_before_r_owes_nothing() -> None:
-    one = merge(R - timedelta(seconds=1), "#279", CODE)
+    one = merge(R - timedelta(seconds=1), "#279", *FULL)
     assert duties.owed(inputs(retro=R, merges=[one]), NOW) == []
 
 
@@ -184,67 +193,58 @@ def test_a_check_recording_merge_owes_nothing(paths: tuple[str, ...]) -> None:
     "paths",
     [
         pytest.param(("ROADMAP.md", "docs/increments/46-x.md"), id="shape-of-237"),
-        pytest.param(("docs/retrospectives/x.md", CODE), id="retrospective-and-code"),
+        pytest.param(("docs/retrospectives/x.md", *FULL), id="retrospective-and-code"),
     ],
 )
 def test_a_merge_that_is_not_check_recording_owes(paths: tuple[str, ...]) -> None:
     one = merge(R + timedelta(hours=1), "#237", *paths)
     assert duties.owed(inputs(retro=R, merges=[one]), NOW) == [
-        "post-merge check (1 merge since the last retrospective, 2026-10-17 06:40 UTC: #237)"
+        "post-merge check (1 merge since the last log entry, 2026-10-17 06:40 UTC: #237)"
     ]
 
 
 def test_five_merges_list_the_newest_three_and_the_rest_as_a_count() -> None:
     # Newest first, the order `git log` gives.
-    five = [merge(R + timedelta(minutes=10 * n), f"#{n}", CODE) for n in (5, 4, 3, 2, 1)]
+    five = [merge(R + timedelta(minutes=10 * n), f"#{n}", *FULL) for n in (5, 4, 3, 2, 1)]
     assert duties.owed(inputs(retro=R, merges=five), NOW) == [
-        "post-merge check (5 merges since the last retrospective, 2026-10-17 06:40 UTC:"
-        " #5, #4, #3, +2)"
+        "post-merge check (5 merges since the last log entry, 2026-10-17 06:40 UTC: #5, #4, #3, +2)"
     ]
 
 
 def test_the_last_retrospective_time_prints_in_utc_whatever_its_offset() -> None:
     oslo = datetime(2026, 10, 17, 11, 40, tzinfo=timezone(timedelta(hours=2)))
-    one = merge(oslo + timedelta(minutes=5), "#280", CODE)
+    one = merge(oslo + timedelta(minutes=5), "#280", *FULL)
     assert duties.owed(inputs(retro=oslo, merges=[one]), NOW) == [
-        "post-merge check (1 merge since the last retrospective, 2026-10-17 09:40 UTC: #280)"
+        "post-merge check (1 merge since the last log entry, 2026-10-17 09:40 UTC: #280)"
     ]
 
 
-def test_with_no_retrospective_on_record_a_merge_owes_and_says_so() -> None:
-    one = merge(R, "#280", CODE)
-    assert duties.owed(inputs(retro=None, merges=[one]), NOW) == [
-        "post-merge check (no retrospective on record)"
+def test_with_no_baseline_on_record_a_merge_owes_and_says_so() -> None:
+    """h34 amends: no retrospective and no log entry; the weekly item is owed too."""
+    one = merge(R, "#280", *FULL)
+    assert duties.owed(inputs(retro=None, logged=None, merges=[one]), NOW) == [
+        "post-merge check (no log entry on record)",
+        "weekly retrospective (none on record)",
     ]
 
 
 # ---------------------------------------------------------------- test 4, D3
-
-
-def test_no_research_file_owes_a_research_round_none_on_record() -> None:
-    assert duties.owed(inputs(research=None), NOW) == ["research round (none on record)"]
-
-
-def test_a_research_file_6_days_23_h_old_owes_nothing() -> None:
-    research = NOW - timedelta(days=6, hours=23)
-    assert duties.owed(inputs(research=research), NOW) == []
-
-
-def test_a_research_file_7_days_1_h_old_owes_and_names_its_date() -> None:
-    research = NOW - timedelta(days=7, hours=1)
-    assert duties.owed(inputs(research=research), NOW) == ["research round (last 2026-10-10)"]
+#
+# Removed by h34: the research round is no longer its own duty; the weekly
+# retrospective replaces it (the h34 test 6 block).
 
 
 # ---------------------------------------------------------------- test 5, render
 #
 # Section 3's golden line, with one change: its R (09:40) is after its away
 # window's end (06:45), which by section 2 would not owe a morning check, so R
-# here is 06:40. Every other character is section 3's.
+# here is 06:40. h34 amends it: R is the last log entry, and with no
+# retrospective on record the weekly item takes the research item's place.
 
 GOLDEN = (
-    "Duties owed: post-merge check (1 merge since the last retrospective, 2026-10-17 06:40 UTC:"
-    " #280); morning check (1 away window ended since, latest 2026-10-17 06:45 UTC); research"
-    " round (none on record); push 6 retrospective branches (worktree-retro-1004c,"
+    "Duties owed: post-merge check (1 merge since the last log entry, 2026-10-17 06:40 UTC:"
+    " #280); morning check (1 away window ended since, latest 2026-10-17 06:45 UTC); weekly"
+    " retrospective (none on record); push 6 retrospective branches (worktree-retro-1004c,"
     " worktree-retro-1005, +4)"
 )
 UNMERGED = [  # unsorted, so the line's order is the tool's
@@ -259,9 +259,9 @@ UNMERGED = [  # unsorted, so the line's order is the tool's
 
 def _golden_inputs() -> Any:
     return inputs(
-        retro=R,
-        research=None,
-        merges=[merge(utc("2026-10-17", "10:15"), "#280", CODE)],
+        retro=None,
+        logged=R,
+        merges=[merge(utc("2026-10-17", "10:15"), "#280", *FULL)],
         windows=[_window("2026-10-16T23:24:03+00:00", "2026-10-17T06:45:45+00:00")],
         unmerged=UNMERGED,
     )
@@ -317,6 +317,9 @@ TM2 = utc("2026-10-04", "09:00")  # retrospective-only merge #12 (retro-b)
 T3 = utc("2026-10-05", "09:00")  # docs/retrospectives/next.md, branch agenda
 T4 = utc("2026-10-06", "09:00")  # a check only on origin/master
 RETRO = "docs/retrospectives/2026-10-02-a.md"
+#: The code merges are full-lane: each carries its increment file (h34 section 3).
+INC11 = {"docs/increments/11-code.md": "# 11\n"}
+INC12 = {"docs/increments/12-other.md": "# 12\n"}
 
 
 def git(repo: Path, *args: str) -> str:
@@ -385,18 +388,23 @@ def test_gather_reads_retrospective_times_merges_and_unmerged_branches(tmp_path:
     git(repo, "checkout", "-q", "-b", "retro-b", root)
     commit(repo, T2, "Retrospective a, carried (@orchestrator)", {RETRO: "# a\n"})
     git(repo, "checkout", "-q", "-b", "code", root)
-    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n"})
+    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
     merge_into_master(repo, TM1, "code", "Merge pull request #11 from x/code")
     git(repo, "checkout", "-q", "-b", "feat2", "master")
-    commit(repo, TM1B - timedelta(minutes=30), "Other (@developer)", {"src/other.py": "y = 1\n"})
+    commit(
+        repo,
+        TM1B - timedelta(minutes=30),
+        "Other (@developer)",
+        {"src/other.py": "y = 1\n", **INC12},
+    )
     bare = merge_into_master(repo, TM1B, "feat2", "Merge branch 'feat2'")
     fetched(repo)
 
     stage1 = duties.gather(repo, True)
     assert stage1.retro == T1  # the earliest add of the path, not the carried one
-    assert stage1.research is None
+    assert stage1.logged is None  # no lessons log beside the repository
     assert sorted(stage1.unmerged) == ["retro-a", "retro-b"]
-    d1 = "post-merge check (2 merges since the last retrospective, 2026-10-02 09:00 UTC: "
+    d1 = "post-merge check (2 merges since the last log entry, 2026-10-02 09:00 UTC: "
     assert _post_merge(duties.owed(stage1, TM2)) == [f"{d1}{bare}, #11)"]
     assert list(duties.gather(repo, False).unmerged) == []
 
@@ -421,27 +429,26 @@ def test_gather_reads_retrospective_times_merges_and_unmerged_branches(tmp_path:
     # Stage 4: a check that only origin/master holds, as after a merge whose
     # local branch was deleted.
     git(repo, "checkout", "-q", "--detach", "master")
-    research = "docs/retrospectives/2026-10-06-research-weekly.md"
-    only_remote = commit(repo, T4, "Research round (@orchestrator)", {research: "# r\n"})
+    weekly = "docs/retrospectives/2026-10-06-weekly.md"
+    only_remote = commit(repo, T4, "Weekly retrospective (@orchestrator)", {weekly: "# r\n"})
     git(repo, "checkout", "-q", "master")
     fetched(repo, only_remote)
     assert git(repo, "branch", "--contains", only_remote).strip() == ""
     stage4 = duties.gather(repo, True)
     assert stage4.retro == T4
-    assert stage4.research == T4
 
 
 def test_gather_without_origin_master_reads_master(tmp_path: Path) -> None:
     repo = new_repo(tmp_path / "g")
     commit(repo, T1, "Retrospective a (@orchestrator)", {RETRO: "# a\n"})
     git(repo, "checkout", "-q", "-b", "code")
-    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n"})
+    commit(repo, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
     merge_into_master(repo, TM1, "code", "Merge pull request #11 from x/code")
 
     found = duties.gather(repo, False)
     assert found.retro == T1
     assert _post_merge(duties.owed(found, TM2)) == [
-        "post-merge check (1 merge since the last retrospective, 2026-10-02 09:00 UTC: #11)"
+        "post-merge check (1 merge since the last log entry, 2026-10-02 09:00 UTC: #11)"
     ]
 
 
@@ -561,14 +568,15 @@ def _after_last_landed(lines: list[str]) -> str:
 
 
 def test_the_recap_prints_the_duties_line_after_last_landed(harness_repo: Path) -> None:
-    _check_now(harness_repo, "2026-10-20-plain.md")  # a check, but not a research round
+    """h34 amends: no retrospective on record owes the weekly one."""
     fetched(harness_repo)
     line = _after_last_landed(_recap(harness_repo))
-    assert line == "Duties owed: research round (none on record)"
+    assert line == "Duties owed: weekly retrospective (none on record)"
 
 
 def test_the_recap_prints_no_duties_line_when_none_is_owed(harness_repo: Path) -> None:
-    _check_now(harness_repo, "2026-10-20-research-x.md")
+    """h34 amends: any retrospective, not only a research one, ends the weekly duty."""
+    _check_now(harness_repo, "2026-10-20-plain.md")
     fetched(harness_repo)
     lines = _recap(harness_repo)
     assert not any(line.startswith("Duties") for line in lines), lines
@@ -590,7 +598,7 @@ def test_the_recap_with_a_broken_duties_module_prints_one_line_and_the_rest(
 
 
 def test_the_hook_is_silent_on_a_push_item_the_status_line_shows(harness_repo: Path) -> None:
-    _check_now(harness_repo, "2026-10-20-research-x.md")
+    _check_now(harness_repo, "2026-10-20-plain.md")
     fetched(harness_repo)
     _check_now(harness_repo, "2026-10-20-unpushed.md", branch="retro-unpushed")
     hook = _run_copy(harness_repo, "")
@@ -598,3 +606,229 @@ def test_the_hook_is_silent_on_a_push_item_the_status_line_shows(harness_repo: P
     status = _run_copy(harness_repo, _status_stdin(harness_repo).getvalue(), "--status")
     assert status.returncode == 0, status.stderr
     assert status.stdout == "Duties owed: push 1 retrospective branch (retro-unpushed)\n"
+
+
+# ================================================================ h34, the lessons log
+#
+# docs/increments/h34-lean-process.md section 4, tests 1 to 7 (test 8 is in
+# test_brief.py). Fixture times are UTC.
+
+NOW34 = utc("2026-10-27", "18:00")
+LOG = (
+    "# lessons\n"
+    "## 2026-10-26T09:00Z merge #380\n"
+    "- a finding, with its evidence\n"
+    "## 2026-10-27T12:00Z night\n"
+    "## 2026-10-27T13:00 merge #381\n"  # no `Z`: not a heading the log counts
+    "## not a heading\n"
+)
+
+
+# ---------------------------------------------------------------- h34 test 1, logged
+
+
+def test_h34_1_logged_is_the_latest_well_formed_stamp() -> None:
+    found = duties.logged(LOG, NOW34)
+    assert found == utc("2026-10-27", "12:00")
+    assert found is not None and found.utcoffset() == timedelta(0)
+
+
+def test_h34_1_logged_of_empty_text_is_none() -> None:
+    assert duties.logged("", NOW34) is None
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        pytest.param("## 2026-10-27T14:00Z nightly", id="night-then-a-letter"),
+        pytest.param("## 2026-10-27T14:00Z merge 382", id="merge-without-hash"),
+        pytest.param("## 2026-10-27T14:00Z review", id="other-kind"),
+        pytest.param(" ## 2026-10-27T14:00Z night", id="indented"),
+        pytest.param("### 2026-10-27T14:00Z night", id="deeper-heading"),
+    ],
+)
+def test_h34_1_a_heading_off_the_pattern_is_ignored(heading: str) -> None:
+    assert duties.logged(f"{LOG}{heading}\n", NOW34) == utc("2026-10-27", "12:00")
+
+
+# ---------------------------------------------------------------- h34 test 2, future stamps
+
+
+def test_h34_2_a_stamp_later_than_now_is_ignored() -> None:
+    later = "## 2026-10-28T09:00Z night\n"  # 15 hours after NOW34
+    assert duties.logged(LOG + later, NOW34) == utc("2026-10-27", "12:00")
+    assert duties.logged(later, NOW34) is None
+
+
+def test_h34_2_a_stamp_equal_to_now_counts() -> None:
+    """ "Not later than `now`": the boundary is kept."""
+    assert duties.logged("## 2026-10-27T18:00Z merge #383\n", NOW34) == NOW34
+
+
+# ---------------------------------------------------------------- h34 tests 3 and 4, post-merge
+
+MERGES34 = [  # newest first, as `git log` gives them
+    merge(utc("2026-10-27", "13:00"), "#382", *FULL),
+    merge(utc("2026-10-27", "11:00"), "#381", *FULL),
+]
+AFTER_NOON = "post-merge check (1 merge since the last log entry, 2026-10-27 12:00 UTC: #382)"
+RECENT34 = utc("2026-10-21", "10:00")  # a retrospective under a week old at NOW34
+
+
+def test_h34_3_merges_after_the_log_entry_are_owed() -> None:
+    """A week-old retrospective: the log entry is the baseline, and the weekly item is owed."""
+    found = inputs(retro=utc("2026-10-20", "10:00"), logged=utc("2026-10-27", "12:00"),
+                   merges=MERGES34)  # fmt: skip
+    assert duties.owed(found, NOW34) == [AFTER_NOON, "weekly retrospective (last 2026-10-20)"]
+
+
+def test_h34_4_with_no_log_entry_the_retrospective_is_the_baseline() -> None:
+    found = inputs(retro=utc("2026-10-27", "12:00"), logged=None, merges=MERGES34)
+    assert duties.owed(found, NOW34) == [AFTER_NOON]
+
+
+def test_h34_4_the_later_of_the_two_is_the_baseline() -> None:
+    found = inputs(retro=utc("2026-10-27", "12:00"), logged=utc("2026-10-27", "10:00"),
+                   merges=MERGES34)  # fmt: skip
+    assert duties.owed(found, NOW34) == [AFTER_NOON]
+
+
+def test_h34_4_with_neither_no_log_entry_is_on_record() -> None:
+    found = inputs(retro=None, logged=None, merges=MERGES34)
+    assert duties.owed(found, NOW34) == [
+        "post-merge check (no log entry on record)",
+        "weekly retrospective (none on record)",
+    ]
+
+
+# ---------------------------------------------------------------- h34 test 9, fast lane
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        pytest.param((CODE,), id="python-code"),
+        pytest.param(("include/terrain/cdt/x.hpp", "tests/cpp/x.cpp"), id="core-code-and-tests"),
+        pytest.param(("tools/duties.py", "ROADMAP.md"), id="tool-and-roadmap"),
+        pytest.param(("docs/increments.md", "docs/x.md"), id="docs-but-not-increments"),
+    ],
+)
+def test_h34_9_a_merge_with_no_increment_path_owes_no_post_merge_check(
+    paths: tuple[str, ...],
+) -> None:
+    """A fast-lane merge, after the baseline, owes nothing; the full-lane one
+    beside it still does, alone."""
+    fast = merge(utc("2026-10-27", "14:00"), "#383", *paths)
+    found = inputs(retro=RECENT34, logged=utc("2026-10-27", "12:00"),
+                   merges=[fast, *MERGES34])  # fmt: skip
+    assert duties.owed(found, NOW34) == [AFTER_NOON]
+    alone = inputs(retro=RECENT34, logged=utc("2026-10-27", "12:00"), merges=[fast])
+    assert duties.owed(alone, NOW34) == []
+
+
+def test_h34_9_with_no_baseline_a_fast_lane_merge_alone_owes_no_post_merge_check() -> None:
+    found = inputs(retro=None, logged=None, merges=[merge(NOW34, "#383", CODE)])
+    assert duties.owed(found, NOW34) == ["weekly retrospective (none on record)"]
+
+
+# ---------------------------------------------------------------- h34 test 5, morning
+
+RECENT = utc("2026-10-21", "10:00")  # a retrospective under a week old at NOW34
+
+
+def test_h34_5_a_window_ending_before_the_log_entry_owes_nothing() -> None:
+    window = _ended(5, utc("2026-10-27", "11:00"))
+    found = inputs(retro=RECENT, logged=utc("2026-10-27", "12:00"), windows=[window])
+    assert duties.owed(found, NOW34) == []
+
+
+def test_h34_5_a_window_ending_after_the_log_entry_owes_the_morning_check() -> None:
+    window = _ended(5, utc("2026-10-27", "13:00"))
+    found = inputs(retro=RECENT, logged=utc("2026-10-27", "12:00"), windows=[window])
+    assert duties.owed(found, NOW34) == [
+        "morning check (1 away window ended since, latest 2026-10-27 13:00 UTC)"
+    ]
+
+
+# ---------------------------------------------------------------- h34 test 6, weekly
+
+
+@pytest.mark.parametrize(
+    ("retro", "items"),
+    [
+        pytest.param(utc("2026-10-19", "10:00"), ["weekly retrospective (last 2026-10-19)"],
+                     id="8-days"),
+        pytest.param(NOW34 - timedelta(days=7), ["weekly retrospective (last 2026-10-20)"],
+                     id="7-days-exactly"),
+        pytest.param(NOW34 - timedelta(days=7) + timedelta(seconds=1), [], id="7-days-less-1-s"),
+        pytest.param(RECENT, [], id="6-days"),
+        pytest.param(None, ["weekly retrospective (none on record)"], id="none"),
+    ],
+)  # fmt: skip
+def test_h34_6_the_weekly_retrospective_is_owed_a_week_after_the_last(
+    retro: datetime | None, items: list[str]
+) -> None:
+    assert duties.owed(inputs(retro=retro), NOW34) == items
+
+
+def test_h34_6_no_item_names_a_research_round() -> None:
+    window = _ended(5, utc("2026-10-27", "13:00"))
+    found = inputs(retro=None, merges=MERGES34, windows=[window], unmerged=["retro-x"])
+    items = duties.owed(found, NOW34)
+    assert len(items) == 4, items
+    assert not [item for item in items if "research" in item], items
+
+
+def test_h34_6_inputs_has_no_research_field() -> None:
+    assert "research" not in duties.Inputs.__dataclass_fields__
+    assert "logged" in duties.Inputs.__dataclass_fields__
+
+
+# ---------------------------------------------------------------- h34 test 7, lessons_path
+
+
+def _log_beside(main: Path) -> Path:
+    """`<parent of the main checkout>/rasputin_scratch/lessons.md`, resolved."""
+    return (main.parent / "rasputin_scratch" / "lessons.md").resolve()
+
+
+def test_h34_7_lessons_path_is_the_same_from_the_repository_and_a_worktree(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "checkouts").mkdir()
+    main = new_repo(tmp_path / "checkouts" / "rasputin")
+    tree = harness_fixtures.add_worktree(main, tmp_path / "elsewhere" / "wt", "wt")
+    assert duties.lessons_path(main).resolve() == _log_beside(main)
+    assert duties.lessons_path(tree).resolve() == _log_beside(main)
+    assert duties.lessons_path(tree / "src").resolve() == _log_beside(main)
+
+
+def test_h34_7_gather_reads_the_log_from_a_worktree_and_starts_the_merge_query_there(
+    tmp_path: Path,
+) -> None:
+    """The log beside the main checkout is read from a worktree; merges at or
+    before its entry are not queried (`git log --since` uses the baseline)."""
+    (tmp_path / "checkouts").mkdir()
+    main = new_repo(tmp_path / "checkouts" / "rasputin")
+    git(main, "checkout", "-q", "-b", "code")
+    commit(main, TM1 - timedelta(hours=1), "Code (@developer)", {"src/code.py": "x = 1\n", **INC11})
+    merge_into_master(main, TM1, "code", "Merge pull request #11 from x/code")
+    git(main, "checkout", "-q", "-b", "code2")
+    commit(main, TM2 - timedelta(hours=1), "More (@developer)", {"src/more.py": "y = 1\n", **INC12})
+    merge_into_master(main, TM2, "code2", "Merge pull request #12 from x/code2")
+    fetched(main)
+    tree = harness_fixtures.add_worktree(main, tmp_path / "elsewhere" / "wt", "wt")
+    assert [m.label for m in duties.gather(tree, False).merges] == ["#12", "#11"]
+
+    log = _log_beside(main)
+    log.parent.mkdir(parents=True)
+    log.write_text(
+        "## 2026-10-03T12:00Z merge #11\n"  # between the two merges
+        "## 2999-01-01T00:00Z night\n"  # later than now: ignored
+    )
+    found = duties.gather(tree, False)
+    assert found.logged == utc("2026-10-03", "12:00")
+    assert [m.label for m in found.merges] == ["#12"]
+    assert _post_merge(duties.owed(found, utc("2026-10-05"))) == [
+        "post-merge check (1 merge since the last log entry, 2026-10-03 12:00 UTC: #12)"
+    ]
