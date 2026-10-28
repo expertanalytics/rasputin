@@ -116,7 +116,7 @@ not committed). "Ruled" marks an item that touches a rule Ola ruled on.
 | 1.12 | `architect.md` §3, item 3, "(Enforce the prohibited dependencies of `CLAUDE.md` §2 fiercely.)" | `CLAUDE.md` §2, gate | "Does a change add a heavy dependency?" | −7 |
 | 1.13 | computational-geometry §3 *Test in the producer's relation* (15 lines) | `REQUIRED-READING.md` *Claims* object-identity question; says itself "not a rule of its own" | "**Oracles use the producer's predicate, never its records** (the general rule: `.claude/REQUIRED-READING.md`, *Claims*)." Also removes the "~93 %" anecdote and worked example | −170 |
 | 1.14 | computational-geometry *Degeneracy Handling* | `tester.md` §3A | "handle the cases of `tester.md` §3A, and acute angles." | −9 |
-| 1.15 | python-development §4 *Testability* | `tester.md` §2 tiers | Cut | −77 |
+| 1.15 | python-development §4 *Testability* | `.claude/agents/tester.md@6bff3b46:42` tiers | Cut | −77 |
 | 1.16 | `tester.md` "under the handback heading "Pinned or assumed beyond the design"" | `.claude/briefs/common.md` handback headings | "in the handback" | −7 |
 | 1.17 | `perf.md` §1 "the 1 m benchmark and a thread-scaling sweep, compared with…" | README *Acceptance* (its one statement) | Cut, keep the pointer | −14 |
 | 1.18 | `perf.md` §2 *Record the power state…* | README *Acceptance* | Cut | −30 |
