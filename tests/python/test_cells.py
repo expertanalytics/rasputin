@@ -30,12 +30,14 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 from __future__ import annotations
 
+import importlib
 import math
 import re
 import sqlite3
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -46,7 +48,7 @@ from shapely.geometry import Polygon, box
 
 from gpkg_fixtures import needs_rtree
 from legend_fixtures import coded_map, corine_like, write
-from tin_engine import cells, meshing_rules
+from tin_engine import cells
 from tin_engine.io import geopackage_write
 from tin_engine.io.geopackage import layer_info, query_features
 from tin_engine.io.models import ClassFractions, SrsEntry
@@ -54,18 +56,23 @@ from tin_engine.io.models import ClassFractions, SrsEntry
 GLACIER, LAKE, FOREST, SAVANNA, UNSPECIFIED = range(5)
 #: Section 3: 44 classes at most of float32 rounding (6e-8 each) in one row.
 FIVE_SUM = 3e-6
-SHIPPED = Path(meshing_rules.__file__).parent / "data" / "meshing_rules"
+SHIPPED = Path(cells.__file__).parent / "data" / "land_cover_classes"
 CORINE = {311: "forest", 312: "forest", 313: "forest", 511: "lake", 512: "lake",
           521: "lake", 522: "lake", 335: "glacier", 523: "unspecified"}  # fmt: skip
 WANT = {
     "corine": CORINE,
-    "corine-water": CORINE,
     "clc18_kode": CORINE,
     "ar50": {30: "forest", 3031: "forest", 3032: "forest", 3033: "forest", 3099: "forest",
              81: "lake", 70: "glacier", 82: "unspecified"},
     "mapbiomas-c11": {3: "forest", 5: "forest", 6: "forest", 49: "forest", 9: "forest",
                       33: "lake", 31: "lake", 4: "savanna", 7: "savanna"},
 }  # fmt: skip
+
+
+def load(name: str) -> Any:
+    """A land-cover class file by name or path; imported here, so the suite
+    collects before `tin_engine.land_cover_classes` exists."""
+    return importlib.import_module("tin_engine.land_cover_classes").load(name)
 
 
 def table(offsets: list[int], classes: list[int], fractions: list[float]) -> ClassFractions:
@@ -77,7 +84,7 @@ def table(offsets: list[int], classes: list[int], fractions: list[float]) -> Cla
 
 
 def five(fractions: ClassFractions, legend: str) -> np.ndarray:
-    got = cells.categorise(fractions, meshing_rules.load(legend).categories)
+    got = cells.categorise(fractions, load(legend).categories)
     assert got.dtype == np.float64 and got.shape == (fractions.triangles, 5), got
     return got
 
@@ -87,7 +94,7 @@ def five(fractions: ClassFractions, legend: str) -> np.ndarray:
 
 @pytest.mark.parametrize("name", sorted(WANT))
 def test_t1_shipped_categories(name: str) -> None:
-    legend = meshing_rules.load(name)
+    legend = load(name)
     assert dict(legend.categories) == WANT[name]
     assert dict(cells.categories_of(legend)) == WANT[name]
 
@@ -96,16 +103,16 @@ def test_t1_shipped_categories(name: str) -> None:
 def test_t1_water_codes_are_the_files_water_classes(name: str) -> None:
     data = tomllib.loads((SHIPPED / f"{name}.toml").read_text("utf-8"))
     water = {c["code"] for c in data["class"] if c.get("water")}
-    assert meshing_rules.load(name).water_codes == frozenset(water)
+    assert load(name).water_codes == frozenset(water)
     assert water <= set(WANT[name]), "every shipped water class is named"
 
 
 def test_t1_class_0_is_unspecified() -> None:
-    assert meshing_rules.load("corine").categories.get(0, "unspecified") == "unspecified"
+    assert load("corine").categories.get(0, "unspecified") == "unspecified"
 
 
 def test_t1_uncategorised_water_loads_and_categories_of_refuses_it(tmp_path: Path) -> None:
-    legend = meshing_rules.load(str(write(tmp_path / "w.toml", corine_like("w", "40"))))
+    legend = load(str(write(tmp_path / "w.toml", corine_like("w", "40"))))
     assert 512 in legend.water_codes and 512 not in legend.categories
     with pytest.raises(ValueError, match=r"\b512\b"):
         cells.categories_of(legend)
@@ -116,7 +123,7 @@ def test_t1_categories_of_names_every_uncategorised_water_class(tmp_path: Path) 
         '[[class]]\ncode = 2\nlabel = "Lake"\ncolour = "#2532e4"\nwater = true\n\n'
         '[[class]]\ncode = 7\nlabel = "Pond"\ncolour = "#2532e5"\nwater = true\n'
     )
-    legend = meshing_rules.load(str(write(tmp_path / "two.toml", coded_map(classes=two))))
+    legend = load(str(write(tmp_path / "two.toml", coded_map(classes=two))))
     with pytest.raises(ValueError) as caught:
         cells.categories_of(legend)
     assert re.search(r"\b2\b", str(caught.value)) and re.search(r"\b7\b", str(caught.value))
@@ -129,7 +136,7 @@ def test_t1_land_without_category_passes_the_check(tmp_path: Path) -> None:
         '[[class]]\ncode = 2\nlabel = "Lake"\ncolour = "#2532e4"\nwater = true\n'
         'category = "lake"\n'
     )
-    legend = meshing_rules.load(str(write(tmp_path / "n.toml", coded_map(classes=named))))
+    legend = load(str(write(tmp_path / "n.toml", coded_map(classes=named))))
     assert dict(cells.categories_of(legend)) == {2: "lake"}
 
 
@@ -137,7 +144,7 @@ def test_t1_an_unknown_category_is_refused_at_load(tmp_path: Path) -> None:
     sea = '[[class]]\ncode = 2\nlabel = "Sea"\ncolour = "#2532e4"\nwater = true\ncategory = "sea"\n'
     path = write(tmp_path / "sea.toml", coded_map(classes=sea))
     with pytest.raises(ValueError, match="sea"):
-        meshing_rules.load(str(path))
+        load(str(path))
 
 
 # ------------------------------------------------------------ T2 categorise
@@ -253,7 +260,7 @@ def conn() -> Iterator[sqlite3.Connection]:
     )  # fmt: skip
     connection = sqlite3.connect(":memory:")
     geopackage_write.create_geopackage(connection, srs)
-    categories = meshing_rules.load("corine").categories
+    categories = load("corine").categories
     table_ = cells.cell_table(VERTICES, TRIANGLES, FRACTIONS, categories)
     geopackage_write.write_cells(connection, table_, UTM33)
     geopackage_write.write_fractions(connection, FRACTIONS)
