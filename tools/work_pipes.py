@@ -268,6 +268,17 @@ def _choose(state: State, now: datetime) -> tuple[Choice, dict[str, str], bool]:
     return order(state.pipes, items, now, unattended, set(notes)), notes, unattended
 
 
+def _owed(repo: Path) -> list[str]:
+    """The duties line `tools/duties.py` gives the prompt hook, as a list; none on a fault."""
+    import duties
+
+    try:
+        found = duties.line(repo, "hook")
+    except Exception:  # the duties are advice here: a fault never stops `next`
+        return []
+    return [found] if found else []
+
+
 def _next_line(choice: Choice) -> str:
     i = choice.item
     return f"next: {i.pipe}/{i.id} {i.state} ({choice.reason})" if i else IDLE
@@ -431,7 +442,8 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
         choice, notes, _ = _choose(state, now)
         flying = [i for i in _open(state.items).values() if i.state in RANK and i.branch in notes]
         return [f"busy: {i.pipe}/{i.id} ({notes[str(i.branch)]})" for i in flying] + [
-            _next_line(choice)
+            _next_line(choice),
+            *([] if choice.item else _owed(repo)),
         ]
     elif getattr(args, "markdown", False):
         return markdown_lines(repo, now)

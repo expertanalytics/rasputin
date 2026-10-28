@@ -84,7 +84,8 @@ the personas. Its rules:
   sequence, each explained, with its default.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
   `@orchestrator`, which appends it to the lessons log.
-* **When to spawn `@orchestrator`.** When `tools/duties.py` shows a duty owed.
+* **When to spawn `@orchestrator`.** When `tools/duties.py` shows a duty
+  owed; with no free item, that duty runs first.
 
 ## 4. Operational Commands
 
@@ -129,9 +130,8 @@ prose-only change. A PR that changes
 only prose (Markdown at the root or under `docs/`, less the files the suites
 read; `tools/ci_changes.py` decides) skips the C++, sanitizer and Python jobs
 and runs only the governance gates, so its green says nothing about code.
-`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR (the
-queue's method, merge commit, applies), and the queue tests it on top of the
-PRs ahead and merges it. No update-branch loop. A method flag such as `--merge`
-only prints a warning (the queue's method wins); `-d`/`--delete-branch` is
-refused. Never pass `--admin`: it bypasses the queue.
+`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR,
+and the queue tests it on top of the PRs ahead and merges it. No update-branch
+loop. `-d`/`--delete-branch` is refused. Never pass `--admin`: it bypasses the
+queue.
 

@@ -932,11 +932,24 @@ def test_h34_10_the_fast_lane_developer_write_limit_adds_tests(repo: Path, home:
     assert line.endswith("and your note file."), line
 
 
+#: Rule text is fast-lane work: the fast lane's write limit names the rule files too.
+RULE_FILES = ("CLAUDE.md", ".claude/ files ending in .md", "docs/increments/README.md")
+
+
+def test_the_fast_lane_developer_write_limit_adds_the_rule_files(repo: Path, home: Path) -> None:
+    output = ok(repo, home, "developer", "--worktree", str(repo), "--beside", "none", *FAST)
+    line = line_starting(output, "Write limit:")
+    for fragment in RULE_FILES:
+        assert fragment in line, line
+
+
 def test_h34_10_without_the_flag_the_developer_write_limit_has_no_tests(
     repo: Path, home: Path
 ) -> None:
     line = line_starting(ok(repo, home, *args_for("developer", repo)), "Write limit:")
     assert "tests/" not in line, line
+    for fragment in RULE_FILES:
+        assert fragment not in line, line
 
 
 def test_h34_10_without_the_flag_a_developer_still_needs_an_increment(

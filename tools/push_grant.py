@@ -7,7 +7,9 @@ expansion test), §3.3 (`reviewed`) and §3.5 (`judge`, called by
 once per head, provided `@reviewer`'s last recorded verdict approved its head.
 A branch holding commits of `private/master` goes only to the private
 repository, where it may also be merged once per head when its checks are
-green; any other branch goes only to origin. Standard library only.
+green; any other branch goes only to origin. A fast-lane branch for origin
+(no full-lane path, no increment file, at most 700 net lines) needs neither
+grant nor review; the merge queue still wants green checks. Standard library only.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ import ci_changes
 import harness_mode as hm
 import shell_scan
 
+#: The net-line ceiling of CLAUDE.md section 2, which a fast-lane branch keeps.
+LANE_CAP = 700
 #: guard_push's reason strings for a push and a pull request write.
 PUSH, PR = "git push writes to the remote", "gh pr changes a pull request"
 PRIVATE_REMOTE, PRIVATE_REPO = "private", "expertanalytics/rasputin-private"
@@ -373,6 +377,31 @@ def jsonl(path: Path) -> list[Any]:
     return found
 
 
+def fast_lane(where: str, state: Path, act: Act) -> bool:
+    """Whether `act` is on a fast-lane branch for origin: no full-lane path and no
+    increment file against origin/master, at most `LANE_CAP` net lines. Fails closed."""
+    try:
+        import check_lane
+
+        common = git(where, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        head = git(where, "rev-parse", "--verify", f"refs/heads/{act.branch}").strip()
+        if act.remote != "origin" or Path(common).resolve() != state.parent.resolve():
+            return False
+        if act.sha not in (None, head) or home(where, head) != ("origin", ""):
+            return False
+        paths = git(where, "diff", "--name-only", "--no-renames", "-z",
+                    f"refs/remotes/origin/master...{head}").split("\0")  # fmt: skip
+        if any(p.startswith(check_lane.FULL_LANE) or check_lane.INCREMENT.fullmatch(p)
+               for p in paths):  # fmt: skip
+            return False
+        count = [sys.executable, str(Path(__file__).with_name("count_loc.py")),
+                 "refs/remotes/origin/master", head, "--max", str(LANE_CAP)]  # fmt: skip
+        return subprocess.run(count, cwd=where, capture_output=True, check=False,
+                              timeout=60).returncode == 0  # fmt: skip
+    except (ImportError, OSError, subprocess.SubprocessError):
+        return False
+
+
 def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | None:
     """A granted branch's act, passed (and logged) or refused with why; None if not one (§3.5)."""
     state = hm.state_dir(hm.ROOT)
@@ -385,13 +414,14 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
     if act is None:
         loose = loose_act(command, grants(flag))
         return Grant(False, *loose, None, NOT_BARE) if loose else None
-    if act.branch not in grants(flag):
+    where = act.directory or event.get("cwd") or os.getcwd()
+    fast = act.branch not in grants(flag)
+    if fast and not fast_lane(where, state, act):
         return None
 
     def refused(why: str, head: str | None = None) -> Grant:
         return Grant(False, act.branch, act.kind, head, why)
 
-    where = act.directory or event.get("cwd") or os.getcwd()
     common = git(where, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
     if Path(common).resolve() != state.parent.resolve():
         return refused("the command runs in another repository")
@@ -408,7 +438,8 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         holds, only = (("holds commits of", "the private repository") if act.remote == "origin"
                        else ("holds no commit of", "origin"))  # fmt: skip
         return refused(f"head {head[:7]} {holds} private/master, so it goes only to {only}", head)
-    reason, record = review_of(where, head, jsonl(state / "reviews.jsonl"), act.remote)
+    reviews = jsonl(state / "reviews.jsonl")
+    reason, record = (None, {}) if fast else review_of(where, head, reviews, act.remote)
     if reason is not None or record is None:
         return refused(
             f"head {head[:7]} is not reviewed: {reason}; it may be redone once "
@@ -416,7 +447,8 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
             head,
         )
     r7 = str(record.get("sha"))[:7]
-    if act.remote == "origin" and not recorded(where, head, str(record.get("sha")), act.remote):
+    public = not fast and act.remote == "origin"
+    if public and not recorded(where, head, str(record.get("sha")), act.remote):
         return refused(f"head {head[:7]} is not reviewed: no increment file this branch changes "
                        f"names {r7} under ## Review; it may be redone once the review of {r7} "
                        "is recorded there", head)  # fmt: skip
@@ -432,6 +464,7 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
     line = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "window": since,
             "branch": act.branch, "act": act.kind, "head": head, "remote": act.remote,
             "review": [record.get("sha"), record.get("at")]}  # fmt: skip
+    line |= {"lane": "fast"} if fast else {}
     error = hm.append_queue(state, line, "grants-used.jsonl")
     if error is not None:
         return refused(f"the grants log cannot be written ({error})", head)

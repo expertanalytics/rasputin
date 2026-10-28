@@ -45,6 +45,8 @@ WRITES: dict[str, tuple[str, ...]] = {
     "tester": ("tests/",),
 }  # fmt: skip
 PERSONAS = tuple(WRITES)
+#: The fast lane's developer writes the test, and rule text is fast-lane work.
+FAST_WRITES = ("tests/", "CLAUDE.md", ".claude/ files ending in .md", "docs/increments/README.md")
 NEEDS_INCREMENT = ("tester", "developer", "reviewer")
 #: The line .claude/hooks/record_review.py records (h29 §3.1); the reviewer's brief demands it.
 REVIEW_LINE = (
@@ -280,7 +282,7 @@ def _brief(argv: list[str] | None) -> str:
         )
     except (KeyError, ValueError) as exc:
         raise BriefError(f"{TEMPLATE}: the template names an unknown variable ({exc})") from exc
-    limit = ", ".join(WRITES[persona] + ("tests/",) * fast) or "nothing"
+    limit = ", ".join(WRITES[persona] + FAST_WRITES * fast) or "nothing"
     body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
     if persona == "reviewer":
