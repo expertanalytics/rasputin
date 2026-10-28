@@ -125,15 +125,11 @@ performed this named act once, and has the tree changed since?* If yes, ask. A g
 outlive the session it was given in: a yes recorded on disk (`session.md`, a
 handback) is asked again after a context loss.
 
-**`@reviewer` runs once on any branch before its first push, whether or not
-the branch contains production code, and again before a push that follows a
-round of findings (a verdict other than `APPROVED`,
-`docs/increments/README.md` step 4).** On a prose or tooling branch its scope is:
-
-- every claim the branch asserts, checked by running the thing it asserts about;
-- `python3 tools/check_citations.py`, with its at-risk list **re-read as
-  quotations** — resolving a line number is not resolving the quotation;
-- for any rule the branch adds, the incident it prevents, named with a commit.
+**On a full-lane branch, `@reviewer` runs once before its first push, and
+again before a push that follows a round of findings (a verdict other than
+`APPROVED`, `docs/increments/README.md` step 4).** Before any push, the
+branch's writer re-reads `python3 tools/check_citations.py`'s at-risk list
+**as quotations**: resolving a line number is not resolving the quotation.
 
 ## The harness
 
