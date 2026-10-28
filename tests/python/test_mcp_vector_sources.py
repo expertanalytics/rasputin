@@ -123,7 +123,10 @@ async def test_t7_find_then_catchment_then_mesh_over_mcp_only(home: Path) -> Non
     # is in the description, which the agent reads.
     polygons = fitting(document, "catchment", "lakes")
     (lakes,) = [s for s in polygons if "lake" in s["description"].lower()]
-    (cover,) = fitting(document, "mesh", "land_cover")
+    # The shipped class raster (mapbiomas-c11) fits `land_cover` too; the one
+    # that covers the box is the agent's, as for the DEM.
+    covers = [s for s in fitting(document, "mesh", "land_cover") if s["box_covered"] == 1.0]
+    (cover,) = covers
     cover_classes = the_fit(cover, "mesh", "land_cover")["classes"]
 
     outline = out_root / "new" / "deeper" / "c.geojson"
