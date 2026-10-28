@@ -5,11 +5,6 @@ each pair copied here with its whitespace collapsed. Each check reads the real
 file of the checkout: the new text is there and the old one is gone (unless
 the new text contains it). Whitespace is collapsed on both
 sides, so line wrapping does not count.
-
-The rule texts are applied by the main session with Ola's yes, after the green
-step of `tools/duties.py` and `tools/brief.py`; until then every case fails,
-so each is a strict expected failure. Whoever applies R1 to R15 removes the
-`xfail` mark in the same commit: a strict `xfail` that passes fails the run.
 """
 
 from __future__ import annotations
@@ -19,9 +14,6 @@ import pytest
 from harness_fixtures import REAL
 
 pytestmark = pytest.mark.harness
-
-#: Applied with Ola's yes, not by the green step (the design's status line).
-PENDING = "R1 to R15 are applied by the main session with Ola's yes"
 
 
 def collapsed(text: str) -> str:
@@ -264,23 +256,9 @@ RULE_TEXTS = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason=PENDING)
 @pytest.mark.parametrize(("relative", "old", "new"), RULE_TEXTS)
 def test_the_rule_text_reads_as_the_design_says(relative: str, old: str, new: str) -> None:
     text = collapsed((REAL / relative).read_text())
     assert text.count(new) == 1, f"{relative}: the new text is not there exactly once"
     if old not in new:
         assert old not in text, f"{relative}: the old text is still there"
-
-
-def test_each_old_text_of_the_design_is_in_its_file_once_or_already_replaced() -> None:
-    """The pairs are copied right: each old or new text is found in its file.
-
-    Before R1 to R15 are applied every old text occurs once (the design's own
-    claim, at master `662022b0`); after, every new one does. A pair found
-    neither way was copied wrong, and the expected failure above would hide it.
-    """
-    for case in RULE_TEXTS:
-        relative, old, new = case.values
-        text = collapsed((REAL / str(relative)).read_text())
-        assert text.count(str(old)) == 1 or text.count(str(new)) == 1, case.id
