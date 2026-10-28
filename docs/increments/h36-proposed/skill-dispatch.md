@@ -14,7 +14,7 @@ plan. List running jobs before starting one. Still unclear: ask Ola one question
 ## Spawning
 * **First question.** Before an item's first spawn, answer in one line Ola
   may veto: is this needed; can we delete instead; which lane?
-* Brief each spawn with `python3 tools/brief.py`; make worktrees with
+* Brief each spawn and new-step resume: `tools/brief.py`; make worktrees with
   `tools/new_worktree.py`.
 * Resume a persona only under about 150 k tokens of transcript; else spawn
   fresh on the increment file.
