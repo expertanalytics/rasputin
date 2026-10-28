@@ -113,7 +113,6 @@ from tin_engine.feature_input import (
     read_linestrings,
     read_polygons,
     read_source,
-    repaired_areas,
     source_region,
 )
 from tin_engine.features import (
@@ -2044,9 +2043,8 @@ def _class_fractions(
             if repository is None:
                 assert land is not None and classes.classes is not None
                 xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
-                say = functools.partial(_say_repaired, "land cover")
-                found, repaired = repaired_areas(land.map.areas, xy, say)
                 listed = known_codes(classes.classes)
+                found, repaired = list(land.map.areas), land.base.repaired
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=listed)
             else:
                 assigned = assign_fractions(
@@ -2207,6 +2205,7 @@ def _land_cover_map(
         region = source_region(area, dem_crs, dem_crs, cell=cell)
         base = build([r.areas for r in reads], [], classes.classes, region)
         built = build([base.areas], chosen, classes.classes, region) if chosen else base
+        _say_repaired("land cover", base.repaired, sum(len(r.areas) for r in reads))
     for r in reads:
         if r.scanned:
             typer.echo(
@@ -2349,7 +2348,7 @@ def _prefer_record(
     label = " + ".join(escaped_ascii(f.name) for f in classes.files)
     xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
     codes = list(dict.fromkeys(p.code for p in preferred))
-    base, _ = repaired_areas([(c, g) for c, g in land.base.areas if c in codes], xy)
+    base = [(c, g) for c, g in land.base.areas if c in codes]
     areas = areas_inside(base, land.map.replaced, codes, xy[trimmed.triangles])
     rows, credits, licences, cites = [], [], [], []
     for key in dict.fromkeys(p.key for p in preferred):

@@ -7,9 +7,10 @@ area, the first given keeps it, and a later file's polygon is cut by the
 earlier files' polygons it shares area with. Each preferred source then
 replaces its class (`preferred.replace`, near the read region), and each
 refilled piece is unioned with the polygons of the class it took whose
-borders meet its own, so no old border runs between them. The polygons stay
-unchecked: a ring that crosses itself is repaired only where the shares
-need it. Pure: shapely geometry in, no file, no CRS.
+borders meet its own, so no old border runs between them. Every polygon
+whose part near the read region is invalid is repaired there first
+(`feature_input._repaired`): a ring that crosses itself makes GEOS's
+overlays throw. Pure: shapely geometry in, no file, no CRS.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import LandCoverClasses, _repaired
+from tin_engine.feature_input import MARGIN, LandCoverClasses, _repaired
 from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
@@ -32,15 +33,16 @@ Pairs = Sequence[tuple[int, BaseGeometry]]
 
 @dataclass(frozen=True)
 class LandCoverMap:
-    """The map's ``(code, polygon)`` areas in the DEM's CRS, unchecked; the
-    class file; the ``--prefer`` cut (None without ``--prefer``); and per
+    """The map's ``(code, polygon)`` areas in the DEM's CRS, repaired; the
+    class file; the ``--prefer`` cut (None without ``--prefer``); per
     overlap between two files, the index of the file kept and the area cut
-    from the later one."""
+    from the later one; and how many of the files' polygons were repaired."""
 
     areas: tuple[tuple[int, BaseGeometry], ...]
     classes: LandCoverClasses
     replaced: Replaced | None
     overlap: tuple[tuple[int, BaseGeometry], ...]
+    repaired: int
 
 
 def build(
@@ -51,21 +53,41 @@ def build(
 ) -> LandCoverMap:
     """The map of ``base`` (one sequence of (code, polygon) per file, in the
     order given) with each code of ``preferred`` (replaced code, polygons, as
-    `preferred.replace` takes them) taken from its polygons near ``region``."""
-    areas, overlap = _joined(base, shapely.get_coordinates(region.exterior))
+    `preferred.replace` takes them) taken from its polygons near ``region``.
+    Each file's polygons are repaired near ``region`` first."""
+    xy = shapely.get_coordinates(region.exterior)
+    fixed = [_fixed(pairs, xy) for pairs in base]
+    areas, overlap = _joined([f for f, _ in fixed])
+    n = sum(r for _, r in fixed)
     if not preferred:
-        return LandCoverMap(tuple(areas), classes, None, tuple(overlap))
+        return LandCoverMap(tuple(areas), classes, None, tuple(overlap), n)
     done = replace(areas, preferred, [region])
-    return LandCoverMap(tuple(_refilled_joined(done)), classes, done, tuple(overlap))
+    return LandCoverMap(tuple(_refilled_joined(done)), classes, done, tuple(overlap), n)
+
+
+def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64]) -> tuple[Pairs, int]:
+    """``pairs`` with each polygon whose part in the box of ``xy`` widened by
+    `MARGIN` is invalid repaired (`_repaired`), as `repaired_areas` repairs,
+    and the count repaired. Only that part is checked: checking a whole
+    polygon of hundreds of thousands of vertices takes most of a second."""
+    box = (*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
+    shapes = np.array([g for _, g in pairs] or [Polygon()], dtype=object)
+    bad = ~shapely.is_valid(shapely.clip_by_rect(shapes, *box))
+    out, n = [], 0
+    for (code, g), suspect in zip(pairs, bad[: len(pairs)], strict=True):
+        fixed = _repaired(g, xy) if suspect else g
+        n += fixed is not g
+        if fixed is not None:
+            out.append((code, fixed))
+    return out, n
 
 
 def _joined(
-    base: Sequence[Pairs], xy: npt.NDArray[np.float64]
+    base: Sequence[Pairs],
 ) -> tuple[list[tuple[int, BaseGeometry]], list[tuple[int, BaseGeometry]]]:
     """The files' polygons, a later one less what it shares with earlier
     ones (pairs that only touch share none); and each area cut, with the
-    index of the file that kept it. The polygons of each pair are repaired
-    near the points ``xy`` first (`_repaired`), as the shares step repairs."""
+    index of the file that kept it."""
     kept: list[tuple[int, BaseGeometry]] = list(base[0]) if base else []
     owner = [0] * len(kept)
     overlap: list[tuple[int, BaseGeometry]] = []
@@ -76,8 +98,6 @@ def _joined(
             later = np.array([g for _, g in pairs], dtype=object)
             found = shapely.STRtree(shapes).query(later, predicate="intersects")
             for i, k in zip(*found, strict=True):
-                for n, g in ((i, later), (k, shapes)):
-                    g[n] = _repaired(g[n], xy) or Polygon()
                 shared = shapely.intersection(later[i], shapes[k])
                 if shared.area > 0:
                     hits[int(i)].append(int(k))
