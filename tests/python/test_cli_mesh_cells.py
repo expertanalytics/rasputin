@@ -155,7 +155,7 @@ def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> No
     check_sums(mapbiomas)
 
 
-# ------------------------------------------------------------ a raster without a land-cover class file
+# ------------------------------------------- a raster without a land-cover class file
 
 
 def test_t5_without_a_class_file_only_the_fractions_table(
