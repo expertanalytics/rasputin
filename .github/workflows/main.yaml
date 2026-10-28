@@ -227,8 +227,8 @@ jobs:
       # Only the decidable half is a failure: a cited file exists and is long
       # enough (for `legacy/` paths, in the legacy-archive tag the full checkout
       # above brings). The half that matters -- whether the quotation at that
-      # line still says what the citing prose claims -- is @reviewer's, per
-      # .claude/REQUIRED-READING.md; the tool prints it as an at-risk worklist,
+      # line still says what the citing prose claims -- is the branch's writer's,
+      # per .claude/REQUIRED-READING.md; the tool prints it as an at-risk worklist,
       # which does not fail the build.
       - name: Citations resolve
         run: python tools/check_citations.py
