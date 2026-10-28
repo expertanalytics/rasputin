@@ -9,8 +9,7 @@ description: Pushes, pull requests, merges, CI and the merge queue. Load before 
   done once and the tree changed since, ask again. A yes recorded on disk is
   asked again after a context loss.
 * **`@reviewer` first** on a full-lane branch: before its first push and
-  before a push that follows a verdict other than `APPROVED`. A fast-lane
-  branch has no review.
+  before a push that follows a verdict other than `APPROVED`.
 * **Conflicts before the question:** `git fetch`, then
   `git merge-tree --write-tree origin/master <branch>`, and against each
   branch queued ahead. Master conflicts: a writer runs

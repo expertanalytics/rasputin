@@ -23,8 +23,8 @@
 - **Derive probes from the code as fixed, not from the bug as found.**
 - **Make the probe able to fail**; time a hang from outside. Verify a gate by
   planting what it forbids.
-- Where nothing can run, ask whether the claim is about the object the code
-  evaluates.
+- Where nothing can run, state the mechanism and ask whether the claim is
+  about the object the code evaluates.
 - For a claim that depends on the tree, write the rule and the command, not
   the value.
 - Check a correction like the claim it corrects. Label an estimate as one.
@@ -40,10 +40,12 @@ C++: `pytest` does not rebuild the extension. Run `ctest` only after a
 
 ## Before you publish: the approval boundary, and the assessment
 
-**The working tree is yours, the remote is Ola's.** `git push`,
-`gh pr create`, `gh pr merge`, any force-push or history rewrite, and any
-edit to `.claude/settings*.json` or the permission system need Ola's fresh
-yes each time (skills: `publishing`; while he is away, `away-mode`).
+**The working tree is yours, the remote is Ola's.** Edits, spawns, builds,
+tests, gates and commits need no fresh yes, as far as the instruction
+requires ("re-verify with `@reviewer`" covers acting on its findings);
+`git push`, `gh pr create`, `gh pr merge`, any force-push or history
+rewrite, and any edit to `.claude/settings*.json` or the permission system
+need one each time (skills: `publishing`; while he is away, `away-mode`).
 Before any push, the branch's writer re-reads
 `python3 tools/check_citations.py`'s at-risk list **as quotations**:
 resolving a line number is not resolving the quotation.

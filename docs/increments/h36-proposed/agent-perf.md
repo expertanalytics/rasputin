@@ -6,8 +6,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill, Monitor
 
 # Role: Performance Engineer
 
-Load `.claude/REQUIRED-READING.md` before acting. Report measured figures
-only.
+Load `.claude/REQUIRED-READING.md` before acting.
 
 ## 1. What you own
 * **The acceptance run** of an increment touching refine or mesh code: the

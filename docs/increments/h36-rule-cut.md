@@ -1,6 +1,6 @@
 # Harness h36: cut the rule payload by half
 
-Status: **designed**, 2026-10-28, round 3: origin/master `14a17091` merged
+Status: **designed**, 2026-10-28, round 3 (amended after its review, §7's sweep): origin/master `14a17091` merged
 in, and every proposed text rebased onto today's version of the file it
 replaces (§7). About 37 counted lines (§3), no C++ file, no refine or mesh
 code, and no path `tools/check_lane.py` names as full-lane. Kept in the full
@@ -74,7 +74,7 @@ loads a `CLAUDE.md` in any subdirectory it reads).
 | File | Stays as an imperative | Moves to a skill | Replaced by a tool | Dropped |
 |---|---|---|---|---|
 | `CLAUDE.md` | §1 to §4, each cut to its commands; step order with both lanes | dispatch rules of §3, the first question included → `dispatch`; CI and merge queue → `publishing` | size-limit definition → `tools/count_loc.py` docstring; "merge commit, never squash" → the merge queue's method; `@orchestrator` timing → `tools/duties.py`; gate list → `gates_after_commit.py`, except `check_code_history.py`, which the hook does not run (`gates_after_commit.py` `gates()`), so its command stays in §4's block | method-flag and `-d` behaviour of `gh pr merge` |
-| `REQUIRED-READING.md` | note file, skills, ideas, claims, approval boundary and the at-risk citation re-read, harness hook list, data folders | cold start, `questions.py` and `work_pipes.py` → `dispatch`; grants, full-lane reviewer-before-push → `publishing`; unattended mode, fast-lane branches while away → `away-mode` | rebuild recipe → `tools/rebuild_core.py`; hook descriptions → the hooks' own refusal texts | recap-size rule; `touch` after a `cp` restore (mutants now run in scratch copies); "editing rule files is ordinary tree work" |
+| `REQUIRED-READING.md` | note file, skills, ideas, claims, approval boundary (what needs no fresh yes, and what needs one) and the at-risk citation re-read, harness hook list, data folders | cold start, `questions.py` and `work_pipes.py` → `dispatch`; grants, full-lane reviewer-before-push → `publishing`; unattended mode, fast-lane branches while away → `away-mode` | rebuild recipe → `tools/rebuild_core.py`; hook descriptions → the hooks' own refusal texts | recap-size rule; `touch` after a `cp` restore (mutants now run in scratch copies); "editing rule files is ordinary tree work" |
 | `docs/increments/README.md` | the loop, the two lanes, acceptance pointer, cost constraints | verdict format → `reviewer.md`; acceptance details → `perf.md` | merge commit → the merge queue | |
 | `docs/PRINCIPLES.md` | deleted; A6, B3, B4, D2, D3 become five lines in REQUIRED-READING's *Claims*; the six files that name it change (§3) | | | *Origin* and *Status* lines |
 | `.claude/briefs/common.md` | all; tested phrases kept word for word | | | "never by a name pattern" |
@@ -177,15 +177,15 @@ the four list entries -4, `new_worktree.py` 0: about **37**.
 
 | File | Now | Proposed | Change |
 |---|---|---|---|
-| `CLAUDE.md` | 1175 | 295 | -880 |
-| `.claude/REQUIRED-READING.md` | 1752 | 473 | -1279 |
+| `CLAUDE.md` | 1175 | 288 | -887 |
+| `.claude/REQUIRED-READING.md` | 1752 | 500 | -1252 |
 | `docs/increments/README.md` | 990 | 412 | -578 |
 | `docs/PRINCIPLES.md` | 437 | 0 | -437 |
 | `.claude/briefs/common.md` | 244 | 227 | -17 |
 | `architect.md` | 495 | 218 | -277 |
 | `developer.md` | 251 | 174 | -77 |
 | `orchestrator.md` | 504 | 310 | -194 |
-| `perf.md` | 623 | 338 | -285 |
+| `perf.md` | 623 | 334 | -289 |
 | `reviewer.md` | 454 | 328 | -126 |
 | `tester.md` | 799 | 374 | -425 |
 | skill `computational-geometry` | 346 | 176 | -170 |
@@ -193,9 +193,9 @@ the four list entries -4, `new_worktree.py` 0: about **37**.
 | skill `modern-cxx` | 308 | 131 | -177 |
 | skill `python-development` | 634 | 254 | -380 |
 | skill `dispatch` (new) | 0 | 365 | +365 |
-| skill `publishing` (new) | 0 | 164 | +164 |
-| skill `away-mode` (new) | 0 | 281 | +281 |
-| **Total** | **9261** | **4629** | **-4632 (50.0 % of now)** |
+| skill `publishing` (new) | 0 | 158 | +158 |
+| skill `away-mode` (new) | 0 | 272 | +272 |
+| **Total** | **9261** | **4630** | **-4631 (50.0 % of now; half is 4630.5)** |
 
 The total counts the new skills in full, though they load only on demand.
 What each agent loads before its first act (`CLAUDE.md`, REQUIRED-READING,
@@ -204,13 +204,13 @@ for the main session):
 
 | Agent | Now | Proposed |
 |---|---|---|
-| main session | 3917 | 1545 |
-| `@architect` | 4656 | 1625 |
-| `@developer` | 4412 | 1581 |
-| `@orchestrator` | 4665 | 1717 |
-| `@perf` | 4784 | 1745 |
-| `@reviewer` | 4615 | 1735 |
-| `@tester` | 4960 | 1781 |
+| main session | 3917 | 1565 |
+| `@architect` | 4656 | 1645 |
+| `@developer` | 4412 | 1601 |
+| `@orchestrator` | 4665 | 1737 |
+| `@perf` | 4784 | 1761 |
+| `@reviewer` | 4615 | 1755 |
+| `@tester` | 4960 | 1801 |
 
 ## 5. The lean-process change (h34), merged first
 
@@ -306,6 +306,7 @@ proposed text now holds it:
 | Questions through `tools/questions.py`, items in `work_pipes.py`; `session.md` gone (REQUIRED-READING) | `dispatch`, *Work in flight*; the `session.md` bullet is gone |
 | `@reviewer` before push only on a full-lane branch (REQUIRED-READING) | `publishing` |
 | Writer re-reads the at-risk citations as quotations before any push (REQUIRED-READING) | REQUIRED-READING, approval boundary |
+| "On an instruction's momentum, with no fresh approval": edits, spawns, builds, tests, gates, note files and commits, as far as the instruction requires (REQUIRED-READING) | REQUIRED-READING, approval boundary, first sentence after "the remote is Ola's" |
 | Fast-lane branch for origin needs no grant or review while away; `questions.py add --act`, `taken`, `list`; fallback held in `work_pipes.py` | `away-mode` |
 | Two lanes replace the short path; three red CI runs, ask Ola (README) | increments README, *Two lanes* |
 | Developer description and fast-lane paragraph | `developer.md` |
@@ -345,6 +346,36 @@ domain skills, `architect.md`, `orchestrator.md`, `perf.md`, `reviewer.md`,
 baseline sentence in `perf.md`, `CLAUDE.md`'s gate-hook sentence (now only
 in REQUIRED-READING's hook list) and REQUIRED-READING's opening line and
 *Ideas* handback clause (the brief's headings carry it) are gone.
+
+**Sweep of today's REQUIRED-READING, paragraph by paragraph** (after the
+round-3 review found the momentum paragraph unplaced). Each paragraph is now
+kept, moved, replaced by a tool, or dropped as below:
+
+- Kept, condensed: the lost-session case of deleting a note file and "or
+  explicitly cancelled by Ola" (`dispatch`); "state the mechanism" where
+  nothing can run (*Claims*); "idle is accepted only when no such item
+  exists" (`away-mode`).
+- Fixed: `away-mode` required the head's sha under `## Review` in the
+  increment file; today's rule is the verdict a hook records from
+  `@reviewer`'s handback (`.claude/hooks/record_review.py`), so it says that.
+- Dropped as restatement: "including a branch's first" (every push needs
+  the yes); "binds claims about behaviour, not design opinions" (an opinion
+  has no command to run); "A result another persona needs is named by path
+  in the handback" (each agent's system prompt asks for absolute paths);
+  "prompts Ola queued mid-turn" (the recap prints them); the `skills:`
+  preload note and "an idea enters git only when picked" (reasoning and a
+  restatement of "commit nothing from it"); "`pip install -e` is not the
+  route" (part of the rebuild recipe the tool replaces).
+- Replaced by a tool: the harness lines on the scratchpad pass, the duties
+  hook, the status line and "the guard judges each redo again" (the hooks'
+  own texts); the end of a window at the flag's time or `!` (`away.py`).
+- To pay for the added words, these restatements go: `dispatch`'s "the
+  recap prints the open list" and "Items go in `tools/work_pipes.py`" (named
+  the line before); `perf.md`'s "Report measured figures only" (its
+  description and §4 say it); `publishing`'s "A fast-lane branch has no
+  review" (the README's fast lane says it); `away-mode`'s "A subagent puts
+  both in its handback" (the brief's headings); `CLAUDE.md`'s "CI runs it
+  with `--max 700`" (CI's workflow states it).
 
 ## Review
 

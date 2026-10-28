@@ -8,7 +8,7 @@ Each task goes to its persona in `.claude/agents/`.
 ## 2. Constraints
 * **Size limit:** under **700 net production lines per pull request**, as
   `python3 tools/count_loc.py <base> <head>` counts them; its docstring
-  defines a counted line, and CI runs it with `--max 700`. Code packed by
+  defines a counted line. Code packed by
   hand under `# fmt: skip` / `# fmt: off` stays readable, and the review
   says why each new region is packed.
 * **Rule text pays for itself:** a change that adds words to the files
