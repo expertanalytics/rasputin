@@ -8,11 +8,13 @@ unknown, and an old sources-file key is an unknown key like any other).
 
 PINNED HERE, where the design leaves it open (listed for `@architect`): the
 MCP instructions name the arguments `land_cover_classes`, `prefer`, `lines`,
-`edges` and `shares`, and no `features_*` argument.
+`edges` and `shares`, and no `features_*` argument; the `rules` refusal says
+"rename rules to classes" (or "rename it to classes"), any case and quoting.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -51,14 +53,30 @@ def test_a_sources_file_with_the_class_map_key_is_refused(tmp_path: Path) -> Non
     refusal(sources, user, "class_map")
 
 
-@pytest.mark.parametrize("key", ["legend", "rules"])
-def test_a_sources_file_with_an_old_key_is_refused_as_unknown(tmp_path: Path, key: str) -> None:
-    """`legend` (once named `rules`) and `rules` (now `classes`) are unknown keys."""
+def test_a_sources_file_with_the_legend_key_is_refused_as_unknown(tmp_path: Path) -> None:
+    """`legend` (once named `rules`) is an unknown key."""
     user = write(
-        tmp_path / "my-sources.toml", {f"source.{USER_ID}": changed(PER_YEAR, **{key: "corine"})}
+        tmp_path / "my-sources.toml", {f"source.{USER_ID}": changed(PER_YEAR, legend="corine")}
     )
-    message = refusal(sources, user, key)
+    message = refusal(sources, user, "legend")
     assert "is now" not in message, message
+
+
+#: The fix the `rules` refusal states: rename the key (`rules` or "it") to `classes`.
+RENAME_TO_CLASSES = re.compile(r"\brename\W+(?:rules|it)\W+to\W+classes\b", re.IGNORECASE)
+
+
+def test_a_sources_file_with_the_rules_key_is_told_to_rename_it_to_classes(
+    tmp_path: Path,
+) -> None:
+    """`rules` (now `classes`) is refused naming the file and the key, as an
+    unknown key is, and the message says to rename it to `classes` (code
+    review round 1: Ola's own sources file holds 15 such lines)."""
+    user = write(
+        tmp_path / "my-sources.toml", {f"source.{USER_ID}": changed(PER_YEAR, rules="corine")}
+    )
+    message = refusal(sources, user, "rules")
+    assert RENAME_TO_CLASSES.search(message), message
 
 
 def test_the_mcp_mesh_tool_takes_only_the_new_names() -> None:

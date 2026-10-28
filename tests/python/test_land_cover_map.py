@@ -16,8 +16,11 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   pairs, as `preferred.replace`'s ``chosen``; ``classes`` is a
   `land_cover_classes.load` result; ``region`` a polygon in the map's CRS.
   Each is passed by position.
-- ``LandCoverMap.areas`` is a sequence of ``(code, polygon)`` pairs; nothing
-  else of the map is checked here.
+- ``LandCoverMap.areas`` is a sequence of ``(code, polygon)`` pairs;
+  ``LandCoverMap.overlap`` is ``(index of the file kept, area cut)`` pairs.
+- A bowtie in an overlapping pair is repaired near ``region`` before the
+  cut: a later file's bowtie keeps a valid remainder; an earlier file's
+  bowtie is not checked (the map stays unchecked until the shares step).
 """
 
 from __future__ import annotations
@@ -137,3 +140,41 @@ def test_10_polygons_that_only_touch_are_both_kept(lcm: Any, corine: Any) -> Non
     left, right = box(0, 0, 50, 100), box(50, 0, 100, 100)
     built = lcm.build([[(311, left)], [(ARABLE, right)]], [], corine, box(0, 0, 100, 100))
     assert by_code(built.areas) == pytest.approx({311: 5000.0, ARABLE: 5000.0}, abs=EPS)
+
+
+def bowtie(x0: float, y0: float, x1: float, y1: float) -> BaseGeometry:
+    """A ring that crosses itself once, at the box's centre: its two
+    triangles, west and east, are half the box ``(x0, y0, x1, y1)``."""
+    return shapely.Polygon([(x0, y0), (x1, y1), (x1, y0), (x0, y1)])
+
+
+def test_10_a_bowtie_in_the_later_file_is_repaired_and_cut(lcm: Any, corine: Any) -> None:
+    """Code review round 1: a self-crossing polygon in an overlapping pair
+    made `_joined`'s intersection throw (GEOSException). Repaired as the
+    shares step repairs (`repaired_areas`), the bowtie is two triangles; the
+    west one, 2,500 m², lies in the first file's square, so it is the overlap
+    the first file kept, and the later file keeps the east one."""
+    tie = bowtie(50, 0, 150, 100)
+    assert not tie.is_valid and shapely.make_valid(tie).area == pytest.approx(5000.0, abs=EPS)
+    base = [[(311, box(0, 0, 100, 100))], [(ARABLE, tie)]]
+    built = lcm.build(base, [], corine, box(0, 0, 200, 100))
+    assert [(k, pytest.approx(g.area, abs=EPS)) for k, g in built.overlap] == [(0, 2500.0)]
+    (arable,) = [g for c, g in built.areas if c == ARABLE]
+    assert arable.is_valid, arable.wkt
+    east = shapely.Polygon([(100, 50), (150, 0), (150, 100)])
+    assert arable.symmetric_difference(east).area <= EPS, arable.wkt
+    (forest,) = [g for c, g in built.areas if c == 311]
+    assert shapely.equals(forest, box(0, 0, 100, 100))
+
+
+def test_10_a_bowtie_in_the_earlier_file_cuts_the_later_one(lcm: Any, corine: Any) -> None:
+    """The same pair the other way round: the first file's bowtie keeps its
+    west triangle's 2,500 m² of the later square, which keeps the rest. The
+    bowtie's own polygon is not checked here (the map's areas stay unchecked
+    until the shares step)."""
+    base = [[(311, bowtie(50, 0, 150, 100))], [(ARABLE, box(0, 0, 100, 100))]]
+    built = lcm.build(base, [], corine, box(0, 0, 200, 100))
+    assert [(k, pytest.approx(g.area, abs=EPS)) for k, g in built.overlap] == [(0, 2500.0)]
+    (arable,) = [g for c, g in built.areas if c == ARABLE]
+    want = box(0, 0, 100, 100).difference(shapely.Polygon([(50, 0), (100, 50), (50, 100)]))
+    assert arable.symmetric_difference(want).area <= EPS, arable.wkt

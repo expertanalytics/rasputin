@@ -34,6 +34,8 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   tree (`39595f5f`) with `--features cover.geojson --features-rules corine`
   and the clean-up switches 0, no `--prefer` (today's tree refuses a coded
   `--features` beside `--land-cover`).
+- A bowtie in a `--land-cover` file ends the run with exit 0 and no
+  exception escaping `rasputin mesh`.
 - A river file is a GeoJSON `FeatureCollection` of one `LineString` with no
   properties, in the mesh CRS.
 - Ola's question 4 (a county line with one class on both sides) is taken at
@@ -49,6 +51,7 @@ import pwd
 import re
 import socket
 import sqlite3
+import traceback
 from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
@@ -63,7 +66,7 @@ from shapely.geometry.base import BaseGeometry
 
 import tin_engine.cli as cli
 from class_fixtures import KEY
-from cli_helpers import USAGE, invoke, squashed
+from cli_helpers import USAGE, invoke, runner, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, domain_ring, dominant
@@ -73,6 +76,8 @@ from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import check_sums, column, mesh, scene, written
 from test_cli_mesh_prefer import preferred_lake, share
 from test_cli_mesh_reservoirs import phases, record, write_reservoirs
+from test_legend_name import RENAME_TO_CLASSES
+from tin_engine.cli import app
 from vector_fixtures import vector_entry
 from vtkread import read_vtk
 
@@ -422,6 +427,7 @@ def test_5_a_sources_file_with_a_rules_key_is_refused(
     code, output = mesh(scene, tmp_path / "x.gpkg", "--land-cover", "cover-test", *edges("all"))
     assert code != 0, output
     assert "rules" in output and "cover-test" in output, output
+    assert RENAME_TO_CLASSES.search(output), output
     assert not (tmp_path / "x.gpkg").exists()
 
 
@@ -667,6 +673,44 @@ def test_10_two_identical_polygons_the_first_given_keeps_the_area(
         check_case7_shares(conn)
     inside = polygons[312].intersection(domain()).area
     assert any(abs(n - inside) <= AREA for n in numbers(overlap)), (inside, overlap)
+    assert "a.geojson" in overlap, overlap
+    assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
+
+
+def test_10_a_bowtie_in_the_later_file_is_repaired_not_a_traceback(
+    scene: dict[str, Path], tmp_path: Path, lake: Path
+) -> None:
+    """Code review round 1: `P`'s corners joined as a bowtie (a ring that
+    crosses itself at `P`'s centre), coded arable in the second file, made
+    `land_cover_map._joined` throw GEOSException. Repaired as the shares step
+    repairs, it is `P`'s west and east triangles, wholly inside forest 311:
+    the first file keeps all of it, and the mesh is test 10's box run."""
+    p = planted_box()
+    x0, y0, x1, y1 = p.bounds
+    tie = Polygon([(x0, y0), (x1, y1), (x1, y0), (x0, y1)])
+    assert not tie.is_valid and dict(cover_polygons())[311].contains(shapely.make_valid(tie))
+    polygons = dict(cover_polygons())
+    a, b = split(tmp_path, [(311, polygons[311]), (312, polygons[312])],
+                 [(512, polygons[512]), (ARABLE, tie)])  # fmt: skip
+    args = (*classes(a, b), *prefer(lake), *edges("all"), "--shares", *AS_READ)
+    target = tmp_path / "x.gpkg"
+    # `test_cli_mesh_cells.mesh`'s arguments, run here to keep the exception.
+    given = ["--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3",
+             "--cache", str(scene["cache"]), "--out", str(target)]  # fmt: skip
+    result = runner.invoke(app, ["mesh", *given, *args])
+    # No exception escaped the run, and none was printed as a traceback.
+    assert result.exception is None, "".join(traceback.format_exception(result.exception))
+    assert result.exit_code == 0, result.output
+    assert "Traceback" not in result.output and "GEOSException" not in result.output
+    with closing(sqlite3.connect(target)) as conn:
+        found = lengths(conn)
+        overlap = overlap_figure(conn)
+        assert ARABLE not in {
+            c for (c,) in conn.execute("SELECT DISTINCT code FROM land_cover_fractions")
+        }
+        check_case7_shares(conn)
+    half = p.area / 2  # 20,080.0 m²
+    assert any(abs(n - half) <= AREA for n in numbers(overlap)), (half, overlap)
     assert "a.geojson" in overlap, overlap
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
 
