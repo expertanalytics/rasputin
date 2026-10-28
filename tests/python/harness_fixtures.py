@@ -61,6 +61,9 @@ COPIED = (
     # h31: the recap prints the pipes block through this module
     # (docs/increments/h31-pipes.md §7).
     "tools/work_pipes.py",
+    # The recap and `away.py --back` list the questions waiting on Ola
+    # through this module.
+    "tools/questions.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

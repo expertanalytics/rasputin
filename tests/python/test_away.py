@@ -358,7 +358,18 @@ def test_the_stopper_terminates_a_caffeinate_it_started() -> None:
 # ---------------------------------------------------------------- T17
 
 BACK_AT = NOW + timedelta(hours=5)
-DECISIONS_HEADING = "ASK OLA lines, every worktree's .claude/current-task/:"
+DECISIONS_HEADING = "Waiting on Ola:"
+
+
+def ask(repo: Path, *texts: str) -> None:
+    """Open questions in the store `tools/questions.py` reads, written without its checks."""
+    with (state_dir(repo).parent / "questions.jsonl").open("a") as out:
+        for n, text in enumerate(texts, 1):
+            out.write(json.dumps({"id": f"q{n}", "kind": "question", "text": text,
+                                  "default": "no", "choices": [], "item": None,
+                                  "source": "main", "state": "open", "words": None,
+                                  "at": "2026-09-30T19:00:00+00:00"}) + "\n")  # fmt: skip
+
 
 QUEUED = (
     {"at": "2026-09-30T19:00:00+00:00", "branch": "feat-a", "hook": "guard_push",
@@ -395,9 +406,7 @@ def test_back_prints_the_queue_by_branch_and_archives_it(
     flag_on(repo, now=NOW, keep_awake_pid=777)
     until = read_flag(repo)["until"]
     write_queue(repo, QUEUED)
-    tasks = repo / ".claude" / "current-task"
-    tasks.mkdir(parents=True)
-    (tasks / "session.md").write_text("round: U1\nASK OLA: may I push?\n")
+    ask(repo, "May I push?")
 
     code, stop = back(repo)
 
@@ -405,16 +414,19 @@ def test_back_prints_the_queue_by_branch_and_archives_it(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith(f"Back. Unattended since {iso(NOW)} until {until}")
     at = lines.index("Queued while away (3):")
-    assert lines[at + 1 : at + 8] == [
+    assert lines[at + 1 : at + 9] == [
         "  feat-a",
         "    2026-09-30T19:00:00+00:00 guard_push main: git push",
         "    2026-09-30T21:00:00+00:00 guard_push developer: gh pr merge 1",
         "  feat-b",
         "    2026-09-30T20:00:00+00:00 guard_governance tester: Edit /r/CLAUDE.md",
         "Push grants: (none)",
-        "ASK OLA lines, every worktree's .claude/current-task/:",
+        DECISIONS_HEADING,
+        "  1. May I push? Default: no.",
     ]
-    assert "  session.md: ASK OLA: may I push?" in lines
+    # It is the question tool's `list`: Ola's "1" now means the question he saw.
+    shown = json.loads((state_dir(repo).parent / "questions-shown.json").read_text())
+    assert shown == {"1": "q1"}
     assert not flag_path(repo).exists()
     assert not (state_dir(repo) / "queue.jsonl").exists()
     assert len(archive(repo).read_text().splitlines()) == 3
@@ -504,10 +516,10 @@ def test_back_lists_a_null_or_missing_branch_under_no_branch(
 # ---------------------------------------------------------------- T22
 
 
-def test_back_survives_a_broken_session_state(repo: Path) -> None:
+def test_back_survives_a_broken_question_tool(repo: Path) -> None:
     # §3.3 (review 1): the recap module is optional to --back; the flag, the
     # keep-awake and the queue are not.
-    (repo / "tools" / "session_state.py").write_text('raise RuntimeError("planted")\n')
+    (repo / "tools" / "questions.py").write_text('raise RuntimeError("planted")\n')
     flag_on(repo)
     write_queue(repo, QUEUED[:1])
     result = subprocess.run(
@@ -523,7 +535,7 @@ def test_back_survives_a_broken_session_state(repo: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
-    at = lines.index("ASK OLA lines, every worktree's .claude/current-task/:")
+    at = lines.index(DECISIONS_HEADING)
     assert lines[at + 1] == "  (unavailable: RuntimeError: planted)"
     assert not flag_path(repo).exists()
     assert not (state_dir(repo) / "queue.jsonl").exists()
@@ -906,32 +918,25 @@ def test_back_with_a_malformed_git_log_line_still_clears_the_state(
 
 # ---------------------------------------------------------------- h8, test 8
 #
-# §3.1: run from a worktree, `--back` lists the main checkout's decisions (the
-# fault evidence §1b reproduced), and every worktree's, uncapped.
+# Run from a worktree, `--back` lists the questions of the store every
+# checkout shares, uncapped.
 
 DECISIONS = DECISIONS_HEADING
 
 
-def test_back_from_a_worktree_lists_the_main_checkouts_decisions(
+def test_back_from_a_worktree_lists_the_shared_questions_uncapped(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     main = make_repo(tmp_path.resolve() / "main")
     tree = add_worktree(main, main / ".claude" / "worktrees" / "w1", "w1")
-    main_tasks = main / ".claude" / "current-task"
-    main_tasks.mkdir(parents=True)
-    (main_tasks / "session.md").write_text(
-        "NOW: h8\nQUEUE: x\n" + "".join(f"ASK OLA: main question {n}?\n" for n in range(7))
-    )
-    tree_tasks = tree / ".claude" / "current-task"
-    tree_tasks.mkdir(parents=True)
-    (tree_tasks / "tester-101010.md").write_text("ASK OLA: worktree question?\n")
+    state_dir(main).mkdir(parents=True, exist_ok=True)
+    ask(main, *(f"Main question {n}?" for n in range(8)))
 
     lines = back_lines(tree, capsys, BACK_AT)
 
     at_ = lines.index(DECISIONS)
     assert lines[at_ + 1 : at_ + 9] == [
-        *(f"  session.md: ASK OLA: main question {n}?" for n in range(7)),
-        "  .claude/worktrees/w1: tester-101010.md: ASK OLA: worktree question?",
+        f"  {n + 1}. Main question {n}? Default: no." for n in range(8)
     ]
 
 
@@ -1031,7 +1036,7 @@ def test_7_back_reports_this_windows_granted_acts_and_each_unused_grant(
 
     at = lines.index("Push grants (3):")
     assert at > next(i for i, line in enumerate(lines) if line.startswith("Queued while away"))
-    assert at < next(i for i, line in enumerate(lines) if line.startswith("ASK OLA lines"))
+    assert at < next(i for i, line in enumerate(lines) if line == DECISIONS_HEADING)
     feat, good, bad = lines[at + 1 : at + 4]
     assert feat.startswith("  feat: ")
     for part in (f"pushed {head[:7]} at 19:10 UTC", f"enqueued {head[:7]} at 19:20 UTC",

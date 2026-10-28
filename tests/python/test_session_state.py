@@ -101,23 +101,6 @@ def test_roadmap_next_on_a_file_without_a_table_is_empty() -> None:
     assert session_state.roadmap_next("# Roadmap\n\nNo table yet.\n") == []
 
 
-def test_pending_decisions_collects_ask_ola_lines_from_every_task_file(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "session.md").write_text("SESSION: did a thing.\nASK OLA: fix before landing?\n")
-    (tmp_path / "tester-101010.md").write_text("ask ola: keep the slow case?\nother\n")
-    (tmp_path / "developer-111111.md").write_text("nothing pending\n")
-    # h8 §3.2 (Ola's ruling on item 3): matching is case-sensitive, so the
-    # lowercase line no longer counts.
-    assert session_state.pending_decisions(tmp_path) == [
-        "session.md: ASK OLA: fix before landing?",
-    ]
-
-
-def test_pending_decisions_survives_a_missing_directory(tmp_path: Path) -> None:
-    assert session_state.pending_decisions(tmp_path / "absent") == []
-
-
 def test_last_landed_is_the_newest_merge_reachable_from_head(repo: Path) -> None:
     landed = session_state.last_landed(repo)
     assert landed.endswith("Merge pull request #1 feature")
@@ -212,7 +195,7 @@ def test_recap_while_unattended_opens_with_the_until(harness_repo: Path) -> None
     until = harness_fixtures.flag_on(harness_repo)
     assert _header(_recap(harness_repo)) == [
         f"UNATTENDED until {until:%Y-%m-%d %H:%M} UTC. Guarded acts are refused and queued: "
-        "record each as an ASK OLA line and continue."
+        "record each with python3 tools/questions.py add --act and continue."
     ]
 
 
@@ -292,7 +275,7 @@ def test_recap_has_no_uncommitted_rule_file_section(harness_repo: Path) -> None:
 
 UNKNOWN_TAIL = (
     "): the recap could not read the flag or the queue. Guarded acts may be refused; "
-    "record each refusal as an ASK OLA line and continue."
+    "record each refusal with python3 tools/questions.py add --act and continue."
 )
 
 
@@ -311,9 +294,7 @@ def test_recap_with_a_broken_harness_says_so_and_prints_the_rest(
 ) -> None:
     harness_fixtures.flag_on(harness_repo)
     _write_queue(harness_repo, [json.dumps(_queue_entry(1))])
-    tasks = harness_repo / ".claude" / "current-task"
-    tasks.mkdir(parents=True)
-    (tasks / "session.md").write_text("ASK OLA: may I push?\n")
+    _ask(harness_repo, _question(1, "May I push?"))
     _break_harness(harness_repo, how)
 
     lines = _recap(harness_repo)
@@ -325,7 +306,7 @@ def test_recap_with_a_broken_harness_says_so_and_prints_the_rest(
         assert lines[0] == f"UNATTENDED STATE UNKNOWN (RuntimeError: planted{UNKNOWN_TAIL}"
     assert lines[1] == "== recap =="
     waiting = next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:"))
-    assert lines[waiting + 1] == "  session.md: ASK OLA: may I push?"
+    assert lines[waiting + 1] == "  1. May I push? Default: no."
     assert "Next on ROADMAP.md:" in lines
     assert not any(line.startswith("Queued while unattended") for line in lines)
 
@@ -336,61 +317,11 @@ def test_recap_with_a_broken_harness_says_so_and_prints_the_rest(
 # repositories are made under `tmp_path.resolve()`, so the paths git prints
 # (realpaths, /private/var on macOS) and the ones the tests build agree.
 
-ASK_EMPTY = "WARNING: empty ASK OLA line"
-
 
 def _tasks(checkout: Path) -> Path:
     tasks = checkout / ".claude" / "current-task"
     tasks.mkdir(parents=True, exist_ok=True)
     return tasks
-
-
-def _porcelain_worktrees(repo: Path) -> list[Path]:
-    """The `worktree <path>` lines of `git worktree list --porcelain`, as printed."""
-    text = harness_fixtures.git(repo, "worktree", "list", "--porcelain")
-    return [
-        Path(line[len("worktree ") :]) for line in text.splitlines() if line.startswith("worktree ")
-    ]
-
-
-# ---------------------------------------------------------------- test 1, §3.2
-
-COUNTED = ("ASK OLA: a", "- ASK OLA: b", "* ASK OLA: c", "  + ASK OLA: d", "\t-\tASK OLA: e")
-NOT_COUNTED = ("ask ola: x", "Note: ASK OLA: x", "**ASK OLA:** x", "1. ASK OLA: x", "ASK OLA x")
-
-
-def test_ask_ola_counts_only_at_the_start_after_an_optional_bullet(tmp_path: Path) -> None:
-    (tmp_path / "session.md").write_text("\n".join((*COUNTED, *NOT_COUNTED)) + "\n")
-    assert session_state.pending_decisions(tmp_path) == [
-        "session.md: ASK OLA: a",
-        "session.md: - ASK OLA: b",
-        "session.md: * ASK OLA: c",
-        "session.md: + ASK OLA: d",
-        "session.md: -\tASK OLA: e",
-    ]
-
-
-@pytest.mark.parametrize("line", NOT_COUNTED)
-def test_a_line_that_only_mentions_ask_ola_is_not_counted(tmp_path: Path, line: str) -> None:
-    (tmp_path / "tester-101010.md").write_text(line + "\n")
-    assert session_state.pending_decisions(tmp_path) == []
-
-
-def test_an_empty_ask_ola_line_is_listed_as_a_warning_with_its_line_number(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "session.md").write_text("NOW: x\nASK OLA:\nASK OLA: real\n- ASK OLA:   \n")
-    assert session_state.pending_decisions(tmp_path) == [
-        f"session.md:2: {ASK_EMPTY}",
-        "session.md: ASK OLA: real",
-        f"session.md:4: {ASK_EMPTY}",
-    ]
-
-
-def test_a_counted_line_is_listed_in_full_however_long(tmp_path: Path) -> None:
-    line = "ASK OLA: " + "q" * 400
-    (tmp_path / "session.md").write_text(line + "\n")
-    assert session_state.pending_decisions(tmp_path) == [f"session.md: {line}"]
 
 
 # ---------------------------------------------------------------- test 2, §3.1
@@ -412,32 +343,10 @@ def test_main_checkout_is_the_main_path_from_anywhere(forest: tuple[Path, Path, 
         assert session_state.main_checkout(start).resolve() == main.resolve()
 
 
-def test_checkouts_lists_the_main_checkout_first_then_every_worktree(
-    forest: tuple[Path, Path, Path],
-) -> None:
-    main, inside, outside = forest
-    for start in (main, inside, outside):
-        found = [p.resolve() for p in session_state.checkouts(start)]
-        assert found[0] == main.resolve()
-        assert sorted(found[1:]) == sorted([inside.resolve(), outside.resolve()])
-
-
-def test_checkouts_skips_a_worktree_whose_directory_was_deleted(
-    forest: tuple[Path, Path, Path],
-) -> None:
-    main, inside, outside = forest
-    shutil.rmtree(outside)
-    assert [p.resolve() for p in session_state.checkouts(main)] == [
-        main.resolve(),
-        inside.resolve(),
-    ]
-
-
-def test_outside_a_repository_both_fall_back_to_the_given_path(tmp_path: Path) -> None:
+def test_outside_a_repository_the_main_checkout_is_the_given_path(tmp_path: Path) -> None:
     plain = tmp_path.resolve() / "plain"
     plain.mkdir()
     assert session_state.main_checkout(plain) == plain
-    assert session_state.checkouts(plain) == [plain]
 
 
 def test_a_bare_repository_is_its_own_main_checkout(tmp_path: Path) -> None:
@@ -448,145 +357,87 @@ def test_a_bare_repository_is_its_own_main_checkout(tmp_path: Path) -> None:
     assert session_state.main_checkout(bare) == bare
 
 
-# ---------------------------------------------------------------- test 3, §3.2
+# ------------------------------------------------ the questions waiting on Ola
 
 
-def _decide(forest: tuple[Path, Path, Path]) -> list[str]:
-    """Decisions in all three checkouts; the expected list in checkout order."""
-    main, inside, outside = forest
-    (_tasks(main) / "session.md").write_text("NOW: n\nQUEUE: q\nASK OLA: main?\n")
-    (_tasks(inside) / "tester-101010.md").write_text("ASK OLA: inside?\n")
-    (_tasks(outside) / "developer-121212.md").write_text("- ASK OLA: outside?\n")
-    by_path = {
-        main.resolve(): ["session.md: ASK OLA: main?"],
-        inside.resolve(): [".claude/worktrees/w1: tester-101010.md: ASK OLA: inside?"],
-    }
-    for listed in _porcelain_worktrees(main):
-        if listed.resolve() == outside.resolve():
-            by_path[outside.resolve()] = [f"{listed}: developer-121212.md: - ASK OLA: outside?"]
-    order = [p.resolve() for p in _porcelain_worktrees(main)]
-    return [line for p in order for line in by_path[p]]
+def _question(n: int, text: str, kind: str = "question", state: str = "open") -> dict[str, object]:
+    """A record as `tools/questions.py` stores it; written directly, so no check runs."""
+    return {"id": f"q{n}", "kind": kind, "text": text, "default": "no", "choices": [],
+            "item": None, "source": "main", "state": state, "words": None,
+            "at": "2026-10-28T05:00:00+00:00"}  # fmt: skip
 
 
-def test_all_decisions_lists_every_checkout_with_its_prefix(
-    forest: tuple[Path, Path, Path],
+def _store(checkout: Path) -> Path:
+    common = harness_fixtures.git(checkout, "rev-parse", "--path-format=absolute",
+                                  "--git-common-dir")  # fmt: skip
+    return Path(common.strip()) / "questions.jsonl"
+
+
+def _ask(checkout: Path, *records: dict[str, object]) -> None:
+    with _store(checkout).open("a") as out:
+        out.writelines(json.dumps(r) + "\n" for r in records)
+
+
+def test_the_recap_lists_the_open_questions_numbered_as_the_question_tool_does(
+    harness_repo: Path,
 ) -> None:
-    expected = _decide(forest)
-    assert len(expected) == 3
-    for start in forest:
-        assert session_state.all_decisions(start) == expected
+    _ask(
+        harness_repo,
+        _question(1, "Keep the slow case?"),
+        _question(2, "Push it?", "act"),
+        _question(3, "Answered?", state="answered"),
+        _question(4, "Took the metre.", "taken"),
+    )
+    lines = _recap(harness_repo)
+    assert _block(lines, "Waiting on Ola:") == [
+        "1. Keep the slow case? Default: no.",
+        "2. Push it? Default: no.",
+        "3. Taken: Took the metre. Veto by number.",
+    ]
 
 
-def test_the_recap_run_from_a_worktree_reads_the_main_checkouts_task_files(
+def test_the_recap_writes_nothing_to_the_question_store(harness_repo: Path) -> None:
+    _ask(harness_repo, _question(1, "Took the metre.", "taken"))
+    before = _store(harness_repo).read_text()
+    _recap(harness_repo)
+    assert _store(harness_repo).read_text() == before
+    assert not _store(harness_repo).with_name("questions-shown.json").exists()
+
+
+def test_the_recap_with_no_open_question_says_so(harness_repo: Path) -> None:
+    _ask(harness_repo, _question(1, "Answered?", state="answered"))
+    lines = _recap(harness_repo)
+    assert "Waiting on Ola: (no open question)" in lines
+
+
+def test_the_recap_with_a_broken_question_tool_prints_one_line_and_the_rest(
+    harness_repo: Path,
+) -> None:
+    (harness_repo / "tools" / "questions.py").write_text('raise RuntimeError("planted")\n')
+    lines = _recap(harness_repo)
+    assert _block(lines, "Waiting on Ola:") == ["(unavailable: RuntimeError: planted)"]
+    assert "Next on ROADMAP.md:" in lines
+
+
+def test_the_recap_run_from_a_worktree_reads_the_shared_store_and_the_main_task_files(
     forest: tuple[Path, Path, Path],
 ) -> None:
     main, inside, _ = forest
-    expected = _decide(forest)
-    (_tasks(inside) / "session.md").write_text("NOW: the worktree's own ask\n")
+    _ask(main, _question(1, "Keep the slow case?"))
+    (_tasks(main) / "tester-w1-101010.md").write_text("ask: the main checkout's note\n")
+    (_tasks(inside) / "developer-w1-121212.md").write_text("ask: the worktree's own note\n")
     lines = _recap(inside)
-    waiting = lines.index("Waiting on Ola:")
-    # The outside worktree's absolute prefix depends on the temp directory, so
-    # its line may pass 160 characters and get §8.11's display cut.
-    shown = [line if len(line) <= 160 else line[:157] + "..." for line in expected]
-    assert [line.strip() for line in lines[waiting + 1 : waiting + 4]] == shown
-    at = lines.index("== .claude/current-task/session.md ==")
-    assert lines[at + 1 : at + 4] == ["NOW: n", "QUEUE: q", "ASK OLA: main?"]
-    assert "NOW: the worktree's own ask" not in lines
-    assert (main / ".claude" / "current-task" / "session.md").exists()
+    assert _block(lines, "Waiting on Ola:") == ["1. Keep the slow case? Default: no."]
+    assert "ask: the main checkout's note" in lines
+    assert "ask: the worktree's own note" not in lines
 
 
-# ---------------------------------------------------------------- test 4, §3.3
-
-NOT_A = "not a NOW, QUEUE or ASK OLA line: "
-GOOD = "NOW: build h8\nQUEUE: red, green\nASK OLA: push?\n\nASK OLA: merge?\n"
-GOOD_BULLETED = "- NOW: build h8\n* QUEUE: red\n  + ASK OLA: push?\n\t- ASK OLA: merge?\n"
-
-
-# h31 §7: the pipes hold the queue, so zero QUEUE lines are as good as one.
-@pytest.mark.parametrize("text", [GOOD, GOOD_BULLETED, "NOW: n\n", "NOW: n\nASK OLA: x\n"])
-def test_a_well_formed_session_md_gives_no_warning(text: str) -> None:
-    assert session_state.session_format(text) == []
-
-
-@pytest.mark.parametrize(
-    ("text", "warning"),
-    [
-        ("QUEUE: q\n", "session.md: 0 NOW lines; exactly one expected"),
-        ("NOW: n\nQUEUE: a\nQUEUE: b\n", "session.md: 2 QUEUE lines; at most one expected"),
-        ("NOW: a\nNOW: b\nQUEUE: q\n", "session.md: 2 NOW lines; exactly one expected"),
-        ("NOW:   \nQUEUE: q\n", "session.md:1: empty NOW line"),
-        ("NOW: n\n- QUEUE:\n", "session.md:2: empty QUEUE line"),
-        ("NOW: n\nQUEUE: q\nASK OLA: x\nRulings: Ola said y\n",
-         f"session.md:4: {NOT_A}Rulings: Ola said y"),
-    ],
-)  # fmt: skip
-def test_each_fault_gives_its_warning_once(text: str, warning: str) -> None:
-    assert session_state.session_format(text) == [warning]
-
-
-def test_a_lowercase_kind_is_not_a_line_of_that_kind() -> None:
-    assert session_state.session_format("now: x\nQUEUE: q\n") == [
-        "session.md: 0 NOW lines; exactly one expected",
-        f"session.md:1: {NOT_A}now: x",
-    ]
-
-
-def test_the_not_a_line_warning_quotes_the_first_60_characters() -> None:
-    line = "Rulings: " + "r" * 100
-    assert session_state.session_format(f"NOW: n\nQUEUE: q\n{line}\n") == [
-        f"session.md:3: {NOT_A}{line[:60]}"
-    ]
-
-
-def test_an_empty_ask_ola_line_is_not_warned_twice() -> None:
-    assert session_state.session_format("NOW: n\nQUEUE: q\nASK OLA:\n") == []
-
-
-def test_the_warnings_come_in_the_order_of_the_design() -> None:
-    long_ask = "ASK OLA: " + "y" * 300  # 309 characters
-    text = f"Rulings: z\nNOW:\nNOW: a\n{long_ask}\nQUEUE: q\nQUEUE: r\n"
-    assert session_state.session_format(text) == [
-        "session.md: 2 NOW lines; exactly one expected",
-        "session.md: 2 QUEUE lines; at most one expected",
-        "session.md:2: empty NOW line",
-        f"session.md:1: {NOT_A}Rulings: z",
-        "session.md:4: 309 characters; at most 300",
-    ]
-
-
-def test_the_name_is_the_one_given() -> None:
-    assert session_state.session_format("QUEUE: q\n", name="x.md") == [
-        "x.md: 0 NOW lines; exactly one expected"
-    ]
-
-
-def test_the_line_limit_is_300() -> None:
-    assert session_state.MAX_LINE == 300
-
-
-def test_a_line_of_exactly_300_characters_passes() -> None:
-    line = "NOW: " + "a" * 295
-    assert len(line) == 300
-    assert session_state.session_format(f"{line}\nQUEUE: q\n") == []
-
-
-def test_a_line_of_301_characters_warns_with_its_number_and_length() -> None:
-    line = "NOW: " + "a" * 296
-    assert session_state.session_format(f"QUEUE: q\n{line}\n") == [
-        "session.md:2: 301 characters; at most 300"
-    ]
-
-
-def test_trailing_whitespace_does_not_count_toward_the_limit() -> None:
-    line = "NOW: " + "a" * 295 + "   \t "
-    assert session_state.session_format(f"{line}\nQUEUE: q\n") == []
-
-
-def test_a_long_ask_ola_line_warns_too() -> None:
-    line = "- ASK OLA: " + "z" * 300  # 311 characters
-    assert session_state.session_format(f"NOW: n\nQUEUE: q\n{line}\n") == [
-        "session.md:3: 311 characters; at most 300"
-    ]
+def test_a_session_md_gets_no_special_place(harness_repo: Path) -> None:
+    (_tasks(harness_repo) / "session.md").write_text("NOW: n\nRulings: x\n")
+    lines = _recap(harness_repo)
+    assert "session.md format:" not in lines
+    assert "== .claude/current-task/session.md ==" not in lines
+    assert any(line.startswith("-- session.md (") for line in lines)
 
 
 def _block(lines: list[str], heading: str) -> list[str]:
@@ -598,50 +449,6 @@ def _block(lines: list[str], heading: str) -> list[str]:
             break
         block.append(line.strip())
     return block
-
-
-def test_the_recap_prints_format_warnings_for_a_faulty_main_session_md(
-    harness_repo: Path,
-) -> None:
-    (_tasks(harness_repo) / "session.md").write_text("ASK OLA: push?\nRulings: x\n")
-    lines = _recap(harness_repo)
-    waiting = lines.index("Waiting on Ola:")
-    assert lines[waiting + 1] == "  session.md: ASK OLA: push?"
-    # h31 §7: the pipes block may stand between the decisions and the format block.
-    assert lines.index("session.md format:") > waiting + 1
-    assert _block(lines, "session.md format:") == [
-        "session.md: 0 NOW lines; exactly one expected",
-        f"session.md:2: {NOT_A}Rulings: x",
-    ]
-
-
-def test_the_recap_prints_no_format_block_for_a_good_or_absent_session_md(
-    harness_repo: Path,
-) -> None:
-    assert "session.md format:" not in _recap(harness_repo)
-    (_tasks(harness_repo) / "session.md").write_text(GOOD)
-    assert "session.md format:" not in _recap(harness_repo)
-
-
-def test_the_recap_does_not_format_check_a_worktrees_session_md(
-    forest: tuple[Path, Path, Path],
-) -> None:
-    main, inside, _ = forest
-    (_tasks(main) / "session.md").write_text(GOOD)
-    (_tasks(inside) / "session.md").write_text("Rulings: x\nASK OLA: from w1?\n")
-    for start in (main, inside):
-        lines = _recap(start)
-        assert "session.md format:" not in lines
-        assert "  .claude/worktrees/w1: session.md: ASK OLA: from w1?" in lines
-
-
-def test_the_recap_caps_the_format_block_at_four_lines(harness_repo: Path) -> None:
-    faults = "".join(f"Ruling {n}\n" for n in range(6))
-    (_tasks(harness_repo) / "session.md").write_text(f"NOW: n\nQUEUE: q\n{faults}")
-    assert _block(_recap(harness_repo), "session.md format:") == [
-        *(f"session.md:{n + 3}: {NOT_A}Ruling {n}" for n in range(4)),
-        "... 2 more",
-    ]
 
 
 # ---------------------------------------------------------------- test 5, §3.5
@@ -806,7 +613,7 @@ def test_the_recap_places_the_jobs_after_in_flight_and_before_waiting_on_ola(
     assert (
         lines.index("In flight:")
         < lines.index(JOBS)
-        < lines.index("Waiting on Ola: (none recorded as ASK OLA)")
+        < lines.index("Waiting on Ola: (no open question)")
     )
     assert _block(lines, JOBS) == ["(none)"]
 
@@ -818,10 +625,11 @@ def test_the_recap_says_when_ps_fails_and_prints_the_rest(
     [shown] = _block(lines, JOBS)
     assert shown.startswith("(could not list: ")
     assert "Next on ROADMAP.md:" in lines
-    assert "== .claude/current-task/session.md ==" in lines
+    assert TASKS in lines
 
 
 SELF_LINE = "/usr/bin/python3 tools/session_state.py"
+TASKS = "== .claude/current-task/ =="
 
 
 def _printf(pid: int | str, ppid: int, etime: str, command: str) -> str:
@@ -886,7 +694,7 @@ def test_the_recap_prints_the_size_table_last(harness_repo: Path) -> None:
     lines = _recap(harness_repo)
     heading = next(i for i, line in enumerate(lines) if line.startswith("Rule text in words"))
     assert heading > lines.index("Next on ROADMAP.md:")
-    assert heading < lines.index("== .claude/current-task/session.md ==")
+    assert heading < lines.index(TASKS)
     assert lines[heading].startswith("Rule text in words, change since 2026-10-01-first.md (")
     assert f"  {14:5} {'+12':>6} CLAUDE.md" in lines
     assert f"  {8:5} {'0':>6} .claude/agents/tester.md" in lines
@@ -902,7 +710,7 @@ def test_the_recap_with_a_broken_size_module_prints_one_line_and_the_rest(
     assert "planted" in unavailable[0]
     assert not any(line.startswith("Rule text in words") for line in lines)
     assert lines.index("Next on ROADMAP.md:") < lines.index(unavailable[0])
-    assert "== .claude/current-task/session.md ==" in lines
+    assert TASKS in lines
 
 
 # ---------------------------------------------------------------- test 11, §3.6
@@ -935,23 +743,21 @@ def _blocks(lines: list[str]) -> dict[str, str]:
     starts = {
         "jobs": lines.index(JOBS),
         "waiting": next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:")),
-        "format": lines.index("session.md format:"),
         "sizes": next(i for i, line in enumerate(lines) if line.startswith("Rule text in words")),
     }
     ends = {
         "jobs": starts["waiting"],
-        "waiting": starts["format"],
-        "format": next(
+        "waiting": next(
             i for i, line in enumerate(lines)
-            if i > starts["format"]
-            and (line.startswith("Queued while") or line == "Next on ROADMAP.md:")
+            if i > starts["waiting"]
+            and (line.startswith(("Pipes", "Queued while")) or line == "Next on ROADMAP.md:")
         ),
-        "sizes": lines.index("== .claude/current-task/session.md =="),
+        "sizes": lines.index(TASKS),
     }  # fmt: skip
     return {k: "".join(line + "\n" for line in lines[starts[k] : ends[k]]) for k in starts}
 
 
-def test_the_four_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
+def test_the_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
     root = tmp_path.resolve()
     main = harness_fixtures.make_repo(root / "main")
     files = _copy_real_rule_files(main)
@@ -960,16 +766,8 @@ def test_the_four_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
     retro.write_text("# Retro\n")
     harness_fixtures.git(main, "add", "-A")
     harness_fixtures.git(main, "commit", "-q", "-m", "real rule files and a retrospective")
-    # 30 ASK OLA lines of 300 characters, ten in each of three worktrees.
-    for n in range(3):
-        tree = harness_fixtures.add_worktree(
-            main, main / ".claude" / "worktrees" / f"w{n}", f"w{n}"
-        )
-        asks = "".join(f"ASK OLA: {n}-{k} " + "a" * (300 - 14) + "\n" for k in range(10))
-        (_tasks(tree) / "tester-101010.md").write_text(asks)
-    # 15 format faults in the main session.md, each a long "not a" line.
-    faults = "".join(f"Ruling {k:02d}: " + "r" * 120 + "\n" for k in range(15))
-    (_tasks(main) / "session.md").write_text(f"NOW: n\nQUEUE: q\n{faults}")
+    # 30 open questions of 240 characters.
+    _ask(main, *(_question(k, f"{k:02d} " + "a" * 236 + "?") for k in range(30)))
     # 15 wrapper processes whose eval'd commands are 300 characters long.
     command = "sleep 600; : " + "c" * (300 - 13)
     script = "".join(_printf(100000 + k, 1, "10-02:03:04", wrapper(command)) for k in range(15))
@@ -979,22 +777,17 @@ def test_the_four_sections_fit_the_budget_at_their_caps(tmp_path: Path) -> None:
 
     assert _block(lines, JOBS)[-1] == "... 11 more"
     assert len(_block(lines, JOBS)) == 5
-    waiting = _block(lines, next(line for line in lines if line.startswith("Waiting on Ola:")))
+    waiting = _block(lines, "Waiting on Ola:")
     assert len(waiting) == 6 and waiting[-1] == "... 25 more"
     assert all(line.endswith("...") and len(line) <= 163 for line in waiting[:5])
-    assert _block(lines, "session.md format:")[-1] == "... 11 more"
-    assert len(_block(lines, "session.md format:")) == 5
     assert len(blocks["sizes"].splitlines()) >= files + 2
     total = sum(len(text) for text in blocks.values())
     assert total <= BUDGET, {k: len(v) for k, v in blocks.items()}
 
 
-def test_a_long_ask_ola_line_is_shown_cut_to_160_characters(harness_repo: Path) -> None:
-    line = "ASK OLA: " + "b" * 291  # 300 characters
-    (_tasks(harness_repo) / "session.md").write_text(f"NOW: n\nQUEUE: q\n{line}\n")
+def test_a_long_question_is_shown_cut_to_160_characters(harness_repo: Path) -> None:
+    text = "b" * 239 + "?"
+    _ask(harness_repo, _question(1, text))
     [shown] = _block(_recap(harness_repo), "Waiting on Ola:")
-    # §8.11: the first 157 characters, then `...`, 160 in all.
     assert len(shown) == 160
-    assert shown == f"session.md: {line}"[:157] + "..."
-    # The full line is still printed further down, with session.md.
-    assert line in _recap(harness_repo)
+    assert shown == f"1. {text} Default: no."[:157] + "..."

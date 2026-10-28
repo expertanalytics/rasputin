@@ -591,7 +591,7 @@ def test_the_recap_with_a_broken_duties_module_prints_one_line_and_the_rest(
     assert _after_last_landed(lines) == "Duties: unknown (RuntimeError: planted)"
     assert len([line for line in lines if line.startswith("Duties")]) == 1
     assert "Next on ROADMAP.md:" in lines
-    assert "== .claude/current-task/session.md ==" in lines
+    assert "== .claude/current-task/ ==" in lines
 
 
 # ---------------------------------------------------------------- the hook leaves out D4
