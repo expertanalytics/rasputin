@@ -191,3 +191,7 @@ check's numedalslagen and lagan cases change command, so their stored
 timings stop being a baseline and the next quick check starts one. Left out:
 fetching line layers from the catalogue (the ideas entry above); fractions
 in cut runs.
+
+## Review
+
+- Design round 1: CHANGES REQUESTED, 75ab2b4f..a2f4dcaa, 0 (no speed estimate for the map and per-class edges; line files lose layer and CRS; Ola's sources file breaks on the rules → classes rename; six wordings and inventory gaps).
