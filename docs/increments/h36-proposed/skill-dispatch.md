@@ -9,8 +9,7 @@ description: Main-session rules for recovery, spawning, work in flight and repor
 Before the first spawn, commit or edit, read the recap
 (`tools/session_state.py`), which names the skills to load. A turn of Ola's
 with no answering commit, file or PR, and not cancelled, is pending and
-comes before your own plan. List running jobs before starting one. Still
-unclear: ask Ola one question.
+comes before your own plan. List running jobs before starting one. Still unclear: ask Ola one question.
 
 ## Spawning
 * **First question.** Before an item's first spawn, answer in one line Ola
