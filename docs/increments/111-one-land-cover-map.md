@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: designed, revised after design review round 4 (`--land-cover` takes several files, read as one map; the Sula lake lines located; the cut run's test); design review round 5 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: designed, revised after design review round 5 (the overlap query's predicate; test 10's planted box; where a cut run's refusal falls); design review round 6 due** by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -167,9 +167,11 @@ in the shares step.
   ar50_33). Their polygons, in the order given, are the base: one map, so
   the clean-up and the shares see one coverage, and `--prefer` cuts it as
   it cuts one file. Where two files overlap, the first given keeps the
-  area (as `--prefer`'s first given wins): a later file's polygon that
-  overlaps an earlier file's (one `STRtree.query(predicate="overlaps")`
-  over each later file) is cut by them. The record's `land_cover_overlap`
+  area (as `--prefer`'s first given wins): a later file's polygon is cut
+  by the earlier files' polygons it shares area with (one
+  `STRtree.query(predicate="intersects")` over each later file, keeping
+  the pairs whose intersection has area above zero; `"overlaps"` would
+  miss a polygon wholly inside another, and two equal polygons). The record's `land_cover_overlap`
   gives that area inside the domain and the file kept; `land_cover_source`,
   `land_cover_crs`, `_notice` and `_licence` list the files joined by `; `,
   as `features*` does today. Today `--features` cleans each file on its
@@ -177,7 +179,7 @@ in the shares step.
   coverage, so with `--edges-merge-same-class` (on for AR50 by its
   accuracy) the county line is an edge only where the class changes
   across it. On Bygdin the two files tile the domain exactly (0 m²
-  overlap, 0 m² gap) and the county line runs 7,614 m inside it, all of it
+  overlap: of 345 intersecting pairs none shares area; 0 m² gap) and the county line runs 7,614 m inside it, all of it
   with one class on both sides: today's mesh follows it, the new one does
   not (question 4, section 7). Refused, naming `--land-cover`: a class
   raster with any other `--land-cover` source; two catalogue entries or
@@ -254,7 +256,12 @@ in the shares step.
   the borders).
 - **A cut run** (`--pieces`) refuses the shares (pieces carry no class
   shares yet, as today: `--land-cover` without class borders is refused
-  there, naming `--land-cover`, and so is `--shares`, naming `--shares`);
+  there, naming `--land-cover`, and so is `--shares`, naming `--shares`;
+  both at the point where a cut run refuses `--stats` and `--out-edges`
+  today, `cli.py`'s `part is not None` check: after the DEM's headers are
+  read and the cut planned, before any DEM block is decoded, the map read
+  or a piece meshed. Not moved earlier: only the plan says whether a run
+  is cut, as `--piece-budget` or a small DEM may give one piece);
   `--land-cover` with class borders in `--edges`, and `--lines`, work as
   in an uncut run, and each piece gets its codes as `_write_piece` gives
   them today (`cli.py:2129`, codes by `label_triangles`). `--prefer` is
@@ -394,23 +401,35 @@ line figures below as round 2 measured them.
    naming `--shares`; `--shares` without `--land-cover` is refused.
    `--edges river` alone (test 8's run) gives no share table.
 10. Several `--land-cover` files (the scene's polygons split in two files;
-    `P` a planted box of class 512 inside forest 311, from `dem_origin`
+    `P` a planted box of class 211, arable land, which `--prefer lake=`
+    does not replace (it replaces 512 only, the class file's
+    `[cells.prefer]`), inside forest 311, from `dem_origin`
     `(420.3, −1319.8)` to `(620.4, −1119.1)`: 40,160.1 m², perimeter
-    801.6 m, 379.8 m west of the preferred lake). Measured with shapely;
-    the line lengths marked *derived* are test 2's plus a border's length,
-    not run, and `@tester` pins them from the run.
-    - `a.geojson` (311, 312) then `b.geojson` (512, `P`), with `--prefer
-      lake=...`, `--edges all --shares`: lines 9,082.7 m, `water` lines
-      2,600.4 m (test 2's), shares equal the one-file run's (case 7) to
-      1e-6; `land_cover_overlap` gives 40,160 m² (±1) and names
-      `a.geojson`; `land_cover_source` names both files.
-    - The same files, `b` first: `build` gives 311 1,369,460 m² and 512
-      460,250 m² (±1 m²), 312 unchanged; `--edges all` lines 9,884.3 m,
-      `water` 3,402.0 m (derived: `P`'s border added).
+    801.6 m, 379.8 m west of the preferred lake). The three runs below
+    have `--prefer lake=...`. Measured on tree `12616b91` (scratch script, not
+    kept): the files joined first given wins with the overlap rule of
+    section 3, then `preferred.replace` (near the read region; no piece
+    refilled), the areas by shapely; the line lengths from today's CLI,
+    the built map as one `--features` file with `corine` and the clean-up
+    switches above, inside the domain, and equal to the map's borders
+    inside the domain by shapely. Planted check: `P` against forest 311
+    gives no pair under `"overlaps"` and one, of 40,160.1 m², under the
+    rule of section 3.
+    - `a.geojson` (311, 312) then `b.geojson` (512, `P`), `--edges all
+      --shares`: `P` is cut away whole, so the map is test 1's (311
+      1,409,620 m², 312 509,495 m², 512 420,090 m²; ±1 m²); lines
+      9,082.7 m, `water` lines 2,600.4 m (test 2's), shares equal the
+      one-file run's (case 7) to 1e-6; `land_cover_overlap` gives
+      40,160 m² (±1) and names `a.geojson`; `land_cover_source` names both
+      files.
+    - The same files, `b` first: `build` gives 311 1,369,460 m², 211
+      40,160 m², 512 420,090 m², 312 509,495 m² (±1 m²); `--edges all`
+      lines 9,884.3 m (`P`'s border added), `water` 2,600.4 m (unchanged:
+      211 is no water class).
     - 311 cut at `x = x0 + 750.5` into a west half (with 312, in one file)
-      and an east half (with 512, in the other): `--edges all
-      --no-edges-merge-same-class` lines 10,782.1 m (derived: the 1,699.4 m
-      cut added); `--edges-merge-same-class` 9,082.7 m: the county-line case.
+      and an east half (with 512, in the other), no `P`: `--edges all
+      --no-edges-merge-same-class` lines 10,782.1 m (the 1,699.4 m cut
+      added); `--edges-merge-same-class` 9,082.7 m: the county-line case.
     - Refused, exit 2, naming `--land-cover`: a class raster (the scene's
       catalogue key) with `cover.geojson`; two catalogue entries whose
       `classes` differ.
@@ -428,7 +447,9 @@ line figures below as round 2 measured them.
     - With `--prefer lake=lake.geojson` added: area by code over all
       pieces 311 1,409,620 m², 512 420,090 m², 312 144,161 m², each ±1 m²
       (the map of test 1, inside the domain).
-    - Refused, exit 2, before any phase: `--land-cover cover.geojson
+    - Refused, exit 2, at the cut-run check of section 3 (after the DEM's
+      headers are read and the cut planned, before any block is decoded
+      or piece written; no `.vtk` file is left): `--land-cover cover.geojson
       --pieces 4` (no class borders, so shares), naming `--land-cover`;
       `--edges all --shares --pieces 4`, naming `--shares`.
 
@@ -468,8 +489,10 @@ today's (section 4, step 3), so the meshes are. `@developer` runs it and
 names both verdicts in the handback.
 
 *Timing, several files.* One new term, only with a second `--land-cover`
-file: the overlap query, 0.13 s on Bygdin (2,273 and 290 polygons read,
-none overlapping; scratch probe on tree `369bac65`, AC power). Cleaning the
+file: the overlap query with its intersection areas, 0.23 s on Bygdin
+(1,697 and 247 polygons, `read_source` over each file's `source_region`
+box; 345 intersecting pairs, none sharing area; scratch probe on tree
+`12616b91`, AC power). Cleaning the
 two files as one coverage costs what cleaning each costs (`coverage_clean`
 over the read region's 591 and 12 polygons: 0.249 s per file, 0.245 s
 joined, best of three). One file adds nothing.
