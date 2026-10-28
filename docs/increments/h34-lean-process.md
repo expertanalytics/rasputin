@@ -1,8 +1,8 @@
-# Harness h34: lessons log, semantic review, one review round
+# Harness h34: lessons log, semantic review, two lanes
 
-Status: **designed**, 2026-10-27, off master `662022b0`. Short path under
-today's rules (`docs/increments/README.md`): about 15 counted lines in
-`tools/duties.py` and `tools/brief.py`, no C++ file, no refine or mesh code.
+Status: **designed**, 2026-10-27, round 3 2026-10-28, off master
+`662022b0`. Short path under the rules it started under: about 20 counted
+lines in `tools/duties.py` and `tools/brief.py`, no C++ file, no refine or mesh code.
 `tools/brief.py` is governed, so the green step runs with Ola at the guard's
 prompt, by day. The rule texts of §5 are applied in the same PR by the main
 session with Ola's yes, as h33's were.
@@ -27,10 +27,21 @@ verbatim:
 > threshold for trivial/short-path changes to let minor structural fixes
 > land in a single round."
 
+Round 3: Ola's ruling of 2026-10-28 on a second outside review, "1-2: yes.",
+as the main session relayed it: (1) two lanes replace one review round for
+small changes. Fast lane: one agent writes the test and the fix on one
+branch, CI runs, it merges; no design file, no review agent, no
+retrospective; everything outside the meshing core (triangulation,
+refinement, predicates) and the land-surface physics. Full lane, today's
+steps less the retrospective PR, for those two. (2) A first question before
+any item starts, answered by the main session with a veto: "is this needed;
+can we delete instead; which lane?". Not a new persona. §3 replaces the
+short-path round of rounds 1 and 2.
+
 Defaults the main session took while Ola was away; they are not his ruling,
 and he may reverse them: the research round moves into the weekly
 retrospective (§1); non-blocking findings become pipe items on every path,
-not only the short one (§2); the reviewer keeps a check whether the change's
+(§2); the reviewer keeps a check whether the change's
 claims are true, and keeps the procedural checks no tool enforces yet
 (§2), until a tool does.
 
@@ -129,20 +140,37 @@ Non-blocking findings become follow-up items in a pipe
 (`tools/work_pipes.py add`, filed by the spawner), on every path, in place of
 the private ideas file.
 
-## 3. One review round on the short path
+## 3. Two lanes, and the first question
 
-The short path (`docs/increments/README.md`) is today: under 50 net counted
-lines, no C++ file, nothing the *Acceptance* section covers. It gains: no rule
-text, and no new module or public type (the "no new concept" of the order).
+**First question.** Before an item's first spawn, the main session answers
+in one line: is this needed; can we delete instead; which lane? Ola may veto
+the answer. While he is away it is an `ASK OLA:` default line. No persona and
+no tool.
 
-`@reviewer` measures the real diff with `tools/count_loc.py` and checks
-every condition above on it; if one fails, the change goes to the full path.
-Such a change lands after its one combined round. Only three findings block,
-and only they give `CHANGES REQUESTED`: a wrong result, a broken invariant, a
-failing test. The round after their fix checks that fix alone and raises no
-new non-blocking finding. Every other finding is a follow-up pipe item. The
-away-mode push grant is unchanged: it still wants an approving verdict on the
-head.
+**Full lane:** the meshing core and the land-surface physics. In this
+repository the core is `include/terrain/cdt/`, `predicates/`, `refinement/`
+and `mesh/`, and `src/` (its `cdt/` and `predicates/`); `mesh/` is a default,
+taken because the *Acceptance* section's `@perf` run covers it. The
+land-surface physics is the private package's. Steps as today, with §1's log
+in place of the retrospective PR.
+
+**Fast lane:** everything else, tools, harness and rule text included. One
+`@developer` writes the test and the fix on one branch; CI runs; it merges
+through the queue. No increment file, no `@reviewer`, no log entry, no
+ROADMAP row. The approval boundary is unchanged: a push still needs Ola's
+yes, and away-mode grants still want a review verdict
+(`tools/push_grant.py`), so fast-lane branches wait for Ola while he is away.
+
+The short path goes: the fast lane takes what it held, and its
+one-combined-round machinery (rounds 1 and 2's R11 to R13) is dropped.
+
+**Tools.**
+- `tools/brief.py` gains `--lane fast`, accepted for `developer` only: it
+  needs no `--increment`, and its write limit adds `tests/`. Without the
+  flag nothing changes.
+- `tools/duties.py`: a merge owes a post-merge check only when one of its
+  paths is under `docs/increments/` (a full-lane merge); the recording-merge
+  exclusion stays.
 
 ## 4. Tests that pin it (`tests/python/test_duties.py`, `test_brief.py`)
 
@@ -156,7 +184,8 @@ Fixture times are UTC; `NOW = 2026-10-27T18:00Z`.
    `NOW`) still gives `2026-10-27T12:00Z`; text holding only that heading
    gives `None`.
 3. Post-merge after the log: `retro = 2026-10-20T10:00Z`,
-   `logged = 2026-10-27T12:00Z`, code merges `#381` at 11:00 and `#382` at
+   `logged = 2026-10-27T12:00Z`, full-lane merges (a code path and
+   `docs/increments/46-x.md`) `#381` at 11:00 and `#382` at
    13:00 on 2026-10-27 owe exactly
    `post-merge check (1 merge since the last log entry, 2026-10-27 12:00 UTC: #382)`.
 4. Baseline from the retrospective: `logged = None`, `retro =
@@ -171,9 +200,18 @@ Fixture times are UTC; `NOW = 2026-10-27T18:00Z`.
 7. `lessons_path` from a repository and from a worktree of it is the same
    path, `<parent of the main checkout>/rasputin_scratch/lessons.md`.
 8. The orchestrator brief's write limit names `../rasputin_scratch/lessons.md`.
+9. Fast-lane merge: a merge whose paths are code only (no
+   `docs/increments/` path) after the baseline owes no post-merge check.
+10. `brief.py developer --lane fast` without `--increment` succeeds, and its
+    write limit names `tests/`; `developer` without the flag still needs
+    `--increment`; `--lane fast` for any other persona is refused.
 
-The existing tests that use `research=` or the "since the last retrospective"
-text are amended by `@tester` in the red commit. No invariant-critical suite.
+Changes to the red commit `850892ea`, made by `@tester` in a new commit:
+`test_duties.py`, the post-merge fixtures (the h34 tests and the older
+post-merge tests) give their merges a `docs/increments/` path, plus test 9;
+`test_brief.py`, test 10; `test_lean_process_rule_text.py`, its pairs
+follow §5 as revised (the old R11 to R13 go; R11 to R15 are new). No
+invariant-critical suite.
 
 Left out: a CI gate for the size ceiling (an idea for Ola); deleting entries
 from the log; any change to `tools/session_state.py`.
@@ -300,7 +338,7 @@ Once a week, check the private ideas file for entries gone stale or done unmarke
 ````text
 ## 3. The lessons log and the weekly retrospective
 
-After a merge or a night, append to `../rasputin_scratch/lessons.md` (never
+After a full-lane merge or a night, append to `../rasputin_scratch/lessons.md` (never
 committed) `## <stamp> merge #N` (or `night`), stamped at the start by
 `date -u +%Y-%m-%dT%H:%MZ`, then at most five lines of findings (§1) and
 lessons passed to you. No PR. A finding needing a fix goes in your handback
@@ -323,54 +361,120 @@ Check the private ideas file for stale or done entries.
 - **Write only under `docs/retrospectives/` and the log.** New ideas, and stale or
 ````
 
-#### R11 `docs/increments/README.md`
+#### R11 `CLAUDE.md`
 
 ````text
-An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
-C++ file and nothing the *Acceptance* section covers takes the short path;
+* **Step order.** Design (`@architect`), failing tests (`@tester`), code
+  (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance run
+  when refine or mesh code is touched (`docs/increments/README.md`).
+  A performance fix is timed by `@perf` before review. Failing
+  tests go back to `@developer`.
 ````
 
 ````text
-An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
-C++ file, rule text or *Acceptance* code, nor adds a module or public type, takes the short path;
+* **First question.** Before an item's first spawn, answer in one line Ola
+  may veto: is this needed; can we delete instead; which lane?
+* **Step order.** Full lane (`docs/increments/README.md`): design
+  (`@architect`), failing tests (`@tester`), code (`@developer`), test run,
+  review (`@reviewer`), and `@perf`'s acceptance run when refine or mesh code
+  is touched; a performance fix is timed by `@perf` before review; failing
+  tests go back to `@developer`. Fast lane: `@developer` alone.
 ````
 
 #### R12 `docs/increments/README.md`
 
 ````text
-  still goes to `@architect` before green.
+   `@reviewer` reviews the design before `@tester` starts (on the short path,
+   below, with the code), and again when a design update adds a step.
 ````
 
 ````text
-  still goes to `@architect` before green.
-- `@reviewer` checks these conditions on the real diff (`count_loc.py`);
-  one failing means the full path. Else it lands after that round: only a
-  wrong result, a broken invariant or a failing test blocks, and the next
-  round checks that fix alone; other findings are pipe items.
+   `@reviewer` reviews the design before `@tester` starts, and again when a
+   design update adds a step.
 ````
 
 #### R13 `docs/increments/README.md`
 
 ````text
-   any other finding, is `CHANGES REQUESTED`.
+## Small changes: the short path
+
+An increment estimated under 50 net lines (`CLAUDE.md` §2) that touches no
+C++ file and nothing the *Acceptance* section covers takes the short path;
+the brief says so, and `@reviewer` may send it back to the full path.
+
+- Its increment file is short: what changes, the tests that pin it, what is
+  left out, the estimate, and the *Prior art* section (step 1).
+- One `@reviewer` round judges the design, the red step and the green step
+  together, and rules on the red step's pins. A pin that changes the design
+  still goes to `@architect` before green.
+- The main session commits the verdict, the Status line and the ROADMAP
+  row together, before the push.
+
+Never dropped: the red commit ahead of the green one, a green commit with no
+test file, and the approval boundary (`.claude/REQUIRED-READING.md`).
 ````
 
 ````text
-   any other finding, is `CHANGES REQUESTED` (short path: below).
+## Two lanes
+
+**The full lane** is the loop above, for the meshing core
+(`include/terrain/` `cdt/`, `predicates/`, `refinement/`, `mesh/`; `src/`)
+and the land-surface physics.
+
+**The fast lane** is everything else: one `@developer`
+(`tools/brief.py --lane fast`) writes the test and the fix on one branch,
+CI runs, and it merges. No increment file, `@reviewer` or retrospective. The
+approval boundary (`.claude/REQUIRED-READING.md`) holds.
+````
+
+#### R14 `.claude/agents/tester.md`
+
+````text
+  increment file leaves open, in the handback; `@architect` confirms or rules on each before green
+  (on the short path, only a pin that changes the design: `docs/increments/README.md`).
+````
+
+````text
+  increment file leaves open, in the handback; `@architect` confirms or rules on each before green.
+````
+
+#### R15 `.claude/REQUIRED-READING.md`
+
+````text
+**`@reviewer` runs once on any branch before its first push, whether or not
+the branch contains production code, and again before a push that follows a
+round of findings (a verdict other than `APPROVED`,
+`docs/increments/README.md` step 4).** On a prose or tooling branch its scope is:
+
+- every claim the branch asserts, checked by running the thing it asserts about;
+- `python3 tools/check_citations.py`, with its at-risk list **re-read as
+  quotations** — resolving a line number is not resolving the quotation;
+- for any rule the branch adds, the incident it prevents, named with a commit.
+````
+
+````text
+**On a full-lane branch, `@reviewer` runs once before its first push, and
+again before a push that follows a round of findings (a verdict other than
+`APPROVED`, `docs/increments/README.md` step 4).**
 ````
 
 ## 6. Rule text size
 
 Counted by `tools/rule_sizes.py`'s `current()` on copies of its files with
-R1 to R13 applied (each old text found exactly once first):
+R1 to R15 applied (each old text found exactly once first):
 
 | File | Words now | After | Change |
 |---|---|---|---|
-| `CLAUDE.md` | 1155 | 1157 | +2 |
-| `docs/increments/README.md` | 1060 | 1116 | +56 |
-| `.claude/agents/orchestrator.md` | 482 | 503 | +21 |
+| `CLAUDE.md` | 1155 | 1187 | +32 |
+| `.claude/REQUIRED-READING.md` | 1857 | 1792 | -65 |
+| `docs/increments/README.md` | 1060 | 968 | -92 |
+| `.claude/agents/orchestrator.md` | 482 | 504 | +22 |
 | `.claude/agents/reviewer.md` | 565 | 454 | -111 |
-| All rule files | 9483 | 9451 | **-32** |
+| `.claude/agents/tester.md` | 811 | 799 | -12 |
+| All rule files | 9483 | 9257 | **-226** |
+
+The same fifteen old texts also occur once each at `origin/master` `aabac548`,
+with the same counts.
 
 ## Review
 
