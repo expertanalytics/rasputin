@@ -239,8 +239,9 @@ class TestTheCentimetreFilter:
 
 
 class TestRefusal:
-    """Test 5: the simplifier's refusal refuses the run, naming the file and
-    the way out."""
+    """Test 5: the simplifier's refusal refuses the run, naming the way out.
+    No file name: `edges_of` takes the map, which may join several files,
+    and no path (the readers' refusals name the file)."""
 
     def test_the_run_is_refused(
         self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -253,7 +254,7 @@ class TestRefusal:
         with pytest.raises(fi.FeatureError) as caught:
             opened(src, 5.0)
         assert str(caught.value) == (
-            "lakes.geojson: border simplification refused: x; "
+            "border simplification refused: x; "
             "--edges-tolerance 0 meshes this source with its borders as read"
         )
 
