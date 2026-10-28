@@ -1,6 +1,6 @@
 # h38: fast-lane push and enqueue without a fresh yes, present or away
 
-Status: design; §8's questions answered by Ola (2026-10-28). No production
+Status: design round 3 (remote URLs pinned); §8 answered by Ola (2026-10-28). No production
 code yet.
 
 Ola, verbatim, 2026-10-28, answering §8's questions (q30: opening the pull
@@ -80,7 +80,7 @@ No second path, no new module.
 guard_push.py --(command, reasons)--> judge
   judge: mode off | on (broken: None, as now)
     flag  = unattended.json only when on; {} when off      (change 1)
-    real  = masters(where): ls-remote of each remote       (change 4)
+    real  = masters(where): URLs pinned, then ls-remote    (change 4)
     act   = granted_act(command)                            (unchanged)
     fast  = not granted and fast_lane(where, state, act, real)
               no full-lane, increment, governed or CI-config path (change 2)
@@ -127,10 +127,20 @@ guard_push.py --(command, reasons)--> judge
 4. **The remotes' real master, not the local refs.** A new
    `masters(where) -> (dict[remote, sha], reason)` runs, once per judged
    act, `git ls-remote <url> refs/heads/master` for origin, and for
-   `private` when `remote.private.url` is set, where `<url>` is
-   `git remote get-url --push <remote>` (which expands `insteadOf` and
-   `pushInsteadOf`, so the guard reads the repository the push would write).
-   For a create it also asks origin for `refs/heads/<branch>` in the same
+   `private` when `remote.private.url` is set. Before that, for each of those
+   remotes, `git remote get-url --all <remote>` and
+   `git remote get-url --push --all <remote>` must each print exactly one
+   line, equal to `<url>` = `REMOTE_URLS[<remote>]`, a new constant:
+   `git@github.com:expertanalytics/rasputin.git` for origin,
+   `git@github.com:expertanalytics/rasputin-private.git` for private (both
+   as `git remote -v` shows them on this machine; an HTTPS remote just asks).
+   Otherwise refuse, reason naming the remote and the URL printed. Both
+   commands expand `insteadOf` and `pushInsteadOf` from every config file
+   (round 2: a global `pushInsteadOf` sent the guard's reads to another
+   repository). Probed in a scratch repository with `GIT_CONFIG_GLOBAL` set:
+   a global `pushInsteadOf` changes only the `--push` line, a global
+   `insteadOf` changes both, and an added `pushurl` replaces the `--push`
+   line; each now refuses. For a create it also asks origin for `refs/heads/<branch>` in the same
    call. A master sha missing locally is fetched once by the guard
    (`git fetch -q <remote> refs/heads/master`); still missing, a timeout
    (15 s per call) or any git error refuses, with the reason. Every place
@@ -161,14 +171,20 @@ push or history rewrite; any command not in the three bare forms (an `&&`
 chain, a variable); `gh pr edit|ready|update-branch`; an enqueue with CI
 red, pending or unreadable, or a second enqueue of the same head; a stale
 named sha; a create whose origin branch is not the local head; a remote
-that cannot be read; any `.claude/settings*.json` edit (`guard_governance`,
+that cannot be read, or whose fetch or push URL is not the pinned one; any `.claude/settings*.json` edit (`guard_governance`,
 unchanged).
 
-**Left open, on purpose.** A global `~/.gitconfig` can point `insteadOf`
-for reading at one repository and `pushInsteadOf` for writing at another;
-`get-url --push` then names the second, which is the one written, so the
-judgement is about the right repository. Not closed: a test module that
-disables others from import time (no file list can find it).
+**Which repository is judged.** With both URLs pinned, the guard's
+`ls-remote` and fetch, `git push origin` and `gh` (which picks its
+repository from these remotes when no `-R` is given) all address
+`expertanalytics/rasputin`. The one way left to point `gh` elsewhere is
+`GH_REPO` or `gh repo set-default` (the latter passes `guard_push` today,
+checked by piping it to the hook); either can only act on a pull request
+in that other repository, and a branch reaches the private one only by a
+push, which asks. The enqueue's checks are read with `-R
+expertanalytics/rasputin` (change 3) whatever `gh` defaults to.
+**Left open, on purpose:** a test module that disables others from import
+time (no file list can find it).
 
 `guard_push.py` changes one word: its refusal says "fast-lane branch" rather
 than "granted branch" when the lane was fast.
@@ -233,7 +249,10 @@ a real bare repository on a local path as that remote, and pushes its
 master there (which also sets the tracking ref): `harness_fixtures.py`
 (the sites at lines 429, 455, 499, 502, 530 today), `test_push_grant.py`
 (284, 704, and `Fast` at 1200), `test_away.py` (1073), `test_guard_push.py`
-(1195). Measured: `git ls-remote` of a local bare repository took 0.10 s.
+(1195). Each such fixture patches `push_grant.REMOTE_URLS` to its bare
+repositories' paths and sets `GIT_CONFIG_GLOBAL` to an empty file, so the
+machine's own `~/.gitconfig` cannot change a result. Measured: `git
+ls-remote` of a local bare repository took 0.10 s.
 `Fast` becomes: `master` (1 commit, from `make_repo`) pushed to a bare
 `origin`, branch `quick` with one commit of `files`, pushed to origin's
 `quick` too unless a test says otherwise. With `tools/y.py` (`y = 1`), the
@@ -271,18 +290,27 @@ the flag file removed.
 9. Mode broken: `None`.
 10. `guard_push` end to end, present, no `unattended.json` on disk: the fast
     push line exits 0 with no output; a full-lane push still asks.
+11. Redirected URLs, both modes, fast branch `quick`: `GIT_CONFIG_GLOBAL`
+    set to a file with `url.<second bare repo>.pushInsteadOf = <origin's
+    path>`, then with `insteadOf` instead, then (no global file) a second
+    `pushurl` added to origin in the repository's own config: push, create
+    and enqueue are each `None` or refused, reason names origin's URL,
+    nothing logged. The same `pushInsteadOf` on `private`'s path: a granted
+    push to origin is refused.
 
-Planting check: each of 1, 3, 4, 6a, 6b, 7 and 10 is run once against
+Planting check: each of 1, 3, 4, 6a, 6b, 7, 10 and 11 is run once against
 `push_grant.py` with its new condition removed (for 10: the unconditional
 read put back), and must fail.
 
 ## 7. Size
 
-Production: `push_grant.py` about 50 lines (`masters` about 20, `CI_CONFIG`
+Production: `push_grant.py` about 58 lines (`masters` about 20, the URL
+pin and `REMOTE_URLS` 8, `CI_CONFIG`
 and its check 8, the threaded sha and the create check about 12, present
-mode and `pr_view` 10), `guard_push.py` 1: about 51 net lines (`away.py`'s
+mode and `pr_view` 10), `guard_push.py` 1: about 59 net lines (`away.py`'s
 20 for the switch dropped), all in governed files, so the build needs Ola's
-yes for each write (as any harness change). Tests about 160 lines, fixture
+yes for each write (as any harness change). Tests about 185 lines (test 11
+and the fixtures' URL patch about 25), fixture
 changes included (the switch's two tests, about 20, dropped).
 Lane: full (it changes the approval boundary), `@reviewer` before push.
 
