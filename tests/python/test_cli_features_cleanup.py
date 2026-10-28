@@ -62,7 +62,7 @@ Test 14's band-0 digest is unchanged. RED at the commit that added them
 simplifier, and the help and record said "repaired, clipped border".
 
 Increment 41 (``docs/increments/41-class-maps-as-data.md``, section 5.3):
-the three distances' help ends "Default: from the meshing rules' positional
+the three distances' help ends "Default: from the land-cover class file's positional
 accuracy and the DEM cell (CORINE: N)."; ``BAND_HELP`` follows it.
 
 RED at the commit that added increment 32's tests (``44f25968``): the default
@@ -126,7 +126,7 @@ BAND_HELP = (
     "the repair and the outline rule, each class keeping its area; the simplification can "
     "bring a border back within the outline-snap distance of the outline, but not closer "
     "than the repair distance. 0 is off. "
-    "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: 50)."
+    "Default: from the land-cover class file's positional accuracy and the DEM cell (CORINE: 50)."
 )
 BAND_WORDING = (
     "Land-cover borders simplified, each at most this far from its border after the repair "

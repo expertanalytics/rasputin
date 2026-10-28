@@ -297,7 +297,7 @@ def test_refusal_2_needs_a_cells_layer(
 ) -> None:
     refused(
         scene, tmp_path, *extra, "--catchments", str(scene["units"]), *CATCHMENTS_TOLERANCE_0,
-        says="needs --land-cover with meshing rules and a .gpkg output",
+        says="needs --land-cover with a land-cover class file and a .gpkg output",
     )  # fmt: skip
 
 

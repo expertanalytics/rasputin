@@ -20,7 +20,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - The record field for a map's licence is `land_cover_licence`; absent when
   every map's licence is empty.
 - `rasputin palette PATH` writes the file's `preset` as the preset's `Name`.
-- The three help texts end "Default: from the meshing rules' positional
+- The three help texts end "Default: from the land-cover class file's positional
   accuracy and the DEM cell (CORINE: N)." with N 1, 50 and 5.
 - A `--features-rules` file error, an unknown name, an extra repeating a
   default name, and more than 22 extras in one run are usage errors (exit 2).
@@ -67,7 +67,9 @@ SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
 OPTIONS = ("edges_repair", "edges_tolerance", "edges_outline_snap")
-DERIVED = "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: {})."
+DERIVED = (
+    "Default: from the land-cover class file's positional accuracy and the DEM cell (CORINE: {})."
+)
 LEVEE = LineString([rel(30.1, -40.3), rel(170.2, -40.3)])
 ROAD = LineString([rel(30.1, -15.2), rel(170.2, -15.2)])
 

@@ -29,7 +29,7 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   usage error naming `--reservoirs` and the suffix, also before any phase.
 - A land cover with no meshing rules writes no `cells` layer, so
   `--reservoirs` with it is refused like the two above: exit 2, before any
-  phase, naming `--reservoirs` and "meshing rules".
+  phase, naming `--reservoirs` and "land-cover class file".
 - With no cache root, a catalogue key for `--reservoirs` gets the whole
   `NO_CACHE` refusal `--land-cover` gives, before any phase.
 """
@@ -288,7 +288,7 @@ def test_t7_a_land_cover_without_meshing_rules_is_refused_naming_them(
     code, output = mesh(scene, target, "--land-cover", KEY, "--reservoirs", str(res))
     assert code == USAGE, output
     flat = squashed(output)
-    assert "--reservoirs" in flat and squashed("meshing rules") in flat, output
+    assert "--reservoirs" in flat and squashed("land-cover class file") in flat, output
     assert phases == [], phases
     assert not target.exists()
 

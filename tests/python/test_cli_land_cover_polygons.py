@@ -482,7 +482,7 @@ class TestRefusals:
             "--land-cover-classes",
             str(rules_file),
         )
-        assert "class 6 is not in the meshing rules" in " ".join(output.split()), output
+        assert "class 6 is not in the land-cover class file" in " ".join(output.split()), output
         assert "legend" not in basenames(output.replace("--land-cover-classes", "")), output
 
     def test_a_file_without_a_legend_is_refused_before_any_phase(

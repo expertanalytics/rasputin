@@ -12,7 +12,7 @@ back, never from the producer's own records.
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 - The record line for a land cover without meshing rules is the `run` row
-  named `cells`, its value "none, the land cover has no meshing rules".
+  named `cells`, its value "none, the land cover has no land-cover class file".
 - The legend check's refusal names the class as `class <code>`.
 """
 
@@ -166,7 +166,7 @@ def test_t5_without_meshing_rules_only_the_fractions_table(
         assert "cells" not in tables and "land_cover_fractions" in tables, tables
         assert conn.execute("SELECT count(*) FROM land_cover_fractions").fetchone() == (ENTRIES,)
         (value,) = conn.execute("SELECT value FROM run WHERE name = 'cells'").fetchone()
-    assert value == "none, the land cover has no meshing rules", value
+    assert value == "none, the land cover has no land-cover class file", value
 
 
 # ------------------------------------------------------------ the legend check

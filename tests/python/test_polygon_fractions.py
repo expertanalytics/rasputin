@@ -181,7 +181,7 @@ class TestHandFigures:
 
 class TestEdgesOfTheInput:
     def test_a_code_absent_from_the_rules_is_refused_naming_it(self, pf: ModuleType) -> None:
-        with pytest.raises(ValueError, match=r"^class 9999 is not in the meshing rules$"):
+        with pytest.raises(ValueError, match=r"^class 9999 is not in the land-cover class file$"):
             assigned(pf, [(311, STRIP), (9999, SQUARE)])
 
     def test_no_polygons_leave_every_triangle_class_0(self, pf: ModuleType) -> None:
