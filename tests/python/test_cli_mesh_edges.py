@@ -35,7 +35,10 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   and the clean-up switches 0, no `--prefer` (today's tree refuses a coded
   `--features` beside `--land-cover`).
 - A bowtie in a `--land-cover` file ends the run with exit 0 and no
-  exception escaping `rasputin mesh`.
+  exception escaping `rasputin mesh`; one in a pair overlapping far outside
+  the read box is counted outside by the edges step, as its partner is.
+- `--threads N` reaches the repairing `build` call as `threads=N`; the
+  `--prefer` call (`fix=False`) repairs nothing and is not checked.
 - A river file is a GeoJSON `FeatureCollection` of one `LineString` with no
   properties, in the mesh CRS.
 - Ola's question 4 (a county line with one class on both sides) is taken at
@@ -733,15 +736,17 @@ def test_10_the_lone_bowtie_premises() -> None:
     assert preferred_lake().intersection(whole).area > 0
 
 
-def run_kept(scene: dict[str, Path], target: Path, *args: str) -> None:
+def run_kept(scene: dict[str, Path], target: Path, *args: str) -> str:
     """`test_cli_mesh_cells.mesh`'s arguments, run here to keep the exception:
-    none escapes, none is printed as a traceback, and the exit is 0."""
+    none escapes, none is printed as a traceback, and the exit is 0. The
+    output, stderr included."""
     given = ["--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3",
              "--cache", str(scene["cache"]), "--out", str(target)]  # fmt: skip
     result = runner.invoke(app, ["mesh", *given, *args])
     assert result.exception is None, "".join(traceback.format_exception(result.exception))
     assert result.exit_code == 0, result.output
     assert "Traceback" not in result.output and "GEOSException" not in result.output
+    return result.output
 
 
 @pytest.mark.parametrize("with_prefer", [False, True], ids=["alone", "prefer"])
@@ -772,6 +777,80 @@ def test_10_a_bowtie_in_a_single_file_with_edge_cleanup_is_not_a_traceback(
     run_kept(scene, target, *classes(f), *edges("all"), "--edges-repair", "0.1")
     with closing(sqlite3.connect(target)) as conn:
         assert lengths(conn)["land_cover"] > 0
+
+
+#: `cli._edges`'s stderr line.
+EDGES_LINE = re.compile(
+    r"\bedges: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
+    r"(?P<o>\d+) outside the domain, (?P<e>\d+) empty\b"
+)
+
+
+def far_pair() -> tuple[Polygon, Polygon]:
+    """A 200 m square coded 311 and a 200 m bowtie coded arable over it, 50 km
+    east of the scene: far outside the read box (`source_region` widened by
+    `land_cover_map.MARGIN`), and sharing 20,000 m² with each other."""
+    x0, y0 = dem_origin()
+    a, b = x0 + 50_000, y0 - 1000
+    tie = Polygon([(a, b), (a + 200, b + 200), (a + 200, b), (a, b + 200)])
+    return box(a, b, a + 200, b + 200), tie
+
+
+def test_10_the_far_pair_premises() -> None:
+    square, tie = far_pair()
+    assert not tie.is_valid
+    assert square.intersection(shapely.make_valid(tie)).area == pytest.approx(20000.0, abs=AREA)
+    assert square.distance(domain()) > 45_000 and tie.distance(domain()) > 45_000
+
+
+def outside_count(output: str) -> int:
+    found = [int(m["o"]) for m in EDGES_LINE.finditer(output)]
+    assert len(found) == 1, output
+    return found[0]
+
+
+@pytest.mark.parametrize("shares", [False, True], ids=["edges", "edges-and-shares"])
+def test_10_an_overlapping_pair_with_a_bowtie_far_outside_the_region_is_counted_outside(
+    scene: dict[str, Path], tmp_path: Path, shares: bool
+) -> None:
+    """Code review round 3: two `--land-cover` files whose polygons overlap
+    50 km outside the region, one a bowtie. `_fixed` keeps a polygon the read
+    box misses whole and unchecked, and `_joined` intersected the pair, so
+    the run ended in GEOSException. Left out of the overlap join, the run
+    ends with exit 0 and the edges step counts both outside the domain: two
+    more than the same files without them."""
+    polygons = dict(cover_polygons())
+    near_a, near_b = [(311, polygons[311]), (312, polygons[312])], [(512, polygons[512])]
+    square, tie = far_pair()
+    extra = (*edges("all"), *AS_READ, *(("--shares",) if shares else ()))
+    (tmp_path / "far").mkdir()
+    (tmp_path / "near").mkdir()
+    a, b = split(tmp_path / "far", [*near_a, (311, square)], [*near_b, (ARABLE, tie)])
+    with_far = run_kept(scene, tmp_path / "far.gpkg", *classes(a, b), *extra)
+    a, b = split(tmp_path / "near", near_a, near_b)
+    without = run_kept(scene, tmp_path / "near.gpkg", *classes(a, b), *extra)
+    assert outside_count(with_far) == outside_count(without) + 2, (with_far, without)
+
+
+def test_10_threads_reach_the_map_build(
+    scene: dict[str, Path], tmp_path: Path, lake: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Code review round 3: `land_cover_map` checked the cut polygons in a
+    fixed 8 threads whatever `--threads` said. `--threads 3` reaches every
+    `build` that repairs (each call but `fix=False`'s) as ``threads=3``."""
+    calls: list[dict[str, Any]] = []
+    real = cli.build
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "build", spy)
+    f = write_cover_geojson(tmp_path / "a.geojson", cover_polygons())
+    run_kept(scene, tmp_path / "x.gpkg", *classes(f), *prefer(lake), "--shares", "--threads", "3")
+    fixing = [k for k in calls if k.get("fix", True)]
+    assert len(fixing) == 1 and len(calls) == 2, calls
+    assert fixing[0].get("threads") == 3, calls
 
 
 def test_10_the_box_first_given_keeps_its_area_and_border(

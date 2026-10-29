@@ -405,6 +405,19 @@ class TestTheClip:
 #: in all against 13,615), and rows 21 and 59 list the same lines in another
 #: order. The Numedalslagen quick-check mesh kept its triangle and vertex
 #: counts and its 10 m largest error, and every class area to 7e-8 relative.
+#: Its meshes at ``2f70ce84`` (whole polygons) and ``a4bcab1e`` (cut ones),
+#: the quick check's command (clean-up at its defaults), both have 653,039
+#: triangles and 334,190 vertices; 28 vertices moved, 22 by under 0.015 m,
+#: the farthest 8.7 m. The cause is the clean-up's repair, not the lines:
+#: with every clean-up switch 0 the two meshes are identical (1,140,546
+#: triangles), and so are they with only the simplification or only the
+#: outline snap on. Of the 3,297 polygons ``shapely.coverage_clean`` is given
+#: (snapping 1 m), 22 have the same vertices in another order (parts or ring
+#: starts; equal once normalised) and 2 differ by 1.5e-11 m. Its result
+#: depends on that order: 23 cleaned polygons differ, their borders by at
+#: most 0.86 m, and the refinement places 28 points elsewhere. The whole
+#: polygons with the cut ones' 22 orderings give 21 of the 23 differences;
+#: the two 1.5e-11 m polygons give the other 2.
 #: Ola, 2026-10-29: "If the mesh is as good, and the diff very small, I see no
 #: reason to keep the old one. Please update the pin." That lifts the rule
 #: below for this change only; it stands for every later one.
