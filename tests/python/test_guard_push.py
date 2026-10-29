@@ -44,7 +44,9 @@ from harness_fixtures import (
     make_repo,
     point_scratchpad,
     pretool_decision,
+    publish,
     queue_lines,
+    remote_urls,
     run_script,
     set_mode,
 )
@@ -1141,16 +1143,53 @@ def test_13_a_branch_not_granted_is_denied_without_the_grant_clause(granted: Gra
     assert not grants_used_path(granted.repo).exists()
 
 
-def test_a_fast_lane_branch_passes_the_hook_without_grant_or_review(granted: Granted) -> None:
+def green_gh(tmp_path: Path, head: str) -> dict[str, str]:
+    """The hook's environment with a `gh` first on PATH that reports `head`'s pull
+    request open into master with one green check, whatever it is asked."""
+    bin_dir = tmp_path / "gh-bin"
+    bin_dir.mkdir()
+    check = {"__typename": "CheckRun", "name": "CI result", "status": "COMPLETED",
+             "conclusion": "SUCCESS"}  # fmt: skip
+    view = {"state": "OPEN", "baseRefName": "master", "headRefOid": head,
+            "statusCheckRollup": [check]}  # fmt: skip
+    (bin_dir / "gh").write_text(f"#!/bin/sh\ncat <<'EOF'\n{json.dumps(view)}\nEOF\n")
+    (bin_dir / "gh").chmod(0o755)
+    return {**clean_env(), "PATH": f"{bin_dir}{os.pathsep}{clean_env()['PATH']}"}
+
+
+def test_a_fast_lane_branch_passes_the_hook_without_grant_or_review(
+    granted: Granted, tmp_path: Path
+) -> None:
     """Ola, 2026-10-28: green fast-lane branches merge while he is away. A branch
-    off `master` changing only `tools/`, with no increment file, needs no grant."""
+    off `master` changing only `tools/`, with no increment file, needs no grant;
+    it is on origin and its checks are green."""
     git(granted.repo, "checkout", "-q", "-b", "quick", granted.base)
     head = commit_file(granted.repo, "tools/q.py", "q = 1\n", "a fast-lane change")
+    publish(granted.repo, "origin", head, "quick")
     flag_granting(granted.repo, [])
+    env = green_gh(tmp_path, head)
     for command in [c.replace("feat", "quick") for c in granted_acts(head)]:
-        assert guard(granted.repo, command) is None, command
+        assert guard(granted.repo, command, env) is None, command
     assert [line["lane"] for line in jsonl(grants_used_path(granted.repo))] == ["fast"] * 3
     assert queue_lines(granted.repo) == []
+
+
+def test_present_with_no_flag_file_a_fast_lane_push_passes_the_hook_silently(
+    granted: Granted,
+) -> None:
+    """docs/increments/h38-fastlane-push.md §6 test 10: Ola present, `unattended.json`
+    absent, so the guard reads no flag; a full-lane push still asks."""
+    flag_path(granted.repo).unlink()
+    git(granted.repo, "checkout", "-q", "-b", "quick", granted.base)
+    head = commit_file(granted.repo, "tools/q.py", "q = 1\n", "a fast-lane change")
+    event = bash_event(granted.repo, f"git push origin {head}:refs/heads/quick")
+    done = run_script(granted.repo, GUARD_PUSH, event)
+    assert (done.returncode, done.stdout, done.stderr) == (0, "", ""), done
+    git(granted.repo, "checkout", "-q", "-b", "deep", granted.base)
+    deep = commit_file(granted.repo, "src/a.cpp", "int a;\n", "a full-lane change")
+    found = guard(granted.repo, f"git push origin {deep}:refs/heads/deep")
+    assert found is not None and found[0] == "ask", found
+    assert [line["head"] for line in jsonl(grants_used_path(granted.repo))] == [head]
 
 
 @pytest.mark.parametrize(
@@ -1192,7 +1231,8 @@ def test_17_a_push_run_in_another_repository_is_denied(granted: Granted, tmp_pat
     other = tmp_path / "other"
     git(tmp_path, "clone", "-q", str(granted.repo), str(other))
     git(other, "update-ref", "refs/heads/feat", granted.head)
-    git(other, "update-ref", "refs/remotes/origin/master", granted.base)
+    git(other, "remote", "set-url", "origin", remote_urls(granted.repo)["origin"])
+    git(other, "fetch", "-q", "origin")
     denied(granted.repo, f"git -C {other} push origin {granted.head}:refs/heads/feat")
     assert not grants_used_path(granted.repo).exists()
 

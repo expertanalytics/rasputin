@@ -21,8 +21,7 @@ description: Rules while Ola is away (unattended mode). Load when the recap says
   pushed (`git push origin <sha>:refs/heads/<branch>`, or `git push private
   ...` for commits of `private/master`), opened as a PR and enqueued, or
   merged on the private repository once green, if `@reviewer`'s last
-  verdict, recorded by a hook, approved that head. A fast-lane branch for
-  origin needs neither (the guard checks its lane). Grants end with the window.
+  verdict approved that head. Grants end with the window.
 * Anything else for Ola: `questions.py add --act`, then other work. Record
   each default taken, a first-question answer included, with
   `questions.py taken` as it is taken; the first report after the window is

@@ -12,8 +12,7 @@ with no answering commit, file or PR, and not cancelled, is pending and
 comes before your own plan. List running jobs before starting one. Still unclear: ask Ola one question.
 
 ## Spawning
-* **First question.** Before an item's first spawn, answer in one line Ola
-  may veto: is this needed; can we delete instead; which lane?
+* Queue each item with `tools/work_pipes.py add`, which asks the triage.
 * Brief each spawn and new-step resume: `tools/brief.py`; make worktrees with
   `tools/new_worktree.py`.
 * Resume a persona only under about 150 k tokens of transcript; else spawn

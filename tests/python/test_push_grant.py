@@ -27,6 +27,7 @@ from harness_fixtures import (
     Granted,
     PrivateGranted,
     Tool,
+    add_remote,
     commit_file,
     flag_granting,
     flag_path,
@@ -34,6 +35,8 @@ from harness_fixtures import (
     grants_used_path,
     jsonl,
     make_repo,
+    pin_remotes,
+    publish,
     review_record,
     review_section,
     write_reviews,
@@ -281,7 +284,8 @@ def test_30_a_review_on_a_merged_branch_off_the_first_parent_chain_is_not_seen(
     """
 
     repo = make_repo(tmp_path / "repo")
-    git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    add_remote(repo, "origin")
+    publish(repo, "origin", "master")
     git(repo, "checkout", "-q", "-b", "other")
     s = commit_file(repo, "tools/s.py", "s = 1\n", "S on other")
     git(repo, "checkout", "-q", "-b", "feat", "master")
@@ -482,6 +486,7 @@ def private(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PrivateGranted:
     never the real checkout's, and a `gh` on PATH that fails if ever reached."""
     built = PrivateGranted(tmp_path.resolve() / "repo")
     monkeypatch.setattr(push_grant.hm, "ROOT", built.repo)
+    pin_remotes(monkeypatch, push_grant, built.repo)
     state = push_grant.hm.state_dir(built.repo)
     assert state is not None and state.resolve().is_relative_to(tmp_path.resolve()), state
     stub = tmp_path / "bin" / "gh"
@@ -635,11 +640,14 @@ def test_h22_5c_a_private_push_of_pub_goes_only_to_origin(
     assert used_lines(private) == []
 
 
-def test_h22_5d_origin_push_of_prv_with_the_ref_deleted_is_refused(
+def test_h22_5d_origin_push_of_prv_with_the_local_ref_deleted_is_still_the_leak(
     private: PrivateGranted, runner: Runner
 ) -> None:
+    """The private master is read from the private remote, so the local ref's absence
+    changes nothing (docs/increments/h38-fastlane-push.md §3, change 4)."""
     private.delete_private_ref()
-    refused_with(judged(private, f"git push origin {private.prv}:refs/heads/prv"), MISSING_REF)
+    refused_with(judged(private, f"git push origin {private.prv}:refs/heads/prv"),
+                 leak(private.prv))  # fmt: skip
 
 
 def test_h22_5e_origin_push_of_prv_with_no_private_only_commit_is_refused(
@@ -701,7 +709,7 @@ def advance_private_master(private: PrivateGranted, relative: str) -> str:
     """A code commit on private/master (P2), made on a scratch branch then deleted."""
     git(private.repo, "checkout", "-q", "-b", "scratch-private", "refs/remotes/private/master")
     sha = commit_file(private.repo, relative, "p = 2\n", f"P2 changes {relative}")
-    git(private.repo, "update-ref", "refs/remotes/private/master", sha)
+    publish(private.repo, "private", sha)
     git(private.repo, "checkout", "-q", "prv")
     git(private.repo, "branch", "-q", "-D", "scratch-private")
     return sha
@@ -976,6 +984,7 @@ def redo(head: str) -> str:
 def grant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Granted:
     built = Granted(tmp_path.resolve() / "repo")
     monkeypatch.setattr(push_grant.hm, "ROOT", built.repo)
+    pin_remotes(monkeypatch, push_grant, built.repo)
     state = push_grant.hm.state_dir(built.repo)
     assert state is not None and state.resolve().is_relative_to(tmp_path.resolve()), state
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"):
@@ -1182,25 +1191,47 @@ def test_h33_2_a_private_act_passes_on_the_log_alone(
 
 # ---------------------------------------------------------------- the fast lane
 #
-# Ola, 2026-10-28: "yes, merge green fast-lane branches while I'm away". While
-# away, a branch whose diff against origin/master changes no full-lane path
-# (tools/check_lane.py's FULL_LANE) and no increment file, at most 700 net
-# lines by tools/count_loc.py, may be pushed, opened and enqueued without a
-# grant or a review record; the merge queue still wants green CI. Any other
-# branch keeps the grant and review rule. Each case judges in process on a
-# repository whose flag is on and grants nothing.
+# docs/increments/h38-fastlane-push.md §3 and §6. Present or away, a branch
+# for origin whose diff against origin's real master (read from the remote,
+# never from the local tracking ref) changes no full-lane path, no increment
+# file, no governed path and no CI-config path, at most 700 net lines, may be
+# pushed, opened (when origin's copy of the branch is the local head) and
+# enqueued once per head (when its pull request's checks are green), without
+# a grant or a review record. Any other branch keeps the grant and review
+# rule. Each case judges in process; "present" is the flag file removed.
+#
+# Pinned here beyond the design's words: `pr_view(where, branch, repo)` names
+# its third parameter `repo`; a create's refusal reads "origin has no
+# refs/heads/<b>" or "origin's refs/heads/<b> is <sha7>"; a redirected URL's
+# refusal names the URL git printed.
+
+PUBLIC_REPO = "expertanalytics/rasputin"
+UNREAD = "the pull request's checks could not be read"
+MODES = ("present", "away")
 
 
 class Fast:
-    """`master` as origin/master, branch `quick` checked out with one commit of `files`."""
+    """`master` (1 commit) pushed to a bare `origin`; branch `quick` checked out with
+    one commit of `files`, pushed to origin's `quick` too unless `pushed` is false.
+    The flag is on and grants nothing. `pr_view` answers `view` and records each
+    repository it is asked about in `seen`."""
 
-    def __init__(self, root: Path, files: dict[str, str]) -> None:
+    def __init__(self, root: Path, files: dict[str, str], pushed: bool = True) -> None:
         self.repo = make_repo(root)
-        base = git(self.repo, "rev-parse", "master").strip()
-        git(self.repo, "update-ref", "refs/remotes/origin/master", base)
+        self.base = git(self.repo, "rev-parse", "master").strip()
+        self.origin = add_remote(self.repo, "origin")
+        publish(self.repo, "origin", self.base)
         git(self.repo, "checkout", "-q", "-b", "quick")
         self.head = commit_files(self.repo, files, "a fast-lane change")
+        if pushed:
+            publish(self.repo, "origin", self.head, "quick")
         self.since = flag_granting(self.repo, [])
+        self.view: Any = view(self.head)
+        self.seen: list[str] = []
+
+    def pr_view(self, where: str, branch: str, repo: str = "") -> Any:
+        self.seen.append(repo)
+        return self.view
 
     def acts(self) -> dict[str, str]:
         return {
@@ -1214,48 +1245,142 @@ class Fast:
         reason = push_grant.PR if command.startswith("gh ") else push_grant.PUSH
         return push_grant.judge({"cwd": str(self.repo)}, command, [reason])
 
+    def in_mode(self, mode: str) -> None:
+        if mode == "present":
+            flag_path(self.repo).unlink()
+
+    def used(self) -> list[Any]:
+        return jsonl(grants_used_path(self.repo))
+
 
 def lines_of(n: int) -> str:
     return "".join(f"v{i} = {i}\n" for i in range(n))
 
 
+FastRepo = Callable[..., Fast]
+
+
 @pytest.fixture
-def fast_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[dict[str, str]], Fast]:
-    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"):
+def fast_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastRepo:
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GH_REPO"):
         monkeypatch.delenv(name, raising=False)
 
-    def build(files: dict[str, str]) -> Fast:
-        made = Fast(tmp_path.resolve() / "repo", files)
+    def build(files: dict[str, str], pushed: bool = True) -> Fast:
+        made = Fast(tmp_path.resolve() / "repo", files, pushed)
         monkeypatch.setattr(push_grant.hm, "ROOT", made.repo)
+        pin_remotes(monkeypatch, push_grant, made.repo)
+        monkeypatch.setitem(push_grant.judge.__globals__, "pr_view", made.pr_view)
         return made
 
     return build
 
 
+def not_judged_or_refused(found: Any, *words: str) -> None:
+    """None, or a refusal whose reason holds each of `words`."""
+    if found is not None:
+        assert not found.passed, f"passed: {found}"
+        for word in words:
+            assert word in found.why, found.why
+
+
 @pytest.mark.parametrize("act", ["push", "create", "enqueue"])
-def test_a_fast_lane_branch_passes_without_grant_or_review(
-    fast_repo: Callable[[dict[str, str]], Fast], act: str
-) -> None:
-    fast = fast_repo({"tools/y.py": "y = 1\n", "CLAUDE.md": "# rules, changed\n"})
+def test_a_fast_lane_branch_passes_without_grant_or_review(fast_repo: FastRepo, act: str) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
     found = fast.judge(act)
     assert found is not None and found.passed, found
-    [line] = jsonl(grants_used_path(fast.repo))
+    [line] = fast.used()
     assert (line["branch"], line["head"], line["lane"]) == ("quick", fast.head, "fast"), line
 
 
-def test_a_fast_lane_branch_of_exactly_700_lines_passes(
-    fast_repo: Callable[[dict[str, str]], Fast],
-) -> None:
+def test_a_fast_lane_branch_of_exactly_700_lines_passes(fast_repo: FastRepo) -> None:
     found = fast_repo({"tools/big.py": lines_of(700)}).judge("push")
     assert found is not None and found.passed, found
 
 
-def test_a_fast_lane_branch_is_enqueued_once_per_head(
-    fast_repo: Callable[[dict[str, str]], Fast],
-) -> None:
+def test_a_fast_lane_branch_is_enqueued_once_per_head(fast_repo: FastRepo) -> None:
     fast = fast_repo({"tools/y.py": "y = 1\n"})
     assert fast.judge("enqueue").passed
     refused_with(fast.judge("enqueue"), "enqueued already in this window")
+
+
+# §6 test 1 -- present: push and create pass, logged with no window.
+
+
+@pytest.mark.parametrize("act", ["push", "create"])
+def test_present_a_fast_lane_push_and_create_pass_and_log_no_window(
+    fast_repo: FastRepo, act: str
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    fast.in_mode("present")
+    found = fast.judge(act)
+    assert found is not None and found.passed, found
+    [line] = fast.used()
+    assert (line["lane"], line["window"], line["head"]) == ("fast", None, fast.head), line
+
+
+# §6 test 2 -- present: a green enqueue passes, read from the public repository, once.
+
+
+def test_present_a_green_fast_lane_enqueue_passes_once_per_head(fast_repo: FastRepo) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    fast.in_mode("present")
+    found = fast.judge("enqueue")
+    assert found is not None and found.passed, found
+    assert fast.seen and set(fast.seen) == {PUBLIC_REPO}, fast.seen
+    refused_with(fast.judge("enqueue"), "enqueued already")
+    assert len(fast.used()) == 1
+
+
+# §6 test 3 -- CI not green: the enqueue is refused, the reason names why.
+
+NOT_GREEN: dict[str, tuple[Callable[[str], Any], Callable[[str], str]]] = {
+    "pending": (lambda h: view(h, statusCheckRollup=[check_run("CI result", "IN_PROGRESS", "")]),
+                lambda h: "check CI result is IN_PROGRESS"),
+    "failed": (lambda h: view(h, statusCheckRollup=[check_run("CI result", conclusion="FAILURE")]),
+               lambda h: "check CI result is FAILURE"),
+    "another-head": (lambda h: view(H),
+                     lambda h: f"the pull request's head is {H[:7]}, not {h[:7]}"),
+    "none-reported": (lambda h: view(h, statusCheckRollup=[]), lambda h: "no checks reported"),
+    "unreadable": (lambda h: None, lambda h: UNREAD),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("case", NOT_GREEN)
+@pytest.mark.parametrize("mode", MODES)
+def test_a_fast_lane_enqueue_without_green_checks_is_refused(
+    fast_repo: FastRepo, mode: str, case: str
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    fast.in_mode(mode)
+    answer, reason = NOT_GREEN[case]
+    fast.view = answer(fast.head)
+    refused_with(fast.judge("enqueue"), reason(fast.head))
+    assert set(fast.seen) == {PUBLIC_REPO}, fast.seen
+    assert fast.used() == []
+
+
+# §6 test 4 -- a governed or CI-config path keeps the branch out of the fast lane.
+
+GOVERNED_OR_CI = (
+    "CLAUDE.md", ".claude/settings.json", ".claude/agents/x.md", ".claude/hooks/x.py",
+    "tools/check_x.py", "tools/push_grant.py", ".github/workflows/main.yaml", "pyproject.toml",
+    "tests/python/conftest.py", "tests/cpp/CMakeLists.txt", "pytest.ini", "ruff.toml",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+@pytest.mark.parametrize("path", GOVERNED_OR_CI)
+@pytest.mark.parametrize("mode", MODES)
+def test_a_branch_changing_a_governed_or_ci_config_path_is_not_judged(
+    fast_repo: FastRepo, mode: str, path: str, act: str
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n", path: "changed = 1\n"})
+    fast.in_mode(mode)
+    assert fast.judge(act) is None
+    assert fast.used() == []
+
+
+# §6 test 5 -- the other cases outside the lane, in both modes.
 
 
 @pytest.mark.parametrize(
@@ -1268,28 +1393,196 @@ def test_a_fast_lane_branch_is_enqueued_once_per_head(
     ids=["full-lane-src", "full-lane-mesh", "full-lane-crs", "increment-file", "over-700"],
 )  # fmt: skip
 @pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+@pytest.mark.parametrize("mode", MODES)
 def test_any_other_ungranted_branch_is_not_judged(
-    fast_repo: Callable[[dict[str, str]], Fast], files: dict[str, str], act: str
+    fast_repo: FastRepo, mode: str, files: dict[str, str], act: str
 ) -> None:
     fast = fast_repo(files)
+    fast.in_mode(mode)
     assert fast.judge(act) is None
-    assert jsonl(grants_used_path(fast.repo)) == []
+    assert fast.used() == []
 
 
-def test_a_fast_lane_push_naming_another_sha_is_not_judged(
-    fast_repo: Callable[[dict[str, str]], Fast],
-) -> None:
+@pytest.mark.parametrize("mode", MODES)
+def test_a_fast_lane_push_naming_another_sha_is_not_judged(fast_repo: FastRepo, mode: str) -> None:
     fast = fast_repo({"tools/y.py": "y = 1\n"})
+    fast.in_mode(mode)
     command = f"git push origin {H}:refs/heads/quick"
     assert push_grant.judge({"cwd": str(fast.repo)}, command, [push_grant.PUSH]) is None
 
 
-def test_a_fast_lane_branch_goes_nowhere_while_ola_is_present(
-    fast_repo: Callable[[dict[str, str]], Fast],
+# §6 test 6 -- the remotes' real master, never the local tracking refs.
+
+
+def forge(repo: Path, ref: str, sha: str) -> None:
+    """Write `ref` through its file, as a plain shell write would, past every git command."""
+    (repo / ".git" / ref).write_text(sha + "\n")
+    assert git(repo, "rev-parse", ref).strip() == sha
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_a_forged_local_origin_master_does_not_open_the_fast_lane(
+    fast_repo: FastRepo, mode: str
+) -> None:
+    fast = fast_repo({"src/x.cpp": "int x;\n"})
+    fast.in_mode(mode)
+    forge(fast.repo, "refs/remotes/origin/master", fast.head)
+    for act in ("push", "create", "enqueue"):
+        assert fast.judge(act) is None, act
+    assert fast.used() == []
+
+
+def test_a_forged_local_private_master_does_not_send_private_commits_to_origin(
+    private: PrivateGranted, runner: Runner
+) -> None:
+    tree = git(private.repo, "rev-parse", f"{private.m0}^{{tree}}").strip()
+    unrelated = git(private.repo, "commit-tree", tree, "-m", "an unrelated history").strip()
+    forge(private.repo, "refs/remotes/private/master", unrelated)
+    refused_with(judged(private, f"git push origin {private.prv}:refs/heads/prv"),
+                 "holds commits of private/master")  # fmt: skip
+    assert used_lines(private) == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_a_stale_local_origin_master_is_not_what_the_lane_is_judged_against(
+    fast_repo: FastRepo, mode: str
+) -> None:
+    """origin's master moved to the branch's full-lane commit, the tracking ref not
+    told: against the real master the branch changes only `tools/y.py`."""
+    fast = fast_repo({"src/a.cpp": "int a;\n"})
+    full = fast.head
+    fast.head = commit_files(fast.repo, {"tools/y.py": "y = 1\n"}, "a fast-lane change on top")
+    publish(fast.repo, "origin", fast.head, "quick")
+    git(fast.origin, "update-ref", "refs/heads/master", full)  # `quick` brought its objects
+    assert git(fast.repo, "rev-parse", "refs/remotes/origin/master").strip() == fast.base
+    fast.in_mode(mode)
+    found = fast.judge("push")
+    assert found is not None and found.passed, found
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_an_unfetched_origin_master_is_fetched_and_judged_against(
+    fast_repo: FastRepo, mode: str, tmp_path: Path
 ) -> None:
     fast = fast_repo({"tools/y.py": "y = 1\n"})
-    flag_path(fast.repo).unlink()
-    assert fast.judge("push") is None
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(fast.origin), str(other))
+    git(other, "config", "user.email", "t@example.invalid")
+    git(other, "config", "user.name", "T")
+    moved = commit_file(other, "src/b.cpp", "int b;\n", "master moves on origin")
+    git(other, "push", "-q", "origin", "HEAD:refs/heads/master")
+    missing = subprocess.run(["git", "-C", str(fast.repo), "cat-file", "-e", moved],
+                             capture_output=True, check=False)  # fmt: skip
+    assert missing.returncode != 0, "the moved master is already here"
+    fast.in_mode(mode)
+    found = fast.judge("push")
+    assert found is not None and found.passed, found
+    assert git(fast.repo, "cat-file", "-t", moved).strip() == "commit"
+
+
+# §6 test 7 -- a create needs origin's copy of the branch at the local head.
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_a_create_with_no_branch_on_origin_is_refused(fast_repo: FastRepo, mode: str) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"}, pushed=False)
+    fast.in_mode(mode)
+    refused_with(fast.judge("create"), "origin has no refs/heads/quick")
+    assert fast.used() == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_a_create_with_origins_branch_elsewhere_is_refused(fast_repo: FastRepo, mode: str) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    publish(fast.repo, "origin", fast.base, "quick")
+    fast.in_mode(mode)
+    refused_with(fast.judge("create"), f"origin's refs/heads/quick is {fast.base[:7]}")
+    assert fast.used() == []
+
+
+# §6 tests 8 and 9 -- an unreadable remote, a broken flag.
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_an_origin_that_cannot_be_read_passes_nothing(
+    fast_repo: FastRepo, mode: str, tmp_path: Path
+) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    gone = str(tmp_path / "gone.git")
+    git(fast.repo, "remote", "set-url", "origin", gone)
+    push_grant.judge.__globals__["REMOTE_URLS"]["origin"] = gone
+    fast.in_mode(mode)
+    for act in ("push", "create", "enqueue"):
+        not_judged_or_refused(fast.judge(act))
+    assert fast.used() == []
+
+
+def test_with_the_flag_broken_a_fast_lane_branch_is_not_judged(fast_repo: FastRepo) -> None:
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    flag_path(fast.repo).write_text("{not json")
+    for act in ("push", "create", "enqueue"):
+        assert fast.judge(act) is None, act
+    assert fast.used() == []
+
+
+# §6 test 11 -- a fetch or push URL that is not the pinned one, or gh pointed elsewhere.
+
+
+def second_origin(fast: Fast, tmp_path: Path) -> str:
+    """A second bare repository holding origin's master: a redirect's target."""
+    second = tmp_path / "second.git"
+    git(tmp_path, "init", "-q", "--bare", str(second))
+    git(fast.repo, "push", "-q", str(second), f"{fast.base}:refs/heads/master")
+    return str(second)
+
+
+REDIRECTS = ("pushInsteadOf", "insteadOf", "GIT_CONFIG_COUNT", "added-pushurl", "second-url",
+             "gh-resolved", "GH_REPO")  # fmt: skip
+
+
+@pytest.mark.parametrize("act", ["push", "create", "enqueue"])
+@pytest.mark.parametrize("redirect", REDIRECTS)
+@pytest.mark.parametrize("mode", MODES)
+def test_a_redirected_remote_passes_nothing(
+    fast_repo: FastRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    mode: str, redirect: str, act: str,
+) -> None:  # fmt: skip
+    fast = fast_repo({"tools/y.py": "y = 1\n"})
+    second, origin = second_origin(fast, tmp_path), str(fast.origin)
+    named = {"gh-resolved": "gh-resolved", "GH_REPO": "GH_REPO"}.get(redirect, second)
+    if redirect in ("pushInsteadOf", "insteadOf"):
+        config = tmp_path / "global.gitconfig"
+        config.write_text(f'[url "{second}"]\n\t{redirect} = {origin}\n')
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    elif redirect == "GIT_CONFIG_COUNT":
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{second}.insteadOf")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", origin)
+    elif redirect == "added-pushurl":
+        git(fast.repo, "config", "remote.origin.pushurl", second)
+    elif redirect == "second-url":
+        git(fast.repo, "config", "--add", "remote.origin.url", second)
+    elif redirect == "gh-resolved":
+        git(fast.repo, "config", "remote.private.gh-resolved", "base")
+    else:
+        monkeypatch.setenv("GH_REPO", "someone/else")
+    fast.in_mode(mode)
+    not_judged_or_refused(fast.judge(act), named)
+    assert fast.used() == []
+
+
+def test_a_redirected_private_push_url_refuses_a_granted_push_to_origin(
+    private: PrivateGranted, runner: Runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elsewhere = tmp_path / "elsewhere.git"
+    git(tmp_path, "init", "-q", "--bare", str(elsewhere))
+    config = tmp_path / "global.gitconfig"
+    config.write_text(f'[url "{elsewhere}"]\n\tpushInsteadOf = {private.url}\n')
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    found = judged(private, f"git push origin {private.pub}:refs/heads/pub")
+    refused_with(found, str(elsewhere))
+    assert "private" in found.why, found.why
+    assert used_lines(private) == []
 
 
 def test_a_granted_full_lane_branch_still_needs_its_review(grant: Granted) -> None:
