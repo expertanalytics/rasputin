@@ -105,7 +105,7 @@ def note(repo: Path, name: str, persona: str = "developer") -> Path:
 
 
 #: The triage answers `add` demands; `cli` gives them to an `add` that gives none.
-TRIAGE = ("--instead", "no", "--lane", "full", "--budget", "300")
+TRIAGE = ("--lane", "full", "--budget", "300")
 
 
 def cli(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -626,24 +626,47 @@ def test_add_refuses_without_each_triage_answer(repo: Path, drop: str) -> None:
     assert not live_list(repo, "core").exists() or "t1" not in live_list(repo, "core").read_text()
 
 
-@pytest.mark.parametrize(("instead", "told"), [("delete:tools/old.py", "delete tools/old.py"),
-                                               ("nothing", "do nothing")])  # fmt: skip
-def test_add_refuses_an_item_that_need_not_be_built(repo: Path, instead: str, told: str) -> None:
-    result = cli(repo, "add", "core", "t1", "x", "--instead", instead, "--lane", "fast",
-                 "--budget", "50")  # fmt: skip
-    assert result.returncode == 2 and told in result.stderr, result.stderr
-    assert "t1" not in pipes.load_items(live_list(repo, "core"))
-
-
 def test_add_refuses_a_budget_over_the_pull_request_limit(repo: Path) -> None:
-    result = cli(repo, "add", "core", "t1", "x", "--instead", "no", "--lane", "full",
-                 "--budget", "701")  # fmt: skip
+    result = cli(repo, "add", "core", "t1", "x", "--lane", "full", "--budget", "701")
     assert result.returncode == 2 and "700" in result.stderr, result.stderr
-    ok(repo, "add", "core", "t2", "x", "--instead", "no", "--lane", "full", "--budget", "700")
+    ok(repo, "add", "core", "t2", "x", "--lane", "full", "--budget", "700")
+
+
+@pytest.fixture
+def harness_repo(repo: Path) -> Path:
+    (repo / ".claude" / "pipes" / "harness.toml").write_text('name = "harness"\npurpose = "h"\n')
+    (repo / "RULES.md").write_text("* **First question.** Before a spawn,\n  answer:\n")
+    return repo
+
+
+@pytest.mark.parametrize("reason", [
+    (), ("--replaces", "RULES.md: gone rule"), ("--replaces", "RULES.md"),
+    ("--replaces", "NOFILE.md: answer"), ("--prevents", "2026-10-26 the recap hung"),
+    ("--prevents", "2999-01-01: the recap hung"), ("--prevents", "yesterday: it broke"),
+])  # fmt: skip
+def test_a_harness_item_is_refused_without_a_reason_that_holds(
+        harness_repo: Path, reason: tuple[str, ...]) -> None:  # fmt: skip
+    result = cli(harness_repo, "add", "harness", "t1", "x", *TRIAGE, *reason)
+    flag = reason[0] if reason else "--absorbs"
+    assert result.returncode == 2 and flag in result.stderr, result.stderr
+    assert "t1" not in pipes.load_items(live_list(harness_repo, "harness"))
+
+
+def test_a_harness_item_with_reasons_stores_and_shows_them(harness_repo: Path) -> None:
+    reasons = {"replaces": "RULES.md: **First question.** Before a spawn, answer:",
+               "prevents": "2026-10-25: a spawn had no lane", "absorbs": "the triage"}  # fmt: skip
+    ok(harness_repo, "add", "harness", "t1", "x", *TRIAGE,
+       *(x for k, v in reasons.items() for x in (f"--{k}", v)))  # fmt: skip
+    item = pipes.load_items(live_list(harness_repo, "harness"))["t1"]
+    assert {k: getattr(item, k) for k in reasons} == reasons
+    shown = ok(harness_repo, "show", "--markdown")
+    assert all(f"{k} {v}" in shown for k, v in reasons.items()), shown
+    ok(harness_repo, "add", "harness", "t2", "x", *TRIAGE, "--absorbs", "a step")
+    ok(harness_repo, "add", "core", "t3", "x", *TRIAGE)
 
 
 def test_lane_and_budget_are_stored_and_shown(repo: Path) -> None:
-    ok(repo, "add", "core", "t1", "x", "--instead", "no", "--lane", "fast", "--budget", "120")
+    ok(repo, "add", "core", "t1", "x", "--lane", "fast", "--budget", "120")
     item = pipes.load_items(live_list(repo, "core"))["t1"]
     assert (item.lane, item.budget) == ("fast", 120)
     row = {r["ITEM"].split()[0]: r for r in table(ok(repo, "show").splitlines())}["t1"]

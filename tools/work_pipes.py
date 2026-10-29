@@ -65,6 +65,9 @@ class Item:
     priority_words: str | None = None
     lane: str | None = None  # `fast` or `full`, given at `add`
     budget: int | None = None  # the counted-line ceiling, given at `add`
+    replaces: str | None = None  # a harness item's reasons, given at `add`: see `REASONS`
+    prevents: str | None = None
+    absorbs: str | None = None
 
 
 @dataclass(frozen=True)
@@ -306,7 +309,9 @@ def _next_line(choice: Choice, nums: dict[str, str]) -> str:
 def _todo(i: Item) -> str:
     """The NEXT cell: the lane and budget `add` took, then the next step and the PR."""
     step = " ".join(filter(None, [i.next, f"#{i.pr}" if i.pr else ""]))
-    return "; ".join(filter(None, [f"{i.lane} lane, {i.budget} lines" if i.lane else "", step]))
+    why = [f"{k} {v}" for k in REASONS if (v := getattr(i, k))]
+    lane = f"{i.lane} lane, {i.budget} lines" if i.lane else ""
+    return "; ".join(filter(None, [lane, *why, step]))
 
 
 def _cell(text: str, width: int) -> str:
@@ -445,16 +450,34 @@ class TriageError(RefusedError):
     code = 2
 
 
-def _triage(args: argparse.Namespace) -> None:
-    """Refuse an item that need not be built, or whose budget breaks the PR limit."""
-    if args.instead.startswith("delete:"):
-        raise TriageError(f"pipes: not added: delete {args.instead[7:]} instead")
-    if args.instead == "nothing":
-        raise TriageError("pipes: not added: do nothing; the item is not needed")
-    if args.instead != "no":
-        raise TriageError("pipes: --instead takes delete:<what>, nothing or no")
+#: A `harness` item's reasons to be built; `add` refuses one that names none.
+REASONS = {
+    "replaces": "<file>: <rule sentence> the tool replaces, deleted in the same branch",
+    "prevents": "<YYYY-MM-DD>: <what broke>, a failure that happened",
+    "absorbs": "<the repeated task> the main session does by hand",
+}
+
+
+def _triage(args: argparse.Namespace, repo: Path, now: datetime) -> None:
+    """Refuse a budget over the PR limit, or a harness item with no reason checked."""
     if not 0 < args.budget <= 700:
         raise TriageError("pipes: --budget is 1 to 700 counted lines, the pull request limit")
+    if args.pipe == "harness" and not any(getattr(args, k) for k in REASONS):
+        raise TriageError("pipes: a harness item names a reason: "
+                          + "; ".join(f"--{k} {v}" for k, v in REASONS.items()))  # fmt: skip
+    if args.replaces:
+        name, _, rule = args.replaces.partition(": ")
+        path = repo / name
+        text = " ".join(path.read_text().split()) if path.is_file() else ""
+        if not rule.strip() or " ".join(rule.split()) not in text:
+            raise TriageError(f"pipes: --replaces: {name} does not hold that sentence today")
+    if args.prevents:
+        try:
+            day = datetime.strptime(args.prevents.partition(": ")[0], "%Y-%m-%d").date()
+        except ValueError:
+            day = None
+        if day is None or day > now.date():
+            raise TriageError("pipes: --prevents takes <YYYY-MM-DD>: <what broke>, no future date")
 
 
 def _append(st: State, item: Item, now: datetime, **change: Any) -> None:
@@ -495,10 +518,11 @@ def command(args: argparse.Namespace, repo: Path, now: datetime) -> list[str]:
         if args.id in state.items:
             raise RefusedError(f"pipes: id {args.id} is taken in pipe {state.items[args.id].pipe}")
         _pipe_record(state, args.pipe, now)
-        _triage(args)
+        _triage(args, repo, now)
         _append(state, Item(id=args.id, state="queued", pipe=args.pipe, since=now), now,
                 title=args.title, next=args.next or "", plain=args.plain or args.fallback,
-                fallback=args.fallback, lane=args.lane, budget=args.budget)  # fmt: skip
+                fallback=args.fallback, lane=args.lane, budget=args.budget,
+                **{k: getattr(args, k) for k in REASONS})  # fmt: skip
     elif args.cmd == "set":
         item, change = _item(state, args.id, now), {"state": args.state}
         change |= {k: v for k in ("branch", "pr", "next") if (v := getattr(args, k)) is not None}
@@ -537,9 +561,10 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("id")
     add.add_argument("title")
     add.add_argument("--fallback", action="store_true", help="the pipe's standing fallback")
-    add.add_argument("--instead", required=True, help="delete:<what>, nothing, or no")
     add.add_argument("--lane", required=True, choices=("fast", "full"))
     add.add_argument("--budget", required=True, type=int, help="counted lines, at most 700")
+    for k, v in REASONS.items():
+        add.add_argument(f"--{k}", help=f"a harness item's reason: {v}")
     put = sub.add_parser("set", help="change an item's state")
     put.add_argument("id")
     put.add_argument("state", choices=STATES)
