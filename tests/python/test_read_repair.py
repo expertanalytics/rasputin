@@ -2,9 +2,9 @@
 
 `docs/increments/106-wednesday-cells.md`, section 2 (106a):
 `feature_input.read_polygons` repairs each polygon after moving it into the
-mesh's CRS; for class polygons that repair is `feature_input.repaired_areas`,
-run on what `read_class_polygons` read (unchecked), in the shares step
-(`docs/increments/111-one-land-cover-map.md`, section 8). A valid polygon is kept as
+mesh's CRS; class polygons are read unchecked by `read_class_polygons` and
+repaired by the same `_repaired` in `land_cover_map.build`
+(`docs/increments/111-one-land-cover-map.md`, sections 3 and 8). A valid polygon is kept as
 it is; an invalid one is replaced by the polygonal parts of
 `shapely.make_valid` (default method), and dropped when it has none. Both
 also return how many they repaired or dropped. `mesh` prints one stderr line
@@ -27,8 +27,8 @@ integer vertices at coordinates under 10, exact in binary but compared with
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- `read_polygons` and `repaired_areas` return a pair, `(polygons, count)`,
-  polygons first; the
+- `read_polygons` returns a pair, `(polygons, count)`, polygons first, and
+  `build` gives the areas and `repaired`; the
   polygons keep today's element types (`(code, geometry)` pairs and
   geometries). Whether a repaired polygon comes back as one multipolygon or
   as one entry per part is left open: the tests look at the parts.
@@ -93,12 +93,18 @@ def pair(out: Any) -> tuple[list[Any], int]:
 EVERYWHERE = (-1.0e9, -1.0e9, 1.0e9, 1.0e9)
 
 
+#: The map's read region: its read box (bounds grown by 100 m) holds `TRIANGLE`.
+REGION = Polygon(TRIANGLE)
+
+
 def classes(path: Path) -> tuple[list[tuple[int, BaseGeometry]], int]:
-    """`read_class_polygons` under `corine`, then `repaired_areas` near the
-    triangle, as the shares step runs them."""
-    fi = ff.feature_input()
-    read = read_class_polygons(path, None, ff.classes("corine"), UTM33, lambda _own: EVERYWHERE)
-    return pair(fi.repaired_areas(read.areas, TRIANGLE))
+    """`read_class_polygons` under `corine`, then `land_cover_map.build`
+    near the triangle, as `rasputin mesh` runs them: the map's areas and
+    its repair count."""
+    corine = ff.classes("corine")
+    read = read_class_polygons(path, None, corine, UTM33, lambda _own: EVERYWHERE)
+    built = ff.land_cover_map().build([read.areas], [], corine, REGION)
+    return pair((built.areas, built.repaired))
 
 
 def plain(path: Path) -> tuple[list[BaseGeometry], int]:
@@ -286,3 +292,9 @@ def test_random_bowties_outside_the_box_keep_inside_and_outside(polygon: Polygon
     """Seeded: 300 circles, one small self-crossing each (11 of them fail on
     the cut-then-repair of `be26db8f`)."""
     assert_same_in_box(_repaired(polygon, NEAR), polygon)
+
+
+def test_the_record_wording_of_the_land_cover_repair_stays_masters() -> None:
+    from tin_engine.run_record import WORDING
+
+    assert WORDING["land_cover_repaired"] == "Land-cover polygons that crossed themselves, repaired"

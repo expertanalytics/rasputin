@@ -1844,6 +1844,21 @@ FAR_BOWTIE = Polygon(
 SMALL = square(20, 20, 60, 60)
 
 
+#: The read box: `BOX` grown by 100 m (the read region) and 100 m more.
+READ_BOX = (*at(-200, -200), *at(500, 500))
+
+
+def ring(*xy: tuple[float, float]) -> Polygon:
+    return Polygon([at(x, y) for x, y in xy])
+
+
+#: A valid U across the read box's east edge (x = 500): inside it, a
+#: 5,000 m² rectangle and the U's inner side, a 100 m line along x = 500.
+U_SHAPE = ring(
+    (450, 0), (700, 0), (700, 300), (500, 300), (500, 200), (600, 200), (600, 100), (450, 100)
+)
+
+
 def every_area_valid(built: Any) -> bool:
     return all(bool(shapely.is_valid(g)) for _, g in built.areas)
 
@@ -1892,6 +1907,36 @@ class TestWhatEveryPolygonInTheMap:
         assert len(again.outside) == 1 and again.outside[0][1] is FAR_BOWTIE
         assert every_area_valid(again)
         assert tuple(lm.build([base.areas], [], corine, region, fix=False).outside) == ()
+
+    def test_a_valid_polygon_inside_the_read_box_comes_back_as_the_object_given(self) -> None:
+        """Test 12, design round 10: its cut would be itself, so it is kept
+        as read. Today `_fixed` gives every area as its `clip_by_rect`, a
+        new object."""
+        built = self.build([(311, INNER)])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept is INNER
+        assert built.repaired == 0 and tuple(built.outside) == ()
+
+    def test_the_u_polygons_premise_its_cut_is_a_polygon_and_a_line(self) -> None:
+        cut = shapely.intersection(U_SHAPE, shapely.box(*READ_BOX))
+        assert U_SHAPE.is_valid and cut.geom_type == "GeometryCollection", cut.wkt
+        parts = sorted(shapely.get_parts(cut), key=lambda p: p.geom_type)
+        assert [p.geom_type for p in parts] == ["LineString", "Polygon"], cut.wkt
+        assert parts[0].length == pytest.approx(100.0, abs=1e-6)
+        assert parts[1].area == pytest.approx(5_000.0, abs=1e-6)
+
+    def test_a_cut_to_a_polygon_and_a_line_keeps_the_polygon(self) -> None:
+        """Test 12, design round 10, section 3 step 4: the polygonal part of
+        a GeometryCollection, as one Polygon."""
+        built = self.build([(311, U_SHAPE)])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept.geom_type == "Polygon", kept.wkt
+        assert kept.area == pytest.approx(5_000.0, abs=1e-6)
+        assert kept.symmetric_difference(ring((450, 0), (500, 0), (500, 100), (450, 100))).area <= (
+            1e-6
+        ), kept.wkt
+        assert every_area_valid(built)
+        assert built.repaired == 0 and tuple(built.outside) == ()
 
     def test_the_p1_bowtie_is_valid_after_repair(self) -> None:
         bowtie = Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)])
@@ -1959,10 +2004,6 @@ class TestWhatEveryPolygonInTheMap:
 EAST = [(600, 0), (700, 0), (700, 100), (600, 100)]
 
 
-def ring(*xy: tuple[float, float]) -> Polygon:
-    return Polygon([at(x, y) for x, y in xy])
-
-
 #: (150, 50) from `at`'s origin with y one ulp (about 9.3e-10 m) higher.
 ULP_TIP = (at(150, 0)[0], float(np.nextafter(at(0, 50)[1], np.inf)))
 #: Polygons that reach the read box with no area there: `clip_by_rect`
@@ -1985,6 +2026,19 @@ NO_AREA_IN_THE_BOX = {
     "a-ring-of-two-points-and-back": ring((600, 50), (150, 50), (600, 50)),
 }
 NO_AREA = [pytest.param(p, id=name) for name, p in NO_AREA_IN_THE_BOX.items()]
+#: Per `NO_AREA_IN_THE_BOX` polygon, the lengths of the lines its rings give
+#: inside the domain (`BOX`) without clean-up, in metres: the design's
+#: figures (section 5, test 13); the corner's is 50·√2.
+SPIKE_LINES = {
+    "a-spike-into-the-box": (150.0,),
+    "a-spike-across-the-box": (300.0,),
+    "a-spike-through-the-box-corner": (50.0 * 2**0.5,),
+    "two-spikes": (150.0, 150.0),
+    "a-spike-whose-tip-is-one-ulp-off": (150.0,),
+    "a-self-crossing-square-with-a-spike": (150.0,),
+    "a-flat-ring-across-the-box-edge": (150.0,),
+    "a-ring-of-two-points-and-back": (150.0,),
+}
 #: A shell over the whole read box whose hole is `EAST` with the spike.
 HOLE_SPIKE = Polygon(
     square(-1_000, -1_000, 1_000, 1_000).exterior.coords,
@@ -1996,16 +2050,18 @@ PART_SPIKE = MultiPolygon([SMALL, NO_AREA_IN_THE_BOX["a-spike-into-the-box"]])
 
 class TestACutToAThreePointRing:
     """Code review round 5 of `docs/increments/111-one-land-cover-map.md`:
-    `_fixed`'s `shapely.clip_by_rect` raises GEOSException ("Invalid number
-    of points in LinearRing found 3") on a polygon whose ring runs into the
-    read box and back along the same line, so every `--land-cover` run with
-    one crashes. By section 3, *What every polygon in the map is*, such a
-    polygon reaches the read box, so it is not ``outside``; its cut is
-    repaired (`_repaired`), and a spike has no area, so the repair keeps
-    nothing of it and the rest of the polygon is kept. The read box is
-    (-200, -200) to (500, 500) from the origin of `at` (`BOX` grown twice by
-    100 m). Areas to 1e-6 m²: coordinates near 5e5 and 6.6e6 m (a double
-    resolves about 1e-9 m there), polygons at most 2 km across."""
+    `shapely.clip_by_rect` raises GEOSException ("Invalid number of points
+    in LinearRing found 3") on a polygon whose ring runs into the read box
+    and back along the same line. By section 3, *What every polygon in the
+    map is* (design round 10), each polygon reaching the read box is
+    repaired whole (`_repaired`) before any cut, and counted when invalid. A
+    spike has no area, so the rebuild of each `NO_AREA_IN_THE_BOX` polygon
+    keeps nothing and the polygon goes to ``outside`` as given, where the
+    edges step draws its rings as master's `--features` route drew them
+    (section 5, test 13). The read box is (-200, -200) to (500, 500) from
+    the origin of `at` (`BOX` grown twice by 100 m). Areas to 1e-6 m²:
+    coordinates near 5e5 and 6.6e6 m (a double resolves about 1e-9 m there),
+    polygons at most 2 km across; line lengths the same, to 1e-6 m."""
 
     READ_BOX = (*at(-200, -200), *at(500, 500))
 
@@ -2029,10 +2085,13 @@ class TestACutToAThreePointRing:
         assert fi._repaired(polygon, shapely.get_coordinates(ff.region_of(BOX).exterior)) is None
 
     @pytest.mark.parametrize("polygon", NO_AREA)
-    def test_a_polygon_with_no_area_in_the_box_gives_nothing(self, polygon: Polygon) -> None:
+    def test_a_polygon_with_no_area_in_the_box_is_outside_as_given(self, polygon: Polygon) -> None:
+        """Test 13: rebuilt to nothing, so ``outside`` holds it as given, and
+        it is counted repaired. Today its `clip_by_rect` raises."""
         built = self.build([(311, polygon), (312, SMALL)])
         assert [(code, g.wkt) for code, g in built.areas] == [(312, SMALL.wkt)]
-        assert tuple(built.outside) == ()
+        ((code, kept),) = built.outside
+        assert code == 311 and kept is polygon
         assert built.repaired == 1
 
     def test_a_hole_with_a_spike_keeps_the_shell_in_the_box(self) -> None:
@@ -2052,17 +2111,34 @@ class TestACutToAThreePointRing:
         assert kept.symmetric_difference(SMALL).area <= 1e-6, kept.wkt
         assert tuple(built.outside) == () and built.repaired == 1
 
-    @pytest.mark.parametrize("switches", [None, CLEANUP], ids=["no-clean-up", "clean-up"])
-    @pytest.mark.parametrize("polygon", NO_AREA)
-    def test_the_run_keeps_the_neighbour_only(
-        self, tmp_path: Path, polygon: Polygon, switches: Any
+    @pytest.mark.parametrize(
+        ("polygon", "lengths"),
+        [pytest.param(NO_AREA_IN_THE_BOX[k], v, id=k) for k, v in SPIKE_LINES.items()],
+    )
+    def test_without_cleanup_the_run_draws_the_rings_as_master(
+        self, tmp_path: Path, polygon: Polygon, lengths: tuple[float, ...]
     ) -> None:
-        """Read and built as `--land-cover` reads them; the reviewer's case
-        is the first. Today `open_one` raises GEOSException in `_fixed`."""
+        """Test 13, master's `--features` figures (probed on `43f1b2e9`):
+        `SMALL` first, then the spiked polygon's rings clipped to the domain,
+        with no area (its feature carries no polygon). Today `open_one`
+        raises GEOSException in `_fixed`."""
         rows = [Feat("spike", polygon, {"Code_18": "311"}), Feat("s", SMALL, {"Code_18": "312"})]
-        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX, switches=switches)
-        assert [f.code for f in fs.features] == [312]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX)
+        assert [f.code for f in fs.features] == [312, 311]
+        assert fs.features[1].polygon is None
+        found = sorted(line.length for line in fs.features[1].lines)
+        assert found == pytest.approx(sorted(lengths), abs=1e-6)
         assert fs.outside == 0
+
+    @pytest.mark.parametrize("polygon", NO_AREA)
+    def test_with_cleanup_the_run_counts_it_outside(self, tmp_path: Path, polygon: Polygon) -> None:
+        """Test 13: the clean-up works on area in the read region, and the
+        spiked polygon has none: only `SMALL` is a feature, and 1 is counted
+        outside. Today `open_one` raises GEOSException in `_fixed`."""
+        rows = [Feat("spike", polygon, {"Code_18": "311"}), Feat("s", SMALL, {"Code_18": "312"})]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX, switches=CLEANUP)
+        assert [f.code for f in fs.features] == [312]
+        assert fs.outside == 1
 
     @pytest.mark.parametrize("switches", [None, CLEANUP], ids=["no-clean-up", "clean-up"])
     @pytest.mark.parametrize(
@@ -2077,3 +2153,271 @@ class TestACutToAThreePointRing:
         assert [f.code for f in fs.features] == [code]
         assert fs.features[0].polygon is not None and fs.features[0].polygon.is_valid
         assert fs.outside == 0
+
+
+# ------------------------ increment 111, design rounds 10 and 11: repair whole, then cut
+
+
+def holed(shell: Polygon, *holes: Polygon) -> Polygon:
+    return Polygon(shell.exterior.coords, [h.exterior.coords for h in holes])
+
+
+def inside_out(w: float) -> Polygon:
+    """`EAST` with a wedge `w` wide at x = 600 run back into the box to a
+    tip at (150, 50), its ring crossing itself: invalid."""
+    return ring(*EAST, (600, 50), (150, 50), (600, 50 + w))
+
+
+def inside_out_twin(w: float) -> Polygon:
+    """The same wedge with its ring the right way round: valid."""
+    return ring(*EAST, (600, 50 + w), (150, 50), (600, 50))
+
+
+#: Faults between simple rings that reach the box: invalid, rebuilt, and the
+#: rebuild's area in m² (section 5, test 13).
+REBUILT = {
+    "a-hole-across-its-shell-in-the-box": (
+        holed(square(0, 0, 300, 300), square(250, 100, 350, 200)),
+        85_000.0,
+    ),
+    "a-hole-across-its-shell-beyond-the-box": (
+        holed(square(-1_000, -1_000, 1_000, 1_000), square(900, 100, 1_100, 200)),
+        490_000.0,
+    ),
+    "a-hole-outside-its-shell-left-of-the-box": (
+        holed(square(-50, 50, 300, 400), square(-300, -300, -250, 500)),
+        122_500.0,
+    ),
+    "an-empty-clip-whose-rebuild-is-not": (
+        holed(
+            square(-250, -500, 950, 550),
+            square(-500, -200, 850, 600),
+            square(-100, -300, 850, 450),
+            square(500, 200, 700, 700),
+        ),
+        390_000.0,
+    ),
+}
+#: Faults whose rebuild keeps nothing: each goes to ``outside`` as given.
+REBUILT_TO_NOTHING = {
+    "a-hole-poking-out-through-its-shell": holed(
+        square(-50, -100, 200, 900), square(-100, -200, 950, 550)
+    ),
+    "a-hole-sharing-two-sides-with-its-shell": holed(
+        square(-300, -300, 900, 100), square(-350, -300, 850, 100)
+    ),
+    "a-hole-enclosing-its-shell": holed(square(0, 0, 100, 100), square(-300, -300, 600, 600)),
+}
+#: Valid, with its edge from (300, 400) to (800, 650) through the box's
+#: corner (500, 500).
+THROUGH_THE_CORNER = ring(
+    (-450, 650), (800, 900), (300, 400), (800, 650), (800, -500), (-450, -500)
+)
+#: Valid, meeting the box along its east edge only.
+TOUCHING = ring((500, 0), (600, 0), (600, 100), (500, 100))
+#: A spike 1e-8 m wide at its base, run from below the box to (-8.7, 41.9):
+#: GEOS's rebuild raises on it.
+THIN_SPIKE = Polygon(
+    [at(-150, -300), at(0, -299.99999999), at(-8.7, 41.9), at(0, -300), at(0, -500), at(-150, -500)]
+)
+#: Every polygon test 13 builds, by name: none may reach `clip_by_rect`.
+EVERY_CASE = {
+    **{f"inside-out-{w}": inside_out(w) for w in (10.0, 1e-3)},
+    **{f"twin-{w}": inside_out_twin(w) for w in (10.0, 1e-3)},
+    **{k: g for k, (g, _) in REBUILT.items()},
+    **REBUILT_TO_NOTHING,
+    "through-the-corner": THROUGH_THE_CORNER,
+    "touching": TOUCHING,
+    **NO_AREA_IN_THE_BOX,
+    "hole-spike": HOLE_SPIKE,
+    "part-spike": PART_SPIKE,
+}
+
+
+class TestRepairWholeThenCut:
+    """`docs/increments/111-one-land-cover-map.md`, section 3, *What every
+    polygon in the map is*, and section 5, test 13. A polygon whose bounding
+    box meets the read box is repaired whole (`_repaired`, master's repair on
+    read) and counted when invalid; a valid one crossing the box's edge is
+    then cut with `shapely.intersection`, never `shapely.clip_by_rect`; a
+    rebuild that keeps nothing sends the polygon to ``outside`` as given; a
+    rebuild that raises is refused (`FeatureError`, design round 11). Read
+    box and bounds as `TestACutToAThreePointRing`'s. Figures measured by the
+    design with shapely 2.2.0 and GEOS 3.14.1."""
+
+    def build(self, pairs: list[tuple[int, BaseGeometry]]) -> Any:
+        return ff.land_cover_map().build([pairs], [], ff.classes("corine"), ff.region_of(BOX))
+
+    def xy(self) -> np.ndarray:
+        return shapely.get_coordinates(ff.region_of(BOX).exterior)
+
+    # ---- the inside-out wedge
+
+    def test_the_inside_out_premise_its_clip_is_valid_and_wrong(self) -> None:
+        g = inside_out(10.0)
+        assert not g.is_valid
+        clip = shapely.clip_by_rect(g, *READ_BOX)
+        assert clip.is_valid
+        assert clip.area == pytest.approx(488_638.8889, abs=1e-4)
+
+    @pytest.mark.parametrize("w", [10.0, 1e-3])
+    def test_an_inside_out_wedge_is_rebuilt_whole(self, fi: ModuleType, w: float) -> None:
+        """The wedge inside the box, 1225/9·`w` m² (350 m of its 450 m
+        length), as `_repaired` gives it. Today the `clip_by_rect` of the
+        invalid polygon is kept: 488,638.9 m² at `w` = 10."""
+        built = self.build([(311, inside_out(w))])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept.is_valid
+        assert kept.area == pytest.approx(1225.0 / 9.0 * w, abs=1e-6)
+        whole = fi._repaired(inside_out(w), self.xy())
+        assert kept.symmetric_difference(whole).area <= 1e-6, kept.wkt
+        assert built.repaired == 1 and tuple(built.outside) == ()
+
+    @pytest.mark.parametrize("w", [10.0, 1e-3])
+    def test_its_valid_twin_gives_the_same_area_unrepaired(self, w: float) -> None:
+        twin = inside_out_twin(w)
+        assert twin.is_valid
+        built = self.build([(311, twin)])
+        ((_, kept),) = built.areas
+        assert kept.area == pytest.approx(1225.0 / 9.0 * w, abs=1e-6)
+        assert built.repaired == 0 and tuple(built.outside) == ()
+
+    # ---- no polygon reaches clip_by_rect
+
+    @pytest.mark.parametrize("polygon", [pytest.param(g, id=k) for k, g in EVERY_CASE.items()])
+    def test_no_polygon_reaches_clip_by_rect(
+        self, monkeypatch: pytest.MonkeyPatch, polygon: BaseGeometry
+    ) -> None:
+        """`_repaired` cuts rings, which are lines; GEOS's rectangle clip is
+        right only on a valid polygon with no edge through a corner of the
+        box, so no polygon is given to it. Today `_fixed` gives it every
+        polygon it builds."""
+        real = shapely.clip_by_rect
+
+        def spy(geometry: Any, *args: Any, **kw: Any) -> Any:
+            kinds = set(shapely.get_type_id(np.asarray(geometry, dtype=object)).ravel().tolist())
+            assert not kinds & {3, 6, 7}, f"clip_by_rect given polygons ({sorted(kinds)})"
+            return real(geometry, *args, **kw)
+
+        monkeypatch.setattr(shapely, "clip_by_rect", spy)
+        self.build([(311, polygon)])
+
+    # ---- faults between simple rings
+
+    @pytest.mark.parametrize("polygon", [pytest.param(g, id=k) for k, (g, _) in REBUILT.items()])
+    def test_the_fault_premises(self, polygon: Polygon) -> None:
+        assert not polygon.is_valid
+
+    def test_the_clip_premises(self) -> None:
+        """What `clip_by_rect` gives these faults, and why it is not used."""
+        clip = {k: shapely.clip_by_rect(g, *READ_BOX) for k, (g, _) in REBUILT.items()}
+        assert not clip["a-hole-across-its-shell-in-the-box"].is_valid
+        assert clip["a-hole-across-its-shell-in-the-box"].area == pytest.approx(80_000.0, abs=1e-6)
+        assert not clip["a-hole-outside-its-shell-left-of-the-box"].is_valid
+        assert clip["a-hole-outside-its-shell-left-of-the-box"].area == pytest.approx(
+            82_500.0, abs=1e-6
+        )
+        assert clip["an-empty-clip-whose-rebuild-is-not"].is_empty
+
+    @pytest.mark.parametrize(
+        ("polygon", "area"), [pytest.param(g, a, id=k) for k, (g, a) in REBUILT.items()]
+    )
+    def test_a_fault_between_simple_rings_is_rebuilt_and_counted(
+        self, polygon: Polygon, area: float
+    ) -> None:
+        built = self.build([(311, polygon)])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept.is_valid
+        assert kept.area == pytest.approx(area, abs=1e-6)
+        assert built.repaired == 1 and tuple(built.outside) == ()
+
+    @pytest.mark.parametrize(
+        "polygon", [pytest.param(g, id=k) for k, g in REBUILT_TO_NOTHING.items()]
+    )
+    def test_a_fault_rebuilt_to_nothing_is_outside_as_given(self, polygon: Polygon) -> None:
+        assert not polygon.is_valid
+        built = self.build([(311, polygon)])
+        assert tuple(built.areas) == ()
+        ((code, kept),) = built.outside
+        assert code == 311 and kept is polygon
+        assert built.repaired == 1
+
+    def test_the_poking_hole_premise_its_clip_is_valid(self) -> None:
+        clip = shapely.clip_by_rect(
+            REBUILT_TO_NOTHING["a-hole-poking-out-through-its-shell"], *READ_BOX
+        )
+        assert clip.is_valid and clip.area == pytest.approx(220_000.0, abs=1e-6)
+
+    def test_the_shared_sides_premise_its_clip_raises(self) -> None:
+        with pytest.raises(shapely.errors.GEOSException):
+            shapely.clip_by_rect(
+                REBUILT_TO_NOTHING["a-hole-sharing-two-sides-with-its-shell"], *READ_BOX
+            )
+
+    # ---- valid polygons at the box's edge
+
+    def test_the_corner_premise_its_clip_is_valid_and_wrong(self) -> None:
+        assert THROUGH_THE_CORNER.is_valid
+        clip = shapely.clip_by_rect(THROUGH_THE_CORNER, *READ_BOX)
+        assert clip.is_valid and clip.area == pytest.approx(5_000.0, abs=1e-6)
+
+    def test_a_valid_polygon_with_an_edge_through_the_corner_is_cut_right(self) -> None:
+        """Today `clip_by_rect` keeps 5,000 m² of it."""
+        built = self.build([(311, THROUGH_THE_CORNER)])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept.is_valid
+        assert kept.area == pytest.approx(485_000.0, abs=1e-6)
+        assert built.repaired == 0 and tuple(built.outside) == ()
+
+    def test_a_valid_polygon_touching_the_box_along_an_edge_is_outside(self) -> None:
+        assert TOUCHING.is_valid
+        built = self.build([(311, TOUCHING)])
+        assert tuple(built.areas) == ()
+        ((code, kept),) = built.outside
+        assert code == 311 and kept is TOUCHING
+        assert built.repaired == 0
+
+    # ---- p5 and the far bowtie
+
+    @pytest.mark.parametrize(
+        ("polygon", "repaired"),
+        [
+            pytest.param(FAR_BOWTIE, 0, id="far-bowtie"),
+            pytest.param(P5["shell-s-envelope-misses-the-region-s"], 0, id="p5-misses"),
+            pytest.param(P5["shell-s-envelope-overlaps-the-region-s"], 1, id="p5-ell"),
+        ],
+    )
+    def test_p5_and_the_far_bowtie_are_outside_as_given(
+        self, polygon: Polygon, repaired: int
+    ) -> None:
+        """The far bowtie and p5's first polygon miss the box, unchecked;
+        p5's L-shaped shell reaches it, is invalid (its hole lies outside
+        it) and rebuilds to nothing, so it is counted. Today the L-shaped
+        shell's empty cut sends it outside uncounted."""
+        built = self.build([(311, polygon)])
+        assert tuple(built.areas) == ()
+        ((code, kept),) = built.outside
+        assert code == 311 and kept is polygon
+        assert built.repaired == repaired
+
+    # ---- a rebuild that raises (design round 11)
+
+    def test_the_thin_spike_premise(self) -> None:
+        assert not THIN_SPIKE.is_valid
+
+    def test_repaired_refuses_a_thin_spike_naming_what_and_where(self, fi: ModuleType) -> None:
+        """Today GEOSException escapes `_repaired`, which takes no `what`."""
+        x, y = THIN_SPIKE.exterior.coords[0]
+        with pytest.raises(fi.FeatureError) as caught:
+            fi._repaired(THIN_SPIKE, self.xy(), what="x")
+        message = str(caught.value)
+        assert message.startswith(f"x near ({x:.1f}, {y:.1f})"), message
+        assert "cannot be repaired" in message, message
+
+    def test_build_refuses_a_thin_spike_naming_its_class(self, fi: ModuleType) -> None:
+        """Today `build` checks only the spike's cut to the read box, which is
+        valid, so it is kept unrebuilt and nothing is refused."""
+        with pytest.raises(fi.FeatureError) as caught:
+            self.build([(312, SMALL), (311, THIN_SPIKE)])
+        message = str(caught.value)
+        assert "class 311" in message and "cannot be repaired" in message, message

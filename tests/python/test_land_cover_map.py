@@ -18,11 +18,11 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   Each is passed by position.
 - ``LandCoverMap.areas`` is a sequence of ``(code, polygon)`` pairs;
   ``LandCoverMap.overlap`` is ``(index of the file kept, area cut)`` pairs.
-- Every polygon is repaired near ``region`` once, where the map is built,
-  as `feature_input.repaired_areas` repairs, whether or not it is in an
+- Every polygon reaching the read box is repaired whole once, where the map
+  is built (`feature_input._repaired`), whether or not it is in an
   overlapping pair: a bowtie, in a single file or in either file of a pair,
-  comes out valid. ``LandCoverMap.repaired`` is the count of polygons
-  repaired, the count `repaired_areas` returns on the files' polygons.
+  comes out valid. ``LandCoverMap.repaired`` counts the invalid polygons
+  reaching the read box.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ def bowtie(x0: float, y0: float, x1: float, y1: float) -> BaseGeometry:
 def test_10_a_bowtie_in_the_later_file_is_repaired_and_cut(lcm: Any, corine: Any) -> None:
     """Code review round 1: a self-crossing polygon in an overlapping pair
     made `_joined`'s intersection throw (GEOSException). Repaired as the
-    shares step repairs (`repaired_areas`), the bowtie is two triangles; the
+    map is built (`_repaired`), the bowtie is two triangles; the
     west one, 2,500 m², lies in the first file's square, so it is the overlap
     the first file kept, and the later file keeps the east one."""
     tie = bowtie(50, 0, 150, 100)
@@ -188,23 +188,14 @@ def test_10_a_bowtie_in_the_earlier_file_cuts_the_later_one(lcm: Any, corine: An
     assert built.repaired == 1
 
 
-def counted(base: Sequence[Sequence[tuple[int, BaseGeometry]]], region: BaseGeometry) -> int:
-    """What `repaired_areas` counts on the files' polygons near ``region``."""
-    from tin_engine.feature_input import repaired_areas
-
-    xy = shapely.get_coordinates(region.exterior)
-    return int(repaired_areas([a for pairs in base for a in pairs], xy)[1])
-
-
 def test_10_a_bowtie_in_a_single_file_is_repaired(lcm: Any, corine: Any) -> None:
     """Code review round 2: a bowtie in one file, in no overlapping pair,
     stayed unrepaired, and `preferred.replace`'s cut threw GEOSException on
     it. Repaired once where the map is built, every polygon comes out valid
     (the bowtie as its two triangles, 5,000 m²), with and without
-    ``preferred``, and the repair is counted as `repaired_areas` counts it."""
+    ``preferred``, and the one repair is counted."""
     tie, region = bowtie(50, 0, 150, 100), box(0, 0, 200, 100)
     base = [[(311, box(0, 0, 50, 100)), (ARABLE, tie)]]
-    assert counted(base, region) == 1
     for preferred in ([], [(LAKE, [box(120, 40, 140, 60)])]):
         built = lcm.build(base, preferred, corine, region)
         assert all(g.is_valid for _, g in built.areas), [g.wkt for _, g in built.areas]

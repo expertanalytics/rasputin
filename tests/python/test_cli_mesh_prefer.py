@@ -327,3 +327,66 @@ def test_lines_of_another_source_are_unchanged_by_prefer(
         plain, preferred = edge_lines(a, "river"), edge_lines(b, "river")
     assert plain.length > 0  # the premise: the lines are there
     assert shapely.equals_exact(shapely.normalize(plain), shapely.normalize(preferred), 0.0)
+
+
+# ------------------------------------------------------------ a spike under --prefer
+
+#: A spike's sides are this far apart at its base, m: GEOS's rebuild raises
+#: on it (`docs/increments/111-one-land-cover-map.md`, section 3, step 6).
+THIN = 1e-8
+
+
+def spiked_lake(base: float) -> Polygon:
+    """A 150 m by 200 m lake whose top edge, at ``base`` below the DEM's
+    origin, runs a spike `THIN` wide at its base up to (991.3, -1987.2) from
+    it: invalid, 30,000 m²."""
+    x0, y0 = dem_origin()
+    b = y0 - base
+    return Polygon(
+        [
+            (x0 + 850, b),
+            (x0 + 1000, b + THIN),
+            (x0 + 991.3, y0 - 1987.2),
+            (x0 + 1000, b),
+            (x0 + 1000, b - 200),
+            (x0 + 850, b - 200),
+        ]
+    )
+
+
+#: Section 5, test 14's lake: its spike runs from 100 m below the box
+#: `read_polygons` repairs in to 341.9 m into it.
+SPIKED_LAKE_BASE = 2429.1
+
+
+def test_14_the_spiked_lakes_premise() -> None:
+    lake = spiked_lake(SPIKED_LAKE_BASE)
+    assert not lake.is_valid
+    assert lake.area == pytest.approx(30_000.0, abs=1e-3)
+
+
+def test_14_read_polygons_refuses_a_thin_spike_naming_the_feature(tmp_path: Path) -> None:
+    """Test 14: today GEOSException ("CoverageUnion cannot process
+    overlapping inputs") escapes `read_polygons`."""
+    from tin_engine.feature_input import FeatureError, read_polygons
+
+    path = write_lake(tmp_path / "lake.geojson", spiked_lake(SPIKED_LAKE_BASE))
+    with pytest.raises(FeatureError) as caught:
+        read_polygons(path, None, MESH_CRS, np.array(domain_ring()), lines="lines go to --lines")
+    message = str(caught.value)
+    assert message.startswith("lake.geojson: feature 1 near ("), message
+    assert "cannot be repaired" in message, message
+
+
+def test_14_prefer_refuses_a_thin_spike_with_no_traceback(
+    scene: dict[str, Path], tmp_path: Path, cover: Path
+) -> None:
+    """Test 14: today the run ends in GEOSException, exit 1."""
+    lake = write_lake(tmp_path / "lake.geojson", spiked_lake(SPIKED_LAKE_BASE))
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"))
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "cannotberepaired" in flat and "--prefer" in flat, output
+    assert "Traceback" not in output, output
+    assert not target.exists()

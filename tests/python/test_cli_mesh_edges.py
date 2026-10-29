@@ -78,7 +78,13 @@ from legend_fixtures import basenames, coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson, write_cover_gpkg
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import check_sums, column, mesh, scene, written
-from test_cli_mesh_prefer import preferred_lake, share, write_lake
+from test_cli_mesh_prefer import (
+    SPIKED_LAKE_BASE,
+    preferred_lake,
+    share,
+    spiked_lake,
+    write_lake,
+)
 from test_cli_mesh_reservoirs import phases, record, write_reservoirs
 from test_legend_name import RENAME_TO_CLASSES
 from tin_engine.cli import app
@@ -1102,3 +1108,32 @@ def test_11_a_cut_run_refuses_the_shares(
     assert spy.calls == 0
     assert not target.exists()
     assert not [p for p in tmp_path.iterdir() if p.name.endswith(".pieces")]
+
+
+# ------------------------------------------------ test 13: a rebuild that raises
+
+#: `test_cli_mesh_prefer.py`'s spiked lake moved 100 m south, so its spike
+#: base lies 80 m below the box `build` repairs in (the read region at the
+#: DEM's 60 m cell, `source_region`, grown by 100 m), where GEOS's rebuild
+#: raises on it.
+SPIKE_BASE = SPIKED_LAKE_BASE + 100.0
+
+
+def test_13_a_land_cover_polygon_whose_rebuild_raises_is_refused(
+    scene: dict[str, Path], tmp_path: Path
+) -> None:
+    """Section 5, test 13, design round 11: the run exits 2 naming the
+    class, "cannot be repaired" and `--land-cover`, with no traceback.
+    Today `build` checks only the polygon's cut to the read box, which is
+    valid, so the spike is never rebuilt and the run ends with exit 0."""
+    spike = spiked_lake(SPIKE_BASE)
+    assert not spike.is_valid  # the premise
+    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (311, spike)])
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *classes(f), *edges("all"))
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "class311" in flat and "cannotberepaired" in flat, output
+    assert "--land-cover" in flat, output
+    assert "Traceback" not in output, output
+    assert not target.exists()
