@@ -2203,7 +2203,10 @@ def _land_cover_map(
                 raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
             chosen.append((p.code, polygons))
         region = source_region(area, dem_crs, dem_crs, cell=cell)
-        base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
+        try:
+            base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
+        except FeatureError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
         again = functools.partial(build, fix=False, outside=base.outside)
         built = again([base.areas], chosen, classes.classes, region) if chosen else base
         _say_repaired("land cover", base.repaired, sum(len(r.areas) for r in reads))

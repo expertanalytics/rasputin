@@ -530,7 +530,9 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
-def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeometry | None:
+def _repaired(
+    geometry: BaseGeometry, xy: npt.NDArray[np.float64], *, what: str = "a polygon"
+) -> BaseGeometry | None:
     """``geometry`` if valid, else ``shapely.make_valid(geometry)`` within the
     box of the points ``xy`` widened by 100 m, as polygons, except where two
     rings share a stretch of edge: there both sides keep the same parity.
@@ -541,18 +543,27 @@ def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64]) -> BaseGeomet
     parts, wind around it. So the rings cut to the box, with the box's own
     edge, split it into faces, and a face is kept when an odd number of parts
     contain a point of it. Cutting the polygon instead of its rings can swap
-    inside and outside when a ring crosses itself outside the box."""
+    inside and outside when a ring crosses itself outside the box.
+    GEOS raises on some spikes too thin to rebuild: a :class:`FeatureError`
+    names ``what`` and its first vertex."""
     if geometry.is_valid:
         return geometry
     box = shapely.box(*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
-    lines = shapely.clip_by_rect(shapely.boundary(geometry), *box.bounds)
-    noded = shapely.union_all([lines, box.exterior])
-    faces = shapely.get_parts(shapely.polygonize(shapely.get_parts(noded)))
-    x, y = shapely.get_coordinates(shapely.point_on_surface(faces)).T
-    odd = np.zeros(len(faces), dtype=bool)
-    for part in shapely.get_parts(geometry):
-        odd ^= shapely.contains_xy(part, x, y)
-    kept = shapely.get_parts(shapely.coverage_union_all(faces[odd]))
+    try:
+        lines = shapely.clip_by_rect(shapely.boundary(geometry), *box.bounds)
+        noded = shapely.union_all([lines, box.exterior])
+        faces = shapely.get_parts(shapely.polygonize(shapely.get_parts(noded)))
+        x, y = shapely.get_coordinates(shapely.point_on_surface(faces)).T
+        odd = np.zeros(len(faces), dtype=bool)
+        for part in shapely.get_parts(geometry):
+            odd ^= shapely.contains_xy(part, x, y)
+        kept = shapely.get_parts(shapely.coverage_union_all(faces[odd]))
+    except shapely.errors.GEOSException as exc:
+        x0, y0 = shapely.get_coordinates(geometry)[0]
+        raise FeatureError(
+            f"{what} near ({x0:.1f}, {y0:.1f}) in the DEM's CRS cannot be repaired: it has"
+            " a spike too thin to rebuild; clean the file"
+        ) from exc
     return MultiPolygon(list(kept)) if len(kept) else None
 
 
@@ -672,22 +683,6 @@ def read_linestrings(
     return SourceLines(lines, read.crs, read.layer, read.scanned, empty)
 
 
-def repaired_areas(
-    areas: Sequence[tuple[int, BaseGeometry]],
-    xy: npt.NDArray[np.float64],
-    tell: Callable[[int, int], None] | None = None,
-) -> tuple[list[tuple[int, BaseGeometry]], int]:
-    """Each class polygon repaired near the points ``xy`` (:func:`_repaired`),
-    and dropped when nothing polygonal is left; the count returned is how
-    many were repaired. ``tell``, if given, is called with that count and the
-    number of polygons."""
-    fixed = [(code, _repaired(g, xy)) for code, g in areas]
-    repaired = sum(a is not b for (_, a), (_, b) in zip(areas, fixed, strict=True))
-    if tell is not None:
-        tell(repaired, len(areas))
-    return [(c, g) for c, g in fixed if g is not None], repaired
-
-
 def _near(
     xy: npt.NDArray[np.float64], mesh_crs: str
 ) -> Callable[[str], tuple[float, float, float, float]]:
@@ -730,12 +725,15 @@ def read_polygons(
             raise FeatureError(f"{path.name}: feature {fid} is a {g.geom_type}; {lines}")
     move = None if same_crs(read.crs, mesh_crs) else reprojector(read.crs, mesh_crs)
     flat = [
-        shapely.force_2d(g)
-        for _, g, _ in rows
+        (fid, shapely.force_2d(g))
+        for fid, g, _ in rows
         if g is not None and not g.is_empty and g.geom_type in POLYGONAL
     ]
-    moved = flat if move is None else [shapely.transform(g, move) for g in flat]
-    fixed = [_repaired(g, xy) for g in moved]
+    moved = [g if move is None else shapely.transform(g, move) for _, g in flat]
+    fixed = [
+        _repaired(g, xy, what=f"{path.name}: feature {fid}")
+        for (fid, _), g in zip(flat, moved, strict=True)
+    ]
     repaired = sum(a is not b for a, b in zip(moved, fixed, strict=True))
     if tell is not None:
         tell(repaired, len(moved))

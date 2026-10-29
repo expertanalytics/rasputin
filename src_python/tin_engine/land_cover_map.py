@@ -7,12 +7,12 @@ area, the first given keeps it, and a later file's polygon is cut by the
 earlier files' polygons it shares area with. Each preferred source then
 replaces its class (`preferred.replace`, near the read region), and each
 refilled piece is unioned with the polygons of the class it took whose
-borders meet its own, so no old border runs between them. Each polygon is
-first cut to the box of the read region widened by `MARGIN`, and one whose
-cut is invalid is repaired there (`feature_input._repaired`): a ring that
-crosses itself makes GEOS's overlays throw. So every polygon of the map's
-``areas`` is valid, and may be overlaid unchecked. A polygon whose cut is
-empty goes to ``outside`` as read, whole and unchecked: nothing overlays it,
+borders meet its own, so no old border runs between them. Each polygon
+reaching the box of the read region widened by `MARGIN` is repaired whole
+(`feature_input._repaired`: a ring that crosses itself makes GEOS's overlays
+throw), then cut to that box. So every polygon of the map's ``areas`` is
+valid, and may be overlaid unchecked. A polygon with no area in the box
+goes to ``outside`` as read, whole: nothing overlays it,
 and only the edges step reads it, by its rings. Pure: shapely geometry in,
 no file, no CRS.
 """
@@ -30,7 +30,7 @@ import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import MARGIN, LandCoverClasses, _repaired
+from tin_engine.feature_input import MARGIN, LandCoverClasses, _polygonal, _repaired
 from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
@@ -69,8 +69,9 @@ def build(
     """The map of ``base`` (one sequence of (code, polygon) per file, in the
     order given) with each code of ``preferred`` (replaced code, polygons, as
     `preferred.replace` takes them) taken from its polygons near ``region``.
-    With ``fix``, each file's polygons are first cut near ``region`` and
-    repaired there, those the cut misses set aside (`_fixed`); without it
+    With ``fix``, each file's polygons are first repaired and cut near
+    ``region``, those with no area there set aside (`_fixed`); a rebuild GEOS
+    cannot make raises :class:`FeatureError`. Without it
     ``base`` is taken as already so, as the ``areas`` of a map built with
     ``fix`` are, and ``outside`` (that map's) is passed through. The check
     runs in ``threads`` threads."""
@@ -86,38 +87,54 @@ def build(
 
 
 def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64], threads: int) -> tuple[Pairs, Pairs, int]:
-    """``pairs`` whose cut to the box of ``xy`` widened by `MARGIN` is not
-    empty, each as its cut, or where the cut is invalid repaired whole
-    (`_repaired`, as `repaired_areas` repairs); those whose cut is empty, as
-    given; and the count repaired. Only the cut is checked: checking a whole
-    polygon of hundreds of thousands of vertices takes most of a second, and
-    an outside polygon is never overlaid (the edges step reads it by its
-    rings only, or counts it outside)."""
-    box = (*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
+    """``pairs`` reaching the box of ``xy`` widened by `MARGIN`, each
+    repaired whole (`_repaired`, master's repair on read) and then cut to the
+    box with `shapely.intersection`, kept when its polygonal part has area;
+    the rest as given; and the count repaired (each invalid one). One whose
+    bounding box misses the box, or lies inside it and is valid, is kept as
+    read uncut. Never `shapely.clip_by_rect`: it is wrong on a valid polygon
+    with an edge through a corner of the box."""
+    lo, hi = xy.min(axis=0) - MARGIN, xy.max(axis=0) + MARGIN
+    box = shapely.box(*lo, *hi)
     shapes = np.array([g for _, g in pairs], dtype=object)
-    cut, bad = np.empty(len(pairs), dtype=object), np.zeros(len(pairs), dtype=bool)
+    x0, y0, x1, y1 = shapely.bounds(shapes).reshape(-1, 4).T
+    near = (x0 <= hi[0]) & (x1 >= lo[0]) & (y0 <= hi[1]) & (y1 >= lo[1])
+    within = (x0 >= lo[0]) & (x1 <= hi[0]) & (y0 >= lo[1]) & (y1 <= hi[1])
+    cut, valid = shapes.copy(), np.ones(len(pairs), dtype=bool)
     ends = np.cumsum(shapely.get_num_coordinates(shapes))
     edges = np.searchsorted(ends, np.linspace(0, ends[-1] if len(ends) else 0, GROUPS + 1)[1:-1])
-    groups = [ix for ix in np.split(np.arange(len(pairs)), edges) if len(ix)]
+    groups = [ix[near[ix]] for ix in np.split(np.arange(len(pairs)), edges)]
 
     def check(ix: npt.NDArray[np.intp]) -> None:
-        cut[ix] = shapely.clip_by_rect(shapes[ix], *box)
-        bad[ix] = ~shapely.is_valid(cut[ix])
+        valid[ix] = shapely.is_valid(shapes[ix])
+        for i in ix[valid[ix]]:
+            cut[i] = _cut(shapes[i], box if not within[i] else None)
 
     with ThreadPoolExecutor(max(threads, 1)) as pool:
-        list(pool.map(check, groups))
+        list(pool.map(check, [ix for ix in groups if len(ix)]))
     areas: list[tuple[int, BaseGeometry]] = []
     outside: list[tuple[int, BaseGeometry]] = []
-    n = 0
-    for (code, g), c, suspect in zip(pairs, cut, bad, strict=True):
-        if c.is_empty:
-            outside.append((code, g))
-            continue
-        fixed = _repaired(g, xy) if suspect else c
-        n += bool(suspect) and fixed is not g
-        if fixed is not None:
-            areas.append((code, fixed))
-    return areas, outside, n
+    for (code, g), c, reach, ok in zip(pairs, cut, near, valid, strict=True):
+        if not reach:
+            part = None
+        elif not ok:
+            part = _repaired(g, xy, what=f"a land-cover polygon of class {code}")
+        else:
+            part = c
+        (outside if part is None else areas).append((code, g if part is None else part))
+    return areas, outside, int(np.count_nonzero(~valid))
+
+
+def _cut(geometry: BaseGeometry, box: Polygon | None) -> BaseGeometry | None:
+    """The valid ``geometry`` itself if a Polygon inside ``box`` (None), else
+    its polygonal part cut to ``box`` part by part, so its parts keep their
+    order; one part as a Polygon; None if it has no area."""
+    if box is None and isinstance(geometry, Polygon):
+        return geometry
+    parts = shapely.get_parts(geometry)
+    pieces = shapely.get_parts(shapely.get_parts(parts if box is None else parts & box))
+    part = _polygonal(shapely.geometrycollections(list(pieces)))
+    return part if part is not None and part.area > 0 else None
 
 
 def _joined(
