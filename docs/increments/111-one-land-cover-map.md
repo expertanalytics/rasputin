@@ -743,6 +743,24 @@ the crossing's road and river (one source per key); line lengths from the
 file without `code_system` refused naming it, hint `--land-cover-classes`;
 `classes =` for `rules =`, on both shipped entries. All six confirmed.
 
+## As built
+
+- RP8's re-pin to the cut kept at a4bcab1e (Ola 2026-10-29), checked on the
+  quick check's Numedalslågen case against 2f70ce84 (whole polygons):
+  `rasputin mesh --dem $RASPUTIN_DATA/DTM10_UTM33_20260925 --domain
+  $RASPUTIN_DATA/numedalslagen_outline_nve.geojson --land-cover
+  $RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg --land-cover-layer corine2018
+  --land-cover-classes corine --edges all --tolerance 10`, with an empty
+  `XDG_CONFIG_HOME` (Ola's sources.toml still says `rules =`). Both meshes:
+  653,039 triangles, 334,190 vertices; 28 vertices moved, 22 by under
+  0.015 m, the farthest 8.745 m. Cause: the clean-up's repair step, not the
+  lines. With every clean-up switch at 0 the meshes are identical
+  (1,140,546 triangles), as with only simplification or only the outline
+  snap on. The cut changes the vertex order (part order or ring start) of
+  22 of the 3,297 polygons, and 2 more by 1.5e-11 m; `shapely.coverage_clean`
+  (1 m snap) depends on that order, so 23 cleaned polygons differ, their
+  borders by at most 0.86 m.
+
 ## Review
 
 - Design round 1: CHANGES REQUESTED, 75ab2b4f..a2f4dcaa, 0 (no speed estimate for the map and per-class edges; line files lose layer and CRS; Ola's sources file breaks on the rules → classes rename; six wordings and inventory gaps).
