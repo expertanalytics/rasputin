@@ -48,8 +48,7 @@ def categorise(fractions: ClassFractions, categories: Mapping[int, Category]) ->
         weights = fractions.fractions[chosen].astype(np.float64)
         shares[:, i] = np.bincount(rows[chosen], weights, minlength=fractions.triangles)
     # Shyft's 1 - glacier - lake - reservoir - forest. The float32 fractions can overshoot
-    # 1 by at most 2.7e-6, a bound (44 classes x 2^-24), not a measurement:
-    # docs/increments/105-cell-table.md, section 3.
+    # 1 by at most 2.7e-6, a bound (44 classes x 2^-24), not a measurement.
     shares[:, 4] = np.maximum(0.0, 1.0 - shares[:, 0] - shares[:, 1] - shares[:, 2])
     return shares
 
