@@ -210,3 +210,5 @@ one increment, by hand. "Repair the land cover once per area of interest"
 would remove finding 2's input class at its source; not taken up here.
 
 ## Review
+
+- Code review round 1: CHANGES REQUESTED, e0aafd73..ee4dac92, 0 (rule text only, net words 0; R1, R2, R3, C1, C2 match section 4; citations, lane, rule-text suites pass, 1282 passed; reviewer.md kept as §5 is fine; blocking: Ola's yes to question 2, the one review waits for his answers, is in no rule text, so R1 must say it; C2's deletion of "All holes in one pass." rests on "once", which counts rounds and does not ask for every hole, so fold "naming every hole" into R1, about +6 words to pay; section 4 cites `tools/push_grant.py:44`, the verdict pattern is at line 56).
