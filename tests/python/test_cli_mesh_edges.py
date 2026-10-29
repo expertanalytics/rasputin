@@ -104,7 +104,7 @@ AREA = 1.0
 #: On a share: case 7's bound (`test_cli_mesh_prefer.py`).
 SHARE = 1e-6
 #: Every clean-up switch off, as the design measured.
-AS_READ = ("--edges-repair", "0", "--edges-tolerance", "0", "--edges-outline-snap", "0")
+AS_READ = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
 #: Arable land: a class `--prefer lake=` does not replace, and no water class.
 ARABLE = 211
 
@@ -464,7 +464,7 @@ def test_6_the_mcp_mesh_tool_follows_the_cli() -> None:
     mesh_tool = {d.tool_name: d for d in mcp_schema.derive(app)}["mesh"]
     properties = set(mesh_tool.tool().input_schema["properties"])
     assert {"edges", "lines", "shares", "land_cover_classes"} <= properties, sorted(properties)
-    assert {"land_cover_layer", "land_cover_crs", "edges_tolerance"} <= properties
+    assert {"land_cover_layer", "land_cover_crs", "edges_max_shift"} <= properties
     assert not {p for p in properties if p.startswith("features")}, sorted(properties)
     assert "land_cover_rules" not in properties
     for word in ("features_rules", "features_layer"):
@@ -506,7 +506,7 @@ def test_7_sula_the_direct_command_gives_sols_mesh(
         "mesh", "--out", str(target), "--dem", str(DTM10), "--tolerance", "20",
         "--domain", str(SULA), "--out-crs", "EPSG:25833", "--cache", str(CACHE),
         "--land-cover", "clc2018", "--prefer", "lake=nve-lakes", "--edges", "all", "--shares",
-        "--edges-repair", "0.1", "--edges-tolerance", "20", "--edges-outline-snap", "0",
+        "--edges-repair", "0.1", "--edges-max-shift", "20", "--edges-outline-snap", "0",
         "--threads", "4", "--z-unit", "m",
     )  # fmt: skip
     assert code == 0, output

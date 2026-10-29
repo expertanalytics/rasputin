@@ -12,7 +12,7 @@ and 8, migrate it from `--features`):
   `--land-cover-layer` and `--land-cover-crs` (each refused without
   `--land-cover`); lines are `--lines KEY=PATH`; `--edges all` chooses every
   class and line key. The gallery's polygons are CORINE forest and lake, its
-  lines `--lines road=` and `--lines wall=`; it runs with `--edges-tolerance
+  lines `--lines road=` and `--lines wall=`; it runs with `--edges-max-shift
   0`, its borders as given, as the uncoded gallery ran.
 - `--edges` without `--domain` is a usage error saying "needs --dem, --domain
   and --tolerance" and naming `--edges`; any `FeatureError` is a usage error
@@ -153,7 +153,7 @@ def gallery_args(where: Path, crs: str | None = None) -> tuple[str, ...]:
     return (
         *("--land-cover", str(cover), "--land-cover-classes", "corine"),
         *keyed,
-        *("--edges", "all", "--edges-tolerance", "0"),
+        *("--edges", "all", "--edges-max-shift", "0"),
     )
 
 
@@ -748,7 +748,7 @@ class TestCommittedExtract:
 
     @pytest.fixture(scope="class")
     def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
-        """The same run with ``--edges-tolerance 0`` (increment 32, test 16:
+        """The same run with ``--edges-max-shift 0`` (increment 32, test 16:
         the default band moves borders up to 50 m from the extract's, so I2's
         oracle, which labels by the extract's polygons, needs the band off)."""
         tmp = tmp_path_factory.mktemp("extract_band_0")
@@ -758,7 +758,7 @@ class TestCommittedExtract:
             KARTVERKET,
             domain,
             *cover_args(EXTRACT),
-            "--edges-tolerance",
+            "--edges-max-shift",
             "0",
             tolerance="10",
         )

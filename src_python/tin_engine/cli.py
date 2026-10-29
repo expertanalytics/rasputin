@@ -311,7 +311,7 @@ DERIVED = (
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
     ("--edges-repair", math.inf),
-    ("--edges-tolerance", math.inf),
+    ("--edges-max-shift", math.inf),
     ("--edges-outline-snap", 100.0),
 )
 #: The line kinds a --lines key may name: the edge names that are no area's.
@@ -733,7 +733,7 @@ def mesh(
             help="With --tolerance, add DEM nodes to the start mesh until its triangles "
             "have no angle under this many degrees, or a stated reason prevents it; "
             "0 is off, at most 35. Default: 25, or 15 with land cover simplified "
-            "(--edges-tolerance above 0).",
+            "(--edges-max-shift above 0).",
         ),
     ] = None,
     start_quality_gain: Annotated[
@@ -851,16 +851,17 @@ def mesh(
             show_default=False,
         ),
     ] = True,
-    edges_tolerance: Annotated[
+    edges_max_shift: Annotated[
         float | None,
         typer.Option(
-            "--edges-tolerance",
+            "--edges-max-shift",
             rich_help_panel=CLEAN_UP,
             show_default=False,
-            help="Metres: simplify land-cover borders, each moved at most this far from its "
-            "border after the repair and the outline rule, each class keeping its area; the "
-            "simplification can bring a border back within the outline-snap distance of the "
-            "outline, but not closer than the repair distance. 0 is off. " + DERIVED.format(50),
+            help="Metres: the farthest a land-cover border may move from where it was (after "
+            "the repair and the outline rule) when simplified, each class keeping its area; "
+            "simplifying can bring a border back within the outline-snap distance of the "
+            "outline, but not closer than the repair distance. --lines lines are kept as given. "
+            "0: no simplification, borders as read. " + DERIVED.format(50),
         ),
     ] = None,
     edges_outline_snap: Annotated[
@@ -887,19 +888,39 @@ def mesh(
             metavar="UNITS",
             help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
             "whose inner point lies in --domain are joined into the domain, their borders, "
-            "simplified within --edges-tolerance or else a band --triangles sets, become "
-            "constraints, and each cell's catchment_id is its unit's id.",
+            "simplified within --catchments-max-shift, become constraints, and each cell's "
+            "catchment_id is its unit's id.",
+        ),
+    ] = None,
+    catchments_max_shift: Annotated[
+        float | None,
+        typer.Option(
+            "--catchments-max-shift",
+            show_default=False,
+            help="Metres: with --catchments, the farthest a unit border may move from where it "
+            "was when simplified, each unit keeping its area. 0: no simplification, borders as "
+            "read. Default: an eighth of a triangle's edge at --triangles.",
         ),
     ] = None,
     simplify_domain: Annotated[
         bool,
         typer.Option(
             "--simplify-domain",
-            help="Simplify the --domain outline, each ring moved at most a band and the area "
-            "kept: --edges-tolerance, or else an eighth of a triangle's edge at --triangles. "
-            "--catchments always simplifies its outline.",
+            help="Simplify the --domain outline, each ring moving at most --domain-max-shift "
+            "and the area kept. --catchments always simplifies its outline, within "
+            "--catchments-max-shift.",
         ),
     ] = False,
+    domain_max_shift: Annotated[
+        float | None,
+        typer.Option(
+            "--domain-max-shift",
+            show_default=False,
+            help="Metres: with --simplify-domain, the farthest the outline may move from where "
+            "it was when simplified, the area kept. 0: no simplification, outline as read. "
+            "Default: an eighth of a triangle's edge at --triangles.",
+        ),
+    ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -1021,23 +1042,33 @@ def mesh(
             "needs --domain: the units whose inner point lies in the domain are the sub-catchments",
             param_hint="--catchments",
         )
-    if catchments is not None and triangles is None and edges_tolerance is None:
+    for flag, shift, applies, needs in (
+        ("--catchments-max-shift", catchments_max_shift, catchments is not None, "--catchments"),
+        ("--domain-max-shift", domain_max_shift, simplify_domain, "--simplify-domain"),
+    ):
+        if shift is not None and not applies:
+            raise typer.BadParameter(f"applies only with {needs}", param_hint=flag)
+        if shift is not None and not (math.isfinite(shift) and shift >= 0):
+            raise typer.BadParameter(f"must be finite, >= 0, got {shift}", param_hint=flag)
+    if catchments is not None and triangles is None and catchments_max_shift is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the border band, or --edges-tolerance",
+            "needs --triangles, whose budget sets the farthest a border may shift, or "
+            "--catchments-max-shift",
             param_hint="--catchments",
         )
     if simplify_domain and domain is None:
         raise typer.BadParameter("needs --domain", param_hint="--simplify-domain")
-    if simplify_domain and triangles is None and edges_tolerance is None:
+    if simplify_domain and triangles is None and domain_max_shift is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the outline band, or --edges-tolerance",
+            "needs --triangles, whose budget sets the farthest the outline may shift, or "
+            "--domain-max-shift",
             param_hint="--simplify-domain",
         )
     regulated = None  # each triangle's share under the reservoir polygons
     catchment_ids = None  # each cell's unit, with --catchments
     overrides = {
         "repair_m": edges_repair,
-        "tolerance_m": edges_tolerance,
+        "max_shift_m": edges_max_shift,
         "outline_snap_m": edges_outline_snap,
     }
     for (flag, top), metres in zip(OPTION_TOPS, overrides.values(), strict=True):
@@ -1154,19 +1185,21 @@ def mesh(
     units: Units | None = None
     if given is not None and units_source is not None:
         with clock.phase("catchments"), _refused("--catchments"):
-            units = _units(*units_source[:3], given, triangles, edges_tolerance)
+            units = _units(*units_source[:3], given, triangles, catchments_max_shift)
         given = units.domain
-    domain_band = None
+    outline_shift = None
     if given is not None and units is None and simplify_domain:
         with clock.phase("domain simplify"):
             before = _ring_vertices(given.polygon)
-            given, domain_band = sub_catchments.simplify_domain(given, triangles, edges_tolerance)
+            given, outline_shift = sub_catchments.simplify_domain(
+                given, triangles, domain_max_shift
+            )
             area = sub_catchments.equal_area(given).polygon.area
-        why = "--edges-tolerance" if edges_tolerance is not None else (
-            f"a triangle's edge at {triangles} triangles, {8 * domain_band:.0f} m, over 8"
+        why = "--domain-max-shift" if domain_max_shift is not None else (
+            f"a triangle's edge at {triangles} triangles, {8 * outline_shift:.0f} m, over 8"
         )  # fmt: skip
         typer.echo(
-            f"domain: outline simplified at {domain_band:.0f} m ({why}): {before} to "
+            f"domain: outline simplified at {outline_shift:.0f} m ({why}): {before} to "
             f"{_ring_vertices(given.polygon)} vertices, {area / 1e6:.2f} km2",
             err=True,
         )
@@ -1252,7 +1285,7 @@ def mesh(
         )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
     simplified = (
-        found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
+        found is not None and found.cover_vertices is not None and cleanup["max_shift_m"] > 0
     )
     angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
     angle = angle if start_min_angle is None else start_min_angle
@@ -1285,7 +1318,7 @@ def mesh(
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     except typer.BadParameter as exc:
-        plain = domain is not None and domain_band is None and units is None
+        plain = domain is not None and outline_shift is None and units is None
         if isinstance(exc.__cause__, UnderFloor) and plain:
             exc.message += "; or give --simplify-domain to simplify the outline to the budget"
         raise
@@ -1328,8 +1361,8 @@ def mesh(
     if given is not None:
         how = transform_label(given.crs, dem_crs)
         values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
-        if domain_band is not None:
-            values["domain_band_m"] = domain_band
+        if outline_shift is not None:
+            values["domain_max_shift_m"] = outline_shift
     if found is not None and dem_run.feature_counts is not None:
         chains, feature_vertices = dem_run.feature_counts
         totals = f"{plural(chains, 'line', 'lines')}, "
@@ -1385,7 +1418,7 @@ def mesh(
             more |= {
                 "catchments": escaped_ascii(units.name),
                 "catchments_units": len(units.units),
-                "catchments_band_m": units.band_m,
+                "catchments_max_shift_m": units.max_shift_m,
             }
         values |= more
     if dem_run.cut is not None:
@@ -1699,11 +1732,11 @@ def _reservoir_source(
 @dataclass(frozen=True)
 class Units:
     """The sub-catchment units as (id, polygon), the domain they join into,
-    the band their borders were simplified within, and the source's name."""
+    the farthest their borders moved when simplified, and the source's name."""
 
     units: list[tuple[int, BaseGeometry]]
     domain: DomainPolygon
-    band_m: float
+    max_shift_m: float
     name: str
 
     def moved(self, crs: str) -> Units:
@@ -1729,7 +1762,7 @@ def _units(
     read = read_source(path, layer, None, lambda own: given.to_crs(own).polygon.bounds)
     if parse_crs(read.crs).is_geographic:
         raise ValueError(
-            f"{name} is in degrees ({crs_label(read.crs)}); the border band is in metres, so "
+            f"{name} is in degrees ({crs_label(read.crs)}); the border shift is in metres, so "
             "give the units in a projected CRS"
         )
     rows = [
@@ -1745,7 +1778,7 @@ def _units(
     repaired = sub_catchments.repair([g for _, g in picked])
     area = join(repaired, read.crs).polygon.area
     if tolerance is not None:
-        band, why = tolerance, "--edges-tolerance"
+        band, why = tolerance, "--catchments-max-shift"
     else:
         assert triangles is not None
         band = sub_catchments.band_m(area, triangles)

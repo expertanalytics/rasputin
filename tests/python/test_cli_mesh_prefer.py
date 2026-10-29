@@ -258,7 +258,7 @@ def test_the_mcp_mesh_tool_takes_prefer_as_a_list() -> None:
 # ------------------------------------------------------------ the map's borders
 
 #: The clean-up's switches off, as the design measured.
-AS_READ = ("--edges-tolerance", "0", "--edges-repair", "0", "--edges-outline-snap", "0")
+AS_READ = ("--edges-max-shift", "0", "--edges-repair", "0", "--edges-outline-snap", "0")
 #: On a length in m: the `lines` layer's geometry differs from the polygons'
 #: by under 1 mm at these coordinates (checked on the two runs below, 0.6 mm),
 #: far below the design's 0.1 m figures.
