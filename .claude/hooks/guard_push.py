@@ -44,6 +44,7 @@ establish about such a line asks, and names that form.
 
 import functools
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -441,8 +442,11 @@ def main() -> int:
                 not python(s.argv[0], command) and SPAWN_MARKS.search(s.program)))]
             reasons = [why for text in texts for pattern, why in PUBLISHES if pattern.search(text)]
             commands = [s.argv for s in simples]
+        stops, where = [], event.get("cwd") or os.getcwd()  # a merge without a verdict
         for words, bare in [pair for argv in commands for pair in runs(argv)]:
             reasons += publishes(words)
+            if push_grant and PR in publishes(words):
+                stops += [stop] if (stop := push_grant.merge_gate(where, words)) else []
             why = segment_why(words, command)
             if why is not None and not (bare and why == UNKNOWN):  # a bare tail never gives G2's
                 reasons.append(why)
@@ -450,6 +454,10 @@ def main() -> int:
         if not reasons or (reasons == [HISTORY] and unpushed_amend(command, event.get("cwd"))):
             return 0
         why = "; ".join(reasons)
+        if stops:  # docs/increments/README.md step 4: only the record commit follows a verdict
+            emit(event, "deny", f"Refused: {'; '.join(stops)}; a new @reviewer round first.",
+                 command, why)  # fmt: skip
+            return 0
         if reasons == [HISTORY] and any(AMENDS & set(words) for words in commands):
             why += "; " + AMEND_FORM
         grant = push_grant.judge(event, command, reasons) if push_grant else None

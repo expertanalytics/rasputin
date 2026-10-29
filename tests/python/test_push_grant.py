@@ -311,6 +311,46 @@ def test_32_a_review_line_in_a_commit_message_is_not_read(built: Granted) -> Non
     refuses_naming(judge(built), y, "tools/x.py", built.x)
 
 
+# ---------------------------------------------------------------- merge needs a verdict
+#
+# PR #400 merged head f29480e9, a test fix made after the last approved review.
+# A full-lane head merges only when reviewed; after the verdict, only commits
+# touching the increment file and ROADMAP.md (docs/increments/README.md step 4).
+
+
+def merge_why(built: Granted) -> str | None:
+    found: str | None = push_grant.merge_refusal(built.repo, built.head, built.records())
+    return found
+
+
+def test_merge_of_the_reviewed_head_and_its_record_passes(built: Granted) -> None:
+    commit_file(built.repo, "ROADMAP.md", "row\n", "h99 roadmap row")
+    assert merge_why(built) is None
+
+
+def test_merge_after_a_test_fix_past_the_verdict_is_refused(built: Granted) -> None:
+    late = commit_file(built.repo, "tests/python/test_x.py", "t = 1\n", "a test fix")
+    refuses_naming(merge_why(built), late, "tests/python/test_x.py", built.x)
+
+
+def test_merge_after_other_prose_past_the_verdict_is_refused(built: Granted) -> None:
+    late = commit_file(built.repo, "docs/notes.md", "n\n", "a prose change")
+    refuses_naming(merge_why(built), late, "docs/notes.md", built.x)
+
+
+def test_merge_without_a_verdict_is_refused(built: Granted) -> None:
+    write_reviews(built.repo, [])
+    assert NO_REVIEW in (merge_why(built) or "")
+
+
+def test_merge_of_a_fast_lane_branch_needs_no_verdict(built: Granted) -> None:
+    git(built.repo, "checkout", "-q", "-b", "quick", "master")
+    commit_file(built.repo, "tools/q.py", "q = 1\n", "a fast-lane change")
+    write_reviews(built.repo, [])
+    head = git(built.repo, "rev-parse", "HEAD").strip()
+    assert push_grant.merge_refusal(built.repo, head, []) is None
+
+
 # ================================================================ h22 fix 1
 #
 # docs/increments/h22-harness-fixes.md §4 and §7 tests 1-8: the private forms,
