@@ -1,6 +1,6 @@
 # Increment 111: one land-cover map, and the edges chosen from it
 
-**Status: built** (red `bce16583`, green `a8246816`, code review round 1's fixes `6cd8bea3` and `77b3def6`; at `77b3def6`, 19 net production lines, 1,057 added and 1,038 removed, by `tools/count_loc.py 75ab2b4f 77b3def6`; full suite 11,232 passed, 18 skipped, 1 xfailed; README, INSTALL, GLOSSARY and `project_structure.md` reworded; next `@reviewer`'s code review round 2). Design rounds 8 and 9 (section 3, *Deciding on the input polygon*; test 13) amend round 7's polygon rule after code review round 5, before more code; round 9 (after design review round 8) checks `is_valid` on the polygon's parts near the read box before any cut, and sends a valid polygon with an edge through a corner of the box to `shapely.intersection`. Designed, approved in design review round 6, section 8 (the Python interface and the wordings tests read) added for the test migration, by `@architect`, 2026-10-28, on master `75ab2b4f`,
+**Status: built** (red `bce16583`, green `a8246816`, code review round 1's fixes `6cd8bea3` and `77b3def6`; at `77b3def6`, 19 net production lines, 1,057 added and 1,038 removed, by `tools/count_loc.py 75ab2b4f 77b3def6`; full suite 11,232 passed, 18 skipped, 1 xfailed; README, INSTALL, GLOSSARY and `project_structure.md` reworded; next `@reviewer`'s code review round 2). Design round 10 (section 3, *What every polygon in the map is*; tests 12 and 13) replaces rounds 7 to 9's polygon rule, before more code: each polygon reaching the read box is repaired whole, as master repairs on read, then cut with `shapely.intersection`. Designed, approved in design review round 6, section 8 (the Python interface and the wordings tests read) added for the test migration, by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
 is the highest under `docs/increments/` over every ref and worktree.
 
@@ -63,9 +63,9 @@ Cartography*, AAG, 1992). No novelty claimed; none searched.
 
 *Ideas file.* Overlaps "Line layers in the ArcGIS fetch": rivers from the
 catalogue need it; this increment reads line files and cached line layers,
-and fetches none. Design round 8 overlaps "Repair CORINE once per area of
-interest": a cached, repaired extract would need no ring check. Not taken
-up.
+and fetches none. Design round 10 overlaps "Repair CORINE once per area of
+interest": a cached, repaired extract would need no check per run; Ola's
+private cleaning plugin is where it goes. Not taken up.
 
 ## 2. Inventory: what assumes the old way, and what it becomes
 
@@ -98,7 +98,7 @@ up.
 | MCP `mesh` arguments `features*`, `land_cover_rules` | follow the CLI (the schema is derived): `edges`, `edges_*`, `lines`, `shares`, `land_cover_classes`, `land_cover_crs`, `land_cover_layer` |
 | MCP `INSTRUCTIONS`: "features_rules", "features_layer" | class polygons to `land_cover` with the fit's classes; lakes, glaciers to `prefer`; rivers, roads to `lines`; `edges`; `shares` for class shares and cells |
 | `sources` fits: `mesh --features` with rules; `mesh --land-cover` (class raster) | `mesh --land-cover` with classes (class polygons), `mesh --prefer` (other polygons), `mesh --lines` (lines); the class raster's `mesh --land-cover` unchanged (it gives shares, as today); `Fit.rules` → `Fit.classes` |
-| `FeatureSource`, `open_features`, `_Tally.source`, `_take`, `pre_clip`, `_runs`, `_bound`, `_linework`, `R_MIN`, `R_MAX` | **deleted**: reading is `read_class_polygons` (reading as `_take`'s cleaned-polygon branch does: one query, one move, no validity check; its `_repaired` moves to the shares step, section 3), `read_polygons`, new `read_linestrings` |
+| `FeatureSource`, `open_features`, `_Tally.source`, `_take`, `pre_clip`, `_runs`, `_bound`, `_linework`, `R_MIN`, `R_MAX` | **deleted**: reading is `read_class_polygons` (reading as `_take`'s cleaned-polygon branch does: one query, one move; its `_repaired` moves to `land_cover_map.build`, section 3), `read_polygons`, new `read_linestrings` |
 | `FeatureRequest` | `EdgeCleanup(repair_m, merge_same_class, tolerance_m, outline_snap_m)` |
 | `MeshingRules` | `LandCoverClasses`, less `classes` (value to edge names), `otherwise`'s names, `extra_names`, `cleaned` |
 | `meshing_rules.run_vocabulary` | the default vocabulary, plus `catchment` with `--catchments` |
@@ -125,7 +125,7 @@ land_cover_map.build(base, preferred, classes, region) -> LandCoverMap | None   
 feature_input.edges_of(map, lines, choice, cleanup, domain, vocabulary) -> FeatureSet   [pure]
         │ + sub-catchment borders (unchanged) → mesh (C++ unchanged)    │
         ▼                                                               ▼
-after the mesh: shares → assign_polygon_fractions(repaired map.areas) → shares, codes, cells
+after the mesh: shares → assign_polygon_fractions(map.areas) → shares, codes, cells
                 class borders without --shares → label_triangles(chosen classes' areas) → codes
 ```
 
@@ -144,40 +144,69 @@ shares, as those runs expect; a run that follows class borders gives
 codes, as the 696 recorded `--features` runs without `--land-cover` (681
 of them the Hafslund, Skagerak, Opal SE2 and Glomma batches) expect;
 `--shares` asks for both, as Sula's 17 runs with `--features` and
-`--land-cover` do. The one step the edges and the shares have in common, reading the polygons, does carry a cost trap
-(section 4, read probe): `read_class_polygons` checks each whole polygon's
-validity (`_repaired`), which the share overlay needs and the edges do not
-(the clean-up clips each polygon to the read region and repairs it,
-`_Tally._clean`). So the map is read without that check, and the check runs
-in the shares step.
+`--land-cover` do. The one step the edges and the shares have in common is
+reading the polygons. Both get them repaired once, in `build` (*What every
+polygon in the map is*, below), and the check skips the polygons whose
+bounding box misses the read box, where master spends most of its check
+(section 4, read probe).
 
 - **The map** (`tin_engine/land_cover_map.py`, frozen dataclass
-  `LandCoverMap(areas, classes, values)`; None without `--land-cover`). The
-  base is the class polygons over the read region (`source_region`), read
-  as today's cleaned `--features` polygons are (`_Tally._take`: every
-  polygon moved in one `shapely.transform` call, no validity check), or no
-  areas for a class raster, read after the mesh as today. Each `--prefer`
-  is 107's `replace` near the read region, first given wins, and each
-  refilled piece is unioned with the same-class polygons it touches (110's
-  join, moved from `_Tally._preferred`, on `(code, polygon)` pairs), on
-  unchecked polygons as `_Tally._preferred` does today. The record's
-  replaced, given and refilled areas are measured inside the domain.
-- **What every polygon in the map is** (code review round 4; this rule
-  replaces the "unchecked" of the bullet above). The *read box* is the read
-  region's bounding box widened by `MARGIN` (100 m). After `build` the map
-  holds two sets, as two fields of `LandCoverMap`:
-  - `areas`: the polygons that reach the read box, each a valid, non-empty
-    Polygon or MultiPolygon, inside it except a preferred polygon kept whole
-    (`Replaced.given`). Which of the two forms a polygon takes is decided on
-    the input polygon (design round 8, *Deciding on the input polygon*,
-    below): its cut to the box (`shapely.clip_by_rect`), or its rebuild
-    (`_repaired`'s construction: its rings cut to the box, faces kept by
-    parity, valid by construction). Checked and rebuilt in one place only,
-    `_fixed` in `build` with `fix` on, in the thread pool, as now.
-  - `outside`: the polygons whose bounding box misses the read box, and
-    those whose cut is empty: as read, whole, never checked, never repaired,
-    never overlaid. Only the edges step reads them, and only by their rings
-    (below).
+  `LandCoverMap(areas, outside, classes, values)`; None without
+  `--land-cover`). The base is the class polygons over the read region
+  (`source_region`): one `read_source` query, every polygon moved in one
+  `shapely.transform` call, then repaired and cut in `build` (next bullet);
+  or no areas for a class raster, read after the mesh as today. Each
+  `--prefer` is 107's `replace` near the read region, first given wins, and
+  each refilled piece is unioned with the same-class polygons it touches
+  (110's join, moved from `_Tally._preferred`, on `(code, polygon)` pairs),
+  on the map's valid `areas`. The record's replaced, given and refilled
+  areas are measured inside the domain.
+- **What every polygon in the map is** (design round 10). Rounds 7 to 9
+  cut first and checked less than the whole polygon, to save time; each
+  check left a polygon the cut got wrong. Ola ruled on 2026-10-29 that
+  repair leaves the open core for a private cleaning plugin, and that the
+  core will then refuse invalid input. Until then the map repairs as master
+  does, then cuts with the overlay that is right on any valid polygon. The
+  *read box* is the read region's bounding box widened by `MARGIN` (100 m,
+  the margin `_repaired` and the GeoPackage query already use; checked on
+  catchments up to Lagan's, 7,866 polygons read). In `_fixed`, in `build`
+  with `fix` on, in the thread pool's groups as now, per polygon `g`:
+  1. *Misses the box.* `g`'s bounding box misses the read box (closed
+     comparison): to `outside`, as read, unchecked. No ring of it can enter
+     the box or enclose it.
+  2. *Repaired whole.* Otherwise `_repaired(g, xy)`, master's repair on
+     read: `g` itself when `shapely.is_valid(g)`, else its rebuild in the
+     read box (its rings cut to the box, faces kept by parity). Each invalid
+     `g` is counted in `repaired`, whatever its rebuild keeps (master's
+     count, and master's record wording, "Land-cover polygons that crossed
+     themselves, repaired").
+  3. *Cut.* A valid `g` whose bounding box lies inside the read box is kept
+     as read: its cut would be itself, and keeping it keeps master's map
+     there (6,893 of Numedalslågen's 7,237 areas). A valid `g` that crosses
+     the box's edge is cut with `shapely.intersection(g, read box)`. A
+     rebuild already lies in the box and is not cut. Never
+     `shapely.clip_by_rect`: GEOS's rectangle clip is right only on a valid
+     polygon with no edge through a corner of the box (design review round
+     9: 3,920 of 5,505 valid polygons with an edge exactly through a corner
+     cut wrong, 5,697 m² against 484,303 m²).
+  4. *Its polygonal part.* The result itself when it is a Polygon or
+     MultiPolygon of area above zero. From a GeometryCollection (a cut that
+     touches the box along a line or at a point beside its area), its
+     Polygon parts, with each MultiPolygon's parts, as one MultiPolygon, or
+     the Polygon when there is one. GEOS's overlay gives valid polygons, and
+     its polygonal parts do not overlap, so the part is valid (test 12).
+  5. *Kept or set aside.* A part with area goes to `areas`. Otherwise (a
+     rebuild that keeps nothing, or a cut that is empty, only lines or only
+     points) `g` goes to `outside`, as read.
+  6. *A rebuild that raises.* `_repaired` raises GEOSException on some
+     spikes up to about 1e-7 m wide (below). `_fixed` catches it per polygon
+     and raises `FeatureError`: "a land-cover polygon of class N near (x, y)
+     in the DEM's CRS cannot be repaired: it has a spike too thin to rebuild;
+     clean the file", (x, y) the polygon's first vertex; the CLI exits 2 with
+     the hint `--land-cover`. It neither drops the polygon nor guesses its
+     area, since inflow between river points needs the classes where they
+     are, and it is the refusal the core will give every invalid polygon
+     once repair moves to the plugin.
 
   `build` with `fix` off (the `--prefer` build in the CLI) takes its base as
   `areas` already so and is given the base map's `outside` (a keyword,
@@ -188,20 +217,34 @@ in the shares step.
   the refill join make is valid too. So any step after `build` may overlay
   `areas` without a check, and no step overlays `outside`. A test asserts
   `shapely.is_valid` on every polygon of `areas` (section 5, test 12).
+  `feature_input.repaired_areas`, which no production code calls, is
+  deleted; the shares step takes `map.areas` as they are.
 
   *Outside polygons, counted and kept.* Without clean-up (the pre-clip
   path of `edges_of`), each chosen class's outside polygon goes through
   today's ring test (`region.intersects(g.boundary)`, then `pre_clip`), so a
   hole lying in the region whose shell misses it (`test_feature_input.py`'s
   p5 cases) still gives its ring, exactly as given. Its feature carries no
-  polygon: it labels no triangle, since by its cut it has no area in the
-  box. One with no ring kept is counted outside. With clean-up on, or with
-  the map cut by `--prefer`, each chosen class's outside polygon is counted
-  outside, with no overlay: the clean-up works on area inside the read
-  region, and an outside polygon has none there. The outside polygons come
-  after the `areas` in the edges step's feature order. A valid outside
-  polygon gives no line, so the meshes of valid inputs do not change. The
-  shares and the codes never see `outside`.
+  polygon: it labels no triangle, since it has no area in the box. One with
+  no ring kept is counted outside. With clean-up on, or with the map cut by
+  `--prefer`, each chosen class's outside polygon is counted outside, with
+  no overlay: the clean-up works on area inside the read region, and an
+  outside polygon has none there. The outside polygons come after the
+  `areas` in the edges step's feature order. The shares and the codes never
+  see `outside`.
+
+  So an invalid polygon with no area in the box (p5's L-shaped shell, the
+  spikes of `NO_AREA_IN_THE_BOX`) is drawn as master's `--features` route
+  drew it, which never repaired, and left out of the shares as master's
+  `--land-cover` route left it out, which dropped it on read. Probed on
+  master `43f1b2e9` with master's `open_features` under `corine`, beside
+  `SMALL` (class 312): without clean-up each spike's ring is a line of
+  class 311 (150 m for the spike into the box; 300 m for the spike across
+  it; 70.711 m through the corner; two lines, 300 m, for two spikes) and
+  nothing is counted outside; with clean-up only `SMALL` is a feature and 1
+  is counted outside. One difference: design review round 8's hole poking
+  out through its shell, with clean-up, raises GEOSException on master
+  ("side location conflict"); here it is counted outside.
 
   *Each step that met unchecked polygons, and why it is now safe:*
   1. `_joined` (the overlap of several files): sees `areas` only. The `far`
@@ -219,255 +262,75 @@ in the shares step.
      only. A predicate on a ring is safe on any ring.
   7. `_overlap_record`: the overlap pieces are intersections of valid pairs.
   8. The edges step's clean-up, `_Tally.clean`'s `shapely.intersection(g,
-     region)` (`src_python/tin_engine/feature_input.py@435d407b:362`), not on `@developer`'s list: today
-     p5's L-shaped polygon with `CLEANUP` raises GEOSException
+     region)` (`src_python/tin_engine/feature_input.py@435d407b:362`):
+     today p5's L-shaped polygon with `CLEANUP` raises GEOSException
      ("TopologyException: unable to assign free hole to a shell").
      Probed on tree `435d407b`. It now gets `areas` only.
-  9. The shares, `assign_polygon_fractions(map.areas)` in `cli.py`: today it
-     receives the outside polygons unchecked. Now it gets `areas` only.
-  10. `label_triangles` over the pre-clip path's polygons: today p5's
-      invalid polygon is a labelling polygon. Now an outside feature has
-      none.
+  9. The shares, `assign_polygon_fractions(map.areas)` in `cli.py`: it gets
+     `areas` only.
+  10. `label_triangles` over the pre-clip path's polygons: an outside
+      feature has none.
 
-  *Why the outside polygons are neither checked whole nor repaired*
-  (`@developer`'s proposal: check each outside polygon whole, repair the
-  invalid ones with `make_valid`). Measured on tree `435d407b`, AC power,
-  one thread, best of three: each case read as the CLI reads it, outside
-  being the polygons whose cut to the read box is empty.
-
-  | Input | Polygons read | Outside | Their vertices | Outside invalid | Check outside whole | Check the cuts |
-  |---|---|---|---|---|---|---|
-  | Bygdin, Innlandet AR50 | 1,697 | 244 | 781,220 | 16 | 145 ms | 48 ms |
-  | Bygdin, ar50_46 | 247 | 113 | 484,609 | 5 | 92 ms | 2 ms |
-  | Sula, clc2018 | 184 | 156 | 5,508,059 | 52 | 1,351 ms | 0.5 ms |
-  | Numedalslågen, CORINE | 7,932 | 695 | 3,361,282 | 0 | 2,503 ms | 238 ms |
-
-  `make_valid` of Sula's 52 invalid outside polygons takes 32.8 s. Checking
-  them whole would add 2.5 s of work to the quick check's Numedalslågen
-  case (about 9 s today): at least 0.58 s on any number of threads, since
-  one polygon cannot be split. On Sula it would add 34 s of work (1.35 s
-  of checks, 32.8 s of repair). Repair also
-  breaks p5. `make_valid` gives the hole back as a shell, clockwise and
-  from another vertex, with method `linework` and with `structure`. With
-  the proposal patched into `_fixed` in a scratch plugin, p5's first case
-  fails under both methods.
-
-  The anomaly, settled: both timings hold, for different polygons. The
-  cost of `is_valid` is set by holes, and by whether the polygon is valid.
-  A valid polygon is checked through: CORINE's largest near Numedalslågen,
-  409,242 vertices and 3,195 holes, takes 578 ms. An invalid one stops at
-  its first fault: the same polygon after Sula's move from EPSG:3035,
-  409,239 vertices, 3,180 holes, takes 63 ms. A ring without holes is fast:
-  a 50,001-vertex circle takes 0.23 ms, the kind of polygon behind
-  `@developer`'s 0.5 ms. So `_fixed`'s docstring holds on real inputs. Its
-  sentence about the edges step is reworded to this rule.
-
-  *Deciding on the input polygon* (design round 8, after code review
-  round 5). Round 7 cut first and checked the cut. But `clip_by_rect` is
-  only right on a valid polygon. GEOS cuts each ring at the box and closes
-  the pieces along the box's edge, in a direction taken from the whole
-  ring's orientation (`Orientation::isCCW` on the shell and on each hole,
-  `src/operation/intersection/RectangleIntersection.cpp` on GEOS `main`).
-  A ring that crosses or runs back over itself breaks that in two ways:
-  - Its pieces in the box collapse to a 3-point ring, and the call raises
-    (code review round 5; `@tester`'s 10 cases in
-    `TestACutToAThreePointRing`, `8c5b4e2a`).
-  - A stretch of it is wound the other way from the whole ring (a
-    clockwise spike on a counter-clockwise square), so the pieces close the
-    wrong way round. The cut comes out valid but inside out.
-
-  The inside-out case: the square `EAST` with a spike to `(150, 50)` and
-  back along `y = 50 + w`, which ends by running back over the square's west
-  side. With `w` from 1e-9 to 10 m, its cut covers 488,639 to 490,000 m²,
-  nearly the whole read box. `_repaired`, and `make_valid` then the cut,
-  both give 136.11·`w` m² for `w` from 1e-6 to 10 m (1,361.1 m² at
-  `w = 10`); at 1e-9 m both give under 2e-7 m². Master repaired every
-  polygon on read, so it gave the right area. The cut-first order came in
-  at `a4bcab1e`, as a speed fix.
-
-  Design round 8 checked each ring near the box with
-  `shapely.is_simple` and then cut the input. Design review round 8 broke
-  it: two simple rings can still make the cut wrong (a hole poking out
-  through its shell across the box's edge gives a valid cut of 220,000 m²
-  where the rebuild keeps nothing), an empty cut can hide a rebuild that is
-  not empty, and the cut raised on simple rings in 50 of its random cases.
-  So validity is now decided on the polygon, before any cut, but only on
-  its rings near the box.
-
-  The rule (design round 9), per polygon reaching the read box, in
-  `_fixed`:
-  1. *Reach.* A polygon whose bounding box misses the read box (closed
-     comparison) goes to `outside`, unchecked: no ring of it can enter the
-     box or enclose it.
-  2. *The near subset.* Of the input keep each part whose shell's bounding
-     box meets the read box, each with only its holes whose bounding box
-     meets it. These parts make one MultiPolygon, the *subset* (built with
-     `shapely.polygons` and `shapely.multipolygons` over the group's rings,
-     so it runs in the pool). `shapely.is_valid` is called on the subset,
-     never on the whole input.
-  3. *Subset invalid* (a ring near the box crosses or touches itself or
-     another, a hole outside its shell, two parts overlapping): the polygon
-     is rebuilt (`_faces`, step 6), and `clip_by_rect` never sees it. A
-     rebuild that keeps something goes to `areas`, counted. One that keeps
-     nothing goes to `outside`, as given and not counted, when every ring of
-     the subset is simple (`shapely.is_simple`, on these polygons only):
-     p5's L-shaped shell, whose hole lies outside it, stays as round 7 has
-     it. Otherwise it is dropped and counted, as master's repair on read
-     drops it (the 8 cases of `NO_AREA_IN_THE_BOX`).
-  4. *Subset valid, and a corner of the read box on its boundary*
-     (`shapely.intersects` of the subset's boundary with the four corners):
-     the area is `shapely.intersection(subset, read box)`, its polygonal
-     part. GEOS's cut is wrong there (below).
-  5. *Subset valid otherwise:* the subset, not the input, is cut. An empty
-     cut goes to `outside`, the input as given. A valid cut goes to
-     `areas`. An invalid cut is replaced by `shapely.intersection(subset,
-     read box)`, as in step 4, and not counted: the input is valid near the
-     box. This is a valid polygon whose cut GEOS leaves with a
-     self-touching ring; Bygdin has two, where the polygon leaves the box
-     and comes back to touch its edge. In steps 4 and 5 an intersection
-     with no area goes to `outside`.
-  6. *Rebuilt*: `_faces(g, xy)` is `_repaired`'s construction without its
-     `is_valid` shortcut. `_repaired(g, xy)` becomes `g if g.is_valid else
-     _faces(g, xy)`, unchanged for its other callers. The map's `repaired`
-     count is the number of polygons counted in step 3. The record's
-     wording `land_cover_repaired` becomes "Land-cover polygons rebuilt
-     near the mesh (invalid there)".
-
-  `clip_by_rect` raising on a valid subset is not caught. None was found:
-  0 of the 28,203 valid subsets of the searches below, and none on
-  Numedalslågen, Sula or Bygdin. Catching it would hide a new kind of fault
-  the way round 7's order hid this one. Steps 2 to 5 run in `check(ix)`, in
-  the pool's 32 groups, as round 7's cut check does.
-
-  *Why checking the subset is enough.* Inside the read box, the input's
-  parity (what `_faces` keeps: a point in an odd number of parts, a part
-  holding a point in its shell and in none of its holes) equals the
-  subset's, whatever the left-out rings do:
-  - A left-out ring's bounding box misses the read box, so no point of the
-    box is inside it or on it.
-  - A left-out part has such a shell, so it holds no point of the box. Its
-    holes cannot add one, even a hole near the box lying outside its shell
-    (possible only in an invalid input).
-  - In a kept part, a point of the box is in the part when it is in the
-    shell and in no hole. The left-out holes hold no point of the box, so
-    the part and its subset part agree there. A hole far off that crosses
-    its shell far off is such a hole.
-  A valid subset's parity is the subset itself, so its part in the box is
-  the right answer, and GEOS cuts it right except at the corners (below).
-  The subset is cut, not the input, because GEOS reads the left-out rings
-  too: shell `square(−50, 50, 300, 400)` with hole `square(−300, −300,
-  −250, 500)`, outside its shell and left of the box. The subset is the
-  shell, cut to 122,500 m², the right area. The input's cut is invalid,
-  82,500 m², the hole subtracted. In the search below, the input's cut
-  differed from the subset's (in area, or by being invalid) in 90 cases.
-
-  *The search* (scratch `r9_search.py`, five seeds of 40,000 draws, read box
-  (−200, −200) to (500, 500), coordinates on a 50 m grid from −500 to
-  1,000): each draw is a shell with up to 3 holes, 30 % with a second part,
-  each ring a rectangle, a random 3- to 8-gon, or a square with a spike of
-  width 0, 1e-9, 1e-3 or 10 m. Of 179,456 polygons reaching the box,
-  154,076 have an invalid subset and are rebuilt. Of the 25,380 with a
-  valid subset (4,528 touching a corner, step 4; 79 with an invalid cut,
-  step 5), none raises in the cut, and none gives an area (cut or
-  intersection) whose symmetric difference with `_faces` of the whole
-  input exceeds 1e-6 m² (in 45 cases `_faces` itself raises, and the cut
-  was compared with `shapely.intersection(subset, box)` instead, or not at
-  all for the 8 of them that touch a corner). 1,255 cuts are empty, and no
-  rebuild of those keeps anything. The
-  reviewer's own generator (`probe.py`, 20,000 draws of rectangles; 16,509
-  reach the box, 2,823 valid subsets) gives the same: no raise, no area
-  differing, no empty cut hiding an area.
-
-  *GEOS's cut of a valid polygon with an edge through a corner of the box.*
-  The search found one valid polygon cut wrong: an edge passing exactly
-  through a corner of the read box, not at a vertex. The cut comes out
-  inside out. The polygon `(−450, 650), (800, 900), (300, 400), (800, 650),
-  (800, −500), (−450, −500)`, whose edge from (300, 400) to (800, 650)
-  passes through (500, 500): cut 5,000 m², valid; its intersection with the
-  box 485,000 m². In a search of valid polygons only (scratch
-  `r9_corner.py`, 300,000 draws on 50, 100 and 250 m grids, 21,510 valid
-  and reaching the box), 3 of the 3,136 with a corner on the boundary were
-  cut wrong, and 0 of the 18,374 without. Moving that vertex 1e-9 m off makes
-  the cut right, and `shapely.intersects` finds the contact exactly. Master
-  overlaid whole polygons, so it never met this. On real data, no subset
-  touches a corner: a corner is at the DEM points' minimum or maximum
-  ±`MARGIN`, so an edge needs exact collinearity with it.
-
-  *Two faults noted, not fixed here:*
+  *Known faults of the repair, left to the cleaning plugin:*
   - `_repaired` and `make_valid` differ on a hole that encloses its shell:
     shell `square(0, 0, 100, 100)`, hole `square(−300, −300, 600, 600)`.
     `_repaired` keeps nothing (no point is in the shell and in no hole);
     `make_valid` then the cut gives 480,000 m² (the hole less the shell).
-    The same on master and here: the same construction. Under the rule it
-    goes to `outside` (step 3: rings simple, nothing kept).
-  - The rebuild itself raises on a spike of near-zero width: `_repaired`
-    of `POLYGON ((−150 −300, 0 −299.999999999, −100 0, 0 −300, 0 −500, −150
-    −500, −150 −300))`, a spike 1e-9 m wide, raises GEOSException
-    "CoverageUnion cannot process overlapping inputs"; at 1e-7 m it gives
-    2.2e-6 m². In the search, 492 of the 154,076 rebuilds raise, 430 of
-    them with a 1e-9 m spike. Master calls the same construction on every
-    invalid polygon on read, so this is not new.
+    The same on master: the same construction. It goes to `outside`.
+  - The rebuild raises on a thin spike: GEOSException "CoverageUnion cannot
+    process overlapping inputs". Scratch `r10_spike.py`: round 9's spike
+    (from (0, −300) to a random tip in the box and back, its sides `w` apart
+    at the base), 400 tips per width, at the origin and at
+    (500,000.3, 6,600,000.7). Of the invalid ones, at the origin and at
+    those coordinates: `w` = 1e-9 m, 100 of 103 and 56 of 103 raise;
+    1e-8 m, 76 of 101 and 62 of 95; 1e-7 m, 2 of 104 and 1 of 108; 1e-6 m,
+    none. Master raises the same in `read_class_polygons`, so a master
+    `--land-cover` run on such a polygon ends in a traceback; master's
+    `--features` runs never repaired, so they did not meet it. Here every
+    `--land-cover` run repairs, so step 6 turns the traceback into a
+    refusal. None of the four real cases holds one: their 11 invalid
+    polygons reaching the box (Sula 4, Bygdin 7) all rebuild.
 
-  *Why the many-holed polygons stay affordable.* `is_valid` pays for
-  holes: GEOS tests each hole against the shell and against the other
-  holes. The subset holds only the holes near the box. Numedalslågen's
-  largest polygon reaching the box has 370,070 vertices and 905 holes. Its
-  whole `is_valid` takes 465 ms; its subset's takes 29 ms (design review
-  round 8, scratch `tim.py`). One polygon cannot be split across threads,
-  so 465 ms would be the floor of a whole check on any number of threads;
-  the subset check's floor is 29 ms.
+  *Cost and effect on real data* (scratch `r10_time.py` and
+  `r10_terms.py`, tree `492f5d8c`, battery power: compare only with battery
+  runs; best of three). Each file is read as `read_class_polygons` reads
+  it, with the read box from `source_region` (cell 10 m in EPSG:25833;
+  Lagan 30 m in EPSG:3006). "Master" is master's repair on read,
+  `_repaired` of every polygon read, one thread (master runs it so, and
+  only in `--land-cover` runs; its `--features` runs check nothing).
+  "Today" is the branch's `_fixed` at `492f5d8c`.
 
-  *Cost and effect on real data.* Scratch probes on battery power (compare
-  only with battery runs), best of three. "Today" is `_fixed` at
-  `8c5b4e2a`; "round 8" the ring check above, as a scratch version, timed
-  on `8c5b4e2a`; "round 9" the rule above (scratch `r9_rule.py`), timed on
-  `6ea1e369` (the same code). Each file is read as `read_class_polygons`
-  reads it, with the read box from `source_region` (cell 10 m, DEM CRS
-  EPSG:25833).
+  | Input | Read | Bounding box meets the read box | Master, 1 thread | Today, 1 / 4 / 10 threads | Round 10, 1 / 4 / 10 threads |
+  |---|---|---|---|---|---|
+  | Numedalslågen, CORINE (`corine2018`) | 7,932 | 7,239 | 3,478 ms | 323 / 133 / 107 ms | 1,359 / 655 / 539 ms |
+  | Lagan, CORINE | 7,866 | 7,150 | 11,783 ms | 336 / 222 / 201 ms | 1,896 / 572 / 508 ms |
+  | Sula, clc2018 | 184 | 31 | 1,391 ms | 10 / 4 ms | 76 / 66 ms |
+  | Bygdin, AR50 Innlandet + ar50_46 | 1,697 + 247 | 1,454 + 134 | 236 + 106 ms | 87 + 4 / 50 + 2 ms | 188 + 27 / 62 + 11 ms |
 
-  | Input | Polygons read | Reaching the box | Today, 1 / 4 threads | Round 8, 1 / 4 threads | Round 9, 1 / 4 threads | Whole `is_valid` of those with a cut, 1 thread |
-  |---|---|---|---|---|---|---|
-  | Numedalslågen, CORINE (`corine2018`) | 7,932 | 7,239 | 319 / 133 ms | 533 / 195 ms | 748 / 331 ms | 1,084 ms |
-  | Sula, clc2018 | 184 | 31 | 10 / 4 ms | 26 / 22 ms | 43 / 38 ms | 2 ms |
-  | Bygdin, AR50 Innlandet + ar50_46 | 1,697 + 247 | 1,588 | 84 + 4 / 50 + 2 ms | 140 + 11 / 72 + 5 ms | 156 + 13 / 78 + 6 ms | 103 ms |
+  Round 10's terms on Numedalslågen, one thread: the whole `is_valid` of
+  the 7,239 polygons 1,026 ms, the intersection of the 346 that cross the
+  box's edge 313 ms; their sum less today's cut and check (309 ms) is
+  1,030 ms, the measured 1,036 ms more than today, to noise. On every core
+  the floor is one polygon's `is_valid`: the largest, 465 ms, which no
+  thread count splits. Master spends most of its 3,478 ms on the 693
+  polygons whose bounding box misses the read box, which round 10 does not
+  check.
 
-  Round 9's terms on Numedalslågen, one thread: building the subsets
-  25 ms, their `is_valid` 388 ms, the corner test 4 ms (only the 15 subsets
-  whose bounding box holds a corner; 10 ms over all), the cut of the
-  subsets 71 ms (the inputs' cut took 73). The sum of the new terms,
-  417 ms, is the measured 429 ms more than today, to noise.
-
-  What changes in the map, against today (round 9 gives every area equal
-  by WKB to round 8's on all four files):
-  - Numedalslågen: nothing. All 7,237 areas are equal by WKB, 695
-    outside, 0 rebuilt, no subset invalid, none touching a corner. So RP8's
-    re-pin and the quick check's meshes hold.
-  - Sula: 27 of 28 areas are equal by WKB. The 28th has a self-touching
-    ring near the box: it is now rebuilt, with the same area. One polygon
-    that was `outside` has a non-simple ring near the box and nothing in
-    it: it is now dropped. `repaired` goes from 0 to 2.
-  - Bygdin, Innlandet: 1,449 of 1,453 areas are equal. Two polygons with
-    a self-crossing ring near the box were kept as their cut today, and are
-    now rebuilt: the same area in the box, to 0 m². Two valid polygons
-    whose cut GEOS left invalid were kept whole today (3.08 and 0.43 km²).
-    Now each is its intersection with the box (1.50 and 0.26 km²), the same
-    there to 0 m². `repaired` goes from 5 to 7 (round 8 counted those two
-    as well: 9). ar50_46: unchanged.
-  - Every kept cut equals `shapely.intersection(subset, box)` to 0 m² on
-    all four files. On these inputs, no cut today differs in area from the
-    rebuild: the flaw is real but did not fire here.
-  - With the rule patched into a scratch pytest plugin (`r9_plugin.py`),
-    all 668 tests in `test_feature_input.py`, `test_land_cover_map.py`,
-    `test_read_repair.py`, `test_cli_mesh_edges.py` and `test_preferred.py`
-    pass, test 7 among them (Sula, 3,271 triangles), and today's 30
-    failing ones (`TestACutToAThreePointRing`). Planted check: the plugin
-    dropping every area fails 123, test 7 among them (2,466 triangles).
-
-  Rejected: `is_valid` on each whole polygon that reaches the box. It costs
-  1,084 ms on Numedalslågen, with a 465 ms floor on any number of threads,
-  against the subset check's 429 ms more on one thread and 198 ms more on
-  four, with a 29 ms floor. The quick check runs Numedalslågen with every
-  core (`threads = [0]`).
+  What changes in the map, against today: on all four files the same
+  number of areas, the same codes in the same order, and each area equal to
+  today's inside the read box to 0 m² (symmetric difference); `outside`
+  holds the same number; every area is valid. `repaired` goes from 0 to 4
+  on Sula and from 5 to 7 on Bygdin's Innlandet file (each invalid polygon
+  reaching the box now counts), and stays 0 elsewhere. Today's cut gives
+  each polygon new WKB even inside the box; round 10 keeps 6,893 of
+  Numedalslågen's 7,237 areas as read (Lagan 6,916 of 7,147, Bygdin 1,450
+  of 1,587, Sula 9 of 28). With round 10 patched into a scratch pytest
+  plugin (`r10_plugin.py`), 657 of the 681 tests in
+  `test_feature_input.py`, `test_land_cover_map.py`, `test_read_repair.py`,
+  `test_cli_mesh_edges.py`, `test_preferred.py` and `test_cli_mesh_prefer.py`
+  pass, test 7 among them (Sula, 3,271 triangles); the 24 that fail are the
+  `TestACutToAThreePointRing` cases test 13 changes. Planted check: the
+  plugin dropping every area fails 125, test 7 among them.
 - **Several `--land-cover` files** (repeatable): class-polygon files under
   the one land-cover class file (`--land-cover-classes`, or the catalogue
   entries' `classes =`, which must agree), as Ola's AR50 runs pass one
@@ -544,10 +407,9 @@ in the shares step.
   lines are today; the `--edges-*` clean-up options shape area borders only.
   With no map, `edges_of` gives the lines alone.
 - **The shares** are computed when `--land-cover` is given and either no
-  `--edges` selector names a class or `--shares` (flag) asks. The map's
-  areas are repaired near the mesh (`_repaired`, today's
-  `read_class_polygons` step, now here), then `assign_polygon_fractions`
-  gives each triangle's shares; or the class raster's route, as today. The
+  `--edges` selector names a class or `--shares` (flag) asks.
+  `assign_polygon_fractions` gives each triangle's shares from the map's
+  `areas`, repaired in `build`; or the class raster's route, as today. The
   codes per triangle come from the shares, and a `.gpkg` with the class
   file's `[cells]` gets the cells layer, both as `--land-cover` gives them
   today. `--shares` without `--land-cover` is refused, naming it.
@@ -664,9 +526,10 @@ of which 90 % is `is_valid` in `_repaired` (cProfile: 17.2 of 19.1 s over
 three reads), none repaired. Today's `features read` phase on that case is
 under 0.2 s (stored quick-check baseline). Lagan, 9,173 polygons: 18 to
 30 s per read, timed while the machine's load average stood at 70, so an
-order of size only. Reading the map through `read_class_polygons` as it
-stands would have cost most of a border-following run's time again; hence
-the read without the check (section 3).
+order of size only. Most of master's check is spent on polygons whose
+bounding box misses the read box (Numedalslågen: 693 of 7,932, over 2.4 s
+of 3.5 s, design round 10), so `build` checks only the polygons reaching
+it (section 3).
 
 ## 5. Tests
 
@@ -781,80 +644,93 @@ line figures below as round 2 measured them.
       they stand.
     - `shapely.is_valid` also holds on every polygon of `areas` in both
       runs, and on the p1 bowtie after repair.
-13. Deciding on the input polygon (section 3, design rounds 8 and 9; unit
-    tests on `build`, test 12's `BOX`, read box (−200, −200) to (500, 500)
-    from `at`'s origin; areas to 1e-6 m²). Measured on tree `8c5b4e2a`
-    (round 9's cases on `6ea1e369`, the same code, with the rule in scratch
-    `r9_rule.py`) with shapely 2.2.0, GEOS 3.14.1.
-    - `TestACutToAThreePointRing` (`8c5b4e2a`) stands as written. Each
-      case has a ring near the box that is not simple, so its subset is
-      invalid, it is rebuilt, and `clip_by_rect` never sees it:
-
-      | Case | Rule gives |
-      |---|---|
-      | the 8 of `NO_AREA_IN_THE_BOX` (one spike into, across, or through the corner of the box; two spikes; a tip one ulp off; a self-crossing square with a spike; a flat ring across the box's edge; two points and back) | rebuilt to nothing, dropped: `areas` holds the neighbour `SMALL` alone, `outside` is empty, `repaired == 1` |
-      | `HOLE_SPIKE` (the spike as a hole of a 2 km square) | rebuilt: one area, the whole read box, 490,000 m² |
-      | `PART_SPIKE` (`SMALL` with the spike as a second part) | rebuilt: one area, `SMALL`, 1,600 m² |
-
-      Each test's premise (the cut raises) stays: it is what makes the
-      order matter.
+    Stands as written under round 10 (`r10_plugin.py`: every test above
+    passes). Added: `INNER` comes back as the very object given (`is`),
+    being inside the read box; and a valid U-shaped polygon crossing the
+    box's edge, `ring((450, 0), (700, 0), (700, 300), (500, 300), (500,
+    200), (600, 200), (600, 100), (450, 100))`, whose intersection with the
+    read box is a GeometryCollection of a 5,000 m² Polygon and a 100 m
+    LineString along x = 500 (premise), gives one area, that Polygon,
+    5,000 m², valid, `repaired == 0`.
+13. Repair whole, then cut (section 3, design round 10; unit tests on
+    `build`, test 12's `BOX`, read box (−200, −200) to (500, 500) from
+    `at`'s origin; areas to 1e-6 m²). Measured on tree `492f5d8c` with the
+    rule in scratch `r10_time.py` (`r10_cases.py`), shapely 2.2.0, GEOS
+    3.14.1. Design rounds 8 and 9's subset, corner and `is_simple` cases are
+    deleted with the rule they tested, except where kept below.
+    - `TestACutToAThreePointRing` (code review round 5) changes. Its
+      premises stand (each cut raises; each of the 8 `NO_AREA_IN_THE_BOX`
+      rebuilds to nothing), and `HOLE_SPIKE` (one area, the whole read box,
+      490,000 m²) and `PART_SPIKE` (one area, `SMALL`, 1,600 m²) stand,
+      `repaired == 1`. The 8 `NO_AREA` cases now go to `outside`, as given,
+      `repaired == 1`, `areas` `SMALL` alone. Their runs (`open_one`,
+      beside `SMALL` of class 312) give master's `--features` figures
+      (section 3, probed on `43f1b2e9`; the same under `r10_plugin.py`):
+      without clean-up, features 312 then 311 (outside polygons come after
+      the areas), 311's lines totalling 150 m for the spike into the box, the
+      one-ulp tip, the self-crossing square, the flat ring and the two
+      points and back; 300 m for the spike across the box; 70.711 m
+      through the corner; two lines, 300 m, for two spikes; `outside == 0`.
+      With `CLEANUP`: feature 312 alone, `outside == 1`.
     - The inside-out case: `ring(*EAST, (600, 50), (150, 50), (600, 50 +
-      w))`, invalid, for `w` = 10 and 1e-3. Premise: its cut is valid and
-      covers 488,638.9 m² at `w = 10`. `build` gives one area of 136.1111·`w`
-      m² (1,361.1111 and 0.1361 m²), and its symmetric difference with
-      `_repaired`'s result is under 1e-6 m². `repaired == 1`, `outside`
-      empty. Red today: one area of 488,638.9 m².
-    - Its valid twin, the spike drawn the other way (`ring(*EAST, (600, 50 +
-      w), (150, 50), (600, 50))`, valid): kept as its cut, the same
-      136.1111·`w` m², `repaired == 0`. So the input decides, not the area.
-    - A spy on `shapely.clip_by_rect` sees no polygonal input from any
-      invalid case above (lines from `_faces` are allowed); the valid twin
-      is cut, as its subset. Planted check: round 7's
-      `_fixed` makes the spy fire on every case.
-    - Faults between simple rings: a hole across its shell in the box
-      (shell `square(0, 0, 300, 300)`, hole `square(250, 100, 350, 200)`).
-      Its subset is invalid, so it is rebuilt: 85,000 m², `repaired == 1`
-      (its cut is invalid, 80,000 m²). The same fault beyond the box (shell
-      `square(−1000, −1000, 1000, 1000)`, hole `square(900, 100, 1100,
-      200)`): the hole is left out of the subset, which is valid; kept as
-      its cut, the whole read box, 490,000 m², `repaired == 0`.
-    - Design review round 8's cases, each with simple rings and an invalid
-      subset, so rebuilt; the spy sees none of them:
-      - A hole poking out through its shell across the box's edge: shell
-        `square(−50, −100, 200, 900)`, hole `square(−100, −200, 950, 550)`.
-        Premise: its cut is valid, 220,000 m² (`make_valid` then the cut
-        270,000). The rebuild keeps nothing and its rings are simple, so
-        `areas` is empty, `outside` is the polygon as given, `repaired ==
-        0`. Red today: one area of 220,000 m².
-      - An empty cut whose rebuild is not empty: shell `square(−250, −500,
-        950, 550)`, holes `square(−500, −200, 850, 600)`, `square(−100,
-        −300, 850, 450)` and `square(500, 200, 700, 700)`. Premise: its cut
-        is empty. `build` gives one area of 390,000 m², `repaired == 1`,
-        `outside` empty. Red today: no area, `outside` holds it.
-      - A cut that raises on simple rings: shell `square(−300, −300, 900,
-        100)`, hole `square(−350, −300, 850, 100)` (sharing two sides).
-        Premise: the cut raises GEOSException (a ring of 3 points). The
-        rebuild keeps nothing: `outside` holds it, `repaired == 0`. Red
-        today: GEOSException.
-    - The subset is cut, not the input: shell `square(−50, 50, 300, 400)`,
-      hole `square(−300, −300, −250, 500)` (outside its shell, left of the
-      box). Premise: the input's cut is invalid, 82,500 m². `build` gives
-      one area of 122,500 m², `repaired == 0`, and the spy sees the shell
-      alone. Red today: the same area, but `repaired == 1`.
+      w))`, invalid, for `w` = 10 and 1e-3. Premise: its `clip_by_rect` is
+      valid and covers 488,638.9 m² at `w = 10`. `build` gives one area of
+      136.1111·`w` m² (1,361.1111 and 0.1361 m²), whose symmetric difference
+      with `_repaired`'s result is under 1e-6 m²; `repaired == 1`,
+      `outside` empty. Its valid twin (`ring(*EAST, (600, 50 + w), (150,
+      50), (600, 50))`): the same area, `repaired == 0`.
+    - A spy on `shapely.clip_by_rect` sees no polygonal input from any case
+      here (`_repaired`'s cut of the rings is lines). Planted check:
+      today's `_fixed` makes it fire on every case.
+    - Faults between simple rings, all invalid, so rebuilt and counted
+      (`repaired == 1`): a hole across its shell in the box (shell
+      `square(0, 0, 300, 300)`, hole `square(250, 100, 350, 200)`):
+      85,000 m² (its `clip_by_rect` is invalid, 80,000 m²); the same fault
+      beyond the box (shell `square(−1000, −1000, 1000, 1000)`, hole
+      `square(900, 100, 1100, 200)`): the whole read box, 490,000 m²; a
+      hole outside its shell, left of the box (shell `square(−50, 50, 300,
+      400)`, hole `square(−300, −300, −250, 500)`): 122,500 m² (its
+      `clip_by_rect` is invalid, 82,500 m²); an empty `clip_by_rect` whose
+      rebuild is not (shell `square(−250, −500, 950, 550)`, holes
+      `square(−500, −200, 850, 600)`, `square(−100, −300, 850, 450)`,
+      `square(500, 200, 700, 700)`): 390,000 m².
+    - Rebuilt to nothing, so `outside` as given, `repaired == 1`: a hole
+      poking out through its shell across the box's edge (shell
+      `square(−50, −100, 200, 900)`, hole `square(−100, −200, 950, 550)`;
+      its `clip_by_rect` is valid, 220,000 m²); a hole sharing two sides
+      with its shell (shell `square(−300, −300, 900, 100)`, hole
+      `square(−350, −300, 850, 100)`; its `clip_by_rect` raises); a hole
+      enclosing its shell (shell `square(0, 0, 100, 100)`, hole
+      `square(−300, −300, 600, 600)`).
     - A valid polygon with an edge through a corner of the box:
       `ring((−450, 650), (800, 900), (300, 400), (800, 650), (800, −500),
-      (−450, −500))`, valid, its edge from (300, 400) to (800, 650) through
-      the corner (500, 500). Premise: its cut is valid and covers 5,000 m².
-      `build` gives one area of 485,000 m², whose symmetric difference with
-      `shapely.intersection` of the polygon and the read box is under 1e-6
-      m², `repaired == 0`; the spy sees no polygonal input. Red today: one
-      area of 5,000 m².
-    - p5's two polygons and the far bowtie: as test 12, `outside`,
-      `repaired == 0`. The far bowtie misses the box; p5's first shell is
-      left out of its subset, which is empty and valid; p5's L-shaped shell
-      makes an invalid subset (its hole lies outside it) whose rebuild keeps
-      nothing, with simple rings.
-    - The record's `land_cover_repaired` wording is section 3's.
+      (−450, −500))`, its edge from (300, 400) to (800, 650) through the
+      corner (500, 500). Premise: its `clip_by_rect` is valid and covers
+      5,000 m². `build` gives one area of 485,000 m², `repaired == 0`. Red
+      today: 5,000 m².
+    - A valid polygon touching the box along an edge only (`ring((500, 0),
+      (600, 0), (600, 100), (500, 100))`): `outside`, as given,
+      `repaired == 0`.
+    - A rebuild that raises: `Polygon([at(−150, −300), at(0,
+      −299.99999999), at(−8.7, 41.9), at(0, −300), at(0, −500), at(−150,
+      −500)])`, a spike 1e-8 m wide at its base. Premise: invalid, and
+      `_repaired` raises GEOSException ("CoverageUnion cannot process
+      overlapping inputs"). `build` raises `FeatureError` naming class 311
+      and "cannot be repaired"; the same polygon in a `--land-cover`
+      GeoJSON through `rasputin mesh ... --edges all` exits 2 with that
+      message and the hint `--land-cover`, and no traceback.
+    - p5's two polygons and the far bowtie: as test 12, `outside`. The far
+      bowtie and p5's first polygon miss the box (`repaired == 0`); p5's
+      L-shaped shell reaches it, is invalid (its hole lies outside it) and
+      rebuilds to nothing (`repaired == 1`).
+    - `test_land_cover_map.py`'s `counted` helper and `test_read_repair.py`'s
+      `classes` helper call `repaired_areas`, which is deleted: `counted`
+      becomes the literal count (1 in its one use), and `classes` reads
+      through `land_cover_map.build([read.areas], [], classes, region)`,
+      giving `(areas, repaired)`, with `region` a polygon whose read box
+      holds `TRIANGLE`. Their figures are to stand; `@tester` confirms them
+      on the change (not probed here: the plugin run kept the helpers).
+    - The record's `land_cover_repaired` wording stays master's.
 
 ## 6. Size, timing, left out
 
@@ -887,9 +763,12 @@ cases stay at about 2 minutes.
 verdict for numedalslagen or lagan. The cases keep their names and inputs,
 so the stored baseline judges them (`_mismatch` compares inputs, not
 arguments); phases renamed from `features ...` are not judged by name, the
-total is. No `MESH CHANGED` verdict is expected either: the lines are
-today's (section 4, step 3), so the meshes are. `@developer` runs it and
-names both verdicts in the handback.
+total is. A `MESH CHANGED` verdict is possible: the clean-up depends on
+the polygons' vertex order (*As built*, RP8), and round 10 keeps the
+polygons inside the read box as read but cuts those crossing its edge
+another way than the branch does today. `@developer` runs it, names both
+verdicts in the handback, and, if the mesh differs from master's, gives the
+vertices moved and the farthest, as RP8's record does.
 
 *Timing, several files.* One new term, only with a second `--land-cover`
 file: the overlap query with its intersection areas, 0.23 s on Bygdin
@@ -900,16 +779,19 @@ two files as one coverage costs what cleaning each costs (`coverage_clean`
 over the read region's 591 and 12 polygons: 0.249 s per file, 0.245 s
 joined, best of three). One file adds nothing.
 
-*Timing, the polygons' check.* Three new terms, design round 9's subset
-check (section 3, *Deciding on the input polygon*): building the subsets
-(25 ms), their `is_valid` (388 ms) and the corner test (4 ms), on
-Numedalslågen, one thread, battery. Measured whole: 429 ms more than today
-on one thread and 198 ms more on four, against a total of about 9 s, so
-under 5 % on one thread and under 2.5 % on four, inside the quick check's
-5 % band (`tools/bench_quick.py`, the band is at least 5 %). The quick
-check runs on every core. Sula and Bygdin add under 90 ms. The outside
-polygons are only set aside. The rejected whole checks are timed in
-section 3.
+*Timing, the polygons' check.* Two new terms against master's
+`--features` route, which checks nothing (section 3, *Cost and effect on
+real data*): the whole `is_valid` of the polygons reaching the read box
+and the intersection of those crossing its edge, 1,026 + 313 ms on
+Numedalslågen on one thread, battery. On every core (the quick check's
+`threads = [0]`, 10 on this machine) round 10 takes 539 ms against today's
+107: 432 ms more, set by one polygon's `is_valid` (465 ms). Against the
+stored baseline's 8.83 s that is 4.9 %, at the edge of the quick check's
+5 % band (`tools/bench_quick.py`: at least 5 %, and more than 0.05 s), so
+a `SLOWER` verdict on numedalslagen is likely (question 5). Lagan: 307 ms
+more on every core, 2.1 % of 14.53 s. Sula and Bygdin add under 90 ms.
+Against master's `--land-cover` runs, which check every polygon read on
+one thread, round 10 is faster: 539 against 3,478 ms on Numedalslågen.
 
 *Timing, the shares.* What `--land-cover` costs today, in the runs that
 compute them (section 3): round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
@@ -935,6 +817,16 @@ Open:
    cleaned on its own); with the files read as one map it does not, since
    the line is no border on the ground. Default: it is not followed. Say
    if county lines should stay edges.
+5. *Half a second more on a Numedalslågen-sized run that follows class
+   borders.* Repairing as master does means checking each polygon near the
+   mesh whole. Your answer 3 asked that no border-following run gets slower.
+   This check makes the quick check's Numedalslågen run about 0.43 s slower
+   on every core (about 5 %, at the edge of its band); Lagan about 0.3 s
+   (2 %). One CORINE polygon's check takes 0.47 s by itself, so more cores
+   do not help. The refusing core that comes after the cleaning plugin
+   needs the same check, unless the plugin's output is marked as checked.
+   Default: accept it, and record the quick check's verdict on
+   numedalslagen with this reason, without re-baselining.
 
 Settled without asking, by Ola's 732 recorded `rasputin mesh` commands
 (every distinct command in a JSON file under `~/rasputin-output`),
@@ -1017,9 +909,6 @@ def read_class_polygons(path: Path, layer: str | None, classes: LandCoverClasses
 def read_linestrings(path: Path, layer: str | None, mesh_crs: str,
                      box_for: Callable[[str], tuple[float, float, float, float]],
                      *, threads: int = 1) -> SourceLines
-def repaired_areas(areas: Sequence[tuple[int, BaseGeometry]], xy: npt.NDArray[np.float64],
-                   tell: Callable[[int, int], None] | None = None,
-                   ) -> tuple[list[tuple[int, BaseGeometry]], int]
 def edges_of(land_cover: LandCoverMap | None, lines: Sequence[tuple[str, LineString]],
              choice: EdgeChoice, cleanup: EdgeCleanup, domain: DomainPolygon,
              vocabulary: EdgeVocabulary, *, region: Polygon) -> FeatureSet
@@ -1030,20 +919,23 @@ In `tin_engine.land_cover_map`, as `test_land_cover_map.py` pins it:
 ```python
 @dataclass(frozen=True)
 class LandCoverMap:
-    areas: tuple[tuple[int, BaseGeometry], ...]   # unchecked polygons, DEM's CRS
+    areas: tuple[tuple[int, BaseGeometry], ...]   # valid, repaired and cut in build; DEM's CRS
+    outside: tuple[tuple[int, BaseGeometry], ...] # as read: no area in the read box
     classes: LandCoverClasses
     replaced: preferred.Replaced | None           # the --prefer cut; None without --prefer
     overlap: tuple[tuple[int, BaseGeometry], ...] # (index of the file kept, area cut from a later one)
+    repaired: int                                 # invalid polygons reaching the read box
 
 def build(base: Sequence[Sequence[tuple[int, BaseGeometry]]],      # one per --land-cover file
           preferred: Sequence[tuple[int, Sequence[BaseGeometry]]],  # as preferred.replace's chosen
-          classes: LandCoverClasses, region: Polygon) -> LandCoverMap
+          classes: LandCoverClasses, region: Polygon, *, fix: bool = True,
+          outside: Sequence[tuple[int, BaseGeometry]] = (), threads: int = 1) -> LandCoverMap
 ```
 
 `replaced` and `overlap` are section 3's `values`: the CLI measures them
 inside the domain for `land_cover_prefer` and `land_cover_overlap`, since
 `build` sees the read region only. A class raster gives
-`LandCoverMap((), classes, None, ())`; no `--land-cover` gives no map (the
+`LandCoverMap((), (), classes, None, (), 0)`; no `--land-cover` gives no map (the
 CLI passes None).
 
 - `box_for` is `read_source`'s: the CLI passes `lambda own:
@@ -1058,10 +950,8 @@ CLI passes None).
 - `read_linestrings` refuses a polygon row (the CLI's hint `--lines`; the
   message names `--prefer`), a point, a collection, and a vertex with no
   image. It takes no `crs`: no `--lines-crs` (section 3).
-- `repaired_areas` is today's `read_class_polygons` repair half
-  (`_repaired` near `xy`, emptied polygons dropped, the count returned and
-  told), run in the shares step on `map.areas`; its stderr line stays
-  `_say_repaired("land cover", ...)`'s.
+- The repair is `build`'s (section 3), counted in `LandCoverMap.repaired`;
+  its stderr line stays `_say_repaired("land cover", ...)`'s.
 - `edges_of` is pure. A chosen area's mask is `land_cover`, plus `water`
   when its code is in `water_codes`; its `TerrainFeature` keeps `code` and
   its cleaned polygon (for `label_triangles`), `fid` its index in
