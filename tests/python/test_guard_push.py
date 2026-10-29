@@ -1157,6 +1157,21 @@ def green_gh(tmp_path: Path, head: str) -> dict[str, str]:
     return {**clean_env(), "PATH": f"{bin_dir}{os.pathsep}{clean_env()['PATH']}"}
 
 
+def test_present_a_merge_of_a_head_changed_after_its_verdict_is_refused(
+    granted: Granted, tmp_path: Path
+) -> None:
+    """PR #400's case: `gh pr merge 400` after a test fix past the approved review.
+    The head is read from `gh pr view`; the refusal names the first such commit."""
+    flag_path(granted.repo).unlink()
+    reviewed = f"gh pr merge feat --match-head-commit {granted.head}"
+    found = guard(granted.repo, reviewed)
+    assert found is not None and found[0] == "ask", found
+    late = commit_file(granted.repo, "tests/python/test_x.py", "t = 1\n", "a test fix")
+    found = guard(granted.repo, "gh pr merge 400", green_gh(tmp_path, late))
+    assert found is not None and found[0] == "deny", found
+    assert f"commit {late[:7]}" in found[1] and "not reviewed" in found[1], found
+
+
 def test_a_fast_lane_branch_passes_the_hook_without_grant_or_review(
     granted: Granted, tmp_path: Path
 ) -> None:
