@@ -46,6 +46,8 @@ requires ("re-verify with `@reviewer`" covers acting on its findings);
 `git push`, `gh pr create`, `gh pr merge`, any force-push or history
 rewrite, and any edit to `.claude/settings*.json` or the permission system
 need one each time (skills: `publishing`; while he is away, `away-mode`).
+A fast-lane branch for origin needs no yes or grant: the guard checks
+lane and CI.
 Before any push, the branch's writer re-reads
 `python3 tools/check_citations.py`'s at-risk list **as quotations**:
 resolving a line number is not resolving the quotation.

@@ -52,6 +52,7 @@ from harness_fixtures import (
     grants_used_path,
     iso,
     make_repo,
+    publish,
     state_dir,
     write_flag,
 )
@@ -1070,7 +1071,7 @@ def private_back_lines(
     repo = built.repo
     git(repo, "checkout", "-q", "-b", "scratch-private", "refs/remotes/private/master")
     p2 = commit_file(repo, "src/p2.py", "p = 2\n", "P2 on private/master")
-    git(repo, "update-ref", "refs/remotes/private/master", p2)
+    publish(repo, "private", p2)
     git(repo, "checkout", "-q", "prv")
     git(repo, "branch", "-q", "-D", "scratch-private")
     git(repo, "merge", "-q", "--no-ff", "--no-edit", "refs/remotes/private/master")

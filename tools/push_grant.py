@@ -8,12 +8,15 @@ once per head, provided `@reviewer`'s last recorded verdict approved its head.
 A branch holding commits of `private/master` goes only to the private
 repository, where it may also be merged once per head when its checks are
 green; any other branch goes only to origin. A fast-lane branch for origin
-(no full-lane path, no increment file, at most 700 net lines) needs neither
-grant nor review; the merge queue still wants green checks. Standard library only.
+(no full-lane, increment, governed or CI-config path, at most 700 net lines)
+needs neither grant nor review, present or away, and is enqueued only with
+green checks (docs/increments/h38-fastlane-push.md). Every master is the
+remote's own, read with `git ls-remote` from a pinned URL. Standard library only.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import re
@@ -26,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
+sys.path.append(str(Path(__file__).resolve().parents[1] / ".claude" / "hooks"))
 import ci_changes
 import harness_mode as hm
 import shell_scan
@@ -35,7 +39,15 @@ LANE_CAP = 700
 #: guard_push's reason strings for a push and a pull request write.
 PUSH, PR = "git push writes to the remote", "gh pr changes a pull request"
 PRIVATE_REMOTE, PRIVATE_REPO = "private", "expertanalytics/rasputin-private"
+PUBLIC_REPO = "expertanalytics/rasputin"
 PRIVATE_MASTER = "refs/remotes/private/master"
+#: The one fetch and push URL each remote must have; read at call time (h38 §3, change 4).
+REMOTE_URLS = {"origin": "git@github.com:expertanalytics/rasputin.git",
+               "private": "git@github.com:expertanalytics/rasputin-private.git"}  # fmt: skip
+#: Paths CI's tools read as settings: a prefix ending in `/`, else a file name anywhere.
+CI_CONFIG = (".github/", "pyproject.toml", "conftest.py", "CMakeLists.txt", "CMakePresets.json",
+             "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg", "mypy.ini", ".mypy.ini",
+             "ruff.toml", ".ruff.toml", ".coveragerc")  # fmt: skip
 SHA = re.compile(r"[0-9a-f]{40}")
 BRANCH = re.compile(r"[A-Za-z0-9._/-]+")
 WORD = re.compile(r"[A-Za-z0-9._/:@-]+")
@@ -80,6 +92,7 @@ class Grant:
     act: str
     head: str | None
     why: str
+    lane: str = "granted"  # or "fast-lane": the word guard_push's refusal uses
 
 
 def branch_name(name: str) -> bool:
@@ -221,29 +234,86 @@ def git(
     return done.stdout
 
 
-def home(repo: Path | str, head: str) -> tuple[str, str]:
-    """(remote, "") for the repository `head` belongs to, or ("", the reason it cannot be told).
+def private_url(repo: Path | str) -> tuple[bool, str]:
+    """(whether `remote.private.url` is set, "") or (False, why it cannot be told).
 
-    Fails closed: while the private remote is set up, a head is public only when
-    `private/master` was read and the head holds none of its private-only commits.
-    A config read error is never taken for "not set up".
-    """
+    A config read error is never taken for "not set up"."""
     try:
         argv = ["git", "-C", str(repo), "config", "--get", "remote.private.url"]
         config = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=10)
     except subprocess.TimeoutExpired:
-        return "", ("git config did not answer within 10 s, so it cannot be told whether the "
-                    "private remote is set up")  # fmt: skip
+        return False, ("git config did not answer within 10 s, so it cannot be told whether the "
+                       "private remote is set up")  # fmt: skip
     if config.returncode not in (0, 1):
         code = config.returncode
-        return "", (f"git config could not be read (it exited {code}), so it cannot be told "
-                    "whether the private remote is set up; fix the file git names")  # fmt: skip
-    url = config.returncode == 0
+        return False, (f"git config could not be read (it exited {code}), so it cannot be told "
+                       "whether the private remote is set up; fix the file git names")  # fmt: skip
+    return config.returncode == 0, ""
+
+
+def masters(where: str, branch: str | None = None) -> tuple[dict[str, str], str]:
+    """({remote: its real master sha}, "") read with `git ls-remote` from the pinned URLs,
+    origin's `refs/heads/<branch>` too when named and present; or ({}, why not) (h38 §3).
+
+    Each remote's fetch and push URL must each be exactly `REMOTE_URLS[remote]`; a sha
+    missing here is fetched once."""
+    url, why = private_url(where)
+    if why:
+        return {}, why
+    found: dict[str, str] = {}
     try:
-        if not git(repo, "rev-parse", "--verify", "-q", PRIVATE_MASTER, codes=(0, 1)).strip():
+        for remote in ("origin", PRIVATE_REMOTE)[: 1 + url]:
+            want = REMOTE_URLS[remote]
+            for push in ((), ("--push",)):
+                printed = git(where, "remote", "get-url", *push, "--all", remote,
+                              timeout=15).splitlines()  # fmt: skip
+                if printed != [want]:
+                    kind = "push" if push else "fetch"
+                    return {}, f"remote {remote}'s {kind} URL is {' '.join(printed)}, not {want}"
+            mine = f"refs/heads/{branch}" if branch is not None and remote == "origin" else ""
+            refs = ["refs/heads/master", *([mine] if mine else [])]
+            listed = git(where, "ls-remote", want, *refs, timeout=15).splitlines()
+            heads = {ref: sha for sha, _, ref in (line.partition("\t") for line in listed)}
+            if "refs/heads/master" not in heads:
+                return {}, f"{remote} has no refs/heads/master"
+            found[remote] = sha = heads["refs/heads/master"]
+            if mine in heads:
+                found[mine] = heads[mine]
+            probe = ("cat-file", "-t", sha)
+            if git(where, *probe, codes=(0, 1, 128)).strip() != "commit":
+                git(where, "fetch", "-q", remote, "refs/heads/master", timeout=15)
+            if git(where, *probe, codes=(0, 1, 128)).strip() != "commit":
+                return {}, f"{remote}'s master {sha[:7]} is missing here after a fetch"
+    except subprocess.CalledProcessError as error:
+        return {}, f"git failed: {' '.join(error.cmd)}: {str(error.stderr).strip()}"
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {}, f"the remotes could not be read: {error}"
+    return found, ""
+
+
+def home(repo: Path | str, head: str, real: dict[str, str] | None = None) -> tuple[str, str]:
+    """(remote, "") for the repository `head` belongs to, or ("", the reason it cannot be told).
+
+    Fails closed: while the private remote is set up, a head is public only when
+    `private/master` was read and the head holds none of its private-only commits.
+    With `real` (from `masters`), the remotes' own masters stand for the local refs.
+    """
+    if real is None:
+        url, why = private_url(repo)
+        if why:
+            return "", why
+    else:
+        url = PRIVATE_REMOTE in real
+    public = real["origin"] if real is not None else "refs/remotes/origin/master"
+    try:
+        if real is not None:
+            private = real.get(PRIVATE_REMOTE, "")
+        else:
+            private = git(repo, "rev-parse", "--verify", "-q", PRIVATE_MASTER, codes=(0, 1)).strip()
+        if not private:
             missing = f"the private remote is set up but {PRIVATE_MASTER} is missing, {UNSURE}"
             return ("", missing) if url else ("origin", "")
-        count = ("rev-list", "--count", PRIVATE_MASTER, "^refs/remotes/origin/master")
+        count = ("rev-list", "--count", private, f"^{public}")
         n, m = (int(git(repo, *count, *extra, timeout=10)) for extra in ((), (f"^{head}",)))
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
         return "", "the private and public histories could not be compared"
@@ -253,14 +323,16 @@ def home(repo: Path | str, head: str) -> tuple[str, str]:
     return (PRIVATE_REMOTE if m < n else "origin"), ""
 
 
-def changes(repo: Path | str, commit: str, remote: str = "origin") -> str | None:
+def changes(
+    repo: Path | str, commit: str, remote: str = "origin", master: str | None = None
+) -> str | None:
     """What a commit after the review changes beyond prose and added dated evidence, or None."""
     parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
     if len(parents) == 1:
         base = parents[0]
     elif len(parents) == 2 and subprocess.run(
         ["git", "-C", str(repo), "merge-base", "--is-ancestor", parents[1],
-         f"refs/remotes/{remote}/master"], capture_output=True, check=False,
+         master or f"refs/remotes/{remote}/master"], capture_output=True, check=False,
     ).returncode == 0:  # fmt: skip
         base = git(repo, "merge-tree", "--write-tree", *parents, codes=(0, 1)).splitlines()[0]
     else:
@@ -273,11 +345,13 @@ def changes(repo: Path | str, commit: str, remote: str = "origin") -> str | None
 
 
 def review_of(
-    repo: Path | str, head: str, records: list[Any], remote: str = "origin"
-) -> tuple[str | None, dict[str, Any] | None]:
+    repo: Path | str, head: str, records: list[Any], remote: str = "origin",
+    master: str | None = None,
+) -> tuple[str | None, dict[str, Any] | None]:  # fmt: skip
     """(None, the record relied on) when `head` is reviewed; else (the reason, None)."""
     try:
-        chain = git(repo, "rev-list", "--first-parent", f"refs/remotes/{remote}/master..{head}")
+        base = master or f"refs/remotes/{remote}/master"
+        chain = git(repo, "rev-list", "--first-parent", f"{base}..{head}")
         commits = chain.split()
         record = next((r for r in reversed(records)
                        if isinstance(r, dict) and r.get("sha") in commits), None)  # fmt: skip
@@ -287,7 +361,7 @@ def review_of(
             return f"last review round: {record.get('verdict')}", None
         reviewed_at = record["sha"]
         for commit in reversed(commits[: commits.index(reviewed_at)]):
-            what = changes(repo, commit, remote)
+            what = changes(repo, commit, remote, master)
             if what is not None:
                 return f"commit {commit[:7]} {what} after the review of {reviewed_at[:7]}", None
     except subprocess.CalledProcessError as error:
@@ -295,15 +369,15 @@ def review_of(
     return None, record
 
 
-def recorded(repo: Path | str, head: str, sha: str, remote: str) -> bool:
+def recorded(repo: Path | str, head: str, sha: str, remote: str, master: str | None = None) -> bool:
     """Whether an increment file the branch changes names `sha` under `## Review`, at `head`.
 
     A branch that changes only retrospectives has no increment file and passes.
     """
+    base = master or f"refs/remotes/{remote}/master"
     try:
-        diff = git(repo, "diff", "--name-only", "-z", f"refs/remotes/{remote}/master...{head}")
-        kept = git(repo, "diff", "--name-only", "-z", "--diff-filter=d",
-                   f"refs/remotes/{remote}/master...{head}")  # fmt: skip
+        diff = git(repo, "diff", "--name-only", "-z", f"{base}...{head}")
+        kept = git(repo, "diff", "--name-only", "-z", "--diff-filter=d", f"{base}...{head}")
         texts = [git(repo, "show", f"{head}:{p}") for p in kept.split("\0")
                  if INCREMENT.fullmatch(p) and p != "docs/increments/README.md"]  # fmt: skip
     except subprocess.CalledProcessError:
@@ -318,13 +392,16 @@ def recorded(repo: Path | str, head: str, sha: str, remote: str) -> bool:
     return False
 
 
-def reviewed(repo: Path | str, head: str, records: list[Any], remote: str = "origin") -> str | None:
+def reviewed(
+    repo: Path | str, head: str, records: list[Any], remote: str = "origin",
+    master: str | None = None,
+) -> str | None:  # fmt: skip
     """None when `head` is reviewed (§3.3), else the reason in plain words."""
-    return review_of(repo, head, records, remote)[0]
+    return review_of(repo, head, records, remote, master)[0]
 
 
 def checks(view: Any, head: str) -> str | None:
-    """Why a private merge's pull request (`gh pr view --json` of VIEW) is not green, or None."""
+    """Why a pull request (`gh pr view --json` of VIEW) is not green, or None."""
     if not isinstance(view, dict) or any(key not in view for key in VIEW):
         return UNREAD
     rollup = view["statusCheckRollup"]
@@ -353,9 +430,9 @@ def checks(view: Any, head: str) -> str | None:
     return None
 
 
-def pr_view(where: str, branch: str) -> Any:
-    """The private pull request's state and checks as gh reports them; None when unread."""
-    argv = ["gh", "pr", "view", branch, "-R", PRIVATE_REPO, "--json", ",".join(VIEW)]
+def pr_view(where: str, branch: str, repo: str) -> Any:
+    """The pull request's state and checks in `repo` as gh reports them; None when unread."""
+    argv = ["gh", "pr", "view", branch, "-R", repo, "--json", ",".join(VIEW)]
     try:
         done = subprocess.run(argv, cwd=where, capture_output=True, text=True, check=False,
                               timeout=20)  # fmt: skip
@@ -377,25 +454,36 @@ def jsonl(path: Path) -> list[Any]:
     return found
 
 
-def fast_lane(where: str, state: Path, act: Act) -> bool:
-    """Whether `act` is on a fast-lane branch for origin: no full-lane path and no
-    increment file against origin/master, at most `LANE_CAP` net lines. Fails closed."""
+def ci_config(path: str) -> bool:
+    return any(path.startswith(c) if c.endswith("/") else Path(path).name == c for c in CI_CONFIG)
+
+
+def fast_lane(where: str, state: Path, act: Act, real: dict[str, str]) -> bool:
+    """Whether `act` is on a fast-lane branch for origin: no full-lane, increment, governed
+    or CI-config path against origin's real master, at most `LANE_CAP` net lines, and gh
+    not pointed at another repository. Fails closed."""
     try:
         import check_lane
 
+        governed = importlib.import_module("guard_governance").governed  # .claude/hooks/
         common = git(where, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         head = git(where, "rev-parse", "--verify", f"refs/heads/{act.branch}").strip()
         if act.remote != "origin" or Path(common).resolve() != state.parent.resolve():
             return False
-        if act.sha not in (None, head) or home(where, head) != ("origin", ""):
+        if act.sha not in (None, head) or home(where, head, real) != ("origin", ""):
+            return False
+        resolved = git(where, "config", "--get-regexp", r"^remote\..*\.gh-resolved$",
+                       codes=(0, 1)).splitlines()  # fmt: skip
+        if os.environ.get("GH_REPO") or set(resolved) - {"remote.origin.gh-resolved base"}:
             return False
         paths = git(where, "diff", "--name-only", "--no-renames", "-z",
-                    f"refs/remotes/origin/master...{head}").split("\0")  # fmt: skip
+                    f"{real['origin']}...{head}").split("\0")  # fmt: skip
         if any(p.startswith(check_lane.FULL_LANE) or check_lane.INCREMENT.fullmatch(p)
-               for p in paths):  # fmt: skip
+               or governed(p, scratch_exempt=False) or ci_config(p)
+               for p in paths if p):  # fmt: skip
             return False
         count = [sys.executable, str(Path(__file__).with_name("count_loc.py")),
-                 "refs/remotes/origin/master", head, "--max", str(LANE_CAP)]  # fmt: skip
+                 real["origin"], head, "--max", str(LANE_CAP)]  # fmt: skip
         return subprocess.run(count, cwd=where, capture_output=True, check=False,
                               timeout=60).returncode == 0  # fmt: skip
     except (ImportError, OSError, subprocess.SubprocessError):
@@ -403,24 +491,28 @@ def fast_lane(where: str, state: Path, act: Act) -> bool:
 
 
 def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | None:
-    """A granted branch's act, passed (and logged) or refused with why; None if not one (§3.5)."""
+    """A granted or fast-lane branch's act, passed (and logged) or refused with why; None if
+    not one (h20 §3.5; h38 §3: away mode off judges the fast lane alone)."""
     state = hm.state_dir(hm.ROOT)
     if reasons not in ([PUSH], [PR]) or state is None:
         return None
-    if hm.read_mode(state, datetime.now(UTC)).state != "on":
+    mode = hm.read_mode(state, datetime.now(UTC)).state
+    if mode not in ("on", "off"):
         return None
-    flag = json.loads((state / "unattended.json").read_text())
+    flag = json.loads((state / "unattended.json").read_text()) if mode == "on" else {}
     act = granted_act(command)
     if act is None:
         loose = loose_act(command, grants(flag))
         return Grant(False, *loose, None, NOT_BARE) if loose else None
     where = act.directory or event.get("cwd") or os.getcwd()
     fast = act.branch not in grants(flag)
-    if fast and not fast_lane(where, state, act):
+    origin_branch = act.branch if act.kind == "pull request" else None
+    real, unread = masters(where, origin_branch)
+    if fast and (unread or not fast_lane(where, state, act, real)):
         return None
 
     def refused(why: str, head: str | None = None) -> Grant:
-        return Grant(False, act.branch, act.kind, head, why)
+        return Grant(False, act.branch, act.kind, head, why, "fast-lane" if fast else "granted")
 
     common = git(where, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
     if Path(common).resolve() != state.parent.resolve():
@@ -431,7 +523,9 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         return refused("the branch does not exist here")
     if act.sha is not None and act.sha != head:
         return refused(f"the command names {act.sha[:7]}, not the head {head[:7]}", head)
-    remote, why = home(where, head)
+    if unread:
+        return refused(unread, head)
+    remote, why = home(where, head, real)
     if why:
         return refused(why, head)
     if remote != act.remote:
@@ -439,7 +533,8 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
                        else ("holds no commit of", "origin"))  # fmt: skip
         return refused(f"head {head[:7]} {holds} private/master, so it goes only to {only}", head)
     reviews = jsonl(state / "reviews.jsonl")
-    reason, record = (None, {}) if fast else review_of(where, head, reviews, act.remote)
+    master = real.get(act.remote)
+    reason, record = (None, {}) if fast else review_of(where, head, reviews, act.remote, master)
     if reason is not None or record is None:
         return refused(
             f"head {head[:7]} is not reviewed: {reason}; it may be redone once "
@@ -448,10 +543,16 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
         )
     r7 = str(record.get("sha"))[:7]
     public = not fast and act.remote == "origin"
-    if public and not recorded(where, head, str(record.get("sha")), act.remote):
+    if public and not recorded(where, head, str(record.get("sha")), act.remote, master):
         return refused(f"head {head[:7]} is not reviewed: no increment file this branch changes "
                        f"names {r7} under ## Review; it may be redone once the review of {r7} "
                        "is recorded there", head)  # fmt: skip
+    if origin_branch is not None and act.remote == "origin":
+        theirs, ref = real.get(f"refs/heads/{act.branch}"), f"refs/heads/{act.branch}"
+        if theirs is None:
+            return refused(f"origin has no {ref}; push the head {head[:7]} there first", head)
+        if theirs != head:
+            return refused(f"origin's {ref} is {theirs[:7]}, not the head {head[:7]}", head)
     since = flag.get("since")
     if act.kind in ("enqueue", "merge") and any(
         isinstance(u, dict) and (u.get("window"), u.get("branch"), u.get("act"), u.get("head"))
@@ -459,7 +560,10 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
     ):  # fmt: skip
         done = "enqueued" if act.kind == "enqueue" else "merged"
         return refused(f"head {head[:7]} was {done} already in this window", head)
-    if act.kind == "merge" and (why := checks(pr_view(where, act.branch), head) or ""):
+    repo = PRIVATE_REPO if act.kind == "merge" else PUBLIC_REPO
+    if (act.kind == "merge" or (fast and act.kind == "enqueue")) and (
+        why := checks(pr_view(where, act.branch, repo), head) or ""
+    ):
         return refused(why, head)
     line = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "window": since,
             "branch": act.branch, "act": act.kind, "head": head, "remote": act.remote,
@@ -468,4 +572,4 @@ def judge(event: dict[str, Any], command: str, reasons: list[str]) -> Grant | No
     error = hm.append_queue(state, line, "grants-used.jsonl")
     if error is not None:
         return refused(f"the grants log cannot be written ({error})", head)
-    return Grant(True, act.branch, act.kind, head, "")
+    return Grant(True, act.branch, act.kind, head, "", "fast-lane" if fast else "granted")

@@ -756,8 +756,10 @@ Pass: `git remote -v`; `git remote get-url origin`; `git config user.email`;
 
 *(review 1)* **Test cleanup for `@tester`**, in the same amendment commit:
 the red-step messages "does not exist yet" go
-(`tests/python/harness_fixtures.py:184` and `:239`,
-`tests/python/test_away.py:157` and `:419`, as of `6a19357`), since the
+(`tests/python/harness_fixtures.py@6a19357:184` and
+`tests/python/harness_fixtures.py@6a19357:239`,
+`tests/python/test_away.py@6a19357:157` and
+`tests/python/test_away.py@6a19357:419`), since the
 files exist. The `make_repo` docstring in `harness_fixtures.py` (its
 "uncommitted-rule-file scan (§3.8)" sentence) and
 `test_recap_lists_uncommitted_rule_files_in_every_worktree` in

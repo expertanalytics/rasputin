@@ -1503,7 +1503,7 @@ Gates: 111 tests pass in `test_count_loc.py`, `test_scratch_copy.py` and `test_s
 
 Citations: `check_citations.py` exits 0 and lists 7 at-risk citations, re-read as quotations:
 - The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `.github/workflows/main.yaml@95b68da:306` [path written out in full by `@architect` so the citation gate resolves it], `scratch_copy.py:10`). They stay.
-- `h3-unattended-u1.md:759` names its revision (`as of 6a19357`). It stays.
+- `docs/increments/h3-unattended-u1.md@061259de:759` names its revision (`as of 6a19357`). It stays.
 - The other 3 are as in round 1.
 
 The 731e2a0 edit to the round-1 record is accepted. It is needed (the bare path makes the gate exit 1 with "no such file"), it does not change the meaning, and it is bracketed and attributed.

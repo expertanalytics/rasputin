@@ -107,6 +107,7 @@ def make_repo(root: Path) -> Path:
 
     `CLAUDE.md` is a governed file and `notes.txt` is not, so a suite can touch
     one of each; everything starts committed, so the working tree starts clean.
+    The copied `push_grant.py` pins the remotes to `remote_urls(root)`.
     """
     root.mkdir(parents=True, exist_ok=True)
     git(root, "init", "-q", "-b", "master")
@@ -117,11 +118,47 @@ def make_repo(root: Path) -> Path:
         if source.exists():
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, root / relative)
+    pinned = root / "tools/push_grant.py"
+    if pinned.exists():
+        with pinned.open("a") as handle:
+            handle.write(
+                "\n# Pinned by the test fixture: the remotes are bare repositories.\n"
+                f"REMOTE_URLS = {remote_urls(root)!r}\n"
+            )
     (root / "CLAUDE.md").write_text("# rules\n")
     (root / "notes.txt").write_text("notes\n")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "root")
     return root
+
+
+def remote_urls(root: Path) -> dict[str, str]:
+    """The URLs `push_grant.REMOTE_URLS` takes for a repository at `root`: bare
+    repositories beside it, which stand in for GitHub's."""
+    return {"origin": str(root.parent / "origin.git"), "private": str(root.parent / "private.git")}
+
+
+def add_remote(repo: Path, name: str) -> Path:
+    """Remote `name` of `repo`, a bare repository at its pinned URL (made when missing)."""
+    bare = Path(remote_urls(repo)[name])
+    if not bare.exists():
+        git(repo.parent, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", name, str(bare))
+    return bare
+
+
+def publish(repo: Path, remote: str, sha: str, branch: str = "master") -> None:
+    """`sha` as `branch` on the remote, forced; git moves the tracking ref with it."""
+    git(repo, "push", "-q", "-f", remote, f"{sha}:refs/heads/{branch}")
+
+
+def pin_remotes(monkeypatch: pytest.MonkeyPatch, module: Any, repo: Path) -> None:
+    """In process: `module`'s `REMOTE_URLS` at `repo`'s bare repositories, and an empty
+    global git config, so the machine's own `~/.gitconfig` cannot change a result.
+
+    Set in the namespace `module.judge` reads, since `module` may be a `Tool`."""
+    monkeypatch.setitem(module.judge.__globals__, "REMOTE_URLS", remote_urls(repo))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
 
 
 def add_worktree(main: Path, path: Path, branch: str) -> Path:
@@ -415,18 +452,18 @@ def flag_granting(repo: Path, grants: Any, now: datetime | None = None) -> datet
 class Granted:
     """h20 §4's fixture repository, measured by construction.
 
-    `master` with 1 commit, `refs/remotes/origin/master` set to it by
-    `git update-ref` (no remote); branch `feat` (checked out) with a code
-    commit `x` adding `tools/x.py` (1 line), then a recording commit `rec`
-    adding `docs/increments/h99.md`, whose `## Review` names `x` at 8 digits
-    (no trailer). `reviews.jsonl` holds one record, `APPROVED` at `x`. The
-    flag is on only if `flag` is.
+    `master` with 1 commit, pushed to a bare `origin`; branch `feat` (checked
+    out) with a code commit `x` adding `tools/x.py` (1 line), then a recording
+    commit `rec` adding `docs/increments/h99.md`, whose `## Review` names `x` at
+    8 digits (no trailer); `feat` is pushed to origin too. `reviews.jsonl`
+    holds one record, `APPROVED` at `x`. The flag is on only if `flag` is.
     """
 
     def __init__(self, root: Path, flag: bool = True, recording_code: bool = False) -> None:
         self.repo = make_repo(root)
         self.base = git(self.repo, "rev-parse", "master").strip()
-        git(self.repo, "update-ref", "refs/remotes/origin/master", self.base)
+        add_remote(self.repo, "origin")
+        publish(self.repo, "origin", self.base)
         git(self.repo, "checkout", "-q", "-b", "feat")
         self.x = commit_file(self.repo, "tools/x.py", "x = 1\n", "X: a code commit")
         (self.repo / "docs/increments").mkdir(parents=True)
@@ -437,6 +474,7 @@ class Granted:
             git(self.repo, "add", "tools/x.py")
         git(self.repo, "commit", "-q", "-m", "h99 review round 1 recorded")
         self.rec = self.head
+        publish(self.repo, "origin", self.rec, "feat")
         write_reviews(self.repo, [review_record(self.x)])
         self.since = flag_granting(self.repo, ["feat"]) if flag else None
 
@@ -452,7 +490,7 @@ class Granted:
         git(self.repo, "checkout", "-q", "master")
         sha = commit_file(self.repo, relative, text, f"master changes {relative}")
         if advance_origin:
-            git(self.repo, "update-ref", "refs/remotes/origin/master", sha)
+            publish(self.repo, "origin", sha)
         git(self.repo, "checkout", "-q", "feat")
         return sha
 
@@ -481,13 +519,13 @@ PRIVATE_REPO = "expertanalytics/rasputin-private"
 class PrivateGranted:
     """h22 §7's Fixture A: a public and a private master, a branch on each.
 
-    `m0` is the root commit. `refs/remotes/origin/master` is `m1` (a code commit
-    on `m0`) and `refs/remotes/private/master` is `p1` (another code commit on
-    `m0`), both by `git update-ref`, so N = 1 private-only commit. Branch `pub`
+    `m0` is the root commit. Bare `origin`'s master is `m1` (a code commit
+    on `m0`) and bare `private`'s is `p1` (another code commit on `m0`), both
+    pushed, so N = 1 private-only commit. Branch `pub`
     is `m1` plus a code commit `pub_code` and a commit recording its review in
     `docs/increments/h98.md`; `prv` is `p1` plus a code commit; `pub` is
-    checked out. `remote.private.url` names a bare repository in `root`'s
-    parent that is never fetched, so N is read from the ref with no network.
+    checked out. `pub` is pushed to origin. Both remotes are bare repositories
+    in `root`'s parent, so nothing reaches the network.
     The flag grants both branches; `reviews.jsonl` approves `pub_code` and `prv`.
     """
 
@@ -496,10 +534,12 @@ class PrivateGranted:
         repo = self.repo
         self.m0 = git(repo, "rev-parse", "master").strip()
         self.m1 = commit_file(repo, "src/m.py", "m = 1\n", "M1: public master")
-        git(repo, "update-ref", "refs/remotes/origin/master", self.m1)
+        add_remote(repo, "origin")
+        publish(repo, "origin", self.m1)
         git(repo, "checkout", "-q", "-b", "private-side", self.m0)
         self.p1 = commit_file(repo, "src/p.py", "p = 1\n", "P1: private master")
-        git(repo, "update-ref", "refs/remotes/private/master", self.p1)
+        self.url = add_remote(repo, "private")
+        publish(repo, "private", self.p1)
         git(repo, "checkout", "-q", "-b", "prv")
         self.prv = commit_file(repo, "tools/x.py", "x = 'prv'\n", "a code commit on prv")
         git(repo, "checkout", "-q", "-b", "pub", self.m1)
@@ -507,9 +547,7 @@ class PrivateGranted:
         self.pub_code = commit_file(repo, "tools/x.py", "x = 'pub'\n", "a code commit on pub")
         self.pub = commit_file(repo, "docs/increments/h98.md", review_section(self.pub_code),
                                "pub's review recorded")  # fmt: skip
-        self.url = root.parent / "private.git"
-        git(root.parent, "init", "-q", "--bare", str(self.url))
-        git(repo, "config", "remote.private.url", str(self.url))
+        publish(repo, "origin", self.pub, "pub")
         write_reviews(repo, [review_record(self.pub_code), review_record(self.prv)])
         self.since = flag_granting(repo, ["pub", "prv"])
 
@@ -527,4 +565,4 @@ class PrivateGranted:
 
     def private_ref_at_m0(self) -> None:
         """N = 0: private/master holds no commit origin/master lacks."""
-        git(self.repo, "update-ref", "refs/remotes/private/master", self.m0)
+        publish(self.repo, "private", self.m0)
