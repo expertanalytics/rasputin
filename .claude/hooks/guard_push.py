@@ -456,7 +456,7 @@ def main() -> int:
         if grant is not None and grant.passed:
             return 0
         if grant is not None:
-            why += f"; granted branch {grant.branch}, but {grant.why}"
+            why += f"; {grant.lane} branch {grant.branch}, but {grant.why}"
         reason = (
             "This reaches beyond the working tree: " + why + ".\n.claude/REQUIRED-READING.md, "
             "the approval boundary -- the working tree is the agent's, the remote is the "
