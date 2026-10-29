@@ -1453,7 +1453,7 @@ def test_a_stale_local_origin_master_is_not_what_the_lane_is_judged_against(
     full = fast.head
     fast.head = commit_files(fast.repo, {"tools/y.py": "y = 1\n"}, "a fast-lane change on top")
     publish(fast.repo, "origin", fast.head, "quick")
-    git(fast.repo, "push", "-q", str(fast.origin), f"{full}:refs/heads/master")
+    git(fast.origin, "update-ref", "refs/heads/master", full)  # `quick` brought its objects
     assert git(fast.repo, "rev-parse", "refs/remotes/origin/master").strip() == fast.base
     fast.in_mode(mode)
     found = fast.judge("push")
