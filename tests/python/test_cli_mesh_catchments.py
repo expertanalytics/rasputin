@@ -147,7 +147,7 @@ def run_of(scene: dict[str, Path], tmp_path: Path) -> Iterator[RunOf]:
         conn.close()
 
 
-CATCHMENTS_TOLERANCE_0 = ("--triangles", "200", "--features-tolerance", "0")
+CATCHMENTS_TOLERANCE_0 = ("--triangles", "200", "--catchments-band", "0")
 
 
 # ------------------------------------------------------------ 5. end to end
@@ -260,7 +260,7 @@ def test_the_band_follows_the_budget_end_to_end(run_of: RunOf, scene: dict[str, 
 
 def test_the_given_tolerance_is_named_as_the_band(run_of: RunOf, scene: dict[str, Path]) -> None:
     ran = run_of("given.gpkg", "--catchments", str(scene["units"]), *CATCHMENTS_TOLERANCE_0)
-    assert "(--features-tolerance)" in ran.output, ran.output
+    assert "(--catchments-band)" in ran.output, ran.output
     assert float(record(ran.conn, "catchments_band_m") or "nan") == 0.0
 
 
@@ -345,5 +345,5 @@ def test_refusal_6_units_in_parts_that_do_not_touch(scene: dict[str, Path], tmp_
 def test_refusal_7_needs_a_budget_or_a_band(scene: dict[str, Path], tmp_path: Path) -> None:
     refused(
         scene, tmp_path, *LAND_COVER, "--catchments", str(scene["units"]), "--tolerance", "3",
-        says="needs --triangles, whose budget sets the border band, or --features-tolerance",
+        says="needs --triangles, whose budget sets the border band, or --catchments-band",
     )  # fmt: skip

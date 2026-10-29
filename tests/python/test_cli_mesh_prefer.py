@@ -272,7 +272,7 @@ LAKE_LINES = (
     '[[class]]\nvalue = "1"\nedges = ["water"]\n'
 )
 #: The clean-up's switches off, as the design measured.
-AS_READ = ("--features-tolerance", "0", "--features-repair", "0", "--features-outline-snap", "0")
+AS_READ = ("--features-band", "0", "--features-repair", "0", "--features-outline-snap", "0")
 #: On a length in m, at coordinates below 1e7 m with the clean-up moving no
 #: vertex: rounding only, far below the design's 0.1 m figures.
 LENGTH = 1e-6

@@ -34,7 +34,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   on darwin/arm64), since the land polygon's outline edges are cut off its
   lines.
 - Test 5's message is a :class:`FeatureError` whose text is exactly
-  ``"<file>: border simplification refused: x; --features-tolerance 0 meshes
+  ``"<file>: border simplification refused: x; --features-band 0 meshes
   this source with its borders as read"``: ``<why>`` is the ``ValueError``'s
   own text.
 - Test 6: each ``features`` entry ends "N lines, M vertices" with that
@@ -130,7 +130,7 @@ def source(
 
 def request(fi: ModuleType, src: Any, band: float) -> Any:
     return fi.FeatureRequest(
-        sources=(src,), repair_m=REPAIR, merge_same_class=True, tolerance_m=band, outline_snap_m=0.0
+        sources=(src,), repair_m=REPAIR, merge_same_class=True, band_m=band, outline_snap_m=0.0
     )
 
 
@@ -284,7 +284,7 @@ class TestRefusal:
             fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
         assert str(caught.value) == (
             "lakes.geojson: border simplification refused: x; "
-            "--features-tolerance 0 meshes this source with its borders as read"
+            "--features-band 0 meshes this source with its borders as read"
         )
 
 
@@ -432,5 +432,5 @@ class TestTheRecord:
         )
         assert output.count(NO_ACCURACY) == 1
         assert record["features_accuracy_m"] == NO_ACCURACY
-        assert record["features_tolerance_m"] == 5.0  # s/2, s = max(10, 10)
+        assert record["features_band_m"] == 5.0  # s/2, s = max(10, 10)
         assert record["features_repair_m"] == pytest.approx(0.1, rel=1e-12)  # s/100

@@ -17,8 +17,8 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 
 - The pure simplification is `sub_catchments.simplify_domain(domain,
   triangles, tolerance)`, returning the simplified `DomainPolygon`, in the
-  domain's CRS, and the band in metres; `tolerance` wins when given, as
-  `_units` reads `--features-tolerance`.
+  domain's CRS, and the band in metres; `tolerance`, from `--domain-band`,
+  wins when given, as `_units` reads `--catchments-band`.
 - The stderr line counts a ring's vertices without its closing repeat (ZZ
   is "240", as the design's line says).
 - Test 5 compares the `triangles` and `cells` rows with those of 106e's
@@ -230,12 +230,21 @@ def test_4_with_the_flag_the_budget_is_met(zz_scene: dict[str, Path], run_of: Ru
 
 
 def test_4_the_given_tolerance_sets_the_band(zz_scene: dict[str, Path], run_of: RunOf) -> None:  # noqa: F811
-    ran = run_of(
-        "given.gpkg", "--triangles", "100", "--simplify-domain", "--features-tolerance", "30"
-    )
+    ran = run_of("given.gpkg", "--triangles", "100", "--simplify-domain", "--domain-band", "30")
     assert float(record(ran.conn, "domain_band_m") or "nan") == 30.0
     said = " ".join(ran.output.split())
-    assert "domain: outline simplified at 30 m (--features-tolerance): 240 to" in said, said
+    assert "domain: outline simplified at 30 m (--domain-band): 240 to" in said, said
+
+
+def test_4_the_features_band_leaves_the_outline_band(
+    zz_scene: dict[str, Path],
+    run_of: RunOf,  # noqa: F811
+) -> None:
+    """`--features-band` is land cover's band: the outline keeps the budget's."""
+    ran = run_of(
+        "features.gpkg", "--triangles", "100", "--simplify-domain", "--features-band", "30"
+    )
+    assert float(record(ran.conn, "domain_band_m") or "nan") == pytest.approx(ZZ_BAND_100, rel=1e-9)
 
 
 # ------------------------------------------------------------ 5. unchanged without it
@@ -306,8 +315,32 @@ def test_7_needs_a_domain(scene: dict[str, Path], tmp_path: Path) -> None:  # no
 def test_7_needs_a_budget_or_a_band(zz_scene: dict[str, Path], tmp_path: Path) -> None:
     refused(
         zz_scene, tmp_path, "--domain", str(zz_scene["domain"]), "--tolerance", "3",
-        says="needs --triangles, whose budget sets the outline band, or --features-tolerance",
+        says="needs --triangles, whose budget sets the outline band, or --domain-band",
     )  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("extra", "says"),
+    [
+        (("--domain-band", "30"), "applies only with --simplify-domain"),
+        (("--simplify-domain", "--domain-band", "-1"), "must be finite, >= 0, got -1.0"),
+        (("--simplify-domain", "--domain-band", "nan"), "must be finite, >= 0, got nan"),
+    ],
+    ids=["without-the-flag", "negative", "nan"],
+)
+def test_7_the_domain_band_refused(
+    zz_scene: dict[str, Path], tmp_path: Path, extra: tuple[str, ...], says: str
+) -> None:
+    target = tmp_path / "refused.vtk"
+    code, output = invoke(
+        "mesh", "--dem", str(zz_scene["dem"]), "--domain", str(zz_scene["domain"]),
+        "--triangles", "100", *extra, "--out", str(target),
+    )  # fmt: skip
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "Invalidvaluefor--domain-band" in flat, output
+    assert squashed(says) in flat, output
+    assert not target.exists()
 
 
 def test_the_band_is_an_eighth_of_the_edge() -> None:

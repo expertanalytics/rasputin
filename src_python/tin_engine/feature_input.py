@@ -152,7 +152,7 @@ class FeatureRequest(BaseModel):
     #: outline snap distance D.
     repair_m: float = 0.0
     merge_same_class: bool = False
-    tolerance_m: float = 0.0
+    band_m: float = 0.0
     outline_snap_m: float = 0.0
     #: Threads for moving a source's vertices into the DEM's CRS.
     threads: int = 1
@@ -313,7 +313,7 @@ def open_features(
             raise FeatureError(f"meshing rules {rules.name}: {exc}") from exc
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary, request.threads)
     tally.cell = cell
-    switches = (request.repair_m, request.merge_same_class, request.tolerance_m)
+    switches = (request.repair_m, request.merge_same_class, request.band_m)
     tally.cleanup = request if any(switches) or request.outline_snap_m else None
     crss: list[str] = []
     layers: list[str | None] = []
@@ -600,17 +600,17 @@ class _Tally:
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
         lines_of, polygons = snapped.lines, snapped.polygons
-        if ask.tolerance_m > 0:  # the band on: area kept inside the domain
+        if ask.band_m > 0:  # the band on: area kept inside the domain
             dom = self.domain.polygon
             inside = clip_to_domain(polygons, dom)
             rest = shapely.difference(dom, shapely.coverage_union_all(inside))
             half = REST_MIN_WIDTH_M / 2
             wide = [p for p in shapely.get_parts(rest) if not p.buffer(-half).is_empty]
             try:
-                done = simplify_borders([*inside, *wide], ask.tolerance_m, ask.repair_m)
+                done = simplify_borders([*inside, *wide], ask.band_m, ask.repair_m)
             except ValueError as exc:
                 raise FeatureError(
-                    f"{name}: border simplification refused: {exc}; --features-tolerance 0 "
+                    f"{name}: border simplification refused: {exc}; --features-band 0 "
                     "meshes this source with its borders as read"
                 ) from exc
             polygons = done.polygons[: len(inside)]

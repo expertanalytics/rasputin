@@ -57,8 +57,8 @@ LINES = (
 )
 WAYS = {
     "cleanup-off": {},
-    "merge-on": {"repair_m": 0.0, "merge_same_class": True, "tolerance_m": 0.0},
-    "merge-off": {"repair_m": 0.0, "merge_same_class": False, "tolerance_m": 0.0,
+    "merge-on": {"repair_m": 0.0, "merge_same_class": True, "band_m": 0.0},
+    "merge-off": {"repair_m": 0.0, "merge_same_class": False, "band_m": 0.0,
                   "outline_snap_m": 5.0},
 }  # fmt: skip
 

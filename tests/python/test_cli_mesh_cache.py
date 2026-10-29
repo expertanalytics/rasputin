@@ -318,7 +318,7 @@ class TestW5TheFetchCommandInTheMessage:
         code, output = invoke(
             "mesh",
             "--dem", KEY, "--cache", str(tmp_path / "cache"), "--domain", str(domain),
-            "--tolerance", "1", "--features-tolerance", "5", "--out", str(target), *extra,
+            "--tolerance", "1", "--out", str(target), *extra,
         )  # fmt: skip
         assert code == USAGE, output
         assert not target.exists()
@@ -334,7 +334,7 @@ class TestW5TheFetchCommandInTheMessage:
     def test_with_simplify_domain_the_fetch_is_the_window(
         self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
     ) -> None:
-        self.refused_with(tmp_path, data, "m.vtk", "--simplify-domain")
+        self.refused_with(tmp_path, data, "m.vtk", "--simplify-domain", "--domain-band", "5")
 
     def test_with_catchments_the_fetch_is_the_window(
         self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
@@ -347,7 +347,7 @@ class TestW5TheFetchCommandInTheMessage:
             tmp_path / "cover.geojson", [Feat(1, unit.buffer(100.0), {"Code_18": "311"})]
         )
         self.refused_with(
-            tmp_path, data, "m.gpkg", "--catchments", str(units),
+            tmp_path, data, "m.gpkg", "--catchments", str(units), "--catchments-band", "5",
             "--land-cover", str(cover), "--land-cover-rules", "corine",
         )  # fmt: skip
 

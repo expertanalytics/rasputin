@@ -39,7 +39,7 @@ WORDING = {
     "features_transform": "Conversion from each features file's coordinate system",
     "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
     "features_merge_same_class": "Borders between land-cover polygons of one class dropped",
-    "features_tolerance_m": (
+    "features_band_m": (
         "Land-cover borders simplified, each at most this far from its border after the "
         "repair and the outline rule, each class's area kept (0 = off)"
     ),

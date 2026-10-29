@@ -699,7 +699,7 @@ class TestCommittedExtract:
 
     @pytest.fixture(scope="class")
     def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
-        """The same run with ``--features-tolerance 0`` (increment 32, test 16:
+        """The same run with ``--features-band 0`` (increment 32, test 16:
         the default band moves borders up to 50 m from the extract's, so I2's
         oracle, which labels by the extract's polygons, needs the band off)."""
         tmp = tmp_path_factory.mktemp("extract_band_0")
@@ -712,7 +712,7 @@ class TestCommittedExtract:
             str(EXTRACT),
             "--features-rules",
             "corine",
-            "--features-tolerance",
+            "--features-band",
             "0",
             tolerance="10",
         )

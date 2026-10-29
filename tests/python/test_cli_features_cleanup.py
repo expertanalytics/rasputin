@@ -29,7 +29,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
 - The timing sub-row is the phase ``features clip: clean-up`` (the
   ``"<parent>: ..."`` form ``stats._timings`` lists as a sub-row).
 - Refused, for its value: ``--features-repair`` and
-  ``--features-tolerance`` negative or non-finite;
+  ``--features-band`` negative or non-finite;
   ``--features-outline-snap`` negative, non-finite, or at or above 100.
 
 RED at the commit that adds ``test_the_area_row_says_another_polygon``
@@ -42,8 +42,8 @@ test excludes), and the default runs hand ``open_features`` a request without
 the four fields.
 
 Increment 32 (``docs/increments/32-landcover-simplify.md``, section 6 "What
-replaces ``--features-tolerance``" and section 9, tests 14 to 16):
-``--features-tolerance`` is now the band, default 50 (``BAND_DEFAULT``), its
+replaces ``--features-band``" and section 9, tests 14 to 16):
+``--features-band`` is now the band, default 50 (``BAND_DEFAULT``), its
 help and record sentence as section 6 words them; the start angle is 15 when
 the land-cover stage ran with the band above 0 and no ``--start-min-angle``
 was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
@@ -102,7 +102,7 @@ OUTLINE_DEFAULT = 5.0  # ruling 6
 BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accuracy
 #: Increment 32, test 14: SHA-256 of the points (float64, little-endian, (N, 3))
 #: then the triangles (int64, little-endian, (T, 3)) read back from the .vtk of
-#: ``run`` with ``--features corine --features-rules corine --features-tolerance
+#: ``run`` with ``--features corine --features-rules corine --features-band
 #: 0``, one per (``sys.platform``, ``platform.machine()``). A recorded digest
 #: pins a platform as well as a behaviour (``test_cli_mesh_domain_crs.py``'s
 #: preamble): the same shapely 2.2.0 (GEOS 3.14.1) and numpy 2.5.3 give this
@@ -135,17 +135,17 @@ BAND_WORDING = (
 #: Section 15.2: an edge lies on the outline when one outline segment is
 #: within this of both its ends (``feature_input.IN_LINE``, 1 µm).
 ON_OUTLINE = 1e-6
-START_HELP = "Default: 25, or 15 with land cover simplified (--features-tolerance above 0)."
+START_HELP = "Default: 25, or 15 with land cover simplified (--features-band above 0)."
 ROWS = (
     "features_repair_m",
     "features_merge_same_class",
-    "features_tolerance_m",
+    "features_band_m",
     "features_outline_snap_m",
 )
 FLAGS = (
     "--features-repair",
     "--features-merge-same-class",
-    "--features-tolerance",
+    "--features-band",
     "--features-outline-snap",
 )
 VERTEX_WORDING = "Land-cover vertices before and after clean-up"
@@ -229,7 +229,7 @@ def run(tmp_path: Path, bumpy: Path, square: Path, *extra: str) -> tuple[str, di
 
 
 def switches(request: Any) -> tuple[float, bool, float, float]:
-    return (request.repair_m, request.merge_same_class, request.tolerance_m, request.outline_snap_m)
+    return (request.repair_m, request.merge_same_class, request.band_m, request.outline_snap_m)
 
 
 # ---------------------------------------------------------------- defaults
@@ -254,10 +254,10 @@ class TestDefaults:
         (request,) = spy.requests
         assert switches(request) == (REPAIR_DEFAULT, True, BAND_DEFAULT, OUTLINE_DEFAULT)
         assert stats_row(report, "features_repair_m") == "1"
-        assert stats_row(report, "features_tolerance_m") == "50"
+        assert stats_row(report, "features_band_m") == "50"
         assert stats_row(report, "features_outline_snap_m") == "5"
         assert record["features_repair_m"] == REPAIR_DEFAULT
-        assert record["features_tolerance_m"] == BAND_DEFAULT
+        assert record["features_band_m"] == BAND_DEFAULT
         assert record["features_outline_snap_m"] == OUTLINE_DEFAULT
         assert record["features_merge_same_class"] == "on"
         assert VERTEX_WORDING in report
@@ -321,7 +321,7 @@ class TestGiven:
             "--features-repair",
             "0.1",
             "--no-features-merge-same-class",
-            "--features-tolerance",
+            "--features-band",
             "2",
             "--features-outline-snap",
             "0",
@@ -329,7 +329,7 @@ class TestGiven:
         (request,) = spy.requests
         assert switches(request) == (0.1, False, 2.0, 0.0)
         assert stats_row(report, "features_repair_m") == "0.1"
-        assert stats_row(report, "features_tolerance_m") == "2"
+        assert stats_row(report, "features_band_m") == "2"
         assert stats_row(report, "features_outline_snap_m") == "0"
         assert record["features_merge_same_class"] == "off"
 
@@ -404,12 +404,12 @@ class TestTheBand:
 
         monkeypatch.setattr(feature_input, "simplify_borders", spy)
         corine_flags = ("--features", str(corine), "--features-rules", "corine")
-        report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--features-tolerance", "0")
+        report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--features-band", "0")
         assert calls == []
-        assert record["features_tolerance_m"] == 0.0
+        assert record["features_band_m"] == 0.0
         assert record["start_min_angle_deg"] == 25.0
         assert stats_row(report, "start_min_angle_deg") == "25"
-        run(tmp_path, bumpy, square, *corine_flags, "--features-tolerance", "2")
+        run(tmp_path, bumpy, square, *corine_flags, "--features-band", "2")
         assert calls == [2.0]
 
     def test_14_band_0_is_todays_mesh_bit_for_bit(
@@ -433,7 +433,7 @@ class TestTheBand:
             str(corine),
             "--features-rules",
             "corine",
-            "--features-tolerance",
+            "--features-band",
             "0",
         )
         assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY[key]
@@ -442,8 +442,8 @@ class TestTheBand:
         ("features", "extra", "angle"),
         [
             ("corine", (), 15.0),  # land cover, band 50 by default
-            ("corine", ("--features-tolerance", "2"), 15.0),
-            ("corine", ("--features-tolerance", "0"), 25.0),
+            ("corine", ("--features-band", "2"), 15.0),
+            ("corine", ("--features-band", "0"), 25.0),
             ("corine", ("--start-min-angle", "25"), 25.0),  # given: it wins
             ("corine", ("--start-min-angle", "0"), 0.0),
             ("gallery", (), 25.0),  # features, but no land-cover stage
@@ -474,9 +474,9 @@ class TestTheBand:
 
     def test_the_help_and_the_record_say_band(self) -> None:
         params = {p.name: p for p in typer.main.get_command(cli.app).commands["mesh"].params}
-        assert params["features_tolerance"].help == BAND_HELP
+        assert params["features_band"].help == BAND_HELP
         assert START_HELP in (params["start_min_angle"].help or "")
-        assert rr.WORDING["features_tolerance_m"] == BAND_WORDING
+        assert rr.WORDING["features_band_m"] == BAND_WORDING
 
 
 class TestTheFixOrder:
@@ -521,9 +521,9 @@ class TestTheFixOrder:
         (tmp_path / "off").mkdir()
         on, fs_on, _ = self.captured(tmp_path / "on", bumpy, square, source)
         off, fs_off, _ = self.captured(
-            tmp_path / "off", bumpy, square, source, "--features-tolerance", "0"
+            tmp_path / "off", bumpy, square, source, "--features-band", "0"
         )
-        assert on["features_tolerance_m"] == BAND_DEFAULT
+        assert on["features_band_m"] == BAND_DEFAULT
         if cover == "near_outline":
             assert fs_off.area_changed > 0  # the premise: the rule moved area
         # The record holds the area as text, to 0.1 m2; the stage's float exactly.
@@ -559,9 +559,9 @@ REFUSED = [
     ("--features-repair", "-0.01"),
     ("--features-repair", "nan"),
     ("--features-repair", "inf"),
-    ("--features-tolerance", "-1"),
-    ("--features-tolerance", "nan"),
-    ("--features-tolerance", "inf"),
+    ("--features-band", "-1"),
+    ("--features-band", "nan"),
+    ("--features-band", "inf"),
     ("--features-outline-snap", "-1"),
     ("--features-outline-snap", "nan"),
     ("--features-outline-snap", "inf"),

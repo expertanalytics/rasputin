@@ -239,7 +239,7 @@ class CleanUpDistances(_Strict):
     """The land-cover clean-up's three distances, in `FeatureRequest`'s names."""
 
     repair_m: float
-    tolerance_m: float
+    band_m: float
     outline_snap_m: float
 
 
@@ -247,7 +247,7 @@ def derived_cleanup(accuracy_m: float, cell: float) -> CleanUpDistances:
     """Section 5.1: s = max(accuracy, cell); repair s/100, simplify s/2,
     snap min(s/20, 50), half the read region's 100 m margin."""
     s = max(accuracy_m, cell)
-    return CleanUpDistances(repair_m=s / 100, tolerance_m=s / 2, outline_snap_m=min(s / 20, 50.0))
+    return CleanUpDistances(repair_m=s / 100, band_m=s / 2, outline_snap_m=min(s / 20, 50.0))
 
 
 def _shipped() -> Any:

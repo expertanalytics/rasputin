@@ -66,7 +66,7 @@ from vtkread import read_vtk
 SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
-OPTIONS = ("features_repair", "features_tolerance", "features_outline_snap")
+OPTIONS = ("features_repair", "features_band", "features_outline_snap")
 DERIVED = "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: {})."
 LEVEE = LineString([rel(30.1, -40.3), rel(170.2, -40.3)])
 ROAD = LineString([rel(30.1, -15.2), rel(170.2, -15.2)])
@@ -105,7 +105,7 @@ def levees(tmp_path: Path) -> Path:
 def recorded(record: dict[str, Any]) -> tuple[float, float, float]:
     return (
         record["features_repair_m"],
-        record["features_tolerance_m"],
+        record["features_band_m"],
         record["features_outline_snap_m"],
     )
 
@@ -255,7 +255,7 @@ class TestDerivedDistances:
             bumpy,
             square,
             *("--features", str(corine), "--features-rules", "corine"),
-            *("--features-tolerance", "20"),
+            *("--features-band", "20"),
         )
         assert recorded(record) == (1.0, 20.0, 5.0)
 
@@ -285,7 +285,7 @@ class TestDerivedDistances:
         )
         assert recorded(record) == want
         (request,) = spy.requests
-        assert (request.repair_m, request.tolerance_m, request.outline_snap_m) == want
+        assert (request.repair_m, request.band_m, request.outline_snap_m) == want
         assert "rules mine" in record["features"]
         assert report
 
@@ -324,7 +324,7 @@ class TestDerivedDistances:
 
     @pytest.mark.parametrize(
         ("param", "corine_value"),
-        [("features_repair", "1"), ("features_tolerance", "50"), ("features_outline_snap", "5")],
+        [("features_repair", "1"), ("features_band", "50"), ("features_outline_snap", "5")],
     )
     def test_t7_the_help_says_derived(self, param: str, corine_value: str) -> None:
         help_text = mesh_params()[param].help or ""

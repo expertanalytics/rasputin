@@ -305,7 +305,7 @@ RENAMED = {"--features-legend": "--features-rules", "--land-cover-legend": "--la
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
     ("--features-repair", math.inf),
-    ("--features-tolerance", math.inf),
+    ("--features-band", math.inf),
     ("--features-outline-snap", 100.0),
 )
 
@@ -737,7 +737,7 @@ def mesh(
             help="With --tolerance, add DEM nodes to the start mesh until its triangles "
             "have no angle under this many degrees, or a stated reason prevents it; "
             "0 is off, at most 35. Default: 25, or 15 with land cover simplified "
-            "(--features-tolerance above 0).",
+            "(--features-band above 0).",
         ),
     ] = None,
     start_quality_gain: Annotated[
@@ -805,10 +805,10 @@ def mesh(
             show_default=False,
         ),
     ] = True,
-    features_tolerance: Annotated[
+    features_band: Annotated[
         float | None,
         typer.Option(
-            "--features-tolerance",
+            "--features-band",
             rich_help_panel=CLEAN_UP,
             show_default=False,
             help="Metres: simplify land-cover borders, each moved at most this far from its "
@@ -880,19 +880,36 @@ def mesh(
             metavar="UNITS",
             help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
             "whose inner point lies in --domain are joined into the domain, their borders, "
-            "simplified within --features-tolerance or else a band --triangles sets, become "
-            "constraints, and each cell's catchment_id is its unit's id.",
+            "simplified within --catchments-band, become constraints, and each cell's "
+            "catchment_id is its unit's id.",
+        ),
+    ] = None,
+    catchments_band: Annotated[
+        float | None,
+        typer.Option(
+            "--catchments-band",
+            show_default=False,
+            help="Metres: with --catchments, move each unit border at most this far, the "
+            "area kept; 0 is off. Default: an eighth of a triangle's edge at --triangles.",
         ),
     ] = None,
     simplify_domain: Annotated[
         bool,
         typer.Option(
             "--simplify-domain",
-            help="Simplify the --domain outline, each ring moved at most a band and the area "
-            "kept: --features-tolerance, or else an eighth of a triangle's edge at --triangles. "
-            "--catchments always simplifies its outline.",
+            help="Simplify the --domain outline, each ring moved at most --domain-band and "
+            "the area kept. --catchments always simplifies its outline, within --catchments-band.",
         ),
     ] = False,
+    domain_band: Annotated[
+        float | None,
+        typer.Option(
+            "--domain-band",
+            show_default=False,
+            help="Metres: with --simplify-domain, move each outline ring at most this far; "
+            "0 is off. Default: an eighth of a triangle's edge at --triangles.",
+        ),
+    ] = None,
     threads: THREADS = None,
     memory_budget: MEMORY_BUDGET = None,
     z_unit: Z_UNIT = None,
@@ -1025,16 +1042,24 @@ def mesh(
             "needs --domain: the units whose inner point lies in the domain are the sub-catchments",
             param_hint="--catchments",
         )
-    if catchments is not None and triangles is None and features_tolerance is None:
+    for flag, band, applies, named in (
+        ("--catchments-band", catchments_band, catchments is not None, "--catchments"),
+        ("--domain-band", domain_band, simplify_domain, "--simplify-domain"),
+    ):
+        if band is not None and not applies:
+            raise typer.BadParameter(f"applies only with {named}", param_hint=flag)
+        if band is not None and not (math.isfinite(band) and band >= 0):
+            raise typer.BadParameter(f"must be finite, >= 0, got {band}", param_hint=flag)
+    if catchments is not None and triangles is None and catchments_band is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the border band, or --features-tolerance",
+            "needs --triangles, whose budget sets the border band, or --catchments-band",
             param_hint="--catchments",
         )
     if simplify_domain and domain is None:
         raise typer.BadParameter("needs --domain", param_hint="--simplify-domain")
-    if simplify_domain and triangles is None and features_tolerance is None:
+    if simplify_domain and triangles is None and domain_band is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the outline band, or --features-tolerance",
+            "needs --triangles, whose budget sets the outline band, or --domain-band",
             param_hint="--simplify-domain",
         )
     regulated = None  # each triangle's share under the reservoir polygons
@@ -1048,7 +1073,7 @@ def mesh(
             )
     overrides = {
         "repair_m": features_repair,
-        "tolerance_m": features_tolerance,
+        "band_m": features_band,
         "outline_snap_m": features_outline_snap,
     }
     for (flag, top), metres in zip(OPTION_TOPS, overrides.values(), strict=True):
@@ -1165,21 +1190,19 @@ def mesh(
     units: Units | None = None
     if given is not None and units_source is not None:
         with clock.phase("catchments"), _refused("--catchments"):
-            units = _units(*units_source[:3], given, triangles, features_tolerance)
+            units = _units(*units_source[:3], given, triangles, catchments_band)
         given = units.domain
-    domain_band = None
+    outline_band = None
     if given is not None and units is None and simplify_domain:
         with clock.phase("domain simplify"):
             before = _ring_vertices(given.polygon)
-            given, domain_band = sub_catchments.simplify_domain(
-                given, triangles, features_tolerance
-            )
+            given, outline_band = sub_catchments.simplify_domain(given, triangles, domain_band)
             area = sub_catchments.equal_area(given).polygon.area
-        why = "--features-tolerance" if features_tolerance is not None else (
-            f"a triangle's edge at {triangles} triangles, {8 * domain_band:.0f} m, over 8"
+        why = "--domain-band" if domain_band is not None else (
+            f"a triangle's edge at {triangles} triangles, {8 * outline_band:.0f} m, over 8"
         )  # fmt: skip
         typer.echo(
-            f"domain: outline simplified at {domain_band:.0f} m ({why}): {before} to "
+            f"domain: outline simplified at {outline_band:.0f} m ({why}): {before} to "
             f"{_ring_vertices(given.polygon)} vertices, {area / 1e6:.2f} km2",
             err=True,
         )
@@ -1259,9 +1282,7 @@ def mesh(
             update={"features": (*found.features, line)}
         )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
-    simplified = (
-        found is not None and found.cover_vertices is not None and cleanup["tolerance_m"] > 0
-    )
+    simplified = found is not None and found.cover_vertices is not None and cleanup["band_m"] > 0
     angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
     angle = angle if start_min_angle is None else start_min_angle
     try:
@@ -1293,7 +1314,7 @@ def mesh(
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     except typer.BadParameter as exc:
-        plain = domain is not None and domain_band is None and units is None
+        plain = domain is not None and outline_band is None and units is None
         if isinstance(exc.__cause__, UnderFloor) and plain:
             exc.message += "; or give --simplify-domain to simplify the outline to the budget"
         raise
@@ -1336,8 +1357,8 @@ def mesh(
     if given is not None:
         how = transform_label(given.crs, dem_crs)
         values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
-        if domain_band is not None:
-            values["domain_band_m"] = domain_band
+        if outline_band is not None:
+            values["domain_band_m"] = outline_band
     if found is not None and sources and dem_run.feature_counts is not None:
         # One entry per source, joined, each counting its own features' lines
         # (found.features are in source order, found.counts[i] of each);
@@ -1766,7 +1787,7 @@ def _units(
     repaired = sub_catchments.repair([g for _, g in picked])
     area = join(repaired, read.crs).polygon.area
     if tolerance is not None:
-        band, why = tolerance, "--features-tolerance"
+        band, why = tolerance, "--catchments-band"
     else:
         assert triangles is not None
         band = sub_catchments.band_m(area, triangles)
