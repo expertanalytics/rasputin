@@ -1,13 +1,15 @@
 # Harness h39: a leaner full lane
 
-Status: **designed**, 2026-10-29, off master `43f1b2e9`. Rule text only:
-no tool, no production line, no path `tools/check_lane.py` names. The
-rule texts in section 4 are proposals; no rule file is edited until Ola
-answers section 5.
+Status: **approved**, 2026-10-29 (Ola, section 5), designed off master
+`43f1b2e9`, applied after merging master `e0aafd73`. Rule text only: no
+tool, no production line, no path `tools/check_lane.py` names. The rule
+texts in section 4 are applied as written.
 
 ## Ola, verbatim
 
 2026-10-29 06:55 UTC: "yes, we need to lean up the development process!"
+
+2026-10-29 10:32 UTC, to section 5's five questions: "yes to all five"
 
 ## 0. The plain picture
 
@@ -138,7 +140,7 @@ each old and new text below; scratch script, not kept).
 | R1 | `docs/increments/README.md` step 1 | one design round | +9 |
 | R2 | `.claude/agents/reviewer.md` handback item 3 | input class, every path | +11 |
 | R3 | `.claude/agents/architect.md` §5 Blueprint | before `@tester` | +3 |
-| C1 | `.claude/agents/reviewer.md` §1 | deleted: CI already refuses over 700 lines (`.github/workflows/main.yaml:251`, `count_loc.py --max 700`) | -18 |
+| C1 | `.claude/agents/reviewer.md`: "The ceiling" section | deleted: CI already refuses over 700 lines (`.github/workflows/main.yaml:251`, `count_loc.py --max 700`) | -18 |
 | C2 | `.claude/agents/reviewer.md` §5 item 6 | deleted: "once" in R1 says it | -5 |
 
 **R1.** Old:
@@ -192,6 +194,9 @@ WORDINGS` and `CHANGES REQUESTED` (`tools/push_grant.py:44` parses them).
    starts? Default: yes.
 5. Delete the reviewer's size-limit section, since CI already refuses a
    pull request over 700 lines? Default: yes.
+
+Answers (2026-10-29 10:32 UTC, "yes to all five"): 1 yes, 2 yes, 3 yes,
+4 yes, 5 yes.
 
 ## 6. Size, tests, left out
 

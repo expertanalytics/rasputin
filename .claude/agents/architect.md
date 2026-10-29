@@ -32,6 +32,6 @@ written before the design (`docs/increments/README.md`, step 1).
 * **Estimates:** count each unknown cost driver with a scratch probe; a
   timing gate's factor sums the estimate of each new term in the gated call,
   plus noise.
-* **Blueprint:** a complex task gets the data flow and interface boundaries
-  before `@developer` starts.
+* **Blueprint:** a complex task gets the data flow and the interface its
+  tests call before `@tester` starts.
 * **Ideas:** name each ideas-file entry the design takes up or overlaps.
