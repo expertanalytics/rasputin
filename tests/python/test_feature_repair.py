@@ -394,7 +394,22 @@ class TestTheClip:
 #: ``open_features``, each OBJECTID replaced by its index among the 69 rows
 #: ``read_source`` reads in key order (that run gave the old digest with the
 #: OBJECTIDs left in). Every other value is unchanged.
-TODAY = (60, "66638148490d9f1c83e1afe0d6a9c819741860d2730e1d620a79ddadb9635878", 9, 19, 0)
+#:
+#: Re-pinned once more at increment 111, ``a4bcab1e``: the land-cover map now
+#: keeps each polygon cut to the read region's box (``land_cover_map._fixed``)
+#: instead of the whole source polygon. That digest was
+#: ``66638148490d9f1c83e1afe0d6a9c819741860d2730e1d620a79ddadb9635878``. The
+#: rows were compared with master ``9c317c16``'s: every fid, mask, code and
+#: line is the same (lines compared normalised); the label polygon is the cut
+#: one (a ``Polygon`` for 55 rows that were a ``MultiPolygon``, 10,628 vertices
+#: in all against 13,615), and rows 21 and 59 list the same lines in another
+#: order. The Numedalslagen quick-check mesh kept its triangle and vertex
+#: counts and its 10 m largest error, and every class area to 7e-8 relative.
+#: Ola, 2026-10-29: "If the mesh is as good, and the diff very small, I see no
+#: reason to keep the old one. Please update the pin." That lifts the rule
+#: below for this change only; it stands for every later one.
+#: No commit may update it to agree with new code.
+TODAY = (60, "9c8236ebf2e1be95a1686dd521d2d4d766183b63f959cc6fc620b8083aa30535", 9, 19, 0)
 
 
 def digest(fs: Any) -> tuple[int, str, int, int, int]:

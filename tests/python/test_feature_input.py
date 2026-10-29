@@ -37,6 +37,7 @@ green before the change.
 
 from __future__ import annotations
 
+import itertools
 import json
 import sqlite3
 from contextlib import closing
@@ -1262,11 +1263,6 @@ class TestTheClipStaysTheSame:
             ),
             pytest.param(
                 BOX,
-                Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)]),
-                id="self-crossing-ring",
-            ),
-            pytest.param(
-                BOX,
                 Polygon([at(100, 100), at(200, 100), at(200, 100), at(200, 200), at(100, 200)]),
                 id="ring-with-a-repeated-vertex",
             ),
@@ -1287,6 +1283,24 @@ class TestTheClipStaysTheSame:
         assert domain.polygon.covers(chain) and expected != [list(chain.coords)]
         fs = one(tmp_path, geometry, domain=domain)
         assert [list(line.coords) for line in lines_of(fs)] == expected
+
+    def test_p1_a_self_crossing_ring_is_repaired_into_its_two_lobes(self, tmp_path: Path) -> None:
+        """Re-pinned at increment 111 (``a4bcab1e``; Ola, 2026-10-29: "Please
+        update the pin"): the land-cover map repairs a polygon whose cut to
+        the read box is invalid (``land_cover_map._fixed``), so the bowtie's
+        lines are its two closed lobes, not GEOS's cut of the raw ring.
+        Both give the same segments; only where a ring starts moved."""
+        bowtie = Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)])
+        fs = one(tmp_path, bowtie)
+        west = [at(100, 100), at(100, 200), at(150, 150), at(100, 100)]
+        east = [at(200, 200), at(200, 100), at(150, 150), at(200, 200)]
+        assert [list(line.coords) for line in lines_of(fs)] == [west, east]
+        (chain,) = ff.boundary_lines(bowtie)
+
+        def segments(lines: list[list[tuple[float, float]]]) -> set[frozenset[Any]]:
+            return {frozenset(s) for c in lines for s in itertools.pairwise(c)}
+
+        assert segments([west, east]) == segments(pieces_in(chain, BOX.polygon))
 
     @pytest.mark.parametrize(
         "where",
