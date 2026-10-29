@@ -1,6 +1,6 @@
 # h38: fast-lane push and enqueue without a fresh yes, present or away
 
-Status: code green at 31911bb2; §4 re-targeted after #395. §8 answered by Ola (2026-10-28).
+Status: code green at 31911bb2; §4 applied (Ola's yes, 2026-10-29), net 0 words. §8 answered by Ola (2026-10-28).
 
 Ola, verbatim, 2026-10-28, answering §8's questions (q30: opening the pull
 request without a yes; q31: an `away.py --fast-push off` switch; q32: the new
