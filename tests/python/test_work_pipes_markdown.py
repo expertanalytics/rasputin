@@ -110,29 +110,29 @@ def test_waiting_on_names_the_question_the_agent_or_a_free_writer(repo: Path) ->
     append(repo, rec("a", "queued"), rec("b", "designing"), rec("c", "red"), rec("e", "queued"))
     ask(repo, "Which name for the command?", "--choices", "show|list")
     ask(repo, "Split it in two?", "--item", "b")
-    ask(repo, "Merge it now?", "--item", "e")  # a second yes/no question: held
+    ask(repo, "Merge it now?", "--item", "e")  # a second yes/no question, open too
     note(repo, "c")
     lines = pipes(repo, "show", "--markdown").splitlines()
     waits = {r[0].split()[0]: r[2] for r in rows(section(lines, "### core"))}
     assert waits["**a**"] == "a free writer"
     assert waits["**b**"] == "Ola (question 2)"
     assert waits["**c**"] == "a running agent"
-    assert waits["**e**"].startswith("Ola (")
+    assert waits["**e**"] == "Ola (question 3)"
 
 
 def test_the_first_line_and_the_questions_section(repo: Path) -> None:
     append(repo, rec("r1", "red"), rec("q1", "queued"))
     ask(repo, "Which name for the command?", "--choices", "show|list")
     ask(repo, "Split it in two?", "--item", "q1")
-    ask(repo, "Merge it now?")  # held behind the yes/no question above
+    ask(repo, "Merge it now?")  # a second yes/no question, open too
     lines = pipes(repo, "show", "--markdown").splitlines()
     assert lines[0].startswith("In flight 1 of 3") and "**r1**" in lines[0], lines[0]
     questions = section(lines, "### Questions for Ola")
     listed = run_script(repo, "tools/questions.py", "", "list").stdout.splitlines()
     numbered = [line for line in listed if line[0].isdigit()]
     assert numbered == [line for line in questions if line[:1].isdigit()]
-    assert len(numbered) == 2
-    assert any("1 more" in line and "held" in line for line in questions), questions
+    assert len(numbered) == 3
+    assert not any("held" in line for line in questions), questions
 
 
 def test_a_pipe_in_a_cell_is_escaped_and_plain_show_is_unchanged(repo: Path) -> None:
