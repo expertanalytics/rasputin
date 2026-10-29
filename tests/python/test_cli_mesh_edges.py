@@ -871,6 +871,41 @@ def test_10_a_bowtie_far_outside_the_region_under_a_preferred_lake_is_counted_ou
     assert outside_count(with_far) == outside_count(without) + 1, (with_far, without)
 
 
+@pytest.mark.parametrize("run", ["far-pair", "far-bowtie-under-a-long-lake"])
+def test_12_every_polygon_of_the_maps_areas_is_valid(
+    scene: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, run: str
+) -> None:
+    """Section 3, *What every polygon in the map is*: in round 3's and round
+    4's runs above, every polygon of the map the edges step is given is
+    valid (`shapely.is_valid`), the far bowtie set aside in ``outside`` whole.
+    Today round 3's map holds the bowtie whole in its areas, and round 4's
+    run ends in GEOSException before the edges step."""
+    maps: list[Any] = []
+    real = cli.edges_of
+
+    def spy(land_cover: Any, *args: Any, **kwargs: Any) -> Any:
+        maps.append(land_cover)
+        return real(land_cover, *args, **kwargs)
+
+    monkeypatch.setattr(cli, "edges_of", spy)
+    polygons = dict(cover_polygons())
+    square, tie = far_pair()
+    if run == "far-pair":
+        near_a, near_b = [(311, polygons[311]), (312, polygons[312])], [(512, polygons[512])]
+        files = split(tmp_path, [*near_a, (311, square)], [*near_b, (ARABLE, tie)])
+        args: tuple[str, ...] = classes(*files)
+    else:
+        lake = write_lake(tmp_path / "lake.geojson", long_lake())
+        f = write_cover_geojson(tmp_path / "far.geojson", [*cover_polygons(), (ARABLE, tie)])
+        args = (*classes(f), *prefer(lake))
+    run_kept(scene, tmp_path / "x.gpkg", *args, *edges("all"), *AS_READ)
+    (land,) = maps
+    assert all(shapely.is_valid(g) for _, g in land.areas)
+    # Read back from GeoJSON in the DEM's CRS; coordinates near 6.6e6 m, so
+    # 1e-6 m is far above their rounding.
+    assert any(shapely.equals_exact(g, tie, tolerance=1e-6) for _, g in land.outside)
+
+
 def test_10_threads_reach_the_map_build(
     scene: dict[str, Path], tmp_path: Path, lake: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1824,3 +1824,129 @@ class TestASplitAttributeAsWritten:
         )
         source = self.source(fi, tmp_path, data, "clc18_kode")
         assert self.codes(fi, source) == {0: 5051, 1: 3031}
+
+
+# ------------------------- increment 111: what every polygon in the map is
+
+#: P5's two polygons: a shell the read box misses, with a hole in the domain.
+P5 = {
+    "shell-s-envelope-misses-the-region-s": Polygon(
+        square(2_000, 2_000, 2_100, 2_100).exterior.coords, [INNER.exterior.coords]
+    ),
+    "shell-s-envelope-overlaps-the-region-s": Polygon(ELL, [INNER.exterior.coords]),
+}
+P5_POLYGONS = [pytest.param(p, id=name) for name, p in P5.items()]
+#: A bowtie 50 km off `BOX`: invalid, and its cut to the read box is empty.
+FAR_BOWTIE = Polygon(
+    [at(50_000, 50_000), at(50_100, 50_100), at(50_100, 50_000), at(50_000, 50_100)]
+)
+#: A small square of class 312 in `BOX`, clear of `INNER`.
+SMALL = square(20, 20, 60, 60)
+
+
+def every_area_valid(built: Any) -> bool:
+    return all(bool(shapely.is_valid(g)) for _, g in built.areas)
+
+
+class TestWhatEveryPolygonInTheMap:
+    """`docs/increments/111-one-land-cover-map.md`, section 3, *What every
+    polygon in the map is*, and section 5, test 12. The read region is `BOX`
+    grown by 100 m (`source_region`), the read box that region's bounds grown
+    by `land_cover_map.MARGIN` (100 m) more. After `build`, ``areas`` holds
+    the polygons that reach the read box, each valid; ``outside`` the
+    polygons whose cut is empty, as read: whole, never checked, never
+    repaired. The edges step reads ``outside`` by rings only, after the
+    areas; no polygon of it labels a triangle."""
+
+    def build(self, pairs: list[tuple[int, BaseGeometry]], **kw: Any) -> Any:
+        return ff.land_cover_map().build([pairs], [], ff.classes("corine"), ff.region_of(BOX), **kw)
+
+    def test_premises(self) -> None:
+        box = ff.land_cover_map().MARGIN + 100.0
+        read_box = (at(-box, -box), at(300 + box, 300 + box))
+        assert not FAR_BOWTIE.is_valid
+        assert shapely.clip_by_rect(FAR_BOWTIE, *read_box[0], *read_box[1]).is_empty
+        for polygon in P5.values():
+            assert not polygon.is_valid
+            assert shapely.clip_by_rect(polygon, *read_box[0], *read_box[1]).is_empty
+
+    def test_a_far_bowtie_is_outside_whole_and_the_areas_are_valid(self) -> None:
+        """Today `areas` holds both, the bowtie invalid (0.0 m² by GEOS)."""
+        inner = Polygon(INNER.exterior.coords)
+        built = self.build([(311, inner), (311, FAR_BOWTIE)])
+        assert [code for code, _ in built.areas] == [311]
+        assert built.areas[0][1].area == pytest.approx(10_000.0, abs=1e-6)
+        assert shapely.equals(built.areas[0][1], INNER)
+        assert every_area_valid(built)
+        assert built.repaired == 0
+        ((code, far),) = built.outside
+        assert code == 311 and far is FAR_BOWTIE
+
+    def test_a_map_built_without_fix_passes_outside_through(self) -> None:
+        """The `--prefer` build (``fix=False``) is given the base map's
+        ``outside`` as a keyword and passes it through; it defaults to empty."""
+        base = self.build([(311, INNER), (311, FAR_BOWTIE)])
+        lm, corine, region = ff.land_cover_map(), ff.classes("corine"), ff.region_of(BOX)
+        lake = [(512, [square(120, 120, 180, 180)])]
+        again = lm.build([base.areas], lake, corine, region, fix=False, outside=base.outside)
+        assert len(again.outside) == 1 and again.outside[0][1] is FAR_BOWTIE
+        assert every_area_valid(again)
+        assert tuple(lm.build([base.areas], [], corine, region, fix=False).outside) == ()
+
+    def test_the_p1_bowtie_is_valid_after_repair(self) -> None:
+        bowtie = Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)])
+        built = self.build([(311, bowtie)])
+        assert len(built.areas) == 1 and tuple(built.outside) == ()
+        assert every_area_valid(built)
+
+    @pytest.mark.parametrize("polygon", P5_POLYGONS)
+    def test_p5_with_cleanup_is_counted_outside(self, tmp_path: Path, polygon: Polygon) -> None:
+        """Today the second raises GEOSException ("unable to assign free
+        hole to a shell") in the clean-up's clip."""
+        fs = one(tmp_path, polygon, switches=CLEANUP)
+        assert fs.features == ()
+        assert fs.outside == 1
+
+    @pytest.mark.parametrize("polygon", P5_POLYGONS)
+    def test_p5_without_cleanup_its_hole_labels_no_triangle(
+        self, tmp_path: Path, polygon: Polygon
+    ) -> None:
+        """Its ring is kept as given (`test_p5_...`), but by its cut it has no
+        area in the box: the feature carries no polygon. Today it carries the
+        invalid polygon."""
+        fs = one(tmp_path, polygon)
+        assert len(fs.features) == 1 and fs.outside == 0
+        assert [list(line.coords) for line in lines_of(fs)] == [list(INNER.exterior.coords)]
+        assert fs.features[0].polygon is None
+
+    @pytest.mark.parametrize("polygon", P5_POLYGONS)
+    def test_p5_outside_polygons_come_after_the_areas(
+        self, tmp_path: Path, polygon: Polygon
+    ) -> None:
+        """Given first in the file, p5's polygon still comes after the
+        areas in the edges step's feature order. Today it comes first."""
+        rows = [Feat("p5", polygon, {"Code_18": "311"}), Feat("s", SMALL, {"Code_18": "312"})]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX)
+        assert [f.code for f in fs.features] == [312, 311]
+        assert [f.polygon is None for f in fs.features] == [False, True]
+
+    @pytest.mark.parametrize("polygon", P5_POLYGONS)
+    def test_p5_in_a_map_cut_by_prefer_is_counted_outside(self, polygon: Polygon) -> None:
+        """With the map cut by `--prefer` the clean-up runs, and each chosen
+        class's outside polygon is counted outside, with no overlay: one more
+        than the same map without it, and the same features."""
+        fi, lm, corine = ff.feature_input(), ff.land_cover_map(), ff.classes("corine")
+        region = ff.region_of(BOX)
+        lake = [(512, [INNER])]
+
+        def edges(pairs: list[tuple[int, BaseGeometry]]) -> Any:
+            built = lm.build([pairs], lake, corine, region)
+            assert every_area_valid(built)
+            return fi.edges_of(built, [], ff.every_class(), ff.cleanup(), BOX, V, region=region)
+
+        near = [(311, SMALL), (512, INNER)]
+        with_p5, without = edges([*near, (311, polygon)]), edges(near)
+        assert with_p5.outside == without.outside + 1
+        assert [(f.code, f.lines) for f in with_p5.features] == [
+            (f.code, f.lines) for f in without.features
+        ]
