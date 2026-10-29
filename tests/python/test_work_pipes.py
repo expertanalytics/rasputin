@@ -245,6 +245,47 @@ def test_the_only_pipe_with_runnable_items_may_hold_a_third() -> None:
     assert label(choice) == "core/cq"
 
 
+def test_a_pipe_holding_its_one_place_lends_to_an_empty_pipe_first() -> None:
+    records = [rec("r", "red"), rec("cq", "queued", age=2 * HOUR),
+               rec("lq", "queued", pipe="lsm")]  # fmt: skip
+    assert label(choose(records, busy={"worktree-r"})) == "lsm/lq"
+
+
+def test_a_spare_place_goes_to_the_higher_priority_pipe() -> None:
+    records = [rec("r", "red"), rec("l", "red", pipe="lsm"), rec("cq", "queued"),
+               rec("lq", "queued", pipe="lsm", age=2 * HOUR)]  # fmt: skip
+    assert label(choose(records, busy={"worktree-r", "worktree-l"})) == "core/cq"
+
+
+def test_an_item_with_a_pr_and_no_agent_takes_no_place_and_is_not_offered() -> None:
+    records = [rec("r", "red"), rec("g", "green"), rec("d", "review", pipe="lsm", pr=5),
+               rec("lq", "queued", pipe="lsm")]  # fmt: skip
+    busy = {"worktree-r", "worktree-g"}
+    assert pipes.in_flight(pipes.fold(records), busy) == 2
+    assert label(choose(records, busy=busy)) == "lsm/lq"
+    assert pipes.in_flight(pipes.fold(records), busy | {"worktree-d"}) == 3
+
+
+def test_the_header_counts_no_place_for_an_item_waiting_on_ola_or_ci(repo: Path) -> None:
+    ok(repo, "add", "core", "a", "running")
+    ok(repo, "set", "a", "red", "--branch", "worktree-a")
+    ok(repo, "add", "core", "b", "asked")
+    ok(repo, "set", "b", "designing", "--branch", "worktree-b")
+    ok(repo, "add", "lsm", "c", "on CI")
+    ok(repo, "set", "c", "review", "--branch", "worktree-c", "--pr", "9")
+    ask_ola(repo, "Split it in two?", "b")
+    assert ok(repo, "show").startswith("Pipes (in flight 1 of 3")
+
+
+def test_next_takes_the_spare_place_when_a_pipe_has_only_an_item_on_ola(repo: Path) -> None:
+    append(repo, rec("r", "red"), rec("cq", "queued", age=2 * HOUR),
+           rec("lq", "queued", pipe="lsm"))  # fmt: skip
+    note(repo, "r")
+    assert " lsm/lq queued " in ok(repo, "next").splitlines()[-1]
+    ask_ola(repo, "Stop?", "lq")
+    assert " core/cq queued " in ok(repo, "next").splitlines()[-1]
+
+
 def test_busy_branches_reads_the_note_names(tmp_path: Path) -> None:
     tasks = tmp_path / "current-task"
     tasks.mkdir()
@@ -280,10 +321,10 @@ def test_a_waiting_item_is_never_chosen() -> None:
 
 
 def test_unattended_skips_items_that_are_not_plain() -> None:
-    records = [rec("r", "red"), rec("governed", "queued", age=2 * HOUR),
+    records = [rec("governed", "queued", age=2 * HOUR),
                rec("plain", "queued", pipe="lsm", plain=True)]  # fmt: skip
-    assert label(choose(records, busy={"worktree-r"})) == "core/governed"
-    assert label(choose(records, busy={"worktree-r"}, unattended=True)) == "lsm/plain"
+    assert label(choose(records)) == "core/governed"
+    assert label(choose(records, unattended=True)) == "lsm/plain"
 
 
 def test_unattended_with_nothing_plain_is_idle(repo: Path) -> None:
