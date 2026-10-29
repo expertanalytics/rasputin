@@ -1950,3 +1950,130 @@ class TestWhatEveryPolygonInTheMap:
         assert [(f.code, f.lines) for f in with_p5.features] == [
             (f.code, f.lines) for f in without.features
         ]
+
+
+# --------------------- increment 111, code review round 5: a cut to a 3-point ring
+
+#: A square east of the read box (which ends at x = 500), whose ring the
+#: cases below run back into the box along a zero-width spike.
+EAST = [(600, 0), (700, 0), (700, 100), (600, 100)]
+
+
+def ring(*xy: tuple[float, float]) -> Polygon:
+    return Polygon([at(x, y) for x, y in xy])
+
+
+#: (150, 50) from `at`'s origin with y one ulp (about 9.3e-10 m) higher.
+ULP_TIP = (at(150, 0)[0], float(np.nextafter(at(0, 50)[1], np.inf)))
+#: Polygons that reach the read box with no area there: `clip_by_rect`
+#: leaves a ring of three points and raises (`test_round_5_premises`), and
+#: `_repaired` keeps no face of the box, so each gives nothing.
+NO_AREA_IN_THE_BOX = {
+    "a-spike-into-the-box": ring(*EAST, (600, 50), (150, 50), (600, 50)),
+    "a-spike-across-the-box": ring(*EAST, (600, 50), (-600, 50), (600, 50)),
+    "a-spike-through-the-box-corner": ring(
+        (600, 600), (700, 600), (700, 700), (600, 700), (600, 600), (250, 250), (600, 600)
+    ),
+    "two-spikes": ring(*EAST, (600, 80), (150, 80), (600, 80), (600, 20), (150, 20), (600, 20)),
+    "a-spike-whose-tip-is-one-ulp-off": Polygon(
+        [*(at(x, y) for x, y in EAST), at(600, 50), ULP_TIP, at(600, 50)]
+    ),
+    "a-self-crossing-square-with-a-spike": ring(
+        (600, 0), (700, 100), (700, 0), (600, 100), (600, 50), (150, 50), (600, 50)
+    ),
+    "a-flat-ring-across-the-box-edge": ring((600, 50), (150, 50), (550, 50), (700, 50)),
+    "a-ring-of-two-points-and-back": ring((600, 50), (150, 50), (600, 50)),
+}
+NO_AREA = [pytest.param(p, id=name) for name, p in NO_AREA_IN_THE_BOX.items()]
+#: A shell over the whole read box whose hole is `EAST` with the spike.
+HOLE_SPIKE = Polygon(
+    square(-1_000, -1_000, 1_000, 1_000).exterior.coords,
+    [NO_AREA_IN_THE_BOX["a-spike-into-the-box"].exterior.coords],
+)
+#: `SMALL`, with the spike as a second part.
+PART_SPIKE = MultiPolygon([SMALL, NO_AREA_IN_THE_BOX["a-spike-into-the-box"]])
+
+
+class TestACutToAThreePointRing:
+    """Code review round 5 of `docs/increments/111-one-land-cover-map.md`:
+    `_fixed`'s `shapely.clip_by_rect` raises GEOSException ("Invalid number
+    of points in LinearRing found 3") on a polygon whose ring runs into the
+    read box and back along the same line, so every `--land-cover` run with
+    one crashes. By section 3, *What every polygon in the map is*, such a
+    polygon reaches the read box, so it is not ``outside``; its cut is
+    repaired (`_repaired`), and a spike has no area, so the repair keeps
+    nothing of it and the rest of the polygon is kept. The read box is
+    (-200, -200) to (500, 500) from the origin of `at` (`BOX` grown twice by
+    100 m). Areas to 1e-6 m²: coordinates near 5e5 and 6.6e6 m (a double
+    resolves about 1e-9 m there), polygons at most 2 km across."""
+
+    READ_BOX = (*at(-200, -200), *at(500, 500))
+
+    def build(self, pairs: list[tuple[int, BaseGeometry]]) -> Any:
+        return ff.land_cover_map().build([pairs], [], ff.classes("corine"), ff.region_of(BOX))
+
+    @pytest.mark.parametrize(
+        "polygon",
+        [*NO_AREA, pytest.param(HOLE_SPIKE, id="hole"), pytest.param(PART_SPIKE, id="part")],
+    )
+    def test_round_5_premises(self, polygon: BaseGeometry) -> None:
+        assert not polygon.is_valid
+        with pytest.raises(
+            shapely.errors.GEOSException,
+            match=r"^IllegalArgumentException: Invalid number of points in LinearRing found 3 ",
+        ):
+            shapely.clip_by_rect(polygon, *self.READ_BOX)
+
+    @pytest.mark.parametrize("polygon", NO_AREA)
+    def test_the_premise_its_repair_keeps_nothing(self, fi: ModuleType, polygon: Polygon) -> None:
+        assert fi._repaired(polygon, shapely.get_coordinates(ff.region_of(BOX).exterior)) is None
+
+    @pytest.mark.parametrize("polygon", NO_AREA)
+    def test_a_polygon_with_no_area_in_the_box_gives_nothing(self, polygon: Polygon) -> None:
+        built = self.build([(311, polygon), (312, SMALL)])
+        assert [(code, g.wkt) for code, g in built.areas] == [(312, SMALL.wkt)]
+        assert tuple(built.outside) == ()
+        assert built.repaired == 1
+
+    def test_a_hole_with_a_spike_keeps_the_shell_in_the_box(self) -> None:
+        """The spike is the hole's: the whole read box stays forest."""
+        built = self.build([(311, HOLE_SPIKE)])
+        ((code, kept),) = built.areas
+        assert code == 311 and kept.is_valid
+        want = shapely.box(*self.READ_BOX)
+        assert kept.area == pytest.approx(700.0 * 700.0, abs=1e-6)
+        assert kept.symmetric_difference(want).area <= 1e-6, kept.wkt
+        assert tuple(built.outside) == () and built.repaired == 1
+
+    def test_a_spike_as_a_second_part_keeps_the_first(self) -> None:
+        built = self.build([(312, PART_SPIKE)])
+        ((code, kept),) = built.areas
+        assert code == 312 and kept.is_valid
+        assert kept.symmetric_difference(SMALL).area <= 1e-6, kept.wkt
+        assert tuple(built.outside) == () and built.repaired == 1
+
+    @pytest.mark.parametrize("switches", [None, CLEANUP], ids=["no-clean-up", "clean-up"])
+    @pytest.mark.parametrize("polygon", NO_AREA)
+    def test_the_run_keeps_the_neighbour_only(
+        self, tmp_path: Path, polygon: Polygon, switches: Any
+    ) -> None:
+        """Read and built as `--land-cover` reads them; the reviewer's case
+        is the first. Today `open_one` raises GEOSException in `_fixed`."""
+        rows = [Feat("spike", polygon, {"Code_18": "311"}), Feat("s", SMALL, {"Code_18": "312"})]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX, switches=switches)
+        assert [f.code for f in fs.features] == [312]
+        assert fs.outside == 0
+
+    @pytest.mark.parametrize("switches", [None, CLEANUP], ids=["no-clean-up", "clean-up"])
+    @pytest.mark.parametrize(
+        ("polygon", "code"),
+        [pytest.param(HOLE_SPIKE, 311, id="hole"), pytest.param(PART_SPIKE, 312, id="part")],
+    )
+    def test_the_run_keeps_the_area_beside_a_spike(
+        self, tmp_path: Path, polygon: BaseGeometry, code: int, switches: Any
+    ) -> None:
+        rows = [Feat("spiked", polygon, {"Code_18": str(code)})]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", rows), BOX, switches=switches)
+        assert [f.code for f in fs.features] == [code]
+        assert fs.features[0].polygon is not None and fs.features[0].polygon.is_valid
+        assert fs.outside == 0
