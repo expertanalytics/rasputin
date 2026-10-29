@@ -1,7 +1,6 @@
 # h38: fast-lane push and enqueue without a fresh yes, present or away
 
-Status: design round 3 (remote URLs pinned); §8 answered by Ola (2026-10-28). No production
-code yet.
+Status: code green at 31911bb2; §4 re-targeted after #395. §8 answered by Ola (2026-10-28).
 
 Ola, verbatim, 2026-10-28, answering §8's questions (q30: opening the pull
 request without a yes; q31: an `away.py --fast-push off` switch; q32: the new
@@ -185,21 +184,28 @@ time (no file list can find it).
 `guard_push.py` changes one word: its refusal says "fast-lane branch" rather
 than "granted branch" when the lane was fast.
 
-## 4. Rule text (`.claude/REQUIRED-READING.md`), net words -2
+## 4. Rule text, net words 0
 
-- In **A fresh yes, every time**, after "...or the permission system.", add:
-  "A fast-lane branch for origin (`docs/increments/README.md`) needs no yes,
-  grant or review; the guard checks its lane and CI." (+19 words, `wc -w`)
-- In **Unattended mode**, delete "A fast-lane branch for origin
-  (`docs/increments/README.md`) needs neither grant nor review; the guard
-  checks its lane." (-16)
-- In `docs/increments/README.md`, **Two lanes**, delete "The approval
-  boundary (`.claude/REQUIRED-READING.md`) holds." (-5): REQUIRED-READING is
-  the one statement of it.
+Re-targeted after #395 (h36, the rule cut, merge 9c317c16) moved the
+sentences: the approval boundary is now one paragraph of
+`.claude/REQUIRED-READING.md`, the away-mode rules are
+`.claude/skills/away-mode/SKILL.md`, and the README's "The approval boundary
+... holds." is gone. Counts are `wc -w`, the measure of `tools/rule_sizes.py`,
+which counts all three files.
+
+- `.claude/REQUIRED-READING.md`, **Before you publish: the approval
+  boundary, and the assessment**, after "...while he is away,
+  `away-mode`).", add: "A fast-lane branch for origin needs no yes or
+  grant: the guard checks lane and CI." (+16)
+- `.claude/skills/away-mode/SKILL.md`, the bullet on granted branches,
+  delete "A fast-lane branch for origin needs neither (the guard checks its
+  lane)." (-12): REQUIRED-READING now says it for both modes.
+- Same bullet, delete "recorded by a hook," (-4): who records the verdict
+  is the guard's business, not an act of the agent's; the agent's rule,
+  `@reviewer`'s last verdict approved that head, stays.
 
 The path lists live in the guard's code, not in rule text, since no agent
-acts on them; the guard does. Recounted after Ola's answers: the switch had
-no rule text, so the net stays -2.
+acts on them; the guard does.
 
 ## 5. What it would have saved
 
