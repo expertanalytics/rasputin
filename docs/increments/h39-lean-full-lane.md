@@ -137,11 +137,12 @@ each old and new text below; scratch script, not kept).
 
 | # | File | Change | Words |
 |---|---|---|---|
-| R1 | `docs/increments/README.md` step 1 | one design round | +9 |
+| R1 | `docs/increments/README.md` step 1 | one design round, after Ola's answers, naming every hole | +15 |
 | R2 | `.claude/agents/reviewer.md` handback item 3 | input class, every path | +11 |
 | R3 | `.claude/agents/architect.md` §5 Blueprint | before `@tester` | +3 |
 | C1 | `.claude/agents/reviewer.md`: "The ceiling" section | deleted: CI already refuses over 700 lines (`.github/workflows/main.yaml:251`, `count_loc.py --max 700`) | -18 |
-| C2 | `.claude/agents/reviewer.md` §5 item 6 | deleted: "once" in R1 says it | -5 |
+| C2 | `.claude/agents/reviewer.md` §5 item 6 | deleted: "naming every hole" in R1 says it | -5 |
+| C3 | `.claude/agents/reviewer.md` mandate paragraph | deleted: "(a hook reads your `Review:` line)"; the handback's last paragraph names the line, `.claude/hooks/record_review.py` reads it | -6 |
 
 **R1.** Old:
 
@@ -150,9 +151,9 @@ each old and new text below; scratch script, not kept).
 
 New:
 
-> `@reviewer` reviews the design once, before `@tester` starts; code review
-> checks its findings fixed; only a design wrong at its core is reviewed
-> again.
+> `@reviewer` reviews the design once, after Ola's answers and before
+> `@tester` starts, naming every hole; code review checks them fixed; only
+> a design wrong at its core is reviewed again.
 
 **R2.** Old: `3. **Blocking Issues.**` New:
 
@@ -177,8 +178,11 @@ New:
 
 **C2.** Delete from item 6: "All holes in one pass."
 
+**C3.** Delete from the mandate paragraph: "(a hook reads your `Review:`
+line)".
+
 No tool changes: the verdict words stay `APPROVED`, `APPROVED WITH
-WORDINGS` and `CHANGES REQUESTED` (`tools/push_grant.py:44` parses them).
+WORDINGS` and `CHANGES REQUESTED` (`tools/push_grant.py:56` parses them).
 
 ## 5. Questions for Ola
 

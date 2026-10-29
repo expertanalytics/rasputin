@@ -11,7 +11,7 @@ Load `.claude/REQUIRED-READING.md` before acting.
 Your mandate is semantics: is the domain model valid (types, invariants,
 units, degenerate inputs), are edge cases handled, are the change's claims
 true. Tools enforce CI status, style (the required `CI result` check) and
-your verdict's record (a hook reads your `Review:` line). The checks below
+your verdict's record. The checks below
 are yours until a tool makes them.
 
 ## 5. Review
