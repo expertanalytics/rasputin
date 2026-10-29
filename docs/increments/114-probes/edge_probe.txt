@@ -1,0 +1,21 @@
+SF 4326->32723 pts 21: shortfall m (0.0, 0.0, 0.0, 8.7372) 0.064 ms
+SF 4326->32723 pts 101: shortfall m (0.0, 0.0, 0.0, 0.4065) 1.307 ms
+SF 4326->32723 pts 1001: shortfall m (0.0, 0.0, 0.0, 0.0042) 117.524 ms
+SF 32723->4326 pts 21: shortfall m (0.0, 26.3526, 0.0, 0.0)
+SF 32723->4326 pts 101: shortfall m (0.0, 0.9694, 0.0, 0.0)
+SF 32723->4326 pts 1001: shortfall m (0.0, 0.0016, 0.0, 0.0)
+quad 4326->25833 pts 21: shortfall m (0.0, 0.0, 0.0, 0.0)
+fetch 4326->25833 pts 21: shortfall m (0.0, 0.0, 0.0, 0.0)
+EPSG:32660 box (700000.0, 5000000.0, 900000.0, 5100000.0) -> 4326 (179.54, 45.04, -177.84, 46.02)
+EDGE in 25833 (517060.4, 6573496.4, 522780.6, 6579094.1)
+EDGE share by area 0.5183 by bounds 0.5179
+outline EPSG:4326->EPSG:32723 n 1000 points 4004: shortfall m (0.0, 0.0, 0.0, 0.0) 0.568 ms
+outline EPSG:4326->EPSG:32723 n 2000 points 8004: shortfall m (0.0, 0.0, 0.0, 0.0) 1.024 ms
+outline EPSG:4326->EPSG:32723 n 4000 points 16004: shortfall m (0.0, 0.0, 0.0, 0.0) 1.940 ms
+outline EPSG:32723->EPSG:4326 n 1000 points 4004: shortfall m (0.0, 0.00583, 0.0, 0.0) 0.590 ms
+outline EPSG:32723->EPSG:4326 n 2000 points 8004: shortfall m (0.0, 0.0016, 0.0, 0.0) 1.077 ms
+outline EPSG:32723->EPSG:4326 n 4000 points 16004: shortfall m (0.0, 0.00033, 0.0, 0.0) 2.049 ms
+AM outline max lon jump 360.0
+pole outline max lon jump 359.97
+SF outline max lon jump 0.00641
+pyproj pole box (-180.0, 83.48, 180.0, 90.0)

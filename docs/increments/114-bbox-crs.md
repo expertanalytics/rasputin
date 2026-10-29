@@ -1,12 +1,12 @@
 # Increment 114: every --bbox names its coordinate system
 
-**Status: designed** by `@architect`, 2026-10-29, on master `f0dfe61b`,
-worktree `bbox-crs`. One PR, full loop, Python only. Number 114: 113 is
-the highest under `docs/increments/` over every worktree (`lsm-thin-soil`),
-112 the highest on the private repo's refs. Every `file:line` below is at
-`f0dfe61b`. PR #404 (`fbeaf649`, merged since) changes `cli.py`, but none of
-its hunks touch a line cited here. The branch `worktree-prefer-holes` may
-shift these line numbers.
+**Status: ready for `@tester`.** Designed by `@architect`, 2026-10-29, on
+master `f0dfe61b`, worktree `bbox-crs`; design review round 1 applied on
+master `fbeaf649` (no second design round: its fixes are checked at code
+review). One PR, full loop, Python only. Number 114: 113 is the highest
+under `docs/increments/` over every worktree (`lsm-thin-soil`), 112 the
+highest on the private repo's refs. Every `file:line` below is at
+`fbeaf649`. The branch `worktree-prefer-holes` may shift these line numbers.
 
 ## 0. The plain picture
 
@@ -55,15 +55,15 @@ the wrong thing. The companion option gets refusal words of our own. It also mat
 repository's `--domain-crs`, `--seed-crs` and `--tolerance-near-crs`. No
 novelty is claimed.
 
-## 2. Every box today (master `f0dfe61b`)
+## 2. Every box today (master `fbeaf649`)
 
 | Where | Assumed CRS today | Stated at |
 |---|---|---|
-| `mesh --bbox` (MCP `mesh.bbox`) | `--out-crs` if given, else the DEM's | `cli.py:596-603`, `cli.py:725` (`--out-crs` help); applied in `dem_input.py:214` (projected path) and `dem_input.py:344-347` (target CRS) |
-| `fetch --bbox` (MCP `fetch.bbox`) | `--out-crs` if given, else the source's | `cli.py:2599-2607`; `fetch/plan.py:38-40`, `_frame_box` `fetch/plan.py:114-122`, `region_sha256` `fetch/plan.py:163-172` |
-| `sources --bbox` (MCP `sources.bbox`) | WGS 84 degrees | `cli.py:2748-2756`; `source_report.py:373-377`; MCP `INSTRUCTIONS`, `mcp/server.py:93` |
-| hint `_fetch_run` (mesh refusal: "run: rasputin fetch ...") | mesh's own rule, passed on | `cli.py:1602-1616`, used at `cli.py:977-1017`, `1212` |
-| hint `_bbox_fetch` (window box of a `NotCached`) | the source's, unstated | `cli.py:1619-1626`; box set at `io/repository.py:381`; `NotCached` `io/cog.py:56-69`; used at `cli.py:1211`, `3705` (catchment) |
+| `mesh --bbox` (MCP `mesh.bbox`) | `--out-crs` if given, else the DEM's | `cli.py:596-604`, `cli.py:725` (`--out-crs` help); box built at `cli.py:2930-2936`; applied in `dem_input.py:214` (projected path) and `dem_input.py:344-346` (target CRS) |
+| `fetch --bbox` (MCP `fetch.bbox`) | `--out-crs` if given, else the source's | `cli.py:2634-2640`, box built at `cli.py:2696`; `fetch/plan.py:38-40`, `_frame_box` `fetch/plan.py:114-122`, `box_in_crs` `fetch/plan.py:134-141`, `region_sha256` `fetch/plan.py:163-172` |
+| `sources --bbox` (MCP `sources.bbox`) | WGS 84 degrees | `cli.py:2782-2790`, check `cli.py:2802-2803`; `source_report.py:373-377`, `_cover` `source_report.py:226-234`; MCP `INSTRUCTIONS`, `mcp/server.py:93`; `README.md:213` |
+| hint `_fetch_run` (mesh refusal: "run: rasputin fetch ...") | mesh's own rule, passed on | `cli.py:1635-1649`, used at `cli.py:998-1038`, `1245` |
+| hint `_bbox_fetch` (window box of a `NotCached`) | the source's, unstated | `cli.py:1652-1659`; box set at `io/repository.py:381`; `NotCached` `io/cog.py:56-75`; used at `cli.py:1244`, `3738` (catchment) |
 
 No other command or MCP argument takes a box. `git grep -n -- '--bbox'
 src_python` lists only these, plus the wording in `mosaic.py:221,614`. The MCP
@@ -78,55 +78,111 @@ geometry with a CRS. It is a frozen Pydantic model:
     class CrsBox(BaseModel):
         crs: str                                    # validated by parse_crs
         box: tuple[float, float, float, float]      # x_min, y_min, x_max, y_max
+        def outline(self, dst: str | CRS) -> Xy     # (4 * (EDGE_STEPS + 1), 2)
         def to_crs(self, dst: str | CRS) -> tuple[float, float, float, float]
 
-- Invariants: every value is finite; `x_min <= x_max` and `y_min <= y_max`.
-  Equal values are allowed because `sources` takes a point. `mesh` and
-  `fetch` still refuse an empty box through `Bounds`, after the move.
-- `to_crs` returns the numbers untouched (bit for bit) when
-  `same_crs(crs, dst)`. Otherwise it returns `transform_bounds(crs, dst, box)`
-  (densified with 21 points, outward, `crs.py:97-105`).
-- A non-finite result is refused with a `ValueError` naming both CRSs: "the
-  box (...) in EPSG:x has no image in EPSG:y".
+- Invariants: every value is finite; `x_min <= x_max` and `y_min <= y_max`
+  (words: "XMIN must not exceed XMAX, nor YMIN YMAX"). Equal values are
+  allowed because `sources` takes a point. In a geographic CRS,
+  `-90 <= y_min` and `y_max <= 90`, else "latitude must lie within ±90° in
+  <crs>". `mesh` and `fetch` still refuse an empty box through `Bounds`,
+  after the move.
+- `outline(dst)`: each side of the box sampled at `EDGE_STEPS + 1` equal
+  steps, mapped point by point by `crs.reprojector(crs, dst)`. Built with
+  NumPy, not `shapely.segmentize`: GEOS refuses a point box
+  (`114-probes/box_probe.py` hit "point array must contain 0 or >1
+  elements").
+- `to_crs(dst)` returns the numbers untouched (bit for bit) when
+  `same_crs(crs, dst)`. Otherwise it returns the outline's bounds. Refused,
+  as `ValueError` naming both CRSs:
+  - a non-finite point: "the box (...) in A has no image in B";
+  - with `dst` geographic, two neighbouring outline points more than 180°
+    of longitude apart: "the box (...) in A crosses ±180° or holds a pole
+    in B; split it". On the probe, a box across 180° (EPSG:32660) and one
+    round the pole (EPSG:3413) step 360.0°, the quad 1e-6° and the São
+    Francisco box 0.0064° (`114-probes/box_probe.txt`, `edge_probe.txt`).
+- **What the move gives.** The outline's points lie on the true image of
+  the box's edges, so its bounds lie inside or on the true image's bounds,
+  never outside. How far inside, against 200 001 points an edge
+  (`114-probes/edge_probe.txt`), on a 12° x 14° box (São Francisco basin,
+  `(-48, -21, -36, -7)`, to and from EPSG:32723):
+
+  | Move | degrees to UTM | UTM to degrees |
+  |---|---|---|
+  | pyproj `transform_bounds`, 21 points an edge (today's) | 8.7 m | 26.4 m |
+  | `outline`, `EDGE_STEPS = 2000` | 0.0 m | 1.6 mm |
+
+  The 0.0 m is luck: the edge's extreme, on the zone's central meridian,
+  falls on a sample. The error falls with the square of the step. The mesh then snaps the box
+  outward to whole nodes (30 m on São Francisco's DEM), so a node line is
+  lost only when the true edge lies within 1.6 mm past it.
+- **Not used:** pyproj's `transform_bounds` at more points. Its cost grows
+  with the square of the count (0.06, 1.3, 118 ms at 21, 101, 1001 points),
+  where `outline` takes 1.1 ms at 2000.
 
 **CLI.** `mesh`, `fetch` and `sources` each gain the option
 `--bbox-crs TEXT`, help: "The --bbox's CRS, anything pyproj reads; EPSG:4326
-is longitude and latitude in degrees. Never assumed." One helper in `cli.py`
-turns `(bbox, bbox_crs)` into a `CrsBox | None` for all three. It refuses:
+is longitude and latitude in degrees. Never assumed. Required with --bbox."
+One helper in `cli.py` turns `(bbox, bbox_crs)` into a `CrsBox | None` for
+all three, replacing the `Bounds` built at `cli.py:2696` and
+`cli.py:2930-2936` and the check at `cli.py:2802-2803`. It refuses:
 
 | Case | Exit | Words (param `--bbox-crs`) |
 |---|---|---|
 | `--bbox` without `--bbox-crs` | 2 | "--bbox needs --bbox-crs, the CRS its four numbers are in (EPSG:4326 for longitude and latitude in degrees); a box's CRS is never assumed" |
-| `--bbox-crs` without `--bbox` | 2 | "applies only with --bbox" (as `--domain-crs`, `cli.py:1047-1048`) |
+| `--bbox-crs` without `--bbox` | 2 | "applies only with --bbox" (as `--domain-crs`, `cli.py:1078-1079`) |
 | CRS pyproj cannot read | 2 | `parse_crs`'s own words |
-| no image in the frame | 2 | `to_crs`'s words |
+| a broken invariant (param `--bbox`) | 2 | `CrsBox`'s words |
+| no image, or across ±180° | 2 | `to_crs`'s words |
 
 The help of each `--bbox` drops its assumption and says "XMIN YMIN XMAX YMAX
 in --bbox-crs (required with it); x is easting or longitude whatever the
 CRS's axis order". `mesh` adds "in another CRS than the mesh's, the box
-holding its image there is meshed, snapped outward to the DEM's nodes". The
-phrase "snapped outward to the DEM's nodes" is kept because
-`test_mcp_schema.py:433` reads it. The `--out-crs` help loses "--bbox is
-then in this CRS." (`cli.py:725`). `fetch --out-crs` becomes "The mesh's CRS,
-which --domain or --bbox is moved into, as mesh moves it."
+holding the image of its edges there is meshed, snapped outward to the
+DEM's nodes, or with --out-crs to its grid's". The phrase "snapped outward
+to the DEM's nodes" is kept because `test_mcp_schema.py:433` reads it. On
+the `--out-crs` path the box in the target CRS becomes the domain of
+`target_grid_for` (`dem_input.py:344-352`), whose bounds, grown by a cell's
+diagonal, snap outward to the target grid. The `--out-crs` help loses
+"--bbox is then in this CRS." (`cli.py:725`). `fetch --out-crs` becomes
+"The mesh's CRS, which --domain or --bbox is moved into, as mesh moves it."
 
 **The CRS each command works in (the frame).** The box is moved into it,
 then used as today:
-- `mesh`: `DemRequest.bounds: Bounds` becomes `box: CrsBox | None`.
-  `plan_dem` moves the box into `single_crs(footprints)` on the projected path
-  and into `target_crs` on the reprojected path. With no footprints the box
-  is not moved and the plan refuses as today.
+- `mesh`: `DemRequest` keeps `bounds: Bounds | None`, in the DEM's CRS (in
+  `target_crs` on the reprojected path), since it is plugin API
+  (`test_plugin_api.py:47-50`; a plugin calls `DemRequest(bounds=grown)`). It gains `box: CrsBox | None`, last, so
+  existing calls are unchanged. At most one of `bounds`, `box` and `domain`
+  is given. `plan_dem`, once it has the footprints, turns `box` into
+  `bounds` by `to_crs` into the frame: `target_crs` on the reprojected path,
+  else `single_crs(footprints)`. With no footprints the box is not moved
+  and the plan refuses as today. The `SIGNATURES` entry for `DemRequest`
+  (`test_plugin_api.py:47-50`) gains `box=None` in its own commit, named in
+  the PR body, as that file asks.
 - `fetch`: `FetchRequest.box: CrsBox | None`. `_frame_box` moves it into the
-  frame (`out_crs`, else the source). `region_sha256` hashes the box's CRS as
-  well as the frame.
-- `sources`: `listing(..., box.to_crs("EPSG:4326"))`. Its west-east check
-  (`cli.py:2769`) runs after the move, so an image that crosses ±180° is
-  refused, with "in EPSG:4326" added to the words.
+  frame (`out_crs`, else the source) by `to_crs`. `region_sha256` hashes the
+  box's CRS as well as the frame. `box_in_crs`'s docstring says what its
+  move gives: "moved with `transform_bounds` (21 points an edge, so the
+  image may fall inside the true one by metres on a box of a few hundred
+  kilometres)", dropping "outward".
+- `sources`: `listing(..., box: CrsBox | None)`. `box_covered` is measured
+  on the area: the share of the box's lon/lat outline,
+  `shapely.Polygon(box.outline("EPSG:4326"))`, that the coverage holds. A
+  point or line box (zero area) keeps today's covered-or-not test, on
+  `box.to_crs("EPSG:4326")`. `to_crs` runs first in either case, so an
+  image across ±180° is refused with its words. `_lonlat`
+  (`source_report.py:218-223`) stays for the tiles' coverage, where its 8
+  segments a side are enough (`SEGMENTS`, `source_report.py:47`).
+
+**Printed boxes name their CRS.** Each refusal or hint that prints a box
+ends it with "in <CRS>" (`crs_label`): `fetch/plan.py:130` and `:192`,
+`io/repository.py:365`, `mosaic.py:179` (the tiles' CRS), and `NotCached`.
 
 **Hints.** `_fetch_run` writes `--bbox ... --bbox-crs <the box's CRS>`.
 `NotCached` gains `crs: str | None`, set at `io/repository.py:381` from
-`plan.meta.crs`. `_bbox_fetch` writes `--bbox-crs` from it. Each printed
-command must run as printed (test 8).
+`plan.meta.crs`; its words say "in EPSG:25833" (the CRS) instead of "in the
+source's CRS" (`io/cog.py:75`). `_bbox_fetch` writes `--bbox-crs` from it.
+Each printed command must run as printed (test 8).
 
 **MCP.** No change in `schema.py`. Each of the three tools gains a
 `bbox_crs` property, `anyOf [string, null]`, whose description is the help
@@ -138,71 +194,90 @@ gets the refusal's words above, naming `--bbox-crs`, as every refusal names
 its flag today. `INSTRUCTIONS` (`server.py:93`) becomes "Give it bbox (west
 south east north) and bbox_crs (EPSG:4326 for degrees) ...".
 
-**Docs.** `README.md:24,26`, `INSTALL.md:239`, `project_structure.md:143`
-(plus the `domain.py` entry naming `CrsBox`) and the script
-`tests/fixtures/velhas/extract.py`. Benchmark records under `docs/benchmarks/`
-are history and stay as they are.
+**Docs.** `README.md:24,26` and `:213` ("with `bbox` and `bbox_crs`"),
+`INSTALL.md:239`, `project_structure.md:143` (plus the `domain.py` entry
+naming `CrsBox`) and the script `tests/fixtures/velhas/extract.py`.
+Benchmark records under `docs/benchmarks/` are history and stay as they are.
 
 **Exclusions.** pyproj's area of use is not checked: a box far outside a
 projection's valid area moves to finite nonsense, as a domain does today. A
-box crossing ±180° stays inexpressible (`x_min <= x_max`).
+box crossing ±180° in its own CRS stays inexpressible (`x_min <= x_max`),
+and one whose image crosses it, or holds a pole, is refused, not split.
 
-**Constants.** None new. `transform_bounds`'s 21 points are existing.
-**Timing.** One `transform_bounds` per run, 1.9 ms
-(`114-probes/box_probe.txt`). No timing gate. A box given in the frame's CRS
-takes today's numbers bit for bit, so meshes are unchanged. `@perf`'s
+**Constants.** `EDGE_STEPS = 2000` (`domain.py`): steps along each side of
+the box. It assumes a box up to São Francisco's size (12° x 14°, about
+1300 x 1550 km), and was checked at that box, where the edge falls short by
+at most 1.6 mm. The error grows with the square of the box's side, so a box
+four times larger falls short by about 26 mm (an estimate, not probed).
+**Timing.** One `to_crs` per run: 1.1 ms for the outline at São Francisco
+scale, 8.9 ms with the transformer's setup on the quad
+(`114-probes/box_probe.txt`). No timing gate. A box given in the frame's
+CRS takes today's numbers bit for bit, so meshes are unchanged. `@perf`'s
 acceptance run is not needed; that is the main session's call.
 
 **Ideas file.** This overlaps the entry "`--bbox` help: 'its nodes' is
 ambiguous with `--out-crs`". The help keeps "the DEM's nodes", already
-reworded in `2f297c6f`, so that entry can close.
+reworded in `2f297c6f`, and adds "or with --out-crs to its grid's", so that
+entry can close.
 
 ## 4. Tests (`@tester`)
 
-Fixtures are measured by `docs/increments/114-probes/box_probe.py`.
+Fixtures are measured by `docs/increments/114-probes/box_probe.py`, which
+applies the design's move (`EDGE_STEPS = 2000`); `edge_probe.py` measures
+the São Francisco error.
 - Quad: `quadrants(whole(9, 13))`, 13 x 9 nodes, x 500000..500120 (dx 10),
   y 6599960..6600000 (dy 5), EPSG:25833.
 - Sources: `dataset_fixtures.py` `COVERAGE`, `INSIDE`, `OUTSIDE`.
 - Fetch: `test_cli_fetch.py` `BBOX`, EPSG:25833.
 
-1. **Unit, `CrsBox.to_crs`.** The same CRS returns the tuple bit for bit
+1. **Unit, `CrsBox`.** The same CRS returns the tuple bit for bit
    (`EPSG:4326` to `OGC:CRS84` too: `same_crs` is True). EPSG:25833
    `(500022, 6599969, 500087, 6599991)` to EPSG:4326 gives
-   `(15.000389013, 59.538070744, 15.001538378, 59.53826831)` to 1e-9. A point
-   box stays a point. A non-finite value and `x_min > x_max` are refused. An
-   unreadable CRS is a `ValueError`.
+   `(15.000389013, 59.538070744, 15.001538378, 59.53826831)` to 1e-9. The
+   point box `(500000, 6600000)` in EPSG:25833 gives the point
+   `(15.0, 59.53834913)` in EPSG:4326, to 1e-8. Refused, each naming both
+   CRSs where two are involved: a non-finite value; `x_min > x_max`; an
+   unreadable CRS (`ValueError`); `y_max = 90.5` in EPSG:4326; the box
+   `(700000, 5000000, 900000, 5100000)` in EPSG:32660 to EPSG:4326 (across
+   180°; pyproj gives 179.54 to -177.84); the box `(-500000, -500000,
+   500000, 500000)` in EPSG:3413 to EPSG:4326 (holds the pole).
 2. **Mesh, same CRS.** Quad, `--bbox 500022 6599969 500087 6599991
    --bbox-crs EPSG:25833`, stride 1. Expect 56 points, x 500020..500090,
    y 6599965..6599995 (cols 2-9, rows 1-7), equal to master's run without the
    option.
 3. **Mesh, box in degrees.** The same run with the lon/lat box of test 1 and
    `--bbox-crs EPSG:4326`. Expect the same 56 points, bit for bit. The
-   margin: the round trip grows the box by at most 0.9 mm, and its edges lie
-   2-9 m from a node line.
+   margin: the round trip moves the box's edges by at most 0.9 mm, and its
+   edges lie 2-9 m from a node line.
 4. **Refusals.** For each of `mesh`, `fetch`, `sources`, parametrized:
    `--bbox` alone exits 2 with the words of section 3, and nothing is
    written or requested. `--bbox-crs` alone exits 2, "applies only with
-   --bbox". `--bbox-crs EPSG:0` exits 2, param `--bbox-crs`.
+   --bbox". `--bbox-crs EPSG:0` exits 2, param `--bbox-crs`. The EPSG:32660
+   box of test 1 to `sources` exits 2 with "crosses ±180°".
 5. **Sources.** `INSIDE` in EPSG:25833, `(508522.7, 6576808.3, 511380.3,
-   6582383.5)`, moves back to `(15.14978, 59.329933, 15.200294, 59.380067)`,
-   inside `COVERAGE`. Expect `box_covered` 1.0. `OUTSIDE` in EPSG:25833
-   `(555607.8, 6651832.7, 561353.6, 6663057.1)` gives 0.0. A UTM point gives
-   1.0 or 0.0 the same way.
+   6582383.5)`: `box_covered` 1.0. `OUTSIDE` in EPSG:25833 `(555607.8,
+   6651832.7, 561353.6, 6663057.1)`: 0.0. A box over `COVERAGE`'s east
+   edge, `(517060.4, 6573496.4, 522780.6, 6579094.1)` in EPSG:25833: 0.5183
+   (to 1e-4; the share by bounds would be 0.5179, so the test tells area
+   from bounds). The UTM point `(508522.7, 6576808.3)` gives 1.0.
 6. **Fetch.** A dry run with `BBOX` and `--bbox-crs EPSG:25833` prints the
    same plan lines as master. The same box in EPSG:4326, `(15.001791152,
    59.536663469, 15.005904106, 59.537800446)`, prints identical plan lines.
-   The round trip grows the box by at most 13.5 mm; the grown fetch box's
-   edges lie at least 1.3 m from a node line.
+   The round trip moves the box's edges by at most 13.5 mm; the grown fetch
+   box's edges lie at least 1.3 m from a node line.
 7. **MCP schema.** `mesh`, `fetch` and `sources` each have `bbox_crs`:
    `anyOf [string, null]`, default null, and a description containing
-   "Never assumed". `bbox`'s description contains "--bbox-crs".
-   `INSTRUCTIONS` contains "bbox_crs".
+   "Never assumed" and "Required with --bbox.". `bbox`'s description
+   contains "--bbox-crs". `INSTRUCTIONS` contains "bbox_crs".
 8. **Hints run.** A mesh refused for a missing cache prints a `rasputin
-   fetch ... --bbox ... --bbox-crs EPSG:25833` command. Run as printed, it
-   exits 0, and the mesh then runs (extend `test_cli_sources.py:136,166`).
-9. **Migration.** Every existing `--bbox` call in `tests/` (about 60 in 17
+   fetch ... --bbox ... --bbox-crs EPSG:25833` command, and the `NotCached`
+   words name "in EPSG:25833". Run as printed, the command exits 0, and the
+   mesh then runs (extend `test_cli_sources.py:136,166`).
+9. **Migration.** Every existing `--bbox` call in `tests/` (64 lines in 18
    files, `git grep -c -- '--bbox\|"bbox"\|bbox=' -- tests`) gains its
-   fixture's CRS. `DemRequest(bounds=...)` (4 calls) becomes `box=CrsBox(...)`.
+   fixture's CRS. `FetchRequest(box=Bounds(...))` (14 to 17 calls,
+   `git grep -n -A4 'FetchRequest(' -- tests src_python | grep box=`)
+   becomes `box=CrsBox(...)`. `DemRequest(bounds=...)` is unchanged.
 
 ## 5. Size
 
@@ -210,13 +285,14 @@ These are estimates of counted lines.
 
 | Module | Net |
 |---|---|
-| `domain.py` (`CrsBox`) | 22 |
-| `cli.py` (3 options, helper, 3 call sites, hints) | 30 |
-| `dem_input.py` | 8 |
+| `domain.py` (`CrsBox`, `outline`, refusals, `EDGE_STEPS`) | 32 |
+| `cli.py` (3 options, helper, 3 call sites, hints; less two `Bounds` and a check) | 28 |
+| `dem_input.py` (`box` field, one-of check, move in `plan_dem`) | 10 |
 | `fetch/plan.py` | 6 |
-| `io/cog.py`, `io/repository.py` | 4 |
+| `source_report.py` (`listing`, `_cover` on the outline) | 5 |
+| `io/cog.py`, `io/repository.py`, `mosaic.py` (CRS in words and `NotCached`) | 6 |
 | `mcp/server.py` | 1 |
-| **Total** | **about 70; worst case 110** |
+| **Total** | **about 90; worst case 120** |
 
 ## Review
 
