@@ -36,7 +36,8 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   `--features` beside `--land-cover`).
 - A bowtie in a `--land-cover` file ends the run with exit 0 and no
   exception escaping `rasputin mesh`; one in a pair overlapping far outside
-  the read box is counted outside by the edges step, as its partner is.
+  the read box is counted outside by the edges step, as its partner is, and
+  so is what a `--prefer` lake reaching one far outside leaves of it.
 - `--threads N` reaches the repairing `build` call as `threads=N`; the
   `--prefer` call (`fix=False`) repairs nothing and is not checked.
 - A river file is a GeoJSON `FeatureCollection` of one `LineString` with no
@@ -77,7 +78,7 @@ from legend_fixtures import basenames, coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson, write_cover_gpkg
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import check_sums, column, mesh, scene, written
-from test_cli_mesh_prefer import preferred_lake, share
+from test_cli_mesh_prefer import preferred_lake, share, write_lake
 from test_cli_mesh_reservoirs import phases, record, write_reservoirs
 from test_legend_name import RENAME_TO_CLASSES
 from tin_engine.cli import app
@@ -830,6 +831,44 @@ def test_10_an_overlapping_pair_with_a_bowtie_far_outside_the_region_is_counted_
     a, b = split(tmp_path / "near", near_a, near_b)
     without = run_kept(scene, tmp_path / "near.gpkg", *classes(a, b), *extra)
     assert outside_count(with_far) == outside_count(without) + 2, (with_far, without)
+
+
+def long_lake() -> Polygon:
+    """`preferred_lake` stretched east to 300 m past `far_pair`'s west side:
+    it meets the domain and covers all of the far bowtie but a 0.6 m strip
+    along its top."""
+    x0, _ = dem_origin()
+    near = preferred_lake()
+    return box(near.bounds[0], near.bounds[1], x0 + 50_300, near.bounds[3])
+
+
+def test_10_the_long_lake_premises() -> None:
+    _, tie = far_pair()
+    whole = shapely.make_valid(tie)
+    assert long_lake().intersects(domain())
+    assert long_lake().intersects(tie)
+    assert whole.area - long_lake().intersection(whole).area > 0
+
+
+@pytest.mark.parametrize("shares", [False, True], ids=["edges", "edges-and-shares"])
+def test_10_a_bowtie_far_outside_the_region_under_a_preferred_lake_is_counted_outside(
+    scene: dict[str, Path], tmp_path: Path, shares: bool
+) -> None:
+    """Code review round 4: one `--land-cover` file with a bowtie 50 km east
+    of the domain, and a `--prefer lake=` lake reaching from the domain to
+    it. `_fixed` keeps a polygon the read box misses whole and unchecked, so
+    `preferred.replace` cut the lake out of the bowtie and `_cut` threw
+    GEOSException; master passes, its reader repaired first. The run ends
+    with exit 0, and what the lake leaves of the bowtie is counted outside
+    the domain by the edges step: one more than the same run without it."""
+    _, tie = far_pair()
+    lake = write_lake(tmp_path / "lake.geojson", long_lake())
+    extra = (*prefer(lake), *edges("all"), *AS_READ, *(("--shares",) if shares else ()))
+    f = write_cover_geojson(tmp_path / "far.geojson", [*cover_polygons(), (ARABLE, tie)])
+    with_far = run_kept(scene, tmp_path / "far.gpkg", *classes(f), *extra)
+    f = write_cover_geojson(tmp_path / "near.geojson", cover_polygons())
+    without = run_kept(scene, tmp_path / "near.gpkg", *classes(f), *extra)
+    assert outside_count(with_far) == outside_count(without) + 1, (with_far, without)
 
 
 def test_10_threads_reach_the_map_build(
