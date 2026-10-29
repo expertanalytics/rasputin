@@ -7,16 +7,18 @@ area, the first given keeps it, and a later file's polygon is cut by the
 earlier files' polygons it shares area with. Each preferred source then
 replaces its class (`preferred.replace`, near the read region), and each
 refilled piece is unioned with the polygons of the class it took whose
-borders meet its own, so no old border runs between them. Every polygon
-whose part near the read region is invalid is repaired there first
-(`feature_input._repaired`): a ring that crosses itself makes GEOS's
-overlays throw. Pure: shapely geometry in, no file, no CRS.
+borders meet its own, so no old border runs between them. Each polygon is
+first cut to the box of the read region widened by `MARGIN`, and one whose
+cut is invalid is repaired there (`feature_input._repaired`): a ring that
+crosses itself makes GEOS's overlays throw. Pure: shapely geometry in, no
+file, no CRS.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -29,6 +31,11 @@ from tin_engine.feature_input import MARGIN, LandCoverClasses, _repaired
 from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
+
+# Chosen: the check runs in this many threads over this many groups of
+# equal vertex count, so one polygon of 100 k vertices does not hold a thread
+# while the rest wait.
+THREADS, GROUPS = 8, 32
 
 
 @dataclass(frozen=True)
@@ -50,13 +57,17 @@ def build(
     preferred: Sequence[tuple[int, Sequence[BaseGeometry]]],
     classes: LandCoverClasses,
     region: Polygon,
+    *,
+    fix: bool = True,
 ) -> LandCoverMap:
     """The map of ``base`` (one sequence of (code, polygon) per file, in the
     order given) with each code of ``preferred`` (replaced code, polygons, as
     `preferred.replace` takes them) taken from its polygons near ``region``.
-    Each file's polygons are repaired near ``region`` first."""
+    With ``fix``, each file's polygons are first cut near ``region`` and
+    repaired there (`_fixed`); without it ``base`` is taken as already so,
+    as the ``areas`` of a map built with ``fix`` are."""
     xy = shapely.get_coordinates(region.exterior)
-    fixed = [_fixed(pairs, xy) for pairs in base]
+    fixed = [_fixed(pairs, xy) if fix else (pairs, 0) for pairs in base]
     areas, overlap = _joined([f for f, _ in fixed])
     n = sum(r for _, r in fixed)
     if not preferred:
@@ -66,17 +77,29 @@ def build(
 
 
 def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64]) -> tuple[Pairs, int]:
-    """``pairs`` with each polygon whose part in the box of ``xy`` widened by
-    `MARGIN` is invalid repaired (`_repaired`), as `repaired_areas` repairs,
-    and the count repaired. Only that part is checked: checking a whole
-    polygon of hundreds of thousands of vertices takes most of a second."""
+    """``pairs`` with each polygon cut to the box of ``xy`` widened by
+    `MARGIN`, those the box misses left whole; where a cut is invalid, the
+    polygon repaired instead (`_repaired`), as `repaired_areas` repairs; and
+    the count repaired. Only the cut is checked: checking a whole polygon of
+    hundreds of thousands of vertices takes most of a second, and the cut
+    is all that is ever overlaid."""
     box = (*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
-    shapes = np.array([g for _, g in pairs] or [Polygon()], dtype=object)
-    bad = ~shapely.is_valid(shapely.clip_by_rect(shapes, *box))
+    shapes = np.array([g for _, g in pairs], dtype=object)
+    cut, bad = np.empty(len(pairs), dtype=object), np.zeros(len(pairs), dtype=bool)
+    ends = np.cumsum(shapely.get_num_coordinates(shapes))
+    edges = np.searchsorted(ends, np.linspace(0, ends[-1] if len(ends) else 0, GROUPS + 1)[1:-1])
+    groups = [ix for ix in np.split(np.arange(len(pairs)), edges) if len(ix)]
+
+    def check(ix: npt.NDArray[np.intp]) -> None:
+        cut[ix] = shapely.clip_by_rect(shapes[ix], *box)
+        bad[ix] = ~shapely.is_valid(cut[ix])
+
+    with ThreadPoolExecutor(THREADS) as pool:
+        list(pool.map(check, groups))
     out, n = [], 0
-    for (code, g), suspect in zip(pairs, bad[: len(pairs)], strict=True):
-        fixed = _repaired(g, xy) if suspect else g
-        n += fixed is not g
+    for (code, g), c, suspect in zip(pairs, cut, bad, strict=True):
+        fixed = _repaired(g, xy) if suspect else g if c.is_empty else c
+        n += bool(suspect) and fixed is not g
         if fixed is not None:
             out.append((code, fixed))
     return out, n
