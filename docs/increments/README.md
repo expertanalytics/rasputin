@@ -18,8 +18,9 @@ every persona working on it.
 
    *Legacy:* `git grep -n <pattern> legacy-archive -- legacy`, its files,
    and what is carried across (its intent stated) or why nothing is.
-   `@reviewer` reviews the design before `@tester` starts, and again when an
-   update adds a step.
+   `@reviewer` reviews the design once, after Ola's answers and before
+   `@tester` starts, naming every hole; code review checks them fixed; only
+   a design wrong at its core is reviewed again.
 2. `@tester` commits a failing suite, **red**, before the implementation.
 3. `@developer` makes it green; the green commit touches **no test file**. A
    ruling or retuned constant after red is `@tester`'s amendment, in its own

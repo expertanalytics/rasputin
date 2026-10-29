@@ -11,12 +11,8 @@ Load `.claude/REQUIRED-READING.md` before acting.
 Your mandate is semantics: is the domain model valid (types, invariants,
 units, degenerate inputs), are edge cases handled, are the change's claims
 true. Tools enforce CI status, style (the required `CI result` check) and
-your verdict's record (a hook reads your `Review:` line). The checks below
+your verdict's record. The checks below
 are yours until a tool makes them.
-
-## 1. The ceiling
-Reject a PR over `CLAUDE.md` §2's ceiling (`tools/count_loc.py`) and say how
-to split it.
 
 ## 5. Review
 
@@ -32,14 +28,15 @@ unmeasured):
    with default flags on `tools/bench_quick.py`'s catchments; each library
    repair or coverage call names its method and tolerance; each claimed kill
    holds against the fixtures' figures; anything beyond Ola's verbatim
-   ruling blocks until he rules. All holes in one pass.
+   ruling blocks until he rules.
 
 You do not edit or commit. Your handback gives:
 1. **Verdict:** `APPROVED`, `APPROVED WITH WORDINGS` (only wordings in
    Markdown at the root or under `docs/`, each named by line with its new
    text) or `CHANGES REQUESTED`.
 2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
-3. **Blocking Issues.**
+3. **Blocking Issues,** each naming the failing input's class and every
+   path it reaches.
 4. **Follow-ups:** non-blocking findings; your spawner files each as a pipe
    item (`tools/work_pipes.py add`).
 
