@@ -16,7 +16,6 @@ import json
 import re
 import subprocess
 import sys
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -42,7 +41,10 @@ class RefusedError(Exception):
 
 
 def load(store: Path) -> tuple[list[dict[str, Any]], int]:
-    """The newest record per id, in first-seen order, and the count of unreadable lines."""
+    """The newest record per id, in first-seen order, and the count of unreadable lines.
+
+    A record in state `held` reads as open.
+    """
     if not store.exists():
         return [], 0
     latest: dict[str, dict[str, Any]] = {}
@@ -55,7 +57,8 @@ def load(store: Path) -> tuple[list[dict[str, Any]], int]:
         if not isinstance(record, dict) or not isinstance(record.get("id"), str):
             bad += 1
             continue
-        latest[record["id"]] = record
+        held = record.get("state") == "held"
+        latest[record["id"]] = {**record, "state": "open"} if held else record
     return list(latest.values()), bad
 
 
@@ -71,23 +74,6 @@ def _append(store: Path, *records: dict[str, Any]) -> None:
 
 def _shown_path(store: Path) -> Path:
     return store.with_name("questions-shown.json")
-
-
-def _yes_no(record: dict[str, Any]) -> bool:
-    return record["kind"] in ("question", "act") and not record["choices"]
-
-
-def _clash(new: dict[str, Any], others: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
-    """The first open question the same short answer would fit, if any."""
-    words = {c.casefold() for c in new["choices"]}
-    for other in others:
-        if other["state"] != "open" or other["kind"] == "taken" or other["id"] == new["id"]:
-            continue
-        if _yes_no(new) and _yes_no(other):
-            return other
-        if words & {c.casefold() for c in other["choices"]}:
-            return other
-    return None
 
 
 def _plain(text: str, terms: set[str], act: bool) -> None:
@@ -131,7 +117,7 @@ def _check(args: argparse.Namespace, records: list[dict[str, Any]], kind: str) -
             raise RefusedError("a question must end with a question mark")
         key = _key(text)
         for r in records:
-            if r["state"] in ("open", "held", "answered") and _key(r["text"]) == key:
+            if r["state"] in ("open", "answered") and _key(r["text"]) == key:
                 said = f': Ola, {r["at"][:10]}: "{r["words"]}"' if r["state"] == "answered" else ""
                 raise RefusedError(f"already asked as {r['id']}{said}")
     if ELSEWHERE.search(text):
@@ -160,12 +146,7 @@ def open_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def list_lines(records: list[dict[str, Any]]) -> list[str]:
     """The block for Ola, numbered 1..n in one sequence; reads nothing and writes nothing."""
-    lines = [_line(n, r) for n, r in enumerate(open_records(records), 1)]
-    if held := [r for r in records if r["state"] == "held"]:
-        kind = "yes/no " if all(_yes_no(r) for r in held) else ""
-        noun = "question" if len(held) == 1 else "questions"
-        lines.append(f"and {len(held)} more {kind}{noun} held until one above is answered")
-    return lines
+    return [_line(n, r) for n, r in enumerate(open_records(records), 1)]
 
 
 def _numbered(store: Path, records: list[dict[str, Any]], n: int) -> dict[str, Any]:
@@ -176,22 +157,6 @@ def _numbered(store: Path, records: list[dict[str, Any]], n: int) -> dict[str, A
     if record is None or record["state"] != "open":
         raise RefusedError(f"the last list printed no open question numbered {n}")
     return record
-
-
-def _close(
-    store: Path, records: list[dict[str, Any]], record: dict[str, Any], now: datetime, **fields: Any
-) -> list[str]:
-    """Close `record` and release the oldest held question nothing open clashes with."""
-    closed = {**record, **fields, "at": now.isoformat()}
-    rest = [closed if r["id"] == record["id"] else r for r in records]
-    released = next((r for r in rest if r["state"] == "held" and _clash(r, rest) is None), None)
-    out = [closed]
-    lines = []
-    if released:
-        out.append({**released, "state": "open", "at": now.isoformat()})
-        lines.append(f"Now open: {released['text']} Default: {released['default']}")
-    _append(store, *out)
-    return lines
 
 
 def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
@@ -214,13 +179,7 @@ def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
             "words": None,
             "at": now.isoformat(),
         }
-        clash = _clash(record, records) if kind != "taken" else None
-        if clash:
-            record["state"] = "held"
         _append(store, record)
-        if clash:
-            why = "the same short answer would fit both"
-            return [f"held until question {clash['id']} is answered: {why}"]
         return [f"stored as {record['id']}"]
     if args.cmd == "list":
         lines = list_lines(records)
@@ -233,10 +192,10 @@ def command(args: argparse.Namespace, store: Path, now: datetime) -> list[str]:
         return lines or ["No open questions."]
     record = _numbered(store, records, args.n)
     if args.cmd == "answer":
-        released = _close(store, records, record, now, state="answered", words=args.words)
-        return [f'Ola, {now.date().isoformat()}: "{args.words}"', *released]
-    released = _close(store, records, record, now, state="dropped", reason=args.reason)
-    return [f"Dropped: {record['text']}", *released]
+        _append(store, {**record, "state": "answered", "words": args.words, "at": now.isoformat()})
+        return [f'Ola, {now.date().isoformat()}: "{args.words}"']
+    _append(store, {**record, "state": "dropped", "reason": args.reason, "at": now.isoformat()})
+    return [f"Dropped: {record['text']}"]
 
 
 def parser() -> argparse.ArgumentParser:

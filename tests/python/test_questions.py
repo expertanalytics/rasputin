@@ -1,4 +1,4 @@
-"""`tools/questions.py`: the questions for Ola, checked, held, numbered and answered.
+"""`tools/questions.py`: the questions for Ola, checked, numbered and answered.
 
 The spec is `docs/increments/h35-question-tool.md`, *4. Tests, `tests/python/test_questions.py`*.
 Every test runs `command()` on a store in `tmp_path`, so the live store under
@@ -23,7 +23,6 @@ pytestmark = pytest.mark.harness
 questions = harness_fixtures.Tool("questions")
 
 NOW = datetime(2026, 10, 27, 18, 0, tzinfo=UTC)
-HELD_TWO = "and 2 more yes/no questions held until one above is answered"
 
 
 # ---------------------------------------------------------------- helpers
@@ -111,40 +110,36 @@ def test_c2_one_question_mark_at_the_end_is_accepted(store: Path) -> None:
     assert newest(store, "Push the tool?")["state"] == "open"
 
 
-# ---------------------------------------------------------------- 3. C3 distinct answers
+# ---------------------------------------------------------------- 3. no question is held
 
 
-def test_c3_a_second_yes_no_question_is_held_and_released_by_an_answer(store: Path) -> None:
+def test_a_second_yes_no_question_is_open_and_listed_with_the_first(store: Path) -> None:
     ask(store, "Cache the repair?")
-    said = ask(store, "Push the tool?")
-    assert "held until question q1 is answered" in " ".join(said)
-    assert newest(store, "Push the tool?")["state"] == "held"
-    shown = run(store, "list")
-    assert len(numbered(shown)) == 1
-    assert shown[0].startswith("1. Cache the repair?")
-    assert shown[-1].startswith("and 1 more")
-    answered = run(store, "answer", "1", "yes")
-    assert 'Ola, 2026-10-27: "yes"' in answered
-    assert any("Push the tool?" in line for line in answered)
-    assert newest(store, "Push the tool?")["state"] == "open"
-
-
-def test_c3_an_act_is_a_yes_no_answer_too(store: Path) -> None:
-    ask(store, "Push the tool and open its pull request?", "--act")
-    ask(store, "Cache the repair?")
-    assert newest(store, "Cache the repair?")["state"] == "held"
-
-
-def test_c3_a_choices_question_beside_an_open_yes_no_one_is_open(store: Path) -> None:
-    ask(store, "Cache the repair?")
-    ask(store, "Which unit for heights?", "--choices", "metre|foot", default="metre")
-    assert newest(store, "Which unit for heights?")["state"] == "open"
-
-
-def test_c3_choices_sharing_a_word_are_held(store: Path) -> None:
+    said = ask(store, "Push the tool and open its pull request?", "--act")
+    assert said == ["stored as q2"]
     ask(store, "Which unit for heights?", "--choices", "metre|foot", default="metre")
     ask(store, "Which unit for depths?", "--choices", "metre|fathom", default="metre")
-    assert newest(store, "Which unit for depths?")["state"] == "held"
+    assert {r["state"] for r in records(store)} == {"open"}
+    shown = run(store, "list")
+    assert shown == numbered(shown) and len(shown) == 4, shown
+    assert not any("held" in line for line in shown)
+    assert run(store, "answer", "4", "yes") == ['Ola, 2026-10-27: "yes"']
+    assert run(store, "drop", "1", "superseded") == ["Dropped: Cache the repair?"]
+    assert newest(store, "Push the tool and open its pull request?")["state"] == "answered"
+
+
+def test_a_stored_held_record_is_listed_and_answered_as_open(store: Path) -> None:
+    ask(store, "Cache the repair?")
+    ask(store, "Push the tool?")
+    held = {**newest(store, "Push the tool?"), "state": "held"}
+    with store.open("a") as out:
+        out.write(json.dumps(held) + "\n")
+    shown = run(store, "list")
+    assert [line[:2] for line in shown] == ["1.", "2."], shown
+    assert shown[1].startswith("2. Push the tool?")
+    refused(store, "add", "Push the tool?", "--default", "no")
+    run(store, "answer", "2", "yes")
+    assert newest(store, "Push the tool?")["state"] == "answered"
 
 
 # ---------------------------------------------------------------- 4. C4 self-contained
@@ -282,22 +277,14 @@ def test_list_numbers_questions_acts_then_taken_in_one_sequence(store: Path) -> 
     ask(store, "Cache the repair?")
     ask(store, "Repair on every run?")
     shown = run(store, "list")
-    lines = numbered(shown)
-    assert len(lines) == 3
-    assert lines[0].startswith("1. Which unit for heights?") and "Default: metre" in lines[0]
-    assert lines[1].startswith("2. Push the tool and open its pull request?")
-    assert "Default: wait for your yes" in lines[1]
-    assert lines[2].startswith("3. Taken: ")
-    assert "the cache lives in the user's cache folder" in lines[2]
-    assert shown[-1] == HELD_TWO
-
-
-def test_a_held_choices_question_is_not_called_yes_no(store: Path) -> None:
-    ask(store, "Which unit for heights?", "--choices", "metre|foot", default="metre")
-    ask(store, "Which unit for depths?", "--choices", "metre|fathom", default="metre")
-    shown = run(store, "list")
-    assert len(numbered(shown)) == 1
-    assert shown[-1] == "and 1 more question held until one above is answered"
+    assert shown == numbered(shown) and len(shown) == 5, shown
+    assert shown[0].startswith("1. Which unit for heights?") and "Default: metre" in shown[0]
+    assert shown[1].startswith("2. Cache the repair?")
+    assert shown[2].startswith("3. Repair on every run?")
+    assert shown[3].startswith("4. Push the tool and open its pull request?")
+    assert "Default: wait for your yes" in shown[3]
+    assert shown[4].startswith("5. Taken: ")
+    assert "the cache lives in the user's cache folder" in shown[4]
 
 
 def test_a_taken_line_appears_in_one_list_only(store: Path) -> None:
