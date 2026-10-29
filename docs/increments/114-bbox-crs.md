@@ -220,6 +220,4 @@ These are estimates of counted lines.
 
 ## Review
 
-(none yet)
-
 - Design round 1: CHANGES REQUESTED, f0dfe61b..0d64a829, 0 (sound at its core; fixes go to code review, no second design round; estimate low: about 90 lines, migration 64 CLI lines in 18 files plus about 17 `FetchRequest(box=)` and about 10 `DemRequest` sites; holds: same-CRS bit for bit, pole boxes, a projected point box, the MCP schema; blocking: `DemRequest` is plugin API (`test_plugin_api.py:47-50`, the lsm radiation search calls `DemRequest(bounds=grown)`), so keep `bounds` and add `box: CrsBox | None`; a box whose geographic image crosses ±180° comes back west > east (EPSG:32660 to 4326: 179.54, -177.75), `to_crs` must refuse naming both CRSs; edges are not held, 21 points per edge falls 11.2 m short on a São Francisco-sized box into EPSG:32723, so "outward" is false; with `--out-crs` the box snaps to `target_grid_for`, not the DEM's nodes; `box_covered` must use the area, reusing `_lonlat` (`source_report.py:218`); refuse |lat| > 90 in a geographic CRS; map gap `README.md:213`; cli.py lines after about 900 moved in fbeaf649, +21 to +33).
