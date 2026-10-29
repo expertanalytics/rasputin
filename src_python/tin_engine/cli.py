@@ -23,19 +23,16 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Final, Literal, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, Final, Literal, TextIO, cast, get_args
 
 import numpy as np
 import numpy.typing as npt
 import shapely
 import typer
 from pydantic import ValidationError
-from shapely.geometry import Point, Polygon
+from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
-from typer._click import Context
-from typer._click.exceptions import NoSuchOption
-from typer.core import TyperCommand
 
 from tin_engine import cli_kit, edge_strip, final_check, installed_version, sub_catchments
 from tin_engine._core import (
@@ -103,19 +100,27 @@ from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
     SUFFIXES,
     Category,
+    ClassPolygons,
+    EdgeChoice,
+    EdgeCleanup,
     FeatureError,
-    FeatureRequest,
     FeatureSet,
-    FeatureSource,
-    MeshingRules,
-    Prefer,
-    open_features,
+    LandCoverClasses,
+    SourceLines,
+    edges_of,
     read_class_polygons,
     read_lake_polygons,
+    read_linestrings,
     read_polygons,
     read_source,
+    source_region,
 )
-from tin_engine.features import DEFAULT_VOCABULARY, PIECE_VOCABULARY, EdgeVocabulary
+from tin_engine.features import (
+    DEFAULT_VOCABULARY,
+    PIECE_VOCABULARY,
+    EdgeProperty,
+    EdgeVocabulary,
+)
 from tin_engine.gauge import Gauge, Placement
 from tin_engine.geodesy import area_m2
 from tin_engine.gml_import import gml_to_geopackage
@@ -159,13 +164,14 @@ from tin_engine.io.repository import (
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.land_cover_classes import derived_cleanup, known_codes, shipped_names
+from tin_engine.land_cover_classes import load as load_classes
 from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
+from tin_engine.land_cover_map import LandCoverMap, build
 from tin_engine.landcover import label_triangles
 from tin_engine.legends import load_legend
 from tin_engine.legends import shipped_names as legend_names
-from tin_engine.meshing_rules import derived_cleanup, known_codes, run_vocabulary, shipped_names
-from tin_engine.meshing_rules import load as load_rules
 from tin_engine.mosaic import Seam, check_canvas
 from tin_engine.network import (
     Network,
@@ -177,7 +183,7 @@ from tin_engine.network import (
 )
 from tin_engine.palettes import paraview_preset
 from tin_engine.polygon_fractions import assign as assign_polygon_fractions
-from tin_engine.preferred import overlay as overlay_preferred
+from tin_engine.preferred import areas_inside
 from tin_engine.raster import to_core
 from tin_engine.refine_job import How, Once, Refined, RunError, error_values
 from tin_engine.resources import Resources, parse_bytes
@@ -296,32 +302,22 @@ LANDCOVER_START_MIN_ANGLE = 15.0
 # point.
 DEFAULT_START_QUALITY_GAIN = 0.0
 #: The four land-cover flags have their own help panel, so the long
-#: --[no-]features-merge-same-class does not narrow the main one's names.
+#: --[no-]edges-merge-same-class does not narrow the main one's names.
 CLEAN_UP = "Land-cover clean-up"
-#: The three clean-up distances default to values derived from the meshing rules.
-DERIVED = "Default: from the meshing rules' positional accuracy and the DEM cell (CORINE: {})."
-#: Options renamed without an alias: each refused naming its new name.
-RENAMED = {"--features-legend": "--features-rules", "--land-cover-legend": "--land-cover-rules"}
+#: The three clean-up distances default to values derived from the class file.
+DERIVED = (
+    "Default: from the land-cover class file's positional accuracy and the DEM cell (CORINE: {})."
+)
 #: Their flags and the bound each given value stays under.
 OPTION_TOPS = (
-    ("--features-repair", math.inf),
-    ("--features-band", math.inf),
-    ("--features-outline-snap", 100.0),
+    ("--edges-repair", math.inf),
+    ("--edges-max-shift", math.inf),
+    ("--edges-outline-snap", 100.0),
 )
-
-
-class _RenamedOptions(TyperCommand):
-    """A command whose no-such-option error names a renamed option's new name."""
-
-    def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
-        try:
-            return super().parse_args(ctx, args)
-        except NoSuchOption as exc:
-            new = RENAMED.get(exc.option_name)
-            if new is None:
-                raise
-            words = f"{exc.option_name} is now {new}; a legend is the colour scheme only"
-            raise NoSuchOption(exc.option_name, words, ctx=ctx) from exc
+#: The line kinds a --lines key may name: the edge names that are no area's.
+LINE_KEYS = tuple(
+    p.name for p in DEFAULT_VOCABULARY.properties if p.name not in ("land_cover", "water")
+)
 
 
 def main() -> None:
@@ -582,10 +578,10 @@ def mesh(
             "--out",
             writable=True,
             help="Where to write: .vtk for ParaView, .ply or .gpkg for QGIS. A .gpkg with "
-            "--land-cover and meshing rules also holds the layer cells, what Shyft reads: one "
-            "row per triangle with its land-type shares glacier, lake, reservoir, forest and "
-            "unspecified "
-            "(savanna, listed too, lies inside unspecified).",
+            "--land-cover, its land-cover class file and its shares also holds the layer "
+            "cells, what Shyft reads: one row per triangle with its land-type shares glacier, "
+            "lake, reservoir, forest and unspecified (savanna, listed too, lies inside "
+            "unspecified).",
         ),
     ],
     dem: Annotated[
@@ -615,7 +611,7 @@ def mesh(
         typer.Option(
             "--out-edges",
             writable=True,
-            help="With .ply, also write the constraint edges as a PLY.",
+            help="With .ply, write the mesh's edges to this PLY.",
         ),
     ] = None,
     binary: Annotated[
@@ -737,7 +733,7 @@ def mesh(
             help="With --tolerance, add DEM nodes to the start mesh until its triangles "
             "have no angle under this many degrees, or a stated reason prevents it; "
             "0 is off, at most 35. Default: 25, or 15 with land cover simplified "
-            "(--features-band above 0).",
+            "(--edges-max-shift above 0).",
         ),
     ] = None,
     start_quality_gain: Annotated[
@@ -759,84 +755,18 @@ def mesh(
             "itself, instead of its foot on the segment.",
         ),
     ] = False,
-    features: Annotated[
-        list[Path] | None,
-        typer.Option(
-            "--features",
-            help="With --domain, polygons and lines as constraints (.geojson, .json, .gpkg "
-            "or .gml), clipped to the domain, each edge carrying its meshing rules' bits. "
-            "Repeatable: each --features is one source, paired by position with the Nth "
-            "of --features-crs, --features-layer and --features-rules.",
-        ),
-    ] = None,
-    features_crs: Annotated[
-        list[str] | None,
-        typer.Option("--features-crs", help="The Nth --features file's CRS, any pyproj reads."),
-    ] = None,
-    features_layer: Annotated[
-        list[str] | None,
-        typer.Option("--features-layer", help="The Nth --features GeoPackage's features table."),
-    ] = None,
-    features_rules: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--features-rules",
-            help="The Nth --features' meshing rules: "
-            f"{', '.join([*shipped_names(), 'property'])}, or a meshing-rules file (.toml). "
-            "Default: property. property: each feature's own edge names, never cleaned or "
-            "simplified.",
-        ),
-    ] = None,
-    features_repair: Annotated[
-        float | None,
-        typer.Option(
-            "--features-repair",
-            rich_help_panel=CLEAN_UP,
-            show_default=False,
-            help="Metres: land-cover borders of one file closer than this become one "
-            "border, and gaps narrower than it are filled; 0 is off. " + DERIVED.format(1),
-        ),
-    ] = None,
-    features_merge_same_class: Annotated[
-        bool,
-        typer.Option(
-            help="Drop borders between neighbouring land-cover polygons of one class. Default: on.",
-            rich_help_panel=CLEAN_UP,
-            show_default=False,
-        ),
-    ] = True,
-    features_band: Annotated[
-        float | None,
-        typer.Option(
-            "--features-band",
-            rich_help_panel=CLEAN_UP,
-            show_default=False,
-            help="Metres: simplify land-cover borders, each moved at most this far from its "
-            "border after the repair and the outline rule, each class keeping its area; the "
-            "simplification can bring a border back within the outline-snap distance of the "
-            "outline, but not closer than the repair distance. 0 is off. " + DERIVED.format(50),
-        ),
-    ] = None,
-    features_outline_snap: Annotated[
-        float | None,
-        typer.Option(
-            "--features-outline-snap",
-            rich_help_panel=CLEAN_UP,
-            show_default=False,
-            help="Metres, under 100: move land-cover borders this close to the domain "
-            "outline onto it; 0 is off. " + DERIVED.format(5),
-        ),
-    ] = None,
     land_cover: Annotated[
-        str | None,
+        list[str] | None,
         typer.Option(
             "--land-cover",
-            help="The exact share of each land-cover class in every triangle, "
-            "from a cached catalogue source of classes "
+            help="What is on the ground: a cached catalogue source of classes "
             f"({', '.join(k for k, s in SOURCES.items() if s.values == 'classes')}) or of "
-            "class polygons with meshing rules "
-            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'features' and s.rules)}"
-            "), a uint8 GeoTIFF or a file of class polygons, in the mesh file.",
+            "class polygons "
+            f"({', '.join(k for k, s in SOURCES.items() if s.values == 'features' and s.classes)}"
+            "), a uint8 GeoTIFF or a file of class polygons. Without class borders in --edges "
+            "it gives the exact share of each class in every triangle, in the mesh file. "
+            "Repeatable for class polygons, read as one map: where two overlap, the first "
+            "given keeps the area.",
         ),
     ] = None,
     land_cover_year: Annotated[
@@ -846,24 +776,102 @@ def mesh(
             help="With --land-cover, the year of the classes. Default: the source's last year.",
         ),
     ] = None,
-    land_cover_rules: Annotated[
+    land_cover_classes: Annotated[
         str | None,
         typer.Option(
-            "--land-cover-rules",
-            help="With --land-cover, meshing rules with codes naming its classes in a .gpkg, "
-            "as --features-rules. Default: the source's.",
+            "--land-cover-classes",
+            help="With --land-cover, the land-cover class file naming its classes: "
+            f"{', '.join(shipped_names())}, or a land-cover class file (.toml). "
+            "Default: the source's.",
         ),
+    ] = None,
+    land_cover_layer: Annotated[
+        str | None,
+        typer.Option(
+            "--land-cover-layer", help="The --land-cover GeoPackage files' features table."
+        ),
+    ] = None,
+    land_cover_crs: Annotated[
+        str | None,
+        typer.Option("--land-cover-crs", help="The --land-cover files' CRS when they do not say."),
     ] = None,
     prefer: Annotated[
         list[str] | None,
         typer.Option(
             "--prefer",
             metavar="KEY=SOURCE",
-            help="With class polygons from --land-cover, take the class its meshing rules name for "
-            "KEY (lake, glacier) from SOURCE, a file or cached source of polygons, and the "
+            help="With class polygons from --land-cover, take the class its class file names "
+            "for KEY (lake, glacier) from SOURCE, a file or cached source of polygons, and the "
             "rest from --land-cover; the land cover's own polygons of that class go to their "
-            "neighbours. Repeatable; where two sources overlap, the first given wins. When the "
-            "--land-cover file is also a --features source, its lines take the same classes.",
+            "neighbours. Repeatable; where two sources overlap, the first given wins.",
+        ),
+    ] = None,
+    lines: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--lines",
+            metavar="KEY=SOURCE",
+            help=f"Lines of one kind ({', '.join(LINE_KEYS)}) from SOURCE, a file or cached "
+            "source of lines, for --edges. Repeatable, one source per kind.",
+        ),
+    ] = None,
+    edges: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--edges",
+            metavar="SELECTOR",
+            help="With --domain, which borders and lines the mesh must follow: all, water, a "
+            "category of the class file (lake, forest, ...), a class code, or a --lines kind. "
+            "Repeatable. Default: none.",
+        ),
+    ] = None,
+    shares: Annotated[
+        bool,
+        typer.Option(
+            "--shares",
+            help="With --land-cover and class borders in --edges, also the exact share of "
+            "each class in every triangle, and in a .gpkg the cells layer.",
+        ),
+    ] = False,
+    edges_repair: Annotated[
+        float | None,
+        typer.Option(
+            "--edges-repair",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres: land-cover borders closer than this become one "
+            "border, and gaps narrower than it are filled; 0 is off. " + DERIVED.format(1),
+        ),
+    ] = None,
+    edges_merge_same_class: Annotated[
+        bool,
+        typer.Option(
+            help="Drop borders between neighbouring land-cover polygons of one class. Default: on.",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+        ),
+    ] = True,
+    edges_max_shift: Annotated[
+        float | None,
+        typer.Option(
+            "--edges-max-shift",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres: the farthest a land-cover border may move from where it was (after "
+            "the repair and the outline rule) when simplified, each class keeping its area; "
+            "simplifying can bring a border back within the outline-snap distance of the "
+            "outline, but not closer than the repair distance. --lines lines are kept as given. "
+            "0: no simplification, borders as read. " + DERIVED.format(50),
+        ),
+    ] = None,
+    edges_outline_snap: Annotated[
+        float | None,
+        typer.Option(
+            "--edges-outline-snap",
+            rich_help_panel=CLEAN_UP,
+            show_default=False,
+            help="Metres, under 100: move land-cover borders this close to the domain "
+            "outline onto it; 0 is off. " + DERIVED.format(5),
         ),
     ] = None,
     reservoirs: Annotated[
@@ -880,34 +888,37 @@ def mesh(
             metavar="UNITS",
             help="Sub-catchment polygons in a projected CRS, a file or cached source: those "
             "whose inner point lies in --domain are joined into the domain, their borders, "
-            "simplified within --catchments-band, become constraints, and each cell's "
+            "simplified within --catchments-max-shift, become constraints, and each cell's "
             "catchment_id is its unit's id.",
         ),
     ] = None,
-    catchments_band: Annotated[
+    catchments_max_shift: Annotated[
         float | None,
         typer.Option(
-            "--catchments-band",
+            "--catchments-max-shift",
             show_default=False,
-            help="Metres: with --catchments, move each unit border at most this far, the "
-            "area kept; 0 is off. Default: an eighth of a triangle's edge at --triangles.",
+            help="Metres: with --catchments, the farthest a unit border may move from where it "
+            "was when simplified, each unit keeping its area. 0: no simplification, borders as "
+            "read. Default: an eighth of a triangle's edge at --triangles.",
         ),
     ] = None,
     simplify_domain: Annotated[
         bool,
         typer.Option(
             "--simplify-domain",
-            help="Simplify the --domain outline, each ring moved at most --domain-band and "
-            "the area kept. --catchments always simplifies its outline, within --catchments-band.",
+            help="Simplify the --domain outline, each ring moving at most --domain-max-shift "
+            "and the area kept. --catchments always simplifies its outline, within "
+            "--catchments-max-shift.",
         ),
     ] = False,
-    domain_band: Annotated[
+    domain_max_shift: Annotated[
         float | None,
         typer.Option(
-            "--domain-band",
+            "--domain-max-shift",
             show_default=False,
-            help="Metres: with --simplify-domain, move each outline ring at most this far; "
-            "0 is off. Default: an eighth of a triangle's edge at --triangles.",
+            help="Metres: with --simplify-domain, the farthest the outline may move from where "
+            "it was when simplified, the area kept. 0: no simplification, outline as read. "
+            "Default: an eighth of a triangle's edge at --triangles.",
         ),
     ] = None,
     threads: THREADS = None,
@@ -959,9 +970,11 @@ def mesh(
     package's or one in your sources file (see rasputin sources). --bbox or
     --domain cuts it. Without --tolerance every --stride-th DEM node is
     triangulated; with it the mesh is refined until every triangle is within
-    that many metres of the DEM. --features adds polygons and lines as
-    constraint edges; meshing rules with codes, or --land-cover, give every
-    triangle a land_cover_code, coloured by rasputin palette. --pieces and
+    that many metres of the DEM. --land-cover says what is on the ground,
+    --prefer takes a class from another source and --lines adds rivers and
+    roads; --edges chooses the borders and lines the mesh follows. Every
+    triangle gets a land_cover_code, coloured by rasputin palette, and
+    without class borders (or with --shares) each class's share. --pieces and
     --piece-budget cut a --domain run into pieces, each its own file under
     <out>.pieces/ with an index.json, which agree bit for bit along every seam.
 
@@ -978,103 +991,85 @@ def mesh(
     palette: Palette | None = None
     cover: list[tuple[int, BaseGeometry]] = []
     seams: tuple[Seam, ...] = ()
-    coded: MeshingRules | None = None
-    feature_paths = features or []
-    feature_crss = features_crs or []
-    feature_layers = features_layer or []
-    feature_rules = features_rules or []
-    # One length rule per paired option. A list longer than --features is
-    # refused naming the offending flag and the counts (none given with --features
-    # absent included); a shorter list takes per-source defaults.
-    for flag, value in (
-        ("--features-crs", feature_crss),
-        ("--features-layer", feature_layers),
-        ("--features-rules", feature_rules),
-    ):
-        if len(value) > len(feature_paths):
-            raise typer.BadParameter(
-                f"{len(value)} {flag} given for {len(feature_paths)} --features; "
-                "each pairs with one source by position",
-                param_hint=flag,
-            )
-    if feature_paths and domain is None:
-        raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
-    # Every rules file is read here, before the DEM, so every file error comes first.
-    rules: list[MeshingRules] = []
-    where = "--features"
-    try:
-        for i, path in enumerate(feature_paths):
-            where = f"--features {i + 1} ({path.name})"
-            rules.append(load_rules(feature_rules[i] if i < len(feature_rules) else "property"))
-        vocabulary = run_vocabulary(rules, ("catchment",) if catchments else ())
-    except ValueError as exc:
-        raise typer.BadParameter(f"{where}: {exc}", param_hint="--features-rules") from exc
     known = _known_sources(os.environ)
+    root = cache_root(cache, os.environ)
     classes = _class_source(
-        land_cover,
-        land_cover_year,
-        land_cover_rules,
-        cache_root(cache, os.environ),
-        known,
-        _fetch_run(land_cover or "", domain, bbox, out_crs, cache),
+        land_cover or [], land_cover_year, land_cover_classes, land_cover_layer, land_cover_crs,
+        root, known, lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
+    )  # fmt: skip
+    line_sources = _line_sources(
+        lines or [], known, root, lambda value: _fetch_run(value, domain, bbox, out_crs, cache)
     )
+    choice = _edge_choice(edges or [], classes, [s.key for s in line_sources])
+    if edges and domain is None:
+        raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--edges")
+    for s in line_sources:
+        if s.key not in choice.lines:
+            raise typer.BadParameter(
+                f"--lines {s.key} is followed by no --edges; add --edges {s.key}",
+                param_hint="--lines",
+            )
+    if shares and classes is None:
+        raise typer.BadParameter("needs --land-cover", param_hint="--shares")
+    borders = bool(choice.every_class or choice.codes)  # the run follows class borders
+    computing = classes is not None and (shares or not borders)  # the run gives the shares
+    vocabulary = DEFAULT_VOCABULARY
+    if catchments:
+        catchment = EdgeProperty(name="catchment", bit=10)  # bit 9 is the cut's seam
+        vocabulary = EdgeVocabulary(properties=(*DEFAULT_VOCABULARY.properties, catchment))
     categories = None  # the cells layer's, checked here before any DEM is read
-    if classes is not None and classes.rules is not None and out.suffix == ".gpkg":
+    named = classes.classes if classes is not None else None
+    if named is not None and computing and out.suffix == ".gpkg":
         try:
-            categories = categories_of(classes.rules)
+            categories = categories_of(named)
         except ValueError as exc:
-            raise typer.BadParameter(str(exc), param_hint="--land-cover-rules") from exc
+            raise typer.BadParameter(str(exc), param_hint="--land-cover-classes") from exc
+    no_cells = "--shares" if classes is not None and not computing else None
     reservoir = _reservoir_source(
-        reservoirs, categories is not None, known, cache_root(cache, os.environ),
-        _fetch_run(reservoirs or "", domain, bbox, out_crs, cache),
+        reservoirs, categories is not None, known, root,
+        _fetch_run(reservoirs or "", domain, bbox, out_crs, cache), why=no_cells,
     )  # fmt: skip
     preferred = _prefer_sources(
-        prefer or [], classes, known, cache_root(cache, os.environ),
+        prefer or [], classes, known, root,
         lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
     )  # fmt: skip
-    own_lines = _cover_lines(classes, preferred, feature_paths, feature_layers, rules)
     units_source = _reservoir_source(
-        catchments, categories is not None, known, cache_root(cache, os.environ),
-        _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments",
+        catchments, categories is not None, known, root,
+        _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments", no_cells,
     )  # fmt: skip
     if catchments is not None and domain is None:
         raise typer.BadParameter(
             "needs --domain: the units whose inner point lies in the domain are the sub-catchments",
             param_hint="--catchments",
         )
-    for flag, band, applies, named in (
-        ("--catchments-band", catchments_band, catchments is not None, "--catchments"),
-        ("--domain-band", domain_band, simplify_domain, "--simplify-domain"),
+    for flag, shift, applies, needs in (
+        ("--catchments-max-shift", catchments_max_shift, catchments is not None, "--catchments"),
+        ("--domain-max-shift", domain_max_shift, simplify_domain, "--simplify-domain"),
     ):
-        if band is not None and not applies:
-            raise typer.BadParameter(f"applies only with {named}", param_hint=flag)
-        if band is not None and not (math.isfinite(band) and band >= 0):
-            raise typer.BadParameter(f"must be finite, >= 0, got {band}", param_hint=flag)
-    if catchments is not None and triangles is None and catchments_band is None:
+        if shift is not None and not applies:
+            raise typer.BadParameter(f"applies only with {needs}", param_hint=flag)
+        if shift is not None and not (math.isfinite(shift) and shift >= 0):
+            raise typer.BadParameter(f"must be finite, >= 0, got {shift}", param_hint=flag)
+    if catchments is not None and triangles is None and catchments_max_shift is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the border band, or --catchments-band",
+            "needs --triangles, whose budget sets the farthest a border may shift, or "
+            "--catchments-max-shift",
             param_hint="--catchments",
         )
     if simplify_domain and domain is None:
         raise typer.BadParameter("needs --domain", param_hint="--simplify-domain")
-    if simplify_domain and triangles is None and domain_band is None:
+    if simplify_domain and triangles is None and domain_max_shift is None:
         raise typer.BadParameter(
-            "needs --triangles, whose budget sets the outline band, or --domain-band",
+            "needs --triangles, whose budget sets the farthest the outline may shift, or "
+            "--domain-max-shift",
             param_hint="--simplify-domain",
         )
     regulated = None  # each triangle's share under the reservoir polygons
     catchment_ids = None  # each cell's unit, with --catchments
-    if classes is not None:
-        for coded_rules in (m for m in rules if m.codes):
-            raise typer.BadParameter(
-                "one mesh has one land_cover_code system, and --features-rules "
-                f"{coded_rules.name} already gives every triangle a code",
-                param_hint="--land-cover",
-            )
     overrides = {
-        "repair_m": features_repair,
-        "band_m": features_band,
-        "outline_snap_m": features_outline_snap,
+        "repair_m": edges_repair,
+        "max_shift_m": edges_max_shift,
+        "outline_snap_m": edges_outline_snap,
     }
     for (flag, top), metres in zip(OPTION_TOPS, overrides.values(), strict=True):
         if metres is not None and not (math.isfinite(metres) and 0 <= metres < top):
@@ -1082,7 +1077,7 @@ def mesh(
             raise typer.BadParameter(f"must be finite, >= 0{under}, got {metres}", param_hint=flag)
     if domain is None and domain_crs is not None:
         raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
-    lines = _tolerance_lines(tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp)
+    near_lines = _tolerance_lines(tolerance, tolerance_near, tolerance_near_crs, tolerance_ramp)
     steep = _tolerance_slope(tolerance, tolerance_slope)
     if domain is not None and bbox is not None:
         raise typer.BadParameter("--bbox and --domain exclude each other", param_hint="--bbox")
@@ -1190,19 +1185,21 @@ def mesh(
     units: Units | None = None
     if given is not None and units_source is not None:
         with clock.phase("catchments"), _refused("--catchments"):
-            units = _units(*units_source[:3], given, triangles, catchments_band)
+            units = _units(*units_source[:3], given, triangles, catchments_max_shift)
         given = units.domain
-    outline_band = None
+    outline_shift = None
     if given is not None and units is None and simplify_domain:
         with clock.phase("domain simplify"):
             before = _ring_vertices(given.polygon)
-            given, outline_band = sub_catchments.simplify_domain(given, triangles, domain_band)
+            given, outline_shift = sub_catchments.simplify_domain(
+                given, triangles, domain_max_shift
+            )
             area = sub_catchments.equal_area(given).polygon.area
-        why = "--domain-band" if domain_band is not None else (
-            f"a triangle's edge at {triangles} triangles, {8 * outline_band:.0f} m, over 8"
+        why = "--domain-max-shift" if domain_max_shift is not None else (
+            f"a triangle's edge at {triangles} triangles, {8 * outline_shift:.0f} m, over 8"
         )  # fmt: skip
         typer.echo(
-            f"domain: outline simplified at {outline_band:.0f} m ({why}): {before} to "
+            f"domain: outline simplified at {outline_shift:.0f} m ({why}): {before} to "
             f"{_ring_vertices(given.polygon)} vertices, {area / 1e6:.2f} km2",
             err=True,
         )
@@ -1218,7 +1215,8 @@ def mesh(
         if part is not None:  # each of these describes one mesh, which a cut run has not
             asked = (
                 ("--stats", stats), ("--out-edges", out_edges), ("--record", record_path),
-                ("--land-cover", land_cover), ("--out", out if out.suffix == ".gpkg" else None),
+                ("--land-cover", land_cover if computing and not shares else None),
+                ("--shares", shares or None), ("--out", out if out.suffix == ".gpkg" else None),
                 ("--rms", rms or None),
             )  # fmt: skip
             for hint, given_option in asked:
@@ -1248,33 +1246,37 @@ def mesh(
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
-    # The clean-up scale is the coarsest cleaned rules' accuracy, a file
-    # stating none counting as the DEM cell (CORINE's 100 m with no cleaned
-    # source), never finer than a DEM cell.
+    # The clean-up scale is the class file's accuracy when the run follows
+    # class borders (CORINE's 100 m when it does not), never finer than a DEM cell.
     cell = max(meta.delta_x, abs(meta.delta_y))
-    accuracy = max(
-        (cell if m.accuracy_m is None else m.accuracy_m for m in rules if m.cleaned), default=100.0
-    )
-    no_accuracy = [
-        f"{Path(feature_rules[i]).name} states no positional_accuracy_m; the DEM cell, {cell:g} m, "
-        "is used"
-        for i, m in enumerate(rules)
-        if m.cleaned and m.accuracy_m is None
-    ]
-    for said in no_accuracy:
-        typer.echo(said, err=True)
+    lcc = classes.classes if classes is not None else None
+    accuracy = lcc.accuracy_m if borders and lcc is not None and lcc.accuracy_m else 100.0
     derived = derived_cleanup(accuracy, cell).model_dump()
     cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
-    cleanup["merge_same_class"] = features_merge_same_class
+    cleanup["merge_same_class"] = edges_merge_same_class
+    # The read region: around the domain, else around the DEM window meshed.
+    area = dem_domain or DomainPolygon(polygon=shapely.box(*meta.node_box()), crs=dem_crs)
+    land: _LandCover | None = None
+    edge_values: dict[str, Value] = {}
+    if classes is not None and classes.files:
+        land = _land_cover_map(classes, preferred, area, dem_crs, cell, clock, res.threads)
+        if len(classes.files) > 1:
+            edge_values["land_cover_overlap"] = _overlap_record(land, classes.files, area)
+    line_pairs, line_reads = _read_lines(line_sources, area, dem_crs, cell, clock, res.threads)
     found = None
-    sources: tuple[FeatureSource, ...] = ()
-    if feature_paths and dem_domain is not None:
-        sources = _feature_sources(feature_paths, feature_crss, feature_layers, rules)
-        found = _open_features(
-            sources, dem_domain, dem_crs, clock, cleanup, vocabulary, res.threads, cell,
-            None if own_lines is None or classes is None or classes.rules is None
-            else (own_lines, classes.rules, preferred),
+    if edges and dem_domain is not None:
+        found = _edges(
+            land if borders else None, line_pairs, choice, EdgeCleanup(**cleanup), dem_domain,
+            vocabulary, source_region(area, dem_crs, dem_crs, cell=cell), clock,
+            sum(r.empty for r in line_reads),
         )  # fmt: skip
+        edge_values |= _edge_record(
+            found, land if borders else None, classes.files if classes else (), line_sources,
+            line_pairs, dem_crs,
+        )  # fmt: skip
+        if borders:
+            edge_values |= {f"edges_{k}": v for k, v in cleanup.items()}
+            edge_values["edges_merge_same_class"] = "on" if edges_merge_same_class else "off"
     if units is not None and dem_domain is not None:
         units = units.moved(dem_crs)
         line = sub_catchments.borders([g for _, g in units.units], vocabulary.mask("catchment"))
@@ -1282,7 +1284,9 @@ def mesh(
             update={"features": (*found.features, line)}
         )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
-    simplified = found is not None and found.cover_vertices is not None and cleanup["band_m"] > 0
+    simplified = (
+        found is not None and found.cover_vertices is not None and cleanup["max_shift_m"] > 0
+    )
     angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
     angle = angle if start_min_angle is None else start_min_angle
     try:
@@ -1302,7 +1306,7 @@ def mesh(
             grid,
             checks,
             DEFAULT_START_QUALITY_GAIN if start_quality_gain is None else start_quality_gain,
-            lines,
+            near_lines,
             steep,
             res.threads,
             vocabulary,
@@ -1314,7 +1318,7 @@ def mesh(
     except RunError as exc:
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
     except typer.BadParameter as exc:
-        plain = domain is not None and outline_band is None and units is None
+        plain = domain is not None and outline_shift is None and units is None
         if isinstance(exc.__cause__, UnderFloor) and plain:
             exc.message += "; or give --simplify-domain to simplify the outline to the budget"
         raise
@@ -1357,70 +1361,33 @@ def mesh(
     if given is not None:
         how = transform_label(given.crs, dem_crs)
         values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
-        if outline_band is not None:
-            values["domain_band_m"] = outline_band
-    if found is not None and sources and dem_run.feature_counts is not None:
-        # One entry per source, joined, each counting its own features' lines
-        # (found.features are in source order, found.counts[i] of each);
-        # the merged PSLG's totals go to features_joined.
+        if outline_shift is not None:
+            values["domain_max_shift_m"] = outline_shift
+    if found is not None and dem_run.feature_counts is not None:
         chains, feature_vertices = dem_run.feature_counts
         totals = f"{plural(chains, 'line', 'lines')}, "
         totals += plural(feature_vertices, "vertex", "vertices")
-        values["features_joined"] = f"{totals} after joining shared edges and adding crossings"
-        texts, crs_texts, transforms, notices = [], [], [], []
-        start = 0
-        for i, src in enumerate(sources):
-            layer = f" layer {found.layers[i]}" if found.layers[i] else ""
-            counted = plural(found.counts[i], "feature", "features")
-            kept = [g for f in found.features[start : start + found.counts[i]] for g in f.lines]
-            start += found.counts[i]
-            coords = sum(int(shapely.get_num_coordinates(g)) for g in kept)
-            mine = f"{plural(len(kept), 'line', 'lines')}, {plural(coords, 'vertex', 'vertices')}"
-            texts.append(f"{src.path.name}{layer}, rules {src.rules.name}: {counted}, {mine}")
-            own = found.crs[i]
-            crs_texts.append(crs_label(own))
-            transforms.append(transform_label(own, dem_crs))
-            if src.rules.notice and src.rules.notice not in notices:
-                notices.append(src.rules.notice)
-        values["features"] = escaped_ascii("; ".join(texts))
-        values["features_crs"] = "; ".join(crs_texts)
-        values["features_accuracy_m"] = escaped_ascii("; ".join(no_accuracy)) or None
-        values["features_transform"] = "; ".join(transforms)
-        values["features_notice"] = "; ".join(notices) or None
-        licences = dict.fromkeys(s.rules.licence for s in sources if s.rules.licence)
-        values["features_licence"] = escaped_ascii("; ".join(licences)) or None
-        values |= {f"features_{k}": v for k, v in cleanup.items()}
-        values["features_merge_same_class"] = "on" if features_merge_same_class else "off"
-        if found.cover_vertices is not None:
-            before, after = found.cover_vertices
-            values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
-            values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
-        # Labelling runs iff a source carries codes (one code system per
-        # mesh is enforced in _feature_sources). Every coded source's
-        # polygons are labelled together over the merged FeatureSet.
-        coded = next((s.rules for s in sources if s.rules.codes), None)
-        if coded is not None and dem_run.cut is None:
+        values["edges_joined"] = f"{totals} after joining shared edges and adding crossings"
+    values |= edge_values
+    coded = lcc if borders else None  # codes by the borders' polygons, no shares
+    if coded is not None and found is not None:
+        palette = coded.legend.colours
+        cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
+        if dem_run.cut is None and not computing:
             codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
             values["land_cover_codes"] = codes_text
-            palette = coded.legend.colours if coded.legend else None
-            cover = [(f.code, f.polygon) for f in found.features if f.polygon and f.code]
-    if classes is not None:
+            values["land_cover_shares"] = "not computed (add --shares)"
+    if land is not None and preferred and dem_run.cut is None:
+        values |= _prefer_record(land, preferred, dem_run.trimmed, classes)
+    if classes is not None and computing:
         table, codes, more = _class_fractions(
-            classes,
-            dem_run.trimmed,
-            dem_crs,
-            clock,
-            domain,
-            out_crs,
-            cache,
-            res.threads,
-            preferred,
-        )
+            classes, land, dem_run.trimmed, dem_crs, clock, domain, out_crs, cache, res.threads,
+        )  # fmt: skip
         codes_text = str(more["land_cover_codes"])
-        if classes.rules is not None:  # names and colours for the .gpkg
-            palette = classes.rules.legend.colours if classes.rules.legend else None
+        if lcc is not None:  # names and colours for the .gpkg
+            palette = lcc.legend.colours
         elif out.suffix == ".gpkg":
-            more["cells"] = "none, the land cover has no meshing rules"
+            more["cells"] = "none, the land cover has no land-cover class file"
         if reservoir is not None:
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
@@ -1451,7 +1418,7 @@ def mesh(
             more |= {
                 "catchments": escaped_ascii(units.name),
                 "catchments_units": len(units.units),
-                "catchments_band_m": units.band_m,
+                "catchments_max_shift_m": units.max_shift_m,
             }
         values |= more
     if dem_run.cut is not None:
@@ -1631,16 +1598,33 @@ def _write_geopackage(
 
 
 @dataclass(frozen=True, slots=True)
+class _Vector:
+    """A vector source as checked: its file, layer, record name and
+    catalogue entry, if any; ``key`` the --prefer or --lines key, and
+    ``code`` the class a --prefer source replaces."""
+
+    path: Path
+    layer: str | None
+    name: str
+    source: RemoteSource | None
+    key: str = ""
+    code: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class _ClassSource:
-    """``--land-cover`` as checked: a catalogue entry with its year (None for a
-    source without years) and cache root, or a file; and the meshing rules
-    that name its classes, if any."""
+    """``--land-cover`` as checked: a class raster, a catalogue entry with
+    its year (None for a source without years) and cache root, or a file
+    (``path``); or class-polygon files (``files``), with the CRS given for
+    them; and the land-cover class file that names its classes, if any."""
 
     source: RemoteSource | None
     year: int | None
     root: Path | None
     path: Path | None
-    rules: MeshingRules | None
+    classes: LandCoverClasses | None
+    files: tuple[_Vector, ...] = ()
+    crs: str | None = None
 
 
 #: The words before a refusal's fetch command, which the MCP server's fetch tool takes
@@ -1702,19 +1686,26 @@ def _reservoir_source(
     root: Path | None,
     run: str,
     flag: str = "--reservoirs",
+    why: str | None = None,
 ) -> tuple[Path, str | None, str, tuple[str, Callable[[list[object]], list[int]]] | None] | None:
     """``flag`` (``--reservoirs`` or ``--catchments``) checked before any work:
     the file, layer and record name of a cached catalogue source of features
     (its key), or of a file rasputin reads (its name), and for an entry with
     `named_by` that rule and the names its source gives, read whole.
-    ``wanted`` is whether the run writes cells: --land-cover with meshing rules
-    and a .gpkg output. An uncached source's refusal names `run`."""
+    ``wanted`` is whether the run writes cells: --land-cover with a land-cover
+    class file, its shares and a .gpkg output; ``why``, when given, is the
+    option a run that writes none lacks. An uncached source's refusal names `run`."""
     if value is None:
         return None
     _refuse_named(known.get(value), value, flag)
+    if not wanted and why is not None:
+        raise typer.BadParameter(
+            f"needs {why}: the cells come from the class shares, which this run does not compute",
+            param_hint=flag,
+        )
     if not wanted:
         raise typer.BadParameter(
-            "needs --land-cover with meshing rules and a .gpkg output", param_hint=flag
+            "needs --land-cover with a land-cover class file and a .gpkg output", param_hint=flag
         )
     found = _features_source(value, flag, known, root, run)
     rule = known[value].named_by if value in known else None
@@ -1741,11 +1732,11 @@ def _reservoir_source(
 @dataclass(frozen=True)
 class Units:
     """The sub-catchment units as (id, polygon), the domain they join into,
-    the band their borders were simplified within, and the source's name."""
+    the farthest their borders moved when simplified, and the source's name."""
 
     units: list[tuple[int, BaseGeometry]]
     domain: DomainPolygon
-    band_m: float
+    max_shift_m: float
     name: str
 
     def moved(self, crs: str) -> Units:
@@ -1771,7 +1762,7 @@ def _units(
     read = read_source(path, layer, None, lambda own: given.to_crs(own).polygon.bounds)
     if parse_crs(read.crs).is_geographic:
         raise ValueError(
-            f"{name} is in degrees ({crs_label(read.crs)}); the border band is in metres, so "
+            f"{name} is in degrees ({crs_label(read.crs)}); the border shift is in metres, so "
             "give the units in a projected CRS"
         )
     rows = [
@@ -1787,7 +1778,7 @@ def _units(
     repaired = sub_catchments.repair([g for _, g in picked])
     area = join(repaired, read.crs).polygon.area
     if tolerance is not None:
-        band, why = tolerance, "--catchments-band"
+        band, why = tolerance, "--catchments-max-shift"
     else:
         assert triangles is not None
         band = sub_catchments.band_m(area, triangles)
@@ -1844,29 +1835,81 @@ def _features_source(
 
 
 def _class_source(
-    value: str | None,
+    values: Sequence[str],
     year: int | None,
-    rules_value: str | None,
+    classes_value: str | None,
+    layer: str | None,
+    crs: str | None,
     root: Path | None,
     known: Mapping[str, RemoteSource],
-    run: str = "",
+    run: Callable[[str], str],
 ) -> _ClassSource | None:
-    """``--land-cover``, ``--land-cover-year`` and ``--land-cover-rules`` checked
-    before any work: a catalogue key is that cached source, anything else a
-    file, whose header is read here. Every refusal is a usage error naming
-    the option; an uncached layer's names `run`, the fetch that copies it."""
-    if value is None:
-        for given, flag in ((year, "--land-cover-year"), (rules_value, "--land-cover-rules")):
-            if given is not None:
+    """``--land-cover`` and the options that qualify it checked before any
+    work: one class raster (a catalogue key of classes, or a file whose header
+    is read here), or class-polygon files and catalogue keys under one
+    land-cover class file. Every refusal is a usage error naming the option;
+    an uncached source's names ``run(value)``, the fetch that copies it."""
+    if not values:
+        given = ((year, "--land-cover-year"), (classes_value, "--land-cover-classes"))
+        for value, flag in (*given, (layer, "--land-cover-layer"), (crs, "--land-cover-crs")):
+            if value is not None:
                 raise typer.BadParameter("needs --land-cover", param_hint=flag)
         return None
-    source, path, chosen = known.get(value), None, None
-    # Class polygons read in place; features with no rules are no classes, refused below.
-    if source is not None and source.values == "features" and (source.rules or rules_value):
+    rasters, files, names = [], [], []
+    for value in values:
+        source = known.get(value)
+        # Features with no class file are no classes: refused as a raster below.
+        if source is not None and source.values == "features" and (source.classes or classes_value):
+            for given_option, flag in ((layer, "--land-cover-layer"), (crs, "--land-cover-crs")):
+                if given_option is not None:
+                    raise typer.BadParameter(
+                        f"applies to a --land-cover file, not the catalogue source {value}",
+                        param_hint=flag,
+                    )
+            path, own, name = _features_source(value, "--land-cover", known, root, run(value))
+            files.append(_Vector(path, own, name, source))
+            names += [source.classes] if source.classes else []
+        elif source is not None or Path(value).suffix.lower() not in SUFFIXES:
+            rasters.append((value, source))
+        else:
+            path = Path(value)
+            if not path.is_file():
+                raise typer.BadParameter(
+                    f"{value} is neither a catalogue source ({', '.join(known)}) nor a file",
+                    param_hint="--land-cover",
+                )
+            if layer is not None and path.suffix.lower() != ".gpkg":
+                raise typer.BadParameter(
+                    f"applies to a .gpkg only, not {path.name}", param_hint="--land-cover-layer"
+                )
+            files.append(_Vector(path, layer, path.name, None))
+    if rasters and len(values) > 1:
+        raise typer.BadParameter(
+            f"{rasters[0][0]} is a class raster, which is the only --land-cover of a run",
+            param_hint="--land-cover",
+        )
+    if len(set(names)) > 1 or (classes_value and names and {classes_value} != set(names)):
+        shown = ", ".join(dict.fromkeys([*([classes_value] if classes_value else []), *names]))
+        raise typer.BadParameter(
+            f"the land-cover sources' class files differ ({shown}); one map has one",
+            param_hint="--land-cover",
+        )
+    if files:
         if year is not None:
-            raise typer.BadParameter(f"{value} has no years", param_hint="--land-cover-year")
-        path = _cached_features(source, root, run, "--land-cover")
-    elif source is not None:
+            raise typer.BadParameter("class polygons have no years", param_hint="--land-cover-year")
+        name = classes_value or (names[0] if names else "")
+        if not name:
+            raise typer.BadParameter(
+                "class polygons need a land-cover class file", param_hint="--land-cover-classes"
+            )
+        return _ClassSource(None, None, None, None, _load_classes(name), tuple(files), crs)
+    value, source = rasters[0]
+    for given_option, flag in ((layer, "--land-cover-layer"), (crs, "--land-cover-crs")):
+        if given_option is not None:
+            raise typer.BadParameter(f"applies to class polygons, not {value}", param_hint=flag)
+    file: Path | None = None
+    chosen = None
+    if source is not None:
         try:
             check_values(source, "classes", "--land-cover")
         except ValueError as exc:
@@ -1881,37 +1924,104 @@ def _class_source(
     else:
         if year is not None:
             raise typer.BadParameter("a file has no years", param_hint="--land-cover-year")
-        path = Path(value)
-        if not path.is_file():
+        file = Path(value)
+        if not file.is_file():
             raise typer.BadParameter(
                 f"{value} is neither a catalogue source ({', '.join(known)}) nor a file",
                 param_hint="--land-cover",
             )
         try:  # the header and one cell: a class raster in uint8 with a CRS
             corner = IndexWindow(row0=0, col0=0, rows=1, cols=1)
-            if path.suffix.lower() not in SUFFIXES:
-                TiffDemRepository([path], z_unit="metre").load_class_window(path.name, corner)
+            TiffDemRepository([file], z_unit="metre").load_class_window(file.name, corner)
         except (OSError, ValueError) as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
-    name = rules_value or (source.rules if source is not None else "")
+    name = classes_value or (source.classes if source is not None else "")
+    found = _load_classes(name) if name else None
+    return _ClassSource(source, chosen, None if file else root, file, found)
+
+
+def _load_classes(name: str) -> LandCoverClasses:
     try:
-        rules = load_rules(name) if name else None
+        return load_classes(name)
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--land-cover-rules") from exc
-    if rules is not None and not rules.codes:
-        raise typer.BadParameter(
-            f"{name} names no class codes; land-cover classes are codes",
-            param_hint="--land-cover-rules",
-        )
-    if rules is None and path is not None and path.suffix.lower() in SUFFIXES:
-        raise typer.BadParameter(
-            "class polygons need meshing rules with class codes", param_hint="--land-cover-rules"
-        )
-    return _ClassSource(source, chosen, None if path else root, path, rules)
+        raise typer.BadParameter(str(exc), param_hint="--land-cover-classes") from exc
+
+
+def _line_sources(
+    values: Sequence[str],
+    known: Mapping[str, RemoteSource],
+    root: Path | None,
+    run: Callable[[str], str],
+) -> list[_Vector]:
+    """Each ``--lines KEY=SOURCE`` checked before any work: a line kind,
+    one source per kind, a file or cached source of features."""
+    found: list[_Vector] = []
+    for value in values:
+        key, _, given = value.partition("=")
+        if not given:
+            raise typer.BadParameter(
+                f"{value} names no source; give KEY=SOURCE", param_hint="--lines"
+            )
+        if key not in LINE_KEYS:
+            area = key in get_args(Category)
+            why = (
+                "an area kind; give it to --prefer"
+                if area
+                else f"no line kind; use {', '.join(LINE_KEYS)}"
+            )
+            raise typer.BadParameter(f"{key} is {why}", param_hint="--lines")
+        if any(s.key == key for s in found):
+            raise typer.BadParameter(
+                f"{key} is given twice; one source per kind", param_hint="--lines"
+            )
+        path, layer, name = _features_source(given, "--lines", known, root, run(given))
+        found.append(_Vector(path, layer, name, known.get(given), key))
+    return found
+
+
+def _edge_choice(
+    selectors: Sequence[str], classes: _ClassSource | None, keys: Sequence[str]
+) -> EdgeChoice:
+    """``--edges`` resolved: ``all``, ``water``, a category of the class
+    file, a class code, a ``--lines`` key; refused naming ``--edges``."""
+    lcc = classes.classes if classes is not None and classes.files else None
+    categories = sorted(set(lcc.categories.values())) if lcc is not None else []
+    every, codes, lines = False, set[int](), set[str]()
+    for s in selectors:
+        if s == "all":
+            every, lines = lcc is not None, lines | set(keys)
+            continue
+        if s in keys:
+            lines.add(s)
+            continue
+        if s in LINE_KEYS:
+            raise typer.BadParameter(
+                f"{s} needs its lines: add --lines {s}=SOURCE", param_hint="--edges"
+            )
+        known = known_codes(lcc) - {0} if lcc is not None else frozenset[int]()
+        area = s == "water" or s in get_args(Category) or s.isdigit()
+        if not area or (lcc is not None and s.isdigit() and int(s) not in known):
+            accepted = ", ".join(["all", "water", *categories, *keys])
+            raise typer.BadParameter(
+                f"{s} is no selector; use {accepted} or a class code", param_hint="--edges"
+            )
+        if lcc is None:
+            raise typer.BadParameter(
+                f"{s} selects classes, and no class polygons come from --land-cover",
+                param_hint="--edges",
+            )
+        if s == "water":
+            codes |= lcc.water_codes
+        elif s.isdigit():
+            codes.add(int(s))
+        else:
+            codes |= {c for c, named in lcc.categories.items() if named == s}
+    return EdgeChoice(every_class=every, codes=frozenset(codes), lines=frozenset(lines))
 
 
 def _class_fractions(
     classes: _ClassSource,
+    land: _LandCover | None,
     trimmed: Trimmed,
     dem_crs: str,
     clock: PhaseClock,
@@ -1919,21 +2029,20 @@ def _class_fractions(
     out_crs: str | None,
     cache: Path | None,
     threads: int = 1,
-    preferred: Sequence[_Preferred] = (),
 ) -> tuple[ClassFractions, npt.NDArray[np.int32], dict[str, Value]]:
-    """The exact class fractions from the cached year, the file or the class
-    polygons, timed as the phase ``land cover fractions``; the table, the
-    codes and the record entries. An object the cache lacks is refused naming
-    the ``fetch`` that gets it. ``preferred`` sources give their classes over
-    the class polygons'."""
+    """The exact class fractions from the cached year, the class raster file
+    or the map of class polygons (``land``), timed as the phase ``land cover
+    fractions``; the table, the codes and the record entries. An object the
+    cache lacks is refused naming the ``fetch`` that gets it."""
     source, year = classes.source, classes.year
     repository: ClassRaster | None = None
     values: dict[str, Value] = {}
-    if classes.path is not None and classes.path.suffix.lower() in SUFFIXES:
-        name, url, fetched = classes.path.name, *_fetched(source, classes.path)
+    if land is not None:
+        label = "; ".join(f.source.id if f.source else escaped_ascii(f.name) for f in classes.files)
     elif source is None:
         assert classes.path is not None
         name = classes.path.name
+        label = escaped_ascii(name)
         repository = TiffDemRepository([classes.path], z_unit="metre", threads=threads)
     else:
         assert classes.root is not None
@@ -1943,6 +2052,7 @@ def _class_fractions(
         repository = cached_classes
         url = source.url_for(year)
         name = url.rsplit("/", 1)[-1].split("?")[0].rsplit(".", 1)[0]
+        label = source.id
         try:
             cached = {f.name for f in cached_classes.footprints()}
         except NotCached:
@@ -1964,20 +2074,10 @@ def _class_fractions(
     with clock.phase("land cover fractions"):
         try:
             if repository is None:
-                assert classes.path is not None and classes.rules is not None
-                layer = source.layer if source is not None else None
+                assert land is not None and classes.classes is not None
                 xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
-                found, repaired = read_class_polygons(
-                    classes.path,
-                    layer,
-                    classes.rules,
-                    dem_crs,
-                    xy,
-                    functools.partial(_say_repaired, "land cover"),
-                )
-                if preferred:
-                    found, values = _overlay_preferred(found, preferred, xy, trimmed, dem_crs, name)
-                listed = known_codes(classes.rules)
+                listed = known_codes(classes.classes)
+                found, repaired = list(land.map.areas), land.base.repaired
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=listed)
             else:
                 assigned = assign_fractions(
@@ -1995,14 +2095,20 @@ def _class_fractions(
         f"{assigned.table.triangles} triangles, {len(np.unique(assigned.table.classes))} classes",
         err=True,
     )
-    label = escaped_ascii(name) if source is None else source.id
     values |= {
         "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
     if repository is None:
         values["land_cover_repaired"] = repaired
-    if source is not None:  # a file carries no credit, licence or citation
+        credits = [_credits(f.source, f.path) for f in classes.files if f.source is not None]
+        if credits:  # a file carries no credit, licence or citation
+            values |= {
+                "land_cover_credit": "; ".join(c for c, _, _ in credits),
+                "land_cover_licence_note": "; ".join(n for _, n, _ in credits),
+                "land_cover_cite": "; ".join(c for *_, c in credits if c) or None,
+            }
+    elif source is not None:
         values |= {
             "land_cover_credit": escaped_ascii(source.credit_for(url=url, date=fetched)),
             "land_cover_licence_note": escaped_ascii(source.licence_note),
@@ -2011,17 +2117,14 @@ def _class_fractions(
     return assigned.table, assigned.codes, values
 
 
-@dataclass(frozen=True, slots=True)
-class _Preferred:
-    """One ``--prefer KEY=SOURCE`` as checked: the key, the class code it
-    replaces, the file, layer and record name, and the catalogue entry if any."""
-
-    key: str
-    code: int
-    path: Path
-    layer: str | None
-    name: str
-    source: RemoteSource | None
+def _credits(source: RemoteSource, path: Path) -> tuple[str, str, str]:
+    """The credit, licence note and citation of polygons read from ``path``."""
+    url, fetched = _fetched(source, path)
+    return (
+        escaped_ascii(source.credit_for(url=url, date=fetched)),
+        escaped_ascii(source.licence_note),
+        escaped_ascii("; ".join(source.cite)),
+    )
 
 
 def _prefer_sources(
@@ -2030,41 +2133,43 @@ def _prefer_sources(
     known: Mapping[str, RemoteSource],
     root: Path | None,
     run: Callable[[str], str],
-) -> list[_Preferred]:
+) -> list[_Vector]:
     """Each ``--prefer`` checked before any work: class polygons from
-    --land-cover, a key its rules' ``[cells.prefer]`` names, and a source of
-    polygons. An uncached source's refusal names ``run(source)``."""
+    --land-cover, a key its class file's ``[cells.prefer]`` names, and a
+    source of polygons. An uncached source's refusal names ``run(source)``."""
     if values and classes is None:
         raise typer.BadParameter("needs --land-cover", param_hint="--prefer")
     found = []
     for value in values:
         assert classes is not None
-        path = classes.path
-        if classes.rules is None or path is None or path.suffix.lower() not in SUFFIXES:
+        key, _, given = value.partition("=")
+        if key in LINE_KEYS:
+            raise typer.BadParameter(
+                f"{key} is a line kind; give it to --lines", param_hint="--prefer"
+            )
+        if classes.classes is None or not classes.files:
             raise typer.BadParameter(
                 "needs class polygons from --land-cover; a raster --land-cover has none",
                 param_hint="--prefer",
             )
-        key, _, given = value.partition("=")
-        prefer = classes.rules.prefer
+        prefer, name = classes.classes.prefer, classes.classes.name
         if not given:
             raise typer.BadParameter(
                 f"{value} names no source; give KEY=SOURCE", param_hint="--prefer"
             )
         if not prefer:
             raise typer.BadParameter(
-                f"meshing rules {classes.rules.name} name no class a preferred source replaces",
+                f"land-cover class file {name} names no class a preferred source replaces",
                 param_hint="--prefer",
             )
         if key not in prefer:
             raise typer.BadParameter(
-                f"{key} is no key of meshing rules {classes.rules.name}; use {', '.join(prefer)}",
+                f"{key} is no key of land-cover class file {name}; use {', '.join(prefer)}",
                 param_hint="--prefer",
             )
-        path, layer, name = _features_source(given, "--prefer", known, root, run(given))
-        source = known.get(given)
+        path, layer, shown = _features_source(given, "--prefer", known, root, run(given))
         code = next(c for k, c in prefer.items() if k == key)
-        found.append(_Preferred(key, code, path, layer, name, source))
+        found.append(_Vector(path, layer, shown, known.get(given), key, code))
     return found
 
 
@@ -2078,31 +2183,215 @@ def _fetched(source: RemoteSource | None, path: Path) -> tuple[str, datetime.dat
     return url, fetched
 
 
-def _overlay_preferred(
-    found: list[tuple[int, BaseGeometry]],
-    preferred: Sequence[_Preferred],
-    xy: npt.NDArray[np.float64],
-    trimmed: Trimmed,
+@dataclass(frozen=True, slots=True)
+class _LandCover:
+    """The map of class polygons, the map before ``--prefer`` (the same
+    without it), and what each ``--land-cover`` file read."""
+
+    map: LandCoverMap
+    base: LandCoverMap
+    reads: tuple[ClassPolygons, ...]
+
+
+def _land_cover_map(
+    classes: _ClassSource,
+    preferred: Sequence[_Vector],
+    area: DomainPolygon,
     dem_crs: str,
-    label: str,
-) -> tuple[list[tuple[int, BaseGeometry]], dict[str, Value]]:
-    """The class polygons with the preferred sources' classes, a warning per
-    key whose source gives less than the land cover did, and the record entries."""
-    chosen = []
-    for p in preferred:
+    cell: float,
+    clock: PhaseClock,
+    threads: int,
+) -> _LandCover:
+    """The --land-cover files read near ``area`` and joined, cut by the
+    --prefer sources: the phase ``land cover read``."""
+    assert classes.classes is not None
+    with clock.phase("land cover read"):
+        reads = []
+        for f in classes.files:
+            try:
+                reads.append(
+                    read_class_polygons(
+                        f.path,
+                        f.layer,
+                        classes.classes,
+                        dem_crs,
+                        lambda own: source_region(area, dem_crs, own, cell=cell).bounds,
+                        crs=classes.crs,
+                        threads=threads,
+                    )
+                )
+            except FeatureError as exc:
+                hint = "--land-cover-crs" if "given CRS" in str(exc) else "--land-cover"
+                raise typer.BadParameter(str(exc), param_hint=hint) from exc
+        xy = shapely.get_coordinates(area.polygon.exterior)
+        chosen = []
+        for p in preferred:
+            try:
+                polygons, _ = read_polygons(
+                    p.path, p.layer, dem_crs, xy,
+                    functools.partial(_say_repaired, f"--prefer {p.key}"),
+                    lines="lines go to --lines",
+                )  # fmt: skip
+            except FeatureError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
+            chosen.append((p.code, polygons))
+        region = source_region(area, dem_crs, dem_crs, cell=cell)
         try:
-            polygons, _ = read_polygons(
-                p.path, p.layer, dem_crs, xy, functools.partial(_say_repaired, f"--prefer {p.key}")
-            )
+            base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
         except FeatureError as exc:
-            raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
-        chosen.append((p.code, polygons))
-    over = overlay_preferred(found, chosen, xy[trimmed.triangles])
+            raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
+        again = functools.partial(build, fix=False, outside=base.outside)
+        built = again([base.areas], chosen, classes.classes, region) if chosen else base
+        _say_repaired("land cover", base.repaired, sum(len(r.areas) for r in reads))
+    for r in reads:
+        if r.scanned:
+            typer.echo(
+                f"{r.layer}: this layer has no spatial index, so every row was read", err=True
+            )
+    return _LandCover(built, base, tuple(reads))
+
+
+def _read_lines(
+    sources: Sequence[_Vector],
+    area: DomainPolygon,
+    dem_crs: str,
+    cell: float,
+    clock: PhaseClock,
+    threads: int,
+) -> tuple[list[tuple[str, LineString]], list[SourceLines]]:
+    """The --lines files read near ``area``: the phase ``lines read``."""
+    pairs: list[tuple[str, LineString]] = []
+    reads: list[SourceLines] = []
+    if not sources:
+        return pairs, reads
+    with clock.phase("lines read"):
+        for s in sources:
+            try:
+                read = read_linestrings(
+                    s.path, s.layer, dem_crs,
+                    lambda own: source_region(area, dem_crs, own, cell=cell).bounds,
+                    threads=threads,
+                )  # fmt: skip
+            except FeatureError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--lines") from exc
+            reads.append(read)
+            pairs += [(s.key, line) for line in read.lines]
+    for r in reads:
+        if r.scanned:
+            typer.echo(
+                f"{r.layer}: this layer has no spatial index, so every row was read", err=True
+            )
+    return pairs, reads
+
+
+def _edges(
+    land: _LandCover | None,
+    pairs: Sequence[tuple[str, LineString]],
+    choice: EdgeChoice,
+    cleanup: EdgeCleanup,
+    domain: DomainPolygon,
+    vocabulary: EdgeVocabulary,
+    region: Polygon,
+    clock: PhaseClock,
+    empty: int,
+) -> FeatureSet:
+    """`edges_of`, timed as ``edges`` and ``edges: clean-up``, with its stderr
+    line; ``empty`` counts the rows the readers skipped as empty."""
+    t0 = time.perf_counter()
+    try:
+        found = edges_of(
+            None if land is None else land.map, pairs, choice, cleanup, domain, vocabulary,
+            region=region,
+        )  # fmt: skip
+    except FeatureError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--edges") from exc
+    clock.add("edges", time.perf_counter() - t0)
+    if found.cover_vertices is not None:
+        clock.add("edges: clean-up", found.cleanup_seconds)
+    empty += found.empty + (sum(r.empty for r in land.reads) if land is not None else 0)
+    typer.echo(
+        f"edges: {len(found.features)} kept ({found.clipped} cut at the domain outline), "
+        f"{found.outside} outside the domain, {empty} empty",
+        err=True,
+    )
+    return found
+
+
+def _edge_record(
+    found: FeatureSet,
+    land: _LandCover | None,
+    files: Sequence[_Vector],
+    sources: Sequence[_Vector],
+    pairs: Sequence[tuple[str, LineString]],
+    dem_crs: str,
+) -> dict[str, Value]:
+    """The record's entries for the edges: one ``edges`` entry per source
+    of edges (`found.counts`), the land-cover ``files``' CRS and credit, the
+    line kinds' lines, and the clean-up's vertices."""
+    texts: list[str] = []
+    entries: list[tuple[str, str]] = []
+    if land is not None:
+        layers = ", ".join(dict.fromkeys(r.layer for r in land.reads if r.layer))
+        names = " + ".join(f.name for f in files) + (f" layer {layers}" if layers else "")
+        entries.append((names, f"classes {land.map.classes.name}"))
+    by_key = {s.key: s for s in sources}
+    entries += [(by_key[k].name, f"lines {k}") for k in dict.fromkeys(k for k, _ in pairs)]
+    start = 0
+    for (what, of), n in zip(entries, found.counts, strict=True):
+        kept = [g for f in found.features[start : start + n] for g in f.lines]
+        start += n
+        coords = sum(int(shapely.get_num_coordinates(g)) for g in kept)
+        mine = f"{plural(len(kept), 'line', 'lines')}, {plural(coords, 'vertex', 'vertices')}"
+        texts.append(f"{what}, {of}: {plural(n, 'feature', 'features')}, {mine}")
+    values: dict[str, Value] = {"edges": escaped_ascii("; ".join(texts))}
+    rows = []
+    for s in sources:
+        lines = [g for f in found.features if str(f.fid).startswith(f"{s.key} ") for g in f.lines]
+        counted = plural(len(lines), "line", "lines")
+        km = sum(g.length for g in lines) / 1e3
+        rows.append(f"{s.key} from {escaped_ascii(s.name)}: {counted}, {km:.3f} km")
+    values["lines"] = "; ".join(rows) or None
+    if land is not None:
+        lcc = land.map.classes
+        values["land_cover_crs"] = "; ".join(crs_label(r.crs) for r in land.reads)
+        values["land_cover_transform"] = "; ".join(
+            transform_label(r.crs, dem_crs) for r in land.reads
+        )
+        values["land_cover_notice"] = lcc.notice or None
+        values["land_cover_licence"] = escaped_ascii(lcc.licence) or None
+    if found.cover_vertices is not None:
+        before, after = found.cover_vertices
+        values["land_cover_vertices"] = f"{before} after the clip, {after} after clean-up"
+        values["land_cover_area_moved_m2"] = f"{found.area_changed:.1f}"
+    return values
+
+
+def _overlap_record(land: _LandCover, files: Sequence[_Vector], area: DomainPolygon) -> str:
+    """Per file that kept an overlap, the area inside ``area`` it kept, m2."""
+    shapely.prepare(area.polygon)
+    kept: dict[int, float] = {}
+    for i, g in land.base.overlap:
+        kept[i] = kept.get(i, 0.0) + float(shapely.intersection(g, area.polygon).area)
+    words = [f"{a:.1f} m2 kept by {escaped_ascii(files[i].name)}" for i, a in kept.items() if a]
+    return "; ".join(words) or "none"
+
+
+def _prefer_record(
+    land: _LandCover, preferred: Sequence[_Vector], trimmed: Trimmed, classes: _ClassSource | None
+) -> dict[str, Value]:
+    """The record entries of the --prefer sources, their areas inside the
+    mesh, and a warning per key whose source gives less than the land cover did."""
+    assert land.map.replaced is not None and classes is not None
+    label = " + ".join(escaped_ascii(f.name) for f in classes.files)
+    xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
+    codes = list(dict.fromkeys(p.code for p in preferred))
+    base = [(c, g) for c, g in land.base.areas if c in codes]
+    areas = areas_inside(base, land.map.replaced, codes, xy[trimmed.triangles])
     rows, credits, licences, cites = [], [], [], []
     for key in dict.fromkeys(p.key for p in preferred):
         mine = [p for p in preferred if p.key == key]
         names = " and ".join(escaped_ascii(p.name) for p in mine)
-        a = over.areas[mine[0].code]
+        a = areas[mine[0].code]
         given, replaced, refilled = (x / 1e6 for x in (a.given, a.replaced, a.refilled))
         rows.append(
             f"{key} from {names}: {replaced:.4f} km2 replaced, {given:.4f} km2 given, "
@@ -2120,17 +2409,16 @@ def _overlay_preferred(
             if p.source is None:
                 credits.append(f"{key}: {escaped_ascii(p.name)}")
                 continue
-            url, fetched = _fetched(p.source, p.path)
-            credits.append(f"{key}: {escaped_ascii(p.source.credit_for(url=url, date=fetched))}")
-            licences.append(f"{key}: {escaped_ascii(p.source.licence_note)}")
+            credit, licence, _ = _credits(p.source, p.path)
+            credits.append(f"{key}: {credit}")
+            licences.append(f"{key}: {licence}")
             cites += [f"{key}: {escaped_ascii(c)}" for c in p.source.cite]
-    values: dict[str, Value] = {
+    return {
         "land_cover_prefer": "; ".join(rows),
         "land_cover_prefer_credit": "; ".join(credits),
         "land_cover_prefer_licence_note": "; ".join(licences) or None,
         "land_cover_prefer_cite": "; ".join(cites) or None,
     }
-    return over.polygons, values
 
 
 def _say_repaired(what: str, repaired: int, read: int) -> None:
@@ -2152,7 +2440,7 @@ def _write_piece(
     suffix: str,
     values: Mapping[str, Value],
     found: FeatureSet | None,
-    coded: MeshingRules | None,
+    coded: LandCoverClasses | None,
     spacing: float,
     clock: PhaseClock,
     binary: bool,
@@ -2195,7 +2483,7 @@ def _write_piece(
 
 
 def _land_cover(
-    trimmed: Trimmed, found: FeatureSet, rules: MeshingRules, spacing: float, clock: PhaseClock
+    trimmed: Trimmed, found: FeatureSet, rules: LandCoverClasses, spacing: float, clock: PhaseClock
 ) -> tuple[npt.NDArray[np.int32], str]:
     """A code per triangle from the coded polygons, timed as the phase
     ``land cover``, with its stderr line; the codes and their text."""
@@ -2525,7 +2813,7 @@ def gml_to_gpkg(
         str | None, typer.Option("--crs", help="The CRS, when the geometries name none.")
     ] = None,
 ) -> None:
-    """Convert a GML 3.2 file of surfaces to a GeoPackage, once, for --features and the catalogue.
+    """Convert a GML 3.2 file of surfaces to a GeoPackage, once, for --land-cover and the catalogue.
 
     One table of the file's feature type: a row per feature with a surface,
     its gml:id and its plain values as columns, in the file's CRS. The file
@@ -2710,126 +2998,6 @@ def _z_words(meta: RasterMeta, option: str | None, caller: ZUnit | None) -> str:
     if not meta.vertical_unit_assumed or (caller is not None and option is None):
         return words
     return words + (" (given with --z-unit)" if option else " (assumed: the DEM file does not say)")
-
-
-def _feature_sources(
-    paths: list[Path], crss: list[str], layers: list[str], rules: list[MeshingRules]
-) -> tuple[FeatureSource, ...]:
-    """The repeatable ``--features`` flags as one source per path, paired
-    by position; a shorter paired list defaults its missing entries. A flag that
-    cannot apply is a usage error naming the 1-based index and path, because with
-    several sources the flag alone no longer identifies which one."""
-    built: list[FeatureSource] = []
-    for i, path in enumerate(paths):
-        layer = layers[i] if i < len(layers) else None
-        if layer is not None and path.suffix.lower() != ".gpkg":
-            raise typer.BadParameter(
-                f"applies to a .gpkg only, not --features {i + 1} ({path.name})",
-                param_hint="--features-layer",
-            )
-        crs = crss[i] if i < len(crss) else None
-        built.append(FeatureSource(path=path, rules=rules[i], layer=layer, crs=crs))
-    # One mesh has one land_cover_code system. Two sources whose rules name
-    # different code systems (any file can name its own) are refused before
-    # any meshing.
-    systems = {s.rules.codes for s in built if s.rules.codes}
-    if len(systems) > 1:
-        raise typer.BadParameter(
-            f"sources carry different code systems ({', '.join(sorted(systems))}); "
-            "one mesh has one land_cover_code system",
-            param_hint="--features-rules",
-        )
-    return tuple(built)
-
-
-def _cover_lines(
-    classes: _ClassSource | None,
-    preferred: Sequence[_Preferred],
-    paths: Sequence[Path],
-    layers: Sequence[str],
-    rules: Sequence[MeshingRules],
-) -> int | None:
-    """With --prefer, the index of the --features source that is the
-    --land-cover file (same file, its layer or none given), whose lines then
-    take the preferred classes; refused when a --prefer source is also a
-    --features source, or the land cover's lines read another attribute or
-    skip the clean-up."""
-    if not preferred or classes is None or classes.path is None or classes.rules is None:
-        return None
-    layer = classes.source.layer if classes.source is not None else None
-    same = [
-        i
-        for i, p in enumerate(paths)
-        if p.resolve() == classes.path.resolve()
-        and (layers[i] if i < len(layers) else None) in (None, layer)
-    ]
-    if not same:
-        return None
-    index = same[0]
-    given = {p.path.resolve(): p.key for p in preferred}
-    for p in paths:
-        if p.resolve() in given:
-            raise typer.BadParameter(
-                f"{p.name} is also the --prefer {given[p.resolve()]} source; with the "
-                "--land-cover file among the --features, its lines come in through the "
-                "land cover's, so give it only to --prefer",
-                param_hint="--features",
-            )
-    mine, cover = rules[index], classes.rules
-    if mine.attribute.lower() != cover.attribute.lower() or not mine.cleaned:
-        raise typer.BadParameter(
-            f"--features {index + 1} ({paths[index].name}) is the --land-cover file; with --prefer "
-            f"its meshing rules must read {cover.attribute}, as meshing rules {cover.name} do, "
-            "and keep the polygons in the clean-up",
-            param_hint="--features-rules",
-        )
-    return index
-
-
-def _open_features(
-    sources: tuple[FeatureSource, ...],
-    domain: DomainPolygon,
-    dem_crs: str,
-    clock: PhaseClock,
-    cleanup: dict[str, float],
-    vocabulary: EdgeVocabulary,
-    threads: int = 1,
-    cell: float = 0.0,
-    own: tuple[int, MeshingRules, Sequence[_Preferred]] | None = None,
-) -> FeatureSet:
-    """Read and clip every source into one set, timed as
-    ``features read`` and ``features clip``; a refusal is a usage error naming
-    the feature. With `own` (the land cover's source index, its rules and
-    the --prefer sources) that source's lines take the preferred classes."""
-    t0 = time.perf_counter()
-    prefer = None
-    if own is not None:
-        xy = shapely.get_coordinates(domain.polygon.exterior)
-        chosen = []
-        for p in own[2]:
-            try:
-                polygons, _ = read_polygons(p.path, p.layer, dem_crs, xy)
-            except FeatureError as exc:
-                raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
-            chosen.append((p.code, polygons))
-        prefer = Prefer(source=own[0], rules=own[1], chosen=chosen)
-    try:
-        request = FeatureRequest(sources=sources, vocabulary=vocabulary, threads=threads, **cleanup)
-        found = open_features(request, domain, dem_crs, cell=cell, prefer=prefer)
-    except FeatureError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--features") from exc
-    clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
-    clock.add("features clip", found.clip_seconds)
-    if found.cover_vertices is not None:
-        clock.add("features clip: clean-up", found.cleanup_seconds)
-    typer.echo(
-        f"features: {len(found.features)} kept ({found.clipped} cut at the domain outline), "
-        f"{found.outside} outside the domain, {found.empty} empty",
-        err=True,
-    )
-    for table in found.scanned:
-        typer.echo(f"{table}: this layer has no spatial index, so every row was read", err=True)
-    return found
 
 
 def _tolerance_lines(
@@ -4157,6 +4325,5 @@ for panel, commands in (
     (OTHER, (version,)),
 ):
     for command in commands:
-        renamed = _RenamedOptions if command is mesh else None
-        app.command(rich_help_panel=panel, cls=renamed)(command)
+        app.command(rich_help_panel=panel)(command)
 app.command(rich_help_panel=OTHER, help=MCP_HELP)(mcp)

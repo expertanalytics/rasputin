@@ -449,6 +449,52 @@ def test_the_shipped_hotspots_file_loads(quick: ModuleType) -> None:
     assert all(r.ruling for r in ruled_list)
 
 
+def test_the_land_cover_cases_follow_every_border_without_shares(quick: ModuleType) -> None:
+    """`docs/increments/111-one-land-cover-map.md`, sections 2 and 6: the
+    Numedalslågen and Lagan cases are `--land-cover <file>
+    --land-cover-layer/-crs ... --land-cover-classes corine --edges all`, no
+    `--shares`, names and inputs unchanged; no case passes `--features`, and
+    every option a case passes is one `rasputin mesh` has."""
+    import typer
+
+    import tin_engine.cli as cli
+
+    mesh = typer.main.get_command(cli.app).commands["mesh"]  # type: ignore[attr-defined]
+    known = {o for p in mesh.params for o in (*p.opts, *p.secondary_opts)}
+    cases = {c.name: c for c in quick.load_cases(SHIPPED / "cases.toml")}
+    for case in cases.values():
+        given = {a for a in case.args[1:] if a.startswith("--")}
+        assert given <= known, (case.name, sorted(given - known))
+        assert not {a for a in given if a.startswith("--features")}, case.name
+    want = {
+        "numedalslagen": ("$RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg", "corine2018", None),
+        "lagan": (
+            "$RASPUTIN_DATA/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/"
+            "U2018_CLC2018_V2020_20u1.gpkg",
+            "U2018_CLC2018_V2020_20u1",
+            "EPSG:3035",
+        ),
+    }
+    for name, (path, layer, crs) in want.items():
+        args = cases[name].args
+
+        def after(flag: str, args: list[str] = args) -> str | None:
+            return args[args.index(flag) + 1] if flag in args else None
+
+        assert after("--land-cover") == path and path in cases[name].inputs, name
+        assert (after("--land-cover-layer"), after("--land-cover-crs")) == (layer, crs), name
+        assert after("--land-cover-classes") == "corine" and after("--edges") == "all", name
+        assert "--shares" not in args, name
+
+
+def test_the_shipped_hotspots_name_the_edges_phase(quick: ModuleType) -> None:
+    """Section 8, *Phases*: the two ruled clean-up entries (lagan,
+    numedalslagen) name the phase `edges`; `features clip` is gone."""
+    ruled = quick.load_hotspots(SHIPPED / "hotspots.toml")
+    assert {(r.case, r.phase) for r in ruled} >= {("lagan", "edges"), ("numedalslagen", "edges")}
+    assert all(r.phase != "features clip" for r in ruled), ruled
+
+
 # ------------------------------------------------------------- fingerprints
 
 

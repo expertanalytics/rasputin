@@ -31,7 +31,6 @@ from typing import Any
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
-from shapely.geometry import Polygon
 
 from class_fixtures import (
     CITE,
@@ -44,12 +43,10 @@ from class_fixtures import (
     per_year_entry,
 )
 from cli_helpers import USAGE, invoke, no_cache_anywhere, plain, runner, says_no_cache
-from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import (
     FETCHED,
     MESH_CRS,
     Row,
-    domain_ring,
     dominant,
     oracle_fractions,
     rows_of,
@@ -300,24 +297,6 @@ class TestRefusals:
         assert code == USAGE, output
         assert "Traceback" not in output and "No such option" not in output, output
         assert KEY in output and "fetch" in output and "2025" in output, output
-        assert not target.exists()
-
-    def test_a_coded_features_map_beside_it_is_refused(
-        self, classes: Any, tmp_path: Path, dem: Path, domain: Path, cache: Path
-    ) -> None:
-        """Section 8: one code system per mesh (16e's rule)."""
-        ring = domain_ring()
-        inner = Polygon(ring).buffer(-200.0)
-        path = write_geojson(
-            tmp_path / "corine.geojson", [Feat(1, inner, {"Code_18": "311"})], crs=MESH_CRS
-        )
-        code, output, target = mesh(
-            tmp_path, dem, domain, cache,
-            *("--features", str(path), "--features-rules", "corine", "--land-cover", KEY),
-        )  # fmt: skip
-        assert code == USAGE, output
-        assert "No such option" not in output, output
-        assert "--land-cover" in output and "corine" in output, output
         assert not target.exists()
 
     def test_an_unknown_key_is_a_usage_error_naming_the_catalogue(

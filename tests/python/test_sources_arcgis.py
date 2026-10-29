@@ -23,7 +23,6 @@ import shapely
 from arcgis_fixtures import CODES, CORINE, CORINE_URL, IDS, NVE, NVE_URL, FakeLayer, LayerData
 from cli_helpers import USAGE, invoke
 from gpkg_fixtures import needs_rtree
-from tin_engine import meshing_rules
 from tin_engine.feature_input import read_lake_polygons, read_source
 from tin_engine.fetch.http import RangeClient
 from tin_engine.fetch.plan import FetchRequest
@@ -75,7 +74,7 @@ def listed(cache: Path) -> dict[str, dict[str, Any]]:
 
 
 def fits_of(entry: dict[str, Any]) -> set[tuple[str, str, str | None]]:
-    return {(f["command"], f["option"], f.get("rules")) for f in entry["fits"]}
+    return {(f["command"], f["option"], f.get("classes")) for f in entry["fits"]}
 
 
 # ------------------------------------------------------------ 1. the catalogue
@@ -99,7 +98,7 @@ class TestTheShippedEntries:
         assert entry.url == CORINE_URL
         assert entry.crs == "EPSG:3035"
         assert entry.fields == ("ID", "Code_18")
-        assert entry.rules == "corine"
+        assert entry.classes == "corine"
 
     def test_the_corine_credit_names_no_version_and_no_doi(self) -> None:
         """The service states no version; the DOI is the V2020_20u1 release's."""
@@ -213,7 +212,7 @@ class TestTheListing:
         assert entry["features"] == 4
         assert entry["geometry"] == ["MultiPolygon"]
         assert set(entry["attributes"]) == {"ID", "Code_18"}
-        assert ("mesh", "--features", "corine") in fits_of(entry)
+        assert ("mesh", "--land-cover", "corine") in fits_of(entry)
         assert ("catchment", "--lakes", None) in fits_of(entry)
         assert {f[0] for f in fits_of(entry)} <= {"mesh", "catchment", "network-catchment"}
         (coded,) = [c for c in entry["classes"] if c["attribute"] == "Code_18"]
@@ -245,9 +244,9 @@ class TestThroughTheReaders:
         assert len(lakes) == 1
         assert shapely.equals(lakes[0], NVE.shapes[3])
 
-    def test_features_with_corine_read_the_cached_codes(self, tmp_path: Path) -> None:
+    def test_land_cover_with_corine_reads_the_cached_codes(self, tmp_path: Path) -> None:
         fetch_into(tmp_path, CORINE)
-        legend = meshing_rules.load("corine")
+        legend = importlib.import_module("tin_engine.land_cover_classes").load("corine")
         rows = read_source(
             tmp_path / "clc2018" / "features.gpkg", None, legend.attribute,
             lambda _crs: CORINE.extent(IDS),

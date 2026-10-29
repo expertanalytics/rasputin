@@ -1,8 +1,10 @@
 """Self-crossing land-cover and reservoir polygons are repaired when read.
 
 `docs/increments/106-wednesday-cells.md`, section 2 (106a):
-`feature_input.read_class_polygons` and `feature_input.read_polygons` repair
-each polygon after moving it into the mesh's CRS. A valid polygon is kept as
+`feature_input.read_polygons` repairs each polygon after moving it into the
+mesh's CRS; class polygons are read unchecked by `read_class_polygons` and
+repaired by the same `_repaired` in `land_cover_map.build`
+(`docs/increments/111-one-land-cover-map.md`, sections 3 and 8). A valid polygon is kept as
 it is; an invalid one is replaced by the polygonal parts of
 `shapely.make_valid` (default method), and dropped when it has none. Both
 also return how many they repaired or dropped. `mesh` prints one stderr line
@@ -25,7 +27,8 @@ integer vertices at coordinates under 10, exact in binary but compared with
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- Both readers return a pair, `(polygons, count)`, polygons first; the
+- `read_polygons` returns a pair, `(polygons, count)`, polygons first, and
+  `build` gives the areas and `repaired`; the
   polygons keep today's element types (`(code, geometry)` pairs and
   geometries). Whether a repaired polygon comes back as one multipolygon or
   as one entry per part is left open: the tests look at the parts.
@@ -52,8 +55,9 @@ from shapely.errors import GEOSException
 from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 
+import feature_fixtures as ff
 from cli_helpers import invoke
-from feature_fixtures import UTM33, Feat, rules, write_geojson
+from feature_fixtures import UTM33, Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, write_dem, write_domain
 from tin_engine.cells import overlay
 from tin_engine.feature_input import _repaired, read_class_polygons, read_polygons
@@ -85,8 +89,22 @@ def pair(out: Any) -> tuple[list[Any], int]:
     return list(polygons), count
 
 
+#: The read box for `read_class_polygons`: everywhere (a GeoJSON is read whole).
+EVERYWHERE = (-1.0e9, -1.0e9, 1.0e9, 1.0e9)
+
+
+#: The map's read region: its read box (bounds grown by 100 m) holds `TRIANGLE`.
+REGION = Polygon(TRIANGLE)
+
+
 def classes(path: Path) -> tuple[list[tuple[int, BaseGeometry]], int]:
-    return pair(read_class_polygons(path, None, rules("corine"), UTM33, TRIANGLE))
+    """`read_class_polygons` under `corine`, then `land_cover_map.build`
+    near the triangle, as `rasputin mesh` runs them: the map's areas and
+    its repair count."""
+    corine = ff.classes("corine")
+    read = read_class_polygons(path, None, corine, UTM33, lambda _own: EVERYWHERE)
+    built = ff.land_cover_map().build([read.areas], [], corine, REGION)
+    return pair((built.areas, built.repaired))
 
 
 def plain(path: Path) -> tuple[list[BaseGeometry], int]:
@@ -204,7 +222,7 @@ def test_6_a_mesh_run_with_a_bowtie_land_cover_completes_and_says_so(tmp_path: P
         *("--dem", str(write_dem(tmp_path / "dem.tif"))),
         *("--domain", str(write_domain(tmp_path / "domain.geojson"))),
         *("--tolerance", "3", "--out", str(tmp_path / "x.vtk"), "--record", str(record)),
-        *("--land-cover", str(cover), "--land-cover-rules", "corine"),
+        *("--land-cover", str(cover), "--land-cover-classes", "corine"),
     )
     assert code == 0, output
     assert "TopologyException" not in output, output
@@ -274,3 +292,9 @@ def test_random_bowties_outside_the_box_keep_inside_and_outside(polygon: Polygon
     """Seeded: 300 circles, one small self-crossing each (11 of them fail on
     the cut-then-repair of `be26db8f`)."""
     assert_same_in_box(_repaired(polygon, NEAR), polygon)
+
+
+def test_the_record_wording_of_the_land_cover_repair_stays_masters() -> None:
+    from tin_engine.run_record import WORDING
+
+    assert WORDING["land_cover_repaired"] == "Land-cover polygons that crossed themselves, repaired"

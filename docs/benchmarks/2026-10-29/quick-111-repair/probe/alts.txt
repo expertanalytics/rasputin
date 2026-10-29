@@ -1,0 +1,16 @@
+numedal.npz: 7932 polygons, 5417093 vertices, max 409242
+A clip+is_valid (branch)             0.316 s [0.315-0.320]  flagged 0
+  clip only                          0.081 s [0.079-0.082]  flagged None
+  is_valid of clipped only           0.235 s [0.235-0.237]  flagged 0
+B clip+is_valid, 8 threads           0.195 s [0.191-0.200]  flagged 0
+E clip+is_simple(boundary)           0.230 s [0.229-0.234]  flagged 739
+W whole is_valid (master shares)     3.458 s [3.455-3.466]  flagged 0
+WT whole is_valid, 8 threads         3.158 s [3.155-3.163]  flagged 0
+lagan.npz: 7866 polygons, 15888613 vertices, max 409242
+A clip+is_valid (branch)             0.331 s [0.329-0.339]  flagged 0
+  clip only                          0.101 s [0.099-0.101]  flagged None
+  is_valid of clipped only           0.228 s [0.228-0.230]  flagged 0
+B clip+is_valid, 8 threads           0.241 s [0.240-0.242]  flagged 0
+E clip+is_simple(boundary)           0.214 s [0.214-0.216]  flagged 720
+W whole is_valid (master shares)     11.745 s [11.735-11.747]  flagged 0
+WT whole is_valid, 8 threads         4.880 s [4.865-4.892]  flagged 0

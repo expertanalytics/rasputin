@@ -1,4 +1,5 @@
-"""`rasputin mesh ... --features-rules corine`: a land-cover code per cell (16c).
+"""`rasputin mesh ... --land-cover-classes corine --edges all`: a land-cover
+code per cell (16c).
 
 `docs/increments/16c-landcover-labels.md`: R3 (what the files carry), R5 (what
 `feature_input` keeps), R6 (the CLI) and "Tests for @tester", through the
@@ -14,14 +15,17 @@ Pinned beyond the design's text (the design leaves them open):
   no polygon, <V> in more than one (the smallest wins), <S> too narrow to
   label with certainty` (increment 25's rewording of R3's words,
   `docs/increments/25-plain-output.md`, "stderr, reworded"); so is the
-  features line, `features: <n> kept (<c> cut at the domain outline), <o>
-  outside the domain, <e> empty`.
+  edges line, `edges: <n> kept (<c> cut at the domain outline), <o>
+  outside the domain, <e> empty` (`docs/increments/111-one-land-cover-map.md`,
+  section 8, which also moves `--features` to `--land-cover`, with `--edges
+  all` and no `--shares`, so the codes per triangle come from the borders'
+  polygons as before, and lines to `--lines`).
 - The `land_cover_codes` string contains `CORINE Land Cover level-3 code`,
   `Code_18`, `corine` and `0 =`; the PLY comment is `land_cover_codes
   <the same text>`.
 - A refused code is a usage error (exit 2) naming the feature and the value,
-  and `--features`, as every other `FeatureError` is (16b).
-- A `LineString` under a coded map keeps its code and has no polygon.
+  and `--land-cover`, as every other `FeatureError` is (16b).
+- A `--lines` line has no code and no polygon.
 - `rasputin mesh --help` names `land_cover_code` and `rasputin palette`.
 
 Committed red at `196147e`: no code wrote `land_cover_code`,
@@ -64,7 +68,7 @@ LAND_COVER_LINE = re.compile(
     r"(?P<s>\d+) too narrow to label with certainty"
 )
 FEATURES_LINE = re.compile(
-    r"\bfeatures: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
+    r"\bedges: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
     r"(?P<o>\d+) outside the domain, (?P<e>\d+) empty\b"
 )
 CODES_SYSTEM = "CORINE Land Cover level-3 code"
@@ -108,10 +112,10 @@ NOTCHED: list[tuple[float, float]] = [
 BAND = rect(50.2, -30.1, 150.3, -15.2)
 #: 20c-3's four land-cover switches off: today's features, byte for byte.
 CLEAN_UP_OFF = (
-    "--features-repair=0",
-    "--no-features-merge-same-class",
-    "--features-band=0",
-    "--features-outline-snap=0",
+    "--edges-repair=0",
+    "--no-edges-merge-same-class",
+    "--edges-max-shift=0",
+    "--edges-outline-snap=0",
 )
 
 
@@ -173,14 +177,23 @@ def polygons_of(features: list[Feat]) -> list[tuple[BaseGeometry, int]]:
     ]
 
 
+def corine_args(path: Path) -> tuple[str, ...]:
+    """``path`` as `--land-cover` with `corine`, every border chosen."""
+    return ("--land-cover", str(path), "--land-cover-classes", "corine", "--edges", "all")
+
+
 def mesh_corine(
     tmp_path: Path, tif: Path, features: list[Feat], domain: Path | None = None, *extra: str
 ) -> Labelled:
-    path = write_geojson(tmp_path / "corine.geojson", features)
+    areas = [f for f in features if not isinstance(f.geometry, LineString)]
+    lines = [f for f in features if isinstance(f.geometry, LineString)]
+    path = write_geojson(tmp_path / "corine.geojson", areas)
+    given = list(corine_args(path))
+    if lines:
+        roads = write_geojson(tmp_path / "roads.geojson", lines)
+        given += ["--lines", f"road={roads}"]
     domain = domain or geojson(tmp_path / "square.geojson", SQUARE)
-    code, output, target = run(
-        tmp_path, tif, domain, "--features", str(path), "--features-rules", "corine", *extra
-    )
+    code, output, target = run(tmp_path, tif, domain, *given, *extra)
     assert code == 0, output
     return labelled_vtk(read_vtk(target.read_bytes()), output, polygons_of(features))
 
@@ -239,11 +252,11 @@ class TestFixtures:
         self, tmp_path: Path, bumpy: Path
     ) -> None:
         """16c's labelling of one polygon the domain clips into two pieces.
-        With 20c-3's outline rule off (``--features-outline-snap=0``, ruling
+        With 20c-3's outline rule off (``--edges-outline-snap=0``, ruling
         G2): the band's borders cross the notch's sides, and the rule, on by
         default, moves them there as designed (OR3), while this oracle
         checks every triangle against the input polygon as given. The border
-        simplification is off too (``--features-band=0``): the band does
+        simplification is off too (``--edges-max-shift=0``): the band does
         not tile the domain, so the uncovered rest borders it and the
         simplifier moves its borders, as designed. The repair and the merge
         stay at their defaults."""
@@ -254,8 +267,8 @@ class TestFixtures:
             bumpy,
             features,
             domain,
-            "--features-outline-snap=0",
-            "--features-band=0",
+            "--edges-outline-snap=0",
+            "--edges-max-shift=0",
         )
         west = got.inside(BAND.intersection(rect(12, -80, 80.1, 0)))
         east = got.inside(BAND.intersection(rect(119.9, -80, 190, 0)))
@@ -306,10 +319,7 @@ class TestRecord:
             tmp_path,
             bumpy,
             plain_square,
-            "--features",
-            str(two_squares),
-            "--features-rules",
-            "corine",
+            *corine_args(two_squares),
         )
         assert code == 0, output
         text = text_field(read_vtk(target.read_bytes()), "land_cover_codes")
@@ -327,10 +337,7 @@ class TestRecord:
             tmp_path,
             bumpy,
             plain_square,
-            "--features",
-            str(two_squares),
-            "--features-rules",
-            "corine",
+            *corine_args(two_squares),
             *extra,
         )
         assert code == 0, output
@@ -341,16 +348,13 @@ class TestRecord:
     def test_no_coded_map_no_codes(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, two_squares: Path
     ) -> None:
-        """D3: `property` writes no labels, nor does a run without features;
-        `corine` over the same polygons does (the control)."""
-        by_property = write_geojson(
-            tmp_path / "p.geojson",
-            [Feat(1, WEST, {"property": "land_cover"}), Feat(2, EAST, {"property": "water"})],
-        )
+        """D3: lines alone write no labels, nor does a run without edges;
+        `corine` over the polygons does (the control)."""
+        ring = write_geojson(tmp_path / "p.geojson", [Feat(1, LineString(WEST.exterior), {})])
         runs = {
             "none": (),
-            "property": ("--features", str(by_property)),
-            "corine": ("--features", str(two_squares), "--features-rules", "corine"),
+            "lines": ("--lines", f"wall={ring}", "--edges", "wall"),
+            "corine": corine_args(two_squares),
         }
         files = {}
         for name, extra in runs.items():
@@ -358,7 +362,7 @@ class TestRecord:
             code, output, target = run(tmp_path / name, bumpy, plain_square, *extra)
             assert code == 0, output
             files[name] = (read_vtk(target.read_bytes()), output)
-        for name in ("none", "property"):
+        for name in ("none", "lines"):
             vtk, output = files[name]
             with pytest.raises(KeyError):
                 vtk.cell_array("land_cover_code")
@@ -375,10 +379,7 @@ class TestRecord:
             tmp_path,
             bumpy,
             plain_square,
-            "--features",
-            str(two_squares),
-            "--features-rules",
-            "corine",
+            *corine_args(two_squares),
             "--stats",
             "-",
         )
@@ -406,11 +407,9 @@ class TestRefusals:
         """R5: `int(str(value))` in 1 .. 2**31 - 1, else refused naming the
         feature and the value; a list is refused too."""
         path = write_geojson(tmp_path / "bad.geojson", [coded("f-77", WEST, value)])
-        code, output, target = run(
-            tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
-        )
+        code, output, target = run(tmp_path, bumpy, plain_square, *corine_args(path))
         assert code == USAGE, output
-        assert "f-77" in output and "--features" in output, output
+        assert "f-77" in output and "--land-cover" in output, output
         shown = value[0] if isinstance(value, list) else value
         assert str(shown) in output, output
         assert not target.exists()
@@ -431,10 +430,7 @@ class TestPly:
             tmp_path,
             bumpy,
             plain_square,
-            "--features",
-            str(path),
-            "--features-rules",
-            "corine",
+            *corine_args(path),
             "--out-edges",
             str(edges_path),
             out="x.ply",
@@ -472,9 +468,7 @@ def test_vtk_reads_the_array_back(tmp_path: Path, bumpy: Path, plain_square: Pat
     `test_io_vtk_readback.py` is; CI runs it in the `viewer` extra's step."""
     vtk = pytest.importorskip("vtk")
     path = write_geojson(tmp_path / "two.geojson", [coded(1, WEST, "311"), coded(2, EAST, "512")])
-    code, output, target = run(
-        tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
-    )
+    code, output, target = run(tmp_path, bumpy, plain_square, *corine_args(path))
     assert code == 0, output
     reader = vtk.vtkPolyDataReader()
     errors: list[str] = []
@@ -520,13 +514,11 @@ class TestWhatFeatureInputKeeps:
         ("name", "codes"),
         [
             ("corine", CODES_SYSTEM),
-            ("corine-water", CODES_SYSTEM),
             ("clc18_kode", CODES_SYSTEM),
-            ("property", ""),
         ],
     )
     def test_the_maps_name_their_code_system(self, name: str, codes: str) -> None:
-        assert ff.rules(name).codes == codes
+        assert ff.classes(name).codes == codes
 
     def test_a_coded_polygon_keeps_its_code_and_polygon(self, tmp_path: Path) -> None:
         fs = self.open(tmp_path, [coded(1, WEST, "311")], "corine")
@@ -535,22 +527,21 @@ class TestWhatFeatureInputKeeps:
         assert feature.polygon is not None
         assert feature.polygon.equals(WEST)
 
-    def test_a_coded_line_keeps_its_code_and_no_polygon(self, tmp_path: Path) -> None:
-        fs = self.open(tmp_path, [coded("r", ROAD, "122")], "corine")
-        (feature,) = fs.features
-        assert (feature.code, feature.polygon) == (122, None)
-
-    def test_the_property_map_keeps_neither(self, tmp_path: Path) -> None:
-        fs = self.open(tmp_path, [Feat(1, WEST, {"property": "land_cover"})], "property")
+    def test_a_line_keeps_no_code_and_no_polygon(self, tmp_path: Path) -> None:
+        path = write_geojson(tmp_path / "road.geojson", [Feat("r", ROAD, {})])
+        fs = ff.open_lines(path, self.DOMAIN, "road")
         (feature,) = fs.features
         assert (feature.code, feature.polygon) == (None, None)
 
-    def test_corine_water_keeps_the_water_only(self, tmp_path: Path) -> None:
-        fs = self.open(
-            tmp_path, [coded("f", FOREST, "312"), coded("l", LAKE, "512")], "corine-water"
+    def test_the_water_classes_keep_the_water_only(self, tmp_path: Path) -> None:
+        """What `--edges water` chooses: the class file's water classes."""
+        path = write_geojson(
+            tmp_path / "w.geojson", [coded("f", FOREST, "312"), coded("l", LAKE, "512")]
         )
+        water = ff.feature_input().EdgeChoice(codes=ff.classes("corine").water_codes)
+        fs = ff.open_one(path, self.DOMAIN, "corine", choice=water)
         (feature,) = fs.features
-        assert (feature.fid, feature.code) == ("l", 512)
+        assert (feature.fid, feature.code) == (1, 512)
 
     def test_a_reprojected_polygon_is_moved_into_the_dems_crs(self, tmp_path: Path) -> None:
         lonlat = ff.moved(WEST, "EPSG:25833", "EPSG:4326")
@@ -564,13 +555,6 @@ class TestWhatFeatureInputKeeps:
         far = rect(900.3, -900.1, 950.7, -850.2)
         fs = self.open(tmp_path, [coded("c", COVER, "333"), coded("x", far, "311")], "corine")
         (feature,) = fs.features
-        assert (feature.fid, feature.code, feature.lines) == ("c", 333, ())
+        assert (feature.fid, feature.code, feature.lines) == (0, 333, ())
         assert feature.polygon.equals(COVER)
         assert (fs.outside, fs.clipped) == (1, 0)
-
-    def test_an_uncoded_map_still_drops_a_covering_polygon(self, tmp_path: Path) -> None:
-        """16b's behaviour for `property`; the coded control keeps it."""
-        uncoded = self.open(tmp_path, [Feat("c", COVER, {"property": "land_cover"})], "property")
-        assert (len(uncoded.features), uncoded.outside) == (0, 1)
-        kept = self.open(tmp_path, [coded("c", COVER, "333")], "corine")
-        assert len(kept.features) == 1

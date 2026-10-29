@@ -1,0 +1,5 @@
+bowtie                 valid=False  THROWS TopologyException: side location conflict at 2 2. This can o
+hole crosses shell     valid=False  THROWS TopologyException: side location conflict at 4 2. This can o
+overlapping parts      valid=False  THROWS TopologyException: side location conflict at 1 2. This can o
+hole outside shell     valid=False  no throw, area 16.000 (input area 15.000)
+spike (zero-width)     valid=False  THROWS TopologyException: unable to assign free hole to a shell at 

@@ -1,11 +1,16 @@
-"""`tin_engine.meshing_rules`: the rules that turn a source into constraint lines.
+"""`tin_engine.land_cover_classes`: the land-cover class files, what a class
+polygon's attribute means.
 
 `docs/increments/41-class-maps-as-data.md`, section 4 (the file, the loader,
 the shipped maps, MapBiomas, the option), section 5 (the derived clean-up
 distances), section 6 (the vocabulary) and section 7 (T1 to T12; the CLI
 halves are in `test_cli_legends.py`); `docs/increments/108-legend-split.md`,
 section 5, tests 1, 3 and 4 (the rules file apart from its legend, `[cells]`,
-the colours and cell mappings unchanged, AR50's known codes). Fixtures by
+the colours and cell mappings unchanged, AR50's known codes);
+`docs/increments/111-one-land-cover-map.md`, sections 2 and 8 (meshing
+rules become land-cover class files: `[edges]`, `class.edges`, `class.value`
+and `[vocabulary]` go, `unlisted = "land"` becomes `"keep"`, `code_system` is
+required, `property` and `corine-water` go). Fixtures by
 hand (`legend_fixtures`); master's CORINE objects from the snapshots
 (`legend_snapshot`, `tests/python/data/legends_5de1144d.json`), so the
 shipped files are checked against what the code held before, not against
@@ -25,20 +30,25 @@ colour]` in the palette's order; `categories` (code as text to category);
 
 PINNED HERE, where the design leaves it open (listed for `@architect`):
 
-- `meshing_rules.load(value: str) -> MeshingRules`: a shipped name,
-  `property`, or a path (ends in `.toml` or holds a path separator). Every
-  refusal is a `ValueError` whose message names the file (its name, at least)
-  and, for a bad key or value, the key. The shipped files are
-  `tin_engine/data/meshing_rules/<name>.toml`.
-- `meshing_rules.known_codes(rules) -> frozenset[int]`: the codes a class
+- `land_cover_classes.load(value: str) -> LandCoverClasses`: a shipped name
+  or a path (ends in `.toml` or holds a path separator). Every refusal is a
+  `ValueError` whose message names the file (its name, at least) and, for a
+  bad key or value, the key. The shipped files are
+  `tin_engine/data/land_cover_classes/<name>.toml`.
+- `LandCoverClasses.classes` holds the listed values: each class's code as
+  text, and each `[codes]` text.
+- A border's edge names follow from its class: `land_cover`, and `water` for
+  a water class, read through `edges_of` with every class chosen. A value
+  `"0511"` is code 511, a water class, so its border carries `water` too
+  (master keyed the names on the text and gave `land_cover` only).
+- `land_cover_classes.known_codes(rules) -> frozenset[int]`: the codes a class
   polygon may carry; 0 among them only when the rules file says
   `accept_no_class = true` (only with `code_system`, and the legend must
   colour code 0); the legend's `[no_class]` decides nothing. Every shipped
   rules file says it.
 - A refusal of a legend-only key in a rules file names the key and the word
   "legend"; one of a `[cells]` misplacement names "[cells]".
-- `derived_cleanup(accuracy_m, cell)` and `run_vocabulary` live in
-  `meshing_rules`, unchanged.
+- `derived_cleanup(accuracy_m, cell)` lives in `land_cover_classes`, unchanged.
 - A MapBiomas class's label is the CSV's `class_name_en` verbatim; colours as
   in the CSV.
 """
@@ -61,11 +71,11 @@ from pydantic import ValidationError
 
 import feature_fixtures as ff
 from feature_fixtures import Feat, domain_of, square, write_geojson
-from legend_fixtures import basenames, coded_map, corine_like, legend_text, uncoded_map, write
+from legend_fixtures import basenames, coded_map, corine_like, legend_text, write
 from legend_snapshot import CORINE_MAPS, CORINE_NATURAL, DATA, PRESET_NAME, SNAPSHOT
 from tin_engine.features import DEFAULT_VOCABULARY
 
-SHIPPED = ("corine", "corine-water", "clc18_kode", "mapbiomas-c11", "ar50")
+SHIPPED = ("corine", "clc18_kode", "mapbiomas-c11", "ar50")
 #: T2's values, as the snapshot lists them.
 VALUES: list[Any] = [value for value, _ in SNAPSHOT["maps"]["corine"]["masks"]]
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
@@ -81,11 +91,11 @@ MAPBIOMAS_NOTICE = (
 
 @pytest.fixture(scope="module")
 def cm() -> ModuleType:
-    return importlib.import_module("tin_engine.meshing_rules")
+    return importlib.import_module("tin_engine.land_cover_classes")
 
 
 def shipped_dir() -> Any:
-    return resources.files("tin_engine") / "data" / "meshing_rules"
+    return resources.files("tin_engine") / "data" / "land_cover_classes"
 
 
 def shipped_toml(name: str) -> dict[str, Any]:
@@ -108,6 +118,22 @@ def refused(cm: ModuleType, path: Path, *words: str) -> str:
     return message
 
 
+def edges_of_values(tmp_path: Path, name: str, values: list[Any]) -> list[list[Any]]:
+    """Each value on one small square inside `DOMAIN`, read as `--land-cover`
+    with the class file ``name`` and `--edges all`: `[code, mask]` per
+    feature, in the values' order."""
+    attribute = ff.classes(name).attribute
+    squares = [square(2 + 2 * (i % 40), 2 + 2 * (i // 40), 3 + 2 * (i % 40), 3 + 2 * (i // 40))
+               for i in range(len(values))]  # fmt: skip
+    path = write_geojson(
+        tmp_path / f"{name}.geojson",
+        [Feat(i, g, {attribute: v}) for i, (g, v) in enumerate(zip(squares, values, strict=True))],
+    )
+    fs = ff.open_one(path, DOMAIN, name)
+    assert [f.fid for f in fs.features] == list(range(len(values)))
+    return [[f.code, f.mask] for f in fs.features]
+
+
 # ------------------------------------------------------------- T1, T12
 
 
@@ -124,10 +150,10 @@ class TestShippedMaps:
         assert shipped_toml(name)["name"] == name
         assert cm.load(name).name == name
 
-    def test_t1_the_three_corine_class_tables_are_equal(self) -> None:
-        corine, water, kode = (shipped_toml(name) for name in CORINE_MAPS)
-        assert corine["class"] == water["class"] == kode["class"]
-        assert corine["legend"] == water["legend"] == kode["legend"] == "corine"
+    def test_t1_the_two_corine_class_tables_are_equal(self) -> None:
+        corine, kode = (shipped_toml(name) for name in CORINE_MAPS)
+        assert corine["class"] == kode["class"]
+        assert corine["legend"] == kode["legend"] == "corine"
         assert len(corine["class"]) == 44
 
 
@@ -149,51 +175,42 @@ class TestCorineBehaviourUnchanged:
         )
 
     @pytest.mark.parametrize("name", CORINE_MAPS)
-    def test_t2_the_masks_of_the_designs_values(self, cm: ModuleType, name: str) -> None:
-        fi, the_legend = ff.feature_input(), cm.load(name)
-        for value, mask in SNAPSHOT["maps"][name]["masks"]:
-            assert fi._mask(the_legend, DEFAULT_VOCABULARY, value, "t2") == mask, value
-
-    @pytest.mark.parametrize("name", CORINE_MAPS)
-    def test_t2_the_mask_of_every_level_3_class(self, cm: ModuleType, name: str) -> None:
-        fi, the_legend = ff.feature_input(), cm.load(name)
-        got = {
-            code: fi._mask(the_legend, DEFAULT_VOCABULARY, code, "t2")
-            for code in SNAPSHOT["maps"][name]["every_class"]
-        }
-        assert got == SNAPSHOT["maps"][name]["every_class"]
+    def test_t2_the_mask_of_every_level_3_class(
+        self, cm: ModuleType, tmp_path: Path, name: str
+    ) -> None:
+        """Through `edges_of`, every class chosen: master's masks."""
+        want = SNAPSHOT["maps"][name]["every_class"]
+        got = edges_of_values(tmp_path, name, list(want))
+        assert {str(code): mask for code, mask in got} == want
 
     def test_t2_water_and_land_as_the_design_states_them(self) -> None:
         """The snapshot's own numbers, as section 7 words them: water 384,
-        other codes 128, `corine-water`'s land codes dropped."""
+        other codes 128."""
         assert (LAND_COVER | WATER, LAND_COVER) == (384, 128)
         masks = SNAPSHOT["maps"]["corine"]["every_class"]
         assert {c for c, m in masks.items() if m == 384} == {"511", "512", "521", "522", "523"}
-        dropped = SNAPSHOT["maps"]["corine-water"]["every_class"]
-        assert {c for c, m in dropped.items() if m is not None} == {
-            "511",
-            "512",
-            "521",
-            "522",
-            "523",
-        }
 
     @pytest.mark.parametrize("name", CORINE_MAPS)
-    def test_t2_codes_and_masks_through_open_features(
+    def test_t2_codes_and_masks_through_edges_of(
         self, cm: ModuleType, tmp_path: Path, name: str
     ) -> None:
+        """Master's codes and refusals; the mask follows the code, so
+        `"0511"` (code 511) carries `water` where master's did not."""
         fi, the_legend = ff.feature_input(), cm.load(name)
+        water = {511, 512, 521, 522, 523}
         for i, (value, want) in enumerate(SNAPSHOT["maps"][name]["opened"]):
             path = write_geojson(
                 tmp_path / f"{i}.geojson", [Feat(1, INSIDE, {the_legend.attribute: value})]
             )
-            request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=the_legend),))
             if want == "refused":
                 with pytest.raises(fi.FeatureError):
-                    fi.open_features(request, DOMAIN, ff.UTM33)
+                    ff.open_one(path, DOMAIN, name)
                 continue
-            fs = fi.open_features(request, DOMAIN, ff.UTM33)
-            assert [[f.code, f.mask] for f in fs.features] == want, value
+            fs = ff.open_one(path, DOMAIN, name)
+            ((code, mask),) = want
+            assert mask == (LAND_COVER | WATER if code in water else LAND_COVER) or value == "0511"
+            by_code = LAND_COVER | WATER if code in water else LAND_COVER
+            assert [[f.code, f.mask] for f in fs.features] == [[code, by_code]], value
 
 
 # ------------------------------------------------------------------- T3
@@ -230,39 +247,21 @@ class TestTheBaseFilesLoad:
             1: ("Forest", "#1f8d49"),
             2: ("Lake", "#2532e4"),
         }
-        assert dict(got.classes) == {"1": ("land_cover",), "2": ("land_cover", "water")}
-        assert got.otherwise == ("land_cover",)
+        assert got.classes == frozenset({"1", "2"})
+        assert got.water_codes == frozenset({2})
+        assert got.otherwise == "keep"
         assert (got.legend.preset, got.notice, got.licence) == (
             "rasputin mine",
             "Test data, made up",
             "",
         )
 
-    def test_the_uncoded_base(self, cm: ModuleType, tmp_path: Path) -> None:
-        got = cm.load(str(write(tmp_path / "levees.toml", uncoded_map())))
-        assert (got.name, got.attribute, got.codes, got.legend) == ("levees", "kind", "", None)
-        assert dict(got.classes) == {"levee": ("levee",), "road": ("road",)}
-        assert got.otherwise == "refuse"
-        assert got.extra_names == ("levee",)
-
-    @pytest.mark.parametrize(
-        ("unlisted", "otherwise"),
-        [("land", ("land_cover",)), ("drop", "drop"), ("refuse", "refuse")],
-    )
+    @pytest.mark.parametrize("unlisted", ["keep", "drop", "refuse"])
     def test_unlisted_becomes_otherwise(
-        self, cm: ModuleType, tmp_path: Path, unlisted: str, otherwise: Any
+        self, cm: ModuleType, tmp_path: Path, unlisted: str
     ) -> None:
         got = cm.load(str(write(tmp_path / "u.toml", coded_map(unlisted=unlisted))))
-        assert got.otherwise == otherwise
-
-    def test_a_class_edges_override_and_drop(self, cm: ModuleType, tmp_path: Path) -> None:
-        """Section 4's table: a class's own `edges` wins; `"drop"` is None."""
-        classes = (
-            '[[class]]\ncode = 1\nlabel = "Forest"\ncolour = "#1f8d49"\nedges = ["wall"]\n\n'
-            '[[class]]\ncode = 2\nlabel = "Lake"\ncolour = "#2532e4"\nedges = "drop"\n'
-        )
-        got = cm.load(str(write(tmp_path / "o.toml", coded_map(classes=classes))))
-        assert dict(got.classes) == {"1": ("wall",), "2": None}
+        assert got.otherwise == unlisted
 
 
 ACC = "positional_accuracy_m"
@@ -273,10 +272,11 @@ ONE_LINE = [
     ("duplicate-code", "code = 2\n", "code = 1\n", ("code",)),
     ("code-zero", "code = 1\n", "code = 0\n", ("code",)),
     ("code-two-31", "code = 1\n", "code = 2147483648\n", ("code",)),
-    ("unknown-key", 'unlisted = "land"\n', 'unlisted = "land"\nlayer = "x"\n', ("layer",)),
+    ("unknown-key", 'unlisted = "keep"\n', 'unlisted = "keep"\nlayer = "x"\n', ("layer",)),
     ("unknown-class-key", "code = 1\n", 'code = 1\nlabl = "x"\n', ("labl",)),
-    ("unlisted-word", 'unlisted = "land"', 'unlisted = "keep"', ("unlisted",)),
-    ("edges-name", 'land = ["land_cover"]', 'land = ["land_cover", "levee"]', ("levee",)),
+    ("unlisted-land", 'unlisted = "keep"', 'unlisted = "land"', ("unlisted",)),
+    ("class-edges", "code = 1\n", 'code = 1\nedges = ["land_cover"]\n', ("edges",)),
+    ("no-code-system", 'code_system = "Test cover code"\n', "", ("code_system",)),
     ("no-accuracy", "positional_accuracy_m = 40\n", "", ("positional_accuracy_m",)),
     ("accuracy-zero", f"{ACC} = 40", f"{ACC} = 0", (ACC,)),
     ("accuracy-negative", f"{ACC} = 40", f"{ACC} = -5", (ACC,)),
@@ -312,13 +312,28 @@ class TestFileRefusals:
     ) -> None:
         refused(cm, write(tmp_path / f"{stem}.toml", coded_map(codes=codes)), word)
 
-    def test_t4_an_uncoded_class_with_a_colour(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map().replace('edges = ["road"]', 'edges = ["road"]\ncolour = "#6e6e6e"')
-        refused(cm, write(tmp_path / "uncoded-colour.toml", text), "colour")
+    @pytest.mark.parametrize(
+        ("stem", "table", "word"),
+        [
+            ("edges-table", '[edges]\nwater = ["land_cover", "water"]\nland = ["land_cover"]\n',
+             "edges"),
+            ("vocabulary-table", '[vocabulary]\nextra = ["levee"]\n', "vocabulary"),
+        ],
+    )  # fmt: skip
+    def test_t4_a_deleted_table_is_refused(
+        self, cm: ModuleType, tmp_path: Path, stem: str, table: str, word: str
+    ) -> None:
+        """`[edges]` and `[vocabulary]` go: the edge names follow from the class."""
+        refused(cm, write(tmp_path / f"{stem}.toml", coded_map() + "\n" + table), word)
 
-    def test_t4_an_uncoded_class_with_a_code(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map().replace('edges = ["road"]', 'edges = ["road"]\ncode = 3')
-        refused(cm, write(tmp_path / "uncoded-code.toml", text), "code")
+    @pytest.mark.parametrize("name", ["all", "water", "river"])
+    def test_t4_a_category_named_as_a_selector_is_refused(
+        self, cm: ModuleType, tmp_path: Path, name: str
+    ) -> None:
+        """So an `--edges` selector means one thing: `all`, `water` and the
+        line keys are no category names."""
+        classes = f'[[class]]\ncode = 1\nlabel = "F"\ncolour = "#1f8d49"\ncategory = "{name}"\n'
+        refused(cm, write(tmp_path / f"category-{name}.toml", coded_map(classes=classes)), name)
 
     def test_t4_a_toml_syntax_error_names_its_line(self, cm: ModuleType, tmp_path: Path) -> None:
         text = coded_map().replace('attribute = "cover"', 'attribute = "cover')
@@ -350,7 +365,7 @@ class TestNameOrPath:
     def test_t5_an_unknown_name_is_refused_listing_the_shipped_names(self, cm: ModuleType) -> None:
         with pytest.raises(ValueError) as caught:
             cm.load("corin")
-        for word in ("corin", *SHIPPED, "property"):
+        for word in ("corin", *SHIPPED):
             assert word in str(caught.value), word
 
     @pytest.mark.parametrize("value", ["./nope.toml", "nowhere/nope"])
@@ -361,12 +376,15 @@ class TestNameOrPath:
         with pytest.raises(ValueError, match="nope"):
             cm.load(value)
 
-    def test_t5_property_is_todays_identity_map(self, cm: ModuleType) -> None:
-        got = cm.load("property")
-        assert (got.name, got.attribute, got.codes, got.notice) == ("property", "property", "", "")
-        assert dict(got.classes) == {p.name: (p.name,) for p in DEFAULT_VOCABULARY.properties}
-        assert got.otherwise == "refuse"
-        assert got.legend is None
+    @pytest.mark.parametrize("name", ["property", "corine-water"])
+    def test_t5_property_and_corine_water_are_unknown_names(
+        self, cm: ModuleType, name: str
+    ) -> None:
+        with pytest.raises(ValueError) as caught:
+            cm.load(name)
+        assert name in str(caught.value)
+        for word in SHIPPED:
+            assert word in str(caught.value), word
 
 
 # ------------------------------------------------------------------- T6
@@ -396,7 +414,7 @@ class TestDerivedCleanup:
         self, cm: ModuleType, accuracy: float, cell: float, want: tuple[float, float, float]
     ) -> None:
         got = cm.derived_cleanup(accuracy, cell)
-        assert (got.repair_m, got.band_m, got.outline_snap_m) == want
+        assert (got.repair_m, got.max_shift_m, got.outline_snap_m) == want
 
     def test_t6_the_snap_stays_under_the_margin(self, cm: ModuleType) -> None:
         """Section 5.1's cap: half `feature_input.MARGIN`, 100 m; checked at
@@ -410,26 +428,26 @@ class TestDerivedCleanup:
         got = cm.derived_cleanup(100.0, 10.0)
         with pytest.raises((TypeError, ValueError, ValidationError)):
             got.repair_m = 3.0
-        assert all(math.isfinite(v) for v in (got.repair_m, got.band_m, got.outline_snap_m))
+        assert all(math.isfinite(v) for v in (got.repair_m, got.max_shift_m, got.outline_snap_m))
 
 
 # ------------------------------------------------------------------- T8
 
 
-def cover_source(tmp_path: Path, unlisted: str, *, bog: bool = True) -> Any:
-    fi = ff.feature_input()
-    the_legend = cm_load(write(tmp_path / f"cover-{unlisted}.toml", coded_map(
+def cover_source(tmp_path: Path, unlisted: str, *, bog: bool = True) -> tuple[Path, str]:
+    """Forest and Lake by text, and a Bog the `[codes]` table lacks; the
+    data file and the class file's path."""
+    classes = write(tmp_path / f"cover-{unlisted}.toml", coded_map(
         unlisted=unlisted, codes='Forest = 1\nLake = 2\n'
-    )))  # fmt: skip
+    ))  # fmt: skip
     features = [Feat("west", WEST, {"cover": "Forest"}), Feat("east", EAST, {"cover": "Lake"})]
     if bog:
         features.append(Feat("bog-7", square(20, 60, 40, 80), {"cover": "Bog"}))
-    path = write_geojson(tmp_path / f"cover-{unlisted}.geojson", features)
-    return fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=the_legend),))
+    return write_geojson(tmp_path / f"cover-{unlisted}.geojson", features), str(classes)
 
 
 def cm_load(path: Path) -> Any:
-    return importlib.import_module("tin_engine.meshing_rules").load(str(path))
+    return importlib.import_module("tin_engine.land_cover_classes").load(str(path))
 
 
 class TestTextCodes:
@@ -438,67 +456,37 @@ class TestTextCodes:
     def test_t8_the_codes_table_is_kept(self, tmp_path: Path) -> None:
         the_legend = cm_load(write(tmp_path / "c.toml", coded_map(codes="Forest = 1\nLake = 2\n")))
         assert dict(the_legend.string_codes) == {"Forest": 1, "Lake": 2}
-        assert dict(the_legend.classes)["Lake"] == ("land_cover", "water")
-        assert dict(the_legend.classes)["Forest"] == ("land_cover",)
+        assert the_legend.classes == frozenset({"1", "2", "Forest", "Lake"})
+        assert the_legend.water_codes == frozenset({2})
 
     def test_t8_text_values_carry_their_codes_and_the_lake_water(self, tmp_path: Path) -> None:
-        fi = ff.feature_input()
-        fs = fi.open_features(cover_source(tmp_path, "drop", bog=False), DOMAIN, ff.UTM33)
+        path, classes = cover_source(tmp_path, "drop", bog=False)
+        fs = ff.open_one(path, DOMAIN, classes)
         got = {f.fid: (f.code, f.mask) for f in fs.features}
-        assert got == {"west": (1, LAND_COVER), "east": (2, LAND_COVER | WATER)}
+        assert got == {0: (1, LAND_COVER), 1: (2, LAND_COVER | WATER)}
 
-    @pytest.mark.parametrize("unlisted", ["refuse", "land"])
+    @pytest.mark.parametrize("unlisted", ["refuse", "keep"])
     def test_t8_an_unlisted_text_is_refused_naming_file_feature_and_value(
         self, tmp_path: Path, unlisted: str
     ) -> None:
         fi = ff.feature_input()
+        path, classes = cover_source(tmp_path, unlisted)
         with pytest.raises(fi.FeatureError) as caught:
-            fi.open_features(cover_source(tmp_path, unlisted), DOMAIN, ff.UTM33)
+            ff.open_one(path, DOMAIN, classes)
         for word in (f"cover-{unlisted}.geojson", "bog-7", "Bog"):
             assert word in str(caught.value), word
 
     def test_t8_an_unlisted_text_is_dropped_with_drop(self, tmp_path: Path) -> None:
-        fi = ff.feature_input()
-        fs = fi.open_features(cover_source(tmp_path, "drop"), DOMAIN, ff.UTM33)
-        assert sorted(f.fid for f in fs.features) == ["east", "west"]
+        path, classes = cover_source(tmp_path, "drop")
+        fs = ff.open_one(path, DOMAIN, classes)
+        assert sorted(f.code for f in fs.features) == [1, 2]
 
     def test_t8_without_a_codes_table_a_text_is_refused_as_today(self, tmp_path: Path) -> None:
         fi = ff.feature_input()
-        the_legend = cm_load(write(tmp_path / "plain.toml", coded_map(unlisted="land")))
+        classes = write(tmp_path / "plain.toml", coded_map(unlisted="keep"))
         path = write_geojson(tmp_path / "plain.geojson", [Feat("f", WEST, {"cover": "Forest"})])
-        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, rules=the_legend),))
         with pytest.raises(fi.FeatureError, match="Forest"):
-            fi.open_features(request, DOMAIN, ff.UTM33)
-
-
-# ------------------------------------------------------------------- T9
-
-
-class TestVocabularyExtras:
-    def test_t9_an_extra_repeating_a_default_name_is_refused(
-        self, cm: ModuleType, tmp_path: Path
-    ) -> None:
-        refused(cm, write(tmp_path / "river.toml", uncoded_map(extra='"levee", "river"')), "river")
-
-    def test_t9_twenty_two_extras_load_and_twenty_three_are_refused(
-        self, cm: ModuleType, tmp_path: Path
-    ) -> None:
-        """Bits 10 to 31 hold 22 names (section 6)."""
-        names = ["levee", *(f"extra{i}" for i in range(1, 23))]
-        quoted = ", ".join(f'"{n}"' for n in names)
-        many = write(tmp_path / "many.toml", uncoded_map(extra=quoted))
-        refused(cm, many, "23")
-        fits = ", ".join(f'"{n}"' for n in names[:22])
-        assert (
-            len(cm.load(str(write(tmp_path / "fits.toml", uncoded_map(extra=fits)))).extra_names)
-            == 22
-        )
-
-    def test_t9_an_edges_name_from_the_extras_is_accepted(
-        self, cm: ModuleType, tmp_path: Path
-    ) -> None:
-        got = cm.load(str(write(tmp_path / "ok.toml", uncoded_map())))
-        assert dict(got.classes)["levee"] == ("levee",)
+            ff.open_one(path, DOMAIN, str(classes))
 
 
 # ------------------------------------------------------------ T10, T11
@@ -521,12 +509,10 @@ class TestMapBiomas:
     def test_t10_no_class_water_and_the_notice(self, cm: ModuleType) -> None:
         got = cm.load("mapbiomas-c11")
         assert got.legend.colours[0] == ("No class; constraint lines", "#3c3c3c")
-        water = {key for key, edges in got.classes.items() if edges and "water" in edges}
-        assert water == {"33", "31"}
+        assert got.water_codes == frozenset({33, 31})
         assert "26" not in got.classes
-        assert got.classes["33"] == ("land_cover", "water")
-        assert got.classes["3"] == ("land_cover",)
-        assert got.otherwise == ("land_cover",)
+        assert {"33", "3"} <= got.classes
+        assert got.otherwise == "keep"
         assert got.notice == MAPBIOMAS_NOTICE
         assert (got.attribute, got.accuracy_m) == ("class", 30.0)
         assert got.codes
@@ -534,7 +520,7 @@ class TestMapBiomas:
 
     def test_t10_the_catalogue_entry_names_the_map(self) -> None:
         sources = importlib.import_module("tin_engine.sources")
-        assert sources.SOURCES["mapbiomas-c11"].rules == "mapbiomas-c11"
+        assert sources.SOURCES["mapbiomas-c11"].classes == "mapbiomas-c11"
 
 
 class TestLicence:
@@ -673,11 +659,9 @@ class TestAr50:
         self, cm: ModuleType
     ) -> None:
         got = cm.load("ar50")
-        land = ("land_cover",)
-        want = {str(code): land for code, *_ in AR50_TABLE}
-        want |= {"81": ("land_cover", "water"), "82": ("land_cover", "water")}
-        assert dict(got.classes) == want
-        assert got.otherwise == land
+        assert got.classes == frozenset(str(code) for code, *_ in AR50_TABLE)
+        assert got.water_codes == frozenset({81, 82})
+        assert got.otherwise == "keep"
 
 
 # ------------------------------------------- splits by a second attribute
@@ -775,7 +759,6 @@ WET = VEG.replace("code = 5051\n", "code = 5051\nwater = true\n")
 LINED = VEG.replace("code = 5051\n", 'code = 5051\nedges = ["levee"]\n')
 #: (file stem, the legend text, words the refusal names besides the file).
 SPLIT_REFUSALS = [
-    ("uncoded", uncoded_map() + "\n" + bare(split(1, "veg", (51, 5051))), ("split",)),
     ("unlisted-class", coded_with(split(40, "veg", (51, 4051))), ("40",)),
     ("class-twice", coded_with(TRE, split(30, "veg", (51, 3051))), ("30",)),
     ("first-attribute", coded_with(split(50, "COVER", (51, 5051))), ("COVER",)),
@@ -815,15 +798,11 @@ class TestSplitRefusals:
 
 #: 108's snapshot of the five shipped names at `5de1144d` (module docstring).
 BEFORE: dict[str, Any] = json.loads((DATA / "legends_5de1144d.json").read_text("utf-8"))
-NO_EDGES = (
-    'unlisted = "land" needs an [edges] table: '
-    "its land list names the edges an unlisted feature gets"
-)
 #: (file stem, the line changed in `coded_map()`, its replacement, words named).
 RULES_ONE_LINE = [
     ("label-in-rules", "code = 1\n", 'code = 1\nlabel = "Forest"\n', ("label", "legend")),
     ("colour-in-rules", "code = 1\n", 'code = 1\ncolour = "#1f8d49"\n', ("colour", "legend")),
-    ("preset-in-rules", 'unlisted = "land"\n', 'unlisted = "land"\npreset = "p"\n',
+    ("preset-in-rules", 'unlisted = "keep"\n', 'unlisted = "keep"\npreset = "p"\n',
      ("preset", "legend")),
     ("category-in-class", "code = 1\n", 'code = 1\ncategory = "forest"\n', ("category", "[cells]")),
 ]  # fmt: skip
@@ -870,21 +849,6 @@ class TestRulesRefusals:
         message = refused(cm, write(tmp_path / "sub-missing.toml", text))
         assert "5099" in message and "5051" not in message, message
 
-    def test_a_legend_without_code_system(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map().replace(
-            'unlisted = "refuse"\n', 'unlisted = "refuse"\nlegend = "corine"\n'
-        )
-        refused(cm, write(tmp_path / "uncoded-legend.toml", text), "legend", "code_system")
-
-    def test_unlisted_land_without_edges(self, cm: ModuleType, tmp_path: Path) -> None:
-        """Without the refusal the file says land and every unlisted feature
-        is dropped."""
-        refused(cm, write(tmp_path / "land.toml", uncoded_map(unlisted="land")), NO_EDGES)
-
-    def test_unlisted_land_with_edges_loads(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map(unlisted="land") + '\n[edges]\nwater = ["water"]\nland = ["road"]\n'
-        assert cm.load(str(write(tmp_path / "land-edges.toml", text))).otherwise == ("road",)
-
     def test_a_top_level_prefer(self, cm: ModuleType, tmp_path: Path) -> None:
         text = coded_map() + "\n[prefer]\nlake = 2\n"
         refused(cm, write(tmp_path / "prefer.toml", text), "prefer", "[cells]")
@@ -900,10 +864,6 @@ class TestRulesRefusals:
         text = coded_map(classes=classes).replace("forest = [1]", "forest = [1, 9]")
         message = refused(cm, write(tmp_path / "unlisted-cell.toml", text))
         assert re.search(r"\b9\b", message), message
-
-    def test_cells_without_code_system(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map() + "\n[cells.categories]\nforest = [1]\n"
-        refused(cm, write(tmp_path / "uncoded-cells.toml", text), "cells", "code_system")
 
 
 class TestRulesNameTheirLegend:
@@ -954,7 +914,8 @@ class TestSameColoursAndCells:
     """108, test 3: each shipped name's legend and cell mappings equal `5de1144d`'s."""
 
     def test_the_snapshot_holds_the_five(self) -> None:
-        assert set(BEFORE) == set(SHIPPED)
+        """`corine-water` goes; the other four are checked against it."""
+        assert set(BEFORE) == {*SHIPPED, "corine-water"}
 
     @pytest.mark.parametrize("name", SHIPPED)
     def test_colours_preset_categories_prefer_and_water(self, cm: ModuleType, name: str) -> None:
@@ -1013,9 +974,3 @@ class TestKnownCodes:
         )  # fmt: skip
         message = refused(cm, write(tmp_path / "zero-uncoloured.toml", text), "legend")
         assert re.search(r"\b0\b", message), message
-
-    def test_accepting_zero_needs_code_system(self, cm: ModuleType, tmp_path: Path) -> None:
-        text = uncoded_map().replace(
-            'unlisted = "refuse"\n', 'unlisted = "refuse"\naccept_no_class = true\n'
-        )
-        refused(cm, write(tmp_path / "uncoded-zero.toml", text), "accept_no_class", "code_system")

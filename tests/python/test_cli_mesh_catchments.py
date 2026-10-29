@@ -79,7 +79,7 @@ UNITS = [
 ]
 SQUARE = local(box(0, 0, 3000, 3000))
 RING = [(float(x), float(y)) for x, y in list(SQUARE.exterior.coords)[:-1]]
-LAND_COVER = ("--land-cover", KEY, "--land-cover-rules", "mapbiomas-c11")
+LAND_COVER = ("--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11")
 
 
 @pytest.fixture
@@ -147,7 +147,7 @@ def run_of(scene: dict[str, Path], tmp_path: Path) -> Iterator[RunOf]:
         conn.close()
 
 
-CATCHMENTS_TOLERANCE_0 = ("--triangles", "200", "--catchments-band", "0")
+CATCHMENTS_TOLERANCE_0 = ("--triangles", "200", "--catchments-max-shift", "0")
 
 
 # ------------------------------------------------------------ 5. end to end
@@ -189,7 +189,7 @@ def test_no_cell_straddles_and_each_takes_its_units_id(
     assert set(expected) == set(FIDS)
     assert record(ran.conn, "catchments") == "units.geojson"
     assert record(ran.conn, "catchments_units") == "3"
-    assert float(record(ran.conn, "catchments_band_m") or "nan") == 0.0
+    assert float(record(ran.conn, "catchments_max_shift_m") or "nan") == 0.0
 
 
 # ------------------------------------------------------------ 6. unchanged without it
@@ -253,15 +253,15 @@ def test_the_band_follows_the_budget_end_to_end(run_of: RunOf, scene: dict[str, 
     ran = run_of("budget.gpkg", "--catchments", str(scene["units"]), "--triangles", "200")
     h = math.sqrt(4 * 9_000_000 / (math.sqrt(3) * 200))
     assert h == pytest.approx(322.371, abs=1e-3)
-    band = float(record(ran.conn, "catchments_band_m") or "nan")
+    band = float(record(ran.conn, "catchments_max_shift_m") or "nan")
     assert band == pytest.approx(40.29637244338282, rel=1e-9)
     assert "a triangle's edge at 200 triangles" in " ".join(ran.output.split()), ran.output
 
 
 def test_the_given_tolerance_is_named_as_the_band(run_of: RunOf, scene: dict[str, Path]) -> None:
     ran = run_of("given.gpkg", "--catchments", str(scene["units"]), *CATCHMENTS_TOLERANCE_0)
-    assert "(--catchments-band)" in ran.output, ran.output
-    assert float(record(ran.conn, "catchments_band_m") or "nan") == 0.0
+    assert "(--catchments-max-shift)" in ran.output, ran.output
+    assert float(record(ran.conn, "catchments_max_shift_m") or "nan") == 0.0
 
 
 # ------------------------------------------------------------ 7. refusals
@@ -297,7 +297,7 @@ def test_refusal_2_needs_a_cells_layer(
 ) -> None:
     refused(
         scene, tmp_path, *extra, "--catchments", str(scene["units"]), *CATCHMENTS_TOLERANCE_0,
-        says="needs --land-cover with meshing rules and a .gpkg output",
+        says="needs --land-cover with a land-cover class file and a .gpkg output",
     )  # fmt: skip
 
 
@@ -320,7 +320,7 @@ def test_refusal_3_units_in_degrees(scene: dict[str, Path], tmp_path: Path) -> N
     path = write_units(tmp_path / "deg.geojson", units, crs="EPSG:4326")
     refused(
         scene, tmp_path, *LAND_COVER, "--catchments", str(path), *CATCHMENTS_TOLERANCE_0,
-        says="deg.geojson is in degrees (EPSG:4326); the border band is in metres, so give the "
+        says="deg.geojson is in degrees (EPSG:4326); the border shift is in metres, so give the "
         "units in a projected CRS",
     )  # fmt: skip
 
@@ -345,5 +345,6 @@ def test_refusal_6_units_in_parts_that_do_not_touch(scene: dict[str, Path], tmp_
 def test_refusal_7_needs_a_budget_or_a_band(scene: dict[str, Path], tmp_path: Path) -> None:
     refused(
         scene, tmp_path, *LAND_COVER, "--catchments", str(scene["units"]), "--tolerance", "3",
-        says="needs --triangles, whose budget sets the border band, or --catchments-band",
+        says="needs --triangles, whose budget sets the farthest a border may shift, or "
+        "--catchments-max-shift",
     )  # fmt: skip

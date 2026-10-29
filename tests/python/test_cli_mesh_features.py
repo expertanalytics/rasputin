@@ -5,48 +5,45 @@ records), "Tests for @tester" (CLI; increment 8's three rows end to end; I3 on
 the extract; I7 on the extract) and "Acceptance" (the quarter circle on the
 committed tile with the committed extract), with Ola's Q6 (b) (the legacy GML).
 
-Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
+Pinned by this suite (`docs/increments/111-one-land-cover-map.md`, sections 3
+and 8, migrate it from `--features`):
 
-- Flags `--features PATH`, `--features-crs TEXT`, `--features-layer NAME`,
-  `--features-rules NAME` (default `property`). Each of the last three without
-  `--features` is a usage error naming itself; `--features` without
-  `--domain` is a usage error naming `--features`; so is any `FeatureError`,
-  and no file is written.
-- The `--stats` row `features` (increment 25 moved it out of the mesh file,
-  `docs/increments/25-plain-output.md` D2 and D4), in the design's words:
-  `<file name>[ layer <layer>], rules <rules>: <n> features, <c> lines, <v>
-  vertices`, where `n` is `len(FeatureSet.features)`, `c` the number of
-  feature chains and `v` the number of feature vertices `start_chains` hands
-  the engine (its vertices less the domain's). The layer is written for a
+- Class polygons are `--land-cover PATH --land-cover-classes NAME`, with
+  `--land-cover-layer` and `--land-cover-crs` (each refused without
+  `--land-cover`); lines are `--lines KEY=PATH`; `--edges all` chooses every
+  class and line key. The gallery's polygons are CORINE forest and lake, its
+  lines `--lines road=` and `--lines wall=`; it runs with `--edges-max-shift
+  0`, its borders as given, as the uncoded gallery ran.
+- `--edges` without `--domain` is a usage error saying "needs --dem, --domain
+  and --tolerance" and naming `--edges`; any `FeatureError` is a usage error
+  naming the option of its file, and no file is written.
+- The `--stats` row `edges`: one entry per source edges were taken from,
+  joined by `; `: the map `<file>[ layer <layer>], classes <C>: <n>
+  features, <c> lines, <v> vertices`, a line key `<file>, lines <key>: ...`,
+  where `n` is that source's count in `FeatureSet.counts`, `c` the number of
+  its feature chains and `v` its feature vertices. The layer is written for a
   GeoPackage only. The row records the data used, never how the file was
-  read: it has no outside-the-domain count, which is 0 behind a spatial index
-  and 1 in a full read for the same rows, so an indexed and an unindexed
-  GeoPackage give the same row and the same file (the principle of Ola's
-  ruling of 2026-09-28, "A table in a run report is output, not data.").
-- The `--stats` rows `features_crs` (`crs_label` of the source's CRS) and
-  `features_transform` (`none` for the DEM's own CRS, else
+  read: it has no outside-the-domain count, so an indexed and an unindexed
+  GeoPackage give the same row and the same file (Ola's ruling of
+  2026-09-28, "A table in a run report is output, not data.").
+- The `--stats` rows `land_cover_crs` (`crs_label` of the land-cover file's
+  CRS) and `land_cover_transform` (`none` for the DEM's own CRS, else
   `transform_description(source, dem)`), as `domain_crs` and
   `domain_transform`.
-- `features_notice`: the map's notice, still in the mesh file (Ola's ruling
-  of 2026-10-03); absent when the map has none.
+- `land_cover_notice`: the class file's notice, still in the mesh file.
 - `start_mesh` reads `the domain outline and the feature lines`.
 - stderr says `lines: <n> vertices read, <m> after joining shared edges and
-  adding crossings`; `--stats` has phase rows `features read` and
-  `features clip`.
-- stderr's features line reads `features: <n> kept (<c> cut at the domain
-  outline), <o> outside the domain, <e> empty` (D2's "stderr, reworded"):
-  `n` counts the features kept and `c` those kept that crossed the domain
-  boundary (R10: "features read, dropped outside, clipped"). How the file was
-  read, including the outside count, goes to stderr only. The `--stats` row
-  `features read` is a phase name and keeps its name. A GeoPackage layer
-  without a spatial index is read all the same, and stderr says `<table>:
-  this layer has no spatial index, so every row was read` (R3: "Without an
-  index the table is scanned and the report says so").
+  adding crossings`; `--stats` has phase rows `land cover read`, `lines
+  read` and `edges`.
+- stderr's edges line reads `edges: <n> kept (<c> cut at the domain
+  outline), <o> outside the domain, <e> empty`. A GeoPackage layer without a
+  spatial index is read all the same, and stderr says `<table>: this layer
+  has no spatial index, so every row was read`.
 
 The field without the dropped-outside count and the stderr line saying
 "kept" were committed red as "16b-1/2 red: the file records data counts only;
 stderr says kept": the field still carried "(<k> dropped outside)", so every
-`FEATURES_FIELD` match failed and the indexed and unindexed files differed,
+match of the row failed and the indexed and unindexed files differed,
 and stderr still said "features read".
 
 Committed red at `e99c8ea` (amended at `972312c`): the flags did not exist
@@ -96,10 +93,21 @@ from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
 V = DEFAULT_VOCABULARY
 SNAP = 1e-3
-FEATURES_FIELD = re.compile(
-    r"(?P<name>.+?)(?: layer (?P<layer>[^,:]+))?, rules (?P<rules>[a-z0-9-_]+): "
+#: One entry of the `--stats` row `edges`: the map's (``classes``) or a line
+#: key's (``key``).
+EDGES_ENTRY = re.compile(
+    r"(?P<name>.+?)(?: layer (?P<layer>[^,:]+))?, "
+    r"(?:classes (?P<classes>[a-z0-9-_]+)|lines (?P<key>[a-z_]+)): "
     r"(?P<n>\d+) features?, (?P<c>\d+) lines?, (?P<v>\d+) vert(?:ex|ices)"
 )
+
+
+def edges_entries(stats: str) -> list[re.Match[str]]:
+    """The `edges` row's entries, each matched by `EDGES_ENTRY`."""
+    row = stats_row(stats, "edges")
+    found = [EDGES_ENTRY.fullmatch(e) for e in row.split("; ")]
+    assert all(found), row
+    return [m for m in found if m is not None]
 
 
 def rel(x: float, y: float) -> tuple[float, float]:
@@ -113,13 +121,40 @@ ROAD_INTO_FOREST = LineString([rel(20.2, -40.3), rel(45.1, -40.3)])
 LAKE = Polygon([rel(120.3, -60.2), rel(170.1, -60.4), rel(170.3, -20.1), rel(120.1, -20.3)])
 BRIDGE = LineString([rel(100.2, -40.7), rel(180.4, -40.7)])
 WALL = LineString([rel(150.3, -15.1), rel(250.2, -15.1)])
-GALLERY = [
-    Feat("forest", FOREST, {"property": "land_cover"}),
-    Feat("road", ROAD_INTO_FOREST, {"property": "road"}),
-    Feat("lake", LAKE, {"property": "water"}),
-    Feat("bridge", BRIDGE, {"property": "road"}),
-    Feat("wall", WALL, {"property": "wall"}),
-]
+#: The gallery: its areas as CORINE classes (forest 311, lake 512), its lines
+#: by kind.
+GALLERY_COVER = [Feat("forest", FOREST, {"Code_18": "311"}), Feat("lake", LAKE, {"Code_18": "512"})]
+GALLERY_LINES = {
+    "road": [Feat("road", ROAD_INTO_FOREST, {}), Feat("bridge", BRIDGE, {})],
+    "wall": [Feat("wall", WALL, {})],
+}
+
+
+def gallery_files(where: Path, crs: str | None = None) -> tuple[Path, dict[str, Path]]:
+    """The gallery's land-cover file and one line file per kind, in
+    EPSG:25833, or moved to ``crs`` (written with no `crs` member for
+    EPSG:4326)."""
+
+    def written(name: str, features: list[Feat]) -> Path:
+        if crs is None:
+            return write_geojson(where / name, features)
+        lonlat = [Feat(f.fid, ff.moved(f.geometry, ff.UTM33, crs), f.properties) for f in features]  # type: ignore[arg-type]
+        return write_geojson(where / name, lonlat, crs=None if crs == "EPSG:4326" else crs)
+
+    cover = written("gallery-cover.geojson", GALLERY_COVER)
+    return cover, {key: written(f"gallery-{key}.geojson", f) for key, f in GALLERY_LINES.items()}
+
+
+def gallery_args(where: Path, crs: str | None = None) -> tuple[str, ...]:
+    """The gallery as `rasputin mesh` options: `--land-cover` with `corine`,
+    each line kind as `--lines`, `--edges all`, the band off."""
+    cover, lines = gallery_files(where, crs)
+    keyed = [a for key, path in lines.items() for a in ("--lines", f"{key}={path}")]
+    return (
+        *("--land-cover", str(cover), "--land-cover-classes", "corine"),
+        *keyed,
+        *("--edges", "all", "--edges-max-shift", "0"),
+    )
 
 
 bumpy = rough_dem(16)
@@ -127,8 +162,13 @@ plain_square = polygon_file(SQUARE)
 
 
 @pytest.fixture
-def gallery(tmp_path: Path) -> Path:
-    return write_geojson(tmp_path / "gallery.geojson", GALLERY)
+def gallery(tmp_path: Path) -> tuple[str, ...]:
+    return gallery_args(tmp_path)
+
+
+def cover_args(path: Path, classes: str = "corine", *more: str) -> tuple[str, ...]:
+    """One land-cover file with ``classes`` and `--edges all`."""
+    return ("--land-cover", str(path), "--land-cover-classes", classes, *more, "--edges", "all")
 
 
 def mesh(
@@ -192,138 +232,153 @@ def edges_at(vtk: VtkFile, point: tuple[float, float], near: float = SNAP) -> li
 
 
 class TestUsage:
-    def test_features_without_a_domain_is_refused(
-        self, tmp_path: Path, bumpy: Path, gallery: Path
-    ) -> None:
+    def test_edges_without_a_domain_is_refused(self, tmp_path: Path, bumpy: Path) -> None:
+        cover, _ = gallery_files(tmp_path)
         code, output = invoke(
             "mesh",
-            "--dem",
-            str(bumpy),
-            "--features",
-            str(gallery),
-            "--out",
-            str(tmp_path / "x.vtk"),
+            *("--dem", str(bumpy), *cover_args(cover)),
+            *("--out", str(tmp_path / "x.vtk")),
         )
-        assert code == USAGE and "--features" in output, output
+        assert code == USAGE and "--edges" in output, output
+        assert "needs --dem, --domain and --tolerance" in output, output
         assert "No such option" not in output
         assert not (tmp_path / "x.vtk").exists()
 
     @pytest.mark.parametrize(
         ("flag", "value"),
-        [
-            ("--features-crs", "EPSG:25833"),
-            ("--features-layer", "x"),
-            ("--features-rules", "corine"),
-        ],
+        [("--land-cover-crs", "EPSG:25833"), ("--land-cover-layer", "x")],
     )
-    def test_a_features_option_without_features_is_refused(
+    def test_a_land_cover_option_without_land_cover_is_refused(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, flag: str, value: str
     ) -> None:
         code, output, target = mesh(tmp_path, bumpy, plain_square, flag, value)
         assert code == USAGE and flag in output and "No such option" not in output, output
         assert not target.exists()
 
+    @pytest.mark.parametrize("option", ["--land-cover", "--lines"])
     def test_an_unknown_suffix_is_refused_naming_it(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, option: str
     ) -> None:
         shp = tmp_path / "roads.shp"
         shp.write_bytes(b"")
-        code, output, target = mesh(tmp_path, bumpy, plain_square, "--features", str(shp))
+        given = cover_args(shp) if option == "--land-cover" else (
+            "--lines", f"road={shp}", "--edges", "road"
+        )  # fmt: skip
+        code, output, target = mesh(tmp_path, bumpy, plain_square, *given)
         assert code == USAGE and ".shp" in output and "No such option" not in output, output
+        assert option in output, output
         assert not target.exists()
 
     def test_a_layer_for_geojson_is_refused(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
+        cover, _ = gallery_files(tmp_path)
         code, output, _ = mesh(
-            tmp_path, bumpy, plain_square, "--features", str(gallery), "--features-layer", "x"
+            tmp_path, bumpy, plain_square, *cover_args(cover, "corine", "--land-cover-layer", "x")
         )
-        assert code == USAGE and "--features-layer" in output and "No such option" not in output, (
-            output
-        )
+        assert code == USAGE and "--land-cover-layer" in output, output
+        assert "No such option" not in output
 
-    def test_an_unknown_map_is_refused_naming_it(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+    def test_an_unknown_class_file_is_refused_naming_it(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        code, output, _ = mesh(
-            tmp_path, bumpy, plain_square, "--features", str(gallery), "--features-rules", "nosuch"
-        )
+        cover, _ = gallery_files(tmp_path)
+        code, output, _ = mesh(tmp_path, bumpy, plain_square, *cover_args(cover, "nosuch"))
         assert code == USAGE and "nosuch" in output and "No such option" not in output, output
 
     def test_a_feature_refusal_is_a_usage_error_naming_the_feature(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        path = write_geojson(
-            tmp_path / "bad.geojson", [Feat("f-99", FOREST, {"property": "glacier"})]
-        )
-        code, output, target = mesh(tmp_path, bumpy, plain_square, "--features", str(path))
-        assert code == USAGE and "f-99" in output and "--features" in output, output
+        path = write_geojson(tmp_path / "bad.geojson", [Feat("f-99", FOREST, {"Code_18": "ice"})])
+        code, output, target = mesh(tmp_path, bumpy, plain_square, *cover_args(path))
+        assert code == USAGE and "f-99" in output and "--land-cover" in output, output
         assert not target.exists()
 
-    def test_a_disagreeing_features_crs_is_refused(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+    def test_a_disagreeing_land_cover_crs_is_refused(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
+        cover, _ = gallery_files(tmp_path)
         code, output, target = mesh(
-            tmp_path, bumpy, plain_square, "--features", str(gallery), "--features-crs", "EPSG:3035"
+            tmp_path,
+            bumpy,
+            plain_square,
+            *cover_args(cover, "corine", "--land-cover-crs", "EPSG:3035"),
         )
         assert code == USAGE and "No such option" not in output, output
+        assert "--land-cover-crs" in output, output
         assert not target.exists()
 
 
 # ------------------------------------------------------------ the record
 
 
+#: The CLI's clean-up for the gallery: CORINE's derived defaults, the band off.
+GALLERY_CLEANUP = {"repair_m": 1.0, "merge_same_class": True, "outline_snap_m": 5.0}
+
+
 class TestRecord:
     def test_the_fields(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: tuple[str, ...]
     ) -> None:
-        vtk, _ = meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))
+        vtk, _ = meshed(tmp_path, bumpy, plain_square, *gallery)
         stats = report(tmp_path)
-        match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
-        assert match, stats_row(stats, "features")
-        assert match["name"] == "gallery.geojson" and match["layer"] is None
-        assert match["rules"] == "property"
+        cover, road, wall = edges_entries(stats)
+        assert (cover["name"], cover["layer"], cover["classes"]) == (
+            "gallery-cover.geojson",
+            None,
+            "corine",
+        )
+        assert (road["name"], road["key"]) == ("gallery-road.geojson", "road")
+        assert (wall["name"], wall["key"]) == ("gallery-wall.geojson", "wall")
         domain = domain_of(Polygon(SQUARE))
-        fs = ff.open_one(gallery, domain)
-        started = ff.start(domain, fs.features)
+        paths = gallery_files(tmp_path)
+        opened = [
+            ff.open_one(paths[0], domain, switches=GALLERY_CLEANUP),
+            ff.open_lines(paths[1]["road"], domain, "road"),
+            ff.open_lines(paths[1]["wall"], domain, "wall"),
+        ]
+        assert "outside" not in stats_row(stats, "edges")
+        every = []
+        for match, fs, n in zip((cover, road, wall), opened, (2, 2, 1), strict=True):
+            assert int(match["n"]) == len(fs.features) == n
+            # The source's own lines and their coordinates (a closed ring
+            # repeats its first point); the joined geometry's go to
+            # edges_joined.
+            own_lines = [line for f in fs.features for line in f.lines]
+            assert int(match["c"]) == len(own_lines)
+            assert int(match["v"]) == sum(int(shapely.get_num_coordinates(g)) for g in own_lines)
+            every += list(fs.features)
+        started = ff.start(domain, every)
         chains = [c for c in started.chains if c[1] == "breakline"]
-        assert "outside" not in match.string
-        assert int(match["n"]) == len(fs.features) == 5
-        # The source's own lines and their coordinates (a closed ring
-        # repeats its first point); the joined geometry's go to
-        # features_joined.
-        own_lines = [line for f in fs.features for line in f.lines]
-        assert int(match["c"]) == len(own_lines)
-        assert int(match["v"]) == sum(int(shapely.get_num_coordinates(g)) for g in own_lines)
         joined = re.fullmatch(
             r"(\d+) lines?, (\d+) vert(?:ex|ices) after joining shared edges and adding crossings",
-            stats_row(stats, "features_joined"),
+            stats_row(stats, "edges_joined"),
         )
-        assert joined, stats_row(stats, "features_joined")
+        assert joined, stats_row(stats, "edges_joined")
         assert int(joined[1]) == len(chains)
         assert int(joined[2]) == len(started.vertices) - len(SQUARE)
-        assert stats_row(stats, "features_crs") == "EPSG:25833"
-        assert stats_row(stats, "features_transform").lower() == "none"
-        assert "features_notice" not in vtk.field_data
-        for moved in ("features", "features_crs", "features_transform"):
+        assert stats_row(stats, "land_cover_crs") == "EPSG:25833"
+        assert stats_row(stats, "land_cover_transform").lower() == "none"
+        assert "Copernicus Land Monitoring Service" in text_field(vtk, "land_cover_notice")
+        for moved in ("edges", "land_cover_crs", "land_cover_transform"):
             assert moved not in vtk.field_data, moved
 
     def test_the_start_mesh_and_the_max_error(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: tuple[str, ...]
     ) -> None:
-        vtk, _ = meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))
+        vtk, _ = meshed(tmp_path, bumpy, plain_square, *gallery)
         start = stats_row(report(tmp_path), "start_mesh")
         assert start == "the domain outline and the feature lines"
         assert max_error(vtk) <= 1.0
 
     def test_the_vocabulary_is_the_writers_fields_and_no_edge_vocabulary(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: tuple[str, ...]
     ) -> None:
         """R10 as ruled on 2026-09-28 ("A table in a run report is output, not
         data."): the masks' meaning is the writer's reserved fields, which
         with 16b's vocabulary pair bit 7 with `land_cover` and bit 8 with
         `water`; there is no `edge_vocabulary` field."""
-        vtk, _ = meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))
+        vtk, _ = meshed(tmp_path, bumpy, plain_square, *gallery)
         bits = [int(b) for b in vtk.field_data["feature_bits"].values]
         names = [str(n) for n in vtk.field_data["feature_names"].values]
         assert len(bits) == len(names)
@@ -333,123 +388,122 @@ class TestRecord:
         assert "edge_vocabulary" not in vtk.field_data
 
     def test_a_reprojected_source(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
-        lonlat = [
-            Feat(f.fid, ff.moved(f.geometry, "EPSG:25833", "EPSG:4326"), f.properties)  # type: ignore[arg-type]
-            for f in GALLERY
-        ]
-        path = write_geojson(tmp_path / "wgs.geojson", lonlat, crs=None)
-        meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        meshed(tmp_path, bumpy, plain_square, *gallery_args(tmp_path, "EPSG:4326"))
         stats = report(tmp_path)
-        assert stats_row(stats, "features_crs") == "EPSG:4326"
-        assert stats_row(stats, "features_transform") == transform_description(
+        assert stats_row(stats, "land_cover_crs") == "EPSG:4326"
+        assert stats_row(stats, "land_cover_transform") == transform_description(
             "EPSG:4326", "EPSG:25833"
         )
 
     def test_the_corine_notice(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
         path = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
-        vtk, _ = meshed(
-            tmp_path, bumpy, plain_square, "--features", str(path), "--features-rules", "corine"
-        )
-        assert "Copernicus Land Monitoring Service" in text_field(vtk, "features_notice")
-        assert (
-            FEATURES_FIELD.fullmatch(stats_row(report(tmp_path), "features"))["rules"] == "corine"
-        )  # type: ignore[index]
+        vtk, _ = meshed(tmp_path, bumpy, plain_square, *cover_args(path))
+        assert "Copernicus Land Monitoring Service" in text_field(vtk, "land_cover_notice")
+        (entry,) = edges_entries(report(tmp_path))
+        assert entry["classes"] == "corine"
 
     def test_the_ply_comments(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
-        """D2: the `.ply` carries what the `.vtk` does: the notice, not `features`."""
+        """D2: the `.ply` carries what the `.vtk` does: the notice, not `edges`."""
         path = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
-        args = ("--features", str(path), "--features-rules", "corine")
-        code, output, target = mesh(tmp_path, bumpy, plain_square, *args, out="x.ply")
+        code, output, target = mesh(tmp_path, bumpy, plain_square, *cover_args(path), out="x.ply")
         assert code == 0, output
         header, _ = read_ply(target.read_bytes())
         fields = ply_fields(header.comments)
-        assert "Copernicus Land Monitoring Service" in fields["features_notice"]
-        for moved in ("features", "features_crs", "features_transform"):
+        assert "Copernicus Land Monitoring Service" in fields["land_cover_notice"]
+        for moved in ("edges", "land_cover_crs", "land_cover_transform"):
             assert moved not in fields, moved
 
     def test_stderr_and_stats(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: tuple[str, ...]
     ) -> None:
-        _, output = meshed(
-            tmp_path, bumpy, plain_square, "--features", str(gallery), "--stats", "-"
-        )
+        _, output = meshed(tmp_path, bumpy, plain_square, *gallery, "--stats", "-")
         lines = r"\blines: \d+ vertices read, \d+ after joining shared edges and adding crossings\b"
         assert re.search(lines, output), output
         assert not re.search(r"\bnoded vertices\b", output), output
         # `invoke` collapses the output onto one line (`plain`), so a row is
-        # found by its cell, `| features read |`, not by a line start.
-        assert re.search(r"\|\s*features read\s*\|", output), output
-        assert re.search(r"\|\s*features clip\s*\|", output), output
+        # found by its cell, `| land cover read |`, not by a line start.
+        for phase in ("land cover read", "lines read", "edges"):
+            assert re.search(rf"\|\s*{phase}\s*\|", output), (phase, output)
+        for gone in ("features read", "features clip"):
+            assert not re.search(rf"\|\s*{gone}\s*\|", output), (gone, output)
 
 
 # ------------------------------------------------------------ the report (R3, R10)
 
 # Two features that cross `SQUARE`'s boundary (a polygon over its west side, the
-# wall over its east side), one wholly inside, one far outside: 2 clipped.
+# wall over its east side), one wholly inside, one far outside: 2 clipped. The
+# polygons are the land cover, the lines one `--lines wall` file.
 WEST_EDGE = Polygon([rel(2.1, -50.3), rel(40.2, -50.1), rel(40.4, -30.2), rel(2.3, -30.4)])
 FAR_AWAY = LineString([rel(900.3, -900.1), rel(950.7, -900.2)])
-CROSSINGS = [
-    Feat("forest", FOREST, {"property": "land_cover"}),
-    Feat("west", WEST_EDGE, {"property": "water"}),
-    Feat("wall", WALL, {"property": "wall"}),
-    Feat("far", FAR_AWAY, {"property": "road"}),
+CROSSING_COVER = [
+    Feat("forest", FOREST, {"Code_18": "311"}),
+    Feat("west", WEST_EDGE, {"Code_18": "512"}),
 ]
+CROSSING_LINES = [Feat("wall", WALL, {}), Feat("far", FAR_AWAY, {})]
 CLIPPED = re.compile(r"\((\d+) cut at the domain outline\)")
 OUTSIDE = re.compile(r"\b(\d+) outside the domain\b")
-FEATURES_LINE = re.compile(
-    r"\bfeatures: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
+EDGES_LINE = re.compile(
+    r"\bedges: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
     r"(?P<o>\d+) outside the domain, (?P<e>\d+) empty\b"
 )
 NO_INDEX = re.compile(r"\bt: this layer has no spatial index, so every row was read\b")
 
 
-def gpkg_of(path: Path, features: list[Feat], *, rtree: bool) -> Path:
-    rows = [Row(i + 1, f.geometry, dict(f.properties)) for i, f in enumerate(features)]
-    return write_gpkg(path, [Layer("t", 25833, rows, columns=("property",), rtree=rtree)])
+def crossing_args(where: Path, cover: list[Feat] | None = None) -> tuple[str, ...]:
+    """`CROSSING_COVER` (or ``cover``) as the land cover, `CROSSING_LINES` as
+    `--lines wall`, `--edges all`."""
+    path = write_geojson(where / "crossings.geojson", CROSSING_COVER if cover is None else cover)
+    lines = write_geojson(where / "crossing-lines.geojson", CROSSING_LINES)
+    return (*cover_args(path), "--lines", f"wall={lines}")
+
+
+def gpkg_args(where: Path, *, rtree: bool) -> tuple[str, ...]:
+    """The crossings as two GeoPackages, each one table `t`: the land cover
+    (`Code_18`) and the lines."""
+    rows = [Row(i + 1, f.geometry, dict(f.properties)) for i, f in enumerate(CROSSING_COVER)]
+    cover = write_gpkg(where / "f.gpkg", [Layer("t", 25833, rows, rtree=rtree)])
+    rows = [Row(i + 1, f.geometry, {}) for i, f in enumerate(CROSSING_LINES)]
+    lines = write_gpkg(where / "l.gpkg", [Layer("t", 25833, rows, columns=(), rtree=rtree)])
+    return (*cover_args(cover), "--lines", f"wall={lines}")
 
 
 class TestReport:
     def test_stderr_gives_the_clipped_count(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """R10: "features read, dropped outside, clipped". Of `CROSSINGS`,
-        `west` and `wall` cross the boundary and are kept, clipped; `far` is
-        dropped outside and `forest` is untouched."""
-        path = write_geojson(tmp_path / "crossings.geojson", CROSSINGS)
-        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        """R10: "features read, dropped outside, clipped". `west` and `wall`
+        cross the boundary and are kept, clipped; `far` is dropped outside
+        and `forest` is untouched."""
+        _, output = meshed(tmp_path, bumpy, plain_square, *crossing_args(tmp_path))
         assert [int(n) for n in OUTSIDE.findall(output)] == [1], output
         assert [int(n) for n in CLIPPED.findall(output)] == [2], output
 
     def test_stderr_counts_the_features_kept(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """The line's first count is the features kept, and says so: of
-        `CROSSINGS`, three kept, `far` dropped outside, two clipped, none
-        empty. "features read" named that count wrongly."""
-        path = write_geojson(tmp_path / "crossings.geojson", CROSSINGS)
-        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
-        found = [m.groupdict() for m in FEATURES_LINE.finditer(output)]
+        """The line's first count is the features kept, and says so: three
+        kept, `far` dropped outside, two clipped, none empty."""
+        _, output = meshed(tmp_path, bumpy, plain_square, *crossing_args(tmp_path))
+        found = [m.groupdict() for m in EDGES_LINE.finditer(output)]
         assert found == [{"n": "3", "c": "2", "o": "1", "e": "0"}], output
-        assert not re.search(r"\bfeatures kept,", output), output
+        assert not re.search(r"\bfeatures: \d+ kept\b", output), output
 
     def test_nothing_crossing_is_zero_clipped(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        path = write_geojson(tmp_path / "inside.geojson", CROSSINGS[:1])
-        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        path = write_geojson(tmp_path / "inside.geojson", CROSSING_COVER[:1])
+        _, output = meshed(tmp_path, bumpy, plain_square, *cover_args(path))
         assert [int(n) for n in CLIPPED.findall(output)] == [0], output
 
     def test_a_layer_without_an_index_is_scanned_and_reported(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
         """R3: "Without an index the table is scanned and the report says so".
-        The layer is still read: the features row counts the kept three, and
+        The layers are still read: the edges row counts the kept three, and
         the full read's outside `far` is on stderr only."""
-        path = gpkg_of(tmp_path / "f.gpkg", CROSSINGS, rtree=False)
-        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
-        features = stats_row(report(tmp_path), "features")
-        match = FEATURES_FIELD.fullmatch(features)
-        assert match is not None and match["n"] == "3", features
+        _, output = meshed(tmp_path, bumpy, plain_square, *gpkg_args(tmp_path, rtree=False))
+        entries = edges_entries(report(tmp_path))
+        assert [int(m["n"]) for m in entries] == [2, 1], stats_row(report(tmp_path), "edges")
         assert [int(n) for n in OUTSIDE.findall(output)] == [1], output
         assert NO_INDEX.search(output), output
         assert not re.search(r"R-tree|scanned", output), output
@@ -459,7 +513,7 @@ class TestReport:
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
         """The control: the same rows behind an R-tree give the same file,
-        byte for byte, `features` field included, and nothing about a scan is
+        byte for byte, `edges` row included, and nothing about a scan is
         said. The R-tree query never returns `far` where the scan reads and
         drops it; that difference is how the file was read, so it stays on
         stderr and out of the file."""
@@ -468,15 +522,13 @@ class TestReport:
         for rtree in (True, False):
             where = tmp_path / str(rtree)
             where.mkdir()
-            path = gpkg_of(where / "f.gpkg", CROSSINGS, rtree=rtree)
-            code, output, target = mesh(where, bumpy, plain_square, "--features", str(path))
+            code, output, target = mesh(where, bumpy, plain_square, *gpkg_args(where, rtree=rtree))
             assert code == 0, output
             if rtree:
                 assert not NO_INDEX.search(output), output
-            features = stats_row(report(where), "features")
-            match = FEATURES_FIELD.fullmatch(features)
-            assert match is not None and match["n"] == "3", features
-            fields.append(features)
+            entries = edges_entries(report(where))
+            assert [int(m["n"]) for m in entries] == [2, 1], stats_row(report(where), "edges")
+            fields.append(stats_row(report(where), "edges").replace(str(where), "<dir>"))
             files.append(target.read_bytes())
         assert fields[0] == fields[1]
         assert files[0] == files[1]
@@ -487,11 +539,14 @@ class TestReport:
 
 class TestGalleryRows:
     """R6: `road-enters-forest`, `wall-leaves-domain` and `bridge-over-lake`
-    as GeoJSON over a synthetic DEM, through the whole command."""
+    as GeoJSON over a synthetic DEM, through the whole command. The lake is
+    a CORINE water class, so its shore carries `land_cover` and `water`."""
 
     @pytest.fixture
-    def vtk(self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path) -> VtkFile:
-        return meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))[0]
+    def vtk(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: tuple[str, ...]
+    ) -> VtkFile:
+        return meshed(tmp_path, bumpy, plain_square, *gallery)[0]
 
     def test_the_road_ends_inside_the_forest(self, vtk: VtkFile) -> None:
         west = LineString(FOREST.exterior.coords[3:5])
@@ -504,8 +559,9 @@ class TestGalleryRows:
     def test_the_bridge_is_split_at_both_shores(self, vtk: VtkFile) -> None:
         shore = LineString(LAKE.exterior.coords)
         for point in shapely.get_parts(shapely.intersection(shore, BRIDGE)):
+            shore_mask = V.mask("land_cover", "water")
             assert edges_at(vtk, (point.x, point.y)) == sorted(
-                [V.mask("water"), V.mask("water"), V.mask("road"), V.mask("road")]
+                [shore_mask, shore_mask, V.mask("road"), V.mask("road")]
             )
 
     def test_the_wall_stops_at_the_domain_boundary(self, vtk: VtkFile) -> None:
@@ -621,7 +677,7 @@ def _max_error(tile: Any, points: np.ndarray, triangles: np.ndarray, domain: Pol
 
 class TestCommittedExtract:
     """Acceptance 16b-1/2 in CI: the quarter circle on the committed tile with
-    the committed extract, `--features-rules corine`, at 10 m (M5's reference:
+    the committed extract, `--land-cover-classes corine --edges all`, at 10 m (M5's reference:
     about 54 840 triangles). I7: the tolerance holds, every node covered.
 
     Increment 16c adds I1, I2, I3 and I5 on the same run (the `test_16c_`
@@ -637,10 +693,7 @@ class TestCommittedExtract:
             tmp,
             KARTVERKET,
             domain,
-            "--features",
-            str(EXTRACT),
-            "--features-rules",
-            "corine",
+            *cover_args(EXTRACT),
             tolerance="10",
         )
         assert code == 0, output
@@ -656,15 +709,14 @@ class TestCommittedExtract:
     def test_the_fields(self, run: Any) -> None:
         vtk, _, target = run
         stats = report(target.parent)
-        match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
-        assert match, stats_row(stats, "features")
+        (match,) = edges_entries(stats)
         assert match["name"] == EXTRACT.name and match["layer"] == "U2018_CLC2018_V2020_20u1"
-        assert match["rules"] == "corine" and int(match["n"]) > 0
-        assert stats_row(stats, "features_crs") == "EPSG:3035"
-        assert stats_row(stats, "features_transform") == transform_description(
+        assert match["classes"] == "corine" and int(match["n"]) > 0
+        assert stats_row(stats, "land_cover_crs") == "EPSG:3035"
+        assert stats_row(stats, "land_cover_transform") == transform_description(
             "EPSG:3035", "EPSG:25833"
         )
-        assert "Copernicus Land Monitoring Service" in text_field(vtk, "features_notice")
+        assert "Copernicus Land Monitoring Service" in text_field(vtk, "land_cover_notice")
 
     @needs_codecs
     def test_land_cover_everywhere_and_water_on_the_coast(self, run: Any) -> None:
@@ -687,10 +739,7 @@ class TestCommittedExtract:
             tmp_path,
             KARTVERKET,
             domain,
-            "--features",
-            str(reversed_path),
-            "--features-rules",
-            "corine",
+            *cover_args(reversed_path),
             out="again.vtk",
             tolerance="10",
         )
@@ -699,7 +748,7 @@ class TestCommittedExtract:
 
     @pytest.fixture(scope="class")
     def run_band_0(self, tmp_path_factory: pytest.TempPathFactory) -> VtkFile:
-        """The same run with ``--features-band 0`` (increment 32, test 16:
+        """The same run with ``--edges-max-shift 0`` (increment 32, test 16:
         the default band moves borders up to 50 m from the extract's, so I2's
         oracle, which labels by the extract's polygons, needs the band off)."""
         tmp = tmp_path_factory.mktemp("extract_band_0")
@@ -708,11 +757,8 @@ class TestCommittedExtract:
             tmp,
             KARTVERKET,
             domain,
-            "--features",
-            str(EXTRACT),
-            "--features-rules",
-            "corine",
-            "--features-band",
+            *cover_args(EXTRACT),
+            "--edges-max-shift",
             "0",
             tolerance="10",
         )
@@ -755,16 +801,13 @@ class TestCommittedExtract:
             tmp_path,
             KARTVERKET,
             domain,
-            "--features",
-            str(LEGACY_GML),
-            "--features-rules",
-            "clc18_kode",
+            *cover_args(LEGACY_GML, "clc18_kode"),
             tolerance="10",
         )
         stats = report(tmp_path)
-        assert stats_row(stats, "features_crs") == "EPSG:4326"
-        match = FEATURES_FIELD.fullmatch(stats_row(stats, "features"))
-        assert match and match["name"] == LEGACY_GML.name and match["layer"] is None
+        assert stats_row(stats, "land_cover_crs") == "EPSG:4326"
+        (match,) = edges_entries(stats)
+        assert match["name"] == LEGACY_GML.name and match["layer"] is None
         assert max_error(vtk) <= 10.0
         assert V.mask("land_cover", "water") in set(edges(vtk)[1].tolist())
 
@@ -804,16 +847,11 @@ def test_olas_geopackages_over_the_dtm10_archive(tmp_path: Path, gpkg: Path, lay
         tmp_path,
         DTM10,
         domain,
-        "--features",
-        str(gpkg),
-        "--features-layer",
-        layer,
-        "--features-rules",
-        "corine",
+        *cover_args(gpkg, "corine", "--land-cover-layer", layer),
         tolerance="10",
     )
-    match = FEATURES_FIELD.fullmatch(stats_row(report(tmp_path), "features"))
-    assert match and match["layer"] == layer and int(match["n"]) > 0
+    (match,) = edges_entries(report(tmp_path))
+    assert match["layer"] == layer and int(match["n"]) > 0
     assert max_error(vtk) <= 10.0
     assert V.mask("land_cover", "water") in set(edges(vtk)[1].tolist())
 

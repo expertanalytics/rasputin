@@ -28,8 +28,8 @@ runs = 3
 warmup = 1
 args = ["mesh", "--dem", "$RASPUTIN_DATA/DTM10_UTM33_20260925",
         "--domain", "$RASPUTIN_DATA/numedalslagen_outline_nve.geojson",
-        "--features", "$RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg", "--features-layer", "corine2018",
-        "--features-rules", "corine", "--tolerance", "10"]
+        "--land-cover", "$RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg", "--land-cover-layer", "corine2018",
+        "--land-cover-classes", "corine", "--edges", "all", "--tolerance", "10"]
 inputs = ["$RASPUTIN_DATA/DTM10_UTM33_20260925", "$RASPUTIN_DATA/numedalslagen_outline_nve.geojson",
           "$RASPUTIN_DATA/corine2018_dtm10_utm33.gpkg"]
 
@@ -41,9 +41,9 @@ warmup = 1
 args = ["mesh", "--dem", "glo30", "--cache", "$RASPUTIN_DATA/sweden_glo30_cache",
         "--out-crs", "EPSG:3006",
         "--domain", "$RASPUTIN_DATA/sweden_smhi_svar/lagan_mouth_svar2022_3006.geojson",
-        "--features", "$RASPUTIN_DATA/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg",
-        "--features-layer", "U2018_CLC2018_V2020_20u1", "--features-crs", "EPSG:3035",
-        "--features-rules", "corine", "--tolerance", "10"]
+        "--land-cover", "$RASPUTIN_DATA/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg",
+        "--land-cover-layer", "U2018_CLC2018_V2020_20u1", "--land-cover-crs", "EPSG:3035",
+        "--land-cover-classes", "corine", "--edges", "all", "--tolerance", "10"]
 inputs = ["$RASPUTIN_DATA/sweden_glo30_cache",
           "$RASPUTIN_DATA/sweden_smhi_svar/lagan_mouth_svar2022_3006.geojson",
           "$RASPUTIN_DATA/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg"]

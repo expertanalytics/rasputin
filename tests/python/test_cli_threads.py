@@ -42,13 +42,12 @@ import tin_engine.land_cover_fractions as land_cover_fractions
 import tin_engine.target_grid as target_grid
 from cli_helpers import USAGE, UTM33, invoke, plain, polygon_file, ran, refused, rough_dem, runner
 from cog_fixtures import write_cache
-from feature_fixtures import Feat, moved, write_geojson
 from fraction_fixtures import write_class_cache, write_dem, write_domain
 from recordread import stats_row
 from test_cli_catchment import dem_dir, lakes, utm_seed
 from test_cli_mesh_cache import KEY as DEM_KEY
 from test_cli_mesh_cache import catalogue, data, sources, tif
-from test_cli_mesh_features import GALLERY, SQUARE
+from test_cli_mesh_features import SQUARE, gallery_args
 from test_cli_mesh_geographic import TARGET, VELHAS
 from test_cli_mesh_land_cover_fractions import classes, covered, offline
 from test_cli_mesh_stats import section
@@ -339,16 +338,16 @@ class TestT8EveryPoolGetsTheCount:
     def test_the_feature_reprojector(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`feature_input.py`'s `_Tally._take` builds a reprojector from the
-        file's CRS to the DEM's when they differ (the gallery in EPSG:4326
-        over the EPSG:25833 DEM); that call carries the count. The hull's
-        call runs the other way (DEM to file) and is not the one asserted."""
+        """The readers in `feature_input.py` build a reprojector from the
+        file's CRS to the DEM's when they differ (the gallery's land cover and
+        lines in EPSG:4326 over the EPSG:25833 DEM); that call carries the
+        count. The hull's call runs the other way (DEM to file) and is not
+        the one asserted."""
         moves = Calls(monkeypatch, feature_input, "reprojector")
-        lonlat = [Feat(f.fid, moved(f.geometry, UTM33, "EPSG:4326"), f.properties) for f in GALLERY]  # type: ignore[arg-type]
-        path = write_geojson(tmp_path / "wgs.geojson", lonlat, crs=None)
+        given = gallery_args(tmp_path, "EPSG:4326")
         out = tmp_path / "x.vtk"
         args = ("--dem", str(bumpy), "--domain", str(plain_square), "--tolerance", "1")
-        mesh(*args, "--features", str(path), "--threads", "3", "--out", str(out))
+        mesh(*args, *given, "--threads", "3", "--out", str(out))
         from_the_file = [
             kw
             for args_, kw in zip(moves.args, moves.kwargs, strict=True)

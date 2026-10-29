@@ -334,21 +334,21 @@ class TestW5TheFetchCommandInTheMessage:
     def test_with_simplify_domain_the_fetch_is_the_window(
         self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
     ) -> None:
-        self.refused_with(tmp_path, data, "m.vtk", "--simplify-domain", "--domain-band", "5")
+        self.refused_with(tmp_path, data, "m.vtk", "--simplify-domain", "--domain-max-shift", "5")
 
     def test_with_catchments_the_fetch_is_the_window(
         self, catalogue: dict[str, Any], tmp_path: Path, data: bytes, no_data_root: None
     ) -> None:
         """`U` is one unit, the domain's triangle, `id` 1; `--catchments`
-        writes cells, so a land cover with meshing rules and a `.gpkg` are given."""
+        writes cells, so a land cover with a land-cover class file and a `.gpkg` are given."""
         unit = Polygon(self.RING)
         units = write_geojson(tmp_path / "u.geojson", [Feat(1, unit, {"name": "u1"})])
         cover = write_geojson(
             tmp_path / "cover.geojson", [Feat(1, unit.buffer(100.0), {"Code_18": "311"})]
         )
         self.refused_with(
-            tmp_path, data, "m.gpkg", "--catchments", str(units), "--catchments-band", "5",
-            "--land-cover", str(cover), "--land-cover-rules", "corine",
+            tmp_path, data, "m.gpkg", "--catchments", str(units), "--catchments-max-shift", "5",
+            "--land-cover", str(cover), "--land-cover-classes", "corine",
         )  # fmt: skip
 
     def test_the_count_of_missing_and_needed_blocks(

@@ -110,10 +110,11 @@ def test_a_road_along_a_partition_line_is_one_edge_with_both_bits(
     x, _ = learn_lines(tmp_path / "first", tif)
     y0, y1 = TIE_Y - 100.3, TIE_Y - 300.7
     roads = write_geojson(
-        tmp_path / "road.geojson", [Feat("r", LineString([(x, y0), (x, y1)]), {"property": "road"})]
+        tmp_path / "road.geojson", [Feat("r", LineString([(x, y0), (x, y1)]), {})]
     )
     domain = pf.write_domain(tmp_path / "sq.geojson", pf.SQUARE)
-    done = pf.cut(tmp_path / "run", *args(tif, domain), "--pieces", "4", "--features", str(roads))
+    road_args = ("--lines", f"road={roads}", "--edges", "road")
+    done = pf.cut(tmp_path / "run", *args(tif, domain), "--pieces", "4", *road_args)
     assert pf.seam_lines(done.pieces)[0] == {x}, "the road moved the partition"
     on_road = 0
     for piece in done.pieces:

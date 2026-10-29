@@ -1,20 +1,19 @@
-"""Meshing-rules and legend files written by hand for the suites.
+"""Land-cover class files and legend files written by hand for the suites.
 
 `docs/increments/108-legend-split.md`, *4. The design*: a legend file is the
 colour scheme only (`name`, `preset`, `[no_class]`, `[[class]]` code, label,
-colour); a meshing-rules file holds the rest and names its legend. The
+colour); a land-cover class file holds the rest and names its legend. The
 fixtures keep the one-text shape the suites were written against: a class
 given here carries its `label` and `colour` (and, optionally, `category`),
 and `coded_map` sorts them into the two files. Labels and colours go to a
-legend file named after a digest of its text, `category` lines to the rules
-file's `[cells.categories]`, and the rules file names the legend by that
-relative name. `write` writes the legend beside any rules file that names
+legend file named after a digest of its text, `category` lines to the class
+file's `[cells.categories]`, and the class file names the legend by that
+relative name. `write` writes the legend beside any class file that names
 one made here, so a suite writes one file as before.
 
-`coded_map` is the smallest coded rules file plus the keys the shipped ones
-use (`notice`, `unlisted`); `uncoded_map` the shape of the `property` rules.
-Every refusal test changes one line of one of these, and
-`test_legends.TestTheBaseFilesLoad` shows both load as written, so a
+`coded_map` is the smallest land-cover class file plus the keys the shipped
+ones use (`notice`, `unlisted`). Every refusal test changes one line of it,
+and `test_legends.TestTheBaseFilesLoad` shows it loads as written, so a
 refusal is the change's and nothing else's.
 """
 
@@ -74,17 +73,16 @@ def coded_map(
     attribute: str = "cover",
     system: str = "Test cover code",
     accuracy: str = "40",
-    unlisted: str = "land",
+    unlisted: str = "keep",
     classes: str = "",
     codes: str = "",
-    extra: str = "",
     licence: str = "",
     prefer: str = "",
     accept_no_class: bool = False,
 ) -> str:
-    """A coded rules file: Forest (code 1) and Lake (code 2, water), or
+    """A land-cover class file: Forest (code 1) and Lake (code 2, water), or
     ``classes``; its legend (preset "rasputin NAME", with `[no_class]`) is
-    kept for `write`. ``accept_no_class`` writes the rules' own setting that
+    kept for `write`. ``accept_no_class`` writes the file's own setting that
     class code 0 (no polygon, constraint lines only) is accepted."""
     classes = classes or (
         '[[class]]\ncode = 1\nlabel = "Forest"\ncolour = "#1f8d49"\n\n'
@@ -107,9 +105,8 @@ def coded_map(
         head += f'licence = "{licence}"\n'
     if accept_no_class:
         head += "accept_no_class = true\n"
-    body = '\n[edges]\nwater = ["land_cover", "water"]\nland = ["land_cover"]\n\n'
+    body = "\n"
     tail = f"\n[codes]\n{codes}" if codes else ""
-    tail += f"\n[vocabulary]\nextra = [{extra}]\n" if extra else ""
     if categories:
         tail += "\n[cells.categories]\n" + "".join(
             f"{category} = {listed}\n" for category, listed in categories.items()
@@ -126,19 +123,6 @@ def corine_like(name: str, accuracy: str) -> str:
     )
     return coded_map(
         name, attribute="Code_18", system=CORINE_SYSTEM, accuracy=accuracy, classes=classes
-    )
-
-
-def uncoded_map(name: str = "levees", *, extra: str = '"levee"', unlisted: str = "refuse") -> str:
-    """An uncoded map on ``kind``: ``levee`` lines on the extra name, ``road`` on road."""
-    vocabulary = f"\n[vocabulary]\nextra = [{extra}]\n" if extra else ""
-    return (
-        f'name = "{name}"\n'
-        'attribute = "kind"\n'
-        f'unlisted = "{unlisted}"\n'
-        f"{vocabulary}\n"
-        '[[class]]\nvalue = "levee"\nedges = ["levee"]\n\n'
-        '[[class]]\nvalue = "road"\nedges = ["road"]\n'
     )
 
 

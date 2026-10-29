@@ -1,11 +1,13 @@
-"""The land-cover clean-up reaches every source but ``property``'s.
+"""The land-cover clean-up reaches every land-cover file.
 
 `docs/increments/109-cleanup-every-source.md`, *5. Prediction and tests*,
 tests 1 to 6, and *3. The design (tonight)*, items 1 to 5. Not named
 invariant-critical, so no mutants.
 
-Tests 1 to 5 run ``open_features`` on a 1,000 m square domain in EPSG:25833
-at plain coordinates (0 to 1,000 m), as the design measured its figures.
+Tests 1 to 5 run ``feature_fixtures.open_one`` (``read_class_polygons``,
+``build``, ``edges_of``, as `docs/increments/111-one-land-cover-map.md`
+section 8 gives them) on a 1,000 m square domain in EPSG:25833 at plain
+coordinates (0 to 1,000 m), as the design measured its figures.
 Areas are compared at ``rel=1e-9`` against the input polygon's own area, at
 coordinates of at most 1,000 m, where a double resolves about 1e-13 m.
 
@@ -23,9 +25,6 @@ Test 6 runs ``rasputin mesh`` on ``cli_helpers``' 10 m x 5 m micro DEM (cell
 
 PINNED HERE, where the design leaves it open (listed for ``@architect``):
 
-- An uncoded rules file is read with its own ``[[class]]`` values (``lake``,
-  ``land``); a polygon of it whose clean-up ran still has ``code`` and
-  ``polygon`` None, and its lines carry the class's edge names.
 - Test 1's and 2's counts are ``FeatureSet.cover_vertices`` (before, after),
   which counts line coordinates; with lakes away from the outline these are
   the design's polygon counts. Test 4's count is the simplifier's own output
@@ -34,17 +33,19 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   on darwin/arm64), since the land polygon's outline edges are cut off its
   lines.
 - Test 5's message is a :class:`FeatureError` whose text is exactly
-  ``"<file>: border simplification refused: x; --features-band 0 meshes
+  ``"<file>: border simplification refused: x; --edges-max-shift 0 meshes
   this source with its borders as read"``: ``<why>`` is the ``ValueError``'s
   own text.
-- Test 6: each ``features`` entry ends "N lines, M vertices" with that
-  source's own counts, sliced from the ``FeatureSet`` by ``counts``;
-  ``features_joined`` is "N lines, M vertices after joining shared edges and
-  adding crossings"; ``features_joined`` and ``features_accuracy_m`` each
-  have a ``run_record.WORDING`` entry; with one source lacking an accuracy,
-  ``features_accuracy_m`` is item 3's sentence alone.
-- ``MeshingRules.cleaned`` is the field name (the design's); an uncoded file
-  without ``positional_accuracy_m`` loads with ``accuracy_m`` None.
+- Test 6: each ``edges`` entry ends "N lines, M vertices" with that
+  source's own counts, sliced from ``edges_of``'s ``FeatureSet`` by
+  ``counts``; ``edges_joined`` is "N lines, M vertices after joining shared
+  edges and adding crossings"; ``edges_joined`` and
+  ``land_cover_accuracy_m`` each have a ``run_record.WORDING`` entry.
+
+Increment 111 deletes the uncoded class file (``code_system`` is required)
+and ``property``, so the uncoded halves of tests 1 to 4, item 1's
+``property`` tests and item 3's missing accuracy (a class file states it)
+go; the second source of test 6 is a ``--lines`` line.
 """
 
 from __future__ import annotations
@@ -57,7 +58,6 @@ from typing import Any
 
 import pytest
 import shapely
-import typer
 from shapely.geometry import Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
@@ -65,7 +65,7 @@ import feature_fixtures as ff
 import tin_engine.cli as cli
 import tin_engine.run_record as rr
 from cli_helpers import SQUARE, geojson, invoke, rough_dem
-from feature_fixtures import UTM33, Feat, domain_of, write_geojson
+from feature_fixtures import Feat, domain_of, write_geojson
 from legend_fixtures import coded_map, write
 from test_cli_mesh_landcover import EAST, WEST, coded, rel
 
@@ -79,15 +79,6 @@ REPAIR = 0.01
 AT_MOST = {1.0: 65, 5.0: 34, 20.0: 22}
 FILTER_AT_MOST = 40
 
-#: An uncoded rules file with no positional accuracy, the shape of Sol's
-#: lake file: a lake class and a land class by value.
-LAKES = (
-    'name = "lakes"\n'
-    'attribute = "kind"\n'
-    'unlisted = "drop"\n\n'
-    '[[class]]\nvalue = "lake"\nedges = ["water"]\n\n'
-    '[[class]]\nvalue = "land"\nedges = ["land_cover"]\n'
-)
 #: The same classes, coded: land 1, lake 2 (water).
 LAKES_CODED = coded_map(
     "lakes-coded",
@@ -98,7 +89,6 @@ LAKES_CODED = coded_map(
         '[[class]]\ncode = 2\nlabel = "Lake"\ncolour = "#2532e4"\nwater = true\n'
     ),
 )
-UNCODED = {"lake": "lake", "land": "land"}
 CODED = {"lake": 2, "land": 1}
 
 
@@ -115,23 +105,23 @@ def rules_file(tmp_path: Path, text: str, name: str = "lakes.toml") -> Path:
     return write(tmp_path / name, text)
 
 
-def source(
-    fi: ModuleType, tmp_path: Path, shapes: list[tuple[str, BaseGeometry]], coded_rules: bool
-) -> Any:
-    """One GeoJSON source of ``shapes`` (class, polygon), under the uncoded or
-    the coded lake rules."""
-    values = CODED if coded_rules else UNCODED
-    feats = [Feat(i + 1, g, {"kind": values[kind]}) for i, (kind, g) in enumerate(shapes)]
+def source(tmp_path: Path, shapes: list[tuple[str, BaseGeometry]]) -> tuple[Path, str]:
+    """One GeoJSON source of ``shapes`` (class, polygon) and the coded lake
+    class file's path."""
+    feats = [Feat(i + 1, g, {"kind": CODED[kind]}) for i, (kind, g) in enumerate(shapes)]
     path = write_geojson(tmp_path / "lakes.geojson", feats)
-    text = LAKES_CODED if coded_rules else LAKES
-    loaded = ff.rules(str(rules_file(tmp_path, text)))
-    return fi.FeatureSource(path=path, rules=loaded)
+    return path, str(rules_file(tmp_path, LAKES_CODED))
 
 
-def request(fi: ModuleType, src: Any, band: float) -> Any:
-    return fi.FeatureRequest(
-        sources=(src,), repair_m=REPAIR, merge_same_class=True, band_m=band, outline_snap_m=0.0
-    )
+def opened(src: tuple[Path, str], band: float) -> Any:
+    """``src`` cleaned with the design's switches at ``band``."""
+    switches = {
+        "repair_m": REPAIR,
+        "merge_same_class": True,
+        "max_shift_m": band,
+        "outline_snap_m": 0.0,
+    }
+    return ff.open_one(src[0], domain_of(DOMAIN), src[1], switches=switches)
 
 
 class Spy:
@@ -159,33 +149,28 @@ def vertices(geometries: Any) -> int:
 class TestLakes:
     """Tests 1 and 2: two lakes, which no polygon of their source borders,
     are simplified once the domain's uncovered rest borders them, each
-    keeping its area; coded or not, the same counts."""
+    keeping its area."""
 
-    @pytest.mark.parametrize("coded_rules", [False, True], ids=["uncoded", "coded"])
     def test_two_lakes_are_simplified(
-        self,
-        fi: ModuleType,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        coded_rules: bool,
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         lakes = [lake(300.0), lake(700.0)]
         assert vertices(lakes) == 514  # the premise
-        src = source(fi, tmp_path, [("lake", g) for g in lakes], coded_rules)
+        src = source(tmp_path, [("lake", g) for g in lakes])
         counts = []
         for band, most in AT_MOST.items():
             with monkeypatch.context() as patch:
                 spy = Spy(fi, patch)
-                fs = fi.open_features(request(fi, src, band), domain_of(DOMAIN), UTM33)
+                fs = opened(src, band)
             before, after = fs.cover_vertices
             assert before == 514 and after <= most, (band, after)
             counts.append(after)
-            self.kept(fs, spy, lakes, coded_rules)
+            self.kept(fs, spy, lakes)
         assert counts == sorted(set(counts), reverse=True), counts  # falls strictly
 
     @staticmethod
-    def kept(fs: Any, spy: Spy, lakes: list[Polygon], coded_rules: bool) -> None:
-        """Each lake keeps its area, and its code and label only if coded."""
+    def kept(fs: Any, spy: Spy, lakes: list[Polygon]) -> None:
+        """Each lake keeps its area, its code and its label polygon."""
         (call,) = spy.calls
         rings = [g for g in call[1].polygons if g.area < DOMAIN.area / 2]  # not the rest
         assert sum(g.area for g in rings) == pytest.approx(sum(g.area for g in lakes), rel=1e-9)
@@ -193,16 +178,8 @@ class TestLakes:
         for f in fs.features:  # each lake's ring keeps its area
             for line in f.lines:
                 assert Polygon(line).area == pytest.approx(lakes[0].area, rel=1e-9)
-            if coded_rules:
-                assert f.code == 2 and f.polygon is not None
-            else:
-                assert f.code is None and f.polygon is None
-
-    def test_the_uncoded_lines_carry_the_class_names(self, fi: ModuleType, tmp_path: Path) -> None:
-        src = source(fi, tmp_path, [("lake", lake(300.0))], coded_rules=False)
-        fs = fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
-        (f,) = fs.features
-        assert f.mask == fi.DEFAULT_VOCABULARY.mask("water")
+            assert f.code == 2 and f.polygon is not None
+            assert f.mask == ff.DEFAULT_VOCABULARY.mask("land_cover", "water")
 
 
 # ---------------------------------------------------------------- test 3
@@ -212,18 +189,12 @@ class TestTiling:
     """Test 3: two halves of the square tile it; the rest is empty, so the
     simplifier gets the source's two polygons and nothing more."""
 
-    @pytest.mark.parametrize("coded_rules", [False, True], ids=["uncoded", "coded"])
     def test_no_rest_piece(
-        self,
-        fi: ModuleType,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        coded_rules: bool,
+        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         halves = [("land", box(0, 0, 500, SIDE)), ("lake", box(500, 0, SIDE, SIDE))]
         spy = Spy(fi, monkeypatch)
-        src = source(fi, tmp_path, halves, coded_rules)
-        fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
+        opened(source(tmp_path, halves), 5.0)
         (call,) = spy.calls
         assert len(call[0]) == 2
         assert sum(g.area for g in call[0]) == pytest.approx(DOMAIN.area, rel=1e-12)
@@ -252,8 +223,7 @@ class TestTheCentimetreFilter:
         assert strip.area == pytest.approx(SIDE * width, rel=1e-6)
         assert shapely.get_num_coordinates(strip) == 5
         spy = Spy(fi, monkeypatch)
-        src = source(fi, tmp_path, [("lake", water), ("land", land)], coded_rules=False)
-        fs = fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
+        fs = opened(source(tmp_path, [("lake", water), ("land", land)]), 5.0)
         (call,) = spy.calls
         assert len(call[0]) == given
         out = call[1].polygons[:2]
@@ -269,8 +239,9 @@ class TestTheCentimetreFilter:
 
 
 class TestRefusal:
-    """Test 5: the simplifier's refusal of an uncoded source refuses the run,
-    naming the file and the way out."""
+    """Test 5: the simplifier's refusal refuses the run, naming the way out.
+    No file name: `edges_of` takes the map, which may join several files,
+    and no path (the readers' refusals name the file)."""
 
     def test_the_run_is_refused(
         self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -279,54 +250,18 @@ class TestRefusal:
             raise ValueError("x")
 
         monkeypatch.setattr(fi, "simplify_borders", refused)
-        src = source(fi, tmp_path, [("lake", lake(300.0))], coded_rules=False)
+        src = source(tmp_path, [("lake", lake(300.0))])
         with pytest.raises(fi.FeatureError) as caught:
-            fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
+            opened(src, 5.0)
         assert str(caught.value) == (
-            "lakes.geojson: border simplification refused: x; "
-            "--features-band 0 meshes this source with its borders as read"
+            "border simplification refused: x; "
+            "--edges-max-shift 0 meshes this source with its borders as read"
         )
-
-
-# ---------------------------------------------------------------- item 1: property
-
-
-class TestProperty:
-    """Item 1: ``property``'s polygons are never cleaned; every other rules
-    file's are. An uncoded file without an accuracy states none."""
-
-    def test_the_cleaned_flag(self, tmp_path: Path) -> None:
-        assert ff.rules("property").cleaned is False
-        assert ff.rules("corine").cleaned is True
-        assert ff.rules("corine-water").cleaned is True
-        uncoded = ff.rules(str(rules_file(tmp_path, LAKES)))
-        assert uncoded.cleaned is True
-        assert uncoded.accuracy_m is None
-
-    def test_property_lakes_are_not_simplified(
-        self, fi: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        spy = Spy(fi, monkeypatch)
-        feats = [Feat(1, lake(300.0), {"property": "water"})]
-        path = write_geojson(tmp_path / "p.geojson", feats)
-        src = fi.FeatureSource(path=path, rules=ff.rules("property"))
-        fs = fi.open_features(request(fi, src, 5.0), domain_of(DOMAIN), UTM33)
-        assert spy.calls == []
-        assert fs.cover_vertices is None
-        (f,) = fs.features
-        assert vertices(f.lines) == 257
-
-    def test_the_help_says_so(self) -> None:
-        params = {p.name: p for p in typer.main.get_command(cli.app).commands["mesh"].params}
-        help_ = params["features_rules"].help
-        assert "property: each feature's own edge names, never cleaned or simplified." in help_
 
 
 # ---------------------------------------------------------------- test 6
 
 bumpy = rough_dem(16)
-#: Item 3's sentence for ``lakes.toml`` on the micro DEM (cell 10 m).
-NO_ACCURACY = "lakes.toml states no positional_accuracy_m; the DEM cell, 10 m, is used"
 JOINED = re.compile(
     r"^\d+ lines?, \d+ vert(ex|ices) after joining shared edges and adding crossings$"
 )
@@ -338,11 +273,12 @@ def square(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def small_lake(tmp_path: Path) -> Path:
-    """An uncoded lake inside ``SQUARE``, more than 5 m from its outline."""
+def small_river(tmp_path: Path) -> Path:
+    """A river line inside ``SQUARE``, more than 5 m from its outline: the
+    ring of a small lake, as a line."""
     (x, y) = rel(60.3, -40.1)
-    feats = [Feat(1, Point(x, y).buffer(15.0, quad_segs=8), {"kind": "lake"})]
-    return write_geojson(tmp_path / "lake.geojson", feats)
+    ring = Point(x, y).buffer(15.0, quad_segs=8).exterior
+    return write_geojson(tmp_path / "river.geojson", [Feat(1, ring, {})])
 
 
 @pytest.fixture
@@ -353,18 +289,18 @@ def corine(tmp_path: Path) -> Path:
 
 
 class Opened:
-    """Every ``cli.open_features`` result."""
+    """Every ``cli.edges_of`` result."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.sets: list[Any] = []
-        real = cli.open_features
+        real = cli.edges_of
 
         def spy(*args: Any, **kwargs: Any) -> Any:
             found = real(*args, **kwargs)
             self.sets.append(found)
             return found
 
-        monkeypatch.setattr(cli, "open_features", spy)
+        monkeypatch.setattr(cli, "edges_of", spy)
 
 
 def mesh(tmp_path: Path, *args: str) -> tuple[dict[str, Any], str]:
@@ -388,49 +324,33 @@ def own_counts(found: Any, i: int) -> str:
 
 
 class TestTheRecord:
-    """Test 6: per-source counts, one joined total, and the stated default
-    for a missing positional accuracy."""
+    """Test 6: per-source counts and one joined total."""
 
     def test_each_source_counts_its_own(
         self,
         tmp_path: Path,
         bumpy: Path,
         square: Path,
-        small_lake: Path,
+        small_river: Path,
         corine: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        rules = rules_file(tmp_path, LAKES)
         spy = Opened(monkeypatch)
         record, _ = mesh(
             tmp_path,
             *("--dem", str(bumpy), "--domain", str(square)),
-            *("--features", str(small_lake), "--features-rules", str(rules)),
-            *("--features", str(corine), "--features-rules", "corine"),
+            *("--land-cover", str(corine), "--land-cover-classes", "corine"),
+            *("--lines", f"river={small_river}", "--edges", "all"),
         )
         (found,) = spy.sets
-        entries = record["features"].split("; ")
+        entries = record["edges"].split("; ")
         assert len(entries) == 2
         own = [own_counts(found, i) for i in range(2)]
         assert own[0] != own[1]  # the premise: the two sources differ
         for entry, counts in zip(entries, own, strict=True):
             assert entry.endswith(f": {counts}") or entry.endswith(f", {counts}"), entry
-        assert entries[0].startswith("lake.geojson, rules lakes: 1 feature, ")
-        assert entries[1].startswith("corine.geojson, rules corine: 2 features, ")
-        assert JOINED.match(record["features_joined"]), record["features_joined"]
-        assert "features_joined" in rr.WORDING
-        assert "features_accuracy_m" in rr.WORDING
-
-    def test_a_missing_accuracy_is_the_dem_cell(
-        self, tmp_path: Path, bumpy: Path, square: Path, small_lake: Path
-    ) -> None:
-        rules = rules_file(tmp_path, LAKES)
-        record, output = mesh(
-            tmp_path,
-            *("--dem", str(bumpy), "--domain", str(square)),
-            *("--features", str(small_lake), "--features-rules", str(rules)),
-        )
-        assert output.count(NO_ACCURACY) == 1
-        assert record["features_accuracy_m"] == NO_ACCURACY
-        assert record["features_band_m"] == 5.0  # s/2, s = max(10, 10)
-        assert record["features_repair_m"] == pytest.approx(0.1, rel=1e-12)  # s/100
+        assert entries[0].startswith("corine.geojson, classes corine: 2 features, ")
+        assert entries[1].startswith("river.geojson, lines river: 1 feature, ")
+        assert JOINED.match(record["edges_joined"]), record["edges_joined"]
+        assert "edges_joined" in rr.WORDING
+        assert "land_cover_accuracy_m" in rr.WORDING

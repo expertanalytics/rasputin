@@ -8,7 +8,7 @@ of T3 to T9. Two fixtures carry it:
   `--record` and `--stats` beside it, once to `.vtk`, and twice more to one
   path for determinism and replacement. Needs the `codecs` extra (LZW).
 - **F3**, the `bumpy` DEM with two hand-made CORINE rectangles (311 west,
-  512 east) under `--features-rules corine`: the coded path, with the
+  512 east) under `--land-cover-classes corine --edges all`: the coded path, with the
   `land_cover`, `land_cover_classes` and `layer_styles` tables.
 
 The `.vtk` of a run with the same arguments is the oracle for every figure:
@@ -160,7 +160,7 @@ def f3(tmp_path: Path, bumpy: Path) -> Written:
     corine = write_geojson(tmp_path / "corine.geojson", features)
     domain = geojson(tmp_path / "square.geojson", SQUARE)
     args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-    args += ("--features", str(corine), "--features-rules", "corine")
+    args += ("--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all")
     return mesh_pair(tmp_path, "cover", *args)
 
 
@@ -469,15 +469,20 @@ class TestLandCover:
     def test_a_coded_run_with_no_polygon_in_the_domain_writes_without_a_land_cover_layer(
         self, tmp_path: Path, bumpy: Path
     ) -> None:
-        """A coded source whose only feature is a line leaves no polygon to
-        write: the run succeeds as the `.vtk` run does, `land_cover` is absent
-        (nothing to draw), while `land_cover_classes` and the codes on
-        `triangles` are still written, every triangle in no polygon (code 0)."""
+        """A land cover whose only polygon lies outside the domain, with a
+        road as `--lines`, leaves no polygon to write: the run succeeds as the
+        `.vtk` run does, `land_cover` is absent (nothing to draw), while
+        `land_cover_classes` and the codes on `triangles` are still written,
+        every triangle in no polygon (code 0). (Was a coded source whose only
+        feature was a line; lines go to `--lines`, increment 111.)"""
         road = shapely.LineString([(TIE_X + 30.1, TIE_Y - 40.3), (TIE_X + 170.2, TIE_Y - 40.3)])
-        corine = write_geojson(tmp_path / "road.geojson", [Feat("r", road, {"Code_18": "122"})])
+        far = shapely.box(TIE_X + 900.3, TIE_Y - 950.1, TIE_X + 950.7, TIE_Y - 900.2)
+        corine = write_geojson(tmp_path / "far.geojson", [Feat("f", far, {"Code_18": "311"})])
+        roads = write_geojson(tmp_path / "road.geojson", [Feat("r", road, {})])
         domain = geojson(tmp_path / "square.geojson", SQUARE)
         args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-        args += ("--features", str(corine), "--features-rules", "corine")
+        args += ("--land-cover", str(corine), "--land-cover-classes", "corine")
+        args += ("--lines", f"road={roads}", "--edges", "all")
         written = mesh_pair(tmp_path, "road", *args)
         with closing(sqlite3.connect(written.gpkg)) as con:
             assert "land_cover" not in tables(con)

@@ -4,10 +4,11 @@
 
 A cell is its triangle's plan centroid, plan area, slope and aspect, and the
 plan-area shares of five categories summed from the exact class fractions:
-glacier, lake, forest and savanna from the meshing rules' ``[cells]`` table, and
+glacier, lake, forest and savanna from the land-cover class file's ``[cells]``
+table, and
 unspecified as ``1 - glacier - lake - reservoir - forest`` clamped at 0, so
 savanna lies inside unspecified, as Shyft has no savanna share. Pure: arrays
-and meshing rules in, no file, no CRS.
+and a land-cover class file in, no file, no CRS.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import numpy.typing as npt
 import shapely
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import Category, MeshingRules
+from tin_engine.feature_input import Category, LandCoverClasses
 from tin_engine.io.models import CellTable, ClassFractions
 
 Float64 = npt.NDArray[np.float64]
@@ -27,8 +28,8 @@ Float64 = npt.NDArray[np.float64]
 SUMMED: tuple[Category, ...] = ("glacier", "lake", "forest", "savanna")
 
 
-def categories_of(rules: MeshingRules) -> Mapping[int, Category]:
-    """The rules' class categories, refused with a `ValueError` naming every
+def categories_of(rules: LandCoverClasses) -> Mapping[int, Category]:
+    """The class file's class categories, refused with a `ValueError` naming every
     water class without one, so water never falls silently into unspecified."""
     missing = sorted(rules.water_codes - set(rules.categories))
     if missing:

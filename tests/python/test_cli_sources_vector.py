@@ -132,16 +132,17 @@ class TestT6VectorListing:
     def test_the_land_cover_fits(self, registered: Path) -> None:
         cover = by_id(listing())[COVER_ID]
         assert fits_of(cover) == {
-            ("mesh", "--features", "corine"),
-            ("mesh", "--features", "corine-water"),
+            ("mesh", "--land-cover", "corine"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
             ("mesh", "--reservoirs", None),
             ("mesh", "--catchments", None),
+            ("mesh", "--prefer", None),
         }
         spelt = {(f["tool"], f["argument"]) for f in cover["fits"]}
         assert spelt == {
-            ("mesh", "features"),
+            ("mesh", "land_cover"),
+            ("mesh", "prefer"),
             ("catchment", "lakes"),
             ("network_catchment", "network"),
             ("mesh", "reservoirs"),
@@ -162,7 +163,8 @@ class TestT6VectorListing:
                                   ("station-catchments", "--lakes", None),
                                   ("network-catchment", "--network", None),
                                   ("mesh", "--reservoirs", None),
-                                  ("mesh", "--catchments", None)}  # fmt: skip
+                                  ("mesh", "--catchments", None),
+                                  ("mesh", "--prefer", None)}  # fmt: skip
 
     def test_the_raster_fields_stay_empty_for_a_vector_source(self, registered: Path) -> None:
         found = by_id(listing())
@@ -239,15 +241,16 @@ class TestT6VectorListing:
     ) -> None:
         _lakes, cover = fixture_v(tmp_path / "v")
         write_sources(config, {
-            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, rules="corine")
+            COVER_ID: vector_entry(cover, COVER_DESCRIPTION, layer=LANDCOVER, classes="corine")
         })  # fmt: skip
         found = by_id(listing())[COVER_ID]
         assert fits_of(found) == {
-            ("mesh", "--features", "corine"),
+            ("mesh", "--land-cover", "corine"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
             ("mesh", "--reservoirs", None),
             ("mesh", "--catchments", None),
+            ("mesh", "--prefer", None),
         }
 
 
@@ -339,7 +342,7 @@ class TestAr50Listing:
     """Test 14 of `docs/increments/73-gml-vector-source.md`: fixture A, converted
     with `gml_to_geopackage` and registered with `legend = "ar50"`, lists
     `arealtype`'s classes (fixture A holds 30 once and 60 five times) and fits
-    `--features` with `ar50` alone."""
+    `--land-cover` with `ar50` alone."""
 
     @pytest.fixture
     def ar50_entry(self, config: Path, tmp_path: Path) -> Path:
@@ -353,7 +356,7 @@ class TestAr50Listing:
         target = tmp_path / "ar50.gpkg"
         with AR50_SAMPLE.open("rb") as stream, closing(create_sqlite(target)) as conn:
             gml_import.gml_to_geopackage(stream, conn)
-        write_sources(config, {"ar50-sample": vector_entry(target, "AR50", rules="ar50")})
+        write_sources(config, {"ar50-sample": vector_entry(target, "AR50", classes="ar50")})
         return target
 
     def test_14_the_classes_and_fits(self, ar50_entry: Path) -> None:
@@ -363,9 +366,10 @@ class TestAr50Listing:
             {"attribute": "arealtype", "values": ["30", "60"], "distinct": 2}
         ]
         assert fits_of(found) == {
-            ("mesh", "--features", "ar50"),
+            ("mesh", "--land-cover", "ar50"),
             ("catchment", "--lakes", None),
             ("network-catchment", "--network", None),
             ("mesh", "--reservoirs", None),
             ("mesh", "--catchments", None),
+            ("mesh", "--prefer", None),
         }

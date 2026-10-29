@@ -37,4 +37,7 @@ PRESET_NAME: str = SNAPSHOT["preset_title"]
 CORINE_NATURAL: dict[int, tuple[str, str]] = {
     int(code): (label, colour) for code, label, colour in SNAPSHOT["palette"]
 }
-CORINE_MAPS = ("corine", "corine-water", "clc18_kode")
+#: The shipped CORINE class files the snapshot is checked against;
+#: `corine-water`'s record stays in the snapshot, its file is gone
+#: (`--edges water` chooses its borders).
+CORINE_MAPS = ("corine", "clc18_kode")

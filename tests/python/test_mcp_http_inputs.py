@@ -257,8 +257,8 @@ def validated(tool: str, arguments: dict[str, Any]) -> Any:
         ),
         pytest.param(
             "mesh",
-            {"out": "m.vtk", "dem": ["glo30"], "features": ["a.geojson", LINK, "b.geojson"]},
-            {"out": "m.vtk", "dem": ["glo30"], "features": ["a.geojson", STORED, "b.geojson"]},
+            {"out": "m.vtk", "dem": ["glo30"], "land_cover": ["a.geojson", LINK, "b.geojson"]},
+            {"out": "m.vtk", "dem": ["glo30"], "land_cover": ["a.geojson", STORED, "b.geojson"]},
             id="repeatable item",
         ),
         pytest.param(

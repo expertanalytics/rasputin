@@ -110,10 +110,13 @@ LAYERS: tuple[dict[str, str], ...] = (
         "cells": "feature_input io.models",  # 105a: the cell table; Legend is feature_input's
         "preferred": "cells polygon_fractions",  # 107: classes from a preferred source
         "legends": "toml_data",  # 108: a legend file is the colour scheme only
-        "meshing_rules": "feature_input features legends toml_data",  # 108: rules files
+        # 108: rules files; 111: renamed land-cover class files
+        "land_cover_classes": "feature_input features legends toml_data",
+        # 111: the one land-cover map, the --prefer cut on LandCoverClasses
+        "land_cover_map": "feature_input preferred",
         # 55: the listing; 57: vector sources
         "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage"
-                         " meshing_rules io.models io.repository sources",
+                         " land_cover_classes io.models io.repository sources",
         # 85: a network file's links and units; reads through feature_input
         "io.network_file": "crs feature_input io.geojson io.geopackage io.repository network",
     },
@@ -124,7 +127,7 @@ LAYERS: tuple[dict[str, str], ...] = (
                " geodesy gml_import grid_domain hydrography io.cog io.domain_file io.geojson"
                " io.geopackage_write io.mesh_index io.models io.network_file io.ply io.repository"
                " io.rivers io.station_set io.vtk_legacy land_cover_fractions landcover legends"
-               " meshing_rules"
+               " land_cover_classes land_cover_map"
                " mcp.http mcp.server mosaic network palettes plugins polygon_fractions preferred"
                " raster"
                " refine_job resources"

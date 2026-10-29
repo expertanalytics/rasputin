@@ -9,7 +9,8 @@ question B:
   last, so a rerun that fails (a truncated DEM) leaves no `index.json`.
 - 8: `--pieces` or `--piece-budget` without `--domain` is a usage error
   naming `--domain`, and no file is written.
-- 14: a partition line through a water ring given by `--features`: the ring
+- 14: a partition line through a water ring (a CORINE water polygon under
+  `--land-cover`, `--edges water`, every clean-up switch 0): the ring
   does not divide pieces, its crossings with the seam are vertices of both
   pieces (off-node, the seam vertices whose z is bilinear), and conformity
   and both section 3D oracles hold over the union.
@@ -142,8 +143,10 @@ def test_a_partition_line_through_a_water_ring(tmp_path: Path) -> None:
     crossings = shapely.get_coordinates(lake.exterior.intersection(seam))
     assert len(crossings) == 2
     assert not any(float((cy - pf.TIE_Y) / pf.H).is_integer() for _, cy in crossings), "on a node"
-    lakes = write_geojson(tmp_path / "lake.geojson", [Feat("l", lake, {"property": "water"})])
-    done = pf.cut(tmp_path / "run", *args(dem, domain, "--pieces", "4", "--features", str(lakes)))
+    lakes = write_geojson(tmp_path / "lake.geojson", [Feat("l", lake, {"Code_18": "512"})])
+    water = ("--land-cover", str(lakes), "--land-cover-classes", "corine", "--edges", "water")
+    as_read = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
+    done = pf.cut(tmp_path / "run", *args(dem, domain, "--pieces", "4", *water, *as_read))
     assert lines_of(done) == (x, y), "the lake moved the partition"
     assert sorted(p.id for p in done.pieces) == [(0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0)]
     left, right = (next(p for p in done.pieces if p.id == (0, i, 0)) for i in (0, 1))
