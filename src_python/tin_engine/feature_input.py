@@ -602,10 +602,7 @@ class _Tally:
         lines_of, polygons = snapped.lines, snapped.polygons
         if ask.tolerance_m > 0:  # the band on: area kept inside the domain
             dom = self.domain.polygon
-            inside = [
-                Polygon() if (c := _polygonal(shapely.intersection(g, dom))) is None else c
-                for g in polygons
-            ]
+            inside = clip_to_domain(polygons, dom)
             rest = shapely.difference(dom, shapely.coverage_union_all(inside))
             half = REST_MIN_WIDTH_M / 2
             wide = [p for p in shapely.get_parts(rest) if not p.buffer(-half).is_empty]
@@ -632,6 +629,22 @@ class _Tally:
         took = time.perf_counter() - t0
         self.seconds += took
         self.cleanup_seconds += took
+
+
+def clip_to_domain(polygons: Sequence[BaseGeometry], domain: BaseGeometry) -> list[BaseGeometry]:
+    """Each of ``polygons`` cut to ``domain``, an empty Polygon where none is
+    left, in input order.
+
+    Cut one at a time, neighbours that tile need not tile after: where one
+    keeps a vertex lying a hair off the outline and the other gets its own
+    crossing beside it (1e-11 to 3.5e-10 m apart), their shared border no
+    longer meets vertex for vertex. The cut set is cleaned as one coverage at
+    GEOS's own snapping distance, which moves next to no area."""
+    inside = [
+        Polygon() if (c := _polygonal(shapely.intersection(g, domain))) is None else c
+        for g in polygons
+    ]
+    return list(shapely.coverage_clean(np.array(inside, dtype=object), snapping_distance=-1))
 
 
 def _polygonal(geometry: BaseGeometry) -> BaseGeometry | None:
