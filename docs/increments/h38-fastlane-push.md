@@ -338,3 +338,6 @@ Answered 2026-10-28 (his words at the top of this file):
   tests; the moved create-check block is unchanged; blocking: §4's three
   rule-text edits are not applied, so REQUIRED-READING still demands a yes
   for every push the guard now lets through).
+- Code review round 2: APPROVED, db82264d..b600f99c, +84 (§4's three edits
+  match word for word, net 0 words; the rule text agrees with the guard;
+  the master merge 2bb4273c touched no guard file).
