@@ -160,6 +160,101 @@ in the shares step.
   join, moved from `_Tally._preferred`, on `(code, polygon)` pairs), on
   unchecked polygons as `_Tally._preferred` does today. The record's
   replaced, given and refilled areas are measured inside the domain.
+- **What every polygon in the map is** (code review round 4; this rule
+  replaces the "unchecked" of the bullet above). The *read box* is the read
+  region's bounding box widened by `MARGIN` (100 m). After `build` the map
+  holds two sets, as two fields of `LandCoverMap`:
+  - `areas`: the polygons that reach the read box, each a valid, non-empty
+    Polygon or MultiPolygon inside it: its cut to the box
+    (`shapely.clip_by_rect`) where `shapely.is_valid` passes on the cut, else
+    `_repaired` of the whole polygon (its rings cut to the box, faces kept by
+    parity: valid by construction). Checked and repaired in one place only,
+    `_fixed` in `build` with `fix` on, cut by cut in the thread pool, as now.
+  - `outside`: the polygons whose cut is empty, as read: whole, never
+    checked, never repaired, never overlaid. Only the edges step reads them,
+    and only by their rings (below).
+
+  `build` with `fix` off (the `--prefer` build in the CLI) takes its base as
+  `areas` already so and is given the base map's `outside` (a keyword,
+  default empty), which it passes through. The preferred polygons are valid
+  as `read_polygons` gives them (`_repaired` each). GEOS's overlays of valid
+  polygons give valid polygons, so every polygon `_joined`, `replace` and
+  the refill join make is valid too. So any step after `build` may overlay
+  `areas` without a check, and no step overlays `outside`. A test asserts
+  `shapely.is_valid` on every polygon of `areas` (section 5, test 12).
+
+  *Outside polygons, counted and kept.* Without clean-up (the pre-clip
+  path of `edges_of`), each chosen class's outside polygon goes through
+  today's ring test (`region.intersects(g.boundary)`, then `pre_clip`), so a
+  hole lying in the region whose shell misses it (`test_feature_input.py`'s
+  p5 cases) still gives its ring, exactly as given. Its feature carries no
+  polygon: it labels no triangle, since by its cut it has no area in the
+  box. One with no ring kept is counted outside. With clean-up on, or with
+  the map cut by `--prefer`, each chosen class's outside polygon is counted
+  outside, with no overlay: the clean-up works on area inside the read
+  region, and an outside polygon has none there. The outside polygons come
+  after the `areas` in the edges step's feature order. A valid outside
+  polygon gives no line, so the meshes of valid inputs do not change. The
+  shares and the codes never see `outside`.
+
+  *Each step that met unchecked polygons, and why it is now safe:*
+  1. `_joined` (the overlap of several files): sees `areas` only. The `far`
+     index set, and the bookkeeping that excluded it, are deleted.
+  2. `preferred.replace` and its `_cut` (the round-4 crash,
+     `src_python/tin_engine/preferred.py@435d407b:70`):
+     the base is `areas`, and the cutters are preferred polygons, both
+     valid. A lake reaching an outside bowtie cuts nothing outside.
+  3. `preferred._neighbours`' `subdivide`: the kept polygons come from
+     `_cut` of valid polygons.
+  4. `_refilled_joined`'s `union_all`: kept polygons and refilled pieces,
+     all from valid overlays.
+  5. `areas_inside` (from `_prefer_record`): `land.base.areas`, valid.
+  6. The edges step's ring test: reads `outside` by rings and boundaries
+     only. A predicate on a ring is safe on any ring.
+  7. `_overlap_record`: the overlap pieces are intersections of valid pairs.
+  8. The edges step's clean-up, `_Tally.clean`'s `shapely.intersection(g,
+     region)` (`src_python/tin_engine/feature_input.py@435d407b:362`), not on `@developer`'s list: today
+     p5's L-shaped polygon with `CLEANUP` raises GEOSException
+     ("TopologyException: unable to assign free hole to a shell").
+     Probed on tree `435d407b`. It now gets `areas` only.
+  9. The shares, `assign_polygon_fractions(map.areas)` in `cli.py`: today it
+     receives the outside polygons unchecked. Now it gets `areas` only.
+  10. `label_triangles` over the pre-clip path's polygons: today p5's
+      invalid polygon is a labelling polygon. Now an outside feature has
+      none.
+
+  *Why the outside polygons are neither checked whole nor repaired*
+  (`@developer`'s proposal: check each outside polygon whole, repair the
+  invalid ones with `make_valid`). Measured on tree `435d407b`, AC power,
+  one thread, best of three: each case read as the CLI reads it, outside
+  being the polygons whose cut to the read box is empty.
+
+  | Input | Polygons read | Outside | Their vertices | Outside invalid | Check outside whole | Check the cuts |
+  |---|---|---|---|---|---|---|
+  | Bygdin, Innlandet AR50 | 1,697 | 244 | 781,220 | 16 | 145 ms | 48 ms |
+  | Bygdin, ar50_46 | 247 | 113 | 484,609 | 5 | 92 ms | 2 ms |
+  | Sula, clc2018 | 184 | 156 | 5,508,059 | 52 | 1,351 ms | 0.5 ms |
+  | Numedalslågen, CORINE | 7,932 | 695 | 3,361,282 | 0 | 2,503 ms | 238 ms |
+
+  `make_valid` of Sula's 52 invalid outside polygons takes 32.8 s. Checking
+  them whole would add 2.5 s of work to the quick check's Numedalslågen
+  case (about 9 s today): at least 0.58 s on any number of threads, since
+  one polygon cannot be split. On Sula it would add 34 s of work (1.35 s
+  of checks, 32.8 s of repair). Repair also
+  breaks p5. `make_valid` gives the hole back as a shell, clockwise and
+  from another vertex, with method `linework` and with `structure`. With
+  the proposal patched into `_fixed` in a scratch plugin, p5's first case
+  fails under both methods.
+
+  The anomaly, settled: both timings hold, for different polygons. The
+  cost of `is_valid` is set by holes, and by whether the polygon is valid.
+  A valid polygon is checked through: CORINE's largest near Numedalslågen,
+  409,242 vertices and 3,195 holes, takes 578 ms. An invalid one stops at
+  its first fault: the same polygon after Sula's move from EPSG:3035,
+  409,239 vertices, 3,180 holes, takes 63 ms. A ring without holes is fast:
+  a 50,001-vertex circle takes 0.23 ms, the kind of polygon behind
+  `@developer`'s 0.5 ms. So `_fixed`'s docstring holds on real inputs. Its
+  sentence about the edges step is reworded to this rule.
 - **Several `--land-cover` files** (repeatable): class-polygon files under
   the one land-cover class file (`--land-cover-classes`, or the catalogue
   entries' `classes =`, which must agree), as Ola's AR50 runs pass one
@@ -452,6 +547,25 @@ line figures below as round 2 measured them.
       or piece written; no `.vtk` file is left): `--land-cover cover.geojson
       --pieces 4` (no class borders, so shares), naming `--land-cover`;
       `--edges all --shares --pieces 4`, naming `--shares`.
+12. What every polygon in the map is (section 3's rule; unit tests,
+    `test_feature_input.py`'s `BOX`, read region `BOX` grown by 100 m, read
+    box that grown by 100 m more). Measured on tree `435d407b`:
+    - `build` on one file of `INNER` (311, 10,000 m², inside the box) and
+      a bowtie 50 km off (`at(50000, 50000)`, `at(50100, 50100)`,
+      `at(50100, 50000)`, `at(50000, 50100)`, invalid, cut empty): `areas`
+      is `INNER` alone, 10,000.0 m², and `outside` is the bowtie, the same
+      object as given; `repaired == 0`; `shapely.is_valid` holds on every
+      polygon of `areas`. Today `areas` holds both, the bowtie invalid
+      (0.0 m² by GEOS's reading).
+    - p5's two polygons with `CLEANUP` (`one(..., switches=CLEANUP)`): no
+      feature, `outside == 1`, no exception, for both. Today the first
+      gives that, and the second (shell `ELL`) raises GEOSException in
+      `_Tally.clean`.
+    - p5 without clean-up: its existing assertions unchanged, and the one
+      feature's `polygon` is None.
+    - The round-4 red test (`test_cli_mesh_edges.py`, the far bowtie under
+      the long lake) and round 3's (the overlapping out-of-box pair), as
+      they stand.
 
 ## 6. Size, timing, left out
 
@@ -496,6 +610,10 @@ box; 345 intersecting pairs, none sharing area; scratch probe on tree
 two files as one coverage costs what cleaning each costs (`coverage_clean`
 over the read region's 591 and 12 polygons: 0.249 s per file, 0.245 s
 joined, best of three). One file adds nothing.
+
+*Timing, the outside polygons.* Section 3's rule adds no check: the cuts
+are checked as now, and the outside polygons are only set aside. The
+rejected whole check is timed there.
 
 *Timing, the shares.* What `--land-cover` costs today, in the runs that
 compute them (section 3): round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
@@ -770,6 +888,6 @@ file without `code_system` refused naming it, hint `--land-cover-classes`;
 - Design round 5: CHANGES REQUESTED, 369bac65..bf9b88de, 0 (Sula and cut-run findings fixed; §3's overlap query `STRtree.query(predicate="overlaps")` returns nothing for a polygon wholly inside another, so test 10's planted box `P` inside forest 311 gives no overlap: query with "intersects" and keep pairs of shared area above zero, and re-measure Bygdin's 0 m² if it used "overlaps"; test 10 bullet 2 ignores that `--prefer lake=` replaces `P` (class 512) as 311, measured 311 1,409,620 m², 512 420,089.9 m², so the stated 1,369,460 m², 460,250 m² and 3,402.0 m water lines are wrong; wording: test 11's "before any phase" vs the refusal after DEM open and piece split, `cli.py:1186-1203`).
 - Design round 6: APPROVED, 12616b91..3ea5ceb8, 0 (all three round-5 fixes hold: Bygdin re-probed, 345 intersecting pairs, none sharing area, 0.24 s; test 10 figures checked by hand, P 40,160.07 m², 311 1,369,459.9 m², lines 9,884.3 m; test 11 refusal after `_open_dem` and `partition`, before `assemble_dem` and `_open_features`).
 - Code review round 1: CHANGES REQUESTED, 75ab2b4f..dc9969ea, +14 (1,052 added, 1,038 removed; all seven gates pass; full suite 11,229 passed, 18 skipped, 1 xfail; Sula test 7 passed; Bygdin two-file AR50 run 199,510 triangles, overlap none; the -300 estimate is what was wrong (round 2, before several files, the overlap record and section 8), nothing beyond the design; the six test amendments each supported by the design. Blocking: the inventory's docs rewording never done: README.md:101 and INSTALL.md:269 give refused `--features ... --features-rules corine` commands, "meshing rules" and `--features-*` remain in README, INSTALL, docs/GLOSSARY.md:256, project_structure.md:220,306; a self-crossing polygon in an overlapping pair of two `--land-cover` files crashes with GEOSException in `land_cover_map._joined` (bowtie reproduced): repair the sharing pair or catch and repair, with a test. Follow-ups: `run_record.WORDING["land_cover_accuracy_m"]` never written; `LandCoverClasses.accuracy_m` optional though the loader requires it. The main session adds: the `rules =` refusal names the file and key but not the fix; it should say to rename it to `classes`).
-- Code review round 2: CHANGES REQUESTED, dbfa0bdd..57c9a0a2, +19 (+5 this round; round-1 findings closed: docs match the code, no user-facing `--features*` or "meshing rules" left, `rules` refusal names the rename; green commit touches no test file; seven gates pass; full suite 11,232 passed, 18 skipped, 1 xfail; merges cleanly with 9c317c16; both polygons of each pair repaired, three-file probe passed. Blocking, a regression against master: a polygon in no overlapping pair (a single file's, or the earlier file's) stays unrepaired, and `preferred.replace` crashes on it with GEOSException at `preferred.py:70` `_cut` (one `--land-cover` file with a self-crossing polygon plus `--prefer lake=`; master passes, its reader repaired first): repair every polygon near the region once in `build`/`_joined`, keep the repair count in `repaired_areas` and `land_cover_repaired`, test single file plus `--prefer`, fix the unit docstring "an earlier file's bowtie is not checked"; the same fix removes a crash master has, `--edges` with clean-up on such a polygon (`feature_input.py:362`). Follow-ups from round 1 still open).
+- Code review round 2: CHANGES REQUESTED, dbfa0bdd..57c9a0a2, +19 (+5 this round; round-1 findings closed: docs match the code, no user-facing `--features*` or "meshing rules" left, `rules` refusal names the rename; green commit touches no test file; seven gates pass; full suite 11,232 passed, 18 skipped, 1 xfail; merges cleanly with 9c317c16; both polygons of each pair repaired, three-file probe passed. Blocking, a regression against master: a polygon in no overlapping pair (a single file's, or the earlier file's) stays unrepaired, and `preferred.replace` crashes on it with GEOSException at `preferred.py:70` `_cut` (one `--land-cover` file with a self-crossing polygon plus `--prefer lake=`; master passes, its reader repaired first): repair every polygon near the region once in `build`/`_joined`, keep the repair count in `repaired_areas` and `land_cover_repaired`, test single file plus `--prefer`, fix the unit docstring "an earlier file's bowtie is not checked"; the same fix removes a crash master has, `--edges` with clean-up on such a polygon (`src_python/tin_engine/feature_input.py@435d407b:362`). Follow-ups from round 1 still open).
 - Code review round 3: CHANGES REQUESTED, 57c9a0a2..b605b1c8, +43 (1,081 added, 1,038 removed; round-2 findings closed; touched suites 298 passed, mypy and ruff clean; blocking: `_fixed` keeps a polygon outside the region's box whole and unchecked, so two overlapping out-of-box polygons, one a bowtie, raise GEOSException through the CLI with two GeoJSON `--land-cover` files; `THREADS = 8` ignores `--threads`, making README.md:87-88 false; RP8's re-pin evidence (master comparison, Numedalslågen mesh at a4bcab1e, 28 vertices moved, at most 8.7 m, and why) is not recorded in the branch).
 - Code review round 4: CHANGES REQUESTED, b605b1c8..31fb6608, +52 (+9 this round; round-3 findings closed: `--threads` reaches the build, the overlap join skips out-of-box polygons, RP8 evidence recorded; new tests fail on b605b1c8; 170 tests pass; blocking: an out-of-box polygon is still kept whole and unchecked, so a bowtie 50 km off plus a `--prefer lake=` lake reaching it crashes `preferred.py:70` `_cut` with GEOSException, where master passes).
