@@ -1568,7 +1568,8 @@ def _write_geopackage(
 class _Vector:
     """A vector source as checked: its file, layer, record name and
     catalogue entry, if any; ``key`` the --prefer or --lines key, and
-    ``code`` the class a --prefer source replaces."""
+    ``code`` the class a --prefer source replaces; ``fetch`` the fetch that
+    copies a cached source for this run's area."""
 
     path: Path
     layer: str | None
@@ -1576,6 +1577,7 @@ class _Vector:
     source: RemoteSource | None
     key: str = ""
     code: int = 0
+    fetch: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2136,7 +2138,9 @@ def _prefer_sources(
             )
         path, layer, shown = _features_source(given, "--prefer", known, root, run(given))
         code = next(c for k, c in prefer.items() if k == key)
-        found.append(_Vector(path, layer, shown, known.get(given), key, code))
+        source = known.get(given)
+        fetch = run(given) if source is not None and source.path is None else ""
+        found.append(_Vector(path, layer, shown, source, key, code, fetch))
     return found
 
 
@@ -2191,6 +2195,7 @@ def _land_cover_map(
                 hint = "--land-cover-crs" if "given CRS" in str(exc) else "--land-cover"
                 raise typer.BadParameter(str(exc), param_hint=hint) from exc
         xy = shapely.get_coordinates(area.polygon.exterior)
+        region = source_region(area, dem_crs, dem_crs, cell=cell)
         chosen = []
         for p in preferred:
             try:
@@ -2201,8 +2206,15 @@ def _land_cover_map(
                 )  # fmt: skip
             except FeatureError as exc:
                 raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
+            if not np.any(shapely.intersects(polygons, region)):
+                box = " ".join(f"{v:.0f}" for v in region.bounds)
+                why = f"; the cache holds only what was fetched{RUN_FETCH}{p.fetch}"
+                raise typer.BadParameter(
+                    f"{p.name} has no polygon meeting the read region, box {box} in {dem_crs}"
+                    + (why if p.fetch else f"; drop --prefer {p.key} if it has none"),
+                    param_hint="--prefer",
+                )
             chosen.append((p.code, polygons))
-        region = source_region(area, dem_crs, dem_crs, cell=cell)
         try:
             base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
         except FeatureError as exc:

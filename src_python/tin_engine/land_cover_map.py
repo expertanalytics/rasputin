@@ -201,8 +201,6 @@ def _refilled_joined(done: Replaced) -> list[tuple[int, BaseGeometry]]:
     for i, (_, g) in enumerate(nodes):
         groups.setdefault(root(i), []).append(g)
     joined = [
-        (nodes[r][0], gs[0] if len(gs) == 1 else shapely.union_all(gs))
-        for r, gs in groups.items()
-        if r < k  # a piece always has a kept neighbour; else it is left uncovered
+        (nodes[r][0], gs[0] if len(gs) == 1 else shapely.union_all(gs)) for r, gs in groups.items()
     ]
     return joined + list(done.given)
