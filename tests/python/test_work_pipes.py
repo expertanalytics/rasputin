@@ -104,8 +104,13 @@ def note(repo: Path, name: str, persona: str = "developer") -> Path:
     return path
 
 
+#: The triage answers `add` demands; `cli` gives them to an `add` that gives none.
+TRIAGE = ("--lane", "full", "--budget", "300")
+
+
 def cli(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return run_script(repo, "tools/work_pipes.py", "", *args)
+    triage = TRIAGE if args[:1] == ("add",) and not set(TRIAGE[::2]) & set(args) else ()
+    return run_script(repo, "tools/work_pipes.py", "", *args, *triage)
 
 
 def ok(repo: Path, *args: str) -> str:
@@ -610,6 +615,71 @@ def test_an_id_is_unique_across_pipes(repo: Path) -> None:
     assert not any(
         line.get("id") == "dup1" for line in harness_fixtures.jsonl(live_list(repo, "lsm"))
     )
+
+
+@pytest.mark.parametrize("drop", TRIAGE[::2])
+def test_add_refuses_without_each_triage_answer(repo: Path, drop: str) -> None:
+    given = dict(zip(TRIAGE[::2], TRIAGE[1::2], strict=True))
+    rest = [x for k, v in given.items() if k != drop for x in (k, v)]
+    result = cli(repo, "add", "core", "t1", "an item", *rest)
+    assert result.returncode == 2 and drop in result.stderr, result.stderr
+    assert not live_list(repo, "core").exists() or "t1" not in live_list(repo, "core").read_text()
+
+
+def test_add_refuses_a_budget_over_the_pull_request_limit(repo: Path) -> None:
+    result = cli(repo, "add", "core", "t1", "x", "--lane", "full", "--budget", "701")
+    assert result.returncode == 2 and "700" in result.stderr, result.stderr
+    ok(repo, "add", "core", "t2", "x", "--lane", "full", "--budget", "700")
+
+
+@pytest.fixture
+def harness_repo(repo: Path) -> Path:
+    (repo / ".claude" / "pipes" / "harness.toml").write_text('name = "harness"\npurpose = "h"\n')
+    (repo / "RULES.md").write_text("* **First question.** Before a spawn,\n  answer:\n")
+    return repo
+
+
+@pytest.mark.parametrize("reason", [
+    (), ("--replaces", "RULES.md: gone rule"), ("--replaces", "RULES.md"),
+    ("--replaces", "NOFILE.md: answer"), ("--prevents", "2026-10-26 the recap hung"),
+    ("--prevents", "2999-01-01: the recap hung"), ("--prevents", "yesterday: it broke"),
+])  # fmt: skip
+def test_a_harness_item_is_refused_without_a_reason_that_holds(
+        harness_repo: Path, reason: tuple[str, ...]) -> None:  # fmt: skip
+    result = cli(harness_repo, "add", "harness", "t1", "x", *TRIAGE, *reason)
+    flag = reason[0] if reason else "--absorbs"
+    assert result.returncode == 2 and flag in result.stderr, result.stderr
+    assert "t1" not in pipes.load_items(live_list(harness_repo, "harness"))
+
+
+def test_a_harness_item_with_reasons_stores_and_shows_them(harness_repo: Path) -> None:
+    reasons = {"replaces": "RULES.md: **First question.** Before a spawn, answer:",
+               "prevents": "2026-10-25: a spawn had no lane", "absorbs": "the triage"}  # fmt: skip
+    ok(harness_repo, "add", "harness", "t1", "x", *TRIAGE,
+       *(x for k, v in reasons.items() for x in (f"--{k}", v)))  # fmt: skip
+    item = pipes.load_items(live_list(harness_repo, "harness"))["t1"]
+    assert {k: getattr(item, k) for k in reasons} == reasons
+    shown = ok(harness_repo, "show", "--markdown")
+    assert all(f"{k} {v}" in shown for k, v in reasons.items()), shown
+    ok(harness_repo, "add", "harness", "t2", "x", *TRIAGE, "--absorbs", "a step")
+    ok(harness_repo, "add", "core", "t3", "x", *TRIAGE)
+
+
+def test_lane_and_budget_are_stored_and_shown(repo: Path) -> None:
+    ok(repo, "add", "core", "t1", "x", "--lane", "fast", "--budget", "120")
+    item = pipes.load_items(live_list(repo, "core"))["t1"]
+    assert (item.lane, item.budget) == ("fast", 120)
+    row = {r["ITEM"].split()[0]: r for r in table(ok(repo, "show").splitlines())}["t1"]
+    assert "fast lane, 120 lines" in row["NEXT"], row
+    assert "fast lane, 120 lines" in ok(repo, "show", "--markdown")
+
+
+def test_a_record_without_lane_or_budget_still_shows(repo: Path) -> None:
+    append(repo, rec("old1", "queued"))
+    item = pipes.load_items(live_list(repo, "core"))["old1"]
+    assert (item.lane, item.budget) == (None, None)
+    row = {r["ITEM"].split()[0]: r for r in table(ok(repo, "show").splitlines())}["old1"]
+    assert "lane" not in row["NEXT"], row
 
 
 def test_the_block_is_capped_at_40_lines_of_120_characters(repo: Path) -> None:
