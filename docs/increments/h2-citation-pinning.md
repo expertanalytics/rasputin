@@ -105,8 +105,8 @@ spaces or tabs, then `§` **immediately** followed by
 
 `ID` = `\d+(\.\d+)*[A-Z]?` | `[A-Z]{1,2}\d+` | `[A-Z]`, not followed by `\w`.
 
-So `` `CLAUDE.md` §2 ``, `` `tester.md` §3C ``, `` `generic-harness.md` §3.2. ``
-(the final period is punctuation) and `PRINCIPLES.md §A6` are ID citations.
+So `` `CLAUDE.md` §2 ``, `` `tester.md` §3C `` and `` `generic-harness.md` §3.2. ``
+(the final period is punctuation) are ID citations.
 `§ Constraint` (space after `§`) and "`CLAUDE.md` section 2" are not citations
 and are ignored.
 

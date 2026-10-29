@@ -1,33 +1,27 @@
 ---
 name: modern-cxx
-description: C++20/23 engineering standards and Pybind11 bindings for the terrain core. Use when writing or reviewing C++ headers and sources, designing concepts and templates for swappable components, managing ownership and zero-overhead abstractions, or exposing the core to Python.
+description: C++20 standards for the terrain core: concepts and templates, ownership, zero-overhead abstractions and Pybind11 bindings.
 ---
 
-# Agent Skill: Modern C++ Engineering & Python Bindings
+# Modern C++ & Python Bindings
 
-Enforces C++20/C++23 standards, zero-overhead abstractions, component swappability, and Pybind11 integration.
+## 1. Swappable components
+Core geometric entities (`Point`, `Mesh`, `RefinementPolicy`) use C++20
+concepts and templates, not virtual dispatch; the triangulation and
+refinement pipelines are templates over those concepts.
 
-## 1. Component Swappability & Abstraction (C++20)
-* **Compile-Time Polymorphism:** Use C++20 **Concepts** and templates instead of runtime virtual tables (`vtable`) for core geometric entities (e.g., `Point`, `Mesh`, `RefinementPolicy`).
-* **Interface Definition:** Define strict concepts for standard geometry actions:
-  ```cpp
-  template<typename T>
-  concept GeometryKernel = requires(T k, Point p1, Point p2) {
-      { k.orient2d(p1, p2, p3) } -> std::same_as<Orientation>;
-  };
-  ```
-* **Future-Proofing:** Implement the triangulation and refinement pipelines as templates parameterized by these concepts, allowing drop-in replacement of the core engine later.
+## 2. Memory
+RAII; `std::unique_ptr` only at resource boundaries; spans and string views
+for zero-copy passing. Contiguous storage; mesh connectivity as indices into
+arrays, not pointers.
 
-## 2. Memory, Data Layout & Execution
-* **Ownership:** Enforce RAII. Use smart pointers (`std::unique_ptr`) only for resource boundaries; use stack allocation, string views (`std::string_view`), and spans (`std::span`) for zero-copy data passing.
-* **Memory Locality:** Prefer contiguous memory layouts (`std::vector`). Avoid pointer-chasing topologies; represent mesh connectivity via indices into contiguous arrays.
+## 3. Bindings
+* `pybind11` code lives only in the wrapper layer; core headers know nothing
+  of Python.
+* Share coordinates through `py::array_t` without copying.
+* Release the GIL (`py::gil_scoped_release`) around long triangulation or
+  refinement calls.
 
-## 3. Python Bindings (Pybind11)
-* **Binding Isolation:** Keep `pybind11` code strictly inside a dedicated wrapper layer (e.g., `bindings/`). Core C++ headers must remain 100% agnostic of Python and Pybind11.
-* **Type Mapping:** Map internal C++ types safely to Python objects or NumPy arrays using `py::array_t` for high-throughput coordinate sharing without copying.
-* **GIL Management:** Release the Global Interpreter Lock (`py::gil_scoped_release`) for intensive C++ triangulation or refinement kernels to allow native multi-threading.
-
-## 4. Code Quality & Formatting
-* **Safety:** Passes the compiler gate (`CLAUDE.md` §4). No `using namespace std;` in headers.
-* **Modernity:** Use `auto` for type deduction where it improves readability, `constexpr` for compile-time math, and structured bindings for tuple/struct unpacking.
-
+## 4. Quality
+Passes the compiler gate (`CLAUDE.md` §4). No `using namespace std;` in
+headers.

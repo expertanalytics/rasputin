@@ -59,7 +59,6 @@ except ImportError:  # no exemption then: a scratchpad path is judged like any o
 #: Files whose content is normative. A change here changes what is allowed.
 GOVERNED = (
     "CLAUDE.md",
-    "docs/PRINCIPLES.md",
     ".claude/REQUIRED-READING.md",
     "docs/increments/README.md",
     # The self-protecting set: live before any review (unattended mode, §3.6).

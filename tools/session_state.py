@@ -309,13 +309,19 @@ def print_recap() -> None:
         import harness_mode
 
         state = harness_mode.state_dir(REPO)
-        header = unattended_header(harness_mode.read_mode(state, datetime.now(UTC)))
+        mode = harness_mode.read_mode(state, datetime.now(UTC))
+        header = unattended_header(mode)
+        # The guards refuse while the flag is on or unreadable; so away-mode is needed.
+        refusing = mode.state in ("on", "broken")
         queue = queued(state)
     except Exception as error:
         header, queue = UNKNOWN.format(f"{type(error).__name__}: {error}"[:200]), []
+        refusing = False
     if header:
         print(header)
     print("== recap ==")
+    skills = "dispatch and away-mode skills" if refusing else "dispatch skill"
+    print(f"Main session: load the {skills} before your first act.")
     print(f"Last landed: {last_landed(REPO)}")
     try:  # a fault in the duties line costs that line, like the harness above
         import duties

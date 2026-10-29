@@ -567,7 +567,6 @@ GOVERNED_MD = "# Rules\n\n## 1. One\n\n## Frameworks\n\ntext\n"
 GOVERNED = (
     "CLAUDE.md",
     "testing.md",
-    "docs/PRINCIPLES.md",
     ".claude/REQUIRED-READING.md",
     "docs/increments/README.md",
     ".claude/agents/x.md",
