@@ -165,7 +165,8 @@ in the shares step.
   region's bounding box widened by `MARGIN` (100 m). After `build` the map
   holds two sets, as two fields of `LandCoverMap`:
   - `areas`: the polygons that reach the read box, each a valid, non-empty
-    Polygon or MultiPolygon inside it: its cut to the box
+    Polygon or MultiPolygon, inside it except a preferred polygon kept whole
+    (`Replaced.given`): its cut to the box
     (`shapely.clip_by_rect`) where `shapely.is_valid` passes on the cut, else
     `_repaired` of the whole polygon (its rings cut to the box, faces kept by
     parity: valid by construction). Checked and repaired in one place only,
@@ -178,7 +179,8 @@ in the shares step.
   `areas` already so and is given the base map's `outside` (a keyword,
   default empty), which it passes through. The preferred polygons are valid
   as `read_polygons` gives them (`_repaired` each). GEOS's overlays of valid
-  polygons give valid polygons, so every polygon `_joined`, `replace` and
+  polygons give valid polygons (the OverlayNG documentation: results are
+  always valid; not probed here), so every polygon `_joined`, `replace` and
   the refill join make is valid too. So any step after `build` may overlay
   `areas` without a check, and no step overlays `outside`. A test asserts
   `shapely.is_valid` on every polygon of `areas` (section 5, test 12).
@@ -566,6 +568,8 @@ line figures below as round 2 measured them.
     - The round-4 red test (`test_cli_mesh_edges.py`, the far bowtie under
       the long lake) and round 3's (the overlapping out-of-box pair), as
       they stand.
+    - `shapely.is_valid` also holds on every polygon of `areas` in both
+      runs, and on the p1 bowtie after repair.
 
 ## 6. Size, timing, left out
 
@@ -891,3 +895,4 @@ file without `code_system` refused naming it, hint `--land-cover-classes`;
 - Code review round 2: CHANGES REQUESTED, dbfa0bdd..57c9a0a2, +19 (+5 this round; round-1 findings closed: docs match the code, no user-facing `--features*` or "meshing rules" left, `rules` refusal names the rename; green commit touches no test file; seven gates pass; full suite 11,232 passed, 18 skipped, 1 xfail; merges cleanly with 9c317c16; both polygons of each pair repaired, three-file probe passed. Blocking, a regression against master: a polygon in no overlapping pair (a single file's, or the earlier file's) stays unrepaired, and `preferred.replace` crashes on it with GEOSException at `preferred.py:70` `_cut` (one `--land-cover` file with a self-crossing polygon plus `--prefer lake=`; master passes, its reader repaired first): repair every polygon near the region once in `build`/`_joined`, keep the repair count in `repaired_areas` and `land_cover_repaired`, test single file plus `--prefer`, fix the unit docstring "an earlier file's bowtie is not checked"; the same fix removes a crash master has, `--edges` with clean-up on such a polygon (`src_python/tin_engine/feature_input.py@435d407b:362`). Follow-ups from round 1 still open).
 - Code review round 3: CHANGES REQUESTED, 57c9a0a2..b605b1c8, +43 (1,081 added, 1,038 removed; round-2 findings closed; touched suites 298 passed, mypy and ruff clean; blocking: `_fixed` keeps a polygon outside the region's box whole and unchecked, so two overlapping out-of-box polygons, one a bowtie, raise GEOSException through the CLI with two GeoJSON `--land-cover` files; `THREADS = 8` ignores `--threads`, making README.md:87-88 false; RP8's re-pin evidence (master comparison, Numedalslågen mesh at a4bcab1e, 28 vertices moved, at most 8.7 m, and why) is not recorded in the branch).
 - Code review round 4: CHANGES REQUESTED, b605b1c8..31fb6608, +52 (+9 this round; round-3 findings closed: `--threads` reaches the build, the overlap join skips out-of-box polygons, RP8 evidence recorded; new tests fail on b605b1c8; 170 tests pass; blocking: an out-of-box polygon is still kept whole and unchecked, so a bowtie 50 km off plus a `--prefer lake=` lake reaching it crashes `preferred.py:70` `_cut` with GEOSException, where master passes).
+- Design round 7: APPROVED WITH WORDINGS, 435d407b..03b0247d, 0 (the map's polygon rule: `areas` valid and checked once in `_fixed`, `outside` whole and read only by rings; all 10 consumers confirmed plus `cli.py:1342`'s `cover`; p5 and the round-3/4 counts hold; the rejection of whole-polygon repair stands on the timings and on `make_valid` breaking p5; three wordings applied in this commit).
