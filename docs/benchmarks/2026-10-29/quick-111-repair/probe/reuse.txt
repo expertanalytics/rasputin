@@ -1,0 +1,8 @@
+numedal.npz: region vertices 138
+  clean-up intersection, raw polygons:     0.615 s
+  clean-up intersection, clipped polygons: 0.501 s  (areas equal for 7932/7932)
+  clip to box 0.081 s, is_valid of clipped 0.234 s
+lagan.npz: region vertices 148
+  clean-up intersection, raw polygons:     0.500 s
+  clean-up intersection, clipped polygons: 0.383 s  (areas equal for 7866/7866)
+  clip to box 0.101 s, is_valid of clipped 0.229 s

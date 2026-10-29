@@ -1,0 +1,1 @@
+FIXED {'n': 7932, 'clip': 0.0848, 'valid_clipped': 0.2422, 'valid_whole': 3.4907, 'fixed_total': 0.3251, 'bad_clipped': 0, 'bad_whole': 0, 'vertices': 5417093, 'clipped_vertices': 1266661, 'wholly_inside': 6893, 'vmax': 409242, 'repaired': 0}
