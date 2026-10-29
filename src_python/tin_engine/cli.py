@@ -2204,7 +2204,8 @@ def _land_cover_map(
             chosen.append((p.code, polygons))
         region = source_region(area, dem_crs, dem_crs, cell=cell)
         base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
-        built = build([base.areas], chosen, classes.classes, region, fix=False) if chosen else base
+        again = functools.partial(build, fix=False, outside=base.outside)
+        built = again([base.areas], chosen, classes.classes, region) if chosen else base
         _say_repaired("land cover", base.repaired, sum(len(r.areas) for r in reads))
     for r in reads:
         if r.scanned:

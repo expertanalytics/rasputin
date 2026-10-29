@@ -177,6 +177,8 @@ class _Map(Protocol):
     @property
     def areas(self) -> Sequence[tuple[int, BaseGeometry]]: ...
     @property
+    def outside(self) -> Sequence[tuple[int, BaseGeometry]]: ...
+    @property
     def classes(self) -> LandCoverClasses: ...
     @property
     def replaced(self) -> Replaced | None: ...
@@ -267,7 +269,11 @@ def edges_of(
     the borders of the map's chosen classes (``land_cover``, and ``water`` for
     a water class), cleaned as one coverage within ``region`` (the read
     region) when a clean-up switch is on or the map was cut by ``--prefer``,
-    then each chosen ``--lines`` key's lines, as given. Pure. Raises
+    then the chosen classes' polygons the read box misses (the map's
+    ``outside``), by their rings only: without clean-up each keeps the
+    edges of its rings that meet ``region`` and labels nothing; with it
+    each is counted outside. Then each chosen ``--lines`` key's lines, as
+    given. Pure. Raises
     :class:`FeatureError` when the border simplification refuses."""
     tally = _Tally(domain)
     counts: list[int] = []
@@ -275,21 +281,27 @@ def edges_of(
         land = vocabulary.mask("land_cover")
         water = land | vocabulary.mask("water")
         wet = land_cover.classes.water_codes
-        cover: list[Cover] = [
-            (i, water if code in wet else land, code, code, g)
-            for i, (code, g) in enumerate(land_cover.areas)
-            if choice.every_class or code in choice.codes
-        ]
+        n = len(land_cover.areas)
+
+        def chosen(pairs: Sequence[tuple[int, BaseGeometry]], start: int) -> list[Cover]:
+            return [
+                (i, water if code in wet else land, code, code, g)
+                for i, (code, g) in enumerate(pairs, start=start)
+                if choice.every_class or code in choice.codes
+            ]
+
+        cover, far = chosen(land_cover.areas, 0), chosen(land_cover.outside, n)
         cut = land_cover.replaced is not None
         switches = (cleanup.repair_m, cleanup.merge_same_class, cleanup.tolerance_m)
         if any(switches) or cleanup.outline_snap_m or cut:
             snap = cleanup.repair_m or (-1.0 if cut else 0.0)
             tally.clean(cover, region, cleanup, snap)
+            tally.outside += len(far)
         else:
             shapely.prepare(region)
-            for fid, mask, code, _, g in cover:
+            for fid, mask, code, _, g in cover + far:
                 kept = list(pre_clip(g, region)) if region.intersects(g.boundary) else []
-                tally.add(fid, mask, kept, code, g)
+                tally.add(fid, mask, kept, code, g if fid < n else None)
         counts.append(len(tally.features))
     for key in dict.fromkeys(k for k, _ in lines if k in choice.lines):
         before = len(tally.features)
