@@ -422,7 +422,15 @@ class TestTheClip:
 #: reason to keep the old one. Please update the pin." That lifts the rule
 #: below for this change only; it stands for every later one.
 #: No commit may update it to agree with new code.
-TODAY = (60, "9c8236ebf2e1be95a1686dd521d2d4d766183b63f959cc6fc620b8083aa30535", 9, 19, 0)
+#:
+#: Fids renumbered at ``81abd570`` (no other value moved): the 7 polygons the
+#: read box misses left ``areas`` for ``outside`` (section 3), so an area's
+#: fid is its index in ``areas`` and an outside one's ``len(areas) + i``
+#: (62 areas; the 7 at 62..68, none giving a row). That digest was
+#: ``9c8236ebf2e1be95a1686dd521d2d4d766183b63f959cc6fc620b8083aa30535``. The
+#: digest below is ``e444e812``'s rows with each fid remapped so, and every
+#: mask, code, line and label polygon is equal by WKB to ``81abd570``'s.
+TODAY = (60, "146abf09c2a8a7805f80065e36eef0b64ee5fd9ca50915f6e0df110a3b6cf4f5", 9, 19, 0)
 
 
 def digest(fs: Any) -> tuple[int, str, int, int, int]:
