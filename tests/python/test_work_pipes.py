@@ -63,19 +63,13 @@ def two_pipes() -> list[Any]:
     ]
 
 
-def choose(records: list[dict[str, Any]], busy: set[str] | None = None,
-           unattended: bool = False, pipe_list: list[Any] | None = None) -> Any:  # fmt: skip
-    return pipes.order(
-        pipe_list if pipe_list is not None else two_pipes(),
-        pipes.fold(records), NOW, unattended, busy or set(),
-    )  # fmt: skip
+def choose(records: list[dict[str, Any]], unattended: bool = False) -> Any:
+    return pipes.order(two_pipes(), pipes.fold(records), NOW, unattended)
 
 
-def label(choice: Any) -> str:
-    """`<pipe>/<id>` of the chosen item, or `IDLE` when none is chosen."""
-    if choice.item is None:
-        return "IDLE"
-    return f"{choice.item.pipe}/{choice.item.id}"
+def label(choices: Any) -> str:
+    """`<pipe>/<id>` of each chosen item, one per free pipe, or `IDLE` when none."""
+    return " ".join(f"{c.item.pipe}/{c.item.id}" for c in choices) or "IDLE"
 
 
 def common_dir(repo: Path) -> Path:
@@ -198,80 +192,31 @@ def test_an_unreadable_line_is_counted_not_raised(repo: Path) -> None:
     assert "1 unreadable" in shown
 
 
-# ---------------------------------------------------------------- 2. step 1
+# ---------------------------------------------------------------- 2. one slot per pipe
 
 
-def test_the_in_flight_item_nearest_to_merging_goes_first() -> None:
-    choice = choose([rec("a", "review", pipe="lsm"), rec("b", "green"), rec("c", "queued")])
-    assert label(choice) == "lsm/a"
-    assert "nearest to merging" in choice.reason
-
-
-def test_step_1_ties_go_to_the_higher_priority_pipe() -> None:
-    choice = choose([rec("a", "review", pipe="lsm", age=5 * HOUR), rec("b", "review")])
-    assert label(choice) == "core/b"
-
-
-def test_step_1_ties_in_one_pipe_go_to_the_older_since() -> None:
-    choice = choose([rec("young", "green", age=2 * HOUR), rec("old", "green", age=5 * HOUR)])
-    assert label(choice) == "core/old"
-
-
-# ---------------------------------------------------------------- 3. caps and busy
-
-
-CAPPED = [rec("r", "red"), rec("g", "green"), rec("cq", "queued", age=2 * HOUR),
-          rec("lq", "queued", pipe="lsm", age=HOUR)]  # fmt: skip
-
-
-def test_a_pipe_with_two_in_flight_yields_to_another_pipe() -> None:
-    choice = choose(CAPPED, busy={"worktree-r", "worktree-g"})
-    assert pipes.in_flight(pipes.fold(CAPPED)) == 2
-    assert label(choice) == "lsm/lq"
-
-
-def test_a_not_busy_in_flight_item_is_taken_first() -> None:
-    choice = choose(CAPPED, busy={"worktree-g"})
-    assert label(choice) == "core/r"
-    assert "nearest to merging" in choice.reason
-
-
-def test_three_in_flight_all_busy_is_idle_never_queued_or_fallback() -> None:
-    records = [*CAPPED, rec("d", "designing", pipe="lsm"),
-               rec("fb", "queued", pipe="lsm", plain=True, fallback=True)]  # fmt: skip
-    choice = choose(records, busy={"worktree-r", "worktree-g", "worktree-d"})
-    assert pipes.in_flight(pipes.fold(records)) == 3
-    assert label(choice) == "IDLE"
-
-
-def test_the_only_pipe_with_runnable_items_may_hold_a_third() -> None:
-    records = [rec("r", "red"), rec("g", "green"), rec("cq", "queued")]
-    choice = choose(records, busy={"worktree-r", "worktree-g"})
-    assert label(choice) == "core/cq"
-
-
-def test_a_pipe_holding_its_one_place_lends_to_an_empty_pipe_first() -> None:
-    records = [rec("r", "red"), rec("cq", "queued", age=2 * HOUR),
+def test_each_pipe_with_no_item_in_flight_gets_its_head() -> None:
+    records = [rec("cq", "queued", age=2 * HOUR), rec("cq2", "queued"),
                rec("lq", "queued", pipe="lsm")]  # fmt: skip
-    assert label(choose(records, busy={"worktree-r"})) == "lsm/lq"
+    choices = choose(records)
+    assert label(choices) == "core/cq lsm/lq"
+    assert all("head of its pipe" in c.reason for c in choices)
 
 
-def test_a_spare_place_goes_to_the_higher_priority_pipe() -> None:
-    records = [rec("r", "red"), rec("l", "red", pipe="lsm"), rec("cq", "queued"),
-               rec("lq", "queued", pipe="lsm", age=2 * HOUR)]  # fmt: skip
-    assert label(choose(records, busy={"worktree-r", "worktree-l"})) == "core/cq"
+def test_a_pipe_with_an_item_in_flight_gets_no_line() -> None:
+    records = [rec("r", "red"), rec("cq", "queued"), rec("lq", "queued", pipe="lsm")]
+    assert label(choose(records)) == "lsm/lq"
+    assert label(choose([*records, rec("d", "designing", pipe="lsm")])) == "IDLE"
 
 
-def test_an_item_with_a_pr_and_no_agent_takes_no_place_and_is_not_offered() -> None:
-    records = [rec("r", "red"), rec("g", "green"), rec("d", "review", pipe="lsm", pr=5),
+def test_an_item_with_a_pr_and_no_agent_is_in_flight() -> None:
+    records = [rec("r", "red"), rec("d", "review", pipe="lsm", pr=5),
                rec("lq", "queued", pipe="lsm")]  # fmt: skip
-    busy = {"worktree-r", "worktree-g"}
-    assert pipes.in_flight(pipes.fold(records), busy) == 2
-    assert label(choose(records, busy=busy)) == "lsm/lq"
-    assert pipes.in_flight(pipes.fold(records), busy | {"worktree-d"}) == 3
+    assert pipes.in_flight(pipes.fold(records)) == 2
+    assert label(choose(records)) == "IDLE"
 
 
-def test_the_header_counts_no_place_for_an_item_waiting_on_ola_or_ci(repo: Path) -> None:
+def test_the_header_counts_no_place_for_an_item_waiting_on_ola(repo: Path) -> None:
     ok(repo, "add", "core", "a", "running")
     ok(repo, "set", "a", "red", "--branch", "worktree-a")
     ok(repo, "add", "core", "b", "asked")
@@ -279,16 +224,15 @@ def test_the_header_counts_no_place_for_an_item_waiting_on_ola_or_ci(repo: Path)
     ok(repo, "add", "lsm", "c", "on CI")
     ok(repo, "set", "c", "review", "--branch", "worktree-c", "--pr", "9")
     ask_ola(repo, "Split it in two?", "b")
-    assert ok(repo, "show").startswith("Pipes (in flight 1 of 3")
+    assert ok(repo, "show").startswith("Pipes (in flight 2 of 2")
 
 
-def test_next_takes_the_spare_place_when_a_pipe_has_only_an_item_on_ola(repo: Path) -> None:
+def test_a_pipe_whose_only_item_in_flight_waits_on_ola_gets_its_head(repo: Path) -> None:
     append(repo, rec("r", "red"), rec("cq", "queued", age=2 * HOUR),
            rec("lq", "queued", pipe="lsm"))  # fmt: skip
-    note(repo, "r")
-    assert " lsm/lq queued " in ok(repo, "next").splitlines()[-1]
-    ask_ola(repo, "Stop?", "lq")
-    assert " core/cq queued " in ok(repo, "next").splitlines()[-1]
+    assert [line.split()[2] for line in ok(repo, "next").splitlines()] == ["lsm/lq"]
+    ask_ola(repo, "Stop?", "r")
+    assert [line.split()[2] for line in ok(repo, "next").splitlines()] == ["core/cq", "lsm/lq"]
 
 
 def test_busy_branches_reads_the_note_names(tmp_path: Path) -> None:
@@ -315,7 +259,7 @@ def test_waiting_items_are_not_in_flight() -> None:
     records = [rec("w1", "waiting"), rec("w2", "waiting"), rec("w3", "waiting", pipe="lsm"),
                rec("r", "red"), rec("q", "queued", pipe="lsm")]  # fmt: skip
     assert pipes.in_flight(pipes.fold(records)) == 1
-    assert label(choose(records, busy={"worktree-r"})) == "lsm/q"
+    assert label(choose(records)) == "lsm/q"
 
 
 def test_a_waiting_item_is_never_chosen() -> None:
@@ -328,13 +272,13 @@ def test_a_waiting_item_is_never_chosen() -> None:
 def test_unattended_skips_items_that_are_not_plain() -> None:
     records = [rec("governed", "queued", age=2 * HOUR),
                rec("plain", "queued", pipe="lsm", plain=True)]  # fmt: skip
-    assert label(choose(records)) == "core/governed"
+    assert label(choose(records)) == "core/governed lsm/plain"
     assert label(choose(records, unattended=True)) == "lsm/plain"
 
 
 def test_unattended_with_nothing_plain_is_idle(repo: Path) -> None:
     records = [rec("r", "red"), rec("governed", "queued")]
-    assert label(choose(records, busy={"worktree-r"}, unattended=True)) == "IDLE"
+    assert label(choose(records, unattended=True)) == "IDLE"
     append(repo, *records)
     note(repo, "r")
     harness_fixtures.flag_on(repo)
@@ -370,21 +314,15 @@ def test_a_next_with_an_item_names_no_duty(repo: Path) -> None:
 def test_the_fallback_is_taken_when_everything_else_waits() -> None:
     records = [rec("w1", "waiting"), rec("w2", "waiting", pipe="lsm"),
                rec("fb", "queued", pipe="lsm", plain=True, fallback=True)]  # fmt: skip
-    choice = choose(records)
-    assert label(choice) == "lsm/fb"
-    assert "fallback" in choice.reason
+    choices = choose(records)
+    assert label(choices) == "lsm/fb"
+    assert "fallback" in choices[0].reason
 
 
-def test_a_plain_queued_item_beats_the_fallback() -> None:
+def test_a_plain_queued_item_beats_its_pipes_fallback() -> None:
     records = [rec("w1", "waiting"), rec("w2", "waiting", pipe="lsm"),
                rec("fb", "queued", pipe="lsm", plain=True, fallback=True, age=9 * HOUR),
-               rec("q", "queued", plain=True)]  # fmt: skip
-    assert label(choose(records)) == "core/q"
-
-
-def test_steps_2_and_3_skip_a_fallback_even_in_the_first_pipe() -> None:
-    records = [rec("fb", "queued", plain=True, fallback=True),
-               rec("q", "queued", pipe="lsm")]  # fmt: skip
+               rec("q", "queued", pipe="lsm", plain=True)]  # fmt: skip
     assert label(choose(records)) == "lsm/q"
 
 
@@ -506,16 +444,17 @@ def test_an_in_flight_item_is_never_stuck() -> None:
     assert pipes.stuck(items, NOW) == []
 
 
-def test_a_stuck_item_in_a_lower_pipe_goes_before_a_fresh_one() -> None:
-    choice = choose(STUCK_SET)
-    assert label(choice) == "lsm/old"
-    assert "stuck 4 d" in choice.reason
+def test_a_stuck_item_goes_before_its_pipes_head() -> None:
+    stale = [*STUCK_SET, rec("older", "queued", pipe="lsm", age=5 * DAY, rank=1)]
+    choices = choose(stale)
+    assert label(choices) == "core/fresh lsm/older"
+    assert "stuck 5 d" in choices[1].reason
 
 
 def test_the_recap_block_lists_stuck_items_first_with_their_age(repo: Path) -> None:
     append(repo, *STUCK_SET)
     lines = pipes.show_lines(repo, NOW)
-    assert lines[0].startswith("Pipes (in flight 0 of 3")
+    assert lines[0].startswith("Pipes (in flight 0 of 2")
     assert "Stuck:" not in lines  # one table: no `Stuck:` heading, no per-pipe headings
     assert not any(line.startswith(("core (priority", "lsm (priority")) for line in lines)
     rows = table(lines)
@@ -589,11 +528,12 @@ def test_next_prints_one_parseable_line_and_a_busy_line_per_skipped_item(repo: P
     ok(repo, "add", "core", "a", "first")
     ok(repo, "set", "a", "red", "--branch", "worktree-a")
     ok(repo, "add", "core", "b", "second")
+    ok(repo, "add", "lsm", "c", "third")
     held = note(repo, "a")
     lines = ok(repo, "next").splitlines()
     chosen = [line for line in lines if line.startswith("next: ")]
     assert len(chosen) == 1, lines
-    assert chosen[0].startswith("next: 4.2 core/b queued (") and chosen[0].endswith(")")
+    assert chosen[0].startswith("next: 2.1 lsm/c queued (") and chosen[0].endswith(")")
     busy = [line for line in lines if line.startswith("busy: ")]
     assert len(busy) == 1 and busy[0].startswith("busy: 4.1 core/a (") and held.name in busy[0]
     assert len(lines) == len(chosen) + len(busy), lines
@@ -701,7 +641,7 @@ def test_the_recap_prints_the_pipes_after_waiting_on_ola(repo: Path) -> None:
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
     waiting = first_index(lines, "Waiting on Ola:")
-    block = first_index(lines, "Pipes (in flight 1 of 3")
+    block = first_index(lines, "Pipes (in flight 1 of 2")
     assert waiting < block < first_index(lines, "Next on ROADMAP.md:")
 
 
@@ -772,8 +712,8 @@ def test_the_table_has_one_aligned_row_per_open_item(repo: Path) -> None:
     assert [row["ITEM"].split()[0] for row in rows] == ["g", "r", "w", "q", "l"]
     assert len(by_id) == len(rows) and "m" not in by_id
     chosen = [line for line in ok(repo, "next").splitlines() if line.startswith("next: ")]
-    assert chosen and chosen[0].startswith("next: 4.1 core/g ")
-    assert [row["ITEM"].split()[0] for row in rows if row["mark"] == "next"] == ["g"]
+    assert chosen == ["next: 2.1 lsm/l queued (head of its pipe)"]
+    assert [row["ITEM"].split()[0] for row in rows if row["mark"] == "next"] == ["l"]
     assert {i: by_id[i]["WAITING ON"] for i in "rgwql"} == {
         "r": "its agent", "g": "free agent", "w": "Ola", "q": "free agent", "l": "free agent"
     }  # fmt: skip
