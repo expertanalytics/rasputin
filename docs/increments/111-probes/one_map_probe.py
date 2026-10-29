@@ -28,12 +28,12 @@ from pathlib import Path
 
 import numpy as np
 import shapely
+from tin_engine.meshing_rules import load
 from typer.testing import CliRunner
 
 from tin_engine import cli, feature_input
 from tin_engine.feature_input import read_class_polygons, read_polygons, source_region
 from tin_engine.io.domain_file import read_domain
-from tin_engine.meshing_rules import load
 
 HOME = Path.home()
 WORK = HOME / "rasputin-output/mcp/ola/work"
