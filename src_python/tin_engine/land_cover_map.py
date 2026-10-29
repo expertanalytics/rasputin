@@ -32,10 +32,9 @@ from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
 
-# Chosen: the check runs in this many threads over this many groups of
-# equal vertex count, so one polygon of 100 k vertices does not hold a thread
-# while the rest wait.
-THREADS, GROUPS = 8, 32
+# Chosen: the check runs over this many groups of equal vertex count, so one
+# polygon of 100 k vertices does not hold a thread while the rest wait.
+GROUPS = 32
 
 
 @dataclass(frozen=True)
@@ -59,30 +58,34 @@ def build(
     region: Polygon,
     *,
     fix: bool = True,
+    threads: int = 1,
 ) -> LandCoverMap:
     """The map of ``base`` (one sequence of (code, polygon) per file, in the
     order given) with each code of ``preferred`` (replaced code, polygons, as
     `preferred.replace` takes them) taken from its polygons near ``region``.
     With ``fix``, each file's polygons are first cut near ``region`` and
     repaired there (`_fixed`); without it ``base`` is taken as already so,
-    as the ``areas`` of a map built with ``fix`` are."""
+    as the ``areas`` of a map built with ``fix`` are. The check runs in
+    ``threads`` threads."""
     xy = shapely.get_coordinates(region.exterior)
-    fixed = [_fixed(pairs, xy) if fix else (pairs, 0) for pairs in base]
-    areas, overlap = _joined([f for f, _ in fixed])
-    n = sum(r for _, r in fixed)
+    fixed = [_fixed(pairs, xy, threads) if fix else (pairs, 0, set()) for pairs in base]
+    areas, overlap = _joined([(f, far) for f, _, far in fixed])
+    n = sum(r for _, r, _ in fixed)
     if not preferred:
         return LandCoverMap(tuple(areas), classes, None, tuple(overlap), n)
     done = replace(areas, preferred, [region])
     return LandCoverMap(tuple(_refilled_joined(done)), classes, done, tuple(overlap), n)
 
 
-def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64]) -> tuple[Pairs, int]:
+def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64], threads: int) -> tuple[Pairs, int, set[int]]:
     """``pairs`` with each polygon cut to the box of ``xy`` widened by
     `MARGIN`, those the box misses left whole; where a cut is invalid, the
-    polygon repaired instead (`_repaired`), as `repaired_areas` repairs; and
-    the count repaired. Only the cut is checked: checking a whole polygon of
-    hundreds of thousands of vertices takes most of a second, and the cut
-    is all that is ever overlaid."""
+    polygon repaired instead (`_repaired`), as `repaired_areas` repairs; the
+    count repaired; and the indices in the result of those left whole, which
+    `_joined` leaves out of its overlap test (they are never checked, and
+    the edges step counts them outside or keeps a hole of theirs). Only the
+    cut is checked: checking a whole polygon of hundreds of thousands of
+    vertices takes most of a second, and the cut is all that is overlaid."""
     box = (*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
     shapes = np.array([g for _, g in pairs], dtype=object)
     cut, bad = np.empty(len(pairs), dtype=object), np.zeros(len(pairs), dtype=bool)
@@ -94,38 +97,45 @@ def _fixed(pairs: Pairs, xy: npt.NDArray[np.float64]) -> tuple[Pairs, int]:
         cut[ix] = shapely.clip_by_rect(shapes[ix], *box)
         bad[ix] = ~shapely.is_valid(cut[ix])
 
-    with ThreadPoolExecutor(THREADS) as pool:
+    with ThreadPoolExecutor(max(threads, 1)) as pool:
         list(pool.map(check, groups))
-    out, n = [], 0
+    out: list[tuple[int, BaseGeometry]] = []
+    n, far = 0, set[int]()
     for (code, g), c, suspect in zip(pairs, cut, bad, strict=True):
         fixed = _repaired(g, xy) if suspect else g if c.is_empty else c
         n += bool(suspect) and fixed is not g
         if fixed is not None:
+            if c.is_empty:
+                far.add(len(out))
             out.append((code, fixed))
-    return out, n
+    return out, n, far
 
 
 def _joined(
-    base: Sequence[Pairs],
+    base: Sequence[tuple[Pairs, set[int]]],
 ) -> tuple[list[tuple[int, BaseGeometry]], list[tuple[int, BaseGeometry]]]:
     """The files' polygons, a later one less what it shares with earlier
-    ones (pairs that only touch share none); and each area cut, with the
-    index of the file that kept it."""
-    kept: list[tuple[int, BaseGeometry]] = list(base[0]) if base else []
+    ones (pairs that only touch share none, nor pairs with a polygon of a
+    file's ``far`` indices); and each area cut, with the index of the file
+    that kept it."""
+    kept: list[tuple[int, BaseGeometry]] = list(base[0][0]) if base else []
+    far_kept = [i in base[0][1] for i in range(len(kept))] if base else []
     owner = [0] * len(kept)
     overlap: list[tuple[int, BaseGeometry]] = []
-    for j, pairs in enumerate(base[1:], start=1):
+    for j, (pairs, far) in enumerate(base[1:], start=1):
         hits: dict[int, list[int]] = defaultdict(list)
         if kept and pairs:
             shapes = np.array([g for _, g in kept], dtype=object)
             later = np.array([g for _, g in pairs], dtype=object)
-            found = shapely.STRtree(shapes).query(later, predicate="intersects")
-            for i, k in zip(*found, strict=True):
+            ks = np.flatnonzero(~np.array(far_kept, dtype=bool))
+            ls = np.array(sorted(set(range(len(pairs))) - far), dtype=np.intp)
+            found = shapely.STRtree(shapes[ks]).query(later[ls], predicate="intersects")
+            for i, k in zip(ls[found[0]], ks[found[1]], strict=True):
                 shared = shapely.intersection(later[i], shapes[k])
                 if shared.area > 0:
                     hits[int(i)].append(int(k))
                     overlap.append((owner[k], shared))
-        added = []
+        added, flags = [], []
         for i, (code, polygon) in enumerate(pairs):
             if i in hits:
                 polygon = later[i].difference(shapely.union_all([shapes[k] for k in hits[i]]))
@@ -138,7 +148,9 @@ def _joined(
                     continue
                 polygon = parts[0] if len(parts) == 1 else MultiPolygon(parts)
             added.append((code, polygon))
+            flags.append(i in far)
         kept += added
+        far_kept += flags
         owner += [j] * len(added)
     return kept, overlap
 
