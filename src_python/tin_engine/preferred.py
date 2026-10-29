@@ -6,8 +6,10 @@ Each preferred polygon that meets a triangle takes its class; it is cut out of
 every base polygon, and an earlier source's polygons are cut out of a later
 one's. The base polygons of a replaced class are dropped: each connected piece
 left of them takes the class of the kept base polygons sharing the longest
-border with it (a tie: the lower code), and a piece with no such neighbour is
-left out, uncovered. Pure: shapely geometry and arrays in, no file, no CRS.
+border with it (a tie: the lower code). A piece with no such neighbour inside
+a preferred polygon's outer ring (in a hole: an island) takes the class of the
+nearest kept polygon; any other is left out, uncovered. Pure: shapely geometry
+and arrays in, no file, no CRS.
 """
 
 from __future__ import annotations
@@ -142,8 +144,30 @@ def replace(
         [(base[i][0], p) for i, g in cut if base[i][0] in replaced for p in shapely.get_parts(g)]
     )
     classes = _neighbours([p for _, p in left], [(c, g) for _, c, g in kept]) if left else []
-    refilled = [(c, p, n) for (c, p), n in zip(left, classes, strict=True) if n is not None]
-    return Replaced(kept, preferred, refilled)
+    pairs = list(zip(left, classes, strict=True))
+    refilled = [(c, p, n) for (c, p), n in pairs if n is not None]
+    lone = [(c, p) for (c, p), n in pairs if n is None]
+    return Replaced(kept, preferred, refilled + _islands(lone, preferred, kept))
+
+
+def _islands(
+    lone: Pairs, preferred: Pairs, kept: Sequence[tuple[int, int, BaseGeometry]]
+) -> list[tuple[int, BaseGeometry, int]]:
+    """Each piece of ``lone`` inside a preferred polygon's outer ring (in a
+    hole: an island) with the class of the nearest kept polygon (a tie: the
+    lower code), as refilled pieces."""
+    if not lone or not kept:
+        return []
+    shells = shapely.polygons(
+        shapely.get_exterior_ring(shapely.get_parts(_array([g for _, g in preferred])))
+    )
+    points = shapely.point_on_surface(_array([p for _, p in lone]))
+    held = np.unique(shapely.STRtree(shells).query(points, predicate="within")[0])
+    tree = shapely.STRtree(_array([g for _, _, g in kept]))
+    codes: dict[int, set[int]] = defaultdict(set)
+    for k, j in zip(*tree.query_nearest(_array([lone[k][1] for k in held])), strict=True):
+        codes[int(held[k])].add(kept[j][1])
+    return [(lone[k][0], lone[k][1], min(c)) for k, c in codes.items()]
 
 
 def areas_inside(

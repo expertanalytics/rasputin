@@ -54,10 +54,15 @@ from class_fixtures import KEY
 from cli_helpers import USAGE, squashed
 from feature_fixtures import Feat, classes, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, domain_ring
+from gpkg_fixtures import Layer, write_gpkg
+from gpkg_fixtures import Row as GpkgRow
 from legend_fixtures import coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson
 from test_cli_mesh_cells import check_sums, column, corners, mesh, scene, written
 from test_cli_mesh_reservoirs import (
+    RESERVOIRS_KEY,
+    install_reservoirs,
+    layer_entry,
     oracle_r,
     phases,
     record,
@@ -389,4 +394,48 @@ def test_14_prefer_refuses_a_thin_spike_with_no_traceback(
     flat = squashed(output)
     assert "cannotberepaired" in flat and "--prefer" in flat, output
     assert "Traceback" not in output, output
+    assert not target.exists()
+
+
+# ------------------------------------------------------------ a source with no polygon here
+
+
+def far_lake() -> Polygon:
+    """A lake 20 km south of the scene: no polygon meets the read region."""
+    x0, y0 = dem_origin()
+    return box(x0 + 1000.2, y0 - 20800.6, x0 + 1700.7, y0 - 20000.3)
+
+
+def test_a_preferred_file_with_no_polygon_here_is_refused_naming_it_and_the_box(
+    scene: dict[str, Path], tmp_path: Path, cover: Path
+) -> None:
+    """Bygdin, 2026-10-29: a preferred source with no polygon near the domain
+    replaced all the water with land and the mesh was written. Refused: a
+    usage error naming --prefer, the source, the read region's box and its CRS."""
+    lake = write_lake(tmp_path / "lake.geojson", far_lake())
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"))
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "--prefer" in flat and "lake.geojson" in flat and "nopolygon" in flat, output
+    assert MESH_CRS.replace(" ", "") in flat, output
+    assert not target.exists()
+
+
+def test_a_cached_source_never_fetched_here_is_refused_naming_the_fetch(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Bygdin case itself: the cache holds only lakes fetched for another
+    region. mesh never fetches, so the refusal names the `rasputin fetch`
+    that copies the source for this run's domain."""
+    layers = [Layer("features", 31983, [GpkgRow(1, far_lake(), {"magasinNr": "1"})], pk="ID")]
+    (scene["cache"] / RESERVOIRS_KEY).mkdir(parents=True)
+    write_gpkg(scene["cache"] / RESERVOIRS_KEY / "features.gpkg", layers)
+    install_reservoirs(monkeypatch, layer_entry())
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={RESERVOIRS_KEY}"))
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert "--prefer" in flat and "nopolygon" in flat, output
+    assert f"rasputinfetch{RESERVOIRS_KEY}--domain" in flat, output
     assert not target.exists()
