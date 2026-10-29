@@ -2,9 +2,8 @@
 
 **Status: built** (red `bce16583`, green `a8246816`, code review round 1's fixes `6cd8bea3` and `77b3def6`; at `77b3def6`, 19 net production lines, 1,057 added and 1,038 removed, by `tools/count_loc.py 75ab2b4f 77b3def6`; full suite 11,232 passed, 18 skipped, 1 xfailed; README, INSTALL, GLOSSARY and `project_structure.md` reworded; next `@reviewer`'s code review round 2). Design round 10 (section 3, *What every polygon in the map is*; tests 12 and 13) replaces rounds 7 to 9's polygon rule, before more code: each polygon reaching the read box is repaired whole, as master repairs on read, then cut with `shapely.intersection`. Design round 11 closes round 10's
 review: a rebuild that raises is refused inside `_repaired` on all three
-paths (section 3, step 6), and the shares' `subdivide` cuts with
-`shapely.intersection` (pipe item `fractions-intersection`, which round 10 left out, taken in; section
-3, *The pieces the shares cut by*). Under h39 (the harness change by which a design fix after a review goes to code review, not to another design review; approved by Ola 2026-10-29,
+paths (section 3, step 6). The shares' area loss in `subdivide` stays out
+(Ola 2026-10-29, "split"; pipe item `fractions-intersection`). Under h39 (the harness change by which a design fix after a review goes to code review, not to another design review; approved by Ola 2026-10-29,
 not yet merged) it has no design review round: code review checks it.
 Designed, approved in design review round 6, section 8 (the Python interface and the wordings tests read) added for the test migration, by `@architect`, 2026-10-28, on master `75ab2b4f`,
 worktree `land-cover-edges`. One PR, full loop, Python only. Number 111: 110
@@ -270,14 +269,10 @@ bounding box misses the read box, where master spends most of its check
      the base is `areas`, and the cutters are preferred polygons, both
      valid. A lake reaching an outside bowtie cuts nothing outside.
   3. `preferred._neighbours`' `subdivide`: the kept polygons come from
-     `_cut` of valid polygons, and `subdivide` cuts them with
-     `shapely.intersection` (*The pieces the shares cut by*, below).
+     `_cut` of valid polygons.
   4. `_refilled_joined`'s `union_all`: kept polygons and refilled pieces,
      all from valid overlays.
-  5. `areas_inside` (from `_prefer_record`): `land.base.areas`, valid, cut
-     into pieces by `subdivide` as in step 3. Until round 11 its rectangle
-     clip lost area on valid polygons (below), so the record's replaced
-     area could come out short.
+  5. `areas_inside` (from `_prefer_record`): `land.base.areas`, valid.
   6. The edges step's ring test: reads `outside` by rings and boundaries
      only. A predicate on a ring is safe on any ring.
   7. `_overlap_record`: the overlap pieces are intersections of valid pairs.
@@ -287,9 +282,15 @@ bounding box misses the read box, where master spends most of its check
      ("TopologyException: unable to assign free hole to a shell").
      Probed on tree `435d407b`. It now gets `areas` only.
   9. The shares, `assign_polygon_fractions(map.areas)` in `cli.py`: it gets
-     `areas` only, and cuts them into pieces as in step 3.
+     `areas` only.
   10. `label_triangles` over the pre-clip path's polygons: an outside
       feature has none.
+
+  Out of scope (Ola 2026-10-29, "split", section 7): `subdivide`'s
+  `clip_by_rect` can still lose area on valid polygons, so the shares
+  (step 9) and `areas_inside` (step 5) can come out short (design review
+  round 10: 10 of 2,817 synthetic polygons, up to 57,515 m²). Pipe item
+  `fractions-intersection` fixes it, after `core-assumes-clean`.
 
   *Known faults of the repair, left to the cleaning plugin:*
   - `_repaired` and `make_valid` differ on a hole that encloses its shell:
@@ -311,43 +312,6 @@ bounding box misses the read box, where master spends most of its check
     each traceback into a refusal. None of the four real cases holds one:
     their 11 invalid polygons reaching the box (Sula 4, Bygdin 7) all
     rebuild.
-
-- **The pieces the shares cut by** (design round 11; pipe item
-  `fractions-intersection`, taken in). `polygon_fractions.subdivide`
-  halves a polygon with `shapely.clip_by_rect`, and with
-  `shapely.intersection` only when the halves' areas miss the piece's. Round
-  10's review found the rectangle clip losing area on valid polygons the
-  area test does not catch (10 of 2,817 synthetic polygons, up to
-  57,515 m²); the reviewer's case (test 15) gives valid pieces 27,083 m²
-  short of a 1,217,500 m² polygon at `most = 8`. `assign` (the shares) and
-  `areas_inside` (the `--prefer` record) sum over those pieces. Round 11
-  halves with `shapely.intersection` only, the overlay section 3 already
-  trusts on valid polygons: each half's parts, a collection's parts taken
-  again (a GeometryCollection may hold a MultiPolygon), its non-empty
-  Polygons kept. `AREA` and the fallback go.
-  Cut one polygon at a time, `shapely.intersection` costs 5.5 times the
-  clip (scratch `a11_subdiv_real.py`, tree `c5cd80c6`, battery, best of
-  three, one thread: Numedalslågen's 7,237 areas 774 against 4,279 ms;
-  Lagan's 7,147, 553 against 2,894 ms). So the new
-  `pieces(polygons, most, threads)` halves every polygon level by level:
-  each level's parts cut in one vectorised `shapely.intersection` call,
-  split over `threads` threads as `_fixed` splits its check (scratch
-  `a11_levels_real.py`): Numedalslågen 3,697 / 1,206 / 768 ms on 1 / 4 /
-  10 threads, Lagan 2,679 / 885 / 606 ms: on this machine's 10 cores about
-  what one thread costs today (768 against 774 ms; 606 against 553 ms). Same piece count as intersection one at a time (41,188 and
-  26,700), every piece valid (today's clip gives 93 and 2 invalid pieces
-  there), and no polygon's pieces off its area by more than 1e-9 of it, on
-  either variant. `subdivide(polygon, most)` stays, as `pieces([polygon],
-  most)[0]`; `assign` takes `threads` (the CLI passes `--threads`, as to
-  `build`); `_neighbours` and `areas_inside` keep `subdivide`, one thread
-  (Numedalslågen's 964 class-512 areas, what `--prefer lake=` replaces:
-  52 ms today, 151 ms; scratch `a11_lakes.py`). With the existing tests of
-  `test_polygon_fractions.py`, `test_preferred.py`,
-  `test_land_cover_overlap.py`, `test_cli_mesh_prefer.py` and
-  `test_land_cover_map.py` run against the level-by-level `subdivide`
-  patched in (scratch `a11_plugin.py`), all 117 pass; planted check: a
-  `subdivide` dropping one piece fails 17 of `test_polygon_fractions.py`'s
-  39.
 
   *Cost and effect on real data* (scratch `r10_time.py` and
   `r10_terms.py`, tree `492f5d8c`, battery power: compare only with battery
@@ -810,53 +774,13 @@ line figures below as round 2 measured them.
       "Traceback". `--reservoirs` reads through the same `read_polygons`,
       so the unit case covers it; no CLI case (its read box is the mesh's
       vertices, which the test would have to pin first).
-15. The pieces the shares cut by (section 3; design round 11). The polygon
-    (round 10 reviewer's scratch `rb_subdiv_ex.wkt`, valid, one hole,
-    71 coordinates, 1,217,500 m², bounds (−750, −850) to (950, 950)):
 
-    ```
-    POLYGON ((450 -150, 650 -200, 800 -400, 450 -250, 750 -450, 700 -450,
-    600 -550, 500 -450, 350 -350, 250 -350, 200 -550, 150 -450, 100 -400,
-    50 -600, 50 -550, -150 -850, -200 -600, -200 -400, -250 -350, -350 -450,
-    -450 -550, -600 -700, -550 -500, -250 -200, -700 -550, -350 -250,
-    -700 -400, -700 -300, -300 -100, -450 -150, -450 0, -500 50, -450 50,
-    -750 150, -600 150, -350 200, -650 400, -300 300, -600 800, -450 600,
-    -400 550, -300 550, -150 300, -150 350, -250 500, -350 750, -300 750,
-    -200 900, 0 450, 150 950, 50 300, 200 800, 200 500, 400 750, 250 400,
-    550 650, 550 600, 250 300, 350 300, 600 550, 300 100, 700 250, 950 150,
-    650 100, 950 50, 450 -150), (50 50, -50 50, -50 -50, 50 -50, 50 50))
-    ```
-
-    Measured on tree `c5cd80c6` (scratch `a11_fixture.py`,
-    `a11_fixture2.py`), the round-11 rule patched in for the new figures:
-    - `subdivide(P, most=8)`: the pieces' areas total 1,217,500 m² to
-      1e-9 of it, every piece valid, at most 8 coordinates, no two pieces
-      sharing area (66 pieces under the rule; not pinned). Red today: 64
-      valid pieces totalling 1,190,416.67 m².
-    - `assign` over two triangles splitting P's bounding box (vertices its
-      four corners, triangles (0, 1, 2) and (0, 2, 3)), `known=[311]`,
-      `most=8`: class 311's share 577,515.36 / 1,530,000 = 0.377461 in the
-      first triangle and 639,984.64 / 1,530,000 = 0.418291 in the second,
-      each ±1e-6 (float32). Red today: 0.359759 in the first.
-    - `pieces([P, STRIP], most=8, threads=4)` equals `pieces([P, STRIP],
-      most=8, threads=1)` piece by piece (`shapely.equals_exact`, 0), and
-      `pieces([P], 8)[0]` is `subdivide(P, 8)`'s list.
-    - `areas_inside` takes its pieces from `subdivide` (no test of its own:
-      P loses no area at its `most = 64`, and no polygon that does was
-      found in 257 valid tries, scratch `a11_find64.py`).
-    - The existing `test_polygon_fractions.py` cases stand (section 3: all
-      pass under the rule). `polygon_fractions.AREA` and the docstring's
-      "`shapely.intersection` where the clip loses area" go; no test reads
-      them (the suite's own `AREA = 1e-9` is its bound, and stays).
-
-*Functions the tests call* (tests 12 to 15; section 8 has the
+*Functions the tests call* (tests 12 to 14; section 8 has the
 signatures): `land_cover_map.build`; `feature_input._repaired(geometry,
 xy, *, what=...)`, `feature_input.read_polygons`,
 `feature_input.edges_of`, `feature_input.read_class_polygons`,
-`feature_input.FeatureError`; `polygon_fractions.subdivide`,
-`polygon_fractions.pieces`, `polygon_fractions.assign(..., threads=)`;
-`preferred.replace`, `preferred.areas_inside`; through the CLI, `rasputin
-mesh` by `test_cli_mesh_prefer.py`'s `mesh` helper and
+`feature_input.FeatureError`; `preferred.replace` (test 12's round-4 run
+reaches it through the CLI); through the CLI, `rasputin mesh` by `test_cli_mesh_prefer.py`'s `mesh` helper and
 `test_cli_mesh_edges.py`'s runs; and `test_feature_input.py`'s `one` and
 `open_one`.
 
@@ -864,12 +788,11 @@ mesh` by `test_cli_mesh_prefer.py`'s `mesh` helper and
 
 Net production lines: round 2 estimated about 300 fewer; code review round
 1 counted +14, and the branch stands at +59 (design review round 10). Round
-11 adds about 25, estimated, not counted: `_repaired`'s catch and `what`
+11 adds about 11, estimated, not counted: `_repaired`'s catch and `what`
 (about 6), `read_polygons` keeping fids (2), the CLI's `try` around `build`
-(3), `pieces` level by level less `subdivide`'s loop and `AREA` (about 12),
-`assign`'s `threads` (2). Round 10's `_fixed` (repair whole, then
-`shapely.intersection`) is not yet built and not counted here, a rewrite
-of one function. About +85 plus that rewrite, far under the 700 limit. Tests change widely (about 270
+(3). Round 10's `_fixed` (repair whole, then `shapely.intersection`) is not
+yet built and not counted here, a rewrite of one function. About +70 plus
+that rewrite, far under the 700 limit. Tests change widely (about 270
 `--features` invocations), all mechanical.
 
 *Timing, border-following runs.* The quick check's stored baseline
@@ -929,17 +852,12 @@ one thread, round 10 is faster: 539 against 3,478 ms on Numedalslågen.
 *Timing, the shares.* What `--land-cover` costs today, in the runs that
 compute them (section 3): round 2's run measured 22.8 s of shares on Numedalslågen and 52 s on Lagan
 (653,039 triangles on Numedalslågen), the polygon read with its validity
-check included. Round 11 changes one term in it, the pieces: on 10
-threads 768 against 774 ms on Numedalslågen and 606 against 553 ms on
-Lagan (section 3, *The pieces the shares cut by*), within noise of 22.8 s
-and 52 s; on one thread 2.9 s and 2.2 s more (13 % and 4 %). The triangle
-cuts after it are unchanged, on 28 fewer pieces on Numedalslågen. The
-`--prefer` record's `areas_inside` adds about 0.1 s on Numedalslågen's
-lakes. No gate: the quick check's cases compute no shares.
+check included.
 
 No `@perf` acceptance run (no refine or mesh code). Left out: fetching line
 layers from the catalogue (the ideas entry above); shares in cut runs;
-faster class shares.
+faster class shares; `subdivide`'s area loss (pipe item
+`fractions-intersection`, section 3).
 
 ## 7. Questions for Ola
 
@@ -947,6 +865,13 @@ Answered, 2026-10-28: (1) the sources-file key `rules` becomes `classes`
 (section 2). (2) Rivers, and roads the same way, without a land-cover map:
 `--lines` (section 3). (3) No slowdown for a run that follows borders: it
 computes no shares unless `--shares` asks (sections 3 and 6).
+
+Answered, 2026-10-29: whether the shares' `subdivide` fix (pipe item
+`fractions-intersection`, taken in by design round 11) stays in 111 or
+leaves it. Ola, verbatim: "split". It leaves: 111 keeps the refusal of a
+rebuild that raises; repair leaves the core in items 1.6 (the private
+cleaning plugin) and 1.7 (`core-assumes-clean`, the core assumes clean
+data).
 
 Open:
 
@@ -1091,24 +1016,16 @@ CLI passes None).
   image. It takes no `crs`: no `--lines-crs` (section 3).
 - The repair is `build`'s (section 3), counted in `LandCoverMap.repaired`;
   its stderr line stays `_say_repaired("land cover", ...)`'s.
-- Design round 11 (section 3, step 6, and *The pieces the shares cut by*):
+- Design round 11 (section 3, step 6):
 
   ```python
   # feature_input
   def _repaired(geometry: BaseGeometry, xy: npt.NDArray[np.float64], *,
                 what: str = "a polygon") -> BaseGeometry | None
       # FeatureError "<what> near (x, y) in the DEM's CRS cannot be repaired: ..."
-  # polygon_fractions
-  def pieces(polygons: Sequence[BaseGeometry], most: int = 64, *,
-             threads: int = 1) -> list[list[BaseGeometry]]   # per polygon, in order
-  def subdivide(polygon: BaseGeometry, most: int = 64) -> list[BaseGeometry]
-      # pieces([polygon], most)[0]; most below 8 a ValueError, as today
-  def assign(vertices, triangles, polygons, *, known, most: int = 64,
-             threads: int = 1) -> Assigned
   ```
 
-  `read_polygons`' signature is unchanged. `pieces` checks `most` as
-  `subdivide` does.
+  `read_polygons`' signature is unchanged.
 - `edges_of` is pure. A chosen area's mask is `land_cover`, plus `water`
   when its code is in `water_codes`; its `TerrainFeature` keeps `code` and
   its cleaned polygon (for `label_triangles`), `fid` its index in
