@@ -2,7 +2,7 @@
 
 One reading path for every GeoJSON input: :func:`read_collection` turns a
 parsed document into its features and the text of its CRS, for `--domain`,
-`--features`, `catchment --lakes` and the station, reference, river and NVE
+`--land-cover`, `--prefer`, `--lines`, `catchment --lakes` and the station, reference, river and NVE
 lake files. The `crs` member is
 GeoJSON 2008's named CRS; a file without one is RFC 7946's WGS 84 where the
 caller allows a default, and a null member is refused whatever the default.

@@ -103,5 +103,5 @@ def fixture_v(directory: Path) -> tuple[Path, Path]:
 
 
 def fits_of(entry: dict[str, Any]) -> set[tuple[str, str, str | None]]:
-    """A listed source's fits as (command, option, rules)."""
-    return {(f["command"], f["option"], f.get("rules")) for f in entry["fits"]}
+    """A listed source's fits as (command, option, land-cover class file)."""
+    return {(f["command"], f["option"], f.get("classes")) for f in entry["fits"]}

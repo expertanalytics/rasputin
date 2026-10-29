@@ -393,14 +393,6 @@ MESH_SNAPSHOTS: dict[str, dict[str, Any]] = {
         "description": "Binary files, small and fast; --ascii writes text you can read.",
         "type": "boolean",
     },
-    "features": {
-        "anyOf": [{"items": STRING, "type": "array"}, {"type": "null"}],
-        "default": None,
-        "description": "With --domain, polygons and lines as constraints (.geojson, .json, "
-        ".gpkg or .gml), clipped to the domain, each edge carrying its meshing rules' bits. "
-        "Repeatable: each --features is one source, paired by position with the Nth of "
-        "--features-crs, --features-layer and --features-rules.",
-    },
     "snap_spacing": {
         "default": 0.001,
         "description": "Snap grid spacing for the noder, in the input's units.",
@@ -440,6 +432,21 @@ class TestTheRealApp:
         bbox = properties["bbox"].pop("description")
         assert "snapped outward to the DEM's nodes" in bbox, bbox
         assert {k: properties[k] for k in MESH_SNAPSHOTS} == MESH_SNAPSHOTS
+
+    def test_mesh_edges_and_out_edges_say_what_they_are(self) -> None:
+        """`docs/increments/111-one-land-cover-map.md`, section 3: `--edges`
+        (repeatable) says "which borders and lines the mesh must follow";
+        `--out-edges` says "write the mesh's edges to this PLY". `features`
+        is gone (its snapshot with it)."""
+        properties = without_titles(derived(app)["mesh"].tool().input_schema["properties"])
+        edges = properties["edges"]
+        assert edges["anyOf"] == [{"items": STRING, "type": "array"}, {"type": "null"}], edges
+        assert edges["default"] is None
+        assert "which borders and lines the mesh must follow" in edges["description"].lower(), edges
+        assert (
+            "write the mesh's edges to this ply" in properties["out_edges"]["description"].lower()
+        )
+        assert "features" not in properties
 
     def test_an_integer_range_carries_its_minimum(self) -> None:
         connections = derived(app)["fetch"].tool().input_schema["properties"]["connections"]

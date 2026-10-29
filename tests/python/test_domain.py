@@ -619,7 +619,7 @@ class TestRefusals:
     def test_a_utf8_byte_order_mark_is_skipped(
         self, domain_file: ModuleType, tmp_path: Path, wrap: str
     ) -> None:
-        """Audit PR C, red test 4: `--domain` decodes a file as `--features`
+        """Audit PR C, red test 4: `--domain` decodes a file as `--land-cover`
         and the station files do (`repository.read_json`), and RFC 8259
         section 8.1 lets a parser ignore the mark. Before: `Unexpected UTF-8
         BOM`."""

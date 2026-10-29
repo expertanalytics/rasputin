@@ -4,8 +4,8 @@
 (E1-E3, E7), L8 and "Tests for @tester" (PY3, PY4, PY5).
 
 - **PY3, the projected path.** A synthetic GeoTIFF (non-square 10 x 5 m
-  cells, rough relief), a domain with off-node corners and one polygon
-  feature. The strip oracle (`strip_oracle.py`) is built from the **input
+  cells, rough relief), a domain with off-node corners and one polygon's
+  ring, given as a `--lines` river. The strip oracle (`strip_oracle.py`) is built from the **input
   polygons**: their crossings with the DEM's grid lines, z from the DEM array,
   measured against the written constraint lines. The midpoints between
   neighbouring crossings are ruled along the strip run's start edges (an
@@ -63,7 +63,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 
 import tin_engine.cli as cli
 from cli_helpers import USAGE, geojson, plain, runner
@@ -242,10 +242,12 @@ def projected_scene(tmp: Path, array: np.ndarray, *, nodata: str | None = None) 
     dem = tmp / "dem.tif"
     dem.write_bytes(micro_tiff(array, nodata=nodata).getvalue())
     domain = geojson(tmp / "domain.geojson", DOMAIN)
-    features = write_geojson(
-        tmp / "features.geojson", [Feat("lake", Polygon(FEATURE), {"property": "water"})]
-    )
-    return ["--dem", str(dem), "--domain", str(domain), "--features", str(features)]
+    ring = LineString(Polygon(FEATURE).exterior.coords)
+    features = write_geojson(tmp / "features.geojson", [Feat("lake", ring, {})])
+    return [
+        *("--dem", str(dem), "--domain", str(domain)),
+        *("--lines", f"river={features}", "--edges", "river"),
+    ]
 
 
 @pytest.fixture(scope="module")

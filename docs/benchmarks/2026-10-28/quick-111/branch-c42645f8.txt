@@ -1,0 +1,14 @@
+23:20  up 13 days, 16:09, 5 users, load averages: 2.58 3.85 5.53
+Now drawing from 'AC Power'
+SLOWER: numedalslagen decode 0.90 -> 0.95 s (+5.8 %, band 5.0 %)
+HOTSPOT: tile refine 44 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen edges: clean-up 66 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 42 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+baseline saved: /Users/skavhaug/projects/rasputin/.claude/worktrees/land-cover-edges/docs/benchmarks/quick/baseline-apple-m1-max-ac.json
+SLOWER
+exit 1
+Now drawing from 'AC Power'

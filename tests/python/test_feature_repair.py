@@ -1,4 +1,4 @@
-"""The land-cover stage of ``open_features``: repair, merge and simplify (20c-3).
+"""The land-cover stage of ``edges_of``: repair, merge and simplify (20c-3).
 
 ``docs/increments/20c-soft-quality.md``, "Design of PR 20c-3" (steps 1 to 3,
 "Where it sits", "Off") and "Tests ``@tester`` writes red first", 20c-3: RP1
@@ -18,12 +18,13 @@ resolves about 1e-9 m; the fixtures span at most 200 m, except RP7's
 
 PINNED HERE, where the design leaves it open (listed for ``@architect``):
 
-- ``FeatureRequest`` carries the four switches as ``repair_m: float``,
+- ``EdgeCleanup`` carries the four switches as ``repair_m: float``,
   ``merge_same_class: bool``, ``tolerance_m: float`` and
   ``outline_snap_m: float``, each defaulting to OFF (0.0, False, 0.0,
   0.0): the library default is today's path, and the CLI supplies the
-  run defaults (1, on, 0, 5). So every older ``open_features`` test,
-  which builds a request without them, keeps today's output.
+  run defaults. The fixtures run through ``feature_fixtures.open_one``
+  (``read_class_polygons``, ``build``, ``edges_of``; increment 111,
+  section 8), where an area's ``fid`` is its index in the map.
 - The label polygon after the stage is ``TerrainFeature.polygon``, in
   source order; with the merge off, one feature per input polygon.
 - An overlap is given to the smaller polygon (16c's D2, "the smallest
@@ -33,8 +34,11 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
 - RP1's third polygon has a straight side through both slit corners, so the
   "two thin triangles the moved corner sweeps" on it have zero area here,
   and the moved area is the wedge's alone.
-- A merged polygon's feature keeps the first fid of its class in source
-  order; the order of the remaining features is not asserted.
+- A merged polygon's feature keeps the first fid (index) of its class in
+  source order; the order of the remaining features is not asserted.
+- Two ``--land-cover`` files are one map, cleaned as one coverage
+  (increment 111, section 3), so RP4's 1 cm gap between two files is
+  repaired as within one.
 
 RED at the commit that adds this file: ``FeatureRequest`` forbids extra
 fields, so every request with a switch is refused by Pydantic.
@@ -112,16 +116,11 @@ def box(x0: float, y0: float, x1: float, y1: float) -> Polygon:
 BIG = domain_of(box(-70, -70, 200, 70))
 
 
-def request(fi: ModuleType, *paths: Path, map_name: str = "corine", **switches: Any) -> Any:
-    sources = tuple(ff.source(p, map_name) for p in paths)
-    return fi.FeatureRequest(sources=sources, **{**OFF, **switches})
-
-
 def opened(
     fi: ModuleType, tmp_path: Path, features: list[Feat], domain: Any = BIG, **switches: Any
 ) -> Any:
     path = write_geojson(tmp_path / "cover.geojson", features)
-    return fi.open_features(request(fi, path, **switches), domain, UTM33)
+    return ff.open_one(path, domain, "corine", switches={**OFF, **switches})
 
 
 def labels(fs: Any) -> list[BaseGeometry]:
@@ -184,7 +183,7 @@ class TestTheSlit:
 
     def test_rp1_at_5_cm_the_slit_is_repaired(self, fi: ModuleType, tmp_path: Path) -> None:
         fs = opened(fi, tmp_path, slit_features(), repair_m=S)
-        assert [f.fid for f in fs.features] == [1, 2, 3, 4]
+        assert [f.fid for f in fs.features] == [0, 1, 2, 3]
         got = labels(fs)
         assert holes(got) == []
         shared = shapely.intersection(got[0], got[1])
@@ -230,18 +229,18 @@ class TestEmptied:
 
     def test_g6e_the_premise_at_0_c_stays(self, fi: ModuleType, tmp_path: Path) -> None:
         fs = opened(fi, tmp_path, self.features(), repair_m=0.0, merge_same_class=True)
-        assert [f.fid for f in fs.features] == [1, 2, 3, 4, 5]
+        assert [f.fid for f in fs.features] == [0, 1, 2, 3, 4]
         assert (fs.outside, fs.empty) == (0, 0)
 
     def test_g6e_the_emptied_polygon_is_counted_empty(self, fi: ModuleType, tmp_path: Path) -> None:
         fs = opened(fi, tmp_path, self.features(), repair_m=S)
-        assert [f.fid for f in fs.features] == [1, 2, 4, 5]  # the premise: C emptied
+        assert [f.fid for f in fs.features] == [0, 1, 3, 4]  # the premise: C emptied
         assert (fs.outside, fs.empty) == (0, 1)
 
 
 class TestTheOrder:
     """RP6: repair before simplifying. Two vertices 4.5 mm off A's straight
-    border, at a third and two thirds of it, with ``--features-tolerance 2``:
+    border, at a third and two thirds of it, with ``--edges-tolerance 2``:
     repaired first, A's and B's borders are one shared border of four
     vertices, and its one collapse drops both; simplified first, A's border is
     a side of the gap, used by one ring, so fixed (increment 32, section 6's
@@ -325,35 +324,28 @@ class TestWhatStays:
             shapely.get_num_coordinates(g) for g in inputs
         ]
 
-    def test_rp4_one_source_at_a_time(self, fi: ModuleType, tmp_path: Path) -> None:
-        """Two sources, one polygon each, 1 cm apart: the gap stays."""
+    def test_rp4_two_files_are_one_coverage(self, fi: ModuleType, tmp_path: Path) -> None:
+        """Two `--land-cover` files, one polygon each, 1 cm apart: one map,
+        so the gap is repaired as within one file; at S = 0 it stays."""
         a, b = box(0, 0, 50, 50), box(50.01, 0, 100, 50)
         joined = shapely.coverage_clean(
             np.array([a, b], dtype=object), snapping_distance=S, gap_width=S
         )
-        assert shapely.distance(*joined) == 0.0  # the premise: in one source they would join
+        assert shapely.distance(*joined) == 0.0  # the premise: in one coverage they join
         pa = write_geojson(tmp_path / "a.geojson", [coded(1, a, "311")])
         pb = write_geojson(tmp_path / "b.geojson", [coded(2, b, "312")])
-        fs = fi.open_features(request(fi, pa, pb, repair_m=S), BIG, UTM33)
-        same(fs, [a, b])
-        assert shapely.distance(*labels(fs)) == pytest.approx(0.01, abs=1e-6)
-
-    def test_rp5_a_map_without_codes_is_not_land_cover(
-        self, fi: ModuleType, tmp_path: Path
-    ) -> None:
-        """The slit under the ``property`` map, with the repair and the merge
-        on: the same lines as with everything off, and no label polygons."""
-        feats = [Feat(i + 1, p, {"property": "land_cover"}) for i, p in enumerate(slit())]
-        path = write_geojson(tmp_path / "p.geojson", feats)
-        on = fi.open_features(
-            request(fi, path, map_name="property", repair_m=S, merge_same_class=True), BIG, UTM33
-        )
-        off = fi.open_features(request(fi, path, map_name="property"), BIG, UTM33)
-        assert [f.fid for f in on.features] == [f.fid for f in off.features] == [1, 2, 3, 4]
-        for f, g in zip(on.features, off.features, strict=True):
-            assert f.polygon is None and g.polygon is None
-            assert len(f.lines) == len(g.lines)
-            assert all(shapely.equals_exact(x, y, 0) for x, y in zip(f.lines, g.lines, strict=True))
+        known, region = ff.classes("corine"), ff.region_of(BIG)
+        reads = [
+            fi.read_class_polygons(p, None, known, UTM33, ff.box_of(BIG)).areas for p in (pa, pb)
+        ]
+        built = ff.land_cover_map().build(reads, [], known, region)
+        choice = ff.every_class()
+        on = fi.edges_of(built, [], choice, ff.cleanup(**{**OFF, "repair_m": S}), BIG,
+                         ff.DEFAULT_VOCABULARY, region=region)  # fmt: skip
+        assert shapely.distance(*labels(on)) == 0.0
+        off = fi.edges_of(built, [], choice, ff.cleanup(**{**OFF, "merge_same_class": True}),
+                          BIG, ff.DEFAULT_VOCABULARY, region=region)  # fmt: skip
+        assert shapely.distance(*labels(off)) == pytest.approx(0.01, abs=1e-6)
 
 
 # ---------------------------------------------------------------- RP7
@@ -395,8 +387,62 @@ class TestTheClip:
 #: with the ``corine`` map and today's request. Integers only (fid, mask,
 #: code, vertices per line, the label polygon's type and vertex count), so
 #: a last bit of pyproj does not move it. No commit may update it to agree
-#: with new code.
-TODAY = (60, "e977f021bebf6f52a1e0e36eccc09e01351b879cf0813d1c91906c9a7bee0957", 9, 19, 0)
+#: with new code. The digest was
+#: ``e977f021bebf6f52a1e0e36eccc09e01351b879cf0813d1c91906c9a7bee0957`` with
+#: each feature's fid its OBJECTID; increment 111 makes an area's fid its
+#: index in the map, so the same rows were digested again from ``bce16583``'s
+#: ``open_features``, each OBJECTID replaced by its index among the 69 rows
+#: ``read_source`` reads in key order (that run gave the old digest with the
+#: OBJECTIDs left in). Every other value is unchanged.
+#:
+#: Re-pinned once more at increment 111, ``a4bcab1e``: the land-cover map now
+#: keeps each polygon cut to the read region's box (``land_cover_map._fixed``)
+#: instead of the whole source polygon. That digest was
+#: ``66638148490d9f1c83e1afe0d6a9c819741860d2730e1d620a79ddadb9635878``. The
+#: rows were compared with master ``9c317c16``'s: every fid, mask, code and
+#: line is the same (lines compared normalised); the label polygon is the cut
+#: one (a ``Polygon`` for 55 rows that were a ``MultiPolygon``, 10,628 vertices
+#: in all against 13,615), and rows 21 and 59 list the same lines in another
+#: order. The Numedalslagen quick-check mesh kept its triangle and vertex
+#: counts and its 10 m largest error, and every class area to 7e-8 relative.
+#: Its meshes at ``2f70ce84`` (whole polygons) and ``a4bcab1e`` (cut ones),
+#: the quick check's command (clean-up at its defaults), both have 653,039
+#: triangles and 334,190 vertices; 28 vertices moved, 22 by under 0.015 m,
+#: the farthest 8.7 m. The cause is the clean-up's repair, not the lines:
+#: with every clean-up switch 0 the two meshes are identical (1,140,546
+#: triangles), and so are they with only the simplification or only the
+#: outline snap on. Of the 3,297 polygons ``shapely.coverage_clean`` is given
+#: (snapping 1 m), 22 have the same vertices in another order (parts or ring
+#: starts; equal once normalised) and 2 differ by 1.5e-11 m. Its result
+#: depends on that order: 23 cleaned polygons differ, their borders by at
+#: most 0.86 m, and the refinement places 28 points elsewhere. The whole
+#: polygons with the cut ones' 22 orderings give 21 of the 23 differences;
+#: the two 1.5e-11 m polygons give the other 2.
+#: Ola, 2026-10-29: "If the mesh is as good, and the diff very small, I see no
+#: reason to keep the old one. Please update the pin." That lifts the rule
+#: below for this change only; it stands for every later one.
+#: No commit may update it to agree with new code.
+#:
+#: Fids renumbered at ``81abd570`` (no other value moved): the 7 polygons the
+#: read box misses left ``areas`` for ``outside`` (section 3), so an area's
+#: fid is its index in ``areas`` and an outside one's ``len(areas) + i``
+#: (62 areas; the 7 at 62..68, none giving a row). That digest was
+#: ``9c8236ebf2e1be95a1686dd521d2d4d766183b63f959cc6fc620b8083aa30535``. The
+#: digest below is ``e444e812``'s rows with each fid remapped so, and every
+#: mask, code, line and label polygon is equal by WKB to ``81abd570``'s.
+#:
+#: Re-pinned at ``2ec0b0e9`` (each polygon repaired whole, then cut with
+#: ``shapely.intersection``): that digest was
+#: ``146abf09c2a8a7805f80065e36eef0b64ee5fd9ca50915f6e0df110a3b6cf4f5``. Only
+#: fid 61's line lengths moved, in order alone: ``[86, 294, 224, 193, 630, 86,
+#: 699, 79]`` became ``[294, 224, 193, 630, 86, 86, 699, 79]``; the old order
+#: there gives the old digest. The order comes from where
+#: ``shapely.intersection`` starts a cut ring. A probe (session scratch,
+#: ``rp8_mesh.py``, not kept) meshed that sea polygon with its lines in
+#: either order: byte-identical meshes (5,627 vertices,
+#: 10,679 triangles, every edge flag equal). Ola, 2026-10-29, "1-3: yes" to
+#: re-pinning it. That lifts the rule above for this change only.
+TODAY = (60, "3de176920a2691329255d7eaa8a2d8d10e471093b8101180210183a841be30af", 9, 19, 0)
 
 
 def digest(fs: Any) -> tuple[int, str, int, int, int]:
@@ -431,18 +477,12 @@ class TestAllOff:
 
         for name in ("coverage_clean", "coverage_union", "coverage_simplify"):
             monkeypatch.setattr(shapely, name, refused)
-        off = fi.open_features(
-            fi.FeatureRequest(sources=(ff.source(EXTRACT, "corine"),), **OFF), domain, UTM33
-        )
+        off = ff.open_one(EXTRACT, domain, "corine", switches=OFF)
         assert digest(off) == TODAY
 
     def test_rp8_the_request_defaults_are_off(self, fi: ModuleType, domain: Any) -> None:
-        default = fi.open_features(
-            fi.FeatureRequest(sources=(ff.source(EXTRACT, "corine"),)), domain, UTM33
-        )
-        off = fi.open_features(
-            fi.FeatureRequest(sources=(ff.source(EXTRACT, "corine"),), **OFF), domain, UTM33
-        )
+        default = ff.open_one(EXTRACT, domain, "corine")
+        off = ff.open_one(EXTRACT, domain, "corine", switches=OFF)
         assert digest(default) == digest(off)
         for f, g in zip(default.features, off.features, strict=True):
             assert (f.fid, f.mask, f.code) == (g.fid, g.mask, g.code)
@@ -463,24 +503,24 @@ class TestMerge:
         feats = [coded(7, a, "311"), coded(3, c, "312"), coded(5, b, "311")]
         fs = opened(fi, tmp_path, feats, repair_m=S, merge_same_class=True)
         by_fid = {f.fid: f for f in fs.features}
-        assert set(by_fid) == {7, 3}
-        assert shapely.equals(by_fid[7].polygon, shapely.union(a, b))
-        assert by_fid[7].code == 311
+        assert set(by_fid) == {0, 1}  # a (index 0) keeps the merged pair
+        assert shapely.equals(by_fid[0].polygon, shapely.union(a, b))
+        assert by_fid[0].code == 311
         shared = LineString([at(50, 0), at(50, 50)])
-        lines = shapely.union_all(list(by_fid[7].lines))
+        lines = shapely.union_all(list(by_fid[0].lines))
         assert shapely.length(shapely.intersection(lines, shared)) == pytest.approx(0.0, abs=1e-9)
         assert shapely.coverage_is_valid(np.array(labels(fs), dtype=object))
 
     def test_off_keeps_both(self, fi: ModuleType, tmp_path: Path) -> None:
         a, b = box(0, 0, 50, 50), box(50, 0, 100, 50)
         fs = opened(fi, tmp_path, [coded(7, a, "311"), coded(5, b, "311")], repair_m=S)
-        assert [f.fid for f in fs.features] == [7, 5]
+        assert [f.fid for f in fs.features] == [0, 1]
 
 
 class TestTolerance:
     """Step 3 is now the band (increment 32; this class assumed GEOS's
     simplifier, test 16): a border 100 m long zig-zagging 0.5 m either side
-    in 10 m steps, with ``--features-tolerance 2``, also with the repair at
+    in 10 m steps, with ``--edges-tolerance 2``, also with the repair at
     0. The coverage stays valid, the zig-zag goes, every polygon keeps its
     area (1e-9 relative; coordinates near 5e5 and 6.6e6 m, where one ulp is
     1e-9 m, on areas of 2 500 to 5 000 m2)."""
@@ -654,5 +694,5 @@ class TestOverlap:
         feats = [coded("f", self.FOREST, "312"), coded("l", self.LAKE, "512")]
         fs = opened(fi, tmp_path, feats, repair_m=S)
         by_fid = {f.fid: f.polygon for f in fs.features}
-        assert by_fid["l"].area == pytest.approx(self.LAKE.area, rel=1e-9)
-        assert by_fid["f"].area == pytest.approx(self.FOREST.area - self.LAKE.area, rel=1e-9)
+        assert by_fid[1].area == pytest.approx(self.LAKE.area, rel=1e-9)
+        assert by_fid[0].area == pytest.approx(self.FOREST.area - self.LAKE.area, rel=1e-9)

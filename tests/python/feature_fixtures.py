@@ -6,10 +6,17 @@ input features and the legend, never from the producer's records (05b,
 of the masks of every feature whose boundary, as given in the source and
 moved by pyproj directly, lies along that edge, within the noder's snap.
 
-`tin_engine.feature_input`, `tin_engine.chains` and `tin_engine.meshing_rules`
-are imported lazily, so a suite importing this module still collects before
-they exist. Increment 41: a legend is loaded by name (or path) through
-`meshing_rules.load`, no longer read from a table in `feature_input`.
+`tin_engine.feature_input`, `tin_engine.chains`, `tin_engine.land_cover_classes`
+and `tin_engine.land_cover_map` are imported lazily, so a suite importing
+this module still collects before they exist. A land-cover class file is
+loaded by name (or path) through `land_cover_classes.load`.
+
+`open_one` and `open_lines` run a source the way `rasputin mesh` does, as
+`docs/increments/111-one-land-cover-map.md`, *8. Python interface, and the wordings tests read*
+gives it: class polygons through `read_class_polygons`, `land_cover_map.build` and
+`edges_of` with every class chosen; lines through `read_linestrings` and
+`edges_of` with no map. What they return reads as the edges and the reader
+together (`Opened`).
 """
 
 from __future__ import annotations
@@ -52,9 +59,13 @@ def chains_module() -> ModuleType:
     return importlib.import_module("tin_engine.chains")
 
 
-def rules(name: str) -> Any:
-    """The meshing rules a `--features-rules` value names."""
-    return importlib.import_module("tin_engine.meshing_rules").load(name)
+def classes(name: str) -> Any:
+    """The land-cover class file a `--land-cover-classes` value names."""
+    return importlib.import_module("tin_engine.land_cover_classes").load(name)
+
+
+def land_cover_map() -> ModuleType:
+    return importlib.import_module("tin_engine.land_cover_map")
 
 
 def at(x: float, y: float) -> tuple[float, float]:
@@ -100,17 +111,136 @@ def write_geojson(path: Path, features: Iterable[Feat], crs: str | None = UTM33)
     return path
 
 
-def source(path: Path, map_name: str = "property", **kwargs: Any) -> Any:
-    return feature_input().FeatureSource(path=path, rules=rules(map_name), **kwargs)
+def region_of(domain: DomainPolygon, dem_crs: str = UTM33, cell: float = 0.0) -> Polygon:
+    """The read region in the DEM's CRS, as the CLI passes it to `edges_of`."""
+    region: Polygon = feature_input().source_region(domain, dem_crs, dem_crs, cell=cell)
+    return region
+
+
+def box_of(
+    domain: DomainPolygon, dem_crs: str = UTM33, cell: float = 0.0
+) -> Callable[[str], tuple[float, float, float, float]]:
+    """`read_source`'s ``box_for``, as the CLI builds it: the read region's
+    bounds in a source's own CRS."""
+    fi = feature_input()
+    return lambda own: fi.source_region(domain, dem_crs, own, cell=cell).bounds
+
+
+@dataclass(frozen=True)
+class Opened:
+    """`edges_of`'s `FeatureSet` (``edges``) and what the reader read
+    (``read``: `ClassPolygons` or `SourceLines`). ``empty`` counts the rows
+    the reader skipped as empty and the areas the clean-up emptied, as the
+    stderr line does."""
+
+    edges: Any
+    read: Any
+
+    @property
+    def features(self) -> Any:
+        return self.edges.features
+
+    @property
+    def outside(self) -> int:
+        return int(self.edges.outside)
+
+    @property
+    def clipped(self) -> int:
+        return int(self.edges.clipped)
+
+    @property
+    def empty(self) -> int:
+        return int(self.read.empty) + int(self.edges.empty)
+
+    @property
+    def counts(self) -> Any:
+        return self.edges.counts
+
+    @property
+    def cover_vertices(self) -> Any:
+        return self.edges.cover_vertices
+
+    @property
+    def area_changed(self) -> float:
+        return float(self.edges.area_changed)
+
+    @property
+    def crs(self) -> str:
+        return str(self.read.crs)
+
+    @property
+    def layer(self) -> str | None:
+        return self.read.layer  # type: ignore[no-any-return]
+
+
+def cleanup(**switches: Any) -> Any:
+    """An `EdgeCleanup`: every switch off unless given."""
+    return feature_input().EdgeCleanup(**switches)
+
+
+def every_class() -> Any:
+    return feature_input().EdgeChoice(every_class=True)
 
 
 def open_one(
-    path: Path, domain: DomainPolygon, map_name: str = "property", dem_crs: str = UTM33, **kw: Any
-) -> Any:
-    """`open_features` on one source."""
+    path: Path,
+    domain: DomainPolygon,
+    classes_name: str = "corine",
+    dem_crs: str = UTM33,
+    *,
+    layer: str | None = None,
+    crs: str | None = None,
+    switches: Mapping[str, Any] | None = None,
+    choice: Any = None,
+    threads: int = 1,
+) -> Opened:
+    """One class-polygon file as `--land-cover` with ``classes_name`` and
+    `--edges all` (or ``choice``) reads it: `read_class_polygons`, `build`
+    with no `--prefer`, `edges_of` with the clean-up ``switches`` (all off
+    unless given)."""
     fi = feature_input()
-    request = fi.FeatureRequest(sources=(source(path, map_name, **kw),))
-    return fi.open_features(request, domain, dem_crs)
+    known = classes(classes_name)
+    region = region_of(domain, dem_crs)
+    read = fi.read_class_polygons(
+        path, layer, known, dem_crs, box_of(domain, dem_crs), crs=crs, threads=threads
+    )
+    built = land_cover_map().build([read.areas], [], known, region)
+    edges = fi.edges_of(
+        built,
+        [],
+        every_class() if choice is None else choice,
+        cleanup(**(switches or {})),
+        domain,
+        DEFAULT_VOCABULARY,
+        region=region,
+    )
+    return Opened(edges=edges, read=read)
+
+
+def open_lines(
+    path: Path,
+    domain: DomainPolygon,
+    key: str = "road",
+    dem_crs: str = UTM33,
+    *,
+    layer: str | None = None,
+    threads: int = 1,
+) -> Opened:
+    """One line file as `--lines KEY=path --edges KEY` reads it, with no
+    land-cover map: `read_linestrings`, then `edges_of(None, ...)`."""
+    fi = feature_input()
+    region = region_of(domain, dem_crs)
+    read = fi.read_linestrings(path, layer, dem_crs, box_of(domain, dem_crs), threads=threads)
+    edges = fi.edges_of(
+        None,
+        [(key, line) for line in read.lines],
+        fi.EdgeChoice(lines=frozenset({key})),
+        cleanup(),
+        domain,
+        DEFAULT_VOCABULARY,
+        region=region,
+    )
+    return Opened(edges=edges, read=read)
 
 
 # ----------------------------------------------------------------- the engine

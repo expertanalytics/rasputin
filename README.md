@@ -28,27 +28,31 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   The box is in the source's CRS (EPSG:25833 and EPSG:3035), or in
   `--out-crs`; `--domain FILE` takes a polygon's box instead. Each lands as
   one GeoPackage in the tile cache, and `rasputin sources` then lists it with
-  its path and the options it fits (`mesh --features` with `--features-rules
-  corine`, `catchment --lakes`). A rerun asks only for polygons not yet
-  cached. The credits go into a `NOTICE.txt` beside the file: NVE's data is
+  its path and the options it fits (`mesh --land-cover` with
+  `--land-cover-classes corine`, `mesh --prefer`, `catchment --lakes`). A
+  rerun asks only for polygons not yet cached. The credits go into a `NOTICE.txt` beside the file: NVE's data is
   under the Norwegian licence for open government data (NLOD 1.0), which
   asks you to name NVE and the licence; CORINE is the EU Copernicus Land
   Monitoring Service's, free and open, asking you to name the source, say
   that it was modified (cut to a box) and not suggest EU endorsement.
 - **A domain.** Mesh only the inside of a polygon, such as a catchment
   (GeoJSON or WKT, in any CRS that pyproj reads).
-- **Features as constraints.** Lakes, land-cover borders, roads and rivers
-  (GeoJSON, GeoPackage or GML) become edges of the mesh, so no triangle
-  crosses them. A GML 3.2 file of surfaces, such as NIBIO's AR50 land-resource
-  map, is converted once with `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`;
-  the shipped `ar50` meshing rules read its land type (`arealtype`) and split
+- **Land cover and lines as edges.** `--land-cover` gives the class polygons
+  (GeoJSON, GeoPackage or GML; several files, such as one per county, are read
+  as one map), `--prefer lake=SOURCE` takes one class from another source, and
+  `--lines river=SOURCE` adds rivers or roads. `--edges` chooses which class
+  borders and lines become edges of the mesh, so no triangle crosses them
+  (`--edges all`, `--edges water`, `--edges river`). A GML 3.2 file of
+  surfaces, such as NIBIO's AR50 land-resource map, is converted once with
+  `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`; the shipped `ar50` land-cover
+  class file reads its land type (`arealtype`) and splits
   forest by tree type (`treslag`, codes 3031 to 3099) and open firm ground by
   vegetation cover (`vegetasjonsdekke`, codes 5051 to 5099).
-- **Land-cover labels, cleaned up.** With CORINE meshing rules, every triangle
-  gets the class of the polygon it lies in. First the borders are repaired
-  (`--features-repair`), merged between neighbours of one class, snapped onto
-  the domain outline where they nearly touch it, and simplified to
-  `--features-tolerance` metres with each class keeping its area.
+- **Land-cover labels, cleaned up.** With class borders in `--edges`, every
+  triangle gets the class of the polygon it lies in. First the borders are
+  repaired (`--edges-repair`), merged between neighbours of one class, snapped
+  onto the domain outline where they nearly touch it, and simplified to
+  `--edges-tolerance` metres with each class keeping its area.
 - **Refinement to a tolerance.** Triangles are split at the worst DEM point
   until every triangle is within `--tolerance` metres of the DEM, then kept
   Delaunay, with a minimum-angle start so there are no slivers along the
@@ -98,7 +102,8 @@ rasputin mesh \
 rasputin mesh \
     --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif \
     --domain docs/benchmarks/2026-09-26/quarter.geojson \
-    --features tests/fixtures/corine/clc2018_7908_3.gpkg --features-rules corine \
+    --land-cover tests/fixtures/corine/clc2018_7908_3.gpkg \
+    --land-cover-classes corine --edges all \
     --tolerance 5 \
     --out quarter_landcover.vtk
 
@@ -125,15 +130,16 @@ every option.
 
 - **`.vtk`** (legacy VTK, one file) is for [ParaView](https://www.paraview.org).
   It holds the triangles, the constraint edges with their feature bits and,
-  with meshing rules, the cell array `land_cover_code`. To colour by land cover,
+  with `--land-cover`, the cell array `land_cover_code`. To colour by land cover,
   import `corine.json` in ParaView's Colour Map Editor (Choose Preset, Import)
-  and colour by `land_cover_code`. `--land-cover` adds each class's exact
-  share of every triangle, from a class raster or from class polygons: a
-  file with `--land-cover-rules`, or a fetched source with meshing rules such as
-  `clc2018`.
-- **`.gpkg`** (GeoPackage) is for QGIS. With `--land-cover` it holds a
-  `land_cover_fractions` table with each class's share of each triangle,
-  meshing rules or not. With meshing rules it also holds a `cells` layer, one point per
+  and colour by `land_cover_code`. `--land-cover` also gives each class's exact
+  share of every triangle, from a class raster or from class polygons (a
+  file with `--land-cover-classes`, or a fetched source such as `clc2018`),
+  unless `--edges` names a class; `--shares` then asks for the shares too.
+- **`.gpkg`** (GeoPackage) is for QGIS. With the shares it holds a
+  `land_cover_fractions` table with each class's share of each triangle.
+  When the land-cover class file has a `[cells]` table it also holds a
+  `cells` layer, one point per
   triangle with Shyft's fractions (glacier, lake, reservoir, forest,
   unspecified), savanna, slope, aspect and area. `--reservoirs` (a polygon
   file or a fetched source) moves the lake share under its polygons to
@@ -209,8 +215,8 @@ source's id as `dem` to `mesh`, `catchment` or `station_catchments`.
 The listing also names vector datasets (polygons, lines, points) with their
 path, layer, geometry types, feature count, attributes and, for land cover,
 the class values, and it reports the output root as `out_root`. Each source's
-`fits` names the tools and arguments it can be given to (`mesh` `features`
-with the meshing rules to pass, `catchment` `lakes`, `station_catchments`
+`fits` names the tools and arguments it can be given to (`mesh` `land_cover`
+with the land-cover class file to pass, `catchment` `lakes`, `station_catchments`
 `stations`, ...), read from the file's header; the agent passes a vector
 source's path, not its id.
 
@@ -229,8 +235,8 @@ description = "Bare-ground terrain model, 10 m cells."
 ```
 
 A vector dataset is a `.gpkg`, `.geojson` or `.json` path; `layer` names the
-table of a GeoPackage that holds more than one, and `rules` the meshing rules
-a land-cover file is read with (they name the legend, its colours):
+table of a GeoPackage that holds more than one, and `classes` the land-cover
+class file a land-cover file is read with (it names the legend, its colours):
 
 ```toml
 [source.my-lakes]
@@ -244,7 +250,7 @@ description = "Lake polygons, 1:50 000."
 kind = "local"
 path = "~/data/landcover.gpkg"
 layer = "landcover"
-rules = "corine"
+classes = "corine"
 credit = "© The data's owner"
 licence_note = "CC BY 4.0"
 description = "Land-cover polygons, minimum mapping unit 25 ha."

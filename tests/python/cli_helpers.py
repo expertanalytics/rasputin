@@ -214,7 +214,8 @@ RIVER: Ring = [(TIE_X + 100.1, TIE_Y - 65.2), (TIE_X + 100.3, TIE_Y - 15.4)]
 
 def crossing_lines() -> Callable[[Path], Path]:
     """A fixture: ``crossing.geojson``, `ROAD` (property ``road``) and `RIVER`
-    (``river``), in UTM33."""
+    (``river``), in UTM33; beside it ``crossing-road.geojson`` and
+    ``crossing-river.geojson``, one line each, for `--lines`."""
 
     @pytest.fixture
     def fixture(tmp_path: Path) -> Path:
@@ -232,14 +233,20 @@ def crossing_lines() -> Callable[[Path], Path]:
         }
         path = tmp_path / "crossing.geojson"
         path.write_text(json.dumps(doc))
+        for kind, feature in zip(("road", "river"), doc["features"], strict=True):
+            one = {**doc, "features": [feature]}
+            (tmp_path / f"crossing-{kind}.geojson").write_text(json.dumps(one))
         return path
 
     return fixture
 
 
 def featured_args(tif: Path, domain: Path, features: Path) -> tuple[str, ...]:
-    """A ``mesh`` run whose constraint edges carry feature bits: `features` in `domain`."""
+    """A ``mesh`` run whose constraint edges carry feature bits: the road and
+    the river beside `features` (`crossing_lines`), in `domain`."""
+    road, river = (features.with_name(f"{features.stem}-{k}.geojson") for k in ("road", "river"))
     return (
-        *("--dem", str(tif), "--domain", str(domain)),
-        *("--tolerance", "1", "--features", str(features)),
+        *("--dem", str(tif), "--domain", str(domain), "--tolerance", "1"),
+        *("--lines", f"road={road}", "--lines", f"river={river}"),
+        *("--edges", "road", "--edges", "river"),
     )

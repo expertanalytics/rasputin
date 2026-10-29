@@ -41,8 +41,8 @@ PINNED BY THESE SUITES (the design names the parts, not their spelling):
 - `rasputin mesh --land-cover KEY [--land-cover-year Y]` (section 6): KEY a
   catalogue source of classes read from `--cache`, the year's object as
   `fetch --year` names it, the last year by default. A year outside the
-  range, `--land-cover-year` without `--land-cover`, a heights source, a run
-  without `--dem`, and a coded `--features-rules` beside it are usage errors
+  range, `--land-cover-year` without `--land-cover`, a heights source, and a
+  run without `--dem` are usage errors
   (exit 2) naming the option; an object not in the cache is refused naming
   the key and `fetch`, with no traceback; an unknown key and a run with
   neither `--cache` nor `RASPUTIN_DATA` are usage errors too. The file's

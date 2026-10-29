@@ -486,6 +486,6 @@ def test_7b_projected_staircase_with_corine_is_byte_identical(
         tmp_path,
         as_master,
         *("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10"),
-        *("--features", str(EXTRACT), "--features-rules", "corine"),
+        *("--land-cover", str(EXTRACT), "--land-cover-classes", "corine", "--edges", "all"),
     )
     assert master == built

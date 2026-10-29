@@ -32,18 +32,25 @@ WORDING = {
     "domain_crs": "The domain's coordinate system",
     "domain_band_m": "Band the domain outline was simplified within, m",
     "domain_transform": "Conversion from the domain's coordinate system",
-    "features": "Each features file: layer, meshing rules, features, lines, vertices",
-    "features_joined": "Lines and vertices of all features files, joined",
-    "features_crs": "Each features file's coordinate system",
-    "features_accuracy_m": "Positional accuracy taken for a features file that states none",
-    "features_transform": "Conversion from each features file's coordinate system",
-    "features_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
-    "features_merge_same_class": "Borders between land-cover polygons of one class dropped",
-    "features_tolerance_m": (
+    "edges": (
+        "Each source of edges: file, layer, land-cover class file or line kind, "
+        "features, lines, vertices"
+    ),
+    "edges_joined": "Lines and vertices of all edges, joined",
+    "lines": "Each line kind: its file, its lines and their length inside the domain",
+    "land_cover_crs": "Each land-cover file's coordinate system",
+    "land_cover_accuracy_m": "Positional accuracy taken for a land-cover file that states none",
+    "land_cover_transform": "Conversion from each land-cover file's coordinate system",
+    "land_cover_overlap": (
+        "Area inside the domain where land-cover files overlap, and the file that kept it"
+    ),
+    "edges_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
+    "edges_merge_same_class": "Borders between land-cover polygons of one class dropped",
+    "edges_tolerance_m": (
         "Land-cover borders simplified, each at most this far from its border after the "
         "repair and the outline rule, each class's area kept (0 = off)"
     ),
-    "features_outline_snap_m": "Land-cover borders this close to the outline moved onto it",
+    "edges_outline_snap_m": "Land-cover borders this close to the outline moved onto it",
     "start_mesh": "What refinement started from",
     "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",
     "start_quality_gain_deg": (
@@ -80,9 +87,10 @@ WORDING = {
     "land_cover_prefer_credit": "Credit for the classes taken from a preferred source",
     "land_cover_prefer_licence_note": "Licence of the classes taken from a preferred source",
     "land_cover_prefer_cite": "Please cite for the classes taken from a preferred source",
-    "features_notice": "Credit for the features data",
-    "features_licence": "Licence of the features data",
+    "land_cover_notice": "Credit for the land-cover data",
+    "land_cover_licence": "Licence of the land-cover data",
     "land_cover_codes": "What land_cover_code holds",
+    "land_cover_shares": "Class shares per triangle",
     "cells": "The cells layer",
     "reservoirs": "Reservoir polygons splitting the cells' lake share",
     "land_cover_prefer": (
@@ -153,7 +161,7 @@ INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])
 #: The mesh-file fields, and the CORINE credit, which the Copernicus data
 #: policy asks for on data derived from CORINE.
 #: ``land_cover_codes`` is in the file too, but the writers put it there.
-IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("features_notice") + 1])
+IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("land_cover_notice") + 1])
 SEAMS_AGREE = "none: the tiles agree where they overlap"
 
 

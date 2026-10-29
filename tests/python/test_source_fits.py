@@ -7,15 +7,26 @@ names is a file the option's reader accepts, and a fit it does not name is
 a file the reader refuses).
 
 T5 reads the files through the readers the options call, never the CLI:
-`open_features` for `mesh --features` (with the fit's legend),
+`read_class_polygons`, `build` and `edges_of` for `mesh --land-cover` with
+the fit's class file, `read_polygons` for `mesh --prefer`,
+`read_linestrings` for `mesh --lines`,
 `read_lake_polygons` for `catchment --lakes`, `read_segments` for either
 `--rivers`, `read_nve_lakes`, `read_stations` and `read_references` for
 `station-catchments`' others. "Refuses" is the reader's `ValueError`; for
 `catchment --lakes`, whose reader skips what is not a polygon, and for
-`--features`, whose map may drop a feature, a read that keeps nothing is
+`--land-cover`, `--prefer` and `--lines`, a read that keeps nothing is
 counted as a refusal, since the run has nothing to use. A fit is a
 header-level necessary condition: these fixtures are well formed, so the
 converse is claimed for them only.
+
+`docs/increments/111-one-land-cover-map.md` (sections 2 and 8): `mesh
+--features` with rules becomes `mesh --land-cover` with classes; the
+class raster's `mesh --land-cover` is unchanged (its `classes` None);
+`Fit.rules` becomes `Fit.classes`. PINNED HERE, where the design leaves it
+open (listed for `@architect`): `Facts.rules` becomes `Facts.classes`; any
+polygons fit `mesh --prefer` (its reader keeps any polygon); a file whose
+geometry is lines only (LineString, MultiLineString), in any CRS, fits
+`mesh --lines`; the listing's JSON names the class file under `classes`.
 """
 
 from __future__ import annotations
@@ -26,23 +37,20 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from pyproj import Transformer
 from shapely.geometry import Point, box
 from shapely.ops import transform
 
 import batch_fixtures as bf
+import feature_fixtures as ff
 from catchment_fixtures import EPSG, lake_box
 from dataset_fixtures import write_sources
-from feature_fixtures import Feat, domain_of, rules, write_geojson
+from feature_fixtures import Feat, classes, domain_of, write_geojson
 from tin_engine import source_report
 from tin_engine.cli import app
-from tin_engine.feature_input import (
-    FeatureRequest,
-    FeatureSource,
-    open_features,
-    read_lake_polygons,
-)
+from tin_engine.feature_input import read_lake_polygons, read_polygons
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.mcp.schema import derive
@@ -64,12 +72,15 @@ OUTLETS = ("network-catchment", "--outlets", None)
 #: whose border band is in metres.
 RESERVOIRS = ("mesh", "--reservoirs", None)
 CATCHMENTS = ("mesh", "--catchments", None)
+#: Any polygons fit `mesh --prefer`; a lines-only file, `mesh --lines`.
+PREFER = ("mesh", "--prefer", None)
+LINES = ("mesh", "--lines", None)
 #: What any polygons fit.
-POLYGONS_FIT = (LAKES, NETWORK, RESERVOIRS)
+POLYGONS_FIT = (LAKES, NETWORK, RESERVOIRS, PREFER)
 
 
 def features(*maps: str) -> set[Fit]:
-    return {("mesh", "--features", m) for m in maps}
+    return {("mesh", "--land-cover", m) for m in maps}
 
 
 def fits_for(fields: dict[str, Any]) -> Any:
@@ -77,9 +88,9 @@ def fits_for(fields: dict[str, Any]) -> Any:
 
 
 def maps() -> dict[str, Any]:
-    """What `listing` passes: every shipped legend plus `property`."""
-    shipped = importlib.import_module("tin_engine.meshing_rules").shipped_names()
-    return {name: rules(name) for name in (*shipped, "property")}
+    """What `listing` passes: every shipped land-cover class file."""
+    shipped = importlib.import_module("tin_engine.land_cover_classes").shipped_names()
+    return {name: classes(name) for name in shipped}
 
 
 def facts(
@@ -90,7 +101,7 @@ def facts(
     attributes: tuple[str, ...] = (),
     crs: bool = True,
     projected: bool | None = None,
-    rules: str = "",
+    classes: str = "",
 ) -> dict[str, Any]:
     """`Facts`' fields; built in the test, so the module collects before `Facts` exists."""
     return dict(
@@ -100,7 +111,7 @@ def facts(
         geometry=frozenset(geometry),
         attributes=attributes,
         crs_stated=crs,
-        rules=rules,
+        classes=classes,
     )
 
 
@@ -119,31 +130,33 @@ ROWS: dict[str, tuple[dict[str, Any], set[Fit]]] = {
         facts("heights", suffix="", crs=False, projected=False), DEMS),
     "classes": (facts("classes", suffix="", crs=False), {("mesh", "--land-cover", None)}),
     "land cover gpkg, every map of its attribute": (
-        gpkg(("Code_18",)), features("corine", "corine-water") | {*POLYGONS_FIT}),
+        gpkg(("Code_18",)), features("corine") | {*POLYGONS_FIT}),
     "gpkg attribute case-insensitive": (
-        gpkg(("code_18", "Remark")), features("corine", "corine-water") | {*POLYGONS_FIT}),
+        gpkg(("code_18", "Remark")), features("corine") | {*POLYGONS_FIT}),
     "geojson attribute exact": (
         facts(geometry=POLY, attributes=("code_18",)), {*POLYGONS_FIT, SC_LAKES}),
     "geojson attribute as the map spells it": (
         facts(geometry=POLY, attributes=("Code_18",)),
-        features("corine", "corine-water") | {*POLYGONS_FIT, SC_LAKES}),
-    "the entry's rules alone": (
-        gpkg(("Code_18",), rules="corine"), features("corine") | {*POLYGONS_FIT}),
-    "the entry's rules, its attribute absent": (
-        gpkg(("Code_18",), rules="clc18_kode"), {*POLYGONS_FIT}),
+        features("corine") | {*POLYGONS_FIT, SC_LAKES}),
+    "the entry's classes alone": (
+        gpkg(("Code_18",), classes="corine"), features("corine") | {*POLYGONS_FIT}),
+    "the entry's classes, its attribute absent": (
+        gpkg(("Code_18",), classes="clc18_kode"), {*POLYGONS_FIT}),
     "another map's attribute": (gpkg(("clc18_kode",)), features("clc18_kode") | {*POLYGONS_FIT}),
     "mapbiomas classes": (facts(geometry=POLY, attributes=("class",)),
                           features("mapbiomas-c11") | {*POLYGONS_FIT, SC_LAKES}),
-    "an uncoded property map": (facts(geometry=POLY, attributes=("property",), crs=False),
-                                features("property") | {*POLYGONS_FIT}),
-    "rivers": (facts(geometry=("LineString",), attributes=("objectid", "elvid")), RIVERS),
-    "rivers in a gpkg: no rivers": (gpkg(("objectid",), geometry="LineString"), set()),
-    "rivers with no crs member: no rivers": (
-        facts(geometry=("LineString",), attributes=("objectid",), crs=False), set()),
-    "MultiLineString: no rivers": (
-        facts(geometry=("MultiLineString",), attributes=("objectid",)), set()),
-    "rivers with no objectid: no rivers": (
-        facts(geometry=("LineString",), attributes=("elvid",)), set()),
+    "polygons on no class file's attribute": (
+        facts(geometry=POLY, attributes=("property",), crs=False), {*POLYGONS_FIT}),
+    "rivers": (facts(geometry=("LineString",), attributes=("objectid", "elvid")),
+               RIVERS | {LINES}),
+    "rivers in a gpkg: lines, no rivers": (
+        gpkg(("objectid",), geometry="LineString"), {LINES}),
+    "rivers with no crs member: lines, no rivers": (
+        facts(geometry=("LineString",), attributes=("objectid",), crs=False), {LINES}),
+    "MultiLineString: lines, no rivers": (
+        facts(geometry=("MultiLineString",), attributes=("objectid",)), {LINES}),
+    "rivers with no objectid: lines, no rivers": (
+        facts(geometry=("LineString",), attributes=("elvid",)), {LINES}),
     "lines and polygons: lakes, no rivers": (
         facts(geometry=("LineString", "Polygon"), attributes=("objectid",)), {*POLYGONS_FIT}),
     "stations": (facts(geometry=("Point",), attributes=("station", "name")), {STATIONS, OUTLETS}),
@@ -182,7 +195,7 @@ class TestT4Fits:
     @pytest.mark.parametrize(("given", "expected"), ROWS.values(), ids=ROWS.keys())
     def test_the_rules(self, given: dict[str, Any], expected: set[Fit]) -> None:
         got = fits_for(given)
-        listed = [(f.command, f.option, f.rules) for f in got]
+        listed = [(f.command, f.option, f.classes) for f in got]
         assert len(listed) == len(set(listed)), listed  # each fit once
         assert set(listed) == expected
 
@@ -210,12 +223,18 @@ class TestT4Fits:
                 assert fit.option in param.opts, (fit, param.opts)
                 seen.add((fit.command, fit.option, fit.tool, fit.argument))
         assert ("station-catchments", "--dem", "station_catchments", "dem") in seen
-        assert ("mesh", "--features", "mesh", "features") in seen
+        assert ("mesh", "--land-cover", "mesh", "land_cover") in seen
+        assert ("mesh", "--lines", "mesh", "lines") in seen
+        assert ("mesh", "--prefer", "mesh", "prefer") in seen
 
-    def test_only_a_features_fit_names_rules(self) -> None:
+    def test_only_a_land_cover_fit_names_classes(self) -> None:
+        """A vector source's `--land-cover` fit names its class file; the
+        class raster's names none, nor does any other fit."""
         for row, _expected in ROWS.values():
             for fit in fits_for(row):
-                assert (fit.rules is not None) == (fit.option == "--features"), fit
+                vector = row["values"] == "features"
+                named = fit.option == "--land-cover" and vector
+                assert (fit.classes is not None) == named, fit
 
 
 # ------------------------------------------------------------ T5
@@ -224,11 +243,30 @@ class TestT4Fits:
 INSIDE_POINT = lake_box().centroid.coords[0]
 
 
+#: Holds every fixture file's features.
+AROUND = domain_of(box(495_000.0, 6_555_000.0, 525_000.0, 6_605_000.0))
+
+
 def accepts_features(path: Path, layer: str | None, name: str) -> bool:
-    source = FeatureSource(path=path, rules=rules(name), layer=layer)
-    domain = domain_of(box(495_000.0, 6_555_000.0, 525_000.0, 6_605_000.0))
+    """`mesh --land-cover` with the class file ``name``: the readers keep a feature."""
     try:
-        found = open_features(FeatureRequest(sources=(source,)), domain, EPSG)
+        found = ff.open_one(path, AROUND, name, EPSG, layer=layer)
+    except ValueError:
+        return False
+    return len(found.features) > 0
+
+
+def accepts_prefer(path: Path, layer: str | None) -> bool:
+    try:
+        found, _repaired = read_polygons(path, layer, EPSG, np.array([INSIDE_POINT]))
+    except ValueError:
+        return False
+    return len(found) > 0
+
+
+def accepts_lines(path: Path, layer: str | None) -> bool:
+    try:
+        found = ff.open_lines(path, AROUND, "river", EPSG, layer=layer)
     except ValueError:
         return False
     return len(found.features) > 0
@@ -262,6 +300,8 @@ READERS: Mapping[tuple[str, str], Callable[[Path, str | None], bool]] = {
     ("station-catchments", "--lakes"): accepts(read_nve_lakes),
     ("station-catchments", "--stations"): accepts(read_stations),
     ("station-catchments", "--reference"): accepts(read_references),
+    ("mesh", "--prefer"): accepts_prefer,
+    ("mesh", "--lines"): accepts_lines,
 }
 
 
@@ -298,7 +338,7 @@ def listed(tmp_path: Path) -> dict[str, tuple[Path, str | None, set[Fit]]]:
     for key, (path, layer) in files.items():
         entry = found[key]
         assert entry.problem is None, (key, entry.problem)
-        out[key] = (path, layer, {(f.command, f.option, f.rules) for f in entry.fits})
+        out[key] = (path, layer, {(f.command, f.option, f.classes) for f in entry.fits})
     return out
 
 
@@ -313,9 +353,9 @@ class TestT5FitsAgreeWithTheReaders:
                 if named != reader(path, layer):
                     disagreements.append((key, option, command, "fit" if named else "no fit"))
             for name in maps():
-                named = ("mesh", "--features", name) in fits
+                named = ("mesh", "--land-cover", name) in fits
                 if named != accepts_features(path, layer, name):
-                    disagreements.append((key, "--features", name, "fit" if named else "no fit"))
+                    disagreements.append((key, "--land-cover", name, "fit" if named else "no fit"))
         assert disagreements == []
 
     def test_the_fixtures_exercise_both_sides(
@@ -324,7 +364,7 @@ class TestT5FitsAgreeWithTheReaders:
         """Each vector option is named for some file and not for another, so
         neither side of the agreement is vacuous."""
         options = {(c, o) for _p, _l, fits in listed.values() for c, o, _m in fits}
-        assert set(READERS) | {("mesh", "--features")} <= options, options
+        assert set(READERS) | {("mesh", "--land-cover")} <= options, options
         for command, option in READERS:
             assert any((command, option, None) not in f for _p, _l, f in listed.values())
 
@@ -344,7 +384,8 @@ def test_106e_the_listing_names_mesh_for_polygons(tmp_path: Path) -> None:
     """`docs/increments/106-wednesday-cells.md`, section 8, test 8: a projected
     polygon file fits `mesh --reservoirs` and `mesh --catchments`, one in
     EPSG:4326 `--reservoirs` only, a points file neither; the CRS is the one
-    the listing reads from the file."""
+    the listing reads from the file. Any polygons fit `mesh --prefer` too
+    (increment 111, pinned in the module docstring)."""
     unit = box(500_000.0, 6_600_000.0, 501_000.0, 6_601_000.0)
     to_wgs84 = Transformer.from_crs("EPSG:25833", "EPSG:4326", always_xy=True).transform
     files = {
@@ -375,7 +416,7 @@ def test_106e_the_listing_names_mesh_for_polygons(tmp_path: Path) -> None:
     for key in files:
         assert found[key].problem is None, (key, found[key].problem)
     assert mesh_fits == {
-        "projected": {("mesh", "--reservoirs"), ("mesh", "--catchments")},
-        "degrees": {("mesh", "--reservoirs")},
+        "projected": {("mesh", "--reservoirs"), ("mesh", "--catchments"), ("mesh", "--prefer")},
+        "degrees": {("mesh", "--reservoirs"), ("mesh", "--prefer")},
         "points": set(),
     }

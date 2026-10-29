@@ -1,0 +1,14 @@
+23:17  up 13 days, 16:06, 5 users, load averages: 4.22 4.80 6.23
+Now drawing from 'AC Power'
+SLOWER: numedalslagen decode 0.90 -> 0.95 s (+5.6 %, band 5.0 %)
+HOTSPOT: tile refine 45 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine 67 % of the run (not in hotspots.toml)
+HOTSPOT: tile t=1 refine: scan (parallel) 50 % of the run (not in hotspots.toml)
+HOTSPOT: quarter refine 47 % of the run (not in hotspots.toml)
+HOTSPOT: numedalslagen features clip: clean-up 67 % of the run (not in hotspots.toml)
+HOTSPOT: geilo-al-ramp decode 42 % of the run (not in hotspots.toml)
+HOTSPOT: romsdal-slope refine 56 % of the run (not in hotspots.toml)
+baseline saved: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/ffc18e91-366e-4411-a0e4-6da9f0e70d71/scratchpad/master-9c317c16/docs/benchmarks/quick/baseline-apple-m1-max-ac.json
+SLOWER
+exit 1
+Now drawing from 'AC Power'

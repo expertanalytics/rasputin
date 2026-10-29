@@ -5,9 +5,9 @@
 A legend file holds ``name``, ``preset`` (the ParaView preset's name), an
 optional ``[no_class]`` (the label and colour of code 0) and ``[[class]]``
 tables of ``code``, ``label`` and ``colour``; every key is required and no
-other is allowed. It says nothing of how a source becomes constraint lines:
-that is the meshing rules' (`tin_engine.meshing_rules`), which name their
-legend. The shipped legends live in ``tin_engine/data/legends/``.
+other is allowed. It says nothing of what a source's values mean: that is
+the land-cover class file's (`tin_engine.land_cover_classes`), which names
+its legend. The shipped legends live in ``tin_engine/data/legends/``.
 """
 
 from __future__ import annotations

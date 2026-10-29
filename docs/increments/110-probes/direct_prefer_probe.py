@@ -23,9 +23,9 @@ from pathlib import Path
 
 import numpy as np
 import shapely
+from tin_engine.meshing_rules import load
 
 from tin_engine.feature_input import read_class_polygons, read_polygons
-from tin_engine.meshing_rules import load
 from tin_engine.preferred import overlay
 
 HOME = Path.home()

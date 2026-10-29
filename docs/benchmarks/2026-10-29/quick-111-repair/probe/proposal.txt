@@ -1,0 +1,10 @@
+numedal.npz:
+  master-like: intersection only (no check)    0.617 s [0.612-0.618]
+  branch: check + intersection                 0.931 s [0.927-0.933]
+  proposed: threaded check, clipped kept       0.597 s [0.597-0.599]
+  flagged: branch 0, proposed 0; clean-up inputs equal: False
+lagan.npz:
+  master-like: intersection only (no check)    0.494 s [0.490-0.499]
+  branch: check + intersection                 0.818 s [0.818-0.828]
+  proposed: threaded check, clipped kept       0.590 s [0.586-0.593]
+  flagged: branch 0, proposed 0; clean-up inputs equal: False

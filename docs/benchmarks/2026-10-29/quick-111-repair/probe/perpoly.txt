@@ -1,0 +1,16 @@
+total 0.255 s; top 5 0.121 s, top 20 0.143 s
+  0.0533 s  vertices 103355  parts 32  holes 655  code 312
+  0.0268 s  vertices 72134  parts 9  holes 421  code 312
+  0.0214 s  vertices 63356  parts 15  holes 408  code 312
+  0.0129 s  vertices 37439  parts 10  holes 120  code 333
+  0.0062 s  vertices 23808  parts 1  holes 61  code 322
+  0.0041 s  vertices 19807  parts 29  holes 69  code 312
+polygons over 10k clipped vertices: 7, their time 0.128 s
+total 0.250 s; top 5 0.175 s, top 20 0.180 s
+  0.1315 s  vertices 173808  parts 39  holes 1290  code 312
+  0.0193 s  vertices 46286  parts 35  holes 315  code 312
+  0.0176 s  vertices 45772  parts 20  holes 561  code 312
+  0.0040 s  vertices 12286  parts 16  holes 128  code 312
+  0.0024 s  vertices 10616  parts 1  holes 47  code 311
+  0.0010 s  vertices 4116  parts 1  holes 29  code 211
+polygons over 10k clipped vertices: 5, their time 0.175 s
