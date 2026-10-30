@@ -289,6 +289,24 @@ class TestBoxCrs:
         found = by_id(await listed(bbox=utm, bbox_crs=EPSG))
         assert found[LOCAL]["box_covered"] == 1.0
 
+    async def test_mesh_refuses_a_box_with_no_area_naming_bbox(
+        self, home: Path, tmp_path: Path
+    ) -> None:
+        """Code review round 1: a point box, which `CrsBox` takes, has no area
+        in the mesh's CRS; the refusal names `--bbox`, not `--dem`."""
+        out = tmp_path / "mesh.vtk"
+        point = [508522.7, 6576808.3, 508522.7, 6576808.3]
+        result = await call(
+            server(tmp_path), "mesh", {"out": str(out), "dem": [LOCAL], "bbox": point,
+                                       "bbox_crs": EPSG},
+        )  # fmt: skip
+        assert result.is_error, result.content
+        words = text_block(result)
+        assert words.startswith("exit 2: Invalid value for --bbox: "), words
+        assert "need finite x_min < x_max and y_min < y_max" in words, words
+        assert f"in {EPSG}" in words, words
+        assert not out.exists()
+
 
 # ------------------------------------------------------------ T9
 

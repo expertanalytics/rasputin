@@ -3,7 +3,10 @@
 `docs/increments/114-bbox-crs.md`, section 4, tests 1 to 5. Tests 6 and 8 (a
 fetch dry run, and hints that run as printed) are in `test_cli_fetch.py`,
 beside its range server; test 7 (the MCP schema and instructions) is in
-`test_mcp_schema.py` and `test_mcp_datasets.py`.
+`test_mcp_schema.py` and `test_mcp_datasets.py`. Code review round 1 adds
+three: a box with no area in the mesh's CRS names `--bbox`, `--out-crs`
+without a region names `--domain` and `--bbox`, and `NotCached` never prints
+a box without its CRS.
 
 The figures are `docs/increments/114-probes/box_probe.py`'s, which applies the
 design's move (`EDGE_STEPS = 2000` steps a side), with one exception: the
@@ -359,6 +362,106 @@ class TestMesh:
         assert code == USAGE, output
         assert squashed(f"meets no tile in {UTM33}") in squashed(output), output
         assert not out.exists()
+
+
+#: `Bounds`' words for a box with no area (`io/models.py`).
+NO_AREA = "need finite x_min < x_max and y_min < y_max"
+
+
+class TestABoxWithNoAreaInTheMeshsCrs:
+    """Code review round 1: a box that `CrsBox` takes (equal corners are
+    allowed, for `sources`) but that has no area once moved into the mesh's
+    CRS is refused naming `--bbox`, as master's `_open_dem` named it, never
+    `--dem`. The printed box names the CRS it is in (section 3, "Printed
+    boxes name their CRS"). Cases: a point and a line in the DEM's CRS, a
+    line on 15° E (UTM 33's central meridian, so x is 500000 at both ends)
+    in degrees, and a point and a line moved into `--out-crs`."""
+
+    @pytest.mark.parametrize(
+        ("box", "crs", "extra", "frame"),
+        [
+            ((500_050.0, 6_599_980.0, 500_050.0, 6_599_980.0), UTM33, (), UTM33),
+            ((500_050.0, 6_599_970.0, 500_050.0, 6_599_990.0), UTM33, (), UTM33),
+            ((15.0, 59.53, 15.0, 59.54), DEGREES, (), UTM33),
+            (
+                (500_050.0, 6_599_980.0, 500_050.0, 6_599_980.0),
+                UTM33,
+                ("--out-crs", "EPSG:3006"),
+                "EPSG:3006",
+            ),
+            (
+                (500_050.0, 6_599_970.0, 500_050.0, 6_599_990.0),
+                UTM33,
+                ("--out-crs", "EPSG:3006"),
+                "EPSG:3006",
+            ),
+        ],
+        ids=["point", "line", "degree-line", "out-crs-point", "out-crs-line"],
+    )
+    def test_it_is_refused_naming_bbox_and_the_meshs_crs(
+        self,
+        tmp_path: Path,
+        quad: Path,
+        box: tuple[float, ...],
+        crs: str,
+        extra: tuple[str, ...],
+        frame: str,
+    ) -> None:
+        out = tmp_path / "m.vtk"
+        code, output = invoke(
+            "mesh", "--dem", str(quad), "--out", str(out), *extra,
+            "--bbox", *map(repr, box), "--bbox-crs", crs,
+        )  # fmt: skip
+        assert code == USAGE, output
+        assert "Invalid value for --bbox:" in output, output
+        assert "Invalid value for --dem" not in output, output
+        assert squashed(NO_AREA) in squashed(output), output
+        assert squashed(f"in {frame}") in squashed(output), output
+        assert "Value error," not in output, output
+        assert not out.exists()
+
+
+class TestOutCrsWithNeitherDomainNorBox:
+    """Code review round 1: the refusal said "a box in the target CRS", but a
+    box may now be in any CRS. It names the options to give instead, under
+    `--out-crs`, the option it is about."""
+
+    def test_it_names_domain_and_bbox(self, tmp_path: Path, quad: Path) -> None:
+        out = tmp_path / "m.vtk"
+        code, output = invoke(
+            "mesh", "--dem", str(quad), "--out", str(out), "--out-crs", "EPSG:3006"
+        )
+        assert code == USAGE, output
+        wanted = "Invalid value for --out-crs: --out-crs needs --domain or --bbox"
+        assert squashed(wanted) in squashed(output), output
+        assert "target CRS" not in output, output
+        assert not out.exists()
+
+
+class TestNotCachedNamesTheWindowsCrs:
+    """Code review round 1: `NotCached` with a box and no CRS printed "in
+    None". A printed box names its CRS (section 3), so a box without one is
+    a programming error, refused when the exception is built."""
+
+    def test_a_box_without_a_crs_is_refused(self) -> None:
+        from tin_engine.io.cog import NotCached
+
+        with pytest.raises(TypeError, match=r"^NotCached's box needs its crs$"):
+            NotCached(1, 2, "cache/obj", box=(1.0, 2.0, 3.0, 4.0))
+
+    def test_a_box_with_its_crs_ends_with_it(self) -> None:
+        from tin_engine.io.cog import NotCached
+
+        words = str(NotCached(1, 2, "cache/obj", box=(1.0, 2.0, 3.0, 4.0), crs=UTM33))
+        assert words == (
+            "cache/obj: 1 of the 2 blocks needed are not in the cache for the window 1 2 3 4 "
+            f"in {UTM33}"
+        )
+
+    def test_no_box_needs_no_crs(self) -> None:
+        from tin_engine.io.cog import NotCached
+
+        assert str(NotCached(0, 0, "cache/obj")) == "cache/obj is not in the cache"
 
 
 # ------------------------------------------------------------ 4. refusals
