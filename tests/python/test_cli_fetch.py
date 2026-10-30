@@ -355,7 +355,7 @@ class TestBoxCrs:
         domain = geojson(tmp_path / "d.geojson", TRIANGLE)
         mesh = (
             "mesh", "--dem", KEY, "--cache", str(cache), "--domain", str(domain),
-            "--tolerance", "1", "--edges-max-shift", "5", "--simplify-domain",
+            "--tolerance", "1", "--domain-max-shift", "5", "--simplify-domain",
             "--out", str(tmp_path / "m.vtk"),
         )  # fmt: skip
         message = refusal(*mesh)
