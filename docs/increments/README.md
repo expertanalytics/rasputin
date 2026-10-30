@@ -26,10 +26,9 @@ every persona working on it.
    ruling or retuned constant after red is `@tester`'s amendment, in its own
    commit with the reason.
 4. `@reviewer` audits before the push (verdicts: `reviewer.md`). The main
-   session copies each round's verdict line, commit range and LOC count into
-   the increment file's `## Review` section, applies any wordings of
-   `APPROVED WITH WORDINGS` exactly in that commit, and commits before the
-   push; that commit needs no second round.
+   session applies any `APPROVED WITH WORDINGS` wordings exactly in one
+   commit before the push, needing no second round; the PR description
+   carries each round's verdict line.
 
 The main session writes the as-built record (pins, kill record, counts) from
 the handbacks and updates `ROADMAP.md`'s row in the PR. No stacked branches;
