@@ -232,9 +232,10 @@ relayed 2026-10-25: yes to both tables, no option to ask for them):
   SQLite: acceptable for a one-off, and the coarse mesh this increment is for
   is three orders smaller. Section 8a has the measured write times.
 
-Without a legend that has categories (a `--land-cover file.tif` with no
-`--land-cover-legend`), the fractions table is written, the `cells` layer is
-not, and the record says "cells: none, the land cover has no legend".
+Without a land-cover class file (a `--land-cover file.tif` with no
+`--land-cover-classes`), the fractions table is written, the `cells` layer is
+not, and the record says "cells: none, the land cover has no land-cover
+class file".
 105a leaves `.vtk` and `.ply` unchanged (105c changes the type of one
 existing array in each, 4.5).
 
@@ -347,7 +348,7 @@ the GeoPackage content list and the `.vtk` arrays of such a run.
   `io.geopackage` reads the rows back in `fid` order.
 - **T5 CLI.** The scene of `tests/python/test_cli_mesh_land_cover_fractions.py`
   (DEM 40 × 40 at 60 m in EPSG:31983, the synthetic class cache,
-  `--tolerance 3`) with `--out x.gpkg --land-cover-legend mapbiomas-c11`,
+  `--tolerance 3`) with `--out x.gpkg --land-cover-classes mapbiomas-c11`,
   measured 2026-10-25 at `074e6322`: **1,590 triangles, 1,825 entries,
   classes {0, 9, 15, 21, 25, 30, 41, 75}, 1,367 triangles of one class**;
   `cells` has 1,590 rows, `land_cover_fractions` 1,825; forest equals the
@@ -356,14 +357,14 @@ the GeoPackage content list and the `.vtk` arrays of such a run.
   the five Shyft columns sum to 1 within 3e-6; `cells.area_m2` equals
   `triangles.area_m2` row by row, total 4,490,161 m² (relative 1e-9). Without
   `--land-cover` the content list stays `triangles, lines, run` (plus
-  `land_cover_classes` when coded); `.vtk` output gains no array. **The legend
-  check:** the same scene with `--land-cover-legend lake.toml`, a `coded_map`
-  legend whose Lake class (code 2, `water = true`) has no category, and
-  `--out x.gpkg` exits 2 with a usage error naming `--land-cover-legend` and
+  `land_cover_classes` when coded); `.vtk` output gains no array. **The category
+  check:** the same scene with `--land-cover-classes lake.toml`, a `coded_map`
+  class file whose Lake class (code 2, `water = true`) has no category, and
+  `--out x.gpkg` exits 2 with a usage error naming `--land-cover-classes` and
   class 2 before any DEM is read (no `x.gpkg.part` exists afterwards); the
   same with `--out x.vtk` writes the mesh with its three fraction arrays as
   today; `--reservoirs` (105b) with `--out x.vtk` or without `--land-cover`
-  with a legend is a usage error.
+  with a class file is a usage error.
 - **T6 polygon fractions (105c).** `polygon_fractions.assign` on triangles
   `A = (0,0), (2,0), (0,2)` and `B = (2,0), (2,2), (0,2)` (plan area 2 each)
   against class polygons 311 = the strip `[0,1] × [0,2]` and 512 = the square
