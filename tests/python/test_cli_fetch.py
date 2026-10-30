@@ -40,7 +40,7 @@ from shapely.geometry import Point, Polygon
 import tin_engine
 from cli_helpers import geojson, invoke, no_cache_anywhere, runner, says_no_cache
 from cog_fixtures import write_cache
-from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
+from fetch_fixtures import PROJECTED_CRS, RangeServer, block_span, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y
 from plyread import read_ply
 from test_cli_mesh_mosaic import field, same_mesh
@@ -298,16 +298,21 @@ def hinted(message: str) -> list[str]:
 
 class TestBoxCrs:
     def test_a_dry_run_in_the_sources_crs_plans_as_before(
-        self, remote: Any, tmp_path: Path
+        self, remote: Any, data: bytes, tmp_path: Path
     ) -> None:
         """Test 6: measured before `--bbox-crs`, with the box read in the source's CRS.
-        The summary's elapsed time (about 0.06 s a run) is cut: it is the host's."""
+        The summary's elapsed time (about 0.06 s a run) is cut: it is the host's.
+        The plan is blocks 0 to 12 (rows 0 to 2, columns 0 to 2 of 5 across) in
+        one request; its byte count is that span of the fixture, whose Deflate
+        sizes depend on the host's Deflate build (6,274 bytes on macOS, 6,312 on CI's Linux)."""
         lines = dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS)
         lines = [re.sub(r", \d+\.\d s$", "", line) for line in lines]
+        page = page_of(data)
+        size = f"{block_span(page, 12)[1] - block_span(page, 0)[0]:,}"
         assert lines == [
-            "p: 9 blocks, 6,274 bytes to fetch",
+            f"p: 9 blocks, {size} bytes to fetch",
             "test-fetch: 1 objects, 9 blocks needed, 0 present, would fetch 9 (0 empty)"
-            " in 1 requests, 6,274 bytes",
+            f" in 1 requests, {size} bytes",
         ], lines
 
     def test_a_dry_run_in_degrees_plans_the_same(self, remote: Any, tmp_path: Path) -> None:
