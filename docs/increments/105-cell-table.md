@@ -117,32 +117,38 @@ five then sum to 1 within 2.7e-6: **not exactly**, and the tests say "within
 
 ## 4. The rule
 
-**4.1 Categories live in the legend files.** Each `[[class]]` in
-`src_python/tin_engine/data/legends/*.toml` may carry
-`category = "forest" | "lake" | "glacier" | "savanna" | "unspecified"`; a
-class without one is unspecified; a `[[split.class]]` inherits its parent's;
-class 0 (no data, constraint lines) is unspecified. Any other value is refused at load
-(a Pydantic `Literal`). `Legend` gains two fields filled at load:
-`categories: Mapping[int, Category]` (class code to its named category) and
-`water_codes: frozenset[int]` (the classes with `water = true`).
+**4.1 Categories live in the land-cover class files.** (Amended 2026-10-30
+for increment 108, which split each old legend file in two: `data/legends/`
+now holds labels and colours only, and `data/land_cover_classes/` the codes,
+water flags and categories.) A class file's `[cells.categories]` table maps
+each of `forest`, `lake`, `glacier`, `savanna`, `unspecified` to a list of
+class codes. A class listed nowhere is unspecified; a `[[split.class]]`
+inherits its parent's; class 0 (no data, constraint lines) is unspecified.
+Refused at load: any other category name (a Pydantic `Literal`), a code that
+is not a listed class or is counted twice, a category named like an
+`--edges` selector, and a `category` key inside a `[[class]]` (the message
+names `[cells]`). `LandCoverClasses` (`feature_input.py`) carries two fields
+filled at load: `categories: Mapping[int, Category]` (class code to its
+named category) and `water_codes: frozenset[int]` (the classes with
+`water = true`).
 
-**The legend check runs only when the cells table is written.** Loading never
-refuses a class for lacking a category: the test legends
-(`tests/python/legend_fixtures.py:35,61`, a `water = true` Lake and a
-`water = true` 512 with no category) and every user legend written before
-this increment keep loading, so no existing fixture changes. The pure
-function `cells.categories_of(legend)` returns `legend.categories` or raises
-`ValueError` naming every code in `legend.water_codes` that has no category
-("class 512 is water but has no category; give it lake or unspecified"), so
-water never silently falls into unspecified. `cli.mesh` calls it right after
-`_class_source`, before any DEM is read, whenever `--land-cover` comes with a
-legend and `--out` ends in `.gpkg`; the refusal is a usage error on
-`--land-cover-legend`. The same legend with a `.vtk` output runs as today.
-The shipped legends never trip it: their `water = true` classes are exactly
-the lake and sea classes below (`grep -B3 'water = true'` over the four
-class files in `data/land_cover_classes/`, 2026-10-30), and every one carries a category. The shipped mapping:
+**The category check runs only when the cells table is written.** Loading
+never refuses a class for lacking a category: the test class files
+(`tests/python/legend_fixtures.py:89,122`, a `water = true` Lake and a
+`water = true` 512 with no category) and every user class file keep loading.
+The pure function `cells.categories_of(classes)` returns `classes.categories`
+or raises `ValueError` naming every code in `classes.water_codes` that has no
+category ("class 512: water without a category; give it lake or
+unspecified"), so water never silently falls into unspecified. `cli.mesh`
+calls it after `_class_source`, before any DEM is read, whenever the run
+computes class shares and `--out` ends in `.gpkg`; the refusal is a usage
+error on `--land-cover-classes`. The same class file with a `.vtk` output
+runs as before. The shipped class files never trip it: their `water = true`
+classes are exactly the lake and sea classes below (`grep -B3 'water = true'`
+over the four class files in `data/land_cover_classes/`, 2026-10-30), and
+every one carries a category. The shipped mapping:
 
-| legend | forest | lake | glacier | savanna | unspecified, named |
+| class file | forest | lake | glacier | savanna | unspecified, named |
 |---|---|---|---|---|---|
 | `corine`, `clc18_kode` | 311, 312, 313 | 511, 512, 521, 522 | 335 | none | 523 Sea and ocean |
 | `ar50` | 30 (and its splits 3031, 3032, 3033, 3099) | 81 | 70 | none | 82 Ocean |
@@ -154,14 +160,15 @@ under its level-1 *Forest* group but Shyft's forest (a canopy that intercepts
 rain and snow) is not. 7 Flooded Savanna goes with it by its own name (a
 default taken, section 11). Sea is unspecified, not lake (same ruling): Shyft's
 lake share is water that stores and evaporates inside the catchment, and a
-coastal triangle over the sea is outside it. The two sea classes carry
-`category = "unspecified"` so the check passes them on purpose. Left
+coastal triangle over the sea is outside it. The two sea classes (523, 82)
+are listed under `unspecified` so the check passes them on purpose. Left
 unspecified without a word: CORINE 324 Transitional woodland-shrub and 244
-Agro-forestry; AR50 60 Marsh. **A user's own mapping** is a legend file:
-copy a shipped one, edit `category`, pass it with `--land-cover-legend
-my.toml` (exists today). No new option. A user holding the EEA's own 100 m
-CLC raster (grid codes 1 to 44, uint8) needs only such a legend file over
-those codes: no code change.
+Agro-forestry; AR50 60 Marsh. **A user's own mapping** is a class file:
+copy a shipped one, edit `[cells.categories]`, pass it with
+`--land-cover-classes my.toml` (exists today). No new option. A user holding
+the EEA's own 100 m CLC raster (grid codes 1 to 44, uint8) needs only such a
+class file over those codes, and the legend it names colouring them: no
+code change.
 
 **4.2 Reservoir (105b).** CORINE, AR50 and MapBiomas cannot tell a regulated
 lake from a lake. **One new option**, `--reservoirs <catalogue vector source
