@@ -222,7 +222,7 @@ def quoted(output: str) -> list[str]:
     return [line for line in output.splitlines() if re.match(r"^  \d+: ", line)]
 
 
-def test_3_the_status_line_body_lines_and_review_count_are_quoted(repo: Path, home: Path) -> None:
+def test_3_the_status_line_and_body_lines_are_quoted(repo: Path, home: Path) -> None:
     text = increment_text(2, REVIEW)
     write(repo, INCREMENT, text)
     output = ok(repo, home, *args_for("tester", repo))
@@ -230,8 +230,7 @@ def test_3_the_status_line_body_lines_and_review_count_are_quoted(repo: Path, ho
     numbered = {n + 1: line.strip() for n, line in enumerate(text.splitlines())}
     expected = [f"  {n}: {line}" for n, line in numbered.items() if line.startswith("Body line")]
     assert quoted(output) == expected  # the review's "mutation" line is not quoted
-    assert line_starting(output, "Review rounds recorded:").startswith("Review rounds recorded: 2")
-    assert "last: **Round 2.** Verdict: APPROVED. All closed." in output
+    assert "Review rounds" not in output  # reviews.jsonl names no branch
     assert f"From {INCREMENT}" in output
 
 
@@ -240,21 +239,6 @@ def test_3_at_most_eight_lines_then_a_count(repo: Path, home: Path) -> None:
     output = ok(repo, home, *args_for("tester", repo))
     assert len(quoted(output)) == 8
     assert "  ... 2 more; read them in the file" in output.splitlines()
-
-
-def test_3_without_a_review_section_it_says_none(repo: Path, home: Path) -> None:
-    write(repo, INCREMENT, increment_text(1, None))
-    output = ok(repo, home, *args_for("tester", repo))
-    assert "Review rounds recorded: none" in output.splitlines()
-
-
-def test_3_a_long_verdict_line_is_cut_to_200_characters(repo: Path, home: Path) -> None:
-    verdict = "**Round 1.** Verdict: APPROVED. " + "x" * 300
-    write(repo, INCREMENT, increment_text(1, verdict))
-    output = ok(repo, home, *args_for("tester", repo))
-    last = output.split("last: ", 1)[1].splitlines()[0]
-    assert len(last) == 200
-    assert verdict.startswith(last)
 
 
 # ---------------------------------------------------------------- 4. increment required

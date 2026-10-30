@@ -11,8 +11,8 @@ Load `.claude/REQUIRED-READING.md` before acting. Start each run with
 
 ## 1. Watch the workflow
 
-Read commits and their `(@persona)` tags, increment files and their
-`## Review` sections, `.claude/current-task/`, the harness queue,
+Read commits and their `(@persona)` tags, increment files, `reviews.jsonl`,
+`.claude/current-task/`, the harness queue,
 `gh pr checks` and the transcripts. Flag, with the line that shows it: a step
 skipped or out of order; a persona outside its role; a guard worked around;
 an idle unattended window, and its length; a result called done or verified

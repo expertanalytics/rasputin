@@ -59,7 +59,7 @@ HEADER = re.compile(
     r"^<<<BRIEF persona=([a-z]+) worktree=(/\S+) head=([0-9a-f]{40}) hash=([0-9a-f]{12})>>>[ \t]*$"
 )
 END = re.compile(r"^<<<END BRIEF ([0-9a-f]{12})>>>[ \t]*$")
-MAX_QUOTED, MAX_VERDICT = 8, 200
+MAX_QUOTED = 8
 
 
 class BriefError(Exception):
@@ -196,7 +196,7 @@ def _concurrency(
 
 
 def _from_increment(path: Path, shown: str) -> list[str]:
-    """§3.1: the Status line, the quoted lines outside ## Review, the review count."""
+    """§3.1: the Status line and the quoted lines outside ## Review."""
     lines = path.read_text(errors="replace").splitlines()
     starts = [n for n, line in enumerate(lines) if line.startswith("## Review")]
     review = range(0)
@@ -210,12 +210,6 @@ def _from_increment(path: Path, shown: str) -> list[str]:
     out += [f"  {n}: {line}" for n, line in hits[:MAX_QUOTED]]
     if len(hits) > MAX_QUOTED:
         out.append(f"  ... {len(hits) - MAX_QUOTED} more; read them in the file")
-    rounds = [lines[n] for n in review if "APPROVED" in lines[n] or "CHANGES REQUESTED" in lines[n]]
-    if not starts:
-        out.append("Review rounds recorded: none")
-    else:
-        last = f"; last: {rounds[-1][:MAX_VERDICT]}" if rounds else ""
-        out.append(f"Review rounds recorded: {len(rounds)}{last}")
     return out
 
 
