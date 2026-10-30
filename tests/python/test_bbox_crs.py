@@ -346,6 +346,20 @@ class TestMesh:
         )  # fmt: skip
         same_mesh(degrees, target)
 
+    def test_a_box_meeting_no_tile_is_named_with_the_tiles_crs(
+        self, tmp_path: Path, quad: Path
+    ) -> None:
+        """Section 3, "Printed boxes name their CRS": the mosaic's refusal."""
+        far = (600_000.0, 6_700_000.0, 600_100.0, 6_700_100.0)
+        out = tmp_path / "far.vtk"
+        code, output = invoke(
+            "mesh", "--dem", str(quad), "--out", str(out),
+            "--bbox", *map(repr, far), "--bbox-crs", UTM33,
+        )  # fmt: skip
+        assert code == USAGE, output
+        assert squashed(f"meets no tile in {UTM33}") in squashed(output), output
+        assert not out.exists()
+
 
 # ------------------------------------------------------------ 4. refusals
 

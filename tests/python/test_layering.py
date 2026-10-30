@@ -38,7 +38,7 @@ LAYERS: tuple[dict[str, str], ...] = (
     },
     {  # L1: pure algorithms
         "crs": "io.models run_record",
-        "mosaic": "io.models resources",
+        "mosaic": "crs io.models resources",  # 114: a printed box names its CRS
         "target_grid": "crs domain grow io.models",
         "grid_domain": "io.models",
         "domain": "crs io.models",
@@ -65,7 +65,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io.mesh_index": "io.models",
         "io.ply": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
         # 63: the features cache, a GeoPackage
-        "io.repository": "io.cog io.geotiff io.geopackage_write io.models mosaic",
+        "io.repository": "crs io.cog io.geotiff io.geopackage_write io.models mosaic",  # 114
         "io.rivers": "hydrography io.station_set",
         "io.station_set": "hydrography io.geojson io.repository",
         "io.vtk_legacy": "features io.mesh_checks io.models",  # 26b: the ClassFractions table
@@ -114,8 +114,8 @@ LAYERS: tuple[dict[str, str], ...] = (
         "land_cover_classes": "feature_input features legends toml_data",
         # 111: the one land-cover map, the --prefer cut on LandCoverClasses
         "land_cover_map": "feature_input preferred",
-        # 55: the listing; 57: vector sources
-        "source_report": "crs dem_input feature_input geodesy io.geojson io.geopackage"
+        # 55: the listing; 57: vector sources; 114: the box with its CRS
+        "source_report": "crs dem_input domain feature_input geodesy io.geojson io.geopackage"
                          " land_cover_classes io.models io.repository sources",
         # 85: a network file's links and units; reads through feature_input
         "io.network_file": "crs feature_input io.geojson io.geopackage io.repository network",

@@ -216,7 +216,8 @@ class TestF2TheSourceBox:
     ) -> None:
         meta = header(geographic(), geographic=True)[0]
         request = plan.FetchRequest(source="s", box=crs_box("EPSG:4326", (179.99, 10, 180.5, 11)))
-        with pytest.raises(fetch_error):
+        # The printed box names its CRS (`docs/increments/114-bbox-crs.md`, section 3).
+        with pytest.raises(fetch_error, match=r"in EPSG:4326$"):
             plan.source_box(request, meta)
 
 
