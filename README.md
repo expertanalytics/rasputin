@@ -21,12 +21,14 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   `rasputin mesh --dem glo30` then runs offline; `anadem-v1` (South America)
   likewise.
 - **Lakes and land cover from the network.**
-  `rasputin fetch nve-lakes --bbox XMIN YMIN XMAX YMAX` copies the lake
-  polygons of NVE's lake database (Innsjødatabasen) meeting the box, and
-  `rasputin fetch clc2018 --bbox ...` the CORINE Land Cover 2018 polygons
-  from the European Environment Agency's map service; no account is needed.
-  The box is in the source's CRS (EPSG:25833 and EPSG:3035), or in
-  `--out-crs`; `--domain FILE` takes a polygon's box instead. Each lands as
+  `rasputin fetch nve-lakes --bbox XMIN YMIN XMAX YMAX --bbox-crs EPSG:25833`
+  copies the lake polygons of NVE's lake database (Innsjødatabasen) meeting
+  the box, and `rasputin fetch clc2018 --bbox ... --bbox-crs EPSG:3035` the
+  CORINE Land Cover 2018 polygons from the European Environment Agency's map
+  service; no account is needed. `--bbox-crs` is required with `--bbox`, since
+  a box's CRS is never assumed (EPSG:4326 for longitude and latitude in
+  degrees); the box is moved into `--out-crs` if given, else into the
+  source's CRS. `--domain FILE` takes a polygon's box instead. Each lands as
   one GeoPackage in the tile cache, and `rasputin sources` then lists it with
   its path and the options it fits (`mesh --land-cover` with
   `--land-cover-classes corine`, `mesh --prefer`, `catchment --lakes`). A
@@ -210,7 +212,7 @@ goes through a `.part` file and a rename, so it cannot.
 every elevation and land-cover source the machine knows, local and remote,
 with its coverage as a longitude/latitude box, cell size in metres, CRS,
 height unit, description and credit, read from the files' headers (with
-`bbox`, the share of an area each covers). The agent passes the chosen
+`bbox` and `bbox_crs`, the share of an area each covers). The agent passes the chosen
 source's id as `dem` to `mesh`, `catchment` or `station_catchments`.
 The listing also names vector datasets (polygons, lines, points) with their
 path, layer, geometry types, feature count, attributes and, for land cover,
