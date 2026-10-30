@@ -5,21 +5,16 @@ for each type rule and refusal its design names. Every fixture is built here
 and its figures are the ones it is written with. P6 is the existing lists:
 `test_plugin_api.py` (each name the core's own object, with its signature),
 `test_cli_help.py` T6 (each name on `docs/plugins.md`) and `test_layering.py`.
-
-`tin_engine.io.feature_table` and `sources.features_file` are looked up
-inside each test, so the suite collects before they exist.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import re
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -29,7 +24,8 @@ from tin_engine import cli, sources
 from tin_engine.crs import srs_entry
 from tin_engine.feature_input import FeatureError
 from tin_engine.io import geopackage_write
-from tin_engine.sources import RemoteSource
+from tin_engine.io.feature_table import FeatureTable, read_feature_table
+from tin_engine.sources import RemoteSource, features_file
 
 UTM33 = "EPSG:25833"
 #: Off every round number, UTM-shaped.
@@ -40,10 +36,6 @@ COLUMNS = (
     ("n", "esriFieldTypeInteger"),
     ("x", "esriFieldTypeDouble"),
 )
-
-
-def feature_table() -> ModuleType:
-    return importlib.import_module("tin_engine.io.feature_table")
 
 
 def square(x: float, y: float, side: float = 10.0) -> MultiPolygon:
@@ -104,7 +96,7 @@ class TestAGeoPackageLayerReadsWhole:
     """P1: columns and types, fids, values exactly, geometries exactly, CRS text."""
 
     def read(self, tmp_path: Path) -> Any:
-        return feature_table().read_feature_table(write_layer(tmp_path / "f.gpkg"), TABLE)
+        return read_feature_table(write_layer(tmp_path / "f.gpkg"), TABLE)
 
     def test_columns_and_their_field_types_in_file_order(self, tmp_path: Path) -> None:
         assert self.read(tmp_path).columns == COLUMNS
@@ -123,11 +115,11 @@ class TestAGeoPackageLayerReadsWhole:
         assert (table.crs, table.layer) == (UTM33, TABLE)
 
     def test_the_only_layer_is_read_when_none_is_named(self, tmp_path: Path) -> None:
-        table = feature_table().read_feature_table(write_layer(tmp_path / "f.gpkg"), None)
+        table = read_feature_table(write_layer(tmp_path / "f.gpkg"), None)
         assert [fid for fid, _, _ in table.rows] == [7, 9, 12]
 
     def test_the_table_is_the_promised_dataclass(self, tmp_path: Path) -> None:
-        assert isinstance(self.read(tmp_path), feature_table().FeatureTable)
+        assert isinstance(self.read(tmp_path), FeatureTable)
 
 
 # ---------------------------------------------------------------- P2
@@ -143,7 +135,7 @@ class TestABoxKeepsTheRowsNearIt:
             asked.append(crs)
             return (X0 - 1.0, Y0 - 1.0, X0 + 111.0, Y0 + 11.0)
 
-        table = feature_table().read_feature_table(write_layer(tmp_path / "f.gpkg"), TABLE, box_for)
+        table = read_feature_table(write_layer(tmp_path / "f.gpkg"), TABLE, box_for)
         assert [fid for fid, _, _ in table.rows] == [7, 9]
         assert [values for _, _, values in table.rows] == [ROWS[0][2], ROWS[1][2]]
         assert asked == [UTM33]
@@ -176,7 +168,7 @@ def test_each_declared_column_type_has_its_field_type(
     path = write_layer(
         tmp_path / "f.gpkg", extra_sql=[f'ALTER TABLE {TABLE} ADD COLUMN "v" {declared}']
     )
-    table = feature_table().read_feature_table(path, TABLE)
+    table = read_feature_table(path, TABLE)
     assert table.columns == (*COLUMNS, ("v", field))
 
 
@@ -188,7 +180,7 @@ def test_p4_a_blob_column_is_refused_by_name(tmp_path: Path) -> None:
         tmp_path / "f.gpkg", extra_sql=[f'ALTER TABLE {TABLE} ADD COLUMN "raw" BLOB']
     )
     with pytest.raises(FeatureError, match=r"\braw\b"):
-        feature_table().read_feature_table(path, TABLE)
+        read_feature_table(path, TABLE)
 
 
 def test_an_undeclared_column_type_is_refused_by_name(tmp_path: Path) -> None:
@@ -196,7 +188,7 @@ def test_an_undeclared_column_type_is_refused_by_name(tmp_path: Path) -> None:
         tmp_path / "f.gpkg", extra_sql=[f'ALTER TABLE {TABLE} ADD COLUMN "odd" GEOMETRYX']
     )
     with pytest.raises(FeatureError, match=r"\bodd\b"):
-        feature_table().read_feature_table(path, TABLE)
+        read_feature_table(path, TABLE)
 
 
 # ---------------------------------------------------------------- P3
@@ -210,52 +202,90 @@ class TestAGeoJsonLayer:
         path = write_geojson(
             tmp_path / "f.geojson", [{"kind": "a"}, {"kind": "b", "n": 2}], ids=[50, 60]
         )
-        table = feature_table().read_feature_table(path, None)
+        table = read_feature_table(path, None)
         assert table.columns == (("kind", "esriFieldTypeString"), ("n", "esriFieldTypeInteger"))
         assert [(fid, values) for fid, _, values in table.rows] == [(1, ("a", None)), (2, ("b", 2))]
         assert table.layer is None
 
     def test_the_geometries_are_read(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.json", [{"kind": "a"}])
-        ((_, geometry, _),) = feature_table().read_feature_table(path, None).rows
+        ((_, geometry, _),) = read_feature_table(path, None).rows
         ring = [(10.0, 60.0), (10.1, 60.0), (10.1, 60.1), (10.0, 60.0)]
         assert geometry is not None and geometry.equals_exact(Polygon(ring), 0.0)
 
     def test_a_key_both_text_and_integer_is_refused_by_name(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [{"code": "1"}, {"code": 1}])
         with pytest.raises(FeatureError, match=r"\bcode\b"):
-            feature_table().read_feature_table(path, None)
+            read_feature_table(path, None)
 
     def test_integers_and_floats_make_a_double(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [{"x": 2}, {"x": 0.5}])
-        table = feature_table().read_feature_table(path, None)
+        table = read_feature_table(path, None)
         assert table.columns == (("x", "esriFieldTypeDouble"),)
         assert [values for _, _, values in table.rows] == [(2,), (0.5,)]
 
     def test_booleans_make_an_integer(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [{"ok": True}, {"ok": False}])
-        table = feature_table().read_feature_table(path, None)
+        table = read_feature_table(path, None)
         assert table.columns == (("ok", "esriFieldTypeInteger"),)
         assert [values for _, _, values in table.rows] == [(1,), (0,)]
 
     def test_a_nested_value_is_refused_by_name(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [{"deep": {"a": 1}}])
         with pytest.raises(FeatureError, match=r"\bdeep\b"):
-            feature_table().read_feature_table(path, None)
+            read_feature_table(path, None)
 
     def test_the_box_is_not_used(self, tmp_path: Path) -> None:
         def box_for(crs: str) -> tuple[float, float, float, float]:
             raise AssertionError(f"box_for called with {crs}")
 
         path = write_geojson(tmp_path / "f.geojson", [{"kind": "a"}, {"kind": "b"}])
-        assert len(feature_table().read_feature_table(path, None, box_for).rows) == 2
+        assert len(read_feature_table(path, None, box_for).rows) == 2
 
 
 def test_an_unknown_suffix_is_refused_by_name(tmp_path: Path) -> None:
     path = tmp_path / "f.shp"
     path.write_bytes(b"")
     with pytest.raises(FeatureError, match=r"f\.shp"):
-        feature_table().read_feature_table(path, None)
+        read_feature_table(path, None)
+
+
+# ---------------------------------------------------------------- refusals and no columns
+
+
+def test_a_missing_geopackage_is_refused_by_name(tmp_path: Path) -> None:
+    path = tmp_path / "gone.gpkg"
+    with pytest.raises(FeatureError, match=r"^gone\.gpkg: "):
+        read_feature_table(path, TABLE)
+    assert not path.exists(), "the read-only open created the file"
+
+
+def test_a_file_that_is_not_a_geopackage_is_refused_by_name(tmp_path: Path) -> None:
+    path = tmp_path / "text.gpkg"
+    path.write_text("not a database, only text\n" * 8, "utf-8")
+    with pytest.raises(FeatureError, match=r"^text\.gpkg: not a readable GeoPackage"):
+        read_feature_table(path, TABLE)
+
+
+@pytest.mark.parametrize("name", ["f.geojson", "f.json"])
+def test_a_layer_given_with_geojson_is_refused(tmp_path: Path, name: str) -> None:
+    path = write_geojson(tmp_path / name, [{"kind": "a"}])
+    with pytest.raises(FeatureError) as caught:
+        read_feature_table(path, TABLE)
+    assert str(caught.value) == f"{name}: a layer applies to a GeoPackage only"
+
+
+def test_a_geopackage_layer_with_no_attribute_columns(tmp_path: Path) -> None:
+    rows = tuple((fid, geometry, ()) for fid, geometry, _ in ROWS)
+    table = read_feature_table(write_layer(tmp_path / "f.gpkg", columns=(), rows=rows), TABLE)
+    assert table.columns == ()
+    assert [(fid, values) for fid, _, values in table.rows] == [(7, ()), (9, ()), (12, ())]
+
+
+def test_a_geojson_layer_with_no_properties(tmp_path: Path) -> None:
+    table = read_feature_table(write_geojson(tmp_path / "f.geojson", [{}, {}]), None)
+    assert table.columns == ()
+    assert [(fid, values) for fid, _, values in table.rows] == [(1, ()), (2, ())]
 
 
 # ---------------------------------------------------------------- P5
@@ -279,26 +309,23 @@ def remote_entry() -> RemoteSource:
 class TestFeaturesFile:
     """P5: a features source's file, the way `mesh` finds it."""
 
-    def features_file(self) -> Callable[[RemoteSource, Path | None], Path]:
-        return sources.features_file  # type: ignore[attr-defined, no-any-return]
-
     def test_a_local_entry_is_its_own_path(self, tmp_path: Path) -> None:
         path = write_layer(tmp_path / "f.gpkg")
-        assert self.features_file()(local_entry(path), None) == path
+        assert features_file(local_entry(path), None) == path
 
     def test_a_remote_entry_is_its_copy_in_the_cache(self, tmp_path: Path) -> None:
         copy = tmp_path / "cache" / "far" / "features.gpkg"
         copy.parent.mkdir(parents=True)
         write_layer(copy)
-        assert self.features_file()(remote_entry(), tmp_path / "cache") == copy
+        assert features_file(remote_entry(), tmp_path / "cache") == copy
 
     def test_a_missing_copy_is_refused_by_name(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match=re.escape("far/features.gpkg is not in the cache")):
-            self.features_file()(remote_entry(), tmp_path / "cache")
+            features_file(remote_entry(), tmp_path / "cache")
 
     def test_a_missing_cache_is_refused(self) -> None:
         with pytest.raises(ValueError, match="no cache directory"):
-            self.features_file()(remote_entry(), None)
+            features_file(remote_entry(), None)
 
     def test_the_cache_root_moves_to_sources(self) -> None:
-        assert cli.cache_root is sources.cache_root  # type: ignore[attr-defined]
+        assert cli.cache_root is sources.cache_root
