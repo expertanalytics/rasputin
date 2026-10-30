@@ -44,6 +44,8 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from tin_engine.crs import crs_label
+
 from .cog import (
     CacheError,
     LocalTiffBlocks,
@@ -362,7 +364,10 @@ class CacheRepository:
         r0 = max(math.floor((y0 - box.y_max) / meta.delta_y), 0)
         r1 = min(math.ceil((y0 - box.y_min) / meta.delta_y), meta.rows)
         if c0 >= c1 or r0 >= r1:
-            raise ValueError(f"{self._source}/{name}: the box {box} meets none of its cells")
+            raise ValueError(
+                f"{self._source}/{name}: the box {box} in {crs_label(meta.crs)} meets none of "
+                "its cells"
+            )
         for start in range(r0, r1, rows):
             window = IndexWindow(row0=start, col0=c0, rows=min(rows, r1 - start), cols=c1 - c0)
             yield self.load_class_window(name, window)
@@ -378,7 +383,8 @@ class CacheRepository:
             needed, missing = needed + len(indices), missing + len(blocks.missing(indices))
         if missing:
             where = f"{self._source} ({self._directory})"
-            raise NotCached(missing, needed, where, box=plan.meta.node_box())
+            box, crs = plan.meta.node_box(), crs_label(plan.meta.crs)
+            raise NotCached(missing, needed, where, box=box, crs=crs)
 
     def _page(self, name: str) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]:
         self.footprints()

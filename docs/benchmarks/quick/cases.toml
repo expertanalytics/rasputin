@@ -87,5 +87,5 @@ runs = 5
 warmup = 1
 args = ["mesh", "--dem", "$TREE/tests/fixtures/velhas/anadem_velhas.tif",
         "--out-crs", "EPSG:31983", "--bbox", "592000", "7845500", "599000", "7854000",
-        "--tolerance", "0.5"]
+        "--bbox-crs", "EPSG:31983", "--tolerance", "0.5"]
 inputs = ["$TREE/tests/fixtures/velhas/anadem_velhas.tif"]

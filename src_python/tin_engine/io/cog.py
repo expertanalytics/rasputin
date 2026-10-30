@@ -56,7 +56,7 @@ class CacheError(ValueError):
 class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the suite
     """`missing` of the `needed` blocks are not in the cache at `where`;
     `needed` is 0 when the source itself is not there. `box`, when given, is
-    the node box of the window that needs them, in the source's CRS."""
+    the node box of the window that needs them, in `crs`, the source's."""
 
     def __init__(
         self,
@@ -65,14 +65,16 @@ class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the s
         where: str,
         *,
         box: tuple[float, float, float, float] | None = None,
+        crs: str | None = None,
     ) -> None:
         self.missing, self.needed, self.where, self.box = missing, needed, where, box
+        self.crs = crs
         if needed == 0:
             text = f"{where} is not in the cache"
         else:
             text = f"{where}: {missing:,} of the {needed:,} blocks needed are not in the cache"
         if box is not None:
-            text += f" for the window {' '.join(f'{v:.15g}' for v in box)} in the source's CRS"
+            text += f" for the window {' '.join(f'{v:.15g}' for v in box)} in {crs}"
         super().__init__(text)
 
 

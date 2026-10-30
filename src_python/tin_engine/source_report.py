@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 from tin_engine.crs import crs_label, parse_crs, reprojector
 from tin_engine.dem_input import repository_for
+from tin_engine.domain import CrsBox
 from tin_engine.feature_input import LandCoverClasses
 from tin_engine.geodesy import LocalFrame
 from tin_engine.io.geojson import collection_summary
@@ -223,19 +224,27 @@ def _lonlat(to_lonlat: Callable[[Any], Any], box: Box) -> shapely.Polygon:
     return shapely.Polygon(to_lonlat(np.asarray(ring.exterior.coords)))
 
 
-def _cover(union: shapely.Geometry, box: Box | None) -> dict[str, object]:
-    """The coverage box of `union` and the share of `box` it covers."""
+def _wanted(box: CrsBox) -> shapely.Geometry:
+    """`box` in longitude and latitude: its outline, or for a point or line
+    box, which has no area, the box of its image. Refuses as `to_crs`."""
+    x0, y0, x1, y1 = box.to_crs("EPSG:4326")
+    if box.box[0] == box.box[2] or box.box[1] == box.box[3]:
+        return shapely.envelope(shapely.multipoints([(x0, y0), (x1, y1)]))
+    return shapely.Polygon(box.outline("EPSG:4326"))
+
+
+def _cover(union: shapely.Geometry, wanted: shapely.Geometry | None) -> dict[str, object]:
+    """The coverage box of `union` and the share of `wanted` it covers."""
     covered = None
-    if box is not None:
-        wanted = shapely.envelope(shapely.multipoints([box[:2], box[2:]]))
-        # A point or line box has no area: covered or not.
+    if wanted is not None:
+        # A point or line has no area: covered or not.
         share = union.covers(wanted) if wanted.area == 0 else union.intersection(wanted).area
         covered = round(float(share) / (wanted.area or 1.0), 4)
     return {"coverage": tuple(round(v, 6) for v in union.bounds), "box_covered": covered}
 
 
 def _figures(
-    entry: RemoteSource, tiles: tuple[TileFootprint, ...], box: Box | None
+    entry: RemoteSource, tiles: tuple[TileFootprint, ...], box: shapely.Geometry | None
 ) -> dict[str, object]:
     """The header figures of `tiles`: CRS, cell sizes, height unit, coverage
     and the share of `box` covered."""
@@ -262,7 +271,10 @@ def _figures(
 
 
 def _vector(
-    path: Path, entry: RemoteSource, box: Box | None, rule_sets: Mapping[str, LandCoverClasses]
+    path: Path,
+    entry: RemoteSource,
+    box: shapely.Geometry | None,
+    rule_sets: Mapping[str, LandCoverClasses],
 ) -> dict[str, Any]:
     """The header figures of a vector source's file `path`, its fits, and the
     values of each attribute a fitting class file reads; its coverage is
@@ -328,7 +340,7 @@ def _one(
     entry: RemoteSource,
     origin: str,
     cache: Path | None,
-    box: Box | None,
+    box: shapely.Geometry | None,
     rule_sets: Mapping[str, LandCoverClasses],
 ) -> SourceReport:
     """`entry` with what its files or its cache say, and the options it fits;
@@ -370,11 +382,13 @@ def _one(
     )
 
 
-def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> CatalogueReport:
+def listing(environ: Mapping[str, str], cache: Path | None, box: CrsBox | None) -> CatalogueReport:
     """The listing for this environment: the user's sources file it finds
     (a refused one is named, and the other sources are still listed), the
     plugins' files skipped, the cache, and every source in catalogue order;
-    `box` (W S E N degrees) adds the share of it each source covers."""
+    `box` adds the share of it each source covers, measured in longitude
+    and latitude; a box whose image there is not one box is refused first."""
+    wanted = None if box is None else _wanted(box)
     looked, user, plugins = (
         user_source_candidates(environ),
         user_source_file(environ),
@@ -389,7 +403,7 @@ def listing(environ: Mapping[str, str], cache: Path | None, box: Box | None) -> 
     register = looked[-1] if looked else None
     rule_sets = {name: load(name) for name in shipped_names()}
     sources = tuple(
-        _one(entry, found.origins[key], cache, box, rule_sets)
+        _one(entry, found.origins[key], cache, wanted, rule_sets)
         for key, entry in found.sources.items()
     )
     notes = []

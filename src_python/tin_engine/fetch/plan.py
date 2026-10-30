@@ -22,8 +22,8 @@ import tifffile
 from pydantic import BaseModel, ConfigDict, model_validator
 from pyproj import CRS
 
-from tin_engine.crs import parse_crs, same_crs, transform_bounds
-from tin_engine.domain import DomainPolygon
+from tin_engine.crs import crs_label, parse_crs, same_crs, transform_bounds
+from tin_engine.domain import CrsBox, DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.io.cog import block_grid, blocks_meeting
 from tin_engine.io.geotiff import read_page
@@ -36,14 +36,14 @@ METRES_PER_DEGREE = 111_320.0
 
 
 class FetchRequest(BaseModel):
-    """One `rasputin fetch`: a source id and exactly one of `domain` and `box`
-    (`box` in `out_crs` if given, else in the source CRS)."""
+    """One `rasputin fetch`: a source id and exactly one of `domain` and `box`,
+    each in its own CRS and moved into the frame (`out_crs`, else the source CRS)."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     source: str
     domain: DomainPolygon | None = None
-    box: Bounds | None = None
+    box: CrsBox | None = None
     out_crs: str | None = None
     margin: int = 4
     connections: int = 8
@@ -118,8 +118,7 @@ def _frame_box(request: FetchRequest, source: CRS) -> tuple[CRS, tuple[float, fl
         x0, y0, x1, y1 = request.domain.to_crs(frame).polygon.bounds
         return frame, (x0, y0, x1, y1)
     assert request.box is not None
-    b = request.box
-    return frame, (b.x_min, b.y_min, b.x_max, b.y_max)
+    return frame, request.box.to_crs(frame)
 
 
 def _checked(box: tuple[float, float, float, float], source: CRS) -> Bounds:
@@ -127,13 +126,17 @@ def _checked(box: tuple[float, float, float, float], source: CRS) -> Bounds:
     if not all(map(math.isfinite, box)) or (
         source.is_geographic and (box[0] < -180 or box[2] > 180 or box[1] < -90 or box[3] > 90)
     ):
-        raise FetchError(f"the box {box} crosses ±180° or a pole, or has no image in the source")
+        raise FetchError(
+            f"the box {box} crosses ±180° or a pole, or has no image, in {crs_label(source)}"
+        )
     return Bounds(x_min=box[0], y_min=box[1], x_max=box[2], y_max=box[3])
 
 
 def box_in_crs(request: FetchRequest, crs: str) -> Bounds:
-    """The request's box (or its domain's bounds) moved into `crs` with
-    `transform_bounds` (densified, outward), with no growth."""
+    """The request's box (or its domain's bounds) in the frame moved into
+    `crs` with `transform_bounds` (21 points an edge, so the image may fall
+    inside the true one by metres on a box of a few hundred kilometres), with
+    no growth."""
     source = parse_crs(crs)
     frame, box = _frame_box(request, source)
     return _checked(
@@ -162,14 +165,13 @@ def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
 
 def region_sha256(request: FetchRequest, crs: str | None) -> str:
     """The sha256 of the region as given: the domain's WKB and CRS, or the
-    box's four numbers and its CRS (`out_crs`, else `crs`), so equal requests
-    on one day are logged once in the manifest."""
+    box's four numbers, its CRS and the frame (`out_crs`, else `crs`), so
+    equal requests on one day are logged once in the manifest."""
     if request.domain is not None:
         data: Any = request.domain.polygon.wkb + request.domain.crs.encode()
     else:
         assert request.box is not None
-        b = request.box
-        data = repr((b.x_min, b.y_min, b.x_max, b.y_max, request.out_crs or crs)).encode()
+        data = repr((*request.box.box, request.box.crs, request.out_crs or crs)).encode()
     return hashlib.sha256(data).hexdigest()
 
 
@@ -189,7 +191,7 @@ def plan_object(
     cols = np.flatnonzero((xs > box.x_min - meta.delta_x) & (xs < box.x_max + meta.delta_x))
     rows = np.flatnonzero((ys > box.y_min - meta.delta_y) & (ys < box.y_max + meta.delta_y))
     if not len(cols) or not len(rows):
-        raise FetchError(f"{object_id}: the box {box} meets no block of {url}")
+        raise FetchError(f"{object_id}: the box {box} in {meta.crs} meets no block of {url}")
     window = IndexWindow(
         row0=int(rows[0]),
         col0=int(cols[0]),
