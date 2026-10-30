@@ -127,6 +127,20 @@ plugins use today, and grows on request.
 | `reprojector` | A vectorised map of `(x, y)` points from one CRS to another |
 | `frame_factors` | Meridian convergence and point scale of a projected CRS |
 | `site_of` | Where a point of a projected CRS lies on the globe |
+| `FeatureTable` | A feature layer as read: CRS text, GeoPackage layer (`None` for GeoJSON), columns as (name, field type), rows as (fid, geometry, values) |
+| `read_feature_table` | `read_feature_table(path, layer, box_for=None)`: a `.gpkg`, `.geojson` or `.json` layer with every column; `box_for(own CRS)` keeps only the GeoPackage rows near a box |
+| `FeatureError` | The `ValueError` a feature reader raises, naming the file |
+| `srs_entry` | The core's GeoPackage writer: a spatial reference row |
+| `create_geopackage` | The core's GeoPackage writer: a new, empty GeoPackage |
+| `create_features_table` | The core's GeoPackage writer: a features table in it |
+| `insert_features` | The core's GeoPackage writer: rows into that table |
+| `catalogue` | The source catalogue, as `rasputin sources` reads it |
+| `user_source_file` | The user's own sources file in that catalogue |
+| `plugin_source_files` | The sources files plugins add to that catalogue |
+| `RemoteSource` | One fetched source in that catalogue |
+| `kept_named` | A source's rows that its `named_by` rule keeps |
+| `cache_root` | The cache directory |
+| `features_file` | A features source's file in the cache |
 
 Where a name has a docstring, it is the full contract.
 
