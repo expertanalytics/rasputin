@@ -206,13 +206,14 @@ from tin_engine.sources import (
     STATION_SOURCES,
     VECTOR_SUFFIXES,
     RemoteSource,
+    cache_root,
     catalogue,
     check_values,
-    data_root,
+    data_root,  # noqa: F401 -- `cli.data_root` stays, as before `cache_root` moved
+    features_file,
     kept_named,
     plugin_source_files,
     user_source_file,
-    xdg_base,
 )
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
@@ -1710,18 +1711,13 @@ def _ring_vertices(polygon: Polygon) -> int:
 
 
 def _cached_features(source: RemoteSource, root: Path | None, run: str, flag: str) -> Path:
-    """A catalogue source of features' file: its own path, else its copy in the
-    cache under `root`; an uncached copy's refusal names `run`, the fetch."""
-    if source.path is not None:
-        return source.path
-    if root is None:
-        raise typer.BadParameter(NO_CACHE, param_hint=flag)
-    path = root / source.id / "features.gpkg"
-    if not path.is_file():
-        raise typer.BadParameter(
-            f"{source.id}/features.gpkg is not in the cache{RUN_FETCH}{run}", param_hint=flag
-        )
-    return path
+    """A catalogue source of features' file (`features_file`); an uncached
+    copy's refusal names `run`, the fetch."""
+    try:
+        return features_file(source, root)
+    except ValueError as exc:
+        hint = NO_CACHE if root is None else f"{exc}{RUN_FETCH}{run}"
+        raise typer.BadParameter(hint, param_hint=flag) from exc
 
 
 def _reservoir_source(
@@ -2903,19 +2899,6 @@ def gml_to_gpkg(
         err=True,
     )
     typer.echo(f"{out}")
-
-
-def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
-    """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
-    ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
-    The XDG Base Directory rule: an empty or relative variable is ignored.
-    Pure in its two arguments (no ``Path.home()``); ``mesh`` passes ``os.environ``."""
-    if option is not None:
-        return option
-    if (root := data_root(environ)) is not None:
-        return root / "cache"
-    base = xdg_base(environ, "XDG_CACHE_HOME", ".cache")
-    return None if base is None else base / "rasputin"
 
 
 def _known_sources(environ: Mapping[str, str]) -> Mapping[str, RemoteSource]:
