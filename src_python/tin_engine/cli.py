@@ -87,8 +87,10 @@ from tin_engine.dem_input import (
     CachedSource,
     DemPlan,
     DemRequest,
+    NoAreaError,
     OutCrsRequiredError,
     PieceDem,
+    TargetRegionError,
     assemble_dem,
     load_piece,
     piece_plan,
@@ -3020,6 +3022,10 @@ def _dem_refusals(dem: tuple[Path, ...]) -> Iterator[None]:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except BoxError as exc:
         raise typer.BadParameter(str(exc), param_hint="--bbox-crs") from exc
+    except NoAreaError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox") from exc
+    except TargetRegionError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out-crs") from exc
     except ValueError as exc:
         raise typer.BadParameter(cli_kit.words(exc), param_hint="--dem") from exc
 

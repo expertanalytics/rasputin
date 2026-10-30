@@ -69,6 +69,8 @@ class NotCached(CacheError):  # noqa: N818 -- the record's name, pinned by the s
     ) -> None:
         self.missing, self.needed, self.where, self.box = missing, needed, where, box
         self.crs = crs
+        if box is not None and crs is None:
+            raise TypeError("NotCached's box needs its crs")
         if needed == 0:
             text = f"{where} is not in the cache"
         else:

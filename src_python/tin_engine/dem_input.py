@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import shapely
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from tin_engine.crs import (
     CrsSuggestion,
@@ -212,12 +212,15 @@ def plan_dem(request: DemRequest, resources: Resources | None = None) -> DemPlan
     footprints = repository.footprints()
     reprojected = bool(footprints) and _reprojected(request, [f.meta for f in footprints])
     if request.box is not None and footprints:  # with no tiles the plan refuses as without one
-        frame = (
+        frame = str(
             request.target_crs
             if reprojected
             else single_crs((f.meta.crs for f in footprints), MosaicError)
         )
-        bounds = Bounds.of(request.box.to_crs(str(frame)))
+        try:
+            bounds = Bounds.of(request.box.to_crs(frame))
+        except ValidationError as exc:  # Bounds' own words, without Pydantic's wrapper
+            raise NoAreaError(f"{exc.errors()[0]['ctx']['error']} in {crs_label(frame)}") from exc
         request = request.model_copy(update={"bounds": bounds, "box": None})
     if reprojected:
         return _plan_reprojected(request, repository, footprints)
@@ -299,6 +302,14 @@ def _checks(
     return check_point_blocks(plan.grid, source, plan.checked, threads, within=within)
 
 
+class NoAreaError(ValueError):
+    """A `--bbox` with no area in the mesh's CRS; the refusal is `--bbox`'s."""
+
+
+class TargetRegionError(ValueError):
+    """`--out-crs` with neither a domain nor a box; the refusal is `--out-crs`'s."""
+
+
 class OutCrsRequiredError(ValueError):
     """A geographic DEM without a target CRS: `head` says why and
     what is suggested; `suggestion.proj` is the `--out-crs` to paste."""
@@ -356,7 +367,7 @@ def _plan_reprojected(
         b = request.bounds
         domain = DomainPolygon(polygon=shapely.box(b.x_min, b.y_min, b.x_max, b.y_max), crs=target)
     else:
-        raise ValueError("--out-crs needs a domain or a box in the target CRS")
+        raise TargetRegionError("--out-crs needs --domain or --bbox")
     meta = footprints[0].meta
     c = domain.polygon.centroid
     ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])
