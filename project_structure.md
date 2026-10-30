@@ -139,7 +139,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
                            #   check overlaps and coverage, stitch; no files (15a);
-                           #   imports only io.models first-party
+                           #   imports io.models, crs and resources first-party
   dem_input.py             # --dem with a CrsBox (--bbox, --bbox-crs) or a
                            #   domain, moved into the DEM's CRS or
                            #   --out-crs -> DemInput(tile, plan, domain in
