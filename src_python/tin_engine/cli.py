@@ -263,6 +263,18 @@ NO_BOX_CRS: Final = (
     "--bbox needs --bbox-crs, the CRS its four numbers are in (EPSG:4326 for longitude and "
     "latitude in degrees); a box's CRS is never assumed"
 )
+SEED_CRS = Annotated[
+    str | None,
+    typer.Option(
+        "--seed-crs",
+        help="The --seed's CRS, anything pyproj reads; EPSG:4326 is longitude and latitude "
+        "in degrees. Never assumed. Required with --seed.",
+    ),
+]
+NO_SEED_CRS: Final = (
+    "--seed needs --seed-crs, the CRS its two numbers are in (EPSG:4326 for longitude and "
+    "latitude in degrees); a seed's CRS is never assumed"
+)
 DEM_HELP: Final = (
     "A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a source from "
     "rasputin sources"
@@ -3690,9 +3702,7 @@ def catchment(
         tuple[float, float],
         typer.Option("--seed", metavar="X Y", help="A point in the lake, in --seed-crs."),
     ],
-    seed_crs: Annotated[
-        str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
-    ] = "EPSG:4326",
+    seed_crs: SEED_CRS = None,
     lakes: Annotated[
         Path | None,
         typer.Option(
@@ -3752,6 +3762,8 @@ def catchment(
     by the data's edge or by NoData is refused, and nothing is written. With
     --rivers the seed is a gauge on a mapped river.
     """
+    if seed_crs is None:
+        raise typer.BadParameter(NO_SEED_CRS, param_hint="--seed-crs")
     if lakes is None and lakes_layer is not None:
         raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
     for name, value in (("--map-radius", map_radius), ("--reach-up", reach_up)):
@@ -3925,9 +3937,7 @@ def network_catchment(
         tuple[float, float] | None,
         typer.Option("--seed", metavar="X Y", help="Seed: a point at a unit's outlet."),
     ] = None,
-    seed_crs: Annotated[
-        str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
-    ] = "EPSG:4326",
+    seed_crs: SEED_CRS = None,
     lakes: Annotated[
         str | None,
         typer.Option(
@@ -3978,7 +3988,10 @@ def network_catchment(
     """
     if (unit is None) == (seed is None):
         raise typer.BadParameter("give exactly one of --unit and --seed", param_hint="--unit")
+    if seed is not None and seed_crs is None:
+        raise typer.BadParameter(NO_SEED_CRS, param_hint="--seed-crs")
     for name, value, other, given in (
+        ("--seed-crs", seed_crs, "--seed", seed),
         ("--lakes", lakes, "--seed", seed),
         ("--outlets", outlets, "--seed", seed),
         ("--outlet-radius", outlet_radius, "--seed", seed),
@@ -4023,7 +4036,7 @@ def network_catchment(
     if seed_unit and seed_unit not in net.links:
         raise typer.BadParameter(f"{network_file.name} has no unit {unit}", param_hint="--unit")
     request: CatchmentRequest | None = None
-    if seed is not None:
+    if seed is not None and seed_crs is not None:  # both, as refused above
         ((x, y),) = reprojector(seed_crs, crs)([seed])
         with _refused("--seed"):
             covering = units_at(network_file, network_layer, id_attribute, Point(x, y))

@@ -32,9 +32,10 @@ from pyproj import Transformer
 from shapely.geometry import Point, Polygon, box, mapping
 
 from catchment_fixtures import bowl, lake_box, lat, tile_of
-from cli_helpers import invoke, plain, ran
+from cli_helpers import invoke, plain, ran, squashed
 from gpkg_fixtures import HAS_RTREE, Layer, Row, write_gpkg
 from mosaic_fixtures import quadrants
+from test_cli_catchment import NO_SEED_CRS
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.crs import parse_crs
 from tin_engine.io.domain_file import read_domain
@@ -337,9 +338,20 @@ class TestPointSeed:
     ) -> None:
         lon, lat_ = Transformer.from_crs(CRS, "EPSG:4326", always_xy=True).transform(*at(500, 150))
         props, _ = run(
-            tmp_path, *geojson_network, *ATTRIBUTES, *outlets, "--seed", repr(lon), repr(lat_)
+            tmp_path,
+            *geojson_network,
+            *ATTRIBUTES,
+            *outlets,
+            *("--seed", repr(lon), repr(lat_), "--seed-crs", "EPSG:4326"),
         )
         assert props["units"] == ABOVE_SE100
+
+    def test_a_seed_without_its_crs_is_refused(
+        self, tmp_path: Path, geojson_network: tuple[str, ...], outlets: tuple[str, ...]
+    ) -> None:
+        seed = ("--seed", *map(repr, at(500, 150)))
+        output = refuse(tmp_path, *geojson_network, *ATTRIBUTES, *outlets, *seed, says=())
+        assert squashed(f"Invalid value for --seed-crs: {NO_SEED_CRS}") in squashed(output), output
 
     def test_the_lake_under_the_point_brings_it_within_the_radius(
         self, tmp_path: Path, network: tuple[str, ...], outlets: tuple[str, ...]
@@ -428,6 +440,12 @@ class TestOptionRefusals:
 
     def test_neither_unit_nor_seed(self, tmp_path: Path, geojson_network: tuple[str, ...]) -> None:
         refuse(tmp_path, *geojson_network, *ATTRIBUTES, says=("Invalid value for --unit", "--seed"))
+
+    def test_a_seed_crs_without_seed(
+        self, tmp_path: Path, geojson_network: tuple[str, ...]
+    ) -> None:
+        args = (*geojson_network, *ATTRIBUTES, "--unit", "SE100", "--seed-crs", CRS)
+        refuse(tmp_path, *args, says=("Invalid value for --seed-crs", "--seed"))
 
     @pytest.mark.parametrize("option", ["--lakes", "--outlets"])
     def test_a_seed_file_without_seed(
