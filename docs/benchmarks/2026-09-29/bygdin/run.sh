@@ -12,7 +12,7 @@ mkdir -p "$LOG" "$SCRATCH"
 catchment() {  # $1 tolerance ("" = default), $2 tag
   local tol=()
   [ -n "$1" ] && tol=(--outline-tolerance "$1")
-  /usr/bin/time -l rasputin catchment --dem $DEM --seed 8.5425 61.3512 \
+  /usr/bin/time -l rasputin catchment --dem $DEM --seed 8.5425 61.3512 --seed-crs EPSG:4326 \
     --lakes $GPKG --lakes-layer corine2018 ${tol[@]+"${tol[@]}"} \
     --out "$SCRATCH/$2.geojson" > "$LOG/$2.out" 2> "$LOG/$2.err"
   echo "$2 exit=$?" | tee -a "$LOG/exits.txt"
