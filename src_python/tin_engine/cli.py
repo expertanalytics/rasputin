@@ -165,7 +165,7 @@ from tin_engine.io.repository import (
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
-from tin_engine.land_cover_classes import derived_cleanup, known_codes, shipped_names
+from tin_engine.land_cover_classes import edge_cleanup, known_codes, shipped_names
 from tin_engine.land_cover_classes import load as load_classes
 from tin_engine.land_cover_fractions import ClassRaster
 from tin_engine.land_cover_fractions import assign as assign_fractions
@@ -1270,10 +1270,9 @@ def mesh(
     # class borders (CORINE's 100 m when it does not), never finer than a DEM cell.
     cell = max(meta.delta_x, abs(meta.delta_y))
     lcc = classes.classes if classes is not None else None
-    accuracy = lcc.accuracy_m if borders and lcc is not None and lcc.accuracy_m else 100.0
-    derived = derived_cleanup(accuracy, cell).model_dump()
-    cleanup = {k: derived[k] if v is None else v for k, v in overrides.items()}
-    cleanup["merge_same_class"] = edges_merge_same_class
+    cleanup = edge_cleanup(
+        lcc if borders else None, cell, merge_same_class=edges_merge_same_class, **overrides
+    )
     # The read region: around the domain, else around the DEM window meshed.
     area = dem_domain or DomainPolygon(polygon=shapely.box(*meta.node_box()), crs=dem_crs)
     land: _LandCover | None = None
@@ -1286,7 +1285,7 @@ def mesh(
     found = None
     if edges and dem_domain is not None:
         found = _edges(
-            land if borders else None, line_pairs, choice, EdgeCleanup(**cleanup), dem_domain,
+            land if borders else None, line_pairs, choice, cleanup, dem_domain,
             vocabulary, source_region(area, dem_crs, dem_crs, cell=cell), clock,
             sum(r.empty for r in line_reads),
         )  # fmt: skip
@@ -1295,7 +1294,7 @@ def mesh(
             line_pairs, dem_crs,
         )  # fmt: skip
         if borders:
-            edge_values |= {f"edges_{k}": v for k, v in cleanup.items()}
+            edge_values |= {f"edges_{k}": v for k, v in cleanup.model_dump().items()}
             edge_values["edges_merge_same_class"] = "on" if edges_merge_same_class else "off"
     if units is not None and dem_domain is not None:
         units = units.moved(dem_crs)
@@ -1304,9 +1303,7 @@ def mesh(
             update={"features": (*found.features, line)}
         )  # fmt: skip
     # 15 degrees with land cover simplified, unless given.
-    simplified = (
-        found is not None and found.cover_vertices is not None and cleanup["max_shift_m"] > 0
-    )
+    simplified = found is not None and found.cover_vertices is not None and cleanup.max_shift_m > 0
     angle = LANDCOVER_START_MIN_ANGLE if simplified else DEFAULT_START_MIN_ANGLE
     angle = angle if start_min_angle is None else start_min_angle
     try:

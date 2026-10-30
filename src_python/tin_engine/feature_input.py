@@ -137,16 +137,17 @@ class EdgeChoice(BaseModel):
 
 
 class EdgeCleanup(BaseModel):
-    """The land-cover clean-up, all off by default (the CLI's are derived
-    from the class file's accuracy): the repair's tolerance, the same-class
-    merge, the simplification and the outline snap distance D."""
+    """The land-cover clean-up: the repair's tolerance, the same-class
+    merge, the simplification and the outline snap distance D (0 is off).
+    No field has a default: `tin_engine.land_cover_classes.edge_cleanup`
+    derives them from the sources, as the CLI does."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    repair_m: float = 0.0
-    merge_same_class: bool = False
-    max_shift_m: float = 0.0
-    outline_snap_m: float = 0.0
+    repair_m: float
+    merge_same_class: bool
+    max_shift_m: float
+    outline_snap_m: float
 
 
 class FeatureSet(BaseModel):
