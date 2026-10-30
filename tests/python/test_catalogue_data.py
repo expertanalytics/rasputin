@@ -50,6 +50,7 @@ from fetch_fixtures import PROJECTED_CRS, RangeServer, projected
 from test_cli_fetch import TRIANGLE, no_network
 from test_cli_mesh_mosaic import same_mesh
 from tin_engine.cli import app
+from tin_engine.sources import data_root
 from vtkread import read_vtk
 
 SNAPSHOT = Path(__file__).parent / "data" / "catalogue_b1353075.json"
@@ -373,9 +374,9 @@ class TestT3UserEntries:
 
 class TestT3DataRoot:
     def test_data_root_reads_rasputin_data(self) -> None:
-        assert cli.data_root({"RASPUTIN_DATA": "/some/root"}) == Path("/some/root")
-        assert cli.data_root({}) is None
-        assert cli.data_root({"RASPUTIN_DATA": ""}) is None
+        assert data_root({"RASPUTIN_DATA": "/some/root"}) == Path("/some/root")
+        assert data_root({}) is None
+        assert data_root({"RASPUTIN_DATA": ""}) is None
 
     def test_the_cache_root_derives_from_it(self) -> None:
         assert cli.cache_root(None, {"RASPUTIN_DATA": "/r"}) == Path("/r") / "cache"

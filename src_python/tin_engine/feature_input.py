@@ -461,14 +461,14 @@ def read_source(
     path: Path,
     layer: str | None,
     attribute: str | None,
-    box_for: Callable[[str], tuple[float, float, float, float]],
+    box_for: Callable[[str], tuple[float, float, float, float] | None],
     crs: str | None = None,
     extra: tuple[str, ...] = (),
 ) -> SourceRows:
     """One source's features, unclipped, in its own CRS, by suffix.
 
     ``attribute`` None reads a GeoPackage's primary key. ``box_for(own CRS)``
-    is the box a GeoPackage's R-tree is queried with. ``crs``, when given,
+    is the box a GeoPackage's R-tree is queried with; None reads every row. ``crs``, when given,
     must be the file's; a GML file naming none takes it. ``extra`` names more
     attributes, read per row into ``SourceRows.extra`` (None where a feature
     or layer has none; ``()`` when none is asked). Every refusal is a
