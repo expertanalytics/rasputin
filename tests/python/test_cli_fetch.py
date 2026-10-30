@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 import shlex
 import socket
 import sys
@@ -299,12 +300,14 @@ class TestBoxCrs:
     def test_a_dry_run_in_the_sources_crs_plans_as_before(
         self, remote: Any, tmp_path: Path
     ) -> None:
-        """Test 6: measured before `--bbox-crs`, with the box read in the source's CRS."""
+        """Test 6: measured before `--bbox-crs`, with the box read in the source's CRS.
+        The summary's elapsed time (about 0.06 s a run) is cut: it is the host's."""
         lines = dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS)
+        lines = [re.sub(r", \d+\.\d s$", "", line) for line in lines]
         assert lines == [
             "p: 9 blocks, 6,274 bytes to fetch",
             "test-fetch: 1 objects, 9 blocks needed, 0 present, would fetch 9 (0 empty)"
-            " in 1 requests, 6,274 bytes, 0.0 s",
+            " in 1 requests, 6,274 bytes",
         ], lines
 
     def test_a_dry_run_in_degrees_plans_the_same(self, remote: Any, tmp_path: Path) -> None:
