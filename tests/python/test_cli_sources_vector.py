@@ -105,7 +105,8 @@ def listing(*args: str) -> dict[str, Any]:
 
 
 def boxed(box: tuple[float, ...]) -> dict[str, Any]:
-    return listing("--bbox", *map(str, box))
+    """The listing for `box`, west south east north in degrees."""
+    return listing("--bbox", *map(str, box), "--bbox-crs", "EPSG:4326")
 
 
 # ------------------------------------------------------------ T6
@@ -331,8 +332,8 @@ class TestT9QuotedHints:
                    "--seed", repr(SEED[0]), repr(SEED[1]), "--seed-crs", EPSG,
                    "--out", str(spaced / "c.geojson"))  # fmt: skip
         assert got[:4] == ["rasputin", "fetch", CACHED, "--bbox"], got
-        assert got[-2:] == ["--cache", str(cache)], got
-        assert len(got) == 10, got  # four numbers between --bbox and --cache
+        assert got[-4:] == ["--bbox-crs", EPSG, "--cache", str(cache)], got
+        assert len(got) == 12, got  # four numbers between --bbox and --bbox-crs
 
 
 # ------------------------------------------------- the AR50 legend, test 14

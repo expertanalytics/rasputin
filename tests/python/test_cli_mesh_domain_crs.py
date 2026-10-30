@@ -417,7 +417,7 @@ class TestUsage:
             tmp_path,
             "mesh",
             *mesh_args(quad_dir, domain),
-            "--bbox", "500000", "6599960", "500120", "6600000",
+            "--bbox", "500000", "6599960", "500120", "6600000", "--bbox-crs", "EPSG:25833",
             says=("--bbox", "--domain"),
         )  # fmt: skip
 

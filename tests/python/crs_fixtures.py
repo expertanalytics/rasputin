@@ -1,4 +1,4 @@
-"""CRS spellings and a no-point-moved guard, shared by the CRS suites.
+"""CRS spellings, a no-point-moved guard and a box with its CRS, shared by the CRS suites.
 
 Audit PR B (`docs/increments/python-audit.md`, section 9): a CRS spelt by
 definition (a WKT without its ID, in either axis order) is that EPSG code, so a
@@ -11,6 +11,7 @@ compare two CRSs and moves nothing with it.
 
 from __future__ import annotations
 
+import importlib
 import warnings
 from typing import Any
 
@@ -55,3 +56,12 @@ def refuse_point_moves(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for name in POINT_MOVING:
         monkeypatch.setattr(Transformer, name, refusing(name))
+
+
+def crs_box(crs: str, box: Any) -> Any:
+    """A `tin_engine.domain.CrsBox`: `box`, four numbers or anything with
+    `x_min` .. `y_max`, in `crs`. The model is read at call time, so a
+    missing name fails the test that needs it, not the collection."""
+    if hasattr(box, "x_min"):
+        box = (box.x_min, box.y_min, box.x_max, box.y_max)
+    return importlib.import_module("tin_engine.domain").CrsBox(crs=crs, box=tuple(box))

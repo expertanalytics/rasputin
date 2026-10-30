@@ -111,7 +111,9 @@ def the_fit(source: dict[str, Any], tool: str, argument: str) -> dict[str, Any]:
 async def test_t7_find_then_catchment_then_mesh_over_mcp_only(home: Path) -> None:
     default_root = (home / "rasputin-output").resolve()
     assert not default_root.exists()
-    listed = body_of(await call(server(), "sources", {"bbox": list(INSIDE)}))
+    listed = body_of(
+        await call(server(), "sources", {"bbox": list(INSIDE), "bbox_crs": "EPSG:4326"})
+    )
     (line,) = listed["stdout"]
     document = json.loads(line)
     assert document["out_root"] == str(default_root)

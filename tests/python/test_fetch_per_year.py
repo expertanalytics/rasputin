@@ -39,6 +39,7 @@ from class_fixtures import (
     whole_box,
 )
 from cog_fixtures import same_bytes
+from crs_fixtures import crs_box
 from fetch_fixtures import PROJECTED_CRS, RangeServer, block_files, projected
 from test_fetch_run import present_blocks, requested_blocks
 from test_fetch_run import whole_box as dem_box
@@ -74,7 +75,8 @@ def classes(api: SimpleNamespace, server: RangeServer) -> Any:
 async def fetch(api: SimpleNamespace, source: Any, root: Path, **request: Any) -> Any:
     client = api.http.RangeClient(delays=(0, 0, 0))
     writer = api.repository.CacheWriter(root, source.id)
-    asked = api.plan.FetchRequest(source=source.id, box=whole_box(), margin=0, **request)
+    given = crs_box(source.crs, whole_box())
+    asked = api.plan.FetchRequest(source=source.id, box=given, margin=0, **request)
     return await api.run.fetch(asked, source, client, writer)
 
 
@@ -138,7 +140,8 @@ class TestThePerYearObject:
         )  # fmt: skip
         client = api.http.RangeClient(delays=(0, 0, 0))
         writer = api.repository.CacheWriter(tmp_path, KEY)
-        asked = api.plan.FetchRequest(source=KEY, box=dem_box(data), margin=0, year=2025)
+        given = crs_box(PROJECTED_CRS, dem_box(data))
+        asked = api.plan.FetchRequest(source=KEY, box=given, margin=0, year=2025)
         with pytest.raises(api.http.FetchError, match="year"):
             await api.run.fetch(asked, dem, client, writer)
         assert server.log == []

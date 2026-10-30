@@ -22,11 +22,11 @@ import shapely
 
 from arcgis_fixtures import CODES, CORINE, CORINE_URL, IDS, NVE, NVE_URL, FakeLayer, LayerData
 from cli_helpers import USAGE, invoke
+from crs_fixtures import crs_box
 from gpkg_fixtures import needs_rtree
 from tin_engine.feature_input import read_lake_polygons, read_source
 from tin_engine.fetch.http import RangeClient
 from tin_engine.fetch.plan import FetchRequest
-from tin_engine.io.models import Bounds
 from tin_engine.io.repository import CacheWriter
 from tin_engine.sources import SOURCES, RemoteSource, catalogue, notice
 
@@ -61,7 +61,7 @@ def fetch_into(root: Path, data: LayerData) -> None:
     features = importlib.import_module("tin_engine.fetch.features")
     source = SOURCES["nve-lakes" if data.url == NVE.url else "clc2018"]
     x0, y0, x1, y1 = data.box_all
-    request = FetchRequest(source=source.id, box=Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1))
+    request = FetchRequest(source=source.id, box=crs_box(source.crs, (x0, y0, x1, y1)))
     features.fetch_features(request, source, FakeLayer(data).get_text, CacheWriter(root, source.id))
 
 
@@ -274,7 +274,9 @@ def served(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeLayer]:
 
 
 def box_args(data: LayerData) -> list[str]:
-    return ["--bbox", *map(str, data.box_all)]
+    """`--bbox` of the layer's four polygons, in its source's CRS."""
+    source = SOURCES["nve-lakes" if data.url == NVE.url else "clc2018"]
+    return ["--bbox", *map(str, data.box_all), "--bbox-crs", source.crs]
 
 
 @needs_rtree
