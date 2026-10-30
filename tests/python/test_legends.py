@@ -430,6 +430,23 @@ class TestDerivedCleanup:
             got.repair_m = 3.0
         assert all(math.isfinite(v) for v in (got.repair_m, got.max_shift_m, got.outline_snap_m))
 
+    def test_a_request_with_no_distances_gets_the_derived_ones(self, cm: ModuleType) -> None:
+        """The library's clean-up is the CLI's: the class file's accuracy
+        (MapBiomas, 30 m) against the cell, merge on; no file: 100 m."""
+        got = cm.edge_cleanup(cm.load("mapbiomas-c11"), 1.0)
+        assert got.model_dump() == {
+            "repair_m": 0.3, "merge_same_class": True, "max_shift_m": 15.0, "outline_snap_m": 1.5,
+        }  # fmt: skip
+        assert cm.edge_cleanup(None, 10.0).max_shift_m == 50.0
+        with pytest.raises(ValidationError):
+            ff.feature_input().EdgeCleanup()  # no silent all-off clean-up
+
+    def test_distances_given_explicitly_keep_their_values(self, cm: ModuleType) -> None:
+        got = cm.edge_cleanup(
+            cm.load("mapbiomas-c11"), 1.0, merge_same_class=False, repair_m=0.0, max_shift_m=None
+        )
+        assert (got.repair_m, got.merge_same_class, got.max_shift_m) == (0.0, False, 15.0)
+
 
 # ------------------------------------------------------------------- T8
 
