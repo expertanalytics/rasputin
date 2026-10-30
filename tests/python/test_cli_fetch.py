@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
+import shlex
 import socket
 import sys
 from collections.abc import Iterator
@@ -38,7 +40,7 @@ from shapely.geometry import Point, Polygon
 import tin_engine
 from cli_helpers import geojson, invoke, no_cache_anywhere, runner, says_no_cache
 from cog_fixtures import write_cache
-from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
+from fetch_fixtures import PROJECTED_CRS, RangeServer, block_span, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y
 from plyread import read_ply
 from test_cli_mesh_mosaic import field, same_mesh
@@ -196,15 +198,14 @@ class TestF9MeshAfterFetch:
 
 class TestF10TheCommand:
     BBOX = (str(TIE_X + 101.3), str(TIE_Y - 187.7), str(TIE_X + 333.9), str(TIE_Y - 61.1))
+    BOX_ARGS = ("--bbox", *BBOX, "--bbox-crs", PROJECTED_CRS)
 
     def test_a_dry_run_writes_nothing(
         self, remote: Any, server: RangeServer, tmp_path: Path
     ) -> None:
         cache = tmp_path / "cache"
         cache.mkdir()
-        code, output = invoke(
-            "fetch", KEY, "--bbox", *self.BBOX, "--cache", str(cache), "--dry-run"
-        )
+        code, output = invoke("fetch", KEY, *self.BOX_ARGS, "--cache", str(cache), "--dry-run")
         assert code == 0, output
         assert snapshot(tmp_path) == {"cache/": b""}
         assert server.block_ranges("p.tif") == []
@@ -213,7 +214,7 @@ class TestF10TheCommand:
         self, remote: Any, sources: ModuleType, tmp_path: Path
     ) -> None:
         cache = tmp_path / "cache"
-        code, output = invoke("fetch", KEY, "--bbox", *self.BBOX, "--cache", str(cache))
+        code, output = invoke("fetch", KEY, *self.BOX_ARGS, "--cache", str(cache))
         assert code == 0, output
         assert (cache / KEY / "NOTICE.txt").read_text() == sources.notice(remote)
 
@@ -227,7 +228,7 @@ class TestF10TheCommand:
         xdg, home = tmp_path / "xdg", tmp_path / "home"
         monkeypatch.setenv("XDG_CACHE_HOME", str(xdg))
         monkeypatch.setenv("HOME", str(home))
-        result = runner.invoke(app, ["fetch", KEY, "--bbox", *self.BBOX])
+        result = runner.invoke(app, ["fetch", KEY, *self.BOX_ARGS])
         assert result.exit_code == 0, result.output
         where = xdg / "rasputin" / KEY
         assert (where / "NOTICE.txt").is_file(), sorted(map(str, tmp_path.rglob("*")))
@@ -241,24 +242,144 @@ class TestF10TheCommand:
         data: bytes, tmp_path: Path,
     ) -> None:  # fmt: skip
         catalogue_with(sources, monkeypatch, server.put("p.tif", data), crs="EPSG:3035")
-        code, output = invoke("fetch", KEY, "--bbox", *self.BBOX, "--cache", str(tmp_path / "c"))
+        code, output = invoke(
+            "fetch", KEY, "--bbox", *self.BBOX, "--bbox-crs", "EPSG:3035",
+            "--cache", str(tmp_path / "c"),
+        )  # fmt: skip
         assert code == REFUSED, output
         assert "3035" in output, output
 
     def test_domain_and_bbox_together_is_a_usage_error(self, remote: Any, tmp_path: Path) -> None:
         domain = geojson(tmp_path / "d.geojson", TRIANGLE)
         code, output = invoke(
-            "fetch", KEY, "--bbox", *self.BBOX, "--domain", str(domain), "--cache", str(tmp_path)
+            "fetch", KEY, *self.BOX_ARGS, "--domain", str(domain), "--cache", str(tmp_path)
         )
         assert code == USAGE, output
         assert "--bbox" in output and "--domain" in output, output
 
     def test_an_unknown_source_is_a_usage_error(self, tmp_path: Path) -> None:
-        code, output = invoke(
-            "fetch", "no-such-source", "--bbox", *self.BBOX, "--cache", str(tmp_path)
-        )
+        code, output = invoke("fetch", "no-such-source", *self.BOX_ARGS, "--cache", str(tmp_path))
         assert code == USAGE, output
         assert "no-such-source" in output and "No such command" not in output, output
+
+
+# --------------------------------------------------------------------------
+# `docs/increments/114-bbox-crs.md`, tests 6 and 8: the box's CRS
+# --------------------------------------------------------------------------
+
+#: `TestF10TheCommand.BBOX` moved into EPSG:4326 (`114-probes/box_probe.txt`).
+#: Moved back, its edges move by at most 13.5 mm; the grown fetch box's edges
+#: lie at least 1.3 m from a node line, so the same blocks are fetched.
+BBOX_DEGREES = ("15.001791152", "59.536663469", "15.005904106", "59.537800446")
+
+
+def dry_run_lines(cache: Path, *box: str) -> list[str]:
+    """The plan lines of a dry run, without the summary's `into <cache>` tail."""
+    result = runner.invoke(app, ["fetch", KEY, *box, "--cache", str(cache), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    return [line.partition(" into ")[0] for line in result.stdout.splitlines()]
+
+
+def untimed(lines: list[str]) -> list[str]:
+    """`lines` without the summary's trailing elapsed time, `, <n>.<n> s`."""
+    return [re.sub(r", \d+\.\d s$", "", line) for line in lines]
+
+
+def refusal(*args: str) -> str:
+    """The message of a refused run, unwrapped by Rich."""
+    result = runner.invoke(app, list(args), standalone_mode=False)
+    message = getattr(result.exception, "message", None)
+    assert isinstance(message, str), (result.exception, result.output)
+    return message
+
+
+def hinted(message: str) -> list[str]:
+    """The `rasputin fetch` the refusal names, split as a shell would, without `rasputin`."""
+    assert "; run: rasputin fetch " in message, message
+    words = shlex.split(message.rpartition("; run: ")[2])
+    assert words[:2] == ["rasputin", "fetch"], words
+    return words[1:]
+
+
+class TestBoxCrs:
+    def test_a_dry_run_in_the_sources_crs_plans_as_before(
+        self, remote: Any, data: bytes, tmp_path: Path
+    ) -> None:
+        """Test 6: measured before `--bbox-crs`, with the box read in the source's CRS.
+        The summary's elapsed time (about 0.06 s a run) is cut: it is the host's.
+        The plan is blocks 0 to 12 (rows 0 to 2, columns 0 to 2 of 5 across) in
+        one request; its byte count is that span of the fixture, whose Deflate
+        sizes depend on the host's Deflate build (6,274 bytes on macOS, 6,312 on CI's Linux)."""
+        lines = untimed(dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS))
+        page = page_of(data)
+        size = f"{block_span(page, 12)[1] - block_span(page, 0)[0]:,}"
+        assert lines == [
+            f"p: 9 blocks, {size} bytes to fetch",
+            "test-fetch: 1 objects, 9 blocks needed, 0 present, would fetch 9 (0 empty)"
+            f" in 1 requests, {size} bytes",
+        ], lines
+
+    def test_a_dry_run_in_degrees_plans_the_same(self, remote: Any, tmp_path: Path) -> None:
+        """Elapsed time is cut from each line: it is the host's (0.1 s and 0.2 s on CI)."""
+        utm = dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS)
+        degrees = dry_run_lines(tmp_path / "c", "--bbox", *BBOX_DEGREES, "--bbox-crs", "EPSG:4326")
+        assert untimed(degrees) == untimed(utm)
+
+    def test_the_mesh_hint_names_the_boxs_crs_and_runs_as_printed(
+        self, remote: Any, data: bytes, tmp_path: Path
+    ) -> None:
+        """Test 8, `_fetch_run`: a box in degrees on an empty cache. The hint
+        repeats the box and its CRS; run as printed it exits 0, and the mesh
+        then runs, offline, as the same box in the DEM's CRS meshes the file."""
+        cache = tmp_path / "cache"
+        box = ("--bbox", *BBOX_DEGREES, "--bbox-crs", "EPSG:4326")
+        mesh = ("mesh", "--dem", KEY, "--cache", str(cache), *box, "--out")
+        fetch = hinted(refusal(*mesh, str(tmp_path / "m.vtk")))
+        assert fetch == ["fetch", KEY, *box, "--cache", str(cache)], fetch
+        code, output = invoke(*fetch)
+        assert code == 0, output
+        code, output = invoke(*mesh, str(tmp_path / "m.vtk"))
+        assert code == 0, output
+        tif = tmp_path / "dem.tif"
+        tif.write_bytes(data)
+        by_path = tmp_path / "path.vtk"
+        code, output = invoke(
+            "mesh", "--dem", str(tif), *TestF10TheCommand.BOX_ARGS, "--out", str(by_path)
+        )
+        assert code == 0, output
+        same_mesh(read_vtk((tmp_path / "m.vtk").read_bytes()), read_vtk(by_path.read_bytes()))
+
+    def test_the_window_hint_names_its_crs_and_runs_as_printed(
+        self, remote: Any, tmp_path: Path
+    ) -> None:
+        """Test 8, `_bbox_fetch`: one block fetched, then a domain whose
+        window needs more. The refusal says the window's CRS (`NotCached`),
+        the hint passes it as `--bbox-crs`; run as printed it exits 0, and
+        the mesh then runs."""
+        cache = tmp_path / "cache"
+        corner = ("--bbox", str(TIE_X + 10), str(TIE_Y - 30), str(TIE_X + 20), str(TIE_Y - 20))
+        code, output = invoke(
+            "fetch", KEY, *corner, "--bbox-crs", PROJECTED_CRS, "--cache", str(cache)
+        )
+        assert code == 0, output
+        domain = geojson(tmp_path / "d.geojson", TRIANGLE)
+        mesh = (
+            "mesh", "--dem", KEY, "--cache", str(cache), "--domain", str(domain),
+            "--tolerance", "1", "--domain-max-shift", "5", "--simplify-domain",
+            "--out", str(tmp_path / "m.vtk"),
+        )  # fmt: skip
+        message = refusal(*mesh)
+        window = "500200 6599860 500280 6599900"
+        assert f"for the window {window} in {PROJECTED_CRS};" in message, message
+        fetch = hinted(message)
+        assert fetch == [
+            "fetch", KEY, "--bbox", *window.split(), "--bbox-crs", PROJECTED_CRS,
+            "--cache", str(cache),
+        ], fetch  # fmt: skip
+        code, output = invoke(*fetch)
+        assert code == 0, output
+        code, output = invoke(*mesh)
+        assert code == 0, output
 
 
 # --------------------------------------------------------------------------
@@ -303,7 +424,7 @@ class TestF11TheBoundary:
         """No `--cache`, `RASPUTIN_DATA`, `XDG_CACHE_HOME` or `HOME`: nowhere to
         write, so a usage error that names every way to give a place."""
         no_cache_anywhere(monkeypatch)
-        code, output = invoke("fetch", KEY, "--bbox", *TestF10TheCommand.BBOX)
+        code, output = invoke("fetch", KEY, *TestF10TheCommand.BOX_ARGS)
         assert code == USAGE, output
         says_no_cache(output)
 

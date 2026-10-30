@@ -63,6 +63,11 @@ from tin_engine.mcp import server as mcp_server
 #: Degrees: the coverage is rounded to 1e-6 by the listing, so the measured
 #: box holds to within one rounding step.
 DEGREES = 1e-6
+#: The refusal of a box without its CRS, `docs/increments/114-bbox-crs.md`, section 3.
+NO_BOX_CRS = (
+    "--bbox needs --bbox-crs, the CRS its four numbers are in (EPSG:4326 for longitude and"
+    " latitude in degrees); a box's CRS is never assumed"
+)
 
 
 @pytest.fixture
@@ -175,13 +180,13 @@ class TestT4Choice:
         self, home: Path, box: tuple[float, ...], share: float
     ) -> None:
         # Rounded to 1e-4 by the listing; the measured share is stated to that step.
-        found = by_id(await listed(bbox=list(box)))
+        found = by_id(await listed(bbox=list(box), bbox_crs="EPSG:4326"))
         assert found[LOCAL]["box_covered"] == pytest.approx(share, abs=1e-4)
         for key in SHIPPED:
             assert found[key]["box_covered"] is None, found[key]
 
     async def test_two_local_sources_told_apart_by_cell_size_alone(self, home: Path) -> None:
-        found = by_id(await listed(bbox=list(INSIDE)))
+        found = by_id(await listed(bbox=list(INSIDE), bbox_crs="EPSG:4326"))
         assert found[LOCAL]["cell_m"] == [100.0, 100.0]
         assert found[COARSE]["cell_m"] == [200.0, 200.0]
         assert found[COARSE]["tiles"] == 1
@@ -191,9 +196,13 @@ class TestT4Choice:
     async def test_a_point_box(self, home: Path) -> None:
         """A point is a box with west equal to east and south equal to north."""
         lon, lat = INSIDE[0], INSIDE[1]
-        found = by_id(await listed(bbox=[lon, lat, lon, lat]))
+        found = by_id(await listed(bbox=[lon, lat, lon, lat], bbox_crs="EPSG:4326"))
         assert found[LOCAL]["box_covered"] == 1.0
-        far = by_id(await listed(bbox=[OUTSIDE[0], OUTSIDE[1], OUTSIDE[0], OUTSIDE[1]]))
+        far = by_id(
+            await listed(
+                bbox=[OUTSIDE[0], OUTSIDE[1], OUTSIDE[0], OUTSIDE[1]], bbox_crs="EPSG:4326"
+            )
+        )
         assert far[LOCAL]["box_covered"] == 0.0
 
 
@@ -210,7 +219,7 @@ def chosen(document: dict[str, Any]) -> str:
 
 class TestT5SelectionThenUse:
     async def test_choose_then_catchment_then_mesh(self, home: Path, tmp_path: Path) -> None:
-        key = chosen(await listed(bbox=list(INSIDE)))
+        key = chosen(await listed(bbox=list(INSIDE), bbox_crs="EPSG:4326"))
         assert key == LOCAL
         lakes = lake_file(tmp_path / "lakes.geojson")
         outline = tmp_path / "catchment.geojson"
@@ -235,7 +244,9 @@ class TestT5SelectionThenUse:
         assert out.is_file()
 
     async def test_fetch_of_a_local_source_is_refused(self, home: Path) -> None:
-        result = await call(server(), "fetch", {"source": LOCAL, "bbox": list(INSIDE)})
+        result = await call(
+            server(), "fetch", {"source": LOCAL, "bbox": list(INSIDE), "bbox_crs": "EPSG:4326"}
+        )
         assert result.is_error, result.content
         assert "needs no fetch" in text_block(result), text_block(result)
 
@@ -257,6 +268,44 @@ class TestT8Instructions:
         words = mcp_server.INSTRUCTIONS.lower()
         for named in ("norway", "dtm10", "glo30", "glo-30", "anadem", "10 m", "30 m"):
             assert named not in words, named
+
+
+class TestBoxCrs:
+    """`docs/increments/114-bbox-crs.md`, test 7: the box's CRS over MCP."""
+
+    def test_the_instructions_name_bbox_crs(self) -> None:
+        text = " ".join(mcp_server.INSTRUCTIONS.split())
+        assert "bbox_crs" in text, text
+        assert "EPSG:4326" in text, text
+
+    async def test_a_box_without_its_crs_is_refused_naming_the_option(self, home: Path) -> None:
+        result = await call(server(), "sources", {"bbox": list(INSIDE)})
+        assert result.is_error, result.content
+        assert text_block(result) == f"exit 2: Invalid value for --bbox-crs: {NO_BOX_CRS}"
+
+    async def test_a_box_in_utm_is_measured_in_degrees(self, home: Path) -> None:
+        """`INSIDE` given in EPSG:25833 (`box_probe.py`'s figures): wholly covered."""
+        utm = [508522.7, 6576808.3, 511380.3, 6582383.5]
+        found = by_id(await listed(bbox=utm, bbox_crs=EPSG))
+        assert found[LOCAL]["box_covered"] == 1.0
+
+    async def test_mesh_refuses_a_box_with_no_area_naming_bbox(
+        self, home: Path, tmp_path: Path
+    ) -> None:
+        """Code review round 1: a point box, which `CrsBox` takes, has no area
+        in the mesh's CRS; the refusal names `--bbox`, not `--dem`."""
+        out = tmp_path / "mesh.vtk"
+        point = [508522.7, 6576808.3, 508522.7, 6576808.3]
+        result = await call(
+            server(tmp_path), "mesh", {"out": str(out), "dem": [LOCAL], "bbox": point,
+                                       "bbox_crs": EPSG},
+        )  # fmt: skip
+        assert result.is_error, result.content
+        words = text_block(result)
+        assert words.startswith("exit 2: Invalid value for --bbox: "), words
+        assert "need finite x_min < x_max and y_min < y_max" in words, words
+        assert f"in {EPSG}" in words, words
+        assert not out.exists()
 
 
 # ------------------------------------------------------------ T9

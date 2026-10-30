@@ -433,6 +433,25 @@ class TestTheRealApp:
         assert "snapped outward to the DEM's nodes" in bbox, bbox
         assert {k: properties[k] for k in MESH_SNAPSHOTS} == MESH_SNAPSHOTS
 
+    @pytest.mark.parametrize("name", ["mesh", "fetch", "sources"])
+    def test_every_bbox_names_its_crs(self, name: str) -> None:
+        """`docs/increments/114-bbox-crs.md`, test 7: `bbox_crs` beside each
+        `bbox`, optional in the schema (click knows no pairing), the pairing
+        in both descriptions."""
+        properties = without_titles(derived(app)[name].tool().input_schema["properties"])
+        crs = properties["bbox_crs"]
+        assert crs["anyOf"] == [STRING, {"type": "null"}], crs
+        assert crs["default"] is None, crs
+        said = " ".join(crs["description"].split())
+        assert "Never assumed" in said and "Required with --bbox." in said, said
+        assert "EPSG:4326 is longitude and latitude in degrees" in said, said
+        assert "--bbox-crs" in properties["bbox"]["description"], properties["bbox"]
+
+    def test_the_mesh_out_crs_no_longer_frames_the_bbox(self) -> None:
+        properties = derived(app)["mesh"].tool().input_schema["properties"]
+        said = " ".join(properties["out_crs"]["description"].split())
+        assert "--bbox is then in this CRS" not in said, said
+
     def test_mesh_edges_and_out_edges_say_what_they_are(self) -> None:
         """`docs/increments/111-one-land-cover-map.md`, section 3: `--edges`
         (repeatable) says "which borders and lines the mesh must follow";

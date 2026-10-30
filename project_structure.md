@@ -139,13 +139,17 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
                            #   check overlaps and coverage, stitch; no files (15a);
-                           #   imports only io.models first-party
-  dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   domain in the DEM's CRS) (15a, 15b);
+                           #   imports io.models, crs and resources first-party
+  dem_input.py             # --dem with a CrsBox (--bbox, --bbox-crs) or a
+                           #   domain, moved into the DEM's CRS or
+                           #   --out-crs -> DemInput(tile, plan, domain in
+                           #   the DEM's CRS) (15a, 15b, 114);
                            #   takes a DemRepository and TileFootprints, and
                            #   the union of the tiles' node_box
   domain.py                # DomainPolygon (one polygon in its own CRS) and its
-                           #   to_crs, check_extent, DomainError; reads no file
+                           #   to_crs, check_extent, DomainError; CrsBox (a
+                           #   box in its own CRS, moved by its densified
+                           #   outline) and BoxError (114); reads no file
                            #   (io/domain_file.py reads --domain); never imports
                            #   _core
   crs.py                   # parse_crs, reprojector, frame_factors, site_of
@@ -708,7 +712,7 @@ Header-only. One helper in `chunks.hpp`, over `std::jthread` created per call an
 
 Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stanislawski, Buttenfield and Brockmeyer's area-preserving segment collapse (APSC, 2020): each collapse replaces two vertices by one on the line that keeps the area, so the area is kept up to rounding; collapses are taken least deviation first while the fine ring's vertices stay within a horizontal tolerance; each new edge is tested for crossings with `noding::classify<K>` over a uniform grid, and keep-points (the seed) must stay inside. Serial and deterministic. Visvalingam-Whyatt and Douglas-Peucker are not used: neither keeps area. See `docs/increments/22-auto-catchment.md`.
 
-`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--edges-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--edges-tolerance` above 0. See `docs/increments/32-landcover-simplify.md`.
+`border_collapse.hpp` (increment 32): `simplify_borders`, the same collapse over a whole land-cover coverage. The rings are cut at their junctions (a vertex with other than two edges, or whose two edges belong to different rings) into borders; a border shared by two rings is collapsed, every other border (the outer boundary) and every junction stays fixed, so both neighbours of a border keep their area. A collapse is taken only if its new edges cross no edge of any border, no vertex of any border lies in the swept region, and an anchored check on the source border keeps every border within the band both ways (Hausdorff). A clearance (the `--edges-repair` distance, 1 m by default) refuses a placement closer than it to the border's fixed ends, and a collapse whose new edges come closer than it to a vertex they do not end, or whose new vertex comes closer than it to an edge; clearance 0 is the old behaviour bit for bit. One global heap, serial, ordered by (deviation, node), so the output depends on the input alone; the binding releases the GIL. Python reaches it through `border_simplify.py`, which `feature_input.py` calls for `--edges-max-shift` above 0 (land-cover borders) and `sub_catchments.py` for `--catchments-max-shift` and, with `--simplify-domain`, `--domain-max-shift` (the outline). See `docs/increments/32-landcover-simplify.md`.
 
 ### `hydrology`
 

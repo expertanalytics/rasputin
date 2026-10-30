@@ -51,6 +51,8 @@ from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
 
 DTM10 = Path(__file__).resolve().parents[1] / "fixtures" / "dtm10"
+#: The CRS of every DEM here, the quadrants' and the DTM10 extracts'.
+UTM33 = "EPSG:25833"
 
 
 def terrain(rows: int, cols: int) -> np.ndarray:
@@ -424,7 +426,10 @@ class TestC5Usage:
         "box", [("1", "0", "0", "1"), ("0", "0", "nan", "1")], ids=["inverted", "nan"]
     )  # fmt: skip
     def test_an_invalid_box(self, tmp_path: Path, mosaic_dir: Path, box: tuple[str, ...]) -> None:
-        self.refused(tmp_path, "--dem", str(mosaic_dir), "--bbox", *box, says=("--bbox",))
+        self.refused(
+            tmp_path, "--dem", str(mosaic_dir), "--bbox", *box, "--bbox-crs", UTM33,
+            says=("--bbox",),
+        )  # fmt: skip
 
     def test_bbox_restricts_the_mesh_to_the_snapped_window(
         self, tmp_path: Path, mosaic_dir: Path
@@ -439,6 +444,8 @@ class TestC5Usage:
             "6599967",
             "500083",
             "6599996",
+            "--bbox-crs",
+            UTM33,
         )
         xs, ys = vtk.points[:, 0], vtk.points[:, 1]
         assert (xs.min(), xs.max()) == (500010.0, 500090.0)
@@ -458,7 +465,7 @@ class TestC5Usage:
         vtk = run_vtk(
             tmp_path / "box.vtk",
             "--dem", str(mosaic_dir),
-            "--bbox", "500072", "6599962", "500112", "6599974",
+            "--bbox", "500072", "6599962", "500112", "6599974", "--bbox-crs", UTM33,
         )  # fmt: skip
         assert field(vtk, "dem_source") == "se.tif"
         assert inputs(tmp_path / "box.vtk", "dem_tiles") == "se.tif"
@@ -478,6 +485,8 @@ class TestC5Usage:
             "6599967",
             "500083",
             "6599996",
+            "--bbox-crs",
+            UTM33,
         )
         assert (vtk.points[:, 0].min(), vtk.points[:, 0].max()) == (500010.0, 500090.0)
 
@@ -548,7 +557,7 @@ class TestRealDtm10:
         vtk = run_vtk(
             tmp_path / "box.vtk",
             "--dem", str(DTM10 / "lattices"),
-            "--bbox", "769800", "7749350", "770000", "7749700",
+            "--bbox", "769800", "7749350", "770000", "7749700", "--bbox-crs", UTM33,
             "--tolerance", "1",
         )  # fmt: skip
         # One tile selected out of a directory: the file used is on record

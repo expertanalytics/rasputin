@@ -27,13 +27,13 @@ import pytest
 import shapely
 
 from arcgis_fixtures import CORINE, FAR, IDS, NVE, FakeLayer, LayerData, holds
+from crs_fixtures import crs_box
 from gpkg_fixtures import needs_rtree
 from tin_engine.crs import transform_bounds
 from tin_engine.domain import DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.fetch.plan import FetchRequest
 from tin_engine.io.geopackage import decode_geometry, layer_info, layer_summary
-from tin_engine.io.models import Bounds
 from tin_engine.io.repository import CacheError, CacheRepository, CacheWriter, open_geopackage
 from tin_engine.sources import SOURCES, RemoteSource
 
@@ -51,14 +51,16 @@ def source_of(data: LayerData) -> RemoteSource:
     return SOURCES["nve-lakes" if data.url == NVE.url else "clc2018"]
 
 
-def bounds(b: tuple[float, float, float, float]) -> Bounds:
-    return Bounds(x_min=b[0], y_min=b[1], x_max=b[2], y_max=b[3])
-
-
 def request(
-    b: tuple[float, float, float, float], source: str = "nve-lakes", **kw: Any
+    b: tuple[float, float, float, float],
+    source: str = "nve-lakes",
+    crs: str | None = None,
+    **kw: Any,
 ) -> FetchRequest:
-    return FetchRequest(source=source, box=bounds(b), **kw)
+    """A request for the box `b` in `crs`; by default in `out_crs` when given,
+    else in the source's CRS."""
+    crs = crs or kw.get("out_crs") or SOURCES[source].crs
+    return FetchRequest(source=source, box=crs_box(crs, b), **kw)
 
 
 def run(
@@ -137,7 +139,7 @@ class TestBoxInCrs:
     def test_a_box_crossing_the_antimeridian_is_refused(self) -> None:
         plan = importlib.import_module("tin_engine.fetch.plan")
         with pytest.raises(FetchError, match="±180°"):
-            plan.box_in_crs(request((179.0, 10.0, 181.0, 11.0)), "EPSG:4326")
+            plan.box_in_crs(request((179.0, 10.0, 181.0, 11.0), crs="EPSG:4326"), "EPSG:4326")
 
 
 class TestChunks:

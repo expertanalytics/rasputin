@@ -131,9 +131,10 @@ class TestT6CachedKeyInCatchment:
         assert code == USAGE, output
         assert not out.exists()
         assert re.search(r"\d+ of the \d+ blocks needed are not in the cache", output), output
-        assert "in the source's CRS" in output, output
+        assert re.search(rf"for the window \S+ \S+ \S+ \S+ in {EPSG}[;.]", output), output
         hint = re.search(
-            rf"run: rasputin fetch {CACHED} --bbox (\S+) (\S+) (\S+) (\S+?)(?: --cache .*)?\.?$",
+            rf"run: rasputin fetch {CACHED} --bbox (\S+) (\S+) (\S+) (\S+) --bbox-crs {EPSG}"
+            r"(?: --cache .*)?\.?$",
             output.strip(),
         )
         assert hint, output
@@ -208,7 +209,9 @@ def test_fetch_refuses_a_local_key_before_any_network_use(
     write_sources(config, {LOCAL: local_entry(local)})
     monkeypatch.setattr(socket, "socket", no_network)
     monkeypatch.setattr(socket, "create_connection", no_network)
-    code, output = invoke("fetch", LOCAL, "--bbox", "15.15", "59.33", "15.20", "59.38")
+    code, output = invoke(
+        "fetch", LOCAL, "--bbox", "15.15", "59.33", "15.20", "59.38", "--bbox-crs", "EPSG:4326"
+    )
     assert code != 0, output
     assert f"{LOCAL} is a local source, read in place; it needs no fetch" in output, output
     assert "Traceback" not in output, output

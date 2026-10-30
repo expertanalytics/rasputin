@@ -34,7 +34,7 @@ from class_fixtures import (
     serve_years,
 )
 from cli_helpers import USAGE, invoke
-from fetch_fixtures import RangeServer, projected
+from fetch_fixtures import PROJECTED_CRS, RangeServer, projected
 from test_cli_fetch import KEY as DEM_KEY
 from test_cli_fetch import catalogue_with, install, no_network
 
@@ -57,7 +57,10 @@ def classes(sources: ModuleType, monkeypatch: pytest.MonkeyPatch, server: RangeS
 
 
 def fetched(cache: Path, *args: str) -> tuple[int, str]:
-    return invoke("fetch", KEY, *args, "--bbox", *bbox_args(), "--cache", str(cache))
+    return invoke(
+        "fetch", KEY, *args, "--bbox", *bbox_args(), "--bbox-crs", "EPSG:4326",
+        "--cache", str(cache),
+    )  # fmt: skip
 
 
 class TestFetchYear:
@@ -90,8 +93,9 @@ class TestFetchYear:
     ) -> None:  # fmt: skip
         catalogue_with(sources, monkeypatch, server.put("p.tif", projected()))
         code, output = invoke(
-            "fetch", DEM_KEY, "--year", "2025", "--bbox", *bbox_args(), "--cache", str(tmp_path)
-        )
+            "fetch", DEM_KEY, "--year", "2025", "--bbox", *bbox_args(),
+            "--bbox-crs", PROJECTED_CRS, "--cache", str(tmp_path),
+        )  # fmt: skip
         assert code == USAGE, output
         assert "No such option" not in output, output
         assert "--year" in output and DEM_KEY in output, output

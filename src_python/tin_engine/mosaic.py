@@ -25,6 +25,7 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict
 
+from tin_engine.crs import crs_label
 from tin_engine.io.models import Bounds, DemTile, IndexWindow, RasterMeta, TileFootprint, valid_mask
 from tin_engine.resources import Resources
 
@@ -176,7 +177,7 @@ def plan_mosaic(
         if window is not None and selected:
             chosen.append(_Lattice(group, reference, placed, window, selected))
     if not chosen:
-        raise MosaicError(f"the box {bounds} meets no tile")
+        raise MosaicError(f"the box {bounds} meets no tile in {crs_label(footprints[0].meta.crs)}")
     if len(chosen) > 1:
         covering = _covering(chosen, bounds, needed)
         return plan_mosaic(covering, bounds, needed, memory_budget=memory_budget, cap=cap)

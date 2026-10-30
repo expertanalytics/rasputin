@@ -1,0 +1,3 @@
+INSIDE: tiles by area 1.000000, tiles by bounds 1.000000, rectangle by area 1.000000, rectangle by bounds 1.000000
+OUTSIDE: tiles by area 0.000000, tiles by bounds 0.000000, rectangle by area 0.000000, rectangle by bounds 0.000000
+EDGE: tiles by area 0.496418, tiles by bounds 0.496067, rectangle by area 0.518333, rectangle by bounds 0.517871

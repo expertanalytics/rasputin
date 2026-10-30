@@ -436,7 +436,8 @@ def test_the_velhas_case_is_public_and_in_the_tree(quick: ModuleType) -> None:
     dem = "$TREE/tests/fixtures/velhas/anadem_velhas.tif"
     assert velhas.args == [
         "mesh", "--dem", dem, "--out-crs", "EPSG:31983",
-        "--bbox", "592000", "7845500", "599000", "7854000", "--tolerance", "0.5",
+        "--bbox", "592000", "7845500", "599000", "7854000", "--bbox-crs", "EPSG:31983",
+        "--tolerance", "0.5",
     ]  # fmt: skip
     assert velhas.inputs == [dem]
     for name in velhas.inputs:

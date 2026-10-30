@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import shapely
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from tin_engine.crs import (
     CrsSuggestion,
@@ -38,7 +38,7 @@ from tin_engine.crs import (
     single_crs,
     suggest_crs,
 )
-from tin_engine.domain import DomainError, DomainPolygon, check_extent
+from tin_engine.domain import CrsBox, DomainError, DomainPolygon, check_extent
 from tin_engine.grow import grow_mitred
 from tin_engine.io.models import Bounds, DemTile, IndexWindow, RasterMeta, TileFootprint, ZUnit
 from tin_engine.io.repository import CacheRepository, DemRepository, TiffDemRepository
@@ -80,8 +80,9 @@ class CachedSource(BaseModel):
 
 class DemRequest(BaseModel):
     """Exactly one directory of tiles, or one or more tile files, or a cached
-    source, and at most one of a box in the DEM's CRS and a domain in its own,
-    since a domain's bounds are its box."""
+    source, and at most one of `bounds` (a box in the DEM's CRS, or in
+    `target_crs` when given), `box` (a box in its own CRS, moved into that
+    one) and a domain in its own, since a domain's bounds are its box."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -93,6 +94,7 @@ class DemRequest(BaseModel):
     z_unit: ZUnit | None = None
     domain: DomainPolygon | None = None
     target_crs: str | None = None
+    box: CrsBox | None = None
 
     @model_validator(mode="after")
     def _one_form(self) -> Self:
@@ -106,8 +108,8 @@ class DemRequest(BaseModel):
                 f"give exactly one directory, or one or more files; got {len(self.sources)} "
                 f"sources of which {directories} are directories"
             )
-        if self.bounds is not None and self.domain is not None:
-            raise ValueError("give a box or a domain, not both: the domain's bounds are the box")
+        if sum(v is not None for v in (self.bounds, self.box, self.domain)) > 1:
+            raise ValueError("give one box or a domain, not two: the domain's bounds are its box")
         return self
 
 
@@ -208,7 +210,19 @@ def plan_dem(request: DemRequest, resources: Resources | None = None) -> DemPlan
         request.sources, request.nodata, request.cached, res.threads, request.z_unit
     )
     footprints = repository.footprints()
-    if footprints and _reprojected(request, [f.meta for f in footprints]):
+    reprojected = bool(footprints) and _reprojected(request, [f.meta for f in footprints])
+    if request.box is not None and footprints:  # with no tiles the plan refuses as without one
+        frame = str(
+            request.target_crs
+            if reprojected
+            else single_crs((f.meta.crs for f in footprints), MosaicError)
+        )
+        try:
+            bounds = Bounds.of(request.box.to_crs(frame))
+        except ValidationError as exc:  # Bounds' own words, without Pydantic's wrapper
+            raise NoAreaError(f"{exc.errors()[0]['ctx']['error']} in {crs_label(frame)}") from exc
+        request = request.model_copy(update={"bounds": bounds, "box": None})
+    if reprojected:
         return _plan_reprojected(request, repository, footprints)
     if request.domain is None or not footprints:
         plan = plan_mosaic(footprints, request.bounds, None, cap=False)
@@ -288,6 +302,14 @@ def _checks(
     return check_point_blocks(plan.grid, source, plan.checked, threads, within=within)
 
 
+class NoAreaError(ValueError):
+    """A `--bbox` with no area in the mesh's CRS; the refusal is `--bbox`'s."""
+
+
+class TargetRegionError(ValueError):
+    """`--out-crs` with neither a domain nor a box; the refusal is `--out-crs`'s."""
+
+
 class OutCrsRequiredError(ValueError):
     """A geographic DEM without a target CRS: `head` says why and
     what is suggested; `suggestion.proj` is the `--out-crs` to paste."""
@@ -345,7 +367,7 @@ def _plan_reprojected(
         b = request.bounds
         domain = DomainPolygon(polygon=shapely.box(b.x_min, b.y_min, b.x_max, b.y_max), crs=target)
     else:
-        raise ValueError("--out-crs needs a domain or a box in the target CRS")
+        raise TargetRegionError("--out-crs needs --domain or --bbox")
     meta = footprints[0].meta
     c = domain.polygon.centroid
     ((ax, ay),) = reprojector(target, meta.crs)([(c.x, c.y)])

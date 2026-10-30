@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from cog_fixtures import VARIANTS, build, with_zero_byte_count
+from crs_fixtures import crs_box
 from fetch_fixtures import (
     CHANGED,
     MIB,
@@ -120,9 +121,11 @@ def part_box(x0: float, x1: float, rows: float = 30.0) -> Bounds:
 
 
 async def fetch(api: SimpleNamespace, source: Any, root: Path, box: Bounds, **request: Any) -> Any:
+    """Fetch `box`, in `out_crs` when given, else in the source's CRS."""
     client = api.http.RangeClient(delays=(0, 0, 0))
     writer = api.repository.CacheWriter(root, source.id)
-    asked = api.plan.FetchRequest(source=source.id, box=box, margin=0, **request)
+    given = crs_box(request.get("out_crs") or source.crs, box)
+    asked = api.plan.FetchRequest(source=source.id, box=given, margin=0, **request)
     return await api.run.fetch(asked, source, client, writer)
 
 
@@ -503,7 +506,8 @@ class TestF8Glo30:
         )  # fmt: skip
         client = api.http.RangeClient(delays=(0, 0, 0))
         writer = api.repository.CacheWriter(tmp_path, SOURCE)
-        asked = api.plan.FetchRequest(source=SOURCE, box=bounds(**box), dry_run=True)
+        given = crs_box("EPSG:4326", bounds(**box))
+        asked = api.plan.FetchRequest(source=SOURCE, box=given, dry_run=True)
         report = await api.run.fetch(asked, source, client, writer)
         assert sorted(report.no_tile) == sorted(glo30_name(lat, lon) for lat, lon in tiles)
         assert report.objects == 0

@@ -1,0 +1,3 @@
+['mesh', '--bbox', '1', '2', '3', '4', '--out', 'a.vtk'] 2 ["Error: Missing option '--out'."]
+['mesh', '--out', 'a.vtk', '--bbox', '1', '2', '3', '4'] 2 ["Error: Option '--bbox' requires 5 arguments."]
+['mesh', '--out', 'a.vtk', '--bbox', '1', '2', '3', '4', 'EPSG:4326'] 0 []

@@ -87,15 +87,17 @@ from tin_engine.dem_input import (
     CachedSource,
     DemPlan,
     DemRequest,
+    NoAreaError,
     OutCrsRequiredError,
     PieceDem,
+    TargetRegionError,
     assemble_dem,
     load_piece,
     piece_plan,
     plan_dem,
     repository_for,
 )
-from tin_engine.domain import DomainError, DomainPolygon
+from tin_engine.domain import BoxError, CrsBox, DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
     SUFFIXES,
@@ -144,7 +146,6 @@ from tin_engine.io.geopackage_write import (
 from tin_engine.io.models import (
     BY_NAME,
     UNITS,
-    Bounds,
     ClassFractions,
     DemTile,
     IndexWindow,
@@ -246,6 +247,22 @@ CACHE = Annotated[
     Path | None,
     typer.Option("--cache", help=f"The tile cache a catalogue --dem is read from. {CACHE_DEFAULT}"),
 ]
+BBOX_HELP: Final = (
+    "XMIN YMIN XMAX YMAX in --bbox-crs (required with it); x is easting or longitude "
+    "whatever the CRS's axis order"
+)
+BBOX_CRS = Annotated[
+    str | None,
+    typer.Option(
+        "--bbox-crs",
+        help="The --bbox's CRS, anything pyproj reads; EPSG:4326 is longitude and latitude "
+        "in degrees. Never assumed. Required with --bbox.",
+    ),
+]
+NO_BOX_CRS: Final = (
+    "--bbox needs --bbox-crs, the CRS its four numbers are in (EPSG:4326 for longitude and "
+    "latitude in degrees); a box's CRS is never assumed"
+)
 DEM_HELP: Final = (
     "A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a source from "
     "rasputin sources"
@@ -598,10 +615,12 @@ def mesh(
         typer.Option(
             "--bbox",
             metavar="BOX",
-            help="Mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, or in --out-crs's when "
-            "given, snapped outward to the DEM's nodes.",
+            help=f"Mesh only {BBOX_HELP}; in another CRS than the mesh's, the box holding "
+            "the image of its edges there is meshed, snapped outward to the DEM's nodes, or "
+            "with --out-crs to its grid's.",
         ),
     ] = None,
+    bbox_crs: BBOX_CRS = None,
     stride: Annotated[
         int | None,
         typer.Option("--stride", help="Every Nth DEM node. Default: <= 256 a side."),
@@ -722,7 +741,7 @@ def mesh(
             "--out-crs",
             help="Mesh in this CRS: a DEM in another CRS (required for one in degrees, "
             "such as glo30) is resampled onto a square grid here, and with --tolerance "
-            "checked against its own nodes. --bbox is then in this CRS. For example "
+            "checked against its own nodes. For example "
             "EPSG:3006 in Sweden, EPSG:25833 in Norway.",
         ),
     ] = None,
@@ -984,6 +1003,7 @@ def mesh(
     --record write it in full. A refused run exits non-zero and writes no file.
     """
     clock = PhaseClock()
+    box = _crs_box(bbox, bbox_crs)
     res = cli_kit.cli_resources(threads, memory_budget)
     codes: npt.NDArray[np.int32] | None = None
     codes_text = ""
@@ -995,10 +1015,10 @@ def mesh(
     root = cache_root(cache, os.environ)
     classes = _class_source(
         land_cover or [], land_cover_year, land_cover_classes, land_cover_layer, land_cover_crs,
-        root, known, lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
+        root, known, lambda value: _fetch_run(value, domain, box, out_crs, cache),
     )  # fmt: skip
     line_sources = _line_sources(
-        lines or [], known, root, lambda value: _fetch_run(value, domain, bbox, out_crs, cache)
+        lines or [], known, root, lambda value: _fetch_run(value, domain, box, out_crs, cache)
     )
     choice = _edge_choice(edges or [], classes, [s.key for s in line_sources])
     if edges and domain is None:
@@ -1027,15 +1047,15 @@ def mesh(
     no_cells = "--shares" if classes is not None and not computing else None
     reservoir = _reservoir_source(
         reservoirs, categories is not None, known, root,
-        _fetch_run(reservoirs or "", domain, bbox, out_crs, cache), why=no_cells,
+        _fetch_run(reservoirs or "", domain, box, out_crs, cache), why=no_cells,
     )  # fmt: skip
     preferred = _prefer_sources(
         prefer or [], classes, known, root,
-        lambda value: _fetch_run(value, domain, bbox, out_crs, cache),
+        lambda value: _fetch_run(value, domain, box, out_crs, cache),
     )  # fmt: skip
     units_source = _reservoir_source(
         catchments, categories is not None, known, root,
-        _fetch_run(catchments or "", domain, bbox, out_crs, cache), "--catchments", no_cells,
+        _fetch_run(catchments or "", domain, box, out_crs, cache), "--catchments", no_cells,
     )  # fmt: skip
     if catchments is not None and domain is None:
         raise typer.BadParameter(
@@ -1204,7 +1224,7 @@ def mesh(
             err=True,
         )
     try:
-        planned = _open_dem(paths, bbox, clock, given, cached, out_crs, res, caller)
+        planned = _open_dem(paths, box, clock, given, cached, out_crs, res, caller)
         meta, part, grid = planned.meta, None, planned.grid
         if tolerance is not None and domain is not None:  # one cell is the uncut run
             cells = partition(
@@ -1242,7 +1262,7 @@ def mesh(
             del opened
     except NotCached as exc:  # an outline past the domain's box needs the window's blocks
         hint = _bbox_fetch(dem[0], exc, cache) if simplify_domain or catchments else ""
-        hint = hint or f"{RUN_FETCH}{_fetch_run(dem[0], domain, bbox, out_crs, cache)}"
+        hint = hint or f"{RUN_FETCH}{_fetch_run(dem[0], domain, box, out_crs, cache)}"
         raise typer.BadParameter(f"{exc}{hint}", param_hint="--dem") from exc
     plan, source_crs, dem_domain = planned.mosaic, planned.source_crs, planned.domain
     dem_crs = meta.crs
@@ -1637,14 +1657,14 @@ RUN_FETCH = "; over MCP, call the fetch tool with this source and options as arg
 def _fetch_run(
     key: str,
     domain: Path | None,
-    bbox: tuple[float, float, float, float] | None,
+    bbox: CrsBox | None,
     out_crs: str | None,
     cache: Path | None,
 ) -> str:
     """The ``rasputin fetch`` that copies `key` for this run's area into its cache."""
     area = f"--domain {shlex.quote(str(domain))}" if domain is not None else ""
     if bbox is not None:
-        area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
+        area = _bbox_args(bbox.box, bbox.crs)
     frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
     store = f"--cache {shlex.quote(str(cache))}" if cache else ""
     flags = " ".join(filter(None, (area, frame, store)))
@@ -1653,12 +1673,35 @@ def _fetch_run(
 
 def _bbox_fetch(key: str, exc: NotCached, cache: Path | None) -> str:
     """The refusal's tail naming the ``rasputin fetch`` of `exc`'s window
-    box, in the source's CRS; empty when it has no box."""
-    if exc.box is None:
+    box, in its CRS; empty when it has no box."""
+    if exc.box is None or exc.crs is None:
         return ""
-    fetch = " ".join(repr(v).removesuffix(".0") for v in exc.box)
     given = f" --cache {shlex.quote(str(cache))}" if cache else ""
-    return f"{RUN_FETCH}rasputin fetch {shlex.quote(key)} --bbox {fetch}{given}"
+    return f"{RUN_FETCH}rasputin fetch {shlex.quote(key)} {_bbox_args(exc.box, exc.crs)}{given}"
+
+
+def _bbox_args(box: tuple[float, ...], crs: str) -> str:
+    """``--bbox X0 Y0 X1 Y1 --bbox-crs C``, each number as it reads back."""
+    numbers = " ".join(repr(v).removesuffix(".0") for v in box)
+    return f"--bbox {numbers} --bbox-crs {shlex.quote(crs)}"
+
+
+def _crs_box(bbox: tuple[float, float, float, float] | None, crs: str | None) -> CrsBox | None:
+    """``--bbox`` with its ``--bbox-crs``; each refusal names its option."""
+    if bbox is None:
+        if crs is not None:
+            raise typer.BadParameter("applies only with --bbox", param_hint="--bbox-crs")
+        return None
+    if crs is None:
+        raise typer.BadParameter(NO_BOX_CRS, param_hint="--bbox-crs")
+    try:
+        parse_crs(crs)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox-crs") from exc
+    try:
+        return CrsBox(crs=crs, box=bbox)
+    except ValidationError as exc:
+        raise typer.BadParameter(cli_kit.words(exc), param_hint="--bbox") from exc
 
 
 def _ring_vertices(polygon: Polygon) -> int:
@@ -2643,12 +2686,15 @@ def fetch(
     ] = None,
     bbox: Annotated[
         tuple[float, float, float, float] | None,
-        typer.Option(
-            "--bbox", metavar="BOX", help="Or XMIN YMIN XMAX YMAX in --out-crs, else the source's."
-        ),
+        typer.Option("--bbox", metavar="BOX", help=f"Or {BBOX_HELP}."),
     ] = None,
+    bbox_crs: BBOX_CRS = None,
     out_crs: Annotated[
-        str | None, typer.Option("--out-crs", help="The frame the mesh's box is in.")
+        str | None,
+        typer.Option(
+            "--out-crs",
+            help="The mesh's CRS, which --domain or --bbox is moved into, as mesh moves it.",
+        ),
     ] = None,
     cache: Annotated[
         Path | None, typer.Option("--cache", writable=True, help=f"The tile cache. {CACHE_DEFAULT}")
@@ -2694,6 +2740,7 @@ def fetch(
             known[source].url_for(year)
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--year") from exc
+    box = _crs_box(bbox, bbox_crs)
     if (domain is None) == (bbox is None):
         raise typer.BadParameter("give exactly one of --domain and --bbox", param_hint="--bbox")
     root = cache_root(cache, os.environ)
@@ -2704,8 +2751,6 @@ def fetch(
         )
     try:
         given = read_domain(domain, domain_crs) if domain is not None else None
-        corners = ("x_min", "y_min", "x_max", "y_max")
-        box = None if bbox is None else Bounds(**dict(zip(corners, bbox, strict=True)))
         request = FetchRequest(
             source=source, domain=given, box=box, out_crs=out_crs, connections=connections,
             dry_run=dry_run, refresh=refresh, year=year,
@@ -2728,6 +2773,8 @@ def fetch(
             got = fetch_features(request, known[source], client.get_text, writer)
         else:
             report = asyncio.run(run(request, known[source], client, writer, progress=progress))
+    except BoxError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox-crs") from exc
     except (FetchError, CacheError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -2795,10 +2842,11 @@ def sources(
         typer.Option(
             "--bbox",
             metavar="BOX",
-            help="WEST SOUTH EAST NORTH in degrees (WGS 84): report the share of it each "
-            "source covers. A point is a box with WEST = EAST and SOUTH = NORTH.",
+            help=f"{BBOX_HELP}: report the share of it each source covers. A point is a "
+            "box with XMIN = XMAX and YMIN = YMAX.",
         ),
     ] = None,
+    bbox_crs: BBOX_CRS = None,
     cache: Annotated[
         Path | None, typer.Option("--cache", help=f"The tile cache read. {CACHE_DEFAULT}")
     ] = None,
@@ -2811,9 +2859,12 @@ def sources(
     """
     from tin_engine.source_report import listing
 
-    if bbox is not None and (bbox[0] > bbox[2] or bbox[1] > bbox[3]):
-        raise typer.BadParameter("WEST must not exceed EAST, nor SOUTH NORTH", param_hint="--bbox")
-    typer.echo(listing(os.environ, cache_root(cache, os.environ), bbox).model_dump_json())
+    box = _crs_box(bbox, bbox_crs)
+    try:
+        found = listing(os.environ, cache_root(cache, os.environ), box)
+    except BoxError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox-crs") from exc
+    typer.echo(found.model_dump_json())
 
 
 def gml_to_gpkg(
@@ -2927,7 +2978,7 @@ def _dem_repository(
 
 def _open_dem(
     dem: tuple[Path, ...],
-    bbox: tuple[float, float, float, float] | None,
+    bbox: CrsBox | None,
     clock: PhaseClock,
     domain: DomainPolygon | None = None,
     cached: CachedSource | None = None,
@@ -2938,19 +2989,11 @@ def _open_dem(
     """``--dem`` and ``--bbox`` or the read ``--domain`` planned, from headers;
     every refusal, the reader's, the mosaic's or the domain's extent, is a
     usage error in its own words."""
-    try:
-        bounds = (
-            None
-            if bbox is None
-            else Bounds(**dict(zip(("x_min", "y_min", "x_max", "y_max"), bbox, strict=True)))
-        )
-    except ValidationError as exc:
-        raise typer.BadParameter(cli_kit.words(exc), param_hint="--bbox") from exc
     with clock.phase("decode"), _dem_refusals(dem):
         request = DemRequest(
             sources=dem,
             cached=cached,
-            bounds=bounds,
+            box=bbox,
             domain=domain,
             target_crs=target_crs,
             z_unit=z_unit,
@@ -2977,6 +3020,12 @@ def _dem_refusals(dem: tuple[Path, ...]) -> Iterator[None]:
         ) from exc
     except DomainError as exc:
         raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+    except BoxError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox-crs") from exc
+    except NoAreaError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--bbox") from exc
+    except TargetRegionError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--out-crs") from exc
     except ValueError as exc:
         raise typer.BadParameter(cli_kit.words(exc), param_hint="--dem") from exc
 

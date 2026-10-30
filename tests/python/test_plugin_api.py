@@ -46,7 +46,7 @@ SIGNATURES: dict[str, str] = {
     "Bounds": "x_min, y_min, x_max, y_max",
     "DemRequest": (
         "sources=(), cached=None, bounds=None, nodata=None, z_unit=None,"
-        " domain=None, target_crs=None"
+        " domain=None, target_crs=None, box=None"
     ),
     "DemTile": "meta, array",
     "RasterMeta": (

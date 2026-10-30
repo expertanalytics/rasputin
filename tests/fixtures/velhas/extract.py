@@ -1,6 +1,6 @@
 """Cut increment 15c-2's ANADEM fixture out of the tile cache (Q17).
 
-    rasputin fetch anadem-v1 --bbox -44.14 -19.49 -44.04 -19.39   # degrees, EPSG:4674
+    rasputin fetch anadem-v1 --bbox -44.14 -19.49 -44.04 -19.39 --bbox-crs EPSG:4674
     python tests/fixtures/velhas/extract.py $RASPUTIN_DATA/cache
 
 (The cache it was cut from was fetched for the whole Velhas piece; the

@@ -236,7 +236,9 @@ Kartverket's 10 m terrain model of mainland Norway is open data under
   separate directories. Kartverket says this set is no longer updated.
 
 Unpack the tiles into one directory and give that directory to `--dem`; use
-`--bbox XMIN YMIN XMAX YMAX` or `--domain` to mesh part of it. The tiles need
+`--bbox XMIN YMIN XMAX YMAX --bbox-crs EPSG:25833` (the tiles' CRS; a box in
+another, such as EPSG:4326 in degrees, is moved into it) or `--domain` to
+mesh part of it. The tiles need
 the `codecs` extra. A `rasputin fetch dtm10` is possible, since both routes
 are plain HTTP: `docs/research/2026-10-11-dtm10-fetcher.md`.
 

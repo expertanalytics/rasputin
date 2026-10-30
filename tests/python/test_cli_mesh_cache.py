@@ -279,11 +279,12 @@ class TestW5TheFetchCommandInTheMessage:
         code, output = invoke(
             "mesh",
             "--dem", KEY, "--cache", str(tmp_path / "cache"), "--bbox", *self.BBOX,
-            "--out", str(tmp_path / "m.vtk"),
+            "--bbox-crs", "EPSG:25833", "--out", str(tmp_path / "m.vtk"),
         )  # fmt: skip
         assert code == USAGE, output
         wanted = (
-            f"run: rasputin fetch {KEY} --bbox {' '.join(self.BBOX)} --cache {tmp_path / 'cache'}"
+            f"run: rasputin fetch {KEY} --bbox {' '.join(self.BBOX)} --bbox-crs EPSG:25833"
+            f" --cache {tmp_path / 'cache'}"
         )
         assert squashed(wanted) in squashed(output), output
         assert not (tmp_path / "m.vtk").exists()
@@ -305,7 +306,8 @@ class TestW5TheFetchCommandInTheMessage:
 
     # 106e, test 9 (`docs/increments/106-wednesday-cells.md`, section 8): with
     # an outline that may pass the domain's bounds, the fetch named is the
-    # planned window's `--bbox`, in the source's CRS. The window is the one
+    # planned window's `--bbox`, in the source's CRS, which the refusal and the
+    # fetch name (`--bbox-crs`). The window is the one
     # the run without either option reports; a triangle keeps its three
     # vertices at any band.
     WINDOW = ("500150", "6599880", "500400", "6599960")
@@ -324,9 +326,14 @@ class TestW5TheFetchCommandInTheMessage:
         assert not target.exists()
         flat = squashed(output)
         window = " ".join(self.WINDOW)
-        missing = f"1 of the 6 blocks needed are not in the cache for the window {window}"
+        missing = (
+            f"1 of the 6 blocks needed are not in the cache for the window {window} in EPSG:25833"
+        )
         assert squashed(missing) in flat, output
-        wanted = f"run: rasputin fetch {KEY} --bbox {window} --cache {tmp_path / 'cache'}"
+        wanted = (
+            f"run: rasputin fetch {KEY} --bbox {window} --bbox-crs EPSG:25833"
+            f" --cache {tmp_path / 'cache'}"
+        )
         assert squashed(wanted) in flat, output
         assert "--domain" not in output.split("run: rasputin fetch", 1)[1], output
         return output

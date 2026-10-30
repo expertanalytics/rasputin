@@ -36,7 +36,7 @@ from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
 
 from cog_fixtures import block_rectangles
-from crs_fixtures import axes_swapped, refuse_point_moves
+from crs_fixtures import axes_swapped, crs_box, refuse_point_moves
 from fetch_fixtures import (
     GAP,
     MAX_RANGE,
@@ -131,13 +131,13 @@ class TestTheRequest:
             plan.FetchRequest(
                 source="s",
                 domain=domain(ring, PROJECTED_CRS),
-                box=box_of(TIE_X, TIE_Y - 100, TIE_X + 100, TIE_Y),
+                box=crs_box(PROJECTED_CRS, box_of(TIE_X, TIE_Y - 100, TIE_X + 100, TIE_Y)),
             )
         with pytest.raises(ValueError, match="domain"):
             plan.FetchRequest(source="s")
 
     def test_the_defaults(self, plan: ModuleType) -> None:
-        request = plan.FetchRequest(source="s", box=box_of(0, 0, 1, 1))
+        request = plan.FetchRequest(source="s", box=crs_box(PROJECTED_CRS, (0, 0, 1, 1)))
         assert (request.margin, request.connections) == (4, 8)
         assert (request.out_crs, request.dry_run, request.refresh) == (None, False, False)
 
@@ -153,7 +153,7 @@ class TestF2TheSourceBox:
     ) -> None:
         meta = header(projected())[0]
         box = box_of(TIE_X + 101.3, TIE_Y - 187.7, TIE_X + 333.9, TIE_Y - 61.1)
-        request = plan.FetchRequest(source="s", box=box, margin=4)
+        request = plan.FetchRequest(source="s", box=crs_box(PROJECTED_CRS, box), margin=4)
         got = plan.source_box(request, meta)
         grow = 4 * meta.delta_y
         points = dense(box, grow)
@@ -191,9 +191,10 @@ class TestF2TheSourceBox:
         meta = header(projected())[0]
         assert meta.crs == f"EPSG:{meta.epsg}" == PROJECTED_CRS
         box = box_of(TIE_X + 101.3, TIE_Y - 187.7, TIE_X + 333.9, TIE_Y - 61.1)
-        bare = plan.source_box(plan.FetchRequest(source="s", box=box, margin=4), meta)
+        given = crs_box(PROJECTED_CRS, box)
+        bare = plan.source_box(plan.FetchRequest(source="s", box=given, margin=4), meta)
         refuse_point_moves(monkeypatch)
-        spelt = plan.FetchRequest(source="s", box=box, margin=4, out_crs=axes_swapped(meta.epsg))
+        spelt = plan.FetchRequest(source="s", box=given, margin=4, out_crs=axes_swapped(meta.epsg))
         assert plan.source_box(spelt, meta) == bare
 
     def test_a_geographic_source_grows_by_its_spacing_in_metres(self, plan: ModuleType) -> None:
@@ -214,8 +215,9 @@ class TestF2TheSourceBox:
         self, plan: ModuleType, fetch_error: type[Exception]
     ) -> None:
         meta = header(geographic(), geographic=True)[0]
-        request = plan.FetchRequest(source="s", box=box_of(179.99, 10, 180.5, 11))
-        with pytest.raises(fetch_error):
+        request = plan.FetchRequest(source="s", box=crs_box("EPSG:4326", (179.99, 10, 180.5, 11)))
+        # The printed box names its CRS (`docs/increments/114-bbox-crs.md`, section 3).
+        with pytest.raises(fetch_error, match=r"in EPSG:4326$"):
             plan.source_box(request, meta)
 
 
