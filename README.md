@@ -52,7 +52,7 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   triangle gets the class of the polygon it lies in. First the borders are
   repaired (`--edges-repair`), merged between neighbours of one class, snapped
   onto the domain outline where they nearly touch it, and simplified to
-  `--edges-tolerance` metres with each class keeping its area.
+  within `--edges-max-shift` metres of where they were, each class keeping its area.
 - **Refinement to a tolerance.** Triangles are split at the worst DEM point
   until every triangle is within `--tolerance` metres of the DEM, then kept
   Delaunay, with a minimum-angle start so there are no slivers along the

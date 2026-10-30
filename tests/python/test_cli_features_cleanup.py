@@ -30,7 +30,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   ``"<parent>: ..."`` form ``stats._timings`` lists as a sub-row;
   ``docs/increments/111-one-land-cover-map.md``, section 8).
 - Refused, for its value: ``--edges-repair`` and
-  ``--edges-tolerance`` negative or non-finite;
+  ``--edges-max-shift`` negative or non-finite;
   ``--edges-outline-snap`` negative, non-finite, or at or above 100.
 
 RED at the commit that adds ``test_the_area_row_says_another_polygon``
@@ -43,8 +43,8 @@ test excludes), and the default runs hand ``open_features`` a request without
 the four fields.
 
 Increment 32 (``docs/increments/32-landcover-simplify.md``, section 6 "What
-replaces ``--edges-tolerance``" and section 9, tests 14 to 16):
-``--edges-tolerance`` is now the band, default 50 (``BAND_DEFAULT``), its
+replaces ``--edges-max-shift``" and section 9, tests 14 to 16):
+``--edges-max-shift`` is now the band, default 50 (``BAND_DEFAULT``), its
 help and record sentence as section 6 words them; the start angle is 15 when
 the land-cover stage ran with the band above 0 and no ``--start-min-angle``
 was given, else 25; band 0 is today's mesh bit for bit (``BAND_0_TODAY``, one
@@ -103,7 +103,7 @@ OUTLINE_DEFAULT = 5.0  # ruling 6
 BAND_DEFAULT = 50.0  # increment 32, section 6: half CORINE's positional accuracy
 #: Increment 32, test 14: SHA-256 of the points (float64, little-endian, (N, 3))
 #: then the triangles (int64, little-endian, (T, 3)) read back from the .vtk of
-#: ``run`` with ``--features corine --features-rules corine --edges-tolerance
+#: ``run`` with ``--features corine --features-rules corine --edges-max-shift
 #: 0``, one per (``sys.platform``, ``platform.machine()``). A recorded digest
 #: pins a platform as well as a behaviour (``test_cli_mesh_domain_crs.py``'s
 #: preamble): the same shapely 2.2.0 (GEOS 3.14.1) and numpy 2.5.3 give this
@@ -123,10 +123,11 @@ BAND_0_TODAY = {
 #: Section 15.4's wording (the fix moved the band after the outline rule; the
 #: section 6 wording this replaced said "repaired, clipped border").
 BAND_HELP = (
-    "Metres: simplify land-cover borders, each moved at most this far from its border after "
-    "the repair and the outline rule, each class keeping its area; the simplification can "
+    "Metres: the farthest a land-cover border may move from where it was (after the repair "
+    "and the outline rule) when simplified, each class keeping its area; simplifying can "
     "bring a border back within the outline-snap distance of the outline, but not closer "
-    "than the repair distance. 0 is off. "
+    "than the repair distance. --lines lines are kept as given. "
+    "0: no simplification, borders as read. "
     "Default: from the land-cover class file's positional accuracy and the DEM cell (CORINE: 50)."
 )
 BAND_WORDING = (
@@ -136,17 +137,17 @@ BAND_WORDING = (
 #: Section 15.2: an edge lies on the outline when one outline segment is
 #: within this of both its ends (``feature_input.IN_LINE``, 1 µm).
 ON_OUTLINE = 1e-6
-START_HELP = "Default: 25, or 15 with land cover simplified (--edges-tolerance above 0)."
+START_HELP = "Default: 25, or 15 with land cover simplified (--edges-max-shift above 0)."
 ROWS = (
     "edges_repair_m",
     "edges_merge_same_class",
-    "edges_tolerance_m",
+    "edges_max_shift_m",
     "edges_outline_snap_m",
 )
 FLAGS = (
     "--edges-repair",
     "--edges-merge-same-class",
-    "--edges-tolerance",
+    "--edges-max-shift",
     "--edges-outline-snap",
 )
 VERTEX_WORDING = "Land-cover vertices before and after clean-up"
@@ -241,7 +242,7 @@ def run(tmp_path: Path, bumpy: Path, square: Path, *extra: str) -> tuple[str, di
 
 
 def switches(request: Any) -> tuple[float, bool, float, float]:
-    return (request.repair_m, request.merge_same_class, request.tolerance_m, request.outline_snap_m)
+    return (request.repair_m, request.merge_same_class, request.max_shift_m, request.outline_snap_m)
 
 
 # ---------------------------------------------------------------- defaults
@@ -264,10 +265,10 @@ class TestDefaults:
         (request,) = spy.requests
         assert switches(request) == (REPAIR_DEFAULT, True, BAND_DEFAULT, OUTLINE_DEFAULT)
         assert stats_row(report, "edges_repair_m") == "1"
-        assert stats_row(report, "edges_tolerance_m") == "50"
+        assert stats_row(report, "edges_max_shift_m") == "50"
         assert stats_row(report, "edges_outline_snap_m") == "5"
         assert record["edges_repair_m"] == REPAIR_DEFAULT
-        assert record["edges_tolerance_m"] == BAND_DEFAULT
+        assert record["edges_max_shift_m"] == BAND_DEFAULT
         assert record["edges_outline_snap_m"] == OUTLINE_DEFAULT
         assert record["edges_merge_same_class"] == "on"
         assert VERTEX_WORDING in report
@@ -312,7 +313,7 @@ class TestGiven:
             "--edges-repair",
             "0.1",
             "--no-edges-merge-same-class",
-            "--edges-tolerance",
+            "--edges-max-shift",
             "2",
             "--edges-outline-snap",
             "0",
@@ -320,7 +321,7 @@ class TestGiven:
         (request,) = spy.requests
         assert switches(request) == (0.1, False, 2.0, 0.0)
         assert stats_row(report, "edges_repair_m") == "0.1"
-        assert stats_row(report, "edges_tolerance_m") == "2"
+        assert stats_row(report, "edges_max_shift_m") == "2"
         assert stats_row(report, "edges_outline_snap_m") == "0"
         assert record["edges_merge_same_class"] == "off"
 
@@ -394,12 +395,12 @@ class TestTheBand:
 
         monkeypatch.setattr(feature_input, "simplify_borders", spy)
         corine_flags = cover(corine)
-        report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--edges-tolerance", "0")
+        report, record, _ = run(tmp_path, bumpy, square, *corine_flags, "--edges-max-shift", "0")
         assert calls == []
-        assert record["edges_tolerance_m"] == 0.0
+        assert record["edges_max_shift_m"] == 0.0
         assert record["start_min_angle_deg"] == 25.0
         assert stats_row(report, "start_min_angle_deg") == "25"
-        run(tmp_path, bumpy, square, *corine_flags, "--edges-tolerance", "2")
+        run(tmp_path, bumpy, square, *corine_flags, "--edges-max-shift", "2")
         assert calls == [2.0]
 
     def test_14_band_0_is_todays_mesh_bit_for_bit(
@@ -420,7 +421,7 @@ class TestTheBand:
             bumpy,
             square,
             *cover(corine),
-            "--edges-tolerance",
+            "--edges-max-shift",
             "0",
         )
         assert mesh_digest(tmp_path / "x.vtk") == BAND_0_TODAY[key]
@@ -429,8 +430,8 @@ class TestTheBand:
         ("features", "extra", "angle"),
         [
             ("corine", (), 15.0),  # land cover, band 50 by default
-            ("corine", ("--edges-tolerance", "2"), 15.0),
-            ("corine", ("--edges-tolerance", "0"), 25.0),
+            ("corine", ("--edges-max-shift", "2"), 15.0),
+            ("corine", ("--edges-max-shift", "0"), 25.0),
             ("corine", ("--start-min-angle", "25"), 25.0),  # given: it wins
             ("corine", ("--start-min-angle", "0"), 0.0),
             ("gallery", (), 25.0),  # lines, but no land-cover stage
@@ -460,9 +461,9 @@ class TestTheBand:
 
     def test_the_help_and_the_record_say_band(self) -> None:
         params = {p.name: p for p in typer.main.get_command(cli.app).commands["mesh"].params}
-        assert params["edges_tolerance"].help == BAND_HELP
+        assert params["edges_max_shift"].help == BAND_HELP
         assert START_HELP in (params["start_min_angle"].help or "")
-        assert rr.WORDING["edges_tolerance_m"] == BAND_WORDING
+        assert rr.WORDING["edges_max_shift_m"] == BAND_WORDING
 
 
 class TestTheFixOrder:
@@ -498,9 +499,9 @@ class TestTheFixOrder:
         (tmp_path / "off").mkdir()
         on, fs_on, _ = self.captured(tmp_path / "on", bumpy, square, source)
         off, fs_off, _ = self.captured(
-            tmp_path / "off", bumpy, square, source, "--edges-tolerance", "0"
+            tmp_path / "off", bumpy, square, source, "--edges-max-shift", "0"
         )
-        assert on["edges_tolerance_m"] == BAND_DEFAULT
+        assert on["edges_max_shift_m"] == BAND_DEFAULT
         if cover == "near_outline":
             assert fs_off.area_changed > 0  # the premise: the rule moved area
         # The record holds the area as text, to 0.1 m2; the stage's float exactly.
@@ -536,9 +537,9 @@ REFUSED = [
     ("--edges-repair", "-0.01"),
     ("--edges-repair", "nan"),
     ("--edges-repair", "inf"),
-    ("--edges-tolerance", "-1"),
-    ("--edges-tolerance", "nan"),
-    ("--edges-tolerance", "inf"),
+    ("--edges-max-shift", "-1"),
+    ("--edges-max-shift", "nan"),
+    ("--edges-max-shift", "inf"),
     ("--edges-outline-snap", "-1"),
     ("--edges-outline-snap", "nan"),
     ("--edges-outline-snap", "inf"),

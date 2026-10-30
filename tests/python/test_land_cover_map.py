@@ -206,3 +206,21 @@ def test_10_a_bowtie_in_a_single_file_is_repaired(lcm: Any, corine: Any) -> None
 
 def test_10_clean_polygons_count_no_repair(lcm: Any, corine: Any) -> None:
     assert lcm.build([cover_polygons()], [], corine, everywhere()).repaired == 0
+
+
+def test_a_map_cut_by_prefer_covers_the_region_once(lcm: Any, corine: Any) -> None:
+    """Bygdin, 2026-10-29: islands in a preferred lake, where the base had
+    water, were left with no class. The base covers the region: heath less a
+    lake [20,80]². The preferred lake [25,75]² has two islands as holes, one
+    in the base's water, one across its shore ([10,30] x [60,70], partly
+    heath). After the cut, the map's areas cover the region once: they sum
+    to its area and to their union's."""
+    region = box(0, 0, 100, 100)
+    water = box(20, 20, 80, 80)
+    base = [[(HEATH, box(-200, -200, 300, 300).difference(water)), (LAKE, water)]]
+    islands = [box(40, 40, 50, 50), box(10, 60, 30, 70)]
+    preferred = box(25, 25, 75, 75).difference(shapely.union_all(islands))
+    built = lcm.build(base, [(LAKE, [preferred])], corine, region)
+    inside = [g.intersection(region) for _, g in built.areas]
+    assert sum(g.area for g in inside) == pytest.approx(region.area, abs=EPS)
+    assert shapely.union_all(inside).area == pytest.approx(region.area, abs=EPS)

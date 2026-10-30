@@ -63,6 +63,10 @@ CREATE = {"--head": "head", "-H": "head", "--base": "base", "-B": "base",
           "--title": "title", "-t": "title", "--body-file": "body", "-F": "body",
           "--draft": "draft", "-d": "draft", "-R": "repo", "--repo": "repo"}  # fmt: skip
 MERGE = {"--match-head-commit": "sha", "--merge": "merge", "-R": "repo", "--repo": "repo"}
+#: gh pr merge's options that take a value, read by the merge gate.
+MERGE_VALUES = {"-R": "repo", "--repo": "repo", "--match-head-commit": "sha", "-A": "",
+                "--author-email": "", "-b": "", "--body": "", "-F": "", "--body-file": "",
+                "-t": "", "--subject": ""}  # fmt: skip
 FLAGS = ("draft", "merge")  # options that take no value
 VIEW = ("state", "baseRefName", "headRefOid", "statusCheckRollup")
 UNREAD = "the pull request's checks could not be read"
@@ -323,10 +327,18 @@ def home(repo: Path | str, head: str, real: dict[str, str] | None = None) -> tup
     return (PRIVATE_REMOTE if m < n else "origin"), ""
 
 
+def recording(path: str) -> bool:
+    """A path the main session's review-record commit may touch (README step 4)."""
+    return path == "ROADMAP.md" or (INCREMENT.fullmatch(path) is not None
+                                    and path != "docs/increments/README.md")  # fmt: skip
+
+
 def changes(
-    repo: Path | str, commit: str, remote: str = "origin", master: str | None = None
-) -> str | None:
-    """What a commit after the review changes beyond prose and added dated evidence, or None."""
+    repo: Path | str, commit: str, remote: str = "origin", master: str | None = None,
+    strict: bool = False,
+) -> str | None:  # fmt: skip
+    """What a commit after the review changes beyond prose and added dated evidence (with
+    `strict`, beyond the increment file and ROADMAP.md), or None."""
     parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
     if len(parents) == 1:
         base = parents[0]
@@ -340,13 +352,14 @@ def changes(
     paths = git(repo, "diff", "--name-only", "--no-renames", "-z", base, commit).split("\0")
     added = git(repo, "diff", "--name-only", "--no-renames", "--diff-filter=A", "-z", base, commit)
     evidence = {path for path in added.split("\0") if BENCH.fullmatch(path)}
-    code = [p for p in paths if p and not ci_changes.is_prose(p) and p not in evidence]
+    loose = [p for p in paths if p and not ci_changes.is_prose(p) and p not in evidence]
+    code = [p for p in paths if p and not recording(p)] if strict else loose
     return f"changes {code[0]}" if code else None
 
 
 def review_of(
     repo: Path | str, head: str, records: list[Any], remote: str = "origin",
-    master: str | None = None,
+    master: str | None = None, strict: bool = False,
 ) -> tuple[str | None, dict[str, Any] | None]:  # fmt: skip
     """(None, the record relied on) when `head` is reviewed; else (the reason, None)."""
     try:
@@ -361,7 +374,7 @@ def review_of(
             return f"last review round: {record.get('verdict')}", None
         reviewed_at = record["sha"]
         for commit in reversed(commits[: commits.index(reviewed_at)]):
-            what = changes(repo, commit, remote, master)
+            what = changes(repo, commit, remote, master, strict)
             if what is not None:
                 return f"commit {commit[:7]} {what} after the review of {reviewed_at[:7]}", None
     except subprocess.CalledProcessError as error:
@@ -398,6 +411,52 @@ def reviewed(
 ) -> str | None:  # fmt: skip
     """None when `head` is reviewed (§3.3), else the reason in plain words."""
     return review_of(repo, head, records, remote, master)[0]
+
+
+def merge_refusal(
+    repo: Path | str, head: str, records: list[Any], remote: str = "origin"
+) -> str | None:
+    """Why `head` may not merge: it adds an increment file (full lane) and is not reviewed,
+    or a commit after the verdict touches more than the increment file and ROADMAP.md."""
+    diff = git(repo, "diff", "--name-only", "-z", f"refs/remotes/{remote}/master...{head}")
+    if not any(recording(p) and p != "ROADMAP.md" for p in diff.split("\0")):
+        return None
+    return review_of(repo, head, records, remote, strict=True)[0]
+
+
+def merge_gate(where: str, argv: list[str]) -> str | None:
+    """Why the `gh pr merge` in `argv` is refused, or None; a head gh cannot report passes."""
+    if argv[1:2] in (["-R"], ["--repo"]) and len(argv) > 3:
+        argv = [argv[0], *argv[3:], "-R", argv[2]]  # gh's own -R, before pr
+    if argv[:3] != ["gh", "pr", "merge"]:
+        return None
+    found, rest, words = {}, [], iter(argv[3:])
+    for word in words:
+        name, equals, value = word.partition("=")
+        if name in MERGE_VALUES:
+            found[MERGE_VALUES[name]] = value if equals else next(words, "")
+        elif not word.startswith("-"):
+            rest.append(word)
+    repo = found.get("repo")
+    remote = {None: "origin", PUBLIC_REPO: "origin", PRIVATE_REPO: PRIVATE_REMOTE}.get(repo)
+    head = found.get("sha")
+    if remote is None:  # another repository's pull request
+        return None
+    if not head:
+        view = subprocess.run(["gh", "pr", "view", *rest, *(["-R", repo] if repo else []),
+                               "--json", "headRefOid"], cwd=where, capture_output=True,
+                              text=True, check=False, timeout=20)  # fmt: skip
+        head = json.loads(view.stdout).get("headRefOid") if view.returncode == 0 else None
+    if not head:
+        return None
+    try:
+        sha = git(where, "rev-parse", "--verify", f"{head}^{{commit}}").strip()
+    except subprocess.CalledProcessError:
+        return f"head {head[:7]} is not here, so its review cannot be read; git fetch {remote}"
+    state = hm.state_dir(hm.ROOT)
+    records = jsonl(state / "reviews.jsonl") if state is not None else []
+    why = merge_refusal(where, sha, records, remote)
+    return f"head {sha[:7]} is not reviewed: {why}" if why else None
 
 
 def checks(view: Any, head: str) -> str | None:

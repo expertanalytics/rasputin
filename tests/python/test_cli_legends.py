@@ -70,7 +70,7 @@ from vtkread import read_vtk
 SHIPPED = ("corine", "clc18_kode", "mapbiomas-c11", "ar50")
 LAND_COVER, WATER = DEFAULT_VOCABULARY.mask("land_cover"), DEFAULT_VOCABULARY.mask("water")
 CORINE_DISTANCES = (1.0, 50.0, 5.0)
-OPTIONS = ("edges_repair", "edges_tolerance", "edges_outline_snap")
+OPTIONS = ("edges_repair", "edges_max_shift", "edges_outline_snap")
 DERIVED = (
     "Default: from the land-cover class file's positional accuracy and the DEM cell (CORINE: {})."
 )
@@ -99,7 +99,7 @@ def cover(path: Path, classes: str = "corine") -> tuple[str, ...]:
 def recorded(record: dict[str, Any]) -> tuple[float, float, float]:
     return (
         record["edges_repair_m"],
-        record["edges_tolerance_m"],
+        record["edges_max_shift_m"],
         record["edges_outline_snap_m"],
     )
 
@@ -247,7 +247,7 @@ class TestDerivedDistances:
             bumpy,
             square,
             *cover(corine),
-            *("--edges-tolerance", "20"),
+            *("--edges-max-shift", "20"),
         )
         assert recorded(record) == (1.0, 20.0, 5.0)
 
@@ -275,7 +275,7 @@ class TestDerivedDistances:
         report, record, _ = run(tmp_path, bumpy, square, *cover(corine, str(path)))
         assert recorded(record) == want
         (request,) = spy.requests
-        assert (request.repair_m, request.tolerance_m, request.outline_snap_m) == want
+        assert (request.repair_m, request.max_shift_m, request.outline_snap_m) == want
         assert "classes mine" in record["edges"]
         assert report
 
@@ -294,7 +294,7 @@ class TestDerivedDistances:
 
     @pytest.mark.parametrize(
         ("param", "corine_value"),
-        [("edges_repair", "1"), ("edges_tolerance", "50"), ("edges_outline_snap", "5")],
+        [("edges_repair", "1"), ("edges_max_shift", "50"), ("edges_outline_snap", "5")],
     )
     def test_t7_the_help_says_derived(self, param: str, corine_value: str) -> None:
         help_text = mesh_params()[param].help or ""

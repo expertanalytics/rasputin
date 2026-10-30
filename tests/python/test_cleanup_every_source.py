@@ -33,7 +33,7 @@ PINNED HERE, where the design leaves it open (listed for ``@architect``):
   on darwin/arm64), since the land polygon's outline edges are cut off its
   lines.
 - Test 5's message is a :class:`FeatureError` whose text is exactly
-  ``"<file>: border simplification refused: x; --edges-tolerance 0 meshes
+  ``"<file>: border simplification refused: x; --edges-max-shift 0 meshes
   this source with its borders as read"``: ``<why>`` is the ``ValueError``'s
   own text.
 - Test 6: each ``edges`` entry ends "N lines, M vertices" with that
@@ -118,7 +118,7 @@ def opened(src: tuple[Path, str], band: float) -> Any:
     switches = {
         "repair_m": REPAIR,
         "merge_same_class": True,
-        "tolerance_m": band,
+        "max_shift_m": band,
         "outline_snap_m": 0.0,
     }
     return ff.open_one(src[0], domain_of(DOMAIN), src[1], switches=switches)
@@ -255,7 +255,7 @@ class TestRefusal:
             opened(src, 5.0)
         assert str(caught.value) == (
             "border simplification refused: x; "
-            "--edges-tolerance 0 meshes this source with its borders as read"
+            "--edges-max-shift 0 meshes this source with its borders as read"
         )
 
 

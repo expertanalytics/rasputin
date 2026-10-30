@@ -166,17 +166,46 @@ def test_case4_other_water_classes_stay_the_bases(preferred: ModuleType) -> None
     check_disjoint(result.polygons)
 
 
-def test_case5_a_piece_with_no_kept_neighbour_is_left_out(preferred: ModuleType) -> None:
+def test_case5_a_piece_in_a_preferred_hole_takes_the_nearest_kept_class(
+    preferred: ModuleType,
+) -> None:
     """Lake [40,60]² in the base; preferred lake the ring [30,70]² less
-    [45,55]²: the 100 m² piece [45,55]² borders only the preferred lake, so
-    no polygon covers it (class 0)."""
+    [45,55]²: the 100 m² piece [45,55]², in the ring's hole (an island),
+    borders only the preferred lake, so it takes the class of the nearest
+    kept polygon (heath), and the polygons cover the square once (Bygdin's
+    islands, 2026-10-29)."""
     ring = box(30, 30, 70, 70).difference(box(45, 45, 55, 55))
     base = heath_with(box(40, 40, 60, 60))
     result = preferred.replace(base, [(LAKE, [ring])], square())
-    check(per_code(result.polygons), {LAKE: 1500.0, HEATH: 8400.0})
+    check(per_code(result.polygons), {LAKE: 1500.0, HEATH: 8500.0})
     check_disjoint(result.polygons)
     covered = shapely.union_all([g for _, g in result.polygons])
-    assert covered.intersection(box(45, 45, 55, 55)).area == pytest.approx(0.0, abs=M2)
+    assert covered.area == pytest.approx(10000.0, abs=M2)
+
+
+def test_case5_an_island_takes_the_nearer_of_two_classes(preferred: ModuleType) -> None:
+    """Heath west of x = 50, conifer east; lake [20,80]²; preferred lake
+    [22,80] x [20,80] less the island [26,36] x [40,50]: the island is 6 m
+    from heath across the lake and 44 m from conifer, so it is heath."""
+    west, east, water = box(0, 0, 50, 100), box(50, 0, 100, 100), box(20, 20, 80, 80)
+    base = [(HEATH, west.difference(water)), (CONIFER, east.difference(water)), (LAKE, water)]
+    island = box(26, 40, 36, 50)
+    result = preferred.replace(base, [(LAKE, [box(22, 20, 80, 80).difference(island)])], square())
+    (got,) = [n for _, p, n in result.refilled if p.equals(island)]
+    assert got == HEATH
+
+
+def test_case5_a_piece_outside_every_preferred_polygon_is_left_out(
+    preferred: ModuleType,
+) -> None:
+    """Lake [40,60]² alone in the square (no heath); preferred lake [30,50] x
+    [40,60]: the piece [50,60] x [40,60] borders no kept polygon and lies in
+    no hole, so no polygon covers it (class 0)."""
+    base = [(LAKE, box(40, 40, 60, 60))]
+    result = preferred.replace(base, [(LAKE, [box(30, 40, 50, 60)])], square())
+    check(per_code(result.polygons), {LAKE: 400.0})
+    covered = shapely.union_all([g for _, g in result.polygons])
+    assert covered.intersection(box(50, 40, 60, 60)).area == pytest.approx(0.0, abs=M2)
 
 
 def test_a_preferred_polygon_off_the_mesh_is_dropped_one_across_its_edge_kept_whole(

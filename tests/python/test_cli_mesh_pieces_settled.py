@@ -145,7 +145,7 @@ def test_a_partition_line_through_a_water_ring(tmp_path: Path) -> None:
     assert not any(float((cy - pf.TIE_Y) / pf.H).is_integer() for _, cy in crossings), "on a node"
     lakes = write_geojson(tmp_path / "lake.geojson", [Feat("l", lake, {"Code_18": "512"})])
     water = ("--land-cover", str(lakes), "--land-cover-classes", "corine", "--edges", "water")
-    as_read = ("--edges-repair", "0", "--edges-tolerance", "0", "--edges-outline-snap", "0")
+    as_read = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
     done = pf.cut(tmp_path / "run", *args(dem, domain, "--pieces", "4", *water, *as_read))
     assert lines_of(done) == (x, y), "the lake moved the partition"
     assert sorted(p.id for p in done.pieces) == [(0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0)]

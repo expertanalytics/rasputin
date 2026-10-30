@@ -414,7 +414,7 @@ class TestDerivedCleanup:
         self, cm: ModuleType, accuracy: float, cell: float, want: tuple[float, float, float]
     ) -> None:
         got = cm.derived_cleanup(accuracy, cell)
-        assert (got.repair_m, got.tolerance_m, got.outline_snap_m) == want
+        assert (got.repair_m, got.max_shift_m, got.outline_snap_m) == want
 
     def test_t6_the_snap_stays_under_the_margin(self, cm: ModuleType) -> None:
         """Section 5.1's cap: half `feature_input.MARGIN`, 100 m; checked at
@@ -428,7 +428,7 @@ class TestDerivedCleanup:
         got = cm.derived_cleanup(100.0, 10.0)
         with pytest.raises((TypeError, ValueError, ValidationError)):
             got.repair_m = 3.0
-        assert all(math.isfinite(v) for v in (got.repair_m, got.tolerance_m, got.outline_snap_m))
+        assert all(math.isfinite(v) for v in (got.repair_m, got.max_shift_m, got.outline_snap_m))
 
 
 # ------------------------------------------------------------------- T8

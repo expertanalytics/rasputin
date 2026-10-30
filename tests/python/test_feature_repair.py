@@ -44,7 +44,7 @@ RED at the commit that adds this file: ``FeatureRequest`` forbids extra
 fields, so every request with a switch is refused by Pydantic.
 
 Increment 32 (``docs/increments/32-landcover-simplify.md``, section 6, "Data
-flow" and "The calls, by name"; test 16): ``tolerance_m`` is now the band of
+flow" and "The calls, by name"; test 16): ``max_shift_m`` is now the band of
 ``border_simplify.simplify_borders``, which replaces
 ``shapely.coverage_simplify``, and a band above 0 clips to the domain polygon
 instead of the read region. RP6 and ``TestTolerance`` assumed GEOS's
@@ -91,7 +91,7 @@ L = 79.13  # the slit's border length (M5, in local coordinates)
 WIDTH = 0.01  # the slit's open end, 1 cm
 WEDGE = 0.5 * L * WIDTH  # its area, 0.39565 m²
 #: All four switches off: "the off switch the gates use".
-OFF = {"repair_m": 0.0, "merge_same_class": False, "tolerance_m": 0.0, "outline_snap_m": 0.0}
+OFF = {"repair_m": 0.0, "merge_same_class": False, "max_shift_m": 0.0, "outline_snap_m": 0.0}
 
 
 @pytest.fixture(scope="module")
@@ -240,7 +240,7 @@ class TestEmptied:
 
 class TestTheOrder:
     """RP6: repair before simplifying. Two vertices 4.5 mm off A's straight
-    border, at a third and two thirds of it, with ``--edges-tolerance 2``:
+    border, at a third and two thirds of it, with ``--edges-max-shift 2``:
     repaired first, A's and B's borders are one shared border of four
     vertices, and its one collapse drops both; simplified first, A's border is
     a side of the gap, used by one ring, so fixed (increment 32, section 6's
@@ -269,7 +269,7 @@ class TestTheOrder:
         (tmp_path / "0").mkdir()
         (tmp_path / "2").mkdir()
         off = opened(fi, tmp_path / "0", self.features(), repair_m=S, merge_same_class=True)
-        on = opened(fi, tmp_path / "2", self.features(), repair_m=S, tolerance_m=2.0)
+        on = opened(fi, tmp_path / "2", self.features(), repair_m=S, max_shift_m=2.0)
         # The premise: the repair keeps both on the shared border.
         assert shapely.get_num_coordinates(labels(off)[0]) == 7
         assert shapely.get_num_coordinates(labels(on)[0]) < 7
@@ -520,7 +520,7 @@ class TestMerge:
 class TestTolerance:
     """Step 3 is now the band (increment 32; this class assumed GEOS's
     simplifier, test 16): a border 100 m long zig-zagging 0.5 m either side
-    in 10 m steps, with ``--edges-tolerance 2``, also with the repair at
+    in 10 m steps, with ``--edges-max-shift 2``, also with the repair at
     0. The coverage stays valid, the zig-zag goes, every polygon keeps its
     area (1e-9 relative; coordinates near 5e5 and 6.6e6 m, where one ulp is
     1e-9 m, on areas of 2 500 to 5 000 m2)."""
@@ -537,7 +537,7 @@ class TestTolerance:
     def test_tolerance_2(self, fi: ModuleType, tmp_path: Path, repair: float) -> None:
         inputs = self.inputs()
         feats = [coded(i + 1, p, c) for i, (p, c) in enumerate(zip(inputs, CODES[:3], strict=True))]
-        fs = opened(fi, tmp_path, feats, repair_m=repair, tolerance_m=2.0)
+        fs = opened(fi, tmp_path, feats, repair_m=repair, max_shift_m=2.0)
         got = labels(fs)
         assert shapely.coverage_is_valid(np.array(got, dtype=object))
         assert shapely.get_num_coordinates(got[0]) < shapely.get_num_coordinates(inputs[0])
@@ -596,7 +596,7 @@ class TestTheBand:
 
         monkeypatch.setattr(shapely, "coverage_simplify", refused)
         feats = self.features()
-        fs = opened(fi, tmp_path, feats, domain_of(self.DOMAIN), repair_m=S, tolerance_m=10.0)
+        fs = opened(fi, tmp_path, feats, domain_of(self.DOMAIN), repair_m=S, max_shift_m=10.0)
         got = labels(fs)
         assert len(got) == 2
         for f, g in zip(feats, got, strict=True):
@@ -646,7 +646,7 @@ class TestTheFixOrder:
                 domain_of(TestTheBand.DOMAIN),
                 repair_m=S,
                 outline_snap_m=self.SNAP,
-                tolerance_m=band,
+                max_shift_m=band,
             )
         return fs, calls
 

@@ -30,7 +30,7 @@ WORDING = {
     "resampled_grid": "The grid the DEM was interpolated onto",
     "domain": "The domain file and shape",
     "domain_crs": "The domain's coordinate system",
-    "domain_band_m": "Band the domain outline was simplified within, m",
+    "domain_max_shift_m": "Farthest the domain outline was moved when simplified, m",
     "domain_transform": "Conversion from the domain's coordinate system",
     "edges": (
         "Each source of edges: file, layer, land-cover class file or line kind, "
@@ -46,7 +46,7 @@ WORDING = {
     ),
     "edges_repair_m": "Land-cover borders closer than this made one, narrower gaps filled",
     "edges_merge_same_class": "Borders between land-cover polygons of one class dropped",
-    "edges_tolerance_m": (
+    "edges_max_shift_m": (
         "Land-cover borders simplified, each at most this far from its border after the "
         "repair and the outline rule, each class's area kept (0 = off)"
     ),
@@ -101,7 +101,7 @@ WORDING = {
     "reservoirs_repaired": "Reservoir polygons that crossed themselves, repaired",
     "catchments": "Sub-catchment units: their borders constraints, their ids the cells'",
     "catchments_units": "Sub-catchment units whose inner point lies in the domain",
-    "catchments_band_m": "Band the sub-catchment borders were simplified within, m",
+    "catchments_max_shift_m": "Farthest a sub-catchment border was moved when simplified, m",
     "land_cover_vertices": "Land-cover vertices before and after clean-up",
     "land_cover_area_moved_m2": (
         "Land-cover area inside the outline that the outline rule gave to another polygon, m2"

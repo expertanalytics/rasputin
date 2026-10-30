@@ -1376,7 +1376,7 @@ class TestTheClipStaysTheSame:
 
 #: The CLI's clean-up defaults (`test_cli_features_cleanup.py`): repair 1 m,
 #: merge on, band 50 m, outline rule 5 m.
-CLEANUP = {"repair_m": 1.0, "merge_same_class": True, "tolerance_m": 50.0, "outline_snap_m": 5.0}
+CLEANUP = {"repair_m": 1.0, "merge_same_class": True, "max_shift_m": 50.0, "outline_snap_m": 5.0}
 
 
 def cleaned(path: Path, domain: Any = BOX) -> Any:

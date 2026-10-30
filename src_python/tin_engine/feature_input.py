@@ -145,7 +145,7 @@ class EdgeCleanup(BaseModel):
 
     repair_m: float = 0.0
     merge_same_class: bool = False
-    tolerance_m: float = 0.0
+    max_shift_m: float = 0.0
     outline_snap_m: float = 0.0
 
 
@@ -292,7 +292,7 @@ def edges_of(
 
         cover, far = chosen(land_cover.areas, 0), chosen(land_cover.outside, n)
         cut = land_cover.replaced is not None
-        switches = (cleanup.repair_m, cleanup.merge_same_class, cleanup.tolerance_m)
+        switches = (cleanup.repair_m, cleanup.merge_same_class, cleanup.max_shift_m)
         if any(switches) or cleanup.outline_snap_m or cut:
             snap = cleanup.repair_m or (-1.0 if cut else 0.0)
             tally.clean(cover, region, cleanup, snap)
@@ -363,9 +363,9 @@ class _Tally:
 
     def clean(self, cover: list[Cover], region: Polygon, ask: EdgeCleanup, snap: float) -> None:
         """The chosen land cover clipped to the read region, then repaired,
-        merged by class and put to the outline, as asked; with the band on
-        then clipped to the domain, simplified
-        within the band at the repair distance's clearance, and its lines cut
+        merged by class and put to the outline, as asked; with the simplification
+        on then clipped to the domain, each border moved at most `max_shift_m`
+        at the repair distance's clearance, and its lines cut
         where they lie on the outline. The domain's uncovered rest, less its
         parts narrower than `REST_MIN_WIDTH_M`, is simplified with them, so no
         border is fixed for lack of a neighbour. Its lines and label polygons
@@ -392,17 +392,17 @@ class _Tally:
         snapped = snap_to_outline(list(polys), self.domain.polygon, ask.outline_snap_m)
         self.area_changed += snapped.area_changed
         lines_of, polygons = snapped.lines, snapped.polygons
-        if ask.tolerance_m > 0:  # the band on: area kept inside the domain
+        if ask.max_shift_m > 0:  # simplification on: area kept inside the domain
             dom = self.domain.polygon
             inside = clip_to_domain(polygons, dom)
             rest = shapely.difference(dom, shapely.coverage_union_all(inside))
             half = REST_MIN_WIDTH_M / 2
             wide = [p for p in shapely.get_parts(rest) if not p.buffer(-half).is_empty]
             try:
-                done = simplify_borders([*inside, *wide], ask.tolerance_m, ask.repair_m)
+                done = simplify_borders([*inside, *wide], ask.max_shift_m, ask.repair_m)
             except ValueError as exc:
                 raise FeatureError(
-                    f"border simplification refused: {exc}; --edges-tolerance 0 "
+                    f"border simplification refused: {exc}; --edges-max-shift 0 "
                     "meshes this source with its borders as read"
                 ) from exc
             polygons = done.polygons[: len(inside)]

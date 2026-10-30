@@ -30,10 +30,10 @@ comes before your own plan. List running jobs before starting one. Still unclear
   write no code and no text in a persona's file.
 
 ## Work in flight
-* At most three items in flight, from first spawn to merge, park or drop;
-  time waiting only on Ola does not count. A fourth asked for: warn
-  ("this makes 4 of 3") and wait for his yes. `python3 tools/work_pipes.py
-  next` names the next; new items are chosen with Ola.
+* One item in flight per pipe, from first spawn to merge, park or drop;
+  time waiting only on Ola does not count. A second in a pipe asked for:
+  warn and wait for his yes. `python3 tools/work_pipes.py next` names each
+  free pipe's next; new items are chosen with Ola.
 * Questions for Ola go through `tools/questions.py` (`--item` for an
   item's).
 

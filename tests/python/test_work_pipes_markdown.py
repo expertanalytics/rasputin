@@ -121,12 +121,12 @@ def test_waiting_on_names_the_question_the_agent_or_a_free_writer(repo: Path) ->
 
 
 def test_the_first_line_and_the_questions_section(repo: Path) -> None:
-    append(repo, rec("r1", "red"), rec("q1", "queued"))
+    append(repo, rec("r1", "red"), rec("q1", "queued"), rec("l1", "queued", pipe="lsm"))
     ask(repo, "Which name for the command?", "--choices", "show|list")
     ask(repo, "Split it in two?", "--item", "q1")
     ask(repo, "Merge it now?")  # a second yes/no question, open too
     lines = pipes(repo, "show", "--markdown").splitlines()
-    assert lines[0].startswith("In flight 1 of 3") and "**r1**" in lines[0], lines[0]
+    assert lines[0].startswith("In flight 1 of 2") and "**l1**" in lines[0], lines[0]
     questions = section(lines, "### Questions for Ola")
     listed = run_script(repo, "tools/questions.py", "", "list").stdout.splitlines()
     numbered = [line for line in listed if line[0].isdigit()]
