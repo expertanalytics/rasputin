@@ -12,6 +12,7 @@ Blocking (sqlite3, GEOS): an async caller runs the reader in
 from __future__ import annotations
 
 import re
+import sqlite3
 from collections.abc import Callable, Sequence
 from contextlib import closing
 from dataclasses import dataclass
@@ -62,7 +63,7 @@ def read_feature_table(
                     for n, t in conn.execute(declared, (info.table,))
                     if n not in (info.pk, info.column)
                 ]
-        except ValueError as exc:
+        except (ValueError, sqlite3.Error) as exc:
             raise FeatureError(f"{path.name}: {exc}") from exc
         columns = tuple((n, _declared(path, n, t)) for n, t in found)
         names = tuple(n for n, _ in columns)
@@ -78,7 +79,7 @@ def read_feature_table(
         keys = tuple(dict.fromkeys(k for f in features for k in f.get("properties") or {}))
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
-    source = read_source(path, None, None, lambda _: None, extra=keys)
+    source = read_source(path, layer, None, lambda _: None, extra=keys)
     values = source.extra or tuple(() for _ in source.rows)  # () when no key is asked
     columns = tuple((k, _inferred(path, k, [v[i] for v in values])) for i, k in enumerate(keys))
     rows = tuple(

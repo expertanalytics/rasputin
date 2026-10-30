@@ -209,7 +209,6 @@ from tin_engine.sources import (
     cache_root,
     catalogue,
     check_values,
-    data_root,  # noqa: F401 -- `cli.data_root` stays, as before `cache_root` moved
     features_file,
     kept_named,
     plugin_source_files,
