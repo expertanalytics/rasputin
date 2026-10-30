@@ -1,6 +1,6 @@
 # Increment 114: every --bbox names its coordinate system
 
-**Status: ready for `@tester`.** Designed by `@architect`, 2026-10-29, on
+**Status: ready for `@developer`** (red suite in; "Rulings on the red suite" settles its pins). Designed by `@architect`, 2026-10-29, on
 master `f0dfe61b`, worktree `bbox-crs`; design review round 1 applied on
 master `fbeaf649` (no second design round: its fixes are checked at code
 review). One PR, full loop, Python only. Number 114: 113 is the highest
@@ -257,9 +257,11 @@ the São Francisco error.
 5. **Sources.** `INSIDE` in EPSG:25833, `(508522.7, 6576808.3, 511380.3,
    6582383.5)`: `box_covered` 1.0. `OUTSIDE` in EPSG:25833 `(555607.8,
    6651832.7, 561353.6, 6663057.1)`: 0.0. A box over `COVERAGE`'s east
-   edge, `(517060.4, 6573496.4, 522780.6, 6579094.1)` in EPSG:25833: 0.5183
-   (to 1e-4; the share by bounds would be 0.5179, so the test tells area
-   from bounds). The UTM point `(508522.7, 6576808.3)` gives 1.0.
+   edge, `(517060.4, 6573496.4, 522780.6, 6579094.1)` in EPSG:25833: 0.4964
+   (to 1e-4; the share by bounds would be 0.4961, so the test tells area
+   from bounds). Both are measured against the union of the four tiles'
+   `_lonlat` outlines, which is what the listing holds; see "Rulings on the
+   red suite", 1. The UTM point `(508522.7, 6576808.3)` gives 1.0.
 6. **Fetch.** A dry run with `BBOX` and `--bbox-crs EPSG:25833` prints the
    same plan lines as master. The same box in EPSG:4326, `(15.001791152,
    59.536663469, 15.005904106, 59.537800446)`, prints identical plan lines.
@@ -293,6 +295,48 @@ These are estimates of counted lines.
 | `io/cog.py`, `io/repository.py`, `mosaic.py` (CRS in words and `NotCached`) | 6 |
 | `mcp/server.py` | 1 |
 | **Total** | **about 90; worst case 120** |
+
+## Rulings on the red suite
+
+`@architect`, 2026-10-30, on `@tester`'s four pins in `b89da23d`,
+`abccbc7f` and `986e7bab`.
+
+1. **Test 5's figure: 0.4964, confirmed.** The design's 0.5183 was measured
+   against `COVERAGE` as a plain degree rectangle. The listing measures
+   against the union of the tiles' own `_lonlat` outlines
+   (`source_report.py:249`, `:260`), so the test must too. `114-probes/share_probe.py`
+   prints all four figures for the edge box: tiles by area 0.496418, tiles by
+   bounds 0.496067, rectangle by area 0.518333, rectangle by bounds 0.517871
+   (`share_probe.txt`). `INSIDE` and `OUTSIDE` give 1.0 and 0.0 every way.
+   0.4964 and 0.4961 are 3.5e-4 apart, so `abs=1e-4` still tells area from
+   bounds. Section 4, test 5 now says 0.4964.
+2. **`docs/benchmarks/quick/cases.toml`: `@developer` edits it**, in the
+   commit that adds `--bbox-crs` to `mesh`, so that no commit has a case the
+   CLI refuses. It is a live input of the quick check, not a benchmark record,
+   so section 3's "records stay as they are" does not cover it. The edit is
+   the one `test_bench_quick.py:437-441` pins: `--bbox-crs EPSG:31983` after
+   the velhas box. Precedent: `7974b15f` (`@developer` added the case) and
+   `62e321f9` (`@architect` renamed options in it). `@perf` need not act. The
+   quick check compares input fingerprints, not arguments
+   (`perf-quick-check.md`, section 3), and a box in the frame's CRS meshes bit
+   for bit, so the saved baselines stay valid. A quick check run with
+   `--tree` at a commit before this PR now fails on velhas, since that tree
+   has no `--bbox-crs`.
+3. **Wordings: all three confirmed.** The non-finite refusal contains
+   "finite" (section 3 lists the invariant but gave no words). The latitude
+   check is a `CrsBox` invariant, so it names `--bbox` (section 3's table,
+   "a broken invariant"). The ±180° and no-image refusals come from `to_crs`,
+   so they name `--bbox-crs` (the table's header). Both hints print `--bbox
+   X0 Y0 X1 Y1 --bbox-crs C` as one group, then `--out-crs` where
+   `_fetch_run` has one, then `--cache`. `fetch` moves that box into its
+   `--out-crs` as `mesh` does, so the printed command fetches the same window.
+4. **Import edges: all three allowed.** `test_layering.py`'s rule is that a
+   module imports from its own layer or below. `mosaic` to `crs` is within L1
+   (values and pure algorithms). `io.repository` (L2) to `crs` (L1) points
+   down, and L2 already imports `crs` (`io.geotiff`, `io.geojson`).
+   `source_report` (L4) to `domain` (L1) points down. No cycle: `crs` imports
+   only `io.models` and `run_record`, and `domain` only `crs` and `io.models`.
+   Nothing new reaches `_core` or C++.
 
 ## Review
 
