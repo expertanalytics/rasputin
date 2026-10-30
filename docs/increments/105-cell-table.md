@@ -106,9 +106,11 @@ Grid north, not true north: the meridian convergence is not applied (Shyft's
 `aspect()` does not either). Fractions are float64 sums of the file's float32
 class fractions. A row's class fractions each carry a float32 rounding of at
 most `2^-24` (6e-8), so a row of `k` entries sums to 1 within `k * 6e-8`; `k`
-is at most the legend's class count, 44 in the largest shipped legend
-(`grep -c '^code = ' src_python/tin_engine/data/legends/*.toml`: corine,
-corine-water and clc18_kode 44, mapbiomas-c11 33, ar50 20), so the four
+is at most the class file's code count, 44 in the largest shipped class file
+(`grep -c '^code = ' src_python/tin_engine/data/land_cover_classes/*.toml`,
+2026-10-30: corine and clc18_kode 44, mapbiomas-c11 33, ar50 20 with its
+splits; since increment 108 the files in `data/legends/` hold colours only),
+so the 44 bound still holds and the four
 categories exceed 1 by at most 2.7e-6. `unspecified` is clamped at 0, and the
 five then sum to 1 within 2.7e-6: **not exactly**, and the tests say "within
 3e-6". A user legend with more classes widens the bound by 6e-8 per class.
@@ -137,12 +139,12 @@ water never silently falls into unspecified. `cli.mesh` calls it right after
 legend and `--out` ends in `.gpkg`; the refusal is a usage error on
 `--land-cover-legend`. The same legend with a `.vtk` output runs as today.
 The shipped legends never trip it: their `water = true` classes are exactly
-the lake and sea classes below (`grep -B3 'water = true'` over the five
-files, 2026-10-25), and every one carries a category. The shipped mapping:
+the lake and sea classes below (`grep -B3 'water = true'` over the four
+class files in `data/land_cover_classes/`, 2026-10-30), and every one carries a category. The shipped mapping:
 
 | legend | forest | lake | glacier | savanna | unspecified, named |
 |---|---|---|---|---|---|
-| `corine`, `corine-water`, `clc18_kode` | 311, 312, 313 | 511, 512, 521, 522 | 335 | none | 523 Sea and ocean |
+| `corine`, `clc18_kode` | 311, 312, 313 | 511, 512, 521, 522 | 335 | none | 523 Sea and ocean |
 | `ar50` | 30 (and its splits 3031, 3032, 3033, 3099) | 81 | 70 | none | 82 Ocean |
 | `mapbiomas-c11` | 3 Forest Formation, 5 Mangrove, 6 Floodable Forest, 49 Wooded Sandbank Vegetation, 9 Forest Plantation | 33, 31 | none | 4 Savanna Formation, 7 Flooded Savanna (beta) | none |
 
