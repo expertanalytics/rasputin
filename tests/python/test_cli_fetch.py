@@ -280,6 +280,11 @@ def dry_run_lines(cache: Path, *box: str) -> list[str]:
     return [line.partition(" into ")[0] for line in result.stdout.splitlines()]
 
 
+def untimed(lines: list[str]) -> list[str]:
+    """`lines` without the summary's trailing elapsed time, `, <n>.<n> s`."""
+    return [re.sub(r", \d+\.\d s$", "", line) for line in lines]
+
+
 def refusal(*args: str) -> str:
     """The message of a refused run, unwrapped by Rich."""
     result = runner.invoke(app, list(args), standalone_mode=False)
@@ -305,8 +310,7 @@ class TestBoxCrs:
         The plan is blocks 0 to 12 (rows 0 to 2, columns 0 to 2 of 5 across) in
         one request; its byte count is that span of the fixture, whose Deflate
         sizes depend on the host's Deflate build (6,274 bytes on macOS, 6,312 on CI's Linux)."""
-        lines = dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS)
-        lines = [re.sub(r", \d+\.\d s$", "", line) for line in lines]
+        lines = untimed(dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS))
         page = page_of(data)
         size = f"{block_span(page, 12)[1] - block_span(page, 0)[0]:,}"
         assert lines == [
@@ -316,9 +320,10 @@ class TestBoxCrs:
         ], lines
 
     def test_a_dry_run_in_degrees_plans_the_same(self, remote: Any, tmp_path: Path) -> None:
+        """Elapsed time is cut from each line: it is the host's (0.1 s and 0.2 s on CI)."""
         utm = dry_run_lines(tmp_path / "c", *TestF10TheCommand.BOX_ARGS)
         degrees = dry_run_lines(tmp_path / "c", "--bbox", *BBOX_DEGREES, "--bbox-crs", "EPSG:4326")
-        assert degrees == utm
+        assert untimed(degrees) == untimed(utm)
 
     def test_the_mesh_hint_names_the_boxs_crs_and_runs_as_printed(
         self, remote: Any, data: bytes, tmp_path: Path
