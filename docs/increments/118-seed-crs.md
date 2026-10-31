@@ -42,8 +42,8 @@ novelty claimed.
 - `network-catchment --unit X --seed-crs C` is refused with "needs --seed",
   like the other seed-only options there.
 - The MCP tools follow without code: their arguments are derived from the
-  click options (`mcp/schema.py`), so `seed_crs` becomes optional there and
-  the command refuses it missing.
+  click options (`mcp/schema.py`), so `seed_crs` loses its EPSG:4326 default
+  there (it is now `None`) and the command refuses it missing.
 - `docs/benchmarks/2026-09-29/bygdin/run.sh` names `--seed-crs EPSG:4326`.
   The other benchmark script with a seed already named its CRS.
 
