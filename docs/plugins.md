@@ -118,6 +118,7 @@ plugins use today, and grows on request.
 | `DemTile` | One decoded tile: its `RasterMeta` and a read-only 2-D array |
 | `RasterMeta` | A tile's node grid: origin, spacing, size, CRS, nodata |
 | `Bounds` | A box in a DEM's CRS |
+| `CrsBox` | `CrsBox(crs=..., box=(x_min, y_min, x_max, y_max))`: a box and its CRS text, x first (easting or longitude) whatever the CRS's axis order. A non-finite value, `x_min > x_max` or `y_min > y_max`, or, in a geographic CRS, a latitude outside ±90° is a `ValueError`. Frozen |
 | `core_args` | A tile's array and grid scalars, checked, for a `raster_view` function (see the raster tag rule below) |
 | `accumulate` | `accumulate(tile)`: each node's drainage over a `DemTile`, by the Priority-Flood that fills its pits, on the node grid alone (spacing and CRS unused). A node drains to the neighbour that flooded it: its lowest filled neighbour, ties first in, first out; not D8's steepest descent. `.count` (uint32, rows × cols): 0 on NoData, else the nodes draining through the node, itself included. `.flow_to` (uint8): that neighbour, `3*(dr+1)+(dc+1)`, with `dr`, `dc` its row and column minus the node's; 255 for an outlet or NoData. Both read-only. 2^32 nodes or more is a `ValueError`. Releases the GIL. The result's type and other attributes are not promised |
 | `encode_geotiff` | A 2-D grid as the bytes of a float32 GeoTIFF |
@@ -130,6 +131,8 @@ plugins use today, and grows on request.
 | `FeatureTable` | A feature layer as read: CRS text, GeoPackage layer (`None` for GeoJSON), columns as (name, field type), rows as (fid, geometry, values) |
 | `read_feature_table` | `read_feature_table(path, layer, box_for=None)`: a `.gpkg`, `.geojson` or `.json` layer with every column; `box_for(own CRS)` keeps only the GeoPackage rows near a box |
 | `FeatureError` | The `ValueError` a feature reader raises, naming the file |
+| `read_source` | `read_source(path, layer, attribute, box_for, crs=None, extra=())`: a `.gpkg`, `.geojson`, `.json` or `.gml` file's features, unclipped, in the file's own CRS: CRS text, GeoPackage layer (`None` otherwise), whether it was scanned without an R-tree, and (fid, geometry, `attribute` value) per row; `attribute=None` reads a GeoPackage's primary key; `box_for(own CRS)` returning `None` reads every row; `crs`, when given, must match the file's, and a GML file naming none takes it; `extra` names more attributes read per row. A refusal is a `FeatureError` |
+| `FeatureManifest` | A cached map-service layer's `manifest.json`: source, URL, CRS, key field, columns, the rasputin version and date of the first fetch, and one region hash and date per request. Frozen |
 | `srs_entry` | The core's GeoPackage writer: a spatial reference row |
 | `create_geopackage` | The core's GeoPackage writer: a new, empty GeoPackage |
 | `create_features_table` | The core's GeoPackage writer: a features table in it |

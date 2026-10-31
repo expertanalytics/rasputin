@@ -31,6 +31,7 @@ import pytest
 PROMISED: dict[str, tuple[str, ...]] = {
     "crs": ("frame_factors", "parse_crs", "reprojector", "same_crs", "site_of", "srs_entry"),
     "dem_input": ("DemRequest", "open_dem", "repository_for"),
+    "domain": ("CrsBox",),
     "io.models": ("Bounds", "DemTile", "RasterMeta"),
     "io.vtk_read": ("read_mesh",),
     "io.geotiff_write": ("encode_geotiff",),
@@ -41,7 +42,8 @@ PROMISED: dict[str, tuple[str, ...]] = {
     "catchment_core": ("accumulate",),
     # 116: feature layers, the GeoPackage writer and the catalogue
     "io.feature_table": ("FeatureTable", "read_feature_table"),
-    "feature_input": ("FeatureError",),
+    "feature_input": ("FeatureError", "read_source"),
+    "io.repository": ("FeatureManifest",),
     "io.geopackage_write": ("create_geopackage", "create_features_table", "insert_features"),
     "sources": (
         "RemoteSource",
@@ -59,6 +61,7 @@ PROMISED: dict[str, tuple[str, ...]] = {
 SIGNATURES: dict[str, str] = {
     "THREADS": "int | None, --threads, min=0, metavar=N",
     "Bounds": "x_min, y_min, x_max, y_max",
+    "CrsBox": "crs, box",
     "DemRequest": (
         "sources=(), cached=None, bounds=None, nodata=None, z_unit=None,"
         " domain=None, target_crs=None, box=None"
@@ -96,6 +99,10 @@ SIGNATURES: dict[str, str] = {
     "words": "(exc: 'ValueError') -> 'str'",
     "FeatureError": "(ValueError)",
     "FeatureTable": "crs, layer, columns, rows",
+    "FeatureManifest": (
+        "source, kind='arcgis-features', url, crs, id_field, fields, rasputin_version,"
+        " first_fetched, requests=()"
+    ),
     "RemoteSource": (
         "id, kind, path=None, url=None, url_template=None, tile_list_url=None,"
         " tile_name=None, tile_spacing=None, years=(), values='heights', fields=(),"
@@ -120,6 +127,11 @@ SIGNATURES: dict[str, str] = {
         "(path: 'Path', layer: 'str | None',"
         " box_for: 'Callable[[str], tuple[float, float, float, float]] | None' = None)"
         " -> 'FeatureTable'"
+    ),
+    "read_source": (
+        "(path: 'Path', layer: 'str | None', attribute: 'str | None',"
+        " box_for: 'Callable[[str], tuple[float, float, float, float] | None]',"
+        " crs: 'str | None' = None, extra: 'tuple[str, ...]' = ()) -> 'SourceRows'"
     ),
     "srs_entry": "(crs: 'str | None') -> 'SrsEntry'",
     "user_source_file": "(environ: 'Mapping[str, str]') -> 'Path | None'",
