@@ -402,13 +402,17 @@ def write_lines(
     register_layer(conn, "lines", "LINESTRING", srs_id, _bounds(boxes), z=True)
 
 
+_MULTI = {"Polygon": shapely.MultiPolygon, "LineString": shapely.MultiLineString}
+
+
 def multipolygon_blobs(
     geometries: Sequence[BaseGeometry], srs_id: int
 ) -> tuple[list[bytes], Float64]:
-    """2-D MultiPolygon blobs of polygons or multipolygons, a polygon wrapped
-    as a one-part multipolygon, and their envelopes ``minx, maxx, miny, maxy``,
-    as flag ``0b0011`` declares (12-128 section 2.1.3)."""
-    multi = [g if g.geom_type == "MultiPolygon" else shapely.MultiPolygon([g]) for g in geometries]
+    """2-D MultiPolygon or MultiLineString blobs of polygons, lines or their
+    multi forms, a polygon or line wrapped as a one-part multi geometry, and
+    their envelopes ``minx, maxx, miny, maxy``, as flag ``0b0011`` declares
+    (12-128 section 2.1.3)."""
+    multi = [_MULTI[g.geom_type]([g]) if g.geom_type in _MULTI else g for g in geometries]
     boxes = shapely.bounds(multi).reshape(-1, 4)[:, [0, 2, 1, 3]]
     wkb = shapely.to_wkb(multi, byte_order=1, flavor="iso", output_dimension=2)
     head = struct.Struct("<2sBBi4d")
@@ -445,8 +449,8 @@ def insert_features(
     srs_id: int,
     rows: Sequence[tuple[int, BaseGeometry, Sequence[Any]]],
 ) -> None:
-    """``(key, polygon, values)`` rows into the table ``name`` as
-    multipolygons, their R-tree entries keyed by ``key``, and the layer's
+    """``(key, geometry, values)`` rows into the table ``name`` as
+    multipolygons or multilinestrings, their R-tree entries keyed by ``key``, and the layer's
     bounds grown to hold them: one transaction."""
     if not rows:
         return

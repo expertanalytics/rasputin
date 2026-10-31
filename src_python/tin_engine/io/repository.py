@@ -247,6 +247,8 @@ class FeatureManifest(BaseModel):
     rasputin_version: str
     first_fetched: datetime.date
     requests: tuple[CachedRequest, ...] = ()
+    #: The entry's `position_error_m` at the first fetch.
+    position_error_m: float | None = None
 
 
 #: The features table of a cached map-service layer, in `features.gpkg`.
@@ -449,21 +451,34 @@ class CacheWriter:
             return {int(k) for (k,) in conn.execute(f'SELECT "{pk}" FROM {FEATURES}')}
 
     def features(
-        self, srs: SrsEntry, pk: str, columns: Sequence[tuple[str, str]]
+        self,
+        srs: SrsEntry,
+        pk: str,
+        columns: Sequence[tuple[str, str]],
+        kind: Literal["MULTIPOLYGON", "MULTILINESTRING"] = "MULTIPOLYGON",
     ) -> sqlite3.Connection:
         """A writable connection to `features.gpkg`, created with an empty
-        `MULTIPOLYGON` table keyed by `pk` on first use; journalled, so a crash
-        keeps every committed transaction. The caller closes it."""
+        table of `kind` keyed by `pk` on first use; journalled, so a crash
+        keeps every committed transaction. The caller closes it. A cache
+        whose table is of another kind is a `CacheError`."""
         assert self._lock is not None, "a CacheWriter writes only inside `with`"
         path = self.directory / "features.gpkg"
         if not path.is_file():
             part = path.with_name(path.name + ".part")
             with closing(create_sqlite(part)) as conn:
                 create_geopackage(conn, srs)
-                create_features_table(conn, FEATURES, srs.srs_id, "MULTIPOLYGON", pk, columns)
+                create_features_table(conn, FEATURES, srs.srs_id, kind, pk, columns)
                 conn.commit()
             os.replace(part, path)
         conn = create_sqlite(path)
+        held = conn.execute(
+            "SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?", (FEATURES,)
+        ).fetchone()
+        if held is None or held[0] != kind:
+            conn.close()
+            raise CacheError(
+                f"{self.source}: the cache holds no {kind} table; --refresh fetches anew"
+            )
         conn.execute("PRAGMA journal_mode=DELETE")
         conn.execute("PRAGMA synchronous=NORMAL")
         return conn

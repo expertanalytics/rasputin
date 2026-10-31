@@ -75,6 +75,18 @@ credit = "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjeng
 licence_note = "Norsk lisens for offentlige data (NLOD) 1.0, https://data.norge.no/nlod/no/1.0. NVE accepts no liability for damage or injuries due to errors in data and incorrect use of data."
 description = "NVE's lake database: \"Innsjødatabasen til NVE inneholder informasjon om vann og innsjøer.\" Lakes larger than 2500 m² have a national number (vatnlnr); scale 1:20 000 (Geonorge)."
 
+[source.nve-river-network]
+kind = "arcgis-features"
+url = "https://kart.nve.no/enterprise/rest/services/Elvenett1/MapServer/2"
+crs = "EPSG:25833"
+# The river segments' fields asked; editor and person fields are never collected.
+fields = ["objekttype", "elvid", "vatnlnr", "strekninglnr"]
+credit = "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Norges vassdrags- og energidirektorat (NVE). Kilde: NVE, ELVIS elvenett, {url}, hentet {date}; lagret som GeoPackage av rasputin."
+licence_note = "Norsk lisens for offentlige data (NLOD) 1.0, https://data.norge.no/nlod/no/1.0. NVE accepts no liability for damage or injuries due to errors in data and incorrect use of data."
+description = "NVE's river network, ELVIS elvenett: every river segment as a line. NVE's product sheet (Produktark Elvenett - ELVIS, 2017-05-12): \"Målestokktall 50 000\"; \"Nøyaktighet: ELVIS er avledet fra vanntema i N50 kartdata\"."
+# Kartverket's N50 product sheet states "2 til 50 meter avhengig av objekttype og etableringsmetode"; the worst is kept.
+position_error_m = 50.0
+
 [source.nve-glaciers]
 kind = "arcgis-features"
 url = "https://kart.nve.no/enterprise/rest/services/Bre2/MapServer/9"

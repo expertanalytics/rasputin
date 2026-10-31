@@ -141,6 +141,8 @@ class RemoteSource(BaseModel):
     description: str = ""
     #: Keep only the features another source names (a local .geojson entry only).
     named_by: NamedBy | None = None
+    #: The worst position error the distributor states for the features, in metres.
+    position_error_m: PositiveFloat | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -159,6 +161,8 @@ class RemoteSource(BaseModel):
             raise ValueError(
                 "named_by: only a local .geojson source of features keeps what another names"
             )
+        if self.position_error_m is not None and self.values != "features":
+            raise ValueError(f"position_error_m: refused for a source of {self.values}")
         if self.fields and self.kind != "arcgis-features":
             raise ValueError(f"fields: refused for {self.kind}")
         if self.kind == "arcgis-features":
