@@ -557,3 +557,64 @@ def test_the_default_run_answers_a_missing_program_with_127(repos: Repos, tmp_pa
     done = tool.run(["rasputin-h18-no-such-program"], tmp_path)
     assert done.returncode == 127
     assert "not found" in done.stderr
+
+
+# --- 8. a private (rasputin-lsm) worktree ----------------------------------------------------
+
+PIN = "rasputin @ git+https://example.invalid/rasputin@0123456789abcdef0123456789abcdef01234567"
+
+
+@dataclass
+class LsmTable(NewTable):
+    """NewTable whose import check is rasputin_lsm's: `<wt>/src`, `_lsm` from `<wt>/.venv`."""
+
+    def __call__(self, argv: list[str], cwd: Path | None) -> Answer:
+        if is_venv_python(argv) and argv[1:2] == ["-c"] and "rasputin_lsm" in argv[2]:
+            if not self.installed:
+                return Answer(1, "", "ModuleNotFoundError: No module named 'rasputin_lsm'\n")
+            wt = Path(argv[0]).parent.parent.parent.resolve()
+            so = wt / ".venv" / "lib" / "python3.14" / "site-packages" / "rasputin_lsm" / "_lsm.so"
+            src = wt / "src" / "rasputin_lsm"
+            return Answer(0, f"{src / '__init__.py'}\n{src / 'cli.py'}\n{so}\n")
+        return super().__call__(argv, cwd)
+
+
+def lsm_run(repos: Repos, capsys: pytest.CaptureFixture[str], extras: str) -> tuple[Path, Outcome]:
+    wt = existing_worktree(repos, "lsm", venv=False, configured=False)
+    (wt / "pyproject.toml").write_text(
+        f'[project]\nname = "rasputin-lsm"\ndependencies = ["{PIN}", "numpy"]\n'
+        f'[project.optional-dependencies]\ndev = ["pytest"]\n{extras}'
+    )
+    outcome = run_tool(repos, ["--existing", str(wt)], capsys, LsmTable(repos.main))
+    assert outcome.code == 0, outcome.text
+    assert kinds(outcome.recorder) == ["venv", "install", "configure"]
+    return wt, outcome
+
+
+@pytest.mark.parametrize(
+    ("extras", "editable", "core"),
+    [
+        ("", ".[dev]", PIN.replace("rasputin @", "rasputin[codecs] @")),
+        ('codecs = ["imagecodecs>=2024.1"]\n', ".[dev,codecs]", PIN),
+    ],
+)
+def test_a_private_worktree_installs_the_pinned_core_with_codecs_before_configuring_against_it(
+    repos: Repos, capsys: pytest.CaptureFixture[str], extras: str, editable: str, core: str
+) -> None:
+    wt, outcome = lsm_run(repos, capsys, extras)
+    by_kind = {kind(c.argv): c.argv for c in outcome.recorder.calls}
+    assert option(by_kind["install"], "-e") == editable
+    assert core in by_kind["install"] and "pybind11" in by_kind["install"]
+    root = defines(by_kind["configure"])["rasputin_ROOT"]
+    assert same(root, wt / ".venv" / "lib" / "python3.14" / "site-packages" / "tin_engine")
+    assert f"rasputin_lsm and rasputin_lsm.cli from {wt}/src" in outcome.out
+    assert "--target _lsm" in outcome.out
+
+
+def test_a_public_worktree_is_not_pointed_at_an_installed_core(
+    repos: Repos, capsys: pytest.CaptureFixture[str]
+) -> None:
+    outcome = run_tool(repos, ["alpha"], capsys)
+    assert outcome.code == 0, outcome.text
+    configure = [a for a in outcome.recorder.argvs() if kind(a) == "configure"]
+    assert "rasputin_ROOT" not in defines(configure[0])

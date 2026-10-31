@@ -360,6 +360,31 @@ def xdg_base(environ: Mapping[str, str], variable: str, under_home: str) -> Path
     return None
 
 
+def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
+    """The tile cache: ``--cache`` if given, else ``$RASPUTIN_DATA/cache``, else
+    ``$XDG_CACHE_HOME/rasputin``, else ``$HOME/.cache/rasputin``, else None.
+    The XDG Base Directory rule: an empty or relative variable is ignored.
+    Pure in its two arguments (no ``Path.home()``); ``mesh`` passes ``os.environ``."""
+    if option is not None:
+        return option
+    if (root := data_root(environ)) is not None:
+        return root / "cache"
+    base = xdg_base(environ, "XDG_CACHE_HOME", ".cache")
+    return None if base is None else base / "rasputin"
+
+
+def features_file(source: RemoteSource, cache: Path | None) -> Path:
+    """A features source's file: its own ``path``, else its copy in ``cache``;
+    a ValueError when the copy or the cache is missing."""
+    if source.path is not None:
+        return source.path
+    if cache is None:
+        raise ValueError(f"no cache directory for {source.id}; see `cache_root`")
+    if not (path := cache / source.id / "features.gpkg").is_file():
+        raise ValueError(f"{source.id}/features.gpkg is not in the cache")
+    return path
+
+
 def user_source_candidates(environ: Mapping[str, str]) -> tuple[Path, ...]:
     """The places the user's sources file is looked for, in order:
     ``$RASPUTIN_DATA/sources.toml``, then ``rasputin/sources.toml`` in the
@@ -477,9 +502,11 @@ __all__ = [
     "PluginFile",
     "RemoteSource",
     "StationSource",
+    "cache_root",
     "catalogue",
     "check_values",
     "data_root",
+    "features_file",
     "kept_named",
     "notice",
     "plugin_source_files",
