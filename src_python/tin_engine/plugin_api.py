@@ -11,6 +11,7 @@ from tin_engine.catchment_core import accumulate
 from tin_engine.cli_kit import THREADS, cli_resources, destination, words
 from tin_engine.crs import frame_factors, parse_crs, reprojector, same_crs, site_of, srs_entry
 from tin_engine.dem_input import DemRequest, open_dem, repository_for
+from tin_engine.domain import CrsBox
 from tin_engine.feature_input import FeatureError
 from tin_engine.io.feature_table import FeatureTable, read_feature_table
 from tin_engine.io.geopackage_write import create_features_table, create_geopackage, insert_features
@@ -33,6 +34,7 @@ from tin_engine.sources import (
 __all__ = [
     "THREADS",
     "Bounds",
+    "CrsBox",
     "DemRequest",
     "DemTile",
     "FeatureError",

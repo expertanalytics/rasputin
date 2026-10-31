@@ -31,6 +31,7 @@ import pytest
 PROMISED: dict[str, tuple[str, ...]] = {
     "crs": ("frame_factors", "parse_crs", "reprojector", "same_crs", "site_of", "srs_entry"),
     "dem_input": ("DemRequest", "open_dem", "repository_for"),
+    "domain": ("CrsBox",),
     "io.models": ("Bounds", "DemTile", "RasterMeta"),
     "io.vtk_read": ("read_mesh",),
     "io.geotiff_write": ("encode_geotiff",),
@@ -59,6 +60,7 @@ PROMISED: dict[str, tuple[str, ...]] = {
 SIGNATURES: dict[str, str] = {
     "THREADS": "int | None, --threads, min=0, metavar=N",
     "Bounds": "x_min, y_min, x_max, y_max",
+    "CrsBox": "crs, box",
     "DemRequest": (
         "sources=(), cached=None, bounds=None, nodata=None, z_unit=None,"
         " domain=None, target_crs=None, box=None"
