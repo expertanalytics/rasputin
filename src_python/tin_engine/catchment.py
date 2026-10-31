@@ -96,7 +96,7 @@ class CatchmentRequest(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     seed: tuple[float, float]
-    seed_crs: str = "EPSG:4326"
+    seed_crs: str
     lakes: tuple[BaseGeometry, ...] | None = None
     lakes_crs: str | None = None
     #: Metres the reduced outline may stray from the fine one; None is twice

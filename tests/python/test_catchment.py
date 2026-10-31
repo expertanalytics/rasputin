@@ -9,9 +9,10 @@ Interface assumed (the design names `CatchmentRequest` (frozen Pydantic),
 `delineate(request, repository) -> Catchment` (frozen), `CatchmentError`,
 `WINDOW_MARGIN_M`; the fields are chosen here and stated in the handback):
 
-- `CatchmentRequest(seed=(x, y), seed_crs="EPSG:4326", lakes=None,
-  lakes_crs=None)`. `lakes` is a tuple of shapely polygons or multipolygons
-  in `lakes_crs` (the CLI reads them from `--lakes`; paths stop there).
+- `CatchmentRequest(seed=(x, y), seed_crs=CRS, lakes=None,
+  lakes_crs=None)`; `seed_crs` has no default (pipe item mesh/seed-crs).
+  `lakes` is a tuple of shapely polygons or multipolygons in `lakes_crs`
+  (the CLI reads them from `--lakes`; paths stop there).
 - `Catchment`: `fine` (a shapely `Polygon` in the DEM's CRS, no interiors),
   `crs` (text pyproj reads as the DEM's CRS), `nodes` (in-nodes),
   `seed_nodes`, `fine_area` (m^2), `rings_dropped`, `holes_filled`,
@@ -123,8 +124,10 @@ def test_catchment_error_is_a_value_error(api: Any) -> None:
     assert issubclass(api.CatchmentError, ValueError)
 
 
-def test_the_request_is_frozen_and_seed_crs_defaults_to_wgs84(api: Any) -> None:
-    req = api.CatchmentRequest(seed=(8.5425, 61.3512))
+def test_the_request_is_frozen_and_seed_crs_is_required(api: Any) -> None:
+    with pytest.raises(ValidationError, match="seed_crs"):
+        api.CatchmentRequest(seed=(8.5425, 61.3512))
+    req = api.CatchmentRequest(seed=(8.5425, 61.3512), seed_crs="EPSG:4326")
     assert req.seed_crs == "EPSG:4326"
     assert req.lakes is None
     with pytest.raises(ValidationError):
@@ -208,7 +211,9 @@ def test_a_seed_in_wgs84_lands_on_the_same_node_as_in_the_dem_crs(api: Any) -> N
     z = bowl()
     x, y = CENTRE[0] + 30.0, CENTRE[1] - 20.0
     utm = api.delineate(api.CatchmentRequest(seed=(x, y), seed_crs=EPSG), repository_of(z))
-    wgs = api.delineate(api.CatchmentRequest(seed=to_4326(x, y)), repository_of(z))
+    wgs = api.delineate(
+        api.CatchmentRequest(seed=to_4326(x, y), seed_crs="EPSG:4326"), repository_of(z)
+    )
     assert wgs.seed_nodes == 1
     assert np.array_equal(on_whole(wgs, z.shape), on_whole(utm, z.shape))
 
@@ -218,7 +223,10 @@ def test_lakes_and_seed_in_other_crss_are_moved_into_the_dem_crs(api: Any) -> No
     here = api.delineate(request(api), repository_of(z))
     there = api.delineate(
         api.CatchmentRequest(
-            seed=to_4326(*CENTRE), lakes=(moved(lake_box(), "EPSG:3035"),), lakes_crs="EPSG:3035"
+            seed=to_4326(*CENTRE),
+            seed_crs="EPSG:4326",
+            lakes=(moved(lake_box(), "EPSG:3035"),),
+            lakes_crs="EPSG:3035",
         ),
         repository_of(z),
     )
@@ -538,7 +546,7 @@ def gauge_request(
 
 
 def test_the_reach_defaults_to_none(api: Any) -> None:
-    assert api.CatchmentRequest(seed=(8.5, 61.3)).reach is None
+    assert api.CatchmentRequest(seed=(8.5, 61.3), seed_crs="EPSG:4326").reach is None
 
 
 def test_a_reach_with_lakes_is_refused(api: Any, gauge_api: Any) -> None:
