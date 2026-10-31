@@ -546,3 +546,51 @@ def test_h22_18_only_a_cxx_change_outside_tests_warns_the_extension_is_from_head
 ) -> None:
     result = copied(private_repo, rev, tmp_path / "copy")
     assert (BUILT_FROM_HEAD in result.stderr) is warns, result.stderr
+
+
+# ------------------------------------------------- the copy checks its imports
+#
+# Harness item scratch-copy-private (2026-10-31): before pytest starts, the
+# printed command checks that each package of the copy is found inside the
+# copy, so a fall-back to the worktree's code fails loudly, not as survivors.
+
+MUTANT = """\
+import pkg.mod
+
+
+def test_the_mutant_is_seen():
+    assert pkg.mod.VALUE == "mutant", pkg.mod.__file__
+"""
+
+
+def test_a_mutant_planted_in_a_private_copy_is_what_a_test_imports(
+    private_repo: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "copy"
+    printed = copied(private_repo, "HEAD", target).stdout
+    write(target, "src/pkg/mod.py", "VALUE = 'mutant'\n")
+    probe = write(tmp_path / "gen", "test_mutant.py", MUTANT)
+    result = subprocess.run(
+        ["/bin/sh", "-c", runnable(printed, probe)],
+        capture_output=True, text=True, cwd=tmp_path, env=env(), timeout=120, check=False,
+    )  # fmt: skip
+    assert result.returncode == 0, f"exit {result.returncode}\n{result.stdout}\n{result.stderr}"
+    assert "1 passed" in result.stdout, result.stdout
+
+
+def test_a_package_found_outside_the_copy_stops_the_run_before_pytest(
+    repo: Path, tmp_path: Path
+) -> None:
+    """With the sitecustomize emptied, the planted editable finder wins again:
+    the run must stop, naming the package, and run no test."""
+    target = tmp_path / "copy"
+    printed = copied(repo, "HEAD", target).stdout
+    (target / ".scratch_copy" / "sitecustomize.py").write_text("")
+    probe = write(tmp_path / "gen", "test_where.py", PROBE.format(copy=str(target)))
+    result = subprocess.run(
+        ["/bin/sh", "-c", runnable(printed, probe)],
+        capture_output=True, text=True, cwd=tmp_path, env=env(), timeout=120, check=False,
+    )  # fmt: skip
+    assert result.returncode != 0, result.stdout
+    assert "tin_engine" in result.stderr and "decoy" in result.stderr, result.stderr
+    assert "passed" not in result.stdout and "failed" not in result.stdout, result.stdout
