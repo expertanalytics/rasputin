@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from tin_engine.feature_input import Category, LandCoverClasses, Split, split_key
+from tin_engine.feature_input import Category, EdgeCleanup, LandCoverClasses, Split, split_key
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.legends import Code, Legend, is_path, load_legend, read
 from tin_engine.toml_data import parse
@@ -175,6 +175,23 @@ def derived_cleanup(accuracy_m: float, cell: float) -> CleanUpDistances:
     snap min(s/20, 50), half the read region's 100 m margin."""
     s = max(accuracy_m, cell)
     return CleanUpDistances(repair_m=s / 100, max_shift_m=s / 2, outline_snap_m=min(s / 20, 50.0))
+
+
+def edge_cleanup(
+    classes: LandCoverClasses | None,
+    cell: float,
+    *,
+    merge_same_class: bool = True,
+    **given: float | None,
+) -> EdgeCleanup:
+    """The clean-up for a map of ``classes`` on a DEM of ``cell`` metres:
+    `derived_cleanup` at the file's accuracy (100 m, CORINE's, when no file
+    or none stated), the same-class merge on; a distance in ``given`` that
+    is not None wins."""
+    accuracy = classes.accuracy_m if classes is not None and classes.accuracy_m else 100.0
+    derived = derived_cleanup(accuracy, cell).model_dump()
+    kept = {k: v for k, v in given.items() if v is not None}
+    return EdgeCleanup(**(derived | kept), merge_same_class=merge_same_class)
 
 
 def _shipped() -> Any:

@@ -9,7 +9,10 @@ The first form makes `<main>/.claude/worktrees/<name>` on branch
 forms then make `<wt>/.venv` with uv, install this checkout into it editable
 (`.[dev,codecs]` plus pybind11), configure `<wt>/build-pyext` for the
 `_core` rebuild of `tools/rebuild_core.py`, and check that the
-venv imports `tin_engine` from this worktree. Each step is skipped when its
+venv imports `tin_engine` from this worktree. A private (rasputin-lsm)
+worktree also gets the core its pyproject pins, with the core's `codecs` extra
+unless it declares imagecodecs itself; cmake is pointed at that core, and the
+check is of `rasputin_lsm` from `<wt>/src`. Each step is skipped when its
 product is already there, so `--existing` is safe to run again; it never
 deletes anything.
 
@@ -23,14 +26,37 @@ import argparse
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 Run = Callable[..., subprocess.CompletedProcess[str]]
 HERE = Path(__file__).resolve().parent
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]*")
-CHECK = ("import tin_engine, tin_engine.cli, tin_engine._core as c; print(tin_engine.__file__); "
-         "print(tin_engine.cli.__file__); print(c.__file__)")  # fmt: skip
+#: Per layout: the package, its source directory, its extension, the rebuild line.
+PUBLIC = ("tin_engine", "src_python", "_core", "python3 {wt}/tools/rebuild_core.py")
+PRIVATE = ("rasputin_lsm", "src", "_lsm", "cmake --build {wt}/build-pyext -j --target _lsm")
+
+
+def check_code(package: str, ext: str) -> str:
+    return (f"import {package}, {package}.cli, {package}.{ext} as c; print({package}.__file__); "
+            f"print({package}.cli.__file__); print(c.__file__)")  # fmt: skip
+
+
+def private_install(wt: Path) -> list[str] | None:
+    """What a rasputin-lsm checkout installs besides pybind11; None for any other."""
+    path = wt / "pyproject.toml"
+    project = tomllib.loads(path.read_text()).get("project", {}) if path.is_file() else {}
+    if project.get("name") != "rasputin-lsm":
+        return None
+    extras, deps = project.get("optional-dependencies", {}), project.get("dependencies", [])
+    names = [name for name in ("dev", "codecs") if name in extras]
+    pin = next((d for d in deps if d.replace(" ", "").startswith("rasputin@")), None)
+    if pin is None:
+        raise Refusal(f"{path} pins no `rasputin @ <url>` core in its dependencies")
+    if not any("imagecodecs" in d for d in [*deps, *(d for k in names for d in extras[k])]):
+        pin = "rasputin[codecs] @" + pin.split("@", 1)[1]
+    return ["-e", f".[{','.join(names)}]", pin]
 
 
 class Refusal(Exception):  # noqa: N818  (a refusal is not an error of the tool)
@@ -80,15 +106,18 @@ def step(run: Run, name: str, argv: list[str], wt: Path, cwd: Path | None = None
     return done.stdout or ""
 
 
-def check(run: Run, wt: Path, py: str) -> tuple[str, str, str] | str:
+def check(
+    run: Run, wt: Path, py: str, layout: tuple[str, ...] = PUBLIC
+) -> tuple[str, str, str] | str:
     """The step-7 import check: the three paths, or why it does not pass."""
-    done = run([py, "-c", CHECK], wt)
+    package, src, ext = layout[:3]
+    done = run([py, "-c", check_code(package, ext)], wt)
     lines = [line.strip() for line in done.stdout.splitlines() if line.strip()]
     if done.returncode != 0 or len(lines) != 3:
         return f"the import check failed (exit {done.returncode}: {last_line(done)}). {kept(wt)}"
     root = wt.resolve()
-    where = (root / "src_python" / "tin_engine", root / "src_python" / "tin_engine", root / ".venv")
-    for module, path, under in zip(("tin_engine", "tin_engine.cli", "tin_engine._core"), lines,
+    where = (root / src / package, root / src / package, root / ".venv")
+    for module, path, under in zip((package, f"{package}.cli", f"{package}.{ext}"), lines,
                                    where, strict=True):  # fmt: skip
         if not Path(path).resolve().is_relative_to(under):
             return (f"{wt}/.venv imports {module} from {path}, not from {wt}; "
@@ -98,21 +127,26 @@ def check(run: Run, wt: Path, py: str) -> tuple[str, str, str] | str:
 
 def set_up(run: Run, wt: Path, version: str) -> None:
     """Steps 4 to 7 of §3.2, each skipped when its product exists."""
-    py = str(wt / ".venv" / "bin" / "python")
+    py, private = str(wt / ".venv" / "bin" / "python"), private_install(wt)
+    layout = PUBLIC if private is None else PRIVATE
     if not (wt / ".venv").exists():
         step(run, "uv venv", ["uv", "venv", "--python", version, str(wt / ".venv")], wt)
-    found, configured = check(run, wt, py), (wt / "build-pyext" / "CMakeCache.txt").exists()
+    found, configured = check(run, wt, py, layout), (wt / "build-pyext" / "CMakeCache.txt").exists()
     if isinstance(found, str) or not configured:  # the configure needs pybind11 in this venv
-        step(run, "uv pip install", ["uv", "pip", "install", "--python", py, "-e",
-                                     ".[dev,codecs]", "pybind11"], wt, wt)  # fmt: skip
+        packages = ["-e", ".[dev,codecs]"] if private is None else private
+        step(run, "uv pip install", ["uv", "pip", "install", "--python", py, *packages,
+                                     "pybind11"], wt, wt)  # fmt: skip
     if not configured:
         cmakedir = step(run, "pybind11 --cmakedir", [py, "-m", "pybind11", "--cmakedir"], wt, wt)
-        step(run, "cmake configure", ["cmake", "-S", str(wt), "-B", str(wt / "build-pyext"),
+        # The installed core's CMake config, which only scikit-build-core finds unaided.
+        core = sorted((wt / ".venv" / "lib").glob("python*/site-packages/tin_engine"))
+        root = [] if private is None else [f"-Drasputin_ROOT={core[-1] if core else ''}"]
+        step(run, "cmake configure", ["cmake", "-S", str(wt), "-B", str(wt / "build-pyext"), *root,
              "-DCMAKE_BUILD_TYPE=Release", "-DRASPUTIN_BUILD_PYTHON=ON",
              "-DRASPUTIN_BUILD_TESTS=OFF", "-DRASPUTIN_HARDENING=ON", f"-DPYTHON_EXECUTABLE={py}",
              f"-DPython_EXECUTABLE={py}", f"-Dpybind11_DIR={cmakedir.strip()}"], wt)  # fmt: skip
     if isinstance(found, str):
-        found = check(run, wt, py)
+        found = check(run, wt, py, layout)
         if isinstance(found, str):
             raise Refusal(found)
     for tool in ("ruff", "mypy"):
@@ -121,8 +155,8 @@ def set_up(run: Run, wt: Path, version: str) -> None:
     sha = run(["git", "-C", str(wt), "rev-parse", "--short", "HEAD"]).stdout.strip()
     python = run([py, "--version"], wt).stdout.strip()
     print(f"worktree  {wt}  (branch {branch} at {sha})\npython    {py}  ({python})\n"
-          f"code      tin_engine and tin_engine.cli from {wt}/src_python\n_core     {found[2]}\n"
-          f"rebuild   python3 {wt}/tools/rebuild_core.py"
+          f"code      {layout[0]} and {layout[0]}.cli from {wt}/{layout[1]}\n"
+          f"{layout[2]:<9} {found[2]}\nrebuild   {layout[3].format(wt=wt)}"
           "   (configured, not built)")  # fmt: skip
 
 

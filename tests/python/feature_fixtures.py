@@ -175,7 +175,8 @@ class Opened:
 
 def cleanup(**switches: Any) -> Any:
     """An `EdgeCleanup`: every switch off unless given."""
-    return feature_input().EdgeCleanup(**switches)
+    off = {"repair_m": 0.0, "merge_same_class": False, "max_shift_m": 0.0, "outline_snap_m": 0.0}
+    return feature_input().EdgeCleanup(**(off | switches))
 
 
 def every_class() -> Any:

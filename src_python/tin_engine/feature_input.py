@@ -137,16 +137,17 @@ class EdgeChoice(BaseModel):
 
 
 class EdgeCleanup(BaseModel):
-    """The land-cover clean-up, all off by default (the CLI's are derived
-    from the class file's accuracy): the repair's tolerance, the same-class
-    merge, the simplification and the outline snap distance D."""
+    """The land-cover clean-up: the repair's tolerance, the same-class
+    merge, the simplification and the outline snap distance D (0 is off).
+    No field has a default: `tin_engine.land_cover_classes.edge_cleanup`
+    derives them from the sources, as the CLI does."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    repair_m: float = 0.0
-    merge_same_class: bool = False
-    max_shift_m: float = 0.0
-    outline_snap_m: float = 0.0
+    repair_m: float
+    merge_same_class: bool
+    max_shift_m: float
+    outline_snap_m: float
 
 
 class FeatureSet(BaseModel):
@@ -460,14 +461,14 @@ def read_source(
     path: Path,
     layer: str | None,
     attribute: str | None,
-    box_for: Callable[[str], tuple[float, float, float, float]],
+    box_for: Callable[[str], tuple[float, float, float, float] | None],
     crs: str | None = None,
     extra: tuple[str, ...] = (),
 ) -> SourceRows:
     """One source's features, unclipped, in its own CRS, by suffix.
 
     ``attribute`` None reads a GeoPackage's primary key. ``box_for(own CRS)``
-    is the box a GeoPackage's R-tree is queried with. ``crs``, when given,
+    is the box a GeoPackage's R-tree is queried with; None reads every row. ``crs``, when given,
     must be the file's; a GML file naming none takes it. ``extra`` names more
     attributes, read per row into ``SourceRows.extra`` (None where a feature
     or layer has none; ``()`` when none is asked). Every refusal is a
