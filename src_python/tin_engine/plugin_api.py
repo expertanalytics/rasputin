@@ -11,11 +11,13 @@ from tin_engine.catchment_core import accumulate
 from tin_engine.cli_kit import THREADS, cli_resources, destination, words
 from tin_engine.crs import frame_factors, parse_crs, reprojector, same_crs, site_of, srs_entry
 from tin_engine.dem_input import DemRequest, open_dem, repository_for
-from tin_engine.feature_input import FeatureError
+from tin_engine.domain import CrsBox
+from tin_engine.feature_input import FeatureError, read_source
 from tin_engine.io.feature_table import FeatureTable, read_feature_table
 from tin_engine.io.geopackage_write import create_features_table, create_geopackage, insert_features
 from tin_engine.io.geotiff_write import encode_geotiff
 from tin_engine.io.models import Bounds, DemTile, RasterMeta
+from tin_engine.io.repository import FeatureManifest
 from tin_engine.io.vtk_read import read_mesh
 from tin_engine.raster import core_args
 from tin_engine.resources import Resources
@@ -33,9 +35,11 @@ from tin_engine.sources import (
 __all__ = [
     "THREADS",
     "Bounds",
+    "CrsBox",
     "DemRequest",
     "DemTile",
     "FeatureError",
+    "FeatureManifest",
     "FeatureTable",
     "RasterMeta",
     "RemoteSource",
@@ -59,6 +63,7 @@ __all__ = [
     "plural",
     "read_feature_table",
     "read_mesh",
+    "read_source",
     "repository_for",
     "reprojector",
     "same_crs",

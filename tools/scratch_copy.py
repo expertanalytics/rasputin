@@ -8,8 +8,9 @@ repository and outside the main checkout that holds it), copies the built
 extensions (`*.so`) of each package in the copy's source roots (`src_python`,
 `src`) from this worktree's `.venv` into the copy's package, and prints one
 line: the command that runs `pytest` on the copy with the worktree's
-interpreter. To run some tests only, replace the `tests/python/` it ends with
-by their paths.
+interpreter, once it has checked that each of those packages is found in the
+copy (it stops, naming the place, if not). To run some tests only, replace the
+`tests/python/` it ends with by their paths.
 
 The command sets `PYTHONPATH` to a generated `sitecustomize.py` in
 `<dir>/.scratch_copy/` and to the copy's source roots. The sitecustomize drops
@@ -49,7 +50,15 @@ SITECUSTOMIZE = (
     'sys.meta_path[:] = [f for f in sys.meta_path if "editable" not in repr(f).lower()]\n'
     "sys.path[:] = [p for p in sys.path if not p or os.path.realpath(p) not in DROP]\n"
 )
-PROGRAM = "import sys, pytest; sys.exit(pytest.main(sys.argv[1:]))"
+#: Run before pytest, after `NAMES = [...]; COPY = ...;`: stop, naming the place, if a package of
+#: the copy is found anywhere but in the copy, so a fall-back to the worktree cannot pass silently.
+PROGRAM = (
+    "import importlib.util as u, os, sys; "
+    "bad = [f'{n} from {s.origin if s else None}' for n in NAMES for s in [u.find_spec(n)] "
+    "if not (s and s.origin and os.path.realpath(s.origin).startswith(COPY + os.sep))]; "
+    "bad and sys.exit(f'scratch_copy: not from the copy {COPY}: ' + ', '.join(bad)); "
+    "import pytest; sys.exit(pytest.main(sys.argv[1:]))"
+)
 
 
 def _main_checkout() -> Path:
@@ -116,8 +125,10 @@ def copy(rev: str, target: Path) -> str:
     (site / "sitecustomize.py").write_text(f"DROP = {drop!r}\n{SITECUSTOMIZE}")
     path = os.pathsep.join(map(str, [site, *roots]))
     python = ROOT / ".venv" / "bin" / "python"
+    names = [package.name for package in packages]
+    program = f"NAMES = {names!r}; COPY = {os.path.realpath(target)!r}; {PROGRAM}"
     quoted = (shlex.quote(str(target)), shlex.quote(path), shlex.quote(str(python)),
-              shlex.quote(PROGRAM))  # fmt: skip
+              shlex.quote(program))  # fmt: skip
     return "cd {} && PYTHONPATH={} {} -c {} tests/python/".format(*quoted)
 
 

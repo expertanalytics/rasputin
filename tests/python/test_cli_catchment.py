@@ -6,11 +6,11 @@ red suites" (PR 1, `test_cli_catchment.py`), and the Bygdin numbers under
 
 Pinned here, from the design:
 
-- `rasputin catchment --dem PATH --seed X Y [--seed-crs CRS] [--lakes PATH
-  [--lakes-layer NAME]] --out FILE.geojson`. `--seed-crs` defaults to
-  EPSG:4326 (`LON LAT`). `--lakes` is a `.gpkg` (with `--lakes-layer` when it
-  holds more than one features table) or `.geojson`/`.json`, in the file's
-  own CRS.
+- `rasputin catchment --dem PATH --seed X Y --seed-crs CRS [--lakes PATH
+  [--lakes-layer NAME]] --out FILE.geojson`. `--seed-crs` is required: a
+  seed's CRS is never assumed (pipe item mesh/seed-crs). `--lakes` is a
+  `.gpkg` (with `--lakes-layer` when it holds more than one features
+  table) or `.geojson`/`.json`, in the file's own CRS.
 - The output is a `FeatureCollection` of one `Feature`, the polygon in the
   DEM's CRS, with a `crs` member naming it; `io.domain_file.read_domain` reads it.
   In PR 1 the polygon is the fine outline, so its area is the marching-squares
@@ -68,7 +68,7 @@ from catchment_fixtures import (
     seeds_in,
     tile_of,
 )
-from cli_helpers import invoke, ran
+from cli_helpers import invoke, ran, squashed
 from gpkg_fixtures import DTM10, OLA_NORWAY, Layer, Row, write_gpkg
 from mosaic_fixtures import quadrants
 from nve_fixtures import collection, river, write
@@ -250,12 +250,26 @@ def test_stderr_names_the_outlet_without_lakes(tmp_path: Path, dem_dir: Path) ->
 # ---------------------------------------------------------------------------
 
 
-def test_the_seed_crs_defaults_to_wgs84(tmp_path: Path, dem_dir: Path, lakes: Path) -> None:
+#: The refusal of a seed without its CRS, worded as `NO_BOX_CRS` (increment 114).
+NO_SEED_CRS = (
+    "--seed needs --seed-crs, the CRS its two numbers are in (EPSG:4326 for longitude and"
+    " latitude in degrees); a seed's CRS is never assumed"
+)
+
+
+def test_a_seed_in_degrees_names_its_crs(tmp_path: Path, dem_dir: Path, lakes: Path) -> None:
     utm, wgs = tmp_path / "utm.geojson", tmp_path / "wgs.geojson"
     run(dem_dir, utm, *utm_seed(), "--lakes", str(lakes))
     lon, lat_ = to_4326(*SEED)
-    run(dem_dir, wgs, "--seed", repr(lon), repr(lat_), "--lakes", str(lakes))
+    seed = ("--seed", repr(lon), repr(lat_), "--seed-crs", "EPSG:4326")
+    run(dem_dir, wgs, *seed, "--lakes", str(lakes))
     assert read_domain(wgs).polygon.equals_exact(read_domain(utm).polygon, 0.0)
+
+
+def test_a_seed_without_its_crs_is_refused(tmp_path: Path, dem_dir: Path) -> None:
+    lon, lat_ = to_4326(*SEED)
+    output = refused(tmp_path, "--dem", str(dem_dir), "--seed", repr(lon), repr(lat_))
+    assert squashed(f"Invalid value for --seed-crs: {NO_SEED_CRS}") in squashed(output), output
 
 
 def test_a_lake_file_in_another_crs(tmp_path: Path, dem_dir: Path, lakes: Path) -> None:
@@ -658,7 +672,8 @@ def test_a_station_in_wgs84_is_placed_the_same(
     utm, wgs = tmp_path / "utm.geojson", tmp_path / "wgs.geojson"
     run(valley_dir, utm, *gauge_station(), "--rivers", str(rivers))
     lon, lat_ = to_4326(*STATION)
-    run(valley_dir, wgs, "--seed", repr(lon), repr(lat_), "--rivers", str(rivers))
+    seed = ("--seed", repr(lon), repr(lat_), "--seed-crs", "EPSG:4326")
+    run(valley_dir, wgs, *seed, "--rivers", str(rivers))
     assert read_domain(wgs).polygon.equals_exact(read_domain(utm).polygon, 0.0)
 
 
