@@ -100,7 +100,7 @@ SIGNATURES: dict[str, str] = {
         "id, kind, path=None, url=None, url_template=None, tile_list_url=None,"
         " tile_name=None, tile_spacing=None, years=(), values='heights', fields=(),"
         " layer=None, crs=None, nodata=None, credit, licence_note, cite=(), classes='',"
-        " z_unit=None, description='', named_by=None"
+        " z_unit=None, description='', named_by=None, position_error_m=None"
     ),
     "cache_root": "(option: 'Path | None', environ: 'Mapping[str, str]') -> 'Path | None'",
     "catalogue": "(user_file: 'Path | None', plugins: 'Sequence[PluginFile]' = ()) -> 'Catalogue'",
