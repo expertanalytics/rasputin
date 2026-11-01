@@ -389,6 +389,17 @@ def features_file(source: RemoteSource, cache: Path | None) -> Path:
     return path
 
 
+def clean_sibling(key: str | None, label: str, known: Mapping[str, RemoteSource]) -> str | None:
+    """``<key>-clean-<n>``, the catalogue's id for the copy of ``key`` made
+    valid in ``EPSG:n``, when ``label`` (a CRS label) is ``EPSG:n`` and
+    ``known`` holds that id; None for no key, another label or no such entry."""
+    code = label.removeprefix("EPSG:")
+    if key is None or code == label or not (code.isascii() and code.isdigit()):
+        return None
+    sibling = f"{key}-clean-{code}"
+    return sibling if sibling in known else None
+
+
 def user_source_candidates(environ: Mapping[str, str]) -> tuple[Path, ...]:
     """The places the user's sources file is looked for, in order:
     ``$RASPUTIN_DATA/sources.toml``, then ``rasputin/sources.toml`` in the
