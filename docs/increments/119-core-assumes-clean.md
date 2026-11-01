@@ -3,7 +3,7 @@
 Status: **designed** (`@architect`, 2026-11-01, on public master
 `ae33748e`; branch `worktree-core-assumes-clean`; amended the same day:
 115's switch done, and Ola's ruling that the refusal names the catalogue's
-clean sibling, section 3). Full lane (it deletes
+clean sibling, section 3; amended after the red suite: `clean_sibling` takes the CRS label, so `sources` keeps its layer, and `@tester`'s pins adopted, sections 3 and 7). Full lane (it deletes
 the land-cover repair on the path to the mesh), Python only: no C++, no
 `@perf` acceptance run (section 8). Pipe item `mesh/core-assumes-clean`,
 ruled by Ola 2026-10-29 (the core states its contract, refuses invalid land
@@ -145,7 +145,15 @@ checked, so a run lists all of them, sorted by fid:
 
 The second form is for a polygon valid as read and invalid only after the
 move; it tells a user who made a clean product in the wrong CRS what
-happened. `fid` is the reader's: the GeoPackage key, or the 0-based
+happened. `{name}` is the file's name (`path.name`), as the readers' other
+refusals have it; `{own}` is the file's CRS text as the reader got it (a
+GeoJSON `crs` member `EPSG:25832` gives `EPSG:25832`). `{m}` counts the
+non-empty polygons reaching the read region: empty rows are skipped before
+the check (section 6) and are not among them. Where the head's lines break
+is free; each bad polygon is a line of its own that, stripped, reads
+`feature <fid>: <reason>` with an optional note. A thin `--prefer` spike,
+refused by `_repaired` today as one GEOS cannot rebuild, is now one more
+invalid polygon: "lake.geojson: 1 of the 1 polygons …". `fid` is the reader's: the GeoPackage key, or the 0-based
 feature position in a GeoJSON file (as every other core message names it).
 Every polygon is listed, none held back: the raw Telemark AR50 file lists
 460 on Numedalslågen (section 5). The words must not contain "given CRS":
@@ -162,10 +170,19 @@ catalogue holds `<id>-clean-<EPSG code>` for the DEM's CRS, the refusal
 names that sibling as the fix). One pure function in `sources.py`:
 
 ```python
-def clean_sibling(key: str | None, crs: str, known: Mapping[str, RemoteSource]) -> str | None:
-    """`<key>-clean-<n>` when `crs_label(crs)` is `EPSG:n` and `known` holds
-    that id; None for no key, a CRS without an EPSG code, or no such entry."""
+def clean_sibling(key: str | None, label: str, known: Mapping[str, RemoteSource]) -> str | None:
+    """`<key>-clean-<n>` when `label` is `EPSG:n` and `known` holds that id;
+    None for no key, a label that is not `EPSG:<digits>`, or no such entry."""
 ```
+
+`label` is the DEM CRS as `crs.crs_label` gives it; the caller, `cli._invalid`,
+computes it. `sources` is layer 0 of the import map
+(`tests/python/test_layering.py`: its row is `toml_data` alone, and its
+docstring promises no pyproj), so it reads the label as text and never
+imports `tin_engine.crs`. A PROJ string or WKT label does not start
+`EPSG:` and gives None, so the design's test 11 holds unchanged. Not moved
+to `cli.py`: the `<id>-clean-<n>` convention is the catalogue's, and test 11
+stays a pure call that loads neither the CLI nor pyproj.
 
 The lookup is by id only: the key is the catalogue id the user gave
 (`_Vector.source.id` for `--land-cover` and `--prefer`; the
@@ -185,7 +202,9 @@ def _invalid(exc: InvalidPolygons, key: str | None, dem_crs: str,
              known: Mapping[str, RemoteSource], flag: str) -> typer.BadParameter:
 ```
 
-With a sibling, the message is the refusal with one sentence in front:
+It calls `clean_sibling(key, crs_label(dem_crs), known)` (`cli` already
+imports `crs`). With a sibling, the message is the refusal with one
+sentence in front:
 
     use {sibling} in place of {key} (its clean copy for {EPSG:n} in the catalogue). {refusal}
 
@@ -211,12 +230,12 @@ output file written. The MCP tools get the same words as their tool error.
       -> ClassPolygons.areas         # land cover: all rows, valid where they reach the box
       -> build(..., cut=True)        # _fixed: cut to the box, the rest to `outside`; no check
       -> map.areas                   # valid, overlaid unchecked as today
-    read_polygons -> list[BaseGeometry]   # valid near ones, valid far ones; invalid far dropped
+    read_polygons -> list[BaseGeometry]   # valid near and far, file order; invalid far dropped
 
 The interfaces the tests call: `read_class_polygons(..., near=box)`,
 `read_polygons(path, layer, mesh_crs, xy, named=..., lines=...) -> list[BaseGeometry]`,
 `land_cover_map.build(base, preferred, classes, region, *, cut=True, outside=(), threads=1)`,
-`LandCoverMap` without `repaired`, `sources.clean_sibling(key, crs, known)`,
+`LandCoverMap` without `repaired`, `sources.clean_sibling(key, label, known)`,
 `feature_input.InvalidPolygons`, and `rasputin mesh` through `CliRunner`.
 
 ## 5. Ola's runs, and a public user
@@ -309,8 +328,11 @@ Fixtures, measured in the probes above (shapely 2.2.0, GEOS 3.14.1):
    EPSG:25833: refused, the line ends "(valid in the file's CRS,
    EPSG:25832: broken by the move)"; with mesh CRS EPSG:25832: accepted.
 5. `read_polygons`: the bow-tie near is refused naming file and fid; the
-   bow-tie far is dropped without error; the return is a list, and `tell`
-   is no parameter.
+   bow-tie far is dropped without error; a valid far polygon is returned,
+   in file order with the near ones; the return is a list, and `tell` is
+   no parameter. The thin spike of `test_cli_mesh_prefer.py`'s test 14
+   (invalid, `Self-intersection[506380 8314890.90000001]`, measured) is
+   refused as "lake.geojson: 1 of the 1 polygons" with its reason.
 6. CLI `--land-cover` with the bow-tie file: exit 2, "Invalid value for
    --land-cover", the fid and reason; the `--out` file does not exist.
 7. CLI `--prefer lake=` the bow-tie file: exit 2, "Invalid value for
@@ -319,7 +341,8 @@ Fixtures, measured in the probes above (shapely 2.2.0, GEOS 3.14.1):
    --reservoirs", and refused before the mesh: the DEM-mesh function the
    CLI calls (`cli._dem_mesh`), patched to fail if reached, is not reached.
 9. Gone: `feature_input._repaired`, `cli._say_repaired`,
-   `LandCoverMap.repaired`, `build(fix=)` (now `cut=`); a valid
+   `LandCoverMap.repaired`, `build(fix=)` (now `cut=`, keyword-only,
+   default True); a valid
    `--land-cover` run's record has no `land_cover_repaired`, a
    `--reservoirs` run's no `reservoirs_repaired`, and `run_record` describes
    neither.
@@ -331,8 +354,10 @@ Fixtures, measured in the probes above (shapely 2.2.0, GEOS 3.14.1):
 11. `clean_sibling`, pure: with `known` holding `bad` and
     `bad-clean-31983`, `clean_sibling("bad", "EPSG:31983", known)` is
     `"bad-clean-31983"`; None for key None, for a `known` holding only
-    `bad-clean-25833`, and for a CRS without an EPSG code (a PROJ string
-    `+proj=tmerc +lon_0=7.3 +ellps=GRS80`, which `crs_label` gives as text).
+    `bad-clean-25833`, and for a label that is not `EPSG:n` (a PROJ string
+    `+proj=tmerc +lon_0=7.3 +ellps=GRS80`, which `crs_label` gives as text);
+    `x-clean-25832` on `EPSG:25833` finds none. The tests pass labels, so
+    `sources` needs no `crs` import (layering, section 3).
 12. CLI, the sibling named (red now: today the run repairs and exits 0).
     The scene of `test_cli_land_cover_polygons.py` (DEM in EPSG:31983,
     domain bounds 505489.1 8315090.9 507609.3 8317210.7) and a user
@@ -346,7 +371,14 @@ Fixtures, measured in the probes above (shapely 2.2.0, GEOS 3.14.1):
     `Self-intersection[506502 8316102]`. The same run with no
     `bad-clean-31983` entry, and with the GeoPackage given by path: exit 2,
     no "-clean-" in the output. `--reservoirs bad` with the sibling (a
-    valid `--land-cover` file beside it): "use bad-clean-31983".
+    valid `--land-cover` file beside it): "use bad-clean-31983". The
+    sentence is matched with whitespace removed (Rich wraps).
+13. Local only (`test_cli_mesh_edges.py`, skipped without Ola's data): Sula
+    with `--land-cover clc2018-clean-25833` gives Sol's mesh of 28 October,
+    3,271 triangles, 30.4411 km², lake 8.935 % (the figures hold on the
+    clean copy, checked by `@tester` on a scratch copy with the check); Sula
+    with the raw `clc2018` exits 2, 4 of its 31 polygons refused (section
+    5), and the message names `clc2018-clean-25833` first.
 
 No suite is named invariant-critical: no mutation round.
 
@@ -357,7 +389,9 @@ No C++ and nothing under `include/terrain/refinement/` or
 review, the green branch runs the quick check's two land-cover cases
 (Numedalslågen and Lagan, `tools/bench_quick.py`): each `.vtk` byte-identical
 to master's, as section 5's zero counts predict. The same step, on Ola's
-catalogue: Sula with `--land-cover clc2018-clean-25833` and Bygdin with
+catalogue: Sula with `--land-cover clc2018-clean-25833` (and the raw
+`clc2018`: section 7's test 13 runs both, so `pytest` on Ola's machine
+covers Sula) and Bygdin with
 `ar50-innlandet-clean-25833` (and `clc2018-clean-25833`) exit 0 (section
 5's zero counts for the products); Bygdin with the raw `ar50-innlandet`
 exits 2 and its message begins "use ar50-innlandet-clean-25833", the
