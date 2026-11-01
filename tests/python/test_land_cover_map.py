@@ -34,7 +34,7 @@ from shapely.geometry import box
 from shapely.geometry.base import BaseGeometry
 
 from fraction_fixtures import dem_origin
-from test_cli_land_cover_polygons import cover_polygons
+from test_cli_land_cover_polygons import cover_polygons, partial_cover
 from test_cli_mesh_prefer import preferred_lake
 
 #: On an area of the scene, m²: the design's figures are to 1 m².
@@ -76,7 +76,9 @@ def planted_box() -> BaseGeometry:
 
 
 def test_1_the_scenes_map(lcm: Any, corine: Any) -> None:
-    built = lcm.build([cover_polygons()], [(LAKE, [preferred_lake()])], corine, everywhere())
+    """On the scene's three classes (`partial_cover()`): the heath that
+    `cover_polygons()` adds would join the map's codes."""
+    built = lcm.build([partial_cover()], [(LAKE, [preferred_lake()])], corine, everywhere())
     found = by_code(built.areas)
     assert set(found) == {311, 312, 512}, found
     for code, area in ((311, 1_409_620.0), (312, 509_495.0), (512, 420_090.0)):

@@ -95,10 +95,13 @@ def served_path(year: int) -> str:
     return PATH_TEMPLATE.format(year=year)
 
 
-def class_grid(year: int = LAST_YEAR) -> np.ndarray:
+def class_grid(year: int = LAST_YEAR, *, no_data: bool = True) -> np.ndarray:
+    """One year's classes; with `no_data`, rows 30 on of columns 0 to 9 are
+    class 0 (no data), the block the I/O tests read."""
     r, c = np.indices((ROWS, COLS))
     grid = np.asarray(CLASSES, dtype=np.uint8)[(7 * r + 3 * c + year) % len(CLASSES)]
-    grid[30:, :10] = 0
+    if no_data:
+        grid[30:, :10] = 0
     return np.ascontiguousarray(grid)
 
 
@@ -108,11 +111,13 @@ def class_tiff(
     empty: Sequence[int] = (),
     compression: str = "deflate",
     predictor: int | None = None,
+    no_data: bool = True,
 ) -> bytes:
-    """One year's raster as GeoTIFF bytes, tiles `empty` with byte count 0."""
+    """One year's raster as GeoTIFF bytes, tiles `empty` with byte count 0;
+    `no_data` as `class_grid`'s."""
     extra: dict[str, Any] = {} if predictor is None else {"predictor": predictor}
     stream = micro_tiff(
-        class_grid(year),
+        class_grid(year, no_data=no_data),
         tiepoint=(0.0, 0.0, 0.0, LON0, LAT0, 0.0),
         scale=(STEP, STEP, 0.0),
         geokeys=AREA_KEYS,

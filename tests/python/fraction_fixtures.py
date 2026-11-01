@@ -263,12 +263,15 @@ def write_domain(path: Path) -> Path:
     return geojson(path, domain_ring(), crs=MESH_CRS)
 
 
-def write_class_cache(root: Path, years: Sequence[int] = CACHED_YEARS) -> Path:
+def write_class_cache(
+    root: Path, years: Sequence[int] = CACHED_YEARS, *, no_data: bool = False
+) -> Path:
     """The cache of the test class source for `years`, as `fetch --year` leaves
-    it, each object fetched on `FETCHED`."""
-    directory = write_cache(
-        root, KEY, {object_id(y): class_tiff(y) for y in years}, crs="EPSG:4326"
-    )
+    it, each object fetched on `FETCHED`. Without `no_data` every pixel holds
+    a class, so a mesh over it meets no coverage gap; with it, the block of
+    class 0 (`class_grid`) is written."""
+    tiffs = {object_id(y): class_tiff(y, no_data=no_data) for y in years}
+    directory = write_cache(root, KEY, tiffs, crs="EPSG:4326")
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     for entry in manifest["objects"].values():

@@ -1,12 +1,13 @@
-"""`landcover.fill_no_class` and `land_cover_fractions.merge_zero_share`: no
-triangle of a finished mesh keeps code 0.
+"""`landcover.fill_no_class`, `land_cover_fractions.merge_zero_share` and
+`landcover.label_triangles(..., rest=)`: no triangle of a finished mesh keeps
+code 0, and code 0 means "in no polygon of the map".
 
 `docs/increments/122-lakes-overrule.md`, section 3.2 (the fill's rule: groups,
-donors, nearest, ties), section 3.3 (the shares merge), section 6 (the
-degeneracies) and section 7, tests 1 to 6 and 12. Each grid is unit squares,
-`c` columns by 2 rows, each square two triangles, codes per column (CORINE:
-322 heath, 333 sparse, 511 river, 512 lake; water is the class file's
-`water_codes`).
+donors, nearest, ties), section 3.3 (the shares merge), section 3.7
+(`rest=`), section 6 (the degeneracies) and section 7, tests 1 to 6, 12 and
+23. Each grid is unit squares, `c` columns by 2 rows, each square two
+triangles, codes per column (CORINE: 311 broad-leaved forest, 322 heath, 333
+sparse, 511 river, 512 lake; water is the class file's `water_codes`).
 
 THE ORACLE is the design's own figures, worked by hand on the grid: a
 column's triangles are at distance `|i - j| - 1` from column `j`'s, and two
@@ -35,11 +36,14 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
+from shapely.geometry import box
 
 from tin_engine import land_cover_classes
 from tin_engine.io.models import ClassFractions
 
 HEATH, SPARSE, RIVER, LAKE, ARABLE = 322, 333, 511, 512, 211
+#: CORINE broad-leaved forest, test 23's middle class.
+BROADLEAF = 311
 WATER = land_cover_classes.load("corine").water_codes
 #: The step-2 refusal's words (section 3.2).
 NO_DONOR = (
@@ -327,3 +331,72 @@ def test_12_a_row_all_zero_becomes_its_class_alone() -> None:
     assert_array_equal(got.offsets, np.array([0, 1, 2], np.uint32))
     assert_array_equal(got.classes, np.array([ARABLE, SPARSE], np.int32))
     assert_array_equal(got.fractions, np.array([1.0, 1.0], np.float32))
+
+
+# ------------------------------------------------------------ test 23, label_triangles(rest=)
+
+#: Test 23's polygons: one region east of x = 3, the map's areas over all four columns.
+EAST_LAKE = [(box(3, 0, 4, 2), LAKE)]
+MAP_AREAS = [(box(0, 0, 2, 2), HEATH), (box(2, 0, 3, 2), BROADLEAF), (box(3, 0, 4, 2), LAKE)]
+
+
+def labelled(**rest: object) -> object:
+    """`label_triangles` on the 4 by 2 grid, the two unit segments on x = 3
+    the constraint edges, `polygons` the lake east of them."""
+    from tin_engine.landcover import label_triangles
+
+    vertices, triangles, _ = grid([0, 0, 0, 0])
+    edges = np.array([[9, 10], [10, 11]], np.int64)  # (3, 0)-(3, 1)-(3, 2)
+    return label_triangles(vertices, triangles, edges, polygons=EAST_LAKE, margin=1e-3, **rest)
+
+
+def test_23_the_label_points_pin_the_figures() -> None:
+    """The figures below are by construction: each half-square's incentre
+    lies strictly inside its own unit square, so off every polygon border."""
+    vertices, triangles, _ = grid([0, 0, 0, 0])
+    a, b, c = (vertices[triangles[:, k]] for k in range(3))
+    la, lb, lc = (np.hypot(*(q - p).T) for p, q in ((b, c), (c, a), (a, b)))
+    centre = (la[:, None] * a + lb[:, None] * b + lc[:, None] * c) / (la + lb + lc)[:, None]
+    column = column_of(triangles)
+    assert ((centre[:, 0] > column) & (centre[:, 0] < column + 1)).all()
+    assert ((centre[:, 1] % 1 > 0) & (centre[:, 1] % 1 < 1)).all()
+
+
+def test_23_a_region_the_borders_leave_0_takes_the_map_per_triangle() -> None:
+    """Section 3.7: the west region holds heath and broad-leaved forest with no
+    line between them; each triangle takes the map's code at its own label
+    point, so two classes in one region, and `CoverLabels.rest` counts 12."""
+    got = labelled(rest=MAP_AREAS)
+    column = column_of(np.zeros((16, 3)))
+    assert_array_equal(got.codes[column <= 1], np.full(8, HEATH, np.int32))
+    assert_array_equal(got.codes[column == 2], np.full(4, BROADLEAF, np.int32))
+    assert_array_equal(got.codes[column == 3], np.full(4, LAKE, np.int32))
+    assert got.rest == 12
+
+
+def test_23_a_triangle_in_no_polygon_of_the_map_stays_0() -> None:
+    got = labelled(rest=[a for a in MAP_AREAS if a[1] != BROADLEAF])
+    column = column_of(np.zeros((16, 3)))
+    assert_array_equal(got.codes[column <= 1], np.full(8, HEATH, np.int32))
+    assert_array_equal(got.codes[column == 2], np.zeros(4, np.int32))
+    assert_array_equal(got.codes[column == 3], np.full(4, LAKE, np.int32))
+    assert got.rest == 8
+
+
+def test_23_without_rest_the_labels_are_todays() -> None:
+    from tin_engine.landcover import label_triangles
+
+    vertices, triangles, _ = grid([0, 0, 0, 0])
+    edges = np.array([[9, 10], [10, 11]], np.int64)
+    today = label_triangles(vertices, triangles, edges, polygons=EAST_LAKE, margin=1e-3)
+    got = labelled(rest=())
+    assert_array_equal(got.codes, today.codes)
+    column = column_of(np.zeros((16, 3)))
+    assert_array_equal(got.codes, np.where(column == 3, LAKE, 0).astype(np.int32))
+    assert got.rest == 0
+    assert (got.regions, got.outside, got.overlapped, got.thin) == (
+        today.regions,
+        today.outside,
+        today.overlapped,
+        today.thin,
+    )

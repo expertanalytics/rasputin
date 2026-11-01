@@ -42,6 +42,7 @@ from test_cli_mesh_features import (
     report,
     text_field,
 )
+from test_cli_mesh_landcover import COVER, covered
 from tin_engine.features import DEFAULT_VOCABULARY
 from vtkread import VtkFile, read_vtk
 
@@ -90,9 +91,13 @@ def parcel_src(tmp_path: Path) -> Path:
 
 
 def land_cover(*paths: Path, classes: str = "corine") -> list[str]:
-    """Each of ``paths`` as a `--land-cover` file, under one class file."""
-    given = [a for path in paths for a in ("--land-cover", str(path))]
-    return [*given, "--land-cover-classes", classes, "--land-cover-partial"]
+    """Each of ``paths`` as a `--land-cover` file, under one class file; the
+    last is `covered`, so a CORINE GeoJSON leaves no coverage gap. Not the
+    first: an earlier file keeps an overlap's area, so a covered first file
+    would take every later file's polygons."""
+    *before, last = paths
+    given = [a for path in (*before, covered(last)) for a in ("--land-cover", str(path))]
+    return [*given, "--land-cover-classes", classes]
 
 
 def with_wall(cover: Path, wall: Path) -> list[str]:
@@ -133,7 +138,8 @@ class TestTwoSources:
     def test_the_coded_source_labels_the_cells(self, vtk: VtkFile) -> None:
         """I3: the CORINE polygons label the cells; the wall adds no code but
         its line still partitions the fill."""
-        _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512)])
+        rest = COVER.difference(FOREST.union(LAKE))
+        _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512), (rest, 211)])
         found = set(codes.tolist())
         assert 311 in found and 512 in found
 
@@ -275,7 +281,8 @@ class TestTwoLandCoverFiles:
         vtk = read_vtk(target.read_bytes())
         assert "land_cover_codes" in vtk.field_data
         # Both files' polygons label the mesh: neither overrode the other.
-        _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512)])
+        rest = COVER.difference(LAKE)
+        _, _, codes = vtk_labels(vtk, [(FOREST, 311), (LAKE, 512), (rest, 211)])
         assert {311, 512} <= set(codes.tolist()), sorted(set(codes.tolist()))
 
 
@@ -296,18 +303,19 @@ class TestRecordPerSource:
         vtk, _ = meshed(tmp_path, bumpy, plain_square, *land_cover(a, b), "--edges", "all")
         (entry,) = edges_entries(report(tmp_path))
         assert entry["name"] == "a.geojson + b.geojson", entry.string
-        assert int(entry["n"]) == 2, entry.string
+        assert int(entry["n"]) == 3, entry.string  # with the arable land `covered` adds
         notice = text_field(vtk, "land_cover_notice")
         assert notice.count("Copernicus Land Monitoring Service") == 1, notice
 
     def test_per_source_feature_counts_are_correct(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
     ) -> None:
-        """The map has two features, the wall one; each entry's `<n>
-        features` count is that source's own, not the run total."""
+        """The map has three features (the arable land `covered` adds among
+        them), the wall one; each entry's `<n> features` count is that
+        source's own, not the run total."""
         meshed(tmp_path, bumpy, plain_square, *with_wall(corine_src, parcel_src))
         counts = [int(m["n"]) for m in edges_entries(report(tmp_path))]
-        assert counts == [2, 1], counts
+        assert counts == [3, 1], counts
 
     def test_land_cover_crs_has_one_entry_per_file(
         self, tmp_path: Path, bumpy: Path, plain_square: Path

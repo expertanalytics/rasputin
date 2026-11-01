@@ -85,6 +85,7 @@ from gpkg_fixtures import (
 from landcover_fixtures import triangle_areas, vtk_labels
 from plyread import read_ply
 from test_cli_mesh_domain import quarter_circle
+from test_cli_mesh_landcover import COVER, covered
 from test_cli_mesh_refine import file_field, ply_fields, stats_row
 from tin_engine.crs import transform_description
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -121,9 +122,15 @@ ROAD_INTO_FOREST = LineString([rel(20.2, -40.3), rel(45.1, -40.3)])
 LAKE = Polygon([rel(120.3, -60.2), rel(170.1, -60.4), rel(170.3, -20.1), rel(120.1, -20.3)])
 BRIDGE = LineString([rel(100.2, -40.7), rel(180.4, -40.7)])
 WALL = LineString([rel(150.3, -15.1), rel(250.2, -15.1)])
-#: The gallery: its areas as CORINE classes (forest 311, lake 512), its lines
-#: by kind.
-GALLERY_COVER = [Feat("forest", FOREST, {"Code_18": "311"}), Feat("lake", LAKE, {"Code_18": "512"})]
+#: `test_cli_mesh_landcover.COVER`'s box, which `covered` fills.
+COVER_BOX = COVER
+#: The gallery: its areas as CORINE classes (forest 311, lake 512, arable land
+#: 211 over the rest of `COVER_BOX`, so no coverage gap), its lines by kind.
+GALLERY_COVER = [
+    Feat("forest", FOREST, {"Code_18": "311"}),
+    Feat("lake", LAKE, {"Code_18": "512"}),
+    Feat("rest", COVER_BOX - (FOREST | LAKE), {"Code_18": "211"}),
+]
 GALLERY_LINES = {
     "road": [Feat("road", ROAD_INTO_FOREST, {}), Feat("bridge", BRIDGE, {})],
     "wall": [Feat("wall", WALL, {})],
@@ -151,7 +158,7 @@ def gallery_args(where: Path, crs: str | None = None) -> tuple[str, ...]:
     cover, lines = gallery_files(where, crs)
     keyed = [a for key, path in lines.items() for a in ("--lines", f"{key}={path}")]
     return (
-        *("--land-cover-partial", "--land-cover", str(cover), "--land-cover-classes", "corine"),
+        *("--land-cover", str(cover), "--land-cover-classes", "corine"),
         *keyed,
         *("--edges", "all", "--edges-max-shift", "0"),
     )
@@ -167,16 +174,11 @@ def gallery(tmp_path: Path) -> tuple[str, ...]:
 
 
 def cover_args(path: Path, classes: str = "corine", *more: str) -> tuple[str, ...]:
-    """One land-cover file with ``classes`` and `--edges all`."""
+    """One land-cover file with ``classes`` and `--edges all`; a CORINE
+    GeoJSON is `covered` first, so it leaves no coverage gap."""
     return (
-        "--land-cover-partial",
-        "--land-cover",
-        str(path),
-        "--land-cover-classes",
-        classes,
-        *more,
-        "--edges",
-        "all",
+        *("--land-cover", str(covered(path)), "--land-cover-classes", classes),
+        *(*more, "--edges", "all"),
     )
 
 
@@ -348,7 +350,7 @@ class TestRecord:
         ]
         assert "outside" not in stats_row(stats, "edges")
         every = []
-        for match, fs, n in zip((cover, road, wall), opened, (2, 2, 1), strict=True):
+        for match, fs, n in zip((cover, road, wall), opened, (3, 2, 1), strict=True):
             assert int(match["n"]) == len(fs.features) == n
             # The source's own lines and their coordinates (a closed ring
             # repeats its first point); the joined geometry's go to
@@ -455,6 +457,9 @@ EDGES_LINE = re.compile(
     r"\bedges: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
     r"(?P<o>\d+) outside the domain, (?P<e>\d+) empty\b"
 )
+#: The override, on the GeoPackage crossings (`covered` leaves a GeoPackage
+#: alone, so its gap stays: `docs/increments/122-lakes-overrule.md`, 7a, K8).
+PARTIAL = "--land-cover-partial"
 NO_INDEX = re.compile(r"\bt: this layer has no spatial index, so every row was read\b")
 
 
@@ -482,19 +487,20 @@ class TestReport:
     ) -> None:
         """R10: "features read, dropped outside, clipped". `west` and `wall`
         cross the boundary and are kept, clipped; `far` is dropped outside
-        and `forest` is untouched."""
+        and `forest` is untouched; the arable land `covered` adds crosses it too."""
         _, output = meshed(tmp_path, bumpy, plain_square, *crossing_args(tmp_path))
         assert [int(n) for n in OUTSIDE.findall(output)] == [1], output
-        assert [int(n) for n in CLIPPED.findall(output)] == [2], output
+        assert [int(n) for n in CLIPPED.findall(output)] == [3], output
 
     def test_stderr_counts_the_features_kept(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """The line's first count is the features kept, and says so: three
-        kept, `far` dropped outside, two clipped, none empty."""
+        """The line's first count is the features kept, and says so: four
+        kept (the arable land `covered` adds among them), `far` dropped
+        outside, three clipped, none empty."""
         _, output = meshed(tmp_path, bumpy, plain_square, *crossing_args(tmp_path))
         found = [m.groupdict() for m in EDGES_LINE.finditer(output)]
-        assert found == [{"n": "3", "c": "2", "o": "1", "e": "0"}], output
+        assert found == [{"n": "4", "c": "3", "o": "1", "e": "0"}], output
         assert not re.search(r"\bfeatures: \d+ kept\b", output), output
 
     def test_nothing_crossing_is_zero_clipped(
@@ -510,7 +516,9 @@ class TestReport:
         """R3: "Without an index the table is scanned and the report says so".
         The layers are still read: the edges row counts the kept three, and
         the full read's outside `far` is on stderr only."""
-        _, output = meshed(tmp_path, bumpy, plain_square, *gpkg_args(tmp_path, rtree=False))
+        _, output = meshed(
+            tmp_path, bumpy, plain_square, *gpkg_args(tmp_path, rtree=False), PARTIAL
+        )
         entries = edges_entries(report(tmp_path))
         assert [int(m["n"]) for m in entries] == [2, 1], stats_row(report(tmp_path), "edges")
         assert [int(n) for n in OUTSIDE.findall(output)] == [1], output
@@ -531,7 +539,8 @@ class TestReport:
         for rtree in (True, False):
             where = tmp_path / str(rtree)
             where.mkdir()
-            code, output, target = mesh(where, bumpy, plain_square, *gpkg_args(where, rtree=rtree))
+            args = gpkg_args(where, rtree=rtree)
+            code, output, target = mesh(where, bumpy, plain_square, *args, PARTIAL)
             assert code == 0, output
             if rtree:
                 assert not NO_INDEX.search(output), output
@@ -810,7 +819,7 @@ class TestCommittedExtract:
             tmp_path,
             KARTVERKET,
             domain,
-            *cover_args(LEGACY_GML, "clc18_kode"),
+            *cover_args(LEGACY_GML, "clc18_kode", "--land-cover-partial"),
             tolerance="10",
         )
         stats = report(tmp_path)

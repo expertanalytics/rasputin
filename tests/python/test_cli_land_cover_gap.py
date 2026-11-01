@@ -4,15 +4,15 @@ it, marked, and records it.
 
 `docs/increments/122-lakes-overrule.md`, section 3.6 (the gap, the refusal,
 its words, the hint, the override), section 3.4 (the mark and the record),
-section 6, and section 7, tests 10, 10b and 17 to 21. The scene is
+section 6, and section 7, tests 10, 10b and 17 to 22. The scene is
 `test_cli_land_cover_polygons.py`'s: its DEM (40 x 40 nodes at 60 m) and
 domain (4,490,161 m²) in SIRGAS 2000 / UTM 23S (EPSG:31983), `--tolerance 3`.
-`cover_polygons()` is the scene's three CORINE polygons: they leave
+`partial_cover()` is the scene's three CORINE polygons: they leave
 1,905,280.4 m² of the domain uncovered, in two parts, 1.8751 km² around
 507344 8315355 and the conifer's hole, 0.0301 km² (measured with shapely
 2.2's `maximum_inscribed_circle` at 0.001 m on these fixtures, by
-`test_the_gap_figures`). `full_cover()` adds heath 322 over the rest of the
-DEM's box, so it leaves no gap.
+`test_the_gap_figures`). `cover_polygons()` adds heath 322 over the rest of
+the DEM's box, so it leaves no gap.
 
 THE ORACLE: the gap figures above, recomputed in `test_the_gap_figures` from
 the fixture polygons by GEOS, never from the producer; codes and marks read
@@ -26,8 +26,6 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
 - `land_cover_gaps` is the number of parts and `land_cover_gap_m2` a number,
   each written as the `run` table's value; `land_cover_partial` is "on" or
   "off"; with no land cover none of the three is written.
-- The scene's old cover is `cover_polygons()` unchanged (the design's test
-  17 scene), so every other suite on it passes `--land-cover-partial`.
 - The `.gpkg`'s `land_cover_filled` is 0 or 1 on every triangle that has a
   `code`.
 - The hint's ids in "covered by" are separated by ", ".
@@ -46,19 +44,25 @@ import numpy as np
 import pytest
 import shapely
 from shapely.geometry import Polygon, box
-from shapely.geometry.base import BaseGeometry
 
 from class_fixtures import KEY
 from cli_helpers import USAGE, help_text, invoke, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
-from fraction_fixtures import MESH_CRS, dem_origin, domain_ring, write_dem, write_domain
-from test_cli_land_cover_polygons import cover_polygons, mesh, write_cover_geojson
+from fraction_fixtures import (
+    MESH_CRS,
+    dem_origin,
+    domain_ring,
+    write_class_cache,
+    write_dem,
+    write_domain,
+)
+from test_cli_land_cover_polygons import cover_polygons, mesh, partial_cover, write_cover_geojson
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_cells import corners, scene
 from test_cli_mesh_cells import mesh as cells_mesh
 from test_cli_mesh_edges import CLEAN_CLC, CLEAN_ID, DTM10, OWN_HOME
-from test_cli_mesh_prefer import write_lake
+from test_cli_mesh_prefer import island_scene, write_lake
 from vector_fixtures import vector_entry
 
 __all__ = ["scene"]  # a fixture, used by name
@@ -95,7 +99,7 @@ def domain(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def gappy(tmp_path: Path) -> Path:
-    return write_cover_geojson(tmp_path / "gappy.geojson", cover_polygons())
+    return write_cover_geojson(tmp_path / "gappy.geojson", partial_cover())
 
 
 def corine(cover: Path, *more: str) -> tuple[str, ...]:
@@ -117,9 +121,9 @@ def parts_of(output: str) -> list[tuple[str, int, int, str]]:
 
 
 def test_the_gap_figures() -> None:
-    """The red premise of 17 and 18, by GEOS: the scene's old cover leaves
-    two parts, 1,905,280.4 m², the larger 1.8751 km² around 507344 8315355."""
-    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in cover_polygons()]))
+    """The red premise of 17 and 18, by GEOS: `partial_cover()` leaves two
+    parts, 1,905,280.4 m², the larger 1.8751 km² around 507344 8315355."""
+    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in partial_cover()]))
     parts = sorted(shapely.get_parts(rest), key=lambda p: -p.area)
     assert len(parts) == 2
     assert rest.area == pytest.approx(GAP_TOTAL_M2, abs=0.05)
@@ -128,16 +132,8 @@ def test_the_gap_figures() -> None:
     assert np.abs(np.round(centre) - LARGEST_AT).max() == 0
 
 
-def full_cover() -> list[tuple[int, BaseGeometry]]:
-    """`cover_polygons()` and heath 322 over the rest of the DEM's box."""
-    x0, y0 = dem_origin()
-    dem_box = box(x0 - 30.0, y0 - 39 * 60.0 - 30.0, x0 + 39 * 60.0 + 30.0, y0 + 30.0)
-    given = cover_polygons()
-    return [*given, (322, dem_box.difference(shapely.union_all([g for _, g in given])))]
-
-
-def test_full_cover_leaves_no_gap() -> None:
-    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in full_cover()]))
+def test_the_scenes_cover_leaves_no_gap() -> None:
+    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in cover_polygons()]))
     assert rest.area == 0.0
 
 
@@ -278,7 +274,7 @@ def test_18_the_marked_triangles_are_those_reaching_the_gap(
     target = tmp_path / "x.gpkg"
     code, output = mesh(dem, domain, target, *corine(gappy, "--land-cover-partial"))
     assert code == 0, output
-    covered = shapely.union_all([g for _, g in cover_polygons()])
+    covered = shapely.union_all([g for _, g in partial_cover()])
     with closing(sqlite3.connect(target)) as conn:
         _, marks = codes_and_marks(conn)
         triangles = shapely.polygons(corners(conn)[:, :, :2])
@@ -301,7 +297,7 @@ def test_18_without_land_cover_the_three_keys_are_absent(
 def test_18_with_full_cover_no_gap_and_the_override_off(
     tmp_path: Path, dem: Path, domain: Path
 ) -> None:
-    cover = write_cover_geojson(tmp_path / "cover.geojson", full_cover())
+    cover = write_cover_geojson(tmp_path / "cover.geojson", cover_polygons())
     target = tmp_path / "x.gpkg"
     code, output = mesh(dem, domain, target, *corine(cover))
     assert code == 0, output
@@ -317,15 +313,6 @@ def test_18_with_full_cover_no_gap_and_the_override_off(
 
 
 # ------------------------------------------------------------ test 19, an island
-
-
-def island_scene() -> tuple[BaseGeometry, BaseGeometry, list[tuple[int, BaseGeometry]]]:
-    """L, H and the cover: heath 322 over the DEM's box less L, lake 512 on L."""
-    x0, y0 = dem_origin()
-    lake = box(x0 + 800.3, y0 - 1600.7, x0 + 1600.9, y0 - 800.1)
-    hole = box(x0 + 1100.2, y0 - 1300.4, x0 + 1300.6, y0 - 1100.8)
-    dem_box = box(x0 - 30.0, y0 - 39 * 60.0 - 30.0, x0 + 39 * 60.0 + 30.0, y0 + 30.0)
-    return lake, hole, [(322, dem_box.difference(lake)), (512, lake)]
 
 
 def test_19_an_island_fills_without_the_override(tmp_path: Path, dem: Path, domain: Path) -> None:
@@ -356,30 +343,6 @@ def test_19_an_island_fills_without_the_override(tmp_path: Path, dem: Path, doma
     assert not (codes == 0).any()
 
 
-def test_19_a_class_left_out_of_edges_is_not_filled_from_water(
-    tmp_path: Path, dem: Path, domain: Path
-) -> None:
-    """Beyond the design's list: `--edges water` over a full cover (heath
-    322 and lake 512, no gap). The borders' polygons are the water's alone,
-    so the land is code 0 on today's labelling, though a polygon covers it;
-    the fill's donors would then be water only (section 3.2, step 2) and
-    give the land 512. A refill never invents water (section 3.1): the land
-    carries 322, unmarked, the lake 512."""
-    lake, _, cover = island_scene()
-    land = write_cover_geojson(tmp_path / "cover.geojson", cover)
-    target = tmp_path / "x.gpkg"
-    code, output = mesh(dem, domain, target, *corine(land, "--edges", "water"))
-    assert code == 0, output
-    with closing(sqlite3.connect(target)) as conn:
-        codes, marks = codes_and_marks(conn)
-        centroids = shapely.points(corners(conn)[:, :, :2].mean(axis=1))
-    wet = shapely.within(centroids, lake)
-    assert wet.any() and (~wet).any()
-    assert set(codes[wet].tolist()) == {512}
-    assert set(codes[~wet].tolist()) == {322}
-    assert not marks.any()
-
-
 # ------------------------------------------------------------ test 20, the hint
 
 
@@ -391,7 +354,7 @@ def test_20_the_hint_names_the_clean_catalogue_file_covering_each_part(
     211 polygon: each part names `east-clean-31983` (of a raw id and its
     clean sibling, only the sibling), never `east` or `other` (another class
     file)."""
-    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in cover_polygons()]))
+    rest = Polygon(domain_ring()).difference(shapely.union_all([g for _, g in partial_cover()]))
     gap = write_geojson(tmp_path / "gap.geojson", [Feat(1, rest, {"Code_18": "211"})], crs=MESH_CRS)
     data = tmp_path / "data"
     monkeypatch.setenv("RASPUTIN_DATA", str(data))
@@ -413,12 +376,19 @@ def test_20_the_hint_names_the_clean_catalogue_file_covering_each_part(
 # ------------------------------------------------------------ test 21, a raster
 
 
-def test_21_a_raster_reaching_no_data_is_refused(scene: dict[str, Path], tmp_path: Path) -> None:
-    """The cached class raster: the mesh reaches its block of class 0 (no
-    data; `test_cli_mesh_land_cover_fractions.py`'s fixture)."""
+@pytest.fixture
+def blocked(scene: dict[str, Path], tmp_path: Path) -> dict[str, Path]:
+    """The CLI scene, its cache written with the block of class 0 (no data)
+    that the mesh reaches: `write_class_cache(root, no_data=True)`."""
+    return {**scene, "cache": write_class_cache(tmp_path / "blocked", no_data=True)}
+
+
+def test_21_a_raster_reaching_no_data_is_refused(blocked: dict[str, Path], tmp_path: Path) -> None:
+    """The cached class raster with its no-data block, which the mesh
+    reaches, and no `--land-cover-partial`."""
     target = tmp_path / "x.gpkg"
     code, output = cells_mesh(
-        scene, target, "--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11"
+        blocked, target, "--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11"
     )
     assert code == USAGE, output
     assert "Invalid value for --land-cover" in output, output
@@ -428,10 +398,10 @@ def test_21_a_raster_reaching_no_data_is_refused(scene: dict[str, Path], tmp_pat
     assert not target.exists()
 
 
-def test_21_the_override_merges_every_zero_share(scene: dict[str, Path], tmp_path: Path) -> None:
+def test_21_the_override_merges_every_zero_share(blocked: dict[str, Path], tmp_path: Path) -> None:
     target = tmp_path / "x.gpkg"
     args = ("--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11", "--land-cover-partial")
-    code, output = cells_mesh(scene, target, *args)
+    code, output = cells_mesh(blocked, target, *args)
     assert code == 0, output
     with closing(sqlite3.connect(target)) as conn:
         zero = conn.execute("SELECT count(*) FROM land_cover_fractions WHERE code = 0")
@@ -440,6 +410,37 @@ def test_21_the_override_merges_every_zero_share(scene: dict[str, Path], tmp_pat
         assert not (codes == 0).any()
         assert marks.any()
         assert record(conn, "land_cover_partial") == "on"
+
+
+# ------------------------------------------------------------ test 22, an edge mode
+
+
+def test_22_a_class_left_out_of_edges_is_not_filled_from_water(
+    tmp_path: Path, dem: Path, domain: Path
+) -> None:
+    """Section 3.7: `--edges water` over a full cover (test 19's heath 322
+    and lake L, no `--prefer`, no gap). The borders' polygons are the
+    water's alone, so the land is code 0 on today's labelling, though a
+    polygon of the map covers it; the fill's donors would then be water only
+    and give it 512. Code 0 means "in no polygon of the map" under every
+    `--edges`: the land takes 322 from the map (`label_triangles(...,
+    rest=)`), unmarked, the lake 512, and the record's `land_cover_filled`
+    is 0."""
+    lake, _, cover = island_scene()
+    land = write_cover_geojson(tmp_path / "cover.geojson", cover)
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(dem, domain, target, *corine(land, "--edges", "water"))
+    assert code == 0, output
+    with closing(sqlite3.connect(target)) as conn:
+        codes, marks = codes_and_marks(conn)
+        centroids = shapely.points(corners(conn)[:, :, :2].mean(axis=1))
+        filled = record(conn, "land_cover_filled")
+    wet = shapely.within(centroids, lake)
+    assert wet.any() and (~wet).any()
+    assert set(codes[wet].tolist()) == {512}
+    assert set(codes[~wet].tolist()) == {322}
+    assert not marks.any()
+    assert filled == "0"
 
 
 # ------------------------------------------------------------ test 11, Bygdin (Ola's data)

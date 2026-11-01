@@ -155,9 +155,7 @@ class Covered:
 
 
 def covered(tmp_path: Path, dem: Path, domain: Path, cache: Path, *extra: str) -> Covered:
-    code, output, target = mesh(
-        tmp_path, dem, domain, cache, "--land-cover-partial", "--land-cover", KEY, *extra
-    )
+    code, output, target = mesh(tmp_path, dem, domain, cache, "--land-cover", KEY, *extra)
     assert code == 0, output
     assert "No such option" not in output, output
     vtk = read_vtk(target.read_bytes())
@@ -202,17 +200,24 @@ class TestTheFile:
         assert_array_equal(codes[lines:], [dominant(row) for row in run.rows])
 
     def test_the_fractions_are_the_oracles(self, run: Covered) -> None:
-        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025))
-        # 122, section 3.3: the no-data share inside the domain joins a class.
-        assert zero_merged(run.rows, want, FRACTION) == []
+        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025, no_data=False))
+        assert same_rows(run.rows, want, FRACTION) == []
 
-    def test_the_classes_are_the_rasters_and_no_data_is_among_them(self, run: Covered) -> None:
+    def test_the_classes_are_the_rasters_and_no_data_is_merged(
+        self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """The cache with its block of class 0 (no data), which the mesh
+        reaches, and `--land-cover-partial`: each triangle's 0 share joins a
+        class (`docs/increments/122-lakes-overrule.md`, section 3.3), so no
+        row keeps class 0."""
+        blocked = write_class_cache(tmp_path / "blocked", no_data=True)
+        run = covered(tmp_path, dem, domain, blocked, "--land-cover-partial")
         seen = set(run.classes.tolist())
         assert seen <= set(CLASSES)
-        # 122: the mesh reaches the block of class 0 (no data), which
-        # `--land-cover-partial` merges into a class: no row keeps it.
         assert 0 not in seen, "a row keeps class 0"
         assert sum(len(row) > 1 for row in run.rows) > 10, "mixed triangles are the point"
+        want = oracle_fractions(run.vtk.points, run.triangles, class_grid(2025))
+        assert zero_merged(run.rows, want, FRACTION) == []
 
     def test_the_strings_name_the_source_year_credit_licence_and_citation(
         self, run: Covered
@@ -243,8 +248,8 @@ class TestTheYear:
         early = covered(tmp_path / "b", dem, domain, cache, "--land-cover-year", "1985")
         assert "1985" in early.string("land_cover_source")
         assert "2025" in latest.string("land_cover_source")
-        want = oracle_fractions(early.vtk.points, early.triangles, class_grid(1985))
-        assert zero_merged(early.rows, want, FRACTION) == []
+        want = oracle_fractions(early.vtk.points, early.triangles, class_grid(1985, no_data=False))
+        assert same_rows(early.rows, want, FRACTION) == []
         assert early.rows != latest.rows, "the two years differ cell by cell"
 
     def test_a_year_out_of_range_is_a_usage_error_naming_the_range(
@@ -368,9 +373,10 @@ class TestChunks:
         ):
             assert ours.dtype == theirs.dtype
             assert_array_equal(ours, theirs)
-        # And one call is what the CLI wrote, its 0 shares merged (122).
-        once = rows_of(whole.table.offsets, whole.table.classes, whole.table.fractions)
-        assert zero_merged(run.rows, once, ONE) == []
+        # And one call is what the CLI wrote.
+        assert_array_equal(whole.table.offsets, run.offsets)
+        assert_array_equal(whole.table.classes, run.classes)
+        assert_array_equal(whole.table.fractions, run.fractions)
 
     def test_a_mesh_past_the_raster_and_an_object_not_cached_are_refused(
         self, classes: Any, offline: None, tmp_path: Path, dem: Path, domain: Path, cache: Path
@@ -430,14 +436,7 @@ def test_the_ply_face_lists_carry_the_same_table(
     run = covered(tmp_path, dem, domain, cache)
     (tmp_path / "ply").mkdir()
     code, output, target = mesh(
-        tmp_path / "ply",
-        dem,
-        domain,
-        cache,
-        "--land-cover-partial",
-        "--land-cover",
-        KEY,
-        out="x.ply",
+        tmp_path / "ply", dem, domain, cache, "--land-cover", KEY, out="x.ply"
     )
     assert code == 0, output
     header, data = read_ply(target.read_bytes())
@@ -472,9 +471,7 @@ def test_vtk_reads_the_field_arrays_back(
     numbers first). Skipped without `vtk`, as 16c's read-back is; CI runs it
     in the `viewer` extra's step."""
     vtk = pytest.importorskip("vtk")
-    code, output, target = mesh(
-        tmp_path, dem, domain, cache, "--land-cover-partial", "--land-cover", KEY
-    )
+    code, output, target = mesh(tmp_path, dem, domain, cache, "--land-cover", KEY)
     assert code == 0, output
     reader = vtk.vtkPolyDataReader()
     errors: list[str] = []

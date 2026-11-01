@@ -62,7 +62,7 @@ from test_cli_features_cleanup import Spy, run, switches
 from test_cli_fetch import install
 from test_cli_mesh_cache import no_network
 from test_cli_mesh_features import edges_at
-from test_cli_mesh_landcover import EAST, WEST, coded, rel
+from test_cli_mesh_landcover import EAST, WEST, coded, covered, rel
 from tin_engine.cli import app
 from tin_engine.features import DEFAULT_VOCABULARY
 from vtkread import read_vtk
@@ -91,17 +91,17 @@ def corine(tmp_path: Path) -> Path:
     )
 
 
+#: The override, on the scenes whose class files are not CORINE: `covered`
+#: leaves them alone, and a covering class would join the very lists of
+#: names and colours they check (`docs/increments/122-lakes-overrule.md`,
+#: section 7a, K7).
+PARTIAL = "--land-cover-partial"
+
+
 def cover(path: Path, classes: str = "corine") -> tuple[str, ...]:
-    """``path`` as the land cover under ``classes``, every class's borders chosen."""
-    return (
-        "--land-cover-partial",
-        "--land-cover",
-        str(path),
-        "--land-cover-classes",
-        classes,
-        "--edges",
-        "all",
-    )
+    """``path`` as the land cover under ``classes``, every class's borders
+    chosen; a CORINE GeoJSON is `covered` first, so it leaves no coverage gap."""
+    return ("--land-cover", str(covered(path)), "--land-cover-classes", classes, "--edges", "all")
 
 
 def recorded(record: dict[str, Any]) -> tuple[float, float, float]:
@@ -325,7 +325,7 @@ class TestTextCodesOnTriangles:
             [Feat("w", WEST, {"cover": "Forest"}), Feat("e", EAST, {"cover": "Lake"})],
         )
         path = write(tmp_path / "cover.toml", coded_map(codes="Forest = 1\nLake = 2\n"))
-        run(tmp_path, bumpy, square, *cover(data, str(path)))
+        run(tmp_path, bumpy, square, *cover(data, str(path)), PARTIAL)
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = vtk.cell_array("land_cover_code").values
         lines = len(vtk.lines)
@@ -382,15 +382,7 @@ class TestMapBiomasThroughTheCli:
         code, said = invoke(
             "mesh",
             *("--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3"),
-            *(
-                "--cache",
-                str(scene["cache"]),
-                "--land-cover-partial",
-                "--land-cover",
-                key,
-                "--out",
-                str(target),
-            ),
+            *("--cache", str(scene["cache"]), "--land-cover", key, "--out", str(target)),
         )
         output = basenames(said)
         assert code == 0, output
@@ -433,7 +425,7 @@ class TestMapBiomasThroughTheCli:
             tmp_path / "mb.geojson",
             [Feat(1, WEST, {"class": 3}), Feat(2, EAST, {"class": 33})],
         )
-        _, record, _ = run(tmp_path, bumpy, square, *cover(data, "mapbiomas-c11"))
+        _, record, _ = run(tmp_path, bumpy, square, *cover(data, "mapbiomas-c11"), PARTIAL)
         notice = (
             importlib.import_module("tin_engine.land_cover_classes").load("mapbiomas-c11").notice
         )
@@ -472,15 +464,8 @@ class TestTheNamesInTheRecord:
             tmp_path,
             bumpy,
             square,
-            *(
-                "--land-cover-partial",
-                "--land-cover",
-                str(corine),
-                "--land-cover-classes",
-                "corine",
-                "--edges",
-                "water",
-            ),
+            *("--land-cover", str(covered(corine)), "--land-cover-classes", "corine"),
+            *("--edges", "water"),
         )
         assert ", classes corine: " in record["edges"], record["edges"]
         assert ", legend corine; " in record["land_cover_codes"], record["land_cover_codes"]
@@ -528,7 +513,7 @@ class TestAr50ThroughTheCli:
     def test_13_the_triangles_borders_and_record(
         self, tmp_path: Path, bumpy: Path, square: Path, ar50: Path
     ) -> None:
-        _, record, _ = run(tmp_path, bumpy, square, *cover(ar50, "ar50"))
+        _, record, _ = run(tmp_path, bumpy, square, *cover(ar50, "ar50"), PARTIAL)
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = vtk.cell_array("land_cover_code").values
         assert {30, 81} <= {int(c) for c in codes[len(vtk.lines) :]}
@@ -549,7 +534,7 @@ class TestAr50ThroughTheCli:
         code, said = invoke(
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
-            *("--out", str(target), *cover(ar50, "ar50")),
+            *("--out", str(target), *cover(ar50, "ar50"), PARTIAL),
         )
         assert code == 0, basenames(said)
         palette = (
@@ -582,7 +567,7 @@ class TestAr50SplitsThroughTheCli:
     def test_the_triangles_border_and_record(
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
-        _, record, _ = run(tmp_path, bumpy, square, *cover(self.cover(tmp_path), "ar50"))
+        _, record, _ = run(tmp_path, bumpy, square, *cover(self.cover(tmp_path), "ar50"), PARTIAL)
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}
         assert {3031, 5052} <= codes
@@ -604,7 +589,7 @@ class TestAr50SplitsThroughTheCli:
         code, said = invoke(
             "mesh",
             *("--dem", str(bumpy), "--domain", str(square), "--tolerance", "1"),
-            *("--out", str(target), *cover(self.cover(tmp_path), "ar50")),
+            *("--out", str(target), *cover(self.cover(tmp_path), "ar50"), PARTIAL),
         )
         assert code == 0, basenames(said)
         palette = (
@@ -620,7 +605,7 @@ class TestAr50SplitsThroughTheCli:
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
         """Section 6: an export carrying only `arealtype` meshes as before."""
-        run(tmp_path, bumpy, square, *cover(self.cover(tmp_path, second=False), "ar50"))
+        run(tmp_path, bumpy, square, *cover(self.cover(tmp_path, second=False), "ar50"), PARTIAL)
         vtk = read_vtk((tmp_path / "x.vtk").read_bytes())
         codes = {int(c) for c in vtk.cell_array("land_cover_code").values[len(vtk.lines) :]}
         assert {30, 50} <= codes

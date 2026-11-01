@@ -57,10 +57,10 @@ from cli_helpers import USAGE, invoke, squashed
 from fraction_fixtures import (
     oracle_fractions,
     rows_of,
+    same_rows,
     write_class_cache,
     write_dem,
     write_domain,
-    zero_merged,
 )
 from geotiff_fixtures import micro_tiff
 from recordread import file_field
@@ -94,7 +94,7 @@ def offline(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def scene(tmp_path: Path) -> dict[str, Path]:
     lc = tmp_path / FILE_NAME
-    lc.write_bytes(class_tiff(2025))
+    lc.write_bytes(class_tiff(2025, no_data=False))
     return {
         "cache": write_class_cache(tmp_path / "cache"),
         "dem": write_dem(tmp_path / "dem.tif"),
@@ -140,19 +140,9 @@ class TestByPath:
         self, classes: Any, offline: None, tmp_path: Path, scene: dict[str, Path]
     ) -> None:
         cached, by_path = tmp_path / "cached.vtk", tmp_path / "path.vtk"
-        code, output = mesh(
-            scene,
-            cached,
-            "--cache",
-            str(scene["cache"]),
-            "--land-cover-partial",
-            "--land-cover",
-            KEY,
-        )
+        code, output = mesh(scene, cached, "--cache", str(scene["cache"]), "--land-cover", KEY)
         assert code == 0, output
-        code, output = mesh(
-            scene, by_path, "--land-cover-partial", "--land-cover", str(scene["file"])
-        )
+        code, output = mesh(scene, by_path, "--land-cover", str(scene["file"]))
         assert code == 0, output
         want, got = read_vtk(cached.read_bytes()), read_vtk(by_path.read_bytes())
         for ours, theirs in zip(table(got), table(want), strict=True):
@@ -163,9 +153,14 @@ class TestByPath:
         offsets, held, fractions = table(got)
         triangles = np.array([np.asarray(p) for p in got.polygons], dtype=np.int64)
         rows = rows_of(offsets, held, fractions.astype(np.float32))
-        # 122: the raster's no data inside the domain is merged (`zero_merged`).
-        want_rows = oracle_fractions(got.points, triangles, class_grid(2025))
-        assert zero_merged(rows, want_rows, FRACTION) == []
+        assert (
+            same_rows(
+                rows,
+                oracle_fractions(got.points, triangles, class_grid(2025, no_data=False)),
+                FRACTION,
+            )
+            == []
+        )
         assert file_field(got, "land_cover_source") == FILE_NAME
         assert not set(CREDIT_FIELDS) & set(got.field_data), sorted(got.field_data)
 
@@ -173,9 +168,7 @@ class TestByPath:
         self, offline: None, tmp_path: Path, scene: dict[str, Path]
     ) -> None:
         target = tmp_path / "x.vtk"
-        code, output = mesh(
-            scene, target, "--land-cover-partial", "--land-cover", str(scene["file"])
-        )
+        code, output = mesh(scene, target, "--land-cover", str(scene["file"]))
         assert code == 0, output
         vtk = read_vtk(target.read_bytes())
         assert file_field(vtk, "land_cover_source") == FILE_NAME
@@ -190,7 +183,6 @@ class TestByPath:
         code, output = mesh(
             scene,
             target,
-            "--land-cover-partial",
             "--land-cover",
             str(scene["file"]),
             "--land-cover-classes",
@@ -243,7 +235,7 @@ class TestRefusals:
     ) -> None:
         output = self.refused(
             scene, tmp_path, phases,
-            "--land-cover-partial", "--land-cover", str(scene["file"]), "--land-cover-year", "2025",
+            "--land-cover", str(scene["file"]), "--land-cover-year", "2025",
         )  # fmt: skip
         says(output, "--land-cover-year", "no years")
 
@@ -267,7 +259,6 @@ class TestRefusals:
     ) -> None:
         output = self.refused(
             scene, tmp_path, phases,
-            "--land-cover-partial",
             "--land-cover", str(scene["file"]), "--land-cover-classes", "property",
         )  # fmt: skip
         says(output, "--land-cover-classes", "property")
@@ -298,7 +289,7 @@ def test_a_feet_raster_passes_the_option_check(
     feet = tmp_path / "feet_classes.tif"
     feet.write_bytes(feet_classes())
     target = tmp_path / "x.vtk"
-    code, output = mesh(scene, target, "--land-cover-partial", "--land-cover", str(feet))
+    code, output = mesh(scene, target, "--land-cover", str(feet))
     assert code == USAGE, output
     says(output, "outside")
     assert "--z-unit" not in squashed(output) and "neither" not in squashed(output), output

@@ -87,9 +87,20 @@ CATALOGUE_KEY = "cover-test"
 
 
 def cover_polygons() -> list[tuple[int, BaseGeometry]]:
+    """`partial_cover()`'s three classes and heath 322 over the rest of the
+    DEM's node box widened by half a cell: the land cover covers the domain,
+    so a run meets no coverage gap."""
+    x0, y0 = dem_origin()
+    dem_box = box(x0 - 30.0, y0 - 39 * 60.0 - 30.0, x0 + 39 * 60.0 + 30.0, y0 + 30.0)
+    given = partial_cover()
+    return [*given, (322, dem_box.difference(shapely.union_all([g for _, g in given])))]
+
+
+def partial_cover() -> list[tuple[int, BaseGeometry]]:
     """Three CORINE classes over the domain, disjoint, none on a DEM node:
     311 inside it, 512 reaching past its east side, 312 with a hole and
-    reaching past its north side. The rest of the domain is uncovered."""
+    reaching past its north side. The rest of the domain is uncovered: a
+    coverage gap of 1,905,280.4 m² in two parts."""
     x0, y0 = dem_origin()
     forest = box(x0 + 300.4, y0 - 2000.2, x0 + 1200.6, y0 - 300.8)
     water = box(x0 + 1400.3, y0 - 1700.5, x0 + 2600.0, y0 - 600.9)
@@ -202,15 +213,7 @@ def phases(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 def run_vtk(dem: Path, domain: Path, target: Path, polygons: Path, *extra: str) -> VtkFile:
     code, output = mesh(
-        dem,
-        domain,
-        target,
-        "--land-cover-partial",
-        "--land-cover",
-        str(polygons),
-        "--land-cover-classes",
-        "corine",
-        *extra,
+        dem, domain, target, "--land-cover", str(polygons), "--land-cover-classes", "corine", *extra
     )
     assert code == 0, output
     assert "No such option" not in output, output
@@ -228,8 +231,7 @@ class TestTheFile:
     def test_the_fractions_are_geos_intersection_areas(self, run: VtkFile) -> None:
         rows = rows_of(*table(run))
         want = oracle_rows(run.points, triangles_of(run), cover_polygons())
-        # 122, section 3.3: the uncovered share joins a non-water class.
-        assert zero_merged(rows, want, FRACTION, CORINE_WATER) == []
+        assert by_value(rows, want, FRACTION) == []
 
     def test_every_row_sums_to_one_with_classes_ascending(self, run: VtkFile) -> None:
         for t, row in enumerate(rows_of(*table(run))):
@@ -237,11 +239,19 @@ class TestTheFile:
             assert list(row) == sorted(row), f"triangle {t}: {row}"
             assert min(row.values()) > 0.0, f"triangle {t}: {row}"
 
-    def test_every_class_is_met_and_the_uncovered_class_0_is_merged(self, run: VtkFile) -> None:
+    def test_every_class_is_met_and_the_uncovered_class_0_is_merged(
+        self, tmp_path: Path, dem: Path, domain: Path
+    ) -> None:
+        """On `partial_cover()`, whose gap `--land-cover-partial` lets through:
+        the uncovered share, class 0 before, joins one non-water class per
+        triangle (`docs/increments/122-lakes-overrule.md`, section 3.3)."""
+        gappy = write_cover_geojson(tmp_path / "gappy.geojson", partial_cover())
+        run = run_vtk(dem, domain, tmp_path / "x.vtk", gappy, "--land-cover-partial")
         rows = rows_of(*table(run))
-        # 122: the uncovered share, class 0 before, joins a class (`zero_merged`).
         assert set().union(*rows) == {311, 312, 512}
         assert sum(len(row) > 1 for row in rows) > 10, "mixed triangles are the point"
+        want = oracle_rows(run.points, triangles_of(run), partial_cover())
+        assert zero_merged(rows, want, FRACTION, CORINE_WATER) == []
 
     def test_the_class_numbers_are_declared_int(self, run: VtkFile) -> None:
         """4.5: 311 and 512 do not fit `unsigned_char`."""
@@ -270,14 +280,7 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "x.ply"
         code, output = mesh(
-            dem,
-            domain,
-            target,
-            "--land-cover-partial",
-            "--land-cover",
-            str(cover),
-            "--land-cover-classes",
-            "corine",
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-classes", "corine"
         )
         assert code == 0, output
         data = target.read_bytes()
@@ -300,14 +303,7 @@ class TestTheFile:
     ) -> None:
         target = tmp_path / "named.gpkg"
         code, output = mesh(
-            dem,
-            domain,
-            target,
-            "--land-cover-partial",
-            "--land-cover",
-            str(cover),
-            "--land-cover-classes",
-            "corine",
+            dem, domain, target, "--land-cover", str(cover), "--land-cover-classes", "corine"
         )
         assert code == 0, output
         palette = classes("corine").legend.colours
@@ -325,22 +321,17 @@ class TestAr50SubClasses:
     sub-class code, which the rules know, so the run is not refused."""
 
     def test_a_sub_class_polygon_is_counted(self, tmp_path: Path, dem: Path, domain: Path) -> None:
-        (_, forest), (_, water), _ = cover_polygons()
+        (_, forest), (_, water), (_, conifer), (_, heath) = cover_polygons()
+        # The rest as open ground (50), so the file covers the domain.
         feats = [
             Feat(1, forest, {"arealtype": 30, "treslag": 31}),
             Feat(2, water, {"arealtype": 81}),
+            Feat(3, conifer.union(heath), {"arealtype": 50}),
         ]
         path = write_geojson(tmp_path / "ar50.geojson", feats, crs=MESH_CRS)
         target = tmp_path / "x.vtk"
         code, output = mesh(
-            dem,
-            domain,
-            target,
-            "--land-cover-partial",
-            "--land-cover",
-            str(path),
-            "--land-cover-classes",
-            "ar50",
+            dem, domain, target, "--land-cover", str(path), "--land-cover-classes", "ar50"
         )
         assert code == 0, output
         assert {3031, 81} <= set().union(*rows_of(*table(read_vtk(target.read_bytes()))))
@@ -370,7 +361,7 @@ class TestSources:
         run = run_vtk(dem, domain, tmp_path / "x.vtk", path)
         moved = [(code, to_mesh(g)) for code, g in wgs84]
         want = oracle_rows(run.points, triangles_of(run), moved)
-        assert zero_merged(rows_of(*table(run)), want, FRACTION, CORINE_WATER) == []
+        assert by_value(rows_of(*table(run)), want, FRACTION) == []
 
     def test_a_catalogue_vector_source_uses_its_legend(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dem: Path, domain: Path
@@ -383,9 +374,7 @@ class TestSources:
         write_sources(config, {CATALOGUE_KEY: vector_entry(gpkg, "Test cover", classes="corine")})
         want = table(run_vtk(dem, domain, tmp_path / "a.vtk", gpkg))
         target = tmp_path / "b.vtk"
-        code, output = mesh(
-            dem, domain, target, "--land-cover-partial", "--land-cover", CATALOGUE_KEY
-        )
+        code, output = mesh(dem, domain, target, "--land-cover", CATALOGUE_KEY)
         assert code == 0, output
         run = read_vtk(target.read_bytes())
         for ours, theirs in zip(table(run), want, strict=True):
@@ -433,14 +422,7 @@ class TestAFetchedLayer:
         (where / "manifest.json").write_text(manifest.model_dump_json(), encoding="utf-8")
         target = tmp_path / "x.vtk"
         code, output = mesh(
-            dem,
-            domain,
-            target,
-            "--land-cover-partial",
-            "--land-cover",
-            FEATURES_KEY,
-            "--cache",
-            str(cache),
+            dem, domain, target, "--land-cover", FEATURES_KEY, "--cache", str(cache)
         )
         assert code == 0, output
         run = read_vtk(target.read_bytes())
@@ -455,14 +437,7 @@ class TestAFetchedLayer:
         meshing with SQLite's "unable to open database file"."""
         target = tmp_path / "x.vtk"
         code, output = mesh(
-            dem,
-            domain,
-            target,
-            "--land-cover-partial",
-            "--land-cover",
-            FEATURES_KEY,
-            "--cache",
-            str(cache),
+            dem, domain, target, "--land-cover", FEATURES_KEY, "--cache", str(cache)
         )
         assert code == USAGE, output
         assert phases == [], phases
@@ -502,14 +477,7 @@ class TestRefusals:
         odd = [*cover_polygons(), (9999, box(x0 + 300.4, y0 - 2200.0, x0 + 900.0, y0 - 2100.0))]
         path = write_cover_geojson(tmp_path / "odd.geojson", odd)
         output = self.refused(
-            dem,
-            domain,
-            tmp_path,
-            "--land-cover-partial",
-            "--land-cover",
-            str(path),
-            "--land-cover-classes",
-            "corine",
+            dem, domain, tmp_path, "--land-cover", str(path), "--land-cover-classes", "corine"
         )
         assert "9999" in squashed(output) and "--land-cover" in output, output
 
@@ -527,13 +495,14 @@ class TestRefusals:
         text = coded_map(attribute="Code_18", classes=classes, unlisted="keep")
         text = re.sub(r'^legend = ".*"$', f'legend = "{colours.name}"', text, flags=re.M)
         rules_file = write(tmp_path / "five.toml", text)
-        (_, forest), (_, water), _ = cover_polygons()
-        path = write_cover_geojson(tmp_path / "five-six.geojson", [(5, forest), (6, water)])
+        (_, forest), (_, water), (_, conifer), (_, heath) = cover_polygons()
+        # The rest coded 5, so the file covers the domain and the refusal is the code's.
+        five_six = [(5, forest), (6, water), (5, conifer.union(heath))]
+        path = write_cover_geojson(tmp_path / "five-six.geojson", five_six)
         output = self.refused(
             dem,
             domain,
             tmp_path,
-            "--land-cover-partial",
             "--land-cover",
             str(path),
             "--land-cover-classes",

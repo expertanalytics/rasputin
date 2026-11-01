@@ -47,6 +47,7 @@ from plyread import parse_header
 from recordread import file_field, ply_fields, stats_names, stats_row
 from test_cli_mesh_dem import SENTINEL
 from test_cli_mesh_features import FOREST
+from test_cli_mesh_landcover import covered
 from test_cli_mesh_mosaic import terrain, write_tiles
 from tin_engine import installed_version
 from tin_engine.cli import app
@@ -356,10 +357,11 @@ class TestTheOtherPaths:
         array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
         tif = write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
         square = geojson(tmp_path / "square.geojson", SQUARE)
-        corine = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
+        corine = covered(
+            write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
+        )
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(monkeypatch, "--dem", str(tif), "--domain", str(square), "--tolerance", "1",
-             "--land-cover-partial",
              "--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all",
              "--out", str(out), "--stats", str(md))  # fmt: skip
         fields = vtk_fields(read_vtk(out.read_bytes()))
@@ -383,7 +385,7 @@ class TestTheOtherPaths:
 def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
     """Successful runs over every path that prints to stderr."""
     square = geojson(tmp_path / "square.geojson", SQUARE)
-    corine = write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})])
+    corine = covered(write_geojson(tmp_path / "c.geojson", [Feat(1, FOREST, {"Code_18": "311"})]))
     source = whole(9, 13, array=terrain(9, 13))
     write_tiles(tmp_path / "tiles", quadrants(source, row_cut=4, col_cut=6, overlap=1))
     return {
@@ -392,15 +394,7 @@ def run_kinds(tmp_path: Path, holed: Path) -> dict[str, list[str]]:
         "tiles": ["--dem", str(tmp_path / "tiles"), "--tolerance", "1"],
         "features": [
             *("--dem", str(holed), "--domain", str(square), "--tolerance", "1"),
-            *(
-                "--land-cover-partial",
-                "--land-cover",
-                str(corine),
-                "--land-cover-classes",
-                "corine",
-                "--edges",
-                "all",
-            ),
+            *("--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all"),
         ],
         "reprojected": [
             *("--dem", str(VELHAS / "anadem_velhas.tif")),

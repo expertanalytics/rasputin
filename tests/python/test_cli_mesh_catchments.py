@@ -99,7 +99,7 @@ def scene(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Path]:
         "dem": dem,
         "domain": geojson(tmp_path / "domain.geojson", RING, crs=MESH_CRS),
         "units": write_units(tmp_path / "units.geojson", UNITS),
-        "cache": write_class_cache(tmp_path / "cache"),
+        "cache": write_class_cache(tmp_path / "cache", no_data=True),
     }  # fmt: skip
 
 

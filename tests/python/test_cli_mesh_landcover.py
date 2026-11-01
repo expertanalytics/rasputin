@@ -48,7 +48,7 @@ import numpy as np
 import pytest
 import shapely
 from numpy.testing import assert_array_equal
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, Polygon, box, mapping, shape
 from shapely.geometry.base import BaseGeometry
 
 import feature_fixtures as ff
@@ -104,6 +104,34 @@ FOREST = rect(30.3, -65.1, 170.2, -15.3)
 HOLED_FOREST = Polygon(FOREST.exterior, [LAKE.exterior])
 ROAD = LineString([rel(30.1, -40.3), rel(170.2, -40.3)])
 COVER = rect(-50.3, -150.1, 300.2, 50.4)
+#: Arable land: `covered`'s class over the rest of `COVER`'s box.
+ARABLE = "211"
+
+
+def covered(path: Path) -> Path:
+    """``path`` with arable land 211 over `COVER`'s box less its polygons, so
+    the land cover covers any domain inside the box
+    (`docs/increments/122-lakes-overrule.md`, section 7a: a coverage gap is
+    refused). Only a CORINE GeoJSON (every feature carries `Code_18`) is
+    rewritten, in place; the box is moved to the file's own `crs` member
+    first (none: EPSG:4326). Any other file comes back unchanged."""
+    if path.suffix != ".geojson":
+        return path
+    assert Path(__file__).parent not in path.resolve().parents, f"{path} is a committed file"
+    doc = json.loads(path.read_text())
+    features = doc.get("features", [])
+    if not features or not all("Code_18" in (f.get("properties") or {}) for f in features):
+        return path
+    crs = doc.get("crs", {}).get("properties", {}).get("name", "EPSG:4326")
+    given = shapely.union_all([shape(f["geometry"]) for f in features])
+    rest = ff.moved(COVER, ff.UTM33, crs).difference(given)
+    features.append(
+        {"type": "Feature", "geometry": mapping(rest), "properties": {"Code_18": ARABLE}}
+    )
+    path.write_text(json.dumps(doc))
+    return path
+
+
 #: The domain with a notch cut down from its north side, x 80 .. 120.
 NOTCHED: list[tuple[float, float]] = [
     rel(12.3, -73.3),

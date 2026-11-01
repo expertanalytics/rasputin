@@ -70,7 +70,12 @@ from cli_helpers import USAGE, runner, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import UTM33, Feat, write_geojson
 from fraction_fixtures import MESH_CRS, write_dem, write_domain
-from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson, write_cover_gpkg
+from test_cli_land_cover_polygons import (
+    cover_polygons,
+    partial_cover,
+    write_cover_geojson,
+    write_cover_gpkg,
+)
 from tin_engine.cells import overlay
 from tin_engine.cli import app
 from tin_engine.polygon_fractions import assign
@@ -391,7 +396,9 @@ def run(dem: Path, domain: Path, target: Path, *extra: str) -> tuple[int, str]:
 
 
 def bad_cover(path: Path) -> Path:
-    return write_cover_geojson(path, [*cover_polygons(), (311, SCENE_BOWTIE)])
+    """`partial_cover()` and the bow-tie: the refusal comes before the gap
+    check, and the bow-tie stays feature 4."""
+    return write_cover_geojson(path, [*partial_cover(), (311, SCENE_BOWTIE)])
 
 
 def good_cover(path: Path) -> Path:
@@ -399,7 +406,7 @@ def good_cover(path: Path) -> Path:
 
 
 def corine(path: Path) -> tuple[str, ...]:
-    return ("--land-cover-partial", "--land-cover", str(path), "--land-cover-classes", "corine")
+    return ("--land-cover", str(path), "--land-cover-classes", "corine")
 
 
 def refused(output: str, option: str, fid: int) -> str:
@@ -527,7 +534,7 @@ class TestTheSiblingNamed:
     @pytest.fixture
     def catalogue(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
         monkeypatch.delenv("RASPUTIN_DATA", raising=False)
-        bad = write_cover_gpkg(tmp_path / "bad.gpkg", [*cover_polygons(), (311, SCENE_BOWTIE)])
+        bad = write_cover_gpkg(tmp_path / "bad.gpkg", [*partial_cover(), (311, SCENE_BOWTIE)])
         good = write_cover_gpkg(tmp_path / "good.gpkg", cover_polygons())
         config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
 
