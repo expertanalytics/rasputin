@@ -2,7 +2,9 @@
 the rest from the base land cover.
 
 `docs/increments/107-prefer-classes.md`, section 2 (the rule) and section 5,
-cases 1 to 5 (synthetic squares, metres, one CRS), on `replace` with `near`
+cases 1 to 5, as `docs/increments/122-lakes-overrule.md` amends them (section
+3.1, tests 7 and 8: a refill takes only a non-water class, and an island is
+left out) (synthetic squares, metres, one CRS), on `replace` with `near`
 the square [0,100]² (or the part a case names). `overlay`, which also
 measured the areas inside a mesh's triangles, goes
 (`docs/increments/111-one-land-cover-map.md`, section 8), and with it the
@@ -38,10 +40,14 @@ import shapely
 from shapely.geometry import box
 from shapely.geometry.base import BaseGeometry
 
+from tin_engine import land_cover_classes
+
 #: On an area in m²: see the module docstring.
 M2 = 1e-6
 
 HEATH, CONIFER, RIVER, LAKE, GLACIER = 322, 312, 511, 512, 335
+#: `replace`'s ``water``: the class file's water classes (122, section 3.1).
+WATER = land_cover_classes.load("corine").water_codes
 
 
 @pytest.fixture
@@ -84,7 +90,7 @@ def test_case1_a_leftover_piece_takes_its_neighbours_class(preferred: ModuleType
     heath on three sides and becomes heath; heath totals 9,600 m². 400 given
     replaces the 400 m² lake."""
     base = heath_with(box(40, 40, 60, 60))
-    result = preferred.replace(base, [(LAKE, [box(30, 40, 50, 60)])], square())
+    result = preferred.replace(base, [(LAKE, [box(30, 40, 50, 60)])], square(), water=WATER)
     check(per_code(result.polygons), {LAKE: 400.0, HEATH: 9600.0})
     check_disjoint(result.polygons)
 
@@ -99,7 +105,7 @@ def test_case2_no_preferred_lake_the_longest_border_wins(preferred: ModuleType) 
         (CONIFER, box(50, 0, 100, 100).difference(lake)),
         (LAKE, lake),
     ]
-    result = preferred.replace(base, [(LAKE, [])], square())
+    result = preferred.replace(base, [(LAKE, [])], square(), water=WATER)
     check(per_code(result.polygons), {HEATH: 5000.0 - 120.0, CONIFER: 5000.0 - 200.0 + 320.0})
     check_disjoint(result.polygons)
 
@@ -113,7 +119,7 @@ def test_case2_a_tie_takes_the_lower_code(preferred: ModuleType) -> None:
         (CONIFER, box(50, 0, 100, 100).difference(lake)),
         (LAKE, lake),
     ]
-    result = preferred.replace(base, [(LAKE, [])], square())
+    result = preferred.replace(base, [(LAKE, [])], square(), water=WATER)
     check(per_code(result.polygons), {HEATH: 4800.0, CONIFER: 5200.0})
 
 
@@ -127,7 +133,7 @@ def test_case2_each_connected_piece_takes_its_own_class(preferred: ModuleType) -
         (CONIFER, box(50, 0, 100, 100).difference(lake)),
         (LAKE, lake),
     ]
-    result = preferred.replace(base, [(LAKE, [box(45, 40, 55, 60)])], square())
+    result = preferred.replace(base, [(LAKE, [box(45, 40, 55, 60)])], square(), water=WATER)
     check(per_code(result.polygons), {HEATH: 4900.0, CONIFER: 4900.0, LAKE: 200.0})
     check_disjoint(result.polygons)
 
@@ -143,7 +149,7 @@ def test_case3_the_first_preferred_source_wins_an_overlap(
     """Preferred lake [0,20]², glacier [10,30]², over heath."""
     sources = {LAKE: [box(0, 0, 20, 20)], GLACIER: [box(10, 10, 30, 30)]}
     chosen = [(code, sources[code]) for code in order]
-    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square())
+    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square(), water=WATER)
     check(per_code(result.polygons), {LAKE: lake, GLACIER: glacier, HEATH: 9300.0})
     check_disjoint(result.polygons)
 
@@ -151,7 +157,7 @@ def test_case3_the_first_preferred_source_wins_an_overlap(
 def test_case3_the_same_code_twice_unions_the_sources(preferred: ModuleType) -> None:
     """Two lake sources, [0,20]² and [10,30]²: one lake of 700 m²."""
     chosen = [(LAKE, [box(0, 0, 20, 20)]), (LAKE, [box(10, 10, 30, 30)])]
-    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square())
+    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square(), water=WATER)
     check(per_code(result.polygons), {LAKE: 700.0, HEATH: 9300.0})
     check_disjoint(result.polygons)
 
@@ -161,38 +167,81 @@ def test_case4_other_water_classes_stay_the_bases(preferred: ModuleType) -> None
     lake [40,60]²: lake 400, river 800, heath 8,800; nothing replaced."""
     river = box(0, 45, 100, 55)
     base = heath_with(river, RIVER)
-    result = preferred.replace(base, [(LAKE, [box(40, 40, 60, 60)])], square())
+    result = preferred.replace(base, [(LAKE, [box(40, 40, 60, 60)])], square(), water=WATER)
     check(per_code(result.polygons), {LAKE: 400.0, RIVER: 800.0, HEATH: 8800.0})
     check_disjoint(result.polygons)
 
 
-def test_case5_a_piece_in_a_preferred_hole_takes_the_nearest_kept_class(
-    preferred: ModuleType,
-) -> None:
-    """Lake [40,60]² in the base; preferred lake the ring [30,70]² less
-    [45,55]²: the 100 m² piece [45,55]², in the ring's hole (an island),
-    borders only the preferred lake, so it takes the class of the nearest
-    kept polygon (heath), and the polygons cover the square once (Bygdin's
-    islands, 2026-10-29)."""
+def test_8_an_island_in_a_preferred_hole_is_left_out(preferred: ModuleType) -> None:
+    """122's test 8 (107's case 5 amended): lake [40,60]² in the base;
+    preferred lake the ring [30,70]² less [45,55]²: the 100 m² piece
+    [45,55]², in the ring's hole (an island), borders only the preferred lake,
+    so it is left out of the map (the mesh fill gives it its class, marked):
+    heath 8,400 m², lake 1,500, the island uncovered (before: heath 8,500)."""
     ring = box(30, 30, 70, 70).difference(box(45, 45, 55, 55))
     base = heath_with(box(40, 40, 60, 60))
-    result = preferred.replace(base, [(LAKE, [ring])], square())
-    check(per_code(result.polygons), {LAKE: 1500.0, HEATH: 8500.0})
+    result = preferred.replace(base, [(LAKE, [ring])], square(), water=WATER)
+    check(per_code(result.polygons), {LAKE: 1500.0, HEATH: 8400.0})
     check_disjoint(result.polygons)
     covered = shapely.union_all([g for _, g in result.polygons])
-    assert covered.area == pytest.approx(10000.0, abs=M2)
+    assert covered.area == pytest.approx(9900.0, abs=M2)
+    assert covered.intersection(box(45, 45, 55, 55)).area == pytest.approx(0.0, abs=M2)
+    assert not result.refilled, result.refilled
 
 
-def test_case5_an_island_takes_the_nearer_of_two_classes(preferred: ModuleType) -> None:
+def test_8_an_island_near_two_classes_is_left_out_too(preferred: ModuleType) -> None:
     """Heath west of x = 50, conifer east; lake [20,80]²; preferred lake
-    [22,80] x [20,80] less the island [26,36] x [40,50]: the island is 6 m
-    from heath across the lake and 44 m from conifer, so it is heath."""
+    [22,80] x [20,80] less the island [26,36] x [40,50]: the island borders
+    no kept polygon, so it is left out whatever lies near (before: heath, the
+    nearer); which class it takes is the mesh fill's (test 1)."""
     west, east, water = box(0, 0, 50, 100), box(50, 0, 100, 100), box(20, 20, 80, 80)
     base = [(HEATH, west.difference(water)), (CONIFER, east.difference(water)), (LAKE, water)]
     island = box(26, 40, 36, 50)
-    result = preferred.replace(base, [(LAKE, [box(22, 20, 80, 80).difference(island)])], square())
-    (got,) = [n for _, p, n in result.refilled if p.equals(island)]
-    assert got == HEATH
+    chosen = [(LAKE, [box(22, 20, 80, 80).difference(island)])]
+    result = preferred.replace(base, chosen, square(), water=WATER)
+    assert not [n for _, p, n in result.refilled if p.intersects(island.buffer(-1))]
+    covered = shapely.union_all([g for _, g in result.polygons])
+    assert covered.intersection(island).area == pytest.approx(0.0, abs=M2)
+
+
+def test_7_a_water_neighbour_is_passed_over(preferred: ModuleType) -> None:
+    """122's test 7: heath on [0,100]² less lake 512 [20,80]² and river 511
+    [80,90] x [10,90]; NVE lake [20,78] x [20,80]. The piece [78,80] x
+    [20,80] (120 m²) shares 60 m with the river and 4 m with heath: today it
+    takes 511, after it takes 322, as a refill never invents water."""
+    lake, river = box(20, 20, 80, 80), box(80, 10, 90, 90)
+    base = [(HEATH, box(0, 0, 100, 100).difference(lake).difference(river)), (LAKE, lake),
+            (RIVER, river)]  # fmt: skip
+    result = preferred.replace(base, [(LAKE, [box(20, 20, 78, 80)])], square(), water=WATER)
+    (piece,) = [(p, n) for _, p, n in result.refilled]
+    assert piece[0].equals(box(78, 20, 80, 80)), piece[0].wkt
+    assert piece[1] == HEATH
+    heath = 10000.0 - 3600.0 - 800.0 + 120.0
+    check(per_code(result.polygons), {HEATH: heath, LAKE: 3480.0, RIVER: 800.0})
+    check_disjoint(result.polygons)
+
+
+def test_7_a_piece_with_only_water_neighbours_is_left_out(preferred: ModuleType) -> None:
+    """Lake [40,60]² and a river strip [60,70] x [40,60] east of it, nothing
+    else; preferred lake [40,50] x [40,60]. The leftover [50,60] x [40,60]
+    borders the river only: left out (section 3.1), not river."""
+    lake, river = box(40, 40, 60, 60), box(60, 40, 70, 60)
+    base = [(LAKE, lake), (RIVER, river)]
+    result = preferred.replace(base, [(LAKE, [box(40, 40, 50, 60)])], square(), water=WATER)
+    assert not result.refilled, result.refilled
+    check(per_code(result.polygons), {LAKE: 200.0, RIVER: 200.0})
+
+
+def test_7_a_glacier_key_never_refills_with_water(preferred: ModuleType) -> None:
+    """Section 3.1, one rule for every key: glacier 335 [40,60]² beside a lake
+    [60,80] x [40,60] (40 m shared) and heath (60 m); the preferred glacier
+    [40,55] x [40,60] leaves [55,60] x [40,60], which shares 20 m with the
+    lake and 10 m with heath: heath."""
+    glacier, lake = box(40, 40, 60, 60), box(60, 40, 80, 60)
+    base = [(HEATH, box(0, 0, 100, 100).difference(glacier).difference(lake)),
+            (GLACIER, glacier), (LAKE, lake)]  # fmt: skip
+    result = preferred.replace(base, [(GLACIER, [box(40, 40, 55, 60)])], square(), water=WATER)
+    assert [n for _, _, n in result.refilled] == [HEATH]
 
 
 def test_case5_a_piece_outside_every_preferred_polygon_is_left_out(
@@ -202,7 +251,7 @@ def test_case5_a_piece_outside_every_preferred_polygon_is_left_out(
     [40,60]: the piece [50,60] x [40,60] borders no kept polygon and lies in
     no hole, so no polygon covers it (class 0)."""
     base = [(LAKE, box(40, 40, 60, 60))]
-    result = preferred.replace(base, [(LAKE, [box(30, 40, 50, 60)])], square())
+    result = preferred.replace(base, [(LAKE, [box(30, 40, 50, 60)])], square(), water=WATER)
     check(per_code(result.polygons), {LAKE: 400.0})
     covered = shapely.union_all([g for _, g in result.polygons])
     assert covered.intersection(box(50, 40, 60, 60)).area == pytest.approx(0.0, abs=M2)
@@ -214,7 +263,7 @@ def test_a_preferred_polygon_off_the_mesh_is_dropped_one_across_its_edge_kept_wh
     """Lake [200,220]² meets not the square: not returned. Lake [90,110] x
     [40,60] crosses the square's east side: returned whole (400 m²)."""
     chosen = [(LAKE, [box(200, 200, 220, 220), box(90, 40, 110, 60)])]
-    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square())
+    result = preferred.replace([(HEATH, box(0, 0, 100, 100))], chosen, square(), water=WATER)
     check(per_code(result.polygons), {LAKE: 400.0, HEATH: 9800.0})
 
 
@@ -223,7 +272,7 @@ def test_replace_gives_kept_then_given_then_refilled(preferred: ModuleType) -> N
     preferred lake, the refilled piece [50,60] x [40,60] as heath."""
     base = heath_with(box(40, 40, 60, 60))
     chosen = [(LAKE, [box(30, 40, 50, 60)])]
-    replaced = preferred.replace(base, chosen, near=square())
+    replaced = preferred.replace(base, chosen, near=square(), water=WATER)
     assert [c for c, _ in replaced.polygons] == [HEATH, LAKE, HEATH]
     lake = box(30, 40, 50, 60)
     want = [box(0, 0, 100, 100).difference(box(40, 40, 60, 60)).difference(lake), lake,

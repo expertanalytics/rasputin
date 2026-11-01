@@ -55,7 +55,13 @@ import feature_fixtures as ff
 from cli_helpers import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
 from feature_fixtures import Feat, domain_of, write_geojson
 from geotiff_fixtures import TIE_X, TIE_Y
-from landcover_fixtures import MARGIN, landcover_oracle, spread_violations, vtk_labels
+from landcover_fixtures import (
+    MARGIN,
+    filled_where_no_polygon,
+    landcover_oracle,
+    spread_violations,
+    vtk_labels,
+)
 from legend_snapshot import CORINE_NATURAL
 from plyread import read_ply
 from tin_engine.cli import app
@@ -179,7 +185,15 @@ def polygons_of(features: list[Feat]) -> list[tuple[BaseGeometry, int]]:
 
 def corine_args(path: Path) -> tuple[str, ...]:
     """``path`` as `--land-cover` with `corine`, every border chosen."""
-    return ("--land-cover", str(path), "--land-cover-classes", "corine", "--edges", "all")
+    return (
+        "--land-cover-partial",
+        "--land-cover",
+        str(path),
+        "--land-cover-classes",
+        "corine",
+        "--edges",
+        "all",
+    )
 
 
 def mesh_corine(
@@ -213,7 +227,8 @@ class TestFixtures:
         got = mesh_corine(tmp_path, bumpy, [coded(1, WEST, "311"), coded(2, EAST, "512")])
         assert set(got.codes[got.inside(WEST)].tolist()) == {311}
         assert set(got.codes[got.inside(EAST)].tolist()) == {512}
-        assert set(got.codes[~got.inside(WEST.union(EAST))].tolist()) == {0}
+        # 122: the rest, in no polygon, takes the nearest non-water class.
+        assert set(got.codes[~got.inside(WEST.union(EAST))].tolist()) == {311}
         # The triangles along the shared side carry both codes.
         seam = LineString([rel(100.7, -55.1), rel(100.7, -25.3)])
         cells = shapely.polygons(got.points[got.triangles][:, :, :2])
@@ -225,7 +240,9 @@ class TestFixtures:
     def test_a_forest_with_an_empty_hole(self, tmp_path: Path, bumpy: Path) -> None:
         got = mesh_corine(tmp_path, bumpy, [coded("f", HOLED_FOREST, "312")])
         assert got.inside(LAKE).any()
-        assert set(got.codes[got.inside(LAKE)].tolist()) == {0}
+        # 122: the empty hole takes the forest's class from the fill, marked;
+        # its border is still a line (I1 and I3 above).
+        assert set(got.codes[got.inside(LAKE)].tolist()) == {312}
         assert set(got.codes[got.inside(HOLED_FOREST)].tolist()) == {312}
 
     def test_a_lake_in_the_hole_of_a_holed_forest(self, tmp_path: Path, bumpy: Path) -> None:
@@ -438,7 +455,7 @@ class TestPly:
         assert code == 0, output
         header, data = read_ply(target.read_bytes())
         face = header.element("face")
-        assert [p.name for p in face.properties] == ["vertex_indices", "land_cover_code"]
+        assert [p.name for p in face.properties][:2] == ["vertex_indices", "land_cover_code"]
         assert face.properties[1].type_name == "int"
         texts = [c for c in header.comments if c.startswith("land_cover_codes ")]
         assert len(texts) == 1 and CODES_SYSTEM in texts[0], header.comments
@@ -455,7 +472,11 @@ class TestPly:
         lines = np.column_stack([edge_data["edge"]["vertex1"], edge_data["edge"]["vertex2"]])
         assert spread_violations(triangles, lines, codes) == []
         oracle = landcover_oracle(points, triangles, [(WEST, 311), (EAST, 512)], MARGIN)
-        assert oracle.mismatches(codes) == []
+        # 122: a face property `uchar land_cover_filled` after `land_cover_code`.
+        assert [p.name for p in face.properties][2:] == ["land_cover_filled"]
+        assert face.properties[2].type_name == "uchar"
+        filled = np.asarray(data["face"]["land_cover_filled"])
+        filled_where_no_polygon(oracle, codes, filled, [(WEST, 311), (EAST, 512)])
         assert {311, 512} <= set(codes.tolist())
 
 

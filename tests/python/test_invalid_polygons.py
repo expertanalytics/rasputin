@@ -399,7 +399,7 @@ def good_cover(path: Path) -> Path:
 
 
 def corine(path: Path) -> tuple[str, ...]:
-    return ("--land-cover", str(path), "--land-cover-classes", "corine")
+    return ("--land-cover-partial", "--land-cover", str(path), "--land-cover-classes", "corine")
 
 
 def refused(output: str, option: str, fid: int) -> str:

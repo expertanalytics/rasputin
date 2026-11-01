@@ -93,7 +93,15 @@ def corine(tmp_path: Path) -> Path:
 
 def cover(path: Path, classes: str = "corine") -> tuple[str, ...]:
     """``path`` as the land cover under ``classes``, every class's borders chosen."""
-    return ("--land-cover", str(path), "--land-cover-classes", classes, "--edges", "all")
+    return (
+        "--land-cover-partial",
+        "--land-cover",
+        str(path),
+        "--land-cover-classes",
+        classes,
+        "--edges",
+        "all",
+    )
 
 
 def recorded(record: dict[str, Any]) -> tuple[float, float, float]:
@@ -374,7 +382,15 @@ class TestMapBiomasThroughTheCli:
         code, said = invoke(
             "mesh",
             *("--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3"),
-            *("--cache", str(scene["cache"]), "--land-cover", key, "--out", str(target)),
+            *(
+                "--cache",
+                str(scene["cache"]),
+                "--land-cover-partial",
+                "--land-cover",
+                key,
+                "--out",
+                str(target),
+            ),
         )
         output = basenames(said)
         assert code == 0, output
@@ -456,7 +472,15 @@ class TestTheNamesInTheRecord:
             tmp_path,
             bumpy,
             square,
-            *("--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "water"),
+            *(
+                "--land-cover-partial",
+                "--land-cover",
+                str(corine),
+                "--land-cover-classes",
+                "corine",
+                "--edges",
+                "water",
+            ),
         )
         assert ", classes corine: " in record["edges"], record["edges"]
         assert ", legend corine; " in record["land_cover_codes"], record["land_cover_codes"]

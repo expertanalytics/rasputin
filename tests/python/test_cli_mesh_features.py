@@ -151,7 +151,7 @@ def gallery_args(where: Path, crs: str | None = None) -> tuple[str, ...]:
     cover, lines = gallery_files(where, crs)
     keyed = [a for key, path in lines.items() for a in ("--lines", f"{key}={path}")]
     return (
-        *("--land-cover", str(cover), "--land-cover-classes", "corine"),
+        *("--land-cover-partial", "--land-cover", str(cover), "--land-cover-classes", "corine"),
         *keyed,
         *("--edges", "all", "--edges-max-shift", "0"),
     )
@@ -168,7 +168,16 @@ def gallery(tmp_path: Path) -> tuple[str, ...]:
 
 def cover_args(path: Path, classes: str = "corine", *more: str) -> tuple[str, ...]:
     """One land-cover file with ``classes`` and `--edges all`."""
-    return ("--land-cover", str(path), "--land-cover-classes", classes, *more, "--edges", "all")
+    return (
+        "--land-cover-partial",
+        "--land-cover",
+        str(path),
+        "--land-cover-classes",
+        classes,
+        *more,
+        "--edges",
+        "all",
+    )
 
 
 def mesh(

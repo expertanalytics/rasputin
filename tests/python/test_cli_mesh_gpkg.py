@@ -160,7 +160,15 @@ def f3(tmp_path: Path, bumpy: Path) -> Written:
     corine = write_geojson(tmp_path / "corine.geojson", features)
     domain = geojson(tmp_path / "square.geojson", SQUARE)
     args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-    args += ("--land-cover", str(corine), "--land-cover-classes", "corine", "--edges", "all")
+    args += (
+        "--land-cover-partial",
+        "--land-cover",
+        str(corine),
+        "--land-cover-classes",
+        "corine",
+        "--edges",
+        "all",
+    )
     return mesh_pair(tmp_path, "cover", *args)
 
 
@@ -384,7 +392,8 @@ class TestLandCoverClasses:
         by_code = opened3.execute(
             "SELECT code, count(*), sum(area_m2) FROM triangles GROUP BY code ORDER BY code"
         ).fetchall()
-        assert [c[0] for c in classes] == [b[0] for b in by_code] == [0, 311, 512]
+        # 122: no triangle keeps code 0; the uncovered rest is filled.
+        assert [c[0] for c in classes] == [b[0] for b in by_code] == [311, 512]
         for (code, name, colour, count, area), (_, n, total) in zip(classes, by_code, strict=True):
             assert (name, colour) == CORINE_NATURAL[code]
             assert count == n
@@ -411,7 +420,7 @@ class TestLandCover:
 
     def test_codes_names_and_colours_follow_the_palette(self, opened3: sqlite3.Connection) -> None:
         rows = opened3.execute("SELECT code, land_cover, colour FROM triangles").fetchall()
-        assert {r[0] for r in rows} == {0, 311, 512}
+        assert {r[0] for r in rows} == {311, 512}  # 122: no code 0
         for code, name, colour in rows:
             assert (name, colour) == CORINE_NATURAL[code]
 
@@ -466,36 +475,37 @@ class TestLandCover:
         assert not tables(opened) & {"land_cover", "land_cover_classes", "layer_styles"}
         assert column(opened, "triangles", "code").tolist() == [None] * 69_571
 
-    def test_a_coded_run_with_no_polygon_in_the_domain_writes_without_a_land_cover_layer(
+    def test_a_coded_run_with_no_polygon_in_the_domain_is_refused(
         self, tmp_path: Path, bumpy: Path
     ) -> None:
         """A land cover whose only polygon lies outside the domain, with a
-        road as `--lines`, leaves no polygon to write: the run succeeds as the
-        `.vtk` run does, `land_cover` is absent (nothing to draw), while
-        `land_cover_classes` and the codes on `triangles` are still written,
-        every triangle in no polygon (code 0). (Was a coded source whose only
-        feature was a line; lines go to `--lines`, increment 111.)"""
+        road as `--lines`: since `docs/increments/122-lakes-overrule.md` the
+        whole domain is a gap, and with `--land-cover-partial` no triangle has
+        a class to fill from (section 3.2, step 2): exit 2 naming
+        `--land-cover`, nothing written, in both formats. (Before 122 it wrote
+        every triangle code 0 and no `land_cover` layer.)"""
         road = shapely.LineString([(TIE_X + 30.1, TIE_Y - 40.3), (TIE_X + 170.2, TIE_Y - 40.3)])
         far = shapely.box(TIE_X + 900.3, TIE_Y - 950.1, TIE_X + 950.7, TIE_Y - 900.2)
         corine = write_geojson(tmp_path / "far.geojson", [Feat("f", far, {"Code_18": "311"})])
         roads = write_geojson(tmp_path / "road.geojson", [Feat("r", road, {})])
         domain = geojson(tmp_path / "square.geojson", SQUARE)
         args = ("--dem", str(bumpy), "--domain", str(domain), "--tolerance", "1")
-        args += ("--land-cover", str(corine), "--land-cover-classes", "corine")
+        args += (
+            "--land-cover-partial",
+            "--land-cover",
+            str(corine),
+            "--land-cover-classes",
+            "corine",
+        )
         args += ("--lines", f"road={roads}", "--edges", "all")
-        written = mesh_pair(tmp_path, "road", *args)
-        with closing(sqlite3.connect(written.gpkg)) as con:
-            assert "land_cover" not in tables(con)
-            assert "land_cover" not in registered(con)
-            codes = column(con, "triangles", "code")
-            assert codes.tolist() == [0] * len(written.triangles)
-            assert_array_equal(
-                codes, written.vtk.cell_array("land_cover_code").values[len(written.edges) :]
-            )
-            classes = con.execute(
-                "SELECT code, land_cover, colour, triangles FROM land_cover_classes"
-            ).fetchall()
-            assert classes == [(0, *CORINE_NATURAL[0], len(written.triangles))]
+        for suffix in (".gpkg", ".vtk"):
+            target = tmp_path / f"road{suffix}"
+            code, output = invoke("mesh", *args, "--out", str(target))
+            assert code == USAGE, output
+            flat = "".join(output.split())
+            assert "Invalidvaluefor--land-cover" in flat, output
+            assert "socode0cannotbefilled;itdoesnotcoverthedomain" in flat, output
+            assert not target.exists()
 
 
 # --------------------------------------------------------------- T6: lines (F3)

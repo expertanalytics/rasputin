@@ -312,3 +312,30 @@ def same_rows(got: Iterable[Row], want: Iterable[Row], tolerance: float) -> list
             if abs(g[k] - w[k]) > tolerance:
                 findings.append(f"triangle {t}, class {k}: {g[k]!r} against {w[k]!r}")
     return findings[:20]
+
+
+def zero_merged(
+    got: Iterable[Row], want: Iterable[Row], tolerance: float, water: frozenset[int] = frozenset()
+) -> list[str]:
+    """Where `got` is not `want` with its class-0 share merged
+    (`docs/increments/122-lakes-overrule.md`, section 3.3): no row of `got`
+    holds class 0; a row of `want` with a 0 share over `tolerance` has it
+    joined to exactly one class (one already in the row or a new one), every
+    other class as `want`, and the class it joins not in `water`; a row
+    without one is `want`. The first twenty findings, as text."""
+    findings: list[str] = []
+    for t, (g, w) in enumerate(zip(got, want, strict=True)):
+        if 0 in g:
+            findings.append(f"triangle {t}: keeps class 0 ({g[0]!r})")
+            continue
+        zero = w.get(0, 0.0)
+        rest = {k: v for k, v in w.items() if k != 0}
+        moved = {k: g.get(k, 0.0) - rest.get(k, 0.0) for k in set(g) | set(rest)}
+        off = sorted(k for k, d in moved.items() if abs(d) > tolerance)
+        if zero <= tolerance:
+            ok = not off
+        else:
+            ok = len(off) == 1 and abs(moved[off[0]] - zero) <= tolerance and off[0] not in water
+        if not ok:
+            findings.append(f"triangle {t}: {g} against {w} with its 0 share merged")
+    return findings[:20]

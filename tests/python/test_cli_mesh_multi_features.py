@@ -92,7 +92,7 @@ def parcel_src(tmp_path: Path) -> Path:
 def land_cover(*paths: Path, classes: str = "corine") -> list[str]:
     """Each of ``paths`` as a `--land-cover` file, under one class file."""
     given = [a for path in paths for a in ("--land-cover", str(path))]
-    return [*given, "--land-cover-classes", classes]
+    return [*given, "--land-cover-classes", classes, "--land-cover-partial"]
 
 
 def with_wall(cover: Path, wall: Path) -> list[str]:

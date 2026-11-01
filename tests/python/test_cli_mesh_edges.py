@@ -76,6 +76,7 @@ from cli_helpers import USAGE, invoke, runner, squashed
 from dataset_fixtures import write_sources
 from feature_fixtures import Feat, write_geojson
 from fraction_fixtures import MESH_CRS, dem_origin, domain_ring, dominant
+from landcover_fixtures import CORINE_WATER
 from legend_fixtures import basenames, coded_map, write
 from test_cli_land_cover_polygons import cover_polygons, write_cover_geojson, write_cover_gpkg
 from test_cli_mesh_cache import no_network
@@ -109,11 +110,13 @@ SHARE = 1e-6
 AS_READ = ("--edges-repair", "0", "--edges-max-shift", "0", "--edges-outline-snap", "0")
 #: Arable land: a class `--prefer lake=` does not replace, and no water class.
 ARABLE = 211
+#: CORINE's water classes: the fill never gives one while forest is near (122).
+WATER = CORINE_WATER
 
 
 def classes(*files: Path | str) -> tuple[str, ...]:
     given = [a for f in files for a in ("--land-cover", str(f))]
-    return (*given, "--land-cover-classes", "corine")
+    return (*given, "--land-cover-classes", "corine", "--land-cover-partial")
 
 
 def edges(*selectors: str) -> tuple[str, ...]:
@@ -180,11 +183,18 @@ def run_gpkg(scene: dict[str, Path], target: Path, *args: str) -> sqlite3.Connec
 
 def check_case7_shares(conn: sqlite3.Connection) -> None:
     """Case 7's oracle: the lake share is the preferred lake's, the forest
-    share the forest less the lake, per triangle as written."""
-    assert_allclose(column(conn, "cells", "lake"), share(conn, preferred_lake()), atol=SHARE)
+    share the forest less the lake, per triangle as written; since
+    `docs/increments/122-lakes-overrule.md` (section 3.3) every 0 share (the
+    left-out water and the scene's gap) joins a non-water class, and the
+    scene's only ones are forest, so the forest share is the rest."""
+    lake = share(conn, preferred_lake())
+    assert_allclose(column(conn, "cells", "lake"), lake, atol=SHARE)
     forest = shapely.union_all([g for c, g in cover_polygons() if c in (311, 312)])
-    expected = share(conn, forest.difference(preferred_lake()))
-    assert_allclose(column(conn, "cells", "forest"), expected, atol=SHARE)
+    assert (
+        column(conn, "cells", "forest") >= share(conn, forest.difference(preferred_lake())) - SHARE
+    ).all()
+    assert_allclose(column(conn, "cells", "forest"), 1.0 - lake, atol=SHARE)
+    assert_allclose(column(conn, "cells", "unspecified"), 0.0, atol=SHARE)
     check_sums(conn)
 
 
@@ -360,7 +370,14 @@ def test_5_an_area_selector_without_class_polygons_is_refused(
 def test_5_an_area_selector_over_a_class_raster_is_refused(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
-    args = ("--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11", *edges("forest"))
+    args = (
+        "--land-cover-partial",
+        "--land-cover",
+        KEY,
+        "--land-cover-classes",
+        "mapbiomas-c11",
+        *edges("forest"),
+    )
     flat = refused(scene, tmp_path, *args)
     assert "--edges" in flat, flat
 
@@ -436,7 +453,14 @@ def test_5_a_sources_file_with_a_rules_key_is_refused(
     gpkg = write_cover_gpkg(tmp_path / "cover.gpkg", cover_polygons())
     config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
     write_sources(config, {"cover-test": vector_entry(gpkg, "Test cover", rules="corine")})
-    code, output = mesh(scene, tmp_path / "x.gpkg", "--land-cover", "cover-test", *edges("all"))
+    code, output = mesh(
+        scene,
+        tmp_path / "x.gpkg",
+        "--land-cover-partial",
+        "--land-cover",
+        "cover-test",
+        *edges("all"),
+    )
     assert code != 0, output
     assert "rules" in output and "cover-test" in output, output
     assert RENAME_TO_CLASSES.search(output), output
@@ -449,7 +473,14 @@ def test_5_a_catalogue_entry_and_classes_that_differ_are_refused(
     gpkg = write_cover_gpkg(tmp_path / "cover.gpkg", cover_polygons())
     config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
     write_sources(config, {"cover-test": vector_entry(gpkg, "Test cover", classes="corine")})
-    args = ("--land-cover", "cover-test", "--land-cover-classes", "ar50", *edges("all"))
+    args = (
+        "--land-cover-partial",
+        "--land-cover",
+        "cover-test",
+        "--land-cover-classes",
+        "ar50",
+        *edges("all"),
+    )
     flat = refused(scene, tmp_path, *args)
     assert "--land-cover" in flat, flat
 
@@ -585,6 +616,20 @@ def codes_of(conn: sqlite3.Connection) -> np.ndarray:
     return np.array([r[0] for r in rows], dtype="<i4")
 
 
+def as_today(codes: np.ndarray, marks: np.ndarray, water: frozenset[int] = WATER) -> np.ndarray:
+    """`docs/increments/122-lakes-overrule.md`: master's codes wherever
+    master's code is not 0; a marked triangle (filled, never 0 and here never
+    water) goes back to 0, so the codes compare with today's."""
+    assert not (codes == 0).any(), "a triangle kept code 0"
+    assert not np.isin(codes[marks == 1], list(water)).any(), "the fill gave water"
+    return np.where(marks == 1, 0, codes).astype(codes.dtype)
+
+
+def marks_of(conn: sqlite3.Connection) -> np.ndarray:
+    rows = conn.execute("SELECT land_cover_filled FROM triangles ORDER BY fid").fetchall()
+    return np.array([r[0] for r in rows], dtype="<i4")
+
+
 def test_9_land_cover_alone_writes_the_shares(
     scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path, phases: list[str]
 ) -> None:
@@ -601,12 +646,13 @@ def test_9_class_borders_alone_give_todays_codes_and_no_shares(
     args = (*classes(cover), *edges("all"), *AS_READ, "--stats", str(stats))
     with closing(run_gpkg(scene, tmp_path / "x.gpkg", *args)) as conn:
         assert not has_shares(conn)
-        codes = codes_of(conn)
+        codes, marks = codes_of(conn), marks_of(conn)
         texts = [str(v) for (v,) in conn.execute("SELECT value FROM run").fetchall()]
     assert any("not computed" in t and "add --shares" in t for t in texts), texts
     assert "land cover fractions" not in phases, phases
     report = stats.read_text(encoding="utf-8")
     assert "| edges |" in report and "land cover fractions" not in report, report
+    codes = as_today(codes, marks)
     found, counts = np.unique(codes, return_counts=True)
     assert dict(zip(found.tolist(), counts.tolist(), strict=True)) == TODAYS_CODES
     assert hashlib.sha256(codes.tobytes()).hexdigest() == TODAYS_DIGEST
@@ -1052,8 +1098,12 @@ def pieces_of(tmp_path: Path) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     for f in sorted(directory.glob("*.vtk")):
         vtk = read_vtk(f.read_bytes())
         codes = np.asarray(vtk.cell_array("land_cover_code").values).astype(int)
+        marks = np.asarray(vtk.cell_array("land_cover_filled").values).astype(int)
         corners = np.array([np.asarray(vtk.points)[c] for c in vtk.polygons])
-        out[f.stem] = (corners, codes[len(vtk.lines) :])
+        # 122: each piece is filled on its own; its codes as today's, the
+        # filled triangles back to 0 (`as_today`).
+        lines = len(vtk.lines)
+        out[f.stem] = (corners, as_today(codes[lines:], marks[lines:]))
     return out
 
 

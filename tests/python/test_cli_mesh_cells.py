@@ -43,9 +43,13 @@ from vtkread import read_vtk
 
 #: Section 3: at most 44 classes of float32 rounding (6e-8 each) per row.
 FIVE_SUM = 3e-6
-#: Measured at `074e6322` (section 6, T5).
-TRIANGLES, ENTRIES, AREA_M2 = 1590, 1825, 4_490_161
-SCENE_CLASSES = {0, 9, 15, 21, 25, 30, 41, 75}
+#: Measured at `074e6322` (section 6, T5). ENTRIES since
+#: `docs/increments/122-lakes-overrule.md`: the no-data share (class 0) of
+#: each triangle merged into one class (section 3.3, with
+#: `--land-cover-partial`), 1,825 rows before; measured on a scratch
+#: prototype of sections 3.2 and 3.3, for `@architect` to confirm.
+TRIANGLES, ENTRIES, AREA_M2 = 1590, 1793, 4_490_161
+SCENE_CLASSES = {9, 15, 21, 25, 30, 41, 75}
 SHARES = ("glacier", "lake", "reservoir", "forest", "unspecified")
 
 
@@ -110,7 +114,13 @@ def check_sums(conn: sqlite3.Connection) -> None:
 @pytest.fixture
 def mapbiomas(scene: dict[str, Path], tmp_path: Path) -> Any:
     conn = written(
-        scene, tmp_path / "x.gpkg", "--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11"
+        scene,
+        tmp_path / "x.gpkg",
+        "--land-cover-partial",
+        "--land-cover",
+        KEY,
+        "--land-cover-classes",
+        "mapbiomas-c11",
     )
     yield conn
     conn.close()
@@ -161,7 +171,9 @@ def test_t5_shares_from_the_long_form_table(mapbiomas: sqlite3.Connection) -> No
 def test_t5_without_a_class_file_only_the_fractions_table(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
-    with closing(written(scene, tmp_path / "x.gpkg", "--land-cover", KEY)) as conn:
+    with closing(
+        written(scene, tmp_path / "x.gpkg", "--land-cover-partial", "--land-cover", KEY)
+    ) as conn:
         tables = {r[0] for r in conn.execute("SELECT table_name FROM gpkg_contents")}
         assert "cells" not in tables and "land_cover_fractions" in tables, tables
         assert conn.execute("SELECT count(*) FROM land_cover_fractions").fetchone() == (ENTRIES,)
@@ -198,7 +210,15 @@ def test_t5_the_same_legend_writes_a_vtk(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
     target = tmp_path / "x.vtk"
-    code, output = mesh(scene, target, "--land-cover", KEY, "--land-cover-classes", str(lake))
+    code, output = mesh(
+        scene,
+        target,
+        "--land-cover-partial",
+        "--land-cover",
+        KEY,
+        "--land-cover-classes",
+        str(lake),
+    )
     assert code == 0, squashed(output)
     names = set(read_vtk(target.read_bytes()).field_data)
     assert {"land_cover_offsets", "land_cover_classes", "land_cover_fractions"} <= names
@@ -212,7 +232,15 @@ def test_t5_polygon_route_writes_cells(scene: dict[str, Path], tmp_path: Path) -
     cover = write_cover_geojson(tmp_path / "cover.geojson", cover_polygons())
     target = tmp_path / "p.gpkg"
     with closing(
-        written(scene, target, "--land-cover", str(cover), "--land-cover-classes", "corine")
+        written(
+            scene,
+            target,
+            "--land-cover-partial",
+            "--land-cover",
+            str(cover),
+            "--land-cover-classes",
+            "corine",
+        )
     ) as conn:
         assert_allclose(column(conn, "cells", "forest"), shares_of(conn, {311, 312}), atol=1e-12)
         assert_allclose(column(conn, "cells", "lake"), shares_of(conn, {512}), atol=1e-12)

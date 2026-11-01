@@ -110,7 +110,14 @@ def cover(tmp_path: Path) -> Path:
 
 def args(cover: Path) -> tuple[str, ...]:
     """The land cover and its legend, then `--reservoirs` awaiting its value."""
-    return ("--land-cover", str(cover), "--land-cover-classes", "corine", "--reservoirs")
+    return (
+        "--land-cover-partial",
+        "--land-cover",
+        str(cover),
+        "--land-cover-classes",
+        "corine",
+        "--reservoirs",
+    )
 
 
 def area_weighted(conn: sqlite3.Connection, name: str) -> float:

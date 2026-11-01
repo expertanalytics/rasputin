@@ -15,7 +15,13 @@ smaller code; Default D2).
   vectorised, with 0 for a centre in no polygon.
 - `spread_violations`: I1. Every interior edge that is not a constraint edge
   has the same code on both sides. Arrays only, no geometry.
-- `vtk_labels`: I3, I1 and I2 on one `.vtk` file, for the CLI suites.
+- `vtk_labels`: I3, I1 and I2 on one `.vtk` file, for the CLI suites. Since
+  `docs/increments/122-lakes-overrule.md` (section 3.2) no triangle keeps
+  code 0: where the oracle says 0 (a centre in no polygon) the triangle
+  carries a code from the fill, not water if any polygon given is not
+  water, and is marked (`land_cover_filled` 1); every other checked
+  triangle carries the oracle's code, unmarked. `filled_where_no_polygon`
+  checks that rule on any file's arrays.
 """
 
 from __future__ import annotations
@@ -36,6 +42,9 @@ SNAP = 1e-3
 MARGIN = 2 * SNAP
 
 Coded = Sequence[tuple[BaseGeometry, int]]
+#: CORINE's water classes (`land_cover_classes.load("corine").water_codes`),
+#: which the fill never gives while another class is near.
+CORINE_WATER = frozenset({511, 512, 521, 522, 523})
 
 
 def xy_of(vertices: npt.ArrayLike) -> np.ndarray:
@@ -169,5 +178,31 @@ def vtk_labels(
     # I2: the oracle, from the input polygons; it must reach most triangles.
     oracle = landcover_oracle(vtk.points, triangles, polygons, margin)
     assert oracle.checked.sum() > 0.9 * len(triangles)
-    assert oracle.mismatches(codes) == []
+    # 122: the mark, an int cell array, 0 on every line.
+    marks = vtk.cell_array("land_cover_filled")
+    assert (marks.type_name, marks.components) == ("int", 1)
+    filled = np.asarray(marks.values)
+    assert len(filled) == vtk.cells and not filled[: len(lines)].any()
+    filled_where_no_polygon(oracle, codes, filled[len(lines) :], polygons)
     return lines, triangles, codes
+
+
+def filled_where_no_polygon(
+    oracle: Oracle,
+    codes: npt.ArrayLike,
+    filled: npt.ArrayLike,
+    polygons: Coded,
+    water: frozenset[int] = CORINE_WATER,
+) -> None:
+    """122's rule on one file: no triangle keeps code 0; where the oracle
+    says 0 the code is filled (marked, and not water while a polygon given is
+    not water); elsewhere the oracle's code, unmarked."""
+    got, marks = np.asarray(codes).reshape(-1), np.asarray(filled).reshape(-1)
+    assert not (got == 0).any(), "a triangle kept code 0"
+    nowhere = oracle.checked & (oracle.codes == 0)
+    exact = Oracle(codes=oracle.codes, checked=oracle.checked & ~nowhere)
+    assert exact.mismatches(got) == []
+    assert (marks[nowhere] == 1).all(), "a triangle in no polygon is not marked"
+    assert (marks[exact.checked] == 0).all(), "a triangle in a polygon is marked"
+    if {c for _, c in polygons} - water:
+        assert not np.isin(got[nowhere], list(water)).any(), "the fill gave water"

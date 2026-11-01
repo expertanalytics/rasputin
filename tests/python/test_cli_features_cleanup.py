@@ -194,7 +194,7 @@ CORINE_ARGS = ("--land-cover-classes", "corine", "--edges", "all")
 
 
 def cover(path: Path) -> tuple[str, ...]:
-    return ("--land-cover", str(path), *CORINE_ARGS)
+    return ("--land-cover-partial", "--land-cover", str(path), *CORINE_ARGS)
 
 
 @pytest.fixture

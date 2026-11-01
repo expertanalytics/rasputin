@@ -9,7 +9,11 @@ uncovered). The preferred lake rectangle covers the east end of forest 311,
 the uncovered land between and the west of water 512. What is left of the
 water borders no kept polygon (a 200 m gap on every side), so it is left out
 (class 0): the lake share is the preferred lake's alone, and the warning fires
-(the preferred lake is smaller than the water it replaces).
+(the preferred lake is smaller than the water it replaces). Since
+`docs/increments/122-lakes-overrule.md` the scene's 1.9 km² gap is refused,
+so every run here passes `--land-cover-partial` (`corine`), and the
+left-out water and the gap are filled from the nearest non-water class,
+forest (test 9).
 
 THE ORACLE: per triangle of the `triangles` layer read back, GEOS's
 `intersection(...).area` share with the preferred lake (lake), and with the
@@ -111,7 +115,14 @@ def lake(tmp_path: Path) -> Path:
 
 
 def corine(cover: Path, *more: str) -> tuple[str, ...]:
-    return ("--land-cover", str(cover), "--land-cover-classes", "corine", *more)
+    return (
+        "--land-cover-partial",
+        "--land-cover",
+        str(cover),
+        "--land-cover-classes",
+        "corine",
+        *more,
+    )
 
 
 # ------------------------------------------------------------ the legends
@@ -133,10 +144,16 @@ def test_case7_the_lake_share_comes_from_the_preferred_polygons(
     assert code == 0, output
     with closing(sqlite3.connect(tmp_path / "x.gpkg")) as conn:
         assert_allclose(column(conn, "cells", "lake"), share(conn, preferred_lake()), atol=SHARE)
+        # 122, section 3.3: the left-out water and the scene's gap are 0
+        # shares that join a non-water class; the scene's only ones are
+        # forest, so the forest share is the forest less the lake and the rest.
         forest = shapely.union_all([g for c, g in cover_polygons() if c in (311, 312)])
         expected = share(conn, forest.difference(preferred_lake()))
-        assert_allclose(column(conn, "cells", "forest"), expected, atol=SHARE)
+        got = column(conn, "cells", "forest")
+        assert (got >= expected - SHARE).all()
+        assert_allclose(got, 1.0 - share(conn, preferred_lake()), atol=SHARE)
         assert not column(conn, "cells", "glacier").any()
+        assert_allclose(column(conn, "cells", "unspecified"), 0.0, atol=SHARE)
         check_sums(conn)
         rows = conn.execute("SELECT name, value FROM run WHERE name LIKE '%prefer%'").fetchall()
         credit = record(conn, "land_cover_prefer_credit")
@@ -217,7 +234,7 @@ def test_case6_a_legend_without_prefer_is_refused_naming_it(
         'category = "lake"\n'
     )
     legend = write(tmp_path / "mine.toml", coded_map("mine", attribute="Code_18", classes=classes))
-    args = ("--land-cover", str(cover), "--land-cover-classes", str(legend))
+    args = ("--land-cover-partial", "--land-cover", str(cover), "--land-cover-classes", str(legend))
     flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
     assert "mine" in flat, flat
 
@@ -225,7 +242,7 @@ def test_case6_a_legend_without_prefer_is_refused_naming_it(
 def test_case6_a_raster_land_cover_is_refused(
     scene: dict[str, Path], tmp_path: Path, lake: Path, phases: list[str]
 ) -> None:
-    args = ("--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11")
+    args = ("--land-cover-partial", "--land-cover", KEY, "--land-cover-classes", "mapbiomas-c11")
     flat = refused(scene, tmp_path, phases, *args, "--prefer", f"lake={lake}")
     assert "--land-cover" in flat, flat
 
@@ -307,11 +324,10 @@ def test_the_maps_borders_take_the_preferred_lake(
         assert water.intersection(after.buffer(LENGTH)).length <= 10 * LENGTH
         gone = before.difference(after.buffer(1.0)).length
         assert gone == pytest.approx(3350.1, abs=0.05), gone
-        # the cell shares stay case 7's
+        # the cell shares stay case 7's, the 0 shares joining forest (122)
         assert_allclose(column(b, "cells", "lake"), share(b, preferred_lake()), atol=SHARE)
-        forest = shapely.union_all([g for c, g in cover_polygons() if c in (311, 312)])
-        expected_forest = share(b, forest.difference(preferred_lake()))
-        assert_allclose(column(b, "cells", "forest"), expected_forest, atol=SHARE)
+        rest = 1.0 - share(b, preferred_lake())
+        assert_allclose(column(b, "cells", "forest"), rest, atol=SHARE)
         check_sums(b)
 
 
@@ -442,3 +458,97 @@ def test_a_cached_source_never_fetched_here_is_refused_naming_the_fetch(
     assert "--prefer" in flat and "nopolygon" in flat, output
     assert f"rasputinfetch{RESERVOIRS_KEY}--domain" in flat, output
     assert not target.exists()
+
+
+# ------------------------------------------------------------ 122, test 9: no code 0
+
+
+def uncovered_share(corners_xy: np.ndarray) -> np.ndarray:
+    """Per triangle, its share in no polygon of the map: forest 311 less the
+    preferred lake, conifer 312 and the lake; the water left is left out."""
+    covered = shapely.union_all(
+        [g for c, g in cover_polygons() if c in (311, 312)] + [preferred_lake()]
+    )
+    triangles = shapely.polygons(corners_xy)
+    return 1.0 - shapely.area(shapely.intersection(triangles, covered)) / shapely.area(triangles)
+
+
+def marked_where_uncovered(marks: np.ndarray, corners_xy: np.ndarray) -> None:
+    """`docs/increments/122-lakes-overrule.md`, section 3.3: a triangle whose
+    code was filled or whose 0 share moved is marked; so marked exactly where
+    the triangle reaches the uncovered area (over 1e-6), never where it does
+    not (under 1e-9), and none lies between."""
+    rest = uncovered_share(corners_xy)
+    assert not ((rest > 1e-9) & (rest <= 1e-6)).any()
+    assert (rest > 1e-6).any(), "the scene's left-out water reaches no triangle"
+    assert_array_equal_bool(marks == 1, rest > 1e-6)
+
+
+def assert_array_equal_bool(got: np.ndarray, want: np.ndarray) -> None:
+    wrong = np.flatnonzero(got != want)
+    assert not len(wrong), f"{len(wrong)} triangles marked wrongly, first {wrong[:10]}"
+
+
+def test_9_no_triangle_keeps_code_0_in_a_gpkg(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path
+) -> None:
+    """122's test 9: the left-out water and the scene's gap (1.9 km², hence
+    `--land-cover-partial`) are filled and marked; the record counts them,
+    no fractions row is code 0, and the fill's stderr line is printed once."""
+    target = tmp_path / "x.gpkg"
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"))
+    assert code == 0, output
+    assert squashed(output).count("innopolygontookthenearestnon-waterclass") == 1
+    with closing(sqlite3.connect(target)) as conn:
+        rows = conn.execute("SELECT code, land_cover_filled FROM triangles ORDER BY fid").fetchall()
+        codes = np.array([r[0] for r in rows])
+        marks = np.array([r[1] for r in rows])
+        assert not (codes == 0).any()
+        marked_where_uncovered(marks, corners(conn)[:, :, :2])
+        filled = record(conn, "land_cover_filled")
+        assert filled is not None and int(filled) == int(marks.sum())
+        area = record(conn, "land_cover_filled_m2")
+        assert area is not None and float(area) > 0.0
+        zero = conn.execute("SELECT count(*) FROM land_cover_fractions WHERE code = 0")
+        assert zero.fetchone() == (0,)
+
+
+def test_9_no_triangle_keeps_code_0_in_a_vtk_or_ply(
+    scene: dict[str, Path], tmp_path: Path, cover: Path, lake: Path
+) -> None:
+    """The same in a `.vtk` (an `int` cell array `land_cover_filled`, 0 on
+    every line cell, read back by `read_mesh`) and a `.ply` (a face property
+    `uchar land_cover_filled` after `land_cover_code`)."""
+    from plyread import read_ply
+    from tin_engine.io.vtk_read import read_mesh
+    from vtkread import read_vtk
+
+    args = corine(cover, "--prefer", f"lake={lake}")
+    vtk_path, ply_path = tmp_path / "x.vtk", tmp_path / "x.ply"
+    for target in (vtk_path, ply_path):
+        code, output = mesh(scene, target, *args)
+        assert code == 0, output
+    vtk = read_vtk(vtk_path.read_bytes())
+    lines = len(vtk.lines)
+    filled = vtk.cell_array("land_cover_filled")
+    assert filled.type_name == "int"
+    marks = np.asarray(filled.values).astype(int)
+    assert not marks[:lines].any(), "a line cell is marked"
+    codes = np.asarray(vtk.cell_array("land_cover_code").values)
+    assert not (codes[lines:] == 0).any()
+    points = np.asarray(vtk.points)
+    corners_xy = np.array([points[np.asarray(p)][:, :2] for p in vtk.polygons])
+    marked_where_uncovered(marks[lines:], corners_xy)
+    arrays = read_mesh(vtk_path.read_bytes())
+    assert arrays.land_cover_filled is not None
+    assert (np.asarray(arrays.land_cover_filled) == marks[lines:]).all()
+    header, elements = read_ply(ply_path.read_bytes())
+    names = [p.name for p in header.element("face").properties]
+    assert names.index("land_cover_filled") == names.index("land_cover_code") + 1, names
+    (kind,) = [
+        p.type_name for p in header.element("face").properties if p.name == "land_cover_filled"
+    ]
+    assert kind == "uchar"
+    face = elements["face"]
+    assert not (np.asarray(face["land_cover_code"]) == 0).any()
+    assert int(np.asarray(face["land_cover_filled"]).sum()) == int(marks.sum())

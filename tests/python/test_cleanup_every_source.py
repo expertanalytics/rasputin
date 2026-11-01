@@ -339,7 +339,13 @@ class TestTheRecord:
         record, _ = mesh(
             tmp_path,
             *("--dem", str(bumpy), "--domain", str(square)),
-            *("--land-cover", str(corine), "--land-cover-classes", "corine"),
+            *(
+                "--land-cover-partial",
+                "--land-cover",
+                str(corine),
+                "--land-cover-classes",
+                "corine",
+            ),
             *("--lines", f"river={small_river}", "--edges", "all"),
         )
         (found,) = spy.sets
