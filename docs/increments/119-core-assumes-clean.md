@@ -1,7 +1,9 @@
 # Increment 119: the core takes valid polygons only
 
 Status: **designed** (`@architect`, 2026-11-01, on public master
-`ae33748e`; branch `worktree-core-assumes-clean`). Full lane (it deletes
+`ae33748e`; branch `worktree-core-assumes-clean`; amended the same day:
+115's switch done, and Ola's ruling that the refusal names the catalogue's
+clean sibling, section 3). Full lane (it deletes
 the land-cover repair on the path to the mesh), Python only: no C++, no
 `@perf` acceptance run (section 8). Pipe item `mesh/core-assumes-clean`,
 ruled by Ola 2026-10-29 (the core states its contract, refuses invalid land
@@ -22,8 +24,11 @@ remote-tracking ref and every worktree.
   same mesh, byte for byte.
 - **Ola's runs** read clean products made once by the private clean-up
   (increment 115): every polygon in them is valid in the CRS they were made
-  for. A public user with a broken file gets the list and the fix (repair
-  the file in the DEM's CRS), never a silent change of their data.
+  for. A run (or an MCP agent) that names a raw source by catalogue id,
+  where the catalogue holds its clean copy for the DEM's CRS, is told to
+  use that copy ("use ar50-innlandet-clean-25833"). A public user with a
+  broken file gets the list and the fix (repair the file in the DEM's CRS),
+  never a silent change of their data.
 
 ## 1. Prior art: legacy and literature
 
@@ -147,6 +152,53 @@ Every polygon is listed, none held back: the raw Telemark AR50 file lists
 the CLI sends a message holding that phrase to `--land-cover-crs`
 (`src_python/tin_engine/cli.py@ae33748e:2275`).
 
+The helper raises `InvalidPolygons`, a subclass of `FeatureError` in
+`feature_input.py` (two lines), so every existing `except FeatureError`
+still holds and the CLI can tell this refusal from the reader's others.
+
+**The clean sibling** (Ola's ruling, 2026-11-01, relayed by the main
+session: when the refusal names an invalid source by catalogue id and the
+catalogue holds `<id>-clean-<EPSG code>` for the DEM's CRS, the refusal
+names that sibling as the fix). One pure function in `sources.py`:
+
+```python
+def clean_sibling(key: str | None, crs: str, known: Mapping[str, RemoteSource]) -> str | None:
+    """`<key>-clean-<n>` when `crs_label(crs)` is `EPSG:n` and `known` holds
+    that id; None for no key, a CRS without an EPSG code, or no such entry."""
+```
+
+The lookup is by id only: the key is the catalogue id the user gave
+(`_Vector.source.id` for `--land-cover` and `--prefer`; the
+`--reservoirs` value when it is in `known`), never a path, file name or
+directory searched or guessed. A path source has key None and keeps
+today's text. The sibling's own entry is not inspected (its kind, classes
+or path): the id is the whole convention. An id that already ends in
+`-clean-<n>` gets no stripping: `ar50-innlandet-clean-25832` on an
+EPSG:25833 DEM looks up `ar50-innlandet-clean-25832-clean-25833`, finds
+none, and keeps today's text with its "broken by the move" lines.
+
+In `cli.py`, one helper serves the three `except InvalidPolygons` sites
+(placed before each site's `except FeatureError`):
+
+```python
+def _invalid(exc: InvalidPolygons, key: str | None, dem_crs: str,
+             known: Mapping[str, RemoteSource], flag: str) -> typer.BadParameter:
+```
+
+With a sibling, the message is the refusal with one sentence in front:
+
+    use {sibling} in place of {key} (its clean copy for {EPSG:n} in the catalogue). {refusal}
+
+so "Invalid value for --land-cover: use ar50-innlandet-clean-25833 in
+place of ar50-innlandet (its clean copy for EPSG:25833 in the catalogue).
+ar50-innlandet: 7 of the 1454 polygons …". The fix goes first because the
+list can run to hundreds of lines (460 on Telemark) and an agent reads the
+head; the MCP server passes the child's stderr whole
+(`src_python/tin_engine/mcp/server.py@ae33748e:310`), so the same words
+reach an MCP agent. Without a sibling the message is the refusal alone.
+`_land_cover_map` gains the parameter `known` (the run's catalogue, already
+in hand at `src_python/tin_engine/cli.py@ae33748e:1026`) for the lookup.
+
 **The exit.** The CLI's existing `FeatureError` handling turns it into
 `typer.BadParameter` with `param_hint` `--land-cover`, `--prefer` or
 `--reservoirs`: "Invalid value for --land-cover: …", exit code 2, no
@@ -164,7 +216,8 @@ output file written. The MCP tools get the same words as their tool error.
 The interfaces the tests call: `read_class_polygons(..., near=box)`,
 `read_polygons(path, layer, mesh_crs, xy, named=..., lines=...) -> list[BaseGeometry]`,
 `land_cover_map.build(base, preferred, classes, region, *, cut=True, outside=(), threads=1)`,
-`LandCoverMap` without `repaired`, and `rasputin mesh` through `CliRunner`.
+`LandCoverMap` without `repaired`, `sources.clean_sibling(key, crs, known)`,
+`feature_input.InvalidPolygons`, and `rasputin mesh` through `CliRunner`.
 
 ## 5. Ola's runs, and a public user
 
@@ -196,14 +249,20 @@ between UTM zones misses polygons the EPSG:25833 box test counts. None of
 those 146 meets the read region (scratch `near_sets.py`: 0 of 146), so no
 mesh change follows from it; 115's proof run (below) checks the mesh.
 
-**Before this merges**, increment 115's switch must be done, or Ola's
-Sula, Bygdin and AR50 runs stop with the refusal: products made under
-`$RASPUTIN_DATA/clean/` and `-clean-25833` entries added to his
-`~/.config/rasputin/sources.toml`, with his yes and a `.bak` copy (115,
-section 7, steps 2 to 4, with its proof run). Checked 2026-11-01: no
-`clean` entry in that file, no `$RASPUTIN_DATA/clean/`. His commands then
-name `clc2018-clean-25833`, `ar50-innlandet-clean-25833` and so on; the
-MCP server reads the same catalogue. A product made in EPSG:25832 and
+**Before this merges**: increment 115's switch, which this blocked on, is
+done (main session, 2026-11-01). Checked the same day: 16 products under
+`$RASPUTIN_DATA/clean/<id>_25833_20261101/<id>.gpkg` (`ls` gives the 15
+AR50 counties and `clc2018`), 16 `[source.<id>-clean-25833]` entries in
+`~/.config/rasputin/sources.toml` (`grep -c`), and the backup
+`sources.toml.bak-20261101`. 115's proof run, Numedalslågen at tolerance
+10 with `--land-cover ar50-buskerud ar50-telemark` against the two
+products: the two `.vtk` files are byte-identical (`cmp`), 2,046,854
+triangles (the file's `POLYGONS` line). What remains before merge is this
+branch's own check on Sula and Bygdin with the `-clean-` ids, in the
+acceptance step (section 8). His commands now name `clc2018-clean-25833`,
+`ar50-innlandet-clean-25833` and so on; one that names the raw id is
+refused with the sibling as its fix (section 3); the MCP server reads the
+same catalogue. A product made in EPSG:25832 and
 meshed on DTM10 (EPSG:25833) passed on Bygdin's box (0 of 1,454), but in
 general it can break in the move and is then refused with the second line
 form above: make one product per DEM CRS, as 115 says.
@@ -269,6 +328,25 @@ Fixtures, measured in the probes above (shapely 2.2.0, GEOS 3.14.1):
     classes of `test_feature_input.py`, `test_land_cover_map.py` and
     `test_cli_mesh_edges.py`) become refusal tests or are deleted, each
     deletion named in the red commit.
+11. `clean_sibling`, pure: with `known` holding `bad` and
+    `bad-clean-31983`, `clean_sibling("bad", "EPSG:31983", known)` is
+    `"bad-clean-31983"`; None for key None, for a `known` holding only
+    `bad-clean-25833`, and for a CRS without an EPSG code (a PROJ string
+    `+proj=tmerc +lon_0=7.3 +ellps=GRS80`, which `crs_label` gives as text).
+12. CLI, the sibling named (red now: today the run repairs and exits 0).
+    The scene of `test_cli_land_cover_polygons.py` (DEM in EPSG:31983,
+    domain bounds 505489.1 8315090.9 507609.3 8317210.7) and a user
+    `sources.toml` (the pattern of
+    `test_a_catalogue_vector_source_uses_its_legend`) holding `bad`, a
+    local `classes = "corine"` entry whose GeoPackage holds the bow-tie
+    moved by (506500, 8316100) (bounds 506500 8316100 506504 8316104, reason
+    `Self-intersection[506502 8316102]`, both measured), and
+    `bad-clean-31983`, any valid cover file. `--land-cover bad`: exit 2,
+    the output holds "use bad-clean-31983 in place of bad" before
+    `Self-intersection[506502 8316102]`. The same run with no
+    `bad-clean-31983` entry, and with the GeoPackage given by path: exit 2,
+    no "-clean-" in the output. `--reservoirs bad` with the sibling (a
+    valid `--land-cover` file beside it): "use bad-clean-31983".
 
 No suite is named invariant-critical: no mutation round.
 
@@ -278,7 +356,14 @@ No C++ and nothing under `include/terrain/refinement/` or
 `include/terrain/mesh/` changes, so no `@perf` acceptance run. Before
 review, the green branch runs the quick check's two land-cover cases
 (Numedalslågen and Lagan, `tools/bench_quick.py`): each `.vtk` byte-identical
-to master's, as section 5's zero counts predict. No timing gate: the
+to master's, as section 5's zero counts predict. The same step, on Ola's
+catalogue: Sula with `--land-cover clc2018-clean-25833` and Bygdin with
+`ar50-innlandet-clean-25833` (and `clc2018-clean-25833`) exit 0 (section
+5's zero counts for the products); Bygdin with the raw `ar50-innlandet`
+exits 2 and its message begins "use ar50-innlandet-clean-25833", the
+ruling seen on a real case. This belongs in acceptance, not review: it
+runs the green branch on Ola's data, and the reviewer reads its output.
+No timing gate: the
 check is today's `is_valid` over today's set of polygons, moved from
 `_fixed` to the reader with the same grouping and threads; for `--prefer`
 and `--reservoirs` it checks only the polygons reaching the box, where
@@ -307,11 +392,13 @@ where validity is enforced. It stays its own fast-lane item, next.
 Estimate, counted lines (`tools/count_loc.py`): about 55 removed
 (`_repaired` 21, `read_polygons`' repair and `tell` 9, `_fixed`'s check
 and repair and the count 10, `_say_repaired` with its calls and the record
-keys 15) and about 35 added (`_refuse_invalid` 22, the `near` keyword and
-calls 5, the reservoir read moved up 8): **net about −20**. One PR, far
-under 700.
+keys 15) and about 60 added (`_refuse_invalid` 22, the `near` keyword and
+calls 5, the reservoir read moved up 8; the amendment's sibling:
+`InvalidPolygons` 2, `clean_sibling` 7, `_invalid` 8, its three call sites
+and `known` passed to `_land_cover_map` 8): **net about +5** (an
+estimate, before the amendment −20). One PR, far under 700.
 
 ## 12. Questions for Ola
 
-None. The one prerequisite, 115's switch in Ola's catalogue (section 5),
-already has its plan and asks for his yes there.
+None. 115's switch is done (section 5); the sibling rule is his ruling of
+2026-11-01 (section 3).
