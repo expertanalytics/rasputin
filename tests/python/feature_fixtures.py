@@ -126,6 +126,16 @@ def box_of(
     return lambda own: fi.source_region(domain, dem_crs, own, cell=cell).bounds
 
 
+def read_box(
+    domain: DomainPolygon, dem_crs: str = UTM33, cell: float = 0.0
+) -> tuple[float, float, float, float]:
+    """The box the readers check polygons in, as the CLI passes it: the read
+    region's bounds widened by `feature_input.MARGIN` on each side."""
+    x0, y0, x1, y1 = region_of(domain, dem_crs, cell).bounds
+    m = float(feature_input().MARGIN)
+    return (x0 - m, y0 - m, x1 + m, y1 + m)
+
+
 @dataclass(frozen=True)
 class Opened:
     """`edges_of`'s `FeatureSet` (``edges``) and what the reader read
@@ -196,14 +206,21 @@ def open_one(
     threads: int = 1,
 ) -> Opened:
     """One class-polygon file as `--land-cover` with ``classes_name`` and
-    `--edges all` (or ``choice``) reads it: `read_class_polygons`, `build`
-    with no `--prefer`, `edges_of` with the clean-up ``switches`` (all off
-    unless given)."""
+    `--edges all` (or ``choice``) reads it: `read_class_polygons` checking
+    the polygons reaching `read_box`, `build` with no `--prefer`, `edges_of`
+    with the clean-up ``switches`` (all off unless given)."""
     fi = feature_input()
     known = classes(classes_name)
     region = region_of(domain, dem_crs)
     read = fi.read_class_polygons(
-        path, layer, known, dem_crs, box_of(domain, dem_crs), crs=crs, threads=threads
+        path,
+        layer,
+        known,
+        dem_crs,
+        box_of(domain, dem_crs),
+        crs=crs,
+        threads=threads,
+        near=read_box(domain, dem_crs),
     )
     built = land_cover_map().build([read.areas], [], known, region)
     edges = fi.edges_of(

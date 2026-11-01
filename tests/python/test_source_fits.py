@@ -258,7 +258,7 @@ def accepts_features(path: Path, layer: str | None, name: str) -> bool:
 
 def accepts_prefer(path: Path, layer: str | None) -> bool:
     try:
-        found, _repaired = read_polygons(path, layer, EPSG, np.array([INSIDE_POINT]))
+        found = read_polygons(path, layer, EPSG, np.array([INSIDE_POINT]))
     except ValueError:
         return False
     return len(found) > 0
