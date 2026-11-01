@@ -18,11 +18,9 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   Each is passed by position.
 - ``LandCoverMap.areas`` is a sequence of ``(code, polygon)`` pairs;
   ``LandCoverMap.overlap`` is ``(index of the file kept, area cut)`` pairs.
-- Every polygon reaching the read box is repaired whole once, where the map
-  is built (`feature_input._repaired`), whether or not it is in an
-  overlapping pair: a bowtie, in a single file or in either file of a pair,
-  comes out valid. ``LandCoverMap.repaired`` counts the invalid polygons
-  reaching the read box.
+- `build` checks and repairs nothing: the readers refuse an invalid polygon
+  reaching the read box (`test_invalid_polygons.py`), so every polygon
+  given here is valid.
 """
 
 from __future__ import annotations
@@ -142,70 +140,6 @@ def test_10_polygons_that_only_touch_are_both_kept(lcm: Any, corine: Any) -> Non
     left, right = box(0, 0, 50, 100), box(50, 0, 100, 100)
     built = lcm.build([[(311, left)], [(ARABLE, right)]], [], corine, box(0, 0, 100, 100))
     assert by_code(built.areas) == pytest.approx({311: 5000.0, ARABLE: 5000.0}, abs=EPS)
-
-
-def bowtie(x0: float, y0: float, x1: float, y1: float) -> BaseGeometry:
-    """A ring that crosses itself once, at the box's centre: its two
-    triangles, west and east, are half the box ``(x0, y0, x1, y1)``."""
-    return shapely.Polygon([(x0, y0), (x1, y1), (x1, y0), (x0, y1)])
-
-
-def test_10_a_bowtie_in_the_later_file_is_repaired_and_cut(lcm: Any, corine: Any) -> None:
-    """Code review round 1: a self-crossing polygon in an overlapping pair
-    made `_joined`'s intersection throw (GEOSException). Repaired as the
-    map is built (`_repaired`), the bowtie is two triangles; the
-    west one, 2,500 m², lies in the first file's square, so it is the overlap
-    the first file kept, and the later file keeps the east one."""
-    tie = bowtie(50, 0, 150, 100)
-    assert not tie.is_valid and shapely.make_valid(tie).area == pytest.approx(5000.0, abs=EPS)
-    base = [[(311, box(0, 0, 100, 100))], [(ARABLE, tie)]]
-    built = lcm.build(base, [], corine, box(0, 0, 200, 100))
-    assert [(k, pytest.approx(g.area, abs=EPS)) for k, g in built.overlap] == [(0, 2500.0)]
-    (arable,) = [g for c, g in built.areas if c == ARABLE]
-    assert arable.is_valid, arable.wkt
-    east = shapely.Polygon([(100, 50), (150, 0), (150, 100)])
-    assert arable.symmetric_difference(east).area <= EPS, arable.wkt
-    (forest,) = [g for c, g in built.areas if c == 311]
-    assert shapely.equals(forest, box(0, 0, 100, 100))
-    assert built.repaired == 1
-
-
-def test_10_a_bowtie_in_the_earlier_file_cuts_the_later_one(lcm: Any, corine: Any) -> None:
-    """The same pair the other way round: the first file's bowtie keeps its
-    west triangle's 2,500 m² of the later square, which keeps the rest. Code
-    review round 2: the bowtie itself comes out repaired too, its two
-    triangles, and is counted once."""
-    tie = bowtie(50, 0, 150, 100)
-    base = [[(311, tie)], [(ARABLE, box(0, 0, 100, 100))]]
-    built = lcm.build(base, [], corine, box(0, 0, 200, 100))
-    assert [(k, pytest.approx(g.area, abs=EPS)) for k, g in built.overlap] == [(0, 2500.0)]
-    (arable,) = [g for c, g in built.areas if c == ARABLE]
-    want = box(0, 0, 100, 100).difference(shapely.Polygon([(50, 0), (100, 50), (50, 100)]))
-    assert arable.symmetric_difference(want).area <= EPS, arable.wkt
-    (forest,) = [g for c, g in built.areas if c == 311]
-    assert forest.is_valid, forest.wkt
-    assert forest.symmetric_difference(shapely.make_valid(tie)).area <= EPS, forest.wkt
-    assert built.repaired == 1
-
-
-def test_10_a_bowtie_in_a_single_file_is_repaired(lcm: Any, corine: Any) -> None:
-    """Code review round 2: a bowtie in one file, in no overlapping pair,
-    stayed unrepaired, and `preferred.replace`'s cut threw GEOSException on
-    it. Repaired once where the map is built, every polygon comes out valid
-    (the bowtie as its two triangles, 5,000 m²), with and without
-    ``preferred``, and the one repair is counted."""
-    tie, region = bowtie(50, 0, 150, 100), box(0, 0, 200, 100)
-    base = [[(311, box(0, 0, 50, 100)), (ARABLE, tie)]]
-    for preferred in ([], [(LAKE, [box(120, 40, 140, 60)])]):
-        built = lcm.build(base, preferred, corine, region)
-        assert all(g.is_valid for _, g in built.areas), [g.wkt for _, g in built.areas]
-        assert built.repaired == 1, preferred
-    (arable,) = [g for c, g in lcm.build(base, [], corine, region).areas if c == ARABLE]
-    assert arable.symmetric_difference(shapely.make_valid(tie)).area <= EPS, arable.wkt
-
-
-def test_10_clean_polygons_count_no_repair(lcm: Any, corine: Any) -> None:
-    assert lcm.build([cover_polygons()], [], corine, everywhere()).repaired == 0
 
 
 def test_a_map_cut_by_prefer_covers_the_region_once(lcm: Any, corine: Any) -> None:

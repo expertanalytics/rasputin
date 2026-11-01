@@ -49,7 +49,7 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   `rasputin gml-to-gpkg SOURCE --out OUT.gpkg`; the shipped `ar50` land-cover
   class file reads its land type (`arealtype`) and splits
   forest by tree type (`treslag`, codes 3031 to 3099) and open firm ground by
-  vegetation cover (`vegetasjonsdekke`, codes 5051 to 5099).
+  vegetation cover (`vegetasjonsdekke`, codes 5051 to 5099). Every `--land-cover`, `--prefer` and `--reservoirs` polygon that reaches the read region must be valid (OGC Simple Features, as `shapely.is_valid` checks it) in the DEM's CRS. The run repairs none: it refuses before meshing and lists each bad one by feature id with GEOS's reason.
 - **Land-cover labels, cleaned up.** With class borders in `--edges`, every
   triangle gets the class of the polygon it lies in. First the borders are
   repaired (`--edges-repair`), merged between neighbours of one class, snapped

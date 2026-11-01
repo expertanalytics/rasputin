@@ -234,9 +234,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   the polygons of `catchment --lakes` near the
                            #   seed point, in the file's CRS (22);
                            #   read_class_polygons: --land-cover's polygons
-                           #   with their class codes, in the mesh CRS, unchecked
-                           #   (105c, 111); repaired_areas: their validity
-                           #   repair, for the shares; read_linestrings: a
+                           #   with their class codes, in the mesh CRS, each one
+                           #   reaching the read region valid or refused
+                           #   (105c, 111, 119); read_linestrings: a
                            #   --lines source (111); read_polygons: a source's
                            #   polygons, in the mesh CRS, for --prefer and
                            #   --reservoirs (105b)

@@ -100,6 +100,7 @@ from tin_engine.dem_input import (
 from tin_engine.domain import BoxError, CrsBox, DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
+    MARGIN,
     SUFFIXES,
     Category,
     ClassPolygons,
@@ -107,6 +108,7 @@ from tin_engine.feature_input import (
     EdgeCleanup,
     FeatureError,
     FeatureSet,
+    InvalidPolygons,
     LandCoverClasses,
     SourceLines,
     edges_of,
@@ -209,6 +211,7 @@ from tin_engine.sources import (
     cache_root,
     catalogue,
     check_values,
+    clean_sibling,
     features_file,
     kept_named,
     plugin_source_files,
@@ -1290,9 +1293,20 @@ def mesh(
     land: _LandCover | None = None
     edge_values: dict[str, Value] = {}
     if classes is not None and classes.files:
-        land = _land_cover_map(classes, preferred, area, dem_crs, cell, clock, res.threads)
+        land = _land_cover_map(classes, preferred, area, dem_crs, cell, clock, res.threads, known)
         if len(classes.files) > 1:
             edge_values["land_cover_overlap"] = _overlap_record(land, classes.files, area)
+    found_reservoirs: list[BaseGeometry] = []
+    if reservoir is not None:  # checked before the mesh, overlaid after it
+        with clock.phase("reservoirs"):
+            ring = shapely.get_coordinates(area.polygon.exterior)
+            try:
+                found_reservoirs = read_polygons(*reservoir[:2], dem_crs, ring, reservoir[3])
+            except InvalidPolygons as exc:
+                key = reservoirs if reservoirs in known else None
+                raise _invalid(exc, key, dem_crs, known, "--reservoirs") from exc
+            except FeatureError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
     line_pairs, line_reads = _read_lines(line_sources, area, dem_crs, cell, clock, res.threads)
     found = None
     if edges and dem_domain is not None:
@@ -1420,18 +1434,8 @@ def mesh(
         if reservoir is not None:
             with clock.phase("reservoirs"):
                 xy = np.asarray(dem_run.trimmed.vertices, dtype=np.float64)
-                try:
-                    found_polygons, repaired = read_polygons(
-                        *reservoir[:2],
-                        dem_crs,
-                        xy[:, :2],
-                        functools.partial(_say_repaired, "reservoirs"),
-                        reservoir[3],
-                    )
-                except FeatureError as exc:
-                    raise typer.BadParameter(str(exc), param_hint="--reservoirs") from exc
-                regulated = overlay(xy[dem_run.trimmed.triangles], found_polygons)
-            more |= {"reservoirs": escaped_ascii(reservoir[2]), "reservoirs_repaired": repaired}
+                regulated = overlay(xy[dem_run.trimmed.triangles], found_reservoirs)
+            more["reservoirs"] = escaped_ascii(reservoir[2])
         elif categories is not None:
             more["reservoirs"] = "none"
         if units is not None:
@@ -2126,7 +2130,7 @@ def _class_fractions(
                 assert land is not None and classes.classes is not None
                 xy = np.asarray(trimmed.vertices, dtype=np.float64)[:, :2]
                 listed = known_codes(classes.classes)
-                found, repaired = list(land.map.areas), land.base.repaired
+                found = list(land.map.areas)
                 assigned = assign_polygon_fractions(xy, trimmed.triangles, found, known=listed)
             else:
                 assigned = assign_fractions(
@@ -2149,7 +2153,6 @@ def _class_fractions(
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
     if repository is None:
-        values["land_cover_repaired"] = repaired
         credits = [_credits(f.source, f.path) for f in classes.files if f.source is not None]
         if credits:  # a file carries no credit, licence or citation
             values |= {
@@ -2252,10 +2255,15 @@ def _land_cover_map(
     cell: float,
     clock: PhaseClock,
     threads: int,
+    known: Mapping[str, RemoteSource],
 ) -> _LandCover:
     """The --land-cover files read near ``area`` and joined, cut by the
-    --prefer sources: the phase ``land cover read``."""
+    --prefer sources: the phase ``land cover read``. An invalid polygon is
+    refused naming its clean copy in ``known``, if any (:func:`_invalid`)."""
     assert classes.classes is not None
+    region = source_region(area, dem_crs, dem_crs, cell=cell)
+    x0, y0, x1, y1 = region.bounds
+    near = (x0 - MARGIN, y0 - MARGIN, x1 + MARGIN, y1 + MARGIN)
     with clock.phase("land cover read"):
         reads = []
         for f in classes.files:
@@ -2269,21 +2277,23 @@ def _land_cover_map(
                         lambda own: source_region(area, dem_crs, own, cell=cell).bounds,
                         crs=classes.crs,
                         threads=threads,
+                        near=near,
                     )
                 )
+            except InvalidPolygons as exc:
+                key = f.source.id if f.source is not None else None
+                raise _invalid(exc, key, dem_crs, known, "--land-cover") from exc
             except FeatureError as exc:
                 hint = "--land-cover-crs" if "given CRS" in str(exc) else "--land-cover"
                 raise typer.BadParameter(str(exc), param_hint=hint) from exc
         xy = shapely.get_coordinates(area.polygon.exterior)
-        region = source_region(area, dem_crs, dem_crs, cell=cell)
         chosen = []
         for p in preferred:
             try:
-                polygons, _ = read_polygons(
-                    p.path, p.layer, dem_crs, xy,
-                    functools.partial(_say_repaired, f"--prefer {p.key}"),
-                    lines="lines go to --lines",
-                )  # fmt: skip
+                polygons = read_polygons(p.path, p.layer, dem_crs, xy, lines="lines go to --lines")
+            except InvalidPolygons as exc:
+                key = p.source.id if p.source is not None else None
+                raise _invalid(exc, key, dem_crs, known, "--prefer") from exc
             except FeatureError as exc:
                 raise typer.BadParameter(str(exc), param_hint="--prefer") from exc
             if not np.any(shapely.intersects(polygons, region)):
@@ -2299,9 +2309,8 @@ def _land_cover_map(
             base = build([r.areas for r in reads], [], classes.classes, region, threads=threads)
         except FeatureError as exc:
             raise typer.BadParameter(str(exc), param_hint="--land-cover") from exc
-        again = functools.partial(build, fix=False, outside=base.outside)
+        again = functools.partial(build, cut=False, outside=base.outside)
         built = again([base.areas], chosen, classes.classes, region) if chosen else base
-        _say_repaired("land cover", base.repaired, sum(len(r.areas) for r in reads))
     for r in reads:
         if r.scanned:
             typer.echo(
@@ -2480,12 +2489,20 @@ def _prefer_record(
     }
 
 
-def _say_repaired(what: str, repaired: int, read: int) -> None:
-    """One stderr line when the polygons read had self-crossing rings."""
-    if repaired:
-        typer.echo(
-            f"{what}: {repaired} of {read} polygons crossed itself and was repaired", err=True
-        )
+def _invalid(
+    exc: InvalidPolygons,
+    key: str | None,
+    dem_crs: str,
+    known: Mapping[str, RemoteSource],
+    flag: str,
+) -> typer.BadParameter:
+    """``flag``'s refusal of invalid polygons, led by the fix when catalogue
+    id ``key`` has a clean copy for the DEM's CRS in ``known``: first, as the
+    list of polygons can run to hundreds of lines."""
+    label = crs_label(dem_crs)
+    sibling = clean_sibling(key, label, known)
+    use = f"use {sibling} in place of {key} (its clean copy for {label} in the catalogue). "
+    return typer.BadParameter((use if sibling else "") + str(exc), param_hint=flag)
 
 
 def _piece_vocabulary(vocabulary: EdgeVocabulary) -> EdgeVocabulary:

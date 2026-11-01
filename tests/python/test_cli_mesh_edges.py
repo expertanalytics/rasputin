@@ -34,12 +34,14 @@ PINNED HERE, where the design leaves it open (listed for `@architect`):
   tree (`39595f5f`) with `--features cover.geojson --features-rules corine`
   and the clean-up switches 0, no `--prefer` (today's tree refuses a coded
   `--features` beside `--land-cover`).
-- A bowtie in a `--land-cover` file ends the run with exit 0 and no
-  exception escaping `rasputin mesh`; one in a pair overlapping far outside
-  the read box is counted outside by the edges step, as its partner is, and
-  so is what a `--prefer` lake reaching one far outside leaves of it.
-- `--threads N` reaches the repairing `build` call as `threads=N`; the
-  `--prefer` call (`fix=False`) repairs nothing and is not checked.
+- A bowtie in a `--land-cover` file reaching the read box ends the run
+  with exit 2 naming the file and the bowtie's fid
+  (`docs/increments/119-core-assumes-clean.md`), and no exception escaping
+  `rasputin mesh`; one in a pair overlapping far outside the read box is
+  counted outside by the edges step, as its partner is, and so is what a
+  `--prefer` lake reaching one far outside leaves of it.
+- `--threads N` reaches the cutting `build` call as `threads=N`; the
+  `--prefer` call (`cut=False`) cuts nothing and is not checked.
 - A river file is a GeoJSON `FeatureCollection` of one `LineString` with no
   properties, in the mesh CRS.
 - Ola's question 4 (a county line with one class on both sides) is taken at
@@ -485,30 +487,47 @@ OWN_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 SULA = OWN_HOME / "rasputin-output/mcp/ola/work/sula-73-27-0/sula-official-catchment.geojson"
 DTM10 = OWN_HOME / "projects/rasputin_data/DTM10_UTM33_20260925"
 CACHE = OWN_HOME / ".cache/rasputin"
+#: `clc2018` made valid in EPSG:25833, as Ola's catalogue names it.
+CLEAN_CLC = OWN_HOME / "projects/rasputin_data/clean/clc2018_25833_20261101/clc2018.gpkg"
+CLEAN_ID = "clc2018-clean-25833"
 needs_sula = pytest.mark.skipif(
-    not (SULA.exists() and DTM10.is_dir()
+    not (SULA.exists() and DTM10.is_dir() and CLEAN_CLC.exists()
          and (CACHE / "clc2018").is_dir() and (CACHE / "nve-lakes").is_dir()),
-    reason="Ola's Sula domain, DTM10 and cached clc2018 and nve-lakes are not here",
+    reason="Ola's Sula domain, DTM10, clean clc2018 and cached clc2018 and nve-lakes are not here",
 )  # fmt: skip
+
+
+def sula(target: Path, land_cover: str) -> tuple[int, str]:
+    """Section 0's command with ``land_cover``, the DEM given by its path and
+    the cache by `--cache`; the user catalogue holds `CLEAN_ID`."""
+    config = Path(os.environ["XDG_CONFIG_HOME"]) / "rasputin" / "sources.toml"
+    write_sources(config, {
+        CLEAN_ID: vector_entry(CLEAN_CLC, "clc2018, valid in EPSG:25833", classes="corine",
+                               layer="features"),
+    })  # fmt: skip
+    return invoke(
+        "mesh", "--out", str(target), "--dem", str(DTM10), "--tolerance", "20",
+        "--domain", str(SULA), "--out-crs", "EPSG:25833", "--cache", str(CACHE),
+        "--land-cover", land_cover, "--prefer", "lake=nve-lakes", "--edges", "all", "--shares",
+        "--edges-repair", "0.1", "--edges-max-shift", "20", "--edges-outline-snap", "0",
+        "--threads", "4", "--z-unit", "m",
+    )  # fmt: skip
 
 
 @needs_sula
 def test_7_sula_the_direct_command_gives_sols_mesh(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Local only: section 0's command against Sol's record of 28 October
-    (3,271 triangles, 30.4411 km², lake 8.935 %), the DEM given by its path
-    and the cache by `--cache`, the network closed."""
+    """Local only: section 0's command on the clean `clc2018` against Sol's
+    record of 28 October (3,271 triangles, 30.4411 km², lake 8.935 %), the
+    network closed. The raw `clc2018` holds 4 polygons near Sula that are not
+    valid in EPSG:25833 (`docs/increments/119-core-assumes-clean.md`,
+    section 5); the figures are the same on the clean copy (checked on a
+    scratch copy with the readers' check, 2026-11-01)."""
     monkeypatch.setattr(socket, "socket", no_network)
     monkeypatch.setattr(socket, "create_connection", no_network)
     target = tmp_path / "sula.gpkg"
-    code, output = invoke(
-        "mesh", "--out", str(target), "--dem", str(DTM10), "--tolerance", "20",
-        "--domain", str(SULA), "--out-crs", "EPSG:25833", "--cache", str(CACHE),
-        "--land-cover", "clc2018", "--prefer", "lake=nve-lakes", "--edges", "all", "--shares",
-        "--edges-repair", "0.1", "--edges-max-shift", "20", "--edges-outline-snap", "0",
-        "--threads", "4", "--z-unit", "m",
-    )  # fmt: skip
+    code, output = sula(target, CLEAN_ID)
     assert code == 0, output
     with closing(sqlite3.connect(target)) as conn:
         area = column(conn, "cells", "area_m2")
@@ -516,6 +535,24 @@ def test_7_sula_the_direct_command_gives_sols_mesh(
     assert len(area) == 3271
     assert area.sum() / 1e6 == pytest.approx(30.4411, abs=5e-5)
     assert 100 * (area * lake_share).sum() / area.sum() == pytest.approx(8.935, abs=5e-4)
+
+
+@needs_sula
+def test_7_sula_on_the_raw_clc2018_is_refused_naming_the_clean_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Local only: the raw `clc2018` is refused, 4 of its 31 polygons
+    reaching the read region not valid in EPSG:25833 (section 5's figure),
+    and the refusal names the catalogue's clean copy first."""
+    monkeypatch.setattr(socket, "socket", no_network)
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    target = tmp_path / "sula.gpkg"
+    code, output = sula(target, "clc2018")
+    assert code == USAGE, output
+    flat = squashed(output)
+    assert flat.find(f"use{CLEAN_ID}inplaceofclc2018") >= 0, output
+    assert flat.find(f"use{CLEAN_ID}") < flat.find("4ofthe31polygons"), output
+    assert not target.exists()
 
 
 # ------------------------------------------------------------ test 8: no land-cover map
@@ -687,42 +724,38 @@ def test_10_two_identical_polygons_the_first_given_keeps_the_area(
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
 
 
-def test_10_a_bowtie_in_the_later_file_is_repaired_not_a_traceback(
+def bowtie_refused(output: str, name: str, fid: int, tie: Polygon) -> None:
+    """The run's refusal names `--land-cover`, the file and the bowtie by
+    fid with GEOS's reason; no traceback."""
+    flat = squashed(output)
+    assert "Invalidvaluefor--land-cover" in flat, output
+    assert name in flat, output
+    assert squashed(f"feature {fid}: {shapely.is_valid_reason(tie)}") in flat, output
+    assert "Traceback" not in output and "GEOSException" not in output, output
+
+
+def test_10_a_bowtie_in_the_later_file_is_refused_not_a_traceback(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
     """Code review round 1: `P`'s corners joined as a bowtie (a ring that
     crosses itself at `P`'s centre), coded arable in the second file, made
-    `land_cover_map._joined` throw GEOSException. Repaired as the shares step
-    repairs, it is `P`'s west and east triangles, wholly inside forest 311:
-    the first file keeps all of it, and the mesh is test 10's box run."""
+    `land_cover_map._joined` throw GEOSException. The reader refuses it: the
+    run exits 2 naming the second file and the bowtie's fid (2)."""
     p = planted_box()
     x0, y0, x1, y1 = p.bounds
     tie = Polygon([(x0, y0), (x1, y1), (x1, y0), (x0, y1)])
-    assert not tie.is_valid and dict(cover_polygons())[311].contains(shapely.make_valid(tie))
+    assert not tie.is_valid
     polygons = dict(cover_polygons())
     a, b = split(tmp_path, [(311, polygons[311]), (312, polygons[312])],
                  [(512, polygons[512]), (ARABLE, tie)])  # fmt: skip
-    args = (*classes(a, b), *prefer(lake), *edges("all"), "--shares", *AS_READ)
     target = tmp_path / "x.gpkg"
-    # `test_cli_mesh_cells.mesh`'s arguments, run here to keep the exception.
+    args = (*classes(a, b), *prefer(lake), *edges("all"), "--shares", *AS_READ)
     given = ["--dem", str(scene["dem"]), "--domain", str(scene["domain"]), "--tolerance", "3",
              "--cache", str(scene["cache"]), "--out", str(target)]  # fmt: skip
     result = runner.invoke(app, ["mesh", *given, *args])
-    # No exception escaped the run, and none was printed as a traceback.
-    assert result.exception is None, "".join(traceback.format_exception(result.exception))
-    assert result.exit_code == 0, result.output
-    assert "Traceback" not in result.output and "GEOSException" not in result.output
-    with closing(sqlite3.connect(target)) as conn:
-        found = lengths(conn)
-        overlap = overlap_figure(conn)
-        assert ARABLE not in {
-            c for (c,) in conn.execute("SELECT DISTINCT code FROM land_cover_fractions")
-        }
-        check_case7_shares(conn)
-    half = p.area / 2  # 20,080.0 m²
-    assert any(abs(n - half) <= AREA for n in numbers(overlap)), (half, overlap)
-    assert "a.geojson" in overlap, overlap
-    assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
+    assert result.exit_code == USAGE, result.output
+    bowtie_refused(result.output, "b.geojson", 2, tie)
+    assert not target.exists()
 
 
 def lone_bowtie() -> Polygon:
@@ -737,10 +770,8 @@ def lone_bowtie() -> Polygon:
 def test_10_the_lone_bowtie_premises() -> None:
     tie, polygons = lone_bowtie(), dict(cover_polygons())
     assert not tie.is_valid
-    whole = shapely.make_valid(tie)
-    assert whole.area == pytest.approx(20000.0, abs=AREA)
-    assert polygons[311].intersection(whole).area == pytest.approx(20000.0, abs=AREA)
-    assert preferred_lake().intersection(whole).area > 0
+    assert polygons[311].contains(tie.envelope)
+    assert preferred_lake().intersects(tie)
 
 
 def run_kept(scene: dict[str, Path], target: Path, *args: str) -> str:
@@ -756,34 +787,26 @@ def run_kept(scene: dict[str, Path], target: Path, *args: str) -> str:
     return result.output
 
 
-@pytest.mark.parametrize("with_prefer", [False, True], ids=["alone", "prefer"])
-def test_10_a_bowtie_in_a_single_file_is_repaired_once_and_counted(
-    scene: dict[str, Path], tmp_path: Path, lake: Path, with_prefer: bool
+@pytest.mark.parametrize(
+    "extra",
+    [(), ("--prefer", "lake=LAKE"), ("--edges", "all", "--edges-repair", "0.1")],
+    ids=["alone", "prefer", "edge-cleanup"],
+)
+def test_10_a_bowtie_in_a_single_file_is_refused_not_a_traceback(
+    scene: dict[str, Path], tmp_path: Path, lake: Path, extra: tuple[str, ...]
 ) -> None:
     """Code review round 2: one `--land-cover` file holding a bowtie in no
     overlapping pair stayed unrepaired, and `--prefer lake=` made
-    `preferred.replace` throw GEOSException in `_cut`. Repaired once where
-    the map is built, the run ends with exit 0 and the record counts the
-    one repair (`land_cover_repaired`), with or without `--prefer`."""
+    `preferred.replace` throw GEOSException in `_cut`, as `--edges` with a
+    clean-up switch made the clean-up's clip throw. The reader refuses it,
+    with or without either: exit 2 naming the file and its fid (4)."""
     f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (ARABLE, lone_bowtie())])
     target = tmp_path / "x.gpkg"
-    run_kept(scene, target, *classes(f), *(prefer(lake) if with_prefer else ()), "--shares")
-    with closing(sqlite3.connect(target)) as conn:
-        assert record(conn, "land_cover_repaired") == "1"
-
-
-def test_10_a_bowtie_in_a_single_file_with_edge_cleanup_is_not_a_traceback(
-    scene: dict[str, Path], tmp_path: Path
-) -> None:
-    """Code review round 2: `--edges` with a clean-up switch on the same file
-    made the clean-up's clip (`feature_input.py`, `clean`) throw on the
-    unrepaired bowtie, on master too. Repaired where the map is built, the
-    run ends with exit 0 and follows the class borders."""
-    f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (ARABLE, lone_bowtie())])
-    target = tmp_path / "x.gpkg"
-    run_kept(scene, target, *classes(f), *edges("all"), "--edges-repair", "0.1")
-    with closing(sqlite3.connect(target)) as conn:
-        assert lengths(conn)["land_cover"] > 0
+    more = tuple(a.replace("LAKE", str(lake)) for a in extra)
+    code, output = mesh(scene, target, *classes(f), *more, "--shares")
+    assert code == USAGE, output
+    bowtie_refused(output, "a.geojson", 4, lone_bowtie())
+    assert not target.exists()
 
 
 #: `cli._edges`'s stderr line.
@@ -917,7 +940,7 @@ def test_10_threads_reach_the_map_build(
 ) -> None:
     """Code review round 3: `land_cover_map` checked the cut polygons in a
     fixed 8 threads whatever `--threads` said. `--threads 3` reaches every
-    `build` that repairs (each call but `fix=False`'s) as ``threads=3``."""
+    `build` that cuts (each call but `cut=False`'s) as ``threads=3``."""
     calls: list[dict[str, Any]] = []
     real = cli.build
 
@@ -928,9 +951,9 @@ def test_10_threads_reach_the_map_build(
     monkeypatch.setattr(cli, "build", spy)
     f = write_cover_geojson(tmp_path / "a.geojson", cover_polygons())
     run_kept(scene, tmp_path / "x.gpkg", *classes(f), *prefer(lake), "--shares", "--threads", "3")
-    fixing = [k for k in calls if k.get("fix", True)]
-    assert len(fixing) == 1 and len(calls) == 2, calls
-    assert fixing[0].get("threads") == 3, calls
+    cutting = [k for k in calls if k.get("cut", True)]
+    assert len(cutting) == 1 and len(calls) == 2, calls
+    assert cutting[0].get("threads") == 3, calls
 
 
 def test_10_the_box_first_given_keeps_its_area_and_border(
@@ -1110,30 +1133,26 @@ def test_11_a_cut_run_refuses_the_shares(
     assert not [p for p in tmp_path.iterdir() if p.name.endswith(".pieces")]
 
 
-# ------------------------------------------------ test 13: a rebuild that raises
+# ------------------------------------------------ test 13: a thin spike
 
 #: `test_cli_mesh_prefer.py`'s spiked lake moved 100 m south, so its spike
-#: base lies 80 m below the box `build` repairs in (the read region at the
-#: DEM's 60 m cell, `source_region`, grown by 100 m), where GEOS's rebuild
-#: raises on it.
+#: base lies 80 m below the read box (the read region at the DEM's 60 m
+#: cell, `source_region`, grown by 100 m), and its tip inside it.
 SPIKE_BASE = SPIKED_LAKE_BASE + 100.0
 
 
-def test_13_a_land_cover_polygon_whose_rebuild_raises_is_refused(
+def test_13_a_land_cover_polygon_with_a_thin_spike_is_refused(
     scene: dict[str, Path], tmp_path: Path
 ) -> None:
-    """Section 5, test 13, design round 11: the run exits 2 naming the
-    class, "cannot be repaired" and `--land-cover`, with no traceback.
-    Today `build` checks only the polygon's cut to the read box, which is
-    valid, so the spike is never rebuilt and the run ends with exit 0."""
+    """Section 5, test 13, design round 11, as the readers' check has it
+    (`docs/increments/119-core-assumes-clean.md`): the spiked polygon is
+    invalid and reaches the read box, so the run exits 2 naming
+    `--land-cover`, the file and the polygon's fid (4), with no traceback."""
     spike = spiked_lake(SPIKE_BASE)
     assert not spike.is_valid  # the premise
     f = write_cover_geojson(tmp_path / "a.geojson", [*cover_polygons(), (311, spike)])
     target = tmp_path / "x.gpkg"
     code, output = mesh(scene, target, *classes(f), *edges("all"))
     assert code == USAGE, output
-    flat = squashed(output)
-    assert "class311" in flat and "cannotberepaired" in flat, output
-    assert "--land-cover" in flat, output
-    assert "Traceback" not in output, output
+    bowtie_refused(output, "a.geojson", 4, spike)
     assert not target.exists()

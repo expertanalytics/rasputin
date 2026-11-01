@@ -7,6 +7,10 @@ Innlandet (34_25832_ar50_gml.gml, downloaded 2026-10-19): the file's first
 gml:featureMember elements copied byte for byte (the file's features 1 to 5
 and 12,843), and the closing root tag. Nothing inside a feature is changed.
 
+tests/python/test_invalid_polygons.py carries one polygon of the same map,
+inline: feature 191902's 12 vertices in EPSG:25832, copied unchanged from
+the same map for Innlandet (downloaded 2026-10-19).
+
   Inneholder data under Norsk lisens for offentlige data (NLOD)
   tilgjengeliggjort av NIBIO. Kilde: NIBIO, AR50 Arealressurskart 1:50 000,
   Innlandet.

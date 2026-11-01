@@ -21,6 +21,7 @@ import math
 import sqlite3
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +54,9 @@ POLYGONAL, LINEAR = ("Polygon", "MultiPolygon"), ("LineString", "MultiLineString
 #: DEM cells when that is more, its boundary densified to this
 #: spacing before it is moved.
 MARGIN, DENSIFY = 100.0, 1_000.0
+# Chosen: the validity check runs over this many groups of equal vertex count,
+# so one polygon of 100 k vertices does not hold a thread while the rest wait.
+GROUPS = 32
 #: A land-cover class's share in a hydrological cell; a class without one is unspecified.
 Category = Literal["forest", "lake", "glacier", "savanna", "unspecified"]
 #: Parts of the domain's uncovered rest narrower than this, metres, stay out of
@@ -64,6 +68,10 @@ Cover = tuple[Any, int, int | None, int | str, BaseGeometry]
 
 class FeatureError(ValueError):
     """A source or feature refused, naming the file and, for a feature, its fid."""
+
+
+class InvalidPolygons(FeatureError):  # noqa: N818  # named for what it lists
+    """Polygons not valid in the DEM's CRS, each named by fid with GEOS's reason."""
 
 
 class Split(BaseModel):
@@ -544,43 +552,6 @@ def read_lake_polygons(
     return lakes, read.crs
 
 
-def _repaired(
-    geometry: BaseGeometry, xy: npt.NDArray[np.float64], *, what: str = "a polygon"
-) -> BaseGeometry | None:
-    """``geometry`` if valid, else ``shapely.make_valid(geometry)`` within the
-    box of the points ``xy`` widened by 100 m, as polygons, except where two
-    rings share a stretch of edge: there both sides keep the same parity.
-    None if empty.
-    A ring that crosses itself makes GEOS's overlays throw. Only the part near
-    the mesh is ever overlaid, and repairing a large polygon whole takes seconds.
-    make_valid keeps a point when an odd number of rings, counted over all
-    parts, wind around it. So the rings cut to the box, with the box's own
-    edge, split it into faces, and a face is kept when an odd number of parts
-    contain a point of it. Cutting the polygon instead of its rings can swap
-    inside and outside when a ring crosses itself outside the box.
-    GEOS raises on some spikes too thin to rebuild: a :class:`FeatureError`
-    names ``what`` and its first vertex."""
-    if geometry.is_valid:
-        return geometry
-    box = shapely.box(*(xy.min(axis=0) - MARGIN), *(xy.max(axis=0) + MARGIN))
-    try:
-        lines = shapely.clip_by_rect(shapely.boundary(geometry), *box.bounds)
-        noded = shapely.union_all([lines, box.exterior])
-        faces = shapely.get_parts(shapely.polygonize(shapely.get_parts(noded)))
-        x, y = shapely.get_coordinates(shapely.point_on_surface(faces)).T
-        odd = np.zeros(len(faces), dtype=bool)
-        for part in shapely.get_parts(geometry):
-            odd ^= shapely.contains_xy(part, x, y)
-        kept = shapely.get_parts(shapely.coverage_union_all(faces[odd]))
-    except shapely.errors.GEOSException as exc:
-        x0, y0 = shapely.get_coordinates(geometry)[0]
-        raise FeatureError(
-            f"{what} near ({x0:.1f}, {y0:.1f}) in the DEM's CRS cannot be repaired: it has"
-            " a spike too thin to rebuild; clean the file"
-        ) from exc
-    return MultiPolygon(list(kept)) if len(kept) else None
-
-
 @dataclass(frozen=True, slots=True)
 class ClassPolygons:
     """What :func:`read_class_polygons` read: ``(code, polygon)`` per row in
@@ -627,6 +598,57 @@ def _moved(
     return geometries
 
 
+def _refuse_invalid(
+    name: str,
+    fids: Sequence[Any],
+    moved: Sequence[BaseGeometry],
+    as_read: Sequence[BaseGeometry],
+    box: tuple[float, float, float, float] | None,
+    own: str,
+    mesh_crs: str,
+    threads: int,
+) -> npt.NDArray[np.bool_]:
+    """Which of ``moved`` (in ``mesh_crs``) have a bounding box meeting
+    ``box`` (closed intervals; None: every one); an :class:`InvalidPolygons`
+    listing, by fid, every one of those that is not valid, with GEOS's reason,
+    and whether it was valid in the file's CRS ``own`` before the move. The
+    far ones are never overlaid, so they are not checked."""
+    shapes = np.empty(len(moved), dtype=object)
+    shapes[:] = list(moved)
+    near = np.ones(len(shapes), dtype=bool)
+    if box is not None and len(shapes):
+        x0, y0, x1, y1 = shapely.bounds(shapes).reshape(-1, 4).T
+        near = (x0 <= box[2]) & (x1 >= box[0]) & (y0 <= box[3]) & (y1 >= box[1])
+    valid = np.ones(len(shapes), dtype=bool)
+    ends = np.cumsum(shapely.get_num_coordinates(shapes))
+    edges = np.searchsorted(ends, np.linspace(0, ends[-1] if len(ends) else 0, GROUPS + 1)[1:-1])
+    groups = [ix[near[ix]] for ix in np.split(np.arange(len(shapes)), edges)]
+
+    def check(ix: npt.NDArray[np.intp]) -> None:
+        valid[ix] = shapely.is_valid(shapes[ix])
+
+    with ThreadPoolExecutor(max(threads, 1)) as pool:
+        list(pool.map(check, [ix for ix in groups if len(ix)]))
+    bad = sorted(
+        map(int, np.flatnonzero(~valid)), key=lambda i: (isinstance(fids[i], str), fids[i])
+    )
+    if not bad:
+        return near
+    lines = []
+    for i in bad:
+        note = as_read[i] is not moved[i] and as_read[i].is_valid
+        lines.append(
+            f"  feature {fids[i]}: {shapely.is_valid_reason(moved[i])}"
+            + (f" (valid in the file's CRS, {own}: broken by the move)" if note else "")
+        )
+    raise InvalidPolygons(
+        f"{name}: {len(bad)} of the {int(near.sum())} polygons reaching the read region are not"
+        f" valid in {mesh_crs}, the DEM's CRS; the mesh takes valid polygons only. Repair them"
+        f" in {mesh_crs} (shapely.make_valid, or QGIS's Fix geometries) and run again:\n"
+        + "\n".join(lines)
+    )
+
+
 def read_class_polygons(
     path: Path,
     layer: str | None,
@@ -636,11 +658,15 @@ def read_class_polygons(
     *,
     crs: str | None = None,
     threads: int = 1,
+    near: tuple[float, float, float, float] | None = None,
 ) -> ClassPolygons:
     """Every polygon of a land-cover file with its class code, moved to
-    ``mesh_crs`` vertex by vertex, unchecked; a GeoPackage is queried with
+    ``mesh_crs`` vertex by vertex; a GeoPackage is queried with
     ``box_for(own CRS)``, and ``crs``, when given, must be the file's. Empty
-    rows are skipped and counted. A :class:`FeatureError` names file and
+    rows are skipped and counted. The contract: every polygon whose bounding
+    box meets ``near`` (in ``mesh_crs``; None: every polygon) is valid in
+    ``mesh_crs``, else :class:`InvalidPolygons` lists each one that is not
+    (:func:`_refuse_invalid`). A :class:`FeatureError` names file and
     feature: a value no class takes under ``otherwise``, a point, a
     collection or a line, and a vertex with no image in the DEM."""
     spelt: dict[str, str] = {}  # lower case to the first spelling, read as written
@@ -662,6 +688,8 @@ def read_class_polygons(
         codes.append(_code(classes, value, what, dict(zip(spelt, more, strict=True))))
         found.append((fid, shapely.force_2d(g)))
     moved = _moved(name, found, read.crs, mesh_crs, threads)
+    fids, as_read = [f for f, _ in found], [g for _, g in found]
+    _refuse_invalid(name, fids, moved, as_read, near, read.crs, mesh_crs, threads)
     areas = tuple(zip(codes, moved, strict=True))
     return ClassPolygons(areas, read.crs, read.layer, read.scanned, empty)
 
@@ -718,18 +746,18 @@ def read_polygons(
     layer: str | None,
     mesh_crs: str,
     xy: npt.NDArray[np.float64],
-    tell: Callable[[int, int], None] | None = None,
     named: tuple[str, Callable[[list[Any]], list[int]]] | None = None,
     *,
     lines: str = "",
-) -> tuple[list[BaseGeometry], int]:
-    """Every polygon or multipolygon of a source, moved to ``mesh_crs`` vertex
-    by vertex and repaired near the points ``xy`` (:func:`_repaired`); a
-    GeoPackage is queried with their box widened by 100 m. The count returned
-    is how many were repaired, and ``tell`` is called with it and the number
-    read. With ``named`` (an attribute and a filter of its values to the
-    indices kept), only those. A line is skipped, or with ``lines`` refused
-    with those words, naming file and feature."""
+) -> list[BaseGeometry]:
+    """Every valid polygon or multipolygon of a source in file order, moved
+    to ``mesh_crs`` vertex by vertex; a GeoPackage is queried with the box of
+    the points ``xy`` widened by `MARGIN`. The contract: every polygon whose
+    bounding box meets that box is valid in ``mesh_crs``, else
+    :class:`InvalidPolygons` lists each one that is not; an invalid one far
+    from it is dropped. With ``named`` (an attribute and a filter of its
+    values to the indices kept), only those. A line is skipped, or with
+    ``lines`` refused with those words, naming file and feature."""
     read = read_source(path, layer, None if named is None else named[0], _near(xy, mesh_crs))
     rows = read.rows
     if named is not None:
@@ -744,14 +772,11 @@ def read_polygons(
         if g is not None and not g.is_empty and g.geom_type in POLYGONAL
     ]
     moved = [g if move is None else shapely.transform(g, move) for _, g in flat]
-    fixed = [
-        _repaired(g, xy, what=f"{path.name}: feature {fid}")
-        for (fid, _), g in zip(flat, moved, strict=True)
-    ]
-    repaired = sum(a is not b for a, b in zip(moved, fixed, strict=True))
-    if tell is not None:
-        tell(repaired, len(moved))
-    return [g for g in fixed if g is not None], repaired
+    (x0, y0), (x1, y1) = xy.min(axis=0) - MARGIN, xy.max(axis=0) + MARGIN
+    box = (float(x0), float(y0), float(x1), float(y1))
+    fids, as_read = [f for f, _ in flat], [g for _, g in flat]
+    near = _refuse_invalid(path.name, fids, moved, as_read, box, read.crs, mesh_crs, 1)
+    return [g for g, n in zip(moved, near, strict=True) if n or g.is_valid]
 
 
 def _finite(geometry: BaseGeometry) -> bool:

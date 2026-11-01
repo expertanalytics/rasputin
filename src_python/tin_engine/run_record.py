@@ -97,8 +97,6 @@ WORDING = {
         "Classes taken from a preferred source: inside the mesh, the land cover's area of the "
         "class, the preferred source's, and what went to neighbouring classes"
     ),
-    "land_cover_repaired": "Land-cover polygons that crossed themselves, repaired",
-    "reservoirs_repaired": "Reservoir polygons that crossed themselves, repaired",
     "catchments": "Sub-catchment units: their borders constraints, their ids the cells'",
     "catchments_units": "Sub-catchment units whose inner point lies in the domain",
     "catchments_max_shift_m": "Farthest a sub-catchment border was moved when simplified, m",

@@ -336,8 +336,8 @@ def test_lines_of_another_source_are_unchanged_by_prefer(
 
 # ------------------------------------------------------------ a spike under --prefer
 
-#: A spike's sides are this far apart at its base, m: GEOS's rebuild raises
-#: on it (`docs/increments/111-one-land-cover-map.md`, section 3, step 6).
+#: A spike's sides are this far apart at its base, m: GEOS cannot rebuild
+#: it (`docs/increments/111-one-land-cover-map.md`, section 3, step 6).
 THIN = 1e-8
 
 
@@ -360,7 +360,7 @@ def spiked_lake(base: float) -> Polygon:
 
 
 #: Section 5, test 14's lake: its spike runs from 100 m below the box
-#: `read_polygons` repairs in to 341.9 m into it.
+#: `read_polygons` checks in to 341.9 m into it.
 SPIKED_LAKE_BASE = 2429.1
 
 
@@ -371,28 +371,31 @@ def test_14_the_spiked_lakes_premise() -> None:
 
 
 def test_14_read_polygons_refuses_a_thin_spike_naming_the_feature(tmp_path: Path) -> None:
-    """Test 14: today GEOSException ("CoverageUnion cannot process
-    overlapping inputs") escapes `read_polygons`."""
-    from tin_engine.feature_input import FeatureError, read_polygons
+    """Test 14, as `docs/increments/119-core-assumes-clean.md` has it: the
+    lake is invalid and reaches the box, so the reader refuses it by fid
+    with GEOS's reason."""
+    from tin_engine.feature_input import InvalidPolygons, read_polygons
 
-    path = write_lake(tmp_path / "lake.geojson", spiked_lake(SPIKED_LAKE_BASE))
-    with pytest.raises(FeatureError) as caught:
+    lake = spiked_lake(SPIKED_LAKE_BASE)
+    path = write_lake(tmp_path / "lake.geojson", lake)
+    with pytest.raises(InvalidPolygons) as caught:
         read_polygons(path, None, MESH_CRS, np.array(domain_ring()), lines="lines go to --lines")
     message = str(caught.value)
-    assert message.startswith("lake.geojson: feature 1 near ("), message
-    assert "cannot be repaired" in message, message
+    assert message.startswith("lake.geojson: 1 of the 1 polygons"), message
+    assert f"feature 1: {shapely.is_valid_reason(lake)}" in message, message
 
 
 def test_14_prefer_refuses_a_thin_spike_with_no_traceback(
     scene: dict[str, Path], tmp_path: Path, cover: Path
 ) -> None:
-    """Test 14: today the run ends in GEOSException, exit 1."""
-    lake = write_lake(tmp_path / "lake.geojson", spiked_lake(SPIKED_LAKE_BASE))
+    lake = spiked_lake(SPIKED_LAKE_BASE)
+    path = write_lake(tmp_path / "lake.geojson", lake)
     target = tmp_path / "x.gpkg"
-    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={lake}"))
+    code, output = mesh(scene, target, *corine(cover, "--prefer", f"lake={path}"))
     assert code == USAGE, output
     flat = squashed(output)
-    assert "cannotberepaired" in flat and "--prefer" in flat, output
+    assert "Invalidvaluefor--prefer" in flat, output
+    assert squashed(f"feature 1: {shapely.is_valid_reason(lake)}") in flat, output
     assert "Traceback" not in output, output
     assert not target.exists()
 
