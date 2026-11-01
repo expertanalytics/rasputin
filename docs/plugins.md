@@ -132,7 +132,7 @@ plugins use today, and grows on request.
 | `read_feature_table` | `read_feature_table(path, layer, box_for=None)`: a `.gpkg`, `.geojson` or `.json` layer with every column; `box_for(own CRS)` keeps only the GeoPackage rows near a box |
 | `FeatureError` | The `ValueError` a feature reader raises, naming the file |
 | `read_source` | `read_source(path, layer, attribute, box_for, crs=None, extra=())`: a `.gpkg`, `.geojson`, `.json` or `.gml` file's features, unclipped, in the file's own CRS: CRS text, GeoPackage layer (`None` otherwise), whether it was scanned without an R-tree, and (fid, geometry, `attribute` value) per row; `attribute=None` reads a GeoPackage's primary key; `box_for(own CRS)` returning `None` reads every row; `crs`, when given, must match the file's, and a GML file naming none takes it; `extra` names more attributes read per row. A refusal is a `FeatureError` |
-| `FeatureManifest` | A cached map-service layer's `manifest.json`: source, URL, CRS, key field, columns, the rasputin version and date of the first fetch, and one region hash and date per request. Frozen |
+| `FeatureManifest` | A cached map-service layer's `manifest.json`: source, URL, CRS, key field, columns, the source's stated position error in metres (none if it states none), the rasputin version and date of the first fetch, and one region hash and date per request. Frozen |
 | `srs_entry` | The core's GeoPackage writer: a spatial reference row |
 | `create_geopackage` | The core's GeoPackage writer: a new, empty GeoPackage |
 | `create_features_table` | The core's GeoPackage writer: a features table in it |

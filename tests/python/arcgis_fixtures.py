@@ -1,4 +1,6 @@
-"""A fake ArcGIS map-service layer and two hand-made layers of four polygons. Test support only.
+"""A fake ArcGIS map-service layer, two hand-made layers of four polygons and one of four lines.
+
+Test support only.
 
 `docs/increments/63-fetch-vectors.md`, *6. Tests*. No test reaches the network:
 `FakeLayer.get_text` stands in for `RangeClient.get_text`, answers from memory
@@ -38,9 +40,12 @@ hold it exactly (all are below 2**24):
 
 `NVE` sits in EPSG:25833 near (200 000, 6 600 000), as NVE's lake layer;
 `CORINE` the same shapes in EPSG:3035 near (4 300 000, 4 000 000), with CORINE
-codes. Each serves fields the catalogue entry does not ask for (NVE's
-`objekttype`, `hoyde`, `magasinnr`; CORINE's `Remark`, `Area_Ha`), so a cache
-that keeps whatever it is given is caught.
+codes. `LINES` is a polyline layer in EPSG:25833 near (200 000, 6 600 000), as
+NVE's river network (Elvenett1, layer 2): id 3 a straight line, id 7 a bent
+one, id 11 a line crossing itself, id 12 a MultiLineString of two parts, id 20
+far away; it also serves a field not asked (`oppdatertav`). Each serves
+fields the catalogue entry does not ask for (NVE's `objekttype`, `hoyde`,
+`magasinnr`; CORINE's `Remark`, `Area_Ha`), so a cache that keeps whatever it is given is caught.
 """
 
 from __future__ import annotations
@@ -52,7 +57,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import shapely
-from shapely.geometry import MultiPolygon, Polygon, box, mapping
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon, box, mapping
+from shapely.geometry.base import BaseGeometry
 
 from tin_engine.fetch.http import FetchError
 
@@ -60,6 +66,7 @@ NVE_URL = "https://kart.nve.no/enterprise/rest/services/Innsjodatabase2/MapServe
 CORINE_URL = (
     "https://image.discomap.eea.europa.eu/arcgis/rest/services/Corine/CLC2018_LAEA/MapServer/0"
 )
+RIVERS_URL = "https://kart.nve.no/enterprise/rest/services/Elvenett1/MapServer/2"
 IDS = (3, 7, 11, 12)
 FAR = 20
 
@@ -97,7 +104,7 @@ class LayerData:
     id_field: str
     #: Every field of the layer, name to esri type, in the layer's order.
     fields: Mapping[str, str]
-    shapes: Mapping[int, Polygon | MultiPolygon]
+    shapes: Mapping[int, BaseGeometry]
     properties: Mapping[int, Mapping[str, Any]]
     #: Boxes in the layer's CRS, x0 y0 x1 y1: all four ids, the first two,
     #: the last three (id 7 in both halves).
@@ -106,6 +113,8 @@ class LayerData:
     box_right: tuple[int, int, int, int]
     #: The fields the catalogue entry asks for.
     asked: tuple[str, ...]
+    #: The layer's `geometryType`.
+    geometry: str = "esriGeometryPolygon"
 
     def extent(self, ids: Iterable[int]) -> tuple[float, float, float, float]:
         """The bounds of the union of the shapes `ids`, min_x min_y max_x max_y."""
@@ -185,6 +194,51 @@ CORINE = LayerData(
 )
 
 
+def _lines(x0: int, y0: int) -> dict[int, LineString | MultiLineString]:
+    """The five lines, laid out from the corner (`x0`, `y0`) as `_shapes` lays out its shapes."""
+    return {
+        3: LineString([(x0, y0), (x0 + 100, y0 + 100)]),
+        7: LineString([(x0 + 1000, y0), (x0 + 1100, y0 + 50), (x0 + 1200, y0)]),
+        11: LineString(
+            [(x0 + 2000, y0), (x0 + 2100, y0 + 100), (x0 + 2100, y0), (x0 + 2000, y0 + 100)]
+        ),
+        12: MultiLineString(
+            [[(x0 + 3000, y0), (x0 + 3100, y0)], [(x0 + 3300, y0), (x0 + 3400, y0 + 100)]]
+        ),
+        FAR: LineString([(x0 + 100_000, y0 + 100_000), (x0 + 100_100, y0 + 100_100)]),
+    }
+
+
+LINES = LayerData(
+    RIVERS_URL,
+    25833,
+    "objectid",
+    {
+        "objectid": "esriFieldTypeOID",
+        "shape": "esriFieldTypeGeometry",
+        "objekttype": "esriFieldTypeString",
+        "elvid": "esriFieldTypeString",
+        "vatnlnr": "esriFieldTypeInteger",
+        "strekninglnr": "esriFieldTypeInteger",
+        "oppdatertav": "esriFieldTypeString",
+    },
+    _lines(_NX, _NY),
+    {
+        i: {
+            "objekttype": "ElvBekk",
+            "elvid": f"002.{i}",
+            "vatnlnr": None if i == 7 else 1000 + i,
+            "strekninglnr": i,
+            "oppdatertav": "someone",
+        }
+        for i in (*IDS, FAR)
+    },
+    **_boxes(_NX, _NY),
+    asked=("objekttype", "elvid", "vatnlnr", "strekninglnr"),
+    geometry="esriGeometryPolyline",
+)
+
+
 #: An ArcGIS refusal as it comes, in an HTTP 200 body; its words are the service's.
 REFUSAL: Mapping[str, Any] = {
     "error": {
@@ -206,7 +260,8 @@ class FakeLayer:
     data: LayerData
     #: The layer's `maxRecordCount`: the chunk size when below 500.
     max_records: int = 2000
-    geometry_type: str = "esriGeometryPolygon"
+    #: The `geometryType` the layer states; None is the layer's own.
+    geometry_type: str | None = None
     #: The CRS the layer states; None is the layer's own.
     stated_epsg: int | None = None
     #: State only `wkid`, no `latestWkid`.
@@ -266,7 +321,7 @@ class FakeLayer:
             "id": 0,
             "name": "layer",
             "type": "Feature Layer",
-            "geometryType": self.geometry_type,
+            "geometryType": self.geometry_type or self.data.geometry,
             "fields": [
                 {"name": n, "type": t, "alias": n}
                 for n, t in self.data.fields.items()

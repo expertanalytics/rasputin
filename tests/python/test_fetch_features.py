@@ -4,8 +4,8 @@
 tests 2 to 8. No network: `arcgis_fixtures.FakeLayer.get_text` is the injected
 `get_text`, and the cache is `tmp_path`. The layers are the hand-made ones of
 `arcgis_fixtures` (ids 3, 7, 11, 12 in `box_all`; id 20 outside it), served
-under the shipped `nve-lakes` and `clc2018` entries, whose CRS, id field and
-fields they match.
+under the shipped `nve-lakes`, `clc2018` and `nve-river-network` entries,
+whose CRS, id field and fields they match; `LINES` is the line layer.
 
 The cache is passed as `CacheWriter(root, source.id)`, not yet entered;
 `fetch_features` takes its lock itself, as `fetch/run.fetch` does.
@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 import shapely
 
-from arcgis_fixtures import CORINE, FAR, IDS, NVE, FakeLayer, LayerData, holds
+from arcgis_fixtures import CORINE, FAR, IDS, LINES, NVE, FakeLayer, LayerData, holds
 from crs_fixtures import crs_box
 from gpkg_fixtures import needs_rtree
 from tin_engine.crs import transform_bounds
@@ -48,7 +48,7 @@ def features() -> ModuleType:
 
 
 def source_of(data: LayerData) -> RemoteSource:
-    return SOURCES["nve-lakes" if data.url == NVE.url else "clc2018"]
+    return SOURCES[{NVE.url: "nve-lakes", LINES.url: "nve-river-network"}.get(data.url, "clc2018")]
 
 
 def request(
@@ -176,12 +176,15 @@ class TestLayerCheck:
     @pytest.mark.parametrize(
         ("knobs", "words"),
         [
-            ({"geometry_type": "esriGeometryPolyline"}, ("only polygon layers are fetched",)),
+            (
+                {"geometry_type": "esriGeometryPoint"},
+                ("esriGeometryPolygon", "esriGeometryPolyline"),
+            ),
             ({"stated_epsg": 4326}, ("4326", "25833")),
             ({"missing_fields": ("navn",)}, ("navn",)),
             ({"hashed_ids": True}, ("OIDFieldContainsHashValue",)),
         ],
-        ids=["a-line-layer", "a-crs-mismatch", "a-field-the-layer-lacks", "hashed-ids"],
+        ids=["a-point-layer", "a-crs-mismatch", "a-field-the-layer-lacks", "hashed-ids"],
     )
     def test_refused_before_any_query(
         self, features: ModuleType, tmp_path: Path, knobs: dict[str, Any], words: tuple[str, ...]
@@ -619,3 +622,116 @@ class TestFeaturesTable:
                     conn, "features", 25833, "MULTIPOLYGON", "objectid",
                     [("vatnlnr", "esriFieldTypeInteger"), ("raw", "esriFieldTypeBlob")],
                 )  # fmt: skip
+
+
+# ------------------------------------------------------------ line layers
+
+
+def manifest_doc(root: Path, source: str) -> dict[str, Any]:
+    return dict(json.loads((root / source / "manifest.json").read_text(encoding="utf-8")))
+
+
+@needs_rtree
+class TestLineLayers:
+    def test_the_facts_of_a_line_layer(self, features: ModuleType) -> None:
+        facts = features.layer_facts(source_of(LINES), FakeLayer(LINES).get_text)
+        assert facts.geometry == "esriGeometryPolyline"
+        assert facts.id_field == "objectid"
+
+    def test_a_line_layer_is_cached_as_multilinestrings_holding_the_allow_list_only(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        report = run(features, FakeLayer(LINES, max_records=2), tmp_path)
+        assert (report.in_box, report.present, report.fetched) == (4, 0, 4)
+        rows = stored(tmp_path, "nve-river-network")
+        assert set(rows) == set(IDS)
+        for i, (geometry, values) in rows.items():
+            assert values == {k: LINES.properties[i][k] for k in LINES.asked}, i
+            served = LINES.shapes[i]
+            parts = served.geoms if served.geom_type == "MultiLineString" else [served]
+            assert geometry.equals_exact(shapely.MultiLineString(list(parts)), 0.0), i
+        with closing(open_geopackage(tmp_path / "nve-river-network" / "features.gpkg")) as conn:
+            info = layer_info(conn, None)
+            summary = layer_summary(conn, info)
+            assert info.crs == UTM33
+            assert summary.geometry == "MULTILINESTRING"
+            assert summary.extent == LINES.extent(IDS)
+
+    def test_a_line_layer_resumes_asking_only_the_ids_not_cached(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        run(features, FakeLayer(LINES), tmp_path, LINES.box_left)
+        assert stored_ids(tmp_path, "nve-river-network") == {3, 7}
+        again = FakeLayer(LINES)
+        report = run(features, again, tmp_path, LINES.box_right)
+        assert again.chunks_asked() == [[11, 12]]
+        assert (report.in_box, report.present, report.fetched) == (3, 1, 2)
+        assert stored_ids(tmp_path, "nve-river-network") == set(IDS)
+        cached = FakeLayer(LINES)
+        run(features, cached, tmp_path, LINES.box_all)
+        assert cached.chunks_asked() == []
+
+    def test_a_polygon_in_a_line_layers_answer_is_refused_naming_it(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        polygon = shapely.geometry.mapping(NVE.shapes[3])
+        with pytest.raises(FetchError) as caught:
+            run(features, FakeLayer(LINES, raw_geometry={11: polygon}), tmp_path)
+        assert "has no line" in message(caught) and names_id(message(caught), 11), message(caught)
+
+    def test_a_line_in_a_polygon_layers_answer_says_it_has_no_polygon(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        line = shapely.geometry.mapping(LINES.shapes[7])
+        with pytest.raises(FetchError) as caught:
+            run(features, FakeLayer(NVE, raw_geometry={7: line}), tmp_path)
+        assert "has no polygon" in message(caught), message(caught)
+
+    def test_a_line_cache_refuses_a_polygon_layers_rows(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        run(features, FakeLayer(LINES), tmp_path, LINES.box_left)
+        polygons = FakeLayer(LINES, geometry_type="esriGeometryPolygon")
+        with pytest.raises(CacheError, match="--refresh fetches anew"):
+            run(features, polygons, tmp_path)
+        assert polygons.chunks_asked() == []
+        assert stored_ids(tmp_path, "nve-river-network") == {3, 7}
+
+
+@needs_rtree
+class TestPositionError:
+    def test_the_manifest_carries_the_entrys_position_error(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        assert SOURCES["nve-river-network"].position_error_m == 50.0
+        run(features, FakeLayer(LINES), tmp_path)
+        assert manifest_doc(tmp_path, "nve-river-network")["position_error_m"] == 50.0
+
+    def test_an_entry_stating_none_gives_none(self, features: ModuleType, tmp_path: Path) -> None:
+        run(features, FakeLayer(NVE), tmp_path)
+        assert manifest_doc(tmp_path, "nve-lakes").get("position_error_m") is None
+
+    def test_a_manifest_without_the_key_reads_as_none(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        run(features, FakeLayer(LINES), tmp_path)
+        doc = manifest_doc(tmp_path, "nve-river-network")
+        del doc["position_error_m"]
+        repository = importlib.import_module("tin_engine.io.repository")
+        assert repository.FeatureManifest.model_validate(doc).position_error_m is None
+
+    def test_a_resume_with_another_position_error_is_refused(
+        self, features: ModuleType, tmp_path: Path
+    ) -> None:
+        run(features, FakeLayer(LINES), tmp_path, LINES.box_left)
+        other = SOURCES["nve-river-network"].model_copy(update={"position_error_m": 20.0})
+        fake = FakeLayer(LINES)
+        asked = request(LINES.box_all, other.id)
+        with pytest.raises(FetchError, match="--refresh fetches anew"):
+            features.fetch_features(asked, other, fake.get_text, CacheWriter(tmp_path, other.id))
+        assert fake.chunks_asked() == []
+
+    def test_a_position_error_is_refused_for_a_source_of_heights(self) -> None:
+        entry = SOURCES["glo30"].model_dump(exclude_unset=True)
+        with pytest.raises(ValueError, match="position_error_m"):
+            RemoteSource.model_validate({**entry, "position_error_m": 5.0})

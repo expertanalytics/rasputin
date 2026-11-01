@@ -57,7 +57,7 @@ SNAPSHOT = Path(__file__).parent / "data" / "catalogue_b1353075.json"
 SHIPPED = ("anadem-v1", "glo30", "mapbiomas-c11")
 STATIONS = ("nve-hrd",)
 #: The entries added after the snapshot: vector layers fetched from a map service.
-FEATURE_LAYERS = ("nve-lakes", "nve-glaciers", "clc2018")
+FEATURE_LAYERS = ("nve-lakes", "nve-glaciers", "clc2018", "nve-river-network")
 GLO30_TILE_NAME = "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM"
 #: 10" and 1" in degrees, each rounded up in the fifth significant digit.
 GLO30_TILE_SPACING = (0.0027778, 0.00027778)
@@ -67,8 +67,8 @@ TILE_FIELDS = ("tile_name", "tile_spacing")
 LOCAL_FIELDS = ("path", "description")
 #: The field every entry gained with vector sources: None on every shipped one.
 VECTOR_FIELDS = ("layer",)
-#: The field the map-service kind added: the attributes asked of the layer.
-FEATURE_FIELDS = ("fields",)
+#: The fields the map-service kind added: the attributes asked of the layer, its position error.
+FEATURE_FIELDS = ("fields", "position_error_m")
 #: The field the named filter added: None on every shipped entry.
 NAMED_FIELDS = ("named_by",)
 USER_ID = "my-x"

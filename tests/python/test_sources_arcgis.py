@@ -325,8 +325,8 @@ class TestTheCli:
     def test_a_refusal_is_exit_1_with_its_reason(
         self, tmp_path: Path, served: dict[str, FakeLayer]
     ) -> None:
-        served[NVE_URL].geometry_type = "esriGeometryPolyline"
+        served[NVE_URL].geometry_type = "esriGeometryPoint"
         code, output = invoke("fetch", "nve-lakes", *box_args(NVE), "--cache", str(tmp_path))
         assert code == REFUSED, output
-        assert "only polygon layers are fetched" in output, output
+        assert "a esriGeometryPoint layer" in output, output
         assert "Traceback" not in output

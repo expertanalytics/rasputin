@@ -1,4 +1,4 @@
-"""`rasputin fetch` of an `arcgis-features` source: a map-service layer's polygons meeting a box.
+"""`rasputin fetch` of an `arcgis-features` source, a map-service layer's polygons or lines by box.
 
 The layer is described first (`<url>?f=json`) and checked against the
 catalogue entry; then the ids of the features meeting the box are asked
@@ -9,8 +9,9 @@ a single answer may be too large for the server (two large sea polygons of
 CORINE in one answer are an HTTP 500 every time; each alone is answered).
 
 Every answer is checked: the ids returned are the ids asked, its CRS is the
-one asked, and each geometry is a polygon or multipolygon with finite
-coordinates. Polygons are stored as served: no repair, no clipping. Each
+one asked, and each geometry is of the layer's kind (a polygon or
+multipolygon, a line or multiline) with finite coordinates. Geometries are
+stored as served: no repair, no clipping. Each
 chunk is one SQLite transaction of `features.gpkg`, so a rerun resumes from
 the ids present. The network call is injected (`get_text`), as in
 `fetch/nve.py`; nothing here opens a file.
@@ -45,6 +46,12 @@ from tin_engine.sources import RemoteSource, notice
 MAX_IDS = 500
 
 GetText = Callable[[str], str]
+#: Per layer kind: the GeoJSON types an answer may hold, the word a refusal
+#: uses, and the GeoPackage table kind.
+_KINDS: dict[str, tuple[tuple[str, str], str, Literal["MULTIPOLYGON", "MULTILINESTRING"]]] = {
+    "esriGeometryPolygon": (("Polygon", "MultiPolygon"), "polygon", "MULTIPOLYGON"),
+    "esriGeometryPolyline": (("LineString", "MultiLineString"), "line", "MULTILINESTRING"),
+}
 
 
 class LayerFacts(BaseModel):
@@ -52,7 +59,7 @@ class LayerFacts(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    geometry: Literal["esriGeometryPolygon"]
+    geometry: Literal["esriGeometryPolygon", "esriGeometryPolyline"]
     id_field: str
     #: Every field, name to esri field type.
     fields: Mapping[str, str]
@@ -93,17 +100,16 @@ def _answer(get_text: GetText, url: str, where: str) -> Any:
 
 def layer_facts(source: RemoteSource, get_text: GetText) -> LayerFacts:
     """The layer's facts, refused (a `FetchError` naming the source and URL)
-    unless it is a polygon layer in the entry's CRS, holding every field the
+    unless it is a polygon or line layer in the entry's CRS, holding every field the
     entry asks for, whose ids are not hash values (which a query by
     `objectIds` must avoid)."""
     url, crs = source.url_for(), source.crs
     assert crs is not None
     where = f"{source.id}: {url}"
     doc = _answer(get_text, query_url(url, {"f": "json"}), where)
-    if doc.get("geometryType") != "esriGeometryPolygon":
-        raise FetchError(
-            f"{where}: a {doc.get('geometryType')} layer; only polygon layers are fetched"
-        )
+    geometry = doc.get("geometryType")
+    if geometry not in _KINDS:
+        raise FetchError(f"{where}: a {geometry} layer; only {' and '.join(_KINDS)} are fetched")
     unique = doc.get("uniqueIdInfo") or {}
     if unique.get("OIDFieldContainsHashValue"):
         raise FetchError(f"{where}: its ids are hash values (OIDFieldContainsHashValue)")
@@ -118,7 +124,7 @@ def layer_facts(source: RemoteSource, get_text: GetText) -> LayerFacts:
     if missing := [f for f in source.fields if f not in fields]:
         raise FetchError(f"{where}: the layer has no field {', '.join(missing)}")
     return LayerFacts(
-        geometry="esriGeometryPolygon",
+        geometry=geometry,
         id_field=ids[0],
         fields=fields,
         max_records=int(doc.get("maxRecordCount") or MAX_IDS),
@@ -134,7 +140,8 @@ def chunks(ids: Sequence[int], size: int) -> list[list[int]]:
 def _rows(
     doc: Any, asked: Sequence[int], facts: LayerFacts, fields: Sequence[str], where: str
 ) -> list[tuple[int, BaseGeometry, list[Any]]]:
-    """A features answer's rows `(id, polygon, values of fields)`, checked."""
+    """A features answer's rows `(id, geometry, values of fields)`, checked."""
+    types, word, _ = _KINDS[facts.geometry]
     stated = ((doc.get("crs") or {}).get("properties") or {}).get("name")
     if stated != f"EPSG:{facts.epsg}":
         raise FetchError(f"{where}: the answer is in {stated}, not EPSG:{facts.epsg} as asked")
@@ -146,13 +153,13 @@ def _rows(
             raise FetchError(f"{where}: a feature without its id ({facts.id_field})")
         given = feature.get("geometry") or {}
         try:
-            if given.get("type") not in ("Polygon", "MultiPolygon"):
+            if given.get("type") not in types:
                 raise ValueError(f"a {given.get('type')} geometry")
             polygon = shape(given)
             if not np.isfinite(shapely.get_coordinates(polygon)).all():
                 raise ValueError("a coordinate that is not finite")
         except (ValueError, TypeError, AttributeError) as exc:
-            raise FetchError(f"{where}: feature {key} has no polygon: {exc}") from exc
+            raise FetchError(f"{where}: feature {key} has no {word}: {exc}") from exc
         rows.append((key, polygon, [properties.get(f) for f in fields]))
     served = [k for k, _, _ in rows]
     if sorted(served) != sorted(asked):
@@ -163,7 +170,7 @@ def _rows(
 def fetch_features(
     request: FetchRequest, source: RemoteSource, get_text: GetText, cache: CacheWriter
 ) -> FeatureReport:
-    """Copy into `cache` the polygons of `source`'s layer meeting the
+    """Copy into `cache` the features of `source`'s layer meeting the
     request's box (or its domain's bounds), moved into the layer's CRS with
     no growth: a feature meeting the box comes whole."""
     t0, sent, got = time.perf_counter(), [0], [0]
@@ -233,10 +240,16 @@ def fetch_features(
             fields=source.fields,
             rasputin_version=installed_version(),
             first_fetched=datetime.date.today(),
+            position_error_m=source.position_error_m,
         )
         if (manifest.id_field, manifest.fields) != (facts.id_field, source.fields):
             raise FetchError(f"{where}: the cache holds other fields; --refresh fetches anew")
-        with closing(cache.features(srs, facts.id_field, columns)) as conn:
+        if manifest.position_error_m != source.position_error_m:
+            raise FetchError(
+                f"{where}: the cache states another position error; --refresh fetches anew"
+            )
+        kind = _KINDS[facts.geometry][2]
+        with closing(cache.features(srs, facts.id_field, columns, kind)) as conn:
             cache.put_manifest(manifest)
             cache.put_notice(
                 notice(source, (source.credit_for(url=url, date=manifest.first_fetched),))
