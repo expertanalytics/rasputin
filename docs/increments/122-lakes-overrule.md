@@ -3,7 +3,11 @@
 Status: **design** (`@architect`, 2026-11-01, on public master `ae33748e`;
 branch `worktree-lakes-overrule`; amended the same day for Ola's ruling
 on coverage gaps: a part of the domain no input file covers stops the run,
-and only `--land-cover-partial` fills it, sections 3.6 and 7). Full lane (it changes the class each
+and only `--land-cover-partial` fills it, sections 3.6 and 7; amended
+2026-11-02 after `@tester`'s red suite `6ae4cd2a`: code 0 means "in no
+polygon of the map" under every `--edges` choice, section 3.7; the test
+fixtures cover their domain and only tests about partial cover pass the
+flag, section 7a). Full lane (it changes the class each
 triangle carries: a wrong class gives wrong numbers without a crash),
 Python only: no C++, nothing under `include/terrain/refinement/` or
 `include/terrain/mesh/`, so no `@perf` acceptance run (section 8). Pipe
@@ -172,7 +176,9 @@ def fill_no_class(vertices: npt.ArrayLike, triangles: npt.ArrayLike,
 
 Pure (numpy and shapely, no file, no CRS object). `asking` (default
 `codes == 0`) marks the triangles to fill; every other triangle keeps its
-code. The rule, exactly:
+code. The codes it is given are section 3.7's, so code 0 is a triangle in
+no polygon of the map, never one the `--edges` choice left uncoded. The
+rule, exactly:
 
 1. **Groups.** The asking triangles split into groups connected through
    shared edges (constraint edges do not cut a group; `regions` on the
@@ -255,8 +261,9 @@ is no data: without `--land-cover-partial` the run is refused (section
 
 ### 3.5 Where it runs
 
-`cli.py`: after `label_triangles` in `_land_cover` (whole mesh and each
-`--pieces` piece through `_write_piece`), and after the codes of
+`cli.py`: after `label_triangles(..., rest=)` in `_land_cover` (whole
+mesh and each `--pieces` piece through `_write_piece`, which gains the
+map's areas as an argument for it, section 3.7), and after the codes of
 `_class_fractions` (polygons and raster). A `ValueError` from the fill
 becomes `typer.BadParameter(param_hint="--land-cover")`, exit 2, no file
 written. A piece is filled on its own triangles: a group cut by a seam
@@ -381,13 +388,65 @@ gap's area in the DEM CRS's plane, 0 when none) and `land_cover_gaps`
 person's, and the agent gets the refusal naming the file to add
 (question 1).
 
+### 3.7 Code 0 means "in no polygon of the map", whatever `--edges` selects (`landcover.py`, `cli.py`)
+
+**Today.** `_land_cover` labels from the borders' polygons alone
+(`found.features`, `src_python/tin_engine/cli.py@6ae4cd2a:2566`). With `--edges water`, a
+category (`forest`) or a class code, those are the selected classes' only,
+so covered land outside them reads 0 (`label_triangles`: "0 in no
+polygon"). The fill would then treat it as missing and, with water the
+only donor, make it water (`@tester`'s case, test 22).
+
+**The rule.** Covered or not is decided by the polygons as read, never
+by a triangle code:
+
+- *The gap check* (section 3.6) already is: the domain less the union of
+  `base.areas` and the `--prefer` polygons, computed in
+  `_land_cover_map`, which runs whenever `--land-cover` gives class
+  polygons, whatever `--edges` says (`src_python/tin_engine/cli.py@6ae4cd2a:1295`). It reads
+  no code. A raster's gap is its own no-data share, and a raster takes no
+  class selector in `--edges` (`_edge_choice` refuses it: "selects
+  classes, and no class polygons come from --land-cover", `src_python/tin_engine/cli.py@6ae4cd2a:2063`), so
+  the edge mode cannot reach it either.
+- *The labels.* `label_triangles` gains `rest: Sequence[tuple[BaseGeometry,
+  int]] = ()`, the map's areas (`land.map.areas`, `--prefer` applied,
+  flipped to `(polygon, code)`). Each region between constraint lines
+  is labelled from `polygons` as today. A triangle whose region took 0
+  takes the code of the `rest` polygon holding its own label point (its
+  incentre, as today's region point): `_lookup`'s rule, the smallest
+  polygon, then the lower code. Still 0 only if that point is in no
+  polygon of the map. So code 0 means one thing under every `--edges`:
+  an island or lone water piece `replace` left out (section 3.1), noise
+  under `GAP_NOISE`, or, with `--land-cover-partial`, a gap. Those, and
+  only those, are filled and marked. `CoverLabels` gains `rest: int`
+  (triangles coded this way); the stderr line adds ", N coded from the
+  map outside the borders" when N > 0 (words free).
+- *Per triangle, not per region:* a land region under `--edges water`
+  may hold heath and forest with no line between them. One code for it
+  would invent a class over most of it.
+- *Under `--edges all`* every region's code comes from the borders,
+  which are the map's areas, so `rest` is reached only by triangles in
+  no polygon (prediction, checked at acceptance: Bygdin's codes equal
+  master's but on the 145 island triangles).
+- *The shares path* (`--shares`, or no class borders) codes from the
+  map already (`_class_fractions` over `land.map.areas`); unchanged.
+
+Cost: one `_lookup` over the triangles left 0, only when some are.
+Scratch `lookup_cost.py` (random points in Voronoi polygons over
+50 km × 50 km): 10⁵ points in 20,000 polygons 0.13 s; 10⁶ in 20,000
+1.30 s; 10⁶ in 170,000 1.69 s. An estimate, not measured: 10⁷ land
+triangles under `--edges water`, some 15 to 20 s at that rate, more with
+real polygons of many vertices; nothing under `--edges all`.
+
 ## 4. Blueprint
 
     read (119: valid polygons) -> land_cover_map.build -> preferred.replace(..., water=)
       -> coverage_gap(domain, base.areas + --prefer polygons, threads=) -> Gap
          (parts and no --land-cover-partial: _covering hint, CoverageGap, exit 2)
       -> map.areas (islands, lone water pieces and, with the flag, gaps uncovered)
-      -> edges_of -> mesh -> label_triangles | assign/dominant (codes, 0 where uncovered)
+      -> edges_of -> mesh
+      -> label_triangles(..., polygons=borders, rest=map.areas) | assign/dominant
+         (codes; 0 only where the label point is in no polygon of the map, section 3.7)
       -> fill_no_class(vertices, triangles, codes, water=) -> Filled
       -> [shares: raster 0 shares and no flag: CoverageGap; merge_zero_share(table, into)]
       -> write_vtk/write_ply/write_triangles(..., filled=Filled.filled), record, stderr
@@ -397,6 +456,7 @@ Interfaces the tests call: `land_cover_map.coverage_gap`,
 `landcover.fill_no_class`, `landcover.Filled`,
 `land_cover_fractions.merge_zero_share`,
 `preferred.replace(base, chosen, near, *, water)`,
+`landcover.label_triangles(..., rest=)` and `CoverLabels.rest`,
 `land_cover_map.build` (unchanged signature after 119), `read_mesh(...)
 .land_cover_filled`, and `rasputin mesh` through `CliRunner`.
 
@@ -407,10 +467,10 @@ Interfaces the tests call: `land_cover_map.coverage_gap`,
 out are overlays (`difference`, the shared-border bands) of valid input,
 with no repair that can leave slivers to fill; and it is written against
 119's code: `build(..., cut=...)` not `fix=`, `read_polygons` returning a
-list, `_class_fractions` without `land_cover_repaired`. So the branch is
-rebased on master after PR 419 merges, before `@tester` starts; begun on
-`ae33748e`, the red suite would conflict in `cli.py`'s `_land_cover_map`
-and `_class_fractions` and test 119's removed `repaired`.
+list, `_class_fractions` without `land_cover_repaired`. Done: PR 419 is
+on master, and the branch merged master `5921a878` at `b1283396` before
+the red suite `6ae4cd2a`; the line numbers cited `@6ae4cd2a` are of that
+tree.
 
 ## 6. Degeneracy policy
 
@@ -454,10 +514,10 @@ triangles, codes per column (CORINE: 322 heath, 333 sparse, 511 river,
    `test_land_cover_map.py::test_a_map_cut_by_prefer_covers_the_region_once`
    are amended to this (their region covered less the island in the
    base's water, 100 m²).
-9. End to end, `test_cli_mesh_prefer.py`'s scene (its left-out water is
-   code 0 today), with `--land-cover-partial`, since its
-   `cover_polygons()` leave 1,905,280.4 m² of its domain uncovered (test
-   17): `.gpkg`, `.vtk` and `.ply` hold no triangle with code 0,
+9. End to end, `test_cli_mesh_prefer.py`'s scene on the covering
+   `cover_polygons()` (section 7a; its left-out water is code 0 today),
+   **without** `--land-cover-partial`: islands fill on the default path.
+   `.gpkg`, `.vtk` and `.ply` hold no triangle with code 0,
    `land_cover_filled` is 1 exactly where today's code is 0, the record's
    `land_cover_filled` equals that count, and no `land_cover_fractions`
    row has code 0; the stderr line is printed once.
@@ -476,7 +536,8 @@ triangles, codes per column (CORINE: 322 heath, 333 sparse, 511 river,
 
 Coverage gaps (section 3.6). Figures of 13 to 16 measured with shapely
 2.2.0 (scratch, this session); of 17 and 18 with the test suite's own
-fixtures (`fraction_fixtures.domain_ring`, `cover_polygons()`).
+fixtures (`fraction_fixtures.domain_ring`, `partial_cover()`, today's
+`cover_polygons()`).
 
 13. `coverage_gap`, domain [0,100]², covers [0,100] x [0,60] and [0,60]
     x [60,100]: one part, 1,600 m² exactly, at (80, 80) ±0.01 (inscribed
@@ -493,7 +554,7 @@ fixtures (`fraction_fixtures.domain_ring`, `cover_polygons()`).
     2,000,000 m², radius 500; `threads=1` and `threads=4` give equal
     `Gap`s, and so does the covers' order reversed.
 17. CLI refusal, `test_cli_mesh_prefer.py`'s scene without the flag
-    (`--land-cover` `cover_polygons()`, domain `domain_ring()`, EPSG:31983):
+    (`--land-cover` `partial_cover()`, domain `domain_ring()`, EPSG:31983):
     exit 2, "Invalid value for --land-cover", 2 parts listed, 1.9053 km²
     in all, the larger 1.8751 km², each line ending "in EPSG:31983", no
     "covered by", and no output file (the red premise: today exit 0).
@@ -501,7 +562,7 @@ fixtures (`fraction_fixtures.domain_ring`, `cover_polygons()`).
     triangle code 0, the stderr gap line once, record
     `land_cover_partial` "on", `land_cover_gaps` 2, `land_cover_gap_m2`
     1,905,280.4 (±0.5); without land cover the three keys are absent;
-    with full cover `land_cover_gaps` 0 and "off".
+    with `cover_polygons()` (full cover) `land_cover_gaps` 0 and "off".
 19. An island fills without the flag: domain `domain_ring()`; heath 322
     over the DEM's box less L, lake 512 on L =
     `box(x0+800.3, y0-1600.7, x0+1600.9, y0-800.1)`, `--prefer lake=` L
@@ -514,10 +575,29 @@ fixtures (`fraction_fixtures.domain_ring`, `cover_polygons()`).
     of the gap of test 17 as one 211 polygon) and `other` (the same
     polygon, classes `ar50`): test 17's run names
     `east-clean-31983` on both lines, never `east` or `other`.
-21. Raster: test_cli_mesh_land_cover_fractions.py's cached class raster,
-    whose class-0 cells the mesh reaches (its fixture says so): without
-    the flag exit 2 naming `--land-cover`; with it exit 0 and no
-    `land_cover_fractions` row with code 0.
+21. Raster: the CLI scene's cache written with its no-data block,
+    `write_class_cache(root, no_data=True)` (rows 30 on, columns 0 to 9
+    class 0, which the mesh reaches): without the flag exit 2 naming
+    `--land-cover`; with it exit 0 and no `land_cover_fractions` row with
+    code 0.
+
+Edge modes (section 3.7).
+
+22. `--edges water` over a full cover: `@tester`'s
+    `test_19_a_class_left_out_of_edges_is_not_filled_from_water`, renamed
+    `test_22_...` (scene: test 19's heath and lake L, no `--prefer`):
+    exit 0, every triangle whose centroid is in L 512, every other 322,
+    none marked, record `land_cover_filled` 0. Red today: the land is 0.
+23. `label_triangles(..., rest=)`, the unit grid of 4 columns by 2 rows
+    (16 triangles), constraint edges the two unit segments on x = 3,
+    `polygons` `[(box(3,0,4,2), 512)]`, `rest` `[(box(0,0,2,2), 322),
+    (box(2,0,3,2), 311), (box(3,0,4,2), 512)]`: columns 0 and 1 322 (8
+    triangles), column 2 311 (4), column 3 512 (4); `CoverLabels.rest` 12
+    (one region west of x = 3, yet two classes: per triangle). The same
+    with `rest` lacking 311: column 2 stays 0, `rest` 8. With `rest` empty:
+    today's labels exactly (west 0, `rest` 0). Figures by construction:
+    each half-square's incentre lies inside its own unit square, off every
+    polygon border.
 
 **7a. Existing tests that change.** A prototype (scratch `fillplug.py`:
 `_islands` returning nothing, the section 3.2 fill on the CLI's codes, no
@@ -533,15 +613,148 @@ per test what changed, and keeps each test's own subject (a test about
 holes still checks the hole's border). The shares merge may move more;
 those are amended the same way and listed.
 
-The refusal reaches further: every CLI test whose land cover leaves a
-gap now exits 2, whatever its subject. Not counted (no test run, disk);
-a prediction: every test on `cover_polygons()` (a 1.9 km² gap) and on the
-fractions fixture's raster, so dozens across the 199 tests of the 28
-files passing `--land-cover`. `@tester` runs the suite on the red commit
-first, and adds `--land-cover-partial` to each refused test whose
-subject is not coverage (its codes are then the fill's, as above); a
-test about coverage gets its own case instead. The list goes in the red
-commit's message.
+**7a-amended (2026-11-02): fixtures cover their domain; the flag only
+where partial cover is the subject.** The first text above had every
+refused test pass `--land-cover-partial`; `@tester` followed it (60 places
+in 18 files at `6ae4cd2a`), so most CLI tests ran the fill, not the
+refusal users meet. Counted: on master's tests (`b1283396`) with a
+scratch plugin logging section 3.6's gap (scratch `plug/probe_gap.py`,
+untiled, `GAP_NOISE` 0.01 m), **182 of the 190** tests that build a map
+or raster shares leave a gap. With fixtures A and B below covered, 99;
+with a covering polygon added to every CORINE GeoJSON written (scratch
+`probe5`), 10, all in K7 and K8. Each figure below that moves was
+measured by running master's tests on master's code with the fixture
+changed (scratch `probe2` to `probe6`); a run with full cover fills
+nothing, so master's figures there are this increment's too.
+
+*Fixture changes (test helpers):*
+
+- **A.** `test_cli_land_cover_polygons.cover_polygons()` returns four
+  polygons: today's three and heath 322 over the DEM's node box widened
+  by half a cell, less them (`test_cli_land_cover_gap.full_cover()`,
+  which it replaces). New `partial_cover()` returns today's three: the gap
+  scene (1,905,280.4 m², tests 17, 18, 20).
+- **B.** `fraction_fixtures.write_class_cache(root, years, *, no_data:
+  bool = False)` writes the class raster without its no-data block;
+  `class_fixtures.class_grid(year, *, no_data: bool = True)` and
+  `class_tiff` pass it through, so the I/O tests keep the block (with it
+  removed everywhere, `test_class_raster_crs.py::TestT10NoData::
+  test_without_a_tag_nothing_changes` moves, 356 to 256). The CLI oracles
+  that call `class_grid` call it with `no_data=False`
+  (`test_cli_land_cover_file.py` once, `test_cli_mesh_land_cover_fractions.py`
+  twice).
+- **C.** `test_cli_mesh_features.GALLERY_COVER` gains
+  `Feat("rest", COVER_BOX - (FOREST | LAKE), {"Code_18": "211"})`.
+- **D.** `test_cli_mesh_landcover.covered(path) -> Path` rewrites a CORINE
+  GeoJSON with arable land 211 over `COVER`'s box (`rect(-50.3, -150.1,
+  300.2, 50.4)`, EPSG:25833) less its polygons, the box moved to the
+  file's own `crs` member first (`ff.moved`, as `gallery_files` moves);
+  any other file comes back unchanged. Called by the argument helpers
+  `test_cli_mesh_features.cover_args`,
+  `test_cli_features_cleanup.cover`, `test_cli_legends.cover` (CORINE),
+  `test_cleanup_every_source`'s `test_each_source_counts_its_own`,
+  `test_cli_mesh_gpkg.f3` and `test_cli_mesh_multi_features.land_cover`
+  (the first path only). `COVER_BOX` in C is the same box.
+- `test_cli_mesh_pieces_settled`: keep `@tester`'s heath around the
+  ring, and go back to master's `--edges water`. Section 3.7 codes the
+  heath from the map, so the piece has a class and master's mesh stands.
+
+*The mechanical rule.* `test_cli_land_cover_gap.py`'s pinned line
+"every other suite on it passes `--land-cover-partial`" is overruled, and
+its `full_cover()` becomes `cover_polygons()`. Every one of the 60 places drops
+`--land-cover-partial`, except the K list. Every test outside K returns to
+master's assertions, plus the new ones the red commit added (no code 0,
+`land_cover_filled`, the record keys). The exceptions are the moves
+listed under M. Red-commit amendments that only absorbed the gap's fill
+go back to master: `zero_merged` becomes `same_rows` again
+(`test_cli_land_cover_polygons` 2, `test_cli_land_cover_file` 1,
+`test_cli_mesh_land_cover_fractions` oracle, year and chunks tests), as
+do the class lists of `test_cli_mesh_gpkg`, `test_cli_mesh_edges` and
+`test_cli_mesh_prefer`'s case 7 forest share, and `test_cli_mesh_edges`
+tests 9 and 11 (but see M1, M2).
+
+*K, the tests that keep the flag (43, and the gap suite's own):*
+
+- K1 `test_cli_land_cover_gap.py`: 10b, 18, 21 with the flag, the help
+  line (the subject is the flag).
+- K2 `test_cli_mesh_landcover.py` through `corine_args` (14 tests): the
+  labelling's own specification on polygons-in-a-domain scenes (holes,
+  clipped pieces, squares side by side), where "in no polygon" is one of
+  the cases its oracle (`vtk_labels`, `filled_where_no_polygon`) checks.
+  Covered, 15 of its tests move (probe6).
+- K3 `test_cli_land_cover_polygons.py::TestTheFile::
+  test_every_class_and_the_uncovered_class_0_are_met`: on
+  `partial_cover()`, with the flag in the test, not in `run_vtk`.
+- K4 `test_cli_mesh_land_cover_fractions.py::TestTheFile::
+  test_the_classes_are_the_rasters_and_no_data_is_among_them`: its own
+  cache, `no_data=True`.
+- K5 `test_cli_mesh_catchments.py` (4, through `LAND_COVER`) and
+  `test_cli_mesh_simplify_domain.py` (5): their oracle is master's stored
+  run `data/catchments_rows_e8251ee8.json` on the raster with the block.
+  Their cache is `no_data=True`; `@tester`'s skipping of marked rows'
+  class columns stands.
+- K6 `test_cli_mesh_edges.py`, the two-file overlap scenes (7):
+  `test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away`,
+  `test_10_a_county_line_with_one_class_on_both_sides_is_not_followed`,
+  `test_10_a_county_line_without_the_merge_is_an_edge`,
+  `test_10_an_overlapping_pair_with_a_bowtie_far_outside_the_region_is_counted_outside`
+  (2 parameters), `test_10_the_box_first_given_keeps_its_area_and_border`,
+  `test_12_every_polygon_of_the_maps_areas_is_valid[far-pair]`. Their
+  figures are the area each file keeps and the edge lengths per kind; a
+  covering polygon joins the overlap cut and moves all seven (probe5).
+- K7 `test_cli_legends.py`'s non-CORINE scenes (7): `TestAr50SplitsThroughTheCli`
+  (3), `TestAr50ThroughTheCli` (2),
+  `TestMapBiomasThroughTheCli::test_t10_a_class_polygon_run_writes_the_mapbiomas_notice`,
+  `TestTextCodesOnTriangles::test_t8_triangles_carry_1_and_2_and_the_lake_border_water`.
+  They check the names and colours of the classes present; a covering
+  class adds to those very lists.
+- K8 `test_cli_mesh_features.py` (3, the flag in each test, since
+  `cover_args` now covers instead): `TestCommittedExtract::test_the_legacy_gml`
+  (a committed AR50 GML extract) and `TestReport::test_a_layer_without_an_index_is_scanned_and_reported`
+  and `test_an_indexed_layer_gives_the_same_file_and_no_scan_line`
+  (GeoPackage layers, which `covered` leaves alone).
+- K9 `test_cli_mesh_gpkg.py::TestLandCover::test_a_coded_run_with_no_polygon_in_the_domain_is_refused`
+  (the whole domain is the gap: step 2's refusal).
+
+*Refusals before the gap check* (no flag, figures kept): the tests that
+append a bowtie or spike to the scene use `partial_cover()`, so their
+feature numbers stay ("feature 4"; on four polygons it would be 5):
+`test_invalid_polygons.py`'s `TestTheRun::test_6_land_cover` and the four
+`TestTheSiblingNamed::test_12_*`, and `test_cli_mesh_edges.py`'s
+`test_10_a_bowtie_in_a_single_file_is_refused_not_a_traceback` (3) and
+`test_13_a_land_cover_polygon_with_a_thin_spike_is_refused`. So does
+`test_land_cover_map.py::test_1_the_scenes_map`, a unit test (on four,
+its map gains 322: 3,955,421.47 m²).
+
+*M, the figures that move:*
+
+- M1 `test_cli_mesh_edges.py::test_9_class_borders_alone_give_todays_codes_and_no_shares`:
+  with 322 read back as 0, the codes give `TODAYS_CODES` and
+  `TODAYS_DIGEST` as master (measured: 767 triangles 322, the old 0s).
+- M2 `test_11_a_cut_run_follows_the_class_borders_as_today`: `PIECES`'
+  key 0 becomes 322, counts unchanged (measured, passes).
+- M3 `test_cli_land_cover_polygons.py`'s two unpackings (`:304`, `:476`):
+  `(_, forest), (_, water), *_ = cover_polygons()` (measured, pass).
+- M4 `test_cli_mesh_cells.py`: `ENTRIES` 1,875 (master 1,825; the red
+  commit's 1,793 goes); `test_t5_shares_from_the_long_form_table`'s forest
+  is `shares_of(mapbiomas, {3, 9})` (class 3 lay only under the block).
+- M5 `test_cli_mesh_features.py`: `TestRecord::test_the_fields` 3
+  features (2); `TestReport::test_stderr_counts_the_features_kept` and
+  `test_stderr_gives_the_clipped_count`: "4 kept (3 cut at the domain
+  outline), 1 outside" (3 kept, 2 cut).
+- M6 `test_cli_mesh_multi_features.py`:
+  `TestRecordPerSource::test_per_source_feature_counts_are_correct`
+  `[3, 1]` (`[2, 1]`); `TestTwoLandCoverFiles::test_both_files_label_the_mesh`
+  and `TestTwoSources::test_the_coded_source_labels_the_cells` give
+  `vtk_labels` the file's polygons with the rest.
+- M7 `test_cli_mesh_gpkg.py`: class sets `{211, 311, 512}` in
+  `test_codes_names_and_colours_follow_the_palette` and
+  `TestLandCoverClasses::test_classes_sum_to_the_triangles_and_their_area`;
+  `test_the_land_cover_layer_holds_each_coded_polygon` `[211, 311, 512]`.
+- M8 `test_cleanup_every_source.py::TestTheRecord::test_each_source_counts_its_own`:
+  "corine.geojson, classes corine: 3 features, ".
+- `test_cli_threads.py` (3 tests gappy on master's fixtures, no flag at
+  `6ae4cd2a`) needs nothing once B and C cover.
 
 ## 8. Acceptance
 
@@ -585,8 +798,11 @@ and reader (`vtk_legacy`, `ply`, `geopackage_write`, `vtk_read`) 30; run
 record keys 3. The gap (section 3.6): `coverage_gap`, `Gap`,
 `CoverageGap` and the two constants 45; `_covering` 25; the flag, the
 refusal words, the gap line and three record keys in `cli.py` 30; the
-raster refusal and its groups 15; record keys 3: about +118. **Net
-about +230**. One PR, far under 700. Tests are not counted.
+raster refusal and its groups 15; record keys 3: about +118. The edge
+modes (section 3.7): `rest` in `label_triangles`, `CoverLabels.rest` and
+the stderr words 10; the map's areas through `_land_cover` and
+`_write_piece` 6: +16. **Net about +246**. One PR, far under 700. Tests
+are not counted.
 
 ## 11. Questions for Ola
 
