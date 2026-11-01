@@ -1,6 +1,6 @@
 # Increment 119: the core takes valid polygons only
 
-Status: **designed** (`@architect`, 2026-11-01, on public master
+Status: **green** (`@architect`, 2026-11-01, on public master
 `ae33748e`; branch `worktree-core-assumes-clean`; amended the same day:
 115's switch done, and Ola's ruling that the refusal names the catalogue's
 clean sibling, section 3; amended after the red suite: `clean_sibling` takes the CRS label, so `sources` keeps its layer, and `@tester`'s pins adopted, sections 3 and 7). Full lane (it deletes
@@ -403,6 +403,8 @@ check is today's `is_valid` over today's set of polygons, moved from
 and `--reservoirs` it checks only the polygons reaching the box, where
 `_repaired` checked every polygon read.
 
+Run by `@reviewer` at 8b458b8e: Numedalslågen and Lagan `.vtk` byte-identical to ae33748e's; Bygdin with raw `ar50-innlandet` and raw `clc2018` exits 2, naming the `-clean-25833` copy first; both clean ids exit 0.
+
 ## 9. `fractions-intersection`
 
 `polygon_fractions.subdivide` halves valid polygons with `clip_by_rect`,
@@ -436,3 +438,7 @@ estimate, before the amendment −20). One PR, far under 700.
 
 None. 115's switch is done (section 5); the sibling rule is his ruling of
 2026-11-01 (section 3).
+
+## Review
+
+- **Code review, round 1, 2026-11-01.** `@reviewer`, head `8b458b8e49f21cce66eea234cbff7ba09883ca45`, range `ae33748e..8b458b8e`. Verdict: APPROVED WITH WORDINGS. LOC: 31 net (117 added, 86 removed; estimate about +5; `_refuse_invalid` about 40 lines with the fid sort, the message and the moved-note; the land-cover map's repair removal saved less). The checking box is `_fixed`'s cutting box; only the CLI calls `build` and `read_polygons`; reservoirs read before the mesh change no run that worked; `clean_sibling` stays in layer 0. 557 tests in the touched suites pass, both local Sula tests included. Three wordings applied in this commit: the README's land-cover contract, `project_structure.md`'s `read_class_polygons` entry, and section 8's run record with the Status line. Follow-ups: one helper for the vertex-count grouping `_refuse_invalid` and `_fixed` share; with DEM cells over 50 m an invalid far polygon in the strip between the read region and the `--prefer` box is dropped silently (as on master; outside the domain).
