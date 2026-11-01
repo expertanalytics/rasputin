@@ -340,6 +340,15 @@ def print_recap() -> None:
     print("Running Bash-tool jobs, any session (Claude Code shell wrappers):")
     for line in running_jobs():
         print(f"  {line}")
+    try:  # a fault in the stray-process list costs one line, like the harness
+        import reap
+
+        stray = reap.listing(reap.found())
+    except Exception as error:
+        stray = [f"(could not list: {type(error).__name__}: {str(error)[:100]})"]
+    print("Stray processes (python3 tools/reap.py --kill stops them):")
+    for line in stray:
+        print(f"  {line}")
     try:  # a fault in the question tool costs one line, like the harness
         import questions
 
