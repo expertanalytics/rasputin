@@ -1,0 +1,22 @@
+Usage: rasputin mesh [OPTIONS]
+Try 'rasputin mesh --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ Invalid value for --land-cover: the land cover leaves 7.8634 km2 of the      │
+│ domain in no polygon of any --land-cover or --prefer file (5 parts); missing │
+│ land cover is refused. Add the file that covers it, or pass                  │
+│ --land-cover-partial to fill each gap from the nearest non-water class and   │
+│ mark it:                                                                     │
+│   5.8199 km2 around 136214 6830715 in EPSG:25833; covered by                 │
+│ ar50-vestland-clean-25833                                                    │
+│   1.9929 km2 around 141916 6830809 in EPSG:25833; covered by                 │
+│ ar50-vestland-clean-25833                                                    │
+│   0.0439 km2 around 140730 6829429 in EPSG:25833; covered by                 │
+│ ar50-vestland-clean-25833                                                    │
+│   0.0062 km2 around 138236 6830376 in EPSG:25833; covered by                 │
+│ ar50-vestland-clean-25833                                                    │
+│   0.0006 km2 around 138288 6830381 in EPSG:25833; covered by                 │
+│ ar50-vestland-clean-25833                                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+real 5.56
+user 5.33
+sys 0.36

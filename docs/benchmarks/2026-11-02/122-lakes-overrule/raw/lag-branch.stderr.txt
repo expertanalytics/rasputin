@@ -1,0 +1,8 @@
+edges: 23 kept (0 cut at the domain outline), 4193 outside the domain, 0 empty
+lines: 155349 vertices read, 103704 after joining shared edges and adding crossings
+DEM: 6 files, 3638 columns x 4777 rows
+land cover: 3043 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+463342 triangles. Every node of the original DEM inside the mesh is within 10 m of it (largest difference 10 m).
+real 20.99
+user 34.69
+sys 2.24

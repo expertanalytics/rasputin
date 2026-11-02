@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/66e9d031-e53c-4911-b4a9-03c4d27bffa6/scratchpad/bin/compare.py", line 22, in <module>
+    vm, tm, cm, fm = load(sys.argv[1]); vb, tb, cb, fb = load(sys.argv[2])
+                     ~~~~^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/66e9d031-e53c-4911-b4a9-03c4d27bffa6/scratchpad/bin/compare.py", line 7, in load
+    m = read_mesh(open(p, "rb").read())
+                  ~~~~^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/66e9d031-e53c-4911-b4a9-03c4d27bffa6/scratchpad/out/lag lag-master.vtk'
