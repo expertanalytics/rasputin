@@ -884,3 +884,7 @@ continues (section 3.6).
 1. Should the MCP mesh tool also take the override? Default: no; the
    override stays a person's flag on the command line, and an MCP agent
    gets the refusal naming the file to add.
+
+## Review
+
+- **Code review, round 1, 2026-11-02.** `@reviewer`, head `3d6d48c27b5fafa497d39c2dc03e14da740466a5`, range `5921a878..3d6d48c2`. Verdict: CHANGES REQUESTED. LOC: +362 net (estimate +246; `cli.py` +180). Blocking, all in `cli.py`: (1) a shares run where every triangle is water with some 0 share crashes (exit 1): `fill_no_class(..., asking=wet)` finds no donor and its `ValueError` is not caught; section 6's water-only donor rule applies (the 0 share joins the triangle's own water code, marked); (2) `land_cover_filled_m2` is a bare float and left out when nothing is filled: write it as text, `"%.1f"`, always, `"0.0"` included; (3) the shares path's words "0 = no data, and every constraint line" are false now that no triangle keeps 0; (4) `CoverageGap` is never raised (the refusal is `typer.BadParameter`, exit 2, as 119's): delete the class and its test, and fix sections 3.6 and 4. Judged right as built: no `rest=` under `--edges all` (its borders are the moved ones), test 9 on `island_scene`, covering the last file, the gap area as text, list K (sampled K2, K5, K6, K9). Follow-ups: the fill line says "non-water" when only water could fill; it counts moved 0 shares as "in no polygon"; `.ply` carries the mark only when some triangle is marked while `.vtk` and `.gpkg` always do; `landcover.DECIMALS` copies `preferred.DECIMALS`.
