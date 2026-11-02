@@ -240,6 +240,9 @@ def start(
         "pgid": os.getpgid(proc.pid),
         "cmd": list(cmd),
         "cwd": str(Path.cwd()),
+        # Fail-safe: if the start-time reader returns None, record now() instead.
+        # now() is at or after the real start, so the pid-reuse guard can only
+        # ever read `failed` on a reused pid, never a false `running`.
         "started": pid_start_utc(proc.pid) or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "host": this_host(),
         "stdout": stdout.name,

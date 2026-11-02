@@ -53,7 +53,6 @@ TOOL = Path(__file__).resolve().parents[2] / "tools" / "detach.py"
 # granular (macOS) and /proc start time is clock-tick granular (Linux); a
 # tighter bound would flap on those sources. We fix it at 2 s: one tick of
 # slack over the 1 s granularity floor, still far below any real pid-reuse gap.
-# ARCHITECT RULING NEEDED before green (choice beyond the design).
 T6_TOLERANCE_S = 2.0
 
 

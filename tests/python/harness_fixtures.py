@@ -67,6 +67,10 @@ COPIED = (
     # The recap, `away.py --back` and the pipes block list the questions
     # waiting on Ola through this module.
     "tools/questions.py",
+    # h40: the recap's "Detached runs:" block reads detached manifests through
+    # this module (docs/increments/h40-detached-runs.md, "Boundary with existing
+    # tools").
+    "tools/detach.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
@@ -273,6 +277,18 @@ def queue_lines(repo: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def detach_host(repo: Path) -> str:
+    """The host string the copied `tools/detach.py` records, read via its own
+    `this_host()`, so a test and the recap reader agree on the host (h40 §5)."""
+    tool = repo / "tools" / "detach.py"
+    spec = importlib.util.spec_from_file_location("detach", tool)
+    assert spec is not None and spec.loader is not None, f"detach.py missing from {repo}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    host: str = module.this_host()
+    return host
 
 
 def run_script(

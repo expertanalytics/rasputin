@@ -245,7 +245,7 @@ them (§5).
   reader** to the recap — "Detached runs:" printing
   `detach.status()` over the known run-dir roots (default
   `docs/benchmarks/<newest date>/`), in the same costs-one-line-on-fault style
-  the recap already uses for reap and pipes (`session_state.py:343`). That is
+  the recap already uses for reap and pipes (`session_state.py:387`). That is
   the only `session_state.py` change and it is read-only.
 * **reap (3.3, not designed here).** reap keys on `cwd` and on the worktree being
   removed/merged or the age > 6 h (`reap.py:57`). A detached job launched with

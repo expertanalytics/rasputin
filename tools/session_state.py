@@ -228,6 +228,9 @@ def running_jobs() -> list[str]:
         return [f"(could not list: {str(error)[:100]})"]
 
 
+# A `docs/benchmarks/` day directory: an ISO calendar date, as bench.py names it.
+_DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 # A table row: | # | What it is | Status | Record |
 _ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|")
 _DONE = ("shipped", "landed")
@@ -281,6 +284,23 @@ def detached_lines(root: Path) -> list[str]:
         return lines
     except Exception as error:
         return [f"(detached runs unavailable: {type(error).__name__}: {str(error)[:100]})"]
+
+
+def default_detached_root(repo: Path) -> Path | None:
+    """The newest `docs/benchmarks/<date>/` under the main checkout, or None.
+
+    The resolved Q1 default (h40): detached run dirs live under the main
+    checkout's `docs/benchmarks/`, so a worktree can be removed without
+    orphaning a run and a cold start reads them from a stable path. Only
+    `YYYY-MM-DD` directories count (a stray dir like `quick` must not shadow a
+    dated one); dates sort lexically, so `max` over them is the newest day.
+    """
+    benchmarks = main_checkout(repo) / "docs" / "benchmarks"
+    try:
+        days = [d for d in benchmarks.iterdir() if d.is_dir() and _DATE_DIR.match(d.name)]
+    except OSError:
+        return None
+    return max(days, key=lambda d: d.name) if days else None
 
 
 def unattended_header(mode: harness_mode.Mode) -> str | None:
@@ -372,6 +392,14 @@ def print_recap() -> None:
         stray = [f"(could not list: {type(error).__name__}: {str(error)[:100]})"]
     print("Stray processes (python3 tools/reap.py --kill stops them):")
     for line in stray:
+        print(f"  {line}")
+    try:  # a fault in the detached-run reader costs one line, like the harness (h40 §5)
+        root = default_detached_root(REPO)
+        detached = (detached_lines(root) or ["(none)"]) if root is not None else ["(none)"]
+    except Exception as error:
+        detached = [f"(detached runs unavailable: {type(error).__name__}: {str(error)[:100]})"]
+    print("Detached runs (python3 tools/detach.py status --run-dir <dir>):")
+    for line in detached:
         print(f"  {line}")
     try:  # a fault in the question tool costs one line, like the harness
         import questions

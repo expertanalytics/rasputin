@@ -918,3 +918,67 @@ def test_t7_malformed_manifest_costs_one_line_not_a_crash(tmp_path: Path) -> Non
     lines = session_state.detached_lines(root)
     assert len(lines) == 1, lines
     assert "could not" in lines[0].lower() or "unavailable" in lines[0].lower(), lines
+
+
+# T7b -- the USER-VISIBLE recap block, not just the function. The function
+# tests above call detached_lines() directly, which is why a green function
+# could hide a recap that never calls it. These run the recap as the harness
+# does and pin the "Detached runs:" header and its lines in the real output
+# (default root: the newest docs/benchmarks/<date>/ under the main checkout,
+# the resolved Q1 default).
+
+
+def _benchmarks_day(repo: Path, day: str = "2026-11-02") -> Path:
+    """A `docs/benchmarks/<day>/` run dir under the fixture's main checkout."""
+    root = repo / "docs" / "benchmarks" / day
+    root.mkdir(parents=True)
+    return root
+
+
+def _detached_block(lines: list[str]) -> list[str]:
+    """The indented lines under the recap's 'Detached runs:' header."""
+    start = next(i for i, line in enumerate(lines) if line.startswith("Detached runs"))
+    body = []
+    for line in lines[start + 1 :]:
+        if not line.startswith("  "):
+            break
+        body.append(line.strip())
+    return body
+
+
+def test_t7b_recap_shows_the_detached_runs_block_when_a_manifest_exists(
+    harness_repo: Path,
+) -> None:
+    this_host = harness_fixtures.detach_host(harness_repo)
+    root = _benchmarks_day(harness_repo)
+    (root / "a.detached.json").write_text(
+        json.dumps(
+            _detached_manifest("a", pid=2147480000, host=this_host, done_marker="a.done.json")
+        )
+    )
+    (root / "a.done.json").write_text('{"ok": true}')
+    (root / "b.detached.json").write_text(
+        json.dumps(
+            _detached_manifest("b", pid=2147480001, host=this_host, done_marker="b.done.json")
+        )
+    )
+    lines = _recap(harness_repo)
+    assert any(line.startswith("Detached runs") for line in lines), lines
+    body = _detached_block(lines)
+    assert any(line.startswith("done a") for line in body), body
+    assert any(line.startswith("failed b") for line in body), body
+
+
+def test_t7b_recap_with_no_run_dir_says_none(harness_repo: Path) -> None:
+    lines = _recap(harness_repo)
+    assert _detached_block(lines) == ["(none)"], lines
+
+
+def test_t7b_recap_degrades_to_one_line_on_a_malformed_manifest(harness_repo: Path) -> None:
+    root = _benchmarks_day(harness_repo)
+    (root / "bad.detached.json").write_text("{ not json")
+    lines = _recap(harness_repo)
+    # The whole recap still runs (exit 0 in _recap) and the block is one line.
+    body = _detached_block(lines)
+    assert len(body) == 1, body
+    assert "could not" in body[0].lower() or "unavailable" in body[0].lower(), body
