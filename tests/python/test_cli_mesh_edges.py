@@ -704,6 +704,10 @@ def test_10_the_planted_box_premises() -> None:
 def test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away(
     scene: dict[str, Path], tmp_path: Path, lake: Path
 ) -> None:
+    """No heath 322, so the run needs `--land-cover-partial`. The forest
+    share is all but the preferred lake's: the gap, and water 512's leftover
+    east of the lake (no non-water neighbour, section 3.1), take the nearest
+    non-water class, forest, and so do their 0 shares (section 3.3)."""
     polygons = dict(cover_polygons())
     a, b = split(tmp_path, [(311, polygons[311]), (312, polygons[312])],
                  [(512, polygons[512]), (ARABLE, planted_box())])  # fmt: skip
@@ -715,7 +719,10 @@ def test_10_a_box_wholly_inside_an_earlier_files_polygon_is_cut_away(
         assert ARABLE not in {
             c for (c,) in conn.execute("SELECT DISTINCT code FROM land_cover_fractions")
         }
-        check_case7_shares(conn)
+        assert_allclose(column(conn, "cells", "lake"), share(conn, preferred_lake()), atol=SHARE)
+        land = share(conn, domain().difference(preferred_lake()))
+        assert_allclose(column(conn, "cells", "forest"), land, atol=SHARE)
+        check_sums(conn)
     assert found["land_cover"] == pytest.approx(9082.7, abs=LENGTH), found
     assert found["water"] == pytest.approx(2600.4, abs=LENGTH), found
     assert any(abs(n - 40160.1) <= AREA for n in numbers(overlap)), overlap

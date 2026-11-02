@@ -96,13 +96,18 @@ def test_13_parts_come_area_descending(lcm: Any) -> None:
 
 
 def test_a_domain_no_polygon_reaches_is_one_part_the_whole_domain(lcm: Any) -> None:
-    """Section 6: a cover far off and none at all both leave the domain."""
+    """Section 6: a cover far off and none at all both leave the domain. The
+    place is a largest inscribed circle's centre (section 3.6, step 4); on a
+    40 x 30 rectangle every point of the centre line y = 15 with 15 <= x <= 25
+    is one (radius 15), so the test pins that segment, not one point."""
     domain = Polygon([(0, 0), (40, 0), (40, 30), (0, 30)])
     for covers in ([box(500, 500, 600, 600)], []):
         gap = lcm.coverage_gap(domain, covers)
         assert len(gap.parts) == 1, (covers, gap)
         assert gap.area == pytest.approx(1200.0, abs=M2)
-        assert gap.parts[0][1:] == pytest.approx((20.0, 15.0), abs=PLACE)
+        _, x, y = gap.parts[0]
+        assert y == pytest.approx(15.0, abs=PLACE), gap
+        assert 15.0 - PLACE <= x <= 25.0 + PLACE, gap
 
 
 def test_a_covered_domain_has_no_gap(lcm: Any) -> None:
