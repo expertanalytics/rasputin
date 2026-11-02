@@ -5,7 +5,7 @@ Spec: docs/increments/h9-spawn-briefs.md §3.1 to §3.4. The main session runs
 
     python3 tools/brief.py <persona> --worktree <path> --beside <none|persona:path>...
                            [--increment <file>] [--no-build] [--untimed] [--ola <text>]...
-                           [--lane fast]
+                           [--lane fast] [--item <id>] [--area <path>...]
 
 and pastes the block, unchanged, before the task. `.claude/hooks/guard_spawn.py`
 reads it back with `find_blocks` and `check`, so the format has one owner. A
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import string
@@ -60,6 +61,7 @@ HEADER = re.compile(
 )
 END = re.compile(r"^<<<END BRIEF ([0-9a-f]{12})>>>[ \t]*$")
 MAX_QUOTED = 8
+MAX_WRITERS = 3  # pipe 3.6; the rule text below says "three"
 
 
 class BriefError(Exception):
@@ -152,12 +154,57 @@ def _checkout(given: str) -> Path:
     return path
 
 
-def _concurrency(
-    persona: str, worktree: Path, beside: list[str], no_build: bool, untimed: bool = False
-) -> str:
+def _inside(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(prefix.rstrip("/") + "/")
+
+
+def _area(worktree: str, declared: list[str]) -> set[str]:
+    """Pipe 3.6: what the branch changes against its base, plus `declared` before its
+    first commit. The base is where it leaves origin/master (master without a remote)."""
+    base = _git(worktree, "merge-base", "HEAD", "origin/master") or \
+        _git(worktree, "merge-base", "HEAD", "master")  # fmt: skip
+    changed = set((_git(worktree, "diff", "--name-only", base, "HEAD") or "").splitlines()
+                  if base else ())  # fmt: skip
+    return changed | set(declared) if base in (None, _git(worktree, "rev-parse", "HEAD")) \
+        else changed  # fmt: skip
+
+
+def _running(worktree: Path) -> tuple[Path, list[dict[str, str | list[str]]]]:
+    """`areas.json` in the git common dir, and its entries for live writers elsewhere:
+    the note file and the worktree still there."""
+    store = Path(_git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
+                 or worktree) / "areas.json"  # fmt: skip
+    try:
+        entries = json.loads(store.read_text())
+    except (OSError, ValueError):
+        entries = []
+    return store, [e for e in entries if e["worktree"] != str(worktree)
+                   and Path(e["note"]).is_file() and Path(e["worktree"]).is_dir()]  # fmt: skip
+
+
+def _overlap(mine: dict[str, str | list[str]], running: list[dict[str, str | list[str]]]) -> None:
+    """A refusal naming both writers when `mine` would write a running writer's paths."""
+
+    def name(e: dict[str, str | list[str]]) -> str:
+        return f"@{e['persona']} ({e['item'] or 'no item'}, in {e['worktree']})"
+
+    for other in running:
+        theirs = _area(str(other["worktree"]), list(other["declared"]))
+        shared = sorted({b if _inside(b, a) else a for a in mine["area"] for b in theirs
+                         if _inside(a, b) or _inside(b, a)})  # fmt: skip
+        if shared:
+            raise BriefError(f"{name(mine)} and {name(other)} would write the same files: "
+                             f"{', '.join(shared)}")  # fmt: skip
+
+
+def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool,
+                 untimed: bool = False, running: Sequence[str] = ()) -> str:  # fmt: skip
     """§3.1a: the generated line, or a refusal naming the rule."""
     if untimed and persona != "perf" and not any(e.partition(":")[0] == "perf" for e in beside):
         raise BriefError("--untimed marks a @perf run")
+    too_many = BriefError("at most three writers run at once")
+    if WRITES[persona] and len({str(worktree), *running}) > MAX_WRITERS:
+        raise too_many
     if beside == ["none"]:
         alone = "Concurrency: you run alone"
         return f"{alone}; nothing runs beside a timing run." if persona == "perf" else f"{alone}."
@@ -178,8 +225,8 @@ def _concurrency(
             "brief its untimed stages with --untimed"
         )
     writers = [place for name, place in everyone if WRITES[name]]
-    if len(writers) > 2:
-        raise BriefError("at most two writers run at once")
+    if len({*map(str, writers), *running}) > MAX_WRITERS:
+        raise too_many
     if len(set(writers)) < len(writers):
         raise BriefError("two writers share one worktree")
     for who, where in everyone:
@@ -191,8 +238,8 @@ def _concurrency(
     listed = ", ".join(f"@{name} ({kinds[name]}, in {place})" for name, place in others)
     build = "You may not build C++ in this run." if no_build else "You may build C++ in this run."
     tail = " This run is untimed." if untimed and persona == "perf" else ""
-    return (f"Concurrency: also running: {listed}. At most two writers run at once; read-only "
-            "agents do not count toward the two, as long as no writer changes the files they "
+    return (f"Concurrency: also running: {listed}. At most three writers run at once; read-only "
+            "agents do not count toward the three, as long as no writer changes the files they "
             f"read.{tail}\n{build}")  # fmt: skip
 
 
@@ -246,6 +293,8 @@ def _brief(argv: list[str] | None) -> str:
     parser.add_argument("--untimed", action="store_true")
     parser.add_argument("--ola", action="append", default=[])
     parser.add_argument("--lane", choices=("fast",))  # h34 §3: test and fix by one developer
+    parser.add_argument("--item", default="")  # pipe 3.6: the pipe item a writer works on
+    parser.add_argument("--area", nargs="+", default=[])  # narrows the write limit
     args = parser.parse_args(argv)
     persona, fast = args.persona, args.lane == "fast"
     if persona not in PERSONAS:
@@ -277,8 +326,21 @@ def _brief(argv: list[str] | None) -> str:
         )
     except (KeyError, ValueError) as exc:
         raise BriefError(f"{TEMPLATE}: the template names an unknown variable ({exc})") from exc
-    limit = ", ".join(WRITES[persona] + FAST_WRITES * fast) or "nothing"
-    body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed),
+    limits = WRITES[persona] + FAST_WRITES * fast
+    prefixes = [e.split()[0] for e in limits if e.split()[0] not in ("root", "the")]
+    for path in args.area:
+        if not any(_inside(path, p) for p in prefixes):
+            raise BriefError(f"--area {path} is outside the write limit")
+    store, running = _running(worktree)
+    declared = args.area or prefixes
+    mine = {"persona": persona, "worktree": str(worktree), "item": args.item,
+            "branch": _git(worktree, "rev-parse", "--abbrev-ref", "HEAD") or "", "note": str(note),
+            "declared": declared, "area": sorted(_area(str(worktree), declared))}  # fmt: skip
+    if WRITES[persona]:
+        _overlap(mine, running)
+    limit = ", ".join(limits) or "nothing"
+    body = [fixed, _concurrency(persona, worktree, args.beside, args.no_build, args.untimed,
+                                [str(e["worktree"]) for e in running]),
             f"Write limit: {limit}, and your note file.", *parts]  # fmt: skip
     if persona == "reviewer":
         body.insert(3, REVIEW_LINE)
@@ -286,6 +348,12 @@ def _brief(argv: list[str] | None) -> str:
         body += _ola(args.ola)
     text, head = _normalise("\n".join(body)), _git(worktree, "rev-parse", "HEAD") or ""
     digest = block_hash(persona, str(worktree), head, text)
+    if WRITES[persona]:  # pipe 3.6: the note file marks the writer live until it is deleted
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(f"persona: @{persona}; made by tools/brief.py, yours to overwrite\n")
+        temporary = store.with_name(f"areas.json.{os.getpid()}")
+        temporary.write_text(json.dumps([*running, mine], indent=1))
+        temporary.replace(store)
     return f"<<<BRIEF persona={persona} worktree={worktree} head={head} hash={digest}>>>\n" \
            f"{text}\n<<<END BRIEF {digest}>>>\n"  # fmt: skip
 
