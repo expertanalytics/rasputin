@@ -50,7 +50,7 @@ Innlandet alone on master against the branch's `--land-cover-partial`
 mesh. Vertices and triangles are identical. Master's 2,245 triangles with
 code 0 are all marked on the branch and all take 5051. The other 4 changed
 codes are marked islands, and no unmarked code changes
-(`raw/compare-byg-inn-master-vs-byg-inn-partial-branch.txt`).
+(`raw/compare-bygdin-innlandet-partial.txt`).
 
 ## The gap's place: why it is 2.2 m from the prediction
 
@@ -90,7 +90,22 @@ and 141916 6830809 for the second part) and the figure in section 8.
 - `raw/<case>-<side>.json` holds each run's record, `.md` its `--stats`
   output, `.stderr.txt` its standard error (Python's start-up
   `RuntimeWarning` lines removed), and `.code` its exit status.
-  `raw/compare-*.txt` holds `compare.py`'s output. The records and the
-  stats name scratch-folder paths for `--out`.
-- The meshes are not committed. To regenerate one, rerun its line in
-  `scripts/all.sh`.
+  The records and the stats name scratch-folder paths for `--out`.
+- **The comparisons were rerun.** The first commit, 1ec9d178, held only
+  tracebacks in its comparison files. Its loop ran under zsh, which does
+  not split `$p` into words, so `compare.py` was handed file names with a
+  space in them. The meshes had already been deleted, so
+  `scripts/rerun.sh` (bash) ran each case once more, untimed: one master
+  run and one branch run, then `compare.py` on each pair. Its outputs are
+  `raw/compare-numedalslagen.txt`, `raw/compare-lagan.txt`,
+  `raw/compare-bygdin-clc.txt`, `raw/compare-bygdin-innlandet-vestland.txt`
+  and `raw/compare-bygdin-innlandet-partial.txt` (master with Innlandet
+  alone against the branch with `--land-cover-partial`). Every figure in
+  the verdict table matches them, and so do the rerun's records
+  (`land_cover_gaps`, `land_cover_gap_m2`, `land_cover_filled`) and its
+  refusal text. No verdict changed. The rerun's records, stats and stderr
+  were not committed again. Every `.json`, `.md`, `.stderr.txt` and
+  `.code` under `raw/` is from the first run (`scripts/all.sh`), the run
+  that gave the timings.
+- The meshes are not committed. To regenerate them, run
+  `scripts/rerun.sh`.
