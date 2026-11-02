@@ -737,9 +737,11 @@ def test_t3_the_note_name_holds_persona_worktree_and_time(
 
 
 def test_t3_two_briefs_in_one_second_in_two_worktrees_name_different_files(
-    frozen_brief: Any, h15_h16: tuple[Path, Path]
+    repo: Path, frozen_brief: Any, h15_h16: tuple[Path, Path]
 ) -> None:
-    first, second = frozen_brief(h15_h16[0]), frozen_brief(h15_h16[1])
+    first = frozen_brief(h15_h16[0])
+    (repo / ".claude" / "current-task" / first).unlink()  # 3.6: else the two areas overlap
+    second = frozen_brief(h15_h16[1])
     assert first == "architect-h15-ci-094230.md"
     assert second == "architect-h16-094230.md"
 
