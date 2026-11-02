@@ -232,7 +232,7 @@ class) joins the share of one class, merged into its row
 pure; `into[t]` the code triangle `t`'s 0 share joins): the triangle's
 code after the fill when that is not water; otherwise the code
 `fill_no_class(..., asking=<water-coded triangles with a 0 share>)` gives
-it. The dominant code is filled first by section 3.2. A triangle whose 0
+it, or, when every triangle is water with a 0 share (no donor), its own code. The dominant code is filled first by section 3.2. A triangle whose 0
 share moved is marked like one whose code was filled. So no
 `land_cover_fractions` row and no cell carries class 0, and the Shyft
 `cells` layer no longer counts an uncovered island as unspecified.
@@ -259,23 +259,16 @@ is no data: without `--land-cover-partial` the run is refused (section
   with nothing filled has no `land_cover_filled`.
 - Record keys `land_cover_filled` (triangles marked) and
   `land_cover_filled_m2` (their area, plus the area of the 0 shares moved,
-  in the mesh CRS's plane), both 0 on a run with nothing to fill.
-  **As built, contradicting this:** with nothing filled,
-  `land_cover_filled` is 0 but `land_cover_filled_m2` is left out of the
-  record (`_fill`: "nothing filled: the count alone says so"; Lagan's and
-  Numedalslågen's records at `1ec9d178` have no such key).
+  in the mesh CRS's plane, as text `"%.1f"`): `0` and `"0.0"` on a run
+  with nothing to fill, both written on both paths.
 - One stderr line when any is filled:
   `land cover: 145 triangles (0.1078 km2) in no polygon took the nearest non-water class: 61 groups, the largest 0.0162 km2 at 147268 6814797 in EPSG:25833`
   (Bygdin with CORINE and NVE, by the prototype; the words are free, the
   figures and the CRS are not). The largest group points a user at a forgotten
   file (Innlandet alone: 5.82 km² past the county line).
 - `land_cover_codes` ends "0 = every constraint line; no triangle"
-  instead of "0 = in no polygon, and every constraint line" (both paths,
-  `src_python/tin_engine/cli.py@ae33748e:2148` and `:2565`).
-  **As built, contradicting "both paths":** the class-border path ends
-  "0 = every constraint line; no triangle"; the shares path
-  (`_class_fractions`) still writes "0 = no data, and every constraint
-  line", though no row and no cell keeps class 0 there (section 3.3).
+  on both paths, instead of "0 = in no polygon, and every constraint line"
+  (class borders) or "0 = no data, and every constraint line" (shares).
 - `accept_no_class` in the class files is unchanged: it still lets a legend
   colour code 0 for the lines.
 
@@ -358,8 +351,7 @@ any file is written, with the same words and parts made of the connected
 groups of triangles holding a 0 share (area: the 0 shares' area; place:
 the centroid of the group's largest such triangle).
 
-**The refusal.** `CoverageGap(FeatureError)` in `land_cover_map.py` (two
-lines), turned by `cli.py` into `typer.BadParameter(param_hint=
+**The refusal.** `cli.py` raises `typer.BadParameter(param_hint=
 "--land-cover")`: "Invalid value for --land-cover: …", exit 2, no file
 written; the MCP tools get the words as their tool error. The words
 (line breaks free; each part a line of its own; every part listed,
@@ -476,17 +468,17 @@ real polygons of many vertices; nothing under `--edges all`.
 
     read (119: valid polygons) -> land_cover_map.build -> preferred.replace(..., water=)
       -> coverage_gap(domain, base.areas + --prefer polygons, threads=) -> Gap
-         (parts and no --land-cover-partial: _covering hint, CoverageGap, exit 2)
+         (parts and no --land-cover-partial: _covering hint, typer.BadParameter, exit 2)
       -> map.areas (islands, lone water pieces and, with the flag, gaps uncovered)
       -> edges_of -> mesh
       -> label_triangles(..., polygons=borders, rest=map.areas) | assign/dominant
          (codes; 0 only where the label point is in no polygon of the map, section 3.7)
       -> fill_no_class(vertices, triangles, codes, water=) -> Filled
-      -> [shares: raster 0 shares and no flag: CoverageGap; merge_zero_share(table, into)]
+      -> [shares: raster 0 shares and no flag: typer.BadParameter, exit 2; merge_zero_share(table, into)]
       -> write_vtk/write_ply/write_triangles(..., filled=Filled.filled), record, stderr
 
 Interfaces the tests call: `land_cover_map.coverage_gap`,
-`land_cover_map.Gap`, `land_cover_map.CoverageGap`,
+`land_cover_map.Gap`,
 `landcover.fill_no_class`, `landcover.Filled`,
 `land_cover_fractions.merge_zero_share`,
 `preferred.replace(base, chosen, near, *, water)`,
@@ -519,7 +511,7 @@ tree.
 - A mesh with no class file (a raster without one): `water` is empty, so
   every coded triangle is a donor.
 - A group touching a donor only at a vertex: distance 0, shared length 0.
-- Water-only donors: the group becomes water, marked like any other.
+- Water-only donors: the group becomes water, marked like any other; in the shares path, with every triangle water and holding a 0 share, each 0 share joins the triangle's own code, marked.
 
 ## 7. Tests `@tester` writes red
 
@@ -888,3 +880,4 @@ continues (section 3.6).
 ## Review
 
 - **Code review, round 1, 2026-11-02.** `@reviewer`, head `3d6d48c27b5fafa497d39c2dc03e14da740466a5`, range `5921a878..3d6d48c2`. Verdict: CHANGES REQUESTED. LOC: +362 net (estimate +246; `cli.py` +180). Blocking, all in `cli.py`: (1) a shares run where every triangle is water with some 0 share crashes (exit 1): `fill_no_class(..., asking=wet)` finds no donor and its `ValueError` is not caught; section 6's water-only donor rule applies (the 0 share joins the triangle's own water code, marked); (2) `land_cover_filled_m2` is a bare float and left out when nothing is filled: write it as text, `"%.1f"`, always, `"0.0"` included; (3) the shares path's words "0 = no data, and every constraint line" are false now that no triangle keeps 0; (4) `CoverageGap` is never raised (the refusal is `typer.BadParameter`, exit 2, as 119's): delete the class and its test, and fix sections 3.6 and 4. Judged right as built: no `rest=` under `--edges all` (its borders are the moved ones), test 9 on `island_scene`, covering the last file, the gap area as text, list K (sampled K2, K5, K6, K9). Follow-ups: the fill line says "non-water" when only water could fill; it counts moved 0 shares as "in no polygon"; `.ply` carries the mark only when some triangle is marked while `.vtk` and `.gpkg` always do; `landcover.DECIMALS` copies `preferred.DECIMALS`.
+- **Code review, round 2, 2026-11-02.** `@reviewer`, head `5a0a526d2848d5ee4acb6f81cc9949dea37a69ac`, range `5921a878..5a0a526d`. Verdict: APPROVED WITH WORDINGS. LOC: +361 net. Round 1's four points closed: `_fill` gives every triangle a non-zero code or refuses, so `fill_no_class(asking=wet)` lacks a donor exactly when every triangle is wet, and then each 0 share joins the triangle's own code, marked (round 1's "some 0 share" was too broad); `land_cover_filled_m2` is `"%.1f"` at both `_fill` call sites; the shares words fixed; `CoverageGap` gone. Eight wordings applied in this commit (sections 3.3, 3.4, 3.6, 4 and 6: the no-donor rule, the record keys, the codes words, and `typer.BadParameter` in place of `CoverageGap`). Round 1's follow-ups stand.
