@@ -15,10 +15,9 @@ flag, section 7a). Full lane (it changes the class each
 triangle carries: a wrong class gives wrong numbers without a crash),
 Python only: no C++, nothing under `include/terrain/refinement/` or
 `include/terrain/mesh/`, so no `@perf` acceptance run (section 8). Pipe
-item `mesh/lakes-overrule`. Number 122: 121 is the highest under
+item `mesh/lakes-overrule`. Number 122 is the next number free under
 `docs/increments/` over every local and remote-tracking ref and every
-worktree (`git ls-tree` over each; 120 and 121 are private increments on
-`worktree-lsm-*` branches). Built **after** increment 119 merges (public
+worktree (`git ls-tree` over each). Built **after** increment 119 merges (public
 PR 419; section 5).
 
 ## 0. The plain picture
