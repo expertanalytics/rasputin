@@ -30,7 +30,7 @@ import shapely
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.feature_input import GROUPS, MARGIN, FeatureError, LandCoverClasses, _polygonal
+from tin_engine.feature_input import GROUPS, MARGIN, LandCoverClasses, _polygonal
 from tin_engine.preferred import BAND, Replaced, replace
 
 Pairs = Sequence[tuple[int, BaseGeometry]]
@@ -42,10 +42,6 @@ Pairs = Sequence[tuple[int, BaseGeometry]]
 GAP_NOISE = 0.01
 #: The side of the square tiles the gap is computed in (chosen; projected metres).
 GAP_TILE = 5000.0
-
-
-class CoverageGap(FeatureError):  # noqa: N818 -- the name the suite pins
-    """A part of the domain lies in no polygon of any land-cover or preferred file."""
 
 
 @dataclass(frozen=True)

@@ -2193,11 +2193,11 @@ def _class_fractions(
     values |= more
     if (zero > 0).any():
         into, wet = codes, (zero > 0) & np.isin(codes, list(water))
-        if wet.any():
+        if wet.any() and not wet.all():  # all wet: each 0 share joins its own water code
             into = fill_no_class(xy, tri, codes, water=water, asking=wet).codes
         table = merge_zero_share(table, into)
     values |= {
-        "land_cover_codes": f"{label} class number; 0 = no data, and every constraint line",
+        "land_cover_codes": f"{label} class number; 0 = every constraint line; no triangle",
         "land_cover_source": label if year is None else f"{label}, {year}",
     }
     if repository is None:
@@ -2247,7 +2247,7 @@ def _fill(
             + (groups + where if done.groups else ""),
             err=True,
         )
-    said: Value = m2 if marks.any() else None  # nothing filled: the count alone says so
+    said = f"{m2:.1f}"
     return done.codes, marks, {"land_cover_filled": int(marks.sum()), "land_cover_filled_m2": said}
 
 
