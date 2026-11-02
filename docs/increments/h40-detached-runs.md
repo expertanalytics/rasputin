@@ -177,10 +177,12 @@ last; `done_marker` is `summary.json`.
   only owns the manifest and the launch. The q146 run — a single-config lsm run
   writing per-frame fields — fits this exactly: one `start`, per-frame files,
   final `summary.json`.
-* **Atomicity:** every marker and every frame file is written to a `.tmp` name
-  in the same directory and `os.replace`d, so a kill mid-write never leaves a
-  half-file a reader will accept. (Shared-directory requirement from the
-  literature note.)
+* **Atomicity:** every marker and frame file that `detach.py` or an lsm run
+  writes goes to a `.tmp` name in the same directory and is `os.replace`d.
+  `bench.py`'s existing `run.json` is not rewritten here; the done-check
+  requires the marker to *parse*, so a truncated `run.json` is treated as
+  not-done and pid-liveness decides (the writing process is exiting, so
+  `failed` is read promptly).
 
 ### `detach.py status`
 
@@ -202,10 +204,13 @@ Reads each `*.detached.json` manifest under `<DIR>` and prints, per job, one of:
 `status` is a **pure read of disk + one `kill(pid,0)` probe**; it starts no
 heavy work and is safe to run from any persona or the main session.
 
-A pid-reuse guard: on Linux compare `/proc/<pid>` start time; on macOS compare
-`ps -o lstart= -p <pid>` against `started`. A mismatch is reported `failed`
-(the original job is gone; some unrelated process now holds the pid). This keeps
-`running` from ever being a false positive.
+A pid-reuse guard: compare the running pid's start time to the manifest's
+`started`, both normalized to UTC, equal within a stated tolerance (>= 1 s,
+since `ps -o lstart=` has 1 s granularity and `/proc` start time is clock-tick
+granular). Linux reads `/proc/<pid>` start time; macOS parses
+`ps -o lstart= -p <pid>`. A mismatch beyond tolerance is reported `failed`.
+This keeps `running` from ever being a false positive; the chosen tolerance is
+`@tester`'s to fix in T6.
 
 ---
 
@@ -348,6 +353,11 @@ Tests: `tests/python/test_detach.py` (T1–T6) and an addition to
 ---
 
 ## Open questions for Ola (each with a default)
+
+**Resolved (Ola, 2026-11-02): all three defaults taken — Q1 run dirs under the
+main checkout's `docs/benchmarks/`, Q2 the heavy threshold is persona
+judgement (no hard timer), Q3 the invariant binds `@perf` and lsm runs only
+for now.**
 
 * **Q1 — where run dirs live vs worktree removal.** Default: run dirs go under
   the **main checkout's** `docs/benchmarks/<date>/<label>/` (option a), so a
