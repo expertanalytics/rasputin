@@ -33,14 +33,20 @@ FEWEST = 8
 #: Below this share of its triangle, the uncovered rest is taken as the
 #: rounding of the cut, not area (a chosen threshold).
 REST = 1e-9
+#: Where the two halves' areas miss the piece's by more than this share, both
+#: are cut again with `shapely.intersection` (a chosen threshold).
+AREA = 1e-9
 
 
 def subdivide(polygon: BaseGeometry, most: int = 64) -> list[BaseGeometry]:
     """`polygon` (or each part of a multipolygon) halved along the longer side
-    of its bounding box with `shapely.intersection` until each piece has at
+    of its bounding box with `shapely.clip_by_rect` until each piece has at
     most `most` coordinates, holes and closing points counted. The pieces tile
     the polygon; one at or under `most` comes back as itself. `most` below 8
-    is a `ValueError`: halving cannot always get under it."""
+    is a `ValueError`: halving cannot always get under it. Where a hole
+    touches the outer ring, GEOS's rectangle clip can lose area or join the
+    two into one self-touching ring; such a half is cut again with the slower
+    `shapely.intersection`, whose output is valid."""
     if most < FEWEST:
         raise ValueError(f"most must be at least {FEWEST}, got {most}")
     pieces: list[BaseGeometry] = []
@@ -55,9 +61,12 @@ def subdivide(polygon: BaseGeometry, most: int = 64) -> list[BaseGeometry]:
             rects = [(x0, y0, (x0 + x1) / 2, y1), ((x0 + x1) / 2, y0, x1, y1)]
         else:
             rects = [(x0, y0, x1, (y0 + y1) / 2), (x0, (y0 + y1) / 2, x1, y1)]
-        # Never `shapely.clip_by_rect`: where a hole touches the outer ring it
-        # can lose area or join the two into one invalid, self-touching ring.
-        halves = [shapely.intersection(part, shapely.box(*r)) for r in rects]
+        halves = np.array([shapely.clip_by_rect(part, *r) for r in rects], dtype=object)
+        redo = ~shapely.is_valid(halves)
+        if abs(shapely.area(halves).sum() - part.area) > AREA * part.area:
+            redo[:] = True
+        if redo.any():
+            halves[redo] = shapely.intersection(part, shapely.box(*np.array(rects)[redo].T))
         for half in halves:
             parts = shapely.get_parts(half)
             todo += [(p, depth + 1) for p in parts if isinstance(p, Polygon) and not p.is_empty]
