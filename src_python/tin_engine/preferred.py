@@ -5,11 +5,12 @@
 Each preferred polygon that meets a triangle takes its class; it is cut out of
 every base polygon, and an earlier source's polygons are cut out of a later
 one's. The base polygons of a replaced class are dropped: each connected piece
-left of them takes the class of the kept base polygons sharing the longest
-border with it (a tie: the lower code). A piece with no such neighbour inside
-a preferred polygon's outer ring (in a hole: an island) takes the class of the
-nearest kept polygon; any other is left out, uncovered. Pure: shapely geometry
-and arrays in, no file, no CRS.
+left of them takes the class of the kept base polygons of a non-water class
+sharing the longest border with it (a tie: the lower code), so a refill never
+invents water. A piece with no such neighbour (an island in a preferred
+polygon's hole, or water beside water only) is left out, uncovered, for the
+mesh fill to class and mark. Pure: shapely geometry and arrays in, no file,
+no CRS.
 """
 
 from __future__ import annotations
@@ -120,11 +121,14 @@ def replace(
     base: Pairs,
     chosen: Sequence[tuple[int, Sequence[BaseGeometry]]],
     near: Sequence[BaseGeometry] | npt.NDArray[Any],
+    *,
+    water: frozenset[int],
 ) -> Replaced:
     """`base` (code, polygon) with each code of `chosen` (replaced code,
     preferred polygons, first wins an overlap, the same code twice unions)
     taken from its preferred polygons; a preferred polygon or a leftover piece
-    is kept only where it meets a geometry of `near`."""
+    is kept only where it meets a geometry of `near`. A leftover piece is
+    refilled from kept polygons whose code is not in `water` only."""
     tree = shapely.STRtree(near)
 
     def meeting(pairs: Pairs) -> list[tuple[int, BaseGeometry]]:
@@ -143,31 +147,10 @@ def replace(
     left = meeting(
         [(base[i][0], p) for i, g in cut if base[i][0] in replaced for p in shapely.get_parts(g)]
     )
-    classes = _neighbours([p for _, p in left], [(c, g) for _, c, g in kept]) if left else []
-    pairs = list(zip(left, classes, strict=True))
-    refilled = [(c, p, n) for (c, p), n in pairs if n is not None]
-    lone = [(c, p) for (c, p), n in pairs if n is None]
-    return Replaced(kept, preferred, refilled + _islands(lone, preferred, kept))
-
-
-def _islands(
-    lone: Pairs, preferred: Pairs, kept: Sequence[tuple[int, int, BaseGeometry]]
-) -> list[tuple[int, BaseGeometry, int]]:
-    """Each piece of ``lone`` inside a preferred polygon's outer ring (in a
-    hole: an island) with the class of the nearest kept polygon (a tie: the
-    lower code), as refilled pieces."""
-    if not lone or not kept:
-        return []
-    shells = shapely.polygons(
-        shapely.get_exterior_ring(shapely.get_parts(_array([g for _, g in preferred])))
-    )
-    points = shapely.point_on_surface(_array([p for _, p in lone]))
-    held = np.unique(shapely.STRtree(shells).query(points, predicate="within")[0])
-    tree = shapely.STRtree(_array([g for _, _, g in kept]))
-    codes: dict[int, set[int]] = defaultdict(set)
-    for k, j in zip(*tree.query_nearest(_array([lone[k][1] for k in held])), strict=True):
-        codes[int(held[k])].add(kept[j][1])
-    return [(lone[k][0], lone[k][1], min(c)) for k, c in codes.items()]
+    land = [(c, g) for _, c, g in kept if c not in water]
+    classes = _neighbours([p for _, p in left], land) if left else []
+    refilled = [(c, p, n) for (c, p), n in zip(left, classes, strict=True) if n is not None]
+    return Replaced(kept, preferred, refilled)
 
 
 def areas_inside(

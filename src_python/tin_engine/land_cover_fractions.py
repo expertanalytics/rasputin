@@ -183,3 +183,23 @@ def dominant(
     top = np.repeat(np.maximum.reduceat(areas, starts), counts)
     index = np.where(areas == top, np.arange(len(areas)), len(areas))
     return classes[np.minimum.reduceat(index, starts)].astype(np.int32)
+
+
+def merge_zero_share(table: ClassFractions, into: npt.ArrayLike) -> ClassFractions:
+    """``table`` with each triangle ``t``'s class-0 share added to the share of
+    class ``into[t]``, classes kept ascending in each row; equal to ``table``
+    when no row has a 0 share."""
+    zero = table.classes == 0
+    if not zero.any():
+        return table
+    counts = table.offsets[1:].astype(np.int64) - table.offsets[:-1]
+    row = np.repeat(np.arange(len(counts)), counts)
+    classes = np.where(zero, np.asarray(into, dtype=np.int32)[row], table.classes)
+    order = np.lexsort((classes, row))
+    row, classes = row[order], classes[order]
+    head = np.flatnonzero(np.r_[True, (row[1:] != row[:-1]) | (classes[1:] != classes[:-1])])
+    shares = np.add.reduceat(table.fractions[order].astype(np.float64), head)
+    offsets = np.searchsorted(row[head], np.arange(len(counts) + 1)).astype(np.uint32)
+    return ClassFractions(
+        offsets=offsets, classes=classes[head], fractions=shares.astype(np.float32)
+    )
